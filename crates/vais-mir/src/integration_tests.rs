@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_full_pipeline_simple_add() {
-    let source = "F add(x: i64, y: i64) -> i64 = x + y";
+    let source = "fn add(x: i64, y: i64) -> i64 = x + y";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut mir = lower::lower_module(&module);
 
@@ -20,7 +20,7 @@ fn test_full_pipeline_simple_add() {
 #[test]
 fn test_full_pipeline_with_optimization() {
     let source = r#"
-        F compute(x: i64) -> i64 = {
+        fn compute(x: i64) -> i64 = {
             unused := 999
             const_a := 10
             const_b := 20
@@ -43,7 +43,7 @@ fn test_full_pipeline_with_optimization() {
 
 #[test]
 fn test_full_pipeline_control_flow() {
-    let source = "F abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }";
+    let source = "fn abs(x: i64) -> i64 = I x < 0 { 0 - x } else { x }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut mir = lower::lower_module(&module);
 
@@ -59,9 +59,9 @@ fn test_full_pipeline_control_flow() {
 #[test]
 fn test_full_pipeline_multiple_functions() {
     let source = r#"
-        F double(x: i64) -> i64 = x * 2
-        F triple(x: i64) -> i64 = x * 3
-        F sum(a: i64, b: i64) -> i64 = a + b
+        fn double(x: i64) -> i64 = x * 2
+        fn triple(x: i64) -> i64 = x * 3
+        fn sum(a: i64, b: i64) -> i64 = a + b
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut mir = lower::lower_module(&module);
@@ -78,7 +78,7 @@ fn test_full_pipeline_multiple_functions() {
 
 #[test]
 fn test_mir_module_display() {
-    let source = "F test(x: i64, y: i64) -> i64 = x + y";
+    let source = "fn test(x: i64, y: i64) -> i64 = x + y";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
 
@@ -91,7 +91,7 @@ fn test_mir_module_display() {
 
 #[test]
 fn test_body_display_with_blocks() {
-    let source = "F branch(x: i64) -> i64 = I x > 0 { 1 } E { 0 }";
+    let source = "fn branch(x: i64) -> i64 = I x > 0 { 1 } else { 0 }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
 
@@ -716,11 +716,11 @@ fn test_place_index_display() {
 #[test]
 fn test_lower_struct_definition() {
     let source = r#"
-        S Point {
+        struct Point {
             x: i64,
             y: i64
         }
-        F origin() -> i64 = 0
+        fn origin() -> i64 = 0
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
@@ -734,7 +734,7 @@ fn test_lower_struct_definition() {
 #[test]
 fn test_lower_assignment() {
     let source = r#"
-        F mutate(x: i64) -> i64 = {
+        fn mutate(x: i64) -> i64 = {
             y := mut x
             y = y + 1
             y
@@ -748,8 +748,8 @@ fn test_lower_assignment() {
 #[test]
 fn test_lower_void_return() {
     let source = r#"
-        F do_nothing() -> i64 = {
-            R 0
+        fn do_nothing() -> i64 = {
+            return 0
         }
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
@@ -762,8 +762,8 @@ fn test_lower_void_return() {
 #[test]
 fn test_lower_function_call() {
     let source = r#"
-        F callee(x: i64) -> i64 = x * 2
-        F caller() -> i64 = callee(21)
+        fn callee(x: i64) -> i64 = x * 2
+        fn caller() -> i64 = callee(21)
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
@@ -774,7 +774,7 @@ fn test_lower_function_call() {
 
 #[test]
 fn test_lower_float_literal() {
-    let source = "F pi() -> f64 = 3.14";
+    let source = "fn pi() -> f64 = 3.14";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
     assert_eq!(mir.bodies.len(), 1);
@@ -782,7 +782,7 @@ fn test_lower_float_literal() {
 
 #[test]
 fn test_lower_bool_literal() {
-    let source = "F truth() -> bool = true";
+    let source = "fn truth() -> bool = true";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
     assert_eq!(mir.bodies.len(), 1);
@@ -790,7 +790,7 @@ fn test_lower_bool_literal() {
 
 #[test]
 fn test_lower_string_literal() {
-    let source = r#"F greeting() -> str = "hello""#;
+    let source = r#"fn greeting() -> str = "hello""#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
     assert_eq!(mir.bodies.len(), 1);
@@ -799,7 +799,7 @@ fn test_lower_string_literal() {
 #[test]
 fn test_lower_match_with_bool_patterns() {
     let source = r#"
-        F check(x: bool) -> i64 = M x {
+        fn check(x: bool) -> i64 = match x {
             true => 1,
             false => 0
         }
@@ -814,7 +814,7 @@ fn test_lower_match_with_bool_patterns() {
 #[test]
 fn test_lower_nested_if() {
     let source = r#"
-        F classify(x: i64) -> i64 = I x > 0 { I x > 100 { 2 } E { 1 } } E { 0 }
+        fn classify(x: i64) -> i64 = I x > 0 { I x > 100 { 2 } else { 1 } } else { 0 }
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower::lower_module(&module);
@@ -1066,8 +1066,8 @@ fn test_emit_constant_unit_operand() {
 #[test]
 fn test_full_pipeline_with_struct() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F make_point() -> i64 = 42
+        struct Point { x: i64, y: i64 }
+        fn make_point() -> i64 = 42
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut mir = lower::lower_module(&module);
@@ -1080,7 +1080,7 @@ fn test_full_pipeline_with_struct() {
 #[test]
 fn test_full_pipeline_with_match() {
     let source = r#"
-        F dispatch(code: i64) -> i64 = M code {
+        fn dispatch(code: i64) -> i64 = match code {
             0 => 100,
             1 => 200,
             2 => 300,
@@ -1098,9 +1098,9 @@ fn test_full_pipeline_with_match() {
 #[test]
 fn test_optimize_module_level() {
     let source = r#"
-        F a(x: i64) -> i64 = x + 1
-        F b(x: i64) -> i64 = x * 2
-        F c(x: i64) -> i64 = x - 3
+        fn a(x: i64) -> i64 = x + 1
+        fn b(x: i64) -> i64 = x * 2
+        fn c(x: i64) -> i64 = x - 3
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut mir = lower::lower_module(&module);

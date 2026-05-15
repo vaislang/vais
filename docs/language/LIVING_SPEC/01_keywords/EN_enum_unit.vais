@@ -1,0 +1,25 @@
+# LIVING_SPEC/01_keywords/EN_enum_unit.vais
+# Key concept: EN Name { Variant, ... } 유닛 열거형 선언.
+# 각 variant는 값이 없는 순수 태그. EN은 EL(else)과 구분되는 unambiguous 키워드.
+
+enum Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+fn to_code(d: Direction) -> i64 {
+    match d {
+        North => 0,
+        South => 1,
+        East  => 2,
+        West  => 3
+    }
+}
+
+fn main() -> i64 {
+    n := to_code(North)
+    w := to_code(West)
+    n + w
+}

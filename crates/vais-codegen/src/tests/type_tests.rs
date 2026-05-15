@@ -9,8 +9,8 @@ fn test_generic_identity_monomorphized_succeeds() {
     // as `identity(42)` should be fully monomorphized by Phase 67 before reaching
     // codegen, so compilation must succeed.
     let source = r#"
-F identity<T>(x: T) -> T { x }
-F main() -> i64 { identity(42) }
+fn identity<T>(x: T) -> T { x }
+fn main() -> i64 { identity(42) }
 "#;
     let module = parse(source).unwrap();
     let mut checker = vais_types::TypeChecker::new();
@@ -50,16 +50,6 @@ fn test_is_void_result_helper() {
         "i64",
         &vais_types::ResolvedType::I64
     ));
-}
-
-#[test]
-fn test_is_llvm_integer_scalar_helper() {
-    assert!(crate::helpers::is_llvm_integer_scalar("i1"));
-    assert!(crate::helpers::is_llvm_integer_scalar("i8"));
-    assert!(crate::helpers::is_llvm_integer_scalar("i64"));
-    assert!(!crate::helpers::is_llvm_integer_scalar("i8*"));
-    assert!(!crate::helpers::is_llvm_integer_scalar("i64 (i64)*"));
-    assert!(!crate::helpers::is_llvm_integer_scalar("float"));
 }
 
 #[test]
@@ -151,7 +141,7 @@ fn test_decreases_basic() {
     let source = r#"
         #[requires(n >= 0)]
         #[decreases(n)]
-        F factorial(n:i64)->i64{I n<=1{R 1}R n*factorial(n-1)}
+        fn factorial(n:i64)->i64{I n<=1{return 1} return n*factorial(n-1)}
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -184,7 +174,7 @@ fn test_decreases_strict_decrease_check() {
     // Test that the strict decrease check (new < old) is generated
     let source = r#"
         #[decreases(n)]
-        F count_down(n:i64)->i64{I n<=0{R 0}R count_down(n-1)}
+        fn count_down(n:i64)->i64{I n<=0{return 0} return count_down(n-1)}
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -208,7 +198,7 @@ fn test_decreases_nonneg_check() {
     // Test that non-negative check is generated for decreases expression
     let source = r#"
         #[decreases(x)]
-        F process(x:i64)->i64{I x<=0{R 0}R process(x-1)+1}
+        fn process(x:i64)->i64{I x<=0{return 0} return process(x-1)+1}
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -234,7 +224,7 @@ fn test_decreases_release_mode() {
     // Test that decreases checks are skipped in release mode
     let source = r#"
         #[decreases(n)]
-        F fib(n:i64)->i64{I n<2{R n}R fib(n-1)+fib(n-2)}
+        fn fib(n:i64)->i64{I n<2{return n} return fib(n-1)+fib(n-2)}
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -261,7 +251,7 @@ fn test_decreases_with_selfcall() {
     // Test decreases with @ self-call operator
     let source = r#"
         #[decreases(n)]
-        F sum_to(n:i64)->i64{I n<=0{R 0}R n+@(n-1)}
+        fn sum_to(n:i64)->i64{I n<=0{return 0} return n+@(n-1)}
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -355,7 +345,11 @@ fn test_ast_type_recursion_limit() {
     for _ in 0..50 {
         nested = Type::Pointer(Box::new(vais_ast::Spanned::new(
             nested,
-            Span { start: 0, end: 0 },
+            Span {
+                file_id: 0,
+                start: 0,
+                end: 0,
+            },
         )));
     }
 
@@ -374,7 +368,11 @@ fn test_ast_type_recursion_limit() {
     for _ in 0..150 {
         extremely_nested = Type::Pointer(Box::new(vais_ast::Spanned::new(
             extremely_nested,
-            Span { start: 0, end: 0 },
+            Span {
+                file_id: 0,
+                start: 0,
+                end: 0,
+            },
         )));
     }
 

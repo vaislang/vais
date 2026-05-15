@@ -42,25 +42,25 @@ C HTTP_DEFAULT_BUFFER: i64 = 4096
 # HTTP Headers
 # ============================================
 
-S Header {
+struct Header {
     name: str,
     value: str
 }
 
-X Header {
-    F new(name: str, value: str) -> Header {
+impl Header {
+    fn new(name: str, value: str) -> Header {
         Header { name: name, value: value }
     }
 }
 
-S Headers {
+struct Headers {
     items: i64,      # Pointer to array of Header
     count: i64,
     capacity: i64
 }
 
-X Headers {
-    F new() -> Headers {
+impl Headers {
+    fn new() -> Headers {
         capacity := 16
         items := __malloc(capacity * 16)  # 16 bytes per Header
         Headers {
@@ -71,7 +71,7 @@ X Headers {
     }
 
     # Add a header
-    F add(&self, name: str, value: str) -> i64 {
+    fn add(&self, name: str, value: str) -> i64 {
         LW self.count >= self.capacity {
             # Grow capacity
             new_capacity := self.capacity * 2
@@ -90,14 +90,14 @@ X Headers {
     }
 
     # Get a header value by name (case-insensitive)
-    F get(&self, name: str) -> str? {
-        i := 0
+    fn get(&self, name: str) -> str? {
+        i := mut 0
         LW i < self.count {
             offset := i * 16
             header_name := __load_ptr(self.items + offset) as str
             LW __str_eq_ignore_case(header_name, name) == 1 {
                 value := __load_ptr(self.items + offset + 8) as str
-                R Some(value)
+                return Some(value)
             }
             i = i + 1
         }
@@ -105,14 +105,14 @@ X Headers {
     }
 
     # Remove a header by name
-    F remove(&self, name: str) -> i64 {
-        i := 0
+    fn remove(&self, name: str) -> i64 {
+        i := mut 0
         LW i < self.count {
             offset := i * 16
             header_name := __load_ptr(self.items + offset) as str
             LW __str_eq_ignore_case(header_name, name) == 1 {
                 # Shift remaining headers down
-                j := i
+                j := mut i
                 LW j < self.count - 1 {
                     src_offset := (j + 1) * 16
                     dst_offset := j * 16
@@ -121,7 +121,7 @@ X Headers {
                     j = j + 1
                 }
                 self.count = self.count - 1
-                R 1
+                return 1
             }
             i = i + 1
         }
@@ -129,13 +129,13 @@ X Headers {
     }
 
     # Check if header exists
-    F contains(&self, name: str) -> i64 {
-        i := 0
+    fn contains(&self, name: str) -> i64 {
+        i := mut 0
         LW i < self.count {
             offset := i * 16
             header_name := __load_ptr(self.items + offset) as str
             LW __str_eq_ignore_case(header_name, name) == 1 {
-                R 1
+                return 1
             }
             i = i + 1
         }
@@ -143,12 +143,12 @@ X Headers {
     }
 
     # Get count
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.count
     }
 
     # Clear all headers
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         self.count = 0
         0
     }
@@ -158,7 +158,7 @@ X Headers {
 # HTTP Request
 # ============================================
 
-S Request {
+struct Request {
     method: i64,
     path: str,
     version: str,
@@ -167,8 +167,8 @@ S Request {
     body_len: i64
 }
 
-X Request {
-    F new(method: i64, path: str) -> Request {
+impl Request {
+    fn new(method: i64, path: str) -> Request {
         Request {
             method: method,
             path: path,
@@ -179,54 +179,54 @@ X Request {
         }
     }
 
-    F get(path: str) -> Request {
+    fn get(path: str) -> Request {
         req := Request::new(HTTP_GET, path)
         req.headers.add("User-Agent", "Vais-HTTP/1.0")
         req
     }
 
-    F post(path: str) -> Request {
+    fn post(path: str) -> Request {
         req := Request::new(HTTP_POST, path)
         req.headers.add("User-Agent", "Vais-HTTP/1.0")
         req
     }
 
-    F put(path: str) -> Request {
+    fn put(path: str) -> Request {
         req := Request::new(HTTP_PUT, path)
         req.headers.add("User-Agent", "Vais-HTTP/1.0")
         req
     }
 
-    F delete(path: str) -> Request {
+    fn delete(path: str) -> Request {
         req := Request::new(HTTP_DELETE, path)
         req.headers.add("User-Agent", "Vais-HTTP/1.0")
         req
     }
 
     # Set request body
-    F with_body(&self, data: i64, len: i64) -> Request {
+    fn with_body(&self, data: i64, len: i64) -> Request {
         self.body = data
         self.body_len = len
-        self
+        (*self)
     }
 
     # Set JSON body
-    F with_json(&self, json_str: str) -> Request {
+    fn with_json(&self, json_str: str) -> Request {
         self.body = json_str as i64
         self.body_len = __strlen(json_str)
         self.headers.add("Content-Type", "application/json")
-        self
+        (*self)
     }
 
     # Add header
-    F header(&self, name: str, value: str) -> Request {
+    fn header(&self, name: str, value: str) -> Request {
         self.headers.add(name, value)
-        self
+        (*self)
     }
 
     # Get method string
-    F method_str(&self) -> str {
-        M self.method {
+    fn method_str(&self) -> str {
+        match self.method {
             1 => "GET",
             2 => "POST",
             3 => "PUT",
@@ -239,9 +239,9 @@ X Request {
     }
 
     # Serialize request to bytes
-    F serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
+    fn serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
         # Request line: METHOD PATH VERSION\r\n
-        pos := 0
+        pos := mut 0
         method_s := self.method_str()
         pos = __str_copy_to(buffer + pos, method_s)
         __store_byte(buffer + pos, 32)  # space
@@ -255,7 +255,7 @@ X Request {
         pos = pos + 2
 
         # Headers
-        i := 0
+        i := mut 0
         LW i < self.headers.count {
             offset := i * 16
             name := __load_ptr(self.headers.items + offset) as str
@@ -299,7 +299,7 @@ X Request {
 # HTTP Response
 # ============================================
 
-S Response {
+struct Response {
     status: i64,
     status_text: str,
     version: str,
@@ -308,8 +308,8 @@ S Response {
     body_len: i64
 }
 
-X Response {
-    F new(status: i64) -> Response {
+impl Response {
+    fn new(status: i64) -> Response {
         Response {
             status: status,
             status_text: Response::status_to_text(status),
@@ -320,81 +320,81 @@ X Response {
         }
     }
 
-    F ok() -> Response {
+    fn ok() -> Response {
         Response::new(HTTP_OK)
     }
 
-    F not_found() -> Response {
+    fn not_found() -> Response {
         Response::new(HTTP_NOT_FOUND)
     }
 
-    F bad_request() -> Response {
+    fn bad_request() -> Response {
         Response::new(HTTP_BAD_REQUEST)
     }
 
-    F internal_error() -> Response {
+    fn internal_error() -> Response {
         Response::new(HTTP_INTERNAL_ERROR)
     }
 
     # Set response body
-    F with_body(&self, data: i64, len: i64) -> Response {
+    fn with_body(&self, data: i64, len: i64) -> Response {
         self.body = data
         self.body_len = len
-        self
+        (*self)
     }
 
     # Set text body
-    F with_text(&self, text: str) -> Response {
+    fn with_text(&self, text: str) -> Response {
         self.body = text as i64
         self.body_len = __strlen(text)
         self.headers.add("Content-Type", "text/plain; charset=utf-8")
-        self
+        (*self)
     }
 
     # Set JSON body
-    F with_json(&self, json_str: str) -> Response {
+    fn with_json(&self, json_str: str) -> Response {
         self.body = json_str as i64
         self.body_len = __strlen(json_str)
         self.headers.add("Content-Type", "application/json")
-        self
+        (*self)
     }
 
     # Set HTML body
-    F with_html(&self, html: str) -> Response {
+    fn with_html(&self, html: str) -> Response {
         self.body = html as i64
         self.body_len = __strlen(html)
         self.headers.add("Content-Type", "text/html; charset=utf-8")
-        self
+        (*self)
     }
 
     # Add header
-    F header(&self, name: str, value: str) -> Response {
+    fn header(&self, name: str, value: str) -> Response {
         self.headers.add(name, value)
-        self
+        (*self)
     }
 
     # Check if successful (2xx)
-    F is_success(&self) -> i64 {
+    fn is_success(&self) -> i64 {
         self.status >= 200 & self.status < 300
     }
 
     # Check if redirect (3xx)
-    F is_redirect(&self) -> i64 {
+    fn is_redirect(&self) -> i64 {
         self.status >= 300 & self.status < 400
     }
 
     # Check if client error (4xx)
-    F is_client_error(&self) -> i64 {
+    fn is_client_error(&self) -> i64 {
         self.status >= 400 & self.status < 500
     }
 
     # Check if server error (5xx)
-    F is_server_error(&self) -> i64 {
+    fn is_server_error(&self) -> i64 {
         self.status >= 500 & self.status < 600
     }
 
     # Get body as string
-    F body_text(&self) -> str {
+    partial fn body_text(&self) -> str {
         LW self.body != 0 & self.body_len > 0 {
             self.body as str
         } ! {
@@ -403,8 +403,8 @@ X Response {
     }
 
     # Serialize response to bytes
-    F serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
-        pos := 0
+    fn serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
+        pos := mut 0
 
         # Status line: VERSION STATUS STATUS_TEXT\r\n
         pos = pos + __str_copy_to(buffer + pos, self.version)
@@ -419,7 +419,7 @@ X Response {
         pos = pos + 2
 
         # Headers
-        i := 0
+        i := mut 0
         LW i < self.headers.count {
             offset := i * 16
             name := __load_ptr(self.headers.items + offset) as str
@@ -459,8 +459,8 @@ X Response {
     }
 
     # Convert status code to text
-    F status_to_text(status: i64) -> str {
-        M status {
+    fn status_to_text(status: i64) -> str {
+        match status {
             200 => "OK",
             201 => "Created",
             202 => "Accepted",
@@ -487,14 +487,14 @@ X Response {
 # HTTP Client
 # ============================================
 
-S Client {
+struct Client {
     timeout_ms: i64,
     follow_redirects: i64,
     max_redirects: i64
 }
 
-X Client {
-    F new() -> Client {
+impl Client {
+    fn new() -> Client {
         Client {
             timeout_ms: 30000,        # 30 seconds
             follow_redirects: 1,
@@ -503,23 +503,23 @@ X Client {
     }
 
     # Set timeout in milliseconds
-    F timeout(&self, ms: i64) -> Client {
+    fn timeout(&self, ms: i64) -> Client {
         self.timeout_ms = ms
-        self
+        (*self)
     }
 
     # Set redirect following
-    F follow_redirects(&self, follow: i64) -> Client {
+    fn follow_redirects(&self, follow: i64) -> Client {
         self.follow_redirects = follow
-        self
+        (*self)
     }
 
     # Execute a request
-    F execute(&self, host: str, port: i64, request: &Request) -> Response? {
+    fn execute(&self, host: str, port: i64, request: &Request) -> Response? {
         # Connect to server
         fd := __tcp_connect(host as i64, port)
         LW fd < 0 {
-            R None
+            return None
         }
 
         # Serialize and send request
@@ -531,15 +531,15 @@ X Client {
 
         LW sent < 0 {
             __tcp_close(fd)
-            R None
+            return None
         }
 
         # Receive response
         recv_buffer := __malloc(HTTP_MAX_HEADER_SIZE + HTTP_MAX_BODY_SIZE)
-        total_recv := 0
+        total_recv := mut 0
 
         # Read response
-        LW 1 {
+        LW true {
             n := __tcp_recv(fd, recv_buffer + total_recv, HTTP_DEFAULT_BUFFER)
             LW n <= 0 {
                 B
@@ -556,7 +556,7 @@ X Client {
 
         LW total_recv <= 0 {
             __free(recv_buffer)
-            R None
+            return None
         }
 
         # Parse response
@@ -567,10 +567,10 @@ X Client {
     }
 
     # Convenience method: GET request
-    F get(&self, url: str) -> Response? {
+    fn get(&self, url: str) -> Response? {
         # Parse URL: http://host:port/path
         host := __parse_url_host(url)
-        port := __parse_url_port(url)
+        port := mut __parse_url_port(url)
         path := __parse_url_path(url)
 
         LW port == 0 {
@@ -582,9 +582,9 @@ X Client {
     }
 
     # Convenience method: POST request
-    F post(&self, url: str, body: str) -> Response? {
+    fn post(&self, url: str, body: str) -> Response? {
         host := __parse_url_host(url)
-        port := __parse_url_port(url)
+        port := mut __parse_url_port(url)
         path := __parse_url_path(url)
 
         LW port == 0 {
@@ -602,24 +602,24 @@ X Client {
 
 # Route handler function type
 # Takes (Request, Response) and returns Response
-W Handler {
-    F handle(&self, req: &Request) -> Response
+trait Handler {
+    fn handle(&self, req: &Request) -> Response
 }
 
-S Route {
+struct Route {
     method: i64,
     path: str,
     handler_ptr: i64
 }
 
-S Router {
+struct Router {
     routes: i64,      # Array of Route
     count: i64,
     capacity: i64
 }
 
-X Router {
-    F new() -> Router {
+impl Router {
+    fn new() -> Router {
         capacity := 32
         routes := __malloc(capacity * 24)  # 24 bytes per Route
         Router {
@@ -630,7 +630,7 @@ X Router {
     }
 
     # Add a route
-    F route(&self, method: i64, path: str, handler: i64) -> Router {
+    fn route(&self, method: i64, path: str, handler: i64) -> Router {
         LW self.count >= self.capacity {
             new_capacity := self.capacity * 2
             new_routes := __malloc(new_capacity * 24)
@@ -645,39 +645,39 @@ X Router {
         __store_ptr(self.routes + offset + 8, path as i64)
         __store_ptr(self.routes + offset + 16, handler)
         self.count = self.count + 1
-        self
+        (*self)
     }
 
     # Add GET route
-    F get(&self, path: str, handler: i64) -> Router {
+    fn get(&self, path: str, handler: i64) -> Router {
         self.route(HTTP_GET, path, handler)
     }
 
     # Add POST route
-    F post(&self, path: str, handler: i64) -> Router {
+    fn post(&self, path: str, handler: i64) -> Router {
         self.route(HTTP_POST, path, handler)
     }
 
     # Add PUT route
-    F put(&self, path: str, handler: i64) -> Router {
+    fn put(&self, path: str, handler: i64) -> Router {
         self.route(HTTP_PUT, path, handler)
     }
 
     # Add DELETE route
-    F delete(&self, path: str, handler: i64) -> Router {
+    fn delete(&self, path: str, handler: i64) -> Router {
         self.route(HTTP_DELETE, path, handler)
     }
 
     # Find handler for request
-    F find_handler(&self, method: i64, path: str) -> i64 {
-        i := 0
+    fn find_handler(&self, method: i64, path: str) -> i64 {
+        i := mut 0
         LW i < self.count {
             offset := i * 24
             route_method := __load_i64(self.routes + offset)
             route_path := __load_ptr(self.routes + offset + 8) as str
 
             LW route_method == method & __str_eq(route_path, path) == 1 {
-                R __load_ptr(self.routes + offset + 16)
+                return __load_ptr(self.routes + offset + 16)
             }
             i = i + 1
         }
@@ -685,15 +685,15 @@ X Router {
     }
 }
 
-S Server {
+struct Server {
     host: str,
     port: i64,
     router: Router,
     running: i64
 }
 
-X Server {
-    F new(port: i64) -> Server {
+impl Server {
+    fn new(port: i64) -> Server {
         Server {
             host: "0.0.0.0",
             port: port,
@@ -702,7 +702,7 @@ X Server {
         }
     }
 
-    F bind(host: str, port: i64) -> Server {
+    fn bind(host: str, port: i64) -> Server {
         Server {
             host: host,
             port: port,
@@ -712,17 +712,17 @@ X Server {
     }
 
     # Add routes
-    F routes(&self, router: Router) -> Server {
+    fn routes(&self, router: Router) -> Server {
         self.router = router
-        self
+        (*self)
     }
 
     # Run the server (blocking)
-    F run(&self) -> i64 {
+    partial fn run(&self) -> i64 {
         # Create TCP listener
         listener_fd := __tcp_listen(self.port)
         LW listener_fd < 0 {
-            R -1
+            return -1
         }
 
         self.running = 1
@@ -744,12 +744,12 @@ X Server {
     }
 
     # Handle a single connection
-    F handle_connection(&self, fd: i64) -> i64 {
+    partial fn handle_connection(&self, fd: i64) -> i64 {
         # Read request
         buffer := __malloc(HTTP_MAX_HEADER_SIZE)
-        total := 0
+        total := mut 0
 
-        LW 1 {
+        LW true {
             n := __tcp_recv(fd, buffer + total, HTTP_DEFAULT_BUFFER)
             LW n <= 0 {
                 B
@@ -763,7 +763,7 @@ X Server {
 
         LW total <= 0 {
             __free(buffer)
-            R -1
+            return -1
         }
 
         # Parse request
@@ -773,17 +773,17 @@ X Server {
         # Find handler
         handler := self.router.find_handler(request.method, request.path)
 
-        response := LW handler != 0 {
-            # Call handler
-            __call_handler(handler, &request)
-        } ! {
-            # 404 Not Found
-            Response::not_found().with_text("Not Found")
-        }
+        # Step 13 A4-01: ternary used so the response type is preserved
+        # through inference; the previous `LW ... ! ...` (if-with-else)
+        # form was being lowered as a statement (Unit return), causing
+        # the silent Unit↔i64 coercion to apply at the __tcp_send call.
+        response: Response = handler != 0
+            ? __call_handler(handler, &request)
+            : Response::not_found().with_text("Not Found")
 
         # Send response
         resp_buffer := __malloc(HTTP_MAX_HEADER_SIZE + HTTP_MAX_BODY_SIZE)
-        resp_len := response.serialize(resp_buffer, HTTP_MAX_HEADER_SIZE + HTTP_MAX_BODY_SIZE)
+        resp_len: i64 = response.serialize(resp_buffer, HTTP_MAX_HEADER_SIZE + HTTP_MAX_BODY_SIZE)
         __tcp_send(fd, resp_buffer, resp_len)
         __free(resp_buffer)
 
@@ -791,7 +791,7 @@ X Server {
     }
 
     # Stop the server
-    F stop(&self) -> i64 {
+    fn stop(&self) -> i64 {
         self.running = 0
         0
     }
@@ -802,27 +802,27 @@ X Server {
 # ============================================
 
 # Create a new HTTP client
-F client() -> Client {
+fn client() -> Client {
     Client::new()
 }
 
 # Create a new HTTP server
-F server(port: i64) -> Server {
+fn server(port: i64) -> Server {
     Server::new(port)
 }
 
 # Create a new router
-F router() -> Router {
+fn router() -> Router {
     Router::new()
 }
 
 # Simple GET request
-F get(url: str) -> Response? {
+fn get(url: str) -> Response? {
     Client::new().get(url)
 }
 
 # Simple POST request
-F post(url: str, body: str) -> Response? {
+fn post(url: str, body: str) -> Response? {
     Client::new().post(url, body)
 }
 
@@ -831,37 +831,37 @@ F post(url: str, body: str) -> Response? {
 # ============================================
 
 # TCP operations (from net module)
-X F __tcp_connect(host: i64, port: i64) -> i64
-X F __tcp_listen(port: i64) -> i64
-X F __tcp_accept(listener_fd: i64) -> i64
-X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
-X F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
-X F __tcp_close(fd: i64) -> i64
+impl fn __tcp_connect(host: i64, port: i64) -> i64
+impl fn __tcp_listen(port: i64) -> i64
+impl fn __tcp_accept(listener_fd: i64) -> i64
+impl fn __tcp_send(fd: i64, data: i64, len: i64) -> i64
+impl fn __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+impl fn __tcp_close(fd: i64) -> i64
 
 # String operations
-X F __strlen(s: str) -> i64
-X F __str_copy_to(dst: i64, src: str) -> i64
-X F __str_eq(a: str, b: str) -> i64
-X F __str_eq_ignore_case(a: str, b: str) -> i64
-X F __i64_to_str(dst: i64, value: i64) -> i64
+impl fn __strlen(s: str) -> i64
+impl fn __str_copy_to(dst: i64, src: str) -> i64
+impl fn __str_eq(a: str, b: str) -> i64
+impl fn __str_eq_ignore_case(a: str, b: str) -> i64
+impl fn __i64_to_str(dst: i64, value: i64) -> i64
 
 # Memory operations
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __memcpy(dst: i64, src: i64, len: i64) -> i64
-X F __store_byte(ptr: i64, value: i64) -> i64
-X F __store_ptr(ptr: i64, value: i64) -> i64
-X F __store_i64(ptr: i64, value: i64) -> i64
-X F __load_ptr(ptr: i64) -> i64
-X F __load_i64(ptr: i64) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __memcpy(dst: i64, src: i64, len: i64) -> i64
+impl fn __store_byte(ptr: i64, value: i64) -> i64
+impl fn __store_ptr(ptr: i64, value: i64) -> i64
+impl fn __store_i64(ptr: i64, value: i64) -> i64
+impl fn __load_ptr(ptr: i64) -> i64
+impl fn __load_i64(ptr: i64) -> i64
 
 # HTTP parsing
-X F __find_header_end(buffer: i64, len: i64) -> i64
-X F __parse_request(buffer: i64, len: i64) -> Request
-X F __parse_response(buffer: i64, len: i64) -> Response
-X F __parse_url_host(url: str) -> str
-X F __parse_url_port(url: str) -> i64
-X F __parse_url_path(url: str) -> str
+impl fn __find_header_end(buffer: i64, len: i64) -> i64
+impl fn __parse_request(buffer: i64, len: i64) -> Request
+impl fn __parse_response(buffer: i64, len: i64) -> Response
+impl fn __parse_url_host(url: str) -> str
+impl fn __parse_url_port(url: str) -> i64
+impl fn __parse_url_path(url: str) -> str
 
 # Handler calling
-X F __call_handler(handler: i64, request: &Request) -> Response
+impl fn __call_handler(handler: i64, request: &Request) -> Response

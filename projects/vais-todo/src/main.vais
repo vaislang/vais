@@ -1,11 +1,11 @@
 # main.vais - CLI TODO application entry point
 
-X F strcmp(a: str, b: str) -> i64
-X F atoi(s: str) -> i64
-X F exit(code: i64) -> i64
+impl fn strcmp(a: str, b: str) -> i64
+impl fn atoi(s: str) -> i64
+impl fn exit(code: i64) -> i64
 
 # Parse command line arguments and execute appropriate command
-F main(argc: i64, argv: str) -> i64 {
+fn main(argc: i64, argv: str) -> i64 {
     # Load existing todos from storage
     C storage_path := storage_get_default_path()
     C list := storage_load(storage_path)
@@ -13,7 +13,7 @@ F main(argc: i64, argv: str) -> i64 {
     # Check if no arguments provided
     I argc < 2 {
         display_help()
-        R 0
+        return 0
     }
 
     # Get the command (first argument)
@@ -26,14 +26,14 @@ F main(argc: i64, argv: str) -> i64 {
     # Clean up
     todolist_free(list)
 
-    R result
+    return result
 }
 
 # Execute a specific command
-F execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: str) -> i64 {
+fn execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: str) -> i64 {
     # Command: help
     I strcmp(cmd, "help") == 0 {
-        R display_help()
+        return display_help()
     }
 
     # Command: list
@@ -47,9 +47,9 @@ F execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: 
             # I strcmp(filter, "--pending") == 0 {
             #     R display_list_filtered(list, 0)
             # }
-            R display_list(list)
-        } E {
-            R display_list(list)
+            return display_list(list)
+        } enum {
+            return display_list(list)
         }
     }
 
@@ -57,7 +57,7 @@ F execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: 
     I strcmp(cmd, "add") == 0 {
         I argc < 3 {
             display_error("Missing description. Usage: add <description>")
-            R 1
+            return 1
         }
 
         # Get description from arguments
@@ -71,10 +71,10 @@ F execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: 
 
         I save_result == 0 {
             display_success("TODO item added!")
-            R 0
-        } E {
+            return 0
+        } enum {
             display_error("Failed to save TODO list")
-            R 1
+            return 1
         }
     }
 
@@ -82,7 +82,7 @@ F execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: 
     I strcmp(cmd, "done") == 0 {
         I argc < 3 {
             display_error("Missing ID. Usage: done <id>")
-            R 1
+            return 1
         }
 
         # Get ID from arguments
@@ -95,10 +95,10 @@ F execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: 
         I result == 0 {
             storage_save(list, storage_path)
             display_success("TODO item marked as done!")
-            R 0
-        } E {
+            return 0
+        } enum {
             display_error("TODO item not found")
-            R 1
+            return 1
         }
     }
 
@@ -106,7 +106,7 @@ F execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: 
     I strcmp(cmd, "remove") == 0 {
         I argc < 3 {
             display_error("Missing ID. Usage: remove <id>")
-            R 1
+            return 1
         }
 
         # Get ID from arguments
@@ -119,24 +119,24 @@ F execute_command(cmd: str, argc: i64, argv: str, list: TodoList, storage_path: 
         I result == 0 {
             storage_save(list, storage_path)
             display_success("TODO item removed!")
-            R 0
-        } E {
+            return 0
+        } enum {
             display_error("TODO item not found")
-            R 1
+            return 1
         }
     }
 
     # Unknown command
     display_error("Unknown command. Use 'help' to see available commands.")
-    R 1
+    return 1
 }
 
 # Entry point wrapper
-F start() -> i64 {
+fn start() -> i64 {
     # In a real implementation, would get actual argc/argv from OS
     C argc := 2
     C argv := "vais-todo list"
 
     C result := main(argc, argv)
-    R result
+    return result
 }

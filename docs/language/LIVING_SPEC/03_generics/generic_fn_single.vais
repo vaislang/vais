@@ -1,0 +1,11 @@
+# LIVING_SPEC/03_generics/generic_fn_single.vais
+# Key concept: F name<T>(x: T) -> T 단일 타입 파라미터 제네릭 함수.
+# 호출 시 타입은 인자로부터 자동 추론(monomorphization).
+
+fn id<T>(x: T) -> T = x
+
+fn main() -> i64 {
+    n := id(10)
+    s := id("hello")
+    id(n)
+}

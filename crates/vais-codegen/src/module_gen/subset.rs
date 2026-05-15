@@ -397,14 +397,46 @@ impl CodeGenerator {
             }
         }
 
-        // Generate specialized struct types from explicit Struct instantiations
+        // Generate specialized struct types from explicit Struct instantiations.
+        // Method instantiations on generic structs also need the receiver's
+        // concrete struct layout, even when no separate Struct instantiation was
+        // recorded by type checking.
         for inst in instantiations {
-            if let vais_types::InstantiationKind::Struct = inst.kind {
-                if let Some(generic_struct) =
-                    self.generics.struct_defs.get(&inst.base_name).cloned()
-                {
-                    self.generate_specialized_struct_type(&generic_struct, inst, &mut ir)?;
+            match &inst.kind {
+                vais_types::InstantiationKind::Struct => {
+                    if let Some(generic_struct) =
+                        self.generics.struct_defs.get(&inst.base_name).cloned()
+                    {
+                        self.generate_specialized_struct_type(&generic_struct, inst, &mut ir)?;
+                    }
                 }
+                vais_types::InstantiationKind::Method { struct_name } => {
+                    if inst.type_args.iter().any(|t| {
+                        matches!(
+                            t,
+                            ResolvedType::Unknown | ResolvedType::Generic(_) | ResolvedType::Var(_)
+                        )
+                    }) {
+                        continue;
+                    }
+                    if let Some(generic_struct) =
+                        self.generics.struct_defs.get(struct_name).cloned()
+                    {
+                        let struct_inst = vais_types::GenericInstantiation {
+                            kind: vais_types::InstantiationKind::Struct,
+                            base_name: struct_name.clone(),
+                            mangled_name: vais_types::mangle_name(struct_name, &inst.type_args),
+                            type_args: inst.type_args.clone(),
+                            const_args: Vec::new(),
+                        };
+                        self.generate_specialized_struct_type(
+                            &generic_struct,
+                            &struct_inst,
+                            &mut ir,
+                        )?;
+                    }
+                }
+                vais_types::InstantiationKind::Function => {}
             }
         }
 
@@ -493,14 +525,26 @@ impl CodeGenerator {
         }
 
         // Generate non-specialized struct types (skip already-emitted specialized generics)
+        // Phase E: dedup across structs/enums — cross-module codegen can see
+        // the same name defined as both a struct and an enum in different
+        // modules. Emit the first definition we encounter and skip later
+        // collisions.
+        let mut emitted_type_names: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
         for (name, info) in &self.types.structs {
             if self.generics.generated_structs.contains_key(name) {
+                continue;
+            }
+            if !emitted_type_names.insert(name.clone()) {
                 continue;
             }
             ir.push_str(&self.generate_struct_type(name, info));
             ir.push('\n');
         }
         for (name, info) in &self.types.enums {
+            if !emitted_type_names.insert(name.clone()) {
+                continue;
+            }
             ir.push_str(&self.generate_enum_type(name, info));
             ir.push('\n');
         }
@@ -508,6 +552,13 @@ impl CodeGenerator {
             ir.push_str(&self.generate_union_type(name, info));
             ir.push('\n');
         }
+
+        // Phase D: placeholder for specialized-generic type forward decls.
+        // MUST be placed BEFORE extern declares so that any `%Foo$Bar`
+        // referenced in a signature has its type on record. The actual
+        // scan + substitution happens at end of subset emission.
+        const PHASE_D_MARKER: &str = "; __PHASE_D_FORWARD_DECLS__\n";
+        ir.push_str(PHASE_D_MARKER);
 
         // Generate extern declarations for ALL extern functions (is_extern = true)
         // Builtin helpers (is_extern = false) are handled separately below.
@@ -528,6 +579,12 @@ impl CodeGenerator {
             // currently emitting the main module.
             if is_main_module
                 && crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name)
+            {
+                declared_fns.insert(info.signature.name.clone());
+                continue;
+            }
+            if is_main_module
+                && crate::function_gen::runtime::is_main_runtime_c_decl(&info.signature.name)
             {
                 declared_fns.insert(info.signature.name.clone());
                 continue;
@@ -582,14 +639,12 @@ impl CodeGenerator {
         // Skip builtins — they are handled by generate_helper_functions() or the non-main extern block.
         // Skip specialized functions that will be defined in this module (type signature mismatch).
         for (name, info) in &self.types.functions {
-            let skip_decl = info.is_extern
-                || module_functions.contains(name)
-                || declared_fns.contains(name)
-                || builtin_fn_keys.contains(name)
-                || specialized_defines.contains(name)
-                || (is_main_module
-                    && crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name));
-            if !skip_decl {
+            if !info.is_extern
+                && !module_functions.contains(name)
+                && !declared_fns.contains(name)
+                && !builtin_fn_keys.contains(name)
+                && !specialized_defines.contains(name)
+            {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
                 declared_fns.insert(name.clone());
@@ -715,24 +770,24 @@ impl CodeGenerator {
         for &idx in &valid_indices {
             let item = &full_module.items[idx];
             match &item.node {
-                Item::Function(f) if f.generics.is_empty() => {
-                    body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
-                    body_ir.push('\n');
-                }
-                Item::Function(_) => {
-                    // generic functions are handled by the instantiation loop above
-                }
-                Item::Struct(s) if s.generics.is_empty() => {
-                    for method in &s.methods {
-                        body_ir.push_str(&self.generate_method_with_span(
-                            &s.name.node,
-                            &method.node,
-                            method.span,
-                        )?);
+                Item::Function(f) => {
+                    if f.generics.is_empty() {
+                        body_ir.push_str(&self.generate_function_with_span(f, item.span)?);
                         body_ir.push('\n');
                     }
+                    // generic functions are handled by the instantiation loop above
                 }
-                Item::Struct(_) => {
+                Item::Struct(s) => {
+                    if s.generics.is_empty() {
+                        for method in &s.methods {
+                            body_ir.push_str(&self.generate_method_with_span(
+                                &s.name.node,
+                                &method.node,
+                                method.span,
+                            )?);
+                            body_ir.push('\n');
+                        }
+                    }
                     // generic struct methods handled by instantiation loop above
                 }
                 Item::Impl(impl_block) => {
@@ -813,11 +868,16 @@ impl CodeGenerator {
             }
         }
 
-        if self.needs_string_helpers {
-            // Emit weak definitions in every module that needs them. A non-main
-            // module can require string helpers even when the main module does
-            // not, and `weak_odr` keeps duplicate definitions link-safe.
+        if is_main_module {
+            // Per-module linking needs one canonical definition of the string
+            // helpers even when only an imported module used substring/concat.
             ir.push_str(&self.generate_string_helper_functions());
+            if !self.target.is_wasm() {
+                ir.push_str(&self.generate_string_extern_declarations());
+            }
+        } else if self.needs_string_helpers {
+            // Non-main modules: declare string helpers as external (defined in main module)
+            ir.push_str(&self.generate_string_helper_declarations());
             if !self.target.is_wasm() {
                 ir.push_str(&self.generate_string_extern_declarations());
             }
@@ -835,9 +895,6 @@ impl CodeGenerator {
         // Struct shallow-free helpers (RFC-002 §4.2, Phase 191 #2b-C).
         for struct_name in &self.needs_struct_shallow.clone() {
             if let Some(info) = self.types.structs.get(struct_name) {
-                // Emit weak definitions in every module that needs them. The
-                // main module may not use the same structs as a transitive
-                // module, so declarations alone can leave link-time gaps.
                 let field_count = info.fields.len();
                 let heap_fields = info.heap_fields.clone();
                 ir.push_str(&self.generate_struct_shallow_free_helper(
@@ -877,6 +934,93 @@ impl CodeGenerator {
         {
             ir.push_str("\n; WASM import/export metadata\n");
             ir.push_str(&self.generate_wasm_metadata());
+        }
+
+        // Phase D: scan the fully-assembled IR for references to specialized
+        // generic types (names containing `$`, e.g. `%Result$f64_VaisError`,
+        // `%Vec$SqlValue`). For any specialization not already declared in
+        // this module, emit a forward type declaration with the erased
+        // enum / base-struct layout. Replaces the PHASE_D_MARKER placeholder
+        // so the declarations appear above any use sites.
+        {
+            use std::collections::BTreeSet;
+            let mut referenced: BTreeSet<String> = BTreeSet::new();
+            for token in
+                ir.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '%'))
+            {
+                if let Some(rest) = token.strip_prefix('%') {
+                    if rest.is_empty() {
+                        continue;
+                    }
+                    if !rest
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+                    {
+                        continue;
+                    }
+                    // Track specialized generics (contain `$`) and bare
+                    // generic-enum bases that the body may alloca/GEP on.
+                    if rest.contains('$') || matches!(rest, "Result" | "Option") {
+                        referenced.insert(rest.to_string());
+                    }
+                }
+            }
+            let mut forward_decls = String::new();
+            for mangled in &referenced {
+                let already = format!("%{} = type", mangled);
+                let already_quoted = format!("%\"{}\" = type", mangled);
+                if ir.contains(&already) || ir.contains(&already_quoted) {
+                    continue;
+                }
+                let base = mangled.split('$').next().unwrap_or(mangled);
+                if self.types.enums.contains_key(base) {
+                    forward_decls.push_str(&format!("%{} = type {{ i32, {{ i64 }} }}\n", mangled));
+                } else if let Some(info) = self.types.structs.get(base) {
+                    let fields: Vec<String> = info
+                        .fields
+                        .iter()
+                        .map(|(_, ty)| self.type_to_llvm(ty))
+                        .collect();
+                    forward_decls.push_str(&format!(
+                        "%{} = type {{ {} }}\n",
+                        mangled,
+                        fields.join(", ")
+                    ));
+                } else if matches!(base, "Result" | "Option") {
+                    // Generic stdlib enums: erased layout.
+                    forward_decls.push_str(&format!("%{} = type {{ i32, {{ i64 }} }}\n", mangled));
+                } else if base == "Vec" {
+                    // std::Vec<T> struct: 5 i64 fields (data, len, cap,
+                    // elem_size, owned). All specializations share layout.
+                    forward_decls.push_str(&format!(
+                        "%{} = type {{ i64, i64, i64, i64, i64 }}\n",
+                        mangled
+                    ));
+                } else if base == "HashMap" {
+                    // std::HashMap: 8 i64 fields (rough layout).
+                    forward_decls.push_str(&format!(
+                        "%{} = type {{ i64, i64, i64, i64, i64, i64, i64, i64 }}\n",
+                        mangled
+                    ));
+                } else if base == "HashSet" {
+                    // std::HashSet<T>: buckets, size, cap.
+                    forward_decls.push_str(&format!("%{} = type {{ i64, i64, i64 }}\n", mangled));
+                } else if base == "Box" {
+                    // std::Box<T> is a heap-wrapper struct with a single
+                    // i64 payload (the boxed pointer). Specializations
+                    // share the same layout.
+                    forward_decls.push_str(&format!("%{} = type {{ i64 }}\n", mangled));
+                }
+            }
+            let replacement = if forward_decls.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "\n; Phase D: forward declarations for cross-module specialized types\n{}",
+                    forward_decls
+                )
+            };
+            ir = ir.replacen(PHASE_D_MARKER, &replacement, 1);
         }
 
         Ok(ir)

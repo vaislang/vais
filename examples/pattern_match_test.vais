@@ -1,7 +1,7 @@
 # Pattern matching test
 
-F color_code(c: i64) -> i64 {
-    M c {
+fn color_code(c: i64) -> i64 {
+    match c {
         0 => 255,
         1 => 65280,
         _ => 0
@@ -9,14 +9,14 @@ F color_code(c: i64) -> i64 {
 }
 
 # Test binding pattern - single expression
-F describe(n: i64) -> i64 {
-    M n {
+fn describe(n: i64) -> i64 {
+    match n {
         0 => 100,
         x => x + 1
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing pattern matching:")
 
     c := color_code(0)

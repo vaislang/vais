@@ -1,4 +1,4 @@
-F literals() -> i64 {
+fn literals() -> i64 {
     a := 42
     b := 3.14
     c := 0xFF

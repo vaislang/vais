@@ -1,0 +1,158 @@
+use sql/parser/ast
+use sql/planner/mod
+use sql/catalog/manager
+use sql/catalog/schema
+use storage/btree/tree
+
+fn make_catalog() -> CatalogManager {
+    tree := mut BTree.new(1 as u32, 0 as u8, 4096 as u32)
+    catalog := mut CatalogManager.new(tree)
+
+    table := mut TableInfo.new(100 as u32, "docs", 2 as u16, 7 as u32)
+    table.row_count_estimate = 120 as u64
+    ignored_table := mut catalog.tables.push(table)
+
+    ignored_col_id := mut catalog.columns.push(
+        ColumnInfo.new_primary_key(100 as u32, 0 as u16, "id", SqlType.Int)
+    )
+    ignored_col_title := mut catalog.columns.push(
+        ColumnInfo.new(100 as u32, 1 as u16, "title", SqlType.Text)
+    )
+
+    index_columns: Vec<str> := mut Vec.with_capacity(1)
+    index_columns.push("id")
+    index := mut IndexInfo.new(1 as u32, "idx_docs_id", 100 as u32, index_columns, 9 as u32)
+    ignored_index := mut catalog.indexes.push(index)
+
+    catalog
+}
+
+fn make_from_docs() -> Option<Vec<TableRef>> {
+    refs: Vec<TableRef> := mut Vec.with_capacity(1)
+    refs.push(TableRef.Table { name: "docs", alias: None })
+    Some(refs)
+}
+
+fn make_column(name: str) -> Expr {
+    Expr.ColumnRef { table: None, column: name }
+}
+
+fn make_int(v: i64) -> Expr {
+    Expr.Literal { value: SqlValue.IntVal { v } }
+}
+
+fn make_project_query() -> SelectQuery {
+    query := mut SelectQuery.empty()
+    query.from = make_from_docs()
+    query.select_list.push(SelectItem.Expr {
+        expr: make_column("id"),
+        alias: Some("doc_id"),
+    })
+    query
+}
+
+fn check_project_limit_index_format(catalog: &CatalogManager) -> i64 {
+    query := mut make_project_query()
+    query.where_clause = Some(Expr.BinaryOp {
+        left: Box.new(make_column("id")),
+        op: BinOp.Eq,
+        right: Box.new(make_int(7)),
+    })
+    query.limit = Some(make_int(2))
+
+    plan := mut match build_plan(&query, catalog) {
+        Ok(v) => v,
+        Err(_) => { return 1 },
+    }
+
+    text := mut format_plan(&plan, 0)
+    I text == "Plan" { return 2 }
+    expected := mut "Project columns=1\n  Limit limit=2\n    IndexScan table=docs index=idx_docs_id residual=false"
+    I text != expected { return 3 }
+
+    indented := mut format_plan(&plan, 1)
+    expected_indented := mut "  Project columns=1\n    Limit limit=2\n      IndexScan table=docs index=idx_docs_id residual=false"
+    I indented != expected_indented { return 4 }
+
+    return 0
+}
+
+fn check_sort_seqscan_format(catalog: &CatalogManager) -> i64 {
+    query := mut make_project_query()
+    query.order_by.push(OrderByItem {
+        expr: make_column("title"),
+        asc: false,
+        nulls_first: Some(true),
+    })
+
+    plan := mut match build_plan(&query, catalog) {
+        Ok(v) => v,
+        Err(_) => { return 10 },
+    }
+
+    text := mut format_plan(&plan, 0)
+    expected := mut "Project columns=1\n  Sort keys=1\n    SeqScan table=docs filter=false"
+    I text != expected { return 11 }
+
+    return 0
+}
+
+fn check_aggregate_format(catalog: &CatalogManager) -> i64 {
+    query := mut SelectQuery.empty()
+    query.from = make_from_docs()
+    query.select_list.push(SelectItem.Expr {
+        expr: make_column("id"),
+        alias: None,
+    })
+    count_args: Vec<Expr> := mut Vec.with_capacity(1)
+    count_args.push(Expr.Star)
+    query.select_list.push(SelectItem.Expr {
+        expr: Expr.FunctionCall {
+            name: "count",
+            args: count_args,
+            distinct: false,
+        },
+        alias: Some("n"),
+    })
+    query.group_by.push(make_column("id"))
+
+    plan := mut match build_plan(&query, catalog) {
+        Ok(v) => v,
+        Err(_) => { return 20 },
+    }
+
+    text := mut format_plan(&plan, 0)
+    expected := mut "Project columns=2\n  Aggregate groups=1 aggregates=1\n    SeqScan table=docs filter=false"
+    I text != expected { return 21 }
+
+    return 0
+}
+
+fn check_leaf_format() -> i64 {
+    empty_text := mut format_plan(&PlanNode.Empty, 1)
+    I empty_text != "  Empty" { return 30 }
+
+    rows: Vec<Vec<Expr>> := mut Vec.with_capacity(0)
+    values_text := mut format_plan(&PlanNode.Values { rows }, 0)
+    I values_text != "Values rows=0" { return 31 }
+
+    return 0
+}
+
+fn main() -> i64 {
+    catalog := mut make_catalog()
+
+    code := mut check_project_limit_index_format(&catalog)
+    I code != 0 { return code }
+
+    code = check_sort_seqscan_format(&catalog)
+    I code != 0 { return code }
+
+    code = check_aggregate_format(&catalog)
+    I code != 0 { return code }
+
+    code = check_leaf_format()
+    I code != 0 { return code }
+
+    return 0
+}

@@ -1,23 +1,23 @@
 # Test suite for vais-uuid
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F load_byte(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F memset(dest: i64, val: i64, n: i64) -> i64
-X F puts(s: str) -> i64
-X F putchar(c: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn memset(dest: i64, val: i64, n: i64) -> i64
+impl fn puts(s: str) -> i64
+impl fn putchar(c: i64) -> i64
 
 # UUID functions
-F next_random(seed: i64) -> i64 {
+fn next_random(seed: i64) -> i64 {
     a := 1664525
     c := 1013904223
     m := 2147483647
     result := (seed * a + c) % m
-    R result
+    return result
 }
 
-F uuid_v4_with_seed(seed: i64) -> i64 {
+fn uuid_v4_with_seed(seed: i64) -> i64 {
     uuid := malloc(16)
     current := seed
     i := 0
@@ -36,21 +36,21 @@ F uuid_v4_with_seed(seed: i64) -> i64 {
     b8 := load_byte(uuid + 8)
     b8 = (b8 & 63) | 128
     store_byte(uuid + 8, b8)
-    R uuid
+    return uuid
 }
 
-F uuid_v4() -> i64 {
-    R uuid_v4_with_seed(12345)
+fn uuid_v4() -> i64 {
+    return uuid_v4_with_seed(12345)
 }
 
-F to_hex(val: i64) -> i64 {
+fn to_hex(val: i64) -> i64 {
     I val < 10 {
-        R 48 + val
+        return 48 + val
     }
-    R 97 + (val - 10)
+    return 97 + (val - 10)
 }
 
-F uuid_to_string(uuid: i64) -> i64 {
+fn uuid_to_string(uuid: i64) -> i64 {
     s := malloc(37)
     pos := 0
     i := 0
@@ -84,16 +84,16 @@ F uuid_to_string(uuid: i64) -> i64 {
         i = i + 1
     }
     store_byte(s + pos, 0)
-    R s
+    return s
 }
 
-F uuid_nil() -> i64 {
+fn uuid_nil() -> i64 {
     uuid := malloc(16)
     memset(uuid, 0, 16)
-    R uuid
+    return uuid
 }
 
-F uuid_compare(a: i64, b: i64) -> i64 {
+fn uuid_compare(a: i64, b: i64) -> i64 {
     i := 0
     L {
         I i >= 16 {
@@ -102,23 +102,23 @@ F uuid_compare(a: i64, b: i64) -> i64 {
         ba := load_byte(a + i)
         bb := load_byte(b + i)
         I ba != bb {
-            R ba - bb
+            return ba - bb
         }
         i = i + 1
     }
-    R 0
+    return 0
 }
 
-F uuid_version(uuid: i64) -> i64 {
+fn uuid_version(uuid: i64) -> i64 {
     b6 := load_byte(uuid + 6)
-    R (b6 >> 4) & 15
+    return (b6 >> 4) & 15
 }
 
 # Helper to print number
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n == 0 {
         putchar(48)
-        R 0
+        return 0
     }
     I n < 0 {
         putchar(45)
@@ -128,11 +128,11 @@ F print_num(n: i64) -> i64 {
         print_num(n / 10)
     }
     putchar(48 + (n % 10))
-    R 0
+    return 0
 }
 
 # Tests
-F test_uuid_format() -> i64 {
+fn test_uuid_format() -> i64 {
     puts("Test 1: UUID format...")
     uuid := uuid_v4()
     s := uuid_to_string(uuid)
@@ -140,28 +140,28 @@ F test_uuid_format() -> i64 {
     # Check length and dashes
     I load_byte(s + 8) != 45 {
         puts(" FAIL")
-        R 0
+        return 0
     }
     I load_byte(s + 13) != 45 {
         puts(" FAIL")
-        R 0
+        return 0
     }
     I load_byte(s + 18) != 45 {
         puts(" FAIL")
-        R 0
+        return 0
     }
     I load_byte(s + 23) != 45 {
         puts(" FAIL")
-        R 0
+        return 0
     }
 
     free(uuid)
     free(s)
     puts(" PASS")
-    R 1
+    return 1
 }
 
-F test_uuid_version() -> i64 {
+fn test_uuid_version() -> i64 {
     puts("Test 2: UUID version...")
     uuid := uuid_v4()
     version := uuid_version(uuid)
@@ -169,15 +169,15 @@ F test_uuid_version() -> i64 {
     I version != 4 {
         puts(" FAIL")
         free(uuid)
-        R 0
+        return 0
     }
 
     free(uuid)
     puts(" PASS")
-    R 1
+    return 1
 }
 
-F test_uuid_variant() -> i64 {
+fn test_uuid_variant() -> i64 {
     puts("Test 3: UUID variant...")
     uuid := uuid_v4()
     b8 := load_byte(uuid + 8)
@@ -186,20 +186,20 @@ F test_uuid_variant() -> i64 {
     I b8 < 128 {
         puts(" FAIL")
         free(uuid)
-        R 0
+        return 0
     }
     I b8 >= 192 {
         puts(" FAIL")
         free(uuid)
-        R 0
+        return 0
     }
 
     free(uuid)
     puts(" PASS")
-    R 1
+    return 1
 }
 
-F test_uuid_nil() -> i64 {
+fn test_uuid_nil() -> i64 {
     puts("Test 4: UUID nil...")
     uuid := uuid_nil()
 
@@ -212,17 +212,17 @@ F test_uuid_nil() -> i64 {
         I byte != 0 {
             puts(" FAIL")
             free(uuid)
-            R 0
+            return 0
         }
         i = i + 1
     }
 
     free(uuid)
     puts(" PASS")
-    R 1
+    return 1
 }
 
-F test_uuid_compare() -> i64 {
+fn test_uuid_compare() -> i64 {
     puts("Test 5: UUID compare...")
     uuid1 := uuid_v4()
 
@@ -230,7 +230,7 @@ F test_uuid_compare() -> i64 {
     I uuid_compare(uuid1, uuid1) != 0 {
         puts(" FAIL")
         free(uuid1)
-        R 0
+        return 0
     }
 
     # Different UUIDs should be different
@@ -242,10 +242,10 @@ F test_uuid_compare() -> i64 {
     free(uuid1)
     free(uuid2)
     puts(" PASS")
-    R 1
+    return 1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== vais-uuid Test Suite ===")
 
     passed := 0
@@ -275,9 +275,9 @@ F main() -> i64 {
 
     I passed == total {
         puts("All tests passed!")
-        R 0
+        return 0
     }
 
     puts("Some tests failed.")
-    R 1
+    return 1
 }

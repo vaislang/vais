@@ -21,7 +21,7 @@
 # we simulate the concepts here.
 
 # Simulate a module handle
-S TestModuleHandle {
+struct TestModuleHandle {
     id: i64,
     name: i64,
     version: i64,
@@ -29,7 +29,7 @@ S TestModuleHandle {
 }
 
 # Create a test module handle
-F create_test_module(id: i64, name: i64) -> TestModuleHandle {
+fn create_test_module(id: i64, name: i64) -> TestModuleHandle {
     TestModuleHandle {
         id: id,
         name: name,
@@ -39,7 +39,7 @@ F create_test_module(id: i64, name: i64) -> TestModuleHandle {
 }
 
 # Simulate unloading
-F unload_test_module(m: TestModuleHandle) -> TestModuleHandle {
+fn unload_test_module(m: TestModuleHandle) -> TestModuleHandle {
     TestModuleHandle {
         id: m.id,
         name: m.name,
@@ -49,7 +49,7 @@ F unload_test_module(m: TestModuleHandle) -> TestModuleHandle {
 }
 
 # Simulate reloading
-F reload_test_module(m: TestModuleHandle) -> TestModuleHandle {
+fn reload_test_module(m: TestModuleHandle) -> TestModuleHandle {
     TestModuleHandle {
         id: m.id,
         name: m.name,
@@ -63,7 +63,7 @@ F reload_test_module(m: TestModuleHandle) -> TestModuleHandle {
 # ============================================================================
 
 # Resource limit structure
-S ResourceLimit {
+struct ResourceLimit {
     max_memory: i64,
     max_time: i64,
     max_stack: i64,
@@ -71,7 +71,7 @@ S ResourceLimit {
 }
 
 # Create default limits
-F default_resource_limits() -> ResourceLimit {
+fn default_resource_limits() -> ResourceLimit {
     ResourceLimit {
         max_memory: 67108864,  # 64 MB
         max_time: 5000,        # 5 seconds
@@ -81,13 +81,13 @@ F default_resource_limits() -> ResourceLimit {
 }
 
 # Check if usage exceeds limits
-F check_limits(used_memory: i64, used_time: i64, limits: ResourceLimit) -> i64 {
+fn check_limits(used_memory: i64, used_time: i64, limits: ResourceLimit) -> i64 {
     I used_memory > limits.max_memory {
         0  # Exceeded
-    } EL {
+    } else {
         I used_time > limits.max_time {
             0  # Exceeded
-        } EL {
+        } else {
             1  # OK
         }
     }
@@ -106,26 +106,26 @@ C CAP_FS_WRITE: i64 = 16
 C CAP_NETWORK: i64  = 32
 
 # Check if capability is granted
-F has_cap(caps: i64, cap: i64) -> i64 {
+fn has_cap(caps: i64, cap: i64) -> i64 {
     I (caps & cap) != 0 {
         1
-    } EL {
+    } else {
         0
     }
 }
 
 # Grant a capability
-F grant_cap(caps: i64, cap: i64) -> i64 {
+fn grant_cap(caps: i64, cap: i64) -> i64 {
     caps | cap
 }
 
 # Revoke a capability
-F revoke_cap(caps: i64, cap: i64) -> i64 {
+fn revoke_cap(caps: i64, cap: i64) -> i64 {
     caps & (~cap)
 }
 
 # Check for dangerous capabilities
-F is_dangerous(caps: i64) -> i64 {
+fn is_dangerous(caps: i64) -> i64 {
     dangerous := CAP_FS_WRITE | CAP_NETWORK
     has_cap(caps, dangerous)
 }
@@ -134,7 +134,7 @@ F is_dangerous(caps: i64) -> i64 {
 # Test 4: Plugin Manifest Simulation
 # ============================================================================
 
-S PluginInfo {
+struct PluginInfo {
     name: i64,
     version_major: i64,
     version_minor: i64,
@@ -143,7 +143,7 @@ S PluginInfo {
 }
 
 # Create plugin info
-F create_plugin_info(name: i64, major: i64, minor: i64, patch: i64) -> PluginInfo {
+fn create_plugin_info(name: i64, major: i64, minor: i64, patch: i64) -> PluginInfo {
     PluginInfo {
         name: name,
         version_major: major,
@@ -155,22 +155,22 @@ F create_plugin_info(name: i64, major: i64, minor: i64, patch: i64) -> PluginInf
 
 # Check version compatibility
 # Returns 1 if plugin version >= required version
-F is_version_compatible(plugin: PluginInfo, req_major: i64, req_minor: i64, req_patch: i64) -> i64 {
+fn is_version_compatible(plugin: PluginInfo, req_major: i64, req_minor: i64, req_patch: i64) -> i64 {
     I plugin.version_major > req_major {
         1
-    } EL {
+    } else {
         I plugin.version_major < req_major {
             0
-        } EL {
+        } else {
             I plugin.version_minor > req_minor {
                 1
-            } EL {
+            } else {
                 I plugin.version_minor < req_minor {
                     0
-                } EL {
+                } else {
                     I plugin.version_patch >= req_patch {
                         1
-                    } EL {
+                    } else {
                         0
                     }
                 }
@@ -189,14 +189,14 @@ C STATE_COMPILING: i64 = 2
 C STATE_LOADING: i64 = 3
 C STATE_ERROR: i64 = 4
 
-S HotReloadState {
+struct HotReloadState {
     state: i64,
     version: i64,
     last_check: i64,
     error_code: i64
 }
 
-F hot_reload_init() -> HotReloadState {
+fn hot_reload_init() -> HotReloadState {
     HotReloadState {
         state: STATE_IDLE,
         version: 0,
@@ -205,7 +205,7 @@ F hot_reload_init() -> HotReloadState {
     }
 }
 
-F hot_reload_start(s: HotReloadState) -> HotReloadState {
+fn hot_reload_start(s: HotReloadState) -> HotReloadState {
     HotReloadState {
         state: STATE_WATCHING,
         version: s.version,
@@ -214,7 +214,7 @@ F hot_reload_start(s: HotReloadState) -> HotReloadState {
     }
 }
 
-F hot_reload_change_detected(s: HotReloadState) -> HotReloadState {
+fn hot_reload_change_detected(s: HotReloadState) -> HotReloadState {
     I s.state == STATE_WATCHING {
         HotReloadState {
             state: STATE_COMPILING,
@@ -222,12 +222,12 @@ F hot_reload_change_detected(s: HotReloadState) -> HotReloadState {
             last_check: s.last_check,
             error_code: 0
         }
-    } EL {
+    } else {
         s
     }
 }
 
-F hot_reload_compile_success(s: HotReloadState) -> HotReloadState {
+fn hot_reload_compile_success(s: HotReloadState) -> HotReloadState {
     I s.state == STATE_COMPILING {
         HotReloadState {
             state: STATE_LOADING,
@@ -235,12 +235,12 @@ F hot_reload_compile_success(s: HotReloadState) -> HotReloadState {
             last_check: s.last_check,
             error_code: 0
         }
-    } EL {
+    } else {
         s
     }
 }
 
-F hot_reload_load_success(s: HotReloadState) -> HotReloadState {
+fn hot_reload_load_success(s: HotReloadState) -> HotReloadState {
     I s.state == STATE_LOADING {
         HotReloadState {
             state: STATE_WATCHING,
@@ -248,7 +248,7 @@ F hot_reload_load_success(s: HotReloadState) -> HotReloadState {
             last_check: 0,
             error_code: 0
         }
-    } EL {
+    } else {
         s
     }
 }
@@ -257,178 +257,178 @@ F hot_reload_load_success(s: HotReloadState) -> HotReloadState {
 # Test Runner (using puts for output)
 # ============================================================================
 
-F test_module_loading() -> i64 {
+fn test_module_loading() -> i64 {
     puts("Testing module loading simulation...")
 
     m := create_test_module(1, 0)
 
     I m.is_loaded != 1 {
         puts("  FAIL: Module should be loaded")
-        R 0
+        return 0
     }
 
     I m.version != 1 {
         puts("  FAIL: Initial version should be 1")
-        R 0
+        return 0
     }
 
     m2 := reload_test_module(m)
 
     I m2.version != 2 {
         puts("  FAIL: Version should be 2 after reload")
-        R 0
+        return 0
     }
 
     m3 := unload_test_module(m2)
 
     I m3.is_loaded != 0 {
         puts("  FAIL: Module should be unloaded")
-        R 0
+        return 0
     }
 
     puts("  PASS: Module loading simulation")
     1
 }
 
-F test_resource_limits() -> i64 {
+fn test_resource_limits() -> i64 {
     puts("Testing resource limits...")
 
     limits := default_resource_limits()
 
     I limits.max_memory != 67108864 {
         puts("  FAIL: Default max_memory incorrect")
-        R 0
+        return 0
     }
 
     I check_limits(10000000, 1000, limits) != 1 {
         puts("  FAIL: Should be within limits")
-        R 0
+        return 0
     }
 
     I check_limits(100000000, 1000, limits) != 0 {
         puts("  FAIL: Should exceed memory limit")
-        R 0
+        return 0
     }
 
     I check_limits(10000000, 10000, limits) != 0 {
         puts("  FAIL: Should exceed time limit")
-        R 0
+        return 0
     }
 
     puts("  PASS: Resource limits")
     1
 }
 
-F test_capabilities() -> i64 {
+fn test_capabilities() -> i64 {
     puts("Testing capability system...")
 
     caps := CAP_CONSOLE
 
     I has_cap(caps, CAP_CONSOLE) != 1 {
         puts("  FAIL: Should have console capability")
-        R 0
+        return 0
     }
 
     I has_cap(caps, CAP_NETWORK) != 0 {
         puts("  FAIL: Should not have network capability")
-        R 0
+        return 0
     }
 
     caps2 := grant_cap(caps, CAP_NETWORK)
 
     I has_cap(caps2, CAP_NETWORK) != 1 {
         puts("  FAIL: Should have network after grant")
-        R 0
+        return 0
     }
 
     I is_dangerous(caps) != 0 {
         puts("  FAIL: Console-only should not be dangerous")
-        R 0
+        return 0
     }
 
     I is_dangerous(caps2) != 1 {
         puts("  FAIL: Network capability should be dangerous")
-        R 0
+        return 0
     }
 
     caps3 := revoke_cap(caps2, CAP_NETWORK)
 
     I has_cap(caps3, CAP_NETWORK) != 0 {
         puts("  FAIL: Should not have network after revoke")
-        R 0
+        return 0
     }
 
     puts("  PASS: Capability system")
     1
 }
 
-F test_version_compatibility() -> i64 {
+fn test_version_compatibility() -> i64 {
     puts("Testing version compatibility...")
 
     plugin := create_plugin_info(0, 2, 1, 0)
 
     I is_version_compatible(plugin, 1, 0, 0) != 1 {
         puts("  FAIL: 2.1.0 should be compatible with 1.0.0")
-        R 0
+        return 0
     }
 
     I is_version_compatible(plugin, 2, 0, 0) != 1 {
         puts("  FAIL: 2.1.0 should be compatible with 2.0.0")
-        R 0
+        return 0
     }
 
     I is_version_compatible(plugin, 2, 2, 0) != 0 {
         puts("  FAIL: 2.1.0 should not be compatible with 2.2.0")
-        R 0
+        return 0
     }
 
     I is_version_compatible(plugin, 3, 0, 0) != 0 {
         puts("  FAIL: 2.1.0 should not be compatible with 3.0.0")
-        R 0
+        return 0
     }
 
     puts("  PASS: Version compatibility")
     1
 }
 
-F test_hot_reload() -> i64 {
+fn test_hot_reload() -> i64 {
     puts("Testing hot reload state machine...")
 
     state := mut hot_reload_init()
 
     I state.state != STATE_IDLE {
         puts("  FAIL: Initial state should be IDLE")
-        R 0
+        return 0
     }
 
     state = hot_reload_start(state)
 
     I state.state != STATE_WATCHING {
         puts("  FAIL: Should be WATCHING after start")
-        R 0
+        return 0
     }
 
     state = hot_reload_change_detected(state)
     I state.state != STATE_COMPILING {
         puts("  FAIL: Should be COMPILING after change detected")
-        R 0
+        return 0
     }
 
     state = hot_reload_compile_success(state)
     I state.state != STATE_LOADING {
         puts("  FAIL: Should be LOADING after compile success")
-        R 0
+        return 0
     }
 
     state = hot_reload_load_success(state)
     I state.state != STATE_WATCHING {
         puts("  FAIL: Should be WATCHING after load success")
-        R 0
+        return 0
     }
 
     I state.version != 1 {
         puts("  FAIL: Version should be 1 after successful reload")
-        R 0
+        return 0
     }
 
     puts("  PASS: Hot reload state machine")
@@ -436,7 +436,7 @@ F test_hot_reload() -> i64 {
 }
 
 # Main entry point
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Dynamic Module Loading Tests ===")
 
     r1 := test_module_loading()
@@ -454,7 +454,7 @@ F main() -> i64 {
     I failed == 0 {
         puts("All 5 tests passed!")
         0
-    } EL {
+    } else {
         puts("Some tests failed.")
         1
     }

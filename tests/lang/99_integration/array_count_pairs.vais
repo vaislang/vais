@@ -1,0 +1,31 @@
+# CHECKS: count pairs (i,j) with i<j and a[i]+a[j]==target.
+use std/vec.{vec_new};
+
+fn count_pairs(v: &Vec<i64>, target: i64) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..v.len() {
+        LF j: i + 1..v.len() {
+            I v[i] + v[j] == target { count = count + 1 }
+        }
+    }
+    count
+}
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    v.push(5)
+
+    # pairs summing to 5: (1,4), (2,3) → 2
+    I count_pairs(&v, 5) != 2 { return 1 }
+    # pairs summing to 7: (2,5), (3,4) → 2
+    I count_pairs(&v, 7) != 2 { return 2 }
+    # pairs summing to 100: 0
+    I count_pairs(&v, 100) != 0 { return 3 }
+    # pairs summing to 9: (4,5) → 1
+    I count_pairs(&v, 9) != 1 { return 4 }
+    return 0
+}

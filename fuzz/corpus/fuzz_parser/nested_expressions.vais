@@ -1,13 +1,13 @@
-F complex(x: i64) -> i64 {
+fn complex(x: i64) -> i64 {
     a := x + 1
     b := a * (x - 2)
     I a > b {
-        M x {
+        match x {
             0 => a,
             1 => b,
             _ => a + b
         }
-    } E {
+    } enum {
         L i : 0..x {
             b += i
         }

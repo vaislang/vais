@@ -39,10 +39,10 @@ use super::helpers::*;
 fn e2e_phase4c2_partial_main_with_assert_compiles() {
     // A `partial F main` is explicitly allowed to contain `assert`.
     let source = r#"
-partial F main() -> i64 {
+partial fn main() -> i64 {
     x := 10
     assert(x > 0)
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 10);
@@ -52,13 +52,13 @@ partial F main() -> i64 {
 fn e2e_phase4c2_partial_main_with_unwrap_compiles() {
     // A `partial F main` is explicitly allowed to contain `!` unwrap.
     let source = r#"
-E Result { Ok(i64), Err(i64) }
+enum Result { Ok(i64), Err(i64) }
 
-F get_value() -> Result {
+fn get_value() -> Result {
     Ok(42)
 }
 
-partial F main() -> i64 {
+partial fn main() -> i64 {
     get_value()!
 }
 "#;
@@ -72,22 +72,22 @@ fn e2e_phase4c2_total_main_with_try_operator_compiles() {
     // This is the critical regression guard for the "Try is not panic"
     // design decision documented in `totality.rs`.
     let source = r#"
-E Result { Ok(i64), Err(i64) }
+enum Result { Ok(i64), Err(i64) }
 
-F parse_num() -> Result {
-    R Ok(7)
+fn parse_num() -> Result {
+    return Ok(7)
 }
 
-F add_one(x: i64) -> i64 {
-    R x + 1
+fn add_one(x: i64) -> i64 {
+    return x + 1
 }
 
-F get_number() -> Result {
-    R Ok(add_one(parse_num()?))
+fn get_number() -> Result {
+    return Ok(add_one(parse_num()?))
 }
 
-F main() -> i64 {
-    M get_number() {
+fn main() -> i64 {
+    match get_number() {
         Ok(v) => v,
         Err(_) => 99
     }
@@ -107,10 +107,10 @@ fn e2e_phase4c2_total_main_with_division_compiles() {
     // design decision — without it, 101 existing E2E tests were broken
     // by the totality gate (iter 10 empirical measurement).
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
     y := 7
-    R x / y
+    return x / y
 }
 "#;
     assert_exit_code(source, 6);
@@ -121,12 +121,12 @@ fn e2e_phase4c2_total_main_with_modulo_compiles() {
     // Companion to the division regression guard: `%` is likewise NOT
     // a panic source. iter 10 `gcd` test was the motivating case.
     let source = r#"
-F gcd(a: i64, b: i64) -> i64 {
-    I b == 0 { R a }
-    R @(b, a % b)
+fn gcd(a: i64, b: i64) -> i64 {
+    I b == 0 { return a }
+    return @(b, a % b)
 }
 
-F main() -> i64 = gcd(126, 84)
+fn main() -> i64 = gcd(126, 84)
 "#;
     assert_exit_code(source, 42);
 }
@@ -137,9 +137,9 @@ fn e2e_phase4c2_total_main_with_indexing_compiles() {
     // bounds safety lives in refinement types or `.get(idx)` APIs.
     // Companion regression guard to the division cases.
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr := [10, 20, 30, 40]
-    R arr[1] + arr[2]
+    return arr[1] + arr[2]
 }
 "#;
     assert_exit_code(source, 50);
@@ -150,12 +150,12 @@ fn e2e_phase4c2_partial_helper_called_from_partial_main_compiles() {
     // `partial` propagates: a `partial` caller can call another
     // `partial` function without itself losing that marker.
     let source = r#"
-partial F ensure_positive(x: i64) -> i64 {
+partial fn ensure_positive(x: i64) -> i64 {
     assert(x > 0)
-    R x
+    return x
 }
 
-partial F main() -> i64 {
+partial fn main() -> i64 {
     ensure_positive(11)
 }
 "#;
@@ -171,10 +171,10 @@ fn e2e_phase4c2_total_main_with_assert_rejected() {
     // Mirror of the positive `assert` test, minus the `partial` modifier.
     // Must be rejected with `TotalFunctionViolation`.
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     assert(x > 0)
-    R x
+    return x
 }
 "#;
     assert_compile_error(source);
@@ -184,13 +184,13 @@ F main() -> i64 {
 fn e2e_phase4c2_total_main_with_unwrap_rejected() {
     // Mirror of the positive `!` test, minus `partial`.
     let source = r#"
-E Result { Ok(i64), Err(i64) }
+enum Result { Ok(i64), Err(i64) }
 
-F get_value() -> Result {
+fn get_value() -> Result {
     Ok(42)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     get_value()!
 }
 "#;
@@ -204,12 +204,12 @@ fn e2e_phase4c2_total_main_with_panic_builtin_rejected() {
     // share the same dispatch in `totality.rs` PANIC_BUILTINS.
     let source = r#"
 N "C" {
-    F abort() -> i64
+    fn abort() -> i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     abort()
-    R 0
+    return 0
 }
 "#;
     assert_compile_error(source);
@@ -222,13 +222,13 @@ fn e2e_phase4c2_total_caller_of_partial_rejected() {
     // primary mechanism by which non-local panic-reachability
     // propagates across the call graph.
     let source = r#"
-partial F dangerous() -> i64 {
+partial fn dangerous() -> i64 {
     panic_marker := 0
     assert(panic_marker == 0)
-    R panic_marker
+    return panic_marker
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     dangerous()
 }
 "#;
@@ -241,17 +241,17 @@ fn e2e_phase4c2_total_caller_of_unwrapping_helper_rejected() {
     // reachable-panic via the direct rule), and `main` calls it (so it
     // becomes reachable-panic via the worklist propagation rule).
     let source = r#"
-E Result { Ok(i64), Err(i64) }
+enum Result { Ok(i64), Err(i64) }
 
-F get_ok() -> Result {
+fn get_ok() -> Result {
     Ok(5)
 }
 
-F helper() -> i64 {
+fn helper() -> i64 {
     get_ok()!
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     helper()
 }
 "#;
@@ -265,9 +265,9 @@ fn e2e_phase4c2_baseline_no_panic_source_compiles() {
     // If this test ever fails, it means a future totality-gate change
     // started flagging trivially safe code.
     let source = r#"
-F add_one(x: i64) -> i64 = x + 1
+fn add_one(x: i64) -> i64 = x + 1
 
-F main() -> i64 {
+fn main() -> i64 {
     add_one(41)
 }
 "#;

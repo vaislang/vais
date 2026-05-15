@@ -1,0 +1,14 @@
+# CHECKS: generic fn invoked from 3 different non-generic call sites.
+fn id<T>(x: T) -> T { x }
+
+fn caller_a() -> i64 { id(100) + 1 }
+fn caller_b() -> i64 { id(200) + 2 }
+fn caller_c() -> i64 { id(300) + 3 }
+
+fn main() -> i64 {
+    I caller_a() != 101 { return 1 }
+    I caller_b() != 202 { return 2 }
+    I caller_c() != 303 { return 3 }
+    I caller_a() + caller_b() + caller_c() != 606 { return 4 }
+    return 0
+}

@@ -1,0 +1,16 @@
+# LIVING_SPEC/05_idioms/idiom_early_return_r.vais
+# Key concept: ❌ 깊은 nesting vs ✅ 조기 R 탈출
+# ✅ DO: 조건 불만족 시 R 즉시 종료 → flat 함수 구조.
+# ❌ DON'T: I c1 { I c2 { I c3 { ... } } } — 우측으로 깊어짐.
+
+fn safe_div(a: i64, b: i64) -> i64 {
+    I b == 0 { return -1 }
+    I a < 0 { return -2 }
+    a / b
+}
+
+fn main() -> i64 {
+    a := safe_div(10, 2)
+    b := safe_div(10, 0)
+    a + b  # 5 + (-1) = 4
+}

@@ -13,7 +13,7 @@ The integration tests cover the following LSP features:
 - `test_shutdown` - Server shutdown
 
 ### Completion (7 tests)
-- `test_completion_provides_keywords` - Vais language keywords (F, S, E, I, L, M, etc.)
+- `test_completion_provides_keywords` - Vais language keywords (fn, struct, enum, I, L, match, etc.)
 - `test_completion_provides_types` - Primitive types (i64, f64, bool, str, etc.)
 - `test_completion_provides_builtin_functions` - Built-in functions (puts, malloc, print_i64, etc.)
 - `test_completion_provides_std_modules` - Standard library modules (std/math, std/io, etc.)

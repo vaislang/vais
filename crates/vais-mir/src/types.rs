@@ -52,6 +52,7 @@ pub enum MirType {
         inner: Box<MirType>,
     },
     Array(Box<MirType>),
+    Vec(Box<MirType>),
     Tuple(Vec<MirType>),
     Struct(String),
     Enum(String),
@@ -87,7 +88,7 @@ impl MirType {
             | MirType::RefMutLifetime { .. }
             | MirType::Never => true,
             MirType::Tuple(elems) => elems.iter().all(|e| e.is_copy()),
-            _ => false, // Array, Struct, Enum, Function
+            _ => false, // Array, Vec, Struct, Enum, Function
         }
     }
 }
@@ -267,6 +268,8 @@ pub enum Rvalue {
     Cast(Operand, MirType),
     /// Get the length of an array/string.
     Len(Place),
+    /// Return a new vector value after appending one element to an existing vector.
+    VecPush(Place, Operand),
 }
 
 /// Kind of aggregate value being constructed.
@@ -274,6 +277,7 @@ pub enum Rvalue {
 pub enum AggregateKind {
     Tuple,
     Array,
+    Vec,
     Struct(String),
     Enum(String, u32), // enum name, variant index
 }

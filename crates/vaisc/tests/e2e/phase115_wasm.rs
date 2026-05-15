@@ -38,10 +38,10 @@ fn compile_to_wasm_ir(source: &str, target: vais_codegen::TargetTriple) -> Resul
 #[test]
 fn test_wasm32_basic_function_ir() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
-F main() -> i64 {
-    R add(3, 4)
+fn main() -> i64 {
+    return add(3, 4)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
@@ -63,8 +63,8 @@ fn test_wasm32_with_globals() {
 G counter: i64 = 0
 G max_val: i64 = 100
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
@@ -76,15 +76,15 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_with_conditionals() {
     let source = r#"
-F abs_val(n: i64) -> i64 {
+fn abs_val(n: i64) -> i64 {
     I n < 0 {
-        R -n
+        return -n
     }
     n
 }
 
-F main() -> i64 {
-    R abs_val(-5)
+fn main() -> i64 {
+    return abs_val(-5)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
@@ -96,7 +96,7 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_with_loop() {
     let source = r#"
-F sum_to(n: i64) -> i64 {
+fn sum_to(n: i64) -> i64 {
     result := mut 0
     i := mut 0
     L i < n {
@@ -106,8 +106,8 @@ F sum_to(n: i64) -> i64 {
     result
 }
 
-F main() -> i64 {
-    R sum_to(10)
+fn main() -> i64 {
+    return sum_to(10)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
@@ -117,13 +117,13 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_with_recursion() {
     let source = r#"
-F fib(n: i64) -> i64 {
+fn fib(n: i64) -> i64 {
     I n <= 1 { n }
-    E { @(n - 1) + @(n - 2) }
+    else { @(n - 1) + @(n - 2) }
 }
 
-F main() -> i64 {
-    R fib(10)
+fn main() -> i64 {
+    return fib(10)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
@@ -135,10 +135,10 @@ F main() -> i64 {
 fn test_wasm32_export_attribute() {
     let source = r#"
 #[wasm_export("compute")]
-F compute(x: i64, y: i64) -> i64 = x * y + 1
+fn compute(x: i64, y: i64) -> i64 = x * y + 1
 
-F main() -> i64 {
-    R compute(3, 4)
+fn main() -> i64 {
+    return compute(3, 4)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
@@ -155,11 +155,11 @@ fn test_wasm32_import_attribute() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "js_log")]
-    F js_log(ptr: i64, len: i64) -> i64;
+    fn js_log(ptr: i64, len: i64) -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
@@ -179,16 +179,16 @@ F main() -> i64 {
 fn test_wasm32_multiple_exports() {
     let source = r#"
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 #[wasm_export("mul")]
-F mul(a: i64, b: i64) -> i64 = a * b
+fn mul(a: i64, b: i64) -> i64 = a * b
 
 #[wasm_export("sub")]
-F sub(a: i64, b: i64) -> i64 = a - b
+fn sub(a: i64, b: i64) -> i64 = a - b
 
-F main() -> i64 {
-    R add(1, 2) + mul(3, 4) + sub(10, 5)
+fn main() -> i64 {
+    return add(1, 2) + mul(3, 4) + sub(10, 5)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
@@ -207,17 +207,17 @@ fn test_wasm32_import_and_export_combined() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "get_input")]
-    F get_input() -> i64;
+    fn get_input() -> i64;
 }
 
 #[wasm_export("process")]
-F process() -> i64 {
+fn process() -> i64 {
     x := get_input()
     x * 2
 }
 
-F main() -> i64 {
-    R process()
+fn main() -> i64 {
+    return process()
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::Wasm32Unknown).unwrap();
@@ -232,8 +232,8 @@ F main() -> i64 {
 #[test]
 fn test_wasip2_basic_ir_generation() {
     let source = r#"
-F main() -> i64 {
-    R 42
+fn main() -> i64 {
+    return 42
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -247,10 +247,10 @@ F main() -> i64 {
 #[test]
 fn test_wasip2_function_with_multiple_params() {
     let source = r#"
-F compute(a: i64, b: i64, c: i64) -> i64 = a * b + c
+fn compute(a: i64, b: i64, c: i64) -> i64 = a * b + c
 
-F main() -> i64 {
-    R compute(2, 3, 4)
+fn main() -> i64 {
+    return compute(2, 3, 4)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -261,16 +261,16 @@ F main() -> i64 {
 #[test]
 fn test_wasip2_with_struct() {
     let source = r#"
-S Point {
+struct Point {
     x: i64,
     y: i64
 }
 
-F distance_sq(p: Point) -> i64 = p.x * p.x + p.y * p.y
+fn distance_sq(p: Point) -> i64 = p.x * p.x + p.y * p.y
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 3, y: 4 }
-    R distance_sq(p)
+    return distance_sq(p)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -280,14 +280,14 @@ F main() -> i64 {
 #[test]
 fn test_wasip2_with_enum() {
     let source = r#"
-E Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
-F color_value(c: Color) -> i64 {
-    M c {
+fn color_value(c: Color) -> i64 {
+    match c {
         Red => 1,
         Green => 2,
         Blue => 3,
@@ -295,9 +295,9 @@ F color_value(c: Color) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Green
-    R color_value(c)
+    return color_value(c)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -310,23 +310,23 @@ fn test_wasip2_wasi_io_full_pipeline() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:io/streams@0.2.0", "read")]
-    F stream_read(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
+    fn stream_read(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
 
     #[wasm_import("wasi:io/streams@0.2.0", "write")]
-    F stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
+    fn stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
 
     #[wasm_import("wasi:io/poll@0.2.0", "poll-one")]
-    F poll_one(pollable: i64) -> i64;
+    fn poll_one(pollable: i64) -> i64;
 
     #[wasm_import("wasi:cli/stdout@0.2.0", "get-stdout")]
-    F get_stdout() -> i64;
+    fn get_stdout() -> i64;
 
     #[wasm_import("wasi:cli/stdin@0.2.0", "get-stdin")]
-    F get_stdin() -> i64;
+    fn get_stdin() -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -349,23 +349,23 @@ fn test_wasip2_filesystem_full_pipeline() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:filesystem/types@0.2.0", "open-at")]
-    F fs_open_at(fd: i64, flags: i64, path_ptr: i64, path_len: i64) -> i64;
+    fn fs_open_at(fd: i64, flags: i64, path_ptr: i64, path_len: i64) -> i64;
 
     #[wasm_import("wasi:filesystem/types@0.2.0", "read-via-stream")]
-    F fs_read_stream(fd: i64) -> i64;
+    fn fs_read_stream(fd: i64) -> i64;
 
     #[wasm_import("wasi:filesystem/types@0.2.0", "write-via-stream")]
-    F fs_write_stream(fd: i64) -> i64;
+    fn fs_write_stream(fd: i64) -> i64;
 
     #[wasm_import("wasi:filesystem/types@0.2.0", "stat")]
-    F fs_stat(fd: i64) -> i64;
+    fn fs_stat(fd: i64) -> i64;
 
     #[wasm_import("wasi:filesystem/preopens@0.2.0", "get-directories")]
-    F fs_get_dirs() -> i64;
+    fn fs_get_dirs() -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -378,17 +378,17 @@ fn test_wasip2_sockets_network_import() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:sockets/tcp@0.2.0", "create-tcp-socket")]
-    F tcp_create(af: i64) -> i64;
+    fn tcp_create(af: i64) -> i64;
 
     #[wasm_import("wasi:sockets/tcp@0.2.0", "connect")]
-    F tcp_connect(socket: i64, addr_ptr: i64, addr_len: i64) -> i64;
+    fn tcp_connect(socket: i64, addr_ptr: i64, addr_len: i64) -> i64;
 
     #[wasm_import("wasi:sockets/ip-name-lookup@0.2.0", "resolve-addresses")]
-    F dns_resolve(name_ptr: i64, name_len: i64) -> i64;
+    fn dns_resolve(name_ptr: i64, name_len: i64) -> i64;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -402,14 +402,14 @@ fn test_wasip2_export_with_wasi_imports() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi:cli/stdout@0.2.0", "get-stdout")]
-    F get_stdout() -> i64;
+    fn get_stdout() -> i64;
 
     #[wasm_import("wasi:io/streams@0.2.0", "write")]
-    F stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
+    fn stream_write(stream: i64, buf_ptr: i64, buf_len: i64) -> i64;
 }
 
 #[wasm_export("hello")]
-F hello() -> i64 {
+fn hello() -> i64 {
     out := get_stdout()
     msg := "Hello from WASI P2"
     _ := stream_write(out, msg as i64, 19)
@@ -417,10 +417,10 @@ F hello() -> i64 {
 }
 
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
-F main() -> i64 {
-    R hello()
+fn main() -> i64 {
+    return hello()
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -570,7 +570,7 @@ fn test_wit_record_construction() {
 fn test_wit_enum_construction() {
     use vais_codegen::wasm_component::WitEnumCase;
 
-    let cases = [
+    let cases = vec![
         WitEnumCase {
             name: "red".to_string(),
             docs: None,
@@ -724,25 +724,25 @@ fn test_wasm_interop_pattern_wasm32() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "console_log")]
-    F console_log(ptr: i64, len: i64) -> i64;
+    fn console_log(ptr: i64, len: i64) -> i64;
 
     #[wasm_import("env", "get_time")]
-    F get_time() -> i64;
+    fn get_time() -> i64;
 }
 
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 #[wasm_export("fibonacci")]
-F fib(n: i64) -> i64 {
+fn fib(n: i64) -> i64 {
     I n <= 1 { n }
-    E { @(n - 1) + @(n - 2) }
+    else { @(n - 1) + @(n - 2) }
 }
 
 #[wasm_export("factorial")]
-F factorial(n: i64) -> i64 = I n <= 1 { 1 } E { n * @(n - 1) }
+fn factorial(n: i64) -> i64 = I n <= 1 { 1 } else { n * @(n - 1) }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := add(10, 20)
     f := fib(10)
     0
@@ -766,23 +766,23 @@ fn test_wasm_calculator_pattern_wasm32() {
     // Equivalent to examples/wasm_calculator.vais core operations
     let source = r#"
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 #[wasm_export("subtract")]
-F subtract(a: i64, b: i64) -> i64 = a - b
+fn subtract(a: i64, b: i64) -> i64 = a - b
 
 #[wasm_export("multiply")]
-F multiply(a: i64, b: i64) -> i64 = a * b
+fn multiply(a: i64, b: i64) -> i64 = a * b
 
 #[wasm_export("divide")]
-F divide(a: i64, b: i64) -> i64 {
-    I b == 0 { R -1 }
+fn divide(a: i64, b: i64) -> i64 {
+    I b == 0 { return -1 }
     a / b
 }
 
 #[wasm_export("power")]
-F power(base: i64, exp: i64) -> i64 {
-    I exp == 0 { R 1 }
+fn power(base: i64, exp: i64) -> i64 {
+    I exp == 0 { return 1 }
     result := mut base
     i := mut 1
     L i < exp {
@@ -793,8 +793,8 @@ F power(base: i64, exp: i64) -> i64 {
 }
 
 #[wasm_export("factorial")]
-F factorial(n: i64) -> i64 {
-    I n <= 1 { R 1 }
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
     result := mut 1
     i := mut 2
     L i <= n {
@@ -804,7 +804,7 @@ F factorial(n: i64) -> i64 {
     result
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     _ := add(10, 5)
     _ := multiply(4, 7)
     _ := power(2, 8)
@@ -828,27 +828,27 @@ fn test_wasm_todo_pattern_wasm32() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "console_log")]
-    F console_log(ptr: i64, len: i64) -> i64;
+    fn console_log(ptr: i64, len: i64) -> i64;
 
     #[wasm_import("env", "dom_create_element")]
-    F dom_create_element(tag_ptr: i64, tag_len: i64) -> i64;
+    fn dom_create_element(tag_ptr: i64, tag_len: i64) -> i64;
 }
 
 #[wasm_export("init")]
-F init() -> i64 {
+fn init() -> i64 {
     0
 }
 
 #[wasm_export("add_todo")]
-F add_todo(title_ptr: i64, title_len: i64) -> i64 {
-    I title_len <= 0 { R -1 }
+fn add_todo(title_ptr: i64, title_len: i64) -> i64 {
+    I title_len <= 0 { return -1 }
     title_ptr
 }
 
 #[wasm_export("get_count")]
-F get_count() -> i64 = 0
+fn get_count() -> i64 = 0
 
-F main() -> i64 {
+fn main() -> i64 {
     _ := init()
     0
 }
@@ -871,24 +871,24 @@ fn test_wasm_api_client_pattern_wasm32() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "fetch_get")]
-    F fetch_get(url_ptr: i64, url_len: i64) -> i64;
+    fn fetch_get(url_ptr: i64, url_len: i64) -> i64;
 
     #[wasm_import("env", "console_log")]
-    F console_log(ptr: i64, len: i64) -> i64;
+    fn console_log(ptr: i64, len: i64) -> i64;
 }
 
 #[wasm_export("get_users")]
-F get_users() -> i64 {
+fn get_users() -> i64 {
     url := "https://api.example.com/users"
     response := fetch_get(url as i64, 30)
-    I response < 0 { R -1 }
+    I response < 0 { return -1 }
     response
 }
 
 #[wasm_export("get_status")]
-F get_status() -> i64 = 200
+fn get_status() -> i64 = 200
 
-F main() -> i64 {
+fn main() -> i64 {
     _ := get_users()
     0
 }
@@ -904,13 +904,13 @@ fn test_wasm_calculator_pattern_wasip2() {
     // Calculator pattern compiled to WASI P2
     let source = r#"
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 #[wasm_export("multiply")]
-F multiply(a: i64, b: i64) -> i64 = a * b
+fn multiply(a: i64, b: i64) -> i64 = a * b
 
-F main() -> i64 {
-    R add(1, 2) + multiply(3, 4)
+fn main() -> i64 {
+    return add(1, 2) + multiply(3, 4)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -924,20 +924,20 @@ fn test_wasm_interop_pattern_wasip2() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "console_log")]
-    F console_log(ptr: i64, len: i64) -> i64;
+    fn console_log(ptr: i64, len: i64) -> i64;
 }
 
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 #[wasm_export("fib")]
-F fib(n: i64) -> i64 {
+fn fib(n: i64) -> i64 {
     I n <= 1 { n }
-    E { @(n - 1) + @(n - 2) }
+    else { @(n - 1) + @(n - 2) }
 }
 
-F main() -> i64 {
-    R fib(10)
+fn main() -> i64 {
+    return fib(10)
 }
 "#;
     let ir = compile_to_wasm_ir(source, vais_codegen::TargetTriple::WasiPreview2).unwrap();
@@ -1147,13 +1147,13 @@ fn test_bindgen_wasm_js_module() {
 #[test]
 fn test_same_source_all_wasm_targets() {
     let source = r#"
-F fib(n: i64) -> i64 {
+fn fib(n: i64) -> i64 {
     I n <= 1 { n }
-    E { @(n - 1) + @(n - 2) }
+    else { @(n - 1) + @(n - 2) }
 }
 
-F main() -> i64 {
-    R fib(10)
+fn main() -> i64 {
+    return fib(10)
 }
 "#;
     // All three WASM targets should produce valid IR
@@ -1183,10 +1183,10 @@ F main() -> i64 {
 #[test]
 fn test_native_vs_wasm_same_ir_structure() {
     let source = r#"
-F double(x: i64) -> i64 = x * 2
+fn double(x: i64) -> i64 = x * 2
 
-F main() -> i64 {
-    R double(21)
+fn main() -> i64 {
+    return double(21)
 }
 "#;
     let ir_native = compile_to_ir(source).expect("native should compile");

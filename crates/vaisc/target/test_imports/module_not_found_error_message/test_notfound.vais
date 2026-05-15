@@ -1,2 +1,2 @@
-U nonexistent_module
-F main() -> i64 = 42
+use nonexistent_module
+fn main() -> i64 = 42

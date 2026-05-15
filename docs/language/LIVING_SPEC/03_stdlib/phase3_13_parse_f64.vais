@@ -1,0 +1,15 @@
+# LIVING_SPEC/03_stdlib/phase3_13_parse_f64.vais
+# Key concept: Phase 3.13 / B.2 — `s.parse_f64()` returns `Result<f64, str>`.
+# Resolved via inkwell str-method dispatch (B.2, 2026-04-21).
+#
+# Status:
+#   - TC(`vaisc check`): ✓
+#   - Codegen + Run: ✓ (inkwell backend)
+
+fn main() -> i64 {
+    ok := "3.14"
+    bad := "notnum"
+    a := match ok.parse_f64() { Ok(v) => (v * 100.0) as i64, Err(_) => -1 }
+    b := match bad.parse_f64() { Ok(_) => 1, Err(_) => 0 }
+    a + b
+}

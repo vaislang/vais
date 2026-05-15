@@ -1,5 +1,5 @@
 # Quicksort with array partitioning
-fn partition(arr: *i64, lo: i64, hi: i64) -> i64 {
+fn partition(arr, lo, hi) {
     pivot := arr[hi]
     i := mut lo
     LF j:lo..hi {
@@ -12,7 +12,7 @@ fn partition(arr: *i64, lo: i64, hi: i64) -> i64 {
     i
 }
 
-fn quicksort(arr: *i64, lo: i64, hi: i64) -> i64 {
+fn quicksort(arr, lo, hi) {
     I lo < hi {
         p := partition(arr, lo, hi)
         @(arr, lo, p - 1)
@@ -21,7 +21,7 @@ fn quicksort(arr: *i64, lo: i64, hi: i64) -> i64 {
     0
 }
 
-fn main() -> i64 {
+fn main() {
     arr: *i64 = [38, 27, 43, 3, 9, 82, 10, 55, 1, 77]
     quicksort(arr, 0, 9)
     LF i:0..10 {

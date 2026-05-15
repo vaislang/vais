@@ -20,7 +20,7 @@ fn lower(source: &str) -> MirModule {
 fn test_dce_removes_unused_local() {
     let mut mir = lower(
         r#"
-        F f(x: i64) -> i64 = {
+        fn f(x: i64) -> i64 = {
             unused := 42
             x + 1
         }
@@ -46,7 +46,7 @@ fn test_dce_removes_unused_local() {
 
 #[test]
 fn test_dce_keeps_return_place() {
-    let mut mir = lower("F f() -> i64 = 42");
+    let mut mir = lower("fn f() -> i64 = 42");
 
     dead_code_elimination(&mut mir.bodies[0]);
 
@@ -59,7 +59,7 @@ fn test_dce_keeps_return_place() {
 fn test_dce_keeps_used_locals() {
     let mut mir = lower(
         r#"
-        F f(x: i64) -> i64 = {
+        fn f(x: i64) -> i64 = {
             a := x + 1
             a * 2
         }
@@ -94,7 +94,7 @@ fn test_dce_keeps_used_locals() {
 fn test_constant_propagation_basic() {
     let mut mir = lower(
         r#"
-        F f() -> i64 = {
+        fn f() -> i64 = {
             a := 10
             b := 20
             a + b
@@ -113,7 +113,7 @@ fn test_constant_propagation_basic() {
 fn test_constant_propagation_through_chain() {
     let mut mir = lower(
         r#"
-        F f() -> i64 = {
+        fn f() -> i64 = {
             a := 5
             b := a
             b
@@ -134,7 +134,7 @@ fn test_constant_propagation_through_chain() {
 fn test_copy_propagation() {
     let mut mir = lower(
         r#"
-        F f(x: i64) -> i64 = {
+        fn f(x: i64) -> i64 = {
             a := x
             a
         }
@@ -156,7 +156,7 @@ fn test_copy_propagation() {
 fn test_cse_identical_binops() {
     let mut mir = lower(
         r#"
-        F f(x: i64, y: i64) -> i64 = {
+        fn f(x: i64, y: i64) -> i64 = {
             a := x + y
             b := x + y
             a + b
@@ -176,7 +176,7 @@ fn test_cse_identical_binops() {
 
 #[test]
 fn test_loop_unrolling_no_crash() {
-    let mut mir = lower("F f(x: i64) -> i64 = x");
+    let mut mir = lower("fn f(x: i64) -> i64 = x");
 
     // Should not crash even with no loops
     loop_unrolling(&mut mir.bodies[0]);
@@ -191,7 +191,7 @@ fn test_loop_unrolling_no_crash() {
 
 #[test]
 fn test_tail_call_detection_recursive() {
-    let mut mir = lower("F f(n: i64) -> i64 = I n == 0 { 1 } E { @(n - 1) }");
+    let mut mir = lower("fn f(n: i64) -> i64 = I n == 0 { 1 } else { @(n - 1) }");
 
     tail_call_detection(&mut mir.bodies[0]);
 
@@ -202,7 +202,7 @@ fn test_tail_call_detection_recursive() {
 
 #[test]
 fn test_tail_call_detection_no_recursion() {
-    let mut mir = lower("F f(x: i64) -> i64 = x + 1");
+    let mut mir = lower("fn f(x: i64) -> i64 = x + 1");
 
     tail_call_detection(&mut mir.bodies[0]);
 
@@ -218,7 +218,7 @@ fn test_tail_call_detection_no_recursion() {
 fn test_escape_analysis_no_crash() {
     let mut mir = lower(
         r#"
-        F f(x: i64) -> i64 = {
+        fn f(x: i64) -> i64 = {
             a := x + 1
             b := a * 2
             b
@@ -240,7 +240,7 @@ fn test_escape_analysis_no_crash() {
 fn test_remove_unreachable_blocks() {
     let mut mir = lower(
         r#"
-        F f(x: i64) -> i64 = I x > 0 { R 1 } E { R 0 }
+        fn f(x: i64) -> i64 = I x > 0 { return 1 } else { return 0 }
     "#,
     );
 
@@ -260,7 +260,7 @@ fn test_remove_unreachable_blocks() {
 fn test_optimize_mir_body_full() {
     let mut mir = lower(
         r#"
-        F compute(x: i64) -> i64 = {
+        fn compute(x: i64) -> i64 = {
             unused := 999
             a := 10
             b := 20
@@ -280,8 +280,8 @@ fn test_optimize_mir_body_full() {
 fn test_optimize_mir_module_multiple_bodies() {
     let mut mir = lower(
         r#"
-        F a(x: i64) -> i64 = x + 1
-        F b(x: i64) -> i64 = {
+        fn a(x: i64) -> i64 = x + 1
+        fn b(x: i64) -> i64 = {
             unused := 42
             x * 2
         }
@@ -300,14 +300,14 @@ fn test_optimize_mir_module_multiple_bodies() {
 
 #[test]
 fn test_optimize_empty_body() {
-    let mut mir = lower("F noop() -> i64 = 0");
+    let mut mir = lower("fn noop() -> i64 = 0");
     optimize_mir_body(&mut mir.bodies[0]);
     assert!(!mir.bodies[0].basic_blocks.is_empty());
 }
 
 #[test]
 fn test_optimize_preserves_correctness_if_else() {
-    let mut mir = lower("F abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }");
+    let mut mir = lower("fn abs(x: i64) -> i64 = I x < 0 { 0 - x } else { x }");
 
     let before_blocks = mir.bodies[0].basic_blocks.len();
     optimize_mir_body(&mut mir.bodies[0]);
@@ -321,9 +321,9 @@ fn test_optimize_preserves_correctness_if_else() {
 fn test_optimize_nested_if() {
     let mut mir = lower(
         r#"
-        F classify(x: i64) -> i64 = I x > 0 {
-            I x > 100 { 3 } E { 2 }
-        } E {
+        fn classify(x: i64) -> i64 = I x > 0 {
+            I x > 100 { 3 } else { 2 }
+        } else {
             1
         }
     "#,
@@ -339,7 +339,7 @@ fn test_optimize_nested_if() {
 fn test_optimize_match() {
     let mut mir = lower(
         r#"
-        F f(x: i64) -> i64 = M x {
+        fn f(x: i64) -> i64 = match x {
             0 => 100,
             1 => 200,
             2 => 300,

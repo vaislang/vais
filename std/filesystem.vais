@@ -3,43 +3,43 @@
 # Provides clean wrappers around POSIX filesystem FFI functions
 
 # Directory operations
-F fs_mkdir(path: str, mode: i64) -> i64 {
+fn fs_mkdir(path: str, mode: i64) -> i64 {
     mkdir(path, mode)
 }
 
-F fs_rmdir(path: str) -> i64 {
+fn fs_rmdir(path: str) -> i64 {
     rmdir(path)
 }
 
-F fs_chdir(path: str) -> i64 {
+fn fs_chdir(path: str) -> i64 {
     chdir(path)
 }
 
 # File operations
-F fs_unlink(path: str) -> i64 {
+fn fs_unlink(path: str) -> i64 {
     unlink(path)
 }
 
-F fs_rename(old_path: str, new_path: str) -> i64 {
+fn fs_rename(old_path: str, new_path: str) -> i64 {
     rename_file(old_path, new_path)
 }
 
 # File metadata
-F fs_file_size(path: str) -> i64 {
+fn fs_file_size(path: str) -> i64 {
     stat_size(path)
 }
 
-F fs_mtime(path: str) -> i64 {
+fn fs_mtime(path: str) -> i64 {
     stat_mtime(path)
 }
 
 # Current working directory
-F fs_getcwd() -> str {
+fn fs_getcwd() -> str {
     buf := malloc(1024)
     result := getcwd(buf, 1024)
     I result == 0 {
         free(buf)
-        R ""
+        return ""
     }
     # buf is already a valid C string pointer — same representation as Vais str
     # We need to copy it to a new allocation so we can free the original buffer
@@ -56,11 +56,11 @@ F fs_getcwd() -> str {
 # Each entry is a pointer to a heap-allocated null-terminated filename
 # Caller must free each entry and the Vec when done
 # Skips "." and ".." entries
-F fs_list_dir(path: str) -> i64 {
+fn fs_list_dir(path: str) -> i64 {
     # Returns a raw pointer to a Vec-like structure:
     # [data_ptr: i64, len: i64, cap: i64]
     d := opendir(path)
-    I d == 0 { R 0 }
+    I d == 0 { return 0 }
 
     # Allocate a simple growable array
     cap := mut 16
@@ -77,11 +77,11 @@ F fs_list_dir(path: str) -> i64 {
             second_byte := load_byte(entry + 1)
             I second_byte == 0 {
                 # "." — skip
-            } EL I second_byte == 46 {
+            } else I second_byte == 46 {
                 third_byte := load_byte(entry + 2)
                 I third_byte == 0 {
                     # ".." — skip
-                } EL {
+                } else {
                     # Filename starting with ".." but longer — keep it
                     len := strlen(entry)
                     copy := malloc(len + 1)
@@ -97,7 +97,7 @@ F fs_list_dir(path: str) -> i64 {
                     store_i64(data + count * 8, copy)
                     count = count + 1
                 }
-            } EL {
+            } else {
                 # Filename starting with "." but not ".." — keep it (hidden files)
                 len := strlen(entry)
                 copy := malloc(len + 1)
@@ -113,7 +113,7 @@ F fs_list_dir(path: str) -> i64 {
                 store_i64(data + count * 8, copy)
                 count = count + 1
             }
-        } EL {
+        } else {
             # Normal filename — copy and store
             len := strlen(entry)
             copy := malloc(len + 1)
@@ -142,21 +142,21 @@ F fs_list_dir(path: str) -> i64 {
 }
 
 # Get the number of entries from fs_list_dir result
-F fs_list_dir_count(dir_result: i64) -> i64 {
-    I dir_result == 0 { R 0 }
+fn fs_list_dir_count(dir_result: i64) -> i64 {
+    I dir_result == 0 { return 0 }
     load_i64(dir_result + 8)
 }
 
 # Get entry at index from fs_list_dir result (returns filename pointer)
-F fs_list_dir_get(dir_result: i64, idx: i64) -> i64 {
-    I dir_result == 0 { R 0 }
+fn fs_list_dir_get(dir_result: i64, idx: i64) -> i64 {
+    I dir_result == 0 { return 0 }
     data := load_i64(dir_result)
     load_i64(data + idx * 8)
 }
 
 # Free fs_list_dir result (frees all filename copies and the array)
-F fs_list_dir_free(dir_result: i64) -> i64 {
-    I dir_result == 0 { R 0 }
+fn fs_list_dir_free(dir_result: i64) -> i64 {
+    I dir_result == 0 { return 0 }
     data := load_i64(dir_result)
     count := load_i64(dir_result + 8)
     i := mut 0
@@ -171,20 +171,31 @@ F fs_list_dir_free(dir_result: i64) -> i64 {
     0
 }
 
-# Check if a path exists (file or directory)
-# Uses access() with F_OK (mode=0)
-# Returns 1 if exists, 0 if not
-F fs_exists(path: str) -> i64 {
-    r := access(path, 0)
-    I r == 0 { 1 } EL { 0 }
+# Check if a path exists (file or directory).
+# Probes via opendir (dir) then fopen (file) — avoids relying on libc
+# `access`, which cannot be registered as a builtin without shadowing
+# vaisdb code that uses `access` as an identifier.
+# Returns 1 if exists, 0 if not.
+fn fs_exists(path: str) -> i64 {
+    d := opendir(path)
+    I d != 0 {
+        closedir(d)
+        return 1
+    }
+    f := fopen(path, "r")
+    I f != 0 {
+        fclose(f)
+        return 1
+    }
+    0
 }
 
 # Check if path is a directory
 # Uses opendir — if it succeeds, it's a directory
 # Returns 1 if directory, 0 if not
-F fs_is_dir(path: str) -> i64 {
+fn fs_is_dir(path: str) -> i64 {
     d := opendir(path)
-    I d == 0 { R 0 }
+    I d == 0 { return 0 }
     closedir(d)
     1
 }
@@ -192,8 +203,8 @@ F fs_is_dir(path: str) -> i64 {
 # Check if path is a regular file (not a directory)
 # A path is a file if it exists but is not a directory
 # Returns 1 if regular file, 0 if not
-F fs_is_file(path: str) -> i64 {
-    I fs_exists(path) == 0 { R 0 }
-    I fs_is_dir(path) == 1 { R 0 }
+fn fs_is_file(path: str) -> i64 {
+    I fs_exists(path) == 0 { return 0 }
+    I fs_is_dir(path) == 1 { return 0 }
     1
 }

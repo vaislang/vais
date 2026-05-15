@@ -233,6 +233,19 @@ pub enum TypeError {
 }
 
 impl TypeError {
+    /// Attach a span to a span-less error variant (currently only Mismatch).
+    /// Useful when low-level helpers like `unify()` produce a Mismatch with
+    /// `span: None` and the caller (which has source location) wants to
+    /// surface it. Other variants are returned unchanged.
+    pub fn with_span(mut self, fallback: Span) -> Self {
+        if let TypeError::Mismatch { ref mut span, .. } = self {
+            if span.is_none() {
+                *span = Some(fallback);
+            }
+        }
+        self
+    }
+
     /// Get the span associated with this error, if available
     pub fn span(&self) -> Option<Span> {
         match self {
@@ -458,7 +471,13 @@ impl TypeError {
                 Some("the reference must not outlive the data it refers to".to_string())
             }
             TypeError::UseAfterMove { var_name, .. } => {
-                Some(format!("variable '{}' was moved and can no longer be used; consider cloning it before the move", var_name))
+                Some(format!(
+                    "variable '{}' was moved and can no longer be used. Options: \
+                     (1) pass by reference `&{}` if the callee only reads the value, \
+                     (2) pass `&mut {}` for in-place modification, \
+                     (3) clone the value with `.clone()` before the move",
+                    var_name, var_name, var_name
+                ))
             }
             TypeError::UseAfterPartialMove { var_name, moved_fields, .. } => {
                 Some(format!("variable '{}' has partially moved fields {:?}; consider cloning before moving individual fields", var_name, moved_fields))
@@ -854,7 +873,11 @@ mod tests {
 
     #[test]
     fn test_span_some() {
-        let span = vais_ast::Span { start: 0, end: 10 };
+        let span = vais_ast::Span {
+            file_id: 0,
+            start: 0,
+            end: 10,
+        };
         let err = TypeError::Mismatch {
             expected: "i64".to_string(),
             found: "bool".to_string(),
@@ -928,7 +951,11 @@ mod tests {
 
     #[test]
     fn test_secondary_spans_use_after_move() {
-        let span = vais_ast::Span { start: 10, end: 20 };
+        let span = vais_ast::Span {
+            file_id: 0,
+            start: 10,
+            end: 20,
+        };
         let err = TypeError::UseAfterMove {
             var_name: "x".to_string(),
             moved_at: Some(span),
@@ -947,7 +974,11 @@ mod tests {
 
     #[test]
     fn test_secondary_spans_borrow_conflict() {
-        let span = vais_ast::Span { start: 5, end: 15 };
+        let span = vais_ast::Span {
+            file_id: 0,
+            start: 5,
+            end: 15,
+        };
         let err = TypeError::BorrowConflict {
             var_name: "x".to_string(),
             existing_borrow_at: Some(span),
@@ -962,7 +993,11 @@ mod tests {
 
     #[test]
     fn test_secondary_spans_borrow_conflict_immutable() {
-        let span = vais_ast::Span { start: 5, end: 15 };
+        let span = vais_ast::Span {
+            file_id: 0,
+            start: 5,
+            end: 15,
+        };
         let err = TypeError::BorrowConflict {
             var_name: "x".to_string(),
             existing_borrow_at: Some(span),

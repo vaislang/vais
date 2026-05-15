@@ -1,0 +1,17 @@
+# path	expect	stage	error	exit	description
+positive/functions/basic_return.vais	pass	run	-	42	function returns explicit i64
+positive/functions/call_and_block.vais	pass	run	-	0	function call and block body
+positive/primitives/int_bool_string.vais	pass	run	-	0	primitive arithmetic bool and str use
+positive/control/if_else_while.vais	pass	run	-	0	if expression and while loop
+positive/structs/point.vais	pass	run	-	0	struct literal and field access
+positive/enums/color_match.vais	pass	run	-	0	enum declaration and match
+positive/enums/option_match.vais	pass	run	-	0	Option construction and match run
+positive/enums/result_match.vais	pass	run	-	0	Result construction and match run
+positive/collections/vec_i64.vais	pass	run	-	0	Vec i64 create push len and index run
+negative/parse/missing_brace.vais	fail	check	P001	-	parse error is rejected
+negative/types/return_bool_as_i64.vais	fail	check	E001	-	bool cannot return as i64
+negative/types/undefined_var.vais	fail	check	E002	-	undefined variable rejected
+negative/types/implicit_str_i64.vais	fail	check	E001	-	str to i64 implicit coercion rejected
+negative/control/non_predicate_condition.vais	fail	check	E001	-	string condition is rejected
+negative/control/branch_mismatch.vais	fail	check	E001	-	if branches must have same type
+negative/structs/unknown_field.vais	fail	check	E002	-	unknown struct field rejected

@@ -1,0 +1,25 @@
+# CHECKS: match arms return bool (via i64 0/1).
+fn is_vowel(c: i64) -> i64 {
+    match c {
+        65 => 1,    # 'A'
+        69 => 1,    # 'E'
+        73 => 1,    # 'I'
+        79 => 1,    # 'O'
+        85 => 1,    # 'U'
+        97 => 1,    # 'a'
+        101 => 1,   # 'e'
+        105 => 1,   # 'i'
+        111 => 1,   # 'o'
+        117 => 1,   # 'u'
+        _ => 0
+    }
+}
+
+fn main() -> i64 {
+    I is_vowel(65) != 1 { return 1 }
+    I is_vowel(98) != 0 { return 2 }
+    I is_vowel(101) != 1 { return 3 }
+    I is_vowel(122) != 0 { return 4 }
+    I is_vowel(0) != 0 { return 5 }
+    return 0
+}

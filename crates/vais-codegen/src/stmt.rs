@@ -68,12 +68,6 @@ impl CodeGenerator {
             } => {
                 // Infer type BEFORE generating code, so we can use function return types
                 let inferred_ty = self.infer_expr_type(value);
-                let resolved_ty = ty
-                    .as_ref()
-                    .map(|t| self.ast_type_to_resolved(&t.node))
-                    .unwrap_or(inferred_ty.clone());
-                let resolved_ty =
-                    vais_types::substitute_type(&resolved_ty, &self.generics.substitutions);
 
                 // Check if this is a struct literal - handle specially
                 // Also detect struct tuple literal: Point(40, 2) where "Point" is a known struct
@@ -108,28 +102,16 @@ impl CodeGenerator {
                     false
                 };
 
-                let saved_generic_substitutions =
-                    self.push_expected_static_ctor_substitutions(&resolved_ty, &value.node);
-                let saved_load_typed_substitutions = if matches!(
-                    &value.node,
-                    Expr::Call { func, .. } if matches!(&func.node, Expr::Ident(name) if name == "load_typed")
-                ) {
-                    let saved = self.generics.substitutions.clone();
-                    self.generics
-                        .substitutions
-                        .insert("T".to_string(), resolved_ty.clone());
-                    Some(saved)
-                } else {
-                    None
-                };
-                let generated_value = self.generate_expr(value, counter);
-                if let Some(saved) = saved_generic_substitutions {
-                    self.generics.substitutions = saved;
-                }
-                if let Some(saved) = saved_load_typed_substitutions {
-                    self.generics.substitutions = saved;
-                }
-                let (val, val_ir) = generated_value?;
+                let (val, val_ir) = self.generate_expr(value, counter)?;
+
+                let resolved_ty_raw = ty
+                    .as_ref()
+                    .map(|t| self.ast_type_to_resolved(&t.node))
+                    .unwrap_or_else(|| {
+                        self.refine_weak_inferred_type_from_value(inferred_ty.clone(), &val)
+                    }); // Use inferred type if not specified
+                let resolved_ty =
+                    vais_types::substitute_type(&resolved_ty_raw, &self.generics.substitutions);
 
                 // Generate unique LLVM name for this variable (to handle loops)
                 let llvm_name = format!("{}.{}", name.node, counter);
@@ -171,13 +153,22 @@ impl CodeGenerator {
                     && !matches!(resolved_ty, ResolvedType::Named { .. })
                     && is_simple_type;
 
+                // Detect array literal RHS so we can tag the LocalVar with a
+                // compile-time-known element count (consumed by `&arr`
+                // coercion to `&[T]` slice fat pointer).
+                let array_len: Option<u64> = match &value.node {
+                    Expr::Array(elems) => Some(elems.len() as u64),
+                    _ => None,
+                };
+
                 if use_ssa {
                     // SSA style: directly alias the value, no alloca needed
                     // The llvm_name will refer to the computed value directly
-                    self.fn_ctx.locals.insert(
-                        name.node.clone(),
-                        LocalVar::ssa(resolved_ty.clone(), val.clone()),
-                    );
+                    let mut local = LocalVar::ssa(resolved_ty.clone(), val.clone());
+                    if let Some(n) = array_len {
+                        local = local.with_array_length(n);
+                    }
+                    self.fn_ctx.locals.insert(name.node.clone(), local);
                     // No additional IR needed - we just register the mapping
                 } else {
                     // Traditional alloca style.
@@ -188,15 +179,18 @@ impl CodeGenerator {
                         || is_unit_variant
                         || matches!(resolved_ty, ResolvedType::Named { .. });
                     if needs_double_ptr {
-                        self.fn_ctx.locals.insert(
-                            name.node.clone(),
-                            LocalVar::alloca_double_ptr(resolved_ty.clone(), llvm_name.clone()),
-                        );
+                        let mut local =
+                            LocalVar::alloca_double_ptr(resolved_ty.clone(), llvm_name.clone());
+                        if let Some(n) = array_len {
+                            local = local.with_array_length(n);
+                        }
+                        self.fn_ctx.locals.insert(name.node.clone(), local);
                     } else {
-                        self.fn_ctx.locals.insert(
-                            name.node.clone(),
-                            LocalVar::alloca(resolved_ty.clone(), llvm_name.clone()),
-                        );
+                        let mut local = LocalVar::alloca(resolved_ty.clone(), llvm_name.clone());
+                        if let Some(n) = array_len {
+                            local = local.with_array_length(n);
+                        }
+                        self.fn_ctx.locals.insert(name.node.clone(), local);
                     }
 
                     // For struct literals and enum variant constructors, the value is already an alloca'd pointer
@@ -219,62 +213,14 @@ impl CodeGenerator {
                         // This keeps all struct variables as pointers for consistency
                         let tmp_ptr = format!("%{}.struct", llvm_name);
                         write_ir!(ir, "  {} = alloca {}", tmp_ptr, llvm_ty);
-                        let is_load_typed_call = matches!(
-                            &value.node,
-                            Expr::Call { func, .. }
-                                if matches!(&func.node, Expr::Ident(name) if name == "load_typed")
-                        );
                         // If the value expression is not a value (e.g., block returning
-                        // a struct-typed local, or load_typed returning alloca ptr),
-                        // we need to load the struct first.
-                        let actual_val = if !self.is_expr_value(value) || is_load_typed_call {
+                        // a struct-typed local), we need to load the struct first
+                        let actual_val = if !self.is_expr_value(value) {
                             let loaded = self.next_temp(counter);
                             write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
-                            self.fn_ctx.register_temp_type(&loaded, resolved_ty.clone());
                             loaded
                         } else {
                             val.clone()
-                        };
-                        let actual_val = if actual_val.starts_with('%') {
-                            let actual_llvm_ty = self.llvm_type_of(&actual_val);
-                            if actual_llvm_ty != llvm_ty
-                                && actual_llvm_ty.starts_with('%')
-                                && llvm_ty.starts_with('%')
-                            {
-                                let actual_slot = self.next_temp(counter);
-                                self.emit_entry_alloca(&actual_slot, &actual_llvm_ty);
-                                write_ir!(
-                                    ir,
-                                    "  store {} {}, {}* {}",
-                                    actual_llvm_ty,
-                                    actual_val,
-                                    actual_llvm_ty,
-                                    actual_slot
-                                );
-                                let cast_ptr = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = bitcast {}* {} to {}*",
-                                    cast_ptr,
-                                    actual_llvm_ty,
-                                    actual_slot,
-                                    llvm_ty
-                                );
-                                let loaded = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load {}, {}* {}",
-                                    loaded,
-                                    llvm_ty,
-                                    llvm_ty,
-                                    cast_ptr
-                                );
-                                loaded
-                            } else {
-                                actual_val
-                            }
-                        } else {
-                            actual_val
                         };
                         write_ir!(
                             ir,
@@ -360,6 +306,7 @@ impl CodeGenerator {
                         let ret_val = if poll_ctx.ret_llvm == "i1" {
                             let trunc = self.next_temp(counter);
                             write_ir!(ir, "  {} = trunc i64 {} to i1", trunc, val);
+                            self.fn_ctx.record_emitted_type(&trunc, "i1");
                             trunc
                         } else {
                             val.clone()
@@ -369,6 +316,7 @@ impl CodeGenerator {
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                         let t0 = self.next_temp(counter);
                         write_ir!(ir, "  {} = insertvalue {} undef, i64 1, 0", t0, poll_ret_ty);
+                        self.fn_ctx.record_emitted_type(&t0, &poll_ret_ty);
                         let t1 = self.next_temp(counter);
                         write_ir!(
                             ir,
@@ -379,6 +327,7 @@ impl CodeGenerator {
                             poll_ctx.ret_llvm,
                             ret_val
                         );
+                        self.fn_ctx.record_emitted_type(&t1, &poll_ret_ty);
                         // Set state to -1 (completed)
                         ir.push_str("  store i64 -1, i64* %state_field\n");
                         write_ir!(ir, "  ret {} {}", poll_ret_ty, t1);
@@ -395,6 +344,7 @@ impl CodeGenerator {
                         let poll_ret_ty = format!("{{ i64, {} }}", poll_ctx.ret_llvm);
                         let t0 = self.next_temp(counter);
                         write_ir!(ir, "  {} = insertvalue {} undef, i64 1, 0", t0, poll_ret_ty);
+                        self.fn_ctx.record_emitted_type(&t0, &poll_ret_ty);
                         ir.push_str("  store i64 -1, i64* %state_field\n");
                         write_ir!(ir, "  ret {} {}", poll_ret_ty, t0);
                         return Ok(("void".to_string(), ir));
@@ -506,96 +456,15 @@ impl CodeGenerator {
                     let alloc_cleanup_ir = self.generate_alloc_cleanup();
                     ir.push_str(&alloc_cleanup_ir);
 
-                    // Coerce value to match function return type if needed
-                    // (e.g., sext i32→i64 in body then ret i32 needs trunc back)
+                    // Mini Pillar 1 (ADR 0001 §1) — single coerce point for ret.
+                    // Migrated from inline 4-branch (int width / float width / str
+                    // void-placeholder / specialized struct erasure) chain.
                     let final_val = {
                         let val_ty = self.llvm_type_of(&final_val);
-                        if val_ty != ret_type
-                            && val_ty.starts_with('i')
-                            && ret_type.starts_with('i')
-                        {
-                            let val_bits: u32 = val_ty[1..].parse().unwrap_or(64);
-                            let ret_bits: u32 = ret_type[1..].parse().unwrap_or(64);
-                            if val_bits > 0 && ret_bits > 0 && val_bits != ret_bits {
-                                let tmp = self.next_temp(counter);
-                                if val_bits > ret_bits {
-                                    write_ir!(
-                                        ir,
-                                        "  {} = trunc {} {} to {}",
-                                        tmp,
-                                        val_ty,
-                                        final_val,
-                                        ret_type
-                                    );
-                                } else {
-                                    write_ir!(
-                                        ir,
-                                        "  {} = sext {} {} to {}",
-                                        tmp,
-                                        val_ty,
-                                        final_val,
-                                        ret_type
-                                    );
-                                }
-                                tmp
-                            } else {
-                                final_val
-                            }
-                        } else if val_ty != ret_type
-                            && (val_ty == "float" || val_ty == "double")
-                            && (ret_type == "float" || ret_type == "double")
-                        {
-                            // Float width coercion (e.g., double→float fptrunc)
-                            let tmp = self.next_temp(counter);
-                            if val_ty == "double" && ret_type == "float" {
-                                write_ir!(ir, "  {} = fptrunc double {} to float", tmp, final_val);
-                            } else {
-                                write_ir!(ir, "  {} = fpext float {} to double", tmp, final_val);
-                            }
-                            tmp
-                        } else if val_ty != ret_type
-                            && val_ty == "i64"
-                            && ret_type == "{ i8*, i64 }"
-                        {
-                            // Str return type mismatch — value is i64 (void placeholder)
-                            // but return type is str fat pointer. Use zeroinitializer.
-                            let zinit = self.next_temp(counter);
-                            write_ir!(
-                                ir,
-                                "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
-                                zinit
-                            );
-                            zinit
-                        } else if val_ty != ret_type
-                            && val_ty == "i64"
-                            && ret_type.starts_with('%')
-                            && !ret_type.ends_with('*')
-                        {
-                            // Struct return type mismatch — value is i64 but return type is struct.
-                            // This happens in specialized generic functions where the body
-                            // uses i64 (generic erasure) but the function signature declares
-                            // a concrete struct type. Use inttoptr+load to reinterpret.
-                            let tmp_ptr = self.next_temp(counter);
-                            write_ir!(
-                                ir,
-                                "  {} = inttoptr i64 {} to {}*",
-                                tmp_ptr,
-                                final_val,
-                                ret_type
-                            );
-                            let loaded = self.next_temp(counter);
-                            write_ir!(
-                                ir,
-                                "  {} = load {}, {}* {}",
-                                loaded,
-                                ret_type,
-                                ret_type,
-                                tmp_ptr
-                            );
-                            loaded
-                        } else {
-                            final_val
-                        }
+                        let (coerced_val, coerce_ir) =
+                            self.coerce_ret_value(&final_val, &val_ty, &ret_type, counter);
+                        ir.push_str(&coerce_ir);
+                        coerced_val
                     };
 
                     // Emit the ret instruction
@@ -797,7 +666,7 @@ impl CodeGenerator {
     }
 
     /// Generate null-check + free IR for each slot in `frame`, skipping:
-    ///   - the `transfer_slot` (ownership being handed to the outer scope)
+    ///   - any `transfer_slots` (ownership being handed to the outer scope)
     ///   - any slot no longer referenced in `string_value_slot` (already freed by
     ///     intermediate-free, which removes the owning SSA→slot entry)
     ///
@@ -813,7 +682,7 @@ impl CodeGenerator {
     pub(crate) fn generate_string_scope_cleanup(
         &mut self,
         frame: &[String],
-        transfer_slot: Option<&str>,
+        transfer_slots: &[String],
     ) -> String {
         if frame.is_empty() {
             return String::new();
@@ -826,11 +695,10 @@ impl CodeGenerator {
         let mut slot_idx = 0usize;
 
         for slot_name in frame {
-            // Skip the slot being transferred out
-            if let Some(ts) = transfer_slot {
-                if slot_name == ts {
-                    continue;
-                }
+            // Skip slots being transferred out.
+            if transfer_slots.iter().any(|ts| ts == slot_name) {
+                slot_idx += 1;
+                continue;
             }
 
             // Skip if the slot is no longer live in string_value_slot (intermediate-free
@@ -863,7 +731,9 @@ impl CodeGenerator {
             let after = format!("__sd_af_{}_{}", block_id, slot_idx);
 
             write_ir!(ir, "  {} = load i8*, i8** {}", loaded, slot_name);
+            self.fn_ctx.record_emitted_type(&loaded, "i8*");
             write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
+            self.fn_ctx.record_emitted_type(&is_null, "i1");
             write_ir!(
                 ir,
                 "  br i1 {}, label %{}, label %{}",
@@ -907,7 +777,7 @@ impl CodeGenerator {
         let top = self.fn_ctx.scope_str_stack.len();
         for idx in loop_depth..top {
             let frame = self.fn_ctx.scope_str_stack[idx].clone();
-            let piece = self.generate_string_scope_cleanup(&frame, None);
+            let piece = self.generate_string_scope_cleanup(&frame, &[]);
             if !piece.is_empty() {
                 ir.push_str(&piece);
             }
@@ -932,7 +802,11 @@ impl CodeGenerator {
     /// because the codegen pattern is: `alloca %Type` → actual struct, then
     /// `alloca %Type*` → pointer stored in locals. We must load the inner
     /// `%Type*` before passing it to the drop function.
-    pub(crate) fn generate_scope_drop_cleanup(&mut self, scope_vars: &[String]) -> String {
+    pub(crate) fn generate_scope_drop_cleanup_except(
+        &mut self,
+        scope_vars: &[String],
+        skip_vars: &[String],
+    ) -> String {
         if scope_vars.is_empty() {
             return String::new();
         }
@@ -944,6 +818,9 @@ impl CodeGenerator {
         //   (Phase 191 #2c — nested container recursion).
         let mut droppable: Vec<DroppableScopeEntry> = Vec::new();
         for var_name in scope_vars {
+            if skip_vars.iter().any(|skip| skip == var_name) {
+                continue;
+            }
             if let Some(local) = self.fn_ctx.locals.get(var_name) {
                 let type_name = match &local.ty {
                     vais_types::ResolvedType::Named { name, .. } => name.clone(),
@@ -1024,6 +901,8 @@ impl CodeGenerator {
                     struct_ty,
                     effective_ptr
                 );
+                self.fn_ctx
+                    .record_emitted_type(&format!("%{}", ret_tmp), "i64");
             }
 
             // 2) Shallow-free (if has_owned_mask — frees heap-owned string fields)
@@ -1078,8 +957,10 @@ impl CodeGenerator {
             self.fn_ctx.label_counter += 1;
             let loaded = format!("%__fr_{}", id);
             write_ir!(ir, "  {} = load i8*, i8** {}", loaded, slot_name);
+            self.fn_ctx.record_emitted_type(&loaded, "i8*");
             let is_null = format!("%__fr_nn_{}", id);
             write_ir!(ir, "  {} = icmp eq i8* {}, null", is_null, loaded);
+            self.fn_ctx.record_emitted_type(&is_null, "i1");
             let do_free = format!("__fr_do_{}", id);
             let after = format!("__fr_after_{}", id);
             write_ir!(
@@ -1109,9 +990,40 @@ impl CodeGenerator {
         self.fn_ctx.pending_return_skip_slot.clear();
         self.fn_ctx.var_string_slot.clear();
         self.fn_ctx.var_string_slots_multi.clear();
+        self.fn_ctx.var_string_scope_depth.clear();
         self.fn_ctx.phi_extra_slots.clear();
         self.fn_ctx.scope_str_stack.clear();
         self.fn_ctx.scope_drop_label_counter = 0;
+    }
+
+    /// Move a string allocation slot from an inner expression/block frame to the
+    /// frame where `var_name` was declared. This preserves ownership for mutable
+    /// outer `str` locals assigned inside loops or nested blocks.
+    pub(crate) fn transfer_string_slot_to_var_scope(&mut self, var_name: &str, slot_name: &str) {
+        let Some(target_depth) = self.fn_ctx.var_string_scope_depth.get(var_name).copied() else {
+            return;
+        };
+        if self.fn_ctx.scope_str_stack.is_empty()
+            || target_depth >= self.fn_ctx.scope_str_stack.len()
+        {
+            return;
+        }
+
+        let current_depth = self.fn_ctx.scope_str_stack.len() - 1;
+        if current_depth <= target_depth {
+            return;
+        }
+
+        for (idx, frame) in self.fn_ctx.scope_str_stack.iter_mut().enumerate() {
+            if idx != target_depth {
+                frame.retain(|slot| slot != slot_name);
+            }
+        }
+
+        let target = &mut self.fn_ctx.scope_str_stack[target_depth];
+        if !target.iter().any(|slot| slot == slot_name) {
+            target.push(slot_name.to_string());
+        }
     }
 
     /// Register a heap allocation for automatic cleanup at scope exit.
@@ -1142,8 +1054,15 @@ impl CodeGenerator {
     /// Called before function exit points, after defer cleanup and before alloc cleanup.
     /// Variables are dropped in reverse declaration order (LIFO), matching Rust semantics.
     pub(crate) fn generate_drop_cleanup(&mut self) -> String {
+        self.generate_drop_cleanup_except(&[])
+    }
+
+    pub(crate) fn generate_drop_cleanup_except(&mut self, skip_vars: &[String]) -> String {
         let mut droppable: Vec<DroppableFnEntry> = Vec::new();
         for (var_name, local) in &self.fn_ctx.locals {
+            if skip_vars.iter().any(|skip| skip == var_name) {
+                continue;
+            }
             let type_name = match &local.ty {
                 ResolvedType::Named { name, .. } => name.clone(),
                 _ => continue,
@@ -1227,6 +1146,8 @@ impl CodeGenerator {
                     struct_ty,
                     effective_ptr
                 );
+                self.fn_ctx
+                    .record_emitted_type(&format!("%{}", ret_tmp), "i64");
             }
 
             if *has_shallow {
@@ -1282,8 +1203,10 @@ impl CodeGenerator {
             vec_ty,
             vec_ptr
         );
+        self.fn_ctx.record_emitted_type(&data_ptr, "i64*");
         let data_i = format!("%__ved_di_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", data_i, data_ptr);
+        self.fn_ctx.record_emitted_type(&data_i, "i64");
         let len_ptr = format!("%__ved_lp_{}", id);
         write_ir!(
             ir,
@@ -1293,8 +1216,10 @@ impl CodeGenerator {
             vec_ty,
             vec_ptr
         );
+        self.fn_ctx.record_emitted_type(&len_ptr, "i64*");
         let len_v = format!("%__ved_len_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", len_v, len_ptr);
+        self.fn_ctx.record_emitted_type(&len_v, "i64");
         let es_ptr = format!("%__ved_esp_{}", id);
         write_ir!(
             ir,
@@ -1304,11 +1229,14 @@ impl CodeGenerator {
             vec_ty,
             vec_ptr
         );
+        self.fn_ctx.record_emitted_type(&es_ptr, "i64*");
         let es_v = format!("%__ved_es_{}", id);
         write_ir!(ir, "  {} = load i64, i64* {}", es_v, es_ptr);
+        self.fn_ctx.record_emitted_type(&es_v, "i64");
 
         let skip_cmp = format!("%__ved_skip_{}", id);
         write_ir!(ir, "  {} = icmp sle i64 {}, 0", skip_cmp, len_v);
+        self.fn_ctx.record_emitted_type(&skip_cmp, "i1");
         let lbl_init = format!("__ved_init_{}", id);
         let lbl_head = format!("__ved_head_{}", id);
         let lbl_body = format!("__ved_body_{}", id);
@@ -1333,8 +1261,10 @@ impl CodeGenerator {
             id,
             lbl_cont
         );
+        self.fn_ctx.record_emitted_type(&i_phi, "i64");
         let done_cmp = format!("%__ved_done_{}", id);
         write_ir!(ir, "  {} = icmp sge i64 {} , {}", done_cmp, i_phi, len_v);
+        self.fn_ctx.record_emitted_type(&done_cmp, "i1");
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}",

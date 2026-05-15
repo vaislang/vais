@@ -1,0 +1,28 @@
+# CHECKS: in-place reverse a Vec<i64> using two-pointer swap.
+use std/vec.{vec_new};
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 0..6 {
+        v.push(i + 1)   # [1,2,3,4,5,6]
+    }
+
+    lo: i64 := mut 0
+    hi: i64 := mut v.len() - 1
+    LW lo < hi {
+        tmp: i64 := v[lo]
+        v[lo] = v[hi]
+        v[hi] = tmp
+        lo = lo + 1
+        hi = hi - 1
+    }
+
+    # expected reversed: [6,5,4,3,2,1]
+    I v[0] != 6 { return 1 }
+    I v[1] != 5 { return 2 }
+    I v[2] != 4 { return 3 }
+    I v[3] != 3 { return 4 }
+    I v[4] != 2 { return 5 }
+    I v[5] != 1 { return 6 }
+    return 0
+}

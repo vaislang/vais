@@ -1,0 +1,17 @@
+# CHECKS: integer power via loop (alt to recursion).
+fn pow_iter(base: i64, exp: i64) -> i64 {
+    result: i64 := mut 1
+    LF i: 0..exp {
+        result = result * base
+    }
+    result
+}
+
+fn main() -> i64 {
+    I pow_iter(2, 0) != 1 { return 1 }
+    I pow_iter(2, 8) != 256 { return 2 }
+    I pow_iter(3, 5) != 243 { return 3 }
+    I pow_iter(10, 6) != 1000000 { return 4 }
+    I pow_iter(0 - 2, 3) != 0 - 8 { return 5 }
+    return 0
+}

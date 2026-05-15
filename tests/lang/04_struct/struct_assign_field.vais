@@ -1,0 +1,33 @@
+# CHECKS: assign to a mutable struct field via &self.
+struct Counter {
+    value: i64
+}
+
+impl Counter {
+    fn new(start: i64) -> Counter {
+        Counter { value: start }
+    }
+
+    fn set(&self, v: i64) -> i64 {
+        self.value = v
+        self.value
+    }
+
+    fn bump(&self) -> i64 {
+        self.value = self.value + 1
+        self.value
+    }
+}
+
+fn main() -> i64 {
+    c: Counter := mut Counter.new(10)
+    I c.value != 10 { return 1 }
+
+    I c.set(50) != 50 { return 2 }
+    I c.value != 50 { return 3 }
+
+    I c.bump() != 51 { return 4 }
+    I c.bump() != 52 { return 5 }
+    I c.value != 52 { return 6 }
+    return 0
+}

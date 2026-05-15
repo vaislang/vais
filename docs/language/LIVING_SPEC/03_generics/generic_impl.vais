@@ -1,0 +1,20 @@
+# LIVING_SPEC/03_generics/generic_impl.vais
+# Key concept: X Name<T> { F new(...) -> Self } 제네릭 impl 블록.
+# Self는 현재 타입을 가리킴; 생성자 패턴.
+
+struct Box<T> {
+    val: T
+}
+
+impl Box<i64> {
+    fn new(v: i64) -> Box<i64> = Box { val: v }
+
+    fn get(&self) -> i64 = self.val
+
+    fn doubled(&self) -> i64 = self.val * 2
+}
+
+fn main() -> i64 {
+    b := Box::new(21)
+    b.doubled()
+}

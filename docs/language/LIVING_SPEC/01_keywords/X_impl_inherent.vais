@@ -1,0 +1,24 @@
+# LIVING_SPEC/01_keywords/X_impl_inherent.vais
+# Key concept: X Type { F method(self, ...) -> T } 고유 메서드 구현.
+# 트레이트 없이 타입에 직접 메서드를 붙이는 inherent impl.
+
+struct Counter {
+    value: i64
+}
+
+impl Counter {
+    fn new() -> Counter {
+        Counter { value: 0 }
+    }
+    fn increment(self) -> i64 {
+        self.value + 1
+    }
+    fn get(self) -> i64 {
+        self.value
+    }
+}
+
+fn main() -> i64 {
+    c := Counter::new()
+    c.increment()
+}

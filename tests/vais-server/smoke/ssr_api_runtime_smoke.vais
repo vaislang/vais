@@ -1,0 +1,144 @@
+use src/api/ssr
+use src/http/header
+use src/http/method
+use src/http/request
+
+fn smoke_parse_requests() -> i64 {
+    render := parse_render_request("{\"route\":\"/dashboard\",\"props\":\"state\"}")
+    I render.route != "/dashboard" {
+        println("FAIL ssr parse render route")
+        return 1
+    }
+    I render.props != "state" {
+        println("FAIL ssr parse render props")
+        return 2
+    }
+
+    hydrate := parse_hydrate_request("{\"route\":\"/dashboard\",\"props\":\"state\"}")
+    I hydrate.route != "/dashboard" {
+        println("FAIL ssr parse hydrate route")
+        return 3
+    }
+    I hydrate.props != "state" {
+        println("FAIL ssr parse hydrate props")
+        return 4
+    }
+
+    0
+}
+
+fn smoke_render_response() -> i64 {
+    req := mut Request.new(HttpMethod.Post, "/api/render")
+    req.headers = req.headers.set(CONTENT_TYPE, "application/json")
+    req.body = "{\"route\":\"/dashboard\",\"props\":\"state\"}"
+
+    response := handle_ssr_render(req)
+    I response.status.code != 200 {
+        println("FAIL ssr render status")
+        return 10
+    }
+    I response.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL ssr render content type")
+        return 11
+    }
+    I smoke_contains(response.body, "\"html\"") != 1 {
+        println("FAIL ssr render html field")
+        return 12
+    }
+    I smoke_contains(response.body, "/dashboard") != 1 {
+        println("FAIL ssr render route")
+        return 13
+    }
+    I smoke_contains(response.body, "\"status\": 200") != 1 {
+        println("FAIL ssr render status field")
+        return 14
+    }
+
+    0
+}
+
+fn smoke_hydrate_response() -> i64 {
+    req := mut Request.new(HttpMethod.Post, "/api/hydrate")
+    req.headers = req.headers.set(CONTENT_TYPE, "application/json")
+    req.body = "{\"route\":\"/dashboard\",\"props\":\"state\"}"
+
+    response := handle_ssr_hydrate(req)
+    I response.status.code != 200 {
+        println("FAIL ssr hydrate status")
+        return 20
+    }
+    I response.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL ssr hydrate content type")
+        return 21
+    }
+    I smoke_contains(response.body, "\"data\": \"state\"") != 1 {
+        println("FAIL ssr hydrate data")
+        return 22
+    }
+    I smoke_contains(response.body, "\"route\": \"/dashboard\"") != 1 {
+        println("FAIL ssr hydrate route")
+        return 23
+    }
+
+    0
+}
+
+fn smoke_error_and_health() -> i64 {
+    missing := do_render("", "state")
+    I missing.status.code != 400 {
+        println("FAIL ssr missing route status")
+        return 30
+    }
+    I smoke_contains(missing.body, "Missing required field: route") != 1 {
+        println("FAIL ssr missing route body")
+        return 31
+    }
+
+    req := Request.new(HttpMethod.Get, "/api/health")
+    health := handle_health(req)
+    I health.status.code != 200 {
+        println("FAIL ssr health status")
+        return 32
+    }
+    I smoke_contains(health.body, "\"status\": \"ok\"") != 1 {
+        println("FAIL ssr health body")
+        return 33
+    }
+
+    0
+}
+
+fn smoke_contains(haystack: str, needle: str) -> i64 {
+    smoke_contains_rec(haystack, needle, 0)
+}
+
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
+    smoke_contains_rec(haystack, needle, i + 1)
+}
+
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+    nc := needle.char_at(ni)
+    I nc == 0 { return 1 }
+    hc := haystack.char_at(hi)
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
+    smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
+}
+
+fn main() -> i64 {
+    failures := mut 0
+    failures += smoke_parse_requests()
+    failures += smoke_render_response()
+    failures += smoke_hydrate_response()
+    failures += smoke_error_and_health()
+
+    I failures > 0 {
+        println("VAIS_SERVER_SSR_API_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_SSR_API_RUNTIME_OK")
+    0
+}

@@ -1,0 +1,108 @@
+use src/core/context
+use src/middleware/pipeline
+
+fn smoke_pipeline_registration() -> i64 {
+    p := mut Pipeline.new()
+    p = p.add("first")
+    p = p.add("second")
+
+    I p.len() != 2 {
+        println("FAIL middleware len")
+        return 1
+    }
+    I p.name_at(0) != "first" {
+        println("FAIL middleware first name")
+        return 2
+    }
+    I p.name_at(1) != "second" {
+        println("FAIL middleware second name")
+        return 3
+    }
+
+    0
+}
+
+fn smoke_before_passthrough() -> i64 {
+    p := mut Pipeline.new()
+    p = p.add("unknown")
+    p = p.add("after-a")
+
+    ctx := Context.new("GET", "/pipeline")
+    output := p.run_before(ctx)
+
+    I output.short_circuit {
+        println("FAIL passthrough short circuit")
+        return 10
+    }
+    I output.ctx.path != "/pipeline" {
+        println("FAIL passthrough ctx")
+        return 11
+    }
+
+    0
+}
+
+fn smoke_before_short_circuit() -> i64 {
+    p := mut Pipeline.new()
+    p = p.add("unknown")
+    p = p.add("deny")
+    p = p.add("after-a")
+
+    ctx := Context.new("POST", "/protected")
+    output := p.run_before(ctx)
+
+    I !output.short_circuit {
+        println("FAIL deny did not short circuit")
+        return 20
+    }
+    I output.response.status != 401 {
+        println("FAIL deny status")
+        return 21
+    }
+    I output.response.body != "middleware-denied" {
+        println("FAIL deny body")
+        return 22
+    }
+
+    0
+}
+
+fn smoke_after_reverse_order() -> i64 {
+    p := mut Pipeline.new()
+    p = p.add("after-a")
+    p = p.add("after-b")
+
+    ctx := Context.new("GET", "/after")
+    response := ctx.text(200, "handler")
+    final := p.run_after(ctx, response)
+
+    I final.status != 200 {
+        println("FAIL after status")
+        return 30
+    }
+    I final.body != "handler|b|a" {
+        println("FAIL after reverse order")
+        return 31
+    }
+    I final.content_type != "text/plain; charset=utf-8" {
+        println("FAIL after content type")
+        return 32
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    failures := mut 0
+    failures += smoke_pipeline_registration()
+    failures += smoke_before_passthrough()
+    failures += smoke_before_short_circuit()
+    failures += smoke_after_reverse_order()
+
+    I failures > 0 {
+        println("VAIS_SERVER_MIDDLEWARE_PIPELINE_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_MIDDLEWARE_PIPELINE_RUNTIME_OK")
+    0
+}

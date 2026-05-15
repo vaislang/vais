@@ -86,7 +86,7 @@ impl Formatter {
             }
             Stmt::Return(expr) => {
                 self.output.push_str(&indent);
-                self.output.push('R');
+                self.output.push_str("return");
                 if let Some(e) = expr {
                     self.output.push(' ');
                     self.output.push_str(&self.format_expr(&e.node));
@@ -150,7 +150,8 @@ impl Formatter {
     pub(crate) fn format_if_else_branch(&mut self, if_else: &IfElse) {
         match if_else {
             IfElse::ElseIf(cond, stmts, else_) => {
-                self.output.push_str(" E I ");
+                // Step 19 P4 retirement: canonical chain form is `else I`.
+                self.output.push_str(" else I ");
                 self.output.push_str(&self.format_expr(&cond.node));
                 self.output.push_str(" {\n");
                 self.push_indent();
@@ -165,7 +166,7 @@ impl Formatter {
                 }
             }
             IfElse::Else(stmts) => {
-                self.output.push_str(" E {\n");
+                self.output.push_str(" else {\n");
                 self.push_indent();
                 for stmt in stmts {
                     self.format_stmt(&stmt.node);
@@ -233,7 +234,7 @@ impl Formatter {
         arms: &[MatchArm],
     ) {
         self.output.push_str(indent);
-        self.output.push_str("M ");
+        self.output.push_str("match ");
         self.output.push_str(&self.format_expr(&expr.node));
         self.output.push_str(" {\n");
         self.push_indent();
@@ -295,7 +296,7 @@ impl Formatter {
             }
             Stmt::Expr(expr) => self.format_expr(&expr.node),
             Stmt::Return(expr) => {
-                let mut s = String::from("R");
+                let mut s = String::from("return");
                 if let Some(e) = expr {
                     s.push(' ');
                     s.push_str(&self.format_expr(&e.node));

@@ -85,6 +85,7 @@ impl CodeGenerator {
             + llvm_size(&ret_llvm)
             + params.iter().map(|(_, ty)| llvm_size(&self.type_to_llvm(ty))).sum::<usize>();
         write_ir!(ir, "  %state_ptr = call i64 @malloc(i64 {})", struct_size);
+        self.fn_ctx.record_emitted_type("%state_ptr", "i64");
         write_ir!(
             ir,
             "  %state = inttoptr i64 %state_ptr to %{}*",
@@ -129,6 +130,7 @@ impl CodeGenerator {
         self.fn_ctx.current_function = Some(format!("{}__poll", func_name));
         self.fn_ctx.locals.clear();
         self.fn_ctx.temp_var_types.clear();
+        self.fn_ctx.actual_llvm_type.clear();
         self.fn_ctx.label_counter = 0;
         self.fn_ctx.loop_stack.clear();
         self.fn_ctx.future_poll_fns.clear();
@@ -232,6 +234,7 @@ impl CodeGenerator {
         } else if ret_llvm == "i1" {
             let trunc = format!("%body_trunc.{}", counter);
             write_ir!(ir, "  {} = trunc i64 {} to i1", trunc, body_result.0);
+            self.fn_ctx.record_emitted_type(&trunc, "i1");
             trunc
         } else {
             body_result.0.clone()
@@ -259,12 +262,16 @@ impl CodeGenerator {
             "  %ret_0 = insertvalue {{ i64, {} }} undef, i64 1, 0",
             ret_llvm
         );
+        self.fn_ctx
+            .record_emitted_type("%ret_0", &format!("{{ i64, {} }}", ret_llvm));
         write_ir!(
             ir,
             "  %ret_1 = insertvalue {{ i64, {} }} %ret_0, {} %ret_val, 1",
             ret_llvm,
             ret_llvm
         );
+        self.fn_ctx
+            .record_emitted_type("%ret_1", &format!("{{ i64, {} }}", ret_llvm));
         write_ir!(ir, "  ret {{ i64, {} }} %ret_1\n", ret_llvm);
 
         // Invalid state handler
@@ -274,6 +281,8 @@ impl CodeGenerator {
             "  %invalid_ret = insertvalue {{ i64, {} }} undef, i64 0, 0",
             ret_llvm
         );
+        self.fn_ctx
+            .record_emitted_type("%invalid_ret", &format!("{{ i64, {} }}", ret_llvm));
         write_ir!(ir, "  ret {{ i64, {} }} %invalid_ret", ret_llvm);
 
         ir.push_str("}\n");

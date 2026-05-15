@@ -1,7 +1,7 @@
 # Range type test
 
 # Test basic range iteration
-F test_range() -> i64 {
+fn test_range() -> i64 {
     puts("Testing range iteration:")
 
     # Simple range loop: L i:0..5 { }
@@ -21,17 +21,17 @@ F test_range() -> i64 {
 }
 
 # Print a number (works for 0-99)
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 10 {
         putchar(n / 10 + 48)
         0
-    } EL {
+    } else {
         0
     }
     putchar(n % 10 + 48)
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     test_range()
 }

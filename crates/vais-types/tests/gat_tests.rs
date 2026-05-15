@@ -15,12 +15,12 @@ fn check_module(source: &str) -> Result<(), String> {
 fn test_gat_basic_trait_definition() {
     // Basic GAT trait definition should compile
     let source = r#"
-        W Container<T> {
-            T Item<U>
-            F get(&self) -> Self::Item<U>
+        trait Container<T> {
+            type Item<U>
+            fn get(&self) -> Self::Item<U>
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -38,12 +38,12 @@ fn test_gat_basic_trait_definition() {
 fn test_gat_with_multiple_params() {
     // GAT with multiple type parameters
     let source = r#"
-        W Mapper {
-            T Output<A, B>
-            F map(&self) -> Self::Output<A, B>
+        trait Mapper {
+            type Output<A, B>
+            fn map(&self) -> Self::Output<A, B>
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -60,24 +60,24 @@ fn test_gat_with_multiple_params() {
 fn test_associated_type_without_gat() {
     // Regular associated type (not GAT) should work
     let source = r#"
-        W Container {
-            T Item
-            F get(&self) -> i64
+        trait Container {
+            type Item
+            fn get(&self) -> i64
         }
 
-        S Vec {
+        struct Vec {
             data: i64
         }
 
-        X Vec: Container {
-            T Item = i64
+        impl Vec: Container {
+            type Item = i64
 
-            F get(&self) -> i64 {
+            fn get(&self) -> i64 {
                 self.data
             }
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             v := Vec { data: 42 }
             v.get()
         }
@@ -90,22 +90,22 @@ fn test_associated_type_without_gat() {
 fn test_trait_with_associated_type_default() {
     // Trait with default associated type
     let source = r#"
-        W HasDefault {
-            T Output = i64
-            F process(&self) -> Self::Output
+        trait HasDefault {
+            type Output = i64
+            fn process(&self) -> Self::Output
         }
 
-        S MyType {
+        struct MyType {
             value: i64
         }
 
-        X MyType: HasDefault {
-            F process(&self) -> i64 {
+        impl MyType: HasDefault {
+            fn process(&self) -> i64 {
                 self.value
             }
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             t := MyType { value: 10 }
             t.process()
         }
@@ -126,12 +126,12 @@ fn test_trait_with_associated_type_default() {
 fn test_associated_type_in_function() {
     // Using associated types in function signatures
     let source = r#"
-        W Iterator {
-            T Item
-            F next(&self) -> Self::Item?
+        trait Iterator {
+            type Item
+            fn next(&self) -> Self::Item?
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -148,12 +148,12 @@ fn test_associated_type_in_function() {
 fn test_gat_with_lifetime() {
     // GAT with lifetime parameter (if lifetimes are supported in GAT context)
     let source = r#"
-        W LendingIterator {
-            T Item<'a>
-            F next(&'a self) -> Self::Item<'a>?
+        trait LendingIterator {
+            type Item<'a>
+            fn next(&'a self) -> Self::Item<'a>?
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -170,12 +170,12 @@ fn test_gat_with_lifetime() {
 fn test_associated_type_with_bounds() {
     // Associated type with trait bounds
     let source = r#"
-        W Container {
-            T Item: Clone
-            F get(&self) -> Self::Item
+        trait Container {
+            type Item: Clone
+            fn get(&self) -> Self::Item
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -192,19 +192,19 @@ fn test_associated_type_with_bounds() {
 fn test_gat_impl_concrete() {
     // Implementing GAT with concrete types
     let source = r#"
-        W Container {
-            T Item<T>
+        trait Container {
+            type Item<T>
         }
 
-        S MyContainer {
+        struct MyContainer {
             value: i64
         }
 
-        X MyContainer: Container {
-            T Item<T> = T
+        impl MyContainer: Container {
+            type Item<T> = T
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -221,15 +221,15 @@ fn test_gat_impl_concrete() {
 fn test_nested_associated_types() {
     // Nested associated type usage
     let source = r#"
-        W Outer {
-            T Inner
+        trait Outer {
+            type Inner
         }
 
-        W HasItem {
-            T Item
+        trait HasItem {
+            type Item
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -241,15 +241,15 @@ fn test_nested_associated_types() {
 fn test_super_trait_with_associated_type() {
     // Super trait with associated types
     let source = r#"
-        W Base {
-            T Item
+        trait Base {
+            type Item
         }
 
-        W Derived: Base {
-            F process(&self) -> Self::Item
+        trait Derived: Base {
+            fn process(&self) -> Self::Item
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -266,23 +266,23 @@ fn test_super_trait_with_associated_type() {
 fn test_associated_type_projection_syntax() {
     // Test parsing of associated type projection: Type::Item
     let source = r#"
-        W Container {
-            T Item
+        trait Container {
+            type Item
         }
 
-        S Vec {
+        struct Vec {
             x: i64
         }
 
-        X Vec: Container {
-            T Item = i64
+        impl Vec: Container {
+            type Item = i64
         }
 
-        F use_item(value: Vec::Item) -> i64 {
+        fn use_item(value: Vec::Item) -> i64 {
             value
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             use_item(42)
         }
     "#;
@@ -299,14 +299,14 @@ fn test_associated_type_projection_syntax() {
 fn test_multiple_associated_types() {
     // Trait with multiple associated types
     let source = r#"
-        W Multi {
-            T First
-            T Second
-            F first(&self) -> Self::First
-            F second(&self) -> Self::Second
+        trait Multi {
+            type First
+            type Second
+            fn first(&self) -> Self::First
+            fn second(&self) -> Self::Second
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -318,12 +318,12 @@ fn test_multiple_associated_types() {
 fn test_gat_where_clause() {
     // GAT with where clause (if supported)
     let source = r#"
-        W Advanced {
-            T Output<T> where T: Clone
-            F transform(&self) -> Self::Output<T>
+        trait Advanced {
+            type Output<T> where T: Clone
+            fn transform(&self) -> Self::Output<T>
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;

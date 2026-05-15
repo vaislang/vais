@@ -19,9 +19,9 @@ use super::helpers::*;
 #[test]
 fn e2e_phase114_generic_identity_i64() {
     let source = r#"
-F identity<T>(x: T) -> T { x }
+fn identity<T>(x: T) -> type { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     identity(42)
 }
 "#;
@@ -33,9 +33,9 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_generic_double() {
     let source = r#"
-F double<T>(x: T) -> T { x + x }
+fn double<T>(x: T) -> type { x + x }
 
-F main() -> i64 {
+fn main() -> i64 {
     double(21)
 }
 "#;
@@ -47,9 +47,9 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_generic_multi_call() {
     let source = r#"
-F add_one<T>(x: T) -> T { x + 1 }
+fn add_one<T>(x: T) -> type { x + 1 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := add_one(10)
     b := add_one(20)
     a + b + 1
@@ -63,10 +63,10 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_transitive_two_levels() {
     let source = r#"
-F inner<T>(x: T) -> T { x + 1 }
-F outer<T>(x: T) -> T { inner(x) + 1 }
+fn inner<T>(x: T) -> type { x + 1 }
+fn outer<T>(x: T) -> type { inner(x) + 1 }
 
-F main() -> i64 {
+fn main() -> i64 {
     outer(40)
 }
 "#;
@@ -78,17 +78,17 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_generic_struct_method() {
     let source = r#"
-S Box<T> {
+struct Box<T> {
     value: T
 }
 
-X Box<T> {
-    F get(self) -> T {
+impl Box<T> {
+    fn get(self) -> type {
         self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     b := Box { value: 55 }
     b.get()
 }
@@ -101,18 +101,18 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_generic_struct_arithmetic_method() {
     let source = r#"
-S Pair<T> {
+struct Pair<T> {
     first: T,
     second: T
 }
 
-X Pair<T> {
-    F sum(self) -> T {
+impl Pair<T> {
+    fn sum(self) -> type {
         self.first + self.second
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Pair { first: 20, second: 22 }
     p.sum()
 }
@@ -125,15 +125,15 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_generic_with_condition() {
     let source = r#"
-F max_val<T>(a: T, b: T) -> T {
+fn max_val<T>(a: T, b: T) -> type {
     I a > b {
         a
-    } E {
+    } else {
         b
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     max_val(10, 42)
 }
 "#;
@@ -145,9 +145,9 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_multi_param_generic() {
     let source = r#"
-F pick_first<A, B>(a: A, b: B) -> A { a }
+fn pick_first<A, B>(a: A, b: B) -> A { a }
 
-F main() -> i64 {
+fn main() -> i64 {
     pick_first(42, 99)
 }
 "#;
@@ -159,11 +159,11 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_three_level_chain() {
     let source = r#"
-F step1<T>(x: T) -> T { x + 1 }
-F step2<T>(x: T) -> T { step1(x) + 1 }
-F step3<T>(x: T) -> T { step2(x) + 1 }
+fn step1<T>(x: T) -> type { x + 1 }
+fn step2<T>(x: T) -> type { step1(x) + 1 }
+fn step3<T>(x: T) -> type { step2(x) + 1 }
 
-F main() -> i64 {
+fn main() -> i64 {
     step3(39)
 }
 "#;
@@ -175,7 +175,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_generic_with_loop() {
     let source = r#"
-F accumulate<T>(start: T, count: i64) -> T {
+fn accumulate<T>(start: T, count: i64) -> type {
     result := mut start
     L i:0..count {
         result = result + 1
@@ -183,7 +183,7 @@ F accumulate<T>(start: T, count: i64) -> T {
     result
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     accumulate(32, 10)
 }
 "#;
@@ -195,10 +195,10 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_generic_wrap_unwrap() {
     let source = r#"
-F wrap<T>(x: T) -> T { x }
-F unwrap_val<T>(x: T) -> T { x }
+fn wrap<T>(x: T) -> type { x }
+fn unwrap_val<T>(x: T) -> type { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     val := wrap(42)
     unwrap_val(val)
 }
@@ -211,13 +211,13 @@ F main() -> i64 {
 #[test]
 fn e2e_phase114_generic_from_nongeneric() {
     let source = r#"
-F add<T>(a: T, b: T) -> T { a + b }
+fn add<T>(a: T, b: T) -> type { a + b }
 
-F compute() -> i64 {
+fn compute() -> i64 {
     add(20, 22)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     compute()
 }
 "#;

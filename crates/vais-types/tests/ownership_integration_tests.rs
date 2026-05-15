@@ -25,7 +25,7 @@ fn ownership_valid_copy_type_reuse() {
     // Copy types (i64) can be used after assignment
     let result = check_strict(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := 42
             y := x
             x + y
@@ -44,10 +44,10 @@ fn ownership_valid_immutable_borrows() {
     // Multiple immutable borrows should be fine
     let result = check_strict(
         r#"
-        F foo(a: i64, b: i64) -> i64 {
+        fn foo(a: i64, b: i64) -> i64 {
             a + b
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             x := 10
             foo(x, x)
         }
@@ -64,7 +64,7 @@ fn ownership_valid_immutable_borrows() {
 fn ownership_valid_mutable_reassign() {
     let result = check_strict(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 0
             x = 42
             x
@@ -85,7 +85,7 @@ fn ownership_warn_mode_does_not_fail() {
     // Even invalid ownership code should not fail in warn-only mode
     let warnings = check_warn(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := 10
             x
         }
@@ -100,7 +100,7 @@ fn ownership_warn_mode_does_not_fail() {
 
 #[test]
 fn ownership_strict_mode_can_be_enabled() {
-    let module = parse("F main() -> i64 { 0 }").unwrap();
+    let module = parse("fn main() -> i64 { 0 }").unwrap();
     let mut checker = TypeChecker::new();
     checker.set_strict_ownership(true);
     let result = checker.check_module(&module);
@@ -109,7 +109,7 @@ fn ownership_strict_mode_can_be_enabled() {
 
 #[test]
 fn ownership_can_be_disabled() {
-    let module = parse("F main() -> i64 { 0 }").unwrap();
+    let module = parse("fn main() -> i64 { 0 }").unwrap();
     let mut checker = TypeChecker::new();
     checker.disable_ownership_check();
     let result = checker.check_module(&module);
@@ -127,8 +127,8 @@ fn ownership_check_runs_during_type_check() {
     // Verify that ownership checking is part of the type check pipeline
     let module = parse(
         r#"
-        F add(a: i64, b: i64) -> i64 { a + b }
-        F main() -> i64 {
+        fn add(a: i64, b: i64) -> i64 { a + b }
+        fn main() -> i64 {
             result := add(1, 2)
             result
         }

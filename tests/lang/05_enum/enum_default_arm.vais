@@ -1,0 +1,25 @@
+# CHECKS: enum match with `_` default that catches multiple variants.
+enum Status {
+    Active,
+    Pending,
+    Done,
+    Cancelled,
+    Archived
+}
+
+fn priority(s: Status) -> i64 {
+    match s {
+        Active => 10,
+        Pending => 5,
+        _ => 0
+    }
+}
+
+fn main() -> i64 {
+    I priority(Active) != 10 { return 1 }
+    I priority(Pending) != 5 { return 2 }
+    I priority(Done) != 0 { return 3 }
+    I priority(Cancelled) != 0 { return 4 }
+    I priority(Archived) != 0 { return 5 }
+    return 0
+}

@@ -10,6 +10,69 @@ use crate::types::{
 };
 
 impl TypeChecker {
+    /// Phase 6.27c.3: push an enum name onto the disambiguation hint stack.
+    /// Returns the depth at push time for paired pop sanity checking by
+    /// callers that want a guard-style usage.
+    pub(crate) fn push_enum_hint(&mut self, enum_name: impl Into<String>) -> usize {
+        let depth = self.enum_hint_stack.len();
+        self.enum_hint_stack.push(enum_name.into());
+        depth
+    }
+
+    /// Pop the topmost enum hint (no-op if stack empty — defensive).
+    pub(crate) fn pop_enum_hint(&mut self) {
+        self.enum_hint_stack.pop();
+    }
+
+    /// Phase 6.27c.3: extract an enum name from an expected type, if any.
+    /// Handles `Named { name: E, .. }` directly and strips common wrappers
+    /// so hints survive one level of `Ref` / `Option` / `Result`.
+    pub(crate) fn enum_name_hint_from(ty: &ResolvedType) -> Option<String> {
+        match ty {
+            ResolvedType::Named { name, .. } => Some(name.clone()),
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                Self::enum_name_hint_from(inner)
+            }
+            ResolvedType::Optional(_) => Some("Option".to_string()),
+            ResolvedType::Result(_, _) => Some("Result".to_string()),
+            _ => None,
+        }
+    }
+
+    /// Phase 6.27c.3: check an expression with a scoped enum hint derived
+    /// from `expected`. Pushes the hint if `expected` names an enum,
+    /// runs `check_expr`, then pops. Callers use this at arg/field sites.
+    pub(crate) fn check_expr_with_enum_hint(
+        &mut self,
+        expr: &vais_ast::Spanned<vais_ast::Expr>,
+        expected: &ResolvedType,
+    ) -> TypeResult<ResolvedType> {
+        let hint = Self::enum_name_hint_from(expected);
+        if let Some(ref h) = hint {
+            self.push_enum_hint(h.clone());
+        }
+        let r = self.check_expr(expr);
+        if hint.is_some() {
+            self.pop_enum_hint();
+        }
+        r
+    }
+
+    /// Phase 17.H4.15: push an expected-type hint onto the stack.
+    pub(crate) fn push_expected_type(&mut self, ty: ResolvedType) {
+        self.expected_type_stack.push(ty);
+    }
+
+    /// Phase 17.H4.15: pop the topmost expected-type hint.
+    pub(crate) fn pop_expected_type(&mut self) {
+        self.expected_type_stack.pop();
+    }
+
+    /// Phase 17.H4.15: peek the topmost expected-type hint (cloned).
+    pub(crate) fn current_expected_type(&self) -> Option<ResolvedType> {
+        self.expected_type_stack.last().cloned()
+    }
+
     /// Look up "self" variable directly from scopes (no fallback)
     pub(crate) fn lookup_self_var_info(&self) -> TypeResult<VarInfo> {
         for scope in self.scopes.iter().rev() {
@@ -68,13 +131,68 @@ impl TypeChecker {
         }
 
         // Check if it's an enum variant
-        for (enum_name, enum_def) in &self.enums {
+        // Phase 6.27b iteration 42: iterate enums in deterministic order
+        // (HashMap iter is non-deterministic, causing flakes when two enums
+        // share a Unit variant name like `None` in `Option` and
+        // user-defined `QuantizationStrategy`). Sort by name and prefer
+        // user-defined enums over builtins when variant name matches.
+        //
+        // Phase 6.27c.3: also honor `enum_hint_stack` — when an expected
+        // type is known (e.g. struct-lit field type `UnaryOp`), that enum
+        // wins over alphabetical order if it also has the variant.
+        let mut enum_entries: Vec<_> = self.enums.iter().collect();
+        enum_entries.sort_by(|(a, _), (b, _)| {
+            // Hint priority: topmost (last pushed) enum that has the variant
+            // goes first. We check `name` membership below; here we only
+            // need a cheap rank based on hint presence.
+            let a_hint = self
+                .enum_hint_stack
+                .iter()
+                .rev()
+                .position(|h| h == *a)
+                .map(|p| p as i32)
+                .unwrap_or(i32::MAX);
+            let b_hint = self
+                .enum_hint_stack
+                .iter()
+                .rev()
+                .position(|h| h == *b)
+                .map(|p| p as i32)
+                .unwrap_or(i32::MAX);
+            let a_builtin = matches!(a.as_str(), "Option" | "Result");
+            let b_builtin = matches!(b.as_str(), "Option" | "Result");
+            // Hinted first (lower rank = earlier in reverse stack = topmost),
+            // then non-builtin, then alphabetical
+            a_hint
+                .cmp(&b_hint)
+                .then_with(|| a_builtin.cmp(&b_builtin))
+                .then_with(|| a.cmp(b))
+        });
+        for (enum_name, enum_def) in enum_entries {
             if let Some(variant_fields) = enum_def.variants.get(name) {
-                // Create type variables for generic enum parameters
+                // Phase 2.10: for Unit variants of built-in Option/Result,
+                // use `Never` for the unconstrained generic slots. This lets
+                // the Unit arm (e.g. `None`) unify trivially with any
+                // concrete Option<T> from a sibling arm. Without this, None
+                // injects a fresh type var that later gets bound to the
+                // scrutinee's T, contaminating the arm result type when a
+                // sibling arm constructs `Some(x: U)` with a different U.
+                //
+                // Scope narrow: only applies when the Unit variant has no
+                // fields (None/Err-unit style) AND the enum is builtin
+                // Option or Result. User-defined enums retain fresh vars.
+                let use_never_for_unit = matches!(variant_fields, VariantFieldTypes::Unit)
+                    && matches!(enum_name.as_str(), "Option" | "Result");
                 let generics: Vec<ResolvedType> = enum_def
                     .generics
                     .iter()
-                    .map(|_| self.fresh_type_var())
+                    .map(|_| {
+                        if use_never_for_unit {
+                            ResolvedType::Never
+                        } else {
+                            self.fresh_type_var()
+                        }
+                    })
                     .collect();
 
                 // Build substitution map for generic parameters
@@ -286,26 +404,51 @@ impl TypeChecker {
         receiver_type: &ResolvedType,
         method_name: &str,
     ) -> Option<TraitMethodSig> {
-        // Handle dyn Trait types - look up method directly in trait definition
-        let dyn_trait = match receiver_type {
-            ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
-            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
-                if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
-                    Some(trait_name.clone())
-                } else {
-                    None
+        // Handle dyn Trait types - look up method directly in trait definition.
+        // Peel Ref/RefMut and Box<...> wrappers before checking DynTrait, so that
+        // `&dyn T`, `&mut dyn T`, `Box<dyn T>`, `&mut Box<dyn T>`, etc. all dispatch.
+        fn peel_to_dyn(t: &ResolvedType) -> Option<String> {
+            match t {
+                ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => peel_to_dyn(inner),
+                ResolvedType::Named { name, generics } if name == "Box" && generics.len() == 1 => {
+                    peel_to_dyn(&generics[0])
                 }
+                _ => None,
             }
-            _ => None,
-        };
+        }
+        let dyn_trait = peel_to_dyn(receiver_type);
         if let Some(trait_name) = dyn_trait {
             let mut visited = std::collections::HashSet::new();
             return self.find_method_in_trait_with_supers(&trait_name, method_name, &mut visited);
         }
 
         // Handle generic types with bounds from where clauses
-        if let ResolvedType::Generic(type_param) = receiver_type {
-            if let Some(bounds) = self.current_generic_bounds.get(type_param) {
+        // Phase 6.27e.b: peel Ref/RefMut so `store: &mut S` where `S: NodeStore`
+        // dispatches to the trait's methods. Also accept `Named{name, []}`
+        // when `name` matches a currently-bound generic parameter — the
+        // resolve pipeline sometimes produces Named for type params that
+        // haven't been recognised as Generic yet.
+        fn as_generic_name(
+            t: &ResolvedType,
+            bounds: &std::collections::HashMap<String, Vec<String>>,
+        ) -> Option<String> {
+            match t {
+                ResolvedType::Generic(name) => Some(name.clone()),
+                ResolvedType::Named { name, generics }
+                    if generics.is_empty() && bounds.contains_key(name) =>
+                {
+                    Some(name.clone())
+                }
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    as_generic_name(inner, bounds)
+                }
+                _ => None,
+            }
+        }
+        let peeled_generic = as_generic_name(receiver_type, &self.current_generic_bounds);
+        if let Some(type_param) = peeled_generic {
+            if let Some(bounds) = self.current_generic_bounds.get(&type_param) {
                 for bound_trait in bounds {
                     let mut visited = std::collections::HashSet::new();
                     if let Some(method_sig) = self.find_method_in_trait_with_supers(
@@ -406,6 +549,25 @@ impl TypeChecker {
                 return Some(ResolvedType::Tuple(vec![
                     ResolvedType::I64,
                     generics[0].clone(),
+                ]));
+            }
+            // Phase 280: HashMap<K,V> named form — iteration yields (K, V) tuples.
+            // vaisdb uses `HashMap<K,V>` type annotation (Named form) rather than
+            // the map literal `[K:V]` form, so we need to handle both.
+            ResolvedType::Named { name, generics }
+                if (name == "HashMap" || name == "BTreeMap" || name == "IndexMap")
+                    && generics.len() >= 2 =>
+            {
+                return Some(ResolvedType::Tuple(vec![
+                    generics[0].clone(),
+                    generics[1].clone(),
+                ]));
+            }
+            // Phase 280: Map(K,V) — [K:V] literal map form iteration yields (K, V) tuples.
+            ResolvedType::Map(key_type, val_type) => {
+                return Some(ResolvedType::Tuple(vec![
+                    (**key_type).clone(),
+                    (**val_type).clone(),
                 ]));
             }
             _ => {}

@@ -196,11 +196,15 @@ impl OwnershipChecker {
                 is_mut,
                 ownership,
             } => {
-                // Check the value expression
+                // Check the value expression. For non-Copy top-level Idents
+                // (e.g. `y := x` where x is Vec<u8>), check_expr_ownership
+                // already marks `x` as Moved via use_var (see Expr::Ident arm).
+                // Phase 6.28.5: previously this was followed by a redundant
+                // `check_move_from_expr(value)` which re-visited the same
+                // Ident and saw the Moved state we just set, triggering a
+                // spurious "use-after-move" E022 on the *first* use. The
+                // redundant call is removed; use_var handles the move.
                 self.check_expr_ownership(value)?;
-
-                // Determine if this is a move or copy from the value
-                self.check_move_from_expr(value)?;
 
                 // Register the new variable
                 let var_ty = if let Some(ty) = ty {
@@ -233,14 +237,18 @@ impl OwnershipChecker {
                 Ok(())
             }
             Stmt::LetDestructure { value, .. } => {
+                // Phase 6.28.5: see Stmt::Let — check_expr_ownership already
+                // marks top-level Idents as Moved via use_var; the separate
+                // check_move_from_expr call was redundant and caused spurious
+                // E022 on first-use of non-Copy values.
                 self.check_expr_ownership(value)?;
-                self.check_move_from_expr(value)?;
                 Ok(())
             }
             Stmt::Expr(expr) => self.check_expr_ownership(expr),
             Stmt::Return(Some(expr)) => {
+                // Phase 6.28.5: see Stmt::Let — check_expr_ownership already
+                // handles moves via use_var; drop the redundant call.
                 self.check_expr_ownership(expr)?;
-                self.check_move_from_expr(expr)?;
                 // Check for returning references to locals
                 if self.function_returns_ref {
                     self.check_return_ref(expr, Some(stmt.span))?;
@@ -280,6 +288,9 @@ impl OwnershipChecker {
                     // Don't mark args as moved — function signatures determine ownership
                     // (args passed by &T or &mut T should not be moved)
                 }
+                // Phase 282: release transient `__ref_*` borrows after the call returns.
+                // Matches Rust's "borrow lifetime ends at call expression" semantics.
+                self.active_borrows.retain(|k, _| !k.starts_with("__ref_"));
                 Ok(())
             }
 
@@ -305,15 +316,22 @@ impl OwnershipChecker {
                     // Don't mark args as moved — method signatures determine ownership
                     // (args passed by &T or &mut T should not be moved)
                 }
+                // Phase 282: release transient `__ref_*` borrows after method call returns.
+                self.active_borrows.retain(|k, _| !k.starts_with("__ref_"));
                 Ok(())
             }
 
             Expr::Ref(inner) => {
-                // Immutable borrow
+                // Phase 282: borrowing an Ident never moves it.
+                // Do NOT recurse into check_expr_ownership(inner) for Ident,
+                // which would call use_var and mark non-Copy types as Moved.
+                // Just record the borrow and return.
                 if let Expr::Ident(name) = &inner.node {
                     let borrower = format!("__ref_{}", name);
                     self.borrow_var(&borrower, name, Some(expr.span))?;
+                    return Ok(());
                 }
+                // Non-Ident inner (e.g., &foo.field, &arr[0]): recurse as usual
                 self.check_expr_ownership(inner)?;
                 Ok(())
             }
@@ -512,7 +530,26 @@ impl OwnershipChecker {
                 expr: object,
                 index,
             } => {
-                self.check_expr_ownership(object)?;
+                // Indexed access v[i] reads through the container — it should
+                // NOT move the container. Treat the object side like a method
+                // receiver: verify it isn't already moved, but don't mark it
+                // as moved. Previously `v[i].field` moved `v`, blocking any
+                // subsequent use and surfacing as E022 across the vaisdb tree.
+                if let Expr::Ident(name) = &object.node {
+                    if let Some(info) = self.lookup_var(name) {
+                        if let OwnershipState::Moved { moved_at, .. } = &info.state {
+                            let err = TypeError::UseAfterMove {
+                                var_name: name.clone(),
+                                moved_at: *moved_at,
+                                use_at: Some(object.span),
+                            };
+                            return self.report_error(err);
+                        }
+                    }
+                } else {
+                    // Non-ident object (nested expr) — recurse normally.
+                    self.check_expr_ownership(object)?;
+                }
                 self.check_expr_ownership(index)?;
                 Ok(())
             }

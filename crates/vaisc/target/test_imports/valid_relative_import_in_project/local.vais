@@ -1,1 +1,1 @@
-F local_func() -> i64 = 42
+fn local_func() -> i64 = 42

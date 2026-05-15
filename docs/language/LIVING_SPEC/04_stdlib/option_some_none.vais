@@ -1,0 +1,13 @@
+# LIVING_SPEC/04_stdlib/option_some_none.vais
+# Key concept: Option<T>는 Some(v) 또는 None — 값의 유무 표현.
+
+fn find(n: i64) -> Option<i64> {
+    I n > 0 { Some(n) } else { None }
+}
+
+fn main() -> i64 {
+    match find(7) {
+        Some(v) => v,
+        None => 0
+    }
+}

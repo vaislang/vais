@@ -29,6 +29,15 @@ impl CodeGenerator {
             match &item.node {
                 Item::Function(f) => self.register_function(f)?,
                 Item::Struct(s) => {
+                    // Phase 17.H4.13: mirror generate_module_subset — store
+                    // generic struct templates into struct_defs so
+                    // try_generate_vec_specialization can produce specialized
+                    // method bodies on demand (e.g., Vec_new$MigrationRecord).
+                    if !s.generics.is_empty() {
+                        self.generics
+                            .struct_defs
+                            .insert(s.name.node.clone(), std::rc::Rc::new(s.clone()));
+                    }
                     self.register_struct(s)?;
                     // Register struct methods
                     for method in &s.methods {
@@ -45,6 +54,22 @@ impl CodeGenerator {
                     };
                     for method in &impl_block.methods {
                         self.register_method(&type_name, &method.node)?;
+                    }
+                    // Phase 17.H4.13: mirror generate_module_subset — add
+                    // impl methods to struct_defs so generic specialization
+                    // (try_generate_vec_specialization) can find method
+                    // templates like Vec.new / Vec.push on generic structs.
+                    if let Some(struct_def) = self.generics.struct_defs.get_mut(&type_name) {
+                        let struct_mut = std::rc::Rc::make_mut(struct_def);
+                        for method in &impl_block.methods {
+                            if !struct_mut
+                                .methods
+                                .iter()
+                                .any(|m| m.node.name.node == method.node.name.node)
+                            {
+                                struct_mut.methods.push(method.clone());
+                            }
+                        }
                     }
                     // Register trait impl for vtable generation
                     if let Some(ref trait_name) = impl_block.trait_name {
@@ -126,6 +151,10 @@ impl CodeGenerator {
             // by `generate_helper_functions()` in this same module (single-module path
             // always acts as the main module).
             if crate::function_gen::runtime::is_runtime_intrinsic(&info.signature.name) {
+                declared_fns.insert(info.signature.name.clone());
+                continue;
+            }
+            if crate::function_gen::runtime::is_main_runtime_c_decl(&info.signature.name) {
                 declared_fns.insert(info.signature.name.clone());
                 continue;
             }

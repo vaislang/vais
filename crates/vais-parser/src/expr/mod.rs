@@ -17,6 +17,25 @@ mod precedence;
 mod primary;
 mod unary;
 
+/// Phase 6.28.1: is this expression a "block-terminated" form (If / Loop / While /
+/// ForEach / Match / Block)? Such expressions end at a `}` and must not be
+/// silently consumed as the LHS of a subsequent binary operator.
+///
+/// Example: `LW cond { body } \n *used.get_mut(i) = v` previously parsed as
+/// `(LW{}) * used.get_mut(i) = v` — Mul then Assign — producing a confusing
+/// E001 "expected numeric, found ()" on the LW. After this check, parse_factor
+/// (and other binary-op levels) treat the `*` as a fresh statement's Deref.
+pub(crate) fn is_block_terminated_expr(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::If { .. }
+            | Expr::Loop { .. }
+            | Expr::While { .. }
+            | Expr::Match { .. }
+            | Expr::Block(_)
+    )
+}
+
 /// Check if a string contains interpolation syntax: `{<non-empty>}`.
 /// Empty `{}` is NOT interpolation (backward compat with format strings).
 /// `{{` is an escaped brace, not interpolation.

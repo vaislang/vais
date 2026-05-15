@@ -1,0 +1,21 @@
+# CHECKS: sum of squares via iteration with formula verification.
+fn sum_of_squares(n: i64) -> i64 {
+    s: i64 := mut 0
+    LF i: 1..=n {
+        s = s + i * i
+    }
+    s
+}
+
+fn formula(n: i64) -> i64 {
+    n * (n + 1) * (2 * n + 1) / 6
+}
+
+fn main() -> i64 {
+    LF n: 1..=20 {
+        a: i64 := sum_of_squares(n)
+        b: i64 := formula(n)
+        I a != b { return n }
+    }
+    return 0
+}

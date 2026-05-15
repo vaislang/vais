@@ -1,0 +1,17 @@
+# CHECKS: string equality via match arms
+fn same(a: str, b: str) -> i64 {
+    match a {
+        "yes" => match b {
+            "yes" => 1,
+            _ => 0,
+        },
+        _ => 0,
+    }
+}
+
+fn main() -> i64 {
+    I same("yes", "yes") != 1 { return 1 }
+    I same("yes", "no")  != 0 { return 2 }
+    I same("no", "yes")  != 0 { return 3 }
+    return 0
+}

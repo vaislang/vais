@@ -5,16 +5,15 @@ This gate is the Step 14 product-level companion to the lower-level
 
 Source of truth:
 
-- `schema/user.vais`
-- `SCHEMA_SOURCE=/path/to/user.vais` can override the fixture when validating
-  against a workspace-level shared schema.
+- `../../../../examples/schema/user.vais`
 
 Certified path:
 
 - `vaisc emit-ts` generates TypeScript declarations from the shared schema.
-- A VaisDB-style consumer type-checks through the real catalog `TableInfo` API.
-- A vais-server-style consumer type-checks through real `Context.new` request
-  context construction.
+- A VaisDB-style consumer builds and runs through real catalog `TableInfo` /
+  `ColumnInfo` APIs.
+- A vais-server-style consumer builds and runs through real `Context.json`
+  response construction.
 - A vais-web TypeScript consumer type-checks against the generated `.d.ts` and
   the real `@vaisx/db` schema builder source.
 - A field rename in the shared schema fails all three consumers, proving the
@@ -24,8 +23,5 @@ Run:
 
 ```bash
 cd compiler
-VAISC=target/debug/vaisc bash tests/product/multi_domain_schema/tests/gate.sh
+bash tests/product/multi_domain_schema/tests/gate.sh
 ```
-
-The gate expects the sibling `lang/packages/vais-web` workspace to have its
-`tsc` tool installed.

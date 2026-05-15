@@ -1,0 +1,40 @@
+[entry]
+id = "A1-03"
+classification = "A1 hard block (uncertified-unused keyword: O / union)"
+surface = "C-style union declaration (`O Name { A: T, B: T }`)"
+keyword = "O (Token::Union)"
+master_plan_version = 22
+
+[v1_evidence]
+probe_summary = "O Either { A: i64, B: i64 }; F main() -> i64 { R 0 }"
+expected_per_design = "vaisc check rejects with stable error[P001] Unexpected token — O union declaration form is reserved with no certified semantics or codegen path"
+actual_observed_pre_block = "exit 0, OK No errors found (silent accept; type checker / codegen never honoured the declaration)"
+actual_observed_post_block = "exit 1, error[P001] found Union, expected item (O union declaration is uncertified — A1 hard block)"
+verified_date = "2026-05-05"
+
+[v2_evidence]
+status = "v1_verified_baseline_zero_use"
+notes = """
+Baseline use count = 0 verified via grep on:
+  compiler/std/, lang/packages/, docs/language/LIVING_SPEC/
+Pattern checked: ^O [A-Z] (top-of-line `O Name` declaration form).
+No matches (2026-05-05).
+
+Hard-block site: crates/vais-parser/src/item/mod.rs Token::Union arm —
+previously self.advance_skip() + parse_union(); now returns
+ParseError::UnexpectedToken with explicit A1 message.
+"""
+
+[migration]
+post_certification_expected = "If `O union` is ever certified into a real C-style tagged-union or untagged-union surface, the fixture's check_fails contract no longer holds. At that point this fixture migrates to a positive form proving the certified surface, OR is removed if `O union` graduates entirely out of A1."
+
+[assertion_kind]
+kind = "check_fails"
+required_stderr_patterns = ["P001", "Union", "A1 hard block"]
+rationale = """
+P001 + Logos token name `Union` + the literal `A1 hard block` substring
+(carried in the `expected` field of UnexpectedToken) confirm the
+diagnostic is the dedicated A1 reject path, not a coincidental syntax
+error elsewhere in the file. A future regression that drops the A1
+hard-block site would also drop the `A1 hard block` substring.
+"""

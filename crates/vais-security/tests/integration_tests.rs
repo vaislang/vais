@@ -36,15 +36,15 @@ fn count_severity(findings: &[vais_security::SecurityFinding], severity: Severit
 #[test]
 fn test_safe_code_no_warnings() {
     let source = r#"
-        F add(x: i64, y: i64) -> i64 {
+        fn add(x: i64, y: i64) -> i64 {
             x + y
         }
 
-        F multiply(x: i64, y: i64) -> i64 {
+        fn multiply(x: i64, y: i64) -> i64 {
             x * y
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             result := add(10, 20)
             result2 := multiply(result, 2)
             result2
@@ -70,7 +70,7 @@ fn test_safe_code_no_warnings() {
 #[test]
 fn test_malloc_free_buffer_overflow() {
     let source = r#"
-        F allocate_memory() -> i64 {
+        fn allocate_memory() -> i64 {
             ptr := malloc(1024)
             store_i64(ptr, 42)
             val := load_i64(ptr)
@@ -104,7 +104,7 @@ fn test_malloc_free_buffer_overflow() {
 #[test]
 fn test_use_after_free_detection() {
     let source = r#"
-        F dangerous() -> i64 {
+        fn dangerous() -> i64 {
             ptr := malloc(64)
             store_i64(ptr, 100)
             free(ptr)
@@ -140,14 +140,14 @@ fn test_use_after_free_detection() {
 fn test_unsafe_c_functions() {
     let source = r#"
         N "C" {
-            F strcpy(dest: *i8, src: *i8) -> *i8
-            F strcat(dest: *i8, src: *i8) -> *i8
-            F gets(buf: *i8) -> *i8
-            F sprintf(buf: *i8, fmt: *i8, ...) -> i64
-            F scanf(fmt: *i8, ...) -> i64
+            fn strcpy(dest: *i8, src: *i8) -> *i8
+            fn strcat(dest: *i8, src: *i8) -> *i8
+            fn gets(buf: *i8) -> *i8
+            fn sprintf(buf: *i8, fmt: *i8, ...) -> i64
+            fn scanf(fmt: *i8, ...) -> i64
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -183,12 +183,12 @@ fn test_unsafe_c_functions() {
 #[test]
 fn test_command_injection_system() {
     let source = r#"
-        F execute_user_command(cmd: String) -> i64 {
+        fn execute_user_command(cmd: String) -> i64 {
             full_cmd := "bash -c " + cmd
             system(full_cmd)
         }
 
-        F dangerous_exec() -> i64 {
+        fn dangerous_exec() -> i64 {
             system("rm -rf /tmp/*")
         }
     "#;
@@ -225,7 +225,7 @@ fn test_command_injection_system() {
 #[test]
 fn test_hardcoded_secrets() {
     let source = r#"
-        F authenticate() -> i64 {
+        fn authenticate() -> i64 {
             password := "super_secret_password_123456"
             api_key := "sk-1234567890abcdefghijklmnopqrstuvwxyz"
             token := "pk_live_abcdefghijklmnopqrstuvwxyz123456"
@@ -265,7 +265,7 @@ fn test_hardcoded_secrets() {
 #[test]
 fn test_pointer_arithmetic() {
     let source = r#"
-        F pointer_ops() -> i64 {
+        fn pointer_ops() -> i64 {
             base := malloc(256)
             offset := 16
             ptr1 := base + offset
@@ -300,7 +300,7 @@ fn test_pointer_arithmetic() {
 #[test]
 fn test_integer_overflow_user_input() {
     let source = r#"
-        F process_user_data() -> i64 {
+        fn process_user_data() -> i64 {
             user_input := read()
             multiplied := user_input * 1000000
             added := user_input + 999999999
@@ -308,7 +308,7 @@ fn test_integer_overflow_user_input() {
             result
         }
 
-        F calculate_size(user_arg: i64) -> i64 {
+        fn calculate_size(user_arg: i64) -> i64 {
             size := user_arg * 1024
             size
         }
@@ -334,11 +334,11 @@ fn test_integer_overflow_user_input() {
 fn test_multiple_vulnerabilities() {
     let source = r#"
         N "C" {
-            F strcpy(dst: *i8, src: *i8) -> *i8
-            F system(cmd: *i8) -> i64
+            fn strcpy(dst: *i8, src: *i8) -> *i8
+            fn system(cmd: *i8) -> i64
         }
 
-        F extremely_vulnerable(user_input: String) -> i64 {
+        fn extremely_vulnerable(user_input: String) -> i64 {
             # Hardcoded password
             password := "admin123password"
 
@@ -411,20 +411,20 @@ fn test_extern_block_analysis() {
     let source = r#"
         N "C" {
             # Unsafe memory functions
-            F strcpy(dst: *i8, src: *i8) -> *i8
-            F strcat(dst: *i8, src: *i8) -> *i8
-            F gets(buf: *i8) -> *i8
+            fn strcpy(dst: *i8, src: *i8) -> *i8
+            fn strcat(dst: *i8, src: *i8) -> *i8
+            fn gets(buf: *i8) -> *i8
 
             # Command execution functions
-            F system(cmd: *i8) -> i64
-            F exec(path: *i8, ...) -> i64
-            F popen(cmd: *i8, mode: *i8) -> *i8
+            fn system(cmd: *i8) -> i64
+            fn exec(path: *i8, ...) -> i64
+            fn popen(cmd: *i8, mode: *i8) -> *i8
 
             # Safe function (should not be flagged)
-            F strlen(s: *i8) -> i64
+            fn strlen(s: *i8) -> i64
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -476,7 +476,7 @@ fn test_extern_block_analysis() {
 #[test]
 fn test_sql_injection() {
     let source = r#"
-        F get_user_by_name(username: String) -> i64 {
+        fn get_user_by_name(username: String) -> i64 {
             # SQL injection via string concatenation with query() function
             query_str := "SELECT * FROM users WHERE name = '" + username + "'"
             result := query(query_str)
@@ -503,13 +503,13 @@ fn test_sql_injection() {
 #[test]
 fn test_array_indexing_no_bounds_check() {
     let source = r#"
-        F access_array(idx: i64) -> i64 {
+        fn access_array(idx: i64) -> i64 {
             arr := [1, 2, 3, 4, 5]
             value := arr[idx]
             value
         }
 
-        F nested_access(i: i64, j: i64) -> i64 {
+        fn nested_access(i: i64, j: i64) -> i64 {
             matrix := [[1, 2], [3, 4], [5, 6]]
             val := matrix[i][j]
             val
@@ -542,7 +542,7 @@ fn test_array_indexing_no_bounds_check() {
 #[test]
 fn test_memory_operations() {
     let source = r#"
-        F memory_ops() -> i64 {
+        fn memory_ops() -> i64 {
             src := malloc(256)
             dst := malloc(256)
 
@@ -579,7 +579,7 @@ fn test_memory_operations() {
 #[test]
 fn test_high_entropy_tokens() {
     let source = r#"
-        F connect_to_api() -> i64 {
+        fn connect_to_api() -> i64 {
             # High entropy string that looks like an API key
             api_key := "xK7mP9qR2sL5nW8tV3gH4jF6bN1cM0dZ"
             secret_token := "AbCdEfGhIjKlMnOpQrStUvWxYz123456"
@@ -612,11 +612,11 @@ fn test_high_entropy_tokens() {
 #[test]
 fn test_unchecked_unwrap() {
     let source = r#"
-        F may_fail() -> i64? {
+        fn may_fail() -> i64? {
             Some(42)
         }
 
-        F risky() -> i64 {
+        fn risky() -> i64 {
             result := may_fail()
             value := unwrap(result)
             value
@@ -641,7 +641,7 @@ fn test_unchecked_unwrap() {
 #[test]
 fn test_nested_security_issues() {
     let source = r#"
-        F nested_danger(input: String) -> i64 {
+        fn nested_danger(input: String) -> i64 {
             I input != "" {
                 ptr := malloc(64)
                 offset := ptr + 16
@@ -653,7 +653,7 @@ fn test_nested_security_issues() {
 
                 free(ptr)
                 0
-            } E {
+            } else {
                 0
             }
         }
@@ -701,12 +701,12 @@ fn test_severity_ordering() {
 #[test]
 fn test_safe_string_concat_no_injection() {
     let source = r#"
-        F build_greeting(name: String, title: String) -> String {
+        fn build_greeting(name: String, title: String) -> String {
             greeting := "Hello, " + title + " " + name
             greeting
         }
 
-        F format_message(prefix: String, msg: String) -> String {
+        fn format_message(prefix: String, msg: String) -> String {
             result := prefix + ": " + msg
             result
         }
@@ -725,18 +725,18 @@ fn test_safe_string_concat_no_injection() {
 #[test]
 fn test_mixed_safe_unsafe() {
     let source = r#"
-        F safe_function(a: i64, b: i64) -> i64 {
+        fn safe_function(a: i64, b: i64) -> i64 {
             a + b
         }
 
-        F unsafe_function() -> i64 {
+        fn unsafe_function() -> i64 {
             ptr := malloc(32)
             store_i64(ptr, 999)
             free(ptr)
             0
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             x := safe_function(10, 20)
             y := unsafe_function()
             x + y
@@ -762,10 +762,10 @@ fn test_mixed_safe_unsafe() {
 fn test_comprehensive_security_report() {
     let source = r#"
         N "C" {
-            F strcpy(dst: *i8, src: *i8) -> *i8
+            fn strcpy(dst: *i8, src: *i8) -> *i8
         }
 
-        F vulnerable_system() -> i64 {
+        fn vulnerable_system() -> i64 {
             # Multiple categories of vulnerabilities
             password := "hardcoded_pass_123"
             buffer := malloc(256)
@@ -835,19 +835,19 @@ fn test_comprehensive_security_report() {
 #[test]
 fn test_complex_conditional_injection() {
     let source = r#"
-        F complex_flow(user: String, admin: bool) -> i64 {
+        fn complex_flow(user: String, admin: bool) -> i64 {
             I admin {
                 I user != "" {
                     query_str := "SELECT * FROM admin WHERE name = '" + user + "'"
                     result := execute(query_str)
                     result
-                } E {
+                } else {
                     0
                 }
-            } E {
+            } else {
                 I user == "guest" {
                     0
-                } E {
+                } else {
                     cmd := "ls " + user
                     system(cmd)
                 }
@@ -890,17 +890,17 @@ fn test_complex_conditional_injection() {
 #[test]
 fn test_nested_call_injection() {
     let source = r#"
-        F sanitize(input: String) -> String {
+        fn sanitize(input: String) -> String {
             # Pretends to sanitize but doesn't
             input
         }
 
-        F build_command(action: String, target: String) -> String {
+        fn build_command(action: String, target: String) -> String {
             cmd := action + " " + target
             cmd
         }
 
-        F execute_action(user_action: String, user_target: String) -> i64 {
+        fn execute_action(user_action: String, user_target: String) -> i64 {
             # Nested call: build_command returns concatenated string
             # Then system() is called with it
             final_cmd := build_command(user_action, user_target)
@@ -921,7 +921,7 @@ fn test_nested_call_injection() {
 #[test]
 fn test_loop_buffer_overflow() {
     let source = r#"
-        F fill_buffer(count: i64) -> i64 {
+        fn fill_buffer(count: i64) -> i64 {
             buffer := malloc(100)
             i := 0
 
@@ -954,7 +954,7 @@ fn test_loop_buffer_overflow() {
 #[test]
 fn test_safe_static_array_indexing() {
     let source = r#"
-        F safe_array_access() -> i64 {
+        fn safe_array_access() -> i64 {
             # Static array with constant indices
             arr := [10, 20, 30, 40, 50]
 
@@ -987,16 +987,16 @@ fn test_safe_extern_function() {
     let source = r#"
         N "C" {
             # Safe read-only function
-            F strlen(s: *i8) -> i64
+            fn strlen(s: *i8) -> i64
 
             # Safe memory allocation
-            F calloc(num: i64, size: i64) -> *i8
+            fn calloc(num: i64, size: i64) -> *i8
 
             # Safe comparison
-            F strcmp(s1: *i8, s2: *i8) -> i64
+            fn strcmp(s1: *i8, s2: *i8) -> i64
         }
 
-        F use_safe_functions(s: *i8) -> i64 {
+        fn use_safe_functions(s: *i8) -> i64 {
             len := strlen(s)
             buffer := calloc(10, 8)
             len
@@ -1030,7 +1030,7 @@ fn test_safe_extern_function() {
 #[test]
 fn test_severity_filter_critical() {
     let source = r#"
-        F mixed_severity() -> i64 {
+        fn mixed_severity() -> i64 {
             # Critical: buffer overflow
             ptr := malloc(64)
             store_i64(ptr, 100)
@@ -1077,7 +1077,7 @@ fn test_severity_filter_critical() {
 #[test]
 fn test_severity_distribution() {
     let source = r#"
-        F comprehensive_issues() -> i64 {
+        fn comprehensive_issues() -> i64 {
             # Critical: hardcoded API key
             api_key := "sk-proj-1234567890abcdefghijklmnopqrstuvwxyz"
 
@@ -1142,7 +1142,7 @@ fn test_empty_module() {
 #[test]
 fn test_long_function_multiple_issues() {
     let source = r#"
-        F long_vulnerable_function(input1: String, input2: String, count: i64) -> i64 {
+        fn long_vulnerable_function(input1: String, input2: String, count: i64) -> i64 {
             # Secret 1
             password := "admin_password_12345"
 

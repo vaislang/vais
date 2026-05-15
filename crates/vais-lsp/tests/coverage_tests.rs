@@ -28,7 +28,7 @@ fn test_completion_context_empty() {
 
 #[test]
 fn test_completion_context_function_start() {
-    let source = "F ";
+    let source = "fn ";
     let ctx = CompletionContext::from_document(source, Position::new(0, 2), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions; // Exercise the path
@@ -36,7 +36,7 @@ fn test_completion_context_function_start() {
 
 #[test]
 fn test_completion_context_after_dot() {
-    let source = "F test() -> i64 { x.";
+    let source = "fn test() -> i64 { x.";
     let ctx = CompletionContext::from_document(source, Position::new(0, 20), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;
@@ -45,7 +45,7 @@ fn test_completion_context_after_dot() {
 #[test]
 fn test_completion_context_in_function_body() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
 
         }
     "#;
@@ -57,8 +57,8 @@ fn test_completion_context_in_function_body() {
 #[test]
 fn test_completion_context_with_ast() {
     let source = r#"
-        F add(x: i64, y: i64) -> i64 = x + y
-        F test() -> i64 {
+        fn add(x: i64, y: i64) -> i64 = x + y
+        fn test() -> i64 {
 
         }
     "#;
@@ -71,8 +71,8 @@ fn test_completion_context_with_ast() {
 #[test]
 fn test_completion_context_struct_field() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
             p.
         }
@@ -85,7 +85,7 @@ fn test_completion_context_struct_field() {
 
 #[test]
 fn test_completion_context_type_position() {
-    let source = "F test(x: ) -> i64 = 0";
+    let source = "fn test(x: ) -> i64 = 0";
     let ctx = CompletionContext::from_document(source, Position::new(0, 10), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;
@@ -93,7 +93,7 @@ fn test_completion_context_type_position() {
 
 #[test]
 fn test_completion_context_return_type() {
-    let source = "F test() -> ";
+    let source = "fn test() -> ";
     let ctx = CompletionContext::from_document(source, Position::new(0, 12), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;
@@ -104,15 +104,15 @@ fn test_completion_context_top_level() {
     let source = "";
     let ctx = CompletionContext::from_document(source, Position::new(0, 0), None);
     let completions = generate_ai_completions(&ctx);
-    // Should include top-level keywords like F, S, E, W, etc.
+    // Should include top-level keywords like fn, struct, enum, trait, etc.
     let _ = completions;
 }
 
 #[test]
 fn test_completion_context_match_arm() {
     let source = r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
 
             }
         }
@@ -124,7 +124,7 @@ fn test_completion_context_match_arm() {
 
 #[test]
 fn test_completion_context_import() {
-    let source = "U ";
+    let source = "use ";
     let ctx = CompletionContext::from_document(source, Position::new(0, 2), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;
@@ -132,7 +132,7 @@ fn test_completion_context_import() {
 
 #[test]
 fn test_completion_context_multiline() {
-    let source = "F test() -> i64 {\n    x := 42\n    \n}";
+    let source = "fn test() -> i64 {\n    x := 42\n    \n}";
     let ctx = CompletionContext::from_document(source, Position::new(2, 4), None);
     let completions = generate_ai_completions(&ctx);
     let _ = completions;

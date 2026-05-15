@@ -1,9 +1,10 @@
 use crate::CodeGenerator;
+use vais_ast::{Expr, Span, Spanned};
 use vais_parser::parse;
 
 #[test]
 fn test_simple_function() {
-    let source = "F add(a:i64,b:i64)->i64=a+b";
+    let source = "fn add(a:i64,b:i64)->i64=a+b";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -14,7 +15,7 @@ fn test_simple_function() {
 
 #[test]
 fn test_fibonacci() {
-    let source = "F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
+    let source = "fn fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -24,9 +25,22 @@ fn test_fibonacci() {
 }
 
 #[test]
+fn test_generate_expr_repeat_does_not_trip_global_counter() {
+    let mut gen = CodeGenerator::new("test");
+    let expr = Spanned::new(Expr::Int(1), Span::default());
+    let mut counter = 0;
+
+    for _ in 0..100_005 {
+        let (value, ir) = gen.generate_expr(&expr, &mut counter).unwrap();
+        assert_eq!(value, "1");
+        assert!(ir.is_empty());
+    }
+}
+
+#[test]
 fn test_if_else() {
-    // I cond { then } E { else }
-    let source = "F max(a:i64,b:i64)->i64{I a>b{R a}E{R b}}";
+    // I cond { then } else { else }
+    let source = "fn max(a:i64,b:i64)->i64{I a>b{return a} else {return b}}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -40,7 +54,7 @@ fn test_if_else() {
 #[test]
 fn test_loop_with_condition() {
     // L pattern:iter { body } - `L _:condition{body}` for while loop
-    let source = "F countdown(n:i64)->i64{x:=n;L _:x>0{x=x-1};x}";
+    let source = "fn countdown(n:i64)->i64{x:=n;L _:x>0{x=x-1};x}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -53,7 +67,7 @@ fn test_loop_with_condition() {
 
 #[test]
 fn test_array_literal() {
-    let source = "F get_arr()->*i64=[1,2,3]";
+    let source = "fn get_arr()->*i64=[1,2,3]";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -65,7 +79,7 @@ fn test_array_literal() {
 
 #[test]
 fn test_array_index() {
-    let source = "F get_elem(arr:*i64, idx:i64)->i64=arr[idx]";
+    let source = "fn get_elem(arr:*i64, idx:i64)->i64=arr[idx]";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -76,7 +90,7 @@ fn test_array_index() {
 
 #[test]
 fn test_struct_codegen() {
-    let source = "S Point{x:i64,y:i64}";
+    let source = "struct Point{x:i64,y:i64}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -98,7 +112,7 @@ fn test_empty_module() {
 
 #[test]
 fn test_minimal_function() {
-    let source = "F f()->()=()";
+    let source = "fn f()->()=()";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -108,7 +122,7 @@ fn test_minimal_function() {
 
 #[test]
 fn test_function_returning_unit() {
-    let source = "F void_fn()->(){}";
+    let source = "fn void_fn()->(){}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -117,7 +131,7 @@ fn test_function_returning_unit() {
 
 #[test]
 fn test_empty_struct() {
-    let source = "S Empty{}";
+    let source = "struct Empty{}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -127,7 +141,7 @@ fn test_empty_struct() {
 
 #[test]
 fn test_single_field_struct() {
-    let source = "S Single{x:i64}";
+    let source = "struct Single{x:i64}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -138,8 +152,8 @@ fn test_single_field_struct() {
 fn test_default_param_call_ir() {
     // Verify that calling a function with fewer args than params fills in defaults
     let source = r#"
-F add(a: i64, b: i64 = 10) -> i64 { a + b }
-F main() -> i64 { add(5) }
+fn add(a: i64, b: i64 = 10) -> i64 { a + b }
+fn main() -> i64 { add(5) }
 "#;
     let module = parse(source).unwrap();
     let mut checker = vais_types::TypeChecker::new();
@@ -158,7 +172,7 @@ F main() -> i64 { add(5) }
 
 #[test]
 fn test_enum_with_variants() {
-    let source = "E Color{Red,Green,Blue}";
+    let source = "enum Color{Red,Green,Blue}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -168,7 +182,7 @@ fn test_enum_with_variants() {
 
 #[test]
 fn test_i64_max_value() {
-    let source = "F max()->i64=9223372036854775807";
+    let source = "fn max()->i64=9223372036854775807";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -177,7 +191,7 @@ fn test_i64_max_value() {
 
 #[test]
 fn test_negative_number() {
-    let source = "F neg()->i64=-42";
+    let source = "fn neg()->i64=-42";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -187,7 +201,7 @@ fn test_negative_number() {
 
 #[test]
 fn test_zero_value() {
-    let source = "F zero()->i64=0";
+    let source = "fn zero()->i64=0";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -196,7 +210,7 @@ fn test_zero_value() {
 
 #[test]
 fn test_float_values() {
-    let source = "F pi()->f64=3.141592653589793";
+    let source = "fn pi()->f64=3.141592653589793";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -205,7 +219,7 @@ fn test_float_values() {
 
 #[test]
 fn test_boolean_true() {
-    let source = "F yes()->bool=true";
+    let source = "fn yes()->bool=true";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -214,7 +228,7 @@ fn test_boolean_true() {
 
 #[test]
 fn test_boolean_false() {
-    let source = "F no()->bool=false";
+    let source = "fn no()->bool=false";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -223,7 +237,7 @@ fn test_boolean_false() {
 
 #[test]
 fn test_empty_string() {
-    let source = r#"F empty()->str="""#;
+    let source = r#"fn empty()->str="""#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -233,7 +247,7 @@ fn test_empty_string() {
 
 #[test]
 fn test_string_with_escape() {
-    let source = r#"F escaped()->str="hello\nworld""#;
+    let source = r#"fn escaped()->str="hello\nworld""#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -243,7 +257,7 @@ fn test_string_with_escape() {
 
 #[test]
 fn test_empty_array() {
-    let source = "F empty_arr()->*i64=[]";
+    let source = "fn empty_arr()->*i64=[]";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -254,11 +268,11 @@ fn test_empty_array() {
 #[test]
 fn test_nested_if_else() {
     let source = r#"
-        F classify(x:i64)->i64{
+        fn classify(x:i64)->i64{
             I x>0{
-                I x>100{2}E{1}
-            }E{
-                I x<-100{-2}E{-1}
+                I x>100{2} else {1}
+            } else {
+                I x<-100{-2} else {-1}
             }
         }
     "#;
@@ -272,7 +286,7 @@ fn test_nested_if_else() {
 
 #[test]
 fn test_simple_match() {
-    let source = "F digit(n:i64)->str=M n{0=>\"zero\",1=>\"one\",_=>\"other\"}";
+    let source = "fn digit(n:i64)->str=match n{0=>\"zero\",1=>\"one\",_=>\"other\"}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -281,7 +295,7 @@ fn test_simple_match() {
 
 #[test]
 fn test_for_loop() {
-    let source = "F sum_to(n:i64)->i64{s:=0;L i:0..n{s+=i};s}";
+    let source = "fn sum_to(n:i64)->i64{s:=0;L i:0..n{s+=i};s}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -293,7 +307,7 @@ fn test_for_loop() {
 
 #[test]
 fn test_while_loop() {
-    let source = "F count_down(n:i64)->i64{x:=n;L _:x>0{x-=1};x}";
+    let source = "fn count_down(n:i64)->i64{x:=n;L _:x>0{x-=1};x}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -302,7 +316,7 @@ fn test_while_loop() {
 
 #[test]
 fn test_infinite_loop_with_break() {
-    let source = "F find()->i64{x:=0;L{I x>10{B x};x+=1};0}";
+    let source = "fn find()->i64{x:=0;L{I x>10{B x};x+=1};0}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -311,7 +325,7 @@ fn test_infinite_loop_with_break() {
 
 #[test]
 fn test_arithmetic_operations() {
-    let source = "F math(a:i64,b:i64)->i64=a+b-a*b/a%b";
+    let source = "fn math(a:i64,b:i64)->i64=a+b-a*b/a%b";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -325,7 +339,7 @@ fn test_arithmetic_operations() {
 #[test]
 fn test_comparison_operations() {
     let source = r#"
-        F compare(a:i64,b:i64)->bool{
+        fn compare(a:i64,b:i64)->bool{
             x:=a<b;
             y:=a<=b;
             z:=a>b;
@@ -348,7 +362,7 @@ fn test_comparison_operations() {
 
 #[test]
 fn test_bitwise_operations() {
-    let source = "F bits(a:i64,b:i64)->i64{x:=a&b;y:=a|b;z:=a^b;w:=a<<2;v:=a>>1;x}";
+    let source = "fn bits(a:i64,b:i64)->i64{x:=a&b;y:=a|b;z:=a^b;w:=a<<2;v:=a>>1;x}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -361,7 +375,7 @@ fn test_bitwise_operations() {
 
 #[test]
 fn test_logical_operations() {
-    let source = "F logic(a:bool,b:bool)->bool=a&&b||!a";
+    let source = "fn logic(a:bool,b:bool)->bool=a&&b||!a";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -370,7 +384,7 @@ fn test_logical_operations() {
 
 #[test]
 fn test_unary_minus() {
-    let source = "F negate(x:i64)->i64=-x";
+    let source = "fn negate(x:i64)->i64=-x";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -379,7 +393,7 @@ fn test_unary_minus() {
 
 #[test]
 fn test_bitwise_not() {
-    let source = "F complement(x:i64)->i64=~x";
+    let source = "fn complement(x:i64)->i64=~x";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -388,7 +402,7 @@ fn test_bitwise_not() {
 
 #[test]
 fn test_ternary_expression() {
-    let source = "F abs(x:i64)->i64=x<0?-x:x";
+    let source = "fn abs(x:i64)->i64=x<0?-x:x";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -400,7 +414,7 @@ fn test_ternary_expression() {
 fn test_compound_assignment() {
     // In Vais, mutable variables use := for declaration
     let source = r#"
-        F compound(x:i64)->i64{
+        fn compound(x:i64)->i64{
             y:=x;
             y+=1;
             y-=2;
@@ -418,8 +432,8 @@ fn test_compound_assignment() {
 #[test]
 fn test_struct_literal() {
     let source = r#"
-        S Point{x:i64,y:i64}
-        F origin()->Point=Point{x:0,y:0}
+        struct Point{x:i64,y:i64}
+        fn origin()->Point=Point{x:0,y:0}
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -431,8 +445,8 @@ fn test_struct_literal() {
 #[test]
 fn test_struct_field_access() {
     let source = r#"
-        S Point{x:i64,y:i64}
-        F get_x(p:Point)->i64=p.x
+        struct Point{x:i64,y:i64}
+        fn get_x(p:Point)->i64=p.x
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -442,7 +456,7 @@ fn test_struct_field_access() {
 
 #[test]
 fn test_lambda_simple() {
-    let source = "F f()->i64{add:=|a:i64,b:i64|a+b;add(1,2)}";
+    let source = "fn f()->i64{add:=|a:i64,b:i64|a+b;add(1,2)}";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -451,7 +465,7 @@ fn test_lambda_simple() {
 
 #[test]
 fn test_recursive_factorial() {
-    let source = "F factorial(n:i64)->i64=n<=1?1:n*@(n-1)";
+    let source = "fn factorial(n:i64)->i64=n<=1?1:n*@(n-1)";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -462,10 +476,10 @@ fn test_recursive_factorial() {
 #[test]
 fn test_multiple_functions() {
     let source = r#"
-        F add(a:i64,b:i64)->i64=a+b
-        F sub(a:i64,b:i64)->i64=a-b
-        F mul(a:i64,b:i64)->i64=a*b
-        F test()->i64=mul(add(1,2),sub(5,2))
+        fn add(a:i64,b:i64)->i64=a+b
+        fn sub(a:i64,b:i64)->i64=a-b
+        fn mul(a:i64,b:i64)->i64=a*b
+        fn test()->i64=mul(add(1,2),sub(5,2))
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -478,7 +492,7 @@ fn test_multiple_functions() {
 
 #[test]
 fn test_function_with_many_params() {
-    let source = "F many(a:i64,b:i64,c:i64,d:i64,e:i64,f:i64,g:i64,h:i64)->i64=a+b+c+d+e+f+g+h";
+    let source = "fn many(a:i64,b:i64,c:i64,d:i64,e:i64,f:i64,g:i64,h:i64)->i64=a+b+c+d+e+f+g+h";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -491,14 +505,14 @@ fn test_function_with_many_params() {
 #[test]
 fn test_all_integer_types() {
     let source = r#"
-        F test_i8(x:i8)->i8=x
-        F test_i16(x:i16)->i16=x
-        F test_i32(x:i32)->i32=x
-        F test_i64(x:i64)->i64=x
-        F test_u8(x:u8)->u8=x
-        F test_u16(x:u16)->u16=x
-        F test_u32(x:u32)->u32=x
-        F test_u64(x:u64)->u64=x
+        fn test_i8(x:i8)->i8=x
+        fn test_i16(x:i16)->i16=x
+        fn test_i32(x:i32)->i32=x
+        fn test_i64(x:i64)->i64=x
+        fn test_u8(x:u8)->u8=x
+        fn test_u16(x:u16)->u16=x
+        fn test_u32(x:u32)->u32=x
+        fn test_u64(x:u64)->u64=x
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -516,8 +530,8 @@ fn test_all_integer_types() {
 #[test]
 fn test_float_types() {
     let source = r#"
-        F test_f32(x:f32)->f32=x
-        F test_f64(x:f64)->f64=x
+        fn test_f32(x:f32)->f32=x
+        fn test_f64(x:f64)->f64=x
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -528,7 +542,7 @@ fn test_float_types() {
 
 #[test]
 fn test_deeply_nested_expression() {
-    let source = "F deep(a:i64)->i64=((((a+1)+2)+3)+4)+5";
+    let source = "fn deep(a:i64)->i64=((((a+1)+2)+3)+4)+5";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -537,7 +551,7 @@ fn test_deeply_nested_expression() {
 
 #[test]
 fn test_mixed_arithmetic_precedence() {
-    let source = "F prec(a:i64,b:i64,c:i64)->i64=a+b*c";
+    let source = "fn prec(a:i64,b:i64,c:i64)->i64=a+b*c";
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
     let ir = gen.generate_module(&module).unwrap();
@@ -553,8 +567,8 @@ fn test_generate_specialized_function() {
     use vais_types::TypeChecker;
 
     let source = r#"
-        F identity<T>(x:T)->T=x
-        F main()->i64=identity(42)
+        fn identity<T>(x:T)->T=x
+        fn main()->i64=identity(42)
     "#;
     let module = parse(source).unwrap();
 
@@ -569,11 +583,12 @@ fn test_generate_specialized_function() {
         .generate_module_with_instantiations(&module, &instantiations)
         .unwrap();
 
-    // Specialized functions use weak_odr linkage so repeated module-level
-    // instantiations remain link-safe across aggregate builds.
+    // Should contain specialized function identity$i64. Phase 0 bug C3 fix
+    // emits these as `linkonce_odr` so duplicate copies (one per consumer
+    // module) merge cleanly at link time.
     assert!(
-        ir.contains("define weak_odr i64 @identity$i64"),
-        "Expected identity$i64 in IR: {}",
+        ir.contains("define linkonce_odr i64 @identity$i64"),
+        "Expected linkonce_odr identity$i64 in IR: {}",
         ir
     );
     assert!(ir.contains("ret i64 %x"), "Expected return in identity$i64");
@@ -587,8 +602,8 @@ fn test_generate_specialized_struct_type() {
     // Note: Full struct literal code generation with generics requires additional work
     // This test verifies the type definition is generated correctly
     let source = r#"
-        S Pair<T>{first:T,second:T}
-        F main()->i64{
+        struct Pair<T>{first:T,second:T}
+        fn main()->i64{
             p:=Pair{first:1,second:2};
             p.first
         }
@@ -621,8 +636,8 @@ fn test_multiple_instantiations() {
     use vais_types::TypeChecker;
 
     let source = r#"
-        F identity<T>(x:T)->T=x
-        F main()->f64{
+        fn identity<T>(x:T)->T=x
+        fn main()->f64{
             a:=identity(42);
             b:=identity(3.14);
             b
@@ -658,7 +673,7 @@ fn test_no_code_for_generic_template() {
     use vais_types::TypeChecker;
 
     let source = r#"
-        F identity<T>(x:T)->T=x
+        fn identity<T>(x:T)->T=x
     "#;
     let module = parse(source).unwrap();
 
@@ -693,7 +708,7 @@ fn test_no_code_for_generic_template() {
 fn test_i8_boundary_values() {
     // Test i8 min (-128) and max (127)
     let source = r#"
-        F i8_bounds()->(i8,i8){
+        fn i8_bounds()->(i8,i8){
             min:i8=-128;
             max:i8=127;
             (min,max)
@@ -711,7 +726,7 @@ fn test_i8_boundary_values() {
 fn test_i8_overflow_value() {
     // Test arithmetic that could overflow (using i64 as i8 not fully supported)
     let source = r#"
-        F add_large()->i64{
+        fn add_large()->i64{
             x:=9000000000000000000;
             y:=1000000000000000000;
             x+y
@@ -729,7 +744,7 @@ fn test_i8_overflow_value() {
 fn test_i8_underflow_value() {
     // Test arithmetic that could underflow (using i64)
     let source = r#"
-        F sub_large()->i64{
+        fn sub_large()->i64{
             x:=-9000000000000000000;
             y:=1000000000000000000;
             x-y
@@ -746,7 +761,7 @@ fn test_i8_underflow_value() {
 fn test_i64_max_value_codegen() {
     // Test i64 max: 9223372036854775807
     let source = r#"
-        F i64_max()->i64=9223372036854775807
+        fn i64_max()->i64=9223372036854775807
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -759,7 +774,7 @@ fn test_i64_max_value_codegen() {
 fn test_i64_min_value_codegen() {
     // Test i64 min (approximately): -9223372036854775808
     let source = r#"
-        F i64_near_min()->i64=-9223372036854775807
+        fn i64_near_min()->i64=-9223372036854775807
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -772,7 +787,7 @@ fn test_i64_min_value_codegen() {
 fn test_integer_overflow_addition() {
     // Test potential overflow in addition
     let source = r#"
-        F add_overflow(a:i64,b:i64)->i64=a+b
+        fn add_overflow(a:i64,b:i64)->i64=a+b
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -786,7 +801,7 @@ fn test_integer_overflow_addition() {
 fn test_integer_overflow_multiplication() {
     // Test potential overflow in multiplication
     let source = r#"
-        F mul_large()->i64{
+        fn mul_large()->i64{
             a:i64=1000000000;
             b:i64=1000000000;
             a*b
@@ -803,7 +818,7 @@ fn test_integer_overflow_multiplication() {
 fn test_division_by_zero() {
     // Test division by zero (runtime error, should compile)
     let source = r#"
-        F div_zero()->i64{
+        fn div_zero()->i64{
             x:=10;
             y:=0;
             x/y
@@ -820,7 +835,7 @@ fn test_division_by_zero() {
 fn test_modulo_by_zero() {
     // Test modulo by zero
     let source = r#"
-        F mod_zero()->i64{
+        fn mod_zero()->i64{
             x:=10;
             y:=0;
             x%y
@@ -840,15 +855,15 @@ fn test_all_integer_type_boundaries() {
     // Vais primarily uses i64 for integer arithmetic, but stores typed values
     // Test that integer literals with annotations generate valid IR
     let source = r#"
-        F get_i8()->i8{
+        fn get_i8()->i8{
             a:i8=127;
             a
         }
-        F get_i32()->i32{
+        fn get_i32()->i32{
             e:i32=2147483647;
             e
         }
-        F get_i64()->i64{
+        fn get_i64()->i64{
             f:i64=9223372036854775807;
             f
         }
@@ -867,7 +882,7 @@ fn test_all_integer_type_boundaries() {
 fn test_signed_integer_wraparound() {
     // Test signed integer wraparound behavior (using i64)
     let source = r#"
-        F wraparound()->i64{
+        fn wraparound()->i64{
             max:=9223372036854775806;
             max+1
         }
@@ -883,8 +898,8 @@ fn test_signed_integer_wraparound() {
 fn test_nested_generic_codegen() {
     // Simplified generic struct test
     let source = r#"
-        S Container<T>{data:T}
-        F empty()->Container<i64> =Container{data:0}
+        struct Container<T>{data:T}
+        fn empty()->Container<i64> =Container{data:0}
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -897,7 +912,7 @@ fn test_nested_generic_codegen() {
 fn test_pattern_match_with_guard_codegen() {
     // Test pattern match with guard generates correct branches (fix escaping)
     let source = r#"
-        F classify(x:i64)->str=M x{
+        fn classify(x:i64)->str=match x{
             n I n>0=>"pos",
             n I n<0=>"neg",
             _=>"zero"
@@ -915,8 +930,8 @@ fn test_pattern_match_with_guard_codegen() {
 fn test_mutual_recursion_codegen() {
     // Test mutual recursion generates correct calls
     let source = r#"
-        F is_even(n:i64)->bool=n==0?true:is_odd(n-1)
-        F is_odd(n:i64)->bool=n==0?false:is_even(n-1)
+        fn is_even(n:i64)->bool=n==0?true:is_odd(n-1)
+        fn is_odd(n:i64)->bool=n==0?false:is_even(n-1)
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -932,13 +947,13 @@ fn test_mutual_recursion_codegen() {
 fn test_deeply_nested_if_codegen() {
     // Test deeply nested if-else generates correct basic blocks
     let source = r#"
-        F deep(x:i64)->i64{
+        fn deep(x:i64)->i64{
             I x>100{
-                I x>1000{1}E{2}
-            }E{
+                I x>1000{1} else {2}
+            } else {
                 I x>10{
-                    I x>50{3}E{4}
-                }E{5}
+                    I x>50{3} else {4}
+                } else {5}
             }
         }
     "#;
@@ -955,7 +970,7 @@ fn test_deeply_nested_if_codegen() {
 fn test_large_number_of_parameters() {
     // Test function with many parameters
     let source = r#"
-        F many_params(
+        fn many_params(
             a:i64,b:i64,c:i64,d:i64,e:i64,
             f:i64,g:i64,h:i64,i:i64,j:i64,
             k:i64,l:i64,m:i64,n:i64,o:i64
@@ -975,7 +990,7 @@ fn test_large_number_of_parameters() {
 fn test_zero_return_optimization() {
     // Test that returning 0 is optimized
     let source = r#"
-        F zero()->i64=0
+        fn zero()->i64=0
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -988,7 +1003,7 @@ fn test_zero_return_optimization() {
 fn test_constant_folding_candidate() {
     // Test expressions that could be constant folded
     let source = r#"
-        F const_expr()->i64=2+3*4-1
+        fn const_expr()->i64=2+3*4-1
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -1003,7 +1018,7 @@ fn test_constant_folding_candidate() {
 fn test_boolean_short_circuit() {
     // Test boolean short-circuit evaluation
     let source = r#"
-        F short_circuit(a:bool,b:bool)->bool=a&&b||!a
+        fn short_circuit(a:bool,b:bool)->bool=a&&b||!a
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -1016,7 +1031,7 @@ fn test_boolean_short_circuit() {
 fn test_comparison_chain_codegen() {
     // Test comparison chains: a < b < c
     let source = r#"
-        F compare_chain(a:i64,b:i64,c:i64)->bool{
+        fn compare_chain(a:i64,b:i64,c:i64)->bool{
             x:=a<b;
             y:=b<c;
             x&&y
@@ -1033,8 +1048,8 @@ fn test_comparison_chain_codegen() {
 fn test_bitwise_operations_all_types() {
     // Test bitwise operations (i8 not fully supported, use i64)
     let source = r#"
-        F bitwise_i64(a:i64,b:i64)->i64=a&b|a^b
-        F bitwise_test()->i64=bitwise_i64(5,3)
+        fn bitwise_i64(a:i64,b:i64)->i64=a&b|a^b
+        fn bitwise_test()->i64=bitwise_i64(5,3)
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -1049,7 +1064,7 @@ fn test_bitwise_operations_all_types() {
 fn test_shift_operations_boundaries() {
     // Test shift operations at boundaries
     let source = r#"
-        F shift_max(x:i64)->i64{
+        fn shift_max(x:i64)->i64{
             a:=x<<63;
             b:=x>>63;
             a+b
@@ -1067,7 +1082,7 @@ fn test_shift_operations_boundaries() {
 fn test_negative_shift_amount() {
     // Test negative shift (undefined behavior, should compile)
     let source = r#"
-        F neg_shift(x:i64)->i64{
+        fn neg_shift(x:i64)->i64{
             shift:=-1;
             x<<shift
         }
@@ -1083,7 +1098,7 @@ fn test_negative_shift_amount() {
 fn test_all_unary_operators() {
     // Test all unary operators
     let source = r#"
-        F unary_ops(x:i64,b:bool)->(i64,i64,bool){
+        fn unary_ops(x:i64,b:bool)->(i64,i64,bool){
             neg:=-x;
             bit_not:=(~x);
             log_not:=!b;
@@ -1102,7 +1117,7 @@ fn test_all_unary_operators() {
 fn test_float_division_by_zero() {
     // Test float division (check IR has float division instruction)
     let source = r#"
-        F fdiv_test(x:f64,y:f64)->f64=x/y
+        fn fdiv_test(x:f64,y:f64)->f64=x/y
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -1116,7 +1131,7 @@ fn test_float_division_by_zero() {
 fn test_recursive_depth() {
     // Test deep recursion (should compile, runtime stack depth)
     let source = r#"
-        F deep_recursion(n:i64)->i64=n<1?0:@(n-1)+1
+        fn deep_recursion(n:i64)->i64=n<1?0:@(n-1)+1
     "#;
     let module = parse(source).unwrap();
     let mut gen = CodeGenerator::new("test");
@@ -1129,16 +1144,16 @@ fn test_recursive_depth() {
 fn test_generic_container_fallback() {
     // Test that a generic function with un-inferrable T gets a fallback definition
     let source = r#"
-S Container<T> {
+struct Container<T> {
     items: i64,
     count: i64
 }
 
-F test_container<T>(c: Container<T>) -> i64 {
+fn test_container<T>(c: Container<T>) -> i64 {
     c.count
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Container { items: 0, count: 42 }
     test_container(c)
 }

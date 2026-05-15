@@ -14,16 +14,16 @@
 //!
 //! Stage 1 scope (LANDED):
 //!   - Composite type lowering:
-//!     `Vec<T>`              → `ReadonlyArray<T_lowered>`
-//!     `&[T]`, `&mut [T]`    → `ReadonlyArray<T_lowered>`
-//!     `&T`, `&mut T`        → `T_lowered` (reference distinction lost; documented in header)
-//!     `()` (Unit)           → `null`
-//!     `Option<T>`           → `T_lowered | null`
-//!     `Result<T, E>`        → `{ ok: T_lowered } | { err: E_lowered }`
-//!     `(T1, T2, …)`         → `readonly [T1_lowered, T2_lowered, …]`
-//!     `HashMap<K, V>`       → `Map<K_lowered, V_lowered>`
-//!     nested struct `S`     → `S` (interface name reference)
-//!     enum `X`              → discriminated union per variant
+//!     `Vec<T>`            → `ReadonlyArray<T_lowered>`
+//!     `&[T]`, `&mut [T]`  → `ReadonlyArray<T_lowered>`
+//!     `&T`, `&mut T`      → `T_lowered`  (reference distinction lost; documented in header)
+//!     `()`  (Unit)        → `null`
+//!     `Option<T>`         → `T_lowered | null`
+//!     `Result<T, E>`      → `{ ok: T_lowered } | { err: E_lowered }`
+//!     `(T1, T2, …)`       → `readonly [T1_lowered, T2_lowered, …]`
+//!     `HashMap<K, V>`     → `Map<K_lowered, V_lowered>`
+//!     nested struct `S`   → `S`  (interface name reference)
+//!     enum `X`            → discriminated union per variant
 //!   - pub enum items are now emitted as tagged TS discriminated unions
 //!   - Topological emit order (leaves first) for readability
 //!
@@ -998,7 +998,11 @@ mod tests {
                 .into_iter()
                 .map(|t| vais_ast::Spanned {
                     node: t,
-                    span: vais_ast::Span::new(0, 0),
+                    span: vais_ast::Span {
+                        file_id: 0,
+                        start: 0,
+                        end: 0,
+                    },
                 })
                 .collect(),
         }
@@ -1007,7 +1011,11 @@ mod tests {
     fn spanned(t: Type) -> vais_ast::Spanned<Type> {
         vais_ast::Spanned {
             node: t,
-            span: vais_ast::Span::new(0, 0),
+            span: vais_ast::Span {
+                file_id: 0,
+                start: 0,
+                end: 0,
+            },
         }
     }
 

@@ -1,0 +1,12 @@
+# CHECKS: i64 mul and div + remainder
+fn main() -> i64 {
+    a: i64 := 12
+    b: i64 := 4
+    prod: i64 := a * b
+    quot: i64 := a / b
+    rem: i64 := 13 % b
+    I prod != 48 { return 1 }
+    I quot != 3 { return 2 }
+    I rem != 1 { return 3 }
+    return 0
+}

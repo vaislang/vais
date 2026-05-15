@@ -8,6 +8,52 @@ use vais_ast::{Expr, Spanned, Stmt};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    pub(crate) fn coerce_if_phi_incoming(
+        &mut self,
+        val: String,
+        phi_llvm: &str,
+        phi_type: &ResolvedType,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> String {
+        if val == "void" || phi_llvm == "void" {
+            return val;
+        }
+
+        let actual = self.llvm_type_of_checked(&val);
+        let expects_aggregate = phi_llvm.starts_with('%') || phi_llvm.starts_with('{');
+        if expects_aggregate && val == "0" {
+            return "zeroinitializer".to_string();
+        }
+        let exact_pointer = actual
+            .as_deref()
+            .map(|ty| ty == format!("{}*", phi_llvm) || (ty == "ptr" && expects_aggregate))
+            .unwrap_or(false);
+        if exact_pointer {
+            let loaded = self.next_temp(counter);
+            match actual.as_deref() {
+                Some("ptr") => {
+                    write_ir!(ir, "  {} = load {}, ptr {}", loaded, phi_llvm, val);
+                }
+                _ => {
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        phi_llvm,
+                        phi_llvm,
+                        val
+                    );
+                }
+            }
+            self.fn_ctx.record_emitted_type(&loaded, phi_llvm);
+            self.fn_ctx.register_temp_type(&loaded, phi_type.clone());
+            loaded
+        } else {
+            val
+        }
+    }
+
     #[inline(never)]
     pub(crate) fn generate_ternary_expr(
         &mut self,
@@ -70,6 +116,7 @@ impl CodeGenerator {
             else_val,
             else_actual
         );
+        self.fn_ctx.record_emitted_type(&result, &phi_llvm);
 
         Ok((result, ir))
     }
@@ -103,6 +150,16 @@ impl CodeGenerator {
 
         // Infer block type to detect struct/enum results that need loading
         let then_type = self.infer_block_type(then);
+        let else_is_terminating = else_
+            .as_ref()
+            .map(|eb| match eb {
+                vais_ast::IfElse::Else(stmts) => matches!(
+                    stmts.last().map(|s| &s.node),
+                    Some(vais_ast::Stmt::Return(_))
+                ),
+                vais_ast::IfElse::ElseIf(..) => false,
+            })
+            .unwrap_or(false);
         let else_type = if let Some(else_branch) = else_ {
             match else_branch {
                 vais_ast::IfElse::Else(stmts) => self.infer_block_type(stmts),
@@ -112,13 +169,39 @@ impl CodeGenerator {
             ResolvedType::I64
         };
         // If branch types differ (e.g., str vs i64), use i64 as the phi type
-        // since the if/else is used as a statement and the result is unused
-        let phi_type = if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type) {
-            ResolvedType::I64
+        // since the if/else is used as a statement and the result is unused.
+        // Exception: when the else branch early-returns, only the then branch
+        // reaches the merge, so keep its type instead of widening to i64.
+        //
+        // Phase B2 continuation: when one side is float/double and the other
+        // is integer, prefer the float type (the int side will be coerced via
+        // sitofp in the arm block before branching). Same logic the nested
+        // ElseIf handler uses.
+        let mut phi_type = if else_is_terminating {
+            then_type.clone()
+        } else if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type) {
+            match (&then_type, &else_type) {
+                (ResolvedType::F64, _) | (_, ResolvedType::F64) => ResolvedType::F64,
+                (ResolvedType::F32, _) | (_, ResolvedType::F32) => ResolvedType::F32,
+                _ => ResolvedType::I64,
+            }
         } else {
-            then_type
+            then_type.clone()
         };
-        let phi_llvm = self.type_to_llvm(&phi_type);
+        if let Some(expected) = self.fn_ctx.expected_expr_types.last().cloned() {
+            let has_i64_fallback = matches!(phi_type, ResolvedType::I64)
+                || matches!(then_type, ResolvedType::I64)
+                || matches!(else_type, ResolvedType::I64);
+            let should_use_expected = has_i64_fallback
+                && (matches!(expected, ResolvedType::Named { .. })
+                    || (matches!(expected, ResolvedType::Str)
+                        && (matches!(then_type, ResolvedType::Str)
+                            || matches!(else_type, ResolvedType::Str))));
+            if should_use_expected {
+                phi_type = expected;
+            }
+        }
+        let mut phi_llvm = self.type_to_llvm(&phi_type);
 
         // Check each branch independently for struct pointer vs value
         let is_named_phi = matches!(&phi_type, ResolvedType::Named { .. });
@@ -165,11 +248,32 @@ impl CodeGenerator {
                     write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
                 }
                 tmp
+            } else if actual_after.starts_with('i')
+                && !actual_after.contains('*')
+                && (phi_llvm == "float" || phi_llvm == "double")
+            {
+                // Int → float for mixed-type phi (B2 extension): coerce arm
+                // value to float in the arm block before branching to merge.
+                let tmp = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = sitofp {} {} to {}",
+                    tmp,
+                    actual_after,
+                    coerced,
+                    phi_llvm
+                );
+                tmp
             } else {
                 coerced
             }
         } else {
             then_val
+        };
+        let then_val_for_phi = if !then_terminated {
+            self.coerce_if_phi_incoming(then_val_for_phi, &phi_llvm, &phi_type, counter, &mut ir)
+        } else {
+            then_val_for_phi
         };
 
         let then_actual_block = self.fn_ctx.current_block.clone();
@@ -192,6 +296,24 @@ impl CodeGenerator {
                 ("0".to_string(), String::new(), false, String::new(), false)
             };
         ir.push_str(&else_ir);
+
+        // B-04b fix: post-else fat-pointer retroactive upgrade.
+        // 같은 패턴이 nested elseif handler (if_else.rs:213-237) 에 *float* 케이스로
+        // 이미 존재. outer if-else 에서는 *fat-pointer* 케이스가 누락 — phi_type
+        // 추론이 then_type/else_type 이 모두 I64 면 phi_type=I64 fallback 으로
+        // 가는데, nested if-else 가 expected_expr_types (function return type Str)
+        // 영향으로 fat-pointer phi 를 emit 한 경우 outer 가 그 사실을 모름.
+        // else_val 의 actual emitted LLVM type 이 fat-pointer 면 outer phi_type 을
+        // Str/fat-pointer 로 upgrade. then arm 의 i64 literal 은 phi 작성 시
+        // zeroinitializer 로 자동 substitute (L444-461 기존 로직).
+        if !else_terminated && has_else {
+            if let Some(else_actual) = self.llvm_type_of_checked(&else_val) {
+                if else_actual == "{ i8*, i64 }" && phi_llvm != "{ i8*, i64 }" {
+                    phi_type = ResolvedType::Str;
+                    phi_llvm = "{ i8*, i64 }".to_string();
+                }
+            }
+        }
 
         // For struct/enum results, load the value from the alloca pointer before branch
         // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
@@ -234,12 +356,32 @@ impl CodeGenerator {
                         write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
                     }
                     tmp
+                } else if actual_after.starts_with('i')
+                    && !actual_after.contains('*')
+                    && (phi_llvm == "float" || phi_llvm == "double")
+                {
+                    // Int → float for mixed-type phi (B2 extension).
+                    let tmp = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = sitofp {} {} to {}",
+                        tmp,
+                        actual_after,
+                        coerced,
+                        phi_llvm
+                    );
+                    tmp
                 } else {
                     coerced
                 }
             } else {
                 else_val
             };
+        let else_val_for_phi = if !else_terminated && has_else {
+            self.coerce_if_phi_incoming(else_val_for_phi, &phi_llvm, &phi_type, counter, &mut ir)
+        } else {
+            else_val_for_phi
+        };
 
         let else_from_label = if !else_terminated {
             write_ir!(ir, "  br label %{}", merge_label);
@@ -262,6 +404,12 @@ impl CodeGenerator {
         // Only flag mismatches between fundamentally incompatible types (e.g., { i8*, i64 } vs i64).
         // We cannot rely on llvm_type_of for accurate SSA type tracking, so only check
         // when the phi type is a struct but a branch value is clearly an integer, or vice versa.
+        // Note: the previous float-widening LUB pass was removed because it
+        // emitted `sitofp` instructions in the merge block *before* the phi
+        // node, violating LLVM's "PHI nodes must be grouped at top of basic
+        // block" rule. The coercion must live in each arm block (before
+        // `br merge`), not here. Float/integer mismatches are deferred to
+        // the caller that consumes the phi result.
         let phi_is_struct = phi_llvm.starts_with('{') || phi_llvm.starts_with('%');
         let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
         let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
@@ -272,7 +420,7 @@ impl CodeGenerator {
                 && !then_val_for_phi.starts_with("zeroinitializer"))
                 || (!else_from_label.is_empty()
                     && else_actual_ty.starts_with('i')
-                    && else_val_for_phi != "0")
+                    && !else_val_for_phi.starts_with("zeroinitializer"))
         } else {
             // phi expects a scalar — check if any branch clearly produces a struct
             (!then_from_label.is_empty()
@@ -281,7 +429,8 @@ impl CodeGenerator {
                     && (else_actual_ty.starts_with('{') || else_actual_ty.starts_with('%')))
         };
 
-        if is_void || !has_else || phi_type_mismatch {
+        let phi_mismatch_requires_placeholder = phi_type_mismatch && phi_llvm != "{ i8*, i64 }";
+        if is_void || !has_else || phi_mismatch_requires_placeholder {
             // When the phi type is str { i8*, i64 }, use a zeroinitializer instead
             // of void placeholder (i64 0) to avoid type mismatch downstream.
             if phi_llvm == "{ i8*, i64 }" {
@@ -290,6 +439,7 @@ impl CodeGenerator {
                     "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                     result
                 );
+                self.fn_ctx.record_emitted_type(&result, "{ i8*, i64 }");
                 // Register as Str so downstream code doesn't override with wrong type
                 self.fn_ctx
                     .register_temp_type(&result, vais_types::ResolvedType::Str);
@@ -310,16 +460,16 @@ impl CodeGenerator {
             // for the phi type.
             let then_is_void = then_val_for_phi == "void";
             let else_is_void = else_val_for_phi == "void";
+            // B-04a fix: phi incoming 으로 constant zeroinitializer 직접 사용.
+            // 이전 코드는 merge block 안에 `insertvalue` SSA temp 를 emit 한 후
+            // 그 temp 를 phi incoming 으로 썼는데, 이는 LLVM 의 "PHI nodes must
+            // be grouped at top of basic block" 규칙을 위반 (phi 직전 non-phi
+            // instruction). zeroinitializer 는 compile-time constant 라서 phi
+            // incoming 으로 직접 허용 — 별도 SSA temp 불필요.
             let then_safe = if phi_llvm == "{ i8*, i64 }"
                 && (then_actual_ty.starts_with('i') || then_is_void)
             {
-                let zinit = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
-                    zinit
-                );
-                zinit
+                "zeroinitializer".to_string()
             } else if then_is_void {
                 "0".to_string()
             } else {
@@ -328,13 +478,7 @@ impl CodeGenerator {
             let else_safe = if phi_llvm == "{ i8*, i64 }"
                 && (else_actual_ty.starts_with('i') || else_is_void)
             {
-                let zinit = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
-                    zinit
-                );
-                zinit
+                "zeroinitializer".to_string()
             } else if else_is_void {
                 "0".to_string()
             } else {
@@ -350,6 +494,7 @@ impl CodeGenerator {
                 else_safe,
                 else_from_label
             );
+            self.fn_ctx.record_emitted_type(&result, &phi_llvm);
             // Register the phi result type so a parent expression seeing
             // this if-expression's value gets the correct struct/enum type.
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
@@ -399,6 +544,7 @@ impl CodeGenerator {
                 safe,
                 then_from_label
             );
+            self.fn_ctx.record_emitted_type(&result, &phi_llvm);
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else if !else_from_label.is_empty() {
             let safe = if else_val_for_phi == "void" {
@@ -414,6 +560,7 @@ impl CodeGenerator {
                 safe,
                 else_from_label
             );
+            self.fn_ctx.record_emitted_type(&result, &phi_llvm);
             self.fn_ctx.register_temp_type(&result, phi_type.clone());
         } else {
             // Both branches terminated (e.g., both have explicit return).
@@ -424,6 +571,7 @@ impl CodeGenerator {
                     "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                     result
                 );
+                self.fn_ctx.record_emitted_type(&result, "{ i8*, i64 }");
                 self.fn_ctx
                     .register_temp_type(&result, vais_types::ResolvedType::Str);
             } else {
@@ -461,6 +609,7 @@ impl CodeGenerator {
             continue_label: loop_start.to_string(),
             break_label: loop_end.to_string(),
             scope_str_depth: self.fn_ctx.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         let mut ir = String::new();
@@ -523,6 +672,7 @@ impl CodeGenerator {
             continue_label: loop_start.to_string(),
             break_label: loop_end.to_string(),
             scope_str_depth: self.fn_ctx.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         let mut ir = String::new();

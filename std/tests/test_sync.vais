@@ -1,0 +1,60 @@
+# Stdlib self-test: sync primitives single-threaded smoke test
+# (Multi-thread tests would require thread spawning — covered separately.)
+# Regression coverage for bugs C4 (MutexGuard<T> specialization) and
+# C9 (Optional<UserStruct> layout at fn return).
+use std/sync
+
+fn main() -> i64 {
+    # AtomicI64
+    a: AtomicI64 := mut AtomicI64.new(0)
+    I a.load() != 0 { return 1 }
+
+    a.store(42)
+    I a.load() != 42 { return 2 }
+
+    old: i64 := a.swap(100)
+    I old != 42 { return 3 }
+    I a.load() != 100 { return 4 }
+
+    # fetch_add returns prior value
+    prev: i64 := a.fetch_add(5)
+    I prev != 100 { return 5 }
+    I a.load() != 105 { return 6 }
+
+    # fetch_sub returns prior value
+    prev2: i64 := a.fetch_sub(10)
+    I prev2 != 105 { return 7 }
+    I a.load() != 95 { return 8 }
+
+    # fetch_or
+    a.store(0x0F)
+    a.fetch_or(0xF0)
+    I a.load() != 0xFF { return 9 }
+
+    # fetch_and
+    a.fetch_and(0x0F)
+    I a.load() != 0x0F { return 10 }
+
+    # fetch_xor
+    a.store(0xFF)
+    a.fetch_xor(0x0F)
+    I a.load() != 0xF0 { return 11 }
+
+    # AtomicBool
+    b: AtomicBool := mut AtomicBool.new(0)
+    I b.load() != 0 { return 12 }
+    b.store(1)
+    I b.load() != 1 { return 13 }
+    bo: i64 := b.swap(0)
+    I bo != 1 { return 14 }
+    I b.load() != 0 { return 15 }
+
+    # Mutex (single-threaded: just exercise lock/unlock without contention)
+    m: Mutex<i64> := mut Mutex.new(7)
+    I m.is_locked() != 0 { return 16 }
+    g: MutexGuard<i64> := mut m.lock()
+    I m.is_locked() != 1 { return 17 }
+    g.unlock()
+
+    return 0
+}

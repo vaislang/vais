@@ -322,6 +322,7 @@ impl Parser {
     }
 
     /// Parse union: `Name{fields}` (untagged union, C-style)
+    #[allow(dead_code)] // Reserved grammar surface; exercised by integration coverage.
     pub(super) fn parse_union(&mut self, is_pub: bool) -> ParseResult<Union> {
         let name = self.parse_ident_or_keyword()?;
         let generics = self.parse_generics()?;
@@ -391,37 +392,30 @@ impl Parser {
     }
 
     /// Parse use statement: `module` or `module/submodule` or `module::submodule`
-    /// Also supports selective imports: `module.Item`, `module.{A, B, C}`
+    /// Also supports selective imports: `module.Item`, `module.{A, B, C}`,
+    /// and `module::{A, B, C}`.
     /// Optional semicolon terminator: `module;` or `module.Item;`
     pub(super) fn parse_use(&mut self) -> ParseResult<Use> {
         let mut path = vec![self.parse_ident()?];
+        let mut has_colon_brace_select = false;
 
         // Support both `::` and `/` as path separators
         while self.check(&Token::ColonColon) || self.check(&Token::Slash) {
-            self.advance();
+            let separator = self.advance().map(|tok| tok.token);
+            if matches!(separator, Some(Token::ColonColon)) && self.check(&Token::LBrace) {
+                has_colon_brace_select = true;
+                break;
+            }
             path.push(self.parse_ident()?);
         }
 
-        // Check for selective import: `.Ident` or `.{Ident, ...}`
-        let items = if self.check(&Token::Dot) {
+        // Check for selective import: `.Ident`, `.{Ident, ...}`, or `::{Ident, ...}`
+        let items = if has_colon_brace_select {
+            self.parse_selective_import_items()?
+        } else if self.check(&Token::Dot) {
             self.advance();
             if self.check(&Token::LBrace) {
-                // Multi-item: `.{A, B, C}`
-                self.advance(); // consume `{`
-                let mut selected = Vec::new();
-                if !self.check(&Token::RBrace) {
-                    selected.push(self.parse_ident()?);
-                    while self.check(&Token::Comma) {
-                        self.advance();
-                        // Allow trailing comma
-                        if self.check(&Token::RBrace) {
-                            break;
-                        }
-                        selected.push(self.parse_ident()?);
-                    }
-                }
-                self.expect(&Token::RBrace)?;
-                Some(selected)
+                self.parse_selective_import_items()?
             } else {
                 // Single item: `.Ident`
                 let item = self.parse_ident()?;
@@ -441,6 +435,24 @@ impl Parser {
             alias: None,
             items,
         })
+    }
+
+    fn parse_selective_import_items(&mut self) -> ParseResult<Option<Vec<Spanned<String>>>> {
+        self.expect(&Token::LBrace)?;
+        let mut selected = Vec::new();
+        if !self.check(&Token::RBrace) {
+            selected.push(self.parse_ident()?);
+            while self.check(&Token::Comma) {
+                self.advance();
+                // Allow trailing comma
+                if self.check(&Token::RBrace) {
+                    break;
+                }
+                selected.push(self.parse_ident()?);
+            }
+        }
+        self.expect(&Token::RBrace)?;
+        Ok(Some(selected))
     }
 
     /// Parse constant definition: `C NAME: Type = value`

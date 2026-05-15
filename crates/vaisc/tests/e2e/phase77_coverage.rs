@@ -22,7 +22,7 @@ fn assert_exit_code(source: &str, expected: i32) {
 fn e2e_p77_plus_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 10
             x += 5
             x
@@ -36,7 +36,7 @@ fn e2e_p77_plus_assign() {
 fn e2e_p77_minus_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 20
             x -= 8
             x
@@ -50,7 +50,7 @@ fn e2e_p77_minus_assign() {
 fn e2e_p77_mul_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 6
             x *= 7
             x
@@ -64,7 +64,7 @@ fn e2e_p77_mul_assign() {
 fn e2e_p77_div_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 100
             x /= 4
             x
@@ -78,7 +78,7 @@ fn e2e_p77_div_assign() {
 fn e2e_p77_mod_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 17
             x %= 5
             x
@@ -92,7 +92,7 @@ fn e2e_p77_mod_assign() {
 fn e2e_p77_bitwise_and_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 255
             x &= 15
             x
@@ -106,7 +106,7 @@ fn e2e_p77_bitwise_and_assign() {
 fn e2e_p77_bitwise_or_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 48
             x |= 3
             x
@@ -120,7 +120,7 @@ fn e2e_p77_bitwise_or_assign() {
 fn e2e_p77_bitwise_xor_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 255
             x ^= 240
             x
@@ -134,7 +134,7 @@ fn e2e_p77_bitwise_xor_assign() {
 fn e2e_p77_shl_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 1
             x <<= 5
             x
@@ -148,7 +148,7 @@ fn e2e_p77_shl_assign() {
 fn e2e_p77_shr_assign() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 128
             x >>= 3
             x
@@ -166,7 +166,7 @@ fn e2e_p77_shr_assign() {
 fn e2e_p77_bitwise_and() {
     assert_exit_code(
         r#"
-        F main() -> i64 = 170 & 15
+        fn main() -> i64 = 170 & 15
     "#,
         10,
     );
@@ -176,7 +176,7 @@ fn e2e_p77_bitwise_and() {
 fn e2e_p77_bitwise_or() {
     assert_exit_code(
         r#"
-        F main() -> i64 = 48 | 3
+        fn main() -> i64 = 48 | 3
     "#,
         51,
     );
@@ -186,7 +186,7 @@ fn e2e_p77_bitwise_or() {
 fn e2e_p77_bitwise_xor() {
     assert_exit_code(
         r#"
-        F main() -> i64 = 85 ^ 34
+        fn main() -> i64 = 85 ^ 34
     "#,
         119,
     );
@@ -196,7 +196,7 @@ fn e2e_p77_bitwise_xor() {
 fn e2e_p77_shift_left() {
     assert_exit_code(
         r#"
-        F main() -> i64 = 3 << 4
+        fn main() -> i64 = 3 << 4
     "#,
         48,
     );
@@ -206,7 +206,7 @@ fn e2e_p77_shift_left() {
 fn e2e_p77_shift_right() {
     assert_exit_code(
         r#"
-        F main() -> i64 = 255 >> 4
+        fn main() -> i64 = 255 >> 4
     "#,
         15,
     );
@@ -218,26 +218,26 @@ fn e2e_p77_shift_right() {
 
 #[test]
 fn e2e_p77_ternary_true() {
-    assert_exit_code("F main() -> i64 = true ? 42 : 0", 42);
+    assert_exit_code("fn main() -> i64 = true ? 42 : 0", 42);
 }
 
 #[test]
 fn e2e_p77_ternary_false() {
-    assert_exit_code("F main() -> i64 = false ? 0 : 33", 33);
+    assert_exit_code("fn main() -> i64 = false ? 0 : 33", 33);
 }
 
 #[test]
 fn e2e_p77_ternary_comparison() {
-    assert_exit_code("F main() -> i64 = 5 > 3 ? 1 : 0", 1);
+    assert_exit_code("fn main() -> i64 = 5 > 3 ? 1 : 0", 1);
 }
 
 #[test]
 fn e2e_p77_nested_ternary() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := 10
-            r := x > 20 ? 3 : 0
+            r := mut x > 20 ? 3 : 0
             I r == 0 {
                 r = x > 5 ? 2 : 1
             }
@@ -254,7 +254,7 @@ fn e2e_p77_nested_ternary() {
 
 #[test]
 fn e2e_p77_cast_i64_to_i64() {
-    assert_exit_code("F main() -> i64 { x := 42; x as i64 }", 42);
+    assert_exit_code("fn main() -> i64 { x := 42; x as i64 }", 42);
 }
 
 // ============================================================================
@@ -265,7 +265,7 @@ fn e2e_p77_cast_i64_to_i64() {
 fn e2e_p77_block_expression() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := {
                 a := 10
                 b := 32
@@ -282,7 +282,7 @@ fn e2e_p77_block_expression() {
 fn e2e_p77_nested_block() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := {
                 y := {
                     z := 7
@@ -305,11 +305,11 @@ fn e2e_p77_nested_block() {
 fn e2e_p77_self_recursion_factorial() {
     assert_exit_code(
         r#"
-        F fact(n: i64) -> i64 {
-            I n <= 1 { R 1 }
+        fn fact(n: i64) -> i64 {
+            I n <= 1 { return 1 }
             n * @(n - 1)
         }
-        F main() -> i64 = fact(5)
+        fn main() -> i64 = fact(5)
     "#,
         120,
     );
@@ -319,11 +319,11 @@ fn e2e_p77_self_recursion_factorial() {
 fn e2e_p77_self_recursion_fibonacci() {
     assert_exit_code(
         r#"
-        F fib(n: i64) -> i64 {
-            I n <= 1 { R n }
+        fn fib(n: i64) -> i64 {
+            I n <= 1 { return n }
             @(n - 1) + @(n - 2)
         }
-        F main() -> i64 = fib(10)
+        fn main() -> i64 = fib(10)
     "#,
         55,
     );
@@ -337,10 +337,10 @@ fn e2e_p77_self_recursion_fibonacci() {
 fn e2e_p77_enum_simple_match() {
     assert_exit_code(
         r#"
-        E Color { Red, Green, Blue }
-        F main() -> i64 {
+        enum Color { Red, Green, Blue }
+        fn main() -> i64 {
             c := Red
-            M c {
+            match c {
                 Red => 1,
                 Green => 2,
                 Blue => 3,
@@ -356,10 +356,10 @@ fn e2e_p77_enum_simple_match() {
 fn e2e_p77_enum_match_green() {
     assert_exit_code(
         r#"
-        E Color { Red, Green, Blue }
-        F main() -> i64 {
+        enum Color { Red, Green, Blue }
+        fn main() -> i64 {
             c := Green
-            M c {
+            match c {
                 Red => 10,
                 Green => 20,
                 Blue => 30,
@@ -375,18 +375,18 @@ fn e2e_p77_enum_match_green() {
 fn e2e_p77_enum_with_data() {
     assert_exit_code(
         r#"
-        E Shape {
+        enum Shape {
             Circle(i64),
             Rect(i64, i64)
         }
-        F area(s: Shape) -> i64 {
-            M s {
+        fn area(s: Shape) -> i64 {
+            match s {
                 Circle(r) => r * r,
                 Rect(w, h) => w * h,
                 _ => 0
             }
         }
-        F main() -> i64 = area(Circle(5))
+        fn main() -> i64 = area(Circle(5))
     "#,
         25,
     );
@@ -396,18 +396,18 @@ fn e2e_p77_enum_with_data() {
 fn e2e_p77_enum_rect_area() {
     assert_exit_code(
         r#"
-        E Shape {
+        enum Shape {
             Circle(i64),
             Rect(i64, i64)
         }
-        F area(s: Shape) -> i64 {
-            M s {
+        fn area(s: Shape) -> i64 {
+            match s {
                 Circle(r) => r * r,
                 Rect(w, h) => w * h,
                 _ => 0
             }
         }
-        F main() -> i64 = area(Rect(6, 7))
+        fn main() -> i64 = area(Rect(6, 7))
     "#,
         42,
     );
@@ -421,15 +421,15 @@ fn e2e_p77_enum_rect_area() {
 fn e2e_p77_match_int_first() {
     assert_exit_code(
         r#"
-        F classify(n: i64) -> i64 {
-            M n {
+        fn classify(n: i64) -> i64 {
+            match n {
                 0 => 10,
                 1 => 20,
                 2 => 30,
                 _ => 99
             }
         }
-        F main() -> i64 = classify(0)
+        fn main() -> i64 = classify(0)
     "#,
         10,
     );
@@ -439,14 +439,14 @@ fn e2e_p77_match_int_first() {
 fn e2e_p77_match_int_wildcard() {
     assert_exit_code(
         r#"
-        F classify(n: i64) -> i64 {
-            M n {
+        fn classify(n: i64) -> i64 {
+            match n {
                 0 => 10,
                 1 => 20,
                 _ => 99
             }
         }
-        F main() -> i64 = classify(42)
+        fn main() -> i64 = classify(42)
     "#,
         99,
     );
@@ -460,8 +460,8 @@ fn e2e_p77_match_int_wildcard() {
 fn e2e_p77_struct_field_access() {
     assert_exit_code(
         r#"
-        S Point { x: i64, y: i64 }
-        F main() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn main() -> i64 {
             p := Point { x: 10, y: 32 }
             p.x + p.y
         }
@@ -474,9 +474,9 @@ fn e2e_p77_struct_field_access() {
 fn e2e_p77_nested_struct() {
     assert_exit_code(
         r#"
-        S Inner { val: i64 }
-        S Outer { inner: Inner, extra: i64 }
-        F main() -> i64 {
+        struct Inner { val: i64 }
+        struct Outer { inner: Inner, extra: i64 }
+        fn main() -> i64 {
             o := Outer { inner: Inner { val: 40 }, extra: 2 }
             o.inner.val + o.extra
         }
@@ -493,12 +493,12 @@ fn e2e_p77_nested_struct() {
 fn e2e_p77_impl_method_call() {
     assert_exit_code(
         r#"
-        S Counter { value: i64 }
-        X Counter {
-            F get(self) -> i64 = self.value
-            F add(self, n: i64) -> i64 = self.value + n
+        struct Counter { value: i64 }
+        impl Counter {
+            fn get(self) -> i64 = self.value
+            fn add(self, n: i64) -> i64 = self.value + n
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             c := Counter { value: 40 }
             c.add(2)
         }
@@ -511,12 +511,12 @@ fn e2e_p77_impl_method_call() {
 fn e2e_p77_static_method() {
     assert_exit_code(
         r#"
-        S Pair { a: i64, b: i64 }
-        X Pair {
-            F new(a: i64, b: i64) -> Pair = Pair { a: a, b: b }
-            F sum(self) -> i64 = self.a + self.b
+        struct Pair { a: i64, b: i64 }
+        impl Pair {
+            fn new(a: i64, b: i64) -> Pair = Pair { a: a, b: b }
+            fn sum(self) -> i64 = self.a + self.b
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             p := Pair::new(20, 22)
             p.sum()
         }
@@ -533,12 +533,12 @@ fn e2e_p77_static_method() {
 fn e2e_p77_trait_impl_basic() {
     assert_exit_code(
         r#"
-        W Evaluate { F eval(self) -> i64 }
-        S Literal { value: i64 }
-        X Literal: Evaluate {
-            F eval(self) -> i64 = self.value
+        trait Evaluate { fn eval(self) -> i64 }
+        struct Literal { value: i64 }
+        impl Literal: Evaluate {
+            fn eval(self) -> i64 = self.value
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             lit := Literal { value: 42 }
             lit.eval()
         }
@@ -555,7 +555,7 @@ fn e2e_p77_trait_impl_basic() {
 fn e2e_p77_lambda_simple() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             f := |x: i64| x * 2
             f(21)
         }
@@ -568,7 +568,7 @@ fn e2e_p77_lambda_simple() {
 fn e2e_p77_lambda_multi_param() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             add := |a: i64, b: i64| a + b
             add(20, 22)
         }
@@ -585,9 +585,9 @@ fn e2e_p77_lambda_multi_param() {
 fn e2e_p77_higher_order_apply() {
     assert_exit_code(
         r#"
-        F apply(x: i64, f: fn(i64) -> i64) -> i64 = f(x)
-        F double(x: i64) -> i64 = x * 2
-        F main() -> i64 = apply(21, double)
+        fn apply(x: i64, f: fn(i64) -> i64) -> i64 = f(x)
+        fn double(x: i64) -> i64 = x * 2
+        fn main() -> i64 = apply(21, double)
     "#,
         42,
     );
@@ -601,8 +601,8 @@ fn e2e_p77_higher_order_apply() {
 fn e2e_p77_generic_identity() {
     assert_exit_code(
         r#"
-        F id<T>(x: T) -> T = x
-        F main() -> i64 = id(42)
+        fn id<T>(x: T) -> type = x
+        fn main() -> i64 = id(42)
     "#,
         42,
     );
@@ -616,9 +616,9 @@ fn e2e_p77_generic_identity() {
 fn e2e_p77_type_alias() {
     assert_exit_code(
         r#"
-        T Num = i64
-        F double(x: Num) -> Num = x * 2
-        F main() -> i64 = double(21)
+        type Num = i64
+        fn double(x: Num) -> Num = x * 2
+        fn main() -> i64 = double(21)
     "#,
         42,
     );
@@ -633,7 +633,7 @@ fn e2e_p77_const_declaration() {
     assert_exit_code(
         r#"
         C ANSWER: i64 = 42
-        F main() -> i64 = ANSWER
+        fn main() -> i64 = ANSWER
     "#,
         42,
     );
@@ -644,7 +644,7 @@ fn e2e_p77_const_in_expression() {
     assert_exit_code(
         r#"
         C BASE: i64 = 40
-        F main() -> i64 = BASE + 2
+        fn main() -> i64 = BASE + 2
     "#,
         42,
     );
@@ -659,7 +659,7 @@ fn e2e_p77_global_variable() {
     assert_exit_code(
         r#"
         G counter: i64 = 42
-        F main() -> i64 = 42
+        fn main() -> i64 = 42
     "#,
         42,
     );
@@ -673,7 +673,7 @@ fn e2e_p77_global_variable() {
 fn e2e_p77_loop_break() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 0
             L {
                 x = x + 1
@@ -690,7 +690,7 @@ fn e2e_p77_loop_break() {
 fn e2e_p77_for_loop_sum() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             sum := mut 0
             L i:0..10 {
                 sum = sum + i
@@ -706,7 +706,7 @@ fn e2e_p77_for_loop_sum() {
 fn e2e_p77_while_loop() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 0
             L x < 42 {
                 x = x + 1
@@ -722,7 +722,7 @@ fn e2e_p77_while_loop() {
 fn e2e_p77_loop_continue() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             sum := mut 0
             L i:0..10 {
                 I i % 2 == 0 { C }
@@ -743,13 +743,13 @@ fn e2e_p77_loop_continue() {
 fn e2e_p77_nested_if() {
     assert_exit_code(
         r#"
-        F classify(n: i64) -> i64 {
-            I n > 100 { R 3 }
-            I n > 50 { R 2 }
-            I n > 0 { R 1 }
-            R 0
+        fn classify(n: i64) -> i64 {
+            I n > 100 { return 3 }
+            I n > 50 { return 2 }
+            I n > 0 { return 1 }
+            return 0
         }
-        F main() -> i64 = classify(75)
+        fn main() -> i64 = classify(75)
     "#,
         2,
     );
@@ -759,11 +759,11 @@ fn e2e_p77_nested_if() {
 fn e2e_p77_if_else_expression() {
     assert_exit_code(
         r#"
-        F abs(x: i64) -> i64 {
-            I x < 0 { R 0 - x }
+        fn abs(x: i64) -> i64 {
+            I x < 0 { return 0 - x }
             x
         }
-        F main() -> i64 = abs(-42)
+        fn main() -> i64 = abs(-42)
     "#,
         42,
     );
@@ -777,15 +777,15 @@ fn e2e_p77_if_else_expression() {
 fn e2e_p77_mutual_recursion() {
     assert_exit_code(
         r#"
-        F is_even(n: i64) -> i64 {
-            I n == 0 { R 1 }
+        fn is_even(n: i64) -> i64 {
+            I n == 0 { return 1 }
             is_odd(n - 1)
         }
-        F is_odd(n: i64) -> i64 {
-            I n == 0 { R 0 }
+        fn is_odd(n: i64) -> i64 {
+            I n == 0 { return 0 }
             is_even(n - 1)
         }
-        F main() -> i64 = is_even(10)
+        fn main() -> i64 = is_even(10)
     "#,
         1,
     );
@@ -799,7 +799,7 @@ fn e2e_p77_mutual_recursion() {
 fn e2e_p77_complex_arithmetic() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             a := 10
             b := 3
             c := a * b + a / b - a % b
@@ -814,11 +814,11 @@ fn e2e_p77_complex_arithmetic() {
 fn e2e_p77_bool_logic() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             a := true
             b := false
-            I a && !b { R 42 }
-            R 0
+            I a && !b { return 42 }
+            return 0
         }
     "#,
         42,
@@ -829,10 +829,10 @@ fn e2e_p77_bool_logic() {
 fn e2e_p77_comparison_chain() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := 5
-            I x > 0 && x < 10 && x != 3 { R 42 }
-            R 0
+            I x > 0 && x < 10 && x != 3 { return 42 }
+            return 0
         }
     "#,
         42,
@@ -847,7 +847,7 @@ fn e2e_p77_comparison_chain() {
 fn e2e_p77_defer_basic() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := mut 0
             D { x = x + 1 }
             x = 41
@@ -866,10 +866,10 @@ fn e2e_p77_defer_basic() {
 fn e2e_p77_call_chain() {
     assert_exit_code(
         r#"
-        F step1(x: i64) -> i64 = x + 10
-        F step2(x: i64) -> i64 = step1(x) * 2
-        F step3(x: i64) -> i64 = step2(x) - 16
-        F main() -> i64 = step3(3)
+        fn step1(x: i64) -> i64 = x + 10
+        fn step2(x: i64) -> i64 = step1(x) * 2
+        fn step3(x: i64) -> i64 = step2(x) - 16
+        fn main() -> i64 = step3(3)
     "#,
         10,
     );
@@ -883,8 +883,8 @@ fn e2e_p77_call_chain() {
 fn e2e_p77_void_function() {
     assert_exit_code(
         r#"
-        F noop() -> i64 = 0
-        F main() -> i64 {
+        fn noop() -> i64 = 0
+        fn main() -> i64 {
             noop()
             42
         }
@@ -901,16 +901,16 @@ fn e2e_p77_void_function() {
 fn e2e_p77_nested_match() {
     assert_exit_code(
         r#"
-        F inner(y: i64) -> i64 {
-            M y {
+        fn inner(y: i64) -> i64 {
+            match y {
                 3 => 42,
                 _ => 29
             }
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             x := 2
             y := 3
-            M x {
+            match x {
                 1 => 19,
                 2 => inner(y),
                 _ => 99
@@ -927,15 +927,15 @@ fn e2e_p77_nested_match() {
 
 #[test]
 fn e2e_p77_expression_body_arithmetic() {
-    assert_exit_code("F main() -> i64 = 6 * 7", 42);
+    assert_exit_code("fn main() -> i64 = 6 * 7", 42);
 }
 
 #[test]
 fn e2e_p77_expression_body_call() {
     assert_exit_code(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F main() -> i64 = add(20, 22)
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn main() -> i64 = add(20, 22)
     "#,
         42,
     );
@@ -949,9 +949,9 @@ fn e2e_p77_expression_body_call() {
 fn e2e_p77_multiple_structs() {
     assert_exit_code(
         r#"
-        S Vec2 { x: i64, y: i64 }
-        F dot(a: Vec2, b: Vec2) -> i64 = a.x * b.x + a.y * b.y
-        F main() -> i64 {
+        struct Vec2 { x: i64, y: i64 }
+        fn dot(a: Vec2, b: Vec2) -> i64 = a.x * b.x + a.y * b.y
+        fn main() -> i64 {
             a := Vec2 { x: 3, y: 4 }
             b := Vec2 { x: 5, y: 6 }
             dot(a, b)
@@ -969,7 +969,7 @@ fn e2e_p77_multiple_structs() {
 fn e2e_p77_negative_literal() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := -10
             0 - x
         }
@@ -986,13 +986,13 @@ fn e2e_p77_negative_literal() {
 fn e2e_p77_chained_methods() {
     assert_exit_code(
         r#"
-        S Builder { value: i64 }
-        X Builder {
-            F new() -> Builder = Builder { value: 0 }
-            F add(self, n: i64) -> Builder = Builder { value: self.value + n }
-            F build(self) -> i64 = self.value
+        struct Builder { value: i64 }
+        impl Builder {
+            fn new() -> Builder = Builder { value: 0 }
+            fn add(self, n: i64) -> Builder = Builder { value: self.value + n }
+            fn build(self) -> i64 = self.value
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             b := Builder::new()
             b2 := b.add(20)
             b3 := b2.add(22)
@@ -1011,9 +1011,9 @@ fn e2e_p77_chained_methods() {
 fn e2e_p77_enum_four_variants() {
     assert_exit_code(
         r#"
-        E Dir { North, South, East, West }
-        F score(d: Dir) -> i64 {
-            M d {
+        enum Dir { North, South, East, West }
+        fn score(d: Dir) -> i64 {
+            match d {
                 North => 1,
                 South => 2,
                 East => 3,
@@ -1021,7 +1021,7 @@ fn e2e_p77_enum_four_variants() {
                 _ => 0
             }
         }
-        F main() -> i64 = score(West) * 10 + score(East)
+        fn main() -> i64 = score(West) * 10 + score(East)
     "#,
         43,
     );
@@ -1035,12 +1035,12 @@ fn e2e_p77_enum_four_variants() {
 fn e2e_p77_early_return() {
     assert_exit_code(
         r#"
-        F check(x: i64) -> i64 {
-            I x == 0 { R 99 }
-            I x == 1 { R 42 }
-            R 0
+        fn check(x: i64) -> i64 {
+            I x == 0 { return 99 }
+            I x == 1 { return 42 }
+            return 0
         }
-        F main() -> i64 = check(1)
+        fn main() -> i64 = check(1)
     "#,
         42,
     );
@@ -1055,9 +1055,9 @@ fn e2e_p77_extern_function() {
     assert_exit_code(
         r#"
         N "C" {
-            F puts(s: i64) -> i64
+            fn puts(s: i64) -> i64
         }
-        F main() -> i64 = 42
+        fn main() -> i64 = 42
     "#,
         42,
     );
@@ -1071,12 +1071,12 @@ fn e2e_p77_extern_function() {
 fn e2e_p77_fizzbuzz_count() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             count := mut 0
             L i:1..21 {
                 I i % 15 == 0 { count = count + 3 }
-                E I i % 3 == 0 { count = count + 1 }
-                E I i % 5 == 0 { count = count + 2 }
+                else I i % 3 == 0 { count = count + 1 }
+                else I i % 5 == 0 { count = count + 2 }
             }
             count
         }
@@ -1094,8 +1094,8 @@ fn e2e_p77_pair_sum() {
     // Tuple index access (.0, .1) may not be supported - use struct instead
     assert_exit_code(
         r#"
-        S Pair { a: i64, b: i64 }
-        F main() -> i64 {
+        struct Pair { a: i64, b: i64 }
+        fn main() -> i64 {
             p := Pair { a: 20, b: 22 }
             p.a + p.b
         }
@@ -1112,8 +1112,8 @@ fn e2e_p77_pair_sum() {
 fn e2e_p77_bool_and_short_circuit() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
-            I false && true { R 0 }
+        fn main() -> i64 {
+            I false && true { return 0 }
             42
         }
     "#,
@@ -1125,8 +1125,8 @@ fn e2e_p77_bool_and_short_circuit() {
 fn e2e_p77_bool_or_short_circuit() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
-            I true || false { R 42 }
+        fn main() -> i64 {
+            I true || false { return 42 }
             0
         }
     "#,
@@ -1142,11 +1142,11 @@ fn e2e_p77_bool_or_short_circuit() {
 fn e2e_p77_zero_division_guard() {
     assert_exit_code(
         r#"
-        F safe_div(a: i64, b: i64) -> i64 {
-            I b == 0 { R 0 }
+        fn safe_div(a: i64, b: i64) -> i64 {
+            I b == 0 { return 0 }
             a / b
         }
-        F main() -> i64 = safe_div(84, 2)
+        fn main() -> i64 = safe_div(84, 2)
     "#,
         42,
     );
@@ -1156,8 +1156,8 @@ fn e2e_p77_zero_division_guard() {
 fn e2e_p77_many_params() {
     assert_exit_code(
         r#"
-        F add5(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 = a + b + c + d + e
-        F main() -> i64 = add5(8, 8, 8, 9, 9)
+        fn add5(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 = a + b + c + d + e
+        fn main() -> i64 = add5(8, 8, 8, 9, 9)
     "#,
         42,
     );
@@ -1167,20 +1167,20 @@ fn e2e_p77_many_params() {
 fn e2e_p77_deeply_nested_if() {
     assert_exit_code(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := 42
             I x > 0 {
                 I x > 10 {
                     I x > 20 {
                         I x > 30 {
                             I x > 40 {
-                                R x
+                                return x
                             }
                         }
                     }
                 }
             }
-            R 0
+            return 0
         }
     "#,
         42,
@@ -1191,8 +1191,8 @@ fn e2e_p77_deeply_nested_if() {
 fn e2e_p77_unused_function_present() {
     assert_exit_code(
         r#"
-        F unused() -> i64 = 99
-        F main() -> i64 = 42
+        fn unused() -> i64 = 99
+        fn main() -> i64 = 42
     "#,
         42,
     );

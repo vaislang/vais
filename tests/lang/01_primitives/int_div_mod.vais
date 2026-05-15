@@ -1,0 +1,28 @@
+# CHECKS: integer division truncates toward zero, modulo follows truncation.
+fn main() -> i64 {
+    # positive / positive
+    I 7 / 2 != 3 { return 1 }
+    I 7 % 2 != 1 { return 2 }
+
+    # check truncation toward zero for negatives
+    I (0 - 7) / 2 != 0 - 3 { return 3 }
+    I (0 - 7) % 2 != 0 - 1 { return 4 }
+
+    # zero dividend
+    I 0 / 5 != 0 { return 5 }
+    I 0 % 5 != 0 { return 6 }
+
+    # exact division
+    I 100 / 4 != 25 { return 7 }
+    I 100 % 4 != 0 { return 8 }
+
+    # invariants: a == (a/b)*b + (a%b)
+    a: i64 := 17
+    b: i64 := 5
+    I (a / b) * b + (a % b) != a { return 9 }
+
+    # negative divisor
+    I 10 / (0 - 3) != 0 - 3 { return 10 }
+    I 10 % (0 - 3) != 1 { return 11 }
+    return 0
+}

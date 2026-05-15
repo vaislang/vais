@@ -1,0 +1,43 @@
+# A4-07 — Numeric widening (sub-target)
+# Empirical fixture metadata.
+
+[entry]
+id = "A4-07"
+classification = "Controlled (IR-internal lowering — default-i64 literal, reclass v17 per F-22; opt-in strict via VAIS_REJECT_A4_07=1)"
+surface = "i32 silently widened to i64 at function call site without explicit `as i64`"
+site = "unification.rs:346"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:346"
+master_plan_version = 17
+
+[v1_evidence]
+probe_summary = "take_i64(small) where small: i32"
+expected_per_design = "type-check rejection (no implicit widening; require `as i64`)"
+actual_observed = 42  # runtime correct
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified"
+notes = """
+Runtime is correct (42 == 42). The classification as A4 is design-driven,
+not runtime-driven. AI-native L-002 §"명확성 100%" forbids implicit
+behavior in user-facing semantics regardless of whether the runtime
+happens to be right.
+
+v2 environment-stable: yes — exit value is the literal source constant,
+not a memory-layout artifact.
+
+v2 contract requires 3 distinct probes for HARD v2 status. Pending probes:
+  - i8 → i64
+  - u32 → i64 (cross-sign widening — may already be rejected)
+  - return-position widening
+"""
+
+[migration]
+post_removal_expected = """
+Two outcomes possible per Master Plan v16 §A4-07 'design pending':
+  (a) full removal: vaisc check exits non-zero, requires explicit `as i64`
+  (b) promotion to Controlled: keep widening but document, add to
+      EXCLUDED_FEATURES.md §Controlled coercions.
+The decision is owed at Order Step 13 entry. This fixture survives in
+either case but with different positive/negative split.
+"""

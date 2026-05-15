@@ -1,13 +1,13 @@
 # Match with variable binding test
-F check(n: i64) -> i64 {
-    M n {
+fn check(n: i64) -> i64 {
+    match n {
         0 => 100,
         1 => 200,
         x => x * 10   # bind value to x and use it
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("check(0):")
     r := check(0)
     putchar(r / 100 + 48)  # print first digit

@@ -1,0 +1,17 @@
+# CHECKS: match on integer literal arms
+fn classify(n: i64) -> i64 {
+    match n {
+        0 => 0,
+        1 => 10,
+        2 => 20,
+        _ => 99,
+    }
+}
+
+fn main() -> i64 {
+    I classify(0) != 0 { return 1 }
+    I classify(1) != 10 { return 2 }
+    I classify(2) != 20 { return 3 }
+    I classify(7) != 99 { return 4 }
+    return 0
+}

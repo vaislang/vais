@@ -2,30 +2,30 @@
 # Syntax: {var_name: BaseType | predicate}
 
 # Positive integer type
-F test_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n * 2
+fn test_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n * 2
 }
 
 # Non-negative integer type
-F test_nonneg(n: {x: i64 | x >= 0}) -> i64 {
-    R n + 1
+fn test_nonneg(n: {x: i64 | x >= 0}) -> i64 {
+    return n + 1
 }
 
 # Bounded integer (array index type)
-F test_bounded(idx: {i: i64 | i >= 0}) -> i64 {
-    R idx
+fn test_bounded(idx: {i: i64 | i >= 0}) -> i64 {
+    return idx
 }
 
 # Function using positive type
-F double_positive(n: {x: i64 | x > 0}) -> {r: i64 | r > 0} {
-    R n * 2
+fn double_positive(n: {x: i64 | x > 0}) -> {r: i64 | r > 0} {
+    return n * 2
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := test_positive(5)
     result2 := test_nonneg(0)
     result3 := test_bounded(3)
 
     puts("Dependent types test passed!")
-    R 0
+    return 0
 }

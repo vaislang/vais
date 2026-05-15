@@ -1,0 +1,18 @@
+# LIVING_SPEC/01_keywords/yield_in_loop.vais
+# Key concept: `yield` expression inside `LF` loop. A.2 실측 (2026-04-21):
+# Parse ✓ / TC ✓ / Codegen ✓ / Run ✓.
+#
+# 한정: 현재 구현은 LANGUAGE_SPEC §"The yield Keyword" 의 simplified
+# semantics — yielded value 를 collect 하지 않고 함수는 trailing 값 반환.
+# 완전한 coroutine desugar 는 Phase 4.22 SCOPED.
+
+fn counter(max: i64) -> i64 {
+    L i: 0..max {
+        yield i
+    }
+    0
+}
+
+fn main() -> i64 {
+    counter(3)
+}

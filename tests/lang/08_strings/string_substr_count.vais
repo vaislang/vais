@@ -1,0 +1,24 @@
+# CHECKS: count occurrences of a 1-char substring in a string.
+fn count_char(p: i64, n: i64, c: i64) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..n {
+        I load_byte(p + i) == c { count = count + 1 }
+    }
+    count
+}
+
+fn main() -> i64 {
+    p1: i64 := str_to_ptr("mississippi")
+    n1: i64 := strlen(p1)
+    # 'i' = 105, 4 occurrences
+    I count_char(p1, n1, 105) != 4 { return 1 }
+    # 's' = 115, 4 occurrences
+    I count_char(p1, n1, 115) != 4 { return 2 }
+    # 'p' = 112, 2 occurrences
+    I count_char(p1, n1, 112) != 2 { return 3 }
+    # 'm' = 109, 1 occurrence
+    I count_char(p1, n1, 109) != 1 { return 4 }
+    # 'z' = 122, 0 occurrences
+    I count_char(p1, n1, 122) != 0 { return 5 }
+    return 0
+}

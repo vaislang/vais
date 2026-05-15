@@ -1,0 +1,19 @@
+# CHECKS: combinations of bool ops.
+fn main() -> i64 {
+    # implications via material conditional: A → B = !A || B
+    a: bool := true
+    b: bool := false
+    impl_ab: bool := !a || b
+    I (impl_ab as i64) != 0 { return 1 }
+
+    impl_ba: bool := !b || a
+    I (impl_ba as i64) != 1 { return 2 }
+
+    # XOR via (a || b) && !(a && b)
+    xor_ab: bool := (a || b) && !(a && b)
+    I (xor_ab as i64) != 1 { return 3 }
+    xor_aa: bool := (a || a) && !(a && a)
+    I (xor_aa as i64) != 0 { return 4 }
+
+    return 0
+}

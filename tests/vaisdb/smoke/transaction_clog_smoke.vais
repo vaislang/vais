@@ -1,0 +1,48 @@
+# CLOG (commit log) runtime smoke for vaisdb.
+#
+# Final transaction-layer smoke completing test_transaction.vais 6/6
+# describe-block coverage. CLOG was previously *indirect coverage* via the
+# Mutex unlock cascade dependency (v51 loop 46 fix); this fixture promotes
+# it to *direct coverage*.
+#
+# Surface exercised end-to-end:
+# - Clog.new with page-size + cache-pages parameters
+# - Clog.set_status (per-txn 2-bit status: InProgress / Committed / Aborted)
+# - Clog.get_status (round-trip preservation)
+# - Multi-page CLOG (txn IDs spanning multiple cache pages — exercises
+#   ensure_page_cached + page_to_cache_index path)
+#
+# Asserted by exit code only: 0 = all 5 sub-scenarios pass,
+# 1..5 = first failing scenario.
+#
+# History: enabled by clog Mutex unlock fix (master-plan v51, loop 46).
+# Without that fix, repeated set_status / get_status calls on the same
+# Clog deadlocked on recursive Mutex acquisition.
+
+use storage/txn/clog.{Clog, TxnStatus}
+
+fn main() -> i64 {
+    clog := mut Clog.new(4096u64, 4u32)
+
+    # Scenario 1: track InProgress status for txn 1.
+    clog.set_status(1u64, TxnStatus.InProgress)
+    I clog.get_status(1u64).to_u8() != TxnStatus.InProgress.to_u8() { return 1 }
+
+    # Scenario 2: state transition InProgress → Committed (idempotent set_status).
+    clog.set_status(1u64, TxnStatus.Committed)
+    I clog.get_status(1u64).to_u8() != TxnStatus.Committed.to_u8() { return 2 }
+
+    # Scenario 3: separate txn 2 marked Aborted (independent slot).
+    clog.set_status(2u64, TxnStatus.Aborted)
+    I clog.get_status(2u64).to_u8() != TxnStatus.Aborted.to_u8() { return 3 }
+
+    # Scenario 4: large txn ID spanning multiple cache pages.
+    clog.set_status(10000u64, TxnStatus.Committed)
+    I clog.get_status(10000u64).to_u8() != TxnStatus.Committed.to_u8() { return 4 }
+
+    # Scenario 5: adjacent large txn ID Aborted (page boundary check).
+    clog.set_status(10001u64, TxnStatus.Aborted)
+    I clog.get_status(10001u64).to_u8() != TxnStatus.Aborted.to_u8() { return 5 }
+
+    0
+}

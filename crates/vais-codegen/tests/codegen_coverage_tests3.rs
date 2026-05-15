@@ -1138,21 +1138,21 @@ fn test_target_all_targets_not_empty() {
 
 #[test]
 fn test_codegen_undefined_var_suggests_similar() {
-    let result = gen_result("F test() -> i64 { abc := 1\nR abd }");
+    let result = gen_result("fn test() -> i64 { abc := 1\nreturn abd }");
     // Should either succeed (if abd is somehow resolved) or give error with suggestion
-    // Some codegen modes may accept this.
-    if let Err(e) = result {
-        assert!(
+    match result {
+        Err(e) => assert!(
             e.contains("abd") || e.contains("abc"),
             "Error should reference var: {}",
             e
-        );
+        ),
+        Ok(_) => {} // Some codegen modes may accept this
     }
 }
 
 #[test]
 fn test_codegen_simple_arithmetic() {
-    let ir = gen_ok("F f() -> i64 = 1 + 2 + 3");
+    let ir = gen_ok("fn f() -> i64 = 1 + 2 + 3");
     assert!(ir.contains("add"));
 }
 
@@ -1160,10 +1160,10 @@ fn test_codegen_simple_arithmetic() {
 fn test_codegen_if_else_phi() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 0 {
                 x
-            } E {
+            } else {
                 0 - x
             }
         }
@@ -1176,14 +1176,14 @@ fn test_codegen_if_else_phi() {
 fn test_codegen_nested_if() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 10 {
                 I x > 20 {
                     3
-                } E {
+                } else {
                     2
                 }
-            } E {
+            } else {
                 1
             }
         }
@@ -1196,7 +1196,7 @@ fn test_codegen_nested_if() {
 fn test_codegen_while_loop() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             i := mut 0
             sum := mut 0
             L i < 10 {
@@ -1214,11 +1214,11 @@ fn test_codegen_while_loop() {
 fn test_codegen_struct_definition() {
     let ir = gen_ok(
         r#"
-        S Point {
+        struct Point {
             x: i64,
             y: i64
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             p := Point { x: 10, y: 20 }
             p.x
         }
@@ -1231,12 +1231,12 @@ fn test_codegen_struct_definition() {
 fn test_codegen_enum_definition() {
     let ir = gen_ok(
         r#"
-        E Color {
+        enum Color {
             Red,
             Green,
             Blue
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(!ir.is_empty());
@@ -1244,13 +1244,13 @@ fn test_codegen_enum_definition() {
 
 #[test]
 fn test_codegen_string_literal() {
-    let ir = gen_ok(r#"F test() -> str = "hello world""#);
+    let ir = gen_ok(r#"fn test() -> str = "hello world""#);
     assert!(ir.contains("hello world") || ir.contains("hello"));
 }
 
 #[test]
 fn test_codegen_bool_operations() {
-    let ir = gen_ok("F test() -> bool = true && false || true");
+    let ir = gen_ok("fn test() -> bool = true && false || true");
     assert!(!ir.is_empty());
 }
 
@@ -1258,7 +1258,7 @@ fn test_codegen_bool_operations() {
 fn test_codegen_comparison_operators() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 1 < 2
             b := 3 >= 3
             c := 4 <= 5
@@ -1276,9 +1276,9 @@ fn test_codegen_comparison_operators() {
 fn test_codegen_multiple_functions() {
     let ir = gen_ok(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F sub(a: i64, b: i64) -> i64 = a - b
-        F main() -> i64 = add(3, sub(5, 2))
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn sub(a: i64, b: i64) -> i64 = a - b
+        fn main() -> i64 = add(3, sub(5, 2))
     "#,
     );
     assert!(ir.contains("@add"));
@@ -1290,10 +1290,10 @@ fn test_codegen_multiple_functions() {
 fn test_codegen_recursive_function() {
     let ir = gen_ok(
         r#"
-        F fib(n: i64) -> i64 {
+        fn fib(n: i64) -> i64 {
             I n <= 1 {
                 n
-            } E {
+            } else {
                 fib(n - 1) + fib(n - 2)
             }
         }
@@ -1306,7 +1306,7 @@ fn test_codegen_recursive_function() {
 fn test_codegen_mutable_variable() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x = 42
             x
@@ -1318,13 +1318,13 @@ fn test_codegen_mutable_variable() {
 
 #[test]
 fn test_codegen_unary_negation() {
-    let ir = gen_ok("F test() -> i64 = 0 - 42");
+    let ir = gen_ok("fn test() -> i64 = 0 - 42");
     assert!(ir.contains("sub"));
 }
 
 #[test]
 fn test_codegen_float_literal() {
-    let ir = gen_ok("F test() -> f64 = 3.14");
+    let ir = gen_ok("fn test() -> f64 = 3.14");
     assert!(ir.contains("3.14") || ir.contains("double") || ir.contains("float"));
 }
 
@@ -1332,7 +1332,7 @@ fn test_codegen_float_literal() {
 fn test_codegen_float_arithmetic() {
     let ir = gen_ok(
         r#"
-        F test() -> f64 {
+        fn test() -> f64 {
             a := 1.5
             b := 2.5
             a + b
@@ -1344,14 +1344,14 @@ fn test_codegen_float_arithmetic() {
 
 #[test]
 fn test_codegen_type_cast() {
-    let result = gen_result("F test() -> f64 = 42 as f64");
+    let result = gen_result("fn test() -> f64 = 42 as f64");
     // May or may not be supported
     assert!(result.is_ok() || result.is_err());
 }
 
 #[test]
 fn test_codegen_empty_function() {
-    let ir = gen_ok("F test() -> i64 = 0");
+    let ir = gen_ok("fn test() -> i64 = 0");
     assert!(ir.contains("@test"));
     assert!(ir.contains("ret"));
 }
@@ -1360,7 +1360,7 @@ fn test_codegen_empty_function() {
 fn test_codegen_for_loop() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i: 0..10 {
                 sum = sum + i
@@ -1376,7 +1376,7 @@ fn test_codegen_for_loop() {
 fn test_codegen_break_continue() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             i := mut 0
             result := mut 0
             L i < 100 {
@@ -1401,7 +1401,7 @@ fn test_codegen_break_continue() {
 fn test_codegen_lambda_simple() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := |x: i64| -> i64 { x * 2 }
             f(21)
         }
@@ -1415,8 +1415,8 @@ fn test_codegen_lambda_simple() {
 fn test_codegen_match_integer() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1 => 10,
                 2 => 20,
                 _ => 0
@@ -1431,9 +1431,9 @@ fn test_codegen_match_integer() {
 fn test_codegen_nested_struct() {
     let ir = gen_ok(
         r#"
-        S Inner { val: i64 }
-        S Outer { inner: Inner, extra: i64 }
-        F test() -> i64 {
+        struct Inner { val: i64 }
+        struct Outer { inner: Inner, extra: i64 }
+        fn test() -> i64 {
             o := Outer { inner: Inner { val: 42 }, extra: 10 }
             o.inner.val
         }
@@ -1446,11 +1446,11 @@ fn test_codegen_nested_struct() {
 fn test_codegen_method_call() {
     let ir = gen_ok(
         r#"
-        S Counter { val: i64 }
-        X Counter {
-            F get(self) -> i64 = self.val
+        struct Counter { val: i64 }
+        impl Counter {
+            fn get(self) -> i64 = self.val
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Counter { val: 99 }
             c.get()
         }
@@ -1463,10 +1463,10 @@ fn test_codegen_method_call() {
 fn test_codegen_trait_definition() {
     let ir = gen_ok(
         r#"
-        W Printable {
-            F show(self) -> i64
+        trait Printable {
+            fn show(self) -> i64
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(!ir.is_empty());
@@ -1477,9 +1477,9 @@ fn test_codegen_extern_declaration() {
     let ir = gen_ok(
         r#"
         N {
-            F puts(s: str) -> i64
+            fn puts(s: str) -> i64
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#,
     );
     assert!(ir.contains("puts") || ir.contains("declare"));
@@ -1487,7 +1487,7 @@ fn test_codegen_extern_declaration() {
 
 #[test]
 fn test_codegen_modulo_operator() {
-    let ir = gen_ok("F test() -> i64 = 17 % 5");
+    let ir = gen_ok("fn test() -> i64 = 17 % 5");
     assert!(ir.contains("srem") || ir.contains("rem"));
 }
 
@@ -1495,10 +1495,10 @@ fn test_codegen_modulo_operator() {
 fn test_codegen_self_recursion_operator() {
     let ir = gen_ok(
         r#"
-        F factorial(n: i64) -> i64 {
+        fn factorial(n: i64) -> i64 {
             I n <= 1 {
                 1
-            } E {
+            } else {
                 n * @(n - 1)
             }
         }
@@ -1511,8 +1511,8 @@ fn test_codegen_self_recursion_operator() {
 fn test_codegen_pipe_operator() {
     let result = gen_result(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F test() -> i64 = 5 |> double
+        fn double(x: i64) -> i64 = x * 2
+        fn test() -> i64 = 5 |> double
     "#,
     );
     assert!(result.is_ok() || result.is_err());

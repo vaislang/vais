@@ -7,23 +7,23 @@
 # A-Z (0-25), a-z (26-51), 0-9 (52-61), + (62), / (63), = (padding)
 
 # Encode a 6-bit value to Base64 character (standard alphabet)
-F base64_encode_char(idx: i64) -> i64 {
+fn base64_encode_char(idx: i64) -> i64 {
     I idx < 26 {
         # A-Z (65-90)
         65 + idx
-    } E {
+    } enum {
         I idx < 52 {
             # a-z (97-122)
             97 + (idx - 26)
-        } E {
+        } enum {
             I idx < 62 {
                 # 0-9 (48-57)
                 48 + (idx - 52)
-            } E {
+            } enum {
                 I idx == 62 {
                     # +
                     43
-                } E {
+                } enum {
                     # / (idx == 63)
                     47
                 }
@@ -33,23 +33,23 @@ F base64_encode_char(idx: i64) -> i64 {
 }
 
 # Encode a 6-bit value to Base64URL character (URL-safe alphabet)
-F base64url_encode_char(idx: i64) -> i64 {
+fn base64url_encode_char(idx: i64) -> i64 {
     I idx < 26 {
         # A-Z (65-90)
         65 + idx
-    } E {
+    } enum {
         I idx < 52 {
             # a-z (97-122)
             97 + (idx - 26)
-        } E {
+        } enum {
             I idx < 62 {
                 # 0-9 (48-57)
                 48 + (idx - 52)
-            } E {
+            } enum {
                 I idx == 62 {
                     # - (minus)
                     45
-                } E {
+                } enum {
                     # _ (underscore, idx == 63)
                     95
                 }
@@ -60,61 +60,61 @@ F base64url_encode_char(idx: i64) -> i64 {
 
 # Decode a Base64 character to 6-bit value (standard alphabet)
 # Returns -1 for invalid characters
-F base64_decode_char(c: i64) -> i64 {
+fn base64_decode_char(c: i64) -> i64 {
     I c >= 65 {
         I c <= 90 {
             # A-Z -> 0-25
             c - 65
-        } E {
+        } enum {
             I c >= 97 {
                 I c <= 122 {
                     # a-z -> 26-51
                     c - 97 + 26
-                } E {
+                } enum {
                     -1
                 }
-            } E {
+            } enum {
                 I c >= 48 {
                     I c <= 57 {
                         # 0-9 -> 52-61
                         c - 48 + 52
-                    } E {
+                    } enum {
                         I c == 43 {
                             # + -> 62
                             62
-                        } E {
+                        } enum {
                             I c == 47 {
                                 # / -> 63
                                 63
-                            } E {
+                            } enum {
                                 -1
                             }
                         }
                     }
-                } E {
+                } enum {
                     -1
                 }
             }
         }
-    } E {
+    } enum {
         I c >= 48 {
             I c <= 57 {
                 # 0-9 -> 52-61
                 c - 48 + 52
-            } E {
+            } enum {
                 I c == 43 {
                     # + -> 62
                     62
-                } E {
+                } enum {
                     I c == 47 {
                         # / -> 63
                         63
-                    } E {
+                    } enum {
                         -1
                     }
                 }
             }
-        } E {
+        } enum {
             -1
         }
     }
@@ -122,61 +122,61 @@ F base64_decode_char(c: i64) -> i64 {
 
 # Decode a Base64URL character to 6-bit value (URL-safe alphabet)
 # Returns -1 for invalid characters
-F base64url_decode_char(c: i64) -> i64 {
+fn base64url_decode_char(c: i64) -> i64 {
     I c >= 65 {
         I c <= 90 {
             # A-Z -> 0-25
             c - 65
-        } E {
+        } enum {
             I c >= 97 {
                 I c <= 122 {
                     # a-z -> 26-51
                     c - 97 + 26
-                } E {
+                } enum {
                     -1
                 }
-            } E {
+            } enum {
                 I c >= 48 {
                     I c <= 57 {
                         # 0-9 -> 52-61
                         c - 48 + 52
-                    } E {
+                    } enum {
                         I c == 45 {
                             # - -> 62
                             62
-                        } E {
+                        } enum {
                             I c == 95 {
                                 # _ -> 63
                                 63
-                            } E {
+                            } enum {
                                 -1
                             }
                         }
                     }
-                } E {
+                } enum {
                     -1
                 }
             }
         }
-    } E {
+    } enum {
         I c >= 48 {
             I c <= 57 {
                 # 0-9 -> 52-61
                 c - 48 + 52
-            } E {
+            } enum {
                 I c == 45 {
                     # - -> 62
                     62
-                } E {
+                } enum {
                     I c == 95 {
                         # _ -> 63
                         63
-                    } E {
+                    } enum {
                         -1
                     }
                 }
             }
-        } E {
+        } enum {
             -1
         }
     }
@@ -190,7 +190,7 @@ F base64url_decode_char(c: i64) -> i64 {
 # data: pointer to input bytes
 # len: length of input data
 # Returns: pointer to null-terminated Base64 string (caller must free)
-F base64_encode(data: i64, len: i64) -> i64 {
+fn base64_encode(data: i64, len: i64) -> i64 {
     # Calculate output size: (len / 3) * 4, rounded up, plus null terminator
     out_len := ((len + 2) / 3) * 4
     out := malloc(out_len + 1)
@@ -236,7 +236,7 @@ F base64_encode(data: i64, len: i64) -> i64 {
         store_byte(out + out_idx + 3, 61)  # '='
 
         out_idx = out_idx + 4
-    } E {
+    } enum {
         I remaining == 2 {
             # 2 bytes remaining -> 3 chars + 1 padding
             b0 := load_byte(data + in_idx)
@@ -252,7 +252,7 @@ F base64_encode(data: i64, len: i64) -> i64 {
             store_byte(out + out_idx + 3, 61)  # '='
 
             out_idx = out_idx + 4
-        } E {
+        } enum {
             # remaining == 0, no action needed
             0
         }
@@ -272,7 +272,7 @@ F base64_encode(data: i64, len: i64) -> i64 {
 # encoded: pointer to Base64 string
 # encoded_len: length of Base64 string
 # Returns: pointer to struct {data_ptr: i64, data_len: i64} (caller must free both)
-F base64_decode(encoded: i64, encoded_len: i64) -> i64 {
+fn base64_decode(encoded: i64, encoded_len: i64) -> i64 {
     # Calculate maximum output size (may be less due to padding)
     max_out_len := (encoded_len / 4) * 3
     out := malloc(max_out_len)
@@ -303,7 +303,7 @@ F base64_decode(encoded: i64, encoded_len: i64) -> i64 {
             b0 := ((v0 << 2) | (v1 >> 4)) & 255
             store_byte(out + out_idx, b0)
             out_idx = out_idx + 1
-        } E {
+        } enum {
             I c3 == 61 {
                 # One padding char: 2 bytes of output
                 b0 := ((v0 << 2) | (v1 >> 4)) & 255
@@ -311,7 +311,7 @@ F base64_decode(encoded: i64, encoded_len: i64) -> i64 {
                 store_byte(out + out_idx, b0)
                 store_byte(out + out_idx + 1, b1)
                 out_idx = out_idx + 2
-            } E {
+            } enum {
                 # No padding: 3 bytes of output
                 b0 := ((v0 << 2) | (v1 >> 4)) & 255
                 b1 := ((v1 << 4) | (v2 >> 2)) & 255
@@ -339,7 +339,7 @@ F base64_decode(encoded: i64, encoded_len: i64) -> i64 {
 
 # Encode binary data to Base64URL string (RFC 4648 Section 5)
 # Uses - and _ instead of + and / for URL-safe encoding
-F base64url_encode(data: i64, len: i64) -> i64 {
+fn base64url_encode(data: i64, len: i64) -> i64 {
     # Calculate output size: (len / 3) * 4, rounded up, plus null terminator
     out_len := ((len + 2) / 3) * 4
     out := malloc(out_len + 1)
@@ -385,7 +385,7 @@ F base64url_encode(data: i64, len: i64) -> i64 {
         store_byte(out + out_idx + 3, 61)  # '='
 
         out_idx = out_idx + 4
-    } E {
+    } enum {
         I remaining == 2 {
             # 2 bytes remaining -> 3 chars + 1 padding
             b0 := load_byte(data + in_idx)
@@ -401,7 +401,7 @@ F base64url_encode(data: i64, len: i64) -> i64 {
             store_byte(out + out_idx + 3, 61)  # '='
 
             out_idx = out_idx + 4
-        } E {
+        } enum {
             # remaining == 0, no action needed
             0
         }
@@ -418,7 +418,7 @@ F base64url_encode(data: i64, len: i64) -> i64 {
 # ============================================================================
 
 # Decode Base64URL string to binary data
-F base64url_decode(encoded: i64, encoded_len: i64) -> i64 {
+fn base64url_decode(encoded: i64, encoded_len: i64) -> i64 {
     # Calculate maximum output size (may be less due to padding)
     max_out_len := (encoded_len / 4) * 3
     out := malloc(max_out_len)
@@ -449,7 +449,7 @@ F base64url_decode(encoded: i64, encoded_len: i64) -> i64 {
             b0 := ((v0 << 2) | (v1 >> 4)) & 255
             store_byte(out + out_idx, b0)
             out_idx = out_idx + 1
-        } E {
+        } enum {
             I c3 == 61 {
                 # One padding char: 2 bytes of output
                 b0 := ((v0 << 2) | (v1 >> 4)) & 255
@@ -457,7 +457,7 @@ F base64url_decode(encoded: i64, encoded_len: i64) -> i64 {
                 store_byte(out + out_idx, b0)
                 store_byte(out + out_idx + 1, b1)
                 out_idx = out_idx + 2
-            } E {
+            } enum {
                 # No padding: 3 bytes of output
                 b0 := ((v0 << 2) | (v1 >> 4)) & 255
                 b1 := ((v1 << 4) | (v2 >> 2)) & 255
@@ -483,15 +483,15 @@ F base64url_decode(encoded: i64, encoded_len: i64) -> i64 {
 # Extern declarations
 # ============================================================================
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F strlen(s: str) -> i64
-X F str_to_ptr(s: str) -> i64
-X F load_byte(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F store_i64(ptr: i64, val: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
-X F memset(dest: i64, val: i64, n: i64) -> i64
-X F print_i64(val: i64) -> i64
-X F print_str(s: str) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn strlen(s: str) -> i64
+impl fn str_to_ptr(s: str) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn store_i64(ptr: i64, val: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn memset(dest: i64, val: i64, n: i64) -> i64
+impl fn print_i64(val: i64) -> i64
+impl fn print_str(s: str) -> i64

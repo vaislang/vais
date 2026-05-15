@@ -7,7 +7,7 @@ use tempfile::TempDir;
 fn test_compute_file_hash() {
     let temp_dir = TempDir::new().unwrap();
     let file_path = temp_dir.path().join("test.vais");
-    fs::write(&file_path, "F main() {}").unwrap();
+    fs::write(&file_path, "fn main() {}").unwrap();
 
     let hash1 = compute_file_hash(&file_path).unwrap();
     assert_eq!(hash1.len(), 64); // SHA256 produces 64 hex chars
@@ -17,7 +17,7 @@ fn test_compute_file_hash() {
     assert_eq!(hash1, hash2);
 
     // Different content = different hash
-    fs::write(&file_path, "F main() { 1 }").unwrap();
+    fs::write(&file_path, "fn main() { 1 }").unwrap();
     let hash3 = compute_file_hash(&file_path).unwrap();
     assert_ne!(hash1, hash3);
 }
@@ -61,7 +61,7 @@ fn test_dirty_set_detection() {
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = temp_dir.path().join(".vais-cache");
     let source_file = temp_dir.path().join("main.vais");
-    fs::write(&source_file, "F main() {}").unwrap();
+    fs::write(&source_file, "fn main() {}").unwrap();
 
     let mut cache = IncrementalCache::new(cache_dir).unwrap();
     cache.set_compilation_options(CompilationOptions {
@@ -85,7 +85,7 @@ fn test_dirty_set_detection() {
     assert!(dirty.is_empty());
 
     // Modify file
-    fs::write(&source_file, "F main() { 1 }").unwrap();
+    fs::write(&source_file, "fn main() { 1 }").unwrap();
     let dirty = cache.detect_changes(&source_file).unwrap();
     assert!(!dirty.is_empty());
 }
@@ -93,12 +93,12 @@ fn test_dirty_set_detection() {
 #[test]
 fn test_definition_extractor_functions() {
     let source = r#"
-F add(a: i32, b: i32) -> i32 {
-    R a + b
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
 }
 
-F main() {
-    V x = add(1, 2)
+fn main() {
+    x := add(1, 2)
     print(x)
 }
 "#;
@@ -117,18 +117,18 @@ F main() {
 #[test]
 fn test_definition_extractor_structs() {
     let source = r#"
-S Point {
+struct Point {
     x: i32,
     y: i32,
 }
 
-S Line {
+struct Line {
     start: Point,
     end: Point,
 }
 
-F distance(p1: Point, p2: Point) -> f64 {
-    R 0.0
+fn distance(p1: Point, p2: Point) -> f64 {
+    return 0.0
 }
 "#;
     let mut extractor = DefinitionExtractor::new();
@@ -148,13 +148,13 @@ F distance(p1: Point, p2: Point) -> f64 {
 #[test]
 fn test_definition_extractor_enums() {
     let source = r#"
-E Color {
+enum Color {
     Red,
     Green,
     Blue,
 }
 
-E Shape {
+enum Shape {
     Circle { radius: f64 },
     Rectangle { width: f64, height: f64 },
 }
@@ -170,21 +170,21 @@ E Shape {
 #[test]
 fn test_function_change_detection() {
     let source1 = r#"
-F add(a: i32, b: i32) -> i32 {
-    R a + b
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
 }
 
-F main() {
-    V x = add(1, 2)
+fn main() {
+    x := add(1, 2)
 }
 "#;
     let source2 = r#"
-F add(a: i32, b: i32) -> i32 {
-    R a + b + 1
+fn add(a: i32, b: i32) -> i32 {
+    return a + b + 1
 }
 
-F main() {
-    V x = add(1, 2)
+fn main() {
+    x := add(1, 2)
 }
 "#;
     let mut extractor1 = DefinitionExtractor::new();
@@ -207,17 +207,17 @@ F main() {
 #[test]
 fn test_function_addition_detection() {
     let source1 = r#"
-F main() {
-    V x = 1
+fn main() {
+    x := 1
 }
 "#;
     let source2 = r#"
-F helper() -> i32 {
-    R 42
+fn helper() -> i32 {
+    return 42
 }
 
-F main() {
-    V x = 1
+fn main() {
+    x := 1
 }
 "#;
     let mut extractor1 = DefinitionExtractor::new();
@@ -236,17 +236,17 @@ F main() {
 #[test]
 fn test_function_removal_detection() {
     let source1 = r#"
-F helper() -> i32 {
-    R 42
+fn helper() -> i32 {
+    return 42
 }
 
-F main() {
-    V x = helper()
+fn main() {
+    x := helper()
 }
 "#;
     let source2 = r#"
-F main() {
-    V x = 1
+fn main() {
+    x := 1
 }
 "#;
     let mut extractor1 = DefinitionExtractor::new();
@@ -279,9 +279,9 @@ fn test_dirty_set_function_tracking() {
 
 #[test]
 fn test_content_hash() {
-    let content1 = "F main() { R 1 }";
-    let content2 = "F main() { R 2 }";
-    let content3 = "F main() { R 1 }"; // Same as content1
+    let content1 = "fn main() { return 1 }";
+    let content2 = "fn main() { return 2 }";
+    let content3 = "fn main() { return 1 }"; // Same as content1
 
     let hash1 = compute_content_hash(content1);
     let hash2 = compute_content_hash(content2);
@@ -299,17 +299,17 @@ fn test_fine_grained_change_detection() {
     let source_file = temp_dir.path().join("test.vais");
 
     // Initial source with multiple functions
-    let source1 = r#"F add(a: i32, b: i32) -> i32 {
-    R a + b
+    let source1 = r#"fn add(a: i32, b: i32) -> i32 {
+    return a + b
 }
 
-F sub(a: i32, b: i32) -> i32 {
-    R a - b
+fn sub(a: i32, b: i32) -> i32 {
+    return a - b
 }
 
-F main() {
-    V x = add(1, 2)
-    V y = sub(3, 1)
+fn main() {
+    x := add(1, 2)
+    y := sub(3, 1)
 }"#;
     fs::write(&source_file, source1).unwrap();
 
@@ -330,17 +330,17 @@ F main() {
     assert_eq!(meta.functions.len(), 3);
 
     // Modify only the add function
-    let source2 = r#"F add(a: i32, b: i32) -> i32 {
-    R a + b + 1
+    let source2 = r#"fn add(a: i32, b: i32) -> i32 {
+    return a + b + 1
 }
 
-F sub(a: i32, b: i32) -> i32 {
-    R a - b
+fn sub(a: i32, b: i32) -> i32 {
+    return a - b
 }
 
-F main() {
-    V x = add(1, 2)
-    V y = sub(3, 1)
+fn main() {
+    x := add(1, 2)
+    y := sub(3, 1)
 }"#;
     fs::write(&source_file, source2).unwrap();
 
@@ -362,7 +362,7 @@ fn test_cache_miss_reasons() {
     let file1 = temp_dir.path().join("file1.vais");
     let file2 = temp_dir.path().join("file2.vais");
 
-    fs::write(&file1, "F main() {}").unwrap();
+    fs::write(&file1, "fn main() {}").unwrap();
 
     let mut cache = IncrementalCache::new(cache_dir).unwrap();
     cache.set_compilation_options(CompilationOptions {
@@ -387,7 +387,7 @@ fn test_cache_miss_reasons() {
     assert!(stats.cache_hits > 0);
 
     // Modify file - hash changed
-    fs::write(&file1, "F main() { R 1 }").unwrap();
+    fs::write(&file1, "fn main() { return 1 }").unwrap();
     let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
     let reasons = stats.miss_reasons.get(&file1.canonicalize().unwrap());
     assert!(reasons.is_some());
@@ -396,7 +396,7 @@ fn test_cache_miss_reasons() {
         .contains(&CacheMissReason::ContentHashChanged));
 
     // Create new file and add dependency
-    fs::write(&file2, "F helper() {}").unwrap();
+    fs::write(&file2, "fn helper() {}").unwrap();
     cache.update_file(&file1).unwrap();
     cache.update_file(&file2).unwrap();
     cache
@@ -408,7 +408,7 @@ fn test_cache_miss_reasons() {
     cache.persist().unwrap();
 
     // Modify dependency
-    fs::write(&file2, "F helper() { R 2 }").unwrap();
+    fs::write(&file2, "fn helper() { return 2 }").unwrap();
     let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
 
     // file2 should have ContentHashChanged
@@ -427,9 +427,9 @@ fn test_incremental_stats_hit_rate() {
     let file2 = temp_dir.path().join("file2.vais");
     let file3 = temp_dir.path().join("file3.vais");
 
-    fs::write(&file1, "F main() {}").unwrap();
-    fs::write(&file2, "F helper() {}").unwrap();
-    fs::write(&file3, "F util() {}").unwrap();
+    fs::write(&file1, "fn main() {}").unwrap();
+    fs::write(&file2, "fn helper() {}").unwrap();
+    fs::write(&file3, "fn util() {}").unwrap();
 
     let mut cache = IncrementalCache::new(cache_dir).unwrap();
     cache.set_compilation_options(CompilationOptions {
@@ -455,7 +455,7 @@ fn test_incremental_stats_hit_rate() {
     assert_eq!(stats.cache_misses, 0);
 
     // Modify one file
-    fs::write(&file2, "F helper() { R 1 }").unwrap();
+    fs::write(&file2, "fn helper() { return 1 }").unwrap();
     let (_dirty, stats) = cache.detect_changes_with_stats(&file1).unwrap();
 
     // Hit rate should be 66.67% (2 hits, 1 miss)
@@ -476,9 +476,9 @@ fn test_warm_cache() {
     fs::create_dir(&subdir).unwrap();
     let file3 = subdir.join("file3.vais");
 
-    fs::write(&file1, "F main() {}").unwrap();
-    fs::write(&file2, "F helper() {}").unwrap();
-    fs::write(&file3, "F util() {}").unwrap();
+    fs::write(&file1, "fn main() {}").unwrap();
+    fs::write(&file2, "fn helper() {}").unwrap();
+    fs::write(&file3, "fn util() {}").unwrap();
 
     let mut cache = IncrementalCache::new(cache_dir).unwrap();
 
@@ -494,7 +494,7 @@ fn test_warm_cache() {
     assert_eq!(warmed, 0);
 
     // Modify one file
-    fs::write(&file2, "F helper() { R 1 }").unwrap();
+    fs::write(&file2, "fn helper() { return 1 }").unwrap();
 
     // Warm again - should update 1 file
     let warmed = cache.warm_cache(&project_dir).unwrap();
@@ -508,8 +508,8 @@ fn test_signature_based_skip() {
     let source_file = temp_dir.path().join("test.vais");
 
     // Initial source with a function
-    let source1 = r#"F add(a: i32, b: i32) -> i32 {
-    R a + b
+    let source1 = r#"fn add(a: i32, b: i32) -> i32 {
+    return a + b
 }"#;
     fs::write(&source_file, source1).unwrap();
 
@@ -530,9 +530,9 @@ fn test_signature_based_skip() {
     let initial_hash = initial_func_meta.hash.clone();
 
     // Modify only the function body (signature unchanged)
-    let source2 = r#"F add(a: i32, b: i32) -> i32 {
-    V result = a + b
-    R result
+    let source2 = r#"fn add(a: i32, b: i32) -> i32 {
+    result := a + b
+    return result
 }"#;
     fs::write(&source_file, source2).unwrap();
 

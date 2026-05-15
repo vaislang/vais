@@ -40,6 +40,27 @@ pub(crate) fn format_llvm_float(n: f64) -> String {
     }
 }
 
+/// Format an f64 value as a valid LLVM IR floating-point constant,
+/// choosing between decimal and the IEEE-754 hex bit-pattern form based
+/// on the target LLVM type (`float` or `double`). For `float`, LLVM
+/// only accepts decimals that round-trip exactly through single
+/// precision (e.g. `1.0e-8` fails); emit the double-bit hex form,
+/// which LLVM interprets as "round this double to float" and is always
+/// accepted.
+#[allow(dead_code)]
+pub(crate) fn format_llvm_float_typed(n: f64, target_llvm: &str) -> String {
+    if target_llvm == "float" && n.is_finite() {
+        // Quick check: does the value round-trip through f32 → f64?
+        let as_f32 = n as f32;
+        let round_tripped = as_f32 as f64;
+        if round_tripped != n {
+            let bits = n.to_bits();
+            return format!("0x{:016X}", bits);
+        }
+    }
+    format_llvm_float(n)
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct LoopLabels {
     pub continue_label: String,
@@ -48,6 +69,13 @@ pub(crate) struct LoopLabels {
     /// are loop-internal and must be freed on break/continue to prevent leaks
     /// of mid-iteration concat/push_str buffers (Phase 191 #6).
     pub scope_str_depth: usize,
+    /// Phase 0 bug C1: when `B <value>` (break-with-value) is used, this
+    /// holds `(slot_name, llvm_ty)` for an alloca emitted in the function's
+    /// entry block. `generate_break_stmt` stores the break value into this
+    /// slot before branching. After the loop end label, the loop expression
+    /// loads from this slot to yield the break value. None for plain `B`
+    /// loops where the loop is used in statement position.
+    pub break_value_slot: Option<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -175,6 +203,11 @@ pub(crate) struct LocalVar {
     /// load before passing to drop/shallow-free. False for direct struct allocas
     /// (`%Type*`) where the alloca IS the struct pointer.
     pub is_double_ptr: bool,
+    /// For array-literal locals (`x := [a, b, c]`), the compile-time known
+    /// element count. Used by `&x` coercion to build a `{ i8*, i64 }` slice
+    /// fat pointer when the target parameter expects `&[T]`.
+    /// `None` for non-array locals (default).
+    pub array_length: Option<u64>,
 }
 
 impl LocalVar {
@@ -185,6 +218,7 @@ impl LocalVar {
             kind: LocalVarKind::Param,
             llvm_name: llvm_name.into(),
             is_double_ptr: false,
+            array_length: None,
         }
     }
 
@@ -195,6 +229,7 @@ impl LocalVar {
             kind: LocalVarKind::Ssa,
             llvm_name: llvm_name.into(),
             is_double_ptr: false,
+            array_length: None,
         }
     }
 
@@ -205,6 +240,7 @@ impl LocalVar {
             kind: LocalVarKind::Alloca,
             llvm_name: llvm_name.into(),
             is_double_ptr: false,
+            array_length: None,
         }
     }
 
@@ -215,7 +251,15 @@ impl LocalVar {
             kind: LocalVarKind::Alloca,
             llvm_name: llvm_name.into(),
             is_double_ptr: true,
+            array_length: None,
         }
+    }
+
+    /// Tag a LocalVar with a compile-time known array length (e.g., from an
+    /// `[a, b, c]` literal init) so `&x` can build a slice fat pointer.
+    pub fn with_array_length(mut self, length: u64) -> Self {
+        self.array_length = Some(length);
+        self
     }
 
     /// Returns true if this is a function parameter

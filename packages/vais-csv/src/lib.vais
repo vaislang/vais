@@ -14,7 +14,7 @@ C CSV_BUFFER_SIZE: i64 = 8192
 # ============================================================================
 
 # CsvRow - represents a parsed CSV row
-S CsvRow {
+struct CsvRow {
     fields: i64,      # Array of field string pointers (i64*)
     count: i64,       # Number of fields in this row
     capacity: i64     # Allocated capacity
@@ -25,7 +25,7 @@ S CsvRow {
 # ============================================================================
 
 # Create a new empty CsvRow
-F csv_row_new() -> i64 {
+fn csv_row_new() -> i64 {
     row := malloc(24)  # sizeof(CsvRow) = 3 * 8
     capacity := MAX_FIELDS
     fields := malloc(capacity * 8)
@@ -37,27 +37,27 @@ F csv_row_new() -> i64 {
 }
 
 # Get field at index from row
-F csv_row_get(row: i64, idx: i64) -> i64 {
-    I idx < 0 { R 0 }
+fn csv_row_get(row: i64, idx: i64) -> i64 {
+    I idx < 0 { return 0 }
 
     count := load_i64(row + 8)
-    I idx >= count { R 0 }
+    I idx >= count { return 0 }
 
     fields := load_i64(row)
     load_i64(fields + (idx * 8))
 }
 
 # Get number of fields in row
-F csv_row_count(row: i64) -> i64 {
+fn csv_row_count(row: i64) -> i64 {
     load_i64(row + 8)
 }
 
 # Add a field to the row
-F csv_row_add(row: i64, field: i64) -> i64 {
+fn csv_row_add(row: i64, field: i64) -> i64 {
     count := load_i64(row + 8)
     capacity := load_i64(row + 16)
 
-    I count >= capacity { R 0 }  # Row full
+    I count >= capacity { return 0 }  # Row full
 
     fields := load_i64(row)
     store_i64(fields + (count * 8), field)
@@ -66,7 +66,7 @@ F csv_row_add(row: i64, field: i64) -> i64 {
 }
 
 # Free all memory allocated for row
-F csv_row_free(row: i64) -> i64 {
+fn csv_row_free(row: i64) -> i64 {
     count := load_i64(row + 8)
     fields := load_i64(row)
 
@@ -96,12 +96,12 @@ F csv_row_free(row: i64) -> i64 {
 
 # Parse a CSV line into a CsvRow
 # Handles quoted fields with embedded commas and quotes
-F csv_parse_line(line: i64) -> i64 {
+fn csv_parse_line(line: i64) -> i64 {
     row := csv_row_new()
-    I line == 0 { R row }
+    I line == 0 { return row }
 
     len := strlen(line)
-    I len == 0 { R row }
+    I len == 0 { return row }
 
     field_buf := malloc(MAX_FIELD_LEN)
     field_pos := mut 0
@@ -118,7 +118,7 @@ F csv_parse_line(line: i64) -> i64 {
                 memcpy(field_str, field_buf, field_pos)
                 store_byte(field_str + field_pos, 0)
                 csv_row_add(row, field_str)
-            } E {
+            } enum {
                 # Empty field at end
                 I i > 0 {
                     prev := load_byte(line + (i - 1))
@@ -145,13 +145,13 @@ F csv_parse_line(line: i64) -> i64 {
                     }
                     i = i + 2  # Skip both quotes
                     C
-                } E {
+                } enum {
                     # End of quoted field
                     in_quotes = 0
                     i = i + 1
                     C
                 }
-            } E {
+            } enum {
                 # Start of quoted field
                 in_quotes = 1
                 i = i + 1
@@ -193,18 +193,18 @@ F csv_parse_line(line: i64) -> i64 {
 
 # Check if a field needs quoting
 # Returns 1 if field contains comma, quote, newline, or carriage return
-F csv_needs_quoting(field: i64) -> i64 {
-    I field == 0 { R 0 }
+fn csv_needs_quoting(field: i64) -> i64 {
+    I field == 0 { return 0 }
 
     i := mut 0
     L 1 {
         c := load_byte(field + i)
         I c == 0 { B }
 
-        I c == 44 { R 1 }  # Comma ','
-        I c == 34 { R 1 }  # Quote '"'
-        I c == 10 { R 1 }  # Newline '\n'
-        I c == 13 { R 1 }  # Carriage return '\r'
+        I c == 44 { return 1 }  # Comma ','
+        I c == 34 { return 1 }  # Quote '"'
+        I c == 10 { return 1 }  # Newline '\n'
+        I c == 13 { return 1 }  # Carriage return '\r'
 
         i = i + 1
     }
@@ -214,7 +214,7 @@ F csv_needs_quoting(field: i64) -> i64 {
 
 # Write field to buffer with proper escaping
 # Returns new buffer position
-F csv_write_field(buf: i64, pos: i64, field: i64) -> i64 {
+fn csv_write_field(buf: i64, pos: i64, field: i64) -> i64 {
     p := mut pos
 
     needs_quote := csv_needs_quoting(field)
@@ -237,7 +237,7 @@ F csv_write_field(buf: i64, pos: i64, field: i64) -> i64 {
                 p = p + 1
                 store_byte(buf + p, 34)
                 p = p + 1
-            } E {
+            } enum {
                 store_byte(buf + p, c)
                 p = p + 1
             }
@@ -256,12 +256,12 @@ F csv_write_field(buf: i64, pos: i64, field: i64) -> i64 {
 
 # Generate a CSV line from a CsvRow
 # Returns allocated string (caller must free)
-F csv_row_to_string(row: i64) -> i64 {
+fn csv_row_to_string(row: i64) -> i64 {
     count := csv_row_count(row)
     I count == 0 {
         buf := malloc(1)
         store_byte(buf, 0)
-        R buf
+        return buf
     }
 
     buf := malloc(CSV_BUFFER_SIZE)
@@ -289,11 +289,11 @@ F csv_row_to_string(row: i64) -> i64 {
 # fields: array of string pointers (i64*)
 # count: number of fields
 # Returns allocated CSV line string (caller must free)
-F csv_write_row(fields: i64, count: i64) -> i64 {
+fn csv_write_row(fields: i64, count: i64) -> i64 {
     I count == 0 {
         buf := malloc(1)
         store_byte(buf, 0)
-        R buf
+        return buf
     }
 
     buf := malloc(CSV_BUFFER_SIZE)
@@ -322,20 +322,20 @@ F csv_write_row(fields: i64, count: i64) -> i64 {
 # ============================================================================
 
 # Parse CSV header (first line) and return field names as CsvRow
-F csv_parse_header(line: i64) -> i64 {
+fn csv_parse_header(line: i64) -> i64 {
     csv_parse_line(line)
 }
 
 # Find index of field by name in header row
 # Returns -1 if not found
-F csv_header_find(header: i64, name: i64) -> i64 {
+fn csv_header_find(header: i64, name: i64) -> i64 {
     count := csv_row_count(header)
 
     i := mut 0
     L i < count {
         field := csv_row_get(header, i)
         I str_equal(field, name) {
-            R i
+            return i
         }
         i = i + 1
     }
@@ -348,17 +348,17 @@ F csv_header_find(header: i64, name: i64) -> i64 {
 # ============================================================================
 
 # Compare two strings for equality
-F str_equal(a: i64, b: i64) -> i64 {
-    I a == 0 { I b == 0 { R 1 } E { R 0 } }
-    I b == 0 { R 0 }
+fn str_equal(a: i64, b: i64) -> i64 {
+    I a == 0 { I b == 0 { return 1 } enum { return 0 } }
+    I b == 0 { return 0 }
 
     i := mut 0
     L 1 {
         ca := load_byte(a + i)
         cb := load_byte(b + i)
 
-        I ca != cb { R 0 }
-        I ca == 0 { R 1 }
+        I ca != cb { return 0 }
+        I ca == 0 { return 1 }
 
         i = i + 1
     }
@@ -367,11 +367,11 @@ F str_equal(a: i64, b: i64) -> i64 {
 }
 
 # Copy field value into new string
-F csv_field_copy(field: i64) -> i64 {
+fn csv_field_copy(field: i64) -> i64 {
     I field == 0 {
         buf := malloc(1)
         store_byte(buf, 0)
-        R buf
+        return buf
     }
 
     len := strlen(field)
@@ -383,7 +383,7 @@ F csv_field_copy(field: i64) -> i64 {
 
 # Create a new row from array of strings
 # Makes copies of all strings
-F csv_row_from_strings(strings: i64, count: i64) -> i64 {
+fn csv_row_from_strings(strings: i64, count: i64) -> i64 {
     row := csv_row_new()
 
     i := mut 0
@@ -401,11 +401,11 @@ F csv_row_from_strings(strings: i64, count: i64) -> i64 {
 # Extern Declarations
 # ============================================================================
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F strlen(s: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
-X F load_byte(ptr: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F store_i64(ptr: i64, val: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn store_i64(ptr: i64, val: i64) -> i64

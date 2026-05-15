@@ -18,7 +18,7 @@ fn test_diagnostic_unexpected_token() {
         span: 5..8,
         expected: "identifier".to_string(),
     };
-    let source = "F 42 test";
+    let source = "fn 42 test";
     let diag = parse_error_to_diagnostic(&err, source);
 
     assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));
@@ -48,7 +48,7 @@ fn test_diagnostic_unexpected_token_on_second_line() {
         span: 10..12,
         expected: "expression".to_string(),
     };
-    let source = "F test()\n 99 error";
+    let source = "fn test()\n 99 error";
     let diag = parse_error_to_diagnostic(&err, source);
 
     assert_eq!(diag.range.start.line, 1);
@@ -61,7 +61,7 @@ fn test_diagnostic_unexpected_token_multiline() {
         span: 20..21,
         expected: "closing brace".to_string(),
     };
-    let source = "F test() -> i64 {\n  ,\n}";
+    let source = "fn test() -> i64 {\n  ,\n}";
     let diag = parse_error_to_diagnostic(&err, source);
 
     assert!(diag.range.start.line >= 1);
@@ -74,7 +74,7 @@ fn test_diagnostic_unexpected_token_multiline() {
 #[test]
 fn test_diagnostic_unexpected_eof() {
     let err = ParseError::UnexpectedEof { span: 10..10 };
-    let source = "F test() -";
+    let source = "fn test() -";
     let diag = parse_error_to_diagnostic(&err, source);
 
     assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));
@@ -164,7 +164,7 @@ fn test_diagnostic_position_unicode() {
         span: 10..11,
         expected: "test".to_string(),
     };
-    let source = "F test() 1";
+    let source = "fn test() 1";
     let diag = parse_error_to_diagnostic(&err, source);
 
     assert_eq!(diag.range.start.line, 0);
@@ -191,7 +191,7 @@ fn test_diagnostic_offset_at_exact_newline() {
 
 #[test]
 fn test_diagnostic_from_real_parse_error() {
-    let source = "F test( { }";
+    let source = "fn test( { }";
     if let Err(err) = vais_parser::parse(source) {
         let diag = parse_error_to_diagnostic(&err, source);
         assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));
@@ -201,7 +201,7 @@ fn test_diagnostic_from_real_parse_error() {
 
 #[test]
 fn test_diagnostic_from_incomplete_function() {
-    let source = "F test(x: i64";
+    let source = "fn test(x: i64";
     if let Err(err) = vais_parser::parse(source) {
         let diag = parse_error_to_diagnostic(&err, source);
         assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));
@@ -210,7 +210,7 @@ fn test_diagnostic_from_incomplete_function() {
 
 #[test]
 fn test_diagnostic_from_missing_body() {
-    let source = "F test() -> i64";
+    let source = "fn test() -> i64";
     if let Err(err) = vais_parser::parse(source) {
         let diag = parse_error_to_diagnostic(&err, source);
         assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));

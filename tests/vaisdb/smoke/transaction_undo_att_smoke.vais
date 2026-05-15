@@ -1,0 +1,81 @@
+# Transaction Undo Entry + Active Transaction Table runtime smoke for vaisdb.
+#
+# Pairs with transaction_mvcc_smoke (basic invariants),
+# transaction_visibility_smoke (Case 1/2/3),
+# transaction_cmd_isolation_smoke (cmd_id + isolation), and
+# transaction_conflict_deadlock_smoke (concurrency control). This fixture
+# covers the *transaction state management* layer:
+# - UndoEntry: serializable undo log entries (new_insert / new_update with
+#   old_data carry, used by Stage 3 rollback).
+# - ActiveTransactionTable: register/get/set_state for in-flight txns (used
+#   by manager.vais begin / commit / abort to track txn lifecycle).
+#
+# Surface exercised end-to-end:
+# - UndoEntry.new_insert (constructor + field invariants)
+# - UndoEntry.new_update (Vec<u8> old_data carry, data_len consistency)
+# - ActiveTransactionTable.new + register + get (HashMap-backed Vec layout)
+# - ATT state transitions (Active → Committing matches)
+#
+# Asserted by exit code only: 0 = all 9 sub-scenarios pass,
+# 1..9 = first failing scenario.
+#
+# History: enabled by clog Mutex unlock (v51) + 5 file cascade fix (v54).
+# ATT internal `# guard.drop() # disabled for dev compiler` annotations
+# (att.vais 13 dead) cleaned in v52, ensuring lock-free no-op semantics
+# match dev compiler reality.
+
+use storage/txn/att.{ActiveTransactionTable, TxnState}
+use storage/txn/snapshot.{IsolationLevel}
+use storage/txn/undo_entry.{UndoEntry}
+use storage/constants.{UNDO_INSERT, UNDO_UPDATE}
+
+fn main() -> i64 {
+    # ─── UndoEntry ──────────────────────────────────────────────────────
+
+    # Scenario 1-5: new_insert preserves all fields.
+    entry_a := mut UndoEntry.new_insert(100u64, 0u64, 1u8, 10u32, 5u16)
+    I entry_a.txn_id != 100u64 { return 1 }
+    I entry_a.entry_type != UNDO_INSERT { return 2 }
+    I entry_a.file_id != 1u8 { return 3 }
+    I entry_a.page_id != 10u32 { return 4 }
+    I entry_a.slot_id != 5u16 { return 5 }
+
+    # Scenario 6-7: new_update carries Vec<u8> old_data with correct length.
+    old_data := mut Vec.with_capacity(8)
+    old_data.push(1u8)
+    old_data.push(2u8)
+    old_data.push(3u8)
+    old_data.push(4u8)
+    old_data.push(5u8)
+    old_data.push(6u8)
+    old_data.push(7u8)
+    old_data.push(8u8)
+    entry_b := mut UndoEntry.new_update(100u64, 0u64, 1u8, 10u32, 5u16, old_data)
+    I entry_b.entry_type != UNDO_UPDATE { return 6 }
+    I entry_b.data_len != 8u16 { return 7 }
+
+    # ─── ActiveTransactionTable ─────────────────────────────────────────
+
+    att := mut ActiveTransactionTable.new()
+
+    # Scenario 8: register + get returns the registered txn.
+    att.register(100u64, IsolationLevel.SnapshotIsolation)
+    e_a_found := match att.get(100u64) {
+        Some(e) => I e.txn_id == 100u64 { 1 } else { 0 },
+        None => 0,
+    }
+    I e_a_found != 1 { return 8 }
+
+    # Scenario 9: set_state transitions Active → Committing.
+    att.set_state(100u64, TxnState.Committing)
+    e_b_committing := match att.get(100u64) {
+        Some(e) => match e.state {
+            TxnState.Committing => 1,
+            _ => 0,
+        },
+        None => 0,
+    }
+    I e_b_committing != 1 { return 9 }
+
+    0
+}

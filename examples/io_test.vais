@@ -1,5 +1,5 @@
 # IO module test - simplified version using builtins directly
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== IO Module Test (simplified) ===")
     putchar(10)
 

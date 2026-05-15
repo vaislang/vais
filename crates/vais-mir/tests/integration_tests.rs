@@ -28,8 +28,8 @@ fn test_lower_simple_function_call() {
     // Regular function call (non-recursive): F add(a: i64, b: i64) -> i64 = a + b
     // F main() -> i64 = add(3, 4)
     let source = r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F main() -> i64 = add(3, 4)
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn main() -> i64 = add(3, 4)
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
@@ -48,8 +48,8 @@ fn test_lower_chained_function_calls() {
     // Multiple function calls in chain: F inc(x: i64) -> i64 = x + 1
     // F main() -> i64 = inc(inc(5))
     let source = r#"
-        F inc(x: i64) -> i64 = x + 1
-        F main() -> i64 = inc(inc(5))
+        fn inc(x: i64) -> i64 = x + 1
+        fn main() -> i64 = inc(inc(5))
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
@@ -65,8 +65,8 @@ fn test_lower_chained_function_calls() {
 fn test_lower_multi_arg_function_call() {
     // Function with multiple arguments
     let source = r#"
-        F sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c
-        F main() -> i64 = sum3(1, 2, 3)
+        fn sum3(a: i64, b: i64, c: i64) -> i64 = a + b + c
+        fn main() -> i64 = sum3(1, 2, 3)
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
@@ -82,7 +82,7 @@ fn test_lower_multi_arg_function_call() {
 #[test]
 fn test_lower_f64_function() {
     // f64 type function: F fadd(x: f64, y: f64) -> f64 = x + y
-    let source = "F fadd(x: f64, y: f64) -> f64 = x + y";
+    let source = "fn fadd(x: f64, y: f64) -> f64 = x + y";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -96,7 +96,7 @@ fn test_lower_f64_function() {
 #[test]
 fn test_lower_bool_function() {
     // bool type function: F is_pos(x: i64) -> bool = x > 0
-    let source = "F is_pos(x: i64) -> bool = x > 0";
+    let source = "fn is_pos(x: i64) -> bool = x > 0";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -107,7 +107,7 @@ fn test_lower_bool_function() {
 #[test]
 fn test_lower_mixed_types() {
     // Function with mixed parameter types
-    let source = "F compute(x: i64, y: f64, flag: bool) -> i64 = I flag { x } E { 0 }";
+    let source = "fn compute(x: i64, y: f64, flag: bool) -> i64 = I flag { x } else { 0 }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -121,7 +121,7 @@ fn test_lower_mixed_types() {
 #[test]
 fn test_lower_f32_function() {
     // f32 type function
-    let source = "F fmul(a: f32, b: f32) -> f32 = a * b";
+    let source = "fn fmul(a: f32, b: f32) -> f32 = a * b";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -132,7 +132,7 @@ fn test_lower_f32_function() {
 #[test]
 fn test_lower_i32_function() {
     // i32 type function
-    let source = "F sub32(a: i32, b: i32) -> i32 = a - b";
+    let source = "fn sub32(a: i32, b: i32) -> i32 = a - b";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -147,8 +147,8 @@ fn test_lower_i32_function() {
 #[test]
 fn test_lower_nested_if_else() {
     // Classify function with nested if/else:
-    // F classify(x: i64) -> i64 = I x > 0 { 1 } E I x < 0 { -1 } E { 0 }
-    let source = "F classify(x: i64) -> i64 = I x > 0 { 1 } E I x < 0 { 0 - 1 } E { 0 }";
+    // F classify(x: i64) -> i64 = I x > 0 { 1 } else I x < 0 { -1 } else { 0 }
+    let source = "fn classify(x: i64) -> i64 = I x > 0 { 1 } else I x < 0 { 0 - 1 } else { 0 }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -164,7 +164,7 @@ fn test_lower_nested_if_else() {
 #[test]
 fn test_lower_deeply_nested_if() {
     // Deeply nested if statements
-    let source = "F deep(x: i64) -> i64 = I x > 10 { I x > 20 { 2 } E { 1 } } E { 0 }";
+    let source = "fn deep(x: i64) -> i64 = I x > 10 { I x > 20 { 2 } else { 1 } } else { 0 }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -180,11 +180,11 @@ fn test_lower_deeply_nested_if() {
 fn test_lower_struct_definition() {
     // Struct definition should be registered in mir_module.structs
     let source = r#"
-        S Point {
+        struct Point {
             x: i64,
             y: i64
         }
-        F origin() -> i64 = 0
+        fn origin() -> i64 = 0
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
@@ -202,9 +202,9 @@ fn test_lower_struct_definition() {
 fn test_lower_multiple_structs() {
     // Multiple struct definitions
     let source = r#"
-        S Vec2 { x: f64, y: f64 }
-        S Color { r: i32, g: i32, b: i32 }
-        F dummy() -> i64 = 0
+        struct Vec2 { x: f64, y: f64 }
+        struct Color { r: i32, g: i32, b: i32 }
+        fn dummy() -> i64 = 0
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
@@ -454,7 +454,7 @@ fn test_emit_aggregate_array() {
 fn test_full_pipeline_with_constant_folding() {
     // Full pipeline: parse → lower → optimize → emit → verify constant folding
     let source = r#"
-        F compute(x: i64) -> i64 = {
+        fn compute(x: i64) -> i64 = {
             a := 10
             b := 20
             c := a + b
@@ -476,7 +476,7 @@ fn test_full_pipeline_with_constant_folding() {
 fn test_pipeline_dead_code_elimination() {
     // Dead code should be eliminated
     let source = r#"
-        F main() -> i64 = {
+        fn main() -> i64 = {
             unused := 999
             result := 42
             result
@@ -496,7 +496,7 @@ fn test_pipeline_dead_code_elimination() {
 #[test]
 fn test_pipeline_unreachable_blocks() {
     // Unreachable blocks should be removed
-    let source = "F always_true() -> i64 = I true { 1 } E { 999 }";
+    let source = "fn always_true() -> i64 = I true { 1 } else { 999 }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut mir = lower_module(&module);
 
@@ -510,7 +510,7 @@ fn test_pipeline_unreachable_blocks() {
 fn test_multiple_optimization_passes() {
     // Multiple passes working together
     let source = r#"
-        F multi_opt(x: i64) -> i64 = {
+        fn multi_opt(x: i64) -> i64 = {
             a := 5
             b := 10
             c := a + b
@@ -542,7 +542,7 @@ fn test_multiple_optimization_passes() {
 #[test]
 fn test_emit_f32_llvm_type() {
     // f32 function should emit float type
-    let source = "F ftest(x: f32) -> f32 = x";
+    let source = "fn ftest(x: f32) -> f32 = x";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -553,7 +553,7 @@ fn test_emit_f32_llvm_type() {
 #[test]
 fn test_emit_f64_llvm_type() {
     // f64 function should emit double type
-    let source = "F dtest(x: f64) -> f64 = x";
+    let source = "fn dtest(x: f64) -> f64 = x";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -564,7 +564,7 @@ fn test_emit_f64_llvm_type() {
 #[test]
 fn test_emit_bool_llvm_type() {
     // bool function should emit i1 type
-    let source = "F btest(x: bool) -> bool = x";
+    let source = "fn btest(x: bool) -> bool = x";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -590,7 +590,7 @@ fn test_emit_void_function() {
 #[test]
 fn test_emit_i32_llvm_type() {
     // i32 function should emit i32 type
-    let source = "F i32test(x: i32) -> i32 = x";
+    let source = "fn i32test(x: i32) -> i32 = x";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -602,8 +602,8 @@ fn test_emit_i32_llvm_type() {
 fn test_emit_struct_llvm_type() {
     // Struct should emit LLVM struct type
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F make_point() -> i64 = 0
+        struct Point { x: i64, y: i64 }
+        fn make_point() -> i64 = 0
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
@@ -632,7 +632,7 @@ fn test_empty_function_body() {
 #[test]
 fn test_unary_operations() {
     // Test negation
-    let source = "F negate(x: i64) -> i64 = 0 - x";
+    let source = "fn negate(x: i64) -> i64 = 0 - x";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -644,7 +644,7 @@ fn test_unary_operations() {
 #[test]
 fn test_comparison_operations() {
     // Test comparison ops
-    let source = "F compare(a: i64, b: i64) -> bool = a < b";
+    let source = "fn compare(a: i64, b: i64) -> bool = a < b";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -666,7 +666,7 @@ fn test_module_with_no_functions() {
 #[test]
 fn test_optimization_body_display() {
     // Ensure optimization doesn't break display
-    let source = "F test(x: i64) -> i64 = x + 1";
+    let source = "fn test(x: i64) -> i64 = x + 1";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mut mir = lower_module(&module);
 
@@ -681,7 +681,7 @@ fn test_optimization_body_display() {
 #[test]
 fn test_target_triple_variants() {
     // Test different target triples
-    let source = "F identity(x: i64) -> i64 = x";
+    let source = "fn identity(x: i64) -> i64 = x";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -706,7 +706,7 @@ use vais_mir::borrow_check::{check_body, check_module, BorrowError};
 #[test]
 fn test_borrow_check_simple_copy() {
     // Copy types (i64) only - no borrow errors expected
-    let source = "F add(x: i64, y: i64) -> i64 = x + y";
+    let source = "fn add(x: i64, y: i64) -> i64 = x + y";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -721,7 +721,7 @@ fn test_borrow_check_simple_copy() {
 #[test]
 fn test_borrow_check_multiple_returns() {
     // Multiple return paths - should be OK
-    let source = "F abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }";
+    let source = "fn abs(x: i64) -> i64 = I x < 0 { 0 - x } else { x }";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 
@@ -737,7 +737,7 @@ fn test_borrow_check_multiple_returns() {
 fn test_borrow_check_let_binding() {
     // Let bindings with Copy types
     let source = r#"
-        F compute(x: i64) -> i64 = {
+        fn compute(x: i64) -> i64 = {
             a := x + 1
             b := a * 2
             b
@@ -754,8 +754,8 @@ fn test_borrow_check_let_binding() {
 fn test_borrow_check_function_call() {
     // Function call with Copy type arguments
     let source = r#"
-        F double(x: i64) -> i64 = x * 2
-        F main() -> i64 = double(42)
+        fn double(x: i64) -> i64 = x * 2
+        fn main() -> i64 = double(42)
     "#;
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
@@ -772,7 +772,7 @@ fn test_borrow_check_function_call() {
 fn test_borrow_check_match_expr() {
     // Match expression with Copy types
     let source = r#"
-        F classify(x: i64) -> i64 = M x {
+        fn classify(x: i64) -> i64 = match x {
             0 => 100,
             1 => 200,
             _ => 999
@@ -795,7 +795,7 @@ fn test_borrow_check_match_expr() {
 fn test_borrow_check_str_move_detection() {
     // Str parameter moved to return - check if lowering produces correct MIR
     // NOTE: Current lower.rs emit_drops may not drop moved values, so this may pass
-    let source = "F take_string(s: str) -> str = s";
+    let source = "fn take_string(s: str) -> str = s";
     let module = vais_parser::parse(source).expect("Parse failed");
     let mir = lower_module(&module);
 

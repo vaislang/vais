@@ -79,14 +79,43 @@ impl CodeGenerator {
         let loop_body = self.next_label("loop.body");
         let loop_end = self.next_label("loop.end");
 
+        // Phase 0 bug C1 fix: pre-scan body for any `B <value>` so we know
+        // whether to emit a break-value slot. Walk shallowly: if we find a
+        // Stmt::Break(Some(_)), we need a slot. Type inferred lazily via
+        // walking the first such break expression (default i64 for now).
+        let needs_break_value_slot = body
+            .iter()
+            .any(|s| Self::stmt_contains_break_with_value(&s.node));
+        let break_slot = if needs_break_value_slot {
+            let slot_name = self.next_temp(counter);
+            // Emit alloca in the entry block by deferring via prepended IR.
+            // The simplest correct approach: emit it inline at the loop start
+            // (above br), which is reachable from entry without crossing loop
+            // back-edges. Since the alloca dominates both the loop body (via
+            // br→loop.start→loop.body) and the loop end (via br after loop),
+            // any break_label store/load can read it safely.
+            Some((slot_name, "i64".to_string()))
+        } else {
+            None
+        };
+
+        let mut ir = String::new();
+
+        // Emit alloca for the break value slot before entering the loop body.
+        if let Some((slot, llvm_ty)) = &break_slot {
+            write_ir!(ir, "  {} = alloca {}", slot, llvm_ty);
+            // Initialize to 0 so paths that exit without `B <value>` (e.g.
+            // condition becomes false in `LW`) yield 0 instead of garbage.
+            write_ir!(ir, "  store {} 0, {}* {}", llvm_ty, llvm_ty, slot);
+        }
+
         // Push loop labels for break/continue
         self.fn_ctx.loop_stack.push(LoopLabels {
             continue_label: loop_start.clone(), // keep: used in continue stmt
             break_label: loop_end.clone(),      // keep: used in break stmt
             scope_str_depth: self.fn_ctx.scope_str_stack.len(),
+            break_value_slot: break_slot.clone(),
         });
-
-        let mut ir = String::new();
 
         // Check if this is a conditional loop (L cond { body }) or infinite loop
         if let Some(iter_expr) = iter {
@@ -135,8 +164,69 @@ impl CodeGenerator {
 
         self.fn_ctx.loop_stack.pop();
 
-        // Loop returns void by default (use break with value for expression)
-        Ok(("0".to_string(), ir))
+        // Phase 0 bug C1 fix: if the loop body used `B <value>`, load the
+        // break value from the slot we allocated before the loop. Otherwise,
+        // return literal 0 (the historical behavior — the loop is used as a
+        // statement and its expression value is unused).
+        if let Some((slot, llvm_ty)) = &break_slot {
+            let val = self.next_temp(counter);
+            write_ir!(ir, "  {} = load {}, {}* {}", val, llvm_ty, llvm_ty, slot);
+            Ok((val, ir))
+        } else {
+            Ok(("0".to_string(), ir))
+        }
+    }
+
+    /// Phase 0 bug C1 helper: shallow scan for `B <value>` inside a stmt.
+    /// Recurses into nested blocks (`I cond { B 1 }`), but stops at inner
+    /// loops since their break labels don't refer to the outer slot.
+    fn stmt_contains_break_with_value(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Break(Some(_)) => true,
+            Stmt::Break(None) | Stmt::Continue => false,
+            Stmt::Return(_) => false,
+            Stmt::Expr(e) => Self::expr_contains_break_with_value(&e.node),
+            Stmt::Let { value, .. } => Self::expr_contains_break_with_value(&value.node),
+            Stmt::LetDestructure { value, .. } => Self::expr_contains_break_with_value(&value.node),
+            Stmt::Defer(e) => Self::expr_contains_break_with_value(&e.node),
+            Stmt::Error { .. } => false,
+        }
+    }
+
+    fn expr_contains_break_with_value(expr: &Expr) -> bool {
+        match expr {
+            Expr::If { then, else_, .. } => {
+                then.iter()
+                    .any(|s| Self::stmt_contains_break_with_value(&s.node))
+                    || else_
+                        .as_ref()
+                        .is_some_and(Self::if_else_contains_break_with_value)
+            }
+            Expr::Block(stmts) => stmts
+                .iter()
+                .any(|s| Self::stmt_contains_break_with_value(&s.node)),
+            Expr::Match { arms, .. } => arms
+                .iter()
+                .any(|arm| Self::expr_contains_break_with_value(&arm.body.node)),
+            // Stop at nested loops — their breaks bind to inner labels.
+            Expr::Loop { .. } => false,
+            _ => false,
+        }
+    }
+
+    fn if_else_contains_break_with_value(else_: &IfElse) -> bool {
+        match else_ {
+            IfElse::ElseIf(_, then, next) => {
+                then.iter()
+                    .any(|s| Self::stmt_contains_break_with_value(&s.node))
+                    || next
+                        .as_ref()
+                        .is_some_and(|n| Self::if_else_contains_break_with_value(n))
+            }
+            IfElse::Else(stmts) => stmts
+                .iter()
+                .any(|s| Self::stmt_contains_break_with_value(&s.node)),
+        }
     }
 
     /// Phase 24 Task 6: peel `.iter()` / `.enumerate()` method calls off a
@@ -217,12 +307,26 @@ impl CodeGenerator {
         // Determine element LLVM type
         let elem_resolved = self.get_collection_element_type(&coll_type);
         let elem_llvm_ty = self.type_to_llvm(&elem_resolved);
+        let bind_elements_by_ref =
+            matches!(&coll_type, ResolvedType::Ref(_) | ResolvedType::RefMut(_));
 
         // Determine if the collection is a slice (fat pointer { i8*, i64 })
+        // Phase B1: `&arr` on an array-typed local with compile-time-known
+        // length is now coerced to `{ i8*, i64 }` by generate_ref_expr. The
+        // static type is still `Ref(Array)`, so detect the runtime slice
+        // shape by inspecting whether the collection expr is such a ref.
+        let ref_to_array_local = matches!(
+            &iter_expr.node,
+            Expr::Ref(inner) if matches!(
+                &inner.node,
+                Expr::Ident(name) if self.fn_ctx.locals.get(name.as_str())
+                    .and_then(|l| l.array_length).is_some()
+            )
+        );
         let is_slice = matches!(
             inner_type,
             ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
-        );
+        ) || ref_to_array_local;
 
         // Determine if the collection is a Vec<T>
         let is_vec = matches!(
@@ -355,11 +459,21 @@ impl CodeGenerator {
             let var_name = format!("{}.foreach.{}", name, self.fn_ctx.label_counter);
             self.fn_ctx.label_counter += 1;
             let llvm_name = format!("%{}", var_name);
-            self.emit_entry_alloca(&llvm_name, &elem_llvm_ty);
-            self.fn_ctx.locals.insert(
-                name.clone(),
-                LocalVar::alloca(elem_resolved.clone(), var_name),
-            );
+            let elem_local_ty = if bind_elements_by_ref {
+                match &coll_type {
+                    ResolvedType::RefMut(_) => {
+                        ResolvedType::RefMut(Box::new(elem_resolved.clone()))
+                    }
+                    _ => ResolvedType::Ref(Box::new(elem_resolved.clone())),
+                }
+            } else {
+                elem_resolved.clone()
+            };
+            let elem_local_llvm_ty = self.type_to_llvm(&elem_local_ty);
+            self.emit_entry_alloca(&llvm_name, &elem_local_llvm_ty);
+            self.fn_ctx
+                .locals
+                .insert(name.clone(), LocalVar::alloca(elem_local_ty, var_name));
         }
 
         // 5. Generate loop structure: cond → body → inc → cond, with exit
@@ -372,6 +486,7 @@ impl CodeGenerator {
             continue_label: loop_inc.clone(),
             break_label: loop_end.clone(),
             scope_str_depth: self.fn_ctx.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         write_ir!(ir, "  br label %{}", loop_cond);
@@ -422,7 +537,7 @@ impl CodeGenerator {
                 let llvm_name = format!("%{}", local.llvm_name);
 
                 if elem_llvm_ty.starts_with('%') && !is_vec {
-                    // Struct element: get pointer to the struct in the array and copy it
+                    // Struct element: get pointer to the struct in the array.
                     let elem_ptr = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -433,17 +548,34 @@ impl CodeGenerator {
                         data_ptr,
                         body_idx
                     );
-                    // For struct types, store the pointer as the variable value
-                    // (the loop variable acts as a reference/pointer to the element)
-                    write_ir!(
-                        ir,
-                        "  store {} {}, {}* {}",
-                        // Store the pointer to the struct element
-                        format!("{}*", elem_llvm_ty),
-                        elem_ptr,
-                        format!("{}*", elem_llvm_ty),
-                        llvm_name
-                    );
+                    if bind_elements_by_ref {
+                        write_ir!(
+                            ir,
+                            "  store {}* {}, {}** {}",
+                            elem_llvm_ty,
+                            elem_ptr,
+                            elem_llvm_ty,
+                            llvm_name
+                        );
+                    } else {
+                        let elem_val = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            elem_val,
+                            elem_llvm_ty,
+                            elem_llvm_ty,
+                            elem_ptr
+                        );
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            elem_llvm_ty,
+                            elem_val,
+                            elem_llvm_ty,
+                            llvm_name
+                        );
+                    }
                 } else if is_vec && elem_llvm_ty.starts_with('%') {
                     // Vec<StructType>: elements may be stored differently
                     // Use elem_size from Vec to compute the offset
@@ -489,17 +621,36 @@ impl CodeGenerator {
                         offset_ptr,
                         elem_llvm_ty
                     );
-                    // Store the pointer to the struct element
-                    write_ir!(
-                        ir,
-                        "  store {} {}, {}* {}",
-                        format!("{}*", elem_llvm_ty),
-                        typed_elem_ptr,
-                        format!("{}*", elem_llvm_ty),
-                        llvm_name
-                    );
+                    if bind_elements_by_ref {
+                        write_ir!(
+                            ir,
+                            "  store {}* {}, {}** {}",
+                            elem_llvm_ty,
+                            typed_elem_ptr,
+                            elem_llvm_ty,
+                            llvm_name
+                        );
+                    } else {
+                        let elem_val = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            elem_val,
+                            elem_llvm_ty,
+                            elem_llvm_ty,
+                            typed_elem_ptr
+                        );
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            elem_llvm_ty,
+                            elem_val,
+                            elem_llvm_ty,
+                            llvm_name
+                        );
+                    }
                 } else {
-                    // Primitive element: GEP + load + store
+                    // Primitive element: GEP, then bind by reference or value.
                     let elem_ptr = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -510,23 +661,34 @@ impl CodeGenerator {
                         data_ptr,
                         body_idx
                     );
-                    let elem_val = self.next_temp(counter);
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        elem_val,
-                        elem_llvm_ty,
-                        elem_llvm_ty,
-                        elem_ptr
-                    );
-                    write_ir!(
-                        ir,
-                        "  store {} {}, {}* {}",
-                        elem_llvm_ty,
-                        elem_val,
-                        elem_llvm_ty,
-                        llvm_name
-                    );
+                    if bind_elements_by_ref {
+                        write_ir!(
+                            ir,
+                            "  store {}* {}, {}** {}",
+                            elem_llvm_ty,
+                            elem_ptr,
+                            elem_llvm_ty,
+                            llvm_name
+                        );
+                    } else {
+                        let elem_val = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
+                            elem_val,
+                            elem_llvm_ty,
+                            elem_llvm_ty,
+                            elem_ptr
+                        );
+                        write_ir!(
+                            ir,
+                            "  store {} {}, {}* {}",
+                            elem_llvm_ty,
+                            elem_val,
+                            elem_llvm_ty,
+                            llvm_name
+                        );
+                    }
                 }
             }
         }
@@ -591,6 +753,7 @@ impl CodeGenerator {
             continue_label: loop_start.clone(), // keep: used in continue stmt
             break_label: loop_end.clone(),      // keep: used in break stmt
             scope_str_depth: self.fn_ctx.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         let mut ir = String::new();

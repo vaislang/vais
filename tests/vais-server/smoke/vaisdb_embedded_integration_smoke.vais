@@ -1,0 +1,107 @@
+use src/core/app
+use src/core/config
+use src/core/context
+use server/embedded
+use storage/constants
+use storage/file
+
+fn integration_file_exists(db_path: str, file_name: str) -> bool {
+    path := mut db_path.clone() + "/" + file_name
+    path_exists(&path)
+}
+
+fn main() -> i64 {
+    db_path := mut "server_vaisdb_integration_db"
+    checkpoint_lsn := mut 515151 as u64
+
+    app := mut App.new(ServerConfig.default())
+    app.get("/db/health", "db_health_handler")
+
+    I app.route_count() != 1 {
+        println("FAIL app route registration")
+        return 1
+    }
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 2 },
+    }
+
+    I !db.is_open() {
+        println("FAIL embedded db should be open")
+        return 3
+    }
+    I db.database.page_size != PAGE_SIZE_8K {
+        println("FAIL embedded db page size")
+        return 4
+    }
+
+    ctx := mut Context.new("GET", "/db/health")
+    ctx = ctx.set_header("X-VaisDB-Mode", "embedded")
+    res := ctx.json(200, "{\"db\":\"open\"}")
+
+    I res.status != 200 {
+        println("FAIL integration response status")
+        return 5
+    }
+    I res.body != "{\"db\":\"open\"}" {
+        println("FAIL integration response body")
+        return 6
+    }
+    I res.content_type != "application/json; charset=utf-8" {
+        println("FAIL integration response content type")
+        return 7
+    }
+    I res.headers == "" {
+        println("FAIL integration response headers")
+        return 8
+    }
+
+    I !integration_file_exists(db_path.clone(), FILE_NAME_DATA) {
+        println("FAIL data file")
+        return 9
+    }
+    I !integration_file_exists(db_path.clone(), FILE_NAME_META) {
+        println("FAIL meta file")
+        return 10
+    }
+
+    db.database.meta.last_checkpoint_lsn = checkpoint_lsn
+    match db.database.flush_meta() {
+        Ok(_) => {},
+        Err(_) => { return 11 },
+    }
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 12 },
+    }
+    I db.is_open() {
+        println("FAIL db should be closed")
+        return 13
+    }
+
+    reopen_cfg := mut EmbeddedConfig.default()
+    reopen_cfg = reopen_cfg.with_data_dir(db_path.clone())
+
+    reopened := mut match EmbeddedDatabase.open(reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 14 },
+    }
+    I reopened.database.meta.last_checkpoint_lsn != checkpoint_lsn {
+        println("FAIL checkpoint lsn persisted through server integration")
+        return 15
+    }
+
+    match reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 16 },
+    }
+
+    println("VAIS_SERVER_VAISDB_INTEGRATION_OK")
+    0
+}

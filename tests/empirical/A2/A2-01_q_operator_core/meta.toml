@@ -1,0 +1,37 @@
+[entry]
+id = "A2-01"
+classification = "A2 certified subset"
+surface = "`?` operator on Result/Option (Core-typed, single-module)"
+predicate = "see compiler/docs/certification/A2_SUBSETS.md §A2-01"
+master_plan_version = 17
+landed = "2026-05-03"
+
+[positive]
+probe = "probe_pos.vais"
+expected_exit = 43
+description = "Result<i64,str>-typed inner; outer also Result<i64,str>; ? early-returns the Err arm; main matches and returns the inner value + 1 = 43."
+
+[negative]
+probe = "probe_neg.vais"
+expected_behavior = "vaisc check rejects with E001 'expected Result<_,_> or Option<_>, found <ret>'"
+description = "outer's return type is i64 not Result; predicate violated; type checker rejects at vaisc check since A4-11 strict default landed (Step 13 stage 1, commit 204a6a03)."
+
+[a2_neg_drift_finding]
+status = "RESOLVED 2026-05-04"
+note = """
+Originally noted that the type checker accepted `?` in a non-Result
+function and the defect surfaced only at clang IR generation. Step 13
+A4-11 (commit 204a6a03) added an enclosing-fn-return check inside
+vais-types/src/checker_expr/special.rs Expr::Try. Default-mode strict
+since 2026-05-04: the negative probe is now caught at vaisc check
+with TypeError::Mismatch ("expected Result<_,_> or Option<_>, found
+<ret>"). The runner has been migrated to a check_fails-shaped
+two-probe runner (positive: exit 43; negative: vaisc check non-zero
++ Result|Option pattern in stderr).
+"""
+
+[assertion_kind]
+kind_positive = "exact_exit"
+expected_exit_positive = 43
+kind_negative = "check_fails"
+required_stderr_patterns_negative = ["expected", "Result|Option"]

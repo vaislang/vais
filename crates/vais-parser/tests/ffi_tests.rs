@@ -6,7 +6,7 @@ use vais_parser::Parser;
 
 #[test]
 fn test_extern_block_basic() {
-    let source = r#"N "C" { F malloc(size: i64) -> *i8; }"#;
+    let source = r#"N "C" { fn malloc(size: i64) -> *i8; }"#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -25,7 +25,7 @@ fn test_extern_block_basic() {
 
 #[test]
 fn test_extern_block_vararg() {
-    let source = r#"N "C" { F printf(fmt: *i8, ...) -> i32; }"#;
+    let source = r#"N "C" { fn printf(fmt: *i8, ...) -> i32; }"#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -43,9 +43,9 @@ fn test_extern_block_vararg() {
 fn test_extern_block_multiple_functions() {
     let source = r#"
         N "C" {
-            F malloc(size: i64) -> *i8;
-            F free(ptr: *i8) -> ();
-            F printf(fmt: *i8, ...) -> i32;
+            fn malloc(size: i64) -> *i8;
+            fn free(ptr: *i8) -> ();
+            fn printf(fmt: *i8, ...) -> i32;
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -66,7 +66,7 @@ fn test_extern_block_multiple_functions() {
 
 #[test]
 fn test_function_pointer_type() {
-    let source = "F test(callback: fn(i32, i32) -> i64) -> i64 = 0";
+    let source = "fn test(callback: fn(i32, i32) -> i64) -> i64 = 0";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -90,7 +90,7 @@ fn test_function_pointer_type() {
 
 #[test]
 fn test_function_pointer_vararg() {
-    let source = "F test(callback: fn(i32, ...) -> i32) -> i32 = 0";
+    let source = "fn test(callback: fn(i32, ...) -> i32) -> i32 = 0";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -110,7 +110,7 @@ fn test_function_pointer_vararg() {
 fn test_repr_c_attribute() {
     let source = r#"
         #[repr(C)]
-        S Point {
+        struct Point {
             x: i32,
             y: i32
         }
@@ -133,7 +133,7 @@ fn test_repr_c_attribute() {
 
 #[test]
 fn test_extern_default_abi() {
-    let source = r#"N { F test() -> i32; }"#;
+    let source = r#"N { fn test() -> i32; }"#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -148,7 +148,7 @@ fn test_extern_default_abi() {
 
 #[test]
 fn test_vararg_after_multiple_params() {
-    let source = r#"N "C" { F fprintf(stream: *i8, fmt: *i8, ...) -> i32; }"#;
+    let source = r#"N "C" { fn fprintf(stream: *i8, fmt: *i8, ...) -> i32; }"#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();

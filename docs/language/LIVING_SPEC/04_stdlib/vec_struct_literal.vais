@@ -1,0 +1,14 @@
+# LIVING_SPEC/04_stdlib/vec_struct_literal.vais
+# Key concept: `v: Vec<Struct> := [Struct{...}, Struct{...}]` 가
+# 원소를 이제 제대로 저장. 이전에는 generate_array_expr 이 StructLit
+# 의 ptr 을 value 로 오인해서 `store %Point <ptr>` 타입 미스매치로
+# clang 거부. F.1 (2026-04-21) 에서 struct 원소일 때 load 를 먼저 삽입.
+
+use std/vec
+
+struct Point { x: i64, y: i64 }
+
+fn main() -> i64 {
+    v: Vec<Point> := [Point{x:1, y:2}, Point{x:3, y:4}]
+    return v[0].x + v[1].x
+}

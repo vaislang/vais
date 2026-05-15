@@ -177,6 +177,7 @@ surface paths without touching the AI docs registry.
 
 function renderReferenceAppContract() {
   const requiredFeatures = registry.features.filter((feature) => feature.referenceApp);
+  const referenceApp = registry.referenceApp;
 
   return `${generatedNotice}
 
@@ -208,6 +209,16 @@ ${requiredFeatures
   involved.
 - A playground example extracted from the same source pattern.
 
+## Current Reference App
+
+Name: ${escapeText(referenceApp.name)}
+
+Path: \`${referenceApp.path}\`
+
+Gate: \`${referenceApp.gate}\`
+
+${escapeText(referenceApp.description)}
+
 ## Acceptance Gates
 
 \`\`\`bash
@@ -216,6 +227,7 @@ cargo test -p vais-types --test inference_unification_tests -- --nocapture
 cargo test -p vaisc --test e2e -- --nocapture
 node scripts/check-public-claims.mjs
 node scripts/check-ai-docs-sync.mjs
+bash ${referenceApp.gate}
 \`\`\`
 
 The reference app is complete only when a clean checkout can build and test it

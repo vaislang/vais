@@ -1,19 +1,19 @@
 # Simple Base64 encoding/decoding example
 
 # Encode a 6-bit value to Base64 character
-F base64_encode_char(idx: i64) -> i64 {
+fn base64_encode_char(idx: i64) -> i64 {
     I idx < 26 {
         65 + idx
-    } E {
+    } enum {
         I idx < 52 {
             97 + (idx - 26)
-        } E {
+        } enum {
             I idx < 62 {
                 48 + (idx - 52)
-            } E {
+            } enum {
                 I idx == 62 {
                     43
-                } E {
+                } enum {
                     47
                 }
             }
@@ -22,7 +22,7 @@ F base64_encode_char(idx: i64) -> i64 {
 }
 
 # Simple encode example
-F base64_encode(data: i64, len: i64) -> i64 {
+fn base64_encode(data: i64, len: i64) -> i64 {
     out_len := ((len + 2) / 3) * 4
     out := malloc(out_len + 1)
 
@@ -61,7 +61,7 @@ F base64_encode(data: i64, len: i64) -> i64 {
         store_byte(out + out_idx + 3, 61)
 
         out_idx = out_idx + 4
-    } E {
+    } enum {
         I remaining == 2 {
             b0 := load_byte(data + in_idx)
             b1 := load_byte(data + in_idx + 1)
@@ -76,7 +76,7 @@ F base64_encode(data: i64, len: i64) -> i64 {
             store_byte(out + out_idx + 3, 61)
 
             out_idx = out_idx + 4
-        } E {
+        } enum {
             0
         }
     }
@@ -85,7 +85,7 @@ F base64_encode(data: i64, len: i64) -> i64 {
     out
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Example: encode "Hello"
     data := str_to_ptr("Hello")
     len := strlen("Hello")
@@ -101,7 +101,7 @@ F main() -> i64 {
         c := load_byte(encoded + idx)
         I c == 0 {
             B
-        } E {
+        } enum {
             putchar(c)
         }
         idx = idx + 1
@@ -112,11 +112,11 @@ F main() -> i64 {
     0
 }
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F strlen(s: str) -> i64
-X F str_to_ptr(s: str) -> i64
-X F load_byte(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F puts(s: str) -> i64
-X F putchar(c: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn strlen(s: str) -> i64
+impl fn str_to_ptr(s: str) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn puts(s: str) -> i64
+impl fn putchar(c: i64) -> i64

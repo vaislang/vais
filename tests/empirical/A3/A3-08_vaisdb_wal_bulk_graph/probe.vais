@@ -1,0 +1,3 @@
+use vaisdb/wal/bulk_graph
+
+fn main() -> i64 { return 0 }

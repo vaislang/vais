@@ -1,0 +1,17 @@
+# CHECKS: iterative factorial — alternative to recursion.
+fn factorial_iter(n: i64) -> i64 {
+    result: i64 := mut 1
+    LF i: 1..=n {
+        result = result * i
+    }
+    result
+}
+
+fn main() -> i64 {
+    I factorial_iter(0) != 1 { return 1 }
+    I factorial_iter(1) != 1 { return 2 }
+    I factorial_iter(5) != 120 { return 3 }
+    I factorial_iter(10) != 3628800 { return 4 }
+    I factorial_iter(12) != 479001600 { return 5 }
+    return 0
+}

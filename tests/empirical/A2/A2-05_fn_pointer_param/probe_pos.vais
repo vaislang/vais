@@ -1,0 +1,13 @@
+fn double(x: i64) -> i64 { x * 2 }
+fn triple(x: i64) -> i64 { x * 3 }
+
+fn apply(f: fn(i64) -> i64, n: i64) -> i64 {
+    f(n)
+}
+
+fn main() -> i64 {
+    # Multi-impl dispatch — proves the fn-pointer is genuinely dispatched
+    # (not constant-folded to one impl, unlike A2-03 dyn dispatch — see
+    # STEP7_FINDINGS F-23). 20 + 30 = 50.
+    apply(double, 10) + apply(triple, 10)
+}

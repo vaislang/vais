@@ -1,3 +1,8 @@
+#![cfg_attr(not(test), warn(clippy::unwrap_used))]
+// Warn on `.unwrap()` in non-test code so any new Category D site
+// (user-input reachable panic) is rejected at review time. See
+// `docs/UNWRAP_CLASSIFICATION.md`. Test code is exempt.
+
 //! Vais Compiler CLI
 //!
 //! The `vaisc` command compiles Vais source files to LLVM IR or native binaries.
@@ -79,18 +84,17 @@ fn check_for_update() {
     }
 
     // Fetch from GitHub API with 2s timeout
-    let agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(2)))
-        .build()
-        .new_agent();
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(2))
+        .build();
     let result = agent
         .get("https://api.github.com/repos/vaislang/vais/releases/latest")
-        .header("User-Agent", &format!("vaisc/{}", current))
+        .set("User-Agent", &format!("vaisc/{}", current))
         .call();
 
     let latest_tag = match result {
-        Ok(mut resp) => {
-            if let Ok(json) = resp.body_mut().read_json::<serde_json::Value>() {
+        Ok(resp) => {
+            if let Ok(json) = resp.into_json::<serde_json::Value>() {
                 json["tag_name"].as_str().unwrap_or("").to_string()
             } else {
                 return;
@@ -482,9 +486,34 @@ enum Commands {
         /// Indentation size (default: 4)
         #[arg(long, default_value = "4")]
         indent: usize,
+
+        /// Step 15 stage 0 codemod: scan for identifiers that would
+        /// collide with proposed multi-character keywords (fn / struct /
+        /// match / etc.). When set, ignores `check` and `indent`.
+        #[arg(long)]
+        rename_keyword_collisions: bool,
+
+        /// Limit `--rename-keyword-collisions` to a single keyword.
+        #[arg(long)]
+        keyword: Option<String>,
+
+        /// `--rename-keyword-collisions` mode: report only (default true
+        /// in stage 0).
+        #[arg(long, default_value = "true")]
+        dry_run: bool,
+
+        /// Step 15 stage 3 dual-syntax round-trip codemod. Convert the
+        /// input file between Vais's two surface forms. Accepts `multi`
+        /// (use long-form keywords like `fn`, `struct`, `match`) or
+        /// `single` (use the canonical single-character keywords like
+        /// `F`, `S`, `M`). Without `--check` the file is rewritten in
+        /// place. Round-trip is invariant: `--to=multi` then
+        /// `--to=single` produces byte-identical output.
+        #[arg(long, value_name = "FORM")]
+        to: Option<String>,
     },
 
-    /// Automatically fix code issues (unused vars, imports)
+    /// Automatically fix code issues (unused vars, imports, or A4 explicit-typing)
     Fix {
         /// Input source file
         input: PathBuf,
@@ -492,6 +521,15 @@ enum Commands {
         /// Show what would be fixed without modifying files
         #[arg(long)]
         dry_run: bool,
+
+        /// Run A4 explicit-typing codemod transformations (Master Plan v16)
+        #[arg(long)]
+        explicit: bool,
+
+        /// Limit A4 codemod to a single site identifier (e.g. A4-01).
+        /// Only meaningful with --explicit.
+        #[arg(long, value_name = "A4-ID")]
+        site: Option<String>,
     },
 
     /// Package management commands
@@ -609,7 +647,7 @@ enum Commands {
         package: String,
     },
 
-    /// Emit a TypeScript declaration file (.d.ts) from a Vais schema source
+    /// Emit TypeScript declaration file (.d.ts) from a Vais schema source (Master Plan v16 Step 8)
     EmitTs {
         /// Input .vais schema file
         input: PathBuf,
@@ -1041,9 +1079,41 @@ fn main_inner() {
             input,
             check,
             indent,
-        }) => commands::simple::cmd_fmt(&input, check, indent),
-        Some(Commands::Fix { input, dry_run }) => {
-            commands::fix::cmd_fix(&input, dry_run, cli.verbose)
+            rename_keyword_collisions,
+            keyword,
+            dry_run,
+            to,
+        }) => {
+            if let Some(to_form) = to {
+                match commands::fmt_dual::DualForm::parse(&to_form) {
+                    Ok(target) => {
+                        let opts = commands::fmt_dual::DualOptions { target, check };
+                        commands::fmt_dual::cmd_fmt_dual(&input, &opts)
+                    }
+                    Err(e) => Err(e),
+                }
+            } else if rename_keyword_collisions {
+                let opts = commands::fmt_rename::RenameOptions {
+                    dry_run,
+                    keyword,
+                    rename_prefix: "_".to_string(),
+                };
+                commands::fmt_rename::cmd_fmt_rename_keywords(&input, &opts)
+            } else {
+                commands::simple::cmd_fmt(&input, check, indent)
+            }
+        }
+        Some(Commands::Fix {
+            input,
+            dry_run,
+            explicit,
+            site,
+        }) => {
+            if explicit {
+                commands::fix::cmd_fix_explicit(&input, dry_run, site.as_deref())
+            } else {
+                commands::fix::cmd_fix(&input, dry_run, cli.verbose)
+            }
         }
         Some(Commands::New {
             name,

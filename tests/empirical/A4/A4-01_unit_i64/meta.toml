@@ -1,0 +1,38 @@
+# A4-01 — Unit ↔ i64 (void return as i64)
+# Empirical fixture metadata.
+
+[entry]
+id = "A4-01"
+classification = "A4-runtime-silent"
+surface = "Unit ↔ i64 — void return value bound to i64 binding succeeds at type-check"
+site = "unification.rs:361"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:361"
+master_plan_version = 17
+
+[v1_evidence]
+# Single-sentinel discovery, 2026-05-03 (master-plan.toml v6+ era).
+probe_summary = "x: i64 = void_fn()"
+expected_per_design = "type-check rejection (no implicit Unit ↔ i64)"
+actual_observed = 96
+verified_date = "2026-05-03"
+
+[v2_evidence]
+# Multi-sentinel retro-validation (Step 7 contract).
+# v2 status: PARTIAL — single probe re-verified; additional probes pending.
+probes = [
+  { vais = "x: i64 = void_fn()", method = "binding", exit_observed = 96 },
+]
+status = "v1_reverified"
+notes = """
+First probe matches v1 evidence exactly. v2 contract requires at least 3
+distinct probes for a HARD v2 status.  Pending probes:
+  - return-position binding (F main() -> i64 { void_fn() })
+  - struct-field binding (S X { v: i64 }; X { v: void_fn() })
+Add when Step 7 second iteration runs.
+"""
+
+[migration]
+# When A4-01 is removed (Step 13), this fixture migrates from positive to
+# negative form.
+post_removal_expected = "vaisc check exits non-zero with stable error code (TBD when Step 13 lands)"
+post_removal_action = "Replace probe.vais with a negative fixture; update run.sh to expect non-zero exit on `vaisc check`."

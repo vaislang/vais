@@ -5,25 +5,25 @@
 # Run:   ./orm_example
 
 # External function declarations
-X F __sql_escape(input: str) -> str
-X F __sql_quote(input: str) -> str
-X F __sql_build_select(table: str, columns: str, where_clause: str, order: str, limit_val: i64) -> str
-X F __sql_build_insert(table: str, columns: str, values: str) -> str
-X F __sql_build_update(table: str, set_clause: str, where_clause: str) -> str
-X F __sql_build_delete(table: str, where_clause: str) -> str
-X F __sql_build_create_table(table: str, column_defs: str) -> str
-X F __strlen(s: str) -> i64
-X F __str_copy_to(dst: i64, src: str) -> i64
-X F __str_eq(a: str, b: str) -> i64
-X F __i64_to_str(dst: i64, value: i64) -> i64
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __memcpy(dst: i64, src: i64, len: i64) -> i64
-X F __store_ptr(ptr: i64, value: i64) -> i64
-X F __store_i64(ptr: i64, value: i64) -> i64
-X F __load_ptr(ptr: i64) -> i64
-X F __load_i64(ptr: i64) -> i64
-X F puts(s: str) -> i64
+impl fn __sql_escape(input: str) -> str
+impl fn __sql_quote(input: str) -> str
+impl fn __sql_build_select(table: str, columns: str, where_clause: str, order: str, limit_val: i64) -> str
+impl fn __sql_build_insert(table: str, columns: str, values: str) -> str
+impl fn __sql_build_update(table: str, set_clause: str, where_clause: str) -> str
+impl fn __sql_build_delete(table: str, where_clause: str) -> str
+impl fn __sql_build_create_table(table: str, column_defs: str) -> str
+impl fn __strlen(s: str) -> i64
+impl fn __str_copy_to(dst: i64, src: str) -> i64
+impl fn __str_eq(a: str, b: str) -> i64
+impl fn __i64_to_str(dst: i64, value: i64) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __memcpy(dst: i64, src: i64, len: i64) -> i64
+impl fn __store_ptr(ptr: i64, value: i64) -> i64
+impl fn __store_i64(ptr: i64, value: i64) -> i64
+impl fn __load_ptr(ptr: i64) -> i64
+impl fn __load_i64(ptr: i64) -> i64
+impl fn puts(s: str) -> i64
 
 # ============================================
 # Column type constants
@@ -49,14 +49,14 @@ C SQL_MAX_VALUES: i64 = 64
 # Schema struct (inline for standalone example)
 # ============================================
 
-S Schema {
+struct Schema {
     table_name: str,
     columns: i64,
     column_count: i64
 }
 
-X Schema {
-    F new(table_name: str) -> Schema {
+impl Schema {
+    fn new(table_name: str) -> Schema {
         columns := __malloc(SQL_MAX_COLUMNS * 40)
         Schema {
             table_name: table_name,
@@ -65,9 +65,9 @@ X Schema {
         }
     }
 
-    F add_column(&self, name: str, col_type: i64) -> Schema {
+    fn add_column(&self, name: str, col_type: i64) -> Schema {
         I self.column_count >= SQL_MAX_COLUMNS {
-            R self
+            return self
         }
         offset := self.column_count * 40
         __store_ptr(self.columns + offset, name as i64)
@@ -79,7 +79,7 @@ X Schema {
         self
     }
 
-    F primary_key(&self) -> Schema {
+    fn primary_key(&self) -> Schema {
         I self.column_count > 0 {
             offset := (self.column_count - 1) * 40
             __store_i64(self.columns + offset + 16, 1)
@@ -87,7 +87,7 @@ X Schema {
         self
     }
 
-    F nullable(&self) -> Schema {
+    fn nullable(&self) -> Schema {
         I self.column_count > 0 {
             offset := (self.column_count - 1) * 40
             __store_i64(self.columns + offset + 24, 1)
@@ -95,7 +95,7 @@ X Schema {
         self
     }
 
-    F with_default(&self, val: str) -> Schema {
+    fn with_default(&self, val: str) -> Schema {
         I self.column_count > 0 {
             offset := (self.column_count - 1) * 40
             __store_ptr(self.columns + offset + 32, val as i64)
@@ -103,8 +103,8 @@ X Schema {
         self
     }
 
-    F col_type_str(col_type: i64) -> str {
-        M col_type {
+    fn col_type_str(col_type: i64) -> str {
+        match col_type {
             1 => "INTEGER",
             2 => "TEXT",
             3 => "REAL",
@@ -114,7 +114,7 @@ X Schema {
         }
     }
 
-    F create_table(&self) -> str {
+    fn create_table(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE)
         pos := 0
         pos = pos + __str_copy_to(buf + pos, "CREATE TABLE IF NOT EXISTS ")
@@ -165,7 +165,7 @@ X Schema {
         buf as str
     }
 
-    F drop_table(&self) -> str {
+    fn drop_table(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE)
         pos := 0
         pos = pos + __str_copy_to(buf + pos, "DROP TABLE IF EXISTS ")
@@ -181,14 +181,14 @@ X Schema {
 # WhereClause
 # ============================================
 
-S WhereClause {
+struct WhereClause {
     items: i64,
     count: i64,
     capacity: i64
 }
 
-X WhereClause {
-    F new() -> WhereClause {
+impl WhereClause {
+    fn new() -> WhereClause {
         capacity := SQL_MAX_WHERE
         items := __malloc(capacity * 32)
         WhereClause {
@@ -198,9 +198,9 @@ X WhereClause {
         }
     }
 
-    F add(&self, connector: str, column: str, operator: str, value: str) -> i64 {
+    fn add(&self, connector: str, column: str, operator: str, value: str) -> i64 {
         I self.count >= self.capacity {
-            R -1
+            return -1
         }
         offset := self.count * 32
         __store_ptr(self.items + offset, connector as i64)
@@ -211,9 +211,9 @@ X WhereClause {
         0
     }
 
-    F write_to(&self, buf: i64, pos: i64) -> i64 {
+    fn write_to(&self, buf: i64, pos: i64) -> i64 {
         I self.count == 0 {
-            R pos
+            return pos
         }
 
         p := pos
@@ -256,7 +256,7 @@ X WhereClause {
 # QueryBuilder
 # ============================================
 
-S QueryBuilder {
+struct QueryBuilder {
     query_type: i64,
     table: str,
     columns: i64,
@@ -270,8 +270,8 @@ S QueryBuilder {
     offset_val: i64
 }
 
-X QueryBuilder {
-    F new() -> QueryBuilder {
+impl QueryBuilder {
+    fn new() -> QueryBuilder {
         columns := __malloc(SQL_MAX_COLUMNS * 8)
         values := __malloc(SQL_MAX_VALUES * 8)
         QueryBuilder {
@@ -289,7 +289,7 @@ X QueryBuilder {
         }
     }
 
-    F select(cols: str) -> QueryBuilder {
+    fn select(cols: str) -> QueryBuilder {
         qb := QueryBuilder::new()
         qb.query_type = QUERY_SELECT
         __store_ptr(qb.columns, cols as i64)
@@ -297,65 +297,65 @@ X QueryBuilder {
         qb
     }
 
-    F from(&self, table: str) -> QueryBuilder {
+    fn from(&self, table: str) -> QueryBuilder {
         self.table = table
         self
     }
 
-    F where_eq(&self, column: str, value: str) -> QueryBuilder {
+    fn where_eq(&self, column: str, value: str) -> QueryBuilder {
         I self.where_clause.count == 0 {
             self.where_clause.add("", column, "=", value)
-        } EL {
+        } else {
             self.where_clause.add("AND", column, "=", value)
         }
         self
     }
 
-    F where_gt(&self, column: str, value: str) -> QueryBuilder {
+    fn where_gt(&self, column: str, value: str) -> QueryBuilder {
         I self.where_clause.count == 0 {
             self.where_clause.add("", column, ">", value)
-        } EL {
+        } else {
             self.where_clause.add("AND", column, ">", value)
         }
         self
     }
 
-    F where_lt(&self, column: str, value: str) -> QueryBuilder {
+    fn where_lt(&self, column: str, value: str) -> QueryBuilder {
         I self.where_clause.count == 0 {
             self.where_clause.add("", column, "<", value)
-        } EL {
+        } else {
             self.where_clause.add("AND", column, "<", value)
         }
         self
     }
 
-    F and_eq(&self, column: str, value: str) -> QueryBuilder {
+    fn and_eq(&self, column: str, value: str) -> QueryBuilder {
         self.where_clause.add("AND", column, "=", value)
         self
     }
 
-    F or_eq(&self, column: str, value: str) -> QueryBuilder {
+    fn or_eq(&self, column: str, value: str) -> QueryBuilder {
         self.where_clause.add("OR", column, "=", value)
         self
     }
 
-    F order_by(&self, column: str, direction: str) -> QueryBuilder {
+    fn order_by(&self, column: str, direction: str) -> QueryBuilder {
         self.order_col = column
         self.order_dir = direction
         self
     }
 
-    F limit(&self, n: i64) -> QueryBuilder {
+    fn limit(&self, n: i64) -> QueryBuilder {
         self.limit_val = n
         self
     }
 
-    F offset(&self, n: i64) -> QueryBuilder {
+    fn offset(&self, n: i64) -> QueryBuilder {
         self.offset_val = n
         self
     }
 
-    F insert(table: str, cols: str, vals: str) -> QueryBuilder {
+    fn insert(table: str, cols: str, vals: str) -> QueryBuilder {
         qb := QueryBuilder::new()
         qb.query_type = QUERY_INSERT
         qb.table = table
@@ -366,7 +366,7 @@ X QueryBuilder {
         qb
     }
 
-    F update(table: str, set_clause: str) -> QueryBuilder {
+    fn update(table: str, set_clause: str) -> QueryBuilder {
         qb := QueryBuilder::new()
         qb.query_type = QUERY_UPDATE
         qb.table = table
@@ -375,24 +375,24 @@ X QueryBuilder {
         qb
     }
 
-    F delete(table: str) -> QueryBuilder {
+    fn delete(table: str) -> QueryBuilder {
         qb := QueryBuilder::new()
         qb.query_type = QUERY_DELETE
         qb.table = table
         qb
     }
 
-    F build(&self) -> str {
+    fn build(&self) -> str {
         buf := __malloc(SQL_BUFFER_SIZE)
         pos := 0
 
-        M self.query_type {
+        match self.query_type {
             1 => {
                 pos = pos + __str_copy_to(buf + pos, "SELECT ")
                 I self.column_count > 0 {
                     col_str := __load_ptr(self.columns) as str
                     pos = pos + __str_copy_to(buf + pos, col_str)
-                } EL {
+                } else {
                     store_byte(buf + pos, 42)
                     pos = pos + 1
                 }
@@ -469,7 +469,7 @@ X QueryBuilder {
 # Main - demonstrate ORM features
 # ============================================
 
-F main() -> i64 {
+fn main() -> i64 {
     # ---- Schema Definition ----
     puts("=== Schema Definition ===")
 

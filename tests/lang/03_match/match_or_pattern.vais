@@ -1,0 +1,19 @@
+# CHECKS: or-patterns `1 | 2 | 3 => result`.
+fn day_kind(n: i64) -> i64 {
+    match n {
+        1 | 2 | 3 | 4 | 5 => 1,   # weekday
+        6 | 7             => 2,   # weekend
+        _                 => 0
+    }
+}
+
+fn main() -> i64 {
+    I day_kind(1) != 1 { return 1 }
+    I day_kind(3) != 1 { return 2 }
+    I day_kind(5) != 1 { return 3 }
+    I day_kind(6) != 2 { return 4 }
+    I day_kind(7) != 2 { return 5 }
+    I day_kind(0) != 0 { return 6 }
+    I day_kind(8) != 0 { return 7 }
+    return 0
+}

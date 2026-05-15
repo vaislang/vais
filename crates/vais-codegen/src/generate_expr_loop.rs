@@ -29,19 +29,29 @@ impl CodeGenerator {
 
         let mut ir = String::new();
 
-        let (start_val, start_ir) = if let Some(s) = start_expr {
+        let (start_val_raw, start_ir) = if let Some(s) = start_expr {
             self.generate_expr(s, counter)?
         } else {
             ("0".to_string(), String::new())
         };
         ir.push_str(&start_ir);
 
-        let (end_val, end_ir) = if let Some(e) = end_expr {
+        let (end_val_raw, end_ir) = if let Some(e) = end_expr {
             self.generate_expr(e, counter)?
         } else {
             (format!("{}", i64::MAX), String::new())
         };
         ir.push_str(&end_ir);
+
+        // Phase 17.H3: coerce range bounds to i64. Range expressions can carry
+        // operands with narrower integer types (e.g., `0..capacity` where
+        // `capacity: i32`). Downstream icmp/add are emitted as `i64`, so the
+        // bounds must be widened first or LLVM rejects the IR.
+        let start_actual = self.llvm_type_of(&start_val_raw);
+        let start_val =
+            self.coerce_int_width(&start_val_raw, &start_actual, "i64", counter, &mut ir);
+        let end_actual = self.llvm_type_of(&end_val_raw);
+        let end_val = self.coerce_int_width(&end_val_raw, &end_actual, "i64", counter, &mut ir);
 
         let counter_var = format!("%loop_counter.{}", self.fn_ctx.label_counter);
         self.fn_ctx.label_counter += 1;
@@ -71,6 +81,7 @@ impl CodeGenerator {
             continue_label: loop_inc.clone(),
             break_label: loop_end.clone(),
             scope_str_depth: self.fn_ctx.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         write_ir!(ir, "  br label %{}", loop_cond);
@@ -78,6 +89,7 @@ impl CodeGenerator {
         write_ir!(ir, "{}:", loop_cond);
         let current_val = self.next_temp(counter);
         write_ir!(ir, "  {} = load i64, i64* {}", current_val, counter_var);
+        self.fn_ctx.record_emitted_type(&current_val, "i64");
 
         let cmp_pred = if inclusive { "sle" } else { "slt" };
         let cond_result = self.next_temp(counter);
@@ -102,6 +114,7 @@ impl CodeGenerator {
         if let Some((_, llvm_name)) = &pattern_var {
             let bind_val = self.next_temp(counter);
             write_ir!(ir, "  {} = load i64, i64* {}", bind_val, counter_var);
+            self.fn_ctx.record_emitted_type(&bind_val, "i64");
             write_ir!(ir, "  store i64 {}, i64* {}", bind_val, llvm_name);
         }
 
@@ -115,12 +128,14 @@ impl CodeGenerator {
         write_ir!(ir, "{}:", loop_inc);
         let inc_load = self.next_temp(counter);
         write_ir!(ir, "  {} = load i64, i64* {}", inc_load, counter_var);
+        self.fn_ctx.record_emitted_type(&inc_load, "i64");
         let inc_result = self.next_temp(counter);
         write_ir!(ir, "  {} = add i64 {}, 1", inc_result, inc_load);
         write_ir!(ir, "  store i64 {}, i64* {}", inc_result, counter_var);
         write_ir!(ir, "  br label %{}", loop_cond);
 
         write_ir!(ir, "{}:", loop_end);
+        self.fn_ctx.current_block.clone_from(&loop_end);
         self.fn_ctx.loop_stack.pop();
 
         Ok(("0".to_string(), ir))

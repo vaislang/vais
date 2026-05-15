@@ -1,0 +1,24 @@
+# CHECKS: small state machine via loop + match.
+fn process(input: i64) -> i64 {
+    state: i64 := mut 0
+    LF n: 0..input {
+        match state {
+            0 => state = 1,
+            1 => state = 2,
+            2 => state = 0,
+            _ => state = 0
+        }
+    }
+    state
+}
+
+fn main() -> i64 {
+    I process(0) != 0 { return 1 }   # no transitions
+    I process(1) != 1 { return 2 }   # 0 → 1
+    I process(2) != 2 { return 3 }   # 0 → 1 → 2
+    I process(3) != 0 { return 4 }   # 0 → 1 → 2 → 0
+    I process(4) != 1 { return 5 }   # cycles
+    I process(7) != 1 { return 6 }
+    I process(9) != 0 { return 7 }
+    return 0
+}

@@ -749,7 +749,7 @@ pub(crate) fn compile_to_ir_for_test(path: &Path) -> Result<String, String> {
     let mut codegen = CodeGenerator::new_with_target(module_name, TargetTriple::Native);
     codegen.set_resolved_functions(checker.get_all_functions_with_methods());
     codegen.set_type_aliases(checker.get_type_aliases().clone());
-    codegen.set_expr_types(checker.get_expr_types().clone());
+    codegen.set_expr_types(checker.get_resolved_expr_types());
     codegen.set_implicit_try_sites(checker.get_implicit_try_sites().clone());
 
     let instantiations = checker.get_generic_instantiations();

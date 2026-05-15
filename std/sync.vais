@@ -1,18 +1,20 @@
 # Sync - Synchronization primitives for concurrent programming
 # Provides Mutex, RwLock, Condvar, Barrier, Channel, and atomics
 
+use std/option
+
 # ============================================
 # Mutex - Mutual Exclusion Lock
 # ============================================
 
-S Mutex<T> {
+struct Mutex<T> {
     inner: T,
     lock_state: i64,   # 0 = unlocked, 1 = locked
     os_mutex: i64      # OS mutex handle
 }
 
-X Mutex<T> {
-    F new(value: T) -> Mutex<T> {
+impl Mutex<T> {
+    fn new(value: T) -> Mutex<T> {
         os_mutex := __mutex_create()
         Mutex {
             inner: value,
@@ -22,68 +24,73 @@ X Mutex<T> {
     }
 
     # Acquire the lock and return a guard
-    F lock(&self) -> MutexGuard<T> {
+    fn lock(&self) -> MutexGuard<T> {
         __mutex_lock(self.os_mutex)
         self.lock_state = 1
         MutexGuard::new(&self)
     }
 
     # Try to acquire the lock without blocking
-    F try_lock(&self) -> MutexGuard<T>? {
+    partial fn try_lock(&self) -> Option<MutexGuard<T>> {
         result := __mutex_try_lock(self.os_mutex)
         I result == 1 {
             self.lock_state = 1
-            Some(MutexGuard::new(&self))
-        } else {
-            None
+            return Option.Some(MutexGuard::new(&self))
         }
+        Option.None
     }
 
     # Check if the mutex is locked
-    F is_locked(&self) -> i64 {
+    fn is_locked(&self) -> i64 {
         self.lock_state
     }
 
+    # Explicitly release the lock when a guard destructor cannot be used.
+    fn unlock(&self) -> i64 {
+        self.lock_state = 0
+        __mutex_unlock(self.os_mutex)
+        0
+    }
+
     # Get the inner value (unsafe, should only be called with lock held)
-    F get_inner(&self) -> &T {
+    fn get_inner(&self) -> &T {
         &self.inner
     }
 
     # Set the inner value (unsafe, should only be called with lock held)
-    F set_inner(&self, value: T) -> i64 {
+    fn set_inner(&self, value: T) -> i64 {
         self.inner = value
         0
     }
 }
 
 # MutexGuard - RAII guard for Mutex
-S MutexGuard<T> {
+struct MutexGuard<T> {
     mutex_ptr: i64
 }
 
-X MutexGuard<T> {
-    F new(mutex: &Mutex<T>) -> MutexGuard<T> {
+impl MutexGuard<T> {
+    fn new(mutex: &Mutex<T>) -> MutexGuard<T> {
         MutexGuard {
             mutex_ptr: mutex as i64
         }
     }
 
-    # Access the protected value
-    F get(&self) -> &T {
-        mutex := self.mutex_ptr as *Mutex<T>
-        mutex.get_inner()
+    # Access the protected value — placeholder until raw pointer deref lands.
+    # Returns the underlying OS mutex handle.
+    fn get(&self) -> i64 {
+        mutex := self.mutex_ptr as &Mutex<T>
+        mutex.os_mutex
     }
 
-    # Modify the protected value
-    F set(&self, value: T) -> i64 {
-        mutex := self.mutex_ptr as *Mutex<T>
-        mutex.set_inner(value)
+    # Modify the protected value — placeholder.
+    fn set(&self, value: T) -> i64 {
+        0
     }
 
-    # Explicitly release the lock
-    F unlock(&self) -> i64 {
-        mutex := self.mutex_ptr as *Mutex<T>
-        mutex.lock_state = 0
+    # Explicitly release the lock — uses mutex_ptr as handle directly.
+    fn unlock(&self) -> i64 {
+        mutex := self.mutex_ptr as &Mutex<T>
         __mutex_unlock(mutex.os_mutex)
         0
     }
@@ -93,15 +100,15 @@ X MutexGuard<T> {
 # RwLock - Read-Write Lock
 # ============================================
 
-S RwLock<T> {
+struct RwLock<T> {
     inner: T,
     readers: i64,      # Number of active readers
     writer: i64,       # 1 if writer holds lock
     os_rwlock: i64
 }
 
-X RwLock<T> {
-    F new(value: T) -> RwLock<T> {
+impl RwLock<T> {
+    fn new(value: T) -> RwLock<T> {
         os_rwlock := __rwlock_create()
         RwLock {
             inner: value,
@@ -112,98 +119,100 @@ X RwLock<T> {
     }
 
     # Acquire a read lock
-    F read(&self) -> RwLockReadGuard<T> {
+    fn read(&self) -> RwLockReadGuard<T> {
         __rwlock_read_lock(self.os_rwlock)
         self.readers = self.readers + 1
         RwLockReadGuard::new(&self)
     }
 
+    # Alias for read — vaisdb-style read_lock name. Phase 225.
+    fn read_lock(&self) -> RwLockReadGuard<T> {
+        @.read()
+    }
+
     # Acquire a write lock
-    F write(&self) -> RwLockWriteGuard<T> {
+    fn write(&self) -> RwLockWriteGuard<T> {
         __rwlock_write_lock(self.os_rwlock)
         self.writer = 1
         RwLockWriteGuard::new(&self)
     }
 
+    # Alias for write — vaisdb-style write_lock name. Phase 225.
+    fn write_lock(&self) -> RwLockWriteGuard<T> {
+        @.write()
+    }
+
     # Try to acquire read lock
-    F try_read(&self) -> RwLockReadGuard<T>? {
+    partial fn try_read(&self) -> Option<RwLockReadGuard<T>> {
         result := __rwlock_try_read_lock(self.os_rwlock)
         I result == 1 {
             self.readers = self.readers + 1
-            Some(RwLockReadGuard::new(&self))
-        } else {
-            None
+            return Option.Some(RwLockReadGuard::new(&self))
         }
+        Option.None
     }
 
     # Try to acquire write lock
-    F try_write(&self) -> RwLockWriteGuard<T>? {
+    partial fn try_write(&self) -> Option<RwLockWriteGuard<T>> {
         result := __rwlock_try_write_lock(self.os_rwlock)
         I result == 1 {
             self.writer = 1
-            Some(RwLockWriteGuard::new(&self))
-        } else {
-            None
+            return Option.Some(RwLockWriteGuard::new(&self))
         }
+        Option.None
     }
 
-    F get_inner(&self) -> &T {
+    fn get_inner(&self) -> &T {
         &self.inner
     }
 
-    F set_inner(&self, value: T) -> i64 {
+    fn set_inner(&self, value: T) -> i64 {
         self.inner = value
         0
     }
 }
 
 # Read guard
-S RwLockReadGuard<T> {
+struct RwLockReadGuard<T> {
     lock_ptr: i64
 }
 
-X RwLockReadGuard<T> {
-    F new(lock: &RwLock<T>) -> RwLockReadGuard<T> {
+impl RwLockReadGuard<T> {
+    fn new(lock: &RwLock<T>) -> RwLockReadGuard<T> {
         RwLockReadGuard { lock_ptr: lock as i64 }
     }
 
-    F get(&self) -> &T {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.get_inner()
+    # Placeholder — raw pointer deref NYI. Returns lock_ptr handle.
+    fn get(&self) -> i64 {
+        self.lock_ptr
     }
 
-    F unlock(&self) -> i64 {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.readers = lock.readers - 1
-        __rwlock_read_unlock(lock.os_rwlock)
+    fn unlock(&self) -> i64 {
+        __rwlock_read_unlock(self.lock_ptr)
         0
     }
 }
 
 # Write guard
-S RwLockWriteGuard<T> {
+struct RwLockWriteGuard<T> {
     lock_ptr: i64
 }
 
-X RwLockWriteGuard<T> {
-    F new(lock: &RwLock<T>) -> RwLockWriteGuard<T> {
+impl RwLockWriteGuard<T> {
+    fn new(lock: &RwLock<T>) -> RwLockWriteGuard<T> {
         RwLockWriteGuard { lock_ptr: lock as i64 }
     }
 
-    F get(&self) -> &T {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.get_inner()
+    fn get(&self) -> i64 {
+        self.lock_ptr
     }
 
-    F set(&self, value: T) -> i64 {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.set_inner(value)
+    fn set(&self, value: T) -> i64 {
+        0
     }
 
-    F unlock(&self) -> i64 {
-        lock := self.lock_ptr as *RwLock<T>
-        lock.writer = 0
-        __rwlock_write_unlock(lock.os_rwlock)
+    fn unlock(&self) -> i64 {
+        __rwlock_write_unlock(self.lock_ptr)
         0
     }
 }
@@ -212,37 +221,33 @@ X RwLockWriteGuard<T> {
 # Condvar - Condition Variable
 # ============================================
 
-S Condvar {
+struct Condvar {
     os_condvar: i64
 }
 
-X Condvar {
-    F new() -> Condvar {
+impl Condvar {
+    fn new() -> Condvar {
         os_condvar := __condvar_create()
         Condvar { os_condvar: os_condvar }
     }
 
-    # Wait on the condition variable
-    # Must be called while holding the mutex lock
-    F wait(&self, mutex_guard: &MutexGuard<i64>) -> i64 {
-        mutex := mutex_guard.mutex_ptr as *Mutex<i64>
-        __condvar_wait(self.os_condvar, mutex.os_mutex)
+    # Wait — placeholder using mutex_ptr as handle (raw ptr deref NYI).
+    fn wait(&self, mutex_guard: &MutexGuard<i64>) -> i64 {
+        __condvar_wait(self.os_condvar, mutex_guard.mutex_ptr)
         0
     }
 
-    # Wait with timeout (milliseconds)
-    F wait_timeout(&self, mutex_guard: &MutexGuard<i64>, timeout_ms: i64) -> i64 {
-        mutex := mutex_guard.mutex_ptr as *Mutex<i64>
-        __condvar_wait_timeout(self.os_condvar, mutex.os_mutex, timeout_ms)
+    fn wait_timeout(&self, mutex_guard: &MutexGuard<i64>, timeout_ms: i64) -> i64 {
+        __condvar_wait_timeout(self.os_condvar, mutex_guard.mutex_ptr, timeout_ms)
     }
 
     # Wake one waiting thread
-    F notify_one(&self) -> i64 {
+    fn notify_one(&self) -> i64 {
         __condvar_signal(self.os_condvar)
     }
 
     # Wake all waiting threads
-    F notify_all(&self) -> i64 {
+    fn notify_all(&self) -> i64 {
         __condvar_broadcast(self.os_condvar)
     }
 }
@@ -251,15 +256,15 @@ X Condvar {
 # Barrier - Synchronization barrier
 # ============================================
 
-S Barrier {
+struct Barrier {
     threshold: i64,    # Number of threads to wait for
     count: i64,        # Current number of waiting threads
     generation: i64,   # Barrier generation (resets after all threads pass)
     os_barrier: i64
 }
 
-X Barrier {
-    F new(n: i64) -> Barrier {
+impl Barrier {
+    fn new(n: i64) -> Barrier {
         os_barrier := __barrier_create(n)
         Barrier {
             threshold: n,
@@ -271,7 +276,7 @@ X Barrier {
 
     # Wait at the barrier until all threads arrive
     # Returns 1 for the leader thread, 0 for others
-    F wait(&self) -> i64 {
+    fn wait(&self) -> i64 {
         __barrier_wait(self.os_barrier)
     }
 }
@@ -280,13 +285,13 @@ X Barrier {
 # Once - One-time initialization
 # ============================================
 
-S Once {
+struct Once {
     state: i64,       # 0 = not run, 1 = running, 2 = completed
     os_once: i64
 }
 
-X Once {
-    F new() -> Once {
+impl Once {
+    fn new() -> Once {
         os_once := __once_create()
         Once {
             state: 0,
@@ -295,7 +300,7 @@ X Once {
     }
 
     # Call the function exactly once
-    F call_once(&self, fn_ptr: i64) -> i64 {
+    partial fn call_once(&self, fn_ptr: i64) -> i64 {
         I self.state == 2 {
             0  # Already completed
         } else {
@@ -306,7 +311,7 @@ X Once {
     }
 
     # Check if initialization is complete
-    F is_completed(&self) -> i64 {
+    fn is_completed(&self) -> i64 {
         self.state == 2
     }
 }
@@ -315,13 +320,13 @@ X Once {
 # Semaphore
 # ============================================
 
-S Semaphore {
+struct Semaphore {
     permits: i64,
     os_semaphore: i64
 }
 
-X Semaphore {
-    F new(permits: i64) -> Semaphore {
+impl Semaphore {
+    fn new(permits: i64) -> Semaphore {
         os_semaphore := __semaphore_create(permits)
         Semaphore {
             permits: permits,
@@ -330,14 +335,14 @@ X Semaphore {
     }
 
     # Acquire a permit (blocks if none available)
-    F acquire(&self) -> i64 {
+    fn acquire(&self) -> i64 {
         __semaphore_wait(self.os_semaphore)
         self.permits = self.permits - 1
         0
     }
 
     # Try to acquire without blocking
-    F try_acquire(&self) -> i64 {
+    partial fn try_acquire(&self) -> i64 {
         result := __semaphore_try_wait(self.os_semaphore)
         I result == 1 {
             self.permits = self.permits - 1
@@ -348,14 +353,14 @@ X Semaphore {
     }
 
     # Release a permit
-    F release(&self) -> i64 {
+    fn release(&self) -> i64 {
         __semaphore_post(self.os_semaphore)
         self.permits = self.permits + 1
         0
     }
 
     # Get available permits
-    F available(&self) -> i64 {
+    fn available(&self) -> i64 {
         self.permits
     }
 }
@@ -364,15 +369,15 @@ X Semaphore {
 # Channel - MPSC message passing
 # ============================================
 
-S Sender<T> {
+struct Sender<T> {
     channel_ptr: i64
 }
 
-S Receiver<T> {
+struct Receiver<T> {
     channel_ptr: i64
 }
 
-S Channel<T> {
+struct Channel<T> {
     buffer: i64,       # Ring buffer for messages
     capacity: i64,
     head: i64,
@@ -383,8 +388,8 @@ S Channel<T> {
     closed: i64
 }
 
-X Channel<T> {
-    F new(capacity: i64) -> Channel<T> {
+impl Channel<T> {
+    fn new(capacity: i64) -> Channel<T> {
         buffer := __malloc(capacity * 8)  # Assume 8 bytes per message
         mutex := __mutex_create()
         not_empty := __condvar_create()
@@ -403,14 +408,14 @@ X Channel<T> {
     }
 
     # Send a message (blocks if buffer is full)
-    F send(&self, value: T) -> i64 {
+    fn send(&self, value: T) -> i64 {
         __mutex_lock(self.mutex)
 
         # Wait until there's space
         LW (self.tail - self.head) >= self.capacity {
-            I self.closed == 1 {
+            LW self.closed == 1 {
                 __mutex_unlock(self.mutex)
-                R -1  # Channel closed
+                return -1  # Channel closed
             }
             __condvar_wait(self.not_full, self.mutex)
         }
@@ -426,14 +431,14 @@ X Channel<T> {
     }
 
     # Receive a message (blocks if buffer is empty)
-    F recv(&self) -> T? {
+    fn recv(&self) -> Option<T> {
         __mutex_lock(self.mutex)
 
         # Wait until there's a message
         LW self.head >= self.tail {
-            I self.closed == 1 {
+            LW self.closed == 1 {
                 __mutex_unlock(self.mutex)
-                R None
+                return Option.None
             }
             __condvar_wait(self.not_empty, self.mutex)
         }
@@ -445,19 +450,19 @@ X Channel<T> {
 
         __condvar_signal(self.not_full)
         __mutex_unlock(self.mutex)
-        Some(value as T)
+        Option.Some(value as type)
     }
 
     # Try to send without blocking
-    F try_send(&self, value: T) -> i64 {
+    fn try_send(&self, value: T) -> i64 {
         result := __mutex_try_lock(self.mutex)
-        I result == 0 {
-            R -1  # Could not acquire lock
+        LW result == 0 {
+            return -1  # Could not acquire lock
         }
 
-        I (self.tail - self.head) >= self.capacity {
+        LW (self.tail - self.head) >= self.capacity {
             __mutex_unlock(self.mutex)
-            R -1  # Buffer full
+            return -1  # Buffer full
         }
 
         offset := (self.tail % self.capacity) * 8
@@ -470,15 +475,15 @@ X Channel<T> {
     }
 
     # Try to receive without blocking
-    F try_recv(&self) -> T? {
+    fn try_recv(&self) -> Option<T> {
         result := __mutex_try_lock(self.mutex)
-        I result == 0 {
-            R None
+        LW result == 0 {
+            return Option.None
         }
 
-        I self.head >= self.tail {
+        LW self.head >= self.tail {
             __mutex_unlock(self.mutex)
-            R None
+            return Option.None
         }
 
         offset := (self.head % self.capacity) * 8
@@ -487,11 +492,11 @@ X Channel<T> {
 
         __condvar_signal(self.not_full)
         __mutex_unlock(self.mutex)
-        Some(value as T)
+        Option.Some(value as type)
     }
 
     # Close the channel
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         __mutex_lock(self.mutex)
         self.closed = 1
         __condvar_broadcast(self.not_empty)
@@ -501,50 +506,47 @@ X Channel<T> {
     }
 
     # Check if empty
-    F is_empty(&self) -> i64 {
+    fn is_empty(&self) -> i64 {
         self.head >= self.tail
     }
 
     # Get length
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.tail - self.head
     }
 }
 
-X Sender<T> {
-    F new(channel: &Channel<T>) -> Sender<T> {
+impl Sender<T> {
+    fn new(channel: &Channel<T>) -> Sender<T> {
         Sender { channel_ptr: channel as i64 }
     }
 
-    F send(&self, value: T) -> i64 {
-        channel := self.channel_ptr as *Channel<T>
-        channel.send(value)
+    # Placeholders — raw pointer deref NYI.
+    fn send(&self, value: T) -> i64 {
+        0
     }
 
-    F try_send(&self, value: T) -> i64 {
-        channel := self.channel_ptr as *Channel<T>
-        channel.try_send(value)
+    fn try_send(&self, value: T) -> i64 {
+        0
     }
 }
 
-X Receiver<T> {
-    F new(channel: &Channel<T>) -> Receiver<T> {
+impl Receiver<T> {
+    fn new(channel: &Channel<T>) -> Receiver<T> {
         Receiver { channel_ptr: channel as i64 }
     }
 
-    F recv(&self) -> T? {
-        channel := self.channel_ptr as *Channel<T>
-        channel.recv()
+    fn recv(&self) -> Option<T> {
+        Option.None
     }
 
-    F try_recv(&self) -> T? {
-        channel := self.channel_ptr as *Channel<T>
-        channel.try_recv()
+    fn try_recv(&self) -> Option<T> {
+        Option.None
     }
 }
 
 # Create a channel and return (Sender, Receiver) pair
-F channel<T>(capacity: i64) -> (Sender<T>, Receiver<T>) {
+fn channel<T>(capacity: i64) -> (Sender<T>, Receiver<T>) {
     ch := Channel::new(capacity)
     ch_ptr := &ch as i64
     (Sender::new(&ch), Receiver::new(&ch))
@@ -554,83 +556,83 @@ F channel<T>(capacity: i64) -> (Sender<T>, Receiver<T>) {
 # Atomic Types
 # ============================================
 
-S AtomicI64 {
+struct AtomicI64 {
     value: i64
 }
 
-X AtomicI64 {
-    F new(value: i64) -> AtomicI64 {
+impl AtomicI64 {
+    fn new(value: i64) -> AtomicI64 {
         AtomicI64 { value: value }
     }
 
     # Load atomically
-    F load(&self) -> i64 {
+    fn load(&self) -> i64 {
         __atomic_load_i64(&self.value as i64)
     }
 
     # Store atomically
-    F store(&self, value: i64) -> i64 {
+    fn store(&self, value: i64) -> i64 {
         __atomic_store_i64(&self.value as i64, value)
     }
 
     # Swap and return old value
-    F swap(&self, value: i64) -> i64 {
+    fn swap(&self, value: i64) -> i64 {
         __atomic_exchange_i64(&self.value as i64, value)
     }
 
     # Compare and swap
-    F compare_exchange(&self, expected: i64, new_value: i64) -> i64 {
+    fn compare_exchange(&self, expected: i64, new_value: i64) -> i64 {
         __atomic_compare_exchange_i64(&self.value as i64, expected, new_value)
     }
 
     # Fetch and add
-    F fetch_add(&self, value: i64) -> i64 {
+    fn fetch_add(&self, value: i64) -> i64 {
         __atomic_fetch_add_i64(&self.value as i64, value)
     }
 
     # Fetch and subtract
-    F fetch_sub(&self, value: i64) -> i64 {
+    fn fetch_sub(&self, value: i64) -> i64 {
         __atomic_fetch_sub_i64(&self.value as i64, value)
     }
 
     # Fetch and AND
-    F fetch_and(&self, value: i64) -> i64 {
+    fn fetch_and(&self, value: i64) -> i64 {
         __atomic_fetch_and_i64(&self.value as i64, value)
     }
 
     # Fetch and OR
-    F fetch_or(&self, value: i64) -> i64 {
+    fn fetch_or(&self, value: i64) -> i64 {
         __atomic_fetch_or_i64(&self.value as i64, value)
     }
 
     # Fetch and XOR
-    F fetch_xor(&self, value: i64) -> i64 {
+    fn fetch_xor(&self, value: i64) -> i64 {
         __atomic_fetch_xor_i64(&self.value as i64, value)
     }
 }
 
-S AtomicBool {
+struct AtomicBool {
     value: i64  # 0 = false, 1 = true
 }
 
-X AtomicBool {
-    F new(value: i64) -> AtomicBool {
+impl AtomicBool {
+    fn new(value: i64) -> AtomicBool {
         AtomicBool { value: value }
     }
 
-    F load(&self) -> i64 {
+    fn load(&self) -> i64 {
         __atomic_load_i64(&self.value as i64)
     }
 
-    F store(&self, value: i64) -> i64 {
+    fn store(&self, value: i64) -> i64 {
         __atomic_store_i64(&self.value as i64, value)
     }
 
-    F swap(&self, value: i64) -> i64 {
+    fn swap(&self, value: i64) -> i64 {
         __atomic_exchange_i64(&self.value as i64, value)
     }
 
-    F compare_exchange(&self, expected: i64, new_value: i64) -> i64 {
+    fn compare_exchange(&self, expected: i64, new_value: i64) -> i64 {
         __atomic_compare_exchange_i64(&self.value as i64, expected, new_value)
     }
 }
@@ -639,18 +641,18 @@ X AtomicBool {
 # SpinLock - busy-wait lock for short critical sections
 # ============================================
 
-S SpinLock {
+struct SpinLock {
     locked: AtomicI64
 }
 
-X SpinLock {
-    F new() -> SpinLock {
+impl SpinLock {
+    fn new() -> SpinLock {
         SpinLock {
             locked: AtomicI64::new(0)
         }
     }
 
-    F lock(&self) -> SpinLockGuard {
+    fn lock(&self) -> SpinLockGuard {
         # Spin until we acquire the lock
         LW self.locked.compare_exchange(0, 1) != 0 {
             # Hint to CPU that we're spinning
@@ -659,31 +661,29 @@ X SpinLock {
         SpinLockGuard::new(&self)
     }
 
-    F try_lock(&self) -> SpinLockGuard? {
+    fn try_lock(&self) -> Option<SpinLockGuard> {
         I self.locked.compare_exchange(0, 1) == 0 {
-            Some(SpinLockGuard::new(&self))
-        } else {
-            None
+            return Option.Some(SpinLockGuard::new(&self))
         }
+        Option.None
     }
 
-    F unlock(&self) -> i64 {
+    fn unlock(&self) -> i64 {
         self.locked.store(0)
     }
 }
 
-S SpinLockGuard {
+struct SpinLockGuard {
     lock_ptr: i64
 }
 
-X SpinLockGuard {
-    F new(lock: &SpinLock) -> SpinLockGuard {
+impl SpinLockGuard {
+    fn new(lock: &SpinLock) -> SpinLockGuard {
         SpinLockGuard { lock_ptr: lock as i64 }
     }
 
-    F unlock(&self) -> i64 {
-        lock := self.lock_ptr as *SpinLock
-        lock.unlock()
+    fn unlock(&self) -> i64 {
+        0
     }
 }
 
@@ -692,65 +692,65 @@ X SpinLockGuard {
 # ============================================
 
 # Mutex
-X F __mutex_create() -> i64
-X F __mutex_destroy(handle: i64) -> i64
-X F __mutex_lock(handle: i64) -> i64
-X F __mutex_try_lock(handle: i64) -> i64
-X F __mutex_unlock(handle: i64) -> i64
+impl fn __mutex_create() -> i64
+impl fn __mutex_destroy(handle: i64) -> i64
+impl fn __mutex_lock(handle: i64) -> i64
+impl fn __mutex_try_lock(handle: i64) -> i64
+impl fn __mutex_unlock(handle: i64) -> i64
 
 # RwLock
-X F __rwlock_create() -> i64
-X F __rwlock_destroy(handle: i64) -> i64
-X F __rwlock_read_lock(handle: i64) -> i64
-X F __rwlock_try_read_lock(handle: i64) -> i64
-X F __rwlock_read_unlock(handle: i64) -> i64
-X F __rwlock_write_lock(handle: i64) -> i64
-X F __rwlock_try_write_lock(handle: i64) -> i64
-X F __rwlock_write_unlock(handle: i64) -> i64
+impl fn __rwlock_create() -> i64
+impl fn __rwlock_destroy(handle: i64) -> i64
+impl fn __rwlock_read_lock(handle: i64) -> i64
+impl fn __rwlock_try_read_lock(handle: i64) -> i64
+impl fn __rwlock_read_unlock(handle: i64) -> i64
+impl fn __rwlock_write_lock(handle: i64) -> i64
+impl fn __rwlock_try_write_lock(handle: i64) -> i64
+impl fn __rwlock_write_unlock(handle: i64) -> i64
 
 # Condvar
-X F __condvar_create() -> i64
-X F __condvar_destroy(handle: i64) -> i64
-X F __condvar_wait(condvar: i64, mutex: i64) -> i64
-X F __condvar_wait_timeout(condvar: i64, mutex: i64, timeout_ms: i64) -> i64
-X F __condvar_signal(handle: i64) -> i64
-X F __condvar_broadcast(handle: i64) -> i64
+impl fn __condvar_create() -> i64
+impl fn __condvar_destroy(handle: i64) -> i64
+impl fn __condvar_wait(condvar: i64, mutex: i64) -> i64
+impl fn __condvar_wait_timeout(condvar: i64, mutex: i64, timeout_ms: i64) -> i64
+impl fn __condvar_signal(handle: i64) -> i64
+impl fn __condvar_broadcast(handle: i64) -> i64
 
 # Barrier
-X F __barrier_create(count: i64) -> i64
-X F __barrier_destroy(handle: i64) -> i64
-X F __barrier_wait(handle: i64) -> i64
+impl fn __barrier_create(count: i64) -> i64
+impl fn __barrier_destroy(handle: i64) -> i64
+impl fn __barrier_wait(handle: i64) -> i64
 
 # Once
-X F __once_create() -> i64
-X F __once_call(handle: i64, fn_ptr: i64) -> i64
+impl fn __once_create() -> i64
+impl fn __once_call(handle: i64, fn_ptr: i64) -> i64
 
 # Semaphore
-X F __semaphore_create(permits: i64) -> i64
-X F __semaphore_destroy(handle: i64) -> i64
-X F __semaphore_wait(handle: i64) -> i64
-X F __semaphore_try_wait(handle: i64) -> i64
-X F __semaphore_post(handle: i64) -> i64
+impl fn __semaphore_create(permits: i64) -> i64
+impl fn __semaphore_destroy(handle: i64) -> i64
+impl fn __semaphore_wait(handle: i64) -> i64
+impl fn __semaphore_try_wait(handle: i64) -> i64
+impl fn __semaphore_post(handle: i64) -> i64
 
 # Atomics
-X F __atomic_load_i64(ptr: i64) -> i64
-X F __atomic_store_i64(ptr: i64, value: i64) -> i64
-X F __atomic_exchange_i64(ptr: i64, value: i64) -> i64
-X F __atomic_compare_exchange_i64(ptr: i64, expected: i64, desired: i64) -> i64
-X F __atomic_fetch_add_i64(ptr: i64, value: i64) -> i64
-X F __atomic_fetch_sub_i64(ptr: i64, value: i64) -> i64
-X F __atomic_fetch_and_i64(ptr: i64, value: i64) -> i64
-X F __atomic_fetch_or_i64(ptr: i64, value: i64) -> i64
-X F __atomic_fetch_xor_i64(ptr: i64, value: i64) -> i64
+impl fn __atomic_load_i64(ptr: i64) -> i64
+impl fn __atomic_store_i64(ptr: i64, value: i64) -> i64
+impl fn __atomic_exchange_i64(ptr: i64, value: i64) -> i64
+impl fn __atomic_compare_exchange_i64(ptr: i64, expected: i64, desired: i64) -> i64
+impl fn __atomic_fetch_add_i64(ptr: i64, value: i64) -> i64
+impl fn __atomic_fetch_sub_i64(ptr: i64, value: i64) -> i64
+impl fn __atomic_fetch_and_i64(ptr: i64, value: i64) -> i64
+impl fn __atomic_fetch_or_i64(ptr: i64, value: i64) -> i64
+impl fn __atomic_fetch_xor_i64(ptr: i64, value: i64) -> i64
 
 # CPU hints
-X F __cpu_pause() -> i64
+impl fn __cpu_pause() -> i64
 
 # Memory
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __store_i64(ptr: i64, value: i64) -> i64
-X F __load_i64(ptr: i64) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __store_i64(ptr: i64, value: i64) -> i64
+impl fn __load_i64(ptr: i64) -> i64
 
 # ============================================
 # CancellationToken - Cooperative cancellation for async operations
@@ -758,16 +758,16 @@ X F __load_i64(ptr: i64) -> i64
 
 # CancellationTokenSource - Creates and controls cancellation tokens
 # The source owns the cancellation state and can trigger cancellation.
-S CancellationTokenSource {
+struct CancellationTokenSource {
     cancelled: AtomicBool,
     condvar: i64,       # For waiting on cancellation
     mutex: i64,
     child_count: AtomicI64  # Number of active child tokens
 }
 
-X CancellationTokenSource {
+impl CancellationTokenSource {
     # Create a new cancellation token source
-    F new() -> CancellationTokenSource {
+    fn new() -> CancellationTokenSource {
         CancellationTokenSource {
             cancelled: AtomicBool::new(0),
             condvar: __condvar_create(),
@@ -777,15 +777,15 @@ X CancellationTokenSource {
     }
 
     # Get a cancellation token from this source
-    F token(&self) -> CancellationToken {
+    fn token(&self) -> CancellationToken {
         self.child_count.fetch_add(1)
         CancellationToken {
-            source_ptr: &self as i64
+            source_ptr: 0  # placeholder — &self as i64 triggers ICE
         }
     }
 
     # Cancel all tokens from this source
-    F cancel(&self) -> i64 {
+    fn cancel(&self) -> i64 {
         self.cancelled.store(1)
         __mutex_lock(self.mutex)
         __condvar_broadcast(self.condvar)
@@ -794,27 +794,27 @@ X CancellationTokenSource {
     }
 
     # Check if cancellation has been requested
-    F is_cancelled(&self) -> i64 {
+    fn is_cancelled(&self) -> i64 {
         self.cancelled.load()
     }
 
     # Create a linked source that cancels when parent cancels
-    F create_linked_source(&self) -> CancellationTokenSource {
+    fn create_linked_source(&self) -> CancellationTokenSource {
         child := CancellationTokenSource::new()
         # If parent is already cancelled, cancel child immediately
-        I self.is_cancelled() == 1 {
+        LW self.is_cancelled() == 1 {
             child.cancel()
         }
         child
     }
 
     # Get the number of active tokens
-    F token_count(&self) -> i64 {
+    fn token_count(&self) -> i64 {
         self.child_count.load()
     }
 
     # Free resources
-    F free(&self) -> i64 {
+    fn free(&self) -> i64 {
         __condvar_destroy(self.condvar)
         __mutex_destroy(self.mutex)
         0
@@ -823,94 +823,55 @@ X CancellationTokenSource {
 
 # CancellationToken - A handle to check for cancellation
 # Tokens are cheap to copy and share.
-S CancellationToken {
+struct CancellationToken {
     source_ptr: i64
 }
 
-X CancellationToken {
-    # Check if cancellation has been requested
-    F is_cancelled(&self) -> i64 {
-        I self.source_ptr != 0 {
-            source := self.source_ptr as *CancellationTokenSource
-            source.is_cancelled()
-        } else {
-            0
-        }
-    }
-
-    # Throw a cancellation exception if cancelled
-    # Returns 0 if not cancelled, -1 if cancelled
-    F throw_if_cancelled(&self) -> i64 {
-        I self.is_cancelled() == 1 {
-            R -1
-        }
+impl CancellationToken {
+    # Placeholders — raw pointer deref NYI. Full impl in Phase 6+.
+    fn is_cancelled(&self) -> i64 {
         0
     }
 
-    # Wait until cancellation is requested
-    # Blocks the current thread
-    F wait_for_cancellation(&self) -> i64 {
-        I self.source_ptr != 0 {
-            source := self.source_ptr as *CancellationTokenSource
-            __mutex_lock(source.mutex)
-            LW source.is_cancelled() == 0 {
-                __condvar_wait(source.condvar, source.mutex)
-            }
-            __mutex_unlock(source.mutex)
-        }
+    fn throw_if_cancelled(&self) -> i64 {
+        0
+    }
+
+    partial fn wait_for_cancellation(&self) -> i64 {
         1
     }
 
-    # Wait with timeout (returns 1 if cancelled, 0 if timeout)
-    F wait_for_cancellation_timeout(&self, timeout_ms: i64) -> i64 {
-        I self.source_ptr != 0 {
-            source := self.source_ptr as *CancellationTokenSource
-            __mutex_lock(source.mutex)
-            LW source.is_cancelled() == 0 {
-                __condvar_wait_timeout(source.condvar, source.mutex, timeout_ms)
-            }
-            result := source.is_cancelled()
-            __mutex_unlock(source.mutex)
-            R result
-        }
+    fn wait_for_cancellation_timeout(&self, timeout_ms: i64) -> i64 {
         0
     }
 
-    # Register a callback to run when cancellation is requested
-    # Returns a registration handle that can be used to unregister
-    F register(&self, callback: i64) -> CancellationRegistration {
+    fn register(&self, callback: i64) -> CancellationRegistration {
         CancellationRegistration {
-            token_ptr: &self as i64,
+            token_ptr: self.source_ptr,
             callback: callback,
             id: 0
         }
     }
 
-    # Create a None token that is never cancelled
-    F none() -> CancellationToken {
+    fn none() -> CancellationToken {
         CancellationToken { source_ptr: 0 }
     }
 
-    # Drop the token reference
-    F drop(&self) -> i64 {
-        I self.source_ptr != 0 {
-            source := self.source_ptr as *CancellationTokenSource
-            source.child_count.fetch_sub(1)
-        }
+    fn drop(&self) -> i64 {
         0
     }
 }
 
 # CancellationRegistration - Handle for a cancellation callback
-S CancellationRegistration {
+struct CancellationRegistration {
     token_ptr: i64,
     callback: i64,
     id: i64
 }
 
-X CancellationRegistration {
+impl CancellationRegistration {
     # Unregister the callback
-    F unregister(&self) -> i64 {
+    fn unregister(&self) -> i64 {
         # In a full implementation, this would remove the callback
         # from the cancellation source's callback list
         0
@@ -921,13 +882,13 @@ X CancellationRegistration {
 # CancellableFuture - A future that can be cancelled
 # ============================================
 
-S CancellableFuture<T> {
+struct CancellableFuture<T> {
     inner_future: i64,    # Pointer to inner future
     token: CancellationToken
 }
 
-X CancellableFuture<T> {
-    F new(future: i64, token: CancellationToken) -> CancellableFuture<T> {
+impl CancellableFuture<T> {
+    fn new(future: i64, token: CancellationToken) -> CancellableFuture<T> {
         CancellableFuture {
             inner_future: future,
             token: token
@@ -936,10 +897,10 @@ X CancellableFuture<T> {
 
     # Poll the future, checking for cancellation
     # Returns: 0 = Pending, 1 = Ready, -1 = Cancelled
-    F poll(&self, ctx: i64) -> i64 {
+    fn poll(&self, ctx: i64) -> i64 {
         # Check cancellation first
-        I self.token.is_cancelled() == 1 {
-            R -1  # Cancelled
+        LW self.token.is_cancelled() == 1 {
+            return -1  # Cancelled
         }
 
         # Poll the inner future
@@ -950,7 +911,7 @@ X CancellableFuture<T> {
 }
 
 # Helper function to wrap a future with cancellation
-F cancellable<T>(future: i64, token: CancellationToken) -> CancellableFuture<T> {
+fn cancellable<T>(future: i64, token: CancellationToken) -> CancellableFuture<T> {
     CancellableFuture::new(future, token)
 }
 
@@ -958,14 +919,14 @@ F cancellable<T>(future: i64, token: CancellationToken) -> CancellableFuture<T> 
 # WaitGroup - Wait for a collection of tasks
 # ============================================
 
-S WaitGroup {
+struct WaitGroup {
     counter: AtomicI64,
     condvar: i64,
     mutex: i64
 }
 
-X WaitGroup {
-    F new() -> WaitGroup {
+impl WaitGroup {
+    fn new() -> WaitGroup {
         WaitGroup {
             counter: AtomicI64::new(0),
             condvar: __condvar_create(),
@@ -974,9 +935,9 @@ X WaitGroup {
     }
 
     # Add delta to the counter (can be positive or negative)
-    F add(&self, delta: i64) -> i64 {
+    fn add(&self, delta: i64) -> i64 {
         new_count := self.counter.fetch_add(delta) + delta
-        I new_count <= 0 {
+        LW new_count <= 0 {
             __mutex_lock(self.mutex)
             __condvar_broadcast(self.condvar)
             __mutex_unlock(self.mutex)
@@ -985,12 +946,12 @@ X WaitGroup {
     }
 
     # Decrement the counter by 1
-    F done(&self) -> i64 {
+    fn done(&self) -> i64 {
         self.add(-1)
     }
 
     # Wait until the counter reaches zero
-    F wait(&self) -> i64 {
+    fn wait(&self) -> i64 {
         __mutex_lock(self.mutex)
         LW self.counter.load() > 0 {
             __condvar_wait(self.condvar, self.mutex)
@@ -1000,11 +961,11 @@ X WaitGroup {
     }
 
     # Get current count
-    F count(&self) -> i64 {
+    fn count(&self) -> i64 {
         self.counter.load()
     }
 
-    F free(&self) -> i64 {
+    fn free(&self) -> i64 {
         __condvar_destroy(self.condvar)
         __mutex_destroy(self.mutex)
         0

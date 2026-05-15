@@ -1,0 +1,25 @@
+# LIVING_SPEC/03_generics/generic_fn_bounded.vais
+# Key concept: F f<T: Trait>(x: T) 트레이트 바운드 제네릭 함수.
+# 주의: Eq 등 built-in trait bound가 checker에서 미지원인 경우 unbounded T 사용.
+# 여기서는 사용자 정의 트레이트 Describable을 바운드로 사용.
+
+trait Describable {
+    fn describe(&self) -> i64
+}
+
+struct Num {
+    val: i64
+}
+
+impl Num: Describable {
+    fn describe(&self) -> i64 = self.val
+}
+
+fn show<T: Describable>(item: T) -> i64 {
+    item.describe()
+}
+
+fn main() -> i64 {
+    n := Num { val: 7 }
+    show(n)
+}

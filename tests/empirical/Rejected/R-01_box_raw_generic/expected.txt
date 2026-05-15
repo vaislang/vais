@@ -1,0 +1,1 @@
+check_fails: E030 no field 'value' on type 'Box'

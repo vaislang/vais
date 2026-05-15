@@ -4,14 +4,14 @@ use crate::commands::build::cmd_build;
 use crate::configure_type_checker;
 use crate::error_formatter;
 use crate::imports::load_module_with_imports_internal;
-use crate::utils::{print_plugin_diagnostics, walkdir};
+use crate::utils::{emit_deprecation_warnings, print_plugin_diagnostics, walkdir};
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use vais_codegen::TargetTriple;
-use vais_lexer::tokenize;
+use vais_lexer::tokenize_with_warnings;
 use vais_parser::parse;
 use vais_plugin::{DiagnosticLevel, PluginRegistry};
 use vais_query::QueryDatabase;
@@ -134,6 +134,35 @@ fn cmd_run_jit(_input: &PathBuf, _verbose: bool) -> Result<(), String> {
     Err("vaisc was built without the `jit` feature; rebuild with `--features jit`".to_string())
 }
 
+/// Walk up from `start` looking for a Vais package source root.
+///
+/// Returns the directory that should be used as `source_root` for import
+/// resolution. Detection rules (in order):
+/// 1. The nearest ancestor that contains a `vais.toml` — and we return its
+///    `src/` subdirectory if it exists, otherwise the directory itself.
+/// 2. The nearest ancestor named `src` (so `pkg/src/foo/bar.vais` → `pkg/src`).
+///
+/// Returns `None` if no package root is detected; callers fall back to the
+/// input file's parent directory.
+fn find_package_source_root(start: &Path) -> Option<PathBuf> {
+    let mut cur: Option<&Path> = start.parent();
+    while let Some(dir) = cur {
+        if dir.join("vais.toml").is_file() {
+            let src = dir.join("src");
+            return Some(if src.is_dir() { src } else { dir.to_path_buf() });
+        }
+        cur = dir.parent();
+    }
+    let mut cur: Option<&Path> = start.parent();
+    while let Some(dir) = cur {
+        if dir.file_name().map(|n| n == "src").unwrap_or(false) {
+            return Some(dir.to_path_buf());
+        }
+        cur = dir.parent();
+    }
+    None
+}
+
 pub(crate) fn cmd_check(
     input: &PathBuf,
     verbose: bool,
@@ -151,15 +180,22 @@ pub(crate) fn cmd_check(
         println!("{} {}", "Checking".green().bold(), input.display());
     }
 
-    // Tokenize (quick syntax check)
-    let _tokens = tokenize(&source).map_err(|e| format!("Lexer error: {}", e))?;
+    // Tokenize (quick syntax check) + collect single-char keyword
+    // deprecation warnings (Step 19 P1, 2026-05-07).
+    let (_tokens, deprecation_warnings) =
+        tokenize_with_warnings(&source).map_err(|e| format!("Lexer error: {}", e))?;
+    emit_deprecation_warnings(&deprecation_warnings, &input.display().to_string());
 
     // Parse with import resolution — load all imported modules into a merged AST
     let mut query_db = QueryDatabase::new();
     query_db.set_cfg_values(std::collections::HashMap::new());
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
     let mut loading_stack: Vec<PathBuf> = Vec::new();
-    let source_root = canonical_input.parent().map(|p| p.to_path_buf());
+    // Walk up from the input file looking for a package root (vais.toml or src/).
+    // If found, use that as source_root so imports like `U security/types` resolve
+    // package-relative instead of being limited to the input file's parent.
+    let source_root = find_package_source_root(&canonical_input)
+        .or_else(|| canonical_input.parent().map(|p| p.to_path_buf()));
     let merged = load_module_with_imports_internal(
         &canonical_input,
         &mut loaded_modules,
@@ -173,14 +209,44 @@ pub(crate) fn cmd_check(
     let ast = match merged {
         Ok(module) => module,
         Err(import_err) => {
-            // Fall back to single-file parse if import resolution fails
-            if verbose {
-                println!(
-                    "{} import resolution: {}",
-                    "warning:".yellow().bold(),
+            // Default-strict (Master Plan v34 / Step 11 root-fix close,
+            // 2026-05-08). Import resolution failure now returns a stable
+            // E_IMPORT_NOT_FOUND error instead of silently falling back to
+            // single-file parse. Empirical impact measurement (vaisc check
+            // across std/82 + selfhost/58 + LIVING_SPEC/117 + vaisdb/282 +
+            // vais-server/78 with strict on vs off) showed delta=0 — every
+            // file that resolves under default mode also resolves under
+            // strict mode, because the only callers that previously hit the
+            // fallback path were uncertified A3 surfaces (gRPC / graphql /
+            // ws-handler / vaisdb security / vaisdb graph / fulltext /
+            // advanced-sql / WAL bulk / vais-server HTTPS), each of which
+            // is now permanent-fixture rejected (compiler/tests/empirical/A3/
+            // A3-01 .. A3-09).
+            //
+            // Opt-out via VAIS_STRICT_IMPORTS=0 retained for legacy harness
+            // scripts that intentionally compile-as-single-file; this is
+            // the inverse of the previous policy. Setting it to anything
+            // other than "0" (or leaving it unset) keeps the strict path.
+            //
+            // Rationale: silent fallback violates LESSONS L-002 north star
+            // ("no silent failure / no implicit behavior"). STEP11_FINDINGS
+            // F-A3-01 documented the violation; the loop 28 drift-correction
+            // close marked the 9 A3 fixtures as DONE but left the default
+            // unchanged, which the user flagged as a non-root close. This
+            // commit lands the actual root fix.
+            let opt_out = std::env::var("VAIS_STRICT_IMPORTS").ok().as_deref() == Some("0");
+            if !opt_out {
+                return Err(format!(
+                    "error[E_IMPORT_NOT_FOUND]: import resolution failed\n  {}\n  Set VAIS_STRICT_IMPORTS=0 to fall back to single-file parse (legacy harness only — uncertified surfaces stay rejected).",
                     import_err
-                );
+                ));
             }
+            // Legacy single-file fallback (opt-out only).
+            eprintln!(
+                "{} import resolution failed, falling back to single-file parse (VAIS_STRICT_IMPORTS=0 opt-out):\n  {}",
+                "warning:".yellow().bold(),
+                import_err
+            );
             let parsed = parse(&source)
                 .map_err(|e| error_formatter::format_parse_error(&e, &source, input))?;
             vais_ast::Module {
@@ -214,6 +280,27 @@ pub(crate) fn cmd_check(
     // Type check merged AST (includes all imported struct/function definitions)
     let mut checker = TypeChecker::new();
     configure_type_checker(&mut checker);
+
+    // Tell the checker how many leading items came from imported modules so
+    // ownership/borrow checking can skip them. Without this, every transitive
+    // importer of std/vec saw spurious E022 from std/vec.fold's `acc := mut init`
+    // pattern (Phase 213). Mirrors what `commands/build/core.rs` already does.
+    {
+        let single_file_ast = parse(&source).unwrap_or_else(|_| vais_ast::Module {
+            items: vec![],
+            modules_map: None,
+        });
+        let original_non_use_count = single_file_ast
+            .items
+            .iter()
+            .filter(|item| !matches!(item.node, vais_ast::Item::Use(_)))
+            .count();
+        let imported_count = ast.items.len().saturating_sub(original_non_use_count);
+        if imported_count > 0 {
+            checker.set_imported_item_count(imported_count);
+        }
+    }
+
     if let Err(e) = checker.check_module(&ast) {
         return Err(error_formatter::format_type_error(&e, &source, input));
     }
@@ -520,3 +607,6 @@ description = "CLI for {name}"
 
     Ok(())
 }
+
+// Note: emit_deprecation_warnings() lives in
+// crate::utils::deprecation to be sharable across cmd_check and cmd_build.

@@ -2,11 +2,11 @@
 # Token definitions for the lexer
 # All TOK_* constants are defined in constants.vais (single source of truth)
 
-U constants
+use constants
 
 # Token structure - stores token type and associated data
 # Note: All values stored as i64 for simplicity (float bits stored as i64)
-S Token {
+struct Token {
     kind: i64,           # Token type constant
     value: i64,          # For integer/float literals (float stored as bits)
     str_ptr: i64,        # Pointer to string data (for strings/idents)
@@ -15,9 +15,9 @@ S Token {
     span_end: i64        # Source end position
 }
 
-X Token {
+impl Token {
     # Create a simple token (no value)
-    F simple(kind: i64, start: i64, end: i64) -> Token = Token {
+    fn simple(kind: i64, start: i64, end: i64) -> Token = Token {
         kind: kind,
         value: 0,
         str_ptr: 0,
@@ -27,7 +27,7 @@ X Token {
     }
 
     # Create an integer literal token
-    F int_lit(val: i64, start: i64, end: i64) -> Token = Token {
+    fn int_lit(val: i64, start: i64, end: i64) -> Token = Token {
         kind: TOK_INT(),
         value: val,
         str_ptr: 0,
@@ -37,7 +37,7 @@ X Token {
     }
 
     # Create a float literal token (value stored as bit pattern)
-    F float_lit(val: i64, start: i64, end: i64) -> Token = Token {
+    fn float_lit(val: i64, start: i64, end: i64) -> Token = Token {
         kind: TOK_FLOAT(),
         value: val,
         str_ptr: 0,
@@ -47,7 +47,7 @@ X Token {
     }
 
     # Create a string/identifier token
-    F string_token(kind: i64, ptr: i64, len: i64, start: i64, end: i64) -> Token = Token {
+    fn string_token(kind: i64, ptr: i64, len: i64, start: i64, end: i64) -> Token = Token {
         kind: kind,
         value: 0,
         str_ptr: ptr,
@@ -57,63 +57,63 @@ X Token {
     }
 
     # Check if token is a keyword
-    F is_keyword(&self) -> i64 {
-        I self.kind >= 1 && self.kind <= 30 { 1 } EL { 0 }
+    fn is_keyword(&self) -> i64 {
+        I self.kind >= 1 && self.kind <= 30 { 1 } else { 0 }
     }
 
     # Check if token is a type keyword
-    F is_type_keyword(&self) -> i64 {
-        I self.kind >= 31 && self.kind <= 50 { 1 } EL { 0 }
+    fn is_type_keyword(&self) -> i64 {
+        I self.kind >= 31 && self.kind <= 50 { 1 } else { 0 }
     }
 
     # Check if token is a literal
-    F is_literal(&self) -> i64 {
-        I self.kind >= 51 && self.kind <= 60 { 1 } EL { 0 }
+    fn is_literal(&self) -> i64 {
+        I self.kind >= 51 && self.kind <= 60 { 1 } else { 0 }
     }
 
     # Check if token is an operator
-    F is_operator(&self) -> i64 {
-        I self.kind >= 61 && self.kind <= 80 { 1 } EL { 0 }
+    fn is_operator(&self) -> i64 {
+        I self.kind >= 61 && self.kind <= 80 { 1 } else { 0 }
     }
 
     # Check if token is EOF
-    F is_eof(&self) -> i64 {
-        I self.kind == TOK_EOF() { 1 } EL { 0 }
+    fn is_eof(&self) -> i64 {
+        I self.kind == TOK_EOF() { 1 } else { 0 }
     }
 
     # Get operator precedence (higher = tighter binding)
-    F precedence(&self) -> i64 {
+    fn precedence(&self) -> i64 {
         k := self.kind
         I k == 80 { 1 }                                          # ||
-        EL I k == 79 { 2 }                                        # &&
-        EL I k == 73 { 3 }                                        # |
-        EL I k == 74 { 4 }                                        # ^
-        EL I k == 72 { 5 }                                        # &
-        EL I k == 70 || k == 71 { 6 }                             # == !=
-        EL I k == 66 || k == 67 || k == 68 || k == 69 { 7 }       # < > <= >=
-        EL I k == 76 || k == 77 { 8 }                             # << >>
-        EL I k == 61 || k == 62 { 9 }                             # + -
-        EL I k == 63 || k == 64 || k == 65 { 10 }                 # * / %
-        EL { 0 }
+        else I k == 79 { 2 }                                        # &&
+        else I k == 73 { 3 }                                        # |
+        else I k == 74 { 4 }                                        # ^
+        else I k == 72 { 5 }                                        # &
+        else I k == 70 || k == 71 { 6 }                             # == !=
+        else I k == 66 || k == 67 || k == 68 || k == 69 { 7 }       # < > <= >=
+        else I k == 76 || k == 77 { 8 }                             # << >>
+        else I k == 61 || k == 62 { 9 }                             # + -
+        else I k == 63 || k == 64 || k == 65 { 10 }                 # * / %
+        else { 0 }
     }
 }
 
 # Token list for lexer output
-S TokenList {
+struct TokenList {
     data: i64,    # Pointer to Token array
     len: i64,     # Current number of tokens
     cap: i64      # Capacity
 }
 
-X TokenList {
+impl TokenList {
     # Create a new token list
-    F new(capacity: i64) -> TokenList {
+    fn new(capacity: i64) -> TokenList {
         data := malloc(capacity * 48)  # Each Token is ~64 bytes
         TokenList { data: data, len: 0, cap: capacity }
     }
 
     # Add a token to the list (pass fields directly to avoid struct parameter bug)
-    F push_fields(&self, kind: i64, value: i64, str_ptr: i64, str_len: i64, span_start: i64, span_end: i64) -> i64 {
+    fn push_fields(&self, kind: i64, value: i64, str_ptr: i64, str_len: i64, span_start: i64, span_end: i64) -> i64 {
         I self.len >= self.cap {
             # Grow the list
             @.grow()
@@ -126,7 +126,7 @@ X TokenList {
     }
 
     # Get token at index - uses unsafe access (caller must ensure valid index)
-    F get(&self, index: i64) -> Token {
+    fn get(&self, index: i64) -> Token {
         ptr := self.data + index * 48
         Token {
             kind: load_i64(ptr + 0),
@@ -139,12 +139,12 @@ X TokenList {
     }
 
     # Check if index is valid
-    F is_valid_index(&self, index: i64) -> i64 {
-        I index >= 0 && index < self.len { 1 } EL { 0 }
+    fn is_valid_index(&self, index: i64) -> i64 {
+        I index >= 0 && index < self.len { 1 } else { 0 }
     }
 
     # Grow the list
-    F grow(&self) -> i64 {
+    fn grow(&self) -> i64 {
         new_cap := self.cap * 2
         new_data := malloc(new_cap * 48)
         memcpy(new_data, self.data, self.len * 48)
@@ -155,17 +155,17 @@ X TokenList {
     }
 
     # Get length
-    F len(&self) -> i64 = self.len
+    fn len(&self) -> i64 = self.len
 
     # Free the list
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.data)
         1
     }
 }
 
 # Global helper functions for token creation (used by lexer)
-F token_simple(kind: i64, start: i64, end: i64) -> Token = Token {
+fn token_simple(kind: i64, start: i64, end: i64) -> Token = Token {
     kind: kind,
     value: 0,
     str_ptr: 0,
@@ -174,7 +174,7 @@ F token_simple(kind: i64, start: i64, end: i64) -> Token = Token {
     span_end: end
 }
 
-F token_int_lit(val: i64, start: i64, end: i64) -> Token = Token {
+fn token_int_lit(val: i64, start: i64, end: i64) -> Token = Token {
     kind: TOK_INT(),
     value: val,
     str_ptr: 0,
@@ -183,7 +183,7 @@ F token_int_lit(val: i64, start: i64, end: i64) -> Token = Token {
     span_end: end
 }
 
-F token_float_lit(val: i64, start: i64, end: i64) -> Token = Token {
+fn token_float_lit(val: i64, start: i64, end: i64) -> Token = Token {
     kind: TOK_FLOAT(),
     value: val,
     str_ptr: 0,
@@ -192,7 +192,7 @@ F token_float_lit(val: i64, start: i64, end: i64) -> Token = Token {
     span_end: end
 }
 
-F token_string(kind: i64, ptr: i64, len: i64, start: i64, end: i64) -> Token = Token {
+fn token_string(kind: i64, ptr: i64, len: i64, start: i64, end: i64) -> Token = Token {
     kind: kind,
     value: 0,
     str_ptr: ptr,
@@ -201,7 +201,7 @@ F token_string(kind: i64, ptr: i64, len: i64, start: i64, end: i64) -> Token = T
     span_end: end
 }
 
-F tokenlist_new(capacity: i64) -> TokenList {
+fn tokenlist_new(capacity: i64) -> TokenList {
     data := malloc(capacity * 48)
     TokenList { data: data, len: 0, cap: capacity }
 }
@@ -209,7 +209,7 @@ F tokenlist_new(capacity: i64) -> TokenList {
 # Helper functions for token storage (using memory primitives)
 # Token size: 6 fields * 8 bytes = 48 bytes
 # store_token_fields: store token fields individually to dst pointer
-F store_token_fields(dst: i64, kind: i64, value: i64, str_ptr: i64, str_len: i64, span_start: i64, span_end: i64) -> i64 {
+fn store_token_fields(dst: i64, kind: i64, value: i64, str_ptr: i64, str_len: i64, span_start: i64, span_end: i64) -> i64 {
     store_i64(dst + 0, kind)
     store_i64(dst + 8, value)
     store_i64(dst + 16, str_ptr)
@@ -220,7 +220,7 @@ F store_token_fields(dst: i64, kind: i64, value: i64, str_ptr: i64, str_len: i64
 }
 
 # Test function (renamed from main to allow module import)
-F test_token_main() -> i64 {
+fn test_token_main() -> i64 {
     puts("Token module loaded")
 
     # Test token creation
@@ -228,7 +228,7 @@ F test_token_main() -> i64 {
     I tok.kind == 1 {
         puts("Token creation: OK")
         0
-    } EL {
+    } else {
         puts("Token creation: FAIL")
         0
     }
@@ -239,7 +239,7 @@ F test_token_main() -> i64 {
     I list.len() == 1 {
         puts("TokenList: OK")
         0
-    } EL {
+    } else {
         puts("TokenList: FAIL")
         0
     }

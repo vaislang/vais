@@ -68,28 +68,28 @@
 # Stackless coroutine-based async/await implementation
 
 # Poll result: Ready(value) or Pending
-EN Poll {
+enum Poll {
     Pending,
     Ready(i64)
 }
 
-X Poll {
-    F is_ready(&self) -> i64 {
-        M self {
+impl Poll {
+    fn is_ready(&self) -> i64 {
+        match self {
             Ready(_) => 1,
             Pending => 0
         }
     }
 
-    F is_pending(&self) -> i64 {
-        M self {
+    fn is_pending(&self) -> i64 {
+        match self {
             Ready(_) => 0,
             Pending => 1
         }
     }
 
-    F unwrap(&self) -> i64 {
-        M self {
+    fn unwrap(&self) -> i64 {
+        match self {
             Ready(v) => v,
             Pending => 0  # Should panic in real impl
         }
@@ -97,26 +97,26 @@ X Poll {
 }
 
 # Future trait - poll the future for completion
-W Future {
-    F poll(&self, ctx: i64) -> Poll
+trait Future {
+    fn poll(&self, ctx: i64) -> Poll
 }
 
 # Context passed to poll - contains waker
-S Context {
+struct Context {
     waker_ptr: i64,
     runtime_ptr: i64
 }
 
-X Context {
-    F new() -> Context {
+impl Context {
+    fn new() -> Context {
         Context { waker_ptr: 0, runtime_ptr: 0 }
     }
 
-    F with_runtime(runtime_ptr: i64) -> Context {
+    fn with_runtime(runtime_ptr: i64) -> Context {
         Context { waker_ptr: 0, runtime_ptr: runtime_ptr }
     }
 
-    F wake(&self) -> i64 {
+    partial fn wake(&self) -> i64 {
         # Wake up the task associated with this context
         LW self.waker_ptr != 0 {
             # Call waker function
@@ -128,17 +128,17 @@ X Context {
 }
 
 # Waker - mechanism to wake up a suspended task
-S Waker {
+struct Waker {
     task_ptr: i64,
     wake_fn: i64
 }
 
-X Waker {
-    F new(task_ptr: i64, wake_fn: i64) -> Waker {
+impl Waker {
+    fn new(task_ptr: i64, wake_fn: i64) -> Waker {
         Waker { task_ptr: task_ptr, wake_fn: wake_fn }
     }
 
-    F wake(&self) -> i64 {
+    fn wake(&self) -> i64 {
         # Signal the runtime that this task is ready to make progress
         LW self.wake_fn != 0 {
             # call_indirect(self.wake_fn, self.task_ptr)
@@ -154,15 +154,15 @@ X Waker {
 # ============================================
 
 # Map combinator - transforms the output of a future
-S MapFuture {
+struct MapFuture {
     inner_ptr: i64,     # Pointer to inner future
     inner_poll: i64,    # Poll function of inner future
     map_fn: i64,        # Mapping function pointer
     state: i64          # 0 = not polled, 1 = complete
 }
 
-X MapFuture {
-    F new(inner_ptr: i64, inner_poll: i64, map_fn: i64) -> MapFuture {
+impl MapFuture {
+    fn new(inner_ptr: i64, inner_poll: i64, map_fn: i64) -> MapFuture {
         MapFuture {
             inner_ptr: inner_ptr,
             inner_poll: inner_poll,
@@ -173,7 +173,7 @@ X MapFuture {
 }
 
 # AndThen combinator - chains futures sequentially
-S AndThenFuture {
+struct AndThenFuture {
     first_ptr: i64,     # First future
     first_poll: i64,
     second_fn: i64,     # Function that creates second future from first result
@@ -182,8 +182,8 @@ S AndThenFuture {
     second_poll: i64
 }
 
-X AndThenFuture {
-    F new(first_ptr: i64, first_poll: i64, second_fn: i64) -> AndThenFuture {
+impl AndThenFuture {
+    fn new(first_ptr: i64, first_poll: i64, second_fn: i64) -> AndThenFuture {
         AndThenFuture {
             first_ptr: first_ptr,
             first_poll: first_poll,
@@ -196,7 +196,7 @@ X AndThenFuture {
 }
 
 # Join combinator - runs two futures concurrently
-S JoinFuture {
+struct JoinFuture {
     first_ptr: i64,
     first_poll: i64,
     second_ptr: i64,
@@ -207,8 +207,8 @@ S JoinFuture {
     second_result: i64
 }
 
-X JoinFuture {
-    F new(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> JoinFuture {
+impl JoinFuture {
+    fn new(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> JoinFuture {
         JoinFuture {
             first_ptr: first_ptr,
             first_poll: first_poll,
@@ -223,15 +223,15 @@ X JoinFuture {
 }
 
 # Select combinator - returns when either future completes
-S SelectFuture {
+struct SelectFuture {
     first_ptr: i64,
     first_poll: i64,
     second_ptr: i64,
     second_poll: i64
 }
 
-X SelectFuture {
-    F new(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> SelectFuture {
+impl SelectFuture {
+    fn new(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> SelectFuture {
         SelectFuture {
             first_ptr: first_ptr,
             first_poll: first_poll,
@@ -242,23 +242,23 @@ X SelectFuture {
 }
 
 # Ready future - immediately resolves to a value
-S ReadyFuture {
+struct ReadyFuture {
     value: i64
 }
 
-X ReadyFuture {
-    F new(value: i64) -> ReadyFuture {
+impl ReadyFuture {
+    fn new(value: i64) -> ReadyFuture {
         ReadyFuture { value: value }
     }
 }
 
 # Pending future - never resolves
-S PendingFuture {
+struct PendingFuture {
     _dummy: i64
 }
 
-X PendingFuture {
-    F new() -> PendingFuture {
+impl PendingFuture {
+    fn new() -> PendingFuture {
         PendingFuture { _dummy: 0 }
     }
 }
@@ -268,22 +268,22 @@ X PendingFuture {
 # ============================================
 
 # Create a future that is immediately ready
-F ready(value: i64) -> ReadyFuture {
+fn ready(value: i64) -> ReadyFuture {
     ReadyFuture::new(value)
 }
 
 # Create a future that is always pending
-F pending() -> PendingFuture {
+fn pending() -> PendingFuture {
     PendingFuture::new()
 }
 
 # Join two futures - both must complete
-F join(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> JoinFuture {
+fn join(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> JoinFuture {
     JoinFuture::new(first_ptr, first_poll, second_ptr, second_poll)
 }
 
 # Select first completing future
-F select(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> SelectFuture {
+fn select(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> SelectFuture {
     SelectFuture::new(first_ptr, first_poll, second_ptr, second_poll)
 }
 
@@ -293,18 +293,18 @@ F select(first_ptr: i64, first_poll: i64, second_ptr: i64, second_poll: i64) -> 
 
 # Yield control back to the runtime
 # Returns Pending on first poll, Ready on second
-S YieldNow {
+struct YieldNow {
     yielded: i64
 }
 
-X YieldNow {
-    F new() -> YieldNow {
+impl YieldNow {
+    fn new() -> YieldNow {
         YieldNow { yielded: 0 }
     }
 }
 
 # Create a yield point
-F yield_now() -> YieldNow {
+fn yield_now() -> YieldNow {
     YieldNow::new()
 }
 
@@ -312,13 +312,13 @@ F yield_now() -> YieldNow {
 # Timer future (basic implementation)
 # ============================================
 
-S TimerFuture {
+struct TimerFuture {
     deadline: i64,      # Target tick count
     started: i64
 }
 
-X TimerFuture {
-    F new(ticks: i64) -> TimerFuture {
+impl TimerFuture {
+    fn new(ticks: i64) -> TimerFuture {
         TimerFuture {
             deadline: ticks,
             started: 0
@@ -327,7 +327,7 @@ X TimerFuture {
 }
 
 # Create a timer that completes after n iterations
-F delay(ticks: i64) -> TimerFuture {
+fn delay(ticks: i64) -> TimerFuture {
     TimerFuture::new(ticks)
 }
 
@@ -346,20 +346,20 @@ F delay(ticks: i64) -> TimerFuture {
 #   }
 
 # AsyncDrop trait - types implementing this perform async cleanup
-W AsyncDrop {
-    A F async_drop(&self) -> i64
+trait AsyncDrop {
+    A fn async_drop(&self) -> i64
 }
 
 # AsyncDropGuard wraps a value that implements AsyncDrop
 # and ensures async_drop is called when the guard is dropped
-S AsyncDropGuard {
+struct AsyncDropGuard {
     value_ptr: i64,         # Pointer to the value
     drop_fn: i64,           # Async drop function pointer (poll-based)
     dropped: i64            # 1 if already dropped
 }
 
-X AsyncDropGuard {
-    F new(value_ptr: i64, drop_fn: i64) -> AsyncDropGuard {
+impl AsyncDropGuard {
+    fn new(value_ptr: i64, drop_fn: i64) -> AsyncDropGuard {
         AsyncDropGuard {
             value_ptr: value_ptr,
             drop_fn: drop_fn,
@@ -369,9 +369,9 @@ X AsyncDropGuard {
 
     # Manually trigger async drop
     # Returns the result of the drop operation
-    A F drop_async(&self) -> i64 {
+    A fn drop_async(&self) -> i64 {
         LW self.dropped == 1 {
-            R 0  # Already dropped
+            return 0  # Already dropped
         }
         self.dropped = 1
         # Call the async drop function
@@ -381,36 +381,36 @@ X AsyncDropGuard {
     }
 
     # Check if already dropped
-    F is_dropped(&self) -> i64 {
+    fn is_dropped(&self) -> i64 {
         self.dropped
     }
 
     # Get the wrapped value pointer
-    F get(&self) -> i64 {
+    fn get(&self) -> i64 {
         self.value_ptr
     }
 }
 
 # AsyncDropScope manages multiple AsyncDrop resources
 # All resources are dropped in reverse order when the scope ends
-S AsyncDropScope {
+struct AsyncDropScope {
     head: i64,          # First guard in linked list
     count: i64          # Number of guards
 }
 
 # Linked list node for AsyncDropScope
-S AsyncDropNode {
+struct AsyncDropNode {
     guard_ptr: i64,     # Pointer to AsyncDropGuard
     next: i64           # Next node
 }
 
-X AsyncDropScope {
-    F new() -> AsyncDropScope {
+impl AsyncDropScope {
+    fn new() -> AsyncDropScope {
         AsyncDropScope { head: 0, count: 0 }
     }
 
     # Register a resource for async drop
-    F register(&self, value_ptr: i64, drop_fn: i64) -> AsyncDropGuard {
+    fn register(&self, value_ptr: i64, drop_fn: i64) -> AsyncDropGuard {
         guard := AsyncDropGuard::new(value_ptr, drop_fn)
 
         # Allocate node (2 fields * 8 bytes)
@@ -427,9 +427,9 @@ X AsyncDropScope {
 
     # Drop all resources in reverse registration order (LIFO)
     # Returns 0 on success, number of failed drops otherwise
-    F drop_all(&self) -> i64 {
+    fn drop_all(&self) -> i64 {
         errors := 0
-        current := self.head
+        current := mut self.head
 
         LW current != 0 {
             value_ptr := load_i64(current)
@@ -447,18 +447,18 @@ X AsyncDropScope {
     }
 
     # Get number of registered resources
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.count
     }
 }
 
 # Helper: create an async drop guard
-F async_drop_guard(value_ptr: i64, drop_fn: i64) -> AsyncDropGuard {
+fn async_drop_guard(value_ptr: i64, drop_fn: i64) -> AsyncDropGuard {
     AsyncDropGuard::new(value_ptr, drop_fn)
 }
 
 # Helper: create an async drop scope
-F async_drop_scope() -> AsyncDropScope {
+fn async_drop_scope() -> AsyncDropScope {
     AsyncDropScope::new()
 }
 
@@ -468,15 +468,15 @@ F async_drop_scope() -> AsyncDropScope {
 
 # FlatMap combinator - transforms and flattens the result directly
 # Similar to AndThen but returns the result without nesting
-S FlatMapFuture {
+struct FlatMapFuture {
     inner_ptr: i64,
     inner_poll: i64,
     flat_fn: i64,       # Function that transforms result
     state: i64          # 0 = not polled, 1 = polled inner, 2 = applied flat_fn
 }
 
-X FlatMapFuture {
-    F new(inner_ptr: i64, inner_poll: i64, flat_fn: i64) -> FlatMapFuture {
+impl FlatMapFuture {
+    fn new(inner_ptr: i64, inner_poll: i64, flat_fn: i64) -> FlatMapFuture {
         FlatMapFuture {
             inner_ptr: inner_ptr,
             inner_poll: inner_poll,
@@ -488,15 +488,15 @@ X FlatMapFuture {
 
 # Filter combinator - only returns Ready if predicate is true
 # Otherwise keeps returning Pending
-S FilterFuture {
+struct FilterFuture {
     inner_ptr: i64,
     inner_poll: i64,
     predicate_fn: i64,  # Function that tests the result
     state: i64          # 0 = not polled, 1 = polled
 }
 
-X FilterFuture {
-    F new(inner_ptr: i64, inner_poll: i64, predicate_fn: i64) -> FilterFuture {
+impl FilterFuture {
+    fn new(inner_ptr: i64, inner_poll: i64, predicate_fn: i64) -> FilterFuture {
         FilterFuture {
             inner_ptr: inner_ptr,
             inner_poll: inner_poll,
@@ -508,15 +508,15 @@ X FilterFuture {
 
 # Race combinator - returns the first future that completes
 # Supports multiple futures via pointer array
-S RaceFuture {
+struct RaceFuture {
     futures_ptr: i64,   # Pointer to array of future pointers
     polls_ptr: i64,     # Pointer to array of poll function pointers
     count: i64,         # Number of futures
     winner_idx: i64     # Index of first completed future (or -1)
 }
 
-X RaceFuture {
-    F new(futures_ptr: i64, polls_ptr: i64, count: i64) -> RaceFuture {
+impl RaceFuture {
+    fn new(futures_ptr: i64, polls_ptr: i64, count: i64) -> RaceFuture {
         RaceFuture {
             futures_ptr: futures_ptr,
             polls_ptr: polls_ptr,
@@ -528,7 +528,7 @@ X RaceFuture {
 
 # Chain combinator - executes futures sequentially
 # Runs first, then second, then third, etc.
-S ChainFuture {
+struct ChainFuture {
     futures_ptr: i64,   # Pointer to array of future pointers
     polls_ptr: i64,     # Pointer to array of poll function pointers
     count: i64,         # Total number of futures
@@ -536,8 +536,8 @@ S ChainFuture {
     results_ptr: i64    # Pointer to array storing results
 }
 
-X ChainFuture {
-    F new(futures_ptr: i64, polls_ptr: i64, count: i64) -> ChainFuture {
+impl ChainFuture {
+    fn new(futures_ptr: i64, polls_ptr: i64, count: i64) -> ChainFuture {
         # Allocate results array
         results := malloc(count * 8)
         ChainFuture {
@@ -550,10 +550,10 @@ X ChainFuture {
     }
 
     # Get result at given index
-    F get_result(&self, idx: i64) -> i64 {
+    fn get_result(&self, idx: i64) -> i64 {
         I idx >= 0 && idx < self.count {
             load_i64(self.results_ptr + idx * 8)
-        } EL {
+        } else {
             0
         }
     }
@@ -561,7 +561,7 @@ X ChainFuture {
 
 # Retry combinator - retries a future on failure
 # Uses backoff count between retries
-S RetryFuture {
+struct RetryFuture {
     future_fn: i64,         # Function that creates a new future
     current_ptr: i64,       # Current future instance
     current_poll: i64,      # Current poll function
@@ -572,8 +572,8 @@ S RetryFuture {
     state: i64              # 0 = polling, 1 = backing off
 }
 
-X RetryFuture {
-    F new(future_fn: i64, max_retries: i64, backoff_base: i64) -> RetryFuture {
+impl RetryFuture {
+    fn new(future_fn: i64, max_retries: i64, backoff_base: i64) -> RetryFuture {
         RetryFuture {
             future_fn: future_fn,
             current_ptr: 0,
@@ -588,12 +588,12 @@ X RetryFuture {
 
     # Calculate backoff delay for current attempt
     # Uses exponential backoff: base * 2^attempt
-    F calculate_backoff(&self) -> i64 {
+    fn calculate_backoff(&self) -> i64 {
         I self.attempt == 0 {
             self.backoff_base
-        } EL {
-            delay := self.backoff_base
-            shifts := self.attempt
+        } else {
+            delay := mut self.backoff_base
+            shifts := mut self.attempt
             LW shifts > 0 {
                 delay = delay * 2
                 shifts = shifts - 1
@@ -605,14 +605,14 @@ X RetryFuture {
 
 # Fuse guard - ensures a future only returns Ready once
 # Subsequent polls after Ready return Pending
-S FuseGuard {
+struct FuseGuard {
     inner_ptr: i64,
     inner_poll: i64,
     completed: i64      # 1 if already returned Ready
 }
 
-X FuseGuard {
-    F new(inner_ptr: i64, inner_poll: i64) -> FuseGuard {
+impl FuseGuard {
+    fn new(inner_ptr: i64, inner_poll: i64) -> FuseGuard {
         FuseGuard {
             inner_ptr: inner_ptr,
             inner_poll: inner_poll,
@@ -621,7 +621,7 @@ X FuseGuard {
     }
 
     # Check if future has completed
-    F is_completed(&self) -> i64 {
+    fn is_completed(&self) -> i64 {
         self.completed
     }
 }
@@ -631,41 +631,41 @@ X FuseGuard {
 # ============================================
 
 # Create a flat_map future
-F flat_map(inner_ptr: i64, inner_poll: i64, flat_fn: i64) -> FlatMapFuture {
+fn flat_map(inner_ptr: i64, inner_poll: i64, flat_fn: i64) -> FlatMapFuture {
     FlatMapFuture::new(inner_ptr, inner_poll, flat_fn)
 }
 
 # Create a filter future
-F filter(inner_ptr: i64, inner_poll: i64, predicate_fn: i64) -> FilterFuture {
+fn filter(inner_ptr: i64, inner_poll: i64, predicate_fn: i64) -> FilterFuture {
     FilterFuture::new(inner_ptr, inner_poll, predicate_fn)
 }
 
 # Create a race future from array of futures
-F race(futures_ptr: i64, polls_ptr: i64, count: i64) -> RaceFuture {
+fn race(futures_ptr: i64, polls_ptr: i64, count: i64) -> RaceFuture {
     RaceFuture::new(futures_ptr, polls_ptr, count)
 }
 
 # Create a chain future that runs futures sequentially
-F chain(futures_ptr: i64, polls_ptr: i64, count: i64) -> ChainFuture {
+fn chain(futures_ptr: i64, polls_ptr: i64, count: i64) -> ChainFuture {
     ChainFuture::new(futures_ptr, polls_ptr, count)
 }
 
 # Create a retry future with exponential backoff
-F retry(future_fn: i64, max_retries: i64, backoff_base: i64) -> RetryFuture {
+fn retry(future_fn: i64, max_retries: i64, backoff_base: i64) -> RetryFuture {
     RetryFuture::new(future_fn, max_retries, backoff_base)
 }
 
 # Create a fused future that only completes once
-F fuse(inner_ptr: i64, inner_poll: i64) -> FuseGuard {
+fn fuse(inner_ptr: i64, inner_poll: i64) -> FuseGuard {
     FuseGuard::new(inner_ptr, inner_poll)
 }
 
 # Poll a future until it returns Ready
 # Helper function that abstracts polling logic
 # Returns the Ready value, or 0 if still Pending
-F poll_ready(future_ptr: i64, poll_fn: i64, ctx: i64) -> i64 {
+fn poll_ready(future_ptr: i64, poll_fn: i64, ctx: i64) -> i64 {
     I poll_fn == 0 {
-        R 0
+        return 0
     }
 
     # Call poll function
@@ -676,9 +676,9 @@ F poll_ready(future_ptr: i64, poll_fn: i64, ctx: i64) -> i64 {
 
 # Poll a future and apply a mapping function to the result
 # Returns transformed value if Ready, 0 if Pending
-F poll_map(future_ptr: i64, poll_fn: i64, map_fn: i64, ctx: i64) -> i64 {
+fn poll_map(future_ptr: i64, poll_fn: i64, map_fn: i64, ctx: i64) -> i64 {
     I poll_fn == 0 || map_fn == 0 {
-        R 0
+        return 0
     }
 
     # Poll the future
@@ -688,7 +688,7 @@ F poll_map(future_ptr: i64, poll_fn: i64, map_fn: i64, ctx: i64) -> i64 {
     I poll_result != 0 {
         # In real impl: call_indirect(map_fn, poll_result)
         poll_result
-    } EL {
+    } else {
         0
     }
 }

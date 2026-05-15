@@ -16,12 +16,12 @@ fn check_module(source: &str) -> Result<(), String> {
 fn test_dyn_trait_type_parsing() {
     // Test that dyn Trait syntax parses correctly
     let source = r#"
-        W Drawable {
-            F draw(&self) -> i64
+        trait Drawable {
+            fn draw(&self) -> i64
         }
 
-        F use_drawable(d: &dyn Drawable) -> i64 = 0
-        F main() -> i64 = 0
+        fn use_drawable(d: &dyn Drawable) -> i64 = 0
+        fn main() -> i64 = 0
     "#;
     assert!(check_module(source).is_ok(), "dyn Trait type should parse");
 }
@@ -30,12 +30,12 @@ fn test_dyn_trait_type_parsing() {
 fn test_dyn_trait_with_generics() {
     // Test dyn Trait with generic parameters
     let source = r#"
-        W Iterator<T> {
-            F next(&self) -> T?
+        trait Iterator<T> {
+            fn next(&self) -> T?
         }
 
-        F use_iter(it: &dyn Iterator<i64>) -> i64 = 0
-        F main() -> i64 = 0
+        fn use_iter(it: &dyn Iterator<i64>) -> i64 = 0
+        fn main() -> i64 = 0
     "#;
     assert!(check_module(source).is_ok(), "dyn Trait<T> should parse");
 }
@@ -60,17 +60,17 @@ fn test_dyn_trait_display() {
 fn test_static_dispatch_still_works() {
     // Existing static dispatch should still work
     let source = r#"
-        W Printable {
-            F print(&self) -> i64
+        trait Printable {
+            fn print(&self) -> i64
         }
 
-        S Counter { value: i64 }
+        struct Counter { value: i64 }
 
-        X Counter: Printable {
-            F print(&self) -> i64 = self.value
+        impl Counter: Printable {
+            fn print(&self) -> i64 = self.value
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             c := Counter { value: 42 }
             c.print()
         }
@@ -82,11 +82,11 @@ fn test_static_dispatch_still_works() {
 fn test_trait_definition() {
     // Test basic trait definition
     let source = r#"
-        W Shape {
-            F area(&self) -> f64
-            F perimeter(&self) -> f64
+        trait Shape {
+            fn area(&self) -> f64
+            fn perimeter(&self) -> f64
         }
-        F main() -> i64 = 0
+        fn main() -> i64 = 0
     "#;
     assert!(check_module(source).is_ok(), "Trait definition should work");
 }
@@ -95,20 +95,59 @@ fn test_trait_definition() {
 fn test_trait_impl() {
     // Test trait implementation
     let source = r#"
-        W Greet {
-            F greet(&self) -> i64
+        trait Greet {
+            fn greet(&self) -> i64
         }
 
-        S Person { age: i64 }
+        struct Person { age: i64 }
 
-        X Person: Greet {
-            F greet(&self) -> i64 = self.age
+        impl Person: Greet {
+            fn greet(&self) -> i64 = self.age
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             p := Person { age: 25 }
             p.greet()
         }
     "#;
     assert!(check_module(source).is_ok(), "Trait impl should work");
+}
+
+#[test]
+fn test_box_dyn_method_dispatch() {
+    // Phase 6.27c.5: method call on Box<dyn Trait> must resolve to trait method.
+    // Previously `find_trait_method` only peeled Ref/RefMut; Box<dyn T> was opaque.
+    let source = r#"
+        trait Executor {
+            fn next(&mut self) -> i64
+        }
+
+        fn drive(e: &mut Box<dyn Executor>) -> i64 {
+            e.next()
+        }
+        fn main() -> i64 = 0
+    "#;
+    assert!(
+        check_module(source).is_ok(),
+        "Box<dyn Trait> method dispatch should work"
+    );
+}
+
+#[test]
+fn test_ref_dyn_method_dispatch() {
+    // Regression: &dyn T / &mut dyn T method dispatch.
+    let source = r#"
+        trait Printable {
+            fn render(&self) -> i64
+        }
+
+        fn show(p: &dyn Printable) -> i64 {
+            p.render()
+        }
+        fn main() -> i64 = 0
+    "#;
+    assert!(
+        check_module(source).is_ok(),
+        "&dyn Trait method dispatch should work"
+    );
 }

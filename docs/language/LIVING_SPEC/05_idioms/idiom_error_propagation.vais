@@ -1,0 +1,29 @@
+# LIVING_SPEC/05_idioms/idiom_error_propagation.vais
+# Key concept: ❌ 복잡한 M 체이닝 vs ✅ M으로 일관된 처리
+# ✅ DO: 각 단계 Result<T,E> 처리 후 Ok로 감싸서 반환.
+# ❌ DON'T: nested Result<Result<Result<T>>> — 시그니처가 복잡.
+
+fn parse(n: i64) -> Result<i64, i64> {
+    I n < 0 { Err(1) } else { Ok(n) }
+}
+
+fn validate(n: i64) -> Result<i64, i64> {
+    I n > 100 { Err(2) } else { Ok(n) }
+}
+
+fn process(n: i64) -> Result<i64, i64> {
+    match parse(n) {
+        Ok(v) => match validate(v) {
+            Ok(w) => Ok(w * 2),
+            Err(e) => Err(e)
+        },
+        Err(e) => Err(e)
+    }
+}
+
+fn main() -> i64 {
+    match process(10) {
+        Ok(v) => v,
+        Err(_) => -1
+    }
+}

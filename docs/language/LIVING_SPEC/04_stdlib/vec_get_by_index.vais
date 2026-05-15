@@ -1,0 +1,17 @@
+# LIVING_SPEC/04_stdlib/vec_get_by_index.vais
+# Key concept: .get(i)는 Option<T> 반환 (안전 접근).
+# 범위를 벗어난 인덱스는 None을 반환한다.
+
+fn main() -> i64 {
+    v: Vec<i64> = Vec::new()
+    v.push(100)
+    v.push(200)
+
+    result := v.get(0)
+    match result {
+        Some(x) => puts("got value"),
+        None    => puts("out of bounds")
+    }
+
+    0
+}

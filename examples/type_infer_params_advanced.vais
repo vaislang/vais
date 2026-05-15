@@ -2,29 +2,29 @@
 # Tests various inference scenarios
 
 # Recursive function with inferred params and @ operator
-F factorial(n) -> i64 {
+fn factorial(n) -> i64 {
     I n <= 1 {
-        R 1
+        return 1
     }
-    R n * @(n - 1)
+    return n * @(n - 1)
 }
 
 # Multiple inferred params with different usage patterns
-F clamp(val, lo, hi) -> i64 {
+fn clamp(val, lo, hi) -> i64 {
     I val < lo {
-        R lo
+        return lo
     }
     I val > hi {
-        R hi
+        return hi
     }
-    R val
+    return val
 }
 
 # f64 inference from float operations
-F area(w, h) -> f64 = w * h
+fn area(w, h) -> f64 = w * h
 
 # Entry point
-F main() -> i64 {
+fn main() -> i64 {
     # Test recursive with inference
     println("{factorial(5)}")
     println("{factorial(10)}")
@@ -34,5 +34,5 @@ F main() -> i64 {
     println("{clamp(-3, 0, 10)}")
     println("{clamp(5, 0, 10)}")
 
-    R 0
+    return 0
 }

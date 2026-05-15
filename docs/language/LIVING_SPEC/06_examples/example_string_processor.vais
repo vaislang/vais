@@ -1,0 +1,70 @@
+# LIVING_SPEC/06_examples/example_string_processor.vais
+# Key concept: 문자열 분석 apps — Vec<str>, Option, LF 순회.
+# Target concepts: Vec<str>, Option, LF, M, F/S/X
+
+struct StringStats {
+    total_count: i64,
+    total_len: i64,
+    max_len: i64,
+    min_len: i64
+}
+
+impl StringStats {
+    fn empty(self) -> StringStats {
+        StringStats { total_count: 0, total_len: 0, max_len: 0, min_len: 999999 }
+    }
+}
+
+fn empty_stats() -> StringStats {
+    StringStats { total_count: 0, total_len: 0, max_len: 0, min_len: 999999 }
+}
+
+fn analyze(strs: Vec<str>) -> StringStats {
+    stats := mut empty_stats()
+    LF i: 0..strs.len() {
+        match strs.get(i) {
+            Some(s) => {
+                len := s.len()
+                stats = StringStats {
+                    total_count: stats.total_count + 1,
+                    total_len: stats.total_len + len,
+                    max_len: I len > stats.max_len { len } else { stats.max_len },
+                    min_len: I len < stats.min_len { len } else { stats.min_len }
+                }
+            },
+            None => {}
+        }
+    }
+    stats
+}
+
+fn count_strings(strs: Vec<str>) -> i64 {
+    strs.len()
+}
+
+fn avg_len(strs: Vec<str>) -> i64 {
+    n := strs.len()
+    I n == 0 { return 0 }
+    total := mut 0
+    LF i: 0..n {
+        match strs.get(i) {
+            Some(s) => { total = total + s.len() },
+            None => {}
+        }
+    }
+    total / n
+}
+
+fn main() -> i64 {
+    strs: Vec<str> = Vec::new()
+    strs.push("hello")
+    strs.push("world")
+    strs.push("vais")
+    strs.push("language")
+
+    stats := analyze(strs)
+    # total_count=4, total_len=5+5+4+8=22
+    # 결과: stats.total_count + stats.total_len/total_count = 4 + 22/4 = 4 + 5 = 9
+    avg := stats.total_len / stats.total_count
+    stats.total_count + avg
+}

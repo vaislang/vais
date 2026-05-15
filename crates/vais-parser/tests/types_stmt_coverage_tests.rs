@@ -25,7 +25,7 @@ fn parse_err(source: &str) {
 
 #[test]
 fn test_parse_generic_single() {
-    let module = parse_ok("F id<T>(x: T) -> T = x");
+    let module = parse_ok("fn id<T>(x: T) -> T = x");
     assert!(!module.items.is_empty());
     if let Item::Function(f) = &module.items[0].node {
         assert_eq!(f.generics.len(), 1);
@@ -34,7 +34,7 @@ fn test_parse_generic_single() {
 
 #[test]
 fn test_parse_generic_multiple() {
-    let module = parse_ok("F pair<A, B>(a: A, b: B) -> A = a");
+    let module = parse_ok("fn pair<A, B>(a: A, b: B) -> A = a");
     if let Item::Function(f) = &module.items[0].node {
         assert_eq!(f.generics.len(), 2);
     }
@@ -48,8 +48,8 @@ fn test_parse_generic_multiple() {
 fn test_parse_generic_with_bound() {
     let module = parse_ok(
         r#"
-        W Display { F show(self) -> str }
-        F print_it<T: Display>(x: T) -> i64 = 0
+        trait Display { fn show(self) -> str }
+        fn print_it<T: Display>(x: T) -> i64 = 0
     "#,
     );
     assert!(module.items.len() >= 2);
@@ -59,9 +59,9 @@ fn test_parse_generic_with_bound() {
 fn test_parse_generic_multi_bound() {
     let module = parse_ok(
         r#"
-        W A { F a(self) -> i64 }
-        W B { F b(self) -> i64 }
-        F both<T: A + B>(x: T) -> i64 = 0
+        trait A { fn a(self) -> i64 }
+        trait B { fn b(self) -> i64 }
+        fn both<T: A + B>(x: T) -> i64 = 0
     "#,
     );
     assert!(module.items.len() >= 3);
@@ -73,7 +73,7 @@ fn test_parse_generic_multi_bound() {
 
 #[test]
 fn test_parse_const_generic() {
-    let module = parse_ok("F fixed<const N: u64>() -> i64 = 0");
+    let module = parse_ok("fn fixed<const N: u64>() -> i64 = 0");
     if let Item::Function(f) = &module.items[0].node {
         assert_eq!(f.generics.len(), 1);
     }
@@ -85,7 +85,7 @@ fn test_parse_const_generic() {
 
 #[test]
 fn test_parse_lifetime_generic() {
-    let module = parse_ok("F borrow<'a>(x: &'a i64) -> i64 = 0");
+    let module = parse_ok("fn borrow<'a>(x: &'a i64) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
@@ -95,25 +95,25 @@ fn test_parse_lifetime_generic() {
 
 #[test]
 fn test_parse_type_i64() {
-    let module = parse_ok("F test(x: i64) -> i64 = x");
+    let module = parse_ok("fn test(x: i64) -> i64 = x");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_bool() {
-    let module = parse_ok("F test(x: bool) -> bool = x");
+    let module = parse_ok("fn test(x: bool) -> bool = x");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_f64() {
-    let module = parse_ok("F test(x: f64) -> f64 = x");
+    let module = parse_ok("fn test(x: f64) -> f64 = x");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_str() {
-    let module = parse_ok("F test(x: str) -> str = x");
+    let module = parse_ok("fn test(x: str) -> str = x");
     assert!(!module.items.is_empty());
 }
 
@@ -123,37 +123,37 @@ fn test_parse_type_str() {
 
 #[test]
 fn test_parse_type_array() {
-    let module = parse_ok("F test(arr: [i64; 5]) -> i64 = 0");
+    let module = parse_ok("fn test(arr: [i64; 5]) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_tuple() {
-    let module = parse_ok("F test(t: (i64, bool)) -> i64 = 0");
+    let module = parse_ok("fn test(t: (i64, bool)) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_reference() {
-    let module = parse_ok("F test(x: &i64) -> i64 = 0");
+    let module = parse_ok("fn test(x: &i64) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_mut_reference() {
-    let module = parse_ok("F test(x: &mut i64) -> i64 = 0");
+    let module = parse_ok("fn test(x: &mut i64) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_option() {
-    let module = parse_ok("F test(x: Option<i64>) -> i64 = 0");
+    let module = parse_ok("fn test(x: Option<i64>) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_type_result() {
-    let module = parse_ok("F test(x: Result<i64, str>) -> i64 = 0");
+    let module = parse_ok("fn test(x: Result<i64, str>) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
@@ -163,7 +163,7 @@ fn test_parse_type_result() {
 
 #[test]
 fn test_parse_type_pointer() {
-    let module = parse_ok("F test(x: &i64) -> i64 = 0");
+    let module = parse_ok("fn test(x: &i64) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
@@ -173,7 +173,7 @@ fn test_parse_type_pointer() {
 
 #[test]
 fn test_parse_nested_generic() {
-    let module = parse_ok("F test(x: Vec<Vec<i64>>) -> i64 = 0");
+    let module = parse_ok("fn test(x: Vec<Vec<i64>>) -> i64 = 0");
     assert!(!module.items.is_empty());
 }
 
@@ -185,7 +185,7 @@ fn test_parse_nested_generic() {
 fn test_parse_struct_fields() {
     let module = parse_ok(
         r#"
-        S Point { x: i64, y: i64, z: i64 }
+        struct Point { x: i64, y: i64, z: i64 }
     "#,
     );
     if let Item::Struct(s) = &module.items[0].node {
@@ -197,7 +197,7 @@ fn test_parse_struct_fields() {
 fn test_parse_struct_generic() {
     let module = parse_ok(
         r#"
-        S Pair<A, B> { first: A, second: B }
+        struct Pair<A, B> { first: A, second: B }
     "#,
     );
     assert!(!module.items.is_empty());
@@ -211,8 +211,8 @@ fn test_parse_struct_generic() {
 fn test_parse_where_clause() {
     let module = parse_ok(
         r#"
-        W Printable { F show(self) -> i64 }
-        F print_all<T>(items: T) -> i64 where T: Printable = 0
+        trait Printable { fn show(self) -> i64 }
+        fn print_all<T>(items: T) -> i64 where T: Printable = 0
     "#,
     );
     assert!(module.items.len() >= 2);
@@ -224,19 +224,19 @@ fn test_parse_where_clause() {
 
 #[test]
 fn test_parse_let_simple() {
-    let module = parse_ok("F test() -> i64 { x := 42\n R x }");
+    let module = parse_ok("fn test() -> i64 { x := 42\n return x }");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_let_mutable() {
-    let module = parse_ok("F test() -> i64 { x := mut 0\n x = 1\n R x }");
+    let module = parse_ok("fn test() -> i64 { x := mut 0\n x = 1\n return x }");
     assert!(!module.items.is_empty());
 }
 
 #[test]
 fn test_parse_let_with_expr() {
-    let module = parse_ok("F test() -> i64 { x := 21 * 2\n R x }");
+    let module = parse_ok("fn test() -> i64 { x := 21 * 2\n return x }");
     assert!(!module.items.is_empty());
 }
 
@@ -246,7 +246,7 @@ fn test_parse_let_with_expr() {
 
 #[test]
 fn test_parse_return() {
-    let module = parse_ok("F test() -> i64 { R 42 }");
+    let module = parse_ok("fn test() -> i64 { return 42 }");
     assert!(!module.items.is_empty());
 }
 
@@ -258,9 +258,9 @@ fn test_parse_return() {
 fn test_parse_expr_stmt() {
     let module = parse_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             println("hello")
-            R 0
+            return 0
         }
     "#,
     );
@@ -275,10 +275,10 @@ fn test_parse_expr_stmt() {
 fn test_parse_assignment() {
     let module = parse_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x = 42
-            R x
+            return x
         }
     "#,
     );
@@ -293,10 +293,10 @@ fn test_parse_assignment() {
 fn test_parse_compound_add() {
     let module = parse_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x += 10
-            R x
+            return x
         }
     "#,
     );
@@ -307,7 +307,7 @@ fn test_parse_compound_add() {
 fn test_parse_compound_all_ops() {
     let module = parse_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 100
             x += 1
             x -= 2
@@ -319,7 +319,7 @@ fn test_parse_compound_all_ops() {
             x ^= 8
             x <<= 1
             x >>= 1
-            R x
+            return x
         }
     "#,
     );
@@ -334,9 +334,9 @@ fn test_parse_compound_all_ops() {
 fn test_parse_if() {
     let module = parse_ok(
         r#"
-        F test(x: i64) -> i64 {
-            I x > 0 { R 1 }
-            R 0
+        fn test(x: i64) -> i64 {
+            I x > 0 { return 1 }
+            return 0
         }
     "#,
     );
@@ -347,8 +347,8 @@ fn test_parse_if() {
 fn test_parse_if_else() {
     let module = parse_ok(
         r#"
-        F test(x: i64) -> i64 {
-            I x > 0 { R 1 } E { R 0 }
+        fn test(x: i64) -> i64 {
+            I x > 0 { return 1 } else { return 0 }
         }
     "#,
     );
@@ -363,8 +363,8 @@ fn test_parse_if_else() {
 fn test_parse_match() {
     let module = parse_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1 => 10,
                 2 => 20,
                 _ => 0
@@ -383,13 +383,13 @@ fn test_parse_match() {
 fn test_parse_infinite_loop() {
     let module = parse_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             L {
                 x += 1
                 I x > 10 { B }
             }
-            R x
+            return x
         }
     "#,
     );
@@ -400,12 +400,12 @@ fn test_parse_infinite_loop() {
 fn test_parse_for_loop() {
     let module = parse_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i:0..10 {
                 sum += i
             }
-            R sum
+            return sum
         }
     "#,
     );
@@ -420,11 +420,11 @@ fn test_parse_for_loop() {
 fn test_parse_break() {
     let module = parse_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             L {
                 B
             }
-            R 0
+            return 0
         }
     "#,
     );
@@ -435,13 +435,13 @@ fn test_parse_break() {
 fn test_parse_continue() {
     let module = parse_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i:0..10 {
                 I i % 2 == 0 { C }
                 sum += i
             }
-            R sum
+            return sum
         }
     "#,
     );
@@ -456,9 +456,9 @@ fn test_parse_continue() {
 fn test_parse_defer() {
     let module = parse_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             D println("cleanup")
-            R 42
+            return 42
         }
     "#,
     );
@@ -471,7 +471,7 @@ fn test_parse_defer() {
 
 #[test]
 fn test_parse_type_alias() {
-    let module = parse_ok("T Num = i64");
+    let module = parse_ok("type Num = i64");
     assert!(!module.items.is_empty());
 }
 
@@ -483,8 +483,8 @@ fn test_parse_type_alias() {
 fn test_parse_trait() {
     let module = parse_ok(
         r#"
-        W Comparable {
-            F compare(self, other: i64) -> i64
+        trait Comparable {
+            fn compare(self, other: i64) -> i64
         }
     "#,
     );
@@ -499,9 +499,9 @@ fn test_parse_trait() {
 fn test_parse_impl() {
     let module = parse_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        X Point {
-            F new(x: i64, y: i64) -> Point = Point { x: x, y: y }
+        struct Point { x: i64, y: i64 }
+        impl Point {
+            fn new(x: i64, y: i64) -> Point = Point { x: x, y: y }
         }
     "#,
     );
@@ -514,7 +514,7 @@ fn test_parse_impl() {
 
 #[test]
 fn test_parse_enum_unit() {
-    let module = parse_ok("E Color { Red, Green, Blue }");
+    let module = parse_ok("enum Color { Red, Green, Blue }");
     if let Item::Enum(e) = &module.items[0].node {
         assert_eq!(e.variants.len(), 3);
     }
@@ -522,7 +522,7 @@ fn test_parse_enum_unit() {
 
 #[test]
 fn test_parse_enum_with_payload() {
-    let module = parse_ok("E Shape { Circle(i64), Rect(i64, i64) }");
+    let module = parse_ok("enum Shape { Circle(i64), Rect(i64, i64) }");
     assert!(!module.items.is_empty());
 }
 
@@ -548,7 +548,7 @@ fn test_parse_const_expr_negative() {
 
 #[test]
 fn test_parse_params_none() {
-    let module = parse_ok("F test() -> i64 = 0");
+    let module = parse_ok("fn test() -> i64 = 0");
     if let Item::Function(f) = &module.items[0].node {
         assert!(f.params.is_empty());
     }
@@ -556,7 +556,7 @@ fn test_parse_params_none() {
 
 #[test]
 fn test_parse_params_single() {
-    let module = parse_ok("F test(x: i64) -> i64 = x");
+    let module = parse_ok("fn test(x: i64) -> i64 = x");
     if let Item::Function(f) = &module.items[0].node {
         assert_eq!(f.params.len(), 1);
     }
@@ -564,7 +564,7 @@ fn test_parse_params_single() {
 
 #[test]
 fn test_parse_params_many() {
-    let module = parse_ok("F test(a: i64, b: i64, c: i64, d: i64) -> i64 = a");
+    let module = parse_ok("fn test(a: i64, b: i64, c: i64, d: i64) -> i64 = a");
     if let Item::Function(f) = &module.items[0].node {
         assert_eq!(f.params.len(), 4);
     }
@@ -574,9 +574,9 @@ fn test_parse_params_many() {
 fn test_parse_self_param() {
     let module = parse_ok(
         r#"
-        S Foo { x: i64 }
-        X Foo {
-            F get(self) -> i64 = self.x
+        struct Foo { x: i64 }
+        impl Foo {
+            fn get(self) -> i64 = self.x
         }
     "#,
     );

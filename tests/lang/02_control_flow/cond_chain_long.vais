@@ -1,0 +1,21 @@
+# CHECKS: long if-elseif chain.
+fn grade(n: i64) -> i64 {
+    I n >= 90 { return 5 }
+    else I n >= 80 { return 4 }
+    else I n >= 70 { return 3 }
+    else I n >= 60 { return 2 }
+    else { return 1 }
+}
+
+fn main() -> i64 {
+    I grade(95) != 5 { return 1 }
+    I grade(85) != 4 { return 2 }
+    I grade(75) != 3 { return 3 }
+    I grade(65) != 2 { return 4 }
+    I grade(40) != 1 { return 5 }
+    I grade(0) != 1 { return 6 }
+    I grade(100) != 5 { return 7 }
+    I grade(60) != 2 { return 8 }
+    I grade(59) != 1 { return 9 }
+    return 0
+}

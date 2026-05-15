@@ -332,7 +332,7 @@ impl AsyncMacroExpander {
         result.push(MacroToken::Punct(';'));
 
         // match __result { ... }
-        result.push(MacroToken::Ident("M".to_string())); // Vais match keyword
+        result.push(MacroToken::Ident("match".to_string()));
         result.push(MacroToken::Ident(result_var));
         result.push(MacroToken::Punct('{'));
 
@@ -538,7 +538,7 @@ mod tests {
         let s = tokens_to_string(&result);
 
         assert!(s.contains("select"));
-        assert!(s.contains("M")); // match keyword
+        assert!(s.contains("match"));
         assert!(s.contains("Left"));
         assert!(s.contains("Right"));
     }

@@ -97,7 +97,7 @@ fn assert_error_snapshot(test_name: &str, source: &str) {
 
 #[test]
 fn snapshot_undefined_variable() {
-    let source = "F main() -> i64 = xyz";
+    let source = "fn main() -> i64 = xyz";
     assert_error_snapshot("undefined_variable", source);
 }
 
@@ -105,8 +105,8 @@ fn snapshot_undefined_variable() {
 fn snapshot_undefined_function() {
     // Define a function with a similar name to get a predictable suggestion
     let source = r#"
-F greet(x: i64) -> i64 = x
-F main() -> i64 = gret(1)
+fn greet(x: i64) -> i64 = x
+fn main() -> i64 = gret(1)
 "#;
     assert_error_snapshot("undefined_function", source);
 }
@@ -114,36 +114,36 @@ F main() -> i64 = gret(1)
 #[test]
 fn snapshot_type_mismatch() {
     // Phase 160-A: bool↔i64 coercion is now allowed, so use str↔i64 mismatch instead
-    let source = r#"F main() -> str = 42"#;
+    let source = r#"fn main() -> str = 42"#;
     assert_error_snapshot("type_mismatch", source);
 }
 
 #[test]
 fn snapshot_wrong_arg_count() {
     let source = r#"
-F f(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = f(1)
+fn f(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = f(1)
 "#;
     assert_error_snapshot("wrong_arg_count", source);
 }
 
 #[test]
 fn snapshot_parser_unexpected_token() {
-    let source = "F main( { }";
+    let source = "fn main( { }";
     assert_error_snapshot("parser_unexpected_token", source);
 }
 
 #[test]
 fn snapshot_unconstrained_params() {
     // Phase 61: Parameters without type annotations and no way to infer should fail
-    let source = "F add(a, b) { a + b }";
+    let source = "fn add(a, b) { a + b }";
     assert_error_snapshot("unconstrained_params", source);
 }
 
 #[test]
 fn snapshot_recursive_no_return_type() {
     // Phase 61: Recursive functions using @ without explicit return type should fail
-    let source = "F fib(n: i64) = I n < 2 { R n } E { R @(n-1) + @(n-2) }";
+    let source = "fn fib(n: i64) = I n < 2 { return n } else { return @(n-1) + @(n-2) }";
     assert_error_snapshot("recursive_no_return_type", source);
 }
 
@@ -151,10 +151,10 @@ fn snapshot_recursive_no_return_type() {
 fn snapshot_invalid_field_access() {
     // Accessing a non-existent field on a struct
     let source = r#"
-S User { name: str, age: i64 }
-F main() -> i64 {
+struct User { name: str, age: i64 }
+fn main() -> i64 {
     u := User { name: "Alice", age: 30 }
-    R u.invalid_field
+    return u.invalid_field
 }
 "#;
     assert_error_snapshot("invalid_field_access", source);
@@ -162,8 +162,8 @@ F main() -> i64 {
 
 #[test]
 fn snapshot_binary_op_type_error() {
-    // Phase 160-A: bool↔i64 is allowed, so use str + i64 mismatch instead
-    let source = r#"F main() -> str = "hello" + 5"#;
+    // str + i64 is accepted as string concatenation; subtraction remains invalid.
+    let source = r#"fn main() -> str = "hello" - 5"#;
     assert_error_snapshot("binary_op_type_error", source);
 }
 
@@ -171,10 +171,10 @@ fn snapshot_binary_op_type_error() {
 fn snapshot_return_type_mismatch() {
     // Function body returns wrong type
     let source = r#"
-F get_number() -> i64 {
-    R "not a number"
+fn get_number() -> i64 {
+    return "not a number"
 }
-F main() -> i64 = 0
+fn main() -> i64 = 0
 "#;
     assert_error_snapshot("return_type_mismatch", source);
 }

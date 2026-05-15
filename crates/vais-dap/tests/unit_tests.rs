@@ -912,7 +912,7 @@ mod source_map_tests {
     #[test]
     fn test_source_map_register_source() {
         let mut map = SourceMap::new();
-        let ref_id = map.register_source("/test.vais", "F main()->i64=42".to_string());
+        let ref_id = map.register_source("/test.vais", "fn main()->i64=42".to_string());
         assert!(ref_id > 0);
         let content = map.get_source_content(ref_id);
         assert!(content.is_some());
@@ -922,8 +922,8 @@ mod source_map_tests {
     #[test]
     fn test_source_map_register_multiple_sources() {
         let mut map = SourceMap::new();
-        let ref1 = map.register_source("/a.vais", "F a()->i64=1".to_string());
-        let ref2 = map.register_source("/b.vais", "F b()->i64=2".to_string());
+        let ref1 = map.register_source("/a.vais", "fn a()->i64=1".to_string());
+        let ref2 = map.register_source("/b.vais", "fn b()->i64=2".to_string());
         assert_ne!(ref1, ref2);
         assert!(map.get_source_content(ref1).unwrap().contains("a"));
         assert!(map.get_source_content(ref2).unwrap().contains("b"));

@@ -1,0 +1,31 @@
+# CHECKS: i8 / i16 / i32 signed widths after C13 fix.
+fn main() -> i64 {
+    a: i32 := 100
+    b: i32 := 200
+    s: i32 := a + b
+    I (s as i64) != 300 { return 1 }
+
+    # i32 negative
+    n: i32 := 0 - 50
+    I (n as i64) != 0 - 50 { return 2 }
+
+    # i32 + negative
+    pos: i32 := 100
+    neg: i32 := 0 - 30
+    sum: i32 := pos + neg
+    I (sum as i64) != 70 { return 3 }
+
+    # i16 fits
+    s16: i16 := 1000
+    I (s16 as i64) != 1000 { return 4 }
+
+    # i8 fits (-128 to 127)
+    s8: i8 := 100
+    I (s8 as i64) != 100 { return 5 }
+
+    # i8 multiplication
+    p8: i8 := 10
+    q8: i8 := 12
+    I ((p8 * q8) as i64) != 120 { return 6 }
+    return 0
+}

@@ -1,0 +1,23 @@
+# CHECKS: struct with three fields of varying types.
+struct Vehicle {
+    wheels: i64,
+    weight: i64,
+    speed: i64
+}
+
+fn main() -> i64 {
+    car: Vehicle := Vehicle { wheels: 4, weight: 1500, speed: 120 }
+    I car.wheels != 4 { return 1 }
+    I car.weight != 1500 { return 2 }
+    I car.speed != 120 { return 3 }
+
+    bike: Vehicle := Vehicle { wheels: 2, weight: 15, speed: 35 }
+    I bike.wheels != 2 { return 4 }
+    I bike.weight != 15 { return 5 }
+    I bike.speed != 35 { return 6 }
+
+    # combined access
+    total: i64 := car.wheels + car.weight + car.speed
+    I total != 1624 { return 7 }
+    return 0
+}

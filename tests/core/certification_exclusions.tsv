@@ -1,0 +1,2 @@
+# kind	file	test	reason
+ignore	crates/vaisc/tests/integrity/compiler_syntax.rs	syntax_import_dot_path	Step 11 default-strict (2026-05-08): `use foo.bar` is unresolvable, and ok_parse runs full vaisc check (parse + type-check + import resolve). True parse-only would require a vaisc --parse-only flag.

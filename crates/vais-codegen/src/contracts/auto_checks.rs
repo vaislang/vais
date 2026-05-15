@@ -146,6 +146,7 @@ impl CodeGenerator {
         *counter += 1;
 
         write_ir!(ir, "  {} = icmp ne i8* {}, null", cond_i1, param_ptr);
+        self.fn_ctx.record_emitted_type(&cond_i1, "i1");
 
         write_ir!(
             ir,
@@ -363,6 +364,7 @@ impl CodeGenerator {
         let cond_i1 = format!("%nonzero_cond_{}", *counter);
         *counter += 1;
         write_ir!(ir, "  {} = icmp ne i64 {}, 0", cond_i1, param_ref);
+        self.fn_ctx.record_emitted_type(&cond_i1, "i1");
 
         write_ir!(
             ir,

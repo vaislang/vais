@@ -50,14 +50,32 @@ impl CodeGenerator {
         if !self.ref_constants.is_empty() {
             ir.push('\n');
         }
+        // Always emit `abort` and `llvm.memcpy` declares when their callers
+        // are present. The original "skip if runtime emits them" heuristic
+        // broke multi-module sub-modules (which call `@abort` from the
+        // generated bounds checks but don't emit the runtime helpers in
+        // their own module) — link failed with `use of undefined value
+        // '@abort'`. Instead we keep the declares unconditionally and
+        // ensure runtime.rs doesn't emit a second `declare` next to its
+        // helper definitions.
+        // The main module defines the runtime helpers
+        // (`__panic_*`, `__memcpy`) which themselves declare `abort` and
+        // `llvm.memcpy`. Re-declaring those symbols here would be a
+        // duplicate declare in the same module — LLVM rejects matching
+        // duplicates with an "invalid redefinition" error. Skip the
+        // declares in the main module; sub-modules in a multi-module
+        // build still emit them (they call `@abort` from generated
+        // bounds checks but do not own the helper definitions).
         if self.needs_unwrap_panic {
             ir.push_str("@.unwrap_panic_msg = private unnamed_addr constant [22 x i8] c\"unwrap failed: panic!\\00\"\n");
-            ir.push_str("declare void @abort()\n\n");
-        } else if self.needs_bounds_check {
+            if !is_main_module {
+                ir.push_str("declare void @abort()\n\n");
+            }
+        } else if self.needs_bounds_check && !is_main_module {
             // Bounds check uses abort() for OOB access
             ir.push_str("declare void @abort()\n\n");
         }
-        if self.needs_llvm_memcpy {
+        if self.needs_llvm_memcpy && !is_main_module {
             ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n\n");
         }
     }

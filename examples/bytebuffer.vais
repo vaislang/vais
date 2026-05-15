@@ -1,22 +1,22 @@
 # ByteBuffer - Growable byte buffer for binary serialization/deserialization
 # This example demonstrates write and read operations on a ByteBuffer
 
-S ByteBuffer {
+struct ByteBuffer {
     data: i64,
     len: i64,
     cap: i64,
     pos: i64
 }
 
-X ByteBuffer {
-    F with_capacity(capacity: i64) -> ByteBuffer {
-        cap := I capacity < 16 { 16 } EL { capacity }
+impl ByteBuffer {
+    fn with_capacity(capacity: i64) -> ByteBuffer {
+        cap := I capacity < 16 { 16 } else { capacity }
         data := malloc(cap)
         ByteBuffer { data: data, len: 0, cap: cap, pos: 0 }
     }
 
-    F ensure_capacity(&self, needed: i64) -> i64 {
-        I needed <= self.cap { R self.cap }
+    fn ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { return self.cap }
         new_cap := self.cap
         L {
             I new_cap >= needed { B 0 }
@@ -30,21 +30,21 @@ X ByteBuffer {
         new_cap
     }
 
-    F write_u8(&self, value: i64) -> i64 {
+    fn write_u8(&self, value: i64) -> i64 {
         @.ensure_capacity(self.len + 1)
         store_byte(self.data + self.len, value & 255)
         self.len = self.len + 1
         1
     }
 
-    F read_u8(&self) -> i64 {
-        I self.pos >= self.len { R 0 - 1 }
+    fn read_u8(&self) -> i64 {
+        I self.pos >= self.len { return 0 - 1 }
         val := load_byte(self.data + self.pos)
         self.pos = self.pos + 1
         val
     }
 
-    F write_i32_le(&self, value: i64) -> i64 {
+    fn write_i32_le(&self, value: i64) -> i64 {
         @.ensure_capacity(self.len + 4)
         store_byte(self.data + self.len, value & 255)
         store_byte(self.data + self.len + 1, (value >> 8) & 255)
@@ -54,8 +54,8 @@ X ByteBuffer {
         4
     }
 
-    F read_i32_le(&self) -> i64 {
-        I self.pos + 4 > self.len { R 0 - 1 }
+    fn read_i32_le(&self) -> i64 {
+        I self.pos + 4 > self.len { return 0 - 1 }
         b0 := load_byte(self.data + self.pos)
         b1 := load_byte(self.data + self.pos + 1)
         b2 := load_byte(self.data + self.pos + 2)
@@ -64,7 +64,7 @@ X ByteBuffer {
         b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
     }
 
-    F write_i64_le(&self, value: i64) -> i64 {
+    fn write_i64_le(&self, value: i64) -> i64 {
         @.ensure_capacity(self.len + 8)
         store_byte(self.data + self.len, value & 255)
         store_byte(self.data + self.len + 1, (value >> 8) & 255)
@@ -78,8 +78,8 @@ X ByteBuffer {
         8
     }
 
-    F read_i64_le(&self) -> i64 {
-        I self.pos + 8 > self.len { R 0 - 1 }
+    fn read_i64_le(&self) -> i64 {
+        I self.pos + 8 > self.len { return 0 - 1 }
         b0 := load_byte(self.data + self.pos)
         b1 := load_byte(self.data + self.pos + 1)
         b2 := load_byte(self.data + self.pos + 2)
@@ -92,12 +92,12 @@ X ByteBuffer {
         b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
     }
 
-    F rewind(&self) -> i64 {
+    fn rewind(&self) -> i64 {
         self.pos = 0
         0
     }
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.data != 0 { free(self.data) }
         self.data = 0
         self.len = 0
@@ -107,7 +107,7 @@ X ByteBuffer {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     buf := ByteBuffer.with_capacity(64)
     buf.write_u8(42)
     buf.write_i32_le(12345)
@@ -116,13 +116,13 @@ F main() -> i64 {
     buf.rewind()
 
     val_u8 := buf.read_u8()
-    I val_u8 != 42 { R 1 }
+    I val_u8 != 42 { return 1 }
 
     val_i32 := buf.read_i32_le()
-    I val_i32 != 12345 { R 2 }
+    I val_i32 != 12345 { return 2 }
 
     val_i64 := buf.read_i64_le()
-    I val_i64 != 9876543210 { R 3 }
+    I val_i64 != 9876543210 { return 3 }
 
     buf.drop()
     0

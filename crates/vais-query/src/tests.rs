@@ -5,13 +5,13 @@ use crate::database::QueryError;
 use vais_codegen::TargetTriple;
 
 const SIMPLE_SOURCE: &str = r#"
-F main() -> i64 {
+fn main() -> i64 {
     42
 }
 "#;
 
 const MODIFIED_SOURCE: &str = r#"
-F main() -> i64 {
+fn main() -> i64 {
     100
 }
 "#;
@@ -127,9 +127,9 @@ fn test_revision_increments() {
     let db = QueryDatabase::new();
 
     let rev1 = db.current_revision();
-    db.set_source_text("a.vais", "F a() -> i64 { 1 }");
+    db.set_source_text("a.vais", "fn a() -> i64 { 1 }");
     let rev2 = db.current_revision();
-    db.set_source_text("b.vais", "F b() -> i64 { 2 }");
+    db.set_source_text("b.vais", "fn b() -> i64 { 2 }");
     let rev3 = db.current_revision();
 
     assert!(rev2 > rev1);
@@ -163,8 +163,8 @@ fn test_clear_caches() {
 #[test]
 fn test_multiple_files() {
     let db = QueryDatabase::new();
-    db.set_source_text("a.vais", "F a() -> i64 { 1 }");
-    db.set_source_text("b.vais", "F b() -> i64 { 2 }");
+    db.set_source_text("a.vais", "fn a() -> i64 { 1 }");
+    db.set_source_text("b.vais", "fn b() -> i64 { 2 }");
 
     assert_eq!(db.source_file_count(), 2);
 
@@ -175,7 +175,7 @@ fn test_multiple_files() {
     assert!(db.is_cached("b.vais", "parse"));
 
     // Changing a.vais should not invalidate b.vais
-    db.set_source_text("a.vais", "F a() -> i64 { 10 }");
+    db.set_source_text("a.vais", "fn a() -> i64 { 10 }");
     assert!(!db.is_cached("a.vais", "parse"));
     assert!(db.is_cached("b.vais", "parse"));
 
@@ -191,8 +191,8 @@ fn test_multiple_files() {
 #[test]
 fn test_source_files_list() {
     let db = QueryDatabase::new();
-    db.set_source_text("a.vais", "F a() -> i64 { 1 }");
-    db.set_source_text("b.vais", "F b() -> i64 { 2 }");
+    db.set_source_text("a.vais", "fn a() -> i64 { 1 }");
+    db.set_source_text("b.vais", "fn b() -> i64 { 2 }");
 
     let files = db.source_files();
     assert_eq!(files.len(), 2);
@@ -254,9 +254,9 @@ fn test_query_invalidation_cascade() {
 fn test_partial_query_invalidation() {
     // Test that only queries for modified files are invalidated
     let db = QueryDatabase::new();
-    db.set_source_text("file1.vais", "F foo() -> i64 { 1 }");
-    db.set_source_text("file2.vais", "F bar() -> i64 { 2 }");
-    db.set_source_text("file3.vais", "F baz() -> i64 { 3 }");
+    db.set_source_text("file1.vais", "fn foo() -> i64 { 1 }");
+    db.set_source_text("file2.vais", "fn bar() -> i64 { 2 }");
+    db.set_source_text("file3.vais", "fn baz() -> i64 { 3 }");
 
     // Run queries on all files
     db.tokenize("file1.vais").unwrap();
@@ -272,7 +272,7 @@ fn test_partial_query_invalidation() {
     assert!(db.is_cached("file3.vais", "tokenize"));
 
     // Modify only file2
-    db.set_source_text("file2.vais", "F bar() -> i64 { 200 }");
+    db.set_source_text("file2.vais", "fn bar() -> i64 { 200 }");
 
     // Only file2 queries should be invalidated
     assert!(db.is_cached("file1.vais", "tokenize"));
@@ -317,9 +317,9 @@ fn test_cache_hit_miss_tracking() {
 fn test_incremental_recomputation() {
     // Test that incremental changes only trigger necessary recomputations
     let db = QueryDatabase::new();
-    let source_v1 = "F add(x: i64, y: i64) -> i64 { x + y }";
-    let source_v2 = "F add(x: i64, y: i64) -> i64 { x + y + 1 }";
-    let source_v3 = "F add(x: i64, y: i64) -> i64 { x + y + 2 }";
+    let source_v1 = "fn add(x: i64, y: i64) -> i64 { x + y }";
+    let source_v2 = "fn add(x: i64, y: i64) -> i64 { x + y + 1 }";
+    let source_v3 = "fn add(x: i64, y: i64) -> i64 { x + y + 2 }";
 
     // Version 1
     db.set_source_text("incr.vais", source_v1);
@@ -354,9 +354,9 @@ fn test_multi_file_dependency_tracking() {
     // Simulate a dependency graph: main.vais → lib.vais
     let db = QueryDatabase::new();
 
-    let lib_source = "F helper() -> i64 { 42 }";
-    let main_source_v1 = "F main() -> i64 { 1 }";
-    let main_source_v2 = "F main() -> i64 { 2 }";
+    let lib_source = "fn helper() -> i64 { 42 }";
+    let main_source_v1 = "fn main() -> i64 { 1 }";
+    let main_source_v2 = "fn main() -> i64 { 2 }";
 
     // Set up both files
     db.set_source_text("lib.vais", lib_source);
@@ -391,10 +391,10 @@ fn test_multi_file_cross_invalidation() {
     let db = QueryDatabase::new();
 
     let files = vec![
-        ("a.vais", "F a() -> i64 { 1 }"),
-        ("b.vais", "F b() -> i64 { 2 }"),
-        ("c.vais", "F c() -> i64 { 3 }"),
-        ("d.vais", "F d() -> i64 { 4 }"),
+        ("a.vais", "fn a() -> i64 { 1 }"),
+        ("b.vais", "fn b() -> i64 { 2 }"),
+        ("c.vais", "fn c() -> i64 { 3 }"),
+        ("d.vais", "fn d() -> i64 { 4 }"),
     ];
 
     // Register all files
@@ -415,7 +415,7 @@ fn test_multi_file_cross_invalidation() {
     }
 
     // Modify only b.vais
-    db.set_source_text("b.vais", "F b() -> i64 { 200 }");
+    db.set_source_text("b.vais", "fn b() -> i64 { 200 }");
 
     // Only b.vais should be invalidated
     assert!(db.is_cached("a.vais", "tokenize"));
@@ -431,8 +431,8 @@ fn test_circular_dependency_simulation() {
     let db = QueryDatabase::new();
 
     // File a references b, file b references a (in comments)
-    let source_a = "# References b.vais\nF a() -> i64 { 1 }";
-    let source_b = "# References a.vais\nF b() -> i64 { 2 }";
+    let source_a = "# References b.vais\nfn a() -> i64 { 1 }";
+    let source_b = "# References a.vais\nfn b() -> i64 { 2 }";
 
     db.set_source_text("a.vais", source_a);
     db.set_source_text("b.vais", source_b);
@@ -445,7 +445,7 @@ fn test_circular_dependency_simulation() {
     assert!(!ast_b.items.is_empty());
 
     // Modifying a.vais should not cause issues with b.vais
-    db.set_source_text("a.vais", "# Updated\nF a() -> i64 { 10 }");
+    db.set_source_text("a.vais", "# Updated\nfn a() -> i64 { 10 }");
 
     assert!(!db.is_cached("a.vais", "parse"));
     assert!(db.is_cached("b.vais", "parse"));
@@ -491,21 +491,21 @@ fn test_revision_stability() {
 
     let rev0 = db.current_revision();
 
-    db.set_source_text("rev1.vais", "F a() -> i64 { 1 }");
+    db.set_source_text("rev1.vais", "fn a() -> i64 { 1 }");
     let rev1 = db.current_revision();
     assert!(rev1 > rev0);
 
-    db.set_source_text("rev2.vais", "F b() -> i64 { 2 }");
+    db.set_source_text("rev2.vais", "fn b() -> i64 { 2 }");
     let rev2 = db.current_revision();
     assert!(rev2 > rev1);
 
     // Setting the same content should not increment revision
-    db.set_source_text("rev1.vais", "F a() -> i64 { 1 }");
+    db.set_source_text("rev1.vais", "fn a() -> i64 { 1 }");
     let rev3 = db.current_revision();
     assert_eq!(rev2, rev3);
 
     // Setting different content should increment
-    db.set_source_text("rev1.vais", "F a() -> i64 { 10 }");
+    db.set_source_text("rev1.vais", "fn a() -> i64 { 10 }");
     let rev4 = db.current_revision();
     assert!(rev4 > rev3);
 }
@@ -514,7 +514,7 @@ fn test_revision_stability() {
 fn test_hash_based_deduplication() {
     // Test that content hash prevents unnecessary invalidations
     let db = QueryDatabase::new();
-    let content = "F unique() -> i64 { 999 }";
+    let content = "fn unique() -> i64 { 999 }";
 
     db.set_source_text("hash.vais", content);
     let hash1 = db.source_hash("hash.vais").unwrap();
@@ -534,7 +534,7 @@ fn test_hash_based_deduplication() {
     assert!(db.is_cached("hash.vais", "tokenize"));
 
     // Different content should produce different hash
-    db.set_source_text("hash.vais", "F unique() -> i64 { 888 }");
+    db.set_source_text("hash.vais", "fn unique() -> i64 { 888 }");
     let hash3 = db.source_hash("hash.vais").unwrap();
     assert_ne!(hash1, hash3);
 }
@@ -543,7 +543,7 @@ fn test_hash_based_deduplication() {
 fn test_query_error_caching() {
     // Test that query errors are also cached
     let db = QueryDatabase::new();
-    let invalid_source = "F broken( -> i64 { }"; // Missing closing paren
+    let invalid_source = "fn broken( -> i64 { }"; // Missing closing paren
 
     db.set_source_text("error.vais", invalid_source);
 
@@ -559,7 +559,7 @@ fn test_query_error_caching() {
     assert!(result2.is_err());
 
     // Fix the source
-    db.set_source_text("error.vais", "F fixed() -> i64 { 42 }");
+    db.set_source_text("error.vais", "fn fixed() -> i64 { 42 }");
 
     // Cache should be invalidated
     assert!(!db.is_cached("error.vais", "parse"));

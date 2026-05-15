@@ -1,0 +1,17 @@
+# CHECKS: Option<T> .is_some()/.is_none()/.unwrap_or() method calls.
+use std/option
+
+fn main() -> i64 {
+    a: Option<i64> := Some(42)
+    b: Option<i64> := None
+
+    I a.is_some() != 1 { return 1 }
+    I a.is_none() != 0 { return 2 }
+    I b.is_some() != 0 { return 3 }
+    I b.is_none() != 1 { return 4 }
+
+    I a.unwrap_or(0) != 42 { return 5 }
+    I b.unwrap_or(99) != 99 { return 6 }
+
+    return 0
+}

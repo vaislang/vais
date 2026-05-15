@@ -1,0 +1,43 @@
+# CHECKS: struct with multiple alternative constructors.
+struct Range {
+    start: i64,
+    end: i64
+}
+
+impl Range {
+    fn new(start: i64, end: i64) -> Range {
+        Range { start: start, end: end }
+    }
+
+    fn unit() -> Range {
+        Range { start: 0, end: 1 }
+    }
+
+    fn empty() -> Range {
+        Range { start: 0, end: 0 }
+    }
+
+    fn from_size(size: i64) -> Range {
+        Range { start: 0, end: size }
+    }
+
+    fn len(&self) -> i64 {
+        self.end - self.start
+    }
+}
+
+fn main() -> i64 {
+    a: Range := Range.new(5, 10)
+    I a.len() != 5 { return 1 }
+
+    b: Range := Range.unit()
+    I b.len() != 1 { return 2 }
+
+    c: Range := Range.empty()
+    I c.len() != 0 { return 3 }
+
+    d: Range := Range.from_size(100)
+    I d.len() != 100 { return 4 }
+    I d.start != 0 { return 5 }
+    return 0
+}

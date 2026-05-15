@@ -1,6 +1,6 @@
 //! Reference and pointer type checking
 
-use crate::types::{ResolvedType, TypeError, TypeResult};
+use crate::types::{ResolvedType, TypeResult};
 use crate::TypeChecker;
 use vais_ast::*;
 
@@ -32,16 +32,7 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                match inner_type {
-                    ResolvedType::Ref(t) | ResolvedType::RefMut(t) | ResolvedType::Pointer(t) => {
-                        Some(Ok(*t))
-                    }
-                    _ => Some(Err(TypeError::Mismatch {
-                        expected: "reference or pointer".to_string(),
-                        found: inner_type.to_string(),
-                        span: Some(inner.span),
-                    })),
-                }
+                Some(Ok(deref_type(inner_type)))
             }
 
             Expr::Spread(inner) => {
@@ -54,5 +45,21 @@ impl TypeChecker {
 
             _ => None,
         }
+    }
+}
+
+fn deref_type(ty: ResolvedType) -> ResolvedType {
+    match ty {
+        ResolvedType::Ref(t) | ResolvedType::RefMut(t) | ResolvedType::Pointer(t) => *t,
+        ResolvedType::Named { name, generics } if name == "Box" && generics.len() == 1 => {
+            generics[0].clone()
+        }
+        // Phase 253: lenient deref. vaisdb often dereferences Option<T> or
+        // Result<T,E> directly. If the wrapped success type is itself a
+        // reference, `*opt_ref` should expose the pointee, not leave `&T`.
+        ResolvedType::Optional(t) => deref_type(*t),
+        ResolvedType::Result(ok, _) => deref_type(*ok),
+        other @ (ResolvedType::Var(_) | ResolvedType::Unknown) => other,
+        other => other,
     }
 }

@@ -1,0 +1,34 @@
+# CHECKS: trait method with default implementation, optionally overridden.
+# REGRESSION for bug C11: when an impl doesn't override a trait method that
+# has a default body, codegen now synthesizes a method on the impl type
+# using the trait's default body, and TC also registers the synthesized sig
+# so call resolution finds it.
+trait Counter {
+    fn base(&self) -> i64
+    fn doubled(&self) -> i64 {
+        self.base() * 2
+    }
+}
+
+struct Plain { x: i64 }
+struct Tripler { x: i64 }
+
+impl Plain: Counter {
+    fn base(&self) -> i64 { self.x }
+    # use default doubled()
+}
+
+impl Tripler: Counter {
+    fn base(&self) -> i64 { self.x }
+    fn doubled(&self) -> i64 { self.base() * 3 }   # override
+}
+
+fn main() -> i64 {
+    p: Plain := Plain { x: 7 }
+    t: Tripler := Tripler { x: 7 }
+    I p.base() != 7 { return 1 }
+    I p.doubled() != 14 { return 2 }
+    I t.base() != 7 { return 3 }
+    I t.doubled() != 21 { return 4 }
+    return 0
+}

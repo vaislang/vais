@@ -1,0 +1,32 @@
+# CHECKS: string operations — count repeated chars.
+fn max_run(p: i64, n: i64) -> i64 {
+    I n == 0 { return 0 }
+    best: i64 := mut 1
+    cur: i64 := mut 1
+    LF i: 1..n {
+        I load_byte(p + i) == load_byte(p + i - 1) {
+            cur = cur + 1
+            I cur > best { best = cur }
+        } else {
+            cur = 1
+        }
+    }
+    best
+}
+
+fn main() -> i64 {
+    p1: i64 := str_to_ptr("aabbbcc")
+    # max run = 3 (bbb)
+    I max_run(p1, strlen(p1)) != 3 { return 1 }
+
+    p2: i64 := str_to_ptr("abcdef")
+    # max run = 1
+    I max_run(p2, strlen(p2)) != 1 { return 2 }
+
+    p3: i64 := str_to_ptr("aaaaa")
+    I max_run(p3, strlen(p3)) != 5 { return 3 }
+
+    p4: i64 := str_to_ptr("")
+    I max_run(p4, 0) != 0 { return 4 }
+    return 0
+}

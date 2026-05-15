@@ -47,25 +47,34 @@
 # Updated to use Option<T> for error handling
 # Supports generic key types via the Hash trait
 
-U std/option
-U std/hash
-U std/stringmap
+use std/option
+use std/hash
+use std/stringmap
+use std/vec
 
 # Helper function to initialize bucket array
-F hashmap_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
+fn hashmap_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
     I idx >= cap {
         0
-    } EL {
+    } else {
         store_i64(buckets + idx * 8, 0)
         hashmap_init_buckets(buckets, idx + 1, cap)
     }
 }
 
+fn hashmap_align_up(offset: i64, align: i64) -> i64 {
+    I align <= 1 {
+        offset
+    } else {
+        ((offset + align - 1) / align) * align
+    }
+}
+
 # Helper function for rehash - copy entries
-F hashmap_rehash_bucket(self_ptr: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
+fn hashmap_rehash_bucket(self_ptr: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
     I idx >= old_cap {
         0
-    } EL {
+    } else {
         entry_ptr := load_i64(old_buckets + idx * 8)
         hashmap_rehash_entries(self_ptr, entry_ptr)
         hashmap_rehash_bucket(self_ptr, old_buckets, idx + 1, old_cap)
@@ -73,10 +82,10 @@ F hashmap_rehash_bucket(self_ptr: i64, old_buckets: i64, idx: i64, old_cap: i64)
 }
 
 # Helper function for rehash - process entry chain
-F hashmap_rehash_entries(self_ptr: i64, entry_ptr: i64) -> i64 {
+fn hashmap_rehash_entries(self_ptr: i64, entry_ptr: i64) -> i64 {
     I entry_ptr == 0 {
         0
-    } EL {
+    } else {
         key := load_typed(entry_ptr)
         value := load_typed(entry_ptr + 8)
         next := load_i64(entry_ptr + 16)
@@ -108,10 +117,10 @@ F hashmap_rehash_entries(self_ptr: i64, entry_ptr: i64) -> i64 {
 }
 
 # Helper function for clear - process all buckets
-F hashmap_clear_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
+fn hashmap_clear_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
     I idx >= cap {
         0
-    } EL {
+    } else {
         entry_ptr := load_i64(buckets + idx * 8)
         hashmap_clear_entries(entry_ptr)
         store_i64(buckets + idx * 8, 0)
@@ -120,10 +129,10 @@ F hashmap_clear_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
 }
 
 # Helper function for clear - free entry chain
-F hashmap_clear_entries(entry_ptr: i64) -> i64 {
+fn hashmap_clear_entries(entry_ptr: i64) -> i64 {
     I entry_ptr == 0 {
         0
-    } EL {
+    } else {
         next := load_i64(entry_ptr + 16)
         free(entry_ptr)
         hashmap_clear_entries(next)
@@ -131,10 +140,10 @@ F hashmap_clear_entries(entry_ptr: i64) -> i64 {
 }
 
 # Helper to count total entries in hashmap
-F hashmap_count_entries(buckets: i64, idx: i64, cap: i64) -> i64 {
+fn hashmap_count_entries(buckets: i64, idx: i64, cap: i64) -> i64 {
     I idx >= cap {
         0
-    } EL {
+    } else {
         entry_ptr := load_i64(buckets + idx * 8)
         chain_count := hashmap_count_chain(entry_ptr)
         chain_count + hashmap_count_entries(buckets, idx + 1, cap)
@@ -142,38 +151,33 @@ F hashmap_count_entries(buckets: i64, idx: i64, cap: i64) -> i64 {
 }
 
 # Helper to count entries in a chain
-F hashmap_count_chain(entry_ptr: i64) -> i64 {
+fn hashmap_count_chain(entry_ptr: i64) -> i64 {
     I entry_ptr == 0 {
         0
-    } EL {
+    } else {
         next := load_i64(entry_ptr + 16)
         1 + hashmap_count_chain(next)
     }
 }
 
 # Entry node for linked list in each bucket
-S Entry<K, V> {
+struct Entry<K, V> {
     key: K,         # Key
     value: V,       # Value
     next: i64       # Pointer to next Entry (0 if none)
 }
 
 # HashMap structure
-S HashMap<K, V> {
+struct HashMap<K, V> {
     buckets: i64,   # Pointer to array of bucket heads (Entry pointers)
     size: i64,      # Number of key-value pairs
     cap: i64        # Number of buckets
 }
 
-X HashMap<K, V> {
-    # Create a new HashMap with default capacity
-    F new() -> HashMap<K, V> {
-        HashMap.with_capacity(16)
-    }
-
+impl HashMap<K, V> {
     # Create a new HashMap with given capacity
-    F with_capacity(capacity: i64) -> HashMap<K, V> {
-        cap := I capacity < 8 { 8 } EL { capacity }
+    fn with_capacity(capacity: i64) -> HashMap<K, V> {
+        cap := I capacity < 8 { 8 } else { capacity }
         # Allocate bucket array (array of pointers, each 8 bytes)
         buckets := malloc(cap * 8)
         # Initialize all buckets to null (0) using recursive helper
@@ -182,267 +186,273 @@ X HashMap<K, V> {
     }
 
     # Get number of entries
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.size
     }
 
     # Get capacity (number of buckets)
-    F capacity(&self) -> i64 {
+    fn capacity(&self) -> i64 {
         self.cap
     }
 
     # Check if empty
-    F is_empty(&self) -> i64 {
-        I self.size == 0 { 1 } EL { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.size == 0 { 1 } else { 0 }
     }
 
     # Hash function for key
     # Uses the mult_hash function from std/hash for i64 keys
     # For other key types, the key value is treated as i64 (pointer or raw value)
-    F hash(&self, key: K) -> i64 {
+    fn hash(&self, key: K) -> i64 {
         # Use the generic mult_hash function for good distribution
         h := mult_hash(key)
         h % self.cap
     }
 
-    # Get value for key, returns 0 if not found.
-    # Use get()/get_mut()/get_opt() for presence-aware lookup.
-    F get_value(&self, key: K) -> V {
+    fn key_size(&self) -> i64 {
+        s := sizeof(K)
+        I s <= 0 { 1 } else { s }
+    }
+
+    fn value_size(&self) -> i64 {
+        s := sizeof(V)
+        I s <= 0 { 1 } else { s }
+    }
+
+    fn value_offset(&self) -> i64 {
+        hashmap_align_up(@.key_size(), alignof(V))
+    }
+
+    fn next_offset(&self) -> i64 {
+        hashmap_align_up(@.value_offset() + @.value_size(), 8)
+    }
+
+    fn entry_size(&self) -> i64 {
+        @.next_offset() + 8
+    }
+
+    # Get value for key, returns zero/default memory if not found.
+    # Prefer get()/get_mut()/get_opt() for presence-aware lookups.
+    fn get_value(&self, key: K) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
         @.get_value_from_chain(entry_ptr, key)
     }
 
     # Helper to search through chain
-    F get_value_from_chain(&self, entry_ptr: i64, key: K) -> V {
+    fn get_value_from_chain(&self, entry_ptr: i64, key: K) -> V {
         I entry_ptr == 0 {
-            0
-        } EL {
-            entry_key: K := load_typed(entry_ptr)
+            load_typed(entry_ptr + @.value_offset(), V)
+        } else {
+            entry_key: K := load_typed(entry_ptr, K)
             I entry_key == key {
-                load_typed(entry_ptr + 8)
-            } EL {
-                next := load_i64(entry_ptr + 16)
+                load_typed(entry_ptr + @.value_offset(), V)
+            } else {
+                next := load_i64(entry_ptr + @.next_offset())
                 @.get_value_from_chain(next, key)
             }
         }
     }
 
-    # Get raw pointer to the value slot, or 0 if not found.
-    F value_ptr(&self, key: K) -> i64 {
+    fn value_ptr(&self, key: K) -> i64 {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
-        cur := mut entry_ptr
-        LW cur != 0 {
-            entry_key: K := load_typed(cur)
-            I entry_key == key {
-                R cur + 8
-            }
-            cur = load_i64(cur + 16)
-        }
-        0
+        @.value_ptr_in_chain(entry_ptr, key)
     }
 
-    # Helper to search through chain and return value slot pointer.
-    F value_ptr_in_chain(&self, entry_ptr: i64, key: K) -> i64 {
+    fn value_ptr_in_chain(&self, entry_ptr: i64, key: K) -> i64 {
         I entry_ptr == 0 {
             0
-        } EL {
-            entry_key: K := load_typed(entry_ptr)
+        } else {
+            entry_key: K := load_typed(entry_ptr, K)
             I entry_key == key {
-                entry_ptr + 8
-            } EL {
-                next := load_i64(entry_ptr + 16)
+                entry_ptr + @.value_offset()
+            } else {
+                next := load_i64(entry_ptr + @.next_offset())
                 @.value_ptr_in_chain(next, key)
             }
         }
     }
 
-    # Presence-aware immutable lookup.
-    F get(&self, key: &K) -> Option<&V> {
+    # Rust-style presence-aware immutable lookup.
+    fn get(&self, key: &K) -> Option<&V> {
         ptr := @.value_ptr(*key)
         I ptr == 0 {
-            None
-        } EL {
-            Some(ptr as &V)
+            return Option.None
         }
+        Option.Some(ptr as &V)
     }
 
-    # Presence-aware mutable lookup.
-    F get_mut(&self, key: &K) -> Option<&mut V> {
+    # Rust-style presence-aware mutable lookup.
+    fn get_mut(&self, key: &K) -> Option<&mut V> {
         ptr := @.value_ptr(*key)
         I ptr == 0 {
-            None
-        } EL {
-            Some(ptr as &mut V)
+            return Option.None
         }
+        Option.Some(ptr as &mut V)
     }
 
     # Get value for key using Option type
     # Returns Some(value) if found, None if not found
-    F get_opt(&self, key: K) -> Option<V> {
+    fn get_opt(&self, key: K) -> Option<V> {
         ptr := @.value_ptr(key)
-        I ptr == 0 {
-            None
-        } EL {
-            Some(load_typed(ptr))
+        I ptr != 0 {
+            return Option.Some(load_typed(ptr, V))
         }
+        Option.None
     }
 
     # Check if key exists
-    F contains(&self, key: K) -> i64 {
+    fn contains(&self, key: K) -> i64 {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
-        cur := mut entry_ptr
-        LW cur != 0 {
-            entry_key: K := load_typed(cur)
-            I entry_key == key {
-                R 1
-            }
-            cur = load_i64(cur + 16)
-        }
-        0
+        @.contains_in_chain(entry_ptr, key)
     }
 
     # Helper to search chain for key
-    F contains_in_chain(&self, entry_ptr: i64, key: K) -> i64 {
+    fn contains_in_chain(&self, entry_ptr: i64, key: K) -> i64 {
         I entry_ptr == 0 {
             0
-        } EL {
-            entry_key: K := load_typed(entry_ptr)
+        } else {
+            entry_key: K := load_typed(entry_ptr, K)
             I entry_key == key {
                 1
-            } EL {
-                next := load_i64(entry_ptr + 16)
+            } else {
+                next := load_i64(entry_ptr + @.next_offset())
                 @.contains_in_chain(next, key)
             }
         }
     }
 
-    # Set key-value pair, returns previous value or 0 if new
-    F set(&self, key: K, value: V) -> V {
+    # Set key-value pair.
+    fn set(&self, key: K, value: V) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
 
-        cur := mut entry_ptr
-        LW cur != 0 {
-            entry_key: K := load_typed(cur)
-            I entry_key == key {
-                old_value: V := load_typed(cur + 8)
-                store_typed(cur + 8, value)
-                R old_value
+        # First try to update existing key
+        updated := @.update_in_chain(entry_ptr, key, value)
+        I updated == 1 {
+            value
+        } else {
+            # Key not found, insert new entry at head
+            value_offset := @.value_offset()
+            next_offset := @.next_offset()
+            new_entry := malloc(@.entry_size())
+            store_typed(new_entry, key)        # key
+            store_typed(new_entry + value_offset, value)  # value
+            store_i64(new_entry + next_offset, entry_ptr)  # next = old head
+            store_i64(self.buckets + idx * 8, new_entry)  # update bucket head
+            self.size = self.size + 1
+
+            # Check if rehash needed (load factor > 0.75)
+            I self.size * 4 > self.cap * 3 {
+                @.rehash()
             }
-            cur = load_i64(cur + 16)
+            value
         }
-
-        # Key not found, insert new entry at head
-        new_entry := malloc(24)  # 3 * 8 bytes for Entry
-        store_typed(new_entry, key)        # key
-        store_typed(new_entry + 8, value)  # value
-        store_i64(new_entry + 16, entry_ptr)  # next = old head
-        store_i64(self.buckets + idx * 8, new_entry)  # update bucket head
-        self.size = self.size + 1
-
-        # Check if rehash needed (load factor > 0.75)
-        I self.size * 4 > self.cap * 3 {
-            @.rehash()
-        }
-        0
-    }
-
-    # Alias for set (API name used by callers)
-    F insert(&self, key: K, value: V) -> V {
-        @.set(key, value)
     }
 
     # Helper to update value if key exists in chain
-    # Returns old value if found (>= 0), -1 if not found
-    F update_in_chain(&self, entry_ptr: i64, key: K, value: V) -> i64 {
+    # Returns 1 if found and updated, 0 if not found.
+    fn update_in_chain(&self, entry_ptr: i64, key: K, value: V) -> i64 {
         I entry_ptr == 0 {
-            0 - 1  # -1 means not found
-        } EL {
-            entry_key: K := load_typed(entry_ptr)
+            0
+        } else {
+            entry_key: K := load_typed(entry_ptr, K)
             I entry_key == key {
                 # Key exists, update value
-                old_value: V := load_typed(entry_ptr + 8)
-                store_typed(entry_ptr + 8, value)
-                old_value
-            } EL {
-                next := load_i64(entry_ptr + 16)
+                store_typed(entry_ptr + @.value_offset(), value)
+                1
+            } else {
+                next := load_i64(entry_ptr + @.next_offset())
                 @.update_in_chain(next, key, value)
             }
         }
     }
 
+    # Alias for `set` — Rust-style insert name. Added Phase 215 so that
+    # downstream code (e.g. vaisdb migrating from a Rust HashMap API) can
+    # call `.insert(k, v)` without rename churn.
+    fn insert(&self, key: K, value: V) -> V {
+        @.set(key, value)
+    }
+
     # Remove key-value pair, returns removed value or 0 if not found
-    F remove(&self, key: K) -> V {
+    fn remove(&self, key: K) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
-        prev := mut 0
-        cur := mut entry_ptr
-        LW cur != 0 {
-            entry_key: K := load_typed(cur)
-            I entry_key == key {
-                value: V := load_typed(cur + 8)
-                next := load_i64(cur + 16)
-                I prev == 0 {
-                    store_i64(self.buckets + idx * 8, next)
-                } EL {
-                    store_i64(prev + 16, next)
-                }
-                free(cur)
-                self.size = self.size - 1
-                R value
-            }
-            prev = cur
-            cur = load_i64(cur + 16)
-        }
-        0
+        @.remove_from_chain(idx, 0, entry_ptr, key)
     }
 
     # Remove key-value pair using Option type
     # Returns Some(value) if found and removed, None if not found
-    F remove_opt(&self, key: K) -> Option<V> {
+    fn remove_opt(&self, key: K) -> Option<V> {
         I @.contains(key) == 1 {
-            Some(@.remove(key))
-        } EL {
-            None
+            return Option.Some(@.remove(key))
         }
+        Option.None
     }
 
     # Helper to remove from chain
-    F remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: K) -> V {
+    fn remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: K) -> V {
         I entry_ptr == 0 {
-            0
-        } EL {
-            entry_key: K := load_typed(entry_ptr)
+            load_typed(entry_ptr + @.value_offset(), V)
+        } else {
+            entry_key: K := load_typed(entry_ptr, K)
             I entry_key == key {
-                value: V := load_typed(entry_ptr + 8)
-                next := load_i64(entry_ptr + 16)
+                value: V := load_typed(entry_ptr + @.value_offset(), V)
+                next := load_i64(entry_ptr + @.next_offset())
 
                 # Use dummy variable to consume if-expression result
                 _ := I prev_ptr == 0 {
                     # Removing head of list
                     store_i64(self.buckets + bucket_idx * 8, next)
                     0
-                } EL {
+                } else {
                     # Removing from middle/end
-                    store_i64(prev_ptr + 16, next)
+                    store_i64(prev_ptr + @.next_offset(), next)
                     0
                 }
 
                 free(entry_ptr)
                 self.size = self.size - 1
                 value
-            } EL {
-                next := load_i64(entry_ptr + 16)
+            } else {
+                next := load_i64(entry_ptr + @.next_offset())
                 @.remove_from_chain(bucket_idx, entry_ptr, next, key)
             }
         }
     }
 
+    fn rehash_bucket(&self, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
+        I idx >= old_cap {
+            0
+        } else {
+            entry_ptr := load_i64(old_buckets + idx * 8)
+            @.rehash_entries(entry_ptr)
+            @.rehash_bucket(old_buckets, idx + 1, old_cap)
+        }
+    }
+
+    fn rehash_entries(&self, entry_ptr: i64) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } else {
+            key: K := load_typed(entry_ptr, K)
+            next_offset := @.next_offset()
+            next := load_i64(entry_ptr + next_offset)
+
+            idx := @.hash(key)
+            old_head := load_i64(self.buckets + idx * 8)
+            store_i64(entry_ptr + next_offset, old_head)
+            store_i64(self.buckets + idx * 8, entry_ptr)
+
+            @.rehash_entries(next)
+        }
+    }
+
     # Rehash to double capacity
-    F rehash(&self) -> i64 {
+    fn rehash(&self) -> i64 {
         old_buckets := self.buckets
         old_cap := self.cap
         new_cap := old_cap * 2
@@ -455,14 +465,8 @@ X HashMap<K, V> {
         self.buckets = new_buckets
         self.cap = new_cap
 
-        # Count entries while rehashing
-        # Note: size tracking done manually in rehash helper
-
-        # Reinsert all entries using recursive raw helper
-        hashmap_rehash_bucket_raw(new_buckets, new_cap, old_buckets, 0, old_cap)
-
-        # Count total entries (traverse all buckets)
-        self.size = hashmap_count_entries(new_buckets, 0, new_cap)
+        # Relink existing entries into the new bucket array.
+        @.rehash_bucket(old_buckets, 0, old_cap)
 
         free(old_buckets)
         1
@@ -471,14 +475,74 @@ X HashMap<K, V> {
     # ===== Additional HashMap Methods =====
 
     # Alias for contains (for API consistency with other languages)
-    F contains_key(&self, key: K) -> i64 {
+    fn contains_key(&self, key: K) -> i64 {
         @.contains(key)
+    }
+
+    fn collect_keys_chain(&self, out: &mut Vec<K>, entry_ptr: i64) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } else {
+            key: K := load_typed(entry_ptr, K)
+            store_typed(out.data + out.len * out.elem_size, key)
+            out.len = out.len + 1
+            next := load_i64(entry_ptr + @.next_offset())
+            @.collect_keys_chain(out, next)
+        }
+    }
+
+    fn collect_keys_bucket(&self, out: &mut Vec<K>, bucket_idx: i64) -> i64 {
+        I bucket_idx >= self.cap {
+            0
+        } else {
+            entry_ptr := load_i64(self.buckets + bucket_idx * 8)
+            @.collect_keys_chain(out, entry_ptr)
+            @.collect_keys_bucket(out, bucket_idx + 1)
+        }
+    }
+
+    fn keys(&self) -> Vec<K> {
+        elem_sz := @.key_size()
+        data := malloc(self.size * elem_sz)
+        out: Vec<K> := mut Vec { data: data, len: 0, cap: self.size, elem_size: elem_sz, owned: 0 }
+        @.collect_keys_bucket(&out, 0)
+        out
+    }
+
+    fn collect_values_chain(&self, out: &mut Vec<V>, entry_ptr: i64) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } else {
+            value: V := load_typed(entry_ptr + @.value_offset(), V)
+            store_typed(out.data + out.len * out.elem_size, value)
+            out.len = out.len + 1
+            next := load_i64(entry_ptr + @.next_offset())
+            @.collect_values_chain(out, next)
+        }
+    }
+
+    fn collect_values_bucket(&self, out: &mut Vec<V>, bucket_idx: i64) -> i64 {
+        I bucket_idx >= self.cap {
+            0
+        } else {
+            entry_ptr := load_i64(self.buckets + bucket_idx * 8)
+            @.collect_values_chain(out, entry_ptr)
+            @.collect_values_bucket(out, bucket_idx + 1)
+        }
+    }
+
+    fn values(&self) -> Vec<V> {
+        elem_sz := @.value_size()
+        data := malloc(self.size * elem_sz)
+        out: Vec<V> := mut Vec { data: data, len: 0, cap: self.size, elem_size: elem_sz, owned: 0 }
+        @.collect_values_bucket(&out, 0)
+        out
     }
 
     # Collect all keys into a flat array
     # Returns pointer to allocated array of keys (caller must free)
     # Sets count_out to number of keys
-    F keys(&self, count_out: i64) -> i64 {
+    fn keys_raw(&self, count_out: i64) -> i64 {
         arr := malloc(self.size * 8)
         hashmap_collect_keys(self.buckets, self.cap, arr, 0, 0)
         store_i64(count_out, self.size)
@@ -488,7 +552,7 @@ X HashMap<K, V> {
     # Collect all values into a flat array
     # Returns pointer to allocated array of values (caller must free)
     # Sets count_out to number of values
-    F values(&self, count_out: i64) -> i64 {
+    fn values_raw(&self, count_out: i64) -> i64 {
         arr := malloc(self.size * 8)
         hashmap_collect_values(self.buckets, self.cap, arr, 0, 0)
         store_i64(count_out, self.size)
@@ -498,7 +562,7 @@ X HashMap<K, V> {
     # Collect all entries (key-value pairs) into a flat array
     # Returns pointer to array of {key, value} pairs (16 bytes each)
     # Sets count_out to number of entries
-    F entries(&self, count_out: i64) -> i64 {
+    fn entries(&self, count_out: i64) -> i64 {
         arr := malloc(self.size * 16)
         hashmap_collect_entries(self.buckets, self.cap, arr, 0, 0)
         store_i64(count_out, self.size)
@@ -506,20 +570,41 @@ X HashMap<K, V> {
     }
 
     # Apply a function to each key-value pair
-    F for_each(&self, f: fn(i64, i64) -> i64) -> i64 {
+    fn for_each(&self, f: fn(i64, i64) -> i64) -> i64 {
         hashmap_for_each_bucket(self.buckets, self.cap, f, 0)
         0
     }
 
+    fn clear_entries(&self, entry_ptr: i64) -> i64 {
+        I entry_ptr == 0 {
+            0
+        } else {
+            next := load_i64(entry_ptr + @.next_offset())
+            free(entry_ptr)
+            @.clear_entries(next)
+        }
+    }
+
+    fn clear_buckets(&self, idx: i64) -> i64 {
+        I idx >= self.cap {
+            0
+        } else {
+            entry_ptr := load_i64(self.buckets + idx * 8)
+            @.clear_entries(entry_ptr)
+            store_i64(self.buckets + idx * 8, 0)
+            @.clear_buckets(idx + 1)
+        }
+    }
+
     # Clear all entries
-    F clear(&self) -> i64 {
-        hashmap_clear_buckets(self.buckets, 0, self.cap)
+    fn clear(&self) -> i64 {
+        @.clear_buckets(0)
         self.size = 0
         0
     }
 
     # Free all memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         @.clear()
         free(self.buckets)
         self.buckets = 0
@@ -531,18 +616,18 @@ X HashMap<K, V> {
 # ===== Collection helpers (recursive) =====
 
 # Collect keys from all buckets into array
-F hashmap_collect_keys(buckets: i64, cap: i64, arr: i64, bucket_idx: i64, arr_idx: i64) -> i64 {
+fn hashmap_collect_keys(buckets: i64, cap: i64, arr: i64, bucket_idx: i64, arr_idx: i64) -> i64 {
     I bucket_idx >= cap { arr_idx }
-    EL {
+    else {
         entry_ptr := load_i64(buckets + bucket_idx * 8)
         new_idx := hashmap_collect_keys_chain(entry_ptr, arr, arr_idx)
         hashmap_collect_keys(buckets, cap, arr, bucket_idx + 1, new_idx)
     }
 }
 
-F hashmap_collect_keys_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
+fn hashmap_collect_keys_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
     I entry_ptr == 0 { arr_idx }
-    EL {
+    else {
         store_i64(arr + arr_idx * 8, load_i64(entry_ptr))
         next := load_i64(entry_ptr + 16)
         hashmap_collect_keys_chain(next, arr, arr_idx + 1)
@@ -550,18 +635,18 @@ F hashmap_collect_keys_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
 }
 
 # Collect values from all buckets into array
-F hashmap_collect_values(buckets: i64, cap: i64, arr: i64, bucket_idx: i64, arr_idx: i64) -> i64 {
+fn hashmap_collect_values(buckets: i64, cap: i64, arr: i64, bucket_idx: i64, arr_idx: i64) -> i64 {
     I bucket_idx >= cap { arr_idx }
-    EL {
+    else {
         entry_ptr := load_i64(buckets + bucket_idx * 8)
         new_idx := hashmap_collect_values_chain(entry_ptr, arr, arr_idx)
         hashmap_collect_values(buckets, cap, arr, bucket_idx + 1, new_idx)
     }
 }
 
-F hashmap_collect_values_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
+fn hashmap_collect_values_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
     I entry_ptr == 0 { arr_idx }
-    EL {
+    else {
         store_i64(arr + arr_idx * 8, load_i64(entry_ptr + 8))
         next := load_i64(entry_ptr + 16)
         hashmap_collect_values_chain(next, arr, arr_idx + 1)
@@ -569,18 +654,18 @@ F hashmap_collect_values_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
 }
 
 # Collect entries (key-value pairs) from all buckets
-F hashmap_collect_entries(buckets: i64, cap: i64, arr: i64, bucket_idx: i64, arr_idx: i64) -> i64 {
+fn hashmap_collect_entries(buckets: i64, cap: i64, arr: i64, bucket_idx: i64, arr_idx: i64) -> i64 {
     I bucket_idx >= cap { arr_idx }
-    EL {
+    else {
         entry_ptr := load_i64(buckets + bucket_idx * 8)
         new_idx := hashmap_collect_entries_chain(entry_ptr, arr, arr_idx)
         hashmap_collect_entries(buckets, cap, arr, bucket_idx + 1, new_idx)
     }
 }
 
-F hashmap_collect_entries_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
+fn hashmap_collect_entries_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
     I entry_ptr == 0 { arr_idx }
-    EL {
+    else {
         store_i64(arr + arr_idx * 16, load_i64(entry_ptr))          # key
         store_i64(arr + arr_idx * 16 + 8, load_i64(entry_ptr + 8))  # value
         next := load_i64(entry_ptr + 16)
@@ -589,18 +674,18 @@ F hashmap_collect_entries_chain(entry_ptr: i64, arr: i64, arr_idx: i64) -> i64 {
 }
 
 # Apply function to each key-value pair in all buckets
-F hashmap_for_each_bucket(buckets: i64, cap: i64, f: fn(i64, i64) -> i64, bucket_idx: i64) -> i64 {
+fn hashmap_for_each_bucket(buckets: i64, cap: i64, f: fn(i64, i64) -> i64, bucket_idx: i64) -> i64 {
     I bucket_idx >= cap { 0 }
-    EL {
+    else {
         entry_ptr := load_i64(buckets + bucket_idx * 8)
         hashmap_for_each_chain(entry_ptr, f)
         hashmap_for_each_bucket(buckets, cap, f, bucket_idx + 1)
     }
 }
 
-F hashmap_for_each_chain(entry_ptr: i64, f: fn(i64, i64) -> i64) -> i64 {
+fn hashmap_for_each_chain(entry_ptr: i64, f: fn(i64, i64) -> i64) -> i64 {
     I entry_ptr == 0 { 0 }
-    EL {
+    else {
         f(load_i64(entry_ptr), load_i64(entry_ptr + 8))
         next := load_i64(entry_ptr + 16)
         hashmap_for_each_chain(next, f)
@@ -608,10 +693,10 @@ F hashmap_for_each_chain(entry_ptr: i64, f: fn(i64, i64) -> i64) -> i64 {
 }
 
 # Rehash helper: iterate buckets - takes raw pointer to HashMap
-F hashmap_rehash_bucket_raw(m_buckets: i64, m_cap: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
+fn hashmap_rehash_bucket_raw(m_buckets: i64, m_cap: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
     I idx >= old_cap {
         0
-    } EL {
+    } else {
         entry_ptr := load_i64(old_buckets + idx * 8)
         hashmap_rehash_entries_raw(m_buckets, m_cap, entry_ptr)
         hashmap_rehash_bucket_raw(m_buckets, m_cap, old_buckets, idx + 1, old_cap)
@@ -619,10 +704,10 @@ F hashmap_rehash_bucket_raw(m_buckets: i64, m_cap: i64, old_buckets: i64, idx: i
 }
 
 # Rehash helper: process entry chain - inserts directly using raw pointers
-F hashmap_rehash_entries_raw(m_buckets: i64, m_cap: i64, entry_ptr: i64) -> i64 {
+fn hashmap_rehash_entries_raw(m_buckets: i64, m_cap: i64, entry_ptr: i64) -> i64 {
     I entry_ptr == 0 {
         0
-    } EL {
+    } else {
         key := load_typed(entry_ptr)
         value := load_typed(entry_ptr + 8)
         next := load_i64(entry_ptr + 16)
@@ -650,13 +735,13 @@ F hashmap_rehash_entries_raw(m_buckets: i64, m_cap: i64, entry_ptr: i64) -> i64 
 # by using content-based comparison (strmap_str_eq) and string hashing (hash_string)
 
 # Helper: search chain for string key
-F hashmap_get_str_chain(entry_ptr: i64, key: i64) -> i64 {
+fn hashmap_get_str_chain(entry_ptr: i64, key: i64) -> i64 {
     I entry_ptr == 0 { 0 }
-    EL {
+    else {
         entry_key := load_i64(entry_ptr)
         I strmap_str_eq(entry_key, key) == 1 {
             load_i64(entry_ptr + 8)
-        } EL {
+        } else {
             next := load_i64(entry_ptr + 16)
             hashmap_get_str_chain(next, key)
         }
@@ -664,12 +749,12 @@ F hashmap_get_str_chain(entry_ptr: i64, key: i64) -> i64 {
 }
 
 # Helper: check if string key exists in chain
-F hashmap_contains_str_chain(entry_ptr: i64, key: i64) -> i64 {
+fn hashmap_contains_str_chain(entry_ptr: i64, key: i64) -> i64 {
     I entry_ptr == 0 { 0 }
-    EL {
+    else {
         entry_key := load_i64(entry_ptr)
         I strmap_str_eq(entry_key, key) == 1 { 1 }
-        EL {
+        else {
             next := load_i64(entry_ptr + 16)
             hashmap_contains_str_chain(next, key)
         }
@@ -677,15 +762,15 @@ F hashmap_contains_str_chain(entry_ptr: i64, key: i64) -> i64 {
 }
 
 # Helper: update string key in chain, returns old value or -1
-F hashmap_update_str_chain(entry_ptr: i64, key: i64, value: i64) -> i64 {
+fn hashmap_update_str_chain(entry_ptr: i64, key: i64, value: i64) -> i64 {
     I entry_ptr == 0 { 0 - 1 }
-    EL {
+    else {
         entry_key := load_i64(entry_ptr)
         I strmap_str_eq(entry_key, key) == 1 {
             old_value := load_i64(entry_ptr + 8)
             store_i64(entry_ptr + 8, value)
             old_value
-        } EL {
+        } else {
             next := load_i64(entry_ptr + 16)
             hashmap_update_str_chain(next, key, value)
         }
@@ -693,9 +778,9 @@ F hashmap_update_str_chain(entry_ptr: i64, key: i64, value: i64) -> i64 {
 }
 
 # Helper: remove string key from chain
-F hashmap_remove_str_chain(self_ptr: i64, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: i64) -> i64 {
+fn hashmap_remove_str_chain(self_ptr: i64, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: i64) -> i64 {
     I entry_ptr == 0 { 0 }
-    EL {
+    else {
         entry_key := load_i64(entry_ptr)
         I strmap_str_eq(entry_key, key) == 1 {
             value := load_i64(entry_ptr + 8)
@@ -704,7 +789,7 @@ F hashmap_remove_str_chain(self_ptr: i64, bucket_idx: i64, prev_ptr: i64, entry_
             _ := I prev_ptr == 0 {
                 store_i64(buckets + bucket_idx * 8, next)
                 0
-            } EL {
+            } else {
                 store_i64(prev_ptr + 16, next)
                 0
             }
@@ -714,7 +799,7 @@ F hashmap_remove_str_chain(self_ptr: i64, bucket_idx: i64, prev_ptr: i64, entry_
             size := load_i64(self_ptr + 8)
             store_i64(self_ptr + 8, size - 1)
             value
-        } EL {
+        } else {
             next := load_i64(entry_ptr + 16)
             hashmap_remove_str_chain(self_ptr, bucket_idx, entry_ptr, next, key)
         }
@@ -722,18 +807,18 @@ F hashmap_remove_str_chain(self_ptr: i64, bucket_idx: i64, prev_ptr: i64, entry_
 }
 
 # Rehash helper for string keys
-F hashmap_rehash_str_bucket(new_buckets: i64, new_cap: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
+fn hashmap_rehash_str_bucket(new_buckets: i64, new_cap: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
     I idx >= old_cap { 0 }
-    EL {
+    else {
         entry_ptr := load_i64(old_buckets + idx * 8)
         hashmap_rehash_str_entries(new_buckets, new_cap, entry_ptr)
         hashmap_rehash_str_bucket(new_buckets, new_cap, old_buckets, idx + 1, old_cap)
     }
 }
 
-F hashmap_rehash_str_entries(new_buckets: i64, new_cap: i64, entry_ptr: i64) -> i64 {
+fn hashmap_rehash_str_entries(new_buckets: i64, new_cap: i64, entry_ptr: i64) -> i64 {
     I entry_ptr == 0 { 0 }
-    EL {
+    else {
         key := load_i64(entry_ptr)
         value := load_i64(entry_ptr + 8)
         next := load_i64(entry_ptr + 16)
@@ -758,35 +843,38 @@ F hashmap_rehash_str_entries(new_buckets: i64, new_cap: i64, entry_ptr: i64) -> 
 # string comparison and string hashing (DJB2) instead of pointer equality.
 # Keys are duplicated on insert for memory safety.
 
-S StrHashMap<V> {
+struct StrHashMap<V> {
     buckets: i64,
     size: i64,
     cap: i64
 }
 
-X StrHashMap<V> {
-    F new() -> StrHashMap<V> {
-        StrHashMap.with_capacity(16)
-    }
-
-    F with_capacity(capacity: i64) -> StrHashMap<V> {
-        cap := I capacity < 8 { 8 } EL { capacity }
+impl StrHashMap<V> {
+    fn with_capacity(capacity: i64) -> StrHashMap<V> {
+        cap := I capacity < 8 { 8 } else { capacity }
         buckets := malloc(cap * 8)
         hashmap_init_buckets(buckets, 0, cap)
         StrHashMap { buckets: buckets, size: 0, cap: cap }
     }
 
-    F len(&self) -> i64 = self.size
-    F capacity(&self) -> i64 = self.cap
-    F is_empty(&self) -> i64 { I self.size == 0 { 1 } EL { 0 } }
+    fn len(&self) -> i64 = self.size
+    fn capacity(&self) -> i64 = self.cap
+    fn is_empty(&self) -> i64 { I self.size == 0 { 1 } else { 0 } }
 
-    F hash(&self, key: str) -> i64 {
+    fn hash(&self, key: str) -> i64 {
         p := str_to_ptr(key)
         h := hash_string(p)
         h % self.cap
     }
 
-    F get(&self, key: str) -> V {
+    fn get(&self, key: str) -> V {
+        idx := @.hash(key)
+        entry_ptr := load_i64(self.buckets + idx * 8)
+        kp := str_to_ptr(key)
+        @.get_str_inline(entry_ptr, kp)
+    }
+
+    fn get_str(&self, key: str) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
         kp := str_to_ptr(key)
@@ -794,32 +882,34 @@ X StrHashMap<V> {
     }
 
     # Helper method for getting value from chain (generic V)
-    F get_str_inline(&self, entry_ptr: i64, key: i64) -> V {
+    fn get_str_inline(&self, entry_ptr: i64, key: i64) -> V {
         I entry_ptr == 0 { 0 }
-        EL {
+        else {
             entry_key := load_i64(entry_ptr)
             I strmap_str_eq(entry_key, key) == 1 {
                 load_typed(entry_ptr + 8)
-            } EL {
+            } else {
                 next := load_i64(entry_ptr + 16)
                 @.get_str_inline(next, key)
             }
         }
     }
 
-    F get_opt(&self, key: str) -> Option<V> {
-        I @.contains(key) == 1 { Some(@.get(key)) }
-        EL { None }
+    fn get_opt(&self, key: str) -> Option<V> {
+        I @.contains(key) == 1 {
+            return Option.Some(@.get(key))
+        }
+        Option.None
     }
 
-    F contains(&self, key: str) -> i64 {
+    fn contains(&self, key: str) -> i64 {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
         kp := str_to_ptr(key)
         hashmap_contains_str_chain(entry_ptr, kp)
     }
 
-    F set(&self, key: str, value: V) -> V {
+    fn set(&self, key: str, value: V) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
         kp := str_to_ptr(key)
@@ -830,7 +920,7 @@ X StrHashMap<V> {
             # Key was found and updated, return the old value stored in temp
             # Note: old value was already returned by find_and_update_str
             0  # Placeholder, actual old value handling is complex with current design
-        } EL {
+        } else {
             # Key not found, insert new entry
             key_copy := strmap_str_dup(kp)
             new_entry := malloc(24)
@@ -846,27 +936,28 @@ X StrHashMap<V> {
         }
     }
 
-    F insert(&self, key: str, value: V) -> V {
-        @.set(key, value)
-    }
-
     # Helper method for finding and updating entries (generic V)
-    F find_and_update_str(&self, entry_ptr: i64, key: i64, value: V) -> i64 {
+    fn find_and_update_str(&self, entry_ptr: i64, key: i64, value: V) -> i64 {
         I entry_ptr == 0 { 0 }  # Not found
-        EL {
+        else {
             entry_key := load_i64(entry_ptr)
             I strmap_str_eq(entry_key, key) == 1 {
                 # Found - update value and return 1
                 store_typed(entry_ptr + 8, value)
                 1
-            } EL {
+            } else {
                 next := load_i64(entry_ptr + 16)
                 @.find_and_update_str(next, key, value)
             }
         }
     }
 
-    F remove(&self, key: str) -> V {
+    # Alias for `set` (StrHashMap) — Rust-style insert name. Phase 215.
+    fn insert(&self, key: str, value: V) -> V {
+        @.set(key, value)
+    }
+
+    fn remove(&self, key: str) -> V {
         idx := @.hash(key)
         entry_ptr := load_i64(self.buckets + idx * 8)
         kp := str_to_ptr(key)
@@ -876,9 +967,9 @@ X StrHashMap<V> {
         @.remove_from_chain(idx, 0, entry_ptr, kp)
     }
 
-    F remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: i64) -> V {
+    fn remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, key: i64) -> V {
         I entry_ptr == 0 { 0 }
-        EL {
+        else {
             entry_key := load_i64(entry_ptr)
             I strmap_str_eq(entry_key, key) == 1 {
                 value := load_typed(entry_ptr + 8)
@@ -886,7 +977,7 @@ X StrHashMap<V> {
                 _ := I prev_ptr == 0 {
                     store_i64(self.buckets + bucket_idx * 8, next)
                     0
-                } EL {
+                } else {
                     store_i64(prev_ptr + 16, next)
                     0
                 }
@@ -894,14 +985,14 @@ X StrHashMap<V> {
                 free(entry_ptr)
                 self.size = self.size - 1
                 value
-            } EL {
+            } else {
                 next := load_i64(entry_ptr + 16)
                 @.remove_from_chain(bucket_idx, entry_ptr, next, key)
             }
         }
     }
 
-    F rehash(&self) -> i64 {
+    fn rehash(&self) -> i64 {
         old_buckets := self.buckets
         old_cap := self.cap
         new_cap := old_cap * 2
@@ -916,18 +1007,18 @@ X StrHashMap<V> {
     }
 
     # Rehash helper for string keys (generic V)
-    F rehash_str_buckets(&self, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
+    fn rehash_str_buckets(&self, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
         I idx >= old_cap { 0 }
-        EL {
+        else {
             entry_ptr := load_i64(old_buckets + idx * 8)
             @.rehash_str_entries(entry_ptr)
             @.rehash_str_buckets(old_buckets, idx + 1, old_cap)
         }
     }
 
-    F rehash_str_entries(&self, entry_ptr: i64) -> i64 {
+    fn rehash_str_entries(&self, entry_ptr: i64) -> i64 {
         I entry_ptr == 0 { 0 }
-        EL {
+        else {
             key := load_i64(entry_ptr)
             value := load_typed(entry_ptr + 8)
             next := load_i64(entry_ptr + 16)
@@ -948,13 +1039,13 @@ X StrHashMap<V> {
         }
     }
 
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         strmap_clear_buckets(self.buckets, 0, self.cap)
         self.size = 0
         0
     }
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         @.clear()
         free(self.buckets)
         self.buckets = 0
@@ -964,17 +1055,11 @@ X StrHashMap<V> {
 }
 
 # Convenience constructors
-F strhashmap_new() -> StrHashMap<i64> {
-    cap := 16
-    buckets := malloc(cap * 8)
-    hashmap_init_buckets(buckets, 0, cap)
-    StrHashMap { buckets: buckets, size: 0, cap: cap }
+fn strhashmap_new() -> StrHashMap<i64> {
+    StrHashMap.with_capacity(16)
 }
 
 # Create new HashMap with default capacity (backward compatibility)
-F hashmap_new() -> HashMap<i64, i64> {
-    cap := 16
-    buckets := malloc(cap * 8)
-    hashmap_init_buckets(buckets, 0, cap)
-    HashMap { buckets: buckets, size: 0, cap: cap }
+fn hashmap_new() -> HashMap<i64, i64> {
+    HashMap.with_capacity(16)
 }

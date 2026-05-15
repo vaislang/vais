@@ -1,5 +1,5 @@
 # Math module test - basic arithmetic only (avoids std/math IR issues)
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Math Module Test ===")
     putchar(10)
 
@@ -37,7 +37,7 @@ F main() -> i64 {
     }
     I a < b {
         puts("42 < 13: true")
-    } EL {
+    } else {
         puts("42 < 13: false")
     }
     putchar(10)

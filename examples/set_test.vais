@@ -2,7 +2,7 @@
 # Tests hash-based set operations using low-level primitives
 
 # Helper: print a number (up to 3 digits)
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 100 {
         d1 := n / 100
         putchar(d1 + 48)
@@ -17,25 +17,25 @@ F print_num(n: i64) -> i64 {
 }
 
 # Helper: Initialize buckets to 0 recursively
-F init_buckets(buckets: i64, cap: i64, i: i64) -> i64 {
-    I i >= cap { 0 } EL {
+fn init_buckets(buckets: i64, cap: i64, i: i64) -> i64 {
+    I i >= cap { 0 } else {
         store_i64(buckets + i * 8, 0)
         init_buckets(buckets, cap, i + 1)
     }
 }
 
 # Helper: Hash function for i64 value
-F set_hash(value: i64, cap: i64) -> i64 {
+fn set_hash(value: i64, cap: i64) -> i64 {
     # Simple modulo hash
-    abs_v := I value < 0 { 0 - value } EL { value }
+    abs_v := I value < 0 { 0 - value } else { value }
     abs_v % cap
 }
 
 # Helper: Search linked list for value
-F set_search_chain(entry_ptr: i64, value: i64) -> i64 {
-    I entry_ptr == 0 { 0 } EL {
+fn set_search_chain(entry_ptr: i64, value: i64) -> i64 {
+    I entry_ptr == 0 { 0 } else {
         entry_value := load_i64(entry_ptr)
-        I entry_value == value { 1 } EL {
+        I entry_value == value { 1 } else {
             next := load_i64(entry_ptr + 8)
             set_search_chain(next, value)
         }
@@ -43,17 +43,17 @@ F set_search_chain(entry_ptr: i64, value: i64) -> i64 {
 }
 
 # Helper: Check if value exists in set
-F set_contains(buckets: i64, cap: i64, value: i64) -> i64 {
+fn set_contains(buckets: i64, cap: i64, value: i64) -> i64 {
     idx := set_hash(value, cap)
     entry_ptr := load_i64(buckets + idx * 8)
     set_search_chain(entry_ptr, value)
 }
 
 # Helper: Insert value into set (modifies buckets, returns 1 if new, 0 if dup)
-F set_insert(buckets: i64, cap: i64, value: i64) -> i64 {
+fn set_insert(buckets: i64, cap: i64, value: i64) -> i64 {
     I set_contains(buckets, cap, value) == 1 {
         0  # Duplicate
-    } EL {
+    } else {
         idx := set_hash(value, cap)
         old_head := load_i64(buckets + idx * 8)
         new_entry := malloc(16)
@@ -65,22 +65,22 @@ F set_insert(buckets: i64, cap: i64, value: i64) -> i64 {
 }
 
 # Helper: Count elements in chain
-F count_chain(entry_ptr: i64) -> i64 {
-    I entry_ptr == 0 { 0 } EL {
+fn count_chain(entry_ptr: i64) -> i64 {
+    I entry_ptr == 0 { 0 } else {
         next := load_i64(entry_ptr + 8)
         1 + count_chain(next)
     }
 }
 
 # Helper: Count total elements
-F set_count(buckets: i64, cap: i64, i: i64) -> i64 {
-    I i >= cap { 0 } EL {
+fn set_count(buckets: i64, cap: i64, i: i64) -> i64 {
+    I i >= cap { 0 } else {
         entry_ptr := load_i64(buckets + i * 8)
         count_chain(entry_ptr) + set_count(buckets, cap, i + 1)
     }
 }
 
-F test_basic() -> i64 {
+fn test_basic() -> i64 {
     puts("Test 1: Basic Set Operations")
 
     cap := 8
@@ -120,10 +120,10 @@ F test_basic() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } EL { 0 } } EL { 0 } } EL { 0 } } EL { 0 }
+    } else { 0 } } else { 0 } } else { 0 } } else { 0 }
 }
 
-F test_count() -> i64 {
+fn test_count() -> i64 {
     puts("Test 2: Element Count")
 
     cap := 16
@@ -145,10 +145,10 @@ F test_count() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } EL { 0 }
+    } else { 0 }
 }
 
-F test_negative() -> i64 {
+fn test_negative() -> i64 {
     puts("Test 3: Negative Values")
 
     cap := 8
@@ -174,10 +174,10 @@ F test_negative() -> i64 {
         puts("  PASSED")
         putchar(10)
         1
-    } EL { 0 } } EL { 0 }
+    } else { 0 } } else { 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Set Collection Test ===")
     putchar(10)
 
@@ -189,13 +189,13 @@ F main() -> i64 {
     I r1 == 1 { I r2 == 1 { I r3 == 1 {
         puts("=== All Set Tests PASSED ===")
         0
-    } EL {
+    } else {
         puts("=== Some Tests FAILED ===")
         1
-    } } EL {
+    } } else {
         puts("=== Some Tests FAILED ===")
         1
-    } } EL {
+    } } else {
         puts("=== Some Tests FAILED ===")
         1
     }

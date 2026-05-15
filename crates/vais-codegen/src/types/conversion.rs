@@ -3,74 +3,6 @@
 use super::*;
 use crate::CodeGenerator;
 
-fn convert_const_binop(op: &vais_ast::ConstBinOp) -> vais_types::ConstBinOp {
-    use vais_ast::ConstBinOp as A;
-    use vais_types::ConstBinOp as R;
-    match op {
-        A::Add => R::Add,
-        A::Sub => R::Sub,
-        A::Mul => R::Mul,
-        A::Div => R::Div,
-        A::Mod => R::Mod,
-        A::BitAnd => R::BitAnd,
-        A::BitOr => R::BitOr,
-        A::BitXor => R::BitXor,
-        A::Shl => R::Shl,
-        A::Shr => R::Shr,
-    }
-}
-
-fn convert_const_expr(expr: &vais_ast::ConstExpr) -> vais_types::ResolvedConst {
-    match expr {
-        vais_ast::ConstExpr::Literal(n) => vais_types::ResolvedConst::Value(*n),
-        vais_ast::ConstExpr::Param(name) => vais_types::ResolvedConst::Param(name.clone()),
-        vais_ast::ConstExpr::Negate(inner) => {
-            let inner = convert_const_expr(inner);
-            if let vais_types::ResolvedConst::Value(n) = inner {
-                vais_types::ResolvedConst::Value(-n)
-            } else {
-                vais_types::ResolvedConst::Negate(Box::new(inner))
-            }
-        }
-        vais_ast::ConstExpr::BinOp { op, left, right } => {
-            let left = convert_const_expr(left);
-            let right = convert_const_expr(right);
-            if let (
-                vais_types::ResolvedConst::Value(left_value),
-                vais_types::ResolvedConst::Value(right_value),
-            ) = (&left, &right)
-            {
-                let folded = match op {
-                    vais_ast::ConstBinOp::Add => Some(left_value + right_value),
-                    vais_ast::ConstBinOp::Sub => Some(left_value - right_value),
-                    vais_ast::ConstBinOp::Mul => Some(left_value * right_value),
-                    vais_ast::ConstBinOp::Div if *right_value != 0 => {
-                        Some(left_value / right_value)
-                    }
-                    vais_ast::ConstBinOp::Mod if *right_value != 0 => {
-                        Some(left_value % right_value)
-                    }
-                    vais_ast::ConstBinOp::BitAnd => Some(left_value & right_value),
-                    vais_ast::ConstBinOp::BitOr => Some(left_value | right_value),
-                    vais_ast::ConstBinOp::BitXor => Some(left_value ^ right_value),
-                    vais_ast::ConstBinOp::Shl => Some(left_value << right_value),
-                    vais_ast::ConstBinOp::Shr => Some(left_value >> right_value),
-                    _ => None,
-                };
-                if let Some(value) = folded {
-                    return vais_types::ResolvedConst::Value(value);
-                }
-            }
-
-            vais_types::ResolvedConst::BinOp {
-                op: convert_const_binop(op),
-                left: Box::new(left),
-                right: Box::new(right),
-            }
-        }
-    }
-}
-
 impl CodeGenerator {
     /// Convert a ResolvedType to LLVM IR type string with caching.
     ///
@@ -221,6 +153,12 @@ impl CodeGenerator {
                 String::from("{ i64, i64, i1 }")
             }
             ResolvedType::Named { name, generics } => {
+                if name == "Box"
+                    && !generics.is_empty()
+                    && !self.generics.struct_defs.contains_key("Box")
+                {
+                    return Ok(String::from("i64"));
+                }
                 // Single uppercase letter is likely a generic type parameter
                 if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
                     if let Some(concrete) = self.get_generic_substitution(name) {
@@ -243,12 +181,19 @@ impl CodeGenerator {
                         {
                             format!("%{}", mangled)
                         } else if self.types.enums.contains_key(name)
-                            || self.types.structs.contains_key(name)
                             || self.types.unions.contains_key(name)
                         {
-                            // Base type exists but no specialization — use base name.
-                            // This is correct for enums/unions where layout is type-independent.
+                            // Enums/unions use i64-uniform layout — base name is safe.
                             format!("%{}", name)
+                        } else if self.types.structs.contains_key(name) {
+                            if !self.generic_struct_layout_uses_type_args(name) {
+                                return Ok(format!("%{}", name));
+                            }
+                            // A concrete generic struct must keep its mangled identity even
+                            // before its type body is emitted. Falling back to the base `%Vec`
+                            // erases nested shapes like `Vec<Vec<HnswNeighbor>>` and can leave
+                            // `%Vec$Vec_HnswNeighbor` as an opaque unsized type at allocation.
+                            format!("%{}", mangled)
                         } else {
                             // External or not-yet-generated specialization
                             format!("%{}", mangled)
@@ -256,6 +201,9 @@ impl CodeGenerator {
                     } else {
                         // For generic types with unresolved parameters, use base struct name.
                         // Layout is i64-uniform when type args can't be resolved.
+                        // Phase 6.30.2: Var-containing tc_ty is now guarded upstream in
+                        // infer_expr_type, so this path should only see Generic(_) from
+                        // generic function bodies — layout-uniform with i64 erasure.
                         format!("%{}", name)
                     }
                 } else if let Some(subst) = self.get_generic_substitution(name) {
@@ -387,8 +335,14 @@ impl CodeGenerator {
                 let ret_type = self.type_to_llvm_impl(ret)?;
                 format!("{}({})*", ret_type, param_types.join(", "))
             }
-            ResolvedType::Optional(_) => String::from("%Option"),
-            ResolvedType::Result(_, _) => String::from("%Result"),
+            ResolvedType::Optional(inner) => {
+                let _ = inner;
+                String::from("%Option")
+            }
+            ResolvedType::Result(ok, _err) => {
+                let _ = ok;
+                String::from("%Result")
+            }
             ResolvedType::Future(_) => {
                 // Future is an opaque pointer to async state machine.
                 // Represented as i64 in Text IR (pointer-as-integer convention).
@@ -608,21 +562,6 @@ impl CodeGenerator {
             Type::Array(inner) => {
                 ResolvedType::Array(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
-            Type::ConstArray { element, size } => ResolvedType::ConstArray {
-                element: Box::new(self.ast_type_to_resolved_impl(&element.node)),
-                size: convert_const_expr(size),
-            },
-            Type::Map(key, value) => ResolvedType::Map(
-                Box::new(self.ast_type_to_resolved_impl(&key.node)),
-                Box::new(self.ast_type_to_resolved_impl(&value.node)),
-            ),
-            Type::Optional(inner) => {
-                ResolvedType::Optional(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
-            }
-            Type::Result(inner) => ResolvedType::Result(
-                Box::new(self.ast_type_to_resolved_impl(&inner.node)),
-                Box::new(ResolvedType::I64),
-            ),
             Type::Pointer(inner) => {
                 ResolvedType::Pointer(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
@@ -649,29 +588,7 @@ impl CodeGenerator {
                     .map(|e| self.ast_type_to_resolved_impl(&e.node))
                     .collect(),
             ),
-            Type::Fn { params, ret } => ResolvedType::Fn {
-                params: params
-                    .iter()
-                    .map(|p| self.ast_type_to_resolved_impl(&p.node))
-                    .collect(),
-                ret: Box::new(self.ast_type_to_resolved_impl(&ret.node)),
-                effects: None,
-            },
-            Type::FnPtr {
-                params,
-                ret,
-                is_vararg,
-            } => ResolvedType::FnPtr {
-                params: params
-                    .iter()
-                    .map(|p| self.ast_type_to_resolved_impl(&p.node))
-                    .collect(),
-                ret: Box::new(self.ast_type_to_resolved_impl(&ret.node)),
-                is_vararg: *is_vararg,
-                effects: None,
-            },
             Type::Unit => ResolvedType::Unit,
-            Type::Infer => ResolvedType::Unknown,
             Type::DynTrait {
                 trait_name,
                 generics,
@@ -694,6 +611,25 @@ impl CodeGenerator {
             Type::Affine(inner) => {
                 ResolvedType::Affine(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
             }
+            // Phase 0 bug C9 fix: `T?` postfix syntax in function signatures.
+            // Without this branch, the catch-all returned ResolvedType::Unknown
+            // which lowered to i64, but the function body returned a real
+            // Option<T> aggregate → IR verifier failed with "ret type mismatch".
+            Type::Optional(inner) => {
+                ResolvedType::Optional(Box::new(self.ast_type_to_resolved_impl(&inner.node)))
+            }
+            // `T!` postfix syntax → Result<T, _>. Same hazard as above.
+            Type::Result(inner) => {
+                let inner_ty = self.ast_type_to_resolved_impl(&inner.node);
+                ResolvedType::Result(
+                    Box::new(inner_ty),
+                    // Default error type to i64 — most stdlib uses err codes.
+                    // TC normally provides the concrete err via the named
+                    // Result<_, _> path; this fallback only fires when the
+                    // user wrote the postfix `!` shorthand.
+                    Box::new(ResolvedType::I64),
+                )
+            }
             Type::Dependent {
                 var_name,
                 base,
@@ -708,20 +644,7 @@ impl CodeGenerator {
                     predicate: predicate_str,
                 }
             }
-            Type::Associated {
-                base,
-                trait_name,
-                assoc_name,
-                generics,
-            } => ResolvedType::Associated {
-                base: Box::new(self.ast_type_to_resolved_impl(&base.node)),
-                trait_name: trait_name.clone(),
-                assoc_name: assoc_name.clone(),
-                generics: generics
-                    .iter()
-                    .map(|g| self.ast_type_to_resolved_impl(&g.node))
-                    .collect(),
-            },
+            _ => ResolvedType::Unknown,
         }
     }
 }

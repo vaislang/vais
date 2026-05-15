@@ -1,0 +1,32 @@
+# CHECKS: parse a non-negative integer from a string.
+fn parse_uint(p: i64, n: i64) -> i64 {
+    acc: i64 := mut 0
+    LF i: 0..n {
+        c: i64 := load_byte(p + i)
+        I c < 48 || c > 57 { return 0 - 1 }
+        acc = acc * 10 + (c - 48)
+    }
+    acc
+}
+
+fn main() -> i64 {
+    p1: i64 := str_to_ptr("0")
+    I parse_uint(p1, 1) != 0 { return 1 }
+
+    p2: i64 := str_to_ptr("42")
+    I parse_uint(p2, 2) != 42 { return 2 }
+
+    p3: i64 := str_to_ptr("12345")
+    I parse_uint(p3, 5) != 12345 { return 3 }
+
+    p4: i64 := str_to_ptr("999999")
+    I parse_uint(p4, 6) != 999999 { return 4 }
+
+    # invalid
+    p5: i64 := str_to_ptr("abc")
+    I parse_uint(p5, 3) != 0 - 1 { return 5 }
+
+    p6: i64 := str_to_ptr("12a3")
+    I parse_uint(p6, 4) != 0 - 1 { return 6 }
+    return 0
+}

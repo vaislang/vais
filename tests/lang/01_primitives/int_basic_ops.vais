@@ -1,0 +1,10 @@
+# CHECKS: basic i64 ops with parens.
+fn main() -> i64 {
+    I (1 + 2) * 3 != 9 { return 1 }
+    I 1 + (2 * 3) != 7 { return 2 }
+    I (10 - 4) * (3 + 2) != 30 { return 3 }
+    I (100 / 5) - 1 != 19 { return 4 }
+    I ((1 + 2) * (3 + 4)) - 10 != 11 { return 5 }
+    I 1 + 2 + 3 + 4 + 5 != 15 { return 6 }
+    return 0
+}

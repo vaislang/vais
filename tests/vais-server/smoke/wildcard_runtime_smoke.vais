@@ -1,0 +1,115 @@
+use src/router/router
+
+fn smoke_named_wildcard() -> i64 {
+    router := mut Router.new()
+    router.get("/files/*path", 90)
+
+    found := router.match_route(METHOD_GET, "/files/docs/readme.md")
+    I !found.is_found() {
+        println("FAIL wildcard route found")
+        return 1
+    }
+    I found.handler_id != 90 {
+        println("FAIL wildcard handler")
+        return 2
+    }
+    I found.params.get_or("path", "") != "docs/readme.md" {
+        println("FAIL wildcard path value")
+        return 3
+    }
+
+    0
+}
+
+fn smoke_wildcard_default_name() -> i64 {
+    router := mut Router.new()
+    router.get("/assets/*", 91)
+
+    found := router.match_route(METHOD_GET, "/assets/css/site.css")
+    I !found.is_found() {
+        println("FAIL unnamed wildcard found")
+        return 10
+    }
+    I found.params.get_or("wildcard", "") != "css/site.css" {
+        println("FAIL unnamed wildcard value")
+        return 11
+    }
+
+    0
+}
+
+fn smoke_wildcard_priority_and_405() -> i64 {
+    router := mut Router.new()
+    router.get("/docs/*path", 100)
+    router.get("/docs/index", 101)
+
+    exact := router.match_route(METHOD_GET, "/docs/index")
+    I !exact.is_found() {
+        println("FAIL exact route found")
+        return 20
+    }
+    I exact.handler_id != 101 {
+        println("FAIL exact route priority")
+        return 21
+    }
+
+    wildcard := router.match_route(METHOD_GET, "/docs/guides/install")
+    I !wildcard.is_found() {
+        println("FAIL wildcard route found after exact")
+        return 22
+    }
+    I wildcard.handler_id != 100 {
+        println("FAIL wildcard handler after exact")
+        return 23
+    }
+    I wildcard.params.get_or("path", "") != "guides/install" {
+        println("FAIL wildcard remainder after exact")
+        return 24
+    }
+
+    wrong_method := router.match_route(METHOD_POST, "/docs/guides/install")
+    I !wrong_method.is_method_not_allowed() {
+        println("FAIL wildcard method-not-allowed")
+        return 25
+    }
+    I wrong_method.allowed_methods.len() == 0 {
+        println("FAIL wildcard allowed methods")
+        return 26
+    }
+
+    missing := router.match_route(METHOD_GET, "/docs")
+    I !missing.is_not_found() {
+        println("FAIL wildcard should not match empty remainder")
+        return 27
+    }
+
+    0
+}
+
+fn smoke_wildcard_segment_boundary() -> i64 {
+    router := mut Router.new()
+    router.get("/prefix/a*b", 110)
+
+    embedded := router.match_route(METHOD_GET, "/prefix/ab")
+    I !embedded.is_not_found() {
+        println("FAIL embedded wildcard should not match")
+        return 30
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    failures := mut 0
+    failures += smoke_named_wildcard()
+    failures += smoke_wildcard_default_name()
+    failures += smoke_wildcard_priority_and_405()
+    failures += smoke_wildcard_segment_boundary()
+
+    I failures > 0 {
+        println("VAIS_SERVER_WILDCARD_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_WILDCARD_RUNTIME_OK")
+    0
+}

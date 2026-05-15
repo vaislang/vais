@@ -1,9 +1,9 @@
 # Test for generic Vec<T>
 
-U std/vec
-U std/option
+use std/vec
+use std/option
 
-F main() -> i64 {
+fn main() -> i64 {
     # Create a Vec<i64> - type inferred from push arguments
     v := Vec.with_capacity(10)
     v.push(42)
@@ -25,14 +25,14 @@ F main() -> i64 {
 
     # Test get_opt with valid index
     opt := v.get_opt(0)
-    result := M opt {
+    result := match opt {
         Some(_) => result + 1,  # 251 + 1 = 252
         None => result
     }
 
     # Test get_opt with invalid index
     opt2 := v.get_opt(99)
-    result := M opt2 {
+    result := match opt2 {
         None => result + 1,  # 252 + 1 = 253
         Some(_) => result
     }

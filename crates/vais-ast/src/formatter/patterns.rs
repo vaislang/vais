@@ -21,7 +21,7 @@ impl Formatter {
                     .collect();
                 format!("({})", ps.join(", "))
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct { name, fields, .. } => {
                 let fs: Vec<String> = fields
                     .iter()
                     .map(|(n, p)| {

@@ -38,10 +38,6 @@ pub(crate) const RUNTIME_INTRINSIC_NAMES: &[&str] = &[
     "__store_f32",
     "__load_f32",
     "__load_f64",
-    "__strlen",
-    "Option_is_some",
-    "Option_is_none",
-    "Option_unwrap_or",
     "__call_poll",
     "__extract_poll_status",
     "__extract_poll_value",
@@ -58,6 +54,70 @@ pub(crate) const RUNTIME_INTRINSIC_NAMES: &[&str] = &[
     "__stat_mtime",
     "__wasm_strlen",
     "__wasi_puts",
+    // Phase C1 additions
+    "__time_now_ns",
+    "__malloc",
+    "__free",
+    "__memcpy",
+    "__strlen",
+    "__load_ptr",
+    "__store_ptr",
+    "__print_str",
+    "__print_i64",
+    "__str_eq",
+    "__str_contains",
+    "__panic_with_value",
+    "__panic_with_values",
+    "__panic_str_mismatch",
+    "__call_fn",
+    "__try_call_fn",
+    // Phase C2 additions
+    "__load_test_case",
+    "__store_test_case",
+    "__load_test_result",
+    "__store_test_result",
+    "__vais_struct_shallow_free_TestCase",
+    "__vais_struct_shallow_free_TestResult",
+    "__vais_struct_shallow_free_TestSuiteResult",
+    "__mutex_create",
+    "__mutex_destroy",
+    "__mutex_lock",
+    "__mutex_try_lock",
+    "__mutex_unlock",
+    "__rwlock_create",
+    "__rwlock_destroy",
+    "__rwlock_read_lock",
+    "__rwlock_try_read_lock",
+    "__rwlock_read_unlock",
+    "__rwlock_write_lock",
+    "__rwlock_try_write_lock",
+    "__rwlock_write_unlock",
+    "__condvar_create",
+    "__condvar_destroy",
+    "__condvar_wait",
+    "__condvar_wait_timeout",
+    "__condvar_signal",
+    "__condvar_broadcast",
+    "__barrier_create",
+    "__barrier_destroy",
+    "__barrier_wait",
+    "__once_create",
+    "__once_call",
+    "__semaphore_create",
+    "__semaphore_destroy",
+    "__semaphore_wait",
+    "__semaphore_try_wait",
+    "__semaphore_post",
+    "__atomic_load_i64",
+    "__atomic_store_i64",
+    "__atomic_exchange_i64",
+    "__atomic_compare_exchange_i64",
+    "__atomic_fetch_add_i64",
+    "__atomic_fetch_sub_i64",
+    "__atomic_fetch_and_i64",
+    "__atomic_fetch_or_i64",
+    "__atomic_fetch_xor_i64",
+    "__cpu_pause",
 ];
 
 /// Check whether a function name is a runtime intrinsic whose body is emitted
@@ -66,6 +126,13 @@ pub(crate) const RUNTIME_INTRINSIC_NAMES: &[&str] = &[
 #[inline]
 pub(crate) fn is_runtime_intrinsic(name: &str) -> bool {
     RUNTIME_INTRINSIC_NAMES.contains(&name)
+}
+
+/// C runtime declarations emitted directly by `generate_helper_functions` in
+/// the main module because helper bodies call them with a canonical ABI.
+#[inline]
+pub(crate) fn is_main_runtime_c_decl(name: &str) -> bool {
+    matches!(name, "gettimeofday")
 }
 
 impl CodeGenerator {
@@ -77,6 +144,7 @@ impl CodeGenerator {
         // Note: exit and strlen are already declared by builtins
         ir.push_str("\n; C library function declarations\n");
         ir.push_str("declare i64 @write(i32, i8*, i64)\n");
+        ir.push_str("declare i64 @gettimeofday(i64, i64)\n");
 
         // Global constant for newline (used by panic functions)
         ir.push_str("\n; Global constants for runtime functions\n");
@@ -149,57 +217,6 @@ impl CodeGenerator {
         ir.push_str("  store i64 %val, i64* %0\n");
         ir.push_str("  ret void\n");
         ir.push_str("}\n");
-
-        // __strlen: std-facing alias for libc strlen
-        ir.push_str("\n; Helper function: strlen alias\n");
-        ir.push_str("define weak_odr i64 @__strlen(i8* %str) {\n");
-        ir.push_str("entry:\n");
-        ir.push_str("  %len = call i64 @strlen(i8* %str)\n");
-        ir.push_str("  ret i64 %len\n");
-        ir.push_str("}\n");
-
-        if self.types.enums.contains_key("Option") {
-            // Base Option helpers for erased `%Option = { i32, { i64 } }`.
-            let some_tag = self.get_enum_variant_tag("Some");
-            let none_tag = self.get_enum_variant_tag("None");
-
-            ir.push_str("\n; Base Option helper: is_some\n");
-            ir.push_str("define weak_odr i64 @Option_is_some(%Option* %self) {\n");
-            ir.push_str("entry:\n");
-            ir.push_str("  %tag_ptr = getelementptr %Option, %Option* %self, i32 0, i32 0\n");
-            ir.push_str("  %tag = load i32, i32* %tag_ptr\n");
-            ir.push_str(&format!("  %is_some = icmp eq i32 %tag, {}\n", some_tag));
-            ir.push_str("  %result = zext i1 %is_some to i64\n");
-            ir.push_str("  ret i64 %result\n");
-            ir.push_str("}\n");
-
-            ir.push_str("\n; Base Option helper: is_none\n");
-            ir.push_str("define weak_odr i64 @Option_is_none(%Option* %self) {\n");
-            ir.push_str("entry:\n");
-            ir.push_str("  %tag_ptr = getelementptr %Option, %Option* %self, i32 0, i32 0\n");
-            ir.push_str("  %tag = load i32, i32* %tag_ptr\n");
-            ir.push_str(&format!("  %is_none = icmp eq i32 %tag, {}\n", none_tag));
-            ir.push_str("  %result = zext i1 %is_none to i64\n");
-            ir.push_str("  ret i64 %result\n");
-            ir.push_str("}\n");
-
-            ir.push_str("\n; Base Option helper: unwrap_or\n");
-            ir.push_str("define weak_odr i64 @Option_unwrap_or(%Option* %self, i64 %default) {\n");
-            ir.push_str("entry:\n");
-            ir.push_str("  %tag_ptr = getelementptr %Option, %Option* %self, i32 0, i32 0\n");
-            ir.push_str("  %tag = load i32, i32* %tag_ptr\n");
-            ir.push_str(&format!("  %is_some = icmp eq i32 %tag, {}\n", some_tag));
-            ir.push_str("  br i1 %is_some, label %some, label %none\n");
-            ir.push_str("some:\n");
-            ir.push_str(
-                "  %payload_ptr = getelementptr %Option, %Option* %self, i32 0, i32 1, i32 0\n",
-            );
-            ir.push_str("  %payload = load i64, i64* %payload_ptr\n");
-            ir.push_str("  ret i64 %payload\n");
-            ir.push_str("none:\n");
-            ir.push_str("  ret i64 %default\n");
-            ir.push_str("}\n");
-        }
 
         // __swap: swap two i64 elements in array by index
         ir.push_str("\n; Helper function: swap two i64 elements in array\n");
@@ -350,14 +367,11 @@ impl CodeGenerator {
 
         // __time_now_ms: get current time in milliseconds using gettimeofday
         ir.push_str("\n; Async helper: current time in milliseconds\n");
-        if !self.types.functions.contains_key("gettimeofday") {
-            ir.push_str("declare i32 @gettimeofday(i8*, i8*)\n");
-        }
         ir.push_str("define i64 @__time_now_ms() {\n");
         ir.push_str("entry:\n");
         ir.push_str("  %tv = alloca [16 x i8], align 8\n");
-        ir.push_str("  %tvptr = bitcast [16 x i8]* %tv to i8*\n");
-        ir.push_str("  %0 = call i32 @gettimeofday(i8* %tvptr, i8* null)\n");
+        ir.push_str("  %tvptr = ptrtoint [16 x i8]* %tv to i64\n");
+        ir.push_str("  %0 = call i64 @gettimeofday(i64 %tvptr, i64 0)\n");
         ir.push_str("  %secptr = bitcast [16 x i8]* %tv to i64*\n");
         ir.push_str("  %sec = load i64, i64* %secptr\n");
         ir.push_str(
@@ -370,6 +384,290 @@ impl CodeGenerator {
         ir.push_str("  %ms = add i64 %ms_sec, %ms_usec\n");
         ir.push_str("  ret i64 %ms\n");
         ir.push_str("}\n");
+
+        // === Phase C1: runtime helpers referenced by std ===
+
+        // __time_now_ns: current time in nanoseconds via gettimeofday
+        ir.push_str("\n; Runtime: current time in nanoseconds\n");
+        ir.push_str("define i64 @__time_now_ns() {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %tv = alloca [16 x i8], align 8\n");
+        ir.push_str("  %tvptr = ptrtoint [16 x i8]* %tv to i64\n");
+        ir.push_str("  %0 = call i64 @gettimeofday(i64 %tvptr, i64 0)\n");
+        ir.push_str("  %secptr = bitcast [16 x i8]* %tv to i64*\n");
+        ir.push_str("  %sec = load i64, i64* %secptr\n");
+        ir.push_str(
+            "  %usecptr = getelementptr inbounds [16 x i8], [16 x i8]* %tv, i64 0, i64 8\n",
+        );
+        ir.push_str("  %usecptr64 = bitcast i8* %usecptr to i64*\n");
+        ir.push_str("  %usec = load i64, i64* %usecptr64\n");
+        ir.push_str("  %ns_sec = mul i64 %sec, 1000000000\n");
+        ir.push_str("  %ns_usec = mul i64 %usec, 1000\n");
+        ir.push_str("  %ns = add i64 %ns_sec, %ns_usec\n");
+        ir.push_str("  ret i64 %ns\n");
+        ir.push_str("}\n");
+
+        // __malloc: pointer-as-i64 wrapper for libc malloc
+        ir.push_str("\n; Runtime: malloc wrapper (i64-ptr)\n");
+        ir.push_str("define linkonce_odr i64 @__malloc(i64 %size) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = call i8* @malloc(i64 %size)\n");
+        ir.push_str("  %pi = ptrtoint i8* %p to i64\n");
+        ir.push_str("  ret i64 %pi\n");
+        ir.push_str("}\n");
+
+        // __free: pointer-as-i64 wrapper for libc free
+        ir.push_str("\n; Runtime: free wrapper (i64-ptr)\n");
+        ir.push_str("define linkonce_odr i64 @__free(i64 %ptr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %ptr to i8*\n");
+        ir.push_str("  call void @free(i8* %p)\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        ir.push_str(
+            r#"
+; Runtime: single-thread sync shims.
+; Guards are not reliably dropped yet, so OS-level locks would deadlock current
+; generated code. These shims provide deterministic single-thread semantics.
+define linkonce_odr i64 @__mutex_create() { ret i64 1 }
+define linkonce_odr i64 @__mutex_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__mutex_lock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__mutex_try_lock(i64 %handle) { ret i64 1 }
+define linkonce_odr i64 @__mutex_unlock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_create() { ret i64 1 }
+define linkonce_odr i64 @__rwlock_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_read_lock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_try_read_lock(i64 %handle) { ret i64 1 }
+define linkonce_odr i64 @__rwlock_read_unlock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_write_lock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__rwlock_try_write_lock(i64 %handle) { ret i64 1 }
+define linkonce_odr i64 @__rwlock_write_unlock(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__condvar_create() { ret i64 1 }
+define linkonce_odr i64 @__condvar_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__condvar_wait(i64 %condvar, i64 %mutex) { ret i64 0 }
+define linkonce_odr i64 @__condvar_wait_timeout(i64 %condvar, i64 %mutex, i64 %timeout_ms) { ret i64 0 }
+define linkonce_odr i64 @__condvar_signal(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__condvar_broadcast(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__barrier_create(i64 %count) { ret i64 1 }
+define linkonce_odr i64 @__barrier_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__barrier_wait(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__once_create() { ret i64 1 }
+define linkonce_odr i64 @__once_call(i64 %handle, i64 %fn_ptr) { ret i64 0 }
+define linkonce_odr i64 @__semaphore_create(i64 %permits) { ret i64 1 }
+define linkonce_odr i64 @__semaphore_destroy(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__semaphore_wait(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__semaphore_try_wait(i64 %handle) { ret i64 1 }
+define linkonce_odr i64 @__semaphore_post(i64 %handle) { ret i64 0 }
+define linkonce_odr i64 @__cpu_pause() { ret i64 0 }
+
+; Runtime: i64 atomic helpers.
+define linkonce_odr i64 @__atomic_load_i64(i64 %ptr) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %v = load atomic i64, i64* %p seq_cst, align 8
+  ret i64 %v
+}
+
+define linkonce_odr i64 @__atomic_store_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  store atomic i64 %value, i64* %p seq_cst, align 8
+  ret i64 %value
+}
+
+define linkonce_odr i64 @__atomic_exchange_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw xchg i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_compare_exchange_i64(i64 %ptr, i64 %expected, i64 %desired) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %pair = cmpxchg i64* %p, i64 %expected, i64 %desired seq_cst seq_cst
+  %ok = extractvalue { i64, i1 } %pair, 1
+  %out = zext i1 %ok to i64
+  ret i64 %out
+}
+
+define linkonce_odr i64 @__atomic_fetch_add_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw add i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_fetch_sub_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw sub i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_fetch_and_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw and i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_fetch_or_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw or i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+define linkonce_odr i64 @__atomic_fetch_xor_i64(i64 %ptr, i64 %value) {
+entry:
+  %p = inttoptr i64 %ptr to i64*
+  %old = atomicrmw xor i64* %p, i64 %value seq_cst
+  ret i64 %old
+}
+
+"#,
+        );
+
+        // __memcpy: pointer-as-i64 wrapper for llvm.memcpy intrinsic
+        // (libc memcpy may already be declared with a conflicting signature).
+        ir.push_str("\n; Runtime: memcpy wrapper (i64-ptr, via intrinsic)\n");
+        ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n");
+        ir.push_str("define linkonce_odr i64 @__memcpy(i64 %dst, i64 %src, i64 %n) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %d = inttoptr i64 %dst to i8*\n");
+        ir.push_str("  %s = inttoptr i64 %src to i8*\n");
+        ir.push_str("  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %d, i8* %s, i64 %n, i1 false)\n");
+        ir.push_str("  ret i64 %dst\n");
+        ir.push_str("}\n");
+
+        // __strlen: pointer-accepting strlen (explicit variant)
+        ir.push_str("\n; Runtime: strlen wrapper\n");
+        ir.push_str("define linkonce_odr i64 @__strlen(i8* %p) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %r = call i64 @strlen(i8* %p)\n");
+        ir.push_str("  ret i64 %r\n");
+        ir.push_str("}\n");
+
+        // __load_ptr / __store_ptr: i64-addressed word load/store (aliases of i64 variants)
+        ir.push_str("\n; Runtime: load/store pointer word (i64-addr)\n");
+        ir.push_str("define i64 @__load_ptr(i64 %addr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %addr to i64*\n");
+        ir.push_str("  %v = load i64, i64* %p\n");
+        ir.push_str("  ret i64 %v\n");
+        ir.push_str("}\n");
+        ir.push_str("define linkonce_odr i64 @__store_ptr(i64 %addr, i64 %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %addr to i64*\n");
+        ir.push_str("  store i64 %val, i64* %p\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        // __print_str / __print_i64: libc-backed print helpers
+        ir.push_str("\n; Runtime: print helpers\n");
+        ir.push_str("@.__fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n");
+        ir.push_str("@.__fmt_i64 = private unnamed_addr constant [6 x i8] c\"%lld\\0A\\00\"\n");
+        ir.push_str("define i64 @__print_str(i8* %s) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str(
+            "  %fmt = getelementptr inbounds [4 x i8], [4 x i8]* @.__fmt_str, i64 0, i64 0\n",
+        );
+        ir.push_str("  %r = call i32 (i8*, ...) @printf(i8* %fmt, i8* %s)\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+        ir.push_str("define i64 @__print_i64(i64 %n) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str(
+            "  %fmt = getelementptr inbounds [6 x i8], [6 x i8]* @.__fmt_i64, i64 0, i64 0\n",
+        );
+        ir.push_str("  %r = call i32 (i8*, ...) @printf(i8* %fmt, i64 %n)\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        // __str_eq: strcmp == 0
+        ir.push_str("\n; Runtime: string equality / contains\n");
+        ir.push_str("declare i8* @strstr(i8*, i8*)\n");
+        ir.push_str("define linkonce_odr i64 @__str_eq(i8* %a, i8* %b) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %r = call i32 @strcmp(i8* %a, i8* %b)\n");
+        ir.push_str("  %eq = icmp eq i32 %r, 0\n");
+        ir.push_str("  %z = zext i1 %eq to i64\n");
+        ir.push_str("  ret i64 %z\n");
+        ir.push_str("}\n");
+
+        // __str_contains: strstr != null
+        ir.push_str("define i64 @__str_contains(i8* %hay, i8* %needle) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %r = call i8* @strstr(i8* %hay, i8* %needle)\n");
+        ir.push_str("  %nn = icmp ne i8* %r, null\n");
+        ir.push_str("  %z = zext i1 %nn to i64\n");
+        ir.push_str("  ret i64 %z\n");
+        ir.push_str("}\n");
+
+        // Panic helpers — print a message and abort
+        ir.push_str("\n; Runtime: panic helpers\n");
+        // Always declare libc abort here so the helper bodies link
+        // (this module owns the helper definitions). LLVM allows two
+        // identical `declare` lines in the same module — only `define`
+        // duplicates are rejected by the verifier.
+        ir.push_str("declare void @abort()\n");
+        ir.push_str(
+            "@.__panic_v_fmt = private unnamed_addr constant [10 x i8] c\"%s: %lld\\0A\\00\"\n",
+        );
+        ir.push_str("@.__panic_v2_fmt = private unnamed_addr constant [16 x i8] c\"%s: %lld, %lld\\0A\\00\"\n");
+        ir.push_str("@.__panic_s2_fmt = private unnamed_addr constant [14 x i8] c\"%s: %s vs %s\\0A\\00\"\n");
+        ir.push_str("define i64 @__panic_with_value(i8* %msg, i64 %val) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str(
+            "  %fmt = getelementptr inbounds [10 x i8], [10 x i8]* @.__panic_v_fmt, i64 0, i64 0\n",
+        );
+        ir.push_str("  call i32 (i8*, ...) @printf(i8* %fmt, i8* %msg, i64 %val)\n");
+        ir.push_str("  call void @abort()\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n");
+        ir.push_str("define i64 @__panic_with_values(i8* %msg, i64 %a, i64 %b) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fmt = getelementptr inbounds [16 x i8], [16 x i8]* @.__panic_v2_fmt, i64 0, i64 0\n");
+        ir.push_str("  call i32 (i8*, ...) @printf(i8* %fmt, i8* %msg, i64 %a, i64 %b)\n");
+        ir.push_str("  call void @abort()\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n");
+        ir.push_str(
+            "@.__panic_sm_lbl = private unnamed_addr constant [13 x i8] c\"str mismatch\\00\"\n",
+        );
+        ir.push_str("define i64 @__panic_str_mismatch(i8* %a, i8* %b) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fmt = getelementptr inbounds [14 x i8], [14 x i8]* @.__panic_s2_fmt, i64 0, i64 0\n");
+        ir.push_str("  %msg = getelementptr inbounds [13 x i8], [13 x i8]* @.__panic_sm_lbl, i64 0, i64 0\n");
+        ir.push_str("  call i32 (i8*, ...) @printf(i8* %fmt, i8* %msg, i8* %a, i8* %b)\n");
+        ir.push_str("  call void @abort()\n");
+        ir.push_str("  unreachable\n");
+        ir.push_str("}\n");
+
+        // __call_fn / __try_call_fn: invoke a function pointer stored as i64
+        // Without setjmp/longjmp, __try_call_fn is a plain call that aborts on panic.
+        ir.push_str("\n; Runtime: call-fn helpers\n");
+        ir.push_str("define linkonce_odr i64 @__call_fn(i64 %fn) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fp = inttoptr i64 %fn to i64 ()*\n");
+        ir.push_str("  %r = call i64 %fp()\n");
+        ir.push_str("  ret i64 %r\n");
+        ir.push_str("}\n");
+        ir.push_str("define i64 @__try_call_fn(i64 %fn, i64 %arg) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %fp = inttoptr i64 %fn to i64 (i64)*\n");
+        ir.push_str("  %r = call i64 %fp(i64 %arg)\n");
+        ir.push_str("  ret i64 %r\n");
+        ir.push_str("}\n");
+
+        // Phase C2: struct-specific load/store + shallow-free helpers for
+        // std/test.vais. These are only meaningful when the main module
+        // declares the relevant struct types — std/test's types are
+        // transitively imported by every vaisdb test, so they appear in
+        // every main-module IR.
+        self.emit_struct_load_store_helpers(&mut ir);
 
         // === macOS-only: kqueue helpers ===
         // Only include kqueue-related functions on macOS (they use the kevent syscall)
@@ -575,6 +873,85 @@ impl CodeGenerator {
         ir
     }
 
+    /// Emit struct-specific runtime helpers (Phase C2). These bodies
+    /// reference `%TestCase` / `%TestResult` / `%TestSuiteResult` directly
+    /// by name; the struct types are declared by the main module because
+    /// every vaisdb test imports std/test which defines them.
+    ///
+    /// Generated bodies:
+    /// - `%TestCase @__load_test_case(i64)` — loads a TestCase from an
+    ///   i64-encoded heap address (inttoptr + load %TestCase).
+    /// - `i64 @__store_test_case(i64 dst, %TestCase* src)` — memcpy
+    ///   (implemented via struct load + store) the src into dst.
+    /// - Same shape for TestResult.
+    /// - `void @__vais_struct_shallow_free_Test*` — free the heap-owned
+    ///   string slots inside the struct (conservative: free data ptr of
+    ///   every `{ i8*, i64 }` field). Safe to call multiple times because
+    ///   free on null is a no-op.
+    fn emit_struct_load_store_helpers(&self, ir: &mut String) {
+        // Phase 0.B fix: only emit these helpers when the main module
+        // actually defines the required struct types. Previously emitted
+        // unconditionally, producing `load %TestCase, %TestCase* p` even
+        // for programs that never import std/test — invalid IR.
+        if !self.types.structs.contains_key("TestCase") {
+            return;
+        }
+
+        ir.push_str("\n; Phase C2: std/test struct helpers\n");
+
+        // TestCase load / store
+        ir.push_str("define %TestCase @__load_test_case(i64 %addr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %addr to %TestCase*\n");
+        ir.push_str("  %v = load %TestCase, %TestCase* %p\n");
+        ir.push_str("  ret %TestCase %v\n");
+        ir.push_str("}\n");
+
+        ir.push_str("define i64 @__store_test_case(i64 %addr, %TestCase* %src) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %d = inttoptr i64 %addr to %TestCase*\n");
+        ir.push_str("  %v = load %TestCase, %TestCase* %src\n");
+        ir.push_str("  store %TestCase %v, %TestCase* %d\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        // TestResult load / store
+        ir.push_str("define %TestResult @__load_test_result(i64 %addr) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %p = inttoptr i64 %addr to %TestResult*\n");
+        ir.push_str("  %v = load %TestResult, %TestResult* %p\n");
+        ir.push_str("  ret %TestResult %v\n");
+        ir.push_str("}\n");
+
+        ir.push_str("define i64 @__store_test_result(i64 %addr, %TestResult* %src) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  %d = inttoptr i64 %addr to %TestResult*\n");
+        ir.push_str("  %v = load %TestResult, %TestResult* %src\n");
+        ir.push_str("  store %TestResult %v, %TestResult* %d\n");
+        ir.push_str("  ret i64 0\n");
+        ir.push_str("}\n");
+
+        // Shallow-free helpers — no-op stubs. The proper ownership
+        // semantics are described in RFC-001 §4 (heap-owned-field masks)
+        // but are only meaningful when the test harness actually owns the
+        // string memory. For the immediate goal (linking the IR to an
+        // executable), empty bodies suffice and avoid double-free risk.
+        ir.push_str("define void @__vais_struct_shallow_free_TestCase(%TestCase* %p) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+        ir.push_str("define void @__vais_struct_shallow_free_TestResult(%TestResult* %p) {\n");
+        ir.push_str("entry:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+        ir.push_str(
+            "define void @__vais_struct_shallow_free_TestSuiteResult(%TestSuiteResult* %p) {\n",
+        );
+        ir.push_str("entry:\n");
+        ir.push_str("  ret void\n");
+        ir.push_str("}\n");
+    }
+
     /// Generate WASM-specific runtime functions and declarations.
     ///
     /// For `wasm32-unknown-unknown` targets, this generates:
@@ -749,7 +1126,10 @@ impl CodeGenerator {
         ir.push_str("; LLVM WASM intrinsics\n");
         ir.push_str("declare i32 @llvm.wasm.memory.size.i32(i32)\n");
         ir.push_str("declare i32 @llvm.wasm.memory.grow.i32(i32, i32)\n");
-        ir.push_str("declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i1)\n\n");
+        // Note: `llvm.memcpy.p0i8.p0i8.i64` is already declared by
+        // `generate_helper_functions` (next to `__memcpy`). Re-declaring it
+        // here triggered LLVM "invalid redefinition" verifier errors when
+        // the WASM target is selected alongside the standard helpers.
 
         // _start entry point that calls main
         ir.push_str("; _start entry point (calls main)\n");

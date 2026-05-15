@@ -24,7 +24,7 @@ C PAGE_OVERFLOW: i64 = 2
 # Functions operate on i64 page_ptr (pointer to 4KB buffer)
 
 # Initialize a fresh page
-F page_init(page_ptr: i64, page_id: i64, page_type: i64) -> i64 {
+fn page_init(page_ptr: i64, page_id: i64, page_type: i64) -> i64 {
     # Zero out header
     store_i64(page_ptr, page_id)                   # page_id
     store_i64(page_ptr + 8, 0)                     # num_slots = 0
@@ -36,17 +36,17 @@ F page_init(page_ptr: i64, page_id: i64, page_type: i64) -> i64 {
 }
 
 # Get page ID
-F page_get_id(page_ptr: i64) -> i64 {
+fn page_get_id(page_ptr: i64) -> i64 {
     load_i64(page_ptr)
 }
 
 # Get number of rows in page
-F page_num_rows(page_ptr: i64) -> i64 {
+fn page_num_rows(page_ptr: i64) -> i64 {
     load_i64(page_ptr + 8)
 }
 
 # Get free space available in page
-F page_free_space(page_ptr: i64) -> i64 {
+fn page_free_space(page_ptr: i64) -> i64 {
     data_end := load_i64(page_ptr + 24)
     free_offset := load_i64(page_ptr + 16)
     data_end - free_offset - SLOT_SIZE   # need room for one more slot too
@@ -56,7 +56,7 @@ F page_free_space(page_ptr: i64) -> i64 {
 # row_ptr: pointer to serialized row data
 # row_len: length of row data in bytes
 # Returns: slot index (0-based) on success, -1 if page full
-F page_insert_row(page_ptr: i64, row_ptr: i64, row_len: i64) -> i64 {
+fn page_insert_row(page_ptr: i64, row_ptr: i64, row_len: i64) -> i64 {
     num_slots := load_i64(page_ptr + 8)
     free_offset := load_i64(page_ptr + 16)
     data_end := load_i64(page_ptr + 24)
@@ -64,7 +64,7 @@ F page_insert_row(page_ptr: i64, row_ptr: i64, row_len: i64) -> i64 {
     # Check if there's room: need SLOT_SIZE for slot + row_len for data
     needed := SLOT_SIZE + row_len
     available := data_end - free_offset
-    I available < needed { R 0 - 1 }
+    I available < needed { return 0 - 1 }
 
     # Write row data at bottom of page (grow downward)
     new_data_end := data_end - row_len
@@ -85,10 +85,10 @@ F page_insert_row(page_ptr: i64, row_ptr: i64, row_len: i64) -> i64 {
 # Get row data pointer and length for given slot
 # Returns row data offset within page (add to page_ptr to get actual pointer)
 # Sets row_len_out to the row length
-F page_get_row_offset(page_ptr: i64, slot_idx: i64) -> i64 {
+fn page_get_row_offset(page_ptr: i64, slot_idx: i64) -> i64 {
     num_slots := load_i64(page_ptr + 8)
-    I slot_idx < 0 { R 0 - 1 }
-    I slot_idx >= num_slots { R 0 - 1 }
+    I slot_idx < 0 { return 0 - 1 }
+    I slot_idx >= num_slots { return 0 - 1 }
 
     # Read slot entry
     slot_ptr := PAGE_HEADER_SIZE + slot_idx * SLOT_SIZE
@@ -99,10 +99,10 @@ F page_get_row_offset(page_ptr: i64, slot_idx: i64) -> i64 {
 # Get the row length for a given slot
 # For a slotted page, row length = next_row_start - this_row_start
 # Last slot's row extends to PAGE_SIZE (or previous data_end)
-F page_get_row_len(page_ptr: i64, slot_idx: i64) -> i64 {
+fn page_get_row_len(page_ptr: i64, slot_idx: i64) -> i64 {
     num_slots := load_i64(page_ptr + 8)
-    I slot_idx < 0 { R 0 }
-    I slot_idx >= num_slots { R 0 }
+    I slot_idx < 0 { return 0 }
+    I slot_idx >= num_slots { return 0 }
 
     slot_ptr := PAGE_HEADER_SIZE + slot_idx * SLOT_SIZE
     row_offset := load_i64(page_ptr + slot_ptr)
@@ -115,7 +115,7 @@ F page_get_row_len(page_ptr: i64, slot_idx: i64) -> i64 {
     I slot_idx == 0 {
         # First slot - row extends to PAGE_SIZE
         PAGE_SIZE - row_offset
-    } EL {
+    } else {
         # Previous slot's row starts right after this one
         prev_slot_ptr := PAGE_HEADER_SIZE + (slot_idx - 1) * SLOT_SIZE
         prev_row_offset := load_i64(page_ptr + prev_slot_ptr)
@@ -128,15 +128,15 @@ F page_get_row_len(page_ptr: i64, slot_idx: i64) -> i64 {
 
 C MAX_PAGES: i64 = 256
 
-S BufferPool {
+struct BufferPool {
     pages: i64,       # Array of page pointers (MAX_PAGES * 8)
     page_ids: i64,    # Array of page IDs (MAX_PAGES * 8), -1 = empty
     num_pages: i64,   # Number of allocated pages
     next_page_id: i64 # Counter for page ID generation
 }
 
-X BufferPool {
-    F new() -> BufferPool {
+impl BufferPool {
+    fn new() -> BufferPool {
         pages := malloc(MAX_PAGES * 8)
         page_ids := malloc(MAX_PAGES * 8)
         # Initialize all slots to empty
@@ -156,8 +156,8 @@ X BufferPool {
     }
 
     # Allocate a new page, returns page_ptr
-    F alloc_page(&self, page_type: i64) -> i64 {
-        I self.num_pages >= MAX_PAGES { R 0 }
+    fn alloc_page(&self, page_type: i64) -> i64 {
+        I self.num_pages >= MAX_PAGES { return 0 }
 
         page_ptr := malloc(PAGE_SIZE)
         page_id := self.next_page_id
@@ -175,26 +175,26 @@ X BufferPool {
     }
 
     # Find page by ID, returns page_ptr or 0 if not found
-    F get_page(&self, page_id: i64) -> i64 {
+    fn get_page(&self, page_id: i64) -> i64 {
         @.find_page(page_id, 0)
     }
 
-    F find_page(&self, page_id: i64, idx: i64) -> i64 {
+    fn find_page(&self, page_id: i64, idx: i64) -> i64 {
         I idx >= self.num_pages { 0 }
-        EL {
+        else {
             pid := load_i64(self.page_ids + idx * 8)
             I pid == page_id {
                 load_i64(self.pages + idx * 8)
-            } EL {
+            } else {
                 @.find_page(page_id, idx + 1)
             }
         }
     }
 
     # Write page to file
-    F flush_page(&self, page_id: i64, file_handle: i64) -> i64 {
+    fn flush_page(&self, page_id: i64, file_handle: i64) -> i64 {
         page_ptr := @.get_page(page_id)
-        I page_ptr == 0 { R 0 - 1 }
+        I page_ptr == 0 { return 0 - 1 }
         # Seek to page position in file
         offset := (page_id - 1) * PAGE_SIZE
         fseek(file_handle, offset, 0)  # SEEK_SET
@@ -202,7 +202,7 @@ X BufferPool {
     }
 
     # Read page from file
-    F load_page(&self, page_id: i64, file_handle: i64) -> i64 {
+    fn load_page(&self, page_id: i64, file_handle: i64) -> i64 {
         # Allocate buffer if needed
         page_ptr := mut @.get_page(page_id)
         I page_ptr == 0 {
@@ -219,16 +219,16 @@ X BufferPool {
     }
 
     # Free all pages
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         @.free_pages(0)
         free(self.pages)
         free(self.page_ids)
         0
     }
 
-    F free_pages(&self, idx: i64) -> i64 {
+    fn free_pages(&self, idx: i64) -> i64 {
         I idx >= self.num_pages { 0 }
-        EL {
+        else {
             pp := load_i64(self.pages + idx * 8)
             I pp != 0 { free(pp) }
             @.free_pages(idx + 1)

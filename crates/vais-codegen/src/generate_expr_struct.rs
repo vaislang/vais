@@ -26,7 +26,8 @@ impl CodeGenerator {
             let has_generic_fields = struct_info
                 .fields
                 .iter()
-                .any(|(_, ty)| matches!(ty, ResolvedType::Generic(_) | ResolvedType::Var(_)));
+                .any(|(_, ty)| matches!(ty, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                || self.generic_struct_layout_uses_type_args(&name.node);
             let (effective_type_name, effective_fields) = if has_generic_fields {
                 if !self.generics.substitutions.is_empty() {
                     // Case 1: Inside a specialized function — use substitutions to resolve
@@ -87,7 +88,16 @@ impl CodeGenerator {
                         }
                         _ => None,
                     };
-                    if let Some(gens) = concrete_generics {
+                    let inferred_generics = if concrete_generics.is_none() {
+                        self.infer_struct_literal_generic_args(
+                            &name.node,
+                            &struct_info.fields,
+                            fields,
+                        )
+                    } else {
+                        None
+                    };
+                    if let Some(gens) = concrete_generics.or(inferred_generics) {
                         let mangled = self.mangle_struct_name(&name.node, &gens);
                         if let Some(specialized) = self.types.structs.get(&mangled).cloned() {
                             (mangled, specialized.fields)
@@ -108,6 +118,8 @@ impl CodeGenerator {
             // Allocate struct on stack (hoisted to entry block)
             let struct_ptr = self.next_temp(counter);
             self.emit_entry_alloca(&struct_ptr, &format!("%{}", effective_type_name));
+            self.fn_ctx
+                .record_emitted_type(&struct_ptr, &format!("%{}*", effective_type_name));
 
             // Phase 191 #2b: zero-initialize the trailing __ownership_mask field
             // for structs that carry heap-owned string fields. The bitmap field
@@ -152,14 +164,11 @@ impl CodeGenerator {
                         ))
                     })?;
 
-                let field_ty = effective_fields[field_idx].1.clone();
-                let saved_generic_substitutions =
-                    self.push_expected_static_ctor_substitutions(&field_ty, &field_expr.node);
-                let generated_field = self.generate_expr(field_expr, counter);
-                if let Some(saved) = saved_generic_substitutions {
-                    self.generics.substitutions = saved;
-                }
-                let (val, field_ir) = generated_field?;
+                let field_ty = &effective_fields[field_idx].1;
+                self.fn_ctx.expected_expr_types.push(field_ty.clone());
+                let field_result = self.generate_expr(field_expr, counter);
+                self.fn_ctx.expected_expr_types.pop();
+                let (val, field_ir) = field_result?;
                 ir.push_str(&field_ir);
 
                 let rvalue_key = val.clone();
@@ -175,19 +184,37 @@ impl CodeGenerator {
                     field_idx
                 );
 
-                let llvm_ty = self.type_to_llvm(&field_ty);
+                let llvm_ty = self.type_to_llvm(field_ty);
 
-                // For struct-typed fields, val might be a pointer that needs to be loaded
-                let val_to_store = if matches!(field_ty, ResolvedType::Named { .. })
-                    && !self.is_expr_value(field_expr)
-                {
-                    // Field value is a pointer to struct, need to load the value
-                    let loaded = self.next_temp(counter);
-                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
-                    loaded
-                } else {
-                    val
-                };
+                // Phase 17.H4: Unit-typed fields have no storable value —
+                // LLVM forbids `store void` and `void*`. When the field's
+                // type erases to void (generic specialization with T=()),
+                // drop the store entirely and leave a zero byte marker
+                // instead (the parameter was coerced to i8 upstream).
+                if llvm_ty == "void" {
+                    write_ir!(ir, "  store i8 0, i8* {}", field_ptr);
+                    continue;
+                }
+
+                // For struct-typed fields, load only when the emitted value is
+                // actually a pointer to the field type. Some SSA locals (for
+                // example tuple destructure results) are already aggregate
+                // values even when their AST shape looks pointer-like.
+                let val_actual_ty = self.llvm_type_of_checked(&val);
+                let val_is_field_ptr = val_actual_ty
+                    .as_deref()
+                    .map(|actual| actual == "ptr" || actual == format!("{}*", llvm_ty))
+                    .unwrap_or(false);
+                let val_to_store =
+                    if matches!(field_ty, ResolvedType::Named { .. }) && val_is_field_ptr {
+                        // Field value is a pointer to struct, need to load the value
+                        let loaded = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
+                        self.fn_ctx.record_emitted_type(&loaded, &llvm_ty);
+                        loaded
+                    } else {
+                        val
+                    };
 
                 // Coerce value width to match field type (e.g., i8 param stored to i64 field
                 // in specialized function body using generic struct layout)
@@ -208,6 +235,7 @@ impl CodeGenerator {
                         {
                             let tmp = self.next_temp(counter);
                             write_ir!(ir, "  {} = zext i8 {} to i64", tmp, coerced_val);
+                            self.fn_ctx.record_emitted_type(&tmp, "i64");
                             tmp
                         } else {
                             coerced_val
@@ -273,6 +301,8 @@ impl CodeGenerator {
             // Allocate union on stack (hoisted to entry block)
             let union_ptr = self.next_temp(counter);
             self.emit_entry_alloca(&union_ptr, &format!("%{}", type_name));
+            self.fn_ctx
+                .record_emitted_type(&union_ptr, &format!("%{}*", type_name));
 
             // Union should have exactly one field in the literal
             if fields.len() != 1 {
@@ -372,7 +402,9 @@ impl CodeGenerator {
         fields: &[(Spanned<String>, Spanned<Expr>)],
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        let tag = self.get_enum_variant_tag(variant_name);
+        let tag = self
+            .get_enum_variant_tag_in_enum(enum_name, variant_name)
+            .unwrap_or_else(|| self.get_enum_variant_tag(variant_name));
 
         // Convert named fields to positional args
         let spanned_fields: Vec<Spanned<Expr>> =

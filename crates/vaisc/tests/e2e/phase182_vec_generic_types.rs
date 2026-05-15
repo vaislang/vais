@@ -31,23 +31,23 @@ use super::helpers::*;
 fn e2e_phase182_vec_f32_generic_compiles() {
     assert_exit_code(
         r#"
-S Vec<T> {
+struct Vec<T> {
     data: i64,
     len: i64,
     cap: i64
 }
 
-X Vec<T> {
-    F new() -> Vec<T> {
+impl Vec<T> {
+    fn new() -> Vec<T> {
         Vec { data: 0, len: 0, cap: 0 }
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.new()
     v.len()
 }
@@ -63,22 +63,22 @@ F main() -> i64 {
 fn e2e_phase182_vec_f32_struct_field_type_preserved() {
     assert_exit_code(
         r#"
-S Vec<T> {
+struct Vec<T> {
     first_elem: T,
     len: i64
 }
 
-X Vec<T> {
-    F new(elem: T) -> Vec<T> {
+impl Vec<T> {
+    fn new(elem: T) -> Vec<T> {
         Vec { first_elem: elem, len: 1 }
     }
 
-    F get_first(&self) -> T {
+    fn get_first(&self) -> type {
         self.first_elem
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.new(3.14 as f32)
     # Type is preserved as f32 in IR — return 0 to pass exit code check
     0
@@ -95,22 +95,22 @@ F main() -> i64 {
 fn e2e_phase182_vec_f64_struct_field_type_preserved() {
     assert_exit_code(
         r#"
-S Vec<T> {
+struct Vec<T> {
     first_elem: T,
     len: i64
 }
 
-X Vec<T> {
-    F new(elem: T) -> Vec<T> {
+impl Vec<T> {
+    fn new(elem: T) -> Vec<T> {
         Vec { first_elem: elem, len: 1 }
     }
 
-    F get_first(&self) -> T {
+    fn get_first(&self) -> type {
         self.first_elem
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.new(2.718)
     # Return 0 — IR type correctness is the verification target
     0
@@ -130,26 +130,26 @@ F main() -> i64 {
 fn e2e_phase182_vec_i32_struct_field_type_preserved() {
     assert_exit_code(
         r#"
-S Vec<T> {
+struct Vec<T> {
     elem: T,
     len: i64
 }
 
-X Vec<T> {
-    F new(v: T) -> Vec<T> {
+impl Vec<T> {
+    fn new(v: T) -> Vec<T> {
         Vec { elem: v, len: 1 }
     }
 
-    F get(&self) -> T {
+    fn get(&self) -> type {
         self.elem
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.new(42 as i32)
     v.len()
 }
@@ -166,26 +166,26 @@ F main() -> i64 {
 fn e2e_phase182_vec_u8_struct_field_type_preserved() {
     assert_exit_code(
         r#"
-S Vec<T> {
+struct Vec<T> {
     elem: T,
     len: i64
 }
 
-X Vec<T> {
-    F new(v: T) -> Vec<T> {
+impl Vec<T> {
+    fn new(v: T) -> Vec<T> {
         Vec { elem: v, len: 1 }
     }
 
-    F get(&self) -> T {
+    fn get(&self) -> type {
         self.elem
     }
 
-    F size(&self) -> i64 {
+    fn size(&self) -> i64 {
         self.len
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.new(99 as u8)
     v.size()
 }
@@ -206,9 +206,9 @@ F main() -> i64 {
 fn e2e_phase182_generic_identity_f32_compiles() {
     assert_exit_code(
         r#"
-F identity<T>(x: T) -> T { x }
+fn identity<T>(x: T) -> type { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     _v := identity(1.5 as f32)
     0
 }
@@ -224,9 +224,9 @@ F main() -> i64 {
 fn e2e_phase182_generic_identity_f64_compiles() {
     assert_exit_code(
         r#"
-F identity<T>(x: T) -> T { x }
+fn identity<T>(x: T) -> type { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     _v := identity(2.5)
     0
 }
@@ -243,26 +243,26 @@ F main() -> i64 {
 fn e2e_phase182_vec_i64_value_preserved() {
     assert_exit_code(
         r#"
-S Vec<T> {
+struct Vec<T> {
     elem: T,
     len: i64
 }
 
-X Vec<T> {
-    F new(v: T) -> Vec<T> {
+impl Vec<T> {
+    fn new(v: T) -> Vec<T> {
         Vec { elem: v, len: 1 }
     }
 
-    F get(&self) -> T {
+    fn get(&self) -> type {
         self.elem
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.new(42)
     v.get()
 }
@@ -276,20 +276,20 @@ F main() -> i64 {
 fn e2e_phase182_vec_i64_two_instances_different_values() {
     assert_exit_code(
         r#"
-S Box<T> {
+struct Box<T> {
     val: T
 }
 
-X Box<T> {
-    F new(v: T) -> Box<T> {
+impl Box<T> {
+    fn new(v: T) -> Box<T> {
         Box { val: v }
     }
-    F get(&self) -> T {
+    fn get(&self) -> type {
         self.val
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := Box.new(20)
     b := Box.new(22)
     a.get() + b.get()
@@ -307,20 +307,20 @@ F main() -> i64 {
 fn e2e_phase182_two_i64_specializations_coexist() {
     assert_exit_code(
         r#"
-S Slot<T> {
+struct Slot<T> {
     value: T
 }
 
-X Slot<T> {
-    F new(v: T) -> Slot<T> {
+impl Slot<T> {
+    fn new(v: T) -> Slot<T> {
         Slot { value: v }
     }
-    F get(&self) -> T {
+    fn get(&self) -> type {
         self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := Slot.new(10)
     b := Slot.new(32)
     a.get() + b.get()
@@ -336,25 +336,25 @@ F main() -> i64 {
 fn e2e_phase182_i64_and_bool_specializations_no_collision() {
     assert_exit_code(
         r#"
-S Cell<T> {
+struct Cell<T> {
     data: T
 }
 
-X Cell<T> {
-    F wrap(v: T) -> Cell<T> {
+impl Cell<T> {
+    fn wrap(v: T) -> Cell<T> {
         Cell { data: v }
     }
-    F unwrap(&self) -> T {
+    fn unwrap(&self) -> type {
         self.data
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     ci := Cell.wrap(41)
     cb := Cell.wrap(true)
     iv := ci.unwrap()
     bv := cb.unwrap()
-    I bv { iv + 1 } E { 0 }
+    I bv { iv + 1 } else { 0 }
 }
 "#,
         42,
@@ -368,20 +368,20 @@ F main() -> i64 {
 fn e2e_phase182_f32_and_f64_specializations_no_collision() {
     assert_exit_code(
         r#"
-S Slot<T> {
+struct Slot<T> {
     value: T
 }
 
-X Slot<T> {
-    F new(v: T) -> Slot<T> {
+impl Slot<T> {
+    fn new(v: T) -> Slot<T> {
         Slot { value: v }
     }
-    F get(&self) -> T {
+    fn get(&self) -> type {
         self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     _a := Slot.new(1.0 as f32)
     _b := Slot.new(2.0)
     0
@@ -407,24 +407,24 @@ F main() -> i64 {
 fn e2e_vec_param_index_compiles() {
     assert_compiles(
         r#"
-S Vec<T> {
+struct Vec<T> {
     data: i64,
     len: i64,
     cap: i64,
     elem_size: i64
 }
 
-X Vec<T> {
-    F new() -> Vec<T> {
+impl Vec<T> {
+    fn new() -> Vec<T> {
         Vec { data: 0, len: 0, cap: 0, elem_size: 8 }
     }
 }
 
-F process_vec(v: Vec<i64>) -> i64 {
+fn process_vec(v: Vec<i64>) -> i64 {
     v[0]
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.new()
     process_vec(v)
 }
@@ -443,24 +443,24 @@ F main() -> i64 {
 fn e2e_vec_param_generic_fn_index_compiles() {
     assert_compiles(
         r#"
-S Vec<T> {
+struct Vec<T> {
     data: i64,
     len: i64,
     cap: i64,
     elem_size: i64
 }
 
-X Vec<T> {
-    F new() -> Vec<T> {
+impl Vec<T> {
+    fn new() -> Vec<T> {
         Vec { data: 0, len: 0, cap: 0, elem_size: 8 }
     }
 }
 
-F get_first<T>(v: Vec<T>) -> T {
+fn get_first<T>(v: Vec<T>) -> type {
     v[0]
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.new()
     get_first(v)
 }

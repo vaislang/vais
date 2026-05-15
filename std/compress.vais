@@ -67,20 +67,20 @@ C COMPRESS_MAX_OUTPUT: i64 = 10485760    # 10MB default max
 # Compression Result
 # ============================================
 
-S CompressResult {
+struct CompressResult {
     data_ptr: i64,      # Pointer to output data (caller must free)
     data_len: i64,      # Length of output data
     status: i64         # COMPRESS_OK or error code
 }
 
-X CompressResult {
+impl CompressResult {
     # Check if compression was successful
-    F is_ok(&self) -> i64 {
-        I self.status == COMPRESS_OK { 1 } EL { 0 }
+    fn is_ok(&self) -> i64 {
+        I self.status == COMPRESS_OK { 1 } else { 0 }
     }
 
     # Free the result data
-    F free(&self) -> i64 {
+    fn free(&self) -> i64 {
         I self.data_ptr != 0 {
             __free(self.data_ptr)
             self.data_ptr = 0
@@ -94,18 +94,18 @@ X CompressResult {
 # Compressor (stateful compression)
 # ============================================
 
-S Compressor {
+struct Compressor {
     handle: i64,        # Opaque pointer to z_stream
     mode: i64,          # COMPRESS_DEFLATE or COMPRESS_GZIP
     level: i64,         # Compression level (1-9)
     streaming: i64      # 1 if streaming mode is active
 }
 
-X Compressor {
+impl Compressor {
     # Create a new deflate compressor (raw RFC 1951)
-    F deflate(level: i64) -> Compressor {
+    fn deflate(level: i64) -> Compressor {
         # Clamp level to valid range
-        actual_level := level
+        actual_level := mut level
         I level < 1 { actual_level = 1 }
         I level > 9 { actual_level = 9 }
 
@@ -119,9 +119,9 @@ X Compressor {
     }
 
     # Create a new gzip compressor (RFC 1952)
-    F gzip(level: i64) -> Compressor {
+    fn gzip(level: i64) -> Compressor {
         # Clamp level to valid range
-        actual_level := level
+        actual_level := mut level
         I level < 1 { actual_level = 1 }
         I level > 9 { actual_level = 9 }
 
@@ -135,14 +135,14 @@ X Compressor {
     }
 
     # Check if compressor was created successfully
-    F is_valid(&self) -> i64 {
-        I self.handle != 0 { 1 } EL { 0 }
+    fn is_valid(&self) -> i64 {
+        I self.handle != 0 { 1 } else { 0 }
     }
 
     # One-shot compression (entire input at once)
-    F compress(&self, data_ptr: i64, data_len: i64) -> CompressResult {
+    fn compress(&self, data_ptr: i64, data_len: i64) -> CompressResult {
         I self.handle == 0 {
-            R CompressResult {
+            return CompressResult {
                 data_ptr: 0,
                 data_len: 0,
                 status: COMPRESS_ERR_INIT
@@ -161,9 +161,9 @@ X Compressor {
     }
 
     # Decompress data (entire input at once)
-    F decompress(&self, data_ptr: i64, data_len: i64) -> CompressResult {
+    fn decompress(&self, data_ptr: i64, data_len: i64) -> CompressResult {
         I self.handle == 0 {
-            R CompressResult {
+            return CompressResult {
                 data_ptr: 0,
                 data_len: 0,
                 status: COMPRESS_ERR_INIT
@@ -182,8 +182,8 @@ X Compressor {
     }
 
     # Begin streaming compression
-    F stream_begin(&self) -> i64 {
-        I self.handle == 0 { R COMPRESS_ERR_INIT }
+    fn stream_begin(&self) -> i64 {
+        I self.handle == 0 { return COMPRESS_ERR_INIT }
         status := __compress_stream_begin(self.handle)
         I status == 0 {
             self.streaming = 1
@@ -192,9 +192,9 @@ X Compressor {
     }
 
     # Write a chunk to the stream
-    F stream_write(&self, chunk_ptr: i64, chunk_len: i64) -> CompressResult {
+    fn stream_write(&self, chunk_ptr: i64, chunk_len: i64) -> CompressResult {
         I self.handle == 0 | self.streaming == 0 {
-            R CompressResult {
+            return CompressResult {
                 data_ptr: 0,
                 data_len: 0,
                 status: COMPRESS_ERR_STREAM
@@ -213,9 +213,9 @@ X Compressor {
     }
 
     # Finish streaming compression and get final chunk
-    F stream_finish(&self) -> CompressResult {
+    fn stream_finish(&self) -> CompressResult {
         I self.handle == 0 | self.streaming == 0 {
-            R CompressResult {
+            return CompressResult {
                 data_ptr: 0,
                 data_len: 0,
                 status: COMPRESS_ERR_STREAM
@@ -235,7 +235,7 @@ X Compressor {
     }
 
     # Free compressor resources
-    F free(&self) -> i64 {
+    fn free(&self) -> i64 {
         I self.handle != 0 {
             __compress_free(self.handle)
             self.handle = 0
@@ -250,9 +250,9 @@ X Compressor {
 # ============================================
 
 # One-shot gzip compression (for HTTP Content-Encoding: gzip)
-F gzip_compress(data_ptr: i64, data_len: i64) -> CompressResult {
+fn gzip_compress(data_ptr: i64, data_len: i64) -> CompressResult {
     I data_ptr == 0 | data_len <= 0 {
-        R CompressResult {
+        return CompressResult {
             data_ptr: 0,
             data_len: 0,
             status: COMPRESS_ERR_PARAM
@@ -261,7 +261,7 @@ F gzip_compress(data_ptr: i64, data_len: i64) -> CompressResult {
 
     compressor := Compressor::gzip(COMPRESS_LEVEL_DEFAULT)
     I compressor.is_valid() == 0 {
-        R CompressResult {
+        return CompressResult {
             data_ptr: 0,
             data_len: 0,
             status: COMPRESS_ERR_INIT
@@ -274,9 +274,9 @@ F gzip_compress(data_ptr: i64, data_len: i64) -> CompressResult {
 }
 
 # One-shot gzip decompression (for HTTP Content-Encoding: gzip)
-F gzip_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
+fn gzip_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
     I data_ptr == 0 | data_len <= 0 {
-        R CompressResult {
+        return CompressResult {
             data_ptr: 0,
             data_len: 0,
             status: COMPRESS_ERR_PARAM
@@ -285,7 +285,7 @@ F gzip_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
 
     compressor := Compressor::gzip(COMPRESS_LEVEL_DEFAULT)
     I compressor.is_valid() == 0 {
-        R CompressResult {
+        return CompressResult {
             data_ptr: 0,
             data_len: 0,
             status: COMPRESS_ERR_INIT
@@ -298,9 +298,9 @@ F gzip_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
 }
 
 # One-shot deflate compression (raw deflate)
-F deflate_compress(data_ptr: i64, data_len: i64) -> CompressResult {
+fn deflate_compress(data_ptr: i64, data_len: i64) -> CompressResult {
     I data_ptr == 0 | data_len <= 0 {
-        R CompressResult {
+        return CompressResult {
             data_ptr: 0,
             data_len: 0,
             status: COMPRESS_ERR_PARAM
@@ -309,7 +309,7 @@ F deflate_compress(data_ptr: i64, data_len: i64) -> CompressResult {
 
     compressor := Compressor::deflate(COMPRESS_LEVEL_DEFAULT)
     I compressor.is_valid() == 0 {
-        R CompressResult {
+        return CompressResult {
             data_ptr: 0,
             data_len: 0,
             status: COMPRESS_ERR_INIT
@@ -322,9 +322,9 @@ F deflate_compress(data_ptr: i64, data_len: i64) -> CompressResult {
 }
 
 # One-shot deflate decompression (raw deflate)
-F deflate_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
+fn deflate_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
     I data_ptr == 0 | data_len <= 0 {
-        R CompressResult {
+        return CompressResult {
             data_ptr: 0,
             data_len: 0,
             status: COMPRESS_ERR_PARAM
@@ -333,7 +333,7 @@ F deflate_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
 
     compressor := Compressor::deflate(COMPRESS_LEVEL_DEFAULT)
     I compressor.is_valid() == 0 {
-        R CompressResult {
+        return CompressResult {
             data_ptr: 0,
             data_len: 0,
             status: COMPRESS_ERR_INIT
@@ -349,8 +349,8 @@ F deflate_decompress(data_ptr: i64, data_len: i64) -> CompressResult {
 # Error Description Helper
 # ============================================
 
-F compress_error_text(code: i64) -> str {
-    M code {
+fn compress_error_text(code: i64) -> str {
+    match code {
         0 => "Success",
         -1 => "Compression initialization failed",
         -2 => "Invalid parameter",
@@ -368,19 +368,19 @@ F compress_error_text(code: i64) -> str {
 # ============================================
 
 # Compressor lifecycle (from compress_runtime.c)
-X F __compress_new(mode: i64, level: i64) -> i64
-X F __compress_free(handle: i64) -> i64
+impl fn __compress_new(mode: i64, level: i64) -> i64
+impl fn __compress_free(handle: i64) -> i64
 
 # One-shot compression/decompression (from compress_runtime.c)
-X F __compress_data(handle: i64, data_ptr: i64, data_len: i64, out_ptr: i64, out_len: i64) -> i64
-X F __decompress_data(handle: i64, data_ptr: i64, data_len: i64, out_ptr: i64, out_len: i64) -> i64
+impl fn __compress_data(handle: i64, data_ptr: i64, data_len: i64, out_ptr: i64, out_len: i64) -> i64
+impl fn __decompress_data(handle: i64, data_ptr: i64, data_len: i64, out_ptr: i64, out_len: i64) -> i64
 
 # Streaming compression (from compress_runtime.c)
-X F __compress_stream_begin(handle: i64) -> i64
-X F __compress_stream_write(handle: i64, chunk_ptr: i64, chunk_len: i64, out_ptr: i64, out_len: i64) -> i64
-X F __compress_stream_finish(handle: i64, out_ptr: i64, out_len: i64) -> i64
+impl fn __compress_stream_begin(handle: i64) -> i64
+impl fn __compress_stream_write(handle: i64, chunk_ptr: i64, chunk_len: i64, out_ptr: i64, out_len: i64) -> i64
+impl fn __compress_stream_finish(handle: i64, out_ptr: i64, out_len: i64) -> i64
 
 # Memory operations (shared)
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __strlen(s: str) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __strlen(s: str) -> i64

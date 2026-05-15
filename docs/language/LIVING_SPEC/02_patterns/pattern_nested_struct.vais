@@ -1,0 +1,17 @@
+# LIVING_SPEC/02_patterns/pattern_nested_struct.vais
+# Key concept: 중첩 struct에서 필드 접근 (match 안에서 구조체 바인딩 후 필드 사용).
+
+struct Address { zip: i64 }
+struct Person { name: i64, addr: Address }
+
+fn zip_of(p: Option<Person>) -> i64 {
+    match p {
+        Some(person) => person.addr.zip,
+        None => -1
+    }
+}
+
+fn main() -> i64 {
+    p := Person { name: 42, addr: Address { zip: 12345 } }
+    zip_of(Some(p))
+}

@@ -1,0 +1,33 @@
+[entry]
+id = "A2-02"
+classification = "A2 certified subset"
+surface = "`?` operator on Result/Option (Core-typed, cross-module via `U inner` import)"
+predicate = "see compiler/docs/certification/A2_SUBSETS.md §A2-02 (TBD)"
+master_plan_version = 17
+landed = "2026-05-04"
+
+[positive]
+probe = "probe_pos_main.vais + probe_pos_inner.vais"
+expected_exit = 43
+description = """
+Two-file probe (inner.vais defines `inner_call() -> Result<i64,str>`; main.vais
+imports via `U inner` and uses `?` propagation). Outer enclosing function
+returns Result; main matches and returns inner value + 1 = 43.
+
+Empirical baseline: vaisdb's storage/bytes.vais → sql/types.vais cross-module
+`?` chain (sql/types.vais:339 reads `read_u8_checked(buf)?` from storage/bytes
+import) is the real-world precedent this fixture certifies.
+"""
+
+[negative]
+probe = "probe_neg_main.vais + probe_neg_inner.vais"
+expected_behavior = "vaisc check rejects with E001 'expected Result<_,_> or Option<_>, found <ret>' (A4-11 strict default LANDED Step 13 stage 1, commit 204a6a03)."
+description = "outer's return type is i64 not Result; predicate violated; cross-module ? propagation cannot escape — rejected at vaisc check before any link/build step."
+
+[verification]
+verified_date = "2026-05-04"
+verifier_command = "bash run.sh"
+verifier_expected_stdout_substring = "A2-02 OK: positive cross-module ? exits 43"
+
+[migration]
+post_predicate_change = "If the A2-02 predicate ever tightens (e.g. only allow Result, not Option), update probe_pos_inner.vais return type and probe_neg to test the freshly-narrowed surface. Otherwise no migration required."

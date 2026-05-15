@@ -2,20 +2,28 @@
 //!
 //! Token-efficient lexer using single-letter keywords for AI optimization.
 
+// Warn on `.unwrap()` in non-test code so any new Category D site
+// (user-input reachable panic) is rejected at review time. See
+// `docs/UNWRAP_CLASSIFICATION.md`. The `not(test)` gate keeps test
+// code idiomatic — tests are allowed to panic on assertion failure.
+#![cfg_attr(not(test), warn(clippy::unwrap_used))]
+
 use logos::Logos;
 use std::fmt;
 
 /// Token types for Vais 0.0.1 language.
 ///
-/// Uses single-letter keywords (F, S, E, I, L, M, etc.) for token efficiency,
-/// optimizing for AI model processing and reducing token count in LLM contexts.
+/// Step 19 P4 retired the single-char declaration keywords (F/S/E/M/R/T/U/P/W/X);
+/// the canonical multi-char forms (`fn`/`struct`/`enum`/`match`/`return`/`type`/
+/// `use`/`pub`/`trait`/`impl`) are the only accepted spellings. Non-retired
+/// single-char forms (I/L/A/B/C/D/O/N/G) remain for control-flow and minor uses.
 ///
 /// # Examples
 ///
 /// ```
 /// use vais_lexer::{tokenize, Token};
 ///
-/// let source = "F add(a:i64,b:i64)->i64=a+b";
+/// let source = "fn add(a:i64,b:i64)->i64=a+b";
 /// let tokens = tokenize(source).unwrap();
 /// assert_eq!(tokens[0].token, Token::Function);
 /// ```
@@ -23,16 +31,11 @@ use std::fmt;
 #[logos(skip r"[ \t\r\n]+")] // Skip whitespace
 pub enum Token {
     // === Doc Comments ===
-    #[regex(
-        r"///[^\n]*",
-        |lex| lex.slice()[3..].trim().to_string(),
-        priority = 5,
-        allow_greedy = true
-    )]
+    #[regex(r"///[^\n]*", |lex| lex.slice()[3..].trim().to_string(), priority = 5)]
     DocComment(String),
 
     // === Regular Comments (lower priority than doc comments) ===
-    #[regex(r"#[^/\[\n][^\n]*", logos::skip, allow_greedy = true)] // Skip regular comments (but not doc comments or #[)
+    #[regex(r"#[^/\[\n][^\n]*", logos::skip)] // Skip regular comments (but not doc comments or #[)
     #[regex(r"#\n", logos::skip)]
     // Skip empty # lines
 
@@ -45,49 +48,37 @@ pub enum Token {
     // dashes or when multiple alternatives exist).
     #[token("<!--", skip_html_comment)]
     // === VaisX Template Doctype (HTML5 doctype declaration) ===
-    #[regex(r"<!DOCTYPE[^>]*>", logos::skip, ignore(case))]
-    // === Keywords ===
-    // Multi-character spellings are accepted as canonical source syntax while
-    // the existing single-letter spellings remain supported for compatibility.
-    // Higher priority than identifiers.
-    #[token("F", priority = 3)]
+    #[regex(r"<!DOCTYPE[^>]*>", logos::skip, ignore(ascii_case))]
+    // === Keywords (multi-char canonical; Step 19 P4 retired single-char forms F/S/E/EN/EL/M/R/T/U/P/W/X) ===
+    // Non-retired single-char keywords (I/L/A/B/C/D/O/N/G/Y) remain as tokens.
     #[token("fn", priority = 3)]
     Function,
-    #[token("S", priority = 3)]
     #[token("struct", priority = 3)]
     Struct,
-    #[token("E", priority = 3)]
     #[token("enum", priority = 3)]
     Enum,
     #[token("I", priority = 3)]
     If,
     #[token("L", priority = 3)]
     Loop,
-    #[token("M", priority = 3)]
     #[token("match", priority = 3)]
     Match,
     #[token("A", priority = 3)]
     Async,
-    #[token("R", priority = 3)]
     #[token("return", priority = 3)]
     Return,
     #[token("B", priority = 3)]
     Break,
     #[token("C", priority = 3)]
     Continue,
-    #[token("T", priority = 3)]
     #[token("type", priority = 3)]
     TypeKeyword,
-    #[token("U", priority = 3)]
     #[token("use", priority = 3)]
     Use,
-    #[token("P", priority = 3)]
     #[token("pub", priority = 3)]
     Pub,
-    #[token("W", priority = 3)]
     #[token("trait", priority = 3)]
     Trait,
-    #[token("X", priority = 3)]
     #[token("impl", priority = 3)]
     Impl,
     #[token("D", priority = 3)]
@@ -100,11 +91,14 @@ pub enum Token {
     Global,
 
     // === Unambiguous 2-char Keywords (priority 4 > single-letter priority 3) ===
-    #[token("EN", priority = 4)]
-    EnumKeyword, // Unambiguous enum (replaces contextual E)
-    #[token("EL", priority = 4)]
+    // EN/EL retired with Step 19 P4 — the `#[token("EN")]` / `#[token("EL")]`
+    // logos attributes are removed so the lexer no longer accepts those
+    // spellings, but the variants stay for backwards compatibility with
+    // downstream parser/codegen match arms (legacy paths that mention the
+    // variant but never receive it). Canonical replacements: `enum`, `else`.
+    EnumKeyword, // Retired spelling EN — variant retained for parser arms
     #[token("else", priority = 4)]
-    Else, // Unambiguous else (replaces contextual E after if)
+    Else, // Unambiguous else
     #[token("LF", priority = 4)]
     ForEach, // Unambiguous for-each loop (replaces contextual L pattern:iter)
     #[token("LW", priority = 4)]
@@ -397,27 +391,31 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Token::DocComment(s) => write!(f, "/// {}", s),
-            Token::Function => write!(f, "F"),
-            Token::Struct => write!(f, "S"),
-            Token::Enum => write!(f, "E"),
+            // Step 19 P4 retirement: Display now emits the canonical multi-char
+            // form (the only form lexer accepts as of master-plan v32). The
+            // legacy single-char emissions (`F`/`S`/`E`/`T`/`U`/`P`/`W`/`X`/
+            // `EN`/`EL`/`R`/`M`) would round-trip to a parse error after P4.
+            Token::Function => write!(f, "fn"),
+            Token::Struct => write!(f, "struct"),
+            Token::Enum => write!(f, "enum"),
             Token::If => write!(f, "I"),
             Token::Loop => write!(f, "L"),
-            Token::Match => write!(f, "M"),
+            Token::Match => write!(f, "match"),
             Token::Async => write!(f, "A"),
-            Token::Return => write!(f, "R"),
+            Token::Return => write!(f, "return"),
             Token::Break => write!(f, "B"),
             Token::Continue => write!(f, "C"),
-            Token::TypeKeyword => write!(f, "T"),
-            Token::Use => write!(f, "U"),
-            Token::Pub => write!(f, "P"),
-            Token::Trait => write!(f, "W"),
-            Token::Impl => write!(f, "X"),
+            Token::TypeKeyword => write!(f, "type"),
+            Token::Use => write!(f, "use"),
+            Token::Pub => write!(f, "pub"),
+            Token::Trait => write!(f, "trait"),
+            Token::Impl => write!(f, "impl"),
             Token::Defer => write!(f, "D"),
             Token::Union => write!(f, "O"),
             Token::Extern => write!(f, "N"),
             Token::Global => write!(f, "G"),
-            Token::EnumKeyword => write!(f, "EN"),
-            Token::Else => write!(f, "EL"),
+            Token::EnumKeyword => write!(f, "enum"),
+            Token::Else => write!(f, "else"),
             Token::ForEach => write!(f, "LF"),
             Token::While => write!(f, "LW"),
             Token::Yield => write!(f, "yield"),
@@ -796,6 +794,159 @@ pub fn tokenize(source: &str) -> Result<Vec<SpannedToken>, LexError> {
     Ok(post_process_tokens(tokens, source))
 }
 
+/// Single-char keyword retirement (Step 19 P1, 2026-05-07).
+///
+/// One deprecation warning per retired-form keyword usage in the source.
+/// The lexer accepts both single-char (`F`/`S`/`EN`/...) and multi-char
+/// (`fn`/`struct`/`enum`/...) spellings as the same token; this struct
+/// records every site where the *single-char* spelling was used.
+///
+/// The 12 retired forms are: F / S / E / EN / EL / M / R / T / U / P / W / X.
+/// Note both `E` (Token::Enum, contextual single-char) and `EN`
+/// (Token::EnumKeyword) are retired — the canonical replacement is
+/// `enum` for both.
+/// The retire decision is locked in (LESSONS L-009 / L-010); see WORKLOG
+/// loop 12-15 entries and the future P2-P6 phases for the full migration
+/// plan. P1 itself is purely additive — source code continues to parse and
+/// run unchanged.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeprecationWarning {
+    /// Byte range of the retired-form keyword in the source.
+    pub span: std::ops::Range<usize>,
+    /// The retired single-char spelling encountered (e.g. `"F"`, `"EN"`).
+    pub spelling: &'static str,
+    /// The canonical multi-char spelling that should replace it
+    /// (e.g. `"fn"`, `"enum"`).
+    pub canonical: &'static str,
+    /// 1-indexed line number of the warning.
+    pub line: usize,
+    /// 1-indexed column number (utf-8 byte offset within the line) of the
+    /// warning.
+    pub column: usize,
+}
+
+impl fmt::Display for DeprecationWarning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "warning: deprecated single-char keyword `{}` at line {}:{} — use `{}` instead (single-char form scheduled for removal; see Step 19 of master plan)",
+            self.spelling, self.line, self.column, self.canonical
+        )
+    }
+}
+
+/// Lookup table for the 11 retired single-char keyword spellings.
+/// `spelling` is what appears in source code today; `canonical` is the
+/// multi-char form that replaces it after Step 19 P4 (lexer single-char
+/// removal). Returns `None` for non-retired tokens.
+fn retired_form_canonical(spelling: &str) -> Option<&'static str> {
+    match spelling {
+        "F" => Some("fn"),
+        "S" => Some("struct"),
+        // Note: both `E` (Token::Enum, contextual single-char) and `EN`
+        // (Token::EnumKeyword, unambiguous 2-char) lex to enum-related
+        // tokens. Step 19 retires both — the multi-char form `enum` is
+        // canonical. `E` is added here in addition to `EN` because it
+        // collides with generic-param names (`Result<T, E>`) and is the
+        // root cause of LESSONS L-009.
+        "E" => Some("enum"),
+        "EN" => Some("enum"),
+        "EL" => Some("else"),
+        "M" => Some("match"),
+        "R" => Some("return"),
+        "T" => Some("type"),
+        "U" => Some("use"),
+        "P" => Some("pub"),
+        "W" => Some("trait"),
+        "X" => Some("impl"),
+        _ => None,
+    }
+}
+
+/// Compute 1-indexed (line, column) from a byte offset into `source`.
+/// Lines are split by `\n`; column is the 1-indexed byte offset within the
+/// line (NOT a unicode codepoint count — utf-8 multibyte characters before
+/// the offset will inflate the column number, which is consistent with how
+/// rustc reports source positions in stderr).
+fn byte_offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1usize;
+    let mut last_newline_at: Option<usize> = None;
+    for (i, b) in source.as_bytes().iter().enumerate() {
+        if i >= offset {
+            break;
+        }
+        if *b == b'\n' {
+            line += 1;
+            last_newline_at = Some(i);
+        }
+    }
+    let line_start = last_newline_at.map(|n| n + 1).unwrap_or(0);
+    let column = offset - line_start + 1;
+    (line, column)
+}
+
+/// Tokenize the source and additionally collect deprecation warnings for
+/// every retired single-char keyword usage. Equivalent to `tokenize` for
+/// the token stream; the warning list is informational and never affects
+/// parse correctness.
+///
+/// # Returns
+///
+/// `Ok((tokens, warnings))` on success. `warnings` is empty if the source
+/// uses only multi-char canonical forms.
+///
+/// # Examples
+///
+/// ```
+/// use vais_lexer::tokenize_with_warnings;
+///
+/// let source = "F main() -> i64 { R 0 }";
+/// let (tokens, warnings) = tokenize_with_warnings(source).unwrap();
+/// assert_eq!(warnings.len(), 2); // F and R
+/// assert_eq!(warnings[0].spelling, "F");
+/// assert_eq!(warnings[0].canonical, "fn");
+/// assert_eq!(warnings[1].spelling, "R");
+/// assert_eq!(warnings[1].canonical, "return");
+/// ```
+pub fn tokenize_with_warnings(
+    source: &str,
+) -> Result<(Vec<SpannedToken>, Vec<DeprecationWarning>), LexError> {
+    let tokens = tokenize(source)?;
+    let mut warnings = Vec::new();
+    for tok in &tokens {
+        let lexeme = &source[tok.span.clone()];
+        if let Some(canonical) = retired_form_canonical(lexeme) {
+            // retired_form_canonical's match guarantees lexeme is one of the
+            // 12 static strings; rebind to a 'static slice via the same
+            // table so the warning struct can hold &'static.
+            let spelling: &'static str = match lexeme {
+                "F" => "F",
+                "S" => "S",
+                "E" => "E",
+                "EN" => "EN",
+                "EL" => "EL",
+                "M" => "M",
+                "R" => "R",
+                "T" => "T",
+                "U" => "U",
+                "P" => "P",
+                "W" => "W",
+                "X" => "X",
+                _ => unreachable!("retired_form_canonical returned Some for unknown spelling"),
+            };
+            let (line, column) = byte_offset_to_line_col(source, tok.span.start);
+            warnings.push(DeprecationWarning {
+                span: tok.span.clone(),
+                spelling,
+                canonical,
+                line,
+                column,
+            });
+        }
+    }
+    Ok((tokens, warnings))
+}
+
 /// Tokenize a suffix of `source` starting at byte offset `offset`, returning
 /// tokens with absolute spans (i.e., spans relative to the original `source`).
 ///
@@ -966,9 +1117,8 @@ fn split_keyword_idents(tokens: Vec<SpannedToken>) -> Vec<SpannedToken> {
             if s.len() == 2 {
                 // Check if this 2-char sequence is one of the unambiguous 2-char keywords.
                 // These must NOT be split into two single-char keyword tokens.
+                // EN/EL retired with Step 19 P4 — only LF/LW remain.
                 let two_char_keyword = match s.as_str() {
-                    "EN" => Some(Token::EnumKeyword),
-                    "EL" => Some(Token::Else),
                     "LF" => Some(Token::ForEach),
                     "LW" => Some(Token::While),
                     _ => None,
@@ -1004,22 +1154,14 @@ fn split_keyword_idents(tokens: Vec<SpannedToken>) -> Vec<SpannedToken> {
 }
 
 fn char_to_keyword(c: char) -> Token {
+    // Step 19 P4: retired single-char keywords (F/S/E/M/R/T/U/P/W/X) lex as
+    // identifiers; non-retired ones (I/L/A/B/C/D/O/N/G) stay as keyword tokens.
     match c {
-        'F' => Token::Function,
-        'S' => Token::Struct,
-        'E' => Token::Enum,
         'I' => Token::If,
         'L' => Token::Loop,
-        'M' => Token::Match,
         'A' => Token::Async,
-        'R' => Token::Return,
         'B' => Token::Break,
         'C' => Token::Continue,
-        'T' => Token::TypeKeyword,
-        'U' => Token::Use,
-        'P' => Token::Pub,
-        'W' => Token::Trait,
-        'X' => Token::Impl,
         'D' => Token::Defer,
         'O' => Token::Union,
         'N' => Token::Extern,

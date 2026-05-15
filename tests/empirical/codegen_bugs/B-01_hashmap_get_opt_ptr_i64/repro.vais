@@ -1,0 +1,47 @@
+# B-01: HashMap.get_opt(&key) with K=u64 — silent ptr/i64 coercion
+#
+# Discovered: 2026-05-08 loop 39 (test_transaction.vais multi-bug isolation).
+# Fixture narrowed from 370 LOC to 16 LOC by binary search across describe blocks
+# + scenario set + std imports.
+#
+# Symptom: clang error: '%t6' defined with type 'ptr' but expected 'i64'
+#   call %Option @HashMap_get_opt$u64_u64(%HashMap* %m, i64 %t6)
+#                                                       ^
+# 
+# Root cause hypothesis (NOT yet verified — multi-iter follow-up):
+#   Either vais-codegen silently coerces &u64 to u64 at call site, or
+#   vais-types accepts &K where K is expected without ref-deref insertion.
+#   The signature of HashMap::get_opt is `fn get_opt(&self, key: K) -> Option<V>`
+#   (compiler/std/hashmap.vais:259), so passing `&key` should be rejected at TC
+#   layer or auto-deref'd by codegen. Currently neither happens — silent path.
+#
+# Status: still_silent (codegen lowers to broken IR; clang catches loud).
+# Step 13 candidate (after Step 16 prerequisite if needed) or independent fix.
+#
+# Baseline impact measurement (2026-05-08 loop 41, iter 2):
+#   - vaisdb: 6 file, ~17 사이트 (conflict.vais 7 + att.vais 2 + cow.vais 4 +
+#     window.vais 1 + pipeline.vais 2 + 기타). 모두 check 통과 + build 시 codegen fail.
+#   - std: 0 사이트 (hashmap.vais get_opt 매치는 함수 *정의*, 호출 아님).
+#   - LIVING_SPEC: 0 사이트.
+#   - vais-server / vais-web: 0 사이트.
+#   따라서 fix 영향 범위는 vaisdb 만 — std cascade 위험 0.
+#
+# Fix scope estimate (multi-iter):
+#   iter 3: vais-types 의 method call resolution 에서 &K → K silent accept
+#           path 식별 (check_method_call). 위험: 다른 generic dispatch 영향.
+#   iter 4: TC reject default-strict (E001 + new error code) 또는 codegen
+#           auto-deref. 옵션 A (reject) 가 L-002 north star 정합.
+#   iter 5+: vaisdb 17 site migration (& 제거 또는 ref form 의도 시 to_value).
+#   각 iter INTEGRITY OK 측정 + L-005 (사전 보수 vs empirical narrow) 적용 의무.
+
+use std/hashmap
+
+fn main() -> i64 {
+    m: HashMap<u64, u64> = HashMap.new()
+    m.insert(100u64, 200u64)
+    key: u64 = 100u64
+    match m.get_opt(&key) {
+        Some(v) => v as i64,
+        None => 0,
+    }
+}

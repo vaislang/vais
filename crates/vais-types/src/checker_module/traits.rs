@@ -51,6 +51,14 @@ impl TypeChecker {
         // Set current generics for proper type resolution
         let saved = self.set_generics(&all_generics);
 
+        // Phase 281: Add "Self" as an implicit generic parameter for impl blocks.
+        // This ensures `-> Self` return types resolve to Generic("Self") rather
+        // than Named { name: "Self" }, so the existing Generic(_) catch-all in
+        // unification.rs correctly unifies Self with the concrete struct type.
+        if !self.current_generics.contains(&"Self".to_string()) {
+            self.current_generics.push("Self".to_string());
+        }
+
         // If implementing a trait, validate the impl
         if let Some(trait_name) = &impl_block.trait_name {
             let trait_name_str = trait_name.node.clone();
@@ -177,13 +185,59 @@ impl TypeChecker {
             ));
         }
 
+        // Phase 0 bug C11 fix: when implementing a trait, also register
+        // synthetic method sigs for trait methods that have a default body
+        // and aren't overridden by this impl. Codegen emits the default body
+        // as a regular method on the concrete type; TC also needs to know
+        // the type advertises that method (otherwise `s.doubled()` fails at
+        // TC with "method not found").
+        let trait_default_sigs: Vec<(String, FunctionSig)> =
+            if let Some(trait_name) = &impl_block.trait_name {
+                if let Some(trait_def) = self.traits.get(&trait_name.node).cloned() {
+                    let impl_method_names: std::collections::HashSet<String> =
+                        method_sigs.iter().map(|(n, _)| n.clone()).collect();
+                    trait_def
+                        .methods
+                        .iter()
+                        .filter(|(n, m)| m.has_default && !impl_method_names.contains(*n))
+                        .map(|(n, m)| {
+                            let sig = FunctionSig {
+                                name: n.clone(),
+                                generics: m.generics.clone(),
+                                generic_bounds: HashMap::new(),
+                                params: m.params.clone(),
+                                ret: m.ret.clone(),
+                                is_async: m.is_async,
+                                is_vararg: false,
+                                required_params: None,
+                                contracts: None,
+                                effect_annotation: EffectAnnotation::Infer,
+                                inferred_effects: None,
+                                generic_callees: vec![],
+                            };
+                            (n.clone(), sig)
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+
         // Now insert methods into the struct or enum
         if let Some(struct_def) = self.structs.get_mut(&type_name) {
             for (name, sig) in method_sigs {
                 struct_def.methods.insert(name, sig);
             }
+            for (name, sig) in trait_default_sigs {
+                struct_def.methods.insert(name, sig);
+            }
         } else if let Some(enum_def) = self.enums.get_mut(&type_name) {
             for (name, sig) in method_sigs {
+                enum_def.methods.insert(name, sig);
+            }
+            for (name, sig) in trait_default_sigs {
                 enum_def.methods.insert(name, sig);
             }
         }

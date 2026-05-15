@@ -33,7 +33,7 @@ impl SourceGenerator {
         let mut source = String::new();
         for i in 0..self.struct_count {
             source.push_str(&format!(
-                "S Struct{} {{ field_a: i64, field_b: i64, field_c: bool }}\n",
+                "struct Struct{} {{ field_a: i64, field_b: i64, field_c: bool }}\n",
                 i
             ));
         }
@@ -44,7 +44,7 @@ impl SourceGenerator {
     fn generate_functions(&self) -> String {
         let mut source = String::new();
         for i in 0..self.function_count {
-            source.push_str(&format!("F func{}(x: i64) -> i64 = x + {}\n", i, i));
+            source.push_str(&format!("fn func{}(x: i64) -> i64 = x + {}\n", i, i));
         }
         source
     }
@@ -54,7 +54,7 @@ impl SourceGenerator {
         let mut source = String::new();
         for i in 0..self.enum_count {
             source.push_str(&format!(
-                "E Enum{} {{ Variant{}A, Variant{}B(i64), Variant{}C{{ x: i64, y: i64 }} }}\n",
+                "enum Enum{} {{ Variant{}A, Variant{}B(i64), Variant{}C{{ x: i64, y: i64 }} }}\n",
                 i, i, i, i
             ));
         }
@@ -82,11 +82,11 @@ impl SourceGenerator {
         for i in 0..self.function_count {
             if i == 0 {
                 // Base case
-                source.push_str(&format!("F func{}(x: i64) -> i64 = x + 1\n", i));
+                source.push_str(&format!("fn func{}(x: i64) -> i64 = x + 1\n", i));
             } else {
                 // Call previous function
                 source.push_str(&format!(
-                    "F func{}(x: i64) -> i64 = func{}(x) + {}\n",
+                    "fn func{}(x: i64) -> i64 = func{}(x) + {}\n",
                     i,
                     i - 1,
                     i
@@ -103,12 +103,12 @@ impl SourceGenerator {
 
         // Generate generic structs
         for i in 0..self.struct_count {
-            source.push_str(&format!("S Struct{}<T> {{ value: T }}\n", i));
+            source.push_str(&format!("struct Struct{}<T> {{ value: T }}\n", i));
         }
 
         // Generate generic functions
         for i in 0..self.function_count {
-            source.push_str(&format!("F func{}<T>(x: T) -> T = x\n", i));
+            source.push_str(&format!("fn func{}<T>(x: T) -> T = x\n", i));
         }
 
         source
@@ -119,15 +119,15 @@ impl SourceGenerator {
         let mut source = String::new();
 
         // Generate Option-like enum
-        source.push_str("E Option<T> { None, Some(T) }\n");
+        source.push_str("enum Option<T> { None, Some(T) }\n");
 
         // Generate Result-like enum
-        source.push_str("E Result<T, E> { Ok(T), Err(E) }\n");
+        source.push_str("enum Result<T, E> { Ok(T), Err(E) }\n");
 
         // Generate functions with pattern matching
         for i in 0..self.function_count {
             source.push_str(&format!(
-                r#"F unwrap_or{}(opt: Option<i64>, default: i64) -> i64 = M opt {{
+                r#"fn unwrap_or{}(opt: Option<i64>, default: i64) -> i64 = match opt {{
     Option::Some(x) -> x,
     Option::None -> default
 }}
@@ -416,10 +416,10 @@ fn test_deep_call_chain() {
 
     for i in 0..depth {
         if i == 0 {
-            source.push_str("F func0(x: i64) -> i64 = x + 1\n");
+            source.push_str("fn func0(x: i64) -> i64 = x + 1\n");
         } else {
             source.push_str(&format!(
-                "F func{}(x: i64) -> i64 = func{}(x + 1)\n",
+                "fn func{}(x: i64) -> i64 = func{}(x + 1)\n",
                 i,
                 i - 1
             ));
@@ -437,7 +437,7 @@ fn test_wide_match_expression() {
     let mut source = String::new();
 
     // Generate enum with many variants
-    source.push_str("E Color { ");
+    source.push_str("enum Color { ");
     for i in 0..100 {
         source.push_str(&format!("Color{}", i));
         if i < 99 {
@@ -447,7 +447,7 @@ fn test_wide_match_expression() {
     source.push_str(" }\n");
 
     // Generate function with match on all variants
-    source.push_str("F color_to_num(c: Color) -> i64 = M c {\n");
+    source.push_str("fn color_to_num(c: Color) -> i64 = match c {\n");
     for i in 0..100 {
         source.push_str(&format!("    Color::Color{} -> {},\n", i, i));
     }
@@ -471,7 +471,7 @@ fn test_large_struct_definitions() {
     let num_structs = 1000;
 
     for i in 0..num_structs {
-        source.push_str(&format!("S Struct{} {{\n", i));
+        source.push_str(&format!("struct Struct{} {{\n", i));
         // Each struct has 50 fields
         for j in 0..50 {
             source.push_str(&format!("    field_{}: i64,\n", j));

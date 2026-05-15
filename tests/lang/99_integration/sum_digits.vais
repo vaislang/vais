@@ -1,0 +1,20 @@
+# CHECKS: sum of decimal digits via repeated mod 10.
+fn sum_digits(n: i64) -> i64 {
+    cur: i64 := mut n
+    s: i64 := mut 0
+    LW cur > 0 {
+        s = s + (cur % 10)
+        cur = cur / 10
+    }
+    s
+}
+
+fn main() -> i64 {
+    I sum_digits(0) != 0 { return 1 }
+    I sum_digits(5) != 5 { return 2 }
+    I sum_digits(123) != 6 { return 3 }
+    I sum_digits(999) != 27 { return 4 }
+    I sum_digits(1000) != 1 { return 5 }
+    I sum_digits(99999) != 45 { return 6 }
+    return 0
+}

@@ -1,19 +1,19 @@
 # Chat Server - Main Entry Point
 # TCP WebSocket chat server on port 8081
 
-U room
-U client
+use room
+use client
 
 # External functions for TCP networking
-X F __tcp_listen(port: i64) -> i64
-X F __tcp_accept(listener_fd: i64) -> i64
-X F __tcp_close(fd: i64) -> i64
-X F puts(s: str) -> i64
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
+impl fn __tcp_listen(port: i64) -> i64
+impl fn __tcp_accept(listener_fd: i64) -> i64
+impl fn __tcp_close(fd: i64) -> i64
+impl fn puts(s: str) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
 
 # Global chat room instance (simplified - single room for this example)
-F create_global_room() -> i64 {
+fn create_global_room() -> i64 {
     # Allocate ChatRoom struct: clients_ptr(i64), clients_count(i64), max_clients(i64)
     room_ptr := __malloc(24)
 
@@ -27,7 +27,7 @@ F create_global_room() -> i64 {
 }
 
 # Main server loop
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais WebSocket Chat Server ===")
     puts("Starting server on port 8081...")
 
@@ -35,7 +35,7 @@ F main() -> i64 {
     listener := __tcp_listen(8081)
     I listener < 0 {
         puts("ERROR: Failed to bind to port 8081")
-        R 1
+        return 1
     }
 
     puts("Server started successfully!")
@@ -59,7 +59,7 @@ F main() -> i64 {
             # Handle client in this thread (simplified - no threading for this example)
             # In production, you'd spawn a new thread here
             handle_client(client_fd, room)
-        } EL {
+        } else {
             puts("Accept failed, retrying...")
         }
     }

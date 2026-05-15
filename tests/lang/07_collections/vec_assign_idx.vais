@@ -1,0 +1,28 @@
+# CHECKS: assign to a Vec element by index.
+use std/vec.{vec_new};
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 0..5 {
+        v.push(i * 10)   # [0, 10, 20, 30, 40]
+    }
+
+    # mutate
+    v[0] = 100
+    v[2] = 300
+    v[4] = 500
+
+    I v[0] != 100 { return 1 }
+    I v[1] != 10 { return 2 }
+    I v[2] != 300 { return 3 }
+    I v[3] != 30 { return 4 }
+    I v[4] != 500 { return 5 }
+
+    sum: i64 := mut 0
+    LF i: 0..v.len() {
+        sum = sum + v[i]
+    }
+    # 100+10+300+30+500 = 940
+    I sum != 940 { return 6 }
+    return 0
+}

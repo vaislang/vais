@@ -2,16 +2,99 @@ use super::*;
 use vais_ast::{Expr, Span, Spanned};
 use vais_types::ResolvedType;
 
-fn is_string_vararg_type(ty: &ResolvedType) -> bool {
-    matches!(ty, ResolvedType::Str)
-        || matches!(
-            ty,
-            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
-                if matches!(inner.as_ref(), ResolvedType::Str)
-        )
-}
-
 impl CodeGenerator {
+    fn is_printf_string_arg_type(ty: &ResolvedType) -> bool {
+        match ty {
+            ResolvedType::Str => true,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                matches!(inner.as_ref(), ResolvedType::Str)
+            }
+            _ => false,
+        }
+    }
+
+    fn lower_aggregate_format_arg_to_i64(
+        &mut self,
+        val: &str,
+        ty: &ResolvedType,
+        counter: &mut usize,
+        ir: &mut String,
+    ) -> Option<String> {
+        let named_ty = match ty {
+            ResolvedType::Named { .. } => ty,
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                if matches!(inner.as_ref(), ResolvedType::Named { .. }) =>
+            {
+                inner.as_ref()
+            }
+            _ => return None,
+        };
+        let ResolvedType::Named { name, .. } = named_ty else {
+            return None;
+        };
+        let enum_lookup = name.split_once('$').map(|(base, _)| base).unwrap_or(name);
+        let is_enum =
+            self.types.enums.contains_key(enum_lookup) || self.types.enums.contains_key(name);
+        let llvm_ty = self.type_to_llvm(named_ty);
+        let actual = self.llvm_type_of_checked(val);
+        let pointer_actual = actual
+            .as_deref()
+            .is_some_and(|actual| actual == "ptr" || actual == format!("{}*", llvm_ty));
+
+        if is_enum && pointer_actual {
+            let tag_ptr = self.next_temp(counter);
+            match actual.as_deref() {
+                Some("ptr") => {
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, ptr {}, i32 0, i32 0",
+                        tag_ptr,
+                        llvm_ty,
+                        val
+                    );
+                }
+                _ => {
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                        tag_ptr,
+                        llvm_ty,
+                        llvm_ty,
+                        val
+                    );
+                }
+            }
+            self.fn_ctx.record_emitted_type(&tag_ptr, "i32*");
+            let tag_i32 = self.next_temp(counter);
+            write_ir!(ir, "  {} = load i32, i32* {}", tag_i32, tag_ptr);
+            self.fn_ctx.record_emitted_type(&tag_i32, "i32");
+            let tag_i64 = self.next_temp(counter);
+            write_ir!(ir, "  {} = zext i32 {} to i64", tag_i64, tag_i32);
+            self.fn_ctx.record_emitted_type(&tag_i64, "i64");
+            return Some(tag_i64);
+        }
+
+        if is_enum && actual.as_deref() == Some(llvm_ty.as_str()) {
+            let tag_i32 = self.next_temp(counter);
+            write_ir!(ir, "  {} = extractvalue {} {}, 0", tag_i32, llvm_ty, val);
+            self.fn_ctx.record_emitted_type(&tag_i32, "i32");
+            let tag_i64 = self.next_temp(counter);
+            write_ir!(ir, "  {} = zext i32 {} to i64", tag_i64, tag_i32);
+            self.fn_ctx.record_emitted_type(&tag_i64, "i64");
+            return Some(tag_i64);
+        }
+
+        if pointer_actual {
+            let ptr_i64 = self.next_temp(counter);
+            let ptr_ty = actual.unwrap_or_else(|| format!("{}*", llvm_ty));
+            write_ir!(ir, "  {} = ptrtoint {} {} to i64", ptr_i64, ptr_ty, val);
+            self.fn_ctx.record_emitted_type(&ptr_i64, "i64");
+            return Some(ptr_i64);
+        }
+
+        None
+    }
+
     /// Generate print/println call with format string support
     ///
     /// Converts Vais format strings like `print("x = {}", x)` to printf calls.
@@ -124,18 +207,15 @@ impl CodeGenerator {
                     // {} -> format specifier based on type
                     chars.next();
                     if arg_idx < arg_types.len() {
-                        let spec = if is_string_vararg_type(&arg_types[arg_idx]) {
-                            "%s"
-                        } else {
-                            match &arg_types[arg_idx] {
-                                ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
-                                ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
-                                ResolvedType::I64 | ResolvedType::I128 => "%ld",
-                                ResolvedType::U64 | ResolvedType::U128 => "%lu",
-                                ResolvedType::F32 | ResolvedType::F64 => "%f",
-                                ResolvedType::Bool => "%ld",
-                                _ => "%ld",
-                            }
+                        let spec = match &arg_types[arg_idx] {
+                            ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
+                            ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
+                            ResolvedType::I64 | ResolvedType::I128 => "%ld",
+                            ResolvedType::U64 | ResolvedType::U128 => "%lu",
+                            ResolvedType::F32 | ResolvedType::F64 => "%f",
+                            ty if Self::is_printf_string_arg_type(ty) => "%s",
+                            ResolvedType::Bool => "%ld",
+                            _ => "%ld",
                         };
                         c_format.push_str(spec);
                         arg_idx += 1;
@@ -190,6 +270,7 @@ impl CodeGenerator {
                     let ir_type = self.type_to_llvm(&arg_types[i]);
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = sext {} {} to i32", ext_tmp, ir_type, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i32");
                     printf_args.push(format!("i32 {}", ext_tmp));
                 }
                 ResolvedType::U8 | ResolvedType::U16 => {
@@ -197,6 +278,7 @@ impl CodeGenerator {
                     let ir_type = self.type_to_llvm(&arg_types[i]);
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = zext {} {} to i32", ext_tmp, ir_type, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i32");
                     printf_args.push(format!("i32 {}", ext_tmp));
                 }
                 ResolvedType::I32 | ResolvedType::U32 => {
@@ -207,6 +289,7 @@ impl CodeGenerator {
                     // i1 → zext to i64 for vararg ABI
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = zext i1 {} to i64", ext_tmp, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i64");
                     printf_args.push(format!("i64 {}", ext_tmp));
                 }
                 ResolvedType::F32 => {
@@ -215,13 +298,16 @@ impl CodeGenerator {
                 ResolvedType::F64 => {
                     printf_args.push(format!("double {}", val));
                 }
-                ty if is_string_vararg_type(ty) => {
+                ty if Self::is_printf_string_arg_type(ty) => {
                     // Extract raw i8* pointer from string fat pointer for printf
                     let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
                     printf_args.push(format!("i8* {}", raw_ptr));
                 }
                 _ => {
-                    printf_args.push(format!("i64 {}", val));
+                    let lowered = self
+                        .lower_aggregate_format_arg_to_i64(&val, &arg_types[i], counter, &mut ir)
+                        .unwrap_or(val);
+                    printf_args.push(format!("i64 {}", lowered));
                 }
             }
         }
@@ -317,18 +403,15 @@ impl CodeGenerator {
                 } else if chars.peek() == Some(&'}') {
                     chars.next();
                     if arg_idx < arg_types.len() {
-                        let spec = if is_string_vararg_type(&arg_types[arg_idx]) {
-                            "%s"
-                        } else {
-                            match &arg_types[arg_idx] {
-                                ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
-                                ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
-                                ResolvedType::I64 | ResolvedType::I128 => "%ld",
-                                ResolvedType::U64 | ResolvedType::U128 => "%lu",
-                                ResolvedType::F32 | ResolvedType::F64 => "%f",
-                                ResolvedType::Bool => "%ld",
-                                _ => "%ld",
-                            }
+                        let spec = match &arg_types[arg_idx] {
+                            ResolvedType::I8 | ResolvedType::I16 | ResolvedType::I32 => "%d",
+                            ResolvedType::U8 | ResolvedType::U16 | ResolvedType::U32 => "%u",
+                            ResolvedType::I64 | ResolvedType::I128 => "%ld",
+                            ResolvedType::U64 | ResolvedType::U128 => "%lu",
+                            ResolvedType::F32 | ResolvedType::F64 => "%f",
+                            ty if Self::is_printf_string_arg_type(ty) => "%s",
+                            ResolvedType::Bool => "%ld",
+                            _ => "%ld",
                         };
                         c_format.push_str(spec);
                         arg_idx += 1;
@@ -377,6 +460,7 @@ impl CodeGenerator {
                     let ir_type = self.type_to_llvm(&arg_types[i]);
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = sext {} {} to i32", ext_tmp, ir_type, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i32");
                     arg_vals.push(format!("i32 {}", ext_tmp));
                 }
                 ResolvedType::U8 | ResolvedType::U16 => {
@@ -384,6 +468,7 @@ impl CodeGenerator {
                     let ir_type = self.type_to_llvm(&arg_types[i]);
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = zext {} {} to i32", ext_tmp, ir_type, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i32");
                     arg_vals.push(format!("i32 {}", ext_tmp));
                 }
                 ResolvedType::I32 | ResolvedType::U32 => {
@@ -394,6 +479,7 @@ impl CodeGenerator {
                     // i1 → zext to i64 for vararg ABI
                     let ext_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = zext i1 {} to i64", ext_tmp, val);
+                    self.fn_ctx.record_emitted_type(&ext_tmp, "i64");
                     arg_vals.push(format!("i64 {}", ext_tmp));
                 }
                 ResolvedType::F32 => {
@@ -402,13 +488,16 @@ impl CodeGenerator {
                 ResolvedType::F64 => {
                     arg_vals.push(format!("double {}", val));
                 }
-                ty if is_string_vararg_type(ty) => {
+                ty if Self::is_printf_string_arg_type(ty) => {
                     // Extract raw i8* pointer from string fat pointer for snprintf
                     let raw_ptr = self.extract_str_ptr(&val, counter, &mut ir);
                     arg_vals.push(format!("i8* {}", raw_ptr));
                 }
                 _ => {
-                    arg_vals.push(format!("i64 {}", val));
+                    let lowered = self
+                        .lower_aggregate_format_arg_to_i64(&val, &arg_types[i], counter, &mut ir)
+                        .unwrap_or(val);
+                    arg_vals.push(format!("i64 {}", lowered));
                 }
             }
         }
@@ -444,6 +533,7 @@ impl CodeGenerator {
         // Convert i32 length to i64
         let len_i64 = self.next_temp(counter);
         write_ir!(ir, "  {} = sext i32 {} to i64", len_i64, len_i32);
+        self.fn_ctx.record_emitted_type(&len_i64, "i64");
 
         // Step 2: malloc(len + 1)
         let buf_size = self.next_temp(counter);
@@ -451,8 +541,9 @@ impl CodeGenerator {
 
         let buf_ptr = self.next_temp(counter);
         write_ir!(ir, "  {} = call i8* @malloc(i64 {})", buf_ptr, buf_size);
-        // Track allocation for automatic cleanup at scope exit
-        ir.push_str(&self.track_alloc(buf_ptr.clone()));
+        self.fn_ctx.record_emitted_type(&buf_ptr, "i8*");
+        let (track_ir, slot) = self.track_alloc_with_slot(buf_ptr.clone());
+        ir.push_str(&track_ir);
 
         // Step 3: snprintf(buf, len+1, fmt, ...)
         let _write_result = self.next_temp(counter);
@@ -471,6 +562,10 @@ impl CodeGenerator {
 
         // Build fat pointer { i8*, i64 } with the formatted string
         let result = self.build_str_fat_ptr(&buf_ptr, &len_i64, counter, &mut ir);
+        if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+            frame.push(slot.clone());
+        }
+        self.fn_ctx.string_value_slot.insert(result.clone(), slot);
         Ok((result, ir))
     }
 
@@ -499,6 +594,7 @@ impl CodeGenerator {
             fmt_len,
             fmt_name
         );
+        self.fn_ctx.record_emitted_type(&fmt_ptr, "i8*");
         let i32_result = self.next_temp(counter);
         write_ir!(
             ir,
@@ -507,8 +603,10 @@ impl CodeGenerator {
             fmt_ptr,
             arg_val
         );
+        self.fn_ctx.record_emitted_type(&i32_result, "i32");
         let result = self.next_temp(counter);
         write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
+        self.fn_ctx.record_emitted_type(&result, "i64");
         Ok((result, ir))
     }
 
@@ -537,6 +635,7 @@ impl CodeGenerator {
             fmt_len,
             fmt_name
         );
+        self.fn_ctx.record_emitted_type(&fmt_ptr, "i8*");
         let i32_result = self.next_temp(counter);
         write_ir!(
             ir,
@@ -545,8 +644,10 @@ impl CodeGenerator {
             fmt_ptr,
             arg_val
         );
+        self.fn_ctx.record_emitted_type(&i32_result, "i32");
         let result = self.next_temp(counter);
         write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
+        self.fn_ctx.record_emitted_type(&result, "i64");
         Ok((result, ir))
     }
 }

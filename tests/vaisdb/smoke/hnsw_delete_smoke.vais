@@ -1,0 +1,165 @@
+use vector/hnsw/types
+use vector/hnsw/delete
+use vector/hnsw/search
+use storage/error
+
+struct SmokeDeleteStore {
+    node: HnswNode,
+    vector: Vec<f32>,
+    has_node: bool,
+    stored_count: u64,
+}
+
+impl SmokeDeleteStore {
+    fn new(node: HnswNode) -> SmokeDeleteStore {
+        vector: Vec<f32> := mut Vec.with_capacity(2)
+        vector.push(0.0)
+        vector.push(0.0)
+        SmokeDeleteStore {
+            node,
+            vector,
+            has_node: true,
+            stored_count: 0,
+        }
+    }
+}
+
+impl SmokeDeleteStore : NodeStore {
+    fn load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
+        I node_id == self.node.node_id && self.has_node {
+            return Ok(self.node.clone())
+        }
+        Err(err_internal("missing smoke delete node"))
+    }
+
+    fn load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
+        values: Vec<f32> := mut Vec.with_capacity(2)
+        values.push(0.0)
+        values.push(0.0)
+        Ok(values)
+    }
+
+    fn store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
+        I node.node_id != self.node.node_id {
+            return Err(err_internal("unexpected smoke delete node"))
+        }
+        self.node = node
+        self.has_node = true
+        self.stored_count += 1
+        Ok(())
+    }
+
+    fn allocate_node_id(mut self) -> u64 {
+        1
+    }
+
+    fn get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
+        Ok((9 as u8, node_id as u32))
+    }
+
+    fn allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
+        Ok((9 as u8, node_id as u32))
+    }
+}
+
+impl SmokeDeleteStore : NodeLookup {
+    fn get_node(self, node_id: u64) -> Result<&HnswNode, VaisError> {
+        I node_id == self.node.node_id && self.has_node {
+            return Ok(&self.node)
+        }
+        Err(err_internal("missing smoke delete lookup node"))
+    }
+
+    fn get_vector(self, node_id: u64) -> Result<&[f32], VaisError> {
+        I node_id == self.node.node_id && self.has_node {
+            return Ok(self.vector[0..2])
+        }
+        Err(err_internal("missing smoke delete lookup vector"))
+    }
+}
+
+fn main() -> i64 {
+    config := mut match HnswConfig.new(2 as u16, 4 as u16, 4 as u32, 4 as u32, 8 as u64, DISTANCE_L2) {
+        Ok(v) => v,
+        Err(_) => { return 1 },
+    }
+    meta := mut HnswMeta.new(config, 13 as u32)
+    meta.add_node()
+    meta.update_entry_point(1, 1 as u8)
+
+    node := mut HnswNode.new(1, 7 as u32, 0 as u16, 1 as u8, 100, 1 as u32)
+    match node.add_neighbor(0 as u8, HnswNeighbor.new(2, 1.0 as f32)) {
+        Ok(_) => {},
+        Err(_) => { return 2 },
+    }
+    match node.add_neighbor(1 as u8, HnswNeighbor.new(3, 2.0 as f32)) {
+        Ok(_) => {},
+        Err(_) => { return 3 },
+    }
+
+    store := mut SmokeDeleteStore.new(node)
+    layers := mut match hnsw_delete(
+        1,
+        &mut meta,
+        &mut store,
+        200,
+        4 as u32,
+        9 as u8,
+        44 as u32,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            I e.code == "VE-02-03-004" { return 30 }
+            return 4
+        },
+    }
+
+    I layers.len() != 2 { return 5 }
+    I layers[0] != 0 as u8 { return 6 }
+    I layers[1] != 1 as u8 { return 7 }
+    I meta.total_nodes != 1 { return 8 }
+    I meta.total_deleted != 1 { return 9 }
+    I meta.active_nodes() != 0 { return 10 }
+    I store.stored_count != 1 { return 11 }
+
+    deleted := mut match store.load_node(1) {
+        Ok(n) => n,
+        Err(_) => { return 12 },
+    }
+    I !deleted.is_deleted { return 13 }
+    I deleted.txn_id_expire != 200 { return 14 }
+    I deleted.expire_cmd_id != 4 as u32 { return 15 }
+    I deleted.is_current() { return 16 }
+
+    match hnsw_delete(
+        1,
+        &mut meta,
+        &mut store,
+        201,
+        5 as u32,
+        9 as u8,
+        44 as u32,
+    ) {
+        Ok(_) => { return 17 },
+        Err(e) => {
+            I e.code != "VE-02-03-004" { return 18 }
+        },
+    }
+
+    match hnsw_delete(
+        INVALID_NODE_ID,
+        &mut meta,
+        &mut store,
+        202,
+        6 as u32,
+        9 as u8,
+        44 as u32,
+    ) {
+        Ok(_) => { return 19 },
+        Err(e) => {
+            I e.code != "VE-02-03-004" { return 20 }
+        },
+    }
+
+    return 0
+}

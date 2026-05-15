@@ -1,0 +1,23 @@
+# CHECKS: array literal indexing and iteration via Vec (since `[T; N]` annotation
+# rejects slice-typed literals — bug C15).
+use std/vec.{vec_new};
+
+fn main() -> i64 {
+    a: Vec<i64> := mut vec_new()
+    a.push(10)
+    a.push(20)
+    a.push(30)
+    a.push(40)
+    a.push(50)
+
+    I a[0] != 10 { return 1 }
+    I a[2] != 30 { return 2 }
+    I a[4] != 50 { return 3 }
+
+    sum: i64 := mut 0
+    LF i: 0..a.len() {
+        sum = sum + a[i]
+    }
+    I sum != 150 { return 4 }
+    return 0
+}

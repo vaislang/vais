@@ -245,3 +245,35 @@ pub(crate) fn print_plugin_diagnostics(diagnostics: &[Diagnostic], source: &str,
         }
     }
 }
+
+/// Emit single-char keyword deprecation warnings to stderr (Step 19 P1).
+///
+/// Vais is migrating from dual-syntax (single-char `F`/`S`/`EN`/...) to
+/// multi-char-only (`fn`/`struct`/`enum`/...). Phase 1 of Step 19 is the
+/// deprecation-warning phase: source code continues to compile, but every
+/// retired single-char keyword usage produces a warning here.
+///
+/// Suppression is opt-in via `VAIS_SUPPRESS_SINGLE_CHAR_WARN=1` so the
+/// intermediate phases (P2 generic param rename / P3 codemod migration)
+/// can run without flooding logs.
+///
+/// `path_display` is the user-facing path (e.g. `"foo.vais"`) prefixed
+/// to each warning so multi-file builds remain attributable.
+pub fn emit_deprecation_warnings(warnings: &[vais_lexer::DeprecationWarning], path_display: &str) {
+    if warnings.is_empty() {
+        return;
+    }
+    if std::env::var("VAIS_SUPPRESS_SINGLE_CHAR_WARN").as_deref() == Ok("1") {
+        return;
+    }
+    use std::io::Write;
+    let stderr = std::io::stderr();
+    let mut handle = stderr.lock();
+    for w in warnings {
+        let _ = writeln!(
+            handle,
+            "{}:{}:{}: warning: deprecated single-char keyword `{}` — use `{}` instead (single-char form scheduled for removal; see Step 19 of master plan)",
+            path_display, w.line, w.column, w.spelling, w.canonical
+        );
+    }
+}

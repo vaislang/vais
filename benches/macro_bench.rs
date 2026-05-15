@@ -1113,7 +1113,7 @@ fn generate_scaling_source(lines: usize) -> String {
     // Generate struct definitions
     for i in 0..lines / 10 {
         source.push_str(&format!(
-            "S Struct{} {{\n    field1: i64,\n    field2: i64,\n}}\n\n",
+            "struct Struct{} {{\n    field1: i64,\n    field2: i64,\n}}\n\n",
             i
         ));
     }
@@ -1121,7 +1121,7 @@ fn generate_scaling_source(lines: usize) -> String {
     // Generate function definitions
     for i in 0..lines / 10 {
         source.push_str(&format!(
-            "F func{}(x: i64) -> i64 {{\n    y := x + {}\n    R y\n}}\n\n",
+            "fn func{}(x: i64) -> i64 {{\n    y := x + {}\n    return y\n}}\n\n",
             i, i
         ));
     }

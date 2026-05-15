@@ -1,0 +1,163 @@
+use src/http/header
+use src/http/method
+use src/http/request
+
+fn smoke_form_body() -> i64 {
+    pairs := parse_form_body("name=vais&count=3&empty")
+    I pairs.len() != 3 {
+        println("FAIL form pair count")
+        return 1
+    }
+    I kv_vec_get(pairs, "name") != "vais" {
+        println("FAIL form name")
+        return 2
+    }
+    I kv_vec_get(pairs, "count") != "3" {
+        println("FAIL form count")
+        return 3
+    }
+    I kv_vec_get(pairs, "empty") != "" {
+        println("FAIL form empty")
+        return 4
+    }
+
+    parsed := parse_body("application/x-www-form-urlencoded", "name=vais&mode=server")
+    match parsed {
+        Ok(form_pairs) => {
+            I form_pairs.len() != 2 {
+                println("FAIL parse_body form count")
+                return 5
+            }
+            I kv_vec_get(form_pairs, "mode") != "server" {
+                println("FAIL parse_body form mode")
+                return 6
+            }
+        },
+        Err(_) => {
+            println("FAIL parse_body form err")
+            return 7
+        },
+    }
+
+    0
+}
+
+fn smoke_json_body() -> i64 {
+    pairs := parse_json_body("{\"name\":\"vais\",\"count\":3,\"active\":true}")
+    I pairs.len() != 3 {
+        println("FAIL json pair count")
+        return 10
+    }
+    I kv_vec_get(pairs, "name") != "vais" {
+        println("FAIL json name")
+        return 11
+    }
+    I kv_vec_get(pairs, "count") != "3" {
+        println("FAIL json count")
+        return 12
+    }
+    I kv_vec_get(pairs, "active") != "true" {
+        println("FAIL json active")
+        return 13
+    }
+
+    parsed := parse_body("application/json; charset=utf-8", "{\"name\":\"vais\",\"count\":3}")
+    match parsed {
+        Ok(json_pairs) => {
+            I json_pairs.len() != 2 {
+                println("FAIL parse_body json count")
+                return 14
+            }
+            I kv_vec_get(json_pairs, "name") != "vais" {
+                println("FAIL parse_body json name")
+                return 15
+            }
+            I kv_vec_get(json_pairs, "count") != "3" {
+                println("FAIL parse_body json number")
+                return 16
+            }
+        },
+        Err(e) => {
+            I e == "unsupported content-type" {
+                println("FAIL parse_body json unsupported")
+                return 17
+            }
+            I e == "malformed json body" {
+                println("FAIL parse_body json malformed")
+                return 18
+            }
+            println("FAIL parse_body json err")
+            return 19
+        },
+    }
+
+    0
+}
+
+fn smoke_request_body_and_errors() -> i64 {
+    req := mut Request.new(HttpMethod.Post, "/submit")
+    req.headers = req.headers.set(CONTENT_TYPE, "application/json")
+    req.body = "{\"ok\":true}"
+
+    parsed := parse_body(req.content_type(), req.body)
+    match parsed {
+        Ok(body_pairs) => {
+            I body_pairs.len() != 1 {
+                println("FAIL request body count")
+                return 20
+            }
+            I kv_vec_get(body_pairs, "ok") != "true" {
+                println("FAIL request body ok")
+                return 21
+            }
+        },
+        Err(_) => {
+            println("FAIL request body err")
+            return 22
+        },
+    }
+
+    unsupported := parse_body("text/plain", "hello")
+    match unsupported {
+        Ok(_) => {
+            println("FAIL unsupported should err")
+            return 23
+        },
+        Err(e) => {
+            I e != "unsupported content-type" {
+                println("FAIL unsupported err message")
+                return 24
+            }
+        },
+    }
+
+    malformed := parse_body("application/json", "not-json")
+    match malformed {
+        Ok(_) => {
+            println("FAIL malformed should err")
+            return 25
+        },
+        Err(e) => {
+            I e != "malformed json body" {
+                println("FAIL malformed err message")
+                return 26
+            }
+        },
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    failures := mut 0
+    failures += smoke_form_body()
+    failures += smoke_json_body()
+    failures += smoke_request_body_and_errors()
+
+    I failures > 0 {
+        println("VAIS_SERVER_BODY_PARSER_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_BODY_PARSER_RUNTIME_OK")
+    0
+}

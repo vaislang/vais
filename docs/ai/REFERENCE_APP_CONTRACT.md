@@ -2,7 +2,7 @@
 
 # Vais Reference App Contract
 
-Last reviewed: 2026-05-15
+Last reviewed: 2026-05-16
 
 The reference app is the end-to-end validation target for AI-written Vais code.
 It should be small enough for a new AI agent to understand from official docs,
@@ -30,6 +30,16 @@ playground boundaries that public docs mention.
   involved.
 - A playground example extracted from the same source pattern.
 
+## Current Reference App
+
+Name: AI docs notes service
+
+Path: `tests/ai_reference_app/notes_service.vais`
+
+Gate: `scripts/check-ai-reference-app.sh`
+
+Small canonical Vais program that a new AI agent can reconstruct from docs/ai and docs/LANGUAGE_SPEC.md without relying on model memory.
+
 ## Acceptance Gates
 
 ```bash
@@ -38,6 +48,7 @@ cargo test -p vais-types --test inference_unification_tests -- --nocapture
 cargo test -p vaisc --test e2e -- --nocapture
 node scripts/check-public-claims.mjs
 node scripts/check-ai-docs-sync.mjs
+bash scripts/check-ai-reference-app.sh
 ```
 
 The reference app is complete only when a clean checkout can build and test it

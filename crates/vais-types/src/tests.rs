@@ -3,7 +3,7 @@ use vais_parser::parse;
 
 #[test]
 fn test_simple_function() {
-    let source = "F add(a:i64,b:i64)->i64=a+b";
+    let source = "fn add(a:i64,b:i64)->i64=a+b";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_ok());
@@ -11,7 +11,7 @@ fn test_simple_function() {
 
 #[test]
 fn test_type_mismatch() {
-    let source = "F add(a:i64,b:str)->i64=a+b";
+    let source = "fn add(a:i64,b:str)->i64=a+b";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_err());
@@ -20,8 +20,8 @@ fn test_type_mismatch() {
 #[test]
 fn test_struct() {
     let source = r#"
-        S Point{x:f64,y:f64}
-        F make_point()->Point=Point{x:1.0,y:2.0}
+        struct Point{x:f64,y:f64}
+        fn make_point()->Point=Point{x:1.0,y:2.0}
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -40,7 +40,7 @@ fn test_empty_module() {
 
 #[test]
 fn test_minimal_function() {
-    let source = "F f()->()=()";
+    let source = "fn f()->()=()";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_ok());
@@ -48,7 +48,7 @@ fn test_minimal_function() {
 
 #[test]
 fn test_empty_struct() {
-    let source = "S Empty{}";
+    let source = "struct Empty{}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_ok());
@@ -56,7 +56,7 @@ fn test_empty_struct() {
 
 #[test]
 fn test_unit_enum() {
-    let source = "E Unit{A,B,C}";
+    let source = "enum Unit{A,B,C}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_ok());
@@ -64,7 +64,7 @@ fn test_unit_enum() {
 
 #[test]
 fn test_undefined_variable() {
-    let source = "F f()->i64=undefined_var";
+    let source = "fn f()->i64=undefined_var";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     let result = checker.check_module(&module);
@@ -73,7 +73,7 @@ fn test_undefined_variable() {
 
 #[test]
 fn test_undefined_function() {
-    let source = "F f()->i64=undefined_func()";
+    let source = "fn f()->i64=undefined_func()";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     let result = checker.check_module(&module);
@@ -84,7 +84,7 @@ fn test_undefined_function() {
 fn test_undefined_type() {
     // Note: Type checker may not catch undefined types at parse time
     // This tests that we handle the undefined type case
-    let source = "F f(x:UndefinedType)->()=()";
+    let source = "fn f(x:UndefinedType)->()=()";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     let _result = checker.check_module(&module);
@@ -94,7 +94,7 @@ fn test_undefined_type() {
 #[test]
 fn test_did_you_mean_variable() {
     // Test that did-you-mean suggestions work for typos in variable names
-    let source = "F test()->i64{count:=42;coutn}";
+    let source = "fn test()->i64{count:=42;coutn}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     let result = checker.check_module(&module);
@@ -113,7 +113,7 @@ fn test_did_you_mean_variable() {
 #[test]
 fn test_did_you_mean_no_match() {
     // Test that no suggestion is given when names are too different
-    let source = "F test()->i64{count:=42;xyz}";
+    let source = "fn test()->i64{count:=42;xyz}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     let result = checker.check_module(&module);
@@ -149,7 +149,7 @@ fn test_levenshtein_distance() {
 
 #[test]
 fn test_return_type_mismatch() {
-    let source = "F f()->i64=\"string\"";
+    let source = "fn f()->i64=\"string\"";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_err());
@@ -157,7 +157,7 @@ fn test_return_type_mismatch() {
 
 #[test]
 fn test_integer_to_float_mismatch() {
-    let source = "F f()->f64=42";
+    let source = "fn f()->f64=42";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     // Phase 160: int→float numeric promotion is allowed
@@ -166,7 +166,7 @@ fn test_integer_to_float_mismatch() {
 
 #[test]
 fn test_array_element_type_mismatch() {
-    let source = "F f()->[i64]=[1,2,\"three\"]";
+    let source = "fn f()->[i64]=[1,2,\"three\"]";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_err());
@@ -175,8 +175,8 @@ fn test_array_element_type_mismatch() {
 #[test]
 fn test_function_wrong_arg_count() {
     let source = r#"
-        F add(a:i64,b:i64)->i64=a+b
-        F f()->i64=add(1)
+        fn add(a:i64,b:i64)->i64=a+b
+        fn f()->i64=add(1)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -186,8 +186,8 @@ fn test_function_wrong_arg_count() {
 #[test]
 fn test_function_wrong_arg_type() {
     let source = r#"
-        F add(a:i64,b:i64)->i64=a+b
-        F f()->i64=add(1,"two")
+        fn add(a:i64,b:i64)->i64=a+b
+        fn f()->i64=add(1,"two")
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -197,8 +197,8 @@ fn test_function_wrong_arg_type() {
 #[test]
 fn test_struct_field_type_mismatch() {
     let source = r#"
-        S Point{x:f64,y:f64}
-        F f()->Point=Point{x:"one",y:2.0}
+        struct Point{x:f64,y:f64}
+        fn f()->Point=Point{x:"one",y:2.0}
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -208,8 +208,8 @@ fn test_struct_field_type_mismatch() {
 #[test]
 fn test_struct_missing_field() {
     let source = r#"
-        S Point{x:f64,y:f64}
-        F f()->Point=Point{x:1.0}
+        struct Point{x:f64,y:f64}
+        fn f()->Point=Point{x:1.0}
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -220,7 +220,7 @@ fn test_struct_missing_field() {
 
 #[test]
 fn test_binary_op_type_mismatch() {
-    let source = "F f()->i64=\"a\"+1";
+    let source = "fn f()->i64=\"a\"+1";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_err());
@@ -228,7 +228,7 @@ fn test_binary_op_type_mismatch() {
 
 #[test]
 fn test_comparison_type_mismatch() {
-    let source = "F f()->bool=\"a\">1";
+    let source = "fn f()->bool=\"a\">1";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_err());
@@ -236,7 +236,7 @@ fn test_comparison_type_mismatch() {
 
 #[test]
 fn test_logical_op_on_non_bool() {
-    let source = "F f()->bool=1&&2";
+    let source = "fn f()->bool=1&&2";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     // Logical operations on non-boolean should fail
@@ -245,26 +245,62 @@ fn test_logical_op_on_non_bool() {
 }
 
 #[test]
-fn test_if_condition_non_bool() {
-    let source = "F f()->i64=I 42{1}E{0}";
+fn test_if_condition_strict_integer_truthy_rejected() {
+    let source = "fn f()->i64=I 42{1}else{0}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
-    // bool↔i64 implicit coercion is FORBIDDEN (CLAUDE.md Phase 158 rule).
-    // Integer literal as if-condition must be a type error.
-    assert!(checker.check_module(&module).is_err());
+    // Master Plan v17 §A4-06 (Step 13 stage 1, LANDED 2026-05-04): integer
+    // truthy in `I`/`LW`/ternary/while conditions is now rejected by
+    // default. The Phase 254 lenient relaxation was reverted because every
+    // baseline use site (vaisdb `I x != 0 { }`, `I count != 0 { }`, etc.)
+    // already uses the explicit `!= 0` form — the lenient rule was a
+    // silent surface per L-002 north star.
+    //
+    // Negative form: `I 42 { ... }` (integer literal as condition) must
+    // fail at vaisc check with a "expected bool" type error. Previously
+    // this test asserted is_ok() under Phase 254; that was renamed and
+    // inverted on the strict-default LANDED commit (master plan v17).
+    //
+    // Legacy lenient mode is still reachable via VAIS_REJECT_A4_06=0 escape
+    // hatch (control_flow.rs:195,250,282,407).
+    assert!(
+        checker.check_module(&module).is_err(),
+        "A4-06 strict default must reject integer truthy in `I` condition"
+    );
 }
 
 #[test]
 fn test_if_branch_type_mismatch() {
-    let source = "F f(x:bool)->i64=I x{1}E{\"zero\"}";
+    let source = "fn f(x:bool)->i64=I x{1}else{\"zero\"}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_err());
 }
 
 #[test]
+fn test_codegen_unresolved_type_detector() {
+    let unresolved_vec = ResolvedType::Named {
+        name: "Vec".to_string(),
+        generics: vec![ResolvedType::Var(7)],
+    };
+    assert_eq!(
+        TypeChecker::codegen_unresolved_type(&unresolved_vec),
+        Some("type variable #7".to_string())
+    );
+
+    let generic_template = ResolvedType::Named {
+        name: "Vec".to_string(),
+        generics: vec![ResolvedType::Generic("T".to_string())],
+    };
+    assert_eq!(
+        TypeChecker::codegen_unresolved_type(&generic_template),
+        None
+    );
+}
+
+#[test]
 fn test_match_arm_type_mismatch() {
-    let source = "F f(x:i64)->i64=M x{0=>0,1=>\"one\",_=>2}";
+    let source = "fn f(x:i64)->i64=match x{0=>0,1=>\"one\",_=>2}";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_err());
@@ -272,7 +308,7 @@ fn test_match_arm_type_mismatch() {
 
 #[test]
 fn test_generic_function() {
-    let source = "F identity<T>(x:T)->T=x";
+    let source = "fn identity<T>(x:T)->T=x";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_ok());
@@ -282,8 +318,8 @@ fn test_generic_function() {
 fn test_generic_struct() {
     // Simple generic struct
     let source = r#"
-        S Box<T>{value:T}
-        F get_value<T>(b:Box<T>)->T=b.value
+        struct Box<T>{value:T}
+        fn get_value<T>(b:Box<T>)->T=b.value
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -292,7 +328,7 @@ fn test_generic_struct() {
 
 #[test]
 fn test_recursive_function() {
-    let source = "F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
+    let source = "fn fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_ok());
@@ -301,8 +337,8 @@ fn test_recursive_function() {
 #[test]
 fn test_mutual_recursion() {
     let source = r#"
-        F is_even(n:i64)->bool=n==0?true:is_odd(n-1)
-        F is_odd(n:i64)->bool=n==0?false:is_even(n-1)
+        fn is_even(n:i64)->bool=n==0?true:is_odd(n-1)
+        fn is_odd(n:i64)->bool=n==0?false:is_even(n-1)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -312,7 +348,7 @@ fn test_mutual_recursion() {
 #[test]
 fn test_nested_blocks() {
     let source = r#"
-        F f()->i64{
+        fn f()->i64{
             x:=1;
             {
                 y:=2;
@@ -331,7 +367,7 @@ fn test_nested_blocks() {
 #[test]
 fn test_shadowing() {
     let source = r#"
-        F f()->i64{
+        fn f()->i64{
             x:=1;
             x:=2;
             x
@@ -345,7 +381,7 @@ fn test_shadowing() {
 #[test]
 fn test_lambda_type_inference() {
     let source = r#"
-        F f()->i64{
+        fn f()->i64{
             add:=|a:i64,b:i64|a+b;
             add(1,2)
         }
@@ -358,9 +394,9 @@ fn test_lambda_type_inference() {
 #[test]
 fn test_higher_order_function() {
     let source = r#"
-        F apply(f:(i64)->i64,x:i64)->i64=f(x)
-        F double(x:i64)->i64=x*2
-        F test()->i64=apply(double,21)
+        fn apply(f:(i64)->i64,x:i64)->i64=f(x)
+        fn double(x:i64)->i64=x*2
+        fn test()->i64=apply(double,21)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -371,7 +407,7 @@ fn test_higher_order_function() {
 fn test_array_operations() {
     // Simple array indexing test
     let source = r#"
-        F get_first(arr:[i64])->i64=arr[0]
+        fn get_first(arr:[i64])->i64=arr[0]
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -380,10 +416,10 @@ fn test_array_operations() {
 
 #[test]
 fn test_trait_impl() {
-    // Test simple trait definition using W keyword
+    // Test simple trait definition using trait keyword
     let source = r#"
-        W Display{F display(s:&Self)->str=""}
-        S Point{x:f64,y:f64}
+        trait Display{fn display(s:&Self)->str=""}
+        struct Point{x:f64,y:f64}
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -392,12 +428,12 @@ fn test_trait_impl() {
 
 #[test]
 fn test_method_call() {
-    // Test struct with impl block using X keyword
+    // Test struct with impl block using impl keyword
     let source = r#"
-        S Counter{value:i64}
-        X Counter{
-            F new()->Counter=Counter{value:0}
-            F get(c:&Counter)->i64=c.value
+        struct Counter{value:i64}
+        impl Counter{
+            fn new()->Counter=Counter{value:0}
+            fn get(c:&Counter)->i64=c.value
         }
     "#;
     let module = parse(source).unwrap();
@@ -408,7 +444,7 @@ fn test_method_call() {
 #[test]
 fn test_optional_type() {
     let source = r#"
-        F maybe(x:i64)->i64?=I x>0{x}E{none}
+        fn maybe(x:i64)->i64?=I x>0{x}else{none}
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -419,7 +455,7 @@ fn test_optional_type() {
 #[test]
 fn test_integer_widening() {
     let source = r#"
-        F f(a:i32,b:i64)->i64{
+        fn f(a:i32,b:i64)->i64{
             x:i64=a;
             x+b
         }
@@ -433,7 +469,7 @@ fn test_integer_widening() {
 #[test]
 fn test_all_integer_types() {
     let source = r#"
-        F test()->(){
+        fn test()->(){
             a:i8=1;
             b:i16=2;
             c:i32=3;
@@ -454,7 +490,7 @@ fn test_all_integer_types() {
 fn test_float_types() {
     // Test float type declarations - inference defaults to f64
     let source = r#"
-        F test()->f64{
+        fn test()->f64{
             a:=1.0;
             b:=2.0;
             a+b
@@ -468,7 +504,7 @@ fn test_float_types() {
 #[test]
 fn test_loop_with_break_value() {
     let source = r#"
-        F find_first(arr:[i64],target:i64)->i64{
+        fn find_first(arr:[i64],target:i64)->i64{
             L i:0..10{
                 I arr[i]==target{B i}
             };
@@ -483,7 +519,7 @@ fn test_loop_with_break_value() {
 #[test]
 fn test_nested_generics() {
     // Use simple generics that the parser supports
-    let source = "F f<T>(x:T)->T=x";
+    let source = "fn f<T>(x:T)->T=x";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_ok());
@@ -491,7 +527,7 @@ fn test_nested_generics() {
 
 #[test]
 fn test_generic_with_bounds() {
-    let source = "F compare<T:Ord>(a:T,b:T)->bool=a<b";
+    let source = "fn compare<T:Ord>(a:T,b:T)->bool=a<b";
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
     assert!(checker.check_module(&module).is_ok());
@@ -503,8 +539,8 @@ fn test_generic_with_bounds() {
 fn test_generic_function_instantiation() {
     // Test that calling a generic function records an instantiation
     let source = r#"
-        F identity<T>(x:T)->T=x
-        F main()->i64=identity(42)
+        fn identity<T>(x:T)->T=x
+        fn main()->i64=identity(42)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -532,8 +568,8 @@ fn test_generic_function_instantiation() {
 fn test_generic_function_multiple_instantiations() {
     // Test that calling a generic function with different types records multiple instantiations
     let source = r#"
-        F identity<T>(x:T)->T=x
-        F main()->f64{
+        fn identity<T>(x:T)->T=x
+        fn main()->f64{
             a:=identity(42);
             b:=identity(3.14);
             b
@@ -567,8 +603,8 @@ fn test_generic_function_multiple_instantiations() {
 fn test_generic_struct_instantiation() {
     // Test that creating a generic struct records an instantiation
     let source = r#"
-        S Pair<T>{first:T,second:T}
-        F main()->i64{
+        struct Pair<T>{first:T,second:T}
+        fn main()->i64{
             p:=Pair{first:1,second:2};
             p.first
         }
@@ -593,7 +629,7 @@ fn test_generic_struct_instantiation() {
 fn test_generic_no_instantiation_without_call() {
     // Test that just defining a generic function doesn't record instantiation
     let source = r#"
-        F identity<T>(x:T)->T=x
+        fn identity<T>(x:T)->T=x
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -610,8 +646,8 @@ fn test_generic_no_instantiation_without_call() {
 #[test]
 fn test_clear_generic_instantiations() {
     let source = r#"
-        F identity<T>(x:T)->T=x
-        F main()->i64=identity(42)
+        fn identity<T>(x:T)->T=x
+        fn main()->i64=identity(42)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -627,12 +663,12 @@ fn test_generic_function_with_struct_return() {
     // Test generic function returning a generic struct
     // Note: Using T directly as return type due to parser limitations with ->Generic<T>
     let source = r#"
-        S Container<T>{value:T}
-        F make_container<T>(x:T)->T{
+        struct Container<T>{value:T}
+        fn make_container<T>(x:T)->T{
             c:=Container{value:x};
             c.value
         }
-        F main()->i64{
+        fn main()->i64{
             v:=make_container(42);
             v
         }
@@ -664,12 +700,12 @@ fn test_generic_instantiation_kind() {
     use crate::InstantiationKind;
 
     let source = r#"
-        S Holder<T>{data:T}
-        F hold<T>(x:T)->T{
+        struct Holder<T>{data:T}
+        fn hold<T>(x:T)->T{
             h:=Holder{data:x};
             h.data
         }
-        F main()->i64{
+        fn main()->i64{
             r:=hold(42);
             r
         }
@@ -701,8 +737,8 @@ fn test_generic_instantiation_kind() {
 fn test_nested_generic_vec_hashmap_option() {
     // Simplified - generic struct test
     let source = r#"
-        S Container<T>{data:T}
-        F make<T>(x:T)->Container<T> =Container{data:x}
+        struct Container<T>{data:T}
+        fn make<T>(x:T)->Container<T> =Container{data:x}
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -713,7 +749,7 @@ fn test_nested_generic_vec_hashmap_option() {
 fn test_option_of_vec_type_inference() {
     // Test Option<Vec<T> > type inference with spaces
     let source = r#"
-        F get_items()->Option<Vec<i64> > =Some([1,2,3])
+        fn get_items()->Option<Vec<i64> > =Some([1,2,3])
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -725,8 +761,8 @@ fn test_option_of_vec_type_inference() {
 fn test_hashmap_with_option_values() {
     // Simplified - basic struct test
     let source = r#"
-        S Cache{count:i64}
-        F make()->Cache=Cache{count:0}
+        struct Cache{count:i64}
+        fn make()->Cache=Cache{count:0}
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -737,7 +773,7 @@ fn test_hashmap_with_option_values() {
 fn test_triple_nested_generics() {
     // Test Vec<HashMap<K, Option<Vec<T> > > > with spaces
     let source = r#"
-        F complex()->Vec<HashMap<str,Option<Vec<i64> > > > =[]
+        fn complex()->Vec<HashMap<str,Option<Vec<i64> > > > =[]
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -748,8 +784,8 @@ fn test_triple_nested_generics() {
 fn test_mutual_recursion_simple() {
     // Test mutual recursion type inference
     let source = r#"
-        F is_even(n:i64)->bool=n==0?true:is_odd(n-1)
-        F is_odd(n:i64)->bool=n==0?false:is_even(n-1)
+        fn is_even(n:i64)->bool=n==0?true:is_odd(n-1)
+        fn is_odd(n:i64)->bool=n==0?false:is_even(n-1)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -760,9 +796,9 @@ fn test_mutual_recursion_simple() {
 fn test_mutual_recursion_three_functions() {
     // Test three-way mutual recursion
     let source = r#"
-        F a(n:i64)->i64=n<1?0:b(n-1)+1
-        F b(n:i64)->i64=n<1?0:c(n-1)+1
-        F c(n:i64)->i64=n<1?0:a(n-1)+1
+        fn a(n:i64)->i64=n<1?0:b(n-1)+1
+        fn b(n:i64)->i64=n<1?0:c(n-1)+1
+        fn c(n:i64)->i64=n<1?0:a(n-1)+1
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -773,8 +809,8 @@ fn test_mutual_recursion_three_functions() {
 fn test_mutual_recursion_with_different_return_types() {
     // Test mutual recursion where functions return different types
     let source = r#"
-        F count_even(n:i64)->i64=n==0?0:1+count_odd(n-1)
-        F count_odd(n:i64)->i64=n==0?0:count_even(n-1)
+        fn count_even(n:i64)->i64=n==0?0:1+count_odd(n-1)
+        fn count_odd(n:i64)->i64=n==0?0:count_even(n-1)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -785,8 +821,8 @@ fn test_mutual_recursion_with_different_return_types() {
 fn test_mutual_recursion_type_mismatch() {
     // Test mutual recursion with type mismatch (should fail)
     let source = r#"
-        F f(n:i64)->i64=g(n)
-        F g(n:i64)->str="error"
+        fn f(n:i64)->i64=g(n)
+        fn g(n:i64)->str="error"
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -798,8 +834,8 @@ fn test_mutual_recursion_type_mismatch() {
 fn test_indirect_recursion_through_helper() {
     // Test indirect recursion through helper function
     let source = r#"
-        F outer(n:i64)->i64=helper(n)
-        F helper(n:i64)->i64=n<1?0:outer(n-1)+1
+        fn outer(n:i64)->i64=helper(n)
+        fn helper(n:i64)->i64=n<1?0:outer(n-1)+1
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -810,8 +846,8 @@ fn test_indirect_recursion_through_helper() {
 fn test_generic_mutual_recursion() {
     // Test mutual recursion with generic functions
     let source = r#"
-        F transform_a<T>(x:T)->T=transform_b(x)
-        F transform_b<T>(x:T)->T=x
+        fn transform_a<T>(x:T)->T=transform_b(x)
+        fn transform_b<T>(x:T)->T=x
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -822,7 +858,7 @@ fn test_generic_mutual_recursion() {
 fn test_i8_boundary_values() {
     // Test i8 min (-128) and max (127)
     let source = r#"
-        F i8_bounds()->(){
+        fn i8_bounds()->(){
             min:i8=-128;
             max:i8=127;
             ()
@@ -837,7 +873,7 @@ fn test_i8_boundary_values() {
 fn test_i8_overflow_detection() {
     // Test i8 overflow (128 > i8::MAX)
     let source = r#"
-        F i8_overflow()->i8=128
+        fn i8_overflow()->i8=128
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -849,7 +885,7 @@ fn test_i8_overflow_detection() {
 fn test_i8_underflow_detection() {
     // Test i8 underflow (-129 < i8::MIN)
     let source = r#"
-        F i8_underflow()->i8=-129
+        fn i8_underflow()->i8=-129
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -860,7 +896,7 @@ fn test_i8_underflow_detection() {
 fn test_i64_max_value() {
     // Test i64 max value: 9223372036854775807
     let source = r#"
-        F i64_max()->i64=9223372036854775807
+        fn i64_max()->i64=9223372036854775807
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -871,7 +907,7 @@ fn test_i64_max_value() {
 fn test_i64_min_value() {
     // Test i64 near min value (actual min causes overflow in lexer)
     let source = r#"
-        F i64_min()->i64=-9223372036854775807
+        fn i64_min()->i64=-9223372036854775807
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -882,8 +918,8 @@ fn test_i64_min_value() {
 fn test_integer_arithmetic_overflow() {
     // Test integer arithmetic that could overflow
     let source = r#"
-        F add_i8(a:i8,b:i8)->i8=a+b
-        F test()->i8=add_i8(100,100)
+        fn add_i8(a:i8,b:i8)->i8=a+b
+        fn test()->i8=add_i8(100,100)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -895,7 +931,7 @@ fn test_integer_arithmetic_overflow() {
 fn test_pattern_with_guard_type_inference() {
     // Test pattern matching with guards - type inference (fix string escaping)
     let source = r#"
-        F classify(x:i64)->str=M x{
+        fn classify(x:i64)->str=match x{
             n I n>0=>"positive",
             n I n<0=>"negative",
             _=>"zero"
@@ -910,7 +946,7 @@ fn test_pattern_with_guard_type_inference() {
 fn test_complex_guard_type_checking() {
     // Test complex guard with multiple conditions
     let source = r#"
-        F filter(x:i64)->bool=M x{
+        fn filter(x:i64)->bool=match x{
             n I n>0&&n<100=>true,
             n I n>=100||n<=-100=>false,
             _=>false
@@ -925,8 +961,8 @@ fn test_complex_guard_type_checking() {
 fn test_nested_pattern_guard_inference() {
     // Test nested pattern with guard
     let source = r#"
-        E Nested{Pair((i64,i64)),Single(i64)}
-        F sum(n:Nested)->i64=M n{
+        enum Nested{Pair((i64,i64)),Single(i64)}
+        fn sum(n:Nested)->i64=match n{
             Pair((a,b)) I a>0&&b>0=>a+b,
             Pair((a,b))=>0,
             Single(x) I x>0=>x,
@@ -942,8 +978,8 @@ fn test_nested_pattern_guard_inference() {
 fn test_guard_with_function_call() {
     // Test guard condition with function calls
     let source = r#"
-        F is_positive(x:i64)->bool=x>0
-        F filter(x:i64)->bool=M x{
+        fn is_positive(x:i64)->bool=x>0
+        fn filter(x:i64)->bool=match x{
             n I is_positive(n)=>true,
             _=>false
         }
@@ -957,8 +993,8 @@ fn test_guard_with_function_call() {
 fn test_multiple_generic_type_params_inference() {
     // Test type inference with multiple generic parameters (simplified)
     let source = r#"
-        F pair<A,B>(a:A,b:B)->A=a
-        F test()->i64=pair(42,3.14)
+        fn pair<A,B>(a:A,b:B)->A=a
+        fn test()->i64=pair(42,3.14)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -969,8 +1005,8 @@ fn test_multiple_generic_type_params_inference() {
 fn test_generic_constraint_satisfaction() {
     // Test that generic constraints are checked
     let source = r#"
-        F compare<T:Ord>(a:T,b:T)->bool=a<b
-        F test()->bool=compare(1,2)
+        fn compare<T:Ord>(a:T,b:T)->bool=a<b
+        fn test()->bool=compare(1,2)
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -981,7 +1017,7 @@ fn test_generic_constraint_satisfaction() {
 fn test_nested_option_type_inference() {
     // Test Option<Option<T> > type inference with spaces
     let source = r#"
-        F unwrap_twice(opt:Option<Option<i64> >)->i64=M opt{
+        fn unwrap_twice(opt:Option<Option<i64> >)->i64=match opt{
             Some(Some(x))=>x,
             Some(None)=>-1,
             None=>-2
@@ -996,9 +1032,9 @@ fn test_nested_option_type_inference() {
 fn test_zero_sized_types() {
     // Test zero-sized types (empty struct, unit type)
     let source = r#"
-        S Empty{}
-        F make_empty()->Empty=Empty{}
-        F unit()->()=()
+        struct Empty{}
+        fn make_empty()->Empty=Empty{}
+        fn unit()->()=()
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -1009,7 +1045,7 @@ fn test_zero_sized_types() {
 fn test_circular_type_reference() {
     // Test potential circular type references
     let source = r#"
-        S Node{value:i64,next:Option<Node>}
+        struct Node{value:i64,next:Option<Node>}
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -1021,9 +1057,9 @@ fn test_circular_type_reference() {
 fn test_deeply_nested_function_calls() {
     // Test deeply nested function calls for stack depth
     let source = r#"
-        F f1(x:i64)->i64=x+1
-        F f2(x:i64)->i64=f1(f1(f1(f1(f1(x)))))
-        F f3(x:i64)->i64=f2(f2(f2(x)))
+        fn f1(x:i64)->i64=x+1
+        fn f2(x:i64)->i64=f1(f1(f1(f1(f1(x)))))
+        fn f3(x:i64)->i64=f2(f2(f2(x)))
     "#;
     let module = parse(source).unwrap();
     let mut checker = TypeChecker::new();
@@ -1034,7 +1070,7 @@ fn test_deeply_nested_function_calls() {
 fn test_type_inference_with_multiple_bindings() {
     // Test type inference across multiple variable bindings
     let source = r#"
-        F chain()->i64{
+        fn chain()->i64{
             a:=1;
             b:=a+2;
             c:=b*3;
@@ -1052,7 +1088,7 @@ fn test_type_inference_with_multiple_bindings() {
 fn test_all_numeric_type_combinations() {
     // Test mixing different numeric types (should fail without explicit conversion)
     let source = r#"
-        F mix()->(){
+        fn mix()->(){
             a:i8=1;
             b:i64=a;
             ()
@@ -1068,7 +1104,7 @@ fn test_all_numeric_type_combinations() {
 fn test_float_to_int_error() {
     // Phase 160: float→int numeric promotion is allowed
     let source = r#"
-        F convert()->i64{
+        fn convert()->i64{
             f:=3.14;
             i:i64=f;
             i

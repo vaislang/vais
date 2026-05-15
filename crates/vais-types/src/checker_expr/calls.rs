@@ -1,6 +1,8 @@
 //! Function/method call expression checking
 
-use crate::types::{self, GenericInstantiation, ResolvedType, TypeError, TypeResult};
+use crate::types::{
+    self, GenericCallee, GenericInstantiation, ResolvedType, TypeError, TypeResult,
+};
 use crate::TypeChecker;
 use std::collections::HashMap;
 use vais_ast::*;
@@ -52,6 +54,34 @@ impl TypeChecker {
     ) -> TypeResult<ResolvedType> {
         // Check if this is a direct call to a known function
         if let Expr::Ident(func_name) = &func.node {
+            if matches!(func_name.as_str(), "sizeof" | "alignof") && args.len() == 1 {
+                if let Expr::Ident(type_name) = &args[0].node {
+                    if self.resolve_builtin_type_marker(type_name).is_some() {
+                        return Ok(ResolvedType::I64);
+                    }
+                }
+            }
+
+            if func_name == "load_typed" && args.len() == 2 {
+                let ptr_ty = self.check_expr(&args[0])?;
+                self.unify(&ResolvedType::I64, &ptr_ty)
+                    .map_err(|e| e.with_span(args[0].span))?;
+                if let Expr::Ident(type_name) = &args[1].node {
+                    return self.resolve_builtin_type_marker(type_name).ok_or_else(|| {
+                        TypeError::UndefinedType {
+                            name: type_name.clone(),
+                            span: Some(args[1].span),
+                            suggestion: None,
+                        }
+                    });
+                }
+                return Err(TypeError::Mismatch {
+                    expected: "type marker".to_string(),
+                    found: self.check_expr(&args[1])?.to_string(),
+                    span: Some(args[1].span),
+                });
+            }
+
             // Enum variant constructor: Ok(value), Err(err), Some(value)
             if !self.functions.contains_key(func_name) && !self.structs.contains_key(func_name) {
                 // Search all enums for a variant with this name
@@ -61,14 +91,34 @@ impl TypeChecker {
                     .find(|(_, def)| def.variants.contains_key(func_name))
                     .map(|(name, def)| (name.clone(), def.clone()));
                 if let Some((enum_name, enum_def)) = found_enum {
+                    // Phase 2.10: capture concrete arg types for enum params
+                    // whose variant field is a bare Generic("T") so the
+                    // returned Named<enum, [...]> carries the arg's real type
+                    // instead of a disconnected fresh var. Scope: built-in
+                    // Option/Result only — user enums retain prior behavior.
+                    let scoped = matches!(enum_name.as_str(), "Option" | "Result");
+                    let mut param_bindings: HashMap<String, ResolvedType> = HashMap::new();
                     if let Some(variant_fields) = enum_def.variants.get(func_name) {
                         match variant_fields {
-                            crate::types::VariantFieldTypes::Tuple(field_types)
-                                if args.len() == field_types.len() =>
-                            {
-                                for (arg, expected_ty) in args.iter().zip(field_types.iter()) {
-                                    let arg_ty = self.check_expr(arg)?;
-                                    self.unify(expected_ty, &arg_ty)?;
+                            crate::types::VariantFieldTypes::Tuple(field_types) => {
+                                if args.len() == field_types.len() {
+                                    for (arg, expected_ty) in args.iter().zip(field_types.iter()) {
+                                        let arg_ty = self.check_expr(arg)?;
+                                        self.unify(expected_ty, &arg_ty)
+                                            .map_err(|e| e.with_span(arg.span))?;
+                                        if scoped {
+                                            if let ResolvedType::Generic(param_name) = expected_ty {
+                                                if enum_def.generics.iter().any(|g| g == param_name)
+                                                {
+                                                    let resolved =
+                                                        self.apply_substitutions(&arg_ty);
+                                                    param_bindings
+                                                        .entry(param_name.clone())
+                                                        .or_insert(resolved);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             crate::types::VariantFieldTypes::Unit => {}
@@ -80,7 +130,12 @@ impl TypeChecker {
                         generics: enum_def
                             .generics
                             .iter()
-                            .map(|_| self.fresh_type_var())
+                            .map(|g| {
+                                param_bindings
+                                    .get(g)
+                                    .cloned()
+                                    .unwrap_or_else(|| self.fresh_type_var())
+                            })
                             .collect(),
                     });
                 }
@@ -194,7 +249,8 @@ impl TypeChecker {
                             None
                         };
                         if propagated.is_none() && !is_str_i64_coercion {
-                            self.unify(&sig.params[i].1, &arg_type)?;
+                            self.unify(&sig.params[i].1, &arg_type)
+                                .map_err(|e| e.with_span(arg.span))?;
                         }
                         // Check dependent type refinement for literal arguments
                         if let ResolvedType::Dependent {
@@ -250,8 +306,10 @@ impl TypeChecker {
                 }
 
                 for (param_type, arg) in params.iter().zip(args) {
-                    let arg_type = self.check_expr(arg)?;
-                    self.unify(param_type, &arg_type)?;
+                    // Phase 6.27c.3: hint enum for bare-variant args.
+                    let arg_type = self.check_expr_with_enum_hint(arg, param_type)?;
+                    self.unify(param_type, &arg_type)
+                        .map_err(|e| e.with_span(arg.span))?;
                 }
 
                 Ok(*ret)
@@ -270,23 +328,130 @@ impl TypeChecker {
     ) -> TypeResult<ResolvedType> {
         let receiver_type = self.check_expr(receiver)?;
 
-        // Extract the inner type if receiver is a reference or pointer (auto-deref)
-        let (inner_type, receiver_generics) = match &receiver_type {
-            ResolvedType::Named { name, generics } => (name.clone(), generics.clone()),
-            ResolvedType::Ref(inner)
-            | ResolvedType::RefMut(inner)
-            | ResolvedType::Pointer(inner) => {
-                if let ResolvedType::Named { name, generics } = inner.as_ref() {
-                    (name.clone(), generics.clone())
-                } else {
-                    (String::new(), vec![])
+        // Extract the inner type if receiver is a reference or pointer (auto-deref).
+        // Phase 263: also auto-unwrap Option<T>/Result<T,E> to dispatch on T.
+        // Pattern: `M opt { Some(x) => x.method() }` where x retains Option type
+        // due to incomplete pattern-binding propagation.
+        let unwrap_named = |t: &ResolvedType| -> Option<(String, Vec<ResolvedType>)> {
+            match t {
+                ResolvedType::Named { name, generics } => Some((name.clone(), generics.clone())),
+                ResolvedType::Ref(inner)
+                | ResolvedType::RefMut(inner)
+                | ResolvedType::Pointer(inner) => {
+                    if let ResolvedType::Named { name, generics } = inner.as_ref() {
+                        Some((name.clone(), generics.clone()))
+                    } else {
+                        None
+                    }
                 }
+                _ => None,
             }
-            _ => (String::new(), vec![]),
+        };
+        let (mut inner_type, mut receiver_generics) = match &receiver_type {
+            ResolvedType::Optional(inner) | ResolvedType::Result(inner, _) => unwrap_named(inner)
+                .or_else(|| match inner.as_ref() {
+                    ResolvedType::Ref(t) | ResolvedType::RefMut(t) | ResolvedType::Pointer(t) => {
+                        unwrap_named(t)
+                    }
+                    _ => None,
+                })
+                .unwrap_or((String::new(), vec![])),
+            _ => unwrap_named(&receiver_type).unwrap_or((String::new(), vec![])),
         };
 
+        // Phase 338: MutexGuard<T>/RwLockReadGuard<T>/RwLockWriteGuard<T>
+        // auto-unwrap — when method isn't defined on the guard itself,
+        // re-dispatch against the protected type T. vaisdb patterns like
+        // `guard := self.connections.lock(); guard.insert(id, conn)`
+        // rely on this transparent pass-through.
+        let is_guard_type = inner_type == "MutexGuard"
+            || inner_type == "RwLockReadGuard"
+            || inner_type == "RwLockWriteGuard";
+        let mut effective_receiver_type = receiver_type.clone();
+        if is_guard_type && !receiver_generics.is_empty() {
+            // Guard's own method matches only when name + arity both fit;
+            // otherwise forward to inner T. MutexGuard::get(&self) is 0-arg
+            // but vaisdb's `guard.get(&k)` targets the inner HashMap's get.
+            let guard_matches = self
+                .structs
+                .get(&inner_type)
+                .and_then(|s| {
+                    s.methods.get(&method.node).map(|m| {
+                        let expected = m.params.iter().filter(|(n, _, _)| n != "self").count();
+                        expected == args.len()
+                    })
+                })
+                .unwrap_or(false);
+            if !guard_matches {
+                if let Some((t_name, t_generics)) = unwrap_named(&receiver_generics[0]) {
+                    inner_type = t_name.clone();
+                    receiver_generics = t_generics.clone();
+                    // Also replace effective_receiver_type so the builtin
+                    // dispatch block below (which matches on receiver_named)
+                    // sees the inner T rather than MutexGuard<T>.
+                    effective_receiver_type = ResolvedType::Named {
+                        name: t_name,
+                        generics: t_generics,
+                    };
+                }
+            }
+        }
+        let receiver_type = effective_receiver_type;
+        let clone_result_type = |ty: &ResolvedType| match ty {
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref().clone(),
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => inner.as_ref().clone(),
+            _ => ty.clone(),
+        };
+
+        // Phase 300a: for HashMap<K,V>.get — bypass the stdlib struct lookup
+        // (which returns V directly) and fall through to the builtin dispatch
+        // that returns Option<V>. vaisdb code consistently expects Option<V>,
+        // matching Rust semantics.
+        //
+        // Phase 311: same treatment for Vec<T>.pop — stdlib `F pop -> T` is
+        // the legacy infallible variant (panic on empty); vaisdb uses
+        // `vec.pop().unwrap()` pervasively, expecting Option<T> like Rust.
+        // Without the bypass, stdlib's T-returning signature wins and
+        // `.unwrap()` dispatches on T (no such method → E004).
+        //
+        // Phase 312: extend to HashMap/BTreeMap/IndexMap `.remove` — same
+        // legacy/Rust-semantics mismatch. stdlib returns V; vaisdb expects
+        // Option<V>. Builtin dispatch below returns Option<V> once bypassed.
+        let is_map_type = inner_type == "HashMap"
+            || inner_type == "StrHashMap"
+            || inner_type == "BTreeMap"
+            || inner_type == "IndexMap";
+        let bypass_struct_lookup = (is_map_type
+            && matches!(method.node.as_str(), "get" | "remove"))
+            || (inner_type == "Vec" && method.node == "pop");
+
+        // Phase 6.27d.a: if receiver is Box<T> and Box itself has no matching
+        // method (Box is typically an opaque smart pointer with no user-defined
+        // methods), peel Box<T> to T so that `box_val.method()` dispatches to
+        // T's inherent impl. Preserves test `syntax_generic_impl_method` which
+        // declares a user `S Box<T>` with its own `F get`.
+        if inner_type == "Box" && receiver_generics.len() == 1 {
+            let box_has_method = self
+                .structs
+                .get("Box")
+                .map(|s| s.methods.contains_key(&method.node))
+                .unwrap_or(false)
+                || self
+                    .enums
+                    .get("Box")
+                    .map(|e| e.methods.contains_key(&method.node))
+                    .unwrap_or(false);
+            if !box_has_method {
+                if let ResolvedType::Named { name, generics } = &receiver_generics[0] {
+                    inner_type = name.clone();
+                    receiver_generics = generics.clone();
+                }
+            }
+        }
+
         // First, try to find the method on the struct or enum itself
-        if !inner_type.is_empty() {
+        if !inner_type.is_empty() && !bypass_struct_lookup {
             // Look up method in struct or enum
             let found_method = self
                 .structs
@@ -312,7 +477,35 @@ impl TypeChecker {
                     .map(|(_, t, _)| t.clone())
                     .collect();
 
-                if param_types.len() != args.len() {
+                // Phase 6.29.5: permissive trailing-arg tolerance for atomic
+                // operations. vaisdb mirrors Rust's std::sync::atomic API with
+                // a trailing `Ordering` argument (e.g.
+                // `counter.load(Ordering::Acquire)`) while stdlib's AtomicI64
+                // signature is 0-arg. The memory-ordering argument has no
+                // effect on emitted IR (codegen uses SeqCst uniformly), so
+                // silently dropping extras keeps both dialects compiling.
+                // Scope: only AtomicI64/AtomicBool/AtomicI32/AtomicU32 methods.
+                let is_atomic_recv = matches!(
+                    inner_type.as_str(),
+                    "AtomicI64" | "AtomicI32" | "AtomicU32" | "AtomicU64" | "AtomicBool"
+                );
+                let atomic_permissive = is_atomic_recv
+                    && args.len() > param_types.len()
+                    && matches!(
+                        method.node.as_str(),
+                        "load"
+                            | "store"
+                            | "swap"
+                            | "fetch_add"
+                            | "fetch_sub"
+                            | "fetch_and"
+                            | "fetch_or"
+                            | "fetch_xor"
+                            | "compare_exchange"
+                            | "compare_exchange_weak"
+                    );
+
+                if !atomic_permissive && param_types.len() != args.len() {
                     return Err(TypeError::ArgCount {
                         expected: param_types.len(),
                         got: args.len(),
@@ -320,12 +513,32 @@ impl TypeChecker {
                     });
                 }
 
+                // For atomic permissive case, still type-check extra args
+                // (mostly to catch obvious undefined-var errors inside the
+                // Ordering::X path access), but don't unify them with a
+                // parameter slot — they're dropped.
+                if atomic_permissive {
+                    for extra_arg in &args[param_types.len()..] {
+                        let _ = self.check_expr(extra_arg);
+                    }
+                }
+                // Truncate args iterator below so we only unify the declared
+                // parameters.
+                let effective_args: &[_] = &args[..param_types.len().min(args.len())];
+
                 // Build substitution map from type's generic params to receiver's concrete types
                 let mut generic_substitutions: HashMap<String, ResolvedType> = found_generics
                     .iter()
                     .zip(receiver_generics.iter())
                     .map(|(param, arg)| (param.clone(), arg.clone()))
                     .collect();
+                generic_substitutions.insert(
+                    "Self".to_string(),
+                    ResolvedType::Named {
+                        name: inner_type.clone(),
+                        generics: receiver_generics.clone(),
+                    },
+                );
 
                 // Also create fresh type variables for method-level generics
                 // that are not already covered by struct-level generics
@@ -336,14 +549,57 @@ impl TypeChecker {
                 }
 
                 // Check arguments with substituted parameter types
-                for (param_type, arg) in param_types.iter().zip(args) {
-                    let arg_type = self.check_expr(arg)?;
+                // (Phase 6.27c.3: push enum hint for bare-variant args)
+                // Phase Ω P1.7 (iter 134): when the formal param is a Fn type,
+                // push its first param-type onto `lambda_param_hint_stack` so
+                // a Lambda arg's `Type::Infer` params resolve to the concrete
+                // type instead of fresh Vars. Without this, `Vec<T>.sort_by`'s
+                // closure body fails E030 on `a.field`.
+                for (param_type, arg) in param_types.iter().zip(effective_args) {
                     let expected_type = if generic_substitutions.is_empty() {
                         param_type.clone()
                     } else {
                         self.substitute_generics(param_type, &generic_substitutions)
                     };
-                    self.unify(&expected_type, &arg_type)?;
+                    let pushed_hint = if matches!(arg.node, Expr::Lambda { .. }) {
+                        // Phase Ω P1.7 (iter 134): closure param hint. The
+                        // formal param may be `Fn { ... }` (closure type) or
+                        // `FnPtr { ... }` (function-pointer type — stdlib
+                        // signatures like `sort_by(&self, cmp: fn(T,T) -> i64)`
+                        // resolve to FnPtr). For Generic("T") params, look up
+                        // the receiver's first generic (Vec<T>'s T) and
+                        // substitute.
+                        let fn_params_opt = match &expected_type {
+                            ResolvedType::Fn { params, .. } => Some(params.clone()),
+                            ResolvedType::FnPtr { params, .. } => Some(params.clone()),
+                            _ => None,
+                        };
+                        if let Some(fn_params) = fn_params_opt {
+                            if let Some(first) = fn_params.first().cloned() {
+                                let concrete = match &first {
+                                    ResolvedType::Generic(_) => {
+                                        receiver_generics.first().cloned().unwrap_or(first)
+                                    }
+                                    _ => first,
+                                };
+                                self.lambda_param_hint_stack.push(concrete);
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+                    let arg_type_result = self.check_expr_with_enum_hint(arg, &expected_type);
+                    if pushed_hint {
+                        self.lambda_param_hint_stack.pop();
+                    }
+                    let arg_type = arg_type_result?;
+                    self.unify(&expected_type, &arg_type)
+                        .map_err(|e| e.with_span(arg.span))?;
                 }
 
                 // Substitute generics in return type
@@ -365,6 +621,55 @@ impl TypeChecker {
                 } else {
                     ret_type_raw
                 };
+
+                // ADR 0001 §1 — TC inference invariant for instance method calls:
+                //   "When an instance method on a generic struct (e.g. Vec<T>.push)
+                //    unifies the struct's generic param T against an argument type,
+                //    propagate the resolved T back to the receiver's local-var
+                //    binding so subsequent uses (e.g. indexing) see the concrete T."
+                //
+                // Why: vaisdb test_btree_node.ll:1848 root cause. `keys.push(inner)`
+                // unifies Vec<?N>'s ?N with Vec<u8>, but `keys` local var still
+                // holds Vec<?N>. Later `keys[0]` indexing then sees ?N which
+                // defaults to i64, producing raw `load i64` and mismatched call args.
+                //
+                // Tracker: vaisdb Task #13. Test:
+                //   call_arg_invariant_test::vec_of_vec_no_annotation_loses_inner_type
+                if !receiver_generics.is_empty() {
+                    if let Expr::Ident(recv_name) = &receiver.node {
+                        // Re-resolve receiver's generic args after arg unification.
+                        let resolved_generics: Vec<ResolvedType> = receiver_generics
+                            .iter()
+                            .map(|g| self.apply_substitutions(g))
+                            .collect();
+                        // If anything changed (Var → concrete), update the local
+                        // var's type. Preserve the outer wrapper (Ref/RefMut/Pointer)
+                        // so auto-deref behavior stays consistent.
+                        let any_changed = resolved_generics
+                            .iter()
+                            .zip(receiver_generics.iter())
+                            .any(|(r, o)| r != o);
+                        if any_changed {
+                            let new_named = ResolvedType::Named {
+                                name: inner_type.clone(),
+                                generics: resolved_generics,
+                            };
+                            // Look at original receiver_type to know if we need a
+                            // Ref/RefMut/Pointer wrapper.
+                            let new_ty = match &receiver_type {
+                                ResolvedType::Ref(_) => ResolvedType::Ref(Box::new(new_named)),
+                                ResolvedType::RefMut(_) => {
+                                    ResolvedType::RefMut(Box::new(new_named))
+                                }
+                                ResolvedType::Pointer(_) => {
+                                    ResolvedType::Pointer(Box::new(new_named))
+                                }
+                                _ => new_named,
+                            };
+                            self.update_var_type(recv_name, new_ty);
+                        }
+                    }
+                }
 
                 // Record generic instantiation for monomorphization
                 if !receiver_generics.is_empty() {
@@ -415,8 +720,9 @@ impl TypeChecker {
             }
 
             for (param_type, arg) in param_types.iter().zip(args) {
-                let arg_type = self.check_expr(arg)?;
-                self.unify(param_type, &arg_type)?;
+                let arg_type = self.check_expr_with_enum_hint(arg, param_type)?;
+                self.unify(param_type, &arg_type)
+                    .map_err(|e| e.with_span(arg.span))?;
             }
 
             // For async trait methods, wrap the return type in Future
@@ -429,8 +735,22 @@ impl TypeChecker {
             return Ok(ret_type);
         }
 
-        // Built-in string methods
-        if matches!(receiver_type, ResolvedType::Str) {
+        // Built-in string methods. Accept str/&str/Str/&Str/&&str alike since
+        // vaisdb passes string refs around extensively (Phase 215, 261).
+        let is_str_like = |t: &ResolvedType| -> bool {
+            matches!(t, ResolvedType::Str)
+                || matches!(t, ResolvedType::Named { name, generics }
+                    if (name == "Str" || name == "str") && generics.is_empty())
+        };
+        let str_recv = is_str_like(&receiver_type)
+            || matches!(
+                &receiver_type,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                    if is_str_like(inner.as_ref())
+                        || matches!(inner.as_ref(),
+                            ResolvedType::Ref(t) | ResolvedType::RefMut(t) if is_str_like(t))
+            );
+        if str_recv {
             match method.node.as_str() {
                 "len" => {
                     if !args.is_empty() {
@@ -442,6 +762,77 @@ impl TypeChecker {
                     }
                     return Ok(ResolvedType::I64);
                 }
+                "is_empty" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Bool);
+                    }
+                }
+                "char_at" | "byte_at" => {
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(ResolvedType::I64);
+                    }
+                }
+                "split" => {
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(ResolvedType::Named {
+                            name: "Vec".to_string(),
+                            generics: vec![ResolvedType::Str],
+                        });
+                    }
+                }
+                "trim" | "to_lowercase" | "to_uppercase" | "to_lower" | "to_upper" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Str);
+                    }
+                }
+                "chars" | "bytes" => {
+                    // Phase 284: str.chars() → Vec<Str> (single-char simplification),
+                    // str.bytes() → Vec<u8>. Unlocks iterator-chain patterns
+                    // like text.chars().filter(...).count() used in vaisdb fulltext.
+                    if args.is_empty() {
+                        let elem = if method.node == "bytes" {
+                            ResolvedType::U8
+                        } else {
+                            ResolvedType::Str // single-char str, permissive simplification
+                        };
+                        return Ok(ResolvedType::Named {
+                            name: "Vec".to_string(),
+                            generics: vec![elem],
+                        });
+                    }
+                }
+                "starts_with" | "ends_with" | "contains" | "startsWith" | "endsWith" => {
+                    // Phase 265/350: both snake_case and camelCase string predicates.
+                    if args.len() != 1 {
+                        return Err(TypeError::ArgCount {
+                            expected: 1,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    let arg_type = self.check_expr(&args[0])?;
+                    self.unify(&ResolvedType::Str, &arg_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
+                    return Ok(ResolvedType::Bool);
+                }
+                "parse_i64" | "parse_int" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Result(
+                            Box::new(ResolvedType::I64),
+                            Box::new(ResolvedType::Str),
+                        ));
+                    }
+                }
+                "parse_f64" | "parse_float" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Result(
+                            Box::new(ResolvedType::F64),
+                            Box::new(ResolvedType::Str),
+                        ));
+                    }
+                }
                 "charAt" => {
                     if args.len() != 1 {
                         return Err(TypeError::ArgCount {
@@ -451,20 +842,9 @@ impl TypeChecker {
                         });
                     }
                     let arg_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::I64, &arg_type)?;
+                    self.unify(&ResolvedType::I64, &arg_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
                     return Ok(ResolvedType::I64);
-                }
-                "contains" | "startsWith" | "endsWith" => {
-                    if args.len() != 1 {
-                        return Err(TypeError::ArgCount {
-                            expected: 1,
-                            got: args.len(),
-                            span: Some(expr_span),
-                        });
-                    }
-                    let arg_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::Str, &arg_type)?;
-                    return Ok(ResolvedType::Bool);
                 }
                 "indexOf" => {
                     if args.len() != 1 {
@@ -475,7 +855,8 @@ impl TypeChecker {
                         });
                     }
                     let arg_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::Str, &arg_type)?;
+                    self.unify(&ResolvedType::Str, &arg_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
                     return Ok(ResolvedType::I64);
                 }
                 "substring" => {
@@ -487,9 +868,11 @@ impl TypeChecker {
                         });
                     }
                     let start_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::I64, &start_type)?;
+                    self.unify(&ResolvedType::I64, &start_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
                     let end_type = self.check_expr(&args[1])?;
-                    self.unify(&ResolvedType::I64, &end_type)?;
+                    self.unify(&ResolvedType::I64, &end_type)
+                        .map_err(|e| e.with_span(args[1].span))?;
                     return Ok(ResolvedType::Str);
                 }
                 "isEmpty" => {
@@ -511,7 +894,8 @@ impl TypeChecker {
                         });
                     }
                     let arg_type = self.check_expr(&args[0])?;
-                    self.unify(&ResolvedType::Str, &arg_type)?;
+                    self.unify(&ResolvedType::Str, &arg_type)
+                        .map_err(|e| e.with_span(args[0].span))?;
                     return Ok(ResolvedType::Str);
                 }
                 "as_bytes" => {
@@ -522,7 +906,22 @@ impl TypeChecker {
                             span: Some(expr_span),
                         });
                     }
-                    return Ok(ResolvedType::Slice(Box::new(ResolvedType::U8)));
+                    // Phase 247: changed from raw i64 ptr to Vec<u8>. vaisdb
+                    // expects iterable result for `path_bytes.len()` etc.
+                    // The legacy raw-ptr semantics still work via .as_ptr().
+                    // Phase 6.31: register Vec<u8> struct instantiation so the
+                    // codegen `generate_specialized_struct_type` path can emit
+                    // `%Vec$u8` alongside the alloca. This is a no-op when Vec
+                    // is not imported (e.g. standalone e2e harness without std
+                    // link), but unblocks vaisdb files that DO import std/vec.
+                    self.add_instantiation(crate::types::GenericInstantiation::struct_type(
+                        "Vec",
+                        vec![ResolvedType::U8],
+                    ));
+                    return Ok(ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![ResolvedType::U8],
+                    });
                 }
                 "clone" | "to_string" | "as_str" => {
                     if !args.is_empty() {
@@ -538,24 +937,975 @@ impl TypeChecker {
             }
         }
 
-        // Built-in slice methods
-        if matches!(
-            &receiver_type,
-            ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
-        ) && method.node.as_str() == "len"
-        {
-            if !args.is_empty() {
-                return Err(TypeError::ArgCount {
-                    expected: 0,
-                    got: args.len(),
-                    span: Some(expr_span),
-                });
+        // Phase 246: built-in numeric methods (f32/f64/integers).
+        // Phase 260: extended to all integer types so vaisdb's u32.min(u32),
+        // u64.min(u64), u8.abs() etc. resolve through the fallback.
+        if receiver_type.is_numeric() {
+            match method.node.as_str() {
+                "sqrt" | "abs" | "floor" | "ceil" | "round" | "trunc" | "ln" | "log2" | "log10"
+                | "exp" | "exp2" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" => {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    return Ok(receiver_type.clone());
+                }
+                "pow" | "min" | "max" => {
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(receiver_type.clone());
+                    }
+                }
+                "cmp" => {
+                    // Phase Ω P1.7 (iter 134): Rust-style `int.cmp(&other) -> Ordering`.
+                    // Vais represents Ordering as i64 (-1, 0, 1) for codegen
+                    // simplicity. vaisdb pattern:
+                    //   col_vec.sort_by(|a, b| a.column_index.cmp(&b.column_index))
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(ResolvedType::I64);
+                    }
+                }
+                "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "wrapping_div"
+                | "wrapping_rem" | "saturating_add" | "saturating_sub" | "saturating_mul"
+                | "checked_add" | "checked_sub" | "checked_mul" | "checked_div" => {
+                    // Phase 270: overflow-safe integer arithmetic.
+                    // wrapping_*/saturating_* return same type; checked_* return Option<T>.
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        let m = method.node.as_str();
+                        if m.starts_with("checked_") {
+                            return Ok(ResolvedType::Optional(Box::new(receiver_type.clone())));
+                        }
+                        return Ok(receiver_type.clone());
+                    }
+                }
+                "count_ones" | "count_zeros" | "leading_zeros" | "trailing_zeros"
+                | "leading_ones" | "trailing_ones" | "swap_bytes" | "reverse_bits" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::U32);
+                    }
+                }
+                "powf" | "powi" => {
+                    if args.len() != 1 {
+                        return Err(TypeError::ArgCount {
+                            expected: 1,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    let _ = self.check_expr(&args[0])?;
+                    return Ok(receiver_type.clone());
+                }
+                "is_nan" | "is_infinite" | "is_finite" | "is_normal" | "is_sign_positive"
+                | "is_sign_negative" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Bool);
+                    }
+                }
+                "to_string" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Str);
+                    }
+                }
+                "to_bits" | "to_bytes" => {
+                    // f64.to_bits() → i64 bit pattern; numeric.to_bytes() → similar.
+                    if args.is_empty() {
+                        return Ok(ResolvedType::I64);
+                    }
+                }
+                "to_le_bytes" | "to_be_bytes" | "to_ne_bytes" => {
+                    // Phase 265: numeric.to_le_bytes() → Vec<u8>.
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Named {
+                            name: "Vec".to_string(),
+                            generics: vec![ResolvedType::U8],
+                        });
+                    }
+                }
+                "from_bits" => {
+                    // f64.from_bits(i64) → f64 (associated, but called as method).
+                    if args.len() == 1 {
+                        let _ = self.check_expr(&args[0]);
+                        return Ok(receiver_type.clone());
+                    }
+                }
+                _ => {}
             }
-            return Ok(ResolvedType::I64);
+        }
+
+        // Built-in slice methods
+        let slice_elem = match &receiver_type {
+            ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => Some(elem.as_ref()),
+            ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => match inner.as_ref() {
+                ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => Some(elem.as_ref()),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(elem) = slice_elem {
+            match method.node.as_str() {
+                "len" => {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    return Ok(ResolvedType::I64);
+                }
+                // `slice.to_vec()` produces an owned Vec<T>. Phase 217 added
+                // for vaisdb migration (was E004 'to_vec not defined' on
+                // every &[u8] / &[T] receiver, ~10 sites).
+                "to_vec" => {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    self.add_instantiation(GenericInstantiation::struct_type(
+                        "Vec",
+                        vec![elem.clone()],
+                    ));
+                    self.add_instantiation(GenericInstantiation::method(
+                        "Vec",
+                        "with_capacity",
+                        vec![elem.clone()],
+                    ));
+                    return Ok(ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![elem.clone()],
+                    });
+                }
+                "clone" => {
+                    if !args.is_empty() {
+                        return Err(TypeError::ArgCount {
+                            expected: 0,
+                            got: args.len(),
+                            span: Some(expr_span),
+                        });
+                    }
+                    self.add_instantiation(GenericInstantiation::struct_type(
+                        "Vec",
+                        vec![elem.clone()],
+                    ));
+                    self.add_instantiation(GenericInstantiation::method(
+                        "Vec",
+                        "with_capacity",
+                        vec![elem.clone()],
+                    ));
+                    return Ok(ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![elem.clone()],
+                    });
+                }
+                // Phase 346: slice mutation ops on &mut [T] (and lenient on
+                // &[T] too — typechecker-only permissive fallback; codegen
+                // handles the real mutation contract). vaisdb hits these via
+                // `page_data[a..b].copy_from_slice(entry)` patterns pervasively.
+                "copy_from_slice" | "clone_from_slice" | "fill" | "swap" | "rotate_left"
+                | "rotate_right" | "sort" | "sort_by" | "reverse" => {
+                    for a in args.iter() {
+                        let _ = self.check_expr(a);
+                    }
+                    return Ok(ResolvedType::Unit);
+                }
+                _ => {}
+            }
         }
 
         // H5-H6 builtin Vec/HashMap/ByteBuffer/Mutex methods removed
         // C1 fix enables proper impl lookup from std modules
+        //
+        // Phase 219: re-add a *narrow* fallback for Vec/HashMap.len/push/insert.
+        // When the receiver is a struct field of type `Vec<T>`/`HashMap<K,V>`
+        // and the std impl lookup hasn't bound a concrete instantiation yet,
+        // generic-method-on-struct-field dispatch returns nothing and vaisdb
+        // sees a misleading E004 'len/push not defined'. The free-function
+        // signatures here are deliberately permissive (return I64 for len,
+        // return I64 for push to match std/vec.vais's `F push -> i64`) so
+        // they unblock downstream type-checking without committing to an
+        // exact element type.
+        // Auto-deref one level for built-in Vec/HashMap dispatch.
+        let receiver_named = match &receiver_type {
+            ResolvedType::Named { .. } => Some(&receiver_type),
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => match inner.as_ref() {
+                ResolvedType::Named { .. } => Some(inner.as_ref()),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(ResolvedType::Named { name, generics }) = receiver_named {
+            // ByteBuffer-specific built-in dispatch. Phase 245.
+            if name == "ByteBuffer" {
+                match method.node.as_str() {
+                    "len" | "position" | "remaining" | "capacity" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "to_vec" | "into_vec" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Named {
+                                name: "Vec".to_string(),
+                                generics: vec![ResolvedType::U8],
+                            });
+                        }
+                    }
+                    "get_string" | "read_string" => {
+                        // Phase 274: ByteBuffer.get_string(len?) → Result<Str, VaisError>.
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::Result(
+                            Box::new(ResolvedType::Str),
+                            Box::new(ResolvedType::Named {
+                                name: "VaisError".to_string(),
+                                generics: vec![],
+                            }),
+                        ));
+                    }
+                    "put_string" | "write_string" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::Unit);
+                    }
+                    "as_bytes" => {
+                        // Phase 278: ByteBuffer.as_bytes() → &[u8] (was i64 raw
+                        // pointer). vaisdb's gcm.write_record takes &[u8]; the
+                        // raw-pointer variant is now `as_ptr()`.
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Ref(Box::new(ResolvedType::Slice(Box::new(
+                                ResolvedType::U8,
+                            )))));
+                        }
+                    }
+                    "as_ptr" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "clone" => {
+                        if args.is_empty() {
+                            return Ok(clone_result_type(&receiver_type));
+                        }
+                    }
+                    "skip" => {
+                        // Phase 284: ByteBuffer.skip(n: I64) → Result<(), VaisError>.
+                        // Advances the read position by n bytes. Used as buf.skip(3)?
+                        // in vaisdb rag/memory/types.vais for padding alignment.
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::Result(
+                            Box::new(ResolvedType::Unit),
+                            Box::new(ResolvedType::Named {
+                                name: "VaisError".to_string(),
+                                generics: vec![],
+                            }),
+                        ));
+                    }
+                    "write_u8" | "write_u16_le" | "write_u32_le" | "write_u64_le"
+                    | "write_i32_le" | "write_i64_le" | "write_f32_le" | "write_f64_le"
+                    | "write_bytes" | "write_str" | "write_varint" | "seek" | "rewind"
+                    | "ensure_capacity" | "clear" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::I64);
+                    }
+                    "read_u8" | "read_u16_le" | "read_u32_le" | "read_u64_le" | "read_i32_le"
+                    | "read_i64_le" | "read_f32_le" | "read_f64_le" | "read_bytes" | "read_str"
+                    | "read_varint" | "get_u8" | "get_u16_le" | "get_u32_le" | "get_u64_le"
+                    | "get_i32_le" | "get_i64_le" | "get_f32_le" | "get_f64_le" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::I64);
+                    }
+                    _ => {}
+                }
+            }
+            // P1.5 (iter 129): HashSet added — vaisdb visited-set patterns use
+            // HashSet.insert(elem) / .contains(elem) extensively (vector/hnsw).
+            // HashSet has 1 generic (T), HashMap has 2 (K, V). Branches below
+            // already gate by args.len() so adding HashSet is safe.
+            if name == "Vec" || name == "HashMap" || name == "StrHashMap" || name == "HashSet" {
+                match method.node.as_str() {
+                    "len" | "size" | "capacity" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "is_empty" | "contains_key" | "contains" => {
+                        if !args.is_empty() {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                        }
+                        return Ok(ResolvedType::Bool);
+                    }
+                    "push" => {
+                        // Vec push returns i64 in stdlib.
+                        //
+                        // Phase Ω P1.2 (iter 90): unify receiver's element type
+                        // generic (Vec<T>'s T) with the arg type. Without this,
+                        // unannotated `Vec.with_capacity(...).push(elem)` leaves
+                        // T as Var(N), erasing to i64 in codegen indexing path.
+                        // Tracked test: call_arg_invariant_test::vec_of_vec_no_annotation_loses_inner_type
+                        // ADR 0002 Class 4 (var-to-llvm).
+                        if name == "Vec" && args.len() == 1 {
+                            let arg_ty = self.check_expr(&args[0])?;
+                            if let Some(elem_ty) = generics.first() {
+                                let _ = self.unify(elem_ty, &arg_ty);
+                            }
+                            // Update receiver's local var if its generic resolved.
+                            if let Expr::Ident(recv_name) = &receiver.node {
+                                let resolved_generics: Vec<ResolvedType> = generics
+                                    .iter()
+                                    .map(|g| self.apply_substitutions(g))
+                                    .collect();
+                                let any_changed = resolved_generics
+                                    .iter()
+                                    .zip(generics.iter())
+                                    .any(|(r, o)| r != o);
+                                if any_changed {
+                                    let new_named = ResolvedType::Named {
+                                        name: name.clone(),
+                                        generics: resolved_generics,
+                                    };
+                                    let new_ty = match &receiver_type {
+                                        ResolvedType::Ref(_) => {
+                                            ResolvedType::Ref(Box::new(new_named))
+                                        }
+                                        ResolvedType::RefMut(_) => {
+                                            ResolvedType::RefMut(Box::new(new_named))
+                                        }
+                                        ResolvedType::Pointer(_) => {
+                                            ResolvedType::Pointer(Box::new(new_named))
+                                        }
+                                        _ => new_named,
+                                    };
+                                    self.update_var_type(recv_name, new_ty);
+                                }
+                            }
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "pop" => {
+                        // Vec.pop returns Option<T>
+                        if name == "Vec" && args.is_empty() {
+                            return Ok(ResolvedType::Optional(Box::new(
+                                generics.first().cloned().unwrap_or(ResolvedType::I64),
+                            )));
+                        }
+                    }
+                    "get" | "get_mut" => {
+                        // Phase 326: Vec.get(i) → Option<&T>; HashMap.get(k) → Option<&V>.
+                        // Rust semantics — previously returned Option<T> which
+                        // broke user-declared `Option<&V>` return types. vaisdb
+                        // code consistently treats the inner as a ref
+                        // (pattern-binds then reads fields via auto-deref).
+                        if !args.is_empty() {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                        }
+                        // Phase 6.27d.c: apply substitutions to the receiver's
+                        // generic slots so that V (or T) resolves when prior
+                        // `insert`/`push` calls unified a fresh type var with
+                        // a concrete type. Without this, HashMap<?k, ?v> where
+                        // ?v was unified with AggGroup via insert still
+                        // reports raw ?v here → `&?N` downstream E030.
+                        let resolved_generics: Vec<ResolvedType> = generics
+                            .iter()
+                            .map(|t| self.apply_substitutions(t))
+                            .collect();
+                        let elem = if name == "Vec" {
+                            resolved_generics.first().cloned()
+                        } else {
+                            resolved_generics.get(1).cloned()
+                        }
+                        .unwrap_or(ResolvedType::I64);
+                        let ref_elem = if method.node == "get_mut" {
+                            ResolvedType::RefMut(Box::new(elem))
+                        } else {
+                            ResolvedType::Ref(Box::new(elem))
+                        };
+                        return Ok(ResolvedType::Optional(Box::new(ref_elem)));
+                    }
+                    "keys" => {
+                        // Phase 264: HashMap.keys() / Vec — Vec<K> with no args.
+                        if args.is_empty() {
+                            let key_ty = if name == "Vec" {
+                                ResolvedType::I64
+                            } else {
+                                generics.first().cloned().unwrap_or(ResolvedType::I64)
+                            };
+                            return Ok(ResolvedType::Named {
+                                name: "Vec".to_string(),
+                                generics: vec![key_ty],
+                            });
+                        }
+                    }
+                    "values" | "values_mut" => {
+                        // Phase 6.27f: HashMap.values()/values_mut() → Vec<V>
+                        // (element types stay bare V; for `LF x: map.values_mut()`
+                        // the iteration will auto-bind &mut V downstream).
+                        if args.is_empty() {
+                            let val_ty = if name == "Vec" {
+                                generics.first().cloned().unwrap_or(ResolvedType::I64)
+                            } else {
+                                generics.get(1).cloned().unwrap_or(ResolvedType::I64)
+                            };
+                            let resolved_val = self.apply_substitutions(&val_ty);
+                            return Ok(ResolvedType::Named {
+                                name: "Vec".to_string(),
+                                generics: vec![resolved_val],
+                            });
+                        }
+                    }
+                    "insert" | "set" => {
+                        // HashSet.insert(elem) — 1 arg, returns Bool (Rust semantics)
+                        // P1.5 (iter 129): added for vaisdb HashSet patterns.
+                        if name == "HashSet" && args.len() == 1 {
+                            let arg_e = self.check_expr(&args[0]).ok();
+                            if let (Some(e_slot), Some(e_actual)) =
+                                (generics.first().cloned(), arg_e)
+                            {
+                                let _ = self.unify(&e_slot, &e_actual);
+                            }
+                            // Same update_var_type propagation as HashMap insert
+                            // (Phase Ω P1.2 R3 audit pattern).
+                            if let Expr::Ident(recv_name) = &receiver.node {
+                                let resolved_generics: Vec<ResolvedType> = generics
+                                    .iter()
+                                    .map(|g| self.apply_substitutions(g))
+                                    .collect();
+                                let any_changed = resolved_generics
+                                    .iter()
+                                    .zip(generics.iter())
+                                    .any(|(r, o)| r != o);
+                                if any_changed {
+                                    let new_named = ResolvedType::Named {
+                                        name: name.clone(),
+                                        generics: resolved_generics,
+                                    };
+                                    let new_ty = match &receiver_type {
+                                        ResolvedType::Ref(_) => {
+                                            ResolvedType::Ref(Box::new(new_named))
+                                        }
+                                        ResolvedType::RefMut(_) => {
+                                            ResolvedType::RefMut(Box::new(new_named))
+                                        }
+                                        ResolvedType::Pointer(_) => {
+                                            ResolvedType::Pointer(Box::new(new_named))
+                                        }
+                                        _ => new_named,
+                                    };
+                                    self.update_var_type(recv_name, new_ty);
+                                }
+                            }
+                            return Ok(ResolvedType::Bool);
+                        }
+                        // HashMap insert/set returns V
+                        if name != "Vec" && name != "HashSet" && args.len() == 2 {
+                            let arg_k = self.check_expr(&args[0]).ok();
+                            let arg_v = self.check_expr(&args[1]).ok();
+                            // Phase 6.27d.c: unify the receiver's K/V slots
+                            // with the call args so subsequent `.get()` can
+                            // resolve V (and K) to concrete types. vaisdb
+                            // patterns like
+                            //   m := mut HashMap.with_capacity(16)
+                            //   m.insert(1, AggGroup.new())
+                            //   item := m.get(&1)!
+                            // depend on this.
+                            if let (Some(k_slot), Some(k_actual)) =
+                                (generics.first().cloned(), arg_k)
+                            {
+                                let _ = self.unify(&k_slot, &k_actual);
+                            }
+                            if let (Some(v_slot), Some(v_actual)) =
+                                (generics.get(1).cloned(), arg_v)
+                            {
+                                let _ = self.unify(&v_slot, &v_actual);
+                            }
+                            // Phase Ω P1.2 R3 audit (iter 91): same update_var_type
+                            // propagation as Vec.push fix, applied to HashMap-family
+                            // receivers. ADR 0002 Class 4 — without this, var_info
+                            // freezes to ?K/?V at declaration, codegen falls back
+                            // to i64 for indexing/method dispatch on receiver.
+                            if let Expr::Ident(recv_name) = &receiver.node {
+                                let resolved_generics: Vec<ResolvedType> = generics
+                                    .iter()
+                                    .map(|g| self.apply_substitutions(g))
+                                    .collect();
+                                let any_changed = resolved_generics
+                                    .iter()
+                                    .zip(generics.iter())
+                                    .any(|(r, o)| r != o);
+                                if any_changed {
+                                    let new_named = ResolvedType::Named {
+                                        name: name.clone(),
+                                        generics: resolved_generics,
+                                    };
+                                    let new_ty = match &receiver_type {
+                                        ResolvedType::Ref(_) => {
+                                            ResolvedType::Ref(Box::new(new_named))
+                                        }
+                                        ResolvedType::RefMut(_) => {
+                                            ResolvedType::RefMut(Box::new(new_named))
+                                        }
+                                        ResolvedType::Pointer(_) => {
+                                            ResolvedType::Pointer(Box::new(new_named))
+                                        }
+                                        _ => new_named,
+                                    };
+                                    self.update_var_type(recv_name, new_ty);
+                                }
+                            }
+                            return Ok(generics.get(1).cloned().unwrap_or(ResolvedType::I64));
+                        }
+                    }
+                    "remove" => {
+                        // Phase 312: HashMap/BTreeMap/etc. .remove(k) → Option<V>
+                        // (Rust semantics). stdlib's legacy `F remove -> V`
+                        // signature is bypassed via bypass_struct_lookup so
+                        // this branch wins. vaisdb uses `.remove(k).unwrap()`
+                        // / pattern-match on the Option<V> return.
+                        if name != "Vec" && !args.is_empty() {
+                            let _ = self.check_expr(&args[0]);
+                            let val_ty = generics.get(1).cloned().unwrap_or(ResolvedType::I64);
+                            return Ok(ResolvedType::Optional(Box::new(val_ty)));
+                        }
+                        // Vec.remove(i) → T
+                        if name == "Vec" && !args.is_empty() {
+                            let _ = self.check_expr(&args[0]);
+                            return Ok(generics.first().cloned().unwrap_or(ResolvedType::I64));
+                        }
+                    }
+                    "clear" | "truncate" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok(ResolvedType::I64);
+                    }
+                    "clone" => {
+                        if args.is_empty() {
+                            return Ok(clone_result_type(&receiver_type));
+                        }
+                    }
+                    "to_vec" | "as_slice" => {
+                        if args.is_empty() && name == "Vec" {
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    "iter_mut" => {
+                        // Return same type — iter_mut is identity at type level.
+                        if args.is_empty() {
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    "as_ref" => {
+                        // Take ref to the same type.
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Ref(Box::new(receiver_type.clone())));
+                        }
+                    }
+                    "filter" | "skip" | "take" | "flat_map" => {
+                        // Phase 284: Vec iterator adapter methods return Vec<T> (identity
+                        // at type level — permissive for chaining like
+                        // text.chars().filter(...).count()). Only for Vec, not HashMap.
+                        if name == "Vec" {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    "count" | "sum" | "product" | "min" | "max" => {
+                        // Phase 284: Vec iterator terminal methods returning I64.
+                        // count() on Vec<T> yields the number of elements;
+                        // used as the terminal in .chars().filter(...).count() chains.
+                        if name == "Vec" {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            return Ok(ResolvedType::I64);
+                        }
+                    }
+                    "map" | "for_each" => {
+                        // Phase 284: Vec.map(|x| ...) → Vec<T> (permissive, identity on T).
+                        // Vec.for_each is Unit.
+                        if name == "Vec" && !args.is_empty() {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            if method.node == "for_each" {
+                                return Ok(ResolvedType::Unit);
+                            }
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            // Phase 353: generic `.as_ptr()` on ANY Named type returns I64.
+            // Vec<u8>/buffers/etc all use this for FFI calls.
+            if method.node == "as_ptr" && args.is_empty() {
+                return Ok(ResolvedType::I64);
+            }
+            if method.node == "as_mut_ptr" && args.is_empty() {
+                return Ok(ResolvedType::I64);
+            }
+            // Phase 226: generic `.to_string()` on ANY Named type returns Str.
+            // This is a permissive fallback — the real stdlib impl (if any)
+            // wins via earlier method lookup. Used by vaisdb for
+            // `query.to_string()`, `err.to_string()` etc.
+            if method.node == "to_string" && args.is_empty() {
+                return Ok(ResolvedType::Str);
+            }
+            // Phase 273: slice/Vec mutation operations — no result.
+            // P1.5 (iter 128): sort_by added — `Vec.sort_by(|a, b| ...)` Unit return.
+            // P1.7 (iter 134) Stage A: closure 인자 hint propagation. For
+            // `Vec<T>.sort_by(|a, b| ...)`, Lambda params `a`/`b` should bind
+            // to `&T` so the closure body's field-access type-checks against
+            // the concrete element type. Without this, the params are fresh
+            // Vars and the body sees `?N.field` (E030). The hint is pushed
+            // onto `lambda_param_hint_stack` and consumed by Expr::Lambda
+            // when resolving each param's `Type::Infer`.
+            if matches!(
+                method.node.as_str(),
+                "copy_from_slice"
+                    | "clone_from_slice"
+                    | "fill"
+                    | "swap"
+                    | "rotate_left"
+                    | "rotate_right"
+                    | "sort"
+                    | "sort_by"
+                    | "reverse"
+            ) {
+                let elem_ty_for_hint = if name == "Vec" {
+                    generics.first().cloned()
+                } else {
+                    None
+                };
+                for a in args.iter() {
+                    if let (Some(elem), Expr::Lambda { .. }) = (&elem_ty_for_hint, &a.node) {
+                        let ref_elem = ResolvedType::Ref(Box::new(elem.clone()));
+                        self.lambda_param_hint_stack.push(ref_elem);
+                        let _ = self.check_expr(a);
+                        self.lambda_param_hint_stack.pop();
+                    } else {
+                        let _ = self.check_expr(a);
+                    }
+                }
+                return Ok(ResolvedType::Unit);
+            }
+            // Phase 269: generic `.as_ref()` on ANY type returns &T.
+            // Option::as_ref, Vec::as_ref, Result::as_ref etc. all match
+            // this pattern. Strict borrow-checking runs separately.
+            if method.node == "as_ref" && args.is_empty() {
+                return Ok(ResolvedType::Ref(Box::new(receiver_type.clone())));
+            }
+            // Phase 271: ok_or / ok_or_else convert Option<T> → Result<T,E>.
+            // The fallback is permissive about the receiver type — codegen
+            // and stdlib's real Option impl override when present.
+            if (method.node == "ok_or" || method.node == "ok_or_else") && args.len() == 1 {
+                let _ = self.check_expr(&args[0]);
+                // Phase 6.27g: also handle Named{"Option", [T]} form — the
+                // resolver sometimes produces Named rather than Optional for
+                // Option types coming out of method returns (e.g.
+                // `catalog.get_table() -> Option<&TableInfo>`), which made
+                // the fallback wrap Result<Option<T>, Str>, breaking
+                // `.ok_or(...)?.field` patterns downstream.
+                if let ResolvedType::Optional(inner) = &receiver_type {
+                    return Ok(ResolvedType::Result(
+                        inner.clone(),
+                        Box::new(ResolvedType::Str),
+                    ));
+                }
+                if let ResolvedType::Named { name, generics } = &receiver_type {
+                    if name == "Option" && generics.len() == 1 {
+                        return Ok(ResolvedType::Result(
+                            Box::new(generics[0].clone()),
+                            Box::new(ResolvedType::Str),
+                        ));
+                    }
+                }
+                return Ok(ResolvedType::Result(
+                    Box::new(receiver_type.clone()),
+                    Box::new(ResolvedType::Str),
+                ));
+            }
+            // Phase 271: map / and_then / or_else identity at type level — but
+            // ONLY when receiver is Option/Result (so we don't shadow user-
+            // defined .map on iterators or Vec). Real signature: map<F>(f: F)
+            // would change inner type, but at the type-checker level we treat
+            // it as receiver-preserving.
+            if matches!(
+                method.node.as_str(),
+                "map" | "and_then" | "or_else" | "filter" | "filter_map"
+            ) && args.len() == 1
+                && matches!(
+                    &receiver_type,
+                    ResolvedType::Optional(_) | ResolvedType::Result(_, _)
+                )
+            {
+                let _ = self.check_expr(&args[0]);
+                return Ok(receiver_type.clone());
+            }
+            // Phase 271: unwrap_or / unwrap_or_default returns inner T.
+            if matches!(method.node.as_str(), "unwrap_or" | "unwrap_or_default") && args.len() <= 1
+            {
+                for a in args.iter() {
+                    let _ = self.check_expr(a);
+                }
+                if let ResolvedType::Optional(inner) | ResolvedType::Result(inner, _) =
+                    &receiver_type
+                {
+                    return Ok((**inner).clone());
+                }
+                return Ok(receiver_type.clone());
+            }
+            // Phase 226: generic `.clone()` on ANY Named type returns the same type.
+            if method.node == "clone" && args.is_empty() {
+                return Ok(clone_result_type(&receiver_type));
+            }
+            // Phase 290: generic `.cloned()` / `.copied()` — iterator/Option/Ref
+            // semantics: identity at type level (with one-layer Ref unwrap).
+            if (method.node == "cloned" || method.node == "copied") && args.is_empty() {
+                if let ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) = &receiver_type {
+                    return Ok((**inner).clone());
+                }
+                return Ok(receiver_type.clone());
+            }
+            // Phase 306: generic lock ops fallback. vaisdb uses
+            // try_read_lock / try_write_lock / try_lock / read_unlock / write_unlock / unlock
+            // pervasively on lock-like types. Try-ops return Option<Guard>
+            // but callers use them as Bool in `I cond { }`. Unlock ops
+            // are void.
+            if matches!(
+                method.node.as_str(),
+                "try_read_lock" | "try_write_lock" | "try_lock"
+            ) && args.is_empty()
+            {
+                return Ok(ResolvedType::Bool);
+            }
+            if matches!(
+                method.node.as_str(),
+                "read_unlock" | "write_unlock" | "unlock"
+            ) && args.is_empty()
+            {
+                return Ok(ResolvedType::Unit);
+            }
+            // Phase 307: Vec.extend(other) — extends with another iterator/Vec.
+            // Returns Unit. Lenient on receiver.
+            if method.node == "extend" && args.len() == 1 {
+                let _ = self.check_expr(&args[0]);
+                return Ok(ResolvedType::Unit);
+            }
+            // Phase 308: Iterator/source open/close/next trait-style methods.
+            // vaisdb's SQL executor pipeline uses .open(ctx)/.close() extensively
+            // — treat as Result<(), VaisError>. Permissive fallback.
+            if matches!(method.node.as_str(), "open" | "close") {
+                for a in args.iter() {
+                    let _ = self.check_expr(a);
+                }
+                return Ok(ResolvedType::Result(
+                    Box::new(ResolvedType::Unit),
+                    Box::new(ResolvedType::Named {
+                        name: "VaisError".to_string(),
+                        generics: vec![],
+                    }),
+                ));
+            }
+            // Phase 236: Option<T>/Result<T,E> method fallback (Named-guarded legacy).
+            // Phase 311: moved primitive ResolvedType::Optional(T)/Result(T,E) dispatch
+            // OUT of this Named-guarded block (see below, right after the closing `}`),
+            // because the old location was unreachable when receiver_type itself was
+            // the enum variant (Optional/Result), not a Named wrapper — that's exactly
+            // the case for `vec.pop().unwrap()` (receiver=Optional<T>).
+
+            if let ResolvedType::Named { name, generics } =
+                receiver_named.unwrap_or(&ResolvedType::Unit)
+            {
+                if name == "Option" || name == "Result" {
+                    match method.node.as_str() {
+                        "unwrap" | "expect" => {
+                            for a in args.iter() {
+                                let _ = self.check_expr(a);
+                            }
+                            return Ok(generics.first().cloned().unwrap_or(ResolvedType::I64));
+                        }
+                        "is_some" | "is_none" | "is_ok" | "is_err" => {
+                            if args.is_empty() {
+                                return Ok(ResolvedType::Bool);
+                            }
+                        }
+                        "ok" => {
+                            if args.is_empty() && name == "Result" {
+                                let inner = generics.first().cloned().unwrap_or(ResolvedType::I64);
+                                return Ok(ResolvedType::Optional(Box::new(inner)));
+                            }
+                        }
+                        "unwrap_or" => {
+                            if args.len() == 1 {
+                                let _ = self.check_expr(&args[0]);
+                                return Ok(generics.first().cloned().unwrap_or(ResolvedType::I64));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            // Phase 235: String-specific fallback for common methods that
+            // vaisdb calls on String receivers. Most return Str or I64 and
+            // are safe permissive fallbacks when the real impl lookup fails
+            // (e.g. when receiver type resolved through a complex chain).
+            if let ResolvedType::Named { name, .. } = receiver_named.unwrap_or(&ResolvedType::Unit)
+            {
+                if name == "String" || name == "Str" {
+                    match method.node.as_str() {
+                        "len" | "capacity" => {
+                            if args.is_empty() {
+                                return Ok(ResolvedType::I64);
+                            }
+                        }
+                        "is_empty" => {
+                            if args.is_empty() {
+                                return Ok(ResolvedType::Bool);
+                            }
+                        }
+                        "char_at" | "byte_at" => {
+                            if args.len() == 1 {
+                                let _ = self.check_expr(&args[0]);
+                                return Ok(ResolvedType::I64);
+                            }
+                        }
+                        "push_char" | "push_byte" => {
+                            if args.len() == 1 {
+                                let _ = self.check_expr(&args[0]);
+                                return Ok(ResolvedType::I64);
+                            }
+                        }
+                        "push_str" | "as_str" => {
+                            if args.len() <= 1 {
+                                for a in args.iter() {
+                                    let _ = self.check_expr(a);
+                                }
+                                return Ok(ResolvedType::Str);
+                            }
+                        }
+                        "contains" | "starts_with" | "ends_with" => {
+                            if args.len() == 1 {
+                                let _ = self.check_expr(&args[0]);
+                                return Ok(ResolvedType::Bool);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        // Phase 311: primitive Optional(T)/Result(T,E) method fallback — reachable
+        // regardless of receiver_named (which is None when receiver IS Optional/Result).
+        // This is the dispatch that makes `vec.pop().unwrap()` typecheck: pop() returns
+        // Optional<T>, and here we handle .unwrap()/.expect()/.is_some() etc. on that.
+        match &receiver_type {
+            ResolvedType::Optional(inner) => {
+                match method.node.as_str() {
+                    "unwrap" | "expect" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok((**inner).clone());
+                    }
+                    "is_some" | "is_none" => {
+                        if args.is_empty() {
+                            return Ok(ResolvedType::Bool);
+                        }
+                    }
+                    "unwrap_or" | "unwrap_or_default" => {
+                        for a in args.iter() {
+                            let _ = self.check_expr(a);
+                        }
+                        return Ok((**inner).clone());
+                    }
+                    // Phase 290: Option<T>.cloned()/.copied() — identity.
+                    "cloned" | "copied" => {
+                        if args.is_empty() {
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    // Phase 6.28.3: ok_or / ok_or_else on a literal Optional(T)
+                    // receiver. The older Phase 271 fallback is inside the
+                    // `receiver_named = Some(Named)` block and never fires when
+                    // the receiver IS Optional/Result itself (receiver_named is
+                    // None in that case). Needed for chains like
+                    // `guard.get(&k).ok_or_else(|| err)` where `guard.get(&k)`
+                    // goes through MutexGuard → HashMap builtin dispatch and
+                    // returns `Optional(Ref(V))` directly.
+                    "ok_or" | "ok_or_else" => {
+                        if args.len() == 1 {
+                            let _ = self.check_expr(&args[0]);
+                            return Ok(ResolvedType::Result(
+                                inner.clone(),
+                                Box::new(ResolvedType::Str),
+                            ));
+                        }
+                    }
+                    // Phase 6.28.3: Option<T>.map/and_then/or_else/filter/filter_map
+                    // identity at type level. Mirror the Named-receiver fallback
+                    // in Phase 271 so chaining on bare Optional works.
+                    "map" | "and_then" | "or_else" | "filter" | "filter_map" => {
+                        if args.len() == 1 {
+                            let _ = self.check_expr(&args[0]);
+                            return Ok(receiver_type.clone());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            ResolvedType::Result(ok_ty, _err_ty) => match method.node.as_str() {
+                "unwrap" | "expect" => {
+                    for a in args.iter() {
+                        let _ = self.check_expr(a);
+                    }
+                    return Ok((**ok_ty).clone());
+                }
+                "is_ok" | "is_err" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Bool);
+                    }
+                }
+                "ok" => {
+                    if args.is_empty() {
+                        return Ok(ResolvedType::Optional(Box::new((**ok_ty).clone())));
+                    }
+                }
+                "unwrap_or" | "unwrap_or_default" => {
+                    for a in args.iter() {
+                        let _ = self.check_expr(a);
+                    }
+                    return Ok((**ok_ty).clone());
+                }
+                _ => {}
+            },
+            _ => {}
+        }
 
         // Phase 24 Task 5: .iter() / .enumerate() builtin for iterable receivers
         // Matches any type whose item type is derivable via get_iterator_item_type
@@ -567,6 +1917,19 @@ impl TypeChecker {
         // see lookup.rs get_iterator_item_type_inner for the binding. Codegen
         // (Task 6) recognizes these method calls in for-each loops and desugars
         // them to index-based iteration.
+        // Phase 227: generic `.len()` on any iterable receiver returns I64.
+        // Catches enum-pattern destructured Vec<T> fields (e.g. `VectorVal { v }`
+        // where v's generic param isn't propagated through the pattern), which
+        // otherwise show E004 'len not defined'. The Vec/HashMap fallback
+        // above already handles the common case; this is a safety net for
+        // anything else iterable.
+        if args.is_empty()
+            && method.node == "len"
+            && self.get_iterator_item_type(&receiver_type).is_some()
+        {
+            return Ok(ResolvedType::I64);
+        }
+
         if args.is_empty() && (method.node == "iter" || method.node == "enumerate") {
             if let Some(elem_ty) = self.get_iterator_item_type(&receiver_type) {
                 // Skip EnumerateIter here — if the receiver is already EnumerateIter<T>,
@@ -594,7 +1957,7 @@ impl TypeChecker {
         // Minimal builtin fallbacks (kept because VaisDB structs lack explicit impl blocks for these)
         // clone: identity-copy semantics for any struct
         if method.node == "clone" && args.is_empty() {
-            return Ok(receiver_type.clone());
+            return Ok(clone_result_type(&receiver_type));
         }
         // serialize: writes to ByteBuffer, returns unit
         if method.node == "serialize" {
@@ -671,18 +2034,49 @@ impl TypeChecker {
                 // Handle generic struct type inference
                 if !struct_def.generics.is_empty() {
                     // Create fresh type variables for each struct generic parameter
-                    let generic_substitutions: HashMap<String, ResolvedType> = struct_def
+                    let mut generic_substitutions: HashMap<String, ResolvedType> = struct_def
                         .generics
                         .iter()
                         .map(|param| (param.clone(), self.fresh_type_var()))
                         .collect();
+                    let self_generics = struct_def
+                        .generics
+                        .iter()
+                        .filter_map(|param| generic_substitutions.get(param).cloned())
+                        .collect();
+                    generic_substitutions.insert(
+                        "Self".to_string(),
+                        ResolvedType::Named {
+                            name: type_name.node.clone(),
+                            generics: self_generics,
+                        },
+                    );
 
                     // Substitute generics in parameter types and check arguments
                     for (param_type, arg) in param_types.iter().zip(args) {
-                        let arg_type = self.check_expr(arg)?;
                         let expected_type =
                             self.substitute_generics(param_type, &generic_substitutions);
-                        self.unify(&expected_type, &arg_type)?;
+                        let arg_type = self.check_expr_with_enum_hint(arg, &expected_type)?;
+                        self.unify(&expected_type, &arg_type)
+                            .map_err(|e| e.with_span(arg.span))?;
+                    }
+
+                    // Phase 17.H4.15: when zero-arg (or otherwise insufficient
+                    // arg info) generic static methods like `Vec.new()` are
+                    // called in a context with a known expected type (e.g.
+                    // struct-literal field whose type is `Vec<MigrationRecord>`),
+                    // unify the method's generic return type with the caller's
+                    // expected type. This binds the fresh type vars so the
+                    // stamped `expr_types` entry holds concrete generics —
+                    // codegen can then route to `Vec_new$MigrationRecord`
+                    // instead of the unmangled generic base symbol.
+                    if let Some(expected_call_ty) = self.current_expected_type() {
+                        let return_subst =
+                            self.substitute_generics(&method_sig.ret, &generic_substitutions);
+                        // Unify is permissive: on mismatch we swallow the
+                        // error — the top-level unify at the call site will
+                        // surface any real conflict with a better span.
+                        let _ = self.unify(&return_subst, &expected_call_ty);
                     }
 
                     // Substitute generics in return type
@@ -710,6 +2104,33 @@ impl TypeChecker {
                     let all_concrete = inferred_type_args
                         .iter()
                         .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
+                    // Phase 0 bug C16 fix: when this static method call is
+                    // inside a generic function body (current_generics is
+                    // non-empty), record it as a `generic_callee` of the
+                    // current fn so that when the caller is concretely
+                    // instantiated, `propagate_transitive_instantiations`
+                    // can derive the concrete method instantiation. The
+                    // callee_name for methods follows the same Type_method
+                    // mangle convention used downstream.
+                    if !self.current_generics.is_empty() {
+                        if let Some(ref caller_name) = self.current_fn_name.clone() {
+                            let callee_name = format!("{}_{}", type_name.node, method.node);
+                            let callee = GenericCallee {
+                                callee_name,
+                                type_args: inferred_type_args.clone(),
+                                method_info: Some((type_name.node.clone(), method.node.clone())),
+                            };
+                            if let Some(caller_sig) = self.functions.get_mut(caller_name) {
+                                let already = caller_sig.generic_callees.iter().any(|c| {
+                                    c.callee_name == callee.callee_name
+                                        && c.type_args == callee.type_args
+                                });
+                                if !already {
+                                    caller_sig.generic_callees.push(callee);
+                                }
+                            }
+                        }
+                    }
                     if all_concrete {
                         let inst = GenericInstantiation::struct_type(
                             &type_name.node,
@@ -742,36 +2163,213 @@ impl TypeChecker {
                     return Ok(resolved_return);
                 }
 
-                // Non-generic struct - original behavior
-                for (param_type, arg) in param_types.iter().zip(args) {
-                    let arg_type = self.check_expr(arg)?;
-                    self.unify(param_type, &arg_type)?;
+                // Non-generic struct - original behavior.
+                // Phase 313: handle method-level generics (e.g. `F reverse_vec<T>`)
+                // on non-generic structs. Without this, calls like
+                // `ShortestPathFinder.reverse_vec(&path)` leave T unbound and
+                // unification of `&mut Vec<T>` against `&Vec<u64>` fails as
+                // "expected T, found u64".
+                if !method_sig.generics.is_empty() {
+                    let mut generic_substitutions: HashMap<String, ResolvedType> = method_sig
+                        .generics
+                        .iter()
+                        .map(|param| (param.clone(), self.fresh_type_var()))
+                        .collect();
+                    generic_substitutions.insert(
+                        "Self".to_string(),
+                        ResolvedType::Named {
+                            name: type_name.node.clone(),
+                            generics: vec![],
+                        },
+                    );
+
+                    for (param_type, arg) in param_types.iter().zip(args) {
+                        let expected_type =
+                            self.substitute_generics(param_type, &generic_substitutions);
+                        let arg_type = self.check_expr_with_enum_hint(arg, &expected_type)?;
+                        self.unify(&expected_type, &arg_type)
+                            .map_err(|e| e.with_span(arg.span))?;
+                    }
+
+                    let return_type =
+                        self.substitute_generics(&method_sig.ret, &generic_substitutions);
+                    return Ok(self.apply_substitutions(&return_type));
                 }
 
-                return Ok(method_sig.ret.clone());
+                let mut self_substitution = HashMap::new();
+                self_substitution.insert(
+                    "Self".to_string(),
+                    ResolvedType::Named {
+                        name: type_name.node.clone(),
+                        generics: vec![],
+                    },
+                );
+                for (param_type, arg) in param_types.iter().zip(args) {
+                    let expected_type = self.substitute_generics(param_type, &self_substitution);
+                    let arg_type = self.check_expr_with_enum_hint(arg, &expected_type)?;
+                    self.unify(&expected_type, &arg_type)
+                        .map_err(|e| e.with_span(arg.span))?;
+                }
+
+                let return_type = self.substitute_generics(&method_sig.ret, &self_substitution);
+                return Ok(self.apply_substitutions(&return_type));
             }
+        }
+
+        // Phase 6.27b: enum variant constructor as static method call:
+        // `EnumType.Variant(arg1, ...)` — check args against the variant's
+        // declared field types, substituting generics with fresh vars,
+        // and return Named{enum_name, [substituted generics]}.
+        if let Some(enum_def) = self.enums.get(&type_name.node).cloned() {
+            if let Some(variant_fields) = enum_def.variants.get(&method.node).cloned() {
+                use crate::types::VariantFieldTypes;
+                // Create fresh type vars for enum generic params, build substitution map
+                let mut generic_substitutions: HashMap<String, ResolvedType> = HashMap::new();
+                for param in &enum_def.generics {
+                    generic_substitutions.insert(param.clone(), self.fresh_type_var());
+                }
+                // Unify arg types against substituted variant field types; capture
+                // generic param → concrete type bindings for the return type.
+                match &variant_fields {
+                    VariantFieldTypes::Tuple(field_types) => {
+                        if args.len() != field_types.len() {
+                            return Err(TypeError::ArgCount {
+                                expected: field_types.len(),
+                                got: args.len(),
+                                span: Some(expr_span),
+                            });
+                        }
+                        for (param_type, arg) in field_types.iter().zip(args) {
+                            let arg_type = self.check_expr(arg)?;
+                            let expected_type =
+                                self.substitute_generics(param_type, &generic_substitutions);
+                            self.unify(&expected_type, &arg_type)
+                                .map_err(|e| e.with_span(arg.span))?;
+                        }
+                    }
+                    VariantFieldTypes::Unit => {
+                        if !args.is_empty() {
+                            return Err(TypeError::ArgCount {
+                                expected: 0,
+                                got: args.len(),
+                                span: Some(expr_span),
+                            });
+                        }
+                    }
+                    VariantFieldTypes::Struct(named_fields) => {
+                        // `Enum.Variant(positional args matching field order)` — rare;
+                        // struct variants usually use Enum.Variant { field: v } syntax
+                        // (handled elsewhere via Expr::StructLit with enum_name Some).
+                        if args.len() != named_fields.len() {
+                            return Err(TypeError::ArgCount {
+                                expected: named_fields.len(),
+                                got: args.len(),
+                                span: Some(expr_span),
+                            });
+                        }
+                        for ((_, param_type), arg) in named_fields.iter().zip(args) {
+                            let arg_type = self.check_expr(arg)?;
+                            let expected_type =
+                                self.substitute_generics(param_type, &generic_substitutions);
+                            self.unify(&expected_type, &arg_type)
+                                .map_err(|e| e.with_span(arg.span))?;
+                        }
+                    }
+                }
+                let resolved_generics: Vec<ResolvedType> = enum_def
+                    .generics
+                    .iter()
+                    .map(|g| {
+                        generic_substitutions
+                            .get(g)
+                            .cloned()
+                            .map(|t| self.apply_substitutions(&t))
+                            .unwrap_or(ResolvedType::Unknown)
+                    })
+                    .collect();
+                return Ok(ResolvedType::Named {
+                    name: type_name.node.clone(),
+                    generics: resolved_generics,
+                });
+            }
+        }
+
+        // Phase 17.H4.15: for zero-arg builtin generic constructors
+        // (Vec.new / HashMap.new / HashSet.new / ...), unify the fresh
+        // generic type vars with the caller's expected type if one is
+        // available. This binds the vars so the stamped `expr_types` entry
+        // carries concrete generics — codegen can then route to the
+        // specialized symbol (e.g. `Vec_new$MigrationRecord`) instead of
+        // the unmangled generic base. Callers that know the expected type
+        // push it via `push_expected_type` before `check_expr`; see
+        // `checker_expr/collections.rs` struct-literal field loop.
+        fn make_and_bind<F>(
+            checker: &mut TypeChecker,
+            container_name: &str,
+            n_type_vars: usize,
+            make_ret: F,
+        ) -> ResolvedType
+        where
+            F: Fn(&[ResolvedType]) -> ResolvedType,
+        {
+            let fresh: Vec<ResolvedType> =
+                (0..n_type_vars).map(|_| checker.fresh_type_var()).collect();
+            let ret = make_ret(&fresh);
+            if let Some(ResolvedType::Named {
+                name: exp_name,
+                generics: exp_generics,
+            }) = checker.current_expected_type().as_ref()
+            {
+                if exp_name == container_name && exp_generics.len() == fresh.len() {
+                    for (var, concrete) in fresh.iter().zip(exp_generics.iter()) {
+                        let _ = checker.unify(var, concrete);
+                    }
+                    // Record method + struct instantiation so codegen's
+                    // specialization lookup (by mangled name) finds the
+                    // symbol even when no prior call site in the same
+                    // module has registered it.
+                    let resolved_generics: Vec<ResolvedType> = exp_generics
+                        .iter()
+                        .map(|g| checker.apply_substitutions(g))
+                        .collect();
+                    let all_concrete = resolved_generics
+                        .iter()
+                        .all(|t| !matches!(t, ResolvedType::Var(_) | ResolvedType::Generic(_)));
+                    if all_concrete {
+                        let inst = GenericInstantiation::struct_type(
+                            container_name,
+                            resolved_generics.clone(),
+                        );
+                        checker.add_instantiation(inst);
+                        let method_inst =
+                            GenericInstantiation::method(container_name, "new", resolved_generics);
+                        checker.add_instantiation(method_inst);
+                    }
+                }
+            }
+            ret
         }
 
         // Built-in Vec static methods
         if type_name.node == "Vec" {
             match method.node.as_str() {
                 "new" => {
-                    let elem_type = self.fresh_type_var();
-                    return Ok(ResolvedType::Named {
+                    let ret = make_and_bind(self, "Vec", 1, |fresh| ResolvedType::Named {
                         name: "Vec".to_string(),
-                        generics: vec![elem_type],
+                        generics: fresh.to_vec(),
                     });
+                    return Ok(ret);
                 }
                 "with_capacity" => {
                     if args.len() == 1 {
                         let arg_type = self.check_expr(&args[0])?;
                         let _ = self.unify(&ResolvedType::I64, &arg_type);
                     }
-                    let elem_type = self.fresh_type_var();
-                    return Ok(ResolvedType::Named {
+                    let ret = make_and_bind(self, "Vec", 1, |fresh| ResolvedType::Named {
                         name: "Vec".to_string(),
-                        generics: vec![elem_type],
+                        generics: fresh.to_vec(),
                     });
+                    return Ok(ret);
                 }
                 _ => {}
             }
@@ -784,10 +2382,31 @@ impl TypeChecker {
                     for arg in args {
                         let _ = self.check_expr(arg)?;
                     }
-                    return Ok(ResolvedType::Named {
+                    let ret = make_and_bind(self, "HashMap", 2, |fresh| ResolvedType::Named {
                         name: "HashMap".to_string(),
-                        generics: vec![self.fresh_type_var(), self.fresh_type_var()],
+                        generics: fresh.to_vec(),
                     });
+                    return Ok(ret);
+                }
+                _ => {}
+            }
+        }
+
+        // Phase 6.27e.a: Built-in HashSet static methods — mirror HashMap.
+        // Without this, HashSet.new()/with_capacity fall through to the
+        // generic "new-like method" fallback which returns a HashSet with
+        // EMPTY generics, making all subsequent methods fail type check.
+        if type_name.node == "HashSet" {
+            match method.node.as_str() {
+                "new" | "with_capacity" => {
+                    for arg in args {
+                        let _ = self.check_expr(arg)?;
+                    }
+                    let ret = make_and_bind(self, "HashSet", 1, |fresh| ResolvedType::Named {
+                        name: "HashSet".to_string(),
+                        generics: fresh.to_vec(),
+                    });
+                    return Ok(ret);
                 }
                 _ => {}
             }
@@ -806,10 +2425,12 @@ impl TypeChecker {
 
         // Fallback: for unknown types, if method returns Self type
         if method.node == "new"
+            || method.node.starts_with("new_")
             || method.node.starts_with("create")
             || method.node.starts_with("from")
             || method.node == "clone"
             || method.node == "default"
+            || method.node.starts_with("default_")
         {
             for arg in args {
                 let _ = self.check_expr(arg)?;
@@ -1016,5 +2637,43 @@ impl TypeChecker {
         self.implicit_try_sites
             .insert((arg_span.start, arg_span.end));
         Ok(Some(inner_ok))
+    }
+
+    fn resolve_builtin_type_marker(&self, name: &str) -> Option<ResolvedType> {
+        let ty = match name {
+            "i8" => ResolvedType::I8,
+            "i16" => ResolvedType::I16,
+            "i32" => ResolvedType::I32,
+            "i64" => ResolvedType::I64,
+            "i128" => ResolvedType::I128,
+            "u8" => ResolvedType::U8,
+            "u16" => ResolvedType::U16,
+            "u32" => ResolvedType::U32,
+            "u64" => ResolvedType::U64,
+            "u128" => ResolvedType::U128,
+            "f32" => ResolvedType::F32,
+            "f64" => ResolvedType::F64,
+            "bool" => ResolvedType::Bool,
+            "str" => ResolvedType::Str,
+            _ if self.current_generics.iter().any(|g| g == name) => {
+                ResolvedType::Generic(name.to_string())
+            }
+            _ => {
+                if let Some(alias) = self.type_aliases.get(name) {
+                    alias.clone()
+                } else if self.structs.contains_key(name)
+                    || self.enums.contains_key(name)
+                    || self.unions.contains_key(name)
+                {
+                    ResolvedType::Named {
+                        name: name.to_string(),
+                        generics: Vec::new(),
+                    }
+                } else {
+                    return None;
+                }
+            }
+        };
+        Some(self.apply_substitutions(&ty))
     }
 }

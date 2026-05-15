@@ -28,7 +28,7 @@ fn count_severity(findings: &[SecurityFinding], severity: Severity) -> usize {
 #[test]
 fn test_malloc_buffer_overflow_detection() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             ptr := malloc(100)
             store_i64(ptr, 42)
             free(ptr)
@@ -44,7 +44,7 @@ fn test_malloc_buffer_overflow_detection() {
 #[test]
 fn test_use_after_free_detection() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             ptr := malloc(8)
             free(ptr)
             val := *ptr
@@ -60,7 +60,7 @@ fn test_use_after_free_detection() {
 #[test]
 fn test_pointer_arithmetic_detection() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             ptr := malloc(100)
             offset := ptr + 10
             store_i64(offset, 42)
@@ -79,7 +79,7 @@ fn test_pointer_arithmetic_detection() {
 #[test]
 fn test_array_indexing_detection() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             arr := [1, 2, 3, 4, 5]
             idx := 10
             val := arr[idx]
@@ -95,7 +95,7 @@ fn test_array_indexing_detection() {
 #[test]
 fn test_command_injection_detection() {
     let source = r#"
-        F execute_cmd(user_input: String) -> i64 {
+        fn execute_cmd(user_input: String) -> i64 {
             cmd := "rm -rf " + user_input
             system(cmd)
         }
@@ -110,7 +110,7 @@ fn test_command_injection_detection() {
 #[test]
 fn test_sql_injection_detection() {
     let source = r#"
-        F get_user(username: String) -> i64 {
+        fn get_user(username: String) -> i64 {
             db_query("SELECT * FROM users WHERE name = '" + username + "'")
         }
     "#;
@@ -124,7 +124,7 @@ fn test_sql_injection_detection() {
 #[test]
 fn test_hardcoded_password_detection() {
     let source = r#"
-        F connect() -> i64 {
+        fn connect() -> i64 {
             password := "super_secret_password_123"
             login("admin", password)
         }
@@ -138,7 +138,7 @@ fn test_hardcoded_password_detection() {
 #[test]
 fn test_hardcoded_api_key_detection() {
     let source = r#"
-        F call_api() -> i64 {
+        fn call_api() -> i64 {
             api_key := "sk-1234567890abcdefghijklmnopqrstuvwxyz"
             authenticate(api_key)
         }
@@ -152,7 +152,7 @@ fn test_hardcoded_api_key_detection() {
 #[test]
 fn test_integer_overflow_on_user_input() {
     let source = r#"
-        F process_input() -> i64 {
+        fn process_input() -> i64 {
             user_val := read()
             result := user_val * 1000000
             result
@@ -167,12 +167,12 @@ fn test_integer_overflow_on_user_input() {
 fn test_unsafe_c_functions_detection() {
     let source = r#"
         N "C" {
-            F strcpy(dest: *i8, src: *i8) -> *i8
-            F gets(buf: *i8) -> *i8
-            F sprintf(buf: *i8, fmt: *i8, ...) -> i64
+            fn strcpy(dest: *i8, src: *i8) -> *i8
+            fn gets(buf: *i8) -> *i8
+            fn sprintf(buf: *i8, fmt: *i8, ...) -> i64
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -191,11 +191,11 @@ fn test_unsafe_c_functions_detection() {
 fn test_system_exec_functions_in_extern() {
     let source = r#"
         N "C" {
-            F system(cmd: *i8) -> i64
-            F exec(path: *i8, ...) -> i64
+            fn system(cmd: *i8) -> i64
+            fn exec(path: *i8, ...) -> i64
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             0
         }
     "#;
@@ -207,7 +207,7 @@ fn test_system_exec_functions_in_extern() {
 #[test]
 fn test_load_store_operations() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ptr := malloc(8)
             store_i64(ptr, 100)
             val := load_i64(ptr)
@@ -230,11 +230,11 @@ fn test_load_store_operations() {
 #[test]
 fn test_unchecked_unwrap() {
     let source = r#"
-        F get_value() -> i64? {
+        fn get_value() -> i64? {
             Some(42)
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             val := unwrap(get_value())
             val
         }
@@ -247,7 +247,7 @@ fn test_unchecked_unwrap() {
 #[test]
 fn test_memcpy_operations() {
     let source = r#"
-        F copy_data() -> i64 {
+        fn copy_data() -> i64 {
             src := malloc(100)
             dst := malloc(100)
             memcpy(dst, src, 100)
@@ -265,7 +265,7 @@ fn test_memcpy_operations() {
 #[test]
 fn test_high_entropy_token_detection() {
     let source = r#"
-        F authenticate() -> i64 {
+        fn authenticate() -> i64 {
             api_key := "xK7mP9qR2sL5nW8tV3gH4jF6bN1cM0dZ"
             send_request(api_key)
         }
@@ -279,11 +279,11 @@ fn test_high_entropy_token_detection() {
 #[test]
 fn test_clean_code_minimal_findings() {
     let source = r#"
-        F add(a: i64, b: i64) -> i64 {
+        fn add(a: i64, b: i64) -> i64 {
             a + b
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             result := add(10, 20)
             result
         }
@@ -298,10 +298,10 @@ fn test_clean_code_minimal_findings() {
 fn test_severity_levels() {
     let source = r#"
         N "C" {
-            F strcpy(dst: *i8, src: *i8) -> *i8
+            fn strcpy(dst: *i8, src: *i8) -> *i8
         }
 
-        F vulnerable() -> i64 {
+        fn vulnerable() -> i64 {
             password := "hardcoded_password"
             ptr := malloc(100)
             system("rm -rf /")
@@ -331,7 +331,7 @@ fn test_severity_levels() {
 #[test]
 fn test_complex_pointer_operations() {
     let source = r#"
-        F complex_memory() -> i64 {
+        fn complex_memory() -> i64 {
             # Allocate memory
             ptr1 := malloc(64)
             ptr2 := malloc(32)
@@ -364,7 +364,7 @@ fn test_complex_pointer_operations() {
 #[test]
 fn test_string_operations_safe() {
     let source = r#"
-        F greet(name: String) -> String {
+        fn greet(name: String) -> String {
             greeting := "Hello, "
             message := greeting + name
             message

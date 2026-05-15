@@ -1,0 +1,161 @@
+use vector/hnsw/types
+use vector/hnsw/bulk
+use vector/distance
+use storage/wal/group_commit
+use storage/wal/writer
+use storage/error
+
+struct BulkWalStore {
+    n1: HnswNode,
+    n2: HnswNode,
+    has1: bool,
+    has2: bool,
+    allocated_pages: u64,
+}
+
+impl BulkWalStore {
+    fn new() -> BulkWalStore {
+        BulkWalStore {
+            n1: HnswNode.new(0, 0, 0, 0, 0, 0),
+            n2: HnswNode.new(0, 0, 0, 0, 0, 0),
+            has1: false,
+            has2: false,
+            allocated_pages: 0,
+        }
+    }
+}
+
+impl BulkWalStore : NodeStore {
+    fn load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
+        I node_id == 1 && self.has1 { return Ok(self.n1.clone()) }
+        I node_id == 2 && self.has2 { return Ok(self.n2.clone()) }
+        Err(err_internal("missing smoke bulk wal node"))
+    }
+
+    fn load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
+        I node_id == 1 && self.has1 {
+            return Ok(bulk_wal_vec2(0.0, 0.0))
+        }
+        I node_id == 2 && self.has2 {
+            return Ok(bulk_wal_vec2(1.0, 0.0))
+        }
+        Err(err_internal("missing smoke bulk wal vector"))
+    }
+
+    fn store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
+        node_id := mut node.node_id
+        I node_id == 1 {
+            self.n1 = node
+            self.has1 = true
+            return Ok(())
+        }
+        I node_id == 2 {
+            self.n2 = node
+            self.has2 = true
+            return Ok(())
+        }
+        Err(err_internal("unexpected smoke bulk wal node"))
+    }
+
+    fn allocate_node_id(mut self) -> u64 {
+        3
+    }
+
+    fn get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
+        Ok((5 as u8, node_id as u32))
+    }
+
+    fn allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
+        self.allocated_pages += 1
+        Ok((5 as u8, node_id as u32))
+    }
+}
+
+fn bulk_wal_vec2(a: f32, b: f32) -> Vec<f32> {
+    values: Vec<f32> := mut Vec.with_capacity(2)
+    values.push(a)
+    values.push(b)
+    values
+}
+
+fn main() -> i64 {
+    hnsw_cfg := mut match HnswConfig.new(2 as u16, 4 as u16, 4 as u32, 4 as u32, 8 as u64, DISTANCE_L2) {
+        Ok(v) => v,
+        Err(_) => { return 1 },
+    }
+    meta := mut HnswMeta.new(hnsw_cfg, 41 as u32)
+    store := mut BulkWalStore.new()
+    distance := mut DistanceComputer.new(L2)
+
+    v1 := mut bulk_wal_vec2(0.0, 0.0)
+    v2 := mut bulk_wal_vec2(1.0, 0.0)
+    vectors: Vec<&[f32]> := mut Vec.new()
+    vectors.push(&v1)
+    vectors.push(&v2)
+
+    metas: Vec<VectorMeta> := mut Vec.new()
+    metas.push(VectorMeta.new(0, 1, 0 as u8, 61 as u32, 0 as u16))
+    metas.push(VectorMeta.new(1, 2, 0 as u8, 62 as u32, 1 as u16))
+
+    cfg := mut BulkLoadConfig.with_batch_size(2)
+    I cfg.skip_wal { return 2 }
+
+    writer := mut match WalWriter.new("/tmp/vais-smoke-hnsw-bulk-wal", 4096 as u32) {
+        Ok(w) => w,
+        Err(_) => { return 3 },
+    }
+    gcm := mut GroupCommitManager.new(GroupCommitConfig.async_mode(), writer)
+
+    meta = match bulk_insert_stored_vectors_with_wal(
+        &cfg,
+        &vectors,
+        &metas,
+        meta,
+        &mut store,
+        &distance,
+        &mut gcm,
+        810,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            I e.code == "VAIS-0202005" { return 4 }
+            return 5
+        },
+    }
+
+    I meta.total_nodes != 2 { return 6 }
+    I meta.entry_point != 1 { return 7 }
+    I meta.max_layer != 0 as u8 { return 8 }
+    I !store.has1 { return 9 }
+    I !store.has2 { return 10 }
+    I store.allocated_pages != 2 { return 11 }
+
+    stored1 := mut match store.load_node(1) {
+        Ok(n) => n,
+        Err(_) => { return 12 },
+    }
+    stored2 := mut match store.load_node(2) {
+        Ok(n) => n,
+        Err(_) => { return 13 },
+    }
+    I stored1.vector_page_id != 61 as u32 { return 14 }
+    I stored2.vector_page_id != 62 as u32 { return 15 }
+    I stored2.vector_offset != 1 as u16 { return 16 }
+
+    n1_neighbors := mut match stored1.get_neighbors(0) {
+        Ok(v) => v,
+        Err(_) => { return 17 },
+    }
+    n2_neighbors := mut match stored2.get_neighbors(0) {
+        Ok(v) => v,
+        Err(_) => { return 18 },
+    }
+    I n1_neighbors.len() != 1 { return 19 }
+    I n2_neighbors.len() != 1 { return 20 }
+    I n1_neighbors[0].node_id != 2 { return 21 }
+    I n2_neighbors[0].node_id != 1 { return 22 }
+    I !approx_eq_f32(n1_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { return 23 }
+    I !approx_eq_f32(n2_neighbors[0].distance, 1.0 as f32, 0.0001 as f32) { return 24 }
+
+    return 0
+}

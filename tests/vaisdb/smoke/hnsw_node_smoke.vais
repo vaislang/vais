@@ -1,0 +1,40 @@
+use vector/hnsw/types
+
+fn main() -> i64 {
+    node := mut HnswNode.new(42, 3, 4, 1, 100, 2)
+
+    match node.add_neighbor(1, HnswNeighbor.new(99, 2.5 as f32)) {
+        Ok(_) => {},
+        Err(_) => { return 1 },
+    }
+
+    layer1 := mut match node.get_neighbors(1) {
+        Ok(v) => v,
+        Err(_) => { return 2 },
+    }
+    I layer1.len() != 1 { return 3 }
+
+    first := mut &layer1[0]
+    I first.node_id != 99 { return 4 }
+    I first.distance != (2.5 as f32) { return 5 }
+
+    layer0 := mut match node.get_neighbors_mut(0) {
+        Ok(v) => v,
+        Err(_) => { return 6 },
+    }
+    layer0.push(HnswNeighbor.new(77, 1.25 as f32))
+
+    layer0_read := mut match node.get_neighbors(0) {
+        Ok(v) => v,
+        Err(_) => { return 7 },
+    }
+    I layer0_read.len() != 1 { return 8 }
+    I layer0_read[0].node_id != 77 { return 9 }
+
+    match node.get_neighbors(3) {
+        Ok(_) => { return 10 },
+        Err(_) => {},
+    }
+
+    return 0
+}

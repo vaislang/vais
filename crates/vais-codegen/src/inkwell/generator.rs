@@ -8,8 +8,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicTypeEnum, StructType};
-use inkwell::values::{BasicValueEnum, FunctionValue, GlobalValue, IntValue, PointerValue};
-use inkwell::AddressSpace;
+use inkwell::values::{BasicValueEnum, FunctionValue, GlobalValue, PointerValue};
 
 use vais_ast::{self as ast, Expr, Module as VaisModule};
 use vais_types::ResolvedType;
@@ -27,6 +26,15 @@ pub(super) struct LoopContext<'ctx> {
     /// `scope_str_stack.len()` at loop entry. Frames at indices ≥ this depth
     /// are loop-internal and must be freed on break/continue (Phase 191 #6).
     pub(super) scope_str_depth: usize,
+    /// B.6: Slot for `B value` propagation. Lazily allocated on the first
+    /// break-with-value encountered during loop body codegen. When present,
+    /// each `B expr` stores its value here before branching to `break_block`,
+    /// and the loop-end reads from it as the loop expression's value.
+    /// None means the loop produces unit — matches legacy behavior.
+    pub(super) break_value_slot: Option<(
+        inkwell::values::PointerValue<'ctx>,
+        inkwell::types::BasicTypeEnum<'ctx>,
+    )>,
 }
 
 /// LLVM code generator using inkwell.
@@ -94,17 +102,22 @@ pub struct InkwellCodeGenerator<'ctx> {
 
     /// Enum multi-field tuple variant payload struct types:
     /// (enum_name, variant_name) -> anonymous struct type that packs all fields.
-    /// Populated when a multi-field tuple variant (e.g., Rect(i64, i64)) is declared;
-    /// pattern bindings use this to decode each erased i64 payload slot back to its
-    /// declared field type.
+    /// Populated when a multi-field tuple variant (e.g., Rect(i64, i64)) is constructed;
+    /// pattern bindings use this to load the heap-allocated payload and extract each field.
     pub(super) enum_variant_multi_payload_types:
         HashMap<(String, String), inkwell::types::StructType<'ctx>>,
 
+    /// Enum struct-variant field names:
+    /// (enum_name, variant_name) -> Vec of field names in declaration order.
+    /// Used by Pattern::Struct binding to map named-field patterns
+    /// (`Enum.Variant { a, b }`) to positional indices in the payload struct.
+    pub(super) enum_variant_multi_payload_field_names: HashMap<(String, String), Vec<String>>,
+
     /// Enum single-primitive variant payload LLVM type:
     /// (enum_name, variant_name) -> primitive BasicTypeEnum (f64, i32, ...) for
-    /// variants whose sole payload is a non-struct primitive. The enum payload
-    /// slot stores this as i64 (bitcast for floats, widen for smaller ints),
-    /// but pattern bindings need to recover the declared type so the
+    /// variants whose sole payload is a non-struct primitive. The enum data
+    /// slot always stores this as i64 (bitcast for floats, widen for smaller
+    /// ints), but pattern bindings need to recover the declared type so the
     /// bound identifier has the right type when referenced downstream.
     pub(super) enum_variant_primitive_payload_types:
         HashMap<(String, String), inkwell::types::BasicTypeEnum<'ctx>>,
@@ -182,6 +195,13 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// list; the null one is already a no-op in emit_alloc_cleanup.
     pub(super) var_string_slots_multi: HashMap<String, Vec<inkwell::values::PointerValue<'ctx>>>,
 
+    /// Variable name -> scope-string frame index where the variable was
+    /// declared. Assignment of a fresh owned string must move the allocation
+    /// slot from the current expression/block frame into this declaration
+    /// frame; otherwise loop-body cleanup frees the buffer while the variable
+    /// still points at it.
+    pub(super) var_string_scope_depth: HashMap<String, usize>,
+
     /// For PHI results that represent a merge of multiple tracked concat
     /// results (if/match-as-expression producing a string), the PHI's SSA is
     /// registered in `string_value_slot` with its first incoming slot; any
@@ -204,6 +224,34 @@ pub struct InkwellCodeGenerator<'ctx> {
     /// Each call-site arg whose span is in this set is wrapped in `Expr::Try`
     /// before codegen, reusing the existing Try handling.
     pub(super) implicit_try_sites: HashSet<(usize, usize)>,
+
+    /// B.1: The resolved type of the scrutinee of the currently-generating
+    /// `match` expression. Used by `generate_pattern_bindings` (Pattern::Variant)
+    /// to recover the struct-payload type for `Option<Struct>` / `Result<Struct,_>`
+    /// when `enum_variant_struct_types` has no entry (those maps are only
+    /// populated for user-defined enums via gen_declaration). Push/pop in
+    /// `generate_match` around arm generation; stack-shaped so nested matches
+    /// work.
+    pub(super) match_scrutinee_type_stack: Vec<vais_types::ResolvedType>,
+
+    /// Trait definitions registered for vtable generation (DEFERRED #18 sub-task 2b-2).
+    /// Mirrors `crates/vais-codegen/src/state.rs::trait_defs` (text-IR side).
+    /// Populated by `register_trait_from_ast_inkwell` from `Item::Trait` AST nodes.
+    /// Used by 2b-2 `generate_vtable_global` and 2b-4 `generate_dynamic_call`.
+    /// Dead until 2b-5 wires call sites in gen_aggregate.rs.
+    pub(super) trait_defs: HashMap<String, vais_types::TraitDef>,
+
+    /// Trait implementation method maps:
+    /// (impl_type, trait_name) -> { method_name -> mangled_function_name }.
+    /// Mirrors text-IR `trait_impl_methods`. Populated by
+    /// `register_trait_impl_inkwell` from `Item::Impl` AST nodes with a
+    /// declared trait. Dead until 2b-5.
+    pub(super) trait_impl_methods: HashMap<(String, String), HashMap<String, String>>,
+
+    /// Cached vtable globals: (impl_type, trait_name) -> emitted GlobalValue.
+    /// Populated lazily by `get_or_generate_vtable_inkwell` in 2b-2.
+    /// Dead until 2b-5.
+    pub(super) vtable_globals: HashMap<(String, String), GlobalValue<'ctx>>,
 }
 
 /// Tail Call Optimization state for loop-based tail recursion elimination.
@@ -257,6 +305,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             enum_variant_struct_types: HashMap::new(),
             enum_variant_primitive_payload_types: HashMap::new(),
             enum_variant_multi_payload_types: HashMap::new(),
+            enum_variant_multi_payload_field_names: HashMap::new(),
             var_struct_types: HashMap::new(),
             var_resolved_types: HashMap::new(),
             struct_generic_params: HashMap::new(),
@@ -272,11 +321,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             scope_str_stack: Vec::new(),
             var_string_slot: HashMap::new(),
             var_string_slots_multi: HashMap::new(),
+            var_string_scope_depth: HashMap::new(),
             phi_extra_slots: HashMap::new(),
             tco_state: None,
             resolved_function_sigs: HashMap::new(),
             type_aliases: HashMap::new(),
             implicit_try_sites: HashSet::new(),
+            match_scrutinee_type_stack: Vec::new(),
+            trait_defs: HashMap::new(),
+            trait_impl_methods: HashMap::new(),
+            vtable_globals: HashMap::new(),
         };
 
         // Declare built-in functions
@@ -301,245 +355,6 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     #[inline]
     pub(super) fn unit_value(&self) -> BasicValueEnum<'ctx> {
         self.context.struct_type(&[], false).const_zero().into()
-    }
-
-    /// Return the canonical erased enum type used by Option/Result in the
-    /// inkwell backend, and mirror it in the generator's named-struct table.
-    pub(super) fn erased_enum_type(&mut self, enum_name: &str) -> StructType<'ctx> {
-        if let Some(ty) = self.generated_structs.get(enum_name).copied() {
-            return ty;
-        }
-        let ty = self.type_mapper.erased_enum_struct_type(enum_name);
-        self.generated_structs.insert(enum_name.to_string(), ty);
-        ty
-    }
-
-    /// Build a value for the canonical enum ABI `{ i32 tag, { i64... } payload }`.
-    /// Unit-only enums have no payload field; missing payload slots are zero-filled.
-    pub(super) fn build_erased_enum_value(
-        &self,
-        enum_type: StructType<'ctx>,
-        tag: i32,
-        payload_slots: &[IntValue<'ctx>],
-        name: &str,
-    ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        let mut value = enum_type.get_undef();
-        let tag_type = match enum_type.get_field_type_at_index(0) {
-            Some(BasicTypeEnum::IntType(int_ty)) => int_ty,
-            _ => self.context.i32_type(),
-        };
-        value = self
-            .builder
-            .build_insert_value(
-                value,
-                tag_type.const_int(tag as u64, false),
-                0,
-                &format!("{}_tag", name),
-            )
-            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-            .into_struct_value();
-
-        if enum_type.count_fields() > 1 {
-            let payload_type = match enum_type.get_field_type_at_index(1) {
-                Some(BasicTypeEnum::StructType(payload_type)) => payload_type,
-                _ => self
-                    .context
-                    .struct_type(&[self.context.i64_type().into()], false),
-            };
-            let mut payload = payload_type.get_undef();
-            for idx in 0..payload_type.count_fields() {
-                let slot = payload_slots
-                    .get(idx as usize)
-                    .copied()
-                    .unwrap_or_else(|| self.context.i64_type().const_int(0, false));
-                payload = self
-                    .builder
-                    .build_insert_value(payload, slot, idx, &format!("{}_data_{}", name, idx))
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-                    .into_struct_value();
-            }
-            value = self
-                .builder
-                .build_insert_value(value, payload, 1, &format!("{}_payload", name))
-                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-                .into_struct_value();
-        }
-
-        Ok(value.into())
-    }
-
-    /// Erase an arbitrary payload value into one canonical i64 enum payload slot.
-    pub(super) fn erase_enum_payload_to_i64(
-        &self,
-        value: BasicValueEnum<'ctx>,
-        name: &str,
-    ) -> CodegenResult<IntValue<'ctx>> {
-        if value.is_struct_value() {
-            let struct_val = value.into_struct_value();
-            let struct_ty = struct_val.get_type();
-            let target_data = inkwell::targets::TargetData::create(
-                &self.module.get_triple().as_str().to_string_lossy(),
-            );
-            let size_bytes = target_data.get_store_size(&struct_ty);
-            let i64_ty = self.context.i64_type();
-            if size_bytes > 8 {
-                let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
-                let malloc_fn = self
-                    .module
-                    .get_function("malloc")
-                    .or_else(|| {
-                        let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
-                        Some(self.module.add_function("malloc", malloc_ty, None))
-                    })
-                    .unwrap();
-                let heap_ptr = self
-                    .builder
-                    .build_call(
-                        malloc_fn,
-                        &[i64_ty.const_int(size_bytes, false).into()],
-                        &format!("{}_heap", name),
-                    )
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-                    .try_as_basic_value()
-                    .basic()
-                    .ok_or_else(|| {
-                        crate::CodegenError::LlvmError(
-                            "ICE: malloc call returned void for enum payload".into(),
-                        )
-                    })?
-                    .into_pointer_value();
-                let typed_ptr = self
-                    .builder
-                    .build_bit_cast(
-                        heap_ptr,
-                        struct_ty.ptr_type(AddressSpace::default()),
-                        &format!("{}_heap_typed", name),
-                    )
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-                    .into_pointer_value();
-                self.builder
-                    .build_store(typed_ptr, struct_val)
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
-                self.builder
-                    .build_ptr_to_int(heap_ptr, i64_ty, &format!("{}_ptr_i64", name))
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
-            } else {
-                let tmp_alloca = self
-                    .builder
-                    .build_alloca(struct_ty, &format!("{}_small_tmp", name))
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
-                self.builder
-                    .build_store(tmp_alloca, struct_val)
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
-                let i64_ptr = self
-                    .builder
-                    .build_bit_cast(
-                        tmp_alloca,
-                        i64_ty.ptr_type(AddressSpace::default()),
-                        &format!("{}_small_i64p", name),
-                    )
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-                    .into_pointer_value();
-                self.builder
-                    .build_load(i64_ty, i64_ptr, &format!("{}_small_i64", name))
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
-                    .map(|v| v.into_int_value())
-            }
-        } else {
-            self.coerce_to_i64(value)
-        }
-    }
-
-    /// Decode one canonical i64 enum payload slot back into the declared LLVM type.
-    pub(super) fn decode_enum_payload_slot(
-        &self,
-        slot: IntValue<'ctx>,
-        declared_type: BasicTypeEnum<'ctx>,
-        name: &str,
-    ) -> CodegenResult<BasicValueEnum<'ctx>> {
-        if let BasicTypeEnum::StructType(struct_ty) = declared_type {
-            let target_data = inkwell::targets::TargetData::create(
-                &self.module.get_triple().as_str().to_string_lossy(),
-            );
-            let size_bytes = target_data.get_store_size(&struct_ty);
-            if size_bytes > 8 {
-                let ptr_ty = struct_ty.ptr_type(AddressSpace::default());
-                let heap_ptr = self
-                    .builder
-                    .build_int_to_ptr(slot, ptr_ty, &format!("{}_heap_ptr", name))
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
-                return self
-                    .builder
-                    .build_load(struct_ty, heap_ptr, &format!("{}_heap_load", name))
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()));
-            }
-
-            let i64_ty = self.context.i64_type();
-            let tmp_alloca = self
-                .builder
-                .build_alloca(i64_ty, &format!("{}_small_slot", name))
-                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
-            self.builder
-                .build_store(tmp_alloca, slot)
-                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
-            let typed_ptr = self
-                .builder
-                .build_bit_cast(
-                    tmp_alloca,
-                    struct_ty.ptr_type(AddressSpace::default()),
-                    &format!("{}_small_typed", name),
-                )
-                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-                .into_pointer_value();
-            return self
-                .builder
-                .build_load(struct_ty, typed_ptr, &format!("{}_small_load", name))
-                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()));
-        }
-
-        if let BasicTypeEnum::FloatType(float_ty) = declared_type {
-            let bit_width = float_ty.get_bit_width();
-            let source = if bit_width < 64 {
-                self.builder
-                    .build_int_truncate(
-                        slot,
-                        self.context.custom_width_int_type(bit_width),
-                        &format!("{}_f_trunc", name),
-                    )
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-            } else {
-                slot
-            };
-            return self
-                .builder
-                .build_bit_cast(source, float_ty, &format!("{}_to_float", name))
-                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()));
-        }
-
-        if let BasicTypeEnum::IntType(int_ty) = declared_type {
-            let decoded = match int_ty.get_bit_width().cmp(&64) {
-                std::cmp::Ordering::Equal => slot,
-                std::cmp::Ordering::Less => self
-                    .builder
-                    .build_int_truncate(slot, int_ty, &format!("{}_trunc", name))
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?,
-                std::cmp::Ordering::Greater => self
-                    .builder
-                    .build_int_s_extend(slot, int_ty, &format!("{}_sext", name))
-                    .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?,
-            };
-            return Ok(decoded.into());
-        }
-
-        if let BasicTypeEnum::PointerType(ptr_ty) = declared_type {
-            return self
-                .builder
-                .build_int_to_ptr(slot, ptr_ty, &format!("{}_to_ptr", name))
-                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
-                .map(Into::into);
-        }
-
-        Ok(slot.into())
     }
 
     /// Enable strict type mode.
@@ -612,6 +427,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 ast::Item::Global(global_def) => {
                     self.define_global(global_def)?;
                 }
+                ast::Item::Trait(t) => {
+                    // 2b-5a: register trait for inkwell-side vtable generation.
+                    // Dead until 2b-5b/2b-5c wire call sites.
+                    self.register_trait_from_ast_inkwell(t);
+                }
                 _ => {}
             }
         }
@@ -624,6 +444,62 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     {
                         for method in &impl_block.methods {
                             self.declare_method(&type_name, &method.node)?;
+                        }
+                        // Phase 0 bug C11: also declare synthetic methods
+                        // for trait defaults the impl doesn't override, so
+                        // call sites can resolve before the body-emit pass.
+                        if let Some(trait_name) = &impl_block.trait_name {
+                            let impl_method_names: std::collections::HashSet<String> = impl_block
+                                .methods
+                                .iter()
+                                .map(|m| m.node.name.node.clone())
+                                .collect();
+                            for trait_item in &vais_module.items {
+                                if let ast::Item::Trait(t) = &trait_item.node {
+                                    if t.name.node != trait_name.node {
+                                        continue;
+                                    }
+                                    for tm in &t.methods {
+                                        if impl_method_names.contains(&tm.name.node) {
+                                            continue;
+                                        }
+                                        let body = match &tm.default_body {
+                                            Some(b) => b.clone(),
+                                            None => continue,
+                                        };
+                                        let synth_fn = ast::Function {
+                                            name: tm.name.clone(),
+                                            generics: tm.generics.clone(),
+                                            params: tm.params.clone(),
+                                            ret_type: tm.ret_type.clone(),
+                                            body,
+                                            is_async: tm.is_async,
+                                            is_partial: false,
+                                            is_pub: false,
+                                            declared_effect: None,
+                                            attributes: Vec::new(),
+                                            where_clause: Vec::new(),
+                                        };
+                                        self.declare_method(&type_name, &synth_fn)?;
+                                    }
+                                }
+                            }
+                            // 2b-5a: register trait impl for inkwell-side
+                            // vtable generation. method_impls maps each
+                            // trait method to the mangled inherent fn name
+                            // `<Type>_<method>` (matches declare_method
+                            // mangling). Default methods get
+                            // `<Trait>_<method>_default`.
+                            let mut method_impls = std::collections::HashMap::new();
+                            for method in &impl_block.methods {
+                                let fn_name = format!("{}_{}", type_name, method.node.name.node);
+                                method_impls.insert(method.node.name.node.clone(), fn_name);
+                            }
+                            self.register_trait_impl_inkwell(
+                                &type_name,
+                                &trait_name.node,
+                                method_impls,
+                            );
                         }
                     }
                 }
@@ -681,6 +557,42 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     }
                 }
                 _ => {}
+            }
+        }
+
+        // Phase 0 bug C17 fix: pre-declare ALL function/method specs first
+        // so that body-generation calls (in the main loop below) can find
+        // every other specialization regardless of iteration order. Without
+        // this, a body generated early references a later-declared spec by
+        // the bare name, leading to link errors. Struct specs are skipped
+        // here because they're declared inside the same iteration anyway.
+        for inst in instantiations {
+            if let vais_types::InstantiationKind::Function = inst.kind {
+                if let Some(generic_fn) = generic_function_templates.get(&inst.base_name) {
+                    let param_types: Vec<ResolvedType> = generic_fn
+                        .params
+                        .iter()
+                        .map(|p| self.ast_type_to_resolved(&p.ty.node))
+                        .collect();
+                    let return_type = if let Some(ret) = generic_fn.ret_type.as_ref() {
+                        self.ast_type_to_resolved(&ret.node)
+                    } else {
+                        ResolvedType::Unit
+                    };
+                    let generic_names: Vec<String> = generic_fn
+                        .generics
+                        .iter()
+                        .filter(|g| !matches!(g.kind, vais_ast::GenericParamKind::Lifetime { .. }))
+                        .map(|g| g.name.node.clone())
+                        .collect();
+                    let _ = self.declare_specialized_function(
+                        &inst.base_name,
+                        &inst.type_args,
+                        &param_types,
+                        &return_type,
+                        &generic_names,
+                    );
+                }
             }
         }
 
@@ -830,6 +742,54 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         for method in &impl_block.methods {
                             self.generate_method(&type_name, &method.node)?;
                         }
+                        // Phase 0 bug C11 fix: if this impl is for a trait,
+                        // emit synthetic methods for any trait method with a
+                        // default body that the impl doesn't override. The
+                        // default body references `self.<other_method>()`
+                        // calls which resolve via the impl's own methods, so
+                        // we just generate the trait's default body as a
+                        // method on this concrete type.
+                        if let Some(trait_name) = &impl_block.trait_name {
+                            let impl_method_names: std::collections::HashSet<String> = impl_block
+                                .methods
+                                .iter()
+                                .map(|m| m.node.name.node.clone())
+                                .collect();
+                            // Find the trait AST and its default-bodied methods.
+                            for trait_item in &vais_module.items {
+                                if let ast::Item::Trait(t) = &trait_item.node {
+                                    if t.name.node != trait_name.node {
+                                        continue;
+                                    }
+                                    for trait_method in &t.methods {
+                                        if impl_method_names.contains(&trait_method.name.node) {
+                                            continue;
+                                        }
+                                        let body = match &trait_method.default_body {
+                                            Some(b) => b.clone(),
+                                            None => continue,
+                                        };
+                                        // Synthesize an ast::Function for the
+                                        // concrete type using the trait's
+                                        // default body.
+                                        let synth_fn = ast::Function {
+                                            name: trait_method.name.clone(),
+                                            generics: trait_method.generics.clone(),
+                                            params: trait_method.params.clone(),
+                                            ret_type: trait_method.ret_type.clone(),
+                                            body,
+                                            is_async: trait_method.is_async,
+                                            is_partial: false,
+                                            is_pub: false,
+                                            declared_effect: None,
+                                            attributes: Vec::new(),
+                                            where_clause: Vec::new(),
+                                        };
+                                        self.generate_method(&type_name, &synth_fn)?;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 ast::Item::Struct(s) => {
@@ -917,7 +877,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use inkwell::types::StructType;
     use vais_ast::Type;
+
+    fn assert_canonical_option_result_abi(st: StructType<'_>) {
+        assert_eq!(st.count_fields(), 2);
+        let tag_ty = st
+            .get_field_type_at_index(0)
+            .expect("Option/Result tag field");
+        assert!(tag_ty.is_int_type());
+        assert_eq!(tag_ty.into_int_type().get_bit_width(), 32);
+
+        let payload_ty = st
+            .get_field_type_at_index(1)
+            .expect("Option/Result payload field");
+        assert!(payload_ty.is_struct_type());
+        let payload_st = payload_ty.into_struct_type();
+        assert_eq!(payload_st.count_fields(), 1);
+        let payload_i64 = payload_st
+            .get_field_type_at_index(0)
+            .expect("Option/Result payload i64 field");
+        assert!(payload_i64.is_int_type());
+        assert_eq!(payload_i64.into_int_type().get_bit_width(), 64);
+    }
 
     #[test]
     fn test_create_generator() {
@@ -967,6 +949,48 @@ mod tests {
         let unit_type = Type::Unit;
         let resolved = gen.ast_type_to_resolved(&unit_type);
         assert!(matches!(resolved, ResolvedType::Unit));
+    }
+
+    #[test]
+    fn test_option_result_type_mapper_uses_canonical_erased_abi() {
+        let context = Context::create();
+        let gen = InkwellCodeGenerator::new(&context, "test");
+
+        let tys = [
+            ResolvedType::Optional(Box::new(ResolvedType::I64)),
+            ResolvedType::Result(Box::new(ResolvedType::I64), Box::new(ResolvedType::Str)),
+            ResolvedType::Named {
+                name: "Option".to_string(),
+                generics: vec![ResolvedType::I64],
+            },
+            ResolvedType::Named {
+                name: "Result".to_string(),
+                generics: vec![ResolvedType::I64, ResolvedType::Str],
+            },
+        ];
+
+        for ty in tys {
+            let llvm_ty = gen.type_mapper.map_type(&ty);
+            assert!(llvm_ty.is_struct_type(), "{:?} did not map to a struct", ty);
+            assert_canonical_option_result_abi(llvm_ty.into_struct_type());
+        }
+    }
+
+    #[test]
+    fn test_option_result_constructors_use_canonical_erased_abi() {
+        let context = Context::create();
+        let mut gen = InkwellCodeGenerator::new(&context, "test");
+
+        let fn_type = context.void_type().fn_type(&[], false);
+        let func = gen.module.add_function("__test_option", fn_type, None);
+        let entry = context.append_basic_block(func, "entry");
+        gen.builder.position_at_end(entry);
+
+        let empty_args: &[vais_ast::Spanned<vais_ast::Expr>] = &[];
+        let some = gen
+            .build_option_result_ctor(1, empty_args, "some")
+            .expect("Some constructor should build");
+        assert_canonical_option_result_abi(some.into_struct_value().get_type());
     }
 
     #[test]

@@ -67,7 +67,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             Ok(call
                 .try_as_basic_value()
-                .basic()
+                .left()
                 .unwrap_or_else(|| self.unit_value()))
         } else {
             Ok(self.unit_value())
@@ -404,6 +404,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         self.scope_str_stack.clear();
         self.var_string_slot.clear();
         self.var_string_slots_multi.clear();
+        self.var_string_scope_depth.clear();
         self.phi_extra_slots.clear();
 
         // Set up generic substitutions from parent struct and method generics

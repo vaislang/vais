@@ -66,10 +66,39 @@ fn test_struct_alignof_takes_max_field() {
         name: "MixedStruct".to_string(),
         generics: vec![],
     };
-    // Size: 1 + 4 + 2 = 7
-    assert_eq!(gen.compute_sizeof(&struct_type), 7);
+    // LLVM ABI layout: i8, 3 bytes padding, i32, i16, 2 bytes tail padding = 12
+    assert_eq!(gen.compute_sizeof(&struct_type), 12);
     // Alignment: max(1, 4, 2) = 4
     assert_eq!(gen.compute_alignof(&struct_type), 4);
+}
+
+#[test]
+fn test_recursive_struct_sizeof_alignof_is_guarded() {
+    let mut gen = CodeGenerator::new("test");
+    gen.types.structs.insert(
+        "Node".to_string(),
+        StructInfo {
+            _name: "Node".to_string(),
+            fields: vec![(
+                "next".to_string(),
+                ResolvedType::Named {
+                    name: "Node".to_string(),
+                    generics: vec![],
+                },
+            )],
+            _repr_c: false,
+            _invariants: vec![],
+            has_owned_mask: false,
+            heap_fields: vec![],
+        },
+    );
+    let struct_type = ResolvedType::Named {
+        name: "Node".to_string(),
+        generics: vec![],
+    };
+
+    assert_eq!(gen.compute_sizeof(&struct_type), 8);
+    assert_eq!(gen.compute_alignof(&struct_type), 8);
 }
 
 #[test]
@@ -238,6 +267,29 @@ fn test_sizeof_ref_mut() {
     let gen = CodeGenerator::new("test");
     let r = ResolvedType::RefMut(Box::new(ResolvedType::I64));
     assert_eq!(gen.compute_sizeof(&r), 8);
+}
+
+#[test]
+fn test_sizeof_slice_fat_pointer() {
+    let gen = CodeGenerator::new("test");
+    let slice = ResolvedType::Slice(Box::new(ResolvedType::F32));
+    let slice_ref = ResolvedType::Ref(Box::new(slice.clone()));
+    let str_ref = ResolvedType::Ref(Box::new(ResolvedType::Str));
+
+    assert_eq!(gen.compute_sizeof(&slice), 16);
+    assert_eq!(gen.compute_sizeof(&slice_ref), 16);
+    assert_eq!(gen.compute_sizeof(&str_ref), 16);
+}
+
+#[test]
+fn test_sizeof_dyn_trait_ref_fat_pointer() {
+    let gen = CodeGenerator::new("test");
+    let dyn_ref = ResolvedType::Ref(Box::new(ResolvedType::DynTrait {
+        trait_name: "Display".to_string(),
+        generics: vec![],
+    }));
+
+    assert_eq!(gen.compute_sizeof(&dyn_ref), 16);
 }
 
 #[test]
@@ -664,6 +716,139 @@ fn test_generate_enum_type_unit_only() {
 }
 
 #[test]
+fn test_unit_enum_alignof_matches_generated_i32_tag() {
+    let mut gen = CodeGenerator::new("test");
+    gen.types.enums.insert(
+        "FrameState".to_string(),
+        EnumInfo {
+            name: "FrameState".to_string(),
+            variants: vec![
+                EnumVariantInfo {
+                    name: "Empty".to_string(),
+                    _tag: 0,
+                    fields: EnumVariantFields::Unit,
+                },
+                EnumVariantInfo {
+                    name: "Clean".to_string(),
+                    _tag: 1,
+                    fields: EnumVariantFields::Unit,
+                },
+                EnumVariantInfo {
+                    name: "Dirty".to_string(),
+                    _tag: 2,
+                    fields: EnumVariantFields::Unit,
+                },
+            ],
+        },
+    );
+
+    let state_ty = ResolvedType::Named {
+        name: "FrameState".to_string(),
+        generics: vec![],
+    };
+    assert_eq!(gen.compute_sizeof(&state_ty), 4);
+    assert_eq!(gen.compute_alignof(&state_ty), 4);
+}
+
+#[test]
+fn test_struct_with_unit_enum_uses_llvm_abi_stride() {
+    let mut gen = CodeGenerator::new("test");
+    gen.types.enums.insert(
+        "FrameState".to_string(),
+        EnumInfo {
+            name: "FrameState".to_string(),
+            variants: vec![
+                EnumVariantInfo {
+                    name: "Empty".to_string(),
+                    _tag: 0,
+                    fields: EnumVariantFields::Unit,
+                },
+                EnumVariantInfo {
+                    name: "Clean".to_string(),
+                    _tag: 1,
+                    fields: EnumVariantFields::Unit,
+                },
+            ],
+        },
+    );
+    gen.types.structs.insert(
+        "PageLocation".to_string(),
+        StructInfo {
+            _name: "PageLocation".to_string(),
+            fields: vec![
+                ("file_id".to_string(), ResolvedType::U8),
+                ("page_id".to_string(), ResolvedType::U32),
+            ],
+            _repr_c: false,
+            _invariants: vec![],
+            has_owned_mask: false,
+            heap_fields: vec![],
+        },
+    );
+    gen.types.structs.insert(
+        "SmallFrame".to_string(),
+        StructInfo {
+            _name: "SmallFrame".to_string(),
+            fields: vec![
+                ("frame_id".to_string(), ResolvedType::U32),
+                (
+                    "location".to_string(),
+                    ResolvedType::Named {
+                        name: "PageLocation".to_string(),
+                        generics: vec![],
+                    },
+                ),
+                (
+                    "state".to_string(),
+                    ResolvedType::Named {
+                        name: "FrameState".to_string(),
+                        generics: vec![],
+                    },
+                ),
+                ("pin_count".to_string(), ResolvedType::U32),
+                ("clock_ref".to_string(), ResolvedType::Bool),
+                (
+                    "data".to_string(),
+                    ResolvedType::Named {
+                        name: "Vec".to_string(),
+                        generics: vec![ResolvedType::U8],
+                    },
+                ),
+                ("page_lsn".to_string(), ResolvedType::U64),
+                ("needs_fpi".to_string(), ResolvedType::Bool),
+            ],
+            _repr_c: false,
+            _invariants: vec![],
+            has_owned_mask: false,
+            heap_fields: vec![],
+        },
+    );
+    gen.types.structs.insert(
+        "Vec".to_string(),
+        StructInfo {
+            _name: "Vec".to_string(),
+            fields: vec![
+                ("data".to_string(), ResolvedType::I64),
+                ("len".to_string(), ResolvedType::I64),
+                ("cap".to_string(), ResolvedType::I64),
+                ("elem_size".to_string(), ResolvedType::I64),
+                ("owned".to_string(), ResolvedType::I64),
+            ],
+            _repr_c: false,
+            _invariants: vec![],
+            has_owned_mask: false,
+            heap_fields: vec![],
+        },
+    );
+
+    let frame_ty = ResolvedType::Named {
+        name: "SmallFrame".to_string(),
+        generics: vec![],
+    };
+    assert_eq!(gen.compute_sizeof(&frame_ty), 80);
+}
+
+#[test]
 fn test_generate_enum_type_with_payload() {
     let gen = CodeGenerator::new("test");
     let info = EnumInfo {
@@ -726,8 +911,8 @@ fn test_sizeof_nested_tuple() {
     let gen = CodeGenerator::new("test");
     let inner = ResolvedType::Tuple(vec![ResolvedType::I8, ResolvedType::I8]);
     let outer = ResolvedType::Tuple(vec![inner, ResolvedType::I32]);
-    // (i8, i8) = 2 bytes, i32 = 4 bytes, total = 6
-    assert_eq!(gen.compute_sizeof(&outer), 6);
+    // LLVM ABI layout: inner tuple = 2 bytes, 2 bytes padding, i32 = 4 bytes
+    assert_eq!(gen.compute_sizeof(&outer), 8);
 }
 
 #[test]

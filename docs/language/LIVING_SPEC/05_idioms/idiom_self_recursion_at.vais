@@ -1,0 +1,12 @@
+# LIVING_SPEC/05_idioms/idiom_self_recursion_at.vais
+# Key concept: ❌ 함수명 다시 쓰기 vs ✅ @로 재귀 호출
+# ✅ DO: @(n - 1) — 이름 바뀌어도 안전.
+# ❌ DON'T: fact(n - 1) — 함수 rename 시 수동 수정 필요.
+
+fn fact(n: i64) -> i64 {
+    I n <= 1 { 1 } else { n * @(n - 1) }
+}
+
+fn main() -> i64 {
+    fact(5)  # 120
+}

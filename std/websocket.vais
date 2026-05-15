@@ -49,7 +49,7 @@ C WS_STATE_CLOSED: i64 = 3
 # WebSocket Frame
 # ============================================
 
-S WsFrame {
+struct WsFrame {
     opcode: i64,
     payload: i64,        # Pointer to payload data
     payload_len: i64,
@@ -57,8 +57,8 @@ S WsFrame {
     is_masked: i64       # 1 if MASK bit set
 }
 
-X WsFrame {
-    F new(opcode: i64, payload: i64, payload_len: i64) -> WsFrame {
+impl WsFrame {
+    fn new(opcode: i64, payload: i64, payload_len: i64) -> WsFrame {
         WsFrame {
             opcode: opcode,
             payload: payload,
@@ -68,7 +68,7 @@ X WsFrame {
         }
     }
 
-    F text(msg: str) -> WsFrame {
+    fn text(msg: str) -> WsFrame {
         WsFrame {
             opcode: WS_OPCODE_TEXT,
             payload: msg as i64,
@@ -78,7 +78,7 @@ X WsFrame {
         }
     }
 
-    F binary(data: i64, len: i64) -> WsFrame {
+    fn binary(data: i64, len: i64) -> WsFrame {
         WsFrame {
             opcode: WS_OPCODE_BINARY,
             payload: data,
@@ -88,7 +88,7 @@ X WsFrame {
         }
     }
 
-    F ping() -> WsFrame {
+    fn ping() -> WsFrame {
         WsFrame {
             opcode: WS_OPCODE_PING,
             payload: 0,
@@ -98,7 +98,7 @@ X WsFrame {
         }
     }
 
-    F pong() -> WsFrame {
+    fn pong() -> WsFrame {
         WsFrame {
             opcode: WS_OPCODE_PONG,
             payload: 0,
@@ -108,7 +108,7 @@ X WsFrame {
         }
     }
 
-    F close(status_code: i64) -> WsFrame {
+    fn close(status_code: i64) -> WsFrame {
         # Close frame payload: 2-byte status code in network byte order
         payload := __malloc(2)
         store_byte(payload, status_code / 256)
@@ -123,57 +123,57 @@ X WsFrame {
     }
 
     # Check if this is a control frame
-    F is_control(&self) -> i64 {
-        I self.opcode >= 8 { 1 } EL { 0 }
+    fn is_control(&self) -> i64 {
+        I self.opcode >= 8 { 1 } else { 0 }
     }
 
     # Check if this is a text frame
-    F is_text(&self) -> i64 {
-        I self.opcode == WS_OPCODE_TEXT { 1 } EL { 0 }
+    fn is_text(&self) -> i64 {
+        I self.opcode == WS_OPCODE_TEXT { 1 } else { 0 }
     }
 
     # Check if this is a binary frame
-    F is_binary(&self) -> i64 {
-        I self.opcode == WS_OPCODE_BINARY { 1 } EL { 0 }
+    fn is_binary(&self) -> i64 {
+        I self.opcode == WS_OPCODE_BINARY { 1 } else { 0 }
     }
 
     # Check if this is a close frame
-    F is_close(&self) -> i64 {
-        I self.opcode == WS_OPCODE_CLOSE { 1 } EL { 0 }
+    fn is_close(&self) -> i64 {
+        I self.opcode == WS_OPCODE_CLOSE { 1 } else { 0 }
     }
 
     # Check if this is a ping frame
-    F is_ping(&self) -> i64 {
-        I self.opcode == WS_OPCODE_PING { 1 } EL { 0 }
+    fn is_ping(&self) -> i64 {
+        I self.opcode == WS_OPCODE_PING { 1 } else { 0 }
     }
 
     # Check if this is a pong frame
-    F is_pong(&self) -> i64 {
-        I self.opcode == WS_OPCODE_PONG { 1 } EL { 0 }
+    fn is_pong(&self) -> i64 {
+        I self.opcode == WS_OPCODE_PONG { 1 } else { 0 }
     }
 
     # Get payload as string (for text frames)
-    F payload_text(&self) -> str {
+    fn payload_text(&self) -> str {
         I self.payload != 0 & self.payload_len > 0 {
             self.payload as str
-        } EL {
+        } else {
             ""
         }
     }
 
     # Get close status code (for close frames)
-    F close_code(&self) -> i64 {
+    fn close_code(&self) -> i64 {
         I self.opcode == WS_OPCODE_CLOSE & self.payload_len >= 2 {
             high := load_byte(self.payload)
             low := load_byte(self.payload + 1)
             high * 256 + low
-        } EL {
+        } else {
             WS_CLOSE_NO_STATUS
         }
     }
 
     # Free payload memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.payload != 0 {
             __free(self.payload)
             self.payload = 0
@@ -186,16 +186,16 @@ X WsFrame {
 # WebSocket Connection
 # ============================================
 
-S WsConnection {
+struct WsConnection {
     fd: i64,             # TCP socket file descriptor
     is_server: i64,      # 1 if server-side, 0 if client-side
     state: i64,          # Connection state (WS_STATE_*)
     mask_key: i64        # Mask key for client->server frames
 }
 
-X WsConnection {
+impl WsConnection {
     # Create a server-side WebSocket connection from an already-accepted TCP fd
-    F from_server(fd: i64) -> WsConnection {
+    fn from_server(fd: i64) -> WsConnection {
         WsConnection {
             fd: fd,
             is_server: 1,
@@ -205,7 +205,7 @@ X WsConnection {
     }
 
     # Create a client-side WebSocket connection
-    F from_client(fd: i64) -> WsConnection {
+    fn from_client(fd: i64) -> WsConnection {
         WsConnection {
             fd: fd,
             is_server: 0,
@@ -215,24 +215,24 @@ X WsConnection {
     }
 
     # Check if connection is open
-    F is_open(&self) -> i64 {
-        I self.state == WS_STATE_OPEN { 1 } EL { 0 }
+    fn is_open(&self) -> i64 {
+        I self.state == WS_STATE_OPEN { 1 } else { 0 }
     }
 
     # Send a WebSocket frame
-    F send_frame(&self, frame: &WsFrame) -> i64 {
+    fn send_frame(&self, frame: &WsFrame) -> i64 {
         I self.state != WS_STATE_OPEN & self.state != WS_STATE_CLOSING {
-            R -1
+            return -1
         }
 
         buf := __malloc(WS_SEND_BUFFER)
         I buf == 0 {
-            R -1
+            return -1
         }
 
         # Server sends unmasked, client sends masked
-        masked := 0
-        mk := 0
+        masked := mut 0
+        mk := mut 0
         I self.is_server == 0 {
             masked = 1
             mk = __ws_random_mask_key()
@@ -245,43 +245,43 @@ X WsConnection {
 
         I frame_len <= 0 {
             __free(buf)
-            R -1
+            return -1
         }
 
         sent := __tcp_send(self.fd, buf, frame_len)
         __free(buf)
 
-        I sent < 0 { -1 } EL { sent }
+        I sent < 0 { -1 } else { sent }
     }
 
     # Send a text message
-    F send_text(&self, msg: str) -> i64 {
+    fn send_text(&self, msg: str) -> i64 {
         frame := WsFrame::text(msg)
         self.send_frame(&frame)
     }
 
     # Send binary data
-    F send_binary(&self, data: i64, len: i64) -> i64 {
+    fn send_binary(&self, data: i64, len: i64) -> i64 {
         frame := WsFrame::binary(data, len)
         self.send_frame(&frame)
     }
 
     # Send a ping frame
-    F send_ping(&self) -> i64 {
+    fn send_ping(&self) -> i64 {
         frame := WsFrame::ping()
         self.send_frame(&frame)
     }
 
     # Send a pong frame (response to ping)
-    F send_pong(&self) -> i64 {
+    fn send_pong(&self) -> i64 {
         frame := WsFrame::pong()
         self.send_frame(&frame)
     }
 
     # Send a close frame with status code
-    F send_close(&self, status_code: i64) -> i64 {
+    fn send_close(&self, status_code: i64) -> i64 {
         I self.state == WS_STATE_CLOSED {
-            R -1
+            return -1
         }
 
         frame := WsFrame::close(status_code)
@@ -298,18 +298,18 @@ X WsConnection {
     # Receive a WebSocket frame
     # Returns a WsFrame. Check opcode for frame type.
     # Returns frame with opcode=-1 on error or connection closed.
-    F recv_frame(&self) -> WsFrame {
+    fn recv_frame(&self) -> WsFrame {
         I self.state == WS_STATE_CLOSED {
-            R WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
+            return WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
         }
 
         # Read data from socket
         buf := __malloc(WS_MAX_FRAME_SIZE + 14)
         I buf == 0 {
-            R WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
+            return WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
         }
 
-        total := 0
+        total := mut 0
 
         # Read at least 2 bytes for frame header
         LW total < 2 {
@@ -317,7 +317,7 @@ X WsConnection {
             I n <= 0 {
                 __free(buf)
                 self.state = WS_STATE_CLOSED
-                R WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
+                return WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
             }
             total = total + n
         }
@@ -326,10 +326,10 @@ X WsConnection {
         frame_out := __malloc(40)  # 5 * 8 bytes for WsFrame fields
         I frame_out == 0 {
             __free(buf)
-            R WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
+            return WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
         }
 
-        consumed := __ws_decode_frame(buf, total, frame_out)
+        consumed := mut __ws_decode_frame(buf, total, frame_out)
 
         # If incomplete, read more data
         LW consumed == 0 & total < WS_MAX_FRAME_SIZE + 14 {
@@ -338,7 +338,7 @@ X WsConnection {
                 __free(buf)
                 __free(frame_out)
                 self.state = WS_STATE_CLOSED
-                R WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
+                return WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
             }
             total = total + n
             consumed = __ws_decode_frame(buf, total, frame_out)
@@ -349,7 +349,7 @@ X WsConnection {
         I consumed <= 0 {
             __free(frame_out)
             self.state = WS_STATE_CLOSED
-            R WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
+            return WsFrame { opcode: -1, payload: 0, payload_len: 0, is_final: 0, is_masked: 0 }
         }
 
         # Extract frame fields from decoded output
@@ -377,7 +377,7 @@ X WsConnection {
                 self.send_frame(&close_reply)
                 close_reply.drop()
                 self.state = WS_STATE_CLOSED
-            } EL I self.state == WS_STATE_CLOSING {
+            } else I self.state == WS_STATE_CLOSING {
                 # We initiated close, received response
                 self.state = WS_STATE_CLOSED
             }
@@ -387,7 +387,7 @@ X WsConnection {
     }
 
     # Close the WebSocket connection gracefully
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         I self.state == WS_STATE_OPEN {
             self.send_close(WS_CLOSE_NORMAL)
         }
@@ -400,7 +400,7 @@ X WsConnection {
     }
 
     # Force close without handshake
-    F force_close(&self) -> i64 {
+    fn force_close(&self) -> i64 {
         I self.fd >= 0 {
             __tcp_close(self.fd)
             self.fd = -1
@@ -410,7 +410,7 @@ X WsConnection {
     }
 
     # Drop / cleanup
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         self.force_close()
     }
 }
@@ -419,15 +419,15 @@ X WsConnection {
 # WebSocket Server
 # ============================================
 
-S WsServer {
+struct WsServer {
     listener_fd: i64,
     port: i64,
     running: i64
 }
 
-X WsServer {
+impl WsServer {
     # Create and bind a WebSocket server on the given port
-    F bind(port: i64) -> WsServer {
+    fn bind(port: i64) -> WsServer {
         listener_fd := __tcp_listen(port)
         WsServer {
             listener_fd: listener_fd,
@@ -437,31 +437,31 @@ X WsServer {
     }
 
     # Check if server is valid (listener bound successfully)
-    F is_valid(&self) -> i64 {
-        I self.listener_fd >= 0 { 1 } EL { 0 }
+    fn is_valid(&self) -> i64 {
+        I self.listener_fd >= 0 { 1 } else { 0 }
     }
 
     # Accept a WebSocket connection (performs HTTP upgrade handshake)
     # Returns WsConnection with fd=-1 on error
-    F accept(&self) -> WsConnection {
+    fn accept(&self) -> WsConnection {
         I self.listener_fd < 0 {
-            R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+            return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
         # Accept TCP connection
         client_fd := __tcp_accept(self.listener_fd)
         I client_fd < 0 {
-            R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+            return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
         # Read the HTTP upgrade request
         buf := __malloc(WS_HEADER_BUFFER)
         I buf == 0 {
             __tcp_close(client_fd)
-            R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+            return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
-        total := 0
+        total := mut 0
         LW true {
             n := __tcp_recv(client_fd, buf + total, WS_RECV_BUFFER)
             I n <= 0 {
@@ -480,7 +480,7 @@ X WsServer {
         I total <= 0 {
             __free(buf)
             __tcp_close(client_fd)
-            R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+            return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
         # Extract Sec-WebSocket-Key from the request
@@ -490,7 +490,7 @@ X WsServer {
         I ws_key == 0 {
             # Not a valid WebSocket upgrade request
             __tcp_close(client_fd)
-            R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+            return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
         # Compute accept key
@@ -499,7 +499,7 @@ X WsServer {
 
         I accept_key == 0 {
             __tcp_close(client_fd)
-            R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+            return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
         # Build and send the upgrade response
@@ -507,7 +507,7 @@ X WsServer {
         I resp_buf == 0 {
             __free(accept_key)
             __tcp_close(client_fd)
-            R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+            return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
         resp_len := __ws_build_upgrade_response(accept_key, resp_buf)
@@ -516,7 +516,7 @@ X WsServer {
         I resp_len <= 0 {
             __free(resp_buf)
             __tcp_close(client_fd)
-            R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+            return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
         sent := __tcp_send(client_fd, resp_buf, resp_len)
@@ -524,7 +524,7 @@ X WsServer {
 
         I sent < 0 {
             __tcp_close(client_fd)
-            R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+            return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
         }
 
         # Successfully upgraded - return open connection
@@ -533,9 +533,9 @@ X WsServer {
 
     # Run an echo server loop (convenience for simple servers)
     # Accepts one connection at a time, echoes text and binary frames back
-    F run_echo(&self) -> i64 {
+    fn run_echo(&self) -> i64 {
         I self.listener_fd < 0 {
-            R -1
+            return -1
         }
 
         self.running = 1
@@ -561,13 +561,13 @@ X WsServer {
                 I frame.opcode == WS_OPCODE_TEXT {
                     # Echo text back
                     conn.send_text(frame.payload_text())
-                } EL I frame.opcode == WS_OPCODE_BINARY {
+                } else I frame.opcode == WS_OPCODE_BINARY {
                     # Echo binary back
                     conn.send_binary(frame.payload, frame.payload_len)
-                } EL I frame.opcode == WS_OPCODE_PING {
+                } else I frame.opcode == WS_OPCODE_PING {
                     # Respond with pong
                     conn.send_pong()
-                } EL I frame.opcode == WS_OPCODE_CLOSE {
+                } else I frame.opcode == WS_OPCODE_CLOSE {
                     # Close handled automatically in recv_frame
                     B
                 }
@@ -583,13 +583,13 @@ X WsServer {
     }
 
     # Stop the server
-    F stop(&self) -> i64 {
+    fn stop(&self) -> i64 {
         self.running = 0
         0
     }
 
     # Close the server listener
-    F close(&self) -> i64 {
+    fn close(&self) -> i64 {
         I self.listener_fd >= 0 {
             __tcp_close(self.listener_fd)
             self.listener_fd = -1
@@ -599,7 +599,7 @@ X WsServer {
     }
 
     # Drop / cleanup
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         self.close()
     }
 }
@@ -609,7 +609,7 @@ X WsServer {
 # ============================================
 
 # Create a WebSocket server bound to a port
-F ws_server(port: i64) -> WsServer {
+fn ws_server(port: i64) -> WsServer {
     WsServer::bind(port)
 }
 
@@ -619,11 +619,11 @@ F ws_server(port: i64) -> WsServer {
 # buffer_len: length of request data
 # fd: TCP socket fd
 # Returns: WsConnection (fd=-1 on failure)
-F ws_upgrade(fd: i64, buffer: i64, buffer_len: i64) -> WsConnection {
+fn ws_upgrade(fd: i64, buffer: i64, buffer_len: i64) -> WsConnection {
     # Extract Sec-WebSocket-Key from the request
     ws_key := __ws_parse_upgrade_request(buffer, buffer_len)
     I ws_key == 0 {
-        R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+        return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
     }
 
     # Compute accept key
@@ -631,14 +631,14 @@ F ws_upgrade(fd: i64, buffer: i64, buffer_len: i64) -> WsConnection {
     __free(ws_key)
 
     I accept_key == 0 {
-        R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+        return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
     }
 
     # Build and send upgrade response
     resp_buf := __malloc(512)
     I resp_buf == 0 {
         __free(accept_key)
-        R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+        return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
     }
 
     resp_len := __ws_build_upgrade_response(accept_key, resp_buf)
@@ -646,14 +646,14 @@ F ws_upgrade(fd: i64, buffer: i64, buffer_len: i64) -> WsConnection {
 
     I resp_len <= 0 {
         __free(resp_buf)
-        R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+        return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
     }
 
     sent := __tcp_send(fd, resp_buf, resp_len)
     __free(resp_buf)
 
     I sent < 0 {
-        R WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
+        return WsConnection { fd: -1, is_server: 1, state: WS_STATE_CLOSED, mask_key: 0 }
     }
 
     WsConnection::from_server(fd)
@@ -664,34 +664,34 @@ F ws_upgrade(fd: i64, buffer: i64, buffer_len: i64) -> WsConnection {
 # ============================================
 
 # TCP operations (from std/http.vais runtime)
-X F __tcp_listen(port: i64) -> i64
-X F __tcp_accept(listener_fd: i64) -> i64
-X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
-X F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
-X F __tcp_close(fd: i64) -> i64
+impl fn __tcp_listen(port: i64) -> i64
+impl fn __tcp_accept(listener_fd: i64) -> i64
+impl fn __tcp_send(fd: i64, data: i64, len: i64) -> i64
+impl fn __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+impl fn __tcp_close(fd: i64) -> i64
 
 # String operations
-X F __strlen(s: str) -> i64
+impl fn __strlen(s: str) -> i64
 
 # Memory operations
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __memcpy(dst: i64, src: i64, len: i64) -> i64
-X F __load_i64(ptr: i64) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __memcpy(dst: i64, src: i64, len: i64) -> i64
+impl fn __load_i64(ptr: i64) -> i64
 
 # HTTP parsing (for upgrade request)
-X F __find_header_end(buffer: i64, len: i64) -> i64
+impl fn __find_header_end(buffer: i64, len: i64) -> i64
 
 # WebSocket runtime functions
-X F __ws_accept_key(client_key: i64) -> i64
-X F __ws_encode_frame(opcode: i64, payload: i64, payload_len: i64, masked: i64, mask_key: i64, out_frame: i64) -> i64
-X F __ws_decode_frame(data: i64, data_len: i64, out_frame: i64) -> i64
-X F __ws_mask(data: i64, len: i64, mask_key: i64) -> i64
-X F __ws_unmask(data: i64, len: i64, mask_key: i64) -> i64
-X F __ws_parse_upgrade_request(buffer: i64, len: i64) -> i64
-X F __ws_build_upgrade_response(accept_key: i64, out_buffer: i64) -> i64
-X F __ws_random_mask_key() -> i64
-X F __ws_log(msg: str) -> i64
-X F __ws_log_int(label: str, value: i64) -> i64
-X F __sha1(input: i64, input_len: i64, output: i64) -> i64
-X F __base64_encode(input: i64, input_len: i64) -> i64
+impl fn __ws_accept_key(client_key: i64) -> i64
+impl fn __ws_encode_frame(opcode: i64, payload: i64, payload_len: i64, masked: i64, mask_key: i64, out_frame: i64) -> i64
+impl fn __ws_decode_frame(data: i64, data_len: i64, out_frame: i64) -> i64
+impl fn __ws_mask(data: i64, len: i64, mask_key: i64) -> i64
+impl fn __ws_unmask(data: i64, len: i64, mask_key: i64) -> i64
+impl fn __ws_parse_upgrade_request(buffer: i64, len: i64) -> i64
+impl fn __ws_build_upgrade_response(accept_key: i64, out_buffer: i64) -> i64
+impl fn __ws_random_mask_key() -> i64
+impl fn __ws_log(msg: str) -> i64
+impl fn __ws_log_int(label: str, value: i64) -> i64
+impl fn __sha1(input: i64, input_len: i64, output: i64) -> i64
+impl fn __base64_encode(input: i64, input_len: i64) -> i64

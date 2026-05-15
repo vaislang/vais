@@ -1,0 +1,31 @@
+# CHECKS: split a Vec at an index — return both halves' lengths.
+use std/vec.{vec_new};
+
+fn first_half_len(v: &Vec<i64>, idx: i64) -> i64 {
+    I idx > v.len() { v.len() } else { idx }
+}
+
+fn second_half_len(v: &Vec<i64>, idx: i64) -> i64 {
+    I idx > v.len() { 0 } else { v.len() - idx }
+}
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 0..10 {
+        v.push(i)
+    }
+
+    I first_half_len(&v, 3) != 3 { return 1 }
+    I second_half_len(&v, 3) != 7 { return 2 }
+
+    I first_half_len(&v, 0) != 0 { return 3 }
+    I second_half_len(&v, 0) != 10 { return 4 }
+
+    I first_half_len(&v, 10) != 10 { return 5 }
+    I second_half_len(&v, 10) != 0 { return 6 }
+
+    # past end
+    I first_half_len(&v, 20) != 10 { return 7 }
+    I second_half_len(&v, 20) != 0 { return 8 }
+    return 0
+}

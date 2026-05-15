@@ -8,18 +8,18 @@
 #   --check     Check if file is already formatted (exit 0=yes, 1=no)
 #   --write     Write formatted output back to file
 
-U constants
-U stringbuffer_s1
-U helpers_s1
-U lexer_s1
-U parser
-U fmt
+use constants
+use stringbuffer_s1
+use helpers_s1
+use lexer_s1
+use parser
+use fmt
 
 # ============================================================================
 # Output helpers
 # ============================================================================
 
-F print_str(ptr: i64, len: i64) -> i64 {
+fn print_str(ptr: i64, len: i64) -> i64 {
     i := mut 0
     L {
         I i >= len { B }
@@ -33,7 +33,7 @@ F print_str(ptr: i64, len: i64) -> i64 {
 # File I/O helpers
 # ============================================================================
 
-F strlen_ptr(s: i64) -> i64 {
+fn strlen_ptr(s: i64) -> i64 {
     len: mut i64 = 0
     L {
         I load_byte(s + len) == 0 { B }
@@ -42,9 +42,9 @@ F strlen_ptr(s: i64) -> i64 {
     len
 }
 
-F read_file_ptr(path: i64) -> i64 {
+fn read_file_ptr(path: i64) -> i64 {
     fp := fopen_ptr(path, "rb")
-    I fp == 0 { R 0 }
+    I fp == 0 { return 0 }
 
     fseek(fp, 0, 2)
     size := ftell(fp)
@@ -53,7 +53,7 @@ F read_file_ptr(path: i64) -> i64 {
     buf := malloc(size + 9)
     I buf == 0 {
         fclose(fp)
-        R 0
+        return 0
     }
     bytes_read := fread(buf + 8, 1, size, fp)
     store_byte(buf + 8 + bytes_read, 0)
@@ -62,9 +62,9 @@ F read_file_ptr(path: i64) -> i64 {
     buf + 8
 }
 
-F write_file_ptr(path: i64, data: i64, len: i64) -> i64 {
+fn write_file_ptr(path: i64, data: i64, len: i64) -> i64 {
     fp := fopen_ptr(path, "wb")
-    I fp == 0 { R 0 }
+    I fp == 0 { return 0 }
     fwrite(data, 1, len, fp)
     fclose(fp)
     1
@@ -74,12 +74,12 @@ F write_file_ptr(path: i64, data: i64, len: i64) -> i64 {
 # String comparison
 # ============================================================================
 
-F streq_ptr(a: i64, alen: i64, b: i64, blen: i64) -> i64 {
-    I alen != blen { R 0 }
+fn streq_ptr(a: i64, alen: i64, b: i64, blen: i64) -> i64 {
+    I alen != blen { return 0 }
     i := mut 0
     L {
         I i >= alen { B }
-        I load_byte(a + i) != load_byte(b + i) { R 0 }
+        I load_byte(a + i) != load_byte(b + i) { return 0 }
         i = i + 1
     }
     1
@@ -89,10 +89,10 @@ F streq_ptr(a: i64, alen: i64, b: i64, blen: i64) -> i64 {
 # Main
 # ============================================================================
 
-F main(argc: i64, argv: i64) -> i64 {
+fn main(argc: i64, argv: i64) -> i64 {
     I argc < 2 {
         puts("Usage: vais-fmt <file.vais> [--check] [--write]\n")
-        R 1
+        return 1
     }
 
     # Get filename from argv[1]
@@ -111,17 +111,17 @@ F main(argc: i64, argv: i64) -> i64 {
         I streq_ptr(flag_ptr, flag_len, check_str, check_len) == 1 {
             mode = 1
             0
-        } EL I streq_ptr(flag_ptr, flag_len, write_str, write_len) == 1 {
+        } else I streq_ptr(flag_ptr, flag_len, write_str, write_len) == 1 {
             mode = 2
             0
-        } EL { 0 }
-    } EL { 0 }
+        } else { 0 }
+    } else { 0 }
 
     # Read source file
     source := read_file_ptr(path_ptr)
     I source == 0 {
         puts("Error: cannot open file\n")
-        R 1
+        return 1
     }
     source_len := load_i64(source - 8)
 
@@ -135,7 +135,7 @@ F main(argc: i64, argv: i64) -> i64 {
     result := parser.parse_module()
     I result == 0 {
         puts("Error: parse failed\n")
-        R 1
+        return 1
     }
 
     # Format
@@ -150,12 +150,12 @@ F main(argc: i64, argv: i64) -> i64 {
         # Print to stdout
         print_str(out_data, out_len)
         0
-    } EL I mode == 1 {
+    } else I mode == 1 {
         # Check mode: compare with original
         I out_len != source_len {
             puts("File is not formatted\n")
             fmt_free(formatter)
-            R 1
+            return 1
         }
         i := mut 0
         diff := mut 0
@@ -170,11 +170,11 @@ F main(argc: i64, argv: i64) -> i64 {
         I diff == 1 {
             puts("File is not formatted\n")
             fmt_free(formatter)
-            R 1
+            return 1
         }
         puts("File is formatted correctly\n")
         0
-    } EL {
+    } else {
         # Write mode: overwrite file
         write_file_ptr(path_ptr, out_data, out_len)
         puts("File formatted\n")

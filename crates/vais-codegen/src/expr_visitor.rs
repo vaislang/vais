@@ -358,7 +358,7 @@ impl ExprVisitor for CodeGenerator {
         args: &[Spanned<Expr>],
         counter: &mut usize,
     ) -> GenResult {
-        self.generate_method_call_expr(receiver, method, args, counter)
+        self.generate_method_call_expr(receiver, method, args, None, counter)
     }
 
     fn visit_static_method_call(
@@ -368,12 +368,18 @@ impl ExprVisitor for CodeGenerator {
         args: &[Spanned<Expr>],
         counter: &mut usize,
     ) -> GenResult {
-        self.generate_static_method_call_expr(type_name, method, args, counter)
+        self.generate_static_method_call_expr(type_name, method, args, None, counter)
     }
 
     fn visit_ref(&mut self, inner: &Spanned<Expr>, counter: &mut usize) -> GenResult {
         if let Expr::Ident(name) = &inner.node {
             if let Some(local) = self.fn_ctx.locals.get(name.as_str()).cloned() {
+                // If the local was initialized from an array literal with a
+                // compile-time-known length, build a `{ i8*, i64 }` slice fat
+                // pointer so calls into `fn(x: &[T])` receive the expected ABI.
+                if let Some(len) = local.array_length {
+                    return self.generate_ref_array_local_slice(&local, len, counter);
+                }
                 if local.is_alloca() {
                     // Alloca variables already have an address
                     return Ok((format!("%{}", local.llvm_name), String::new()));
@@ -394,6 +400,8 @@ impl ExprVisitor for CodeGenerator {
                     ir.push_str(&val_ir);
                     let tmp_alloca = self.next_temp(counter);
                     write_ir!(ir, "  {} = alloca {}", tmp_alloca, llvm_ty);
+                    self.fn_ctx
+                        .record_emitted_type(&tmp_alloca, &format!("{}*", llvm_ty));
                     write_ir!(
                         ir,
                         "  store {} {}, {}* {}",
@@ -403,6 +411,91 @@ impl ExprVisitor for CodeGenerator {
                         tmp_alloca
                     );
                     return Ok((tmp_alloca, ir));
+                }
+            }
+        }
+        // `&obj.field` — emit a GEP to the field's address rather than
+        // loading the field's value. Without this, `&self.x as i64` would
+        // ptrtoint the loaded value (often a value, not the address),
+        // breaking `__atomic_*` runtime calls that expect a real pointer.
+        if let Expr::Field {
+            expr: obj_expr,
+            field,
+        } = &inner.node
+        {
+            let obj_type = self.infer_expr_type(obj_expr);
+            let resolved_type = match &obj_type {
+                ResolvedType::Ref(inner_t)
+                | ResolvedType::RefMut(inner_t)
+                | ResolvedType::Pointer(inner_t) => inner_t.as_ref().clone(),
+                other => other.clone(),
+            };
+            if let ResolvedType::Named {
+                name: orig_type_name,
+                generics: type_generics,
+            } = &resolved_type
+            {
+                let candidate = if !type_generics.is_empty()
+                    && type_generics
+                        .iter()
+                        .all(|g| !matches!(g, ResolvedType::Generic(_) | ResolvedType::Var(_)))
+                {
+                    let mangled = self.mangle_struct_name(orig_type_name, type_generics);
+                    if self.types.structs.contains_key(&mangled)
+                        || self.generics.generated_structs.contains_key(&mangled)
+                    {
+                        mangled
+                    } else {
+                        self.resolve_struct_name(orig_type_name)
+                    }
+                } else {
+                    self.resolve_struct_name(orig_type_name)
+                };
+                let type_name = if self.types.structs.contains_key(&candidate) {
+                    candidate
+                } else if candidate.contains('$') {
+                    let base = candidate
+                        .split('$')
+                        .next()
+                        .unwrap_or(&candidate)
+                        .to_string();
+                    if self.types.structs.contains_key(&base) {
+                        base
+                    } else {
+                        candidate
+                    }
+                } else {
+                    candidate
+                };
+                if let Some(struct_info) = self.types.structs.get(&type_name).cloned() {
+                    if let Some(field_idx) = struct_info
+                        .fields
+                        .iter()
+                        .position(|(n, _)| n == &field.node)
+                    {
+                        let field_ty_raw = &struct_info.fields[field_idx].1;
+                        let field_ty = if !self.generics.substitutions.is_empty() {
+                            vais_types::substitute_type(field_ty_raw, &self.generics.substitutions)
+                        } else {
+                            field_ty_raw.clone()
+                        };
+                        let llvm_ty = self.type_to_llvm(&field_ty);
+                        let (obj_val, obj_ir) = self.visit_expr(obj_expr, counter)?;
+                        let mut ir = obj_ir;
+                        let field_ptr = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                            field_ptr,
+                            type_name,
+                            type_name,
+                            obj_val,
+                            field_idx
+                        );
+                        self.fn_ctx
+                            .record_emitted_type(&field_ptr, &format!("{}*", llvm_ty));
+                        return Ok((field_ptr, ir));
+                    }
                 }
             }
         }
@@ -547,6 +640,8 @@ impl ExprVisitor for CodeGenerator {
 
                 // For now, assume i64 elements (we'd need better type inference for mixed types)
                 write_ir!(ir, "  {} = alloca [{} x i64]", array_name, len);
+                self.fn_ctx
+                    .record_emitted_type(&array_name, &format!("[{} x i64]*", len));
 
                 for (i, elem_val) in elements.iter().enumerate() {
                     let elem_ptr = self.next_temp(counter);
@@ -559,6 +654,7 @@ impl ExprVisitor for CodeGenerator {
                         array_name,
                         i
                     );
+                    self.fn_ctx.record_emitted_type(&elem_ptr, "i64*");
                     write_ir!(ir, "  store i64 {}, i64* {}", elem_val, elem_ptr);
                 }
 

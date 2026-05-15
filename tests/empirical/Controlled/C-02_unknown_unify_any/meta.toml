@@ -1,0 +1,22 @@
+[entry]
+id = "Controlled-02"
+classification = "Controlled (verified, NOT A4)"
+surface = "Type variable Unknown unifies with any concrete type during inference"
+site = "unification.rs:220"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:220"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "F id<T>(x: T) -> T { R x }; main calls id(11)"
+expected_per_design = "type-check accepts (generic inference is the intended path)"
+actual_observed = 11
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified"
+notes = "Generic identity function returns input unchanged. v2 contract requires 3 distinct probes for HARD v2 status."
+
+[assertion_kind]
+kind = "exact_exit"
+expected_exit = 11
+rationale = "Generic id() returns its argument; main passes literal 11; exit propagates."

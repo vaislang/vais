@@ -1,0 +1,9 @@
+# LIVING_SPEC/04_stdlib/str_interp.vais
+# Key concept: 문자열 보간 "text {expr}" — 중괄호 안에 변수/표현식 삽입.
+
+fn main() -> i64 {
+    name := "world"
+    greeting := "hello {name}"
+    # greeting == "hello world"
+    greeting.len()
+}

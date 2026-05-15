@@ -72,6 +72,20 @@ impl TypeChecker {
         }
     }
 
+    /// Update an existing variable's type in whichever scope owns it.
+    /// Used by Expr::Assign when the prior binding contained Never (from
+    /// `mut None` / `mut Err(...)` init) and the assignment provides a
+    /// more concrete type.
+    pub(crate) fn update_var_type(&mut self, name: &str, ty: ResolvedType) -> bool {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(var_info) = scope.get_mut(name) {
+                var_info.ty = ty;
+                return true;
+            }
+        }
+        false
+    }
+
     /// Mark a variable as used (for linear type tracking)
     #[inline]
     pub(crate) fn mark_var_used(&mut self, name: &str) {
@@ -155,11 +169,19 @@ impl TypeChecker {
         }
 
         // Otherwise, try to find it as an enum variant
+        // Phase 300b: auto-deref Ref/RefMut/Pointer so `M &node { Node.V { .. } }`
+        // still finds the enum Node.
+        let deref_ty = match expr_type {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => inner.as_ref(),
+            _ => expr_type,
+        };
         // Extract enum name and generics from expr_type
         if let ResolvedType::Named {
             name: enum_name,
             generics: concrete_generics,
-        } = expr_type
+        } = deref_ty
         {
             if let Some(enum_def) = self.enums.get(enum_name) {
                 if let Some(VariantFieldTypes::Struct(fields)) = enum_def.variants.get(pattern_name)
@@ -185,6 +207,49 @@ impl TypeChecker {
         HashMap::new()
     }
 
+    /// Get field types for a qualified enum struct variant pattern like
+    /// `EnumName.Variant { field }`.
+    ///
+    /// This is intentionally independent of the scrutinee type. In nested
+    /// matches the scrutinee can be an expression such as `*input` whose type
+    /// has not survived strongly enough for the unqualified variant lookup, but
+    /// the source-level enum qualifier is still a precise contract.
+    pub(crate) fn get_qualified_enum_variant_fields(
+        &self,
+        enum_name: &str,
+        variant_name: &str,
+        expr_type: &ResolvedType,
+    ) -> Option<HashMap<String, ResolvedType>> {
+        let enum_def = self.enums.get(enum_name)?;
+        let VariantFieldTypes::Struct(fields) = enum_def.variants.get(variant_name)? else {
+            return None;
+        };
+
+        let deref_ty = match expr_type {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => inner.as_ref(),
+            _ => expr_type,
+        };
+        let concrete_generics = match deref_ty {
+            ResolvedType::Named { name, generics } if name == enum_name => generics.as_slice(),
+            _ => &[],
+        };
+        let substitutions: HashMap<String, ResolvedType> = enum_def
+            .generics
+            .iter()
+            .zip(concrete_generics.iter())
+            .map(|(param, concrete)| (param.clone(), concrete.clone()))
+            .collect();
+
+        Some(
+            fields
+                .iter()
+                .map(|(name, ty)| (name.clone(), self.substitute_generics(ty, &substitutions)))
+                .collect(),
+        )
+    }
+
     /// Get tuple field types for an enum tuple variant.
     /// Used in pattern matching to properly type-check variant tuple patterns.
     /// Returns a vector of field types in order.
@@ -193,11 +258,36 @@ impl TypeChecker {
         pattern_name: &str,
         expr_type: &ResolvedType,
     ) -> Vec<ResolvedType> {
+        // Phase 300a/b: auto-deref Ref/RefMut/Pointer so `M &opt { Some(x) }`
+        // and Option/Result variant unwrapping work on references too.
+        let deref_ty = match expr_type {
+            ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Pointer(inner) => inner.as_ref(),
+            _ => expr_type,
+        };
+        // Phase 300a: Option<T>/Result<T,E> are primitive variant types, not
+        // Named enum defs — special-case Some/None/Ok/Err patterns so the
+        // bound variable gets the proper inner type (avoids losing V through
+        // HashMap.get_mut's Option<&mut V> return value).
+        match deref_ty {
+            ResolvedType::Optional(inner) => match pattern_name {
+                "Some" => return vec![(**inner).clone()],
+                "None" => return vec![],
+                _ => {}
+            },
+            ResolvedType::Result(ok, err) => match pattern_name {
+                "Ok" => return vec![(**ok).clone()],
+                "Err" => return vec![(**err).clone()],
+                _ => {}
+            },
+            _ => {}
+        }
         // Extract enum name and generics from expr_type
         if let ResolvedType::Named {
             name: enum_name,
             generics: concrete_generics,
-        } = expr_type
+        } = deref_ty
         {
             if let Some(enum_def) = self.enums.get(enum_name) {
                 if let Some(variant_fields) = enum_def.variants.get(pattern_name) {
@@ -237,6 +327,19 @@ impl TypeChecker {
         match &pattern.node {
             Pattern::Wildcard => Ok(()),
             Pattern::Ident(name) => {
+                // Phase 2.10: if the ident names a known enum variant (None,
+                // Some, Ok, Err, or any registered enum variant), treat it as
+                // a variant pattern — do NOT bind it as a fresh variable.
+                // Previously `None` in a match arm was bound as a variable
+                // with the scrutinee's type, which then leaked the scrutinee's
+                // T into sibling arms that construct `Some(v: U)` with U != T.
+                let is_variant_name = self
+                    .enums
+                    .values()
+                    .any(|def| def.variants.contains_key(name));
+                if is_variant_name {
+                    return Ok(());
+                }
                 // Bind the identifier to the matched expression's type
                 self.define_var(name, expr_type.clone(), false);
                 Ok(())
@@ -255,9 +358,18 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct {
+                name,
+                fields,
+                enum_name,
+            } => {
                 // For struct patterns, look up field types from the struct or enum variant
-                let field_types = self.get_struct_or_variant_fields(&name.node, expr_type);
+                let field_types = enum_name
+                    .as_deref()
+                    .and_then(|enum_name| {
+                        self.get_qualified_enum_variant_fields(enum_name, &name.node, expr_type)
+                    })
+                    .unwrap_or_else(|| self.get_struct_or_variant_fields(&name.node, expr_type));
 
                 for (field_name, sub_pattern) in fields {
                     let field_type = field_types

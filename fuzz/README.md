@@ -22,7 +22,8 @@ This directory contains fuzzing infrastructure for the Vais compiler using cargo
 | `fuzz_parser` | Parser | Raw source code |
 | `fuzz_type_checker` | Type checker | Valid parsed AST |
 | `fuzz_codegen` | Code generator | Valid typed AST |
-| `fuzz_full_pipeline` | Full compiler pipeline | Structured program |
+| `fuzz_full_pipeline` | Full compiler pipeline | Structured program (`Arbitrary` bytes) |
+| `fuzz_mir_native_diff` | MIR-vs-native differential oracle (Path A: MIR interpreter, Path B: vais-jit Cranelift in-process). Diverging exit codes between the two arms cause libFuzzer to flag the input. | Structured program (`Arbitrary` bytes) |
 
 ## Quick Start
 

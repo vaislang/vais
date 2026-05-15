@@ -1,1 +1,1 @@
-Parser error: UnexpectedToken { found: LBrace, span: 8..9, expected: "identifier" }
+Parser error: UnexpectedToken { found: LBrace, span: 9..10, expected: "identifier" }

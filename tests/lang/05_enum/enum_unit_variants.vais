@@ -1,0 +1,30 @@
+# CHECKS: enum with only unit variants.
+enum Color {
+    Red,
+    Green,
+    Blue,
+    Cyan,
+    Magenta,
+    Yellow
+}
+
+fn priority(c: Color) -> i64 {
+    match c {
+        Red => 1,
+        Green => 2,
+        Blue => 3,
+        Cyan => 4,
+        Magenta => 5,
+        Yellow => 6
+    }
+}
+
+fn main() -> i64 {
+    I priority(Red) != 1 { return 1 }
+    I priority(Green) != 2 { return 2 }
+    I priority(Blue) != 3 { return 3 }
+    I priority(Cyan) != 4 { return 4 }
+    I priority(Magenta) != 5 { return 5 }
+    I priority(Yellow) != 6 { return 6 }
+    return 0
+}

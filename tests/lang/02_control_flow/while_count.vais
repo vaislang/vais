@@ -1,0 +1,23 @@
+# CHECKS: LW (while) with multiple conditions, accumulation.
+fn main() -> i64 {
+    n: i64 := mut 0
+    sum: i64 := mut 0
+    LW n < 10 {
+        sum = sum + n
+        n = n + 1
+    }
+    # 0+1+...+9 = 45
+    I sum != 45 { return 1 }
+    I n != 10 { return 2 }
+
+    # while with compound condition
+    i: i64 := mut 1
+    p: i64 := mut 1
+    LW i <= 5 && p < 1000 {
+        p = p * i
+        i = i + 1
+    }
+    # 5! = 120, loop continues until i>5
+    I p != 120 { return 3 }
+    return 0
+}

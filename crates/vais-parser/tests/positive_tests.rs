@@ -12,7 +12,7 @@ use vais_parser::Parser;
 
 #[test]
 fn test_parse_simple_function() {
-    let source = "F add(a: i64, b: i64) -> i64 = a + b";
+    let source = "fn add(a: i64, b: i64) -> i64 = a + b";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -34,11 +34,11 @@ fn test_parse_simple_function() {
 #[test]
 fn test_parse_function_with_block_body() {
     let source = r#"
-        F factorial(n: i64) -> i64 {
+        fn factorial(n: i64) -> i64 {
             I n <= 1 {
-                R 1
-            } E {
-                R n * @(n - 1)
+                return 1
+            } else {
+                return n * @(n - 1)
             }
         }
     "#;
@@ -58,7 +58,7 @@ fn test_parse_function_with_block_body() {
 
 #[test]
 fn test_parse_generic_function() {
-    let source = "F identity<T>(x: T) -> T = x";
+    let source = "fn identity<T>(x: T) -> T = x";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -75,7 +75,7 @@ fn test_parse_generic_function() {
 
 #[test]
 fn test_parse_public_function() {
-    let source = "P F hello() -> () = ()";
+    let source = "pub fn hello() -> () = ()";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -96,7 +96,7 @@ fn test_parse_public_function() {
 #[test]
 fn test_parse_struct() {
     let source = r#"
-        S Point {
+        struct Point {
             x: i64,
             y: i64
         }
@@ -120,7 +120,7 @@ fn test_parse_struct() {
 #[test]
 fn test_parse_generic_struct() {
     let source = r#"
-        S Container<T> {
+        struct Container<T> {
             value: T
         }
     "#;
@@ -142,7 +142,7 @@ fn test_parse_generic_struct() {
 #[test]
 fn test_parse_public_struct() {
     let source = r#"
-        P S Visible {
+        pub struct Visible {
             id: i64
         }
     "#;
@@ -167,7 +167,7 @@ fn test_parse_public_struct() {
 #[test]
 fn test_parse_enum() {
     let source = r#"
-        E Option<T> {
+        enum Option<T> {
             None,
             Some(T)
         }
@@ -192,7 +192,7 @@ fn test_parse_enum() {
 #[test]
 fn test_parse_enum_with_struct_variant() {
     let source = r#"
-        E Message {
+        enum Message {
             Text(str),
             Command { name: str, args: Vec<str> }
         }
@@ -231,15 +231,7 @@ fn test_parse_union() {
     "#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
-    let module = parser.parse_module().unwrap();
-
-    match &module.items[0].node {
-        Item::Union(u) => {
-            assert_eq!(u.name.node, "Data");
-            assert_eq!(u.fields.len(), 2);
-        }
-        _ => panic!("Expected Union"),
-    }
+    assert!(parser.parse_module().is_err());
 }
 
 // =============================================================================
@@ -248,7 +240,7 @@ fn test_parse_union() {
 
 #[test]
 fn test_parse_type_alias() {
-    let source = "T MyInt = i64";
+    let source = "type MyInt = i64";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -271,7 +263,7 @@ fn test_parse_type_alias() {
 
 #[test]
 fn test_parse_use_statement() {
-    let source = "U std::collections::HashMap";
+    let source = "use std::collections::HashMap";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -290,7 +282,7 @@ fn test_parse_use_statement() {
 
 #[test]
 fn test_parse_use_selective_single() {
-    let source = "U std/string.Str";
+    let source = "use std/string.Str";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -310,7 +302,7 @@ fn test_parse_use_selective_single() {
 
 #[test]
 fn test_parse_use_selective_multi() {
-    let source = "U std/option.{Option, Some, None}";
+    let source = "use std/option.{Option, Some, None}";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -332,7 +324,7 @@ fn test_parse_use_selective_multi() {
 
 #[test]
 fn test_parse_use_with_semicolon() {
-    let source = "U std/option;\nF main() -> i64 = 42";
+    let source = "use std/option;\nfn main() -> i64 = 42";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -351,7 +343,7 @@ fn test_parse_use_with_semicolon() {
 
 #[test]
 fn test_parse_use_selective_with_semicolon() {
-    let source = "U std/option.{Option, None};\nF main() -> i64 = 42";
+    let source = "use std/option.{Option, None};\nfn main() -> i64 = 42";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -370,7 +362,7 @@ fn test_parse_use_selective_with_semicolon() {
 
 #[test]
 fn test_parse_use_trailing_comma() {
-    let source = "U std/option.{Option, Some,}";
+    let source = "use std/option.{Option, Some,}";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -393,8 +385,8 @@ fn test_parse_use_trailing_comma() {
 #[test]
 fn test_parse_trait() {
     let source = r#"
-        W Display {
-            F fmt(self) -> str
+        trait Display {
+            fn fmt(self) -> str
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -414,9 +406,9 @@ fn test_parse_trait() {
 #[test]
 fn test_parse_trait_with_associated_type() {
     let source = r#"
-        W Iterator {
-            T Item
-            F next(self) -> Option<Item>
+        trait Iterator {
+            type Item
+            fn next(self) -> Option<Item>
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -441,9 +433,9 @@ fn test_parse_trait_with_associated_type() {
 #[test]
 fn test_parse_impl_block() {
     let source = r#"
-        X Point: Display {
-            F fmt(self) -> str {
-                R "Point"
+        impl Point: Display {
+            fn fmt(self) -> str {
+                return "Point"
             }
         }
     "#;
@@ -464,9 +456,9 @@ fn test_parse_impl_block() {
 #[test]
 fn test_parse_inherent_impl() {
     let source = r#"
-        X Point {
-            F new(x: i64, y: i64) -> Point {
-                R Point { x: x, y: y }
+        impl Point {
+            fn new(x: i64, y: i64) -> Point {
+                return Point { x: x, y: y }
             }
         }
     "#;
@@ -491,9 +483,9 @@ fn test_parse_inherent_impl() {
 #[test]
 fn test_parse_let_binding() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
-            R x
+            return x
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -521,10 +513,10 @@ fn test_parse_let_binding() {
 #[test]
 fn test_parse_mut_binding() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x = 42
-            R x
+            return x
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -549,9 +541,9 @@ fn test_parse_mut_binding() {
 #[test]
 fn test_parse_typed_binding() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x: i64 = 42
-            R x
+            return x
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -580,11 +572,11 @@ fn test_parse_typed_binding() {
 #[test]
 fn test_parse_if_else() {
     let source = r#"
-        F abs(x: i64) -> i64 {
+        fn abs(x: i64) -> i64 {
             I x < 0 {
-                R -x
-            } E {
-                R x
+                return -x
+            } else {
+                return x
             }
         }
     "#;
@@ -614,7 +606,7 @@ fn test_parse_if_else() {
 #[test]
 fn test_parse_loop() {
     let source = r#"
-        F infinite() -> () {
+        fn infinite() -> () {
             L {
                 print("loop")
                 B
@@ -651,12 +643,12 @@ fn test_parse_loop() {
 #[test]
 fn test_parse_for_loop() {
     let source = r#"
-        F sum(items: Vec<i64>) -> i64 {
+        fn sum(items: Vec<i64>) -> i64 {
             total := mut 0
             L x: items {
                 total = total + x
             }
-            R total
+            return total
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -687,8 +679,8 @@ fn test_parse_for_loop() {
 #[test]
 fn test_parse_match() {
     let source = r#"
-        F describe(x: i64) -> str {
-            M x {
+        fn describe(x: i64) -> str {
+            match x {
                 0 => "zero",
                 1 => "one",
                 _ => "other"
@@ -720,8 +712,8 @@ fn test_parse_match() {
 #[test]
 fn test_parse_match_with_enum() {
     let source = r#"
-        F unwrap<T>(opt: Option<T>) -> T {
-            M opt {
+        fn unwrap<T>(opt: Option<T>) -> type {
+            match opt {
                 Some(x) => x,
                 None => panic("unwrap on None")
             }
@@ -759,9 +751,9 @@ fn test_parse_match_with_enum() {
 #[test]
 fn test_parse_closure() {
     let source = r#"
-        F map_test() -> Vec<i64> {
+        fn map_test() -> Vec<i64> {
             items := [1, 2, 3]
-            R items.map(|x| x * 2)
+            return items.map(|x| x * 2)
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -792,9 +784,9 @@ fn test_parse_closure() {
 #[test]
 fn test_parse_multi_param_closure() {
     let source = r#"
-        F fold_test() -> i64 {
+        fn fold_test() -> i64 {
             items := [1, 2, 3, 4]
-            R items.fold(0, |acc, x| acc + x)
+            return items.fold(0, |acc, x| acc + x)
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -834,9 +826,9 @@ fn test_parse_multi_param_closure() {
 #[test]
 fn test_parse_method_call() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             s := "hello"
-            R s.len()
+            return s.len()
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -870,8 +862,8 @@ fn test_parse_method_call() {
 #[test]
 fn test_parse_pipe_operator() {
     let source = r#"
-        F pipeline() -> i64 {
-            R 42 |> double |> inc
+        fn pipeline() -> i64 {
+            return 42 |> double |> inc
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -901,8 +893,8 @@ fn test_parse_pipe_operator() {
 #[test]
 fn test_parse_async_function() {
     let source = r#"
-        A F fetch_data() -> str {
-            R "data"
+        A fn fetch_data() -> str {
+            return "data"
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -921,9 +913,9 @@ fn test_parse_async_function() {
 #[test]
 fn test_parse_await_expression() {
     let source = r#"
-        A F call_async() -> str {
+        A fn call_async() -> str {
             result := fetch_data().await
-            R result
+            return result
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -952,7 +944,7 @@ fn test_parse_await_expression() {
 fn test_parse_attribute() {
     let source = r#"
         #[inline]
-        F fast() -> i64 = 42
+        fn fast() -> i64 = 42
     "#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
@@ -971,7 +963,7 @@ fn test_parse_attribute() {
 fn test_parse_cfg_attribute() {
     let source = r#"
         #[cfg(target_os = "linux")]
-        F linux_only() -> () = ()
+        fn linux_only() -> () = ()
     "#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
@@ -1030,10 +1022,10 @@ fn test_parse_global() {
 #[test]
 fn test_parse_defer() {
     let source = r#"
-        F with_cleanup() -> () {
+        fn with_cleanup() -> () {
             file := open("test.txt")
             D close(file)
-            R ()
+            return ()
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -1061,7 +1053,7 @@ fn test_parse_defer() {
 
 #[test]
 fn test_parse_slice_type() {
-    let source = "F process(data: &[i64]) -> i64 = data.len()";
+    let source = "fn process(data: &[i64]) -> i64 = data.len()";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1080,7 +1072,7 @@ fn test_parse_slice_type() {
 
 #[test]
 fn test_parse_mut_slice_type() {
-    let source = "F modify(data: &mut [i64]) -> () = ()";
+    let source = "fn modify(data: &mut [i64]) -> () = ()";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1104,8 +1096,8 @@ fn test_parse_mut_slice_type() {
 #[test]
 fn test_parse_array_literal() {
     let source = r#"
-        F get_array() -> Vec<i64> {
-            R [1, 2, 3, 4, 5]
+        fn get_array() -> Vec<i64> {
+            return [1, 2, 3, 4, 5]
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -1132,8 +1124,8 @@ fn test_parse_array_literal() {
 #[test]
 fn test_parse_tuple_literal() {
     let source = r#"
-        F get_tuple() -> (i64, str) {
-            R (42, "hello")
+        fn get_tuple() -> (i64, str) {
+            return (42, "hello")
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -1160,8 +1152,8 @@ fn test_parse_tuple_literal() {
 #[test]
 fn test_parse_struct_literal() {
     let source = r#"
-        F make_point() -> Point {
-            R Point { x: 10, y: 20 }
+        fn make_point() -> Point {
+            return Point { x: 10, y: 20 }
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -1189,7 +1181,7 @@ fn test_parse_struct_literal() {
 #[test]
 fn test_parse_range() {
     let source = r#"
-        F get_range() -> () {
+        fn get_range() -> () {
             L i: 0..10 {
                 print(i)
             }
@@ -1220,7 +1212,7 @@ fn test_parse_range() {
 #[test]
 fn test_parse_self_recursion() {
     let source = r#"
-        F countdown(n: i64) -> () {
+        fn countdown(n: i64) -> () {
             I n > 0 {
                 print(n)
                 @(n - 1)
@@ -1249,8 +1241,8 @@ fn test_parse_self_recursion() {
 #[test]
 fn test_parse_string_interpolation() {
     let source = r#"
-        F greet(name: str) -> str {
-            R "Hello, ~{name}!"
+        fn greet(name: str) -> str {
+            return "Hello, ~{name}!"
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -1280,7 +1272,7 @@ fn test_parse_string_interpolation() {
 #[test]
 fn test_brace_escape_full_literal() {
     // Source: "\{weight: 1.0\}"
-    let source = r#"F f() -> str = "\{weight: 1.0\}""#;
+    let source = r#"fn f() -> str = "\{weight: 1.0\}""#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1304,7 +1296,7 @@ fn test_brace_escape_full_literal() {
 /// Criterion 2: `"hello {name}"` → Expr::StringInterp (existing behaviour unchanged)
 #[test]
 fn test_brace_escape_normal_interpolation_unchanged() {
-    let source = r#"F f(name: str) -> str = "hello {name}""#;
+    let source = r#"fn f(name: str) -> str = "hello {name}""#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1328,7 +1320,7 @@ fn test_brace_escape_normal_interpolation_unchanged() {
 #[test]
 fn test_brace_escape_mixed_literal_and_interp() {
     // "\{key\}: {value}" — the \{key\} part is literal, {value} is interpolated
-    let source = r#"F f(value: str) -> str = "\{key\}: {value}""#;
+    let source = r#"fn f(value: str) -> str = "\{key\}: {value}""#;
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1371,9 +1363,9 @@ fn test_brace_escape_mixed_literal_and_interp() {
 #[test]
 fn test_parse_try_operator() {
     let source = r#"
-        F read_file(path: str) -> Result<str, Error> {
+        fn read_file(path: str) -> Result<str, Error> {
             content := open(path)?
-            R Ok(content)
+            return Ok(content)
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -1397,8 +1389,8 @@ fn test_parse_try_operator() {
 #[test]
 fn test_parse_unwrap_operator() {
     let source = r#"
-        F get_value(opt: Option<i64>) -> i64 {
-            R opt!
+        fn get_value(opt: Option<i64>) -> i64 {
+            return opt!
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -1426,9 +1418,9 @@ fn test_parse_unwrap_operator() {
 #[test]
 fn test_parse_complex_generic_function_with_trait_bounds() {
     let source = r#"
-        F process<T>(items: Vec<T>) -> Vec<T> {
+        fn process<T>(items: Vec<T>) -> Vec<T> {
             result := items.map(|x| x)
-            R result
+            return result
         }
     "#;
     let tokens = tokenize(source).unwrap();
@@ -1451,7 +1443,7 @@ fn test_parse_complex_generic_function_with_trait_bounds() {
 
 #[test]
 fn test_parse_lambda_default_capture() {
-    let source = "F main() { f := |x| x + 1 }";
+    let source = "fn main() { f := |x| x + 1 }";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1479,7 +1471,7 @@ fn test_parse_lambda_default_capture() {
 
 #[test]
 fn test_parse_lambda_move_capture() {
-    let source = "F main() { f := move |x| x + 1 }";
+    let source = "fn main() { f := move |x| x + 1 }";
     let tokens = tokenize(source).unwrap();
     let mut parser = Parser::new(tokens);
     let module = parser.parse_module().unwrap();
@@ -1508,7 +1500,7 @@ fn test_parse_lambda_move_capture() {
 #[test]
 fn test_parse_lambda_move_with_captures() {
     let source = r#"
-        F main() {
+        fn main() {
             x := 42
             f := move |y| x + y
         }

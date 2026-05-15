@@ -1,0 +1,29 @@
+# CHECKS: 3-variant unit enum with all-int dispatch.
+enum Tier {
+    Bronze,
+    Silver,
+    Gold
+}
+
+fn multiplier(t: Tier) -> i64 {
+    match t {
+        Bronze => 1,
+        Silver => 2,
+        Gold => 5
+    }
+}
+
+fn price(base: i64, t: Tier) -> i64 {
+    base * multiplier(t)
+}
+
+fn main() -> i64 {
+    I price(10, Bronze) != 10 { return 1 }
+    I price(10, Silver) != 20 { return 2 }
+    I price(10, Gold) != 50 { return 3 }
+
+    # combine
+    total: i64 := price(100, Bronze) + price(50, Silver) + price(20, Gold)
+    I total != 300 { return 4 }
+    return 0
+}

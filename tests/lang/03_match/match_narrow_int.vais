@@ -1,0 +1,18 @@
+# CHECKS: match coerces narrow-int source to bare-int literal arms
+# REGRESSION: Phase 17 narrow-int phi-incoming class
+# NOTE: i32 literal arms (e.g., `0i32 =>`) currently rejected by parser;
+#       test uses bare integer literals which the TC widens.
+fn classify(n: i32) -> i64 {
+    match n {
+        0 => 0,
+        1 => 10,
+        _ => 99,
+    }
+}
+
+fn main() -> i64 {
+    I classify(0i32) != 0   { return 1 }
+    I classify(1i32) != 10  { return 2 }
+    I classify(7i32) != 99  { return 3 }
+    return 0
+}

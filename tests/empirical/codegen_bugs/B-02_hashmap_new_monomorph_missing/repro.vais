@@ -1,0 +1,29 @@
+# B-02: HashMap<u64,u64>.new() — monomorphization missing
+#
+# Discovered: 2026-05-08 loop 39 (sibling fixture to B-01 during isolation).
+#
+# Symptom: clang error: use of undefined value '@HashMap_new'
+#   %t0 = call %HashMap$u64_u64 @HashMap_new()
+#
+# When HashMap.get_opt is called with the value form (m.get_opt(key)) instead
+# of the &-form, the call site succeeds at TC but HashMap_new monomorphization
+# for $u64_u64 is not emitted — leaving an undefined symbol referenced in IR.
+#
+# Symmetric to B-01: B-01 fires on ref-form path, B-02 fires on value-form path.
+# Both indicate gaps in HashMap<u64,u64> code path — possibly the std hashmap
+# K=u64 instantiation is rare in baseline (vaisdb uses &-form, std uses str
+# specialization at lines 831+).
+#
+# Status: still_silent (codegen produces incomplete IR; clang catches loud).
+
+use std/hashmap
+
+fn main() -> i64 {
+    m: HashMap<u64, u64> = HashMap.new()
+    m.insert(100u64, 200u64)
+    key: u64 = 100u64
+    match m.get_opt(key) {
+        Some(v) => v as i64,
+        None => 0,
+    }
+}

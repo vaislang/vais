@@ -1,0 +1,37 @@
+# CHECKS: matching Result<UserStruct, i64> decodes the Ok payload as the
+# user struct (not %Unknown / i64). REGRESSION Wave 4a — previously the
+# enum-payload decode for specialized Result<T, E> returned the universal
+# i64 slot value when T was a Named struct, yielding garbage struct fields.
+
+struct Point {
+    x: i64,
+    y: i64
+}
+
+fn try_make(flag: i64) -> Result<Point, i64> {
+    I flag > 0 {
+        Ok(Point { x: 10, y: 20 })
+    } else {
+        Err(99)
+    }
+}
+
+fn main() -> i64 {
+    r1: Result<Point, i64> := try_make(1)
+    match r1 {
+        Ok(p) => {
+            I p.x != 10 { return 1 }
+            I p.y != 20 { return 2 }
+        },
+        Err(_) => { return 3 }
+    }
+
+    r2: Result<Point, i64> := try_make(0)
+    match r2 {
+        Ok(_) => { return 4 },
+        Err(code) => {
+            I code != 99 { return 5 }
+        }
+    }
+    return 0
+}

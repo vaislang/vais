@@ -1,0 +1,9 @@
+# Hello World #7: top-level generic function
+fn max<T>(a: T, b: T) -> T {
+    I a > b { return a }
+    b
+}
+
+fn main() -> i64 {
+    return max(15, 9)    # exit 15
+}

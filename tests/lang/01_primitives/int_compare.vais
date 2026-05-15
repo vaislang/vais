@@ -1,0 +1,12 @@
+# CHECKS: integer comparison operators
+fn main() -> i64 {
+    a: i64 := 5
+    b: i64 := 10
+    I !(a < b)  { return 1 }
+    I !(b > a)  { return 2 }
+    I !(a <= 5) { return 3 }
+    I !(b >= 10){ return 4 }
+    I !(a != b) { return 5 }
+    I !(a == 5) { return 6 }
+    return 0
+}

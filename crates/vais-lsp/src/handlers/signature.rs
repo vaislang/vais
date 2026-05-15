@@ -207,7 +207,7 @@ pub(crate) async fn handle_signature_help(
 
                             let is_async = if f.is_async { "A " } else { "" };
                             let sig_label = format!(
-                                "{}F {}({}){}",
+                                "{}fn {}({}){}",
                                 is_async,
                                 f.name.node,
                                 params_str.join(", "),
@@ -266,7 +266,7 @@ pub(crate) async fn handle_signature_help(
 
                                 let is_async = if method.node.is_async { "A " } else { "" };
                                 let sig_label = format!(
-                                    "{}F {}({}){}",
+                                    "{}fn {}({}){}",
                                     is_async,
                                     method.node.name.node,
                                     params_str.join(", "),

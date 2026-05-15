@@ -1,0 +1,33 @@
+[entry]
+id = "Rejected-03"
+classification = "Rejected at type-check (NOT A4)"
+surface = "Bare T passed where Option<T> expected — type checker rejects with E001"
+site = "unification.rs:98 (Site 23 in master-plan v16)"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:98"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "F take_opt(x: Option<i64>); main passes i64 literal 42"
+expected_per_design = "vaisc check rejects with E001 type mismatch"
+actual_observed = "E001 fires; check exits non-zero"
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified"
+notes = """
+Master-plan v16 lists 3 paths for this surface (Site 23, 23b, 23c).
+This probe covers 23 (bare i64 → Option<i64>). 23b (Named-form bridge)
+and 23c (reverse, explicitly NOT-allowed direction) are pending
+follow-up probes for HARD v2 status.
+"""
+
+[migration]
+# Rejected surfaces require no migration. Already safe.
+
+[assertion_kind]
+kind = "check_fails"
+required_stderr_patterns = ["E001", "expected Option<i64>", "found i64"]
+rationale = """
+E001 is the type mismatch code; the specific 'expected Option<i64>'
+phrase guards against matching unrelated E001 errors elsewhere.
+"""

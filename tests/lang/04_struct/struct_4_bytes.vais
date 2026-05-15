@@ -1,0 +1,18 @@
+# CHECKS: 4-byte Named struct (e.g., {i16, i16}) survives field assignment
+# REGRESSION: Phase 17 Wave 4a, compiler commit 039df2f7
+#             Vec_index_set previously matched any 4-byte type to
+#             `store i32 ptr_val` — this broke when the value was a
+#             struct value rather than a narrow int.
+struct Slot {
+    off: i16,
+    len: i16,
+}
+
+fn main() -> i64 {
+    s: Slot := mut Slot { off: 5i16, len: 100i16 }
+    I s.off as i64 != 5 { return 1 }
+    I s.len as i64 != 100 { return 2 }
+    s.off = 7i16
+    I s.off as i64 != 7 { return 3 }
+    return 0
+}

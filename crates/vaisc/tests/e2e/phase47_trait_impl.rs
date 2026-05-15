@@ -16,14 +16,14 @@ use super::helpers::*;
 fn e2e_p47_trait_single_method() {
     // Trait with one method, implemented on a struct
     let source = r#"
-W Sizeable {
-    F size(self) -> i64
+trait Sizeable {
+    fn size(self) -> i64
 }
-S Bag { items: i64 }
-X Bag: Sizeable {
-    F size(self) -> i64 { self.items }
+struct Bag { items: i64 }
+impl Bag: Sizeable {
+    fn size(self) -> i64 { self.items }
 }
-F main() -> i64 {
+fn main() -> i64 {
     b := Bag { items: 7 }
     b.size()
 }
@@ -37,16 +37,16 @@ F main() -> i64 {
 fn e2e_p47_trait_two_methods_called() {
     // Trait with two methods, both exercised in main
     let source = r#"
-W Stats {
-    F min_val(self) -> i64
-    F max_val(self) -> i64
+trait Stats {
+    fn min_val(self) -> i64
+    fn max_val(self) -> i64
 }
-S Range { lo: i64, hi: i64 }
-X Range: Stats {
-    F min_val(self) -> i64 { self.lo }
-    F max_val(self) -> i64 { self.hi }
+struct Range { lo: i64, hi: i64 }
+impl Range: Stats {
+    fn min_val(self) -> i64 { self.lo }
+    fn max_val(self) -> i64 { self.hi }
 }
-F main() -> i64 {
+fn main() -> i64 {
     r := Range { lo: 3, hi: 50 }
     r.max_val() - r.min_val()
 }
@@ -61,18 +61,18 @@ F main() -> i64 {
 fn e2e_p47_trait_two_impls() {
     // Same trait implemented for two different structs
     let source = r#"
-W Weight {
-    F weight(self) -> i64
+trait Weight {
+    fn weight(self) -> i64
 }
-S Apple { grams: i64 }
-S Stone { kg: i64 }
-X Apple: Weight {
-    F weight(self) -> i64 { self.grams }
+struct Apple { grams: i64 }
+struct Stone { kg: i64 }
+impl Apple: Weight {
+    fn weight(self) -> i64 { self.grams }
 }
-X Stone: Weight {
-    F weight(self) -> i64 { self.kg * 1000 }
+impl Stone: Weight {
+    fn weight(self) -> i64 { self.kg * 1000 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     a := Apple { grams: 150 }
     s := Stone { kg: 0 }
     a.weight() - s.weight()
@@ -88,14 +88,14 @@ F main() -> i64 {
 fn e2e_p47_trait_method_arithmetic() {
     // Trait method performs arithmetic on struct fields
     let source = r#"
-W Area {
-    F area(self) -> i64
+trait Area {
+    fn area(self) -> i64
 }
-S Rect { w: i64, h: i64 }
-X Rect: Area {
-    F area(self) -> i64 { self.w * self.h }
+struct Rect { w: i64, h: i64 }
+impl Rect: Area {
+    fn area(self) -> i64 { self.w * self.h }
 }
-F main() -> i64 {
+fn main() -> i64 {
     r := Rect { w: 7, h: 8 }
     r.area()
 }
@@ -110,11 +110,11 @@ F main() -> i64 {
 fn e2e_p47_struct_impl_single_method() {
     // Plain struct impl block with one method
     let source = r#"
-S Counter { val: i64 }
-X Counter {
-    F current(self) -> i64 { self.val }
+struct Counter { val: i64 }
+impl Counter {
+    fn current(self) -> i64 { self.val }
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := Counter { val: 33 }
     c.current()
 }
@@ -128,12 +128,12 @@ F main() -> i64 {
 fn e2e_p47_struct_impl_two_methods() {
     // Two methods in one impl block
     let source = r#"
-S Pair { a: i64, b: i64 }
-X Pair {
-    F sum(self) -> i64 { self.a + self.b }
-    F diff(self) -> i64 { self.a - self.b }
+struct Pair { a: i64, b: i64 }
+impl Pair {
+    fn sum(self) -> i64 { self.a + self.b }
+    fn diff(self) -> i64 { self.a - self.b }
 }
-F main() -> i64 {
+fn main() -> i64 {
     p := Pair { a: 30, b: 10 }
     p.sum() - p.diff()
 }
@@ -148,13 +148,13 @@ F main() -> i64 {
 fn e2e_p47_method_result_in_if() {
     // Method return value used as condition
     let source = r#"
-S Val { n: i64 }
-X Val {
-    F get(self) -> i64 { self.n }
+struct Val { n: i64 }
+impl Val {
+    fn get(self) -> i64 { self.n }
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := Val { n: 10 }
-    I v.get() > 5 { 1 } E { 0 }
+    I v.get() > 5 { 1 } else { 0 }
 }
 "#;
     assert_exit_code(source, 1);
@@ -166,12 +166,12 @@ F main() -> i64 {
 fn e2e_p47_method_result_arithmetic() {
     // Method results combined in arithmetic
     let source = r#"
-S Box { w: i64, h: i64 }
-X Box {
-    F width(self) -> i64 { self.w }
-    F height(self) -> i64 { self.h }
+struct Box { w: i64, h: i64 }
+impl Box {
+    fn width(self) -> i64 { self.w }
+    fn height(self) -> i64 { self.h }
 }
-F main() -> i64 {
+fn main() -> i64 {
     b := Box { w: 5, h: 9 }
     b.width() + b.height()
 }
@@ -186,14 +186,14 @@ F main() -> i64 {
 fn e2e_p47_trait_ref_self() {
     // Trait method with &self (borrow)
     let source = r#"
-W Readable {
-    F read(&self) -> i64
+trait Readable {
+    fn read(&self) -> i64
 }
-S Sensor { reading: i64 }
-X Sensor: Readable {
-    F read(&self) -> i64 { self.reading }
+struct Sensor { reading: i64 }
+impl Sensor: Readable {
+    fn read(&self) -> i64 { self.reading }
 }
-F main() -> i64 {
+fn main() -> i64 {
     s := Sensor { reading: 42 }
     s.read()
 }
@@ -207,20 +207,20 @@ F main() -> i64 {
 fn e2e_p47_two_traits_one_struct() {
     // One struct implements two different traits
     let source = r#"
-W HasWidth {
-    F width(self) -> i64
+trait HasWidth {
+    fn width(self) -> i64
 }
-W HasHeight {
-    F height(self) -> i64
+trait HasHeight {
+    fn height(self) -> i64
 }
-S Panel { w: i64, h: i64 }
-X Panel: HasWidth {
-    F width(self) -> i64 { self.w }
+struct Panel { w: i64, h: i64 }
+impl Panel: HasWidth {
+    fn width(self) -> i64 { self.w }
 }
-X Panel: HasHeight {
-    F height(self) -> i64 { self.h }
+impl Panel: HasHeight {
+    fn height(self) -> i64 { self.h }
 }
-F main() -> i64 {
+fn main() -> i64 {
     p := Panel { w: 8, h: 12 }
     p.width() + p.height()
 }
@@ -235,14 +235,14 @@ F main() -> i64 {
 fn e2e_p47_method_called_from_fn() {
     // A free function calls a method on a struct parameter
     let source = r#"
-S Score { points: i64 }
-X Score {
-    F get(self) -> i64 { self.points }
+struct Score { points: i64 }
+impl Score {
+    fn get(self) -> i64 { self.points }
 }
-F extract(s: Score) -> i64 {
+fn extract(s: Score) -> i64 {
     s.get()
 }
-F main() -> i64 {
+fn main() -> i64 {
     sc := Score { points: 88 }
     extract(sc)
 }
@@ -256,14 +256,14 @@ F main() -> i64 {
 fn e2e_p47_trait_method_in_loop() {
     // Trait method value accumulated in a loop
     let source = r#"
-W GetVal {
-    F val(self) -> i64
+trait GetVal {
+    fn val(self) -> i64
 }
-S Num { v: i64 }
-X Num: GetVal {
-    F val(self) -> i64 { self.v }
+struct Num { v: i64 }
+impl Num: GetVal {
+    fn val(self) -> i64 { self.v }
 }
-F main() -> i64 {
+fn main() -> i64 {
     n := Num { v: 5 }
     total := mut 0
     L i:0..4 {
@@ -282,13 +282,13 @@ F main() -> i64 {
 fn e2e_p47_struct_method_bool_return() {
     // Method returns a boolean-like value (0 or 1)
     let source = r#"
-S Threshold { limit: i64 }
-X Threshold {
-    F exceeds(self, val: i64) -> i64 {
-        I val > self.limit { 1 } E { 0 }
+struct Threshold { limit: i64 }
+impl Threshold {
+    fn exceeds(self, val: i64) -> i64 {
+        I val > self.limit { 1 } else { 0 }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     t := Threshold { limit: 10 }
     t.exceeds(15) + t.exceeds(5)
 }
@@ -303,13 +303,13 @@ F main() -> i64 {
 fn e2e_p47_struct_method_two_params() {
     // Method that takes two extra parameters
     let source = r#"
-S Calc { base: i64 }
-X Calc {
-    F compute(self, a: i64, b: i64) -> i64 {
+struct Calc { base: i64 }
+impl Calc {
+    fn compute(self, a: i64, b: i64) -> i64 {
         self.base + a * b
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := Calc { base: 10 }
     c.compute(3, 4)
 }
@@ -324,15 +324,15 @@ F main() -> i64 {
 fn e2e_p47_enum_impl_method() {
     // Enum with impl block — method matches on self
     let source = r#"
-E Dir {
+enum Dir {
     Up,
     Down,
     Left,
     Right
 }
-X Dir {
-    F to_num(self) -> i64 {
-        M self {
+impl Dir {
+    fn to_num(self) -> i64 {
+        match self {
             Up => 1,
             Down => 2,
             Left => 3,
@@ -340,7 +340,7 @@ X Dir {
         }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     d := Right
     d.to_num()
 }
@@ -354,19 +354,19 @@ F main() -> i64 {
 fn e2e_p47_enum_impl_data_variant() {
     // Enum method that extracts data from variant
     let source = r#"
-E Value {
+enum Value {
     Num(i64),
     None
 }
-X Value {
-    F unwrap_or(self, default: i64) -> i64 {
-        M self {
+impl Value {
+    fn unwrap_or(self, default: i64) -> i64 {
+        match self {
             Num(n) => n,
             None => default
         }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := Num(42)
     v.unwrap_or(0)
 }
@@ -380,19 +380,19 @@ F main() -> i64 {
 fn e2e_p47_enum_method_none_variant() {
     // Same enum method but called on None variant
     let source = r#"
-E MaybeInt {
+enum MaybeInt {
     Some(i64),
     Nothing
 }
-X MaybeInt {
-    F get_or(self, fallback: i64) -> i64 {
-        M self {
+impl MaybeInt {
+    fn get_or(self, fallback: i64) -> i64 {
+        match self {
             Some(n) => n,
             Nothing => fallback
         }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := Nothing
     v.get_or(99)
 }
@@ -406,17 +406,17 @@ F main() -> i64 {
 fn e2e_p47_trait_and_inherent_methods() {
     // Both trait impl and inherent (non-trait) impl on same struct
     let source = r#"
-W Printable {
-    F code(self) -> i64
+trait Printable {
+    fn code(self) -> i64
 }
-S Item { id: i64, qty: i64 }
-X Item {
-    F total(self) -> i64 { self.qty }
+struct Item { id: i64, qty: i64 }
+impl Item {
+    fn total(self) -> i64 { self.qty }
 }
-X Item: Printable {
-    F code(self) -> i64 { self.id }
+impl Item: Printable {
+    fn code(self) -> i64 { self.id }
 }
-F main() -> i64 {
+fn main() -> i64 {
     it := Item { id: 10, qty: 5 }
     it.code() + it.total()
 }
@@ -431,11 +431,11 @@ F main() -> i64 {
 fn e2e_p47_method_returns_zero() {
     // Method that always returns zero (edge case)
     let source = r#"
-S Empty { x: i64 }
-X Empty {
-    F zero(self) -> i64 { 0 }
+struct Empty { x: i64 }
+impl Empty {
+    fn zero(self) -> i64 { 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     e := Empty { x: 999 }
     e.zero()
 }
@@ -449,11 +449,11 @@ F main() -> i64 {
 fn e2e_p47_method_called_repeatedly() {
     // Same method called multiple times on same instance
     let source = r#"
-S Fixed { val: i64 }
-X Fixed {
-    F get(self) -> i64 { self.val }
+struct Fixed { val: i64 }
+impl Fixed {
+    fn get(self) -> i64 { self.val }
 }
-F main() -> i64 {
+fn main() -> i64 {
     f := Fixed { val: 7 }
     f.get() + f.get() + f.get()
 }
@@ -468,14 +468,14 @@ F main() -> i64 {
 fn e2e_p47_trait_impl_three_fields() {
     // Struct with 3 fields, trait method uses all
     let source = r#"
-W Volume {
-    F volume(self) -> i64
+trait Volume {
+    fn volume(self) -> i64
 }
-S Cuboid { l: i64, w: i64, h: i64 }
-X Cuboid: Volume {
-    F volume(self) -> i64 { self.l * self.w * self.h }
+struct Cuboid { l: i64, w: i64, h: i64 }
+impl Cuboid: Volume {
+    fn volume(self) -> i64 { self.l * self.w * self.h }
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := Cuboid { l: 2, w: 3, h: 4 }
     c.volume()
 }
@@ -490,11 +490,11 @@ F main() -> i64 {
 fn e2e_p47_method_result_stored() {
     // Method return value assigned to variable, then used
     let source = r#"
-S Data { n: i64 }
-X Data {
-    F doubled(self) -> i64 { self.n * 2 }
+struct Data { n: i64 }
+impl Data {
+    fn doubled(self) -> i64 { self.n * 2 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     d := Data { n: 15 }
     result := d.doubled()
     result + 1
@@ -510,18 +510,18 @@ F main() -> i64 {
 fn e2e_p47_trait_dispatch_different_returns() {
     // Two structs implementing same trait return different computed values
     let source = r#"
-W Priority {
-    F level(self) -> i64
+trait Priority {
+    fn level(self) -> i64
 }
-S Urgent { factor: i64 }
-S Normal { factor: i64 }
-X Urgent: Priority {
-    F level(self) -> i64 { self.factor * 10 }
+struct Urgent { factor: i64 }
+struct Normal { factor: i64 }
+impl Urgent: Priority {
+    fn level(self) -> i64 { self.factor * 10 }
 }
-X Normal: Priority {
-    F level(self) -> i64 { self.factor }
+impl Normal: Priority {
+    fn level(self) -> i64 { self.factor }
 }
-F main() -> i64 {
+fn main() -> i64 {
     u := Urgent { factor: 3 }
     n := Normal { factor: 5 }
     u.level() + n.level()
@@ -537,13 +537,13 @@ F main() -> i64 {
 fn e2e_p47_struct_method_conditional() {
     // Method contains if-else logic
     let source = r#"
-S Clamped { val: i64, max: i64 }
-X Clamped {
-    F get(self) -> i64 {
-        I self.val > self.max { self.max } E { self.val }
+struct Clamped { val: i64, max: i64 }
+impl Clamped {
+    fn get(self) -> i64 {
+        I self.val > self.max { self.max } else { self.val }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := Clamped { val: 200, max: 100 }
     c.get()
 }
@@ -557,11 +557,11 @@ F main() -> i64 {
 fn e2e_p47_struct_method_field_direct() {
     // Simplest possible method — returns one field
     let source = r#"
-S Wrapper { inner: i64 }
-X Wrapper {
-    F unwrap(self) -> i64 { self.inner }
+struct Wrapper { inner: i64 }
+impl Wrapper {
+    fn unwrap(self) -> i64 { self.inner }
 }
-F main() -> i64 {
+fn main() -> i64 {
     Wrapper { inner: 77 }.unwrap()
 }
 "#;
@@ -574,15 +574,15 @@ F main() -> i64 {
 fn e2e_p47_trait_result_passed_to_fn() {
     // Trait method result passed as argument to another function
     let source = r#"
-W Source {
-    F emit(self) -> i64
+trait Source {
+    fn emit(self) -> i64
 }
-S Generator { seed: i64 }
-X Generator: Source {
-    F emit(self) -> i64 { self.seed + 1 }
+struct Generator { seed: i64 }
+impl Generator: Source {
+    fn emit(self) -> i64 { self.seed + 1 }
 }
-F double(x: i64) -> i64 { x * 2 }
-F main() -> i64 {
+fn double(x: i64) -> i64 { x * 2 }
+fn main() -> i64 {
     g := Generator { seed: 10 }
     double(g.emit())
 }

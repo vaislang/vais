@@ -47,11 +47,11 @@ fn test_lint_category_display() {
 #[test]
 fn test_dead_code_detection() {
     let source = r#"
-F helper() -> i64 {
+fn helper() -> i64 {
 42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
 0
 }
 "#;
@@ -70,11 +70,11 @@ F main() -> i64 {
 #[test]
 fn test_no_dead_code_when_called() {
     let source = r#"
-F helper() -> i64 {
+fn helper() -> i64 {
 42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
 helper()
 }
 "#;
@@ -92,10 +92,10 @@ helper()
 #[test]
 fn test_unused_import_detection() {
     let source = r#"
-U std::io
-U std::math
+use std::io
+use std::math
 
-F main() -> i64 {
+fn main() -> i64 {
 0
 }
 "#;
@@ -118,11 +118,11 @@ F main() -> i64 {
 #[test]
 fn test_naming_convention() {
     let source = r#"
-F BadName() -> i64 {
+fn BadName() -> i64 {
 42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
 0
 }
 "#;
@@ -141,11 +141,11 @@ F main() -> i64 {
 #[test]
 fn test_underscore_prefix_suppresses_dead_code() {
     let source = r#"
-F _internal() -> i64 {
+fn _internal() -> i64 {
 42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
 0
 }
 "#;
@@ -167,8 +167,8 @@ F main() -> i64 {
 #[test]
 fn test_unreachable_code() {
     let source = r#"
-F main() -> i64 {
-R 0
+fn main() -> i64 {
+return 0
 x := 42
 }
 "#;
@@ -186,7 +186,7 @@ x := 42
 #[test]
 fn test_unsafe_audit_deref() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
 ptr := malloc(100)
 *ptr
 }
@@ -212,7 +212,11 @@ fn test_lint_diagnostic_display() {
         level: LintLevel::Warning,
         category: LintCategory::DeadCode,
         message: "function 'foo' is never called".to_string(),
-        span: Span { start: 0, end: 10 },
+        span: Span {
+            file_id: 0,
+            start: 0,
+            end: 10,
+        },
         suggestion: Some("Remove or prefix with '_'".to_string()),
     };
     let display = format!("{}", diag);

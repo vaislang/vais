@@ -153,7 +153,7 @@ fn handle_diagnostic_quickfixes(
                                 uri.clone(),
                                 vec![TextEdit {
                                     range: Range::new(Position::new(0, 0), Position::new(0, 0)),
-                                    new_text: format!("U {}\n", module),
+                                    new_text: format!("use {}\n", module),
                                 }],
                             );
                             map
@@ -468,7 +468,7 @@ fn add_extract_to_function_action(
 
             // Create function definition
             let function_def = format!(
-                "\nF {}() -> _ {{\n{}{}\n}}\n",
+                "\nfn {}() -> _ {{\n{}{}\n}}\n",
                 func_name,
                 indent,
                 selected_text

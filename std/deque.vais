@@ -3,17 +3,17 @@
 # Supports O(1) push/pop operations at both ends
 # Updated to use Option<T> for error handling
 
-U std/option
+use std/option
 
 # Helper function to copy one element from circular buffer to linear buffer
 # This is a recursive helper to work around loop variable mutability limitations
-F deque_copy_element(src_data: i64, dst_data: i64, head: i64, cap: i64, src_idx: i64, dst_idx: i64, remaining: i64) -> i64 {
+fn deque_copy_element(src_data: i64, dst_data: i64, head: i64, cap: i64, src_idx: i64, dst_idx: i64, remaining: i64) -> i64 {
     I remaining <= 0 {
         0
-    } EL {
+    } else {
         # Calculate actual source index in circular buffer
         actual_src_temp := head + src_idx
-        actual_src := I actual_src_temp >= cap { actual_src_temp - cap } EL { actual_src_temp }
+        actual_src := I actual_src_temp >= cap { actual_src_temp - cap } else { actual_src_temp }
 
         # Copy the element
         src_ptr := src_data + actual_src * 8
@@ -26,7 +26,7 @@ F deque_copy_element(src_data: i64, dst_data: i64, head: i64, cap: i64, src_idx:
     }
 }
 
-S Deque {
+struct Deque {
     data: i64,      # Pointer to element array
     head: i64,      # Index of first element
     tail: i64,      # Index of next insertion position at back
@@ -34,34 +34,34 @@ S Deque {
     cap: i64        # Allocated capacity
 }
 
-X Deque {
+impl Deque {
     # Create a new empty Deque with given capacity
-    F with_capacity(capacity: i64) -> Deque {
+    fn with_capacity(capacity: i64) -> Deque {
         data := malloc(capacity * 8)  # 8 bytes per i64
         Deque { data: data, head: 0, tail: 0, len: 0, cap: capacity }
     }
 
     # Get the number of elements
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 
     # Get the capacity
-    F capacity(&self) -> i64 {
+    fn capacity(&self) -> i64 {
         self.cap
     }
 
     # Check if empty
-    F is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } EL { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } else { 0 }
     }
 
     # Push element to front
-    F push_front(&self, value: i64) -> i64 {
+    fn push_front(&self, value: i64) -> i64 {
         I self.len >= self.cap {
             # Grow capacity (inline)
             doubled := self.cap * 2
-            new_cap := I doubled < 8 { 8 } EL { doubled }
+            new_cap := I doubled < 8 { 8 } else { doubled }
             new_data := malloc(new_cap * 8)
 
             # Copy elements to new buffer in contiguous order
@@ -77,7 +77,7 @@ X Deque {
         # Move head back (wrapping around if needed)
         I self.head == 0 {
             self.head = self.cap - 1
-        } EL {
+        } else {
             self.head = self.head - 1
         }
 
@@ -88,11 +88,11 @@ X Deque {
     }
 
     # Push element to back
-    F push_back(&self, value: i64) -> i64 {
+    fn push_back(&self, value: i64) -> i64 {
         I self.len >= self.cap {
             # Grow capacity (inline)
             doubled := self.cap * 2
-            new_cap := I doubled < 8 { 8 } EL { doubled }
+            new_cap := I doubled < 8 { 8 } else { doubled }
             new_data := malloc(new_cap * 8)
 
             # Copy elements to new buffer in contiguous order
@@ -120,10 +120,10 @@ X Deque {
 
     # Pop element from front
     # Returns 0 if deque is empty
-    F pop_front(&self) -> i64 {
+    fn pop_front(&self) -> i64 {
         I self.len == 0 {
             0
-        } EL {
+        } else {
             ptr := self.data + self.head * 8
             value := load_i64(ptr)
 
@@ -140,10 +140,10 @@ X Deque {
 
     # Pop element from front using Option type
     # Returns Some(value) if deque is not empty, None otherwise
-    F pop_front_opt(&self) -> Option<i64> {
+    fn pop_front_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
-        } EL {
+        } else {
             ptr := self.data + self.head * 8
             value := load_i64(ptr)
 
@@ -160,14 +160,14 @@ X Deque {
 
     # Pop element from back
     # Returns 0 if deque is empty
-    F pop_back(&self) -> i64 {
+    fn pop_back(&self) -> i64 {
         I self.len == 0 {
             0
-        } EL {
+        } else {
             # Move tail back (wrapping around if needed)
             I self.tail == 0 {
                 self.tail = self.cap - 1
-            } EL {
+            } else {
                 self.tail = self.tail - 1
             }
 
@@ -180,14 +180,14 @@ X Deque {
 
     # Pop element from back using Option type
     # Returns Some(value) if deque is not empty, None otherwise
-    F pop_back_opt(&self) -> Option<i64> {
+    fn pop_back_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
-        } EL {
+        } else {
             # Move tail back (wrapping around if needed)
             I self.tail == 0 {
                 self.tail = self.cap - 1
-            } EL {
+            } else {
                 self.tail = self.tail - 1
             }
 
@@ -200,10 +200,10 @@ X Deque {
 
     # Get element at front without removing
     # Returns 0 if deque is empty
-    F front(&self) -> i64 {
+    fn front(&self) -> i64 {
         I self.len == 0 {
             0
-        } EL {
+        } else {
             ptr := self.data + self.head * 8
             load_i64(ptr)
         }
@@ -211,10 +211,10 @@ X Deque {
 
     # Get element at front using Option type
     # Returns Some(value) if deque is not empty, None otherwise
-    F front_opt(&self) -> Option<i64> {
+    fn front_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
-        } EL {
+        } else {
             ptr := self.data + self.head * 8
             Some(load_i64(ptr))
         }
@@ -222,13 +222,13 @@ X Deque {
 
     # Get element at back without removing
     # Returns 0 if deque is empty
-    F back(&self) -> i64 {
+    fn back(&self) -> i64 {
         I self.len == 0 {
             0
-        } EL {
+        } else {
             # Calculate index of last element
             back_idx_temp := self.tail - 1
-            back_idx := I back_idx_temp < 0 { self.cap - 1 } EL { back_idx_temp }
+            back_idx := I back_idx_temp < 0 { self.cap - 1 } else { back_idx_temp }
 
             ptr := self.data + back_idx * 8
             load_i64(ptr)
@@ -237,13 +237,13 @@ X Deque {
 
     # Get element at back using Option type
     # Returns Some(value) if deque is not empty, None otherwise
-    F back_opt(&self) -> Option<i64> {
+    fn back_opt(&self) -> Option<i64> {
         I self.len == 0 {
             None
-        } EL {
+        } else {
             # Calculate index of last element
             back_idx_temp := self.tail - 1
-            back_idx := I back_idx_temp < 0 { self.cap - 1 } EL { back_idx_temp }
+            back_idx := I back_idx_temp < 0 { self.cap - 1 } else { back_idx_temp }
 
             ptr := self.data + back_idx * 8
             Some(load_i64(ptr))
@@ -252,15 +252,15 @@ X Deque {
 
     # Get element at index (0-indexed from front)
     # Returns 0 if index is out of bounds
-    F get(&self, index: i64) -> i64 {
+    fn get(&self, index: i64) -> i64 {
         I index < 0 {
             0
-        } EL I index >= self.len {
+        } else I index >= self.len {
             0
-        } EL {
+        } else {
             # Calculate actual position in circular buffer
             actual_idx_temp := self.head + index
-            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } EL { actual_idx_temp }
+            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } else { actual_idx_temp }
 
             ptr := self.data + actual_idx * 8
             load_i64(ptr)
@@ -269,15 +269,15 @@ X Deque {
 
     # Get element at index using Option type
     # Returns Some(value) if index is valid, None otherwise
-    F get_opt(&self, index: i64) -> Option<i64> {
+    fn get_opt(&self, index: i64) -> Option<i64> {
         I index < 0 {
             None
-        } EL I index >= self.len {
+        } else I index >= self.len {
             None
-        } EL {
+        } else {
             # Calculate actual position in circular buffer
             actual_idx_temp := self.head + index
-            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } EL { actual_idx_temp }
+            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } else { actual_idx_temp }
 
             ptr := self.data + actual_idx * 8
             Some(load_i64(ptr))
@@ -286,15 +286,15 @@ X Deque {
 
     # Set element at index (0-indexed from front)
     # Returns 1 on success, 0 if index is out of bounds
-    F set(&self, index: i64, value: i64) -> i64 {
+    fn set(&self, index: i64, value: i64) -> i64 {
         I index < 0 {
             0
-        } EL I index >= self.len {
+        } else I index >= self.len {
             0
-        } EL {
+        } else {
             # Calculate actual position in circular buffer
             actual_idx_temp := self.head + index
-            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } EL { actual_idx_temp }
+            actual_idx := I actual_idx_temp >= self.cap { actual_idx_temp - self.cap } else { actual_idx_temp }
 
             ptr := self.data + actual_idx * 8
             store_i64(ptr, value)
@@ -303,7 +303,7 @@ X Deque {
     }
 
     # Clear all elements
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         self.len = 0
         self.head = 0
         self.tail = 0
@@ -311,7 +311,7 @@ X Deque {
     }
 
     # Free memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.data)
         self.data = 0
         self.len = 0
@@ -323,6 +323,6 @@ X Deque {
 }
 
 # Create new Deque with initial capacity of 8
-F deque_new() -> Deque {
+fn deque_new() -> Deque {
     Deque.with_capacity(8)
 }

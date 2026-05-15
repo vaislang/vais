@@ -1,0 +1,22 @@
+# CHECKS: fixed-size array `[T; N]` literal binding (REGRESSION C15).
+# Annotated `: [i64; 3]` now unifies with `[1, 2, 3]` AND the binding lowers
+# to a real `[3 x i64]` slot (not a stale `ptr` store of 8 bytes).
+
+fn main() -> i64 {
+    a: [i64; 3] := [1, 2, 3]
+    sum: i64 := mut 0
+    LF i: 0..3 {
+        sum = sum + a[i]
+    }
+    I sum != 6 { return 1 }
+
+    # also exercise [i64; 5] with non-trivial values
+    b: [i64; 5] := [10, 20, 30, 40, 50]
+    total: i64 := mut 0
+    LF j: 0..5 {
+        total = total + b[j]
+    }
+    I total != 150 { return 2 }
+
+    return 0
+}

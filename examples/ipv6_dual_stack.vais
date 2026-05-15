@@ -4,7 +4,7 @@
 # Note: This example demonstrates the API. The full implementation would use std/net
 # but the module import system currently has limitations with extension methods.
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("========================================")
     puts("IPv6 Dual-Stack Networking Example")
     puts("========================================")

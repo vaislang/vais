@@ -43,28 +43,28 @@ fn check_err(source: &str) -> TypeError {
 
 #[test]
 fn test_mismatch_return_bool_for_i64() {
-    let err = check_err("F test()->i64=\"hello\"");
+    let err = check_err("fn test()->i64=\"hello\"");
     assert_eq!(err.error_code(), "E001");
     assert!(err.to_string().contains("mismatch") || err.to_string().contains("Mismatch"));
 }
 
 #[test]
 fn test_mismatch_return_string_for_i64() {
-    if let Some(err) = check_error("F test()->i64=\"hello\"") {
+    if let Some(err) = check_error("fn test()->i64=\"hello\"") {
         assert_eq!(err.error_code(), "E001");
     }
 }
 
 #[test]
 fn test_mismatch_return_i64_for_bool() {
-    if let Some(err) = check_error("F test()->bool=42") {
+    if let Some(err) = check_error("fn test()->bool=42") {
         assert_eq!(err.error_code(), "E001");
     }
 }
 
 #[test]
 fn test_mismatch_help_message() {
-    let err = check_err("F test()->i64=\"hello\"");
+    let err = check_err("fn test()->i64=\"hello\"");
     let help = err.help();
     assert!(help.is_some(), "Mismatch should have help message");
 }
@@ -75,13 +75,13 @@ fn test_mismatch_help_message() {
 
 #[test]
 fn test_undefined_var_simple() {
-    let err = check_err("F test()->i64{R x}");
+    let err = check_err("fn test()->i64{return x}");
     assert_eq!(err.error_code(), "E002");
 }
 
 #[test]
 fn test_undefined_var_with_suggestion() {
-    if let Some(err) = check_error("F test()->i64{count:=42;R cont}") {
+    if let Some(err) = check_error("fn test()->i64{count:=42;return cont}") {
         assert_eq!(err.error_code(), "E002");
         let help = err.help();
         assert!(help.is_some(), "Should have help with suggestion");
@@ -96,7 +96,7 @@ fn test_undefined_var_with_suggestion() {
 
 #[test]
 fn test_undefined_var_no_suggestion_dissimilar() {
-    if let Some(err) = check_error("F test()->i64{counter:=42;R xyz}") {
+    if let Some(err) = check_error("fn test()->i64{counter:=42;return xyz}") {
         assert_eq!(err.error_code(), "E002");
         let help = err.help();
         assert!(help.is_some(), "Should still have a help message");
@@ -105,21 +105,21 @@ fn test_undefined_var_no_suggestion_dissimilar() {
 
 #[test]
 fn test_undefined_var_in_binary_expr() {
-    if let Some(err) = check_error("F test()->i64{a:=1;R a+b}") {
+    if let Some(err) = check_error("fn test()->i64{a:=1;return a+b}") {
         assert_eq!(err.error_code(), "E002");
     }
 }
 
 #[test]
 fn test_undefined_var_in_condition() {
-    if let Some(err) = check_error("F test()->i64{I flag{R 1}E{R 0}}") {
+    if let Some(err) = check_error("fn test()->i64{I flag{return 1} else {return 0}}") {
         assert_eq!(err.error_code(), "E002");
     }
 }
 
 #[test]
 fn test_undefined_var_in_loop() {
-    if let Some(err) = check_error("F test()->i64{L _:cond{B};R 0}") {
+    if let Some(err) = check_error("fn test()->i64{L _:cond{B};return 0}") {
         assert_eq!(err.error_code(), "E002");
     }
 }
@@ -130,14 +130,14 @@ fn test_undefined_var_in_loop() {
 
 #[test]
 fn test_undefined_type() {
-    if let Some(err) = check_error("F test(x:NonExistent)->i64=0") {
+    if let Some(err) = check_error("fn test(x:NonExistent)->i64=0") {
         assert_eq!(err.error_code(), "E003");
     }
 }
 
 #[test]
 fn test_undefined_type_suggestion() {
-    if let Some(err) = check_error("S Point{x:i64} F test(p:Poin)->i64=0") {
+    if let Some(err) = check_error("struct Point{x:i64} fn test(p:Poin)->i64=0") {
         assert_eq!(err.error_code(), "E003");
         let help = err.help();
         assert!(help.is_some());
@@ -150,7 +150,7 @@ fn test_undefined_type_suggestion() {
 
 #[test]
 fn test_undefined_function() {
-    if let Some(err) = check_error("F add(a:i64,b:i64)->i64=a+b F main()->i64=ad(1,2)") {
+    if let Some(err) = check_error("fn add(a:i64,b:i64)->i64=a+b fn main()->i64=ad(1,2)") {
         let code = err.error_code();
         // May be E002 or E004 depending on resolution order
         assert!(code == "E002" || code == "E004", "Got: {}", code);
@@ -159,7 +159,7 @@ fn test_undefined_function() {
 
 #[test]
 fn test_undefined_function_help() {
-    if let Some(err) = check_error("F add(a:i64,b:i64)->i64=a+b F main()->i64=ad(1,2)") {
+    if let Some(err) = check_error("fn add(a:i64,b:i64)->i64=a+b fn main()->i64=ad(1,2)") {
         let help = err.help();
         assert!(help.is_some(), "Undefined identifier should have help");
     }
@@ -171,7 +171,7 @@ fn test_undefined_function_help() {
 
 #[test]
 fn test_arg_count_too_few() {
-    if let Some(err) = check_error("F add(a:i64,b:i64)->i64=a+b F main()->i64=add(1)") {
+    if let Some(err) = check_error("fn add(a:i64,b:i64)->i64=a+b fn main()->i64=add(1)") {
         assert_eq!(err.error_code(), "E006");
         let msg = format!("{}", err);
         assert!(
@@ -184,14 +184,14 @@ fn test_arg_count_too_few() {
 
 #[test]
 fn test_arg_count_too_many() {
-    if let Some(err) = check_error("F inc(x:i64)->i64=x+1 F main()->i64=inc(1,2)") {
+    if let Some(err) = check_error("fn inc(x:i64)->i64=x+1 fn main()->i64=inc(1,2)") {
         assert_eq!(err.error_code(), "E006");
     }
 }
 
 #[test]
 fn test_arg_count_zero_expected() {
-    if let Some(err) = check_error("F nop()->i64=0 F main()->i64=nop(42)") {
+    if let Some(err) = check_error("fn nop()->i64=0 fn main()->i64=nop(42)") {
         assert_eq!(err.error_code(), "E006");
         let help = err.help().unwrap();
         assert!(help.contains("no arguments"), "Help: {}", help);
@@ -200,7 +200,7 @@ fn test_arg_count_zero_expected() {
 
 #[test]
 fn test_arg_count_help_singular() {
-    if let Some(err) = check_error("F one(x:i64)->i64=x F main()->i64=one(1,2)") {
+    if let Some(err) = check_error("fn one(x:i64)->i64=x fn main()->i64=one(1,2)") {
         assert_eq!(err.error_code(), "E006");
         let help = err.help().unwrap();
         assert!(help.contains("1 argument"), "Help: {}", help);
@@ -213,7 +213,7 @@ fn test_arg_count_help_singular() {
 
 #[test]
 fn test_duplicate_function() {
-    if let Some(err) = check_error("F test()->i64=1 F test()->i64=2") {
+    if let Some(err) = check_error("fn test()->i64=1 fn test()->i64=2") {
         assert_eq!(err.error_code(), "E008");
         let help = err.help().unwrap();
         assert!(
@@ -226,7 +226,7 @@ fn test_duplicate_function() {
 
 #[test]
 fn test_duplicate_struct() {
-    if let Some(err) = check_error("S Point{x:i64} S Point{y:i64}") {
+    if let Some(err) = check_error("struct Point{x:i64} struct Point{y:i64}") {
         assert_eq!(err.error_code(), "E008");
     }
 }
@@ -237,7 +237,7 @@ fn test_duplicate_struct() {
 
 #[test]
 fn test_immutable_assign() {
-    if let Some(err) = check_error("F test()->i64{x:=42;x=10;R x}") {
+    if let Some(err) = check_error("fn test()->i64{x:=42;x=10;return x}") {
         assert_eq!(err.error_code(), "E009");
         let help = err.help().unwrap();
         assert!(help.contains("mutable"), "Help: {}", help);
@@ -250,78 +250,80 @@ fn test_immutable_assign() {
 
 #[test]
 fn test_valid_simple_function() {
-    check_ok("F test()->i64=42");
+    check_ok("fn test()->i64=42");
 }
 
 #[test]
 fn test_valid_binary_op() {
-    check_ok("F add(a:i64,b:i64)->i64=a+b");
+    check_ok("fn add(a:i64,b:i64)->i64=a+b");
 }
 
 #[test]
 fn test_valid_if_else() {
-    check_ok("F abs(x:i64)->i64{I x>0{R x}E{R 0-x}}");
+    check_ok("fn abs(x:i64)->i64{I x>0{return x} else {return 0-x}}");
 }
 
 #[test]
 fn test_valid_loop() {
-    check_ok("F test()->i64{x:=0;L _:x<10{x=x+1};x}");
+    // Phase 0 bug C2: `:= mut` required for reassignment.
+    check_ok("fn test()->i64{x:= mut 0;L _:x<10{x=x+1};x}");
 }
 
 #[test]
 fn test_valid_struct_field_access() {
-    check_ok("S Point{x:i64,y:i64} F get_x(p:Point)->i64=p.x");
+    check_ok("struct Point{x:i64,y:i64} fn get_x(p:Point)->i64=p.x");
 }
 
 #[test]
 fn test_valid_match() {
-    check_ok("F test(x:i64)->i64{M x{0=>1,1=>2,_=>0}}");
+    check_ok("fn test(x:i64)->i64{match x{0=>1,1=>2,_=>0}}");
 }
 
 #[test]
 fn test_valid_self_recursion() {
-    check_ok("F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)");
+    check_ok("fn fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)");
 }
 
 #[test]
 fn test_valid_generic() {
-    check_ok("F id<T>(x:T)->T=x");
+    check_ok("fn id<T>(x:T)->T=x");
 }
 
 #[test]
 fn test_valid_mutable_var() {
-    check_ok("F test()->i64{x:= mut 0;x=42;R x}");
+    check_ok("fn test()->i64{x:= mut 0;x=42;return x}");
 }
 
 #[test]
 fn test_valid_enum() {
-    check_ok("E Dir{N,S,E2,W}");
+    check_ok("enum Dir{N,S,E2,W}");
 }
 
 #[test]
 fn test_valid_trait() {
-    check_ok("W Printable{F to_str(self)->str}");
+    check_ok("trait Printable{fn to_str(self)->str}");
 }
 
 #[test]
 fn test_valid_impl() {
-    check_ok("S Num{val:i64} X Num{F get(self)->i64=self.val}");
+    check_ok("struct Num{val:i64} impl Num{fn get(self)->i64=self.val}");
 }
 
 #[test]
 fn test_valid_nested_if() {
-    check_ok("F test(x:i64)->i64{I x>0{I x>10{R 2}E{R 1}}E{R 0}}");
+    check_ok("fn test(x:i64)->i64{I x>0{I x>10{return 2} else {return 1}} else {return 0}}");
 }
 
 #[test]
 fn test_valid_for_loop() {
-    check_ok("F test()->i64{s:=0;L i:0..10{s=s+i};s}");
+    // Phase 0 bug C2: `:= mut` required for reassignment.
+    check_ok("fn test()->i64{s:= mut 0;L i:0..10{s=s+i};s}");
 }
 
 #[test]
 fn test_valid_lambda() {
     // Vais lambda: no return type annotation in closure syntax
-    check_ok("F test()->i64{f:=|x:i64|{x+1};f(41)}");
+    check_ok("fn test()->i64{f:=|x:i64|{x+1};f(41)}");
 }
 
 // ============================================================================
@@ -957,7 +959,11 @@ fn test_help_refinement_violation() {
 
 #[test]
 fn test_secondary_spans_use_after_move_with_span() {
-    let span = vais_ast::Span { start: 10, end: 20 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 10,
+        end: 20,
+    };
     let err = TypeError::UseAfterMove {
         var_name: "x".to_string(),
         moved_at: Some(span),
@@ -980,7 +986,11 @@ fn test_secondary_spans_use_after_move_no_span() {
 
 #[test]
 fn test_secondary_spans_assign_while_borrowed() {
-    let span = vais_ast::Span { start: 5, end: 15 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 5,
+        end: 15,
+    };
     let err = TypeError::AssignWhileBorrowed {
         var_name: "x".to_string(),
         borrow_at: Some(span),
@@ -994,7 +1004,11 @@ fn test_secondary_spans_assign_while_borrowed() {
 
 #[test]
 fn test_secondary_spans_dangling_reference() {
-    let span = vais_ast::Span { start: 0, end: 5 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 5,
+    };
     let err = TypeError::DanglingReference {
         ref_var: "r".to_string(),
         source_var: "x".to_string(),
@@ -1010,7 +1024,11 @@ fn test_secondary_spans_dangling_reference() {
 
 #[test]
 fn test_secondary_spans_borrow_after_move() {
-    let span = vais_ast::Span { start: 0, end: 5 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 5,
+    };
     let err = TypeError::BorrowAfterMove {
         var_name: "x".to_string(),
         moved_at: Some(span),
@@ -1023,7 +1041,11 @@ fn test_secondary_spans_borrow_after_move() {
 
 #[test]
 fn test_secondary_spans_return_local_ref() {
-    let span = vais_ast::Span { start: 0, end: 5 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 5,
+    };
     let err = TypeError::ReturnLocalRef {
         var_name: "x".to_string(),
         return_at: None,
@@ -1036,7 +1058,11 @@ fn test_secondary_spans_return_local_ref() {
 
 #[test]
 fn test_secondary_spans_move_after_use() {
-    let span = vais_ast::Span { start: 0, end: 5 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 5,
+    };
     let err = TypeError::MoveAfterUse {
         var_name: "x".to_string(),
         first_use_at: Some(span),
@@ -1170,7 +1196,11 @@ fn test_internal_error_help() {
 
 #[test]
 fn test_internal_error_span() {
-    let span = vais_ast::Span { start: 0, end: 10 };
+    let span = vais_ast::Span {
+        file_id: 0,
+        start: 0,
+        end: 10,
+    };
     let err = TypeError::InternalError {
         message: "test".to_string(),
         span: Some(span),

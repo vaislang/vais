@@ -1,0 +1,36 @@
+# CHECKS: count zeroes in a Vec<i64>.
+use std/vec.{vec_new};
+
+fn count_zeros(v: &Vec<i64>) -> i64 {
+    count: i64 := mut 0
+    LF i: 0..v.len() {
+        I v[i] == 0 { count = count + 1 }
+    }
+    count
+}
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(0)
+    v.push(1)
+    v.push(0)
+    v.push(2)
+    v.push(0)
+    v.push(0)
+    I count_zeros(&v) != 4 { return 1 }
+
+    nz: Vec<i64> := mut vec_new()
+    nz.push(1)
+    nz.push(2)
+    nz.push(3)
+    I count_zeros(&nz) != 0 { return 2 }
+
+    az: Vec<i64> := mut vec_new()
+    az.push(0)
+    az.push(0)
+    I count_zeros(&az) != 2 { return 3 }
+
+    e: Vec<i64> := mut vec_new()
+    I count_zeros(&e) != 0 { return 4 }
+    return 0
+}

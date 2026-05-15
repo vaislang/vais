@@ -12,9 +12,9 @@ use vais_parser::parse;
 fn test_generate_code_basic() {
     // Test the simple generator
     let code = generate_code(10);
-    assert!(code.contains("F func0"));
-    assert!(code.contains("F func9"));
-    assert!(code.contains("F main()->i64 = func0(42)"));
+    assert!(code.contains("fn func0"));
+    assert!(code.contains("fn func9"));
+    assert!(code.contains("fn main()->i64 = func0(42)"));
 
     // Verify it parses
     let result = parse(&code);
@@ -40,9 +40,9 @@ fn test_generate_large_project_10k() {
 
     // Should contain expected constructs
     assert!(code.contains("# Module"));
-    assert!(code.contains("S Point"));
-    assert!(code.contains("E Result"));
-    assert!(code.contains("F main()"));
+    assert!(code.contains("struct Point"));
+    assert!(code.contains("enum Result"));
+    assert!(code.contains("fn main()"));
 
     // Verify it parses
     let result = parse(&code);
@@ -113,19 +113,19 @@ fn test_generate_large_project_contains_variety() {
     assert!(code.contains("_compute_"));
 
     // Structs
-    assert!(code.contains("S Point"));
-    assert!(code.contains("S Container"));
+    assert!(code.contains("struct Point"));
+    assert!(code.contains("struct Container"));
 
     // Enums
-    assert!(code.contains("E Result"));
+    assert!(code.contains("enum Result"));
     assert!(code.contains("Ok(i64)"));
     assert!(code.contains("Err(i64)"));
 
     // Control flow
     assert!(code.contains("I ")); // if
     assert!(code.contains("L {")); // loop
-    assert!(code.contains("M ")); // match
-    assert!(code.contains("R ")); // return
+    assert!(code.contains("match ")); // match
+    assert!(code.contains("return ")); // return
 
     // Operators
     assert!(code.contains("@(")); // self-recursion
@@ -160,7 +160,9 @@ fn test_generate_multi_module_project() {
         // Check for public declarations (except main)
         if filename != "main.vais" {
             assert!(
-                code.contains("P S ") || code.contains("P E ") || code.contains("P F "),
+                code.contains("pub struct ")
+                    || code.contains("pub enum ")
+                    || code.contains("pub fn "),
                 "Module {} should have public declarations",
                 filename
             );
@@ -172,7 +174,7 @@ fn test_generate_multi_module_project() {
         .iter()
         .find(|(name, _)| name == "main.vais")
         .expect("Should have main.vais");
-    assert!(main_module.1.contains("U module0"));
+    assert!(main_module.1.contains("use module0"));
 }
 
 #[test]
@@ -222,8 +224,8 @@ fn test_generated_code_has_valid_syntax() {
     // Loop syntax should have braces
     assert!(code.contains("L {"));
 
-    // Return statements should use R
-    assert!(code.contains("R "));
+    // Return statements should use canonical `return`
+    assert!(code.contains("return "));
 }
 
 #[test]
@@ -256,7 +258,7 @@ fn test_multi_module_cross_references() {
 
     // Should import previous module
     assert!(
-        module1.1.contains("U module0"),
+        module1.1.contains("use module0"),
         "Module1 should import module0"
     );
 
@@ -271,7 +273,7 @@ fn test_multi_module_cross_references() {
 fn test_generate_code_empty() {
     // Edge case: 0 functions
     let code = generate_code(0);
-    assert!(code.contains("F main()->i64 = func0(42)"));
+    assert!(code.contains("fn main()->i64 = func0(42)"));
 
     // Should still parse (even though func0 is missing, parser doesn't check semantics)
     let result = parse(&code);
@@ -282,7 +284,7 @@ fn test_generate_code_empty() {
 fn test_large_project_min_size() {
     // Edge case: very small target
     let code = generate_large_project(10);
-    assert!(code.contains("F main()"));
+    assert!(code.contains("fn main()"));
 
     // Should still parse
     let result = parse(&code);

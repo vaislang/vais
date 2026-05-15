@@ -1,0 +1,13 @@
+use inner
+
+# Predicate violation: outer's return type is i64 (not Result/Option),
+# so the cross-module `?` propagation is invalid. Strict A4-11 (Step 13
+# stage 1) rejects this at vaisc check.
+fn outer() -> i64 {
+    x: i64 = inner_call()?
+    x + 1
+}
+
+fn main() -> i64 {
+    outer()
+}

@@ -30,8 +30,8 @@ fn gen_result(source: &str) -> Result<String, String> {
 fn test_builtin_labs() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
-            R labs(-42)
+        fn test() -> i64 {
+            return labs(-42)
         }
     "#,
     );
@@ -42,8 +42,8 @@ fn test_builtin_labs() {
 fn test_builtin_atol() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
-            R atol("123")
+        fn test() -> i64 {
+            return atol("123")
         }
     "#,
     );
@@ -56,8 +56,8 @@ fn test_builtin_atol() {
 fn test_builtin_atof() {
     let result = gen_result(
         r#"
-        F test() -> f64 {
-            R atof("3.14")
+        fn test() -> f64 {
+            return atof("3.14")
         }
     "#,
     );
@@ -72,8 +72,8 @@ fn test_builtin_atof() {
 fn test_builtin_sqrt() {
     let result = gen_result(
         r#"
-        F test() -> f64 {
-            R sqrt(4.0)
+        fn test() -> f64 {
+            return sqrt(4.0)
         }
     "#,
     );
@@ -84,8 +84,8 @@ fn test_builtin_sqrt() {
 fn test_builtin_sin() {
     let result = gen_result(
         r#"
-        F test() -> f64 {
-            R sin(0.0)
+        fn test() -> f64 {
+            return sin(0.0)
         }
     "#,
     );
@@ -96,8 +96,8 @@ fn test_builtin_sin() {
 fn test_builtin_cos() {
     let result = gen_result(
         r#"
-        F test() -> f64 {
-            R cos(0.0)
+        fn test() -> f64 {
+            return cos(0.0)
         }
     "#,
     );
@@ -108,8 +108,8 @@ fn test_builtin_cos() {
 fn test_builtin_pow() {
     let result = gen_result(
         r#"
-        F test() -> f64 {
-            R pow(2.0, 10.0)
+        fn test() -> f64 {
+            return pow(2.0, 10.0)
         }
     "#,
     );
@@ -120,8 +120,8 @@ fn test_builtin_pow() {
 fn test_builtin_log() {
     let result = gen_result(
         r#"
-        F test() -> f64 {
-            R log(2.718)
+        fn test() -> f64 {
+            return log(2.718)
         }
     "#,
     );
@@ -132,8 +132,8 @@ fn test_builtin_log() {
 fn test_builtin_floor() {
     let result = gen_result(
         r#"
-        F test() -> f64 {
-            R floor(3.7)
+        fn test() -> f64 {
+            return floor(3.7)
         }
     "#,
     );
@@ -144,8 +144,8 @@ fn test_builtin_floor() {
 fn test_builtin_ceil() {
     let result = gen_result(
         r#"
-        F test() -> f64 {
-            R ceil(3.2)
+        fn test() -> f64 {
+            return ceil(3.2)
         }
     "#,
     );
@@ -160,10 +160,10 @@ fn test_builtin_ceil() {
 fn test_builtin_malloc_free() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ptr := malloc(100)
             free(ptr)
-            R 0
+            return 0
         }
     "#,
     );
@@ -174,11 +174,11 @@ fn test_builtin_malloc_free() {
 fn test_builtin_memset() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ptr := malloc(100)
             memset(ptr, 0, 100)
             free(ptr)
-            R 0
+            return 0
         }
     "#,
     );
@@ -189,13 +189,13 @@ fn test_builtin_memset() {
 fn test_builtin_memcpy() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             src := malloc(100)
             dst := malloc(100)
             memcpy(dst, src, 100)
             free(src)
             free(dst)
-            R 0
+            return 0
         }
     "#,
     );
@@ -210,9 +210,9 @@ fn test_builtin_memcpy() {
 fn test_builtin_fopen() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := fopen("test.txt", "r")
-            R 0
+            return 0
         }
     "#,
     );
@@ -227,8 +227,8 @@ fn test_builtin_fopen() {
 fn test_builtin_strlen() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
-            R strlen("hello")
+        fn test() -> i64 {
+            return strlen("hello")
         }
     "#,
     );
@@ -239,8 +239,8 @@ fn test_builtin_strlen() {
 fn test_builtin_strcmp() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
-            R strcmp("abc", "abc")
+        fn test() -> i64 {
+            return strcmp("abc", "abc")
         }
     "#,
     );
@@ -255,9 +255,9 @@ fn test_builtin_strcmp() {
 fn test_builtin_exit() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             exit(0)
-            R 0
+            return 0
         }
     "#,
     );
@@ -268,9 +268,9 @@ fn test_builtin_exit() {
 fn test_builtin_getenv() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             e := getenv("HOME")
-            R 0
+            return 0
         }
     "#,
     );
@@ -286,8 +286,8 @@ fn test_contract_nonnull() {
     let ir = gen_ok(
         r#"
         #[contract(nonnull)]
-        F test(s: str) -> i64 {
-            R 0
+        fn test(s: str) -> i64 {
+            return 0
         }
     "#,
     );
@@ -299,8 +299,8 @@ fn test_contract_safe_div() {
     let ir = gen_ok(
         r#"
         #[contract(safe_div)]
-        F divide(a: i64, b: i64) -> i64 {
-            R a / b
+        fn divide(a: i64, b: i64) -> i64 {
+            return a / b
         }
     "#,
     );
@@ -312,8 +312,8 @@ fn test_contract_all() {
     let ir = gen_ok(
         r#"
         #[contract(all)]
-        F test(s: str, n: i64) -> i64 {
-            R n / 2
+        fn test(s: str, n: i64) -> i64 {
+            return n / 2
         }
     "#,
     );
@@ -325,8 +325,8 @@ fn test_contract_default() {
     let ir = gen_ok(
         r#"
         #[contract]
-        F test(s: str, n: i64) -> i64 {
-            R n
+        fn test(s: str, n: i64) -> i64 {
+            return n
         }
     "#,
     );
@@ -339,7 +339,7 @@ fn test_contract_no_sideeffects() {
     let ir = gen_ok(
         r#"
         #[contract(nonnull, safe_div)]
-        F add(s: str, b: i64) -> i64 = b
+        fn add(s: str, b: i64) -> i64 = b
     "#,
     );
     assert!(!ir.is_empty());
@@ -350,9 +350,9 @@ fn test_contract_bounds() {
     let ir = gen_ok(
         r#"
         #[contract(bounds)]
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [1, 2, 3]
-            R arr[1]
+            return arr[1]
         }
     "#,
     );
@@ -367,9 +367,9 @@ fn test_contract_bounds() {
 fn test_assert_simple() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             assert(x > 0)
-            R x
+            return x
         }
     "#,
     );
@@ -380,9 +380,9 @@ fn test_assert_simple() {
 fn test_assert_with_message() {
     let result = gen_result(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             assert(x >= 0)
-            R x
+            return x
         }
     "#,
     );
@@ -397,9 +397,9 @@ fn test_assert_with_message() {
 fn test_recursive_with_decreases() {
     let result = gen_result(
         r#"
-        F count(n: i64) -> i64 {
-            I n <= 0 { R 0 }
-            R 1 + count(n - 1)
+        fn count(n: i64) -> i64 {
+            I n <= 0 { return 0 }
+            return 1 + count(n - 1)
         }
     "#,
     );
@@ -415,8 +415,8 @@ fn test_requires_attribute() {
     let ir = gen_ok(
         r#"
         #[requires(n > 0)]
-        F test(n: i64) -> i64 {
-            R n * 2
+        fn test(n: i64) -> i64 {
+            return n * 2
         }
     "#,
     );
@@ -428,9 +428,9 @@ fn test_ensures_attribute() {
     let ir = gen_ok(
         r#"
         #[ensures(result >= 0)]
-        F abs(x: i64) -> i64 {
-            I x >= 0 { R x }
-            R 0 - x
+        fn abs(x: i64) -> i64 {
+            I x >= 0 { return x }
+            return 0 - x
         }
     "#,
     );
@@ -445,9 +445,9 @@ fn test_ensures_attribute() {
 fn test_printf_format_string() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             printf("hello %d\n", 42)
-            R 0
+            return 0
         }
     "#,
     );
@@ -458,9 +458,9 @@ fn test_printf_format_string() {
 fn test_puts_string() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             puts("hello world")
-            R 0
+            return 0
         }
     "#,
     );
@@ -475,9 +475,9 @@ fn test_puts_string() {
 fn test_putchar() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             putchar(65)
-            R 0
+            return 0
         }
     "#,
     );
@@ -492,8 +492,8 @@ fn test_putchar() {
 fn test_builtin_time() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
-            R time(0)
+        fn test() -> i64 {
+            return time(0)
         }
     "#,
     );
@@ -504,8 +504,8 @@ fn test_builtin_time() {
 fn test_builtin_clock() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
-            R clock()
+        fn test() -> i64 {
+            return clock()
         }
     "#,
     );
@@ -520,8 +520,8 @@ fn test_builtin_clock() {
 fn test_builtin_sizeof() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
-            R sizeof(i64)
+        fn test() -> i64 {
+            return sizeof(i64)
         }
     "#,
     );
@@ -537,10 +537,10 @@ fn test_contract_with_malloc() {
     let ir = gen_ok(
         r#"
         #[contract(nonnull)]
-        F alloc_and_free(size: i64) -> i64 {
+        fn alloc_and_free(size: i64) -> i64 {
             ptr := malloc(size)
             free(ptr)
-            R 0
+            return 0
         }
     "#,
     );

@@ -1,0 +1,58 @@
+# A4-08 — Vec<T> ↔ &T permissive
+
+[entry]
+id = "A4-08"
+classification = "A4-late-codegen-silent (per master-plan.toml; symptom drifted to runtime — see STEP7_FINDINGS F-06)"
+surface = "Vec<T> silently unifies with &T (non-Slice reference types) at unification.rs:384 'Permissive: allow Vec ↔ &T'"
+site = "unification.rs:384"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:384"
+master_plan_version = 17
+
+[v1_evidence]
+probe_summary = "take_str_ref(v) where v: Vec<i64>"
+expected_per_design = "type-check rejection (Vec is fat pointer ptr+len, &str is fat pointer ptr+len but with different element semantics — must require .as_str() or similar conversion)"
+actual_observed = "clang IR mismatch ({ptr,i64} vs ptr) — late codegen failure"
+verified_date = "2026-05-03 (initial)"
+
+[v2_evidence]
+status = "v1_symptom_drifted_v2_runtime_crash"
+notes = """
+v1 build-time symptom no longer reproduces on macOS arm64 + clang
+2026-05-03. Build succeeds. However the SURFACE (unification rule at
+line 384) is unchanged and the defect now surfaces at runtime: when
+the misinterpreted &str is passed to a C function (puts) that reads
+it as a NUL-terminated string, the program SIGSEGVs (exit 139)
+because the Vec fat pointer's first word is the data pointer (which
+puts then reads), but the second word is length, not a NUL-terminated
+buffer.
+
+This is *worse* than the v1 symptom — silent at compile and link, only
+surfaces at runtime if the parameter is actually consumed.
+
+Critical insight (STEP7_FINDINGS F-06): a non-consuming probe whose
+body returns a constant (e.g. `F take_str_ref(s: &str) -> i64 { R 1 }`)
+MASKS the defect. The body must consume `s` to expose the corruption.
+
+v2 contract requires 3 distinct probes for HARD v2 status. Pending:
+  - Vec<u8> ↔ &str (closer-to-compatible types)
+  - Vec<i64> ↔ &SomeStruct
+  - Method receiver mismatch
+"""
+
+[migration]
+post_removal_expected = "vaisc check exits non-zero (proposal: E_TYPE_VEC_REF_MISMATCH)"
+post_removal_action = "Replace probe with negative form expecting `vaisc check` to fail. Companion positive uses .as_slice() or explicit conversion."
+
+[assertion_kind]
+kind = "runtime_crashes"
+expected_exit = 139
+consuming_probe_required = true
+rationale = """
+139 = 128 + 11 (SIGSEGV). The Vec<i64> fat pointer's data ptr is
+arbitrary stack memory (the array contents); puts() reads bytes from
+that address until NUL, walking off into unmapped pages. Signal class
+is environment-stable: any POSIX system using clang produces SIGSEGV
+for the same dereference pattern. (Non-POSIX or sandboxed runtimes
+may produce different signal classes; the runner's expected_exit is
+calibrated to the macOS+clang baseline used by this fixture suite.)
+"""

@@ -182,12 +182,209 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     /// Returns a default/zero value for a given LLVM type.
     pub(super) fn get_default_value(&self, ty: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
-        ty.const_zero()
+        match ty {
+            BasicTypeEnum::IntType(it) => it.const_int(0, false).into(),
+            BasicTypeEnum::FloatType(ft) => ft.const_float(0.0).into(),
+            BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
+            BasicTypeEnum::StructType(st) => st.const_zero().into(),
+            BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
+            BasicTypeEnum::VectorType(vt) => vt.const_zero().into(),
+        }
     }
 
     // ========== Match Expression ==========
 
+    /// B.1: Resolve the static type of a match scrutinee if we can determine
+    /// it cheaply — only used to inform struct-payload decoding for Option /
+    /// Result variants. Best-effort: returns None if the type is not known.
+    /// Recognized sources: `var_resolved_types` (for `Expr::Ident`) and
+    /// `resolved_function_sigs` (for `Expr::Call` of a named function).
+    fn resolve_match_scrutinee_type(&self, expr: &Expr) -> Option<vais_types::ResolvedType> {
+        use vais_types::ResolvedType as R;
+        match expr {
+            Expr::Ident(name) => self.var_resolved_types.get(name).cloned(),
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(fn_name) = &func.node {
+                    self.resolved_function_sigs
+                        .get(fn_name.as_str())
+                        .map(|sig| sig.ret.clone())
+                } else {
+                    None
+                }
+            }
+            // B.2: known str builtin methods — `s.parse_*()` / `s.char_at(i)`
+            // — have fixed return types. Teach the scrutinee resolver so that
+            // `M s.parse_f64() { Ok(v) => ... }` knows v is f64 without
+            // requiring an intermediate `let r: Result<f64, str> := ...`.
+            Expr::MethodCall { method, .. } => match method.node.as_str() {
+                "parse_i64" | "parse_int" => Some(R::Result(Box::new(R::I64), Box::new(R::Str))),
+                "parse_i32" => Some(R::Result(Box::new(R::I32), Box::new(R::Str))),
+                "parse_u64" => Some(R::Result(Box::new(R::U64), Box::new(R::Str))),
+                "parse_u32" => Some(R::Result(Box::new(R::U32), Box::new(R::Str))),
+                "parse_f64" => Some(R::Result(Box::new(R::F64), Box::new(R::Str))),
+                "parse_f32" => Some(R::Result(Box::new(R::F32), Box::new(R::Str))),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// B.1: When decoding a `Pattern::Variant` whose struct-payload mapping
+    /// is not registered in `enum_variant_struct_types` (Option/Result
+    /// variants skip that registration), recover the payload's LLVM type
+    /// from the current match scrutinee's resolved type. Returns a
+    /// `StructType` for any aggregate payload (named struct, nested Option,
+    /// Result, tuple). Returns None for primitive payloads (the existing
+    /// primitive-decoding path handles those) or when the scrutinee type
+    /// was not resolved.
+    /// B.2 companion: recover the LLVM primitive payload type for Option/Result
+    /// variants when the payload is a non-aggregate (int, float, ptr). Returns
+    /// None for struct/aggregate payloads (those go through
+    /// `option_result_payload_struct_type`) and when the scrutinee type is
+    /// unresolved.
+    /// Phase 0 bug C7 helper: when descending into a nested variant pattern
+    /// (e.g. `Some(Some(v))`), push the inner payload type onto the scrutinee
+    /// stack so recursive `option_result_payload_*` lookups resolve relative
+    /// to the inner Option/Result rather than the outer one. Returns true
+    /// when a push happened (caller must pop).
+    fn push_inner_scrutinee_for_variant(&mut self, variant_name: &str) -> bool {
+        use vais_types::ResolvedType as R;
+        let inner_ty = {
+            let outer = match self.match_scrutinee_type_stack.last() {
+                Some(t) => t,
+                None => return false,
+            };
+            match (outer, variant_name) {
+                (R::Optional(inner), "Some") => Some((**inner).clone()),
+                (R::Result(ok, _), "Ok") => Some((**ok).clone()),
+                (R::Result(_, err), "Err") => Some((**err).clone()),
+                _ => None,
+            }
+        };
+        if let Some(t) = inner_ty {
+            self.match_scrutinee_type_stack.push(t);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn option_result_payload_primitive_type(
+        &self,
+        variant_name: &str,
+    ) -> Option<inkwell::types::BasicTypeEnum<'ctx>> {
+        let ty = self.match_scrutinee_type_stack.last()?;
+        use vais_types::ResolvedType as R;
+        let payload_ty = match (ty, variant_name) {
+            (R::Optional(inner), "Some") => inner.as_ref(),
+            (R::Result(ok, _), "Ok") => ok.as_ref(),
+            (R::Result(_, err), "Err") => err.as_ref(),
+            _ => return None,
+        };
+        // Only interested in primitives — the struct-aware branch catches
+        // Named/Optional/Result/Tuple first (see call site order).
+        match payload_ty {
+            R::I8
+            | R::I16
+            | R::I32
+            | R::I64
+            | R::I128
+            | R::U8
+            | R::U16
+            | R::U32
+            | R::U64
+            | R::U128
+            | R::F32
+            | R::F64
+            | R::Bool
+            | R::Str => Some(self.type_mapper.map_type(payload_ty)),
+            _ => None,
+        }
+    }
+
+    fn option_result_payload_struct_type(
+        &self,
+        variant_name: &str,
+    ) -> Option<(Option<String>, inkwell::types::StructType<'ctx>)> {
+        let ty = self.match_scrutinee_type_stack.last()?;
+        use vais_types::ResolvedType as R;
+        let payload_ty = match (ty, variant_name) {
+            (R::Optional(inner), "Some") => inner.as_ref(),
+            (R::Result(ok, _), "Ok") => ok.as_ref(),
+            (R::Result(_, err), "Err") => err.as_ref(),
+            _ => return None,
+        };
+        // Strip Ref/RefMut/Pointer wrappers before inspecting the pointee —
+        // reference payloads should be bound as pointers, which the primitive
+        // decoder handles. Return None for those.
+        let mut cur = payload_ty;
+        while let R::Ref(inner) | R::RefMut(inner) | R::Pointer(inner) = cur {
+            cur = inner.as_ref();
+        }
+        match cur {
+            R::Named { name, .. } => self
+                .generated_structs
+                .get(name.as_str())
+                .copied()
+                .map(|t| (Some(name.clone()), t)),
+            // Nested Option<Option<T>> / Result<Option<T>, _> / tuples all
+            // lower to LLVM struct types via type_mapper. Look them up to
+            // recover the struct layout for decoding.
+            R::Optional(_) | R::Result(_, _) | R::Tuple(_) => {
+                let llvm = self.type_mapper.map_type(cur);
+                if llvm.is_struct_type() {
+                    Some((None, llvm.into_struct_type()))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn unwrap_erased_enum_payload_i64(
+        &self,
+        data_val: BasicValueEnum<'ctx>,
+        name: &str,
+    ) -> CodegenResult<IntValue<'ctx>> {
+        if data_val.is_struct_value() {
+            Ok(self
+                .builder
+                .build_extract_value(data_val.into_struct_value(), 0, name)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_int_value())
+        } else if data_val.is_int_value() {
+            Ok(data_val.into_int_value())
+        } else {
+            Err(CodegenError::LlvmError(format!(
+                "enum payload for `{}` is neither i64 nor {{ i64 }}",
+                name
+            )))
+        }
+    }
+
     pub(super) fn generate_match(
+        &mut self,
+        match_expr: &Spanned<Expr>,
+        arms: &[MatchArm],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // B.1: resolve the scrutinee's static type and push onto the scrutinee
+        // stack so `generate_pattern_bindings` can recover struct-payload
+        // information for Option<Struct> / Result<Struct, _> patterns. Popped
+        // at every exit via the inner closure pattern below.
+        let scrutinee_ty = self.resolve_match_scrutinee_type(&match_expr.node);
+        let pushed_scrutinee = scrutinee_ty.is_some();
+        if let Some(ty) = scrutinee_ty {
+            self.match_scrutinee_type_stack.push(ty);
+        }
+        let result = self.generate_match_inner(match_expr, arms);
+        if pushed_scrutinee {
+            self.match_scrutinee_type_stack.pop();
+        }
+        result
+    }
+
+    fn generate_match_inner(
         &mut self,
         match_expr: &Spanned<Expr>,
         arms: &[MatchArm],
@@ -629,7 +826,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                         let cmp_int = cmp_result
                             .try_as_basic_value()
-                            .basic()
+                            .left()
                             .ok_or_else(|| {
                                 CodegenError::LlvmError("strcmp returned void".to_string())
                             })?
@@ -741,9 +938,10 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
                 Ok(result)
             }
-            Pattern::Variant { name, fields: _ } => {
-                // Enum variant pattern: check the tag matches
-                // Enum is represented as `{ i32 tag, { i64... } payload }`.
+            Pattern::Variant { name, fields } => {
+                // Enum variant pattern: check the tag matches.
+                // User enums use { i8 tag, i64 data }; built-in Option/Result
+                // use { i32 tag, { i64 } data }.
                 let struct_val = match_val.into_struct_value();
                 let tag_val = self
                     .builder
@@ -754,7 +952,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 // Find expected tag value
                 let expected_tag = self.get_enum_variant_tag(&name.node);
 
-                let result = self
+                let tag_match = self
                     .builder
                     .build_int_compare(
                         IntPredicate::EQ,
@@ -764,11 +962,187 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     )
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
-                Ok(result)
+                // Phase 0 bug C7 (part 2): if any inner field is itself a
+                // Variant pattern (e.g. `Some(Some(v))` or `Some(None)`), AND-in
+                // the inner pattern check so we distinguish between sibling
+                // arms that share the outer tag. Without this, arms like
+                // `Some(Some(v)) => ...` and `Some(None) => ...` collapse to
+                // the same `tag == Some` predicate, causing the wrong arm
+                // to fire. Bare Ident/Wildcard inner patterns match anything
+                // and don't add extra constraints.
+                let needs_inner_check = fields.iter().any(|f| {
+                    matches!(
+                        f.node,
+                        Pattern::Variant { .. } | Pattern::Literal(_) | Pattern::Range { .. }
+                    )
+                });
+                if !needs_inner_check || fields.is_empty() {
+                    return Ok(tag_match);
+                }
+
+                // Decode the payload and recurse on the inner pattern.
+                // Single-field variant (Option/Result/single-payload user enums):
+                // re-use the same payload-decoding logic as
+                // `generate_pattern_bindings`. To keep this contained, we
+                // synthesize a short check: extract data, decode struct or
+                // primitive based on scrutinee type, then recurse.
+                if fields.len() != 1 {
+                    // Multi-field variants don't currently surface nested
+                    // variant patterns; leave the bare tag check.
+                    return Ok(tag_match);
+                }
+                let inner_pat = &fields[0];
+                if !matches!(
+                    inner_pat.node,
+                    Pattern::Variant { .. } | Pattern::Literal(_) | Pattern::Range { .. }
+                ) {
+                    return Ok(tag_match);
+                }
+
+                // Build inner check inside an "AND" — only run if outer tag
+                // matched. We use short-circuit branch-and-merge.
+                let fn_value = self.current_function.ok_or_else(|| {
+                    CodegenError::LlvmError("no current function for variant pattern".into())
+                })?;
+                let then_blk = self.context.append_basic_block(fn_value, "variant_inner");
+                let join_blk = self.context.append_basic_block(fn_value, "variant_join");
+                let entry_blk = self.builder.get_insert_block().expect("invariant: builder positioned in a basic block before variant pattern short-circuit branch");
+                self.builder
+                    .build_conditional_branch(tag_match, then_blk, join_blk)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                // Decode the variant payload as the inner scrutinee value.
+                self.builder.position_at_end(then_blk);
+                let data_val = self
+                    .builder
+                    .build_extract_value(struct_val, 1, "variant_data_check")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                let inner_val: BasicValueEnum<'ctx> = if let Some((_, struct_ty)) =
+                    self.option_result_payload_struct_type(&name.node)
+                {
+                    let target_data = inkwell::targets::TargetData::create(
+                        &self.module.get_triple().as_str().to_string_lossy(),
+                    );
+                    let size_bytes = target_data.get_store_size(&struct_ty);
+                    let i64_ty = self.context.i64_type();
+                    let data_i64 =
+                        self.unwrap_erased_enum_payload_i64(data_val, "variant_inner_data_i64")?;
+                    if size_bytes > 8 {
+                        let ptr_ty = struct_ty.ptr_type(AddressSpace::default());
+                        let heap_ptr = self
+                            .builder
+                            .build_int_to_ptr(data_i64, ptr_ty, "variant_inner_heap_ptr")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        self.builder
+                            .build_load(struct_ty, heap_ptr, "variant_inner_heap_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    } else {
+                        let tmp_alloca = self
+                            .builder
+                            .build_alloca(i64_ty, "variant_inner_small")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        self.builder
+                            .build_store(tmp_alloca, data_i64)
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        let typed_ptr = self
+                            .builder
+                            .build_bitcast(
+                                tmp_alloca,
+                                struct_ty.ptr_type(AddressSpace::default()),
+                                "variant_inner_typed",
+                            )
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_pointer_value();
+                        self.builder
+                            .build_load(struct_ty, typed_ptr, "variant_inner_small_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    }
+                } else {
+                    self.unwrap_erased_enum_payload_i64(data_val, "variant_inner_data_i64")?
+                        .into()
+                };
+
+                let pushed = self.push_inner_scrutinee_for_variant(&name.node);
+                let inner_check = self.generate_pattern_check(inner_pat, &inner_val)?;
+                if pushed {
+                    self.match_scrutinee_type_stack.pop();
+                }
+                let then_end = self.builder.get_insert_block().expect("invariant: builder positioned in a basic block after generating inner pattern check");
+                self.builder
+                    .build_unconditional_branch(join_blk)
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+                self.builder.position_at_end(join_blk);
+                let phi = self
+                    .builder
+                    .build_phi(self.context.bool_type(), "variant_combined")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                phi.add_incoming(&[
+                    (&self.context.bool_type().const_zero(), entry_blk),
+                    (&inner_check, then_end),
+                ]);
+                Ok(phi.as_basic_value().into_int_value())
             }
-            Pattern::Struct { name, fields } => {
-                // Struct pattern: check field patterns
+            Pattern::Struct { name, fields, .. } => {
+                // Struct pattern: check field patterns.
+                // Phase 6.27b: for enum struct-variant pattern (`Enum.Variant { a, b }`),
+                // check the enum tag first, then skip inner-field checks (which are
+                // just identifier bindings that match anything — the actual binding
+                // happens in generate_pattern_bindings).
                 let struct_name = &name.node;
+                let is_variant = self
+                    .enum_variants
+                    .iter()
+                    .any(|((_, v_name), _)| v_name == struct_name);
+                if is_variant {
+                    // Auto-deref pointer
+                    let enum_val: BasicValueEnum<'ctx> = if match_val.is_pointer_value() {
+                        let enum_name_opt = self
+                            .enum_variants
+                            .iter()
+                            .find(|((_, v_name), _)| v_name == struct_name)
+                            .map(|((e_name, _), _)| e_name.clone());
+                        if let Some(enum_name) = enum_name_opt {
+                            if let Some(enum_ty) = self.generated_structs.get(&enum_name).copied() {
+                                self.builder
+                                    .build_load(
+                                        enum_ty,
+                                        match_val.into_pointer_value(),
+                                        "enum_tag_deref",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            } else {
+                                *match_val
+                            }
+                        } else {
+                            *match_val
+                        }
+                    } else {
+                        *match_val
+                    };
+                    let enum_struct = enum_val.into_struct_value();
+                    let tag_val = self
+                        .builder
+                        .build_extract_value(enum_struct, 0, "variant_struct_tag")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                        .into_int_value();
+                    let expected_tag = self.get_enum_variant_tag(struct_name);
+                    let result = self
+                        .builder
+                        .build_int_compare(
+                            IntPredicate::EQ,
+                            tag_val,
+                            self.context.i8_type().const_int(expected_tag as u64, false),
+                            "variant_struct_check",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    // Don't recurse into field patterns — they're bindings only.
+                    // If sub-field patterns with actual checks (e.g., literals) are ever
+                    // added, they'd need deref + payload extract similar to bindings.
+                    let _ = fields;
+                    return Ok(result);
+                }
+
                 let struct_val = match_val.into_struct_value();
                 let mut result = self.context.bool_type().const_int(1, false);
 
@@ -809,6 +1183,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 Ok(())
             }
             Pattern::Ident(name) => {
+                // Phase 0 bug C18 fix: if `name` is a known unit-variant
+                // (e.g. `On`, `Off`, `Red`, `Green`, `Blue`) then this is a
+                // variant pattern, not a fresh binding. The pattern check
+                // already discriminates by tag; we should NOT alloca/store
+                // the whole match value under the variant's name (which then
+                // leaks across sibling arms via shared LLVM symbol).
+                let is_unit_variant = self
+                    .enum_variants
+                    .iter()
+                    .any(|((_, v_name), _)| v_name == name);
+                if is_unit_variant {
+                    return Ok(());
+                }
                 // Bind identifier to the matched value
                 let var_type = match_val.get_type();
                 let alloca = self
@@ -849,23 +1236,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Pattern::Variant { name, fields } => {
                 // Bind variant fields.
-                // Enum is `{ i32 tag, { i64... } payload }`. Each variant field is
-                // erased into one i64 payload slot.
+                // User enums use { i8 tag, i64 data }. Built-in Option/Result
+                // use { i32 tag, { i64 } data }; unwrap the payload wrapper
+                // before primitive/struct decoding.
+                // For multi-field variants the payload is an anonymous struct; extract each
+                // sub-field with sequential build_extract_value calls.
                 let struct_val = match_val.into_struct_value();
-                let payload_val = if struct_val.get_type().count_fields() > 1 {
-                    self.builder
-                        .build_extract_value(struct_val, 1, "variant_payload")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                } else {
-                    self.context.i64_type().const_int(0, false).into()
-                };
-                let data_val = if payload_val.is_struct_value() {
-                    self.builder
-                        .build_extract_value(payload_val.into_struct_value(), 0, "variant_data")
-                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                } else {
-                    payload_val
-                };
+                let data_val = self
+                    .builder
+                    .build_extract_value(struct_val, 1, "variant_data")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
 
                 // Look up whether this variant carries a struct payload.
                 // (enum_name unknown here — scan enum_variant_struct_types by variant name.)
@@ -874,12 +1254,48 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .iter()
                     .find(|((_, v_name), _)| v_name == &name.node)
                     .map(|(_, s)| s.clone());
+                // B.1: resolve the payload LLVM struct type directly for
+                // Option/Result variants (which are not registered in
+                // `enum_variant_struct_types`). Prefer this over
+                // `variant_struct_name` so nested `Option<Option<_>>` payloads
+                // (which have no Named struct) are also decoded correctly.
+                // Returns (optional-struct-name, struct-type) — the name is
+                // Some only for named-struct payloads, used to tag
+                // `var_struct_types` so downstream field access resolves.
+                let variant_struct_ty_direct: Option<(
+                    Option<String>,
+                    inkwell::types::StructType<'ctx>,
+                )> = self.option_result_payload_struct_type(&name.node);
 
                 if fields.len() <= 1 {
                     // Single-field (or no-field) variant: bind directly.
                     if let Some(first_field) = fields.first() {
-                        if let Some(ref struct_name) = variant_struct_name {
-                            if let Some(&struct_ty) = self.generated_structs.get(struct_name) {
+                        // Resolve payload struct type. Priority:
+                        //   1. B.1 direct struct-type from scrutinee (handles
+                        //      nested Option/Result, named-struct payloads).
+                        //   2. Legacy: variant_struct_name → generated_structs
+                        //      (user-defined enums).
+                        let resolved_payload_ty: Option<(
+                            Option<String>,
+                            inkwell::types::StructType<'ctx>,
+                        )> = variant_struct_ty_direct.clone().or_else(|| {
+                            variant_struct_name.as_ref().and_then(|sn| {
+                                self.generated_structs
+                                    .get(sn)
+                                    .copied()
+                                    .map(|t| (Some(sn.clone()), t))
+                            })
+                        });
+                        if let Some((struct_name_opt, struct_ty)) = resolved_payload_ty {
+                            // B.1: was `if let Some(struct_name) ...` with an
+                            // inner `generated_structs.get(struct_name)`; now
+                            // we pass the struct type directly so the legacy
+                            // branch (user-defined enums) still works while
+                            // Option/Result paths supply a synthesized type.
+                            let _ = &struct_name_opt; // retained for the
+                                                      // var_struct_types tag
+                                                      // below when available.
+                            {
                                 // data_val is an i64 holding either the bitcast struct
                                 // (if ≤8B) or a heap pointer (if >8B). Determine which
                                 // based on the struct's store size.
@@ -888,7 +1304,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                 );
                                 let size_bytes = target_data.get_store_size(&struct_ty);
                                 let i64_ty = self.context.i64_type();
-                                let data_i64 = data_val.into_int_value();
+                                let data_i64 = self
+                                    .unwrap_erased_enum_payload_i64(data_val, "variant_data_i64")?;
                                 let loaded_struct: BasicValueEnum<'ctx> = if size_bytes > 8 {
                                     // Heap-allocated: i64 → ptr → load struct
                                     let ptr_ty = struct_ty.ptr_type(AddressSpace::default());
@@ -910,7 +1327,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                                     let typed_ptr = self
                                         .builder
-                                        .build_bit_cast(
+                                        .build_bitcast(
                                             tmp_alloca,
                                             struct_ty.ptr_type(AddressSpace::default()),
                                             "variant_small_typed",
@@ -921,10 +1338,27 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                                         .build_load(struct_ty, typed_ptr, "variant_small_load")
                                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                                 };
+                                // Phase 0 bug C7 fix: nested Option/Result patterns like
+                                // `Some(Some(v))` need the scrutinee stack updated as we
+                                // descend. Without pushing the inner-Option's type, the
+                                // recursive `Some(v)` lookup still sees the outer
+                                // `Option<Option<i64>>` and binds v as `Option<i64>` instead
+                                // of `i64`. Push the inner payload type onto the scrutinee
+                                // stack for the duration of the recursive call.
+                                let pushed = self.push_inner_scrutinee_for_variant(&name.node);
                                 // Bind the loaded struct value, then record its type name
                                 // so downstream field access can resolve the struct.
                                 self.generate_pattern_bindings(first_field, &loaded_struct)?;
-                                if let Pattern::Ident(ident_name) = &first_field.node {
+                                if pushed {
+                                    self.match_scrutinee_type_stack.pop();
+                                }
+                                if let (Pattern::Ident(ident_name), Some(struct_name)) =
+                                    (&first_field.node, struct_name_opt.as_ref())
+                                {
+                                    // Only tag var_struct_types when we have a
+                                    // named struct (legacy path / named-struct
+                                    // payload). For synthesized Option/Result
+                                    // struct types we leave it untagged.
                                     self.var_struct_types
                                         .insert(ident_name.clone(), struct_name.clone());
                                 }
@@ -932,26 +1366,80 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             }
                         }
 
-                        // Non-struct payload (e.g. Circle(f64)): recover the
-                        // declared type from the erased i64 payload slot.
+                        // Non-struct payload (e.g. Circle(f64)): the enum data
+                        // slot stored the payload as i64 (floats bitcast, ints
+                        // widened). Recover the declared primitive type if we
+                        // have it recorded so the bound identifier has the
+                        // right LLVM type downstream.
+                        // B.2: fall back to scrutinee-based recovery for
+                        // Option<f64> / Result<i64, _> etc. where
+                        // `enum_variant_primitive_payload_types` has no entry
+                        // (built-in Option/Result bypasses the user-enum
+                        // registration step).
                         let primitive_ty: Option<inkwell::types::BasicTypeEnum<'ctx>> = self
                             .enum_variant_primitive_payload_types
                             .iter()
                             .find(|((_, v_name), _)| v_name == &name.node)
-                            .map(|(_, ty)| *ty);
+                            .map(|(_, ty)| *ty)
+                            .or_else(|| self.option_result_payload_primitive_type(&name.node));
                         if let Some(decl_ty) = primitive_ty {
-                            let data_i64 = data_val.into_int_value();
-                            let decoded =
-                                self.decode_enum_payload_slot(data_i64, decl_ty, "variant_slot")?;
+                            let data_i64 =
+                                self.unwrap_erased_enum_payload_i64(data_val, "variant_data_i64")?;
+                            let decoded: BasicValueEnum<'ctx> = if decl_ty.is_float_type() {
+                                self.builder
+                                    .build_bitcast(
+                                        data_i64,
+                                        decl_ty.into_float_type(),
+                                        "variant_i64_to_f",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            } else if decl_ty.is_int_type() {
+                                let target = decl_ty.into_int_type();
+                                if target.get_bit_width() == 64 {
+                                    data_i64.into()
+                                } else if target.get_bit_width() < 64 {
+                                    self.builder
+                                        .build_int_truncate(data_i64, target, "variant_i64_trunc")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                        .into()
+                                } else {
+                                    self.builder
+                                        .build_int_s_extend(data_i64, target, "variant_i64_sext")
+                                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                        .into()
+                                }
+                            } else if decl_ty.is_pointer_type() {
+                                self.builder
+                                    .build_int_to_ptr(
+                                        data_i64,
+                                        decl_ty.into_pointer_type(),
+                                        "variant_i64_to_ptr",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                    .into()
+                            } else {
+                                data_val
+                            };
+                            let pushed = self.push_inner_scrutinee_for_variant(&name.node);
                             self.generate_pattern_bindings(first_field, &decoded)?;
+                            if pushed {
+                                self.match_scrutinee_type_stack.pop();
+                            }
                             return Ok(());
                         }
 
-                        self.generate_pattern_bindings(first_field, &data_val)?;
+                        let pushed = self.push_inner_scrutinee_for_variant(&name.node);
+                        let payload_i64 =
+                            self.unwrap_erased_enum_payload_i64(data_val, "variant_data_i64")?;
+                        self.generate_pattern_bindings(first_field, &payload_i64.into())?;
+                        if pushed {
+                            self.match_scrutinee_type_stack.pop();
+                        }
                     }
                 } else {
-                    // Multi-field variant: each erased payload slot corresponds to
-                    // the same-index declared field type recorded at enum declaration.
+                    // Multi-field variant: the payload is packed into an anonymous struct
+                    // and stored on the heap. The enum's i64 data slot holds the heap ptr.
+                    // Look up the payload struct type recorded at construction time.
                     let multi_payload_ty: Option<inkwell::types::StructType<'ctx>> = self
                         .enum_variant_multi_payload_types
                         .iter()
@@ -959,32 +1447,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         .map(|(_, ty)| *ty);
 
                     if let Some(payload_ty) = multi_payload_ty {
-                        if !payload_val.is_struct_value() {
-                            if let Some(first_field) = fields.first() {
-                                self.generate_pattern_bindings(first_field, &data_val)?;
-                            }
-                            return Ok(());
-                        }
-
-                        let payload_struct = payload_val.into_struct_value();
+                        // data_val is the i64 holding the heap pointer. inttoptr to struct*,
+                        // load the struct, then extract each field.
+                        let data_i64 =
+                            self.unwrap_erased_enum_payload_i64(data_val, "variant_multi_i64")?;
+                        let ptr_ty = payload_ty.ptr_type(AddressSpace::default());
+                        let heap_ptr = self
+                            .builder
+                            .build_int_to_ptr(data_i64, ptr_ty, "variant_multi_ptr")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        let loaded_struct = self
+                            .builder
+                            .build_load(payload_ty, heap_ptr, "variant_multi_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_struct_value();
                         for (idx, field_pat) in fields.iter().enumerate() {
-                            let slot = self
+                            let sub_val = self
                                 .builder
                                 .build_extract_value(
-                                    payload_struct,
+                                    loaded_struct,
                                     idx as u32,
-                                    &format!("variant_slot_{}", idx),
+                                    &format!("variant_field_{}", idx),
                                 )
-                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
-                                .into_int_value();
-                            let declared_ty = payload_ty
-                                .get_field_type_at_index(idx as u32)
-                                .unwrap_or_else(|| self.context.i64_type().into());
-                            let sub_val = self.decode_enum_payload_slot(
-                                slot,
-                                declared_ty,
-                                &format!("variant_field_{}", idx),
-                            )?;
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                             self.generate_pattern_bindings(field_pat, &sub_val)?;
                         }
                     } else if data_val.is_struct_value() {
@@ -1011,12 +1496,126 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 }
                 Ok(())
             }
-            Pattern::Struct { name, fields } => {
+            Pattern::Struct { name, fields, .. } => {
                 let struct_name = &name.node;
-                let struct_val = match_val.into_struct_value();
+
+                // Phase 6.27b: detect enum-struct-variant pattern (`Enum.Variant { a, b }`).
+                // Parser emits Pattern::Struct for both true struct destructure and enum
+                // struct-variant destructure. If `struct_name` matches a known variant
+                // name AND match_val is the enum {tag, i64 data} layout, recover the
+                // payload struct from the i64 data slot before binding fields.
+                let is_variant = self
+                    .enum_variants
+                    .iter()
+                    .any(|((_, v_name), _)| v_name == struct_name);
+                let payload_struct_ty: Option<inkwell::types::StructType<'ctx>> = if is_variant {
+                    // Multi-field payload (struct-variant with >1 field) is stored via heap ptr.
+                    self.enum_variant_multi_payload_types
+                        .iter()
+                        .find(|((_, v_name), _)| v_name == struct_name)
+                        .map(|(_, ty)| *ty)
+                        .or_else(|| {
+                            // Single-field struct payload (struct-variant with 1 named field
+                            // whose type is a Named struct) uses enum_variant_struct_types.
+                            self.enum_variant_struct_types
+                                .iter()
+                                .find(|((_, v_name), _)| v_name == struct_name)
+                                .and_then(|(_, sname)| self.generated_structs.get(sname).copied())
+                        })
+                } else {
+                    None
+                };
+
+                // Auto-deref: if match_val is a pointer (e.g., &Enum), load first.
+                let resolved_match_val: BasicValueEnum<'ctx> = if match_val.is_pointer_value() {
+                    // Find enum type to load. If this is an enum variant pattern, match_val
+                    // points at the {i8 tag, i64 data} enum struct.
+                    if is_variant {
+                        // Find the enum type name by looking up the variant.
+                        let enum_name_opt = self
+                            .enum_variants
+                            .iter()
+                            .find(|((_, v_name), _)| v_name == struct_name)
+                            .map(|((e_name, _), _)| e_name.clone());
+                        if let Some(enum_name) = enum_name_opt {
+                            if let Some(enum_ty) = self.generated_structs.get(&enum_name).copied() {
+                                self.builder
+                                    .build_load(
+                                        enum_ty,
+                                        match_val.into_pointer_value(),
+                                        "enum_auto_deref",
+                                    )
+                                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            } else {
+                                *match_val
+                            }
+                        } else {
+                            *match_val
+                        }
+                    } else if let Some(&struct_ty) = self.generated_structs.get(struct_name) {
+                        self.builder
+                            .build_load(
+                                struct_ty,
+                                match_val.into_pointer_value(),
+                                "struct_auto_deref",
+                            )
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    } else {
+                        *match_val
+                    }
+                } else {
+                    *match_val
+                };
+
+                let struct_val: inkwell::values::StructValue<'ctx> =
+                    if let Some(payload_ty) = payload_struct_ty {
+                        // Extract enum.data (i64), inttoptr, load payload struct.
+                        let enum_struct = resolved_match_val.into_struct_value();
+                        let data_val = self
+                            .builder
+                            .build_extract_value(enum_struct, 1, "enum_struct_data")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        let data_i64 = data_val.into_int_value();
+                        let ptr_ty = payload_ty.ptr_type(AddressSpace::default());
+                        let heap_ptr = self
+                            .builder
+                            .build_int_to_ptr(data_i64, ptr_ty, "variant_struct_ptr")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        self.builder
+                            .build_load(payload_ty, heap_ptr, "variant_struct_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into_struct_value()
+                    } else {
+                        resolved_match_val.into_struct_value()
+                    };
 
                 for (field_name, field_pat) in fields {
-                    let field_idx = self.get_field_index(struct_name, &field_name.node)?;
+                    // For enum struct variants, field index comes from the positional
+                    // order in the variant definition (stored at multi_payload construction).
+                    // For regular structs, use get_field_index by name.
+                    let field_idx = if payload_struct_ty.is_some() {
+                        // Find field index by name in the payload struct's field list.
+                        // enum_variant_multi_payload_field_names maps (enum, variant) → Vec<String>.
+                        self.enum_variant_multi_payload_field_names
+                            .iter()
+                            .find(|((_, v_name), _)| v_name == struct_name)
+                            .and_then(|(_, names)| {
+                                names
+                                    .iter()
+                                    .position(|n| n == &field_name.node)
+                                    .map(|i| i as u32)
+                            })
+                            .unwrap_or_else(|| {
+                                // Fallback: positional by pattern order
+                                fields
+                                    .iter()
+                                    .position(|(fn_, _)| fn_.node == field_name.node)
+                                    .map(|i| i as u32)
+                                    .unwrap_or(0)
+                            })
+                    } else {
+                        self.get_field_index(struct_name, &field_name.node)?
+                    };
                     let field_val = self
                         .builder
                         .build_extract_value(struct_val, field_idx, &field_name.node)

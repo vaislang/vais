@@ -1,0 +1,10 @@
+# path	description
+tests/core/positive/functions/basic_return.vais	explicit i64 return through a block body
+tests/core/positive/functions/call_and_block.vais	direct call, local binding, if branch, and explicit return
+tests/core/positive/primitives/int_bool_string.vais	primitive arithmetic, bool comparison, unary not, and string equality
+tests/core/positive/control/if_else_while.vais	if/else and while loop control flow
+tests/core/positive/structs/point.vais	struct literal aggregate and field projection
+tests/core/positive/enums/color_match.vais	unit enum aggregate and discriminant match
+tests/core/positive/enums/option_match.vais	Option<i64> payload aggregate and match binding projection
+tests/core/positive/enums/result_match.vais	Result<i64,i64> payload aggregate and match binding projection
+tests/core/positive/collections/vec_i64.vais	Vec<i64> aggregate, push, len, and index projection

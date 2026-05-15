@@ -1,0 +1,1 @@
+check_fails: P001 Unexpected token (found Macro; A1 hard block)

@@ -31,11 +31,12 @@ impl CodeGenerator {
         free: &mut Vec<String>,
     ) {
         match expr {
-            Expr::Ident(name) if !bound.contains(name) && self.fn_ctx.locals.contains_key(name) => {
+            Expr::Ident(name) => {
                 // Only capture if it's in our locals (exists in outer scope)
-                free.push(name.clone());
+                if !bound.contains(name) && self.fn_ctx.locals.contains_key(name) {
+                    free.push(name.clone());
+                }
             }
-            Expr::Ident(_) => {}
             Expr::Binary { left, right, .. } => {
                 self.collect_free_vars_in_expr(&left.node, bound, free);
                 self.collect_free_vars_in_expr(&right.node, bound, free);

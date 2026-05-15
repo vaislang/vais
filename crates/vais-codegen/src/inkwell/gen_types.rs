@@ -5,8 +5,9 @@
 
 use std::collections::HashMap;
 
+use inkwell::module::Linkage;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
-use inkwell::values::{BasicValueEnum, FunctionValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, StructValue};
 
 use vais_ast::{ConstExpr, Expr, Type};
 use vais_types::{ResolvedConst, ResolvedType};
@@ -77,36 +78,6 @@ fn convert_const_binop(op: &vais_ast::ConstBinOp) -> vais_types::ConstBinOp {
 }
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
-    fn enum_error_tag_for_expr(&self, expr: &Expr) -> i32 {
-        fn classify(ty: &ResolvedType) -> Option<&'static str> {
-            match ty {
-                ResolvedType::Optional(_) => Some("None"),
-                ResolvedType::Result(_, _) => Some("Err"),
-                ResolvedType::Named { name, .. } if name == "Option" => Some("None"),
-                ResolvedType::Named { name, .. } if name == "Result" => Some("Err"),
-                _ => None,
-            }
-        }
-
-        let variant = match expr {
-            Expr::Ident(name) => self.var_resolved_types.get(name).and_then(classify),
-            Expr::Call { func, .. } => {
-                if let Expr::Ident(fn_name) = &func.node {
-                    self.resolved_function_sigs
-                        .get(fn_name)
-                        .and_then(|sig| classify(&sig.ret))
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        };
-
-        variant
-            .map(|name| self.get_enum_variant_tag(name))
-            .unwrap_or_else(|| self.get_enum_variant_tag("Err"))
-    }
-
     pub(super) fn ast_type_to_resolved(&self, ty: &Type) -> ResolvedType {
         match ty {
             Type::Named { name, generics } => match name.as_str() {
@@ -124,6 +95,20 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 "f64" => ResolvedType::F64,
                 "bool" => ResolvedType::Bool,
                 "str" => ResolvedType::Str,
+                // B.1: `Option<T>` and `Result<T, E>` written as named-generic
+                // AST must resolve to the dedicated ResolvedType variants so
+                // `map_type` lowers them to the canonical erased Option/Result ABI
+                // (types.rs Optional/Result arms). Otherwise they slip through
+                // the generic Named branch and become `%Option = type opaque`,
+                // causing `ret %Option zeroinitializer` / C004 Aggregate errors
+                // at match-arm extract time.
+                "Option" if generics.len() == 1 => {
+                    ResolvedType::Optional(Box::new(self.ast_type_to_resolved(&generics[0].node)))
+                }
+                "Result" if generics.len() == 2 => ResolvedType::Result(
+                    Box::new(self.ast_type_to_resolved(&generics[0].node)),
+                    Box::new(self.ast_type_to_resolved(&generics[1].node)),
+                ),
                 _ => {
                     // Single uppercase letter is likely a generic type parameter
                     if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_uppercase()) {
@@ -218,6 +203,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             Type::SliceMut(inner) => {
                 ResolvedType::SliceMut(Box::new(self.ast_type_to_resolved(&inner.node)))
+            }
+            // F-23 / A4-12 step 1 fix (2026-05-04): preserve dyn-trait info
+            // through ast→resolved conversion. Previously fell into the
+            // I64 fallback below (Type::DynTrait was implicitly an `_` arm),
+            // which made `var_resolved_types["g"] = Some(Ref(I64))` for
+            // `g: &dyn Greeter` parameters. That defeated the codegen-side
+            // F-23 GUARD (gen_aggregate.rs:854-889) which checks for
+            // ResolvedType::DynTrait. With this arm in place, the guard
+            // activates correctly: cross-impl dyn dispatch now hits a
+            // hard CodegenError::Unsupported instead of silently binding
+            // to the alphabetically-first impl. STEP7_FINDINGS F-23.
+            Type::DynTrait {
+                trait_name,
+                generics,
+            } => {
+                let resolved_generics: Vec<ResolvedType> = generics
+                    .iter()
+                    .map(|g| self.ast_type_to_resolved(&g.node))
+                    .collect();
+                ResolvedType::DynTrait {
+                    trait_name: trait_name.clone(),
+                    generics: resolved_generics,
+                }
             }
             _ => ResolvedType::I64, // Fallback for Infer, ConstArray, etc.
         }
@@ -359,7 +367,21 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             ret_type.fn_type(&llvm_param_types, false)
         };
 
-        let fn_value = self.module.add_function(&mangled_name, fn_type, None);
+        // Phase 0 bug C3 fix: emit specialized generic functions with
+        // LinkOnceODR linkage. In multi-module builds, every module that
+        // imports a generic gets its own copy of the AST template, and each
+        // emits its own monomorphized variant — yielding duplicate-symbol
+        // link errors (e.g. `_StrHashMap_hash$i64` defined in both std/hashmap
+        // and the consumer module). LinkOnceODR tells the linker that all
+        // copies are equivalent and it may pick any one. This matches how
+        // C++ handles template instantiations across translation units and
+        // is a standard idiom for monomorphized generic ABIs.
+        let fn_value = self
+            .module
+            .add_function(&mangled_name, fn_type, Some(Linkage::LinkOnceODR));
+        // Belt-and-suspenders: also call set_linkage in case add_function's
+        // linkage parameter is silently ignored on some inkwell builds.
+        fn_value.set_linkage(Linkage::LinkOnceODR);
         self.functions.insert(mangled_name, fn_value);
 
         Ok(fn_value)
@@ -367,9 +389,87 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
     // ========== Try/Unwrap ==========
 
+    fn resolve_try_expr_type(&self, expr: &Expr) -> Option<ResolvedType> {
+        match expr {
+            Expr::Ident(name) => self.var_resolved_types.get(name).cloned(),
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(fn_name) = &func.node {
+                    self.resolved_function_sigs
+                        .get(fn_name.as_str())
+                        .map(|sig| sig.ret.clone())
+                } else {
+                    None
+                }
+            }
+            Expr::MethodCall { method, .. } => match method.node.as_str() {
+                "parse_i64" | "parse_int" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::I64),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_i32" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::I32),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_u64" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::U64),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_u32" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::U32),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_f64" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::F64),
+                    Box::new(ResolvedType::Str),
+                )),
+                "parse_f32" => Some(ResolvedType::Result(
+                    Box::new(ResolvedType::F32),
+                    Box::new(ResolvedType::Str),
+                )),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn build_try_error_predicate(
+        &self,
+        tag: inkwell::values::IntValue<'ctx>,
+        ty: Option<&ResolvedType>,
+        name: &str,
+    ) -> CodegenResult<inkwell::values::IntValue<'ctx>> {
+        let zero = tag.get_type().const_int(0, false);
+        let pred = match ty {
+            Some(ResolvedType::Optional(_)) => inkwell::IntPredicate::EQ,
+            Some(ResolvedType::Result(_, _)) | None => inkwell::IntPredicate::NE,
+            Some(_) => inkwell::IntPredicate::NE,
+        };
+        self.builder
+            .build_int_compare(pred, tag, zero, name)
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
+    }
+
+    fn extract_option_result_payload_i64(
+        &self,
+        struct_val: StructValue<'ctx>,
+        name: &str,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let payload = self
+            .builder
+            .build_extract_value(struct_val, 1, name)
+            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        if payload.is_struct_value() {
+            self.builder
+                .build_extract_value(payload.into_struct_value(), 0, &format!("{}_i64", name))
+                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))
+        } else {
+            Ok(payload)
+        }
+    }
+
     pub(super) fn generate_try(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
-        // Try (?) operator - propagate error if Result/Option is error/None
-        // Result/Optional layout: `{ i32 tag, { i64... } payload }`.
+        // Try (?) operator: propagate Err for Result, None for Option.
+        // Built-in Option/Result layout is { i32 tag, { i64 } payload }.
         let val = self.generate_expr(inner)?;
 
         // If the value is not a struct (e.g. primitive), just return it as-is (no unwrapping needed)
@@ -380,10 +480,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let struct_val = val.into_struct_value();
         let struct_type = struct_val.get_type();
 
-        // Only handle enum-shaped structs.
-        if struct_type.count_fields() < 2 {
+        // Only handle two-field enum-like structs (Result/Optional).
+        if struct_type.count_fields() != 2 {
             return Ok(struct_val.into());
         }
+        let scrutinee_ty = self.resolve_try_expr_type(inner);
 
         let fn_value = self.current_function.ok_or_else(|| {
             crate::CodegenError::LlvmError("No current function for try operator".to_string())
@@ -396,18 +497,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
             .into_int_value();
 
-        // Result propagates Err; Option propagates None. Use resolved local/call
-        // type when available so declaration-order tags stay authoritative.
-        let error_tag = self.enum_error_tag_for_expr(inner);
-        let is_error = self
-            .builder
-            .build_int_compare(
-                inkwell::IntPredicate::EQ,
-                tag,
-                tag.get_type().const_int(error_tag as u64, false),
-                "try_is_err",
-            )
-            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        let is_error = self.build_try_error_predicate(tag, scrutinee_ty.as_ref(), "try_is_err")?;
 
         let ok_block = self.context.append_basic_block(fn_value, "try_ok");
         let err_block = self.context.append_basic_block(fn_value, "try_err");
@@ -422,26 +512,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_return(Some(&struct_val))
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
 
-        // Ok path: extract payload slot 0 (field 1 is the payload struct)
+        // Ok path: extract canonical payload field 1, then unwrap { i64 }.
         self.builder.position_at_end(ok_block);
-        let payload_struct = self
-            .builder
-            .build_extract_value(struct_val, 1, "try_payload")
-            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
-        let payload = if payload_struct.is_struct_value() {
-            self.builder
-                .build_extract_value(payload_struct.into_struct_value(), 0, "try_payload_slot")
-                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-        } else {
-            payload_struct
-        };
+        let payload = self.extract_option_result_payload_i64(struct_val, "try_payload")?;
 
         Ok(payload)
     }
 
     pub(super) fn generate_unwrap(&mut self, inner: &Expr) -> CodegenResult<BasicValueEnum<'ctx>> {
-        // Unwrap (!) operator - panic if Result/Option is error/None
-        // Result/Optional layout: `{ i32 tag, { i64... } payload }`.
+        // Unwrap (!) operator - panic if Result is Err or Option is None.
         let val = self.generate_expr(inner)?;
 
         // If the value is not a struct, just return it as-is
@@ -452,10 +531,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let struct_val = val.into_struct_value();
         let struct_type = struct_val.get_type();
 
-        // Only handle enum-shaped structs.
-        if struct_type.count_fields() < 2 {
+        // Only handle two-field enum-like structs (Result/Optional).
+        if struct_type.count_fields() != 2 {
             return Ok(struct_val.into());
         }
+        let scrutinee_ty = self.resolve_try_expr_type(inner);
 
         let fn_value = self.current_function.ok_or_else(|| {
             crate::CodegenError::LlvmError("No current function for unwrap operator".to_string())
@@ -468,17 +548,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
             .into_int_value();
 
-        // Panic on Err/None, using declaration-order tags.
-        let error_tag = self.enum_error_tag_for_expr(inner);
-        let is_error = self
-            .builder
-            .build_int_compare(
-                inkwell::IntPredicate::EQ,
-                tag,
-                tag.get_type().const_int(error_tag as u64, false),
-                "unwrap_is_err",
-            )
-            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
+        let is_error =
+            self.build_try_error_predicate(tag, scrutinee_ty.as_ref(), "unwrap_is_err")?;
 
         let ok_block = self.context.append_basic_block(fn_value, "unwrap_ok");
         let panic_block = self.context.append_basic_block(fn_value, "unwrap_panic");
@@ -498,19 +569,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_unreachable()
             .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
 
-        // Ok path: extract payload slot 0 (field 1 is the payload struct)
+        // Ok path: extract canonical payload field 1, then unwrap { i64 }.
         self.builder.position_at_end(ok_block);
-        let payload_struct = self
-            .builder
-            .build_extract_value(struct_val, 1, "unwrap_payload")
-            .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?;
-        let payload = if payload_struct.is_struct_value() {
-            self.builder
-                .build_extract_value(payload_struct.into_struct_value(), 0, "unwrap_payload_slot")
-                .map_err(|e| crate::CodegenError::LlvmError(e.to_string()))?
-        } else {
-            payload_struct
-        };
+        let payload = self.extract_option_result_payload_i64(struct_val, "unwrap_payload")?;
 
         Ok(payload)
     }

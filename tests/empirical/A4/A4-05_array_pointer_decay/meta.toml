@@ -1,0 +1,34 @@
+# A4-05 — Array → Pointer decay
+
+[entry]
+id = "A4-05"
+classification = "Controlled (IR-internal lowering, reclass v17 per F-22; opt-in strict via VAIS_REJECT_A4_NN=1)"
+surface = "Array silently coerced to pointer, then pointer unified with i64 in function call"
+site = "unification.rs:424"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:424"
+master_plan_version = 17
+
+[v1_evidence]
+probe_summary = "arr[0] through *i64 cast: take_i64(&arr as *i64)"
+expected_per_design = "type-check rejection (no implicit array → *T decay; require explicit indexing)"
+actual_observed = 139
+actual_observed_macos_arm64_release_2026_05_03 = 16
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified_with_protocol_revision"
+notes = """
+Environment drift. exit_not form with forbidden_set=[42] — well-typed
+take_i64(arr[0]) where arr[0]=42 returns 42. Defective rule passes the
+array's stack address (cast as *i64), then *i64 silently unifies to i64
+(A4-02 chains here too). Result is the lower bits of the stack frame.
+"""
+
+[migration]
+post_removal_expected = "vaisc check exits non-zero (proposal: E_TYPE_ARRAY_POINTER_DECAY_REJECTED)"
+post_removal_action = "Replace with negative; positive uses arr[0] indexing."
+
+[assertion_kind]
+kind = "exit_not"
+forbidden_set = [42]
+forbidden_set_rationale = "well-typed arr[0]=42 returns 42 via take_i64."

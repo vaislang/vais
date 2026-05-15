@@ -2,40 +2,40 @@
 # Supports UUID v4 (random-based) generation and string conversion
 # Requires std/random.vais for random number generation
 
-U std/random
-U std/string
+use std/random
+use std/string
 
 # UUID structure - 128-bit identifier stored as two 64-bit integers
-S Uuid {
+struct Uuid {
     high: i64,      # High 64 bits
     low: i64        # Low 64 bits
 }
 
-X Uuid {
+impl Uuid {
     # Create a new UUID with given high and low values
-    F new(high: i64, low: i64) -> Uuid {
+    fn new(high: i64, low: i64) -> Uuid {
         Uuid { high: high, low: low }
     }
 
     # Create a nil UUID (all zeros)
-    F nil() -> Uuid {
+    fn nil() -> Uuid {
         Uuid { high: 0, low: 0 }
     }
 
     # Check if UUID is nil
-    F is_nil(&self) -> i64 {
-        I self.high == 0 && self.low == 0 { 1 } EL { 0 }
+    fn is_nil(&self) -> i64 {
+        I self.high == 0 && self.low == 0 { 1 } else { 0 }
     }
 
     # Compare two UUIDs for equality
-    F equals(&self, other: Uuid) -> i64 {
-        I self.high == other.high && self.low == other.low { 1 } EL { 0 }
+    fn equals(&self, other: Uuid) -> i64 {
+        I self.high == other.high && self.low == other.low { 1 } else { 0 }
     }
 
     # Convert UUID to string representation
     # Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
     # where x is any hex digit and y is one of 8, 9, A, or B
-    F to_string(&self) -> String {
+    fn to_string(&self) -> String {
         # UUID string is 36 characters (32 hex + 4 hyphens)
         s := String.with_capacity(40)
 
@@ -80,7 +80,7 @@ X Uuid {
     }
 
     # Helper: Append a byte as two hex characters to string
-    F append_hex_byte(&self, s: String, byte: i64) -> i64 {
+    fn append_hex_byte(&self, s: String, byte: i64) -> i64 {
         high_nibble := (byte >> 4) & 15
         low_nibble := byte & 15
 
@@ -90,7 +90,7 @@ X Uuid {
     }
 
     # Print UUID to stdout
-    F print(&self) -> i64 {
+    fn print(&self) -> i64 {
         s := @.to_string()
         s.print()
         s.drop()
@@ -99,26 +99,26 @@ X Uuid {
 }
 
 # Convert nibble (0-15) to hex character
-F nibble_to_hex(n: i64) -> i64 {
+fn nibble_to_hex(n: i64) -> i64 {
     I n < 10 {
         48 + n  # '0' + n
-    } EL {
+    } else {
         97 + (n - 10)  # 'a' + (n - 10)
     }
 }
 
 # Convert hex character to value (0-15), returns -1 if invalid
-F hex_to_nibble(c: i64) -> i64 {
+fn hex_to_nibble(c: i64) -> i64 {
     I c >= 48 && c <= 57 {
         # '0'-'9'
         c - 48
-    } EL I c >= 97 && c <= 102 {
+    } else I c >= 97 && c <= 102 {
         # 'a'-'f'
         c - 97 + 10
-    } EL I c >= 65 && c <= 70 {
+    } else I c >= 65 && c <= 70 {
         # 'A'-'F'
         c - 65 + 10
-    } EL {
+    } else {
         0 - 1
     }
 }
@@ -127,14 +127,14 @@ F hex_to_nibble(c: i64) -> i64 {
 # UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
 # - Version is 4 (random)
 # - Variant is RFC 4122 (bits 6-7 of byte 8 are 10)
-F uuid_v4() -> Uuid {
+fn uuid_v4() -> Uuid {
     # Generate 16 random bytes
     bytes := malloc(16)
     random_bytes(bytes, 16)
 
     # Read as two i64 values
-    high := load_i64(bytes)
-    low := load_i64(bytes + 8)
+    high := mut load_i64(bytes)
+    low := mut load_i64(bytes + 8)
 
     free(bytes)
 
@@ -155,7 +155,7 @@ F uuid_v4() -> Uuid {
 }
 
 # Generate UUID v4 and return as string
-F uuid_v4_string() -> String {
+fn uuid_v4_string() -> String {
     uuid := uuid_v4()
     uuid.to_string()
 }
@@ -163,18 +163,18 @@ F uuid_v4_string() -> String {
 # Parse UUID from string
 # Accepts format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 # Returns Uuid.nil() if parsing fails
-F uuid_parse(s: String) -> Uuid {
+fn uuid_parse(s: String) -> Uuid {
     # UUID string must be exactly 36 characters
     I s.len != 36 {
         Uuid.nil()
-    } EL {
+    } else {
         # Verify hyphens are in correct positions
         I s.char_at(8) != 45 || s.char_at(13) != 45 || s.char_at(18) != 45 || s.char_at(23) != 45 {
             Uuid.nil()
-        } EL {
+        } else {
             # Parse hex digits
-            high := 0
-            low := 0
+            high := mut 0
+            low := mut 0
 
             # Bytes 0-7 (high)
             # Positions: 0-1, 2-3, 4-5, 6-7, 9-10, 11-12, 14-15, 16-17
@@ -188,7 +188,7 @@ F uuid_parse(s: String) -> Uuid {
             store_i64(pos_high + 48, 14)
             store_i64(pos_high + 56, 16)
 
-            i := 0
+            i := mut 0
             LW i < 8 {
                 pos := load_i64(pos_high + i * 8)
                 b := parse_hex_byte(s, pos)
@@ -236,26 +236,26 @@ F uuid_parse(s: String) -> Uuid {
 
 # Parse a hex byte (2 characters) from string at position
 # Returns -1 if invalid
-F parse_hex_byte(s: String, pos: i64) -> i64 {
+fn parse_hex_byte(s: String, pos: i64) -> i64 {
     I pos + 1 >= s.len {
         0 - 1
-    } EL {
+    } else {
         high := hex_to_nibble(s.char_at(pos))
         low := hex_to_nibble(s.char_at(pos + 1))
 
         I high < 0 || low < 0 {
             0 - 1
-        } EL {
+        } else {
             (high << 4) | low
         }
     }
 }
 
 # Parse UUID from C string (null-terminated)
-F uuid_parse_cstr(cstr: i64) -> Uuid {
+fn uuid_parse_cstr(cstr: i64) -> Uuid {
     I cstr == 0 {
         Uuid.nil()
-    } EL {
+    } else {
         s := str_from(cstr)
         uuid := uuid_parse(s)
         s.drop()
@@ -267,7 +267,7 @@ F uuid_parse_cstr(cstr: i64) -> Uuid {
 # Not suitable for production use
 G uuid_counter: i64 = 0
 
-F uuid_sequential() -> Uuid {
+fn uuid_sequential() -> Uuid {
     uuid_counter = uuid_counter + 1
     Uuid { high: 0, low: uuid_counter }
 }

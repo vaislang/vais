@@ -5,7 +5,7 @@ use crate::incremental;
 use crate::package;
 use crate::runtime::{
     find_gc_library, find_http_runtime, find_runtime_file, find_sync_runtime, find_thread_runtime,
-    get_runtime_for_module,
+    get_runtime_for_module, runtime_files_for_module,
 };
 use colored::Colorize;
 use std::collections::{HashMap, HashSet};
@@ -18,7 +18,7 @@ use vais_types::TypeChecker;
 // Submodules
 mod native;
 mod parallel;
-mod per_module;
+pub(crate) mod per_module;
 mod pipeline;
 mod wasm;
 

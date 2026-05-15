@@ -1,0 +1,23 @@
+# CHECKS: Result<i64, i64> Ok/Err match
+fn divide(a: i64, b: i64) -> Result<i64, i64> {
+    I b == 0 { return Err(0) }
+    Ok(a / b)
+}
+
+fn main() -> i64 {
+    r1: Result<i64, i64> := divide(10, 2)
+    v1: i64 := match r1 {
+        Ok(v) => v,
+        Err(_) => -1,
+    }
+    I v1 != 5 { return 1 }
+
+    r2: Result<i64, i64> := divide(10, 0)
+    v2: i64 := match r2 {
+        Ok(v) => v,
+        Err(_) => -1,
+    }
+    I v2 != -1 { return 2 }
+
+    return 0
+}

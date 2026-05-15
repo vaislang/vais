@@ -440,7 +440,7 @@ mod tests {
         let file = dir.path().join("main.vais");
 
         fs::write(&file, "F main() -> i64 { 0 }").unwrap();
-        let hash1 = compute_source_hash(std::slice::from_ref(&file), 0, "native", false).unwrap();
+        let hash1 = compute_source_hash(&[file.clone()], 0, "native", false).unwrap();
 
         fs::write(&file, "F main() -> i64 { 1 }").unwrap();
         let hash2 = compute_source_hash(&[file], 0, "native", false).unwrap();
@@ -454,7 +454,7 @@ mod tests {
         let file = dir.path().join("main.vais");
         fs::write(&file, "F main() -> i64 { 0 }").unwrap();
 
-        let hash_o0 = compute_source_hash(std::slice::from_ref(&file), 0, "native", false).unwrap();
+        let hash_o0 = compute_source_hash(&[file.clone()], 0, "native", false).unwrap();
         let hash_o2 = compute_source_hash(&[file], 2, "native", false).unwrap();
 
         assert_ne!(hash_o0, hash_o2);

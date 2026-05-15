@@ -1,0 +1,24 @@
+# CHECKS: user-defined enum with 3 variants, exhaustive match.
+enum Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+fn bearing(d: Direction) -> i64 {
+    match d {
+        North => 0,
+        East => 90,
+        South => 180,
+        West => 270
+    }
+}
+
+fn main() -> i64 {
+    I bearing(Direction::North) != 0 { return 1 }
+    I bearing(Direction::East) != 90 { return 2 }
+    I bearing(Direction::South) != 180 { return 3 }
+    I bearing(Direction::West) != 270 { return 4 }
+    return 0
+}

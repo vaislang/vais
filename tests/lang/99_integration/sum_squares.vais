@@ -1,0 +1,25 @@
+# CHECKS: aggregation pipeline — generate, filter, sum.
+fn sum_squares_under(limit: i64) -> i64 {
+    sum: i64 := mut 0
+    i: i64 := mut 1
+    L {
+        sq: i64 := i * i
+        I sq >= limit { B sum }
+        sum = sum + sq
+        i = i + 1
+    }
+}
+
+fn main() -> i64 {
+    # 1, 4, 9, 16, 25, 36, 49, 64, 81 < 100 → sum = 285
+    I sum_squares_under(100) != 285 { return 1 }
+    # 1, 4, 9, 16 < 25 → sum = 30
+    I sum_squares_under(25) != 30 { return 2 }
+    # 1 < 4 → sum = 1
+    I sum_squares_under(4) != 1 { return 3 }
+    # 1 < 2 → sum = 1
+    I sum_squares_under(2) != 1 { return 4 }
+    # nothing < 1 → sum = 0
+    I sum_squares_under(1) != 0 { return 5 }
+    return 0
+}

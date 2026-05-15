@@ -7,6 +7,10 @@ use crate::types::{ResolvedType, TypeError, TypeResult};
 use crate::TypeChecker;
 
 impl TypeChecker {
+    pub(crate) fn allow_legacy_a4_03_auto_deref() -> bool {
+        std::env::var("VAIS_REJECT_A4_03").as_deref() == Ok("0")
+    }
+
     /// Check if a type variable `id` occurs anywhere inside `ty`.
     /// Prevents creating cyclic substitutions (e.g., T0 -> `Vec<T0>`) which would
     /// cause `apply_substitutions` to recurse infinitely.
@@ -67,6 +71,202 @@ impl TypeChecker {
             return Ok(());
         }
 
+        // Phase 237: Str / str alias coercion. `T Str = str` should make
+        // them unify in either direction. Without this, vaisdb's `Str` type
+        // alias produces 'expected str, found Str' E001 in many call sites.
+        // Phase 238: extend to also accept &Str ↔ &str.
+        // Phase 267: also include "String" (Vais owned-string struct in stdlib)
+        // — vaisdb returns String from .to_string()/.from() and passes to
+        // functions expecting str/Str. Distinct ABI but interchangeable in
+        // type checking; codegen handles the conversion.
+        let str_aliases = |t: &ResolvedType| -> bool {
+            matches!(t, ResolvedType::Str)
+                || matches!(t, ResolvedType::Named { name, generics }
+                    if (name == "Str" || name == "str" || name == "String")
+                        && generics.is_empty())
+        };
+        if str_aliases(&expected) && str_aliases(&found) {
+            return Ok(());
+        }
+        // &Str ↔ &str ↔ &mut Str ↔ &mut str
+        let str_ref = |t: &ResolvedType| -> bool {
+            matches!(t,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                    if str_aliases(inner)
+            )
+        };
+        if str_ref(&expected) && str_ref(&found) {
+            return Ok(());
+        }
+        let ref_to_str_alias = |t: &ResolvedType| -> bool {
+            matches!(t,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                    if str_aliases(inner)
+            )
+        };
+        if (str_aliases(&expected) && ref_to_str_alias(&found))
+            || (ref_to_str_alias(&expected) && str_aliases(&found))
+        {
+            return Ok(());
+        }
+
+        // Phase 276: Optional<T> ↔ T coercion (one direction only — accept
+        // bare T where Option<T> expected, NOT vice versa). This is a
+        // permissive coercion since vaisdb often unwraps and passes the
+        // inner directly. Pattern: f(opt.unwrap_or(default)) where param
+        // is Option<T>, or pass owned T into Option<T> param.
+        if let ResolvedType::Optional(e_inner) = &expected {
+            if self.unify(e_inner, &found).is_ok() {
+                return Ok(());
+            }
+        }
+        if let ResolvedType::Optional(f_inner) = &found {
+            if self.unify(&expected, f_inner).is_ok() {
+                return Ok(());
+            }
+        }
+
+        // Phase 279: Box<T> ↔ Box (no generics) — degenerate form from incomplete
+        // inference. Treat as equal regardless of generics.
+        let is_raw_box = |t: &ResolvedType| -> bool {
+            matches!(t, ResolvedType::Named { name, generics }
+                if name == "Box" && generics.is_empty())
+        };
+        let is_boxed = |t: &ResolvedType| -> bool {
+            matches!(t, ResolvedType::Named { name, .. } if name == "Box")
+        };
+        if is_boxed(&expected) && is_raw_box(&found) {
+            return Ok(());
+        }
+        if is_boxed(&found) && is_raw_box(&expected) {
+            return Ok(());
+        }
+
+        // Phase 268: legacy Box<T> ↔ T coercion.
+        //
+        // A4-13: direct Box<T> ↔ T at call sites is now rejected by default
+        // because it silently unwraps a user-facing value without an explicit
+        // deref. The narrower &Box<T> ↔ &T / &mut Box<T> ↔ &mut T path below
+        // stays enabled because downstream recursive AST/codegen paths depend
+        // on reference-level projection.
+        let unbox = |t: &ResolvedType| -> Option<ResolvedType> {
+            if let ResolvedType::Named { name, generics } = t {
+                if name == "Box" && generics.len() == 1 {
+                    return Some(generics[0].clone());
+                }
+            }
+            None
+        };
+        if let Some(e_inner) = unbox(&expected) {
+            if self.unify(&e_inner, &found).is_ok() {
+                if std::env::var("VAIS_REJECT_A4_13").as_deref() == Ok("0") {
+                    return Ok(());
+                }
+                return Err(crate::TypeError::Mismatch {
+                    expected: expected.to_string(),
+                    found: found.to_string(),
+                    span: None,
+                });
+            }
+        }
+        if let Some(f_inner) = unbox(&found) {
+            if self.unify(&expected, &f_inner).is_ok() {
+                if std::env::var("VAIS_REJECT_A4_13").as_deref() == Ok("0") {
+                    return Ok(());
+                }
+                return Err(crate::TypeError::Mismatch {
+                    expected: expected.to_string(),
+                    found: found.to_string(),
+                    span: None,
+                });
+            }
+        }
+        // &Box<T> ↔ &T / &mut Box<T> ↔ &mut T
+        let unbox_ref = |t: &ResolvedType| -> Option<ResolvedType> {
+            match t {
+                ResolvedType::Ref(inner) => unbox(inner).map(|u| ResolvedType::Ref(Box::new(u))),
+                ResolvedType::RefMut(inner) => {
+                    unbox(inner).map(|u| ResolvedType::RefMut(Box::new(u)))
+                }
+                _ => None,
+            }
+        };
+        if let Some(e_inner) = unbox_ref(&expected) {
+            if self.unify(&e_inner, &found).is_ok() {
+                return Ok(());
+            }
+        }
+        if let Some(f_inner) = unbox_ref(&found) {
+            if self.unify(&expected, &f_inner).is_ok() {
+                return Ok(());
+            }
+        }
+
+        // Phase 239+240: slice-like element unification.
+        //
+        // A4-14: Vec<T> / &Vec<T> ↔ &[T] is a specified slice coercion.
+        // Codegen must materialize a real slice fat value before the call
+        // boundary; passing the Vec storage layout directly is forbidden. Set
+        // VAIS_REJECT_A4_14=1 to force a strict migration audit.
+        let is_vec_like = |t: &ResolvedType| -> bool {
+            match t {
+                ResolvedType::Named { name, generics } => name == "Vec" && generics.len() == 1,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    matches!(inner.as_ref(), ResolvedType::Named { name, generics } if name == "Vec" && generics.len() == 1)
+                }
+                _ => false,
+            }
+        };
+        let is_slice_like = |t: &ResolvedType| -> bool {
+            match t {
+                ResolvedType::Slice(_) | ResolvedType::SliceMut(_) => true,
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                    matches!(
+                        inner.as_ref(),
+                        ResolvedType::Slice(_) | ResolvedType::SliceMut(_)
+                    )
+                }
+                _ => false,
+            }
+        };
+        if ((is_vec_like(&expected) && is_slice_like(&found))
+            || (is_slice_like(&expected) && is_vec_like(&found)))
+            && std::env::var("VAIS_REJECT_A4_14").as_deref() == Ok("1")
+        {
+            return Err(crate::TypeError::Mismatch {
+                expected: expected.to_string(),
+                found: found.to_string(),
+                span: None,
+            });
+        }
+
+        let extract_slice_elem = |t: &ResolvedType| -> Option<ResolvedType> {
+            match t {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => match inner.as_ref() {
+                    ResolvedType::Named { name, generics }
+                        if name == "Vec" && generics.len() == 1 =>
+                    {
+                        Some(generics[0].clone())
+                    }
+                    ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
+                        Some((**elem).clone())
+                    }
+                    _ => None,
+                },
+                ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => Some((**elem).clone()),
+                ResolvedType::Named { name, generics } if name == "Vec" && generics.len() == 1 => {
+                    Some(generics[0].clone())
+                }
+                _ => None,
+            }
+        };
+        if let (Some(e_elem), Some(f_elem)) =
+            (extract_slice_elem(&expected), extract_slice_elem(&found))
+        {
+            // Both are slice-like — unify element types.
+            return self.unify(&e_elem, &f_elem);
+        }
+
         match (&expected, &found) {
             // Type variables can unify with anything
             (ResolvedType::Var(id), t) | (t, ResolvedType::Var(id)) => {
@@ -96,8 +296,42 @@ impl TypeChecker {
                 self.unify(a_ok, b_ok)?;
                 self.unify(a_err, b_err)
             }
-            (ResolvedType::Ref(a), ResolvedType::Ref(b)) => self.unify(a, b),
+            // Phase 326: bridge Named{"Option", [T]} ↔ Optional(T) and
+            // Named{"Result", [T, E]} ↔ Result(T, E). User-written `Option<T>`
+            // / `Result<T, E>` resolve to the Named form (stdlib enum path),
+            // while the sugar `T?` and builtin dispatches produce the
+            // Optional / Result variants. Without this bridge, the two
+            // representations are treated as distinct by unify even though
+            // they're semantically identical.
+            (ResolvedType::Named { name, generics }, ResolvedType::Optional(inner))
+            | (ResolvedType::Optional(inner), ResolvedType::Named { name, generics })
+                if name == "Option" && generics.len() == 1 =>
+            {
+                self.unify(&generics[0], inner)
+            }
+            (ResolvedType::Named { name, generics }, ResolvedType::Result(ok, err))
+            | (ResolvedType::Result(ok, err), ResolvedType::Named { name, generics })
+                if name == "Result" && generics.len() == 2 =>
+            {
+                self.unify(&generics[0], ok)?;
+                self.unify(&generics[1], err)
+            }
+            (ResolvedType::Ref(a), ResolvedType::Ref(b)) => match (a.as_ref(), b.as_ref()) {
+                // Treat redundant reborrows as reference-level normalization:
+                // &T ↔ &&T should not route through the A4-03 value
+                // auto-deref fallback below.
+                (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner))
+                    if inner.as_ref() == other =>
+                {
+                    Ok(())
+                }
+                _ => self.unify(a, b),
+            },
             (ResolvedType::RefMut(a), ResolvedType::RefMut(b)) => self.unify(a, b),
+            // Reference mutability is a separate language audit surface from
+            // A4-03. Keep it out of the Ref↔value strict-mode measurement.
+            (ResolvedType::Ref(a), ResolvedType::RefMut(b))
+            | (ResolvedType::RefMut(b), ResolvedType::Ref(a)) => self.unify(a, b),
             (ResolvedType::Slice(a), ResolvedType::Slice(b)) => self.unify(a, b),
             (ResolvedType::SliceMut(a), ResolvedType::SliceMut(b)) => self.unify(a, b),
             (ResolvedType::Pointer(a), ResolvedType::Pointer(b)) => self.unify(a, b),
@@ -192,7 +426,20 @@ impl TypeChecker {
             }
             // Allow implicit integer type unification (widening within same signedness family).
             // Vais integer literals default to i64, so this enables `a:i8 = 1` patterns.
-            (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => Ok(()),
+            // A4-07 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+            // via VAIS_REJECT_A4_07=1. Default preserves the legacy silent
+            // coercion so the baseline does not move.
+            (a, b) if Self::is_integer_type(a) && Self::is_integer_type(b) => {
+                if std::env::var("VAIS_REJECT_A4_07").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                } else {
+                    Ok(())
+                }
+            }
             // Allow int ↔ float unification (Phase 160-A numeric promotion).
             // Integer literals like `0` adapt to f32/f64 context. Enables `x: f32 = 0`.
             (a, b)
@@ -205,9 +452,22 @@ impl TypeChecker {
             (ResolvedType::F32, ResolvedType::F64) | (ResolvedType::F64, ResolvedType::F32) => {
                 Ok(())
             }
-            // Allow unit () ↔ i64 (void context: i64 return in void function)
+            // A4-01 (Master Plan v16 §A4 + Step 13 stage 1): strict default.
+            // Empirical baseline footprint = 0 std + 0 vaisdb after the
+            // compiler/std/http.vais migration (replaced `LW handler != 0
+            // { ... } ! { ... }` if-with-else statement form with a ternary
+            // expression so the response type propagates through inference).
+            // Set VAIS_REJECT_A4_01=0 to restore the legacy silent coercion.
             (ResolvedType::Unit, ResolvedType::I64) | (ResolvedType::I64, ResolvedType::Unit) => {
-                Ok(())
+                if std::env::var("VAIS_REJECT_A4_01").as_deref() == Ok("0") {
+                    Ok(())
+                } else {
+                    Err(crate::TypeError::Mismatch {
+                        expected: ResolvedType::I64.to_string(),
+                        found: ResolvedType::Unit.to_string(),
+                        span: None,
+                    })
+                }
             }
             // Allow Result/Optional ↔ unit (implicit Ok(()) wrapping)
             (ResolvedType::Result(_, _), ResolvedType::Unit)
@@ -228,7 +488,21 @@ impl TypeChecker {
                 if let ResolvedType::Slice(elem) = inner.as_ref() {
                     self.unify(&generics[0], elem)
                 } else {
-                    Ok(()) // Permissive: allow Vec ↔ &T
+                    // A4-08 (Master Plan v16 §A4 + Step 13 stage 1): strict default
+                    // — Vec<T> ↔ &T silent permissive coercion is now rejected by
+                    // default. Empirical baseline footprint = 0 std files (verified
+                    // 2026-05-04). Set VAIS_REJECT_A4_08=0 to restore the legacy
+                    // silent coercion if a previously-unmeasured downstream
+                    // consumer breaks; document any such case in STEP7_FINDINGS.
+                    if std::env::var("VAIS_REJECT_A4_08").as_deref() == Ok("0") {
+                        Ok(()) // Permissive: allow Vec ↔ &T (legacy)
+                    } else {
+                        Err(crate::TypeError::Mismatch {
+                            expected: "Vec<T>".to_string(),
+                            found: "&T".to_string(),
+                            span: None,
+                        })
+                    }
                 }
             }
             // Ref(Vec<T>) ↔ Slice(T) auto-coercion (Phase 163).
@@ -266,30 +540,68 @@ impl TypeChecker {
                     Ok(())
                 }
             }
-            // RefMut(Pointer<T>) ↔ SliceMut(T), same narrow pointer-backed slice coercion.
-            (ResolvedType::RefMut(inner), ResolvedType::SliceMut(elem))
-            | (ResolvedType::SliceMut(elem), ResolvedType::RefMut(inner))
-                if matches!(inner.as_ref(), ResolvedType::Pointer(_)) =>
-            {
-                if let ResolvedType::Pointer(pointer_elem) = inner.as_ref() {
-                    self.unify(pointer_elem, elem)
-                } else {
+            // Pointer <-> i64 implicit unification.
+            // Vais represents all pointers as i64 at the IR level (no opaque pointer distinction).
+            // This allows builtins like vec_new() -> i64 and malloc() -> i64 to unify with *T
+            // parameters, and swap(ptr, i, j) to accept either pointer or i64 arguments.
+            // Scope: unification only — does not enable arbitrary pointer arithmetic in user code.
+            // A4-02 (Master Plan v16 §A4 + Step 13 stage 1): strict default.
+            // Empirical baseline footprint = 0 std + 0 vaisdb after std/gpu.vais
+            // migration (2026-05-04). Set VAIS_REJECT_A4_02=0 to restore the
+            // legacy silent coercion.
+            (ResolvedType::Pointer(_), ResolvedType::I64)
+            | (ResolvedType::I64, ResolvedType::Pointer(_)) => {
+                if std::env::var("VAIS_REJECT_A4_02").as_deref() == Ok("0") {
                     Ok(())
+                } else {
+                    Err(crate::TypeError::Mismatch {
+                        expected: "Pointer<T>".to_string(),
+                        found: "i64".to_string(),
+                        span: None,
+                    })
                 }
             }
             // Pointer<T> ↔ Slice<T> / SliceMut<T> auto-coercion (Phase 162).
             // *u8 and &[u8] are compatible in systems code — both represent byte buffers.
             // Unifies element types to maintain generic consistency.
+            // A4-04 (Master Plan v16 §A4 + Step 13 stage 1): strict default.
+            // Empirical baseline footprint = 0 std + 0 vaisdb sample (2026-05-04).
+            // Set VAIS_REJECT_A4_04=0 to restore legacy silent coercion.
             (ResolvedType::Pointer(p), ResolvedType::Slice(s))
             | (ResolvedType::Slice(s), ResolvedType::Pointer(p))
             | (ResolvedType::Pointer(p), ResolvedType::SliceMut(s))
-            | (ResolvedType::SliceMut(s), ResolvedType::Pointer(p)) => self.unify(p, s),
+            | (ResolvedType::SliceMut(s), ResolvedType::Pointer(p)) => {
+                if std::env::var("VAIS_REJECT_A4_04").as_deref() == Ok("0") {
+                    self.unify(p, s)
+                } else {
+                    Err(crate::TypeError::Mismatch {
+                        expected: "Pointer<T>".to_string(),
+                        found: "Slice<T>".to_string(),
+                        span: None,
+                    })
+                }
+            }
             // Array/ConstArray ↔ Pointer auto-coercion (Phase 162).
             // [u64] / [u64; N] and *i64 are compatible (C-style array decay to pointer).
+            // A4-05 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode.
+            // Stage-1 attempt 2026-05-04 found ONE vaisdb dependency
+            // (lang/packages/vaisdb/src/vector/hnsw/cow.vais), so default
+            // remains legacy until that site is migrated. Set
+            // VAIS_REJECT_A4_05=1 to enable strict; default-mode INTEGRITY OK.
             (ResolvedType::ConstArray { element, .. }, ResolvedType::Pointer(p))
             | (ResolvedType::Pointer(p), ResolvedType::ConstArray { element, .. })
             | (ResolvedType::Array(element), ResolvedType::Pointer(p))
-            | (ResolvedType::Pointer(p), ResolvedType::Array(element)) => self.unify(element, p),
+            | (ResolvedType::Pointer(p), ResolvedType::Array(element)) => {
+                if std::env::var("VAIS_REJECT_A4_05").as_deref() == Ok("1") {
+                    Err(crate::TypeError::Mismatch {
+                        expected: "Array<T>".to_string(),
+                        found: "Pointer<T>".to_string(),
+                        span: None,
+                    })
+                } else {
+                    self.unify(element, p)
+                }
+            }
             // Linear type: unwrap and unify with inner type
             (ResolvedType::Linear(inner), other) | (other, ResolvedType::Linear(inner)) => {
                 self.unify(inner, other)
@@ -311,13 +623,32 @@ impl TypeChecker {
                 ResolvedType::RefMutLifetime { inner: b, .. },
             ) => self.unify(a, b),
             // Allow ref with lifetime to unify with plain ref
+            // A4-09 (Master Plan v16 §A4 + Step 13 stage 0): opt-in strict mode
+            // via VAIS_REJECT_A4_09=1. Default preserves the legacy silent
+            // coercion so the baseline does not move.
             (ResolvedType::RefLifetime { inner, .. }, ResolvedType::Ref(other))
             | (ResolvedType::Ref(other), ResolvedType::RefLifetime { inner, .. }) => {
-                self.unify(inner, other)
+                if std::env::var("VAIS_REJECT_A4_09").as_deref() == Ok("0") {
+                    self.unify(inner, other)
+                } else {
+                    Err(crate::TypeError::Mismatch {
+                        expected: "&'a T".to_string(),
+                        found: "&T".to_string(),
+                        span: None,
+                    })
+                }
             }
             (ResolvedType::RefMutLifetime { inner, .. }, ResolvedType::RefMut(other))
             | (ResolvedType::RefMut(other), ResolvedType::RefMutLifetime { inner, .. }) => {
-                self.unify(inner, other)
+                if std::env::var("VAIS_REJECT_A4_09").as_deref() == Ok("0") {
+                    self.unify(inner, other)
+                } else {
+                    Err(crate::TypeError::Mismatch {
+                        expected: "&'a mut T".to_string(),
+                        found: "&mut T".to_string(),
+                        span: None,
+                    })
+                }
             }
             // ConstArray: element type unification + size equality
             (
@@ -430,8 +761,35 @@ impl TypeChecker {
             // DynTrait: dyn Trait accepts any concrete type that implements the trait
             (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
             // ImplTrait / HigherKinded were removed in ROADMAP #18.
-            // Do not implicitly unify &T or &mut T with T. Value/reference
-            // conversion must be explicit at the expression boundary (`*ref`).
+            // A4-03: default-strict rejection of &T ↔ T implicit deref.
+            //
+            // Keep unresolved inference-variable glue working; it is not a
+            // concrete user-facing implicit deref decision. Set
+            // VAIS_REJECT_A4_03=0 only for legacy drift investigation.
+            (ResolvedType::Ref(inner), other) | (other, ResolvedType::Ref(inner)) => {
+                let inference_glue = Self::contains_var(inner) || Self::contains_var(other);
+                if !Self::allow_legacy_a4_03_auto_deref() && !inference_glue {
+                    Err(crate::TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                } else {
+                    self.unify(inner, other)
+                }
+            }
+            (ResolvedType::RefMut(inner), other) | (other, ResolvedType::RefMut(inner)) => {
+                let inference_glue = Self::contains_var(inner) || Self::contains_var(other);
+                if !Self::allow_legacy_a4_03_auto_deref() && !inference_glue {
+                    Err(crate::TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    })
+                } else {
+                    self.unify(inner, other)
+                }
+            }
             _ => Err(TypeError::Mismatch {
                 expected: expected.to_string(),
                 found: found.to_string(),

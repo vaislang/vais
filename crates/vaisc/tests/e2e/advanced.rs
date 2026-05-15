@@ -15,7 +15,7 @@ fn test_coverage_basic_program() {
     // Verify that a basic program compiles and runs correctly with coverage flags
     let result = compile_and_run_with_coverage(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
     y := 58
     x + y
@@ -31,27 +31,27 @@ fn test_coverage_branching() {
     // Coverage instrumentation should track branch coverage — verify branches work correctly
     let result = compile_and_run_with_coverage(
         r#"
-F classify(n: i64) -> i64 {
+fn classify(n: i64) -> i64 {
     I n > 100 {
         3
-    } E {
+    } else {
         I n > 50 {
             2
-        } E {
+        } else {
             I n > 0 {
                 1
-            } E {
+            } else {
                 0
             }
         }
     }
 }
 
-F main() -> i64 {
-    a := classify(200)
-    b := classify(75)
-    c := classify(25)
-    d := classify(0)
+fn main() -> i64 {
+    a := mut classify(200)
+    b := mut classify(75)
+    c := mut classify(25)
+    d := mut classify(0)
     # a=3, b=2, c=1, d=0 → sum=6
     a + b + c + d
 }
@@ -66,7 +66,7 @@ fn test_coverage_loops() {
     // Coverage should track loop iterations — verify loops work with instrumentation
     let result = compile_and_run_with_coverage(
         r#"
-F sum_to(n: i64) -> i64 {
+fn sum_to(n: i64) -> i64 {
     total := mut 0
     i := mut 1
     L {
@@ -77,7 +77,7 @@ F sum_to(n: i64) -> i64 {
     total
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # 1+2+3+4+5+6+7+8+9+10 = 55
     sum_to(10)
 }
@@ -92,13 +92,13 @@ fn test_coverage_function_calls() {
     // Coverage should track function call counts — verify multi-function programs
     let result = compile_and_run_with_coverage(
         r#"
-F add(a: i64, b: i64) -> i64 { a + b }
-F mul(a: i64, b: i64) -> i64 { a * b }
-F square(n: i64) -> i64 { mul(n, n) }
+fn add(a: i64, b: i64) -> i64 { a + b }
+fn mul(a: i64, b: i64) -> i64 { a * b }
+fn square(n: i64) -> i64 { mul(n, n) }
 
-F main() -> i64 {
-    a := add(3, 4)
-    b := square(3)
+fn main() -> i64 {
+    a := mut add(3, 4)
+    b := mut square(3)
     # a=7, b=9 → 7+9=16
     add(a, b)
 }
@@ -115,19 +115,19 @@ fn test_project_todo_model_struct() {
     // Test Todo struct pattern from todo-api project
     let result = compile_and_run(
         r#"
-S Todo {
+struct Todo {
     id: i64,
     title: str,
     completed: bool
 }
 
-F todo_new(id: i64, title: str, completed: bool) -> Todo {
+fn todo_new(id: i64, title: str, completed: bool) -> Todo {
     Todo { id: id, title: title, completed: completed }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     t := todo_new(1, "Buy milk", false)
-    I t.id == 1 { 10 } E { 1 }
+    I t.id == 1 { 10 } else { 1 }
 }
 "#,
     )
@@ -140,19 +140,19 @@ fn test_project_csv_row_struct() {
     // Test CsvRow struct pattern from data-pipeline project
     let result = compile_and_run(
         r#"
-S CsvRow {
+struct CsvRow {
     name: str,
     age: i64,
     score: i64
 }
 
-S TransformResult {
+struct TransformResult {
     filtered_count: i64,
     avg_score: i64,
     total_score: i64
 }
 
-F filter_by_score(rows: i64, count: i64, threshold: i64) -> i64 {
+fn filter_by_score(rows: i64, count: i64, threshold: i64) -> i64 {
     passed := mut 0
     i := mut 0
     L {
@@ -166,7 +166,7 @@ F filter_by_score(rows: i64, count: i64, threshold: i64) -> i64 {
     passed
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Simulate scores array: 85, 92, 78, 95, 88
     buf := malloc(40)
     store_i64(buf, 85)
@@ -191,18 +191,18 @@ fn test_project_chat_room_pattern() {
     // Test ChatRoom-like client list management pattern
     let result = compile_and_run(
         r#"
-F add_client(clients: i64, count_ptr: i64, fd: i64) -> i64 {
+fn add_client(clients: i64, count_ptr: i64, fd: i64) -> i64 {
     count := load_i64(count_ptr)
     store_i64(clients + count * 8, fd)
     store_i64(count_ptr, count + 1)
     1
 }
 
-F get_client_count(count_ptr: i64) -> i64 {
+fn get_client_count(count_ptr: i64) -> i64 {
     load_i64(count_ptr)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     clients := malloc(80)
     count_ptr := malloc(8)
     store_i64(count_ptr, 0)
@@ -227,7 +227,7 @@ fn test_project_line_reader_pattern() {
     // Test line-by-line buffer pattern
     let result = compile_and_run(
         r#"
-F count_newlines(buf: i64, len: i64) -> i64 {
+fn count_newlines(buf: i64, len: i64) -> i64 {
     count := mut 0
     i := mut 0
     L {
@@ -241,7 +241,7 @@ F count_newlines(buf: i64, len: i64) -> i64 {
     count
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Simulate "hello\nworld\nfoo\n" — 3 newlines
     buf := malloc(20)
     store_byte(buf, 104)     # h
@@ -276,15 +276,15 @@ F main() -> i64 {
 #[test]
 fn e2e_phase55_fs_exists() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     fp := fopen("/tmp/vais_e2e_exists_test55.txt", "w")
-    I fp == 0 { R 1 }
+    I fp == 0 { return 1 }
     fputs("test", fp)
     fclose(fp)
     r := access("/tmp/vais_e2e_exists_test55.txt", 0)
-    I r != 0 { R 2 }
+    I r != 0 { return 2 }
     r2 := access("/tmp/vais_e2e_nonexistent_xyz_999.txt", 0)
-    I r2 == 0 { R 3 }
+    I r2 == 0 { return 3 }
     unlink("/tmp/vais_e2e_exists_test55.txt")
     0
 }
@@ -295,19 +295,19 @@ F main() -> i64 {
 #[test]
 fn e2e_phase55_fs_is_dir() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     rmdir("/tmp/vais_e2e_isdir55")
     r := mkdir("/tmp/vais_e2e_isdir55", 493)
-    I r != 0 { R 1 }
+    I r != 0 { return 1 }
     d := opendir("/tmp/vais_e2e_isdir55")
-    I d == 0 { R 2 }
+    I d == 0 { return 2 }
     closedir(d)
     fp := fopen("/tmp/vais_e2e_isdir55_file.txt", "w")
-    I fp == 0 { R 3 }
+    I fp == 0 { return 3 }
     fputs("x", fp)
     fclose(fp)
     d2 := opendir("/tmp/vais_e2e_isdir55_file.txt")
-    I d2 != 0 { closedir(d2); R 4 }
+    I d2 != 0 { closedir(d2); return 4 }
     rmdir("/tmp/vais_e2e_isdir55")
     unlink("/tmp/vais_e2e_isdir55_file.txt")
     0
@@ -319,21 +319,21 @@ F main() -> i64 {
 #[test]
 fn e2e_phase55_readdir_list() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     unlink("/tmp/vais_e2e_rd55/a.txt")
     unlink("/tmp/vais_e2e_rd55/b.txt")
     rmdir("/tmp/vais_e2e_rd55")
     mkdir("/tmp/vais_e2e_rd55", 493)
     fp1 := fopen("/tmp/vais_e2e_rd55/a.txt", "w")
-    I fp1 == 0 { R 1 }
+    I fp1 == 0 { return 1 }
     fputs("aaa", fp1)
     fclose(fp1)
     fp2 := fopen("/tmp/vais_e2e_rd55/b.txt", "w")
-    I fp2 == 0 { R 2 }
+    I fp2 == 0 { return 2 }
     fputs("bbb", fp2)
     fclose(fp2)
     d := opendir("/tmp/vais_e2e_rd55")
-    I d == 0 { R 3 }
+    I d == 0 { return 3 }
     count := mut 0
     L {
         entry := readdir(d)
@@ -341,24 +341,24 @@ F main() -> i64 {
         first := load_byte(entry)
         I first != 46 {
             count = count + 1
-        } E {
+        } else {
             second := load_byte(entry + 1)
             I second == 0 {
                 # "." skip
-            } E I second == 46 {
+            } else I second == 46 {
                 third := load_byte(entry + 2)
                 I third == 0 {
                     # ".." skip
-                } E {
+                } else {
                     count = count + 1
                 }
-            } E {
+            } else {
                 count = count + 1
             }
         }
     }
     closedir(d)
-    I count != 2 { R 10 + count }
+    I count != 2 { return 10 + count }
     unlink("/tmp/vais_e2e_rd55/a.txt")
     unlink("/tmp/vais_e2e_rd55/b.txt")
     rmdir("/tmp/vais_e2e_rd55")
@@ -371,15 +371,15 @@ F main() -> i64 {
 #[test]
 fn e2e_phase55_getcwd() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     buf := malloc(1024)
     result := getcwd(buf, 1024)
-    I result == 0 { free(buf); R 1 }
+    I result == 0 { free(buf); return 1 }
     # result is i64 pointer — check first byte
     first := load_byte(result)
-    I first == 0 { free(buf); R 2 }
+    I first == 0 { free(buf); return 2 }
     # On Unix, cwd starts with '/' (ASCII 47)
-    I first != 47 { free(buf); R 3 }
+    I first != 47 { free(buf); return 3 }
     free(buf)
     0
 }
@@ -390,7 +390,7 @@ F main() -> i64 {
 #[test]
 fn e2e_phase55_ptr_to_str() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     # Allocate a buffer and fill with "hi\0"
     buf := malloc(8)
     store_byte(buf, 104)
@@ -399,11 +399,11 @@ F main() -> i64 {
     # ptr_to_str converts i64 pointer to str
     s := ptr_to_str(buf)
     len := strlen(s)
-    I len != 2 { free(buf); R 1 }
+    I len != 2 { free(buf); return 1 }
     # Verify first char
     p := str_to_ptr(s)
     first := load_byte(p)
-    I first != 104 { free(buf); R 2 }
+    I first != 104 { free(buf); return 2 }
     free(buf)
     0
 }
@@ -417,7 +417,7 @@ F main() -> i64 {
 fn e2e_phase55_strhashmap_basic() {
     // Test StrHashMap: str-typed keys with content-based hashing
     let source = r#"
-F djb2_hash(s: i64) -> i64 {
+fn djb2_hash(s: i64) -> i64 {
     hash := mut 5381
     idx := mut 0
     L {
@@ -430,81 +430,81 @@ F djb2_hash(s: i64) -> i64 {
     hash
 }
 
-F streq(a: i64, b: i64) -> i64 {
-    I a == b { R 1 }
+fn streq(a: i64, b: i64) -> i64 {
+    I a == b { return 1 }
     idx := mut 0
     L {
         ca := load_byte(a + idx)
         cb := load_byte(b + idx)
-        I ca != cb { R 0 }
-        I ca == 0 { R 1 }
+        I ca != cb { return 0 }
+        I ca == 0 { return 1 }
         idx = idx + 1
     }
     1
 }
 
-F ptr_strlen(s: i64) -> i64 {
+fn ptr_strlen(s: i64) -> i64 {
     idx := mut 0
     L {
         c := load_byte(s + idx)
-        I c == 0 { R idx }
+        I c == 0 { return idx }
         idx = idx + 1
     }
     idx
 }
 
-F strdup_heap(s: i64) -> i64 {
+fn strdup_heap(s: i64) -> i64 {
     len := ptr_strlen(s)
     buf := malloc(len + 1)
     memcpy(buf, s, len + 1)
     buf
 }
 
-S SHMap {
+struct SHMap {
     buckets: i64, size: i64, cap: i64
 }
-X SHMap {
-    F with_capacity(c: i64) -> SHMap {
-        cap := I c < 8 { 8 } E { c }
+impl SHMap {
+    fn with_capacity(c: i64) -> SHMap {
+        cap := I c < 8 { 8 } else { c }
         b := malloc(cap * 8)
         i := mut 0
         L { I i >= cap { B }; store_i64(b + i * 8, 0); i = i + 1 }
         SHMap { buckets: b, size: 0, cap: cap }
     }
-    F hash(&self, key: str) -> i64 {
+    fn hash(&self, key: str) -> i64 {
         p := str_to_ptr(key)
         h := djb2_hash(p)
         h % self.cap
     }
-    F get(&self, key: str) -> i64 {
+    fn get(&self, key: str) -> i64 {
         idx := @.hash(key)
         ep := load_i64(self.buckets + idx * 8)
         kp := str_to_ptr(key)
         @.get_chain(ep, kp)
     }
-    F get_chain(&self, ep: i64, kp: i64) -> i64 {
+    fn get_chain(&self, ep: i64, kp: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 { load_i64(ep + 8) }
-            E { @.get_chain(load_i64(ep + 16), kp) }
+            else { @.get_chain(load_i64(ep + 16), kp) }
         }
     }
-    F contains(&self, key: str) -> i64 {
+    fn contains(&self, key: str) -> i64 {
         idx := @.hash(key)
         ep := load_i64(self.buckets + idx * 8)
         kp := str_to_ptr(key)
         @.contains_chain(ep, kp)
     }
-    F contains_chain(&self, ep: i64, kp: i64) -> i64 {
+    fn contains_chain(&self, ep: i64, kp: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 { 1 }
-            E { @.contains_chain(load_i64(ep + 16), kp) }
+            else { @.contains_chain(load_i64(ep + 16), kp) }
         }
     }
-    F set(&self, key: str, value: i64) -> i64 {
+    fn set(&self, key: str, value: i64) -> i64 {
         idx := @.hash(key)
         ep := load_i64(self.buckets + idx * 8)
         kp := str_to_ptr(key)
@@ -518,17 +518,17 @@ X SHMap {
         0
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     m := SHMap.with_capacity(16)
     m.set("hello", 42)
     m.set("world", 99)
     m.set("vais", 7)
 
-    I m.get("hello") != 42 { R 1 }
-    I m.get("world") != 99 { R 2 }
-    I m.get("vais") != 7 { R 3 }
-    I m.contains("hello") != 1 { R 4 }
-    I m.contains("missing") != 0 { R 5 }
+    I m.get("hello") != 42 { return 1 }
+    I m.get("world") != 99 { return 2 }
+    I m.get("vais") != 7 { return 3 }
+    I m.contains("hello") != 1 { return 4 }
+    I m.contains("missing") != 0 { return 5 }
     0
 }
 "#;
@@ -539,7 +539,7 @@ F main() -> i64 {
 fn e2e_phase55_strhashmap_update_remove() {
     // Test StrHashMap: update existing key, remove key
     let source = r#"
-F djb2_hash(s: i64) -> i64 {
+fn djb2_hash(s: i64) -> i64 {
     hash := mut 5381
     idx := mut 0
     L {
@@ -552,71 +552,71 @@ F djb2_hash(s: i64) -> i64 {
     hash
 }
 
-F streq(a: i64, b: i64) -> i64 {
-    I a == b { R 1 }
+fn streq(a: i64, b: i64) -> i64 {
+    I a == b { return 1 }
     idx := mut 0
     L {
         ca := load_byte(a + idx)
         cb := load_byte(b + idx)
-        I ca != cb { R 0 }
-        I ca == 0 { R 1 }
+        I ca != cb { return 0 }
+        I ca == 0 { return 1 }
         idx = idx + 1
     }
     1
 }
 
-F ptr_strlen2(s: i64) -> i64 {
+fn ptr_strlen2(s: i64) -> i64 {
     idx := mut 0
     L {
         c := load_byte(s + idx)
-        I c == 0 { R idx }
+        I c == 0 { return idx }
         idx = idx + 1
     }
     idx
 }
 
-F strdup_heap2(s: i64) -> i64 {
+fn strdup_heap2(s: i64) -> i64 {
     len := ptr_strlen2(s)
     buf := malloc(len + 1)
     memcpy(buf, s, len + 1)
     buf
 }
 
-S SHMap2 {
+struct SHMap2 {
     buckets: i64, size: i64, cap: i64
 }
-X SHMap2 {
-    F with_capacity(c: i64) -> SHMap2 {
-        cap := I c < 8 { 8 } E { c }
+impl SHMap2 {
+    fn with_capacity(c: i64) -> SHMap2 {
+        cap := I c < 8 { 8 } else { c }
         b := malloc(cap * 8)
         i := mut 0
         L { I i >= cap { B }; store_i64(b + i * 8, 0); i = i + 1 }
         SHMap2 { buckets: b, size: 0, cap: cap }
     }
-    F hash(&self, kp: i64) -> i64 {
+    fn hash(&self, kp: i64) -> i64 {
         h := djb2_hash(kp)
         h % self.cap
     }
-    F get(&self, key: str) -> i64 {
+    fn get(&self, key: str) -> i64 {
         kp := str_to_ptr(key)
         idx := @.hash(kp)
         ep := load_i64(self.buckets + idx * 8)
         @.get_chain(ep, kp)
     }
-    F get_chain(&self, ep: i64, kp: i64) -> i64 {
+    fn get_chain(&self, ep: i64, kp: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 { load_i64(ep + 8) }
-            E { @.get_chain(load_i64(ep + 16), kp) }
+            else { @.get_chain(load_i64(ep + 16), kp) }
         }
     }
-    F set(&self, key: str, value: i64) -> i64 {
+    fn set(&self, key: str, value: i64) -> i64 {
         kp := str_to_ptr(key)
         idx := @.hash(kp)
         ep := load_i64(self.buckets + idx * 8)
         updated := @.try_update(ep, kp, value)
-        I updated == 1 { R 0 }
+        I updated == 1 { return 0 }
         kc := strdup_heap2(kp)
         ne := malloc(24)
         store_i64(ne, kc)
@@ -626,59 +626,59 @@ X SHMap2 {
         self.size = self.size + 1
         0
     }
-    F try_update(&self, ep: i64, kp: i64, value: i64) -> i64 {
+    fn try_update(&self, ep: i64, kp: i64, value: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 {
                 store_i64(ep + 8, value)
                 1
-            } E {
+            } else {
                 @.try_update(load_i64(ep + 16), kp, value)
             }
         }
     }
-    F remove(&self, key: str) -> i64 {
+    fn remove(&self, key: str) -> i64 {
         kp := str_to_ptr(key)
         idx := @.hash(kp)
         ep := load_i64(self.buckets + idx * 8)
         @.remove_chain(idx, 0, ep, kp)
     }
-    F remove_chain(&self, bidx: i64, prev: i64, ep: i64, kp: i64) -> i64 {
+    fn remove_chain(&self, bidx: i64, prev: i64, ep: i64, kp: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, kp) == 1 {
                 val := load_i64(ep + 8)
                 nxt := load_i64(ep + 16)
                 _ := I prev == 0 {
                     store_i64(self.buckets + bidx * 8, nxt); 0
-                } E {
+                } else {
                     store_i64(prev + 16, nxt); 0
                 }
                 free(ek)
                 free(ep)
                 self.size = self.size - 1
                 val
-            } E {
+            } else {
                 @.remove_chain(bidx, ep, load_i64(ep + 16), kp)
             }
         }
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     m := SHMap2.with_capacity(16)
     m.set("key1", 10)
     m.set("key2", 20)
     # Update existing key
     m.set("key1", 100)
-    I m.get("key1") != 100 { R 1 }
-    I m.get("key2") != 20 { R 2 }
+    I m.get("key1") != 100 { return 1 }
+    I m.get("key2") != 20 { return 2 }
     # Remove key
     removed := m.remove("key2")
-    I removed != 20 { R 3 }
-    I m.get("key2") != 0 { R 4 }
-    I m.size != 1 { R 5 }
+    I removed != 20 { return 3 }
+    I m.get("key2") != 0 { return 4 }
+    I m.size != 1 { return 5 }
     0
 }
 "#;
@@ -689,7 +689,7 @@ F main() -> i64 {
 fn e2e_phase55_stringmap_generic() {
     // Test StringMap<V> generic struct — content-based str key comparison with generic value type
     let source = r#"
-F djb2_hash(s: i64) -> i64 {
+fn djb2_hash(s: i64) -> i64 {
     hash := mut 5381
     idx := mut 0
     L {
@@ -702,23 +702,23 @@ F djb2_hash(s: i64) -> i64 {
     hash
 }
 
-F streq(a: i64, b: i64) -> i64 {
+fn streq(a: i64, b: i64) -> i64 {
     idx := mut 0
     L {
         ca := load_byte(a + idx)
         cb := load_byte(b + idx)
-        I ca != cb { R 0 }
-        I ca == 0 { R 1 }
+        I ca != cb { return 0 }
+        I ca == 0 { return 1 }
         idx = idx + 1
     }
     1
 }
 
-F ptr_len(s: i64) -> i64 {
+fn ptr_len(s: i64) -> i64 {
     idx := mut 0
     L {
         c := load_byte(s + idx)
-        I c == 0 { R idx }
+        I c == 0 { return idx }
         idx = idx + 1
     }
     idx
@@ -726,35 +726,35 @@ F ptr_len(s: i64) -> i64 {
 
 # Non-generic StringMap that tests content-based string comparison
 # (tests the same logic as the generic StringMap<V> in std/stringmap.vais)
-S StrMap {
+struct StrMap {
     buckets: i64, size: i64, cap: i64
 }
 
-X StrMap {
-    F with_capacity(c: i64) -> StrMap {
-        cap := I c < 8 { 8 } E { c }
+impl StrMap {
+    fn with_capacity(c: i64) -> StrMap {
+        cap := I c < 8 { 8 } else { c }
         b := malloc(cap * 8)
         i := mut 0
         L { I i >= cap { B }; store_i64(b + i * 8, 0); i = i + 1 }
         StrMap { buckets: b, size: 0, cap: cap }
     }
-    F len(&self) -> i64 = self.size
-    F is_empty(&self) -> i64 { I self.size == 0 { 1 } E { 0 } }
-    F get(&self, key: i64) -> i64 {
+    fn len(&self) -> i64 = self.size
+    fn is_empty(&self) -> i64 { I self.size == 0 { 1 } else { 0 } }
+    fn get(&self, key: i64) -> i64 {
         h := djb2_hash(key)
         idx := h % self.cap
         ep := load_i64(self.buckets + idx * 8)
         @.get_chain(ep, key)
     }
-    F get_chain(&self, ep: i64, key: i64) -> i64 {
+    fn get_chain(&self, ep: i64, key: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, key) == 1 { load_i64(ep + 8) }
-            E { @.get_chain(load_i64(ep + 16), key) }
+            else { @.get_chain(load_i64(ep + 16), key) }
         }
     }
-    F set(&self, key: i64, value: i64) -> i64 {
+    fn set(&self, key: i64, value: i64) -> i64 {
         h := djb2_hash(key)
         idx := h % self.cap
         ep := load_i64(self.buckets + idx * 8)
@@ -769,25 +769,25 @@ X StrMap {
         self.size = self.size + 1
         0
     }
-    F contains(&self, key: i64) -> i64 {
+    fn contains(&self, key: i64) -> i64 {
         h := djb2_hash(key)
         idx := h % self.cap
         ep := load_i64(self.buckets + idx * 8)
         @.contains_chain(ep, key)
     }
-    F contains_chain(&self, ep: i64, key: i64) -> i64 {
+    fn contains_chain(&self, ep: i64, key: i64) -> i64 {
         I ep == 0 { 0 }
-        E {
+        else {
             ek := load_i64(ep)
             I streq(ek, key) == 1 { 1 }
-            E { @.contains_chain(load_i64(ep + 16), key) }
+            else { @.contains_chain(load_i64(ep + 16), key) }
         }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     m := StrMap.with_capacity(16)
-    I m.is_empty() != 1 { R 1 }
+    I m.is_empty() != 1 { return 1 }
 
     p1 := str_to_ptr("alpha")
     p2 := str_to_ptr("beta")
@@ -797,24 +797,24 @@ F main() -> i64 {
     m.set(p2, 200)
     m.set(p3, 300)
 
-    I m.len() != 3 { R 2 }
-    I m.is_empty() != 0 { R 3 }
+    I m.len() != 3 { return 2 }
+    I m.is_empty() != 0 { return 3 }
 
     # Look up by content (different pointer, same string)
     q1 := str_to_ptr("alpha")
-    I m.get(q1) != 100 { R 4 }
+    I m.get(q1) != 100 { return 4 }
     q2 := str_to_ptr("beta")
-    I m.get(q2) != 200 { R 5 }
+    I m.get(q2) != 200 { return 5 }
     q3 := str_to_ptr("gamma")
-    I m.get(q3) != 300 { R 6 }
+    I m.get(q3) != 300 { return 6 }
 
     # Unknown key returns 0
     q4 := str_to_ptr("delta")
-    I m.get(q4) != 0 { R 7 }
+    I m.get(q4) != 0 { return 7 }
 
     # Test contains
-    I m.contains(q1) != 1 { R 8 }
-    I m.contains(q4) != 0 { R 9 }
+    I m.contains(q1) != 1 { return 8 }
+    I m.contains(q4) != 0 { return 9 }
 
     0
 }
@@ -826,17 +826,17 @@ F main() -> i64 {
 fn e2e_phase55_bytebuffer_varint() {
     // Test ByteBuffer varint (LEB128) write/read roundtrip
     let source = r#"
-S ByteBuffer {
+struct ByteBuffer {
     data: i64, len: i64, cap: i64, pos: i64
 }
-X ByteBuffer {
-    F with_capacity(c: i64) -> ByteBuffer {
-        cap := I c < 16 { 16 } E { c }
+impl ByteBuffer {
+    fn with_capacity(c: i64) -> ByteBuffer {
+        cap := mut I c < 16 { 16 } else { c }
         d := malloc(cap)
         ByteBuffer { data: d, len: 0, cap: cap, pos: 0 }
     }
-    F ensure_capacity(&self, needed: i64) -> i64 {
-        I needed <= self.cap { R self.cap }
+    fn ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { return self.cap }
         nc := mut self.cap
         L { I nc >= needed { B }; nc = nc * 2 }
         nd := malloc(nc)
@@ -846,19 +846,19 @@ X ByteBuffer {
         self.cap = nc
         nc
     }
-    F write_u8(&self, v: i64) -> i64 {
+    fn write_u8(&self, v: i64) -> i64 {
         @.ensure_capacity(self.len + 1)
         store_byte(self.data + self.len, v & 255)
         self.len = self.len + 1
         1
     }
-    F read_u8(&self) -> i64 {
-        I self.pos >= self.len { R 0 - 1 }
+    fn read_u8(&self) -> i64 {
+        I self.pos >= self.len { return 0 - 1 }
         val := load_byte(self.data + self.pos)
         self.pos = self.pos + 1
         val
     }
-    F write_varint(&self, value: i64) -> i64 {
+    fn write_varint(&self, value: i64) -> i64 {
         count := mut 0
         v := mut value
         L {
@@ -866,7 +866,7 @@ X ByteBuffer {
             v = v >> 7
             I v > 0 {
                 @.write_u8(byte | 128)
-            } E {
+            } else {
                 @.write_u8(byte)
             }
             count = count + 1
@@ -874,54 +874,54 @@ X ByteBuffer {
         }
         count
     }
-    F read_varint(&self) -> i64 {
+    fn read_varint(&self) -> i64 {
         result := mut 0
         shift := mut 0
         L {
-            I self.pos >= self.len { R 0 - 1 }
+            I self.pos >= self.len { return 0 - 1 }
             byte := @.read_u8()
-            I byte < 0 { R 0 - 1 }
+            I byte < 0 { return 0 - 1 }
             result = result | ((byte & 127) << shift)
             I (byte & 128) == 0 { B }
             shift = shift + 7
-            I shift >= 64 { R 0 - 1 }
+            I shift >= 64 { return 0 - 1 }
         }
         result
     }
-    F rewind(&self) -> i64 { self.pos = 0; 0 }
+    fn rewind(&self) -> i64 { self.pos = 0; 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     bb := ByteBuffer.with_capacity(64)
 
     # Small value (fits in 1 byte)
     n1 := bb.write_varint(42)
-    I n1 != 1 { R 1 }
+    I n1 != 1 { return 1 }
 
     # Medium value (needs 2 bytes: 300 = 0b100101100)
     n2 := bb.write_varint(300)
-    I n2 != 2 { R 2 }
+    I n2 != 2 { return 2 }
 
     # Larger value (16384 = 2^14, needs 3 bytes)
     n3 := bb.write_varint(16384)
-    I n3 != 3 { R 3 }
+    I n3 != 3 { return 3 }
 
     # Zero
     n4 := bb.write_varint(0)
-    I n4 != 1 { R 4 }
+    I n4 != 1 { return 4 }
 
     # Read back
     bb.rewind()
     v1 := bb.read_varint()
-    I v1 != 42 { R 11 }
+    I v1 != 42 { return 11 }
 
     v2 := bb.read_varint()
-    I v2 != 300 { R 12 }
+    I v2 != 300 { return 12 }
 
     v3 := bb.read_varint()
-    I v3 != 16384 { R 13 }
+    I v3 != 16384 { return 13 }
 
     v4 := bb.read_varint()
-    I v4 != 0 { R 14 }
+    I v4 != 0 { return 14 }
 
     free(bb.data)
     0
@@ -934,17 +934,17 @@ F main() -> i64 {
 fn e2e_phase55_bytebuffer_u16_str() {
     // Test ByteBuffer u16_le + write_str/read_str
     let source = r#"
-S ByteBuffer {
+struct ByteBuffer {
     data: i64, len: i64, cap: i64, pos: i64
 }
-X ByteBuffer {
-    F with_capacity(c: i64) -> ByteBuffer {
-        cap := I c < 16 { 16 } E { c }
+impl ByteBuffer {
+    fn with_capacity(c: i64) -> ByteBuffer {
+        cap := mut I c < 16 { 16 } else { c }
         d := malloc(cap)
         ByteBuffer { data: d, len: 0, cap: cap, pos: 0 }
     }
-    F ensure_capacity(&self, needed: i64) -> i64 {
-        I needed <= self.cap { R self.cap }
+    fn ensure_capacity(&self, needed: i64) -> i64 {
+        I needed <= self.cap { return self.cap }
         nc := mut self.cap
         L { I nc >= needed { B }; nc = nc * 2 }
         nd := malloc(nc)
@@ -954,33 +954,33 @@ X ByteBuffer {
         self.cap = nc
         nc
     }
-    F write_u8(&self, v: i64) -> i64 {
+    fn write_u8(&self, v: i64) -> i64 {
         @.ensure_capacity(self.len + 1)
         store_byte(self.data + self.len, v & 255)
         self.len = self.len + 1
         1
     }
-    F read_u8(&self) -> i64 {
-        I self.pos >= self.len { R 0 - 1 }
+    fn read_u8(&self) -> i64 {
+        I self.pos >= self.len { return 0 - 1 }
         val := load_byte(self.data + self.pos)
         self.pos = self.pos + 1
         val
     }
-    F write_u16_le(&self, value: i64) -> i64 {
+    fn write_u16_le(&self, value: i64) -> i64 {
         @.ensure_capacity(self.len + 2)
         store_byte(self.data + self.len, value & 255)
         store_byte(self.data + self.len + 1, (value >> 8) & 255)
         self.len = self.len + 2
         2
     }
-    F read_u16_le(&self) -> i64 {
-        I self.pos + 2 > self.len { R 0 - 1 }
+    fn read_u16_le(&self) -> i64 {
+        I self.pos + 2 > self.len { return 0 - 1 }
         b0 := load_byte(self.data + self.pos)
         b1 := load_byte(self.data + self.pos + 1)
         self.pos = self.pos + 2
         b0 | (b1 << 8)
     }
-    F write_i32_le(&self, value: i64) -> i64 {
+    fn write_i32_le(&self, value: i64) -> i64 {
         @.ensure_capacity(self.len + 4)
         store_byte(self.data + self.len, value & 255)
         store_byte(self.data + self.len + 1, (value >> 8) & 255)
@@ -989,8 +989,8 @@ X ByteBuffer {
         self.len = self.len + 4
         4
     }
-    F read_i32_le(&self) -> i64 {
-        I self.pos + 4 > self.len { R 0 - 1 }
+    fn read_i32_le(&self) -> i64 {
+        I self.pos + 4 > self.len { return 0 - 1 }
         b0 := load_byte(self.data + self.pos)
         b1 := load_byte(self.data + self.pos + 1)
         b2 := load_byte(self.data + self.pos + 2)
@@ -998,7 +998,7 @@ X ByteBuffer {
         self.pos = self.pos + 4
         b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
     }
-    F write_str(&self, s: str) -> i64 {
+    fn write_str(&self, s: str) -> i64 {
         p := str_to_ptr(s)
         slen := mut 0
         L {
@@ -1012,20 +1012,20 @@ X ByteBuffer {
         self.len = self.len + slen
         slen + 4
     }
-    F read_str(&self) -> i64 {
-        I self.pos + 4 > self.len { R 0 }
+    fn read_str(&self) -> i64 {
+        I self.pos + 4 > self.len { return 0 }
         slen := @.read_i32_le()
-        I slen < 0 { R 0 }
-        I self.pos + slen > self.len { R 0 }
+        I slen < 0 { return 0 }
+        I self.pos + slen > self.len { return 0 }
         buf := malloc(slen + 1)
         memcpy(buf, self.data + self.pos, slen)
         store_byte(buf + slen, 0)
         self.pos = self.pos + slen
         buf
     }
-    F rewind(&self) -> i64 { self.pos = 0; 0 }
+    fn rewind(&self) -> i64 { self.pos = 0; 0 }
 }
-F main() -> i64 {
+fn main() -> i64 {
     bb := ByteBuffer.with_capacity(128)
 
     # Write u16 values
@@ -1040,23 +1040,23 @@ F main() -> i64 {
 
     # Read back
     bb.rewind()
-    I bb.read_u16_le() != 0 { R 1 }
-    I bb.read_u16_le() != 255 { R 2 }
-    I bb.read_u16_le() != 65535 { R 3 }
-    I bb.read_u16_le() != 1000 { R 4 }
+    I bb.read_u16_le() != 0 { return 1 }
+    I bb.read_u16_le() != 255 { return 2 }
+    I bb.read_u16_le() != 65535 { return 3 }
+    I bb.read_u16_le() != 1000 { return 4 }
 
     # Read strings back as i64 pointers and check content
     s1_ptr := bb.read_str()
-    I s1_ptr == 0 { R 5 }
+    I s1_ptr == 0 { return 5 }
     # "hello" = 5 chars
-    I load_byte(s1_ptr) != 104 { R 6 }       # 'h'
-    I load_byte(s1_ptr + 4) != 111 { R 7 }   # 'o'
-    I load_byte(s1_ptr + 5) != 0 { R 8 }
+    I load_byte(s1_ptr) != 104 { return 6 }       # 'h'
+    I load_byte(s1_ptr + 4) != 111 { return 7 }   # 'o'
+    I load_byte(s1_ptr + 5) != 0 { return 8 }
 
     s2_ptr := bb.read_str()
-    I s2_ptr == 0 { R 9 }
-    I load_byte(s2_ptr) != 118 { R 10 }      # 'v'
-    I load_byte(s2_ptr + 4) != 0 { R 11 }
+    I s2_ptr == 0 { return 9 }
+    I load_byte(s2_ptr) != 118 { return 10 }      # 'v'
+    I load_byte(s2_ptr + 4) != 0 { return 11 }
 
     free(s1_ptr)
     free(s2_ptr)
@@ -1077,7 +1077,7 @@ C PAGE_SIZE: i64 = 4096
 C PAGE_HEADER_SIZE: i64 = 64
 C SLOT_SIZE: i64 = 8
 
-F page_init(p: i64, id: i64) -> i64 {
+fn page_init(p: i64, id: i64) -> i64 {
     store_i64(p, id)
     store_i64(p + 8, 0)
     store_i64(p + 16, PAGE_HEADER_SIZE)
@@ -1085,15 +1085,15 @@ F page_init(p: i64, id: i64) -> i64 {
     0
 }
 
-F page_num_rows(p: i64) -> i64 = load_i64(p + 8)
+fn page_num_rows(p: i64) -> i64 = load_i64(p + 8)
 
-F page_insert(p: i64, row: i64, row_len: i64) -> i64 {
+fn page_insert(p: i64, row: i64, row_len: i64) -> i64 {
     num := load_i64(p + 8)
     free_off := load_i64(p + 16)
     data_end := load_i64(p + 24)
     needed := SLOT_SIZE + row_len
     available := data_end - free_off
-    I available < needed { R 0 - 1 }
+    I available < needed { return 0 - 1 }
     new_data_end := data_end - row_len
     memcpy(p + new_data_end, row, row_len)
     store_i64(p + free_off, new_data_end)
@@ -1103,40 +1103,40 @@ F page_insert(p: i64, row: i64, row_len: i64) -> i64 {
     num
 }
 
-F page_get_offset(p: i64, slot: i64) -> i64 {
+fn page_get_offset(p: i64, slot: i64) -> i64 {
     num := load_i64(p + 8)
-    I slot >= num { R 0 - 1 }
+    I slot >= num { return 0 - 1 }
     load_i64(p + PAGE_HEADER_SIZE + slot * SLOT_SIZE)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := malloc(PAGE_SIZE)
     page_init(p, 1)
 
-    I load_i64(p) != 1 { free(p); R 1 }
-    I page_num_rows(p) != 0 { free(p); R 2 }
+    I load_i64(p) != 1 { free(p); return 1 }
+    I page_num_rows(p) != 0 { free(p); return 2 }
 
     row := malloc(16)
     i := mut 0
     L { I i >= 16 { B }; store_byte(row + i, 65 + i); i = i + 1 }
 
     s0 := page_insert(p, row, 16)
-    I s0 != 0 { free(row); free(p); R 3 }
-    I page_num_rows(p) != 1 { free(row); free(p); R 4 }
+    I s0 != 0 { free(row); free(p); return 3 }
+    I page_num_rows(p) != 1 { free(row); free(p); return 4 }
 
     s1 := page_insert(p, row, 16)
-    I s1 != 1 { free(row); free(p); R 5 }
+    I s1 != 1 { free(row); free(p); return 5 }
 
     off0 := page_get_offset(p, 0)
-    I off0 < 0 { free(row); free(p); R 6 }
-    I load_byte(p + off0) != 65 { free(row); free(p); R 7 }
+    I off0 < 0 { free(row); free(p); return 6 }
+    I load_byte(p + off0) != 65 { free(row); free(p); return 7 }
 
     off1 := page_get_offset(p, 1)
-    I off1 < 0 { free(row); free(p); R 8 }
-    I load_byte(p + off1) != 65 { free(row); free(p); R 9 }
+    I off1 < 0 { free(row); free(p); return 8 }
+    I load_byte(p + off1) != 65 { free(row); free(p); return 9 }
 
     bad := page_get_offset(p, 99)
-    I bad != 0 - 1 { free(row); free(p); R 10 }
+    I bad != 0 - 1 { free(row); free(p); return 10 }
 
     free(row)
     free(p)
@@ -1156,21 +1156,21 @@ C COL_I64: i64 = 1
 C COL_STR: i64 = 2
 C COL_BOOL: i64 = 3
 
-S RowWriter {
+struct RowWriter {
     buf: i64,
     pos: i64,
     cap: i64,
     num_cols: i64
 }
 
-X RowWriter {
-    F new() -> RowWriter {
+impl RowWriter {
+    fn new() -> RowWriter {
         buf := malloc(256)
         store_i64(buf, 0)
         RowWriter { buf: buf, pos: 8, cap: 256, num_cols: 0 }
     }
 
-    F add_i64(&self, val: i64) -> i64 {
+    fn add_i64(&self, val: i64) -> i64 {
         store_byte(self.buf + self.pos, COL_I64)
         self.pos = self.pos + 1
         store_i64(self.buf + self.pos, val)
@@ -1179,7 +1179,7 @@ X RowWriter {
         0
     }
 
-    F add_bool(&self, val: i64) -> i64 {
+    fn add_bool(&self, val: i64) -> i64 {
         store_byte(self.buf + self.pos, COL_BOOL)
         self.pos = self.pos + 1
         store_byte(self.buf + self.pos, val)
@@ -1188,37 +1188,37 @@ X RowWriter {
         0
     }
 
-    F finish(&self) -> i64 {
+    fn finish(&self) -> i64 {
         store_i64(self.buf, self.num_cols)
         self.pos
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     rw := RowWriter.new()
     rw.add_i64(42)
     rw.add_i64(100)
     rw.add_bool(1)
     total := rw.finish()
 
-    I total <= 0 { free(rw.buf); R 1 }
-    I load_i64(rw.buf) != 3 { free(rw.buf); R 2 }
+    I total <= 0 { free(rw.buf); return 1 }
+    I load_i64(rw.buf) != 3 { free(rw.buf); return 2 }
 
     # Read back: skip header (8 bytes)
     p := mut 8
-    I load_byte(rw.buf + p) != COL_I64 { free(rw.buf); R 3 }
+    I load_byte(rw.buf + p) != COL_I64 { free(rw.buf); return 3 }
     p = p + 1
-    I load_i64(rw.buf + p) != 42 { free(rw.buf); R 4 }
+    I load_i64(rw.buf + p) != 42 { free(rw.buf); return 4 }
     p = p + 8
 
-    I load_byte(rw.buf + p) != COL_I64 { free(rw.buf); R 5 }
+    I load_byte(rw.buf + p) != COL_I64 { free(rw.buf); return 5 }
     p = p + 1
-    I load_i64(rw.buf + p) != 100 { free(rw.buf); R 6 }
+    I load_i64(rw.buf + p) != 100 { free(rw.buf); return 6 }
     p = p + 8
 
-    I load_byte(rw.buf + p) != COL_BOOL { free(rw.buf); R 7 }
+    I load_byte(rw.buf + p) != COL_BOOL { free(rw.buf); return 7 }
     p = p + 1
-    I load_byte(rw.buf + p) != 1 { free(rw.buf); R 8 }
+    I load_byte(rw.buf + p) != 1 { free(rw.buf); return 8 }
 
     free(rw.buf)
     0
@@ -1236,35 +1236,35 @@ fn e2e_phase55_vaisdb_btree_basic() {
 C MAX_KEYS: i64 = 7
 C NODE_SIZE: i64 = 248
 
-F node_new(is_leaf: i64) -> i64 {
+fn node_new(is_leaf: i64) -> i64 {
     n := malloc(NODE_SIZE)
     store_i64(n, is_leaf)
     store_i64(n + 8, 0)
     n
 }
 
-F node_num_keys(n: i64) -> i64 = load_i64(n + 8)
+fn node_num_keys(n: i64) -> i64 = load_i64(n + 8)
 
-F node_get_key(n: i64, i: i64) -> i64 = load_i64(n + 16 + i * 8)
-F node_set_key(n: i64, i: i64, k: i64) -> i64 { store_i64(n + 16 + i * 8, k); 0 }
+fn node_get_key(n: i64, i: i64) -> i64 = load_i64(n + 16 + i * 8)
+fn node_set_key(n: i64, i: i64, k: i64) -> i64 { store_i64(n + 16 + i * 8, k); 0 }
 
-F node_get_val(n: i64, i: i64) -> i64 = load_i64(n + 72 + i * 8)
-F node_set_val(n: i64, i: i64, v: i64) -> i64 { store_i64(n + 72 + i * 8, v); 0 }
+fn node_get_val(n: i64, i: i64) -> i64 = load_i64(n + 72 + i * 8)
+fn node_set_val(n: i64, i: i64, v: i64) -> i64 { store_i64(n + 72 + i * 8, v); 0 }
 
-F node_search(n: i64, key: i64) -> i64 {
+fn node_search(n: i64, key: i64) -> i64 {
     num := node_num_keys(n)
     i := mut 0
     L {
         I i >= num { B }
-        I node_get_key(n, i) == key { R node_get_val(n, i) }
+        I node_get_key(n, i) == key { return node_get_val(n, i) }
         i = i + 1
     }
     0
 }
 
-F node_insert_sorted(n: i64, key: i64, val: i64) -> i64 {
+fn node_insert_sorted(n: i64, key: i64, val: i64) -> i64 {
     num := node_num_keys(n)
-    I num >= MAX_KEYS { R 0 - 1 }
+    I num >= MAX_KEYS { return 0 - 1 }
 
     pos := mut num
     L {
@@ -1280,7 +1280,7 @@ F node_insert_sorted(n: i64, key: i64, val: i64) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     root := node_new(1)
 
     node_insert_sorted(root, 30, 3)
@@ -1289,28 +1289,28 @@ F main() -> i64 {
     node_insert_sorted(root, 50, 5)
     node_insert_sorted(root, 40, 4)
 
-    I node_num_keys(root) != 5 { free(root); R 1 }
+    I node_num_keys(root) != 5 { free(root); return 1 }
 
     # Keys should be sorted: 10, 20, 30, 40, 50
-    I node_get_key(root, 0) != 10 { free(root); R 2 }
-    I node_get_key(root, 1) != 20 { free(root); R 3 }
-    I node_get_key(root, 2) != 30 { free(root); R 4 }
-    I node_get_key(root, 3) != 40 { free(root); R 5 }
-    I node_get_key(root, 4) != 50 { free(root); R 6 }
+    I node_get_key(root, 0) != 10 { free(root); return 2 }
+    I node_get_key(root, 1) != 20 { free(root); return 3 }
+    I node_get_key(root, 2) != 30 { free(root); return 4 }
+    I node_get_key(root, 3) != 40 { free(root); return 5 }
+    I node_get_key(root, 4) != 50 { free(root); return 6 }
 
     # Search
-    I node_search(root, 30) != 3 { free(root); R 7 }
-    I node_search(root, 10) != 1 { free(root); R 8 }
-    I node_search(root, 99) != 0 { free(root); R 9 }
+    I node_search(root, 30) != 3 { free(root); return 7 }
+    I node_search(root, 10) != 1 { free(root); return 8 }
+    I node_search(root, 99) != 0 { free(root); return 9 }
 
     # Fill to max (7 keys)
     node_insert_sorted(root, 25, 25)
     node_insert_sorted(root, 35, 35)
-    I node_num_keys(root) != 7 { free(root); R 10 }
+    I node_num_keys(root) != 7 { free(root); return 10 }
 
     # Overflow should return -1
     result := node_insert_sorted(root, 60, 60)
-    I result != 0 - 1 { free(root); R 11 }
+    I result != 0 - 1 { free(root); return 11 }
 
     free(root)
     0
@@ -1328,15 +1328,15 @@ fn e2e_phase55_vaisdb_buffer_pool() {
 C PAGE_SIZE: i64 = 4096
 C MAX_POOL: i64 = 16
 
-S Pool {
+struct Pool {
     pages: i64,
     ids: i64,
     count: i64,
     next_id: i64
 }
 
-X Pool {
-    F new() -> Pool {
+impl Pool {
+    fn new() -> Pool {
         pages := malloc(MAX_POOL * 8)
         ids := malloc(MAX_POOL * 8)
         i := mut 0
@@ -1344,8 +1344,8 @@ X Pool {
         Pool { pages: pages, ids: ids, count: 0, next_id: 1 }
     }
 
-    F alloc(&self) -> i64 {
-        I self.count >= MAX_POOL { R 0 }
+    fn alloc(&self) -> i64 {
+        I self.count >= MAX_POOL { return 0 }
         p := malloc(PAGE_SIZE)
         id := self.next_id
         self.next_id = self.next_id + 1
@@ -1357,52 +1357,52 @@ X Pool {
         p
     }
 
-    F find(&self, id: i64, idx: i64) -> i64 {
-        I idx >= self.count { R 0 }
+    fn find(&self, id: i64, idx: i64) -> i64 {
+        I idx >= self.count { return 0 }
         pid := load_i64(self.ids + idx * 8)
         I pid == id { load_i64(self.pages + idx * 8) }
-        E { @.find(id, idx + 1) }
+        else { @.find(id, idx + 1) }
     }
 
-    F get(&self, id: i64) -> i64 = @.find(id, 0)
+    fn get(&self, id: i64) -> i64 = @.find(id, 0)
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         @.free_all(0)
         free(self.pages)
         free(self.ids)
         0
     }
 
-    F free_all(&self, idx: i64) -> i64 {
-        I idx >= self.count { R 0 }
+    fn free_all(&self, idx: i64) -> i64 {
+        I idx >= self.count { return 0 }
         pp := load_i64(self.pages + idx * 8)
         I pp != 0 { free(pp) }
         @.free_all(idx + 1)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     pool := Pool.new()
 
     p1 := pool.alloc()
-    I p1 == 0 { pool.drop(); R 1 }
+    I p1 == 0 { pool.drop(); return 1 }
     p2 := pool.alloc()
-    I p2 == 0 { pool.drop(); R 2 }
+    I p2 == 0 { pool.drop(); return 2 }
     p3 := pool.alloc()
-    I p3 == 0 { pool.drop(); R 3 }
+    I p3 == 0 { pool.drop(); return 3 }
 
-    I pool.count != 3 { pool.drop(); R 4 }
+    I pool.count != 3 { pool.drop(); return 4 }
 
     id1 := load_i64(p1)
     found1 := pool.get(id1)
-    I found1 != p1 { pool.drop(); R 5 }
+    I found1 != p1 { pool.drop(); return 5 }
 
     id3 := load_i64(p3)
     found3 := pool.get(id3)
-    I found3 != p3 { pool.drop(); R 6 }
+    I found3 != p3 { pool.drop(); return 6 }
 
     not_found := pool.get(999)
-    I not_found != 0 { pool.drop(); R 7 }
+    I not_found != 0 { pool.drop(); return 7 }
 
     pool.drop()
     0
@@ -1420,20 +1420,20 @@ fn e2e_phase55_vaisdb_table_insert_get() {
 C MAX_ROWS: i64 = 100
 C ROW_SIZE: i64 = 32
 
-S SimpleTable {
+struct SimpleTable {
     data: i64,
     count: i64,
     next_key: i64
 }
 
-X SimpleTable {
-    F new() -> SimpleTable {
+impl SimpleTable {
+    fn new() -> SimpleTable {
         d := malloc(MAX_ROWS * ROW_SIZE)
         SimpleTable { data: d, count: 0, next_key: 1 }
     }
 
-    F insert(&self, val1: i64, val2: i64) -> i64 {
-        I self.count >= MAX_ROWS { R 0 - 1 }
+    fn insert(&self, val1: i64, val2: i64) -> i64 {
+        I self.count >= MAX_ROWS { return 0 - 1 }
         pk := self.next_key
         self.next_key = self.next_key + 1
         offset := self.count * ROW_SIZE
@@ -1444,45 +1444,45 @@ X SimpleTable {
         pk
     }
 
-    F get(&self, key: i64, idx: i64) -> i64 {
-        I idx >= self.count { R 0 }
+    fn get(&self, key: i64, idx: i64) -> i64 {
+        I idx >= self.count { return 0 }
         offset := idx * ROW_SIZE
         pk := load_i64(self.data + offset)
-        I pk == key { R self.data + offset }
+        I pk == key { return self.data + offset }
         @.get(key, idx + 1)
     }
 
-    F find(&self, key: i64) -> i64 = @.get(key, 0)
+    fn find(&self, key: i64) -> i64 = @.get(key, 0)
 
-    F drop_table(&self) -> i64 { free(self.data); 0 }
+    fn drop_table(&self) -> i64 { free(self.data); 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     t := SimpleTable.new()
 
     pk1 := t.insert(100, 200)
-    I pk1 != 1 { t.drop_table(); R 1 }
+    I pk1 != 1 { t.drop_table(); return 1 }
 
     pk2 := t.insert(300, 400)
-    I pk2 != 2 { t.drop_table(); R 2 }
+    I pk2 != 2 { t.drop_table(); return 2 }
 
     pk3 := t.insert(500, 600)
-    I pk3 != 3 { t.drop_table(); R 3 }
+    I pk3 != 3 { t.drop_table(); return 3 }
 
-    I t.count != 3 { t.drop_table(); R 4 }
+    I t.count != 3 { t.drop_table(); return 4 }
 
     row_ptr := t.find(2)
-    I row_ptr == 0 { t.drop_table(); R 5 }
-    I load_i64(row_ptr) != 2 { t.drop_table(); R 6 }
-    I load_i64(row_ptr + 8) != 300 { t.drop_table(); R 7 }
-    I load_i64(row_ptr + 16) != 400 { t.drop_table(); R 8 }
+    I row_ptr == 0 { t.drop_table(); return 5 }
+    I load_i64(row_ptr) != 2 { t.drop_table(); return 6 }
+    I load_i64(row_ptr + 8) != 300 { t.drop_table(); return 7 }
+    I load_i64(row_ptr + 16) != 400 { t.drop_table(); return 8 }
 
     row1 := t.find(1)
-    I row1 == 0 { t.drop_table(); R 9 }
-    I load_i64(row1 + 8) != 100 { t.drop_table(); R 10 }
+    I row1 == 0 { t.drop_table(); return 9 }
+    I load_i64(row1 + 8) != 100 { t.drop_table(); return 10 }
 
     missing := t.find(99)
-    I missing != 0 { t.drop_table(); R 11 }
+    I missing != 0 { t.drop_table(); return 11 }
 
     idx := mut 0
     L {
@@ -1490,7 +1490,7 @@ F main() -> i64 {
         t.insert(idx, idx * 2)
         idx = idx + 1
     }
-    I t.count != 53 { t.drop_table(); R 12 }
+    I t.count != 53 { t.drop_table(); return 12 }
 
     t.drop_table()
     0
@@ -1506,9 +1506,9 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_target_ir_generation() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     puts("hello wasm")
-    R 0
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1524,8 +1524,8 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_start_entry_point() {
     let source = r#"
-F main() -> i64 {
-    R 42
+fn main() -> i64 {
+    return 42
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1541,9 +1541,9 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_malloc_implementation() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     ptr := malloc(100)
-    R 0
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1560,9 +1560,9 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_puts_wasm_write() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     puts("test output")
-    R 0
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1579,9 +1579,9 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_memory_intrinsics() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     ptr := malloc(1000000)
-    R 0
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1598,9 +1598,9 @@ F main() -> i64 {
 #[test]
 fn test_wasi_target_ir_generation() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     puts("hello wasi")
-    R 0
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1616,8 +1616,8 @@ F main() -> i64 {
 #[test]
 fn test_wasi_start_entry_point() {
     let source = r#"
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1634,9 +1634,9 @@ F main() -> i64 {
 #[test]
 fn test_wasi_fd_write_declaration() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     puts("wasi output")
-    R 0
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1652,10 +1652,10 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_free_noop() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     ptr := malloc(100)
     free(ptr)
-    R 0
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1672,9 +1672,9 @@ F main() -> i64 {
 #[test]
 fn test_wasm32_exit_trap() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     exit(1)
-    R 0
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1696,12 +1696,12 @@ F main() -> i64 {
 #[test]
 fn test_async_function_declaration() {
     let source = r#"
-A F fetch() -> i64 {
-    R 42
+A fn fetch() -> i64 {
+    return 42
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1712,13 +1712,13 @@ F main() -> i64 {
 #[test]
 fn test_plain_call_generates_call() {
     let source = r#"
-F worker() -> i64 {
-    R 1
+fn worker() -> i64 {
+    return 1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x := worker()
-    R x
+    return x
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1728,14 +1728,14 @@ F main() -> i64 {
 #[test]
 fn test_future_struct_layout() {
     let source = r#"
-S MyFuture {
+struct MyFuture {
     value: i64,
     ready: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     f := MyFuture { value: 42, ready: 0 }
-    R f.value
+    return f.value
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1746,14 +1746,14 @@ F main() -> i64 {
 #[test]
 fn test_select_pattern_match() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 1
-    result := M x {
+    result := match x {
         1 => 10,
         2 => 20,
         _ => 0
     }
-    R result
+    return result
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1764,15 +1764,15 @@ F main() -> i64 {
 #[test]
 fn test_async_channel_struct() {
     let source = r#"
-S Channel {
+struct Channel {
     buf: i64,
     len: i64,
     cap: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Channel { buf: 0, len: 0, cap: 16 }
-    R c.cap
+    return c.cap
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1783,7 +1783,7 @@ F main() -> i64 {
 #[test]
 fn test_executor_loop_pattern() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     i := mut 0
     L {
         I i >= 10 {
@@ -1791,7 +1791,7 @@ F main() -> i64 {
         }
         i = i + 1
     }
-    R i
+    return i
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1803,12 +1803,12 @@ F main() -> i64 {
 #[test]
 fn test_waker_callback_pattern() {
     let source = r#"
-F callback(x: i64) -> i64 {
-    R x + 1
+fn callback(x: i64) -> i64 {
+    return x + 1
 }
 
-F main() -> i64 {
-    R callback(41)
+fn main() -> i64 {
+    return callback(41)
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1819,14 +1819,14 @@ F main() -> i64 {
 #[test]
 fn test_async_mutex_simulation() {
     let source = r#"
-S Mutex {
+struct Mutex {
     locked: i64,
     value: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     m := Mutex { locked: 0, value: 42 }
-    R m.value
+    return m.value
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1837,7 +1837,7 @@ F main() -> i64 {
 #[test]
 fn test_timeout_pattern() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     deadline := 1000
     elapsed := mut 0
     L {
@@ -1846,7 +1846,7 @@ F main() -> i64 {
         }
         elapsed = elapsed + 1
     }
-    R elapsed
+    return elapsed
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1857,11 +1857,11 @@ F main() -> i64 {
 #[test]
 fn test_task_pool_array() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     pool := malloc(80)
     store_i64(pool, 42)
     v := load_i64(pool)
-    R v
+    return v
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -1880,11 +1880,11 @@ fn test_wasm_import_attribute_extern_function() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "js_alert")]
-    F alert(msg: *i8);
+    fn alert(msg: *i8);
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1902,10 +1902,10 @@ F main() -> i64 {
 fn test_wasm_export_attribute_function() {
     let source = r#"
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
-F main() -> i64 {
-    R add(1, 2)
+fn main() -> i64 {
+    return add(1, 2)
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1927,11 +1927,11 @@ fn test_wasm_import_default_module() {
     let source = r#"
 N "C" {
     #[wasm_import]
-    F console_log(ptr: *i8, len: i64);
+    fn console_log(ptr: *i8, len: i64);
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1950,11 +1950,11 @@ fn test_wasm_import_custom_module() {
     let source = r#"
 N "C" {
     #[wasm_import("wasi_snapshot_preview1", "fd_write")]
-    F fd_write(fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32;
+    fn fd_write(fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32;
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1972,10 +1972,10 @@ fn test_wasm_export_with_no_args() {
     // wasm_export with no args uses function name as export name
     let source = r#"
 #[wasm_export]
-F greet() -> i64 = 42
+fn greet() -> i64 = 42
 
-F main() -> i64 {
-    R greet()
+fn main() -> i64 {
+    return greet()
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -1996,20 +1996,20 @@ fn test_wasm_multiple_imports_exports() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "js_log")]
-    F js_log(ptr: *i8, len: i64);
+    fn js_log(ptr: *i8, len: i64);
 
     #[wasm_import("env", "js_alert")]
-    F js_alert(ptr: *i8, len: i64);
+    fn js_alert(ptr: *i8, len: i64);
 }
 
 #[wasm_export("add")]
-F add(a: i64, b: i64) -> i64 = a + b
+fn add(a: i64, b: i64) -> i64 = a + b
 
 #[wasm_export("multiply")]
-F multiply(a: i64, b: i64) -> i64 = a * b
+fn multiply(a: i64, b: i64) -> i64 = a * b
 
-F main() -> i64 {
-    R add(2, 3) + multiply(4, 5)
+fn main() -> i64 {
+    return add(2, 3) + multiply(4, 5)
 }
 "#;
     let module = vais_parser::parse(source).unwrap();
@@ -2035,11 +2035,11 @@ fn test_wasm_import_not_on_native_target() {
     let source = r#"
 N "C" {
     #[wasm_import("env", "js_alert")]
-    F alert(msg: *i8);
+    fn alert(msg: *i8);
 }
 
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     let ir = compile_to_ir(source).unwrap();
@@ -2132,8 +2132,8 @@ fn test_js_target_simple_function() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1, 2)
+        r#"fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1, 2)
 "#,
     )
     .unwrap();
@@ -2164,14 +2164,14 @@ fn test_js_target_struct_to_class() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"S Point {
+        r#"struct Point {
     x: i64,
     y: i64,
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 10, y: 20 }
-    R p.x + p.y
+    return p.x + p.y
 }
 "#,
     )
@@ -2203,14 +2203,14 @@ fn test_js_target_enum_tagged_union() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"E Result {
+        r#"enum Result {
     Ok(i64),
     Err(i64),
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := Ok(42)
-    M r {
+    match r {
         Ok(v) => v,
         Err(_) => 0,
     }
@@ -2245,15 +2245,15 @@ fn test_js_target_if_else() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"F max(a: i64, b: i64) -> i64 {
+        r#"fn max(a: i64, b: i64) -> i64 {
     I a > b {
-        R a
-    } E {
-        R b
+        return a
+    } else {
+        return b
     }
 }
 
-F main() -> i64 = max(5, 3)
+fn main() -> i64 = max(5, 3)
 "#,
     )
     .unwrap();
@@ -2284,9 +2284,9 @@ fn test_js_target_array_operations() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"F main() -> i64 {
+        r#"fn main() -> i64 {
     arr := [1, 2, 3, 4, 5]
-    R arr[2]
+    return arr[2]
 }
 "#,
     )
@@ -2317,11 +2317,11 @@ fn test_js_target_lambda_arrow() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"F apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
+        r#"fn apply(f: fn(i64) -> i64, x: i64) -> i64 = f(x)
 
-F main() -> i64 {
+fn main() -> i64 {
     double := |x: i64| x * 2
-    R apply(double, 5)
+    return apply(double, 5)
 }
 "#,
     )
@@ -2353,8 +2353,8 @@ fn test_js_target_match_expression() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"F classify(n: i64) -> i64 {
-    M n {
+        r#"fn classify(n: i64) -> i64 {
+    match n {
         0 => 0,
         1 => 10,
         2 => 20,
@@ -2362,7 +2362,7 @@ fn test_js_target_match_expression() {
     }
 }
 
-F main() -> i64 = classify(2)
+fn main() -> i64 = classify(2)
 "#,
     )
     .unwrap();
@@ -2396,7 +2396,7 @@ fn test_js_target_loop_for_of() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"F sum_loop(n: i64) -> i64 {
+        r#"fn sum_loop(n: i64) -> i64 {
     total := mut 0
     i := mut 0
     L {
@@ -2404,10 +2404,10 @@ fn test_js_target_loop_for_of() {
         total := total + i
         i := i + 1
     }
-    R total
+    return total
 }
 
-F main() -> i64 = sum_loop(5)
+fn main() -> i64 = sum_loop(5)
 "#,
     )
     .unwrap();
@@ -2438,11 +2438,11 @@ fn test_js_target_tree_shaking() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"F used() -> i64 = 42
+        r#"fn used() -> i64 = 42
 
-F unused() -> i64 = 999
+fn unused() -> i64 = 999
 
-F main() -> i64 = used()
+fn main() -> i64 = used()
 "#,
     )
     .unwrap();
@@ -2475,7 +2475,7 @@ fn test_js_target_output_extension() {
     let input = tmp.path().join("test.vais");
     fs::write(
         &input,
-        r#"F main() -> i64 = 42
+        r#"fn main() -> i64 = 42
 "#,
     )
     .unwrap();
@@ -2530,18 +2530,18 @@ fn test_js_target_output_extension() {
 #[test]
 fn test_typed_memory_type_size_basic() {
     let source = r#"
-        S Vec<T> {
+        struct Vec<T> {
             elem_size: i64
         }
 
-        X Vec<T> {
-            F new() -> Vec<T> {
+        impl Vec<T> {
+            fn new() -> Vec<T> {
                 es := type_size()
                 Vec { elem_size: es }
             }
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             v := Vec.new()
             v.elem_size
         }
@@ -2560,7 +2560,7 @@ fn test_typed_memory_type_size_basic() {
 #[test]
 fn test_typed_memory_load_store_i64() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             ptr := malloc(16)
             store_typed(ptr, 42)
             value := load_typed(ptr)
@@ -2582,28 +2582,28 @@ fn test_typed_memory_load_store_i64() {
 #[test]
 fn test_typed_memory_type_size_builtin() {
     let source = r#"
-        S Vec<T> {
+        struct Vec<T> {
             data: i64,
             len: i64,
             cap: i64,
             elem_size: i64
         }
 
-        X Vec<T> {
-            F with_capacity(capacity: i64) -> Vec<T> {
+        impl Vec<T> {
+            fn with_capacity(capacity: i64) -> Vec<T> {
                 es := type_size()
-                elem_sz := I es <= 0 { 8 } E I es > 8 { 8 } E { es }
+                elem_sz := I es <= 0 { 8 } else I es > 8 { 8 } else { es }
                 data := malloc(capacity * elem_sz)
                 Vec { data: data, len: 0, cap: capacity, elem_size: elem_sz }
             }
 
-            F drop(&self) -> i64 {
+            fn drop(&self) -> i64 {
                 free(self.data)
                 0
             }
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             v := Vec.with_capacity(4)
             print_i64(v.elem_size)
             v.drop()
@@ -2625,7 +2625,7 @@ fn test_typed_memory_type_size_builtin() {
 #[test]
 fn test_typed_memory_load_store_i32() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             ptr := malloc(16)
             store_typed(ptr, 42)
             store_typed(ptr + 4, 100)
@@ -2649,38 +2649,38 @@ fn test_typed_memory_load_store_i32() {
 #[test]
 fn test_typed_memory_vec_simple() {
     let source = r#"
-        S Vec<T> {
+        struct Vec<T> {
             data: i64,
             len: i64,
             elem_size: i64
         }
 
-        X Vec<T> {
-            F new() -> Vec<T> {
+        impl Vec<T> {
+            fn new() -> Vec<T> {
                 es := type_size()
                 data := malloc(16 * es)
                 Vec { data: data, len: 0, elem_size: es }
             }
 
-            F push(&self, value: T) -> i64 {
+            fn push(&self, value: T) -> i64 {
                 ptr := self.data + self.len * self.elem_size
                 store_typed(ptr, value)
                 self.len = self.len + 1
                 self.len
             }
 
-            F get(&self, index: i64) -> T {
+            fn get(&self, index: i64) -> type {
                 ptr := self.data + index * self.elem_size
                 load_typed(ptr)
             }
 
-            F drop(&self) -> i64 {
+            fn drop(&self) -> i64 {
                 free(self.data)
                 0
             }
         }
 
-        F main() -> i64 {
+        fn main() -> i64 {
             v := Vec.new()
             v.push(10)
             v.push(20)
@@ -2706,7 +2706,7 @@ fn test_typed_memory_vec_simple() {
 #[test]
 fn test_typed_memory_array_operations() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             ptr := malloc(32)
             store_typed(ptr + 0, 5)
             store_typed(ptr + 8, 15)
@@ -2734,7 +2734,7 @@ fn test_typed_memory_array_operations() {
 #[test]
 fn test_typed_memory_sequential_ops() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             ptr := malloc(64)
 
             store_typed(ptr + 0, 1)
@@ -2767,7 +2767,7 @@ fn test_typed_memory_sequential_ops() {
 #[test]
 fn test_typed_memory_overwrite() {
     let source = r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             ptr := malloc(16)
 
             store_typed(ptr, 100)
@@ -2798,19 +2798,19 @@ fn test_typed_memory_overwrite() {
 #[test]
 fn test_trait_dispatch_basic() {
     let source = r#"
-W Printable {
-    F display(&self) -> i64
+trait Printable {
+    fn display(&self) -> i64
 }
 
-S Point { x: i64, y: i64 }
+struct Point { x: i64, y: i64 }
 
-X Point: Printable {
-    F display(&self) -> i64 {
+impl Point: Printable {
+    fn display(&self) -> i64 {
         self.x + self.y
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 3, y: 4 }
     p.display()
 }
@@ -2829,26 +2829,26 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_multiple_structs() {
     let source = r#"
-W Calculable {
-    F compute(&self) -> i64
+trait Calculable {
+    fn compute(&self) -> i64
 }
 
-S Circle { radius: i64 }
-S Square { side: i64 }
+struct Circle { radius: i64 }
+struct Square { side: i64 }
 
-X Circle: Calculable {
-    F compute(&self) -> i64 {
+impl Circle: Calculable {
+    fn compute(&self) -> i64 {
         self.radius * self.radius * 3
     }
 }
 
-X Square: Calculable {
-    F compute(&self) -> i64 {
+impl Square: Calculable {
+    fn compute(&self) -> i64 {
         self.side * self.side
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Circle { radius: 5 }
     s := Square { side: 4 }
     c.compute() + s.compute()
@@ -2868,26 +2868,26 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_polymorphism() {
     let source = r#"
-W Summable {
-    F sum(&self) -> i64
+trait Summable {
+    fn sum(&self) -> i64
 }
 
-S Pair { a: i64, b: i64 }
-S Triple { a: i64, b: i64, c: i64 }
+struct Pair { a: i64, b: i64 }
+struct Triple { a: i64, b: i64, c: i64 }
 
-X Pair: Summable {
-    F sum(&self) -> i64 {
+impl Pair: Summable {
+    fn sum(&self) -> i64 {
         self.a + self.b
     }
 }
 
-X Triple: Summable {
-    F sum(&self) -> i64 {
+impl Triple: Summable {
+    fn sum(&self) -> i64 {
         self.a + self.b + self.c
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Pair { a: 10, b: 20 }
     t := Triple { a: 1, b: 2, c: 3 }
     p.sum() + t.sum()
@@ -2907,19 +2907,19 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_self_field_access() {
     let source = r#"
-W Incrementable {
-    F increment(&self) -> i64
+trait Incrementable {
+    fn increment(&self) -> i64
 }
 
-S Counter { value: i64, step: i64 }
+struct Counter { value: i64, step: i64 }
 
-X Counter: Incrementable {
-    F increment(&self) -> i64 {
+impl Counter: Incrementable {
+    fn increment(&self) -> i64 {
         self.value + self.step
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Counter { value: 100, step: 7 }
     c.increment()
 }
@@ -2938,29 +2938,29 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_multiple_traits_one_struct() {
     let source = r#"
-W Addable {
-    F add(&self) -> i64
+trait Addable {
+    fn add(&self) -> i64
 }
 
-W Multipliable {
-    F multiply(&self) -> i64
+trait Multipliable {
+    fn multiply(&self) -> i64
 }
 
-S Numbers { a: i64, b: i64 }
+struct Numbers { a: i64, b: i64 }
 
-X Numbers: Addable {
-    F add(&self) -> i64 {
+impl Numbers: Addable {
+    fn add(&self) -> i64 {
         self.a + self.b
     }
 }
 
-X Numbers: Multipliable {
-    F multiply(&self) -> i64 {
+impl Numbers: Multipliable {
+    fn multiply(&self) -> i64 {
         self.a * self.b
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     n := Numbers { a: 5, b: 3 }
     n.add() + n.multiply()
 }
@@ -2979,19 +2979,19 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_return_value_usage() {
     let source = r#"
-W Evaluable {
-    F evaluate(&self) -> i64
+trait Evaluable {
+    fn evaluate(&self) -> i64
 }
 
-S Expression { left: i64, right: i64 }
+struct Expression { left: i64, right: i64 }
 
-X Expression: Evaluable {
-    F evaluate(&self) -> i64 {
+impl Expression: Evaluable {
+    fn evaluate(&self) -> i64 {
         self.left * 10 + self.right
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     e := Expression { left: 4, right: 2 }
     result := e.evaluate()
     result * 2
@@ -3011,29 +3011,29 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_chain_calls() {
     let source = r#"
-W Doubler {
-    F double(&self) -> i64
+trait Doubler {
+    fn double(&self) -> i64
 }
 
-W Tripler {
-    F triple(&self) -> i64
+trait Tripler {
+    fn triple(&self) -> i64
 }
 
-S Value { n: i64 }
+struct Value { n: i64 }
 
-X Value: Doubler {
-    F double(&self) -> i64 {
+impl Value: Doubler {
+    fn double(&self) -> i64 {
         self.n * 2
     }
 }
 
-X Value: Tripler {
-    F triple(&self) -> i64 {
+impl Value: Tripler {
+    fn triple(&self) -> i64 {
         self.n * 3
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Value { n: 5 }
     d := v.double()
     t := v.triple()
@@ -3054,23 +3054,23 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_conditional() {
     let source = r#"
-W Checker {
-    F check(&self) -> i64
+trait Checker {
+    fn check(&self) -> i64
 }
 
-S Data { flag: i64, value: i64 }
+struct Data { flag: i64, value: i64 }
 
-X Data: Checker {
-    F check(&self) -> i64 {
+impl Data: Checker {
+    fn check(&self) -> i64 {
         I self.flag > 0 {
-            R self.value
-        } E {
-            R 0
+            return self.value
+        } else {
+            return 0
         }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     d1 := Data { flag: 1, value: 42 }
     d2 := Data { flag: 0, value: 99 }
     d1.check() + d2.check()
@@ -3090,21 +3090,21 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_nested_operations() {
     let source = r#"
-W Calculator {
-    F calculate(&self) -> i64
+trait Calculator {
+    fn calculate(&self) -> i64
 }
 
-S Operation { x: i64, y: i64, z: i64 }
+struct Operation { x: i64, y: i64, z: i64 }
 
-X Operation: Calculator {
-    F calculate(&self) -> i64 {
+impl Operation: Calculator {
+    fn calculate(&self) -> i64 {
         result := self.x + self.y
         result := result * self.z
         result
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     op := Operation { x: 2, y: 3, z: 4 }
     op.calculate()
 }
@@ -3123,19 +3123,19 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_zero_fields() {
     let source = r#"
-W Provider {
-    F provide(&self) -> i64
+trait Provider {
+    fn provide(&self) -> i64
 }
 
-S Unit {}
+struct Unit {}
 
-X Unit: Provider {
-    F provide(&self) -> i64 {
+impl Unit: Provider {
+    fn provide(&self) -> i64 {
         42
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     u := Unit {}
     u.provide()
 }
@@ -3154,29 +3154,29 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_complex_calculation() {
     let source = r#"
-W AreaCalculator {
-    F area(&self) -> i64
+trait AreaCalculator {
+    fn area(&self) -> i64
 }
 
-W PerimeterCalculator {
-    F perimeter(&self) -> i64
+trait PerimeterCalculator {
+    fn perimeter(&self) -> i64
 }
 
-S Rectangle { width: i64, height: i64 }
+struct Rectangle { width: i64, height: i64 }
 
-X Rectangle: AreaCalculator {
-    F area(&self) -> i64 {
+impl Rectangle: AreaCalculator {
+    fn area(&self) -> i64 {
         self.width * self.height
     }
 }
 
-X Rectangle: PerimeterCalculator {
-    F perimeter(&self) -> i64 {
+impl Rectangle: PerimeterCalculator {
+    fn perimeter(&self) -> i64 {
         (self.width + self.height) * 2
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := Rectangle { width: 5, height: 3 }
     a := r.area()
     p := r.perimeter()
@@ -3197,19 +3197,19 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_negative_values() {
     let source = r#"
-W Negator {
-    F negate(&self) -> i64
+trait Negator {
+    fn negate(&self) -> i64
 }
 
-S SignedValue { value: i64 }
+struct SignedValue { value: i64 }
 
-X SignedValue: Negator {
-    F negate(&self) -> i64 {
+impl SignedValue: Negator {
+    fn negate(&self) -> i64 {
         0 - self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := SignedValue { value: 50 }
     n := v.negate()
     n + 100
@@ -3229,19 +3229,19 @@ F main() -> i64 {
 #[test]
 fn test_trait_dispatch_multiple_instances() {
     let source = r#"
-W Scorer {
-    F score(&self) -> i64
+trait Scorer {
+    fn score(&self) -> i64
 }
 
-S Player { points: i64, bonus: i64 }
+struct Player { points: i64, bonus: i64 }
 
-X Player: Scorer {
-    F score(&self) -> i64 {
+impl Player: Scorer {
+    fn score(&self) -> i64 {
         self.points + self.bonus
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p1 := Player { points: 10, bonus: 5 }
     p2 := Player { points: 20, bonus: 3 }
     p3 := Player { points: 15, bonus: 7 }
@@ -3264,11 +3264,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_type_parse() {
     let source = r#"
-F foo(s: &[i64]) -> i64 {
+fn foo(s: &[i64]) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3278,11 +3278,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_mut_type_parse() {
     let source = r#"
-F bar(s: &mut [i64]) {
+fn bar(s: &mut [i64]) {
     s[0] = 42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3294,11 +3294,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_len_method() {
     let source = r#"
-F baz(s: &[i64]) -> i64 {
+fn baz(s: &[i64]) -> i64 {
     s.len()
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3310,11 +3310,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_nested_generic() {
     let source = r#"
-F qux(s: &[&[i64]]) -> i64 {
+fn qux(s: &[&[i64]]) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3324,11 +3324,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_param_return() {
     let source = r#"
-F identity(s: &[i64]) -> &[i64] {
+fn identity(s: &[i64]) -> &[i64] {
     s
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3338,11 +3338,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_with_str() {
     let source = r#"
-F first_char(s: &[str]) -> str {
+fn first_char(s: &[str]) -> str {
     "empty"
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3352,11 +3352,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_in_struct() {
     let source = r#"
-S Foo {
+struct Foo {
     data: &[i64]
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3366,11 +3366,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_mut_len() {
     let source = r#"
-F len_mut(s: &mut [f64]) -> i64 {
+fn len_mut(s: &mut [f64]) -> i64 {
     s.len()
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3382,11 +3382,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_multi_param() {
     let source = r#"
-F add_first(a: &[i64], b: &[i64]) -> i64 {
+fn add_first(a: &[i64], b: &[i64]) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3396,11 +3396,11 @@ F main() -> i64 {
 #[test]
 fn test_slice_return_type() {
     let source = r#"
-F get_slice(input: &[i64]) -> &[i64] {
+fn get_slice(input: &[i64]) -> &[i64] {
     input
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     0
 }
 "#;
@@ -3412,15 +3412,15 @@ F main() -> i64 {
 #[test]
 fn e2e_str_reuse_double_comparison() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello"
     I s == "hello" {
         I s == "hello" {
             1
-        } E {
+        } else {
             0
         }
-    } E {
+    } else {
         0
     }
 }
@@ -3431,17 +3431,17 @@ F main() -> i64 {
 #[test]
 fn e2e_str_comparison_and_use() {
     let source = r#"
-F check(s: str) -> i64 {
+fn check(s: str) -> i64 {
     I s == "world" {
         1
-    } E {
+    } else {
         0
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s := "world"
-    result := I s == "world" { 1 } E { 0 }
+    result := I s == "world" { 1 } else { 0 }
     # Use s again after comparison
     check_result := check(s)
     result + check_result
@@ -3453,15 +3453,15 @@ F main() -> i64 {
 #[test]
 fn e2e_str_param_comparison() {
     let source = r#"
-F check_str(input: str) -> i64 {
+fn check_str(input: str) -> i64 {
     I input == "test" {
         42
-    } E {
+    } else {
         0
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     check_str("test")
 }
 "#;
@@ -3471,7 +3471,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_multiple_comparisons() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := "foo"
     b := "bar"
     c := "foo"
@@ -3496,7 +3496,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_comparison_in_loop() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     target := "match"
     count := mut 0
     i := mut 0
@@ -3504,7 +3504,7 @@ F main() -> i64 {
         I i >= 3 {
             B
         }
-        test := I i == 1 { "match" } E { "other" }
+        test := I i == 1 { "match" } else { "other" }
         I test == target {
             count = count + 1
         }
@@ -3519,15 +3519,15 @@ F main() -> i64 {
 #[test]
 fn e2e_str_comparison_inequality() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello"
     I s != "world" {
         I s == "hello" {
             42
-        } E {
+        } else {
             0
         }
-    } E {
+    } else {
         0
     }
 }
@@ -3538,10 +3538,10 @@ F main() -> i64 {
 #[test]
 fn test_type_alias_i_as_i64_param() {
     let source = r#"
-F add(x: i, y: i) -> i {
+fn add(x: i, y: i) -> i {
     x + y
 }
-F main() -> i64 {
+fn main() -> i64 {
     add(20, 22)
 }
 "#;
@@ -3551,10 +3551,10 @@ F main() -> i64 {
 #[test]
 fn test_type_alias_i_as_i64_return() {
     let source = r#"
-F double(x: i64) -> i {
+fn double(x: i64) -> i {
     x * 2
 }
-F main() -> i64 {
+fn main() -> i64 {
     double(21)
 }
 "#;
@@ -3564,7 +3564,7 @@ F main() -> i64 {
 #[test]
 fn test_type_alias_i_as_i64_variable() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x: i = 42
     x
 }
@@ -3575,8 +3575,8 @@ F main() -> i64 {
 #[test]
 fn test_struct_tuple_literal_basic() {
     let source = r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point(40, 2)
     p.x + p.y
 }
@@ -3587,11 +3587,11 @@ F main() -> i64 {
 #[test]
 fn test_struct_tuple_literal_nested() {
     let source = r#"
-S Pair { a: i64, b: i64 }
-F make(x: i64, y: i64) -> Pair {
+struct Pair { a: i64, b: i64 }
+fn make(x: i64, y: i64) -> Pair {
     Pair(x, y)
 }
-F main() -> i64 {
+fn main() -> i64 {
     p := make(20, 22)
     p.a + p.b
 }
@@ -3602,8 +3602,8 @@ F main() -> i64 {
 #[test]
 fn test_struct_tuple_literal_three_fields() {
     let source = r#"
-S Triple { x: i64, y: i64, z: i64 }
-F main() -> i64 {
+struct Triple { x: i64, y: i64, z: i64 }
+fn main() -> i64 {
     t := Triple(10, 20, 12)
     t.x + t.y + t.z
 }
@@ -3617,7 +3617,7 @@ F main() -> i64 {
 fn test_main_auto_return_println() {
     // main() without -> i64 should auto-return 0
     let source = r#"
-F main() {
+fn main() {
     println("hello")
 }
 "#;
@@ -3628,7 +3628,7 @@ F main() {
 fn test_main_auto_return_empty() {
     // main() with empty body should auto-return 0
     let source = r#"
-F main() {
+fn main() {
 }
 "#;
     assert_exit_code(source, 0);
@@ -3638,7 +3638,7 @@ F main() {
 fn test_main_auto_return_with_loop() {
     // main() with loop and no explicit return
     let source = r#"
-F main() {
+fn main() {
     x := mut 0
     L i:0..5 {
         x += i
@@ -3653,7 +3653,7 @@ F main() {
 fn test_main_explicit_return_still_works() {
     // main() -> i64 with explicit return still works
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     42
 }
 "#;
@@ -3662,10 +3662,10 @@ F main() -> i64 {
 
 #[test]
 fn test_main_auto_return_explicit_r() {
-    // F main() { R 5 } — explicit return in auto-return main
+    // F main() { return 5 } — explicit return in auto-return main
     let source = r#"
-F main() {
-    R 5
+fn main() {
+    return 5
 }
 "#;
     assert_exit_code(source, 5);
@@ -3675,7 +3675,7 @@ F main() {
 fn test_main_auto_return_expression_body() {
     // F main() { 42 } — expression value without -> i64 annotation (implicit i64 return)
     let source = r#"
-F main() {
+fn main() {
     42
 }
 "#;
@@ -3686,7 +3686,7 @@ F main() {
 fn test_swap_builtin_basic() {
     // swap(ptr, idx1, idx2) swaps two i64 elements
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr: *i64 = [10, 20, 30]
     swap(arr, 0, 2)
     arr[0] - arr[2]
@@ -3700,7 +3700,7 @@ F main() -> i64 {
 fn test_swap_builtin_same_index() {
     // swap with same index should be no-op
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr: *i64 = [42, 99]
     swap(arr, 0, 0)
     arr[0]
@@ -3713,10 +3713,10 @@ F main() -> i64 {
 fn test_swap_builtin_in_function() {
     // swap called from another function
     let source = r#"
-F do_swap(arr: *i64, i: i64, j: i64) {
+fn do_swap(arr: *i64, i: i64, j: i64) {
     swap(arr, i, j)
 }
-F main() -> i64 {
+fn main() -> i64 {
     arr: *i64 = [10, 20, 30]
     do_swap(arr, 0, 2)
     arr[0] - arr[2]
@@ -3730,7 +3730,7 @@ F main() -> i64 {
 fn test_swap_builtin_multiple() {
     // Two consecutive swaps verify both work correctly
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     arr: *i64 = [5, 3, 1, 4, 2]
     swap(arr, 0, 2)
     swap(arr, 3, 4)

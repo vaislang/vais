@@ -417,7 +417,8 @@ impl TypeChecker {
             let arg_type = self.check_expr(arg)?;
             // Substitute generic parameters with type variables in the parameter type
             let expected_type = self.substitute_generics(param_type, &generic_substitutions);
-            self.unify(&expected_type, &arg_type)?;
+            self.unify(&expected_type, &arg_type)
+                .map_err(|e| e.with_span(arg.span))?;
         }
 
         // Apply substitutions to infer concrete generic types
@@ -449,6 +450,7 @@ impl TypeChecker {
                 let callee = GenericCallee {
                     callee_name: sig.name.clone(),
                     type_args: inferred_type_args.clone(),
+                    method_info: None,
                 };
                 if let Some(caller_sig) = self.functions.get_mut(caller_name) {
                     // Avoid duplicates
@@ -508,7 +510,7 @@ impl TypeChecker {
     /// `caller_generics`: the generic param names of the caller (e.g., ["T"])
     /// `caller_type_args`: the concrete type args for this instantiation (e.g., [i64])
     /// `visiting`: cycle guard set to prevent infinite recursion
-    fn propagate_transitive_instantiations(
+    pub(crate) fn propagate_transitive_instantiations(
         &mut self,
         caller_name: &str,
         caller_generics: &[String],
@@ -548,27 +550,38 @@ impl TypeChecker {
                 .all(|t| !matches!(t, ResolvedType::Generic(_) | ResolvedType::Var(_)));
 
             if all_concrete {
-                let inst = GenericInstantiation::function(
-                    &callee.callee_name,
-                    concrete_callee_args.clone(),
-                );
+                // Phase 0 bug C16 fix: when this callee is a static method
+                // call (method_info is Some), register a Method-kind
+                // instantiation so codegen's spec pipeline picks it up.
+                // Otherwise register a Function-kind instantiation as before.
+                let inst = if let Some((ref ty, ref m)) = callee.method_info {
+                    GenericInstantiation::method(ty, m, concrete_callee_args.clone())
+                } else {
+                    GenericInstantiation::function(
+                        &callee.callee_name,
+                        concrete_callee_args.clone(),
+                    )
+                };
                 // add_instantiation deduplicates via HashSet
                 self.add_instantiation(inst);
 
-                // Recursively propagate to the callee's callees
-                let callee_generics: Vec<String> = self
-                    .functions
-                    .get(&callee.callee_name)
-                    .map(|sig| sig.generics.clone())
-                    .unwrap_or_default();
+                // Recursively propagate to the callee's callees (only for
+                // function callees — methods don't propagate further today).
+                if callee.method_info.is_none() {
+                    let callee_generics: Vec<String> = self
+                        .functions
+                        .get(&callee.callee_name)
+                        .map(|sig| sig.generics.clone())
+                        .unwrap_or_default();
 
-                if !callee_generics.is_empty() {
-                    self.propagate_transitive_instantiations(
-                        &callee.callee_name,
-                        &callee_generics,
-                        &concrete_callee_args,
-                        visiting,
-                    );
+                    if !callee_generics.is_empty() {
+                        self.propagate_transitive_instantiations(
+                            &callee.callee_name,
+                            &callee_generics,
+                            &concrete_callee_args,
+                            visiting,
+                        );
+                    }
                 }
             }
         }

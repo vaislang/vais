@@ -69,26 +69,39 @@ pub(crate) fn load_module_with_imports_internal(
         .canonicalize()
         .map_err(|e| format!("Cannot resolve path '{}': {}", path.display(), e))?;
 
-    // Check for circular imports (module already in loading stack)
+    // Phase 6.27c.1: tolerate circular imports. Previously this was a
+    // hard error, which blocks cross-file `X Parser` extension files
+    // (parser_expr.vais needs parse_select from parser_select.vais and
+    // vice versa). On cycle detection, return an empty Module — the
+    // other side of the cycle has already inserted the types/X blocks
+    // that this leg needs, so the second visit has nothing to add.
     if loading_stack.contains(&canonical) {
-        // Build error message showing the import chain
-        let mut chain: Vec<String> = loading_stack
-            .iter()
-            .map(|p| {
-                p.file_name()
+        if verbose {
+            let mut chain: Vec<String> = loading_stack
+                .iter()
+                .map(|p| {
+                    p.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string()
+                })
+                .collect();
+            chain.push(
+                canonical
+                    .file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
-                    .to_string()
-            })
-            .collect();
-        chain.push(
-            canonical
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string(),
-        );
-        return Err(format!("Circular import detected: {}", chain.join(" → ")));
+                    .to_string(),
+            );
+            eprintln!(
+                "note: import cycle (benign, truncating revisit): {}",
+                chain.join(" → ")
+            );
+        }
+        return Ok(Module {
+            items: vec![],
+            modules_map: None,
+        });
     }
 
     // Skip if already loaded (completed loading)
@@ -135,7 +148,10 @@ pub(crate) fn load_module_with_imports_internal(
     // Collect items, processing imports, and build modules_map for per-module codegen
     let mut all_items = Vec::new();
     let mut modules_map: HashMap<PathBuf, Vec<usize>> = HashMap::new();
-    let base_dir = path.parent().unwrap_or(Path::new("."));
+    let base_dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
 
     for item in ast.items.iter() {
         match &item.node {
@@ -269,7 +285,10 @@ pub(crate) fn load_module_with_imports_parallel(
         println!("  {} items", ast.items.len());
     }
 
-    let base_dir = path.parent().unwrap_or(Path::new("."));
+    let base_dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
 
     // Phase 1: Collect all import paths first
     let mut import_paths: Vec<PathBuf> = Vec::new();

@@ -1,0 +1,14 @@
+# CHECKS: B (break) inside infinite LW loop — exits when condition met
+# Vais uses single-char keyword: B = break, C = continue.
+fn main() -> i64 {
+    i: i64 := mut 0
+    sum: i64 := mut 0
+    LW true {
+        i = i + 1
+        I i > 5 { B }
+        sum = sum + i
+    }
+    # 1+2+3+4+5 = 15
+    I sum != 15 { return 1 }
+    return 0
+}

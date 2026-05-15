@@ -31,7 +31,7 @@ fn compile_strict(source: &str) -> Result<String, String> {
 #[test]
 fn strict_basic_arithmetic() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 10
     y := 20
     x + y
@@ -44,11 +44,11 @@ F main() -> i64 {
 #[test]
 fn strict_function_calls() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 {
+fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     add(3, 4)
 }
 "#;
@@ -59,12 +59,12 @@ F main() -> i64 {
 #[test]
 fn strict_struct_creation() {
     let source = r#"
-S Point {
+struct Point {
     x: i64,
     y: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 10, y: 20 }
     p.x + p.y
 }
@@ -76,9 +76,9 @@ F main() -> i64 {
 #[test]
 fn strict_conditionals_and_loops() {
     let source = r#"
-F main() -> i64 {
-    sum := 0
-    i := 0
+fn main() -> i64 {
+    sum := mut 0
+    i := mut 0
     L i < 10 {
         sum = sum + i
         i = i + 1
@@ -93,15 +93,15 @@ F main() -> i64 {
 #[test]
 fn strict_match_expression() {
     let source = r#"
-F classify(x: i64) -> i64 {
-    M x {
+fn classify(x: i64) -> i64 {
+    match x {
         0 => 0,
         1 => 1,
         _ => 2
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     classify(5)
 }
 "#;
@@ -112,7 +112,7 @@ F main() -> i64 {
 #[test]
 fn strict_string_constants() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     msg := "hello"
     0
 }
@@ -124,16 +124,16 @@ F main() -> i64 {
 #[test]
 fn strict_nested_structs() {
     let source = r#"
-S Inner {
+struct Inner {
     value: i64
 }
 
-S Outer {
+struct Outer {
     a: Inner,
     b: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     inner := Inner { value: 42 }
     outer := Outer { a: inner, b: 10 }
     outer.a.value + outer.b
@@ -147,21 +147,21 @@ F main() -> i64 {
 #[test]
 fn strict_impl_methods() {
     let source = r#"
-S Counter {
+struct Counter {
     count: i64
 }
 
-X Counter {
-    F new() -> Counter {
+impl Counter {
+    fn new() -> Counter {
         Counter { count: 0 }
     }
 
-    F get(&self) -> i64 {
+    fn get(&self) -> i64 {
         self.count
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Counter::new()
     c.get()
 }
@@ -173,15 +173,15 @@ F main() -> i64 {
 #[test]
 fn strict_recursive_function() {
     let source = r#"
-F factorial(n: i64) -> i64 {
+fn factorial(n: i64) -> i64 {
     I n <= 1 {
         1
-    } E {
+    } else {
         n * @(n - 1)
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     factorial(5)
 }
 "#;
@@ -195,7 +195,7 @@ fn strict_constants() {
 C MAX_SIZE: i64 = 100
 C PI_APPROX: f64 = 3.14
 
-F main() -> i64 {
+fn main() -> i64 {
     MAX_SIZE
 }
 "#;
@@ -219,7 +219,7 @@ fn no_crash_on_empty_source() {
 fn no_crash_on_deeply_nested_expressions() {
     // Build a moderately nested expression: ((((1 + 1) + 1) + 1) ...)
     // Keep depth low to avoid stack overflow (parser is recursive descent)
-    let mut source = String::from("F main() -> i64 {\n    ");
+    let mut source = String::from("fn main() -> i64 {\n    ");
     let depth = 10;
     for _ in 0..depth {
         source.push('(');
@@ -240,7 +240,7 @@ fn no_crash_on_deeply_nested_expressions() {
 
 #[test]
 fn no_crash_on_invalid_syntax() {
-    let source = "F main( { }}}}";
+    let source = "fn main( { }}}}";
     let result = compile_strict(source);
     // Should return Err, not panic
     assert!(result.is_err());
@@ -249,7 +249,7 @@ fn no_crash_on_invalid_syntax() {
 #[test]
 fn no_crash_on_type_mismatch() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := "hello"
     x + 5
 }

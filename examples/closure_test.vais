@@ -1,24 +1,24 @@
 # Closure test - lambda with captured variables
 
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     # Print hundreds digit
     d2 := n / 100
     I d2 > 0 {
         putchar(d2 + 48)
-    } EL { 0 }
+    } else { 0 }
 
     # Print tens digit
     d1 := (n / 10) % 10
     I n >= 10 {
         putchar(d1 + 48)
-    } EL { 0 }
+    } else { 0 }
 
     # Print ones digit
     putchar(n % 10 + 48)
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Closure Test ===")
 
     # Test 1: Simple capture

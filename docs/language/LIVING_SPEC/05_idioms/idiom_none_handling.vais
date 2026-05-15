@@ -1,0 +1,15 @@
+# LIVING_SPEC/05_idioms/idiom_none_handling.vais
+# Key concept: None 처리는 항상 의미 있는 기본값 지정.
+# ✅ DO: M으로 Some/None 명시 분기, 기본값 결정.
+# ❌ DON'T: unwrap은 None에서 panic — 프로덕션 코드에서 피함.
+
+fn safe_get(opt: Option<i64>) -> i64 {
+    match opt {
+        Some(v) => v,
+        None => 0  # 의미 있는 fallback
+    }
+}
+
+fn main() -> i64 {
+    safe_get(Some(42)) + safe_get(None)
+}

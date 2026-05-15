@@ -9,10 +9,10 @@ fn test_extract_doc_comments() {
     let source = r#"
 /// This is a function
 /// that adds two numbers
-F add(a:i64,b:i64)->i64=a+b
+fn add(a:i64,b:i64)->i64=a+b
 "#;
     let lines: Vec<&str> = source.lines().collect();
-    let docs = extract_doc_comments(&lines, 50); // Position of F
+    let docs = extract_doc_comments(&lines, 50); // Position of fn
     assert_eq!(docs.len(), 2);
     assert_eq!(docs[0], "This is a function");
     assert_eq!(docs[1], "that adds two numbers");
@@ -23,17 +23,17 @@ fn test_parse_examples() {
     let docs = vec![
         "This is a test".to_string(),
         "```vais".to_string(),
-        "F test()->i64=42".to_string(),
+        "fn test()->i64=42".to_string(),
         "```".to_string(),
     ];
     let examples = parse_examples(&docs);
     assert_eq!(examples.len(), 1);
-    assert!(examples[0].contains("F test()->i64=42"));
+    assert!(examples[0].contains("fn test()->i64=42"));
 }
 
 #[test]
 fn test_extract_function_doc() {
-    let source = "F add(a:i64,b:i64)->i64=a+b";
+    let source = "fn add(a:i64,b:i64)->i64=a+b";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Function(f) = &ast.items[0].node {
@@ -48,7 +48,7 @@ fn test_extract_function_doc() {
 
 #[test]
 fn test_extract_struct_doc() {
-    let source = "S Point{x:i64,y:i64}";
+    let source = "struct Point{x:i64,y:i64}";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Struct(s) = &ast.items[0].node {
@@ -114,11 +114,11 @@ fn test_parse_examples_multiple_blocks() {
     let docs = vec![
         "Example 1:".to_string(),
         "```vais".to_string(),
-        "F foo()->i64=1".to_string(),
+        "fn foo()->i64=1".to_string(),
         "```".to_string(),
         "Example 2:".to_string(),
         "```vais".to_string(),
-        "F bar()->i64=2".to_string(),
+        "fn bar()->i64=2".to_string(),
         "```".to_string(),
     ];
     let examples = parse_examples(&docs);
@@ -139,7 +139,7 @@ fn test_parse_examples_generic_code_fence() {
 
 #[test]
 fn test_extract_doc_comments_no_docs() {
-    let source = "F main()->i64=0";
+    let source = "fn main()->i64=0";
     let lines: Vec<&str> = source.lines().collect();
     let docs = extract_doc_comments(&lines, 0);
     assert!(docs.is_empty());
@@ -147,16 +147,16 @@ fn test_extract_doc_comments_no_docs() {
 
 #[test]
 fn test_extract_doc_comments_hash_style() {
-    let source = "# A vais-style comment\nF main()->i64=0";
+    let source = "# A vais-style comment\nfn main()->i64=0";
     let lines: Vec<&str> = source.lines().collect();
-    let docs = extract_doc_comments(&lines, 24); // Position of F
+    let docs = extract_doc_comments(&lines, 24); // Position of fn
     assert_eq!(docs.len(), 1);
     assert_eq!(docs[0], "A vais-style comment");
 }
 
 #[test]
 fn test_extract_doc_comments_skips_separator_lines() {
-    let source = "# Real comment\n# ============\nF main()->i64=0";
+    let source = "# Real comment\n# ============\nfn main()->i64=0";
     let lines: Vec<&str> = source.lines().collect();
     let docs = extract_doc_comments(&lines, 30);
     // Separator lines (all = or -) should be skipped
@@ -166,7 +166,7 @@ fn test_extract_doc_comments_skips_separator_lines() {
 
 #[test]
 fn test_extract_function_doc_no_docs() {
-    let source = "F greet()->i64=42";
+    let source = "fn greet()->i64=42";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Function(f) = &ast.items[0].node {
@@ -182,13 +182,13 @@ fn test_extract_function_doc_no_docs() {
 
 #[test]
 fn test_extract_function_doc_with_return_type() {
-    let source = "F add(a:i64,b:i64)->i64=a+b";
+    let source = "fn add(a:i64,b:i64)->i64=a+b";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Function(f) = &ast.items[0].node {
         let doc = extract_function_doc(f, vec![]);
         assert!(doc.returns.is_some());
-        assert!(doc.signature.contains("F add"));
+        assert!(doc.signature.contains("fn add"));
         assert!(doc.signature.contains("i64"));
     } else {
         panic!("Expected function item");
@@ -197,13 +197,13 @@ fn test_extract_function_doc_with_return_type() {
 
 #[test]
 fn test_extract_function_doc_pub() {
-    let source = "P F greet()->i64=42";
+    let source = "pub fn greet()->i64=42";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Function(f) = &ast.items[0].node {
         let doc = extract_function_doc(f, vec![]);
         assert_eq!(doc.visibility, Visibility::Public);
-        assert!(doc.signature.starts_with("P "));
+        assert!(doc.signature.starts_with("pub "));
     } else {
         panic!("Expected function item");
     }
@@ -211,7 +211,7 @@ fn test_extract_function_doc_pub() {
 
 #[test]
 fn test_extract_function_doc_private() {
-    let source = "F helper()->i64=1";
+    let source = "fn helper()->i64=1";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Function(f) = &ast.items[0].node {
@@ -224,14 +224,14 @@ fn test_extract_function_doc_private() {
 
 #[test]
 fn test_extract_enum_doc() {
-    let source = "E Color { Red, Green, Blue }";
+    let source = "enum Color { Red, Green, Blue }";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Enum(e) = &ast.items[0].node {
         let doc = extract_enum_doc(e, vec!["Color enum".to_string()]);
         assert_eq!(doc.name, "Color");
         assert_eq!(doc.kind, DocKind::Enum);
-        assert!(doc.signature.contains("E Color"));
+        assert!(doc.signature.contains("enum Color"));
         assert!(doc.signature.contains("Red"));
     } else {
         panic!("Expected enum item");
@@ -240,13 +240,13 @@ fn test_extract_enum_doc() {
 
 #[test]
 fn test_extract_enum_doc_pub() {
-    let source = "P E Status { Ok, Error }";
+    let source = "pub enum Status { Ok, Error }";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Enum(e) = &ast.items[0].node {
         let doc = extract_enum_doc(e, vec![]);
         assert_eq!(doc.visibility, Visibility::Public);
-        assert!(doc.signature.starts_with("P "));
+        assert!(doc.signature.starts_with("pub "));
     } else {
         panic!("Expected enum item");
     }
@@ -254,13 +254,13 @@ fn test_extract_enum_doc_pub() {
 
 #[test]
 fn test_extract_documentation_full() {
-    let source = r#"F add(a: i64, b: i64) -> i64 {
+    let source = r#"fn add(a: i64, b: i64) -> i64 {
     a + b
 }
 
-S Point { x: i64, y: i64 }
+struct Point { x: i64, y: i64 }
 
-E Color { Red, Green, Blue }
+enum Color { Red, Green, Blue }
 "#;
     let ast = parse(source).unwrap();
     let doc = extract_documentation(std::path::Path::new("test.vais"), &ast, source);
@@ -299,7 +299,7 @@ fn test_visibility_equality() {
 
 #[test]
 fn test_extract_function_doc_with_examples() {
-    let source = "F greet()->i64=42";
+    let source = "fn greet()->i64=42";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Function(f) = &ast.items[0].node {
@@ -320,13 +320,13 @@ fn test_extract_function_doc_with_examples() {
 
 #[test]
 fn test_extract_struct_doc_pub() {
-    let source = "P S Config{debug:bool}";
+    let source = "pub struct Config{debug:bool}";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Struct(s) = &ast.items[0].node {
         let doc = extract_struct_doc(s, vec![]);
         assert_eq!(doc.visibility, Visibility::Public);
-        assert!(doc.signature.starts_with("P "));
+        assert!(doc.signature.starts_with("pub "));
     } else {
         panic!("Expected struct item");
     }
@@ -334,7 +334,7 @@ fn test_extract_struct_doc_pub() {
 
 #[test]
 fn test_extract_struct_doc_signature_contains_fields() {
-    let source = "S Point{x:i64,y:i64}";
+    let source = "struct Point{x:i64,y:i64}";
     let ast = parse(source).unwrap();
 
     if let vais_ast::Item::Struct(s) = &ast.items[0].node {

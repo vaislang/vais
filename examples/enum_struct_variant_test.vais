@@ -4,7 +4,7 @@
 # This test focuses on verifying that struct variants are properly registered
 
 # Define an enum with mixed variant types
-EN Color {
+enum Color {
     Red,
     Green,
     Blue,
@@ -12,7 +12,7 @@ EN Color {
 }
 
 # More complex example: Message enum
-EN Message {
+enum Message {
     Quit,
     Move { x: i64, y: i64 },
     Write(i64),
@@ -20,11 +20,11 @@ EN Message {
 }
 
 # Simple function to test enum type checking
-F get_red() -> i64 {
+fn get_red() -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Enum Struct Variant Type Check Test ===")
     putchar(10)
 

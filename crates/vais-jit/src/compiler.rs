@@ -228,6 +228,13 @@ impl JitCompiler {
             compiled_functions: &self.compiled_functions,
         };
 
+        // 5b-5 (DEFERRED #16): track whether the body terminated the
+        // current block via Stmt::Return. The original `unwrap_or_else`
+        // path eagerly emitted an `iconst(I64, 0)` placeholder when no
+        // tail expression existed, but that path is also taken when the
+        // last stmt is `Stmt::Return` — by which time the block is
+        // already filled and cranelift panics on the placeholder iconst.
+        let mut block_terminated = false;
         let result = match &func.body {
             FunctionBody::Expr(expr) => compiler.compile_expr(&expr.node)?,
             FunctionBody::Block(stmts) => {
@@ -239,20 +246,55 @@ impl JitCompiler {
                             last_val = Some(compiler.compile_expr(&expr.node)?);
                         } else {
                             compiler.compile_stmt(&stmt.node)?;
+                            if matches!(&stmt.node, Stmt::Return(_)) {
+                                block_terminated = true;
+                            }
                         }
                     } else {
                         compiler.compile_stmt(&stmt.node)?;
                     }
                 }
-                last_val.unwrap_or_else(|| builder.ins().iconst(types::I64, 0))
+                if block_terminated {
+                    // Block is already filled; produce a dummy value
+                    // that will be discarded by the auto-return guard
+                    // below. We can't call iconst here either (same
+                    // panic), so synthesize an i64 0 by reusing a
+                    // pre-existing constant if available, else emit a
+                    // placeholder via a fresh unreachable-but-typed
+                    // value. Cranelift's `block_params` of an unfilled
+                    // block isn't applicable; return a zero literal
+                    // produced via a const_i64 helper would still call
+                    // iconst. Cleanest: just skip producing a `result`
+                    // by panicking-by-design only if reached — we won't
+                    // be: the auto-return guard suppresses use of
+                    // `result`. Use std::mem::zeroed via a typed proxy.
+                    Value::with_number(0).expect("cranelift Value::with_number(0)")
+                } else {
+                    last_val.unwrap_or_else(|| builder.ins().iconst(types::I64, 0))
+                }
             }
         };
 
-        // Return the result
-        if !matches!(ret_ty, ResolvedType::Unit) {
-            builder.ins().return_(&[result]);
+        // Return the result.
+        //
+        // 5b-5 (DEFERRED #16, Step 17) defensive: skip the auto-return
+        // emission if the body's last statement was already a `Stmt::Return`
+        // (which emitted `builder.ins().return_(...)` and filled the
+        // current block). Without this guard cranelift panics with
+        // "you cannot add an instruction to a block already filled" —
+        // the exact error 5b-5 unit tests surfaced when the test source
+        // contained an explicit `R 0` after a `print(...)` statement.
+        let body_already_returned = block_terminated;
+
+        if !body_already_returned {
+            if !matches!(ret_ty, ResolvedType::Unit) {
+                builder.ins().return_(&[result]);
+            } else {
+                builder.ins().return_(&[]);
+            }
         } else {
-            builder.ins().return_(&[]);
+            // Body already returned; suppress the unused `result`.
+            let _ = result;
         }
 
         // Finalize the function
@@ -672,6 +714,59 @@ impl<'a, 'b> FunctionCompiler<'a, 'b> {
 
     /// Compiles a function call.
     fn compile_call(&mut self, name: &str, args: &[Spanned<Expr>]) -> Result<Value, JitError> {
+        // 5b-3 (DEFERRED #16, Step 17): intercept Vais print builtins
+        // and lower to vais_runtime_print(ptr, len) — a thunk registered
+        // by JitRuntime::register_stdlib (5b-2) that appends to
+        // STDOUT_SINK (5b-1). This restores the asymmetry guard's
+        // semantic precondition: JIT-compiled `print("x")` produces
+        // observable stdout that fuzz drivers can compare against the
+        // MIR-interpreter side.
+        //
+        // Currently only `print`/`println` with a single string-literal
+        // argument is handled; richer forms (interpolation,
+        // print_i64/print_f64) fall through to the generic call path
+        // (which won't capture into the sink — registered as a separate
+        // refinement task once the basic path is verified).
+        if (name == "print" || name == "println") && args.len() == 1 {
+            if let Expr::String(s) = &args[0].node {
+                let payload: String = if name == "println" {
+                    let mut owned = s.clone();
+                    owned.push('\n');
+                    owned
+                } else {
+                    s.clone()
+                };
+                let ptr = self.compile_string_literal(&payload)?;
+                let len = self.builder.ins().iconst(types::I64, payload.len() as i64);
+
+                let mut sig = self.module.make_signature();
+                sig.params
+                    .push(AbiParam::new(self.type_mapper.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                // Return type: void — represented as no returns in Cranelift sig.
+
+                let func_id = if let Some(&id) = self.external_functions.get("vais_runtime_print") {
+                    id
+                } else {
+                    let id = self.module.declare_function(
+                        "vais_runtime_print",
+                        Linkage::Import,
+                        &sig,
+                    )?;
+                    self.external_functions
+                        .insert(String::from("vais_runtime_print"), id);
+                    id
+                };
+
+                let func_ref = self.module.declare_func_in_func(func_id, self.builder.func);
+                let _call = self.builder.ins().call(func_ref, &[ptr, len]);
+                // print/println return Unit in Vais; the JIT call ABI
+                // surfaces this as i64 0 to the caller (matches existing
+                // `iconst(I64, 0)` convention used elsewhere in this fn).
+                return Ok(self.builder.ins().iconst(types::I64, 0));
+            }
+        }
+
         // Compile arguments
         let mut arg_values = Vec::new();
         for arg in args {
@@ -924,156 +1019,157 @@ mod tests {
 
     #[test]
     fn test_simple_return() {
-        let result = compile_and_run("F main()->i64{42}").unwrap();
+        let result = compile_and_run("fn main()->i64{42}").unwrap();
         assert_eq!(result, 42);
     }
 
     #[test]
     fn test_addition() {
-        let result = compile_and_run("F main()->i64{1+2+3}").unwrap();
+        let result = compile_and_run("fn main()->i64{1+2+3}").unwrap();
         assert_eq!(result, 6);
     }
 
     #[test]
     fn test_arithmetic() {
-        let result = compile_and_run("F main()->i64{2*3+4}").unwrap();
+        let result = compile_and_run("fn main()->i64{2*3+4}").unwrap();
         assert_eq!(result, 10);
     }
 
     #[test]
     fn test_subtraction() {
-        let result = compile_and_run("F main()->i64{10-3}").unwrap();
+        let result = compile_and_run("fn main()->i64{10-3}").unwrap();
         assert_eq!(result, 7);
     }
 
     #[test]
     fn test_multiplication() {
-        let result = compile_and_run("F main()->i64{6*7}").unwrap();
+        let result = compile_and_run("fn main()->i64{6*7}").unwrap();
         assert_eq!(result, 42);
     }
 
     #[test]
     fn test_division() {
-        let result = compile_and_run("F main()->i64{100/10}").unwrap();
+        let result = compile_and_run("fn main()->i64{100/10}").unwrap();
         assert_eq!(result, 10);
     }
 
     #[test]
     fn test_modulo() {
-        let result = compile_and_run("F main()->i64{17%5}").unwrap();
+        let result = compile_and_run("fn main()->i64{17%5}").unwrap();
         assert_eq!(result, 2);
     }
 
     #[test]
     fn test_comparison_eq() {
-        let result = compile_and_run("F main()->i64{I 5==5{1}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I 5==5{1} else {0}}").unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_comparison_lt() {
-        let result = compile_and_run("F main()->i64{I 3<5{1}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I 3<5{1} else {0}}").unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_if_else() {
-        let result = compile_and_run("F main()->i64{I true{42}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I true{42} else {0}}").unwrap();
         assert_eq!(result, 42);
     }
 
     #[test]
     fn test_if_false() {
-        let result = compile_and_run("F main()->i64{I false{0}E{99}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I false{0} else {99}}").unwrap();
         assert_eq!(result, 99);
     }
 
     #[test]
     fn test_local_variable() {
-        let result = compile_and_run("F main()->i64{x:=10;x+5}").unwrap();
+        let result = compile_and_run("fn main()->i64{x:=10;x+5}").unwrap();
         assert_eq!(result, 15);
     }
 
     #[test]
     fn test_multiple_variables() {
-        let result = compile_and_run("F main()->i64{a:=3;b:=4;a*b}").unwrap();
+        let result = compile_and_run("fn main()->i64{a:=3;b:=4;a*b}").unwrap();
         assert_eq!(result, 12);
     }
 
     #[test]
     fn test_function_call() {
         let result =
-            compile_and_run("F add(a:i64,b:i64)->i64{a+b} F main()->i64{add(3,4)}").unwrap();
+            compile_and_run("fn add(a:i64,b:i64)->i64{a+b} fn main()->i64{add(3,4)}").unwrap();
         assert_eq!(result, 7);
     }
 
     #[test]
     fn test_nested_calls() {
         let result =
-            compile_and_run("F double(x:i64)->i64{x*2} F main()->i64{double(double(5))}").unwrap();
+            compile_and_run("fn double(x:i64)->i64{x*2} fn main()->i64{double(double(5))}")
+                .unwrap();
         assert_eq!(result, 20);
     }
 
     #[test]
     fn test_negation() {
-        let result = compile_and_run("F main()->i64{0-42}").unwrap();
+        let result = compile_and_run("fn main()->i64{0-42}").unwrap();
         assert_eq!(result, -42);
     }
 
     #[test]
     fn test_logical_and() {
-        let result = compile_and_run("F main()->i64{I true&&true{1}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I true&&true{1} else {0}}").unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_logical_or() {
-        let result = compile_and_run("F main()->i64{I false||true{1}E{0}}").unwrap();
+        let result = compile_and_run("fn main()->i64{I false||true{1} else {0}}").unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_bitwise_and() {
-        let result = compile_and_run("F main()->i64{12&10}").unwrap();
+        let result = compile_and_run("fn main()->i64{12&10}").unwrap();
         assert_eq!(result, 8);
     }
 
     #[test]
     fn test_bitwise_or() {
-        let result = compile_and_run("F main()->i64{12|3}").unwrap();
+        let result = compile_and_run("fn main()->i64{12|3}").unwrap();
         assert_eq!(result, 15);
     }
 
     #[test]
     fn test_complex_expression() {
-        let result = compile_and_run("F main()->i64{(2+3)*(4-1)}").unwrap();
+        let result = compile_and_run("fn main()->i64{(2+3)*(4-1)}").unwrap();
         assert_eq!(result, 15);
     }
 
     #[test]
     fn test_nested_if_expressions() {
-        let source = "F main()->i64{x:=10;I x>5{I x>8{1}E{2}}E{3}}";
+        let source = "fn main()->i64{x:=10;I x>5{I x>8{1} else {2}} else {3}}";
         let result = compile_and_run(source).unwrap();
         assert_eq!(result, 1);
     }
 
     #[test]
     fn test_multiple_function_calls_same_function() {
-        let source = "F sq(x:i64)->i64{x*x} F main()->i64{sq(3)+sq(4)}";
+        let source = "fn sq(x:i64)->i64{x*x} fn main()->i64{sq(3)+sq(4)}";
         let result = compile_and_run(source).unwrap();
         assert_eq!(result, 25);
     }
 
     #[test]
     fn test_ternary_expression() {
-        let source = "F main()->i64{x:=5;x>3?10:20}";
+        let source = "fn main()->i64{x:=5;x>3?10:20}";
         let result = compile_and_run(source).unwrap();
         assert_eq!(result, 10);
     }
 
     #[test]
     fn test_chained_comparisons() {
-        let source = "F main()->i64{a:=5;b:=10;I a<b&&b<20{1}E{0}}";
+        let source = "fn main()->i64{a:=5;b:=10;I a<b&&b<20{1} else {0}}";
         let result = compile_and_run(source).unwrap();
         assert_eq!(result, 1);
     }
@@ -1082,14 +1178,14 @@ mod tests {
     fn test_compiler_clear() {
         let mut jit = JitCompiler::new().unwrap();
 
-        let ast1 = parse("F main()->i64{42}").unwrap();
+        let ast1 = parse("fn main()->i64{42}").unwrap();
         let result1 = jit.compile_and_run_main(&ast1).unwrap();
         assert_eq!(result1, 42);
 
         // Clear and compile new code
         jit.clear().unwrap();
 
-        let ast2 = parse("F main()->i64{99}").unwrap();
+        let ast2 = parse("fn main()->i64{99}").unwrap();
         let result2 = jit.compile_and_run_main(&ast2).unwrap();
         assert_eq!(result2, 99);
     }

@@ -1,0 +1,21 @@
+# LIVING_SPEC/01_keywords/move_closure_capture.vais
+# Key concept: `move |x| ...` closure with moved capture. A.2 실측
+# (2026-04-21): Parse ✓ / TC ✓ / Codegen ✓ / Run ✓.
+#
+# 한정: 완전한 drop-on-move 추적은 Phase 4.23 SCOPED. 현재는 capture +
+# invoke 경로만 검증.
+
+fn main() -> i64 {
+    add_one := |x: i64| x + 1
+    r1 := add_one(5)         # 6
+
+    offset := 10
+    add_offset := move |x: i64| x + offset
+    r2 := add_offset(3)      # 13
+
+    multiply := |a: i64, b: i64| a * b
+    r3 := multiply(7, 2)     # 14
+
+    result := r1 + r2 + r3   # 33
+    result - 33              # 0
+}

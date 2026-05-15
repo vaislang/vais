@@ -1,0 +1,39 @@
+[entry]
+id = "A1-04"
+classification = "A1 hard block (uncertified-unused keyword: macro)"
+surface = "Declarative macro declaration (`macro foo! {...}` and `macro foo {...}`)"
+keyword = "macro (Token::Macro)"
+master_plan_version = 22
+
+[v1_evidence]
+probe_summary = "macro foo! { () => { 0 } }; F main() -> i64 { R 0 }"
+expected_per_design = "vaisc check rejects with stable error[P001] Unexpected token — declarative macro declaration form is reserved with no certified surface (the vais-macro crate provides infra but no .vais source declares a macro)"
+actual_observed_pre_block = "exit 0, OK No errors found (silent accept; type checker / codegen never honoured the declaration)"
+actual_observed_post_block = "exit 1, error[P001] found Macro, expected item (macro declaration is uncertified — A1 hard block)"
+verified_date = "2026-05-05"
+
+[v2_evidence]
+status = "v1_verified_baseline_zero_use"
+notes = """
+Baseline use count = 0 verified via grep on:
+  compiler/std/, lang/packages/, docs/language/LIVING_SPEC/
+Pattern checked: ^[[:space:]]*macro [a-z] (top-level macro foo declaration form).
+No matches (2026-05-05).
+
+Hard-block site: crates/vais-parser/src/item/mod.rs Token::Macro arm —
+previously self.advance_skip() + parse_macro_def(); now returns
+ParseError::UnexpectedToken with explicit A1 message.
+"""
+
+[migration]
+post_certification_expected = "If declarative macros are ever certified into a real surface, the fixture's check_fails contract no longer holds. At that point this fixture migrates to a positive form proving the certified surface, OR is removed if `macro` graduates entirely out of A1."
+
+[assertion_kind]
+kind = "check_fails"
+required_stderr_patterns = ["P001", "Macro", "A1 hard block"]
+rationale = """
+P001 + Logos token name `Macro` + the literal `A1 hard block` substring
+confirm the diagnostic is the dedicated A1 reject path. A future
+regression that drops the A1 hard-block site would also drop the
+`A1 hard block` substring.
+"""

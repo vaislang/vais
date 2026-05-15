@@ -42,9 +42,31 @@ impl OwnershipChecker {
             // Dynamic arrays, maps, and other heap-allocated types are NOT Copy
             ResolvedType::Array(_) | ResolvedType::Map(_, _) => false,
 
-            // Named structs/enums: not Copy by default
-            // (In a full implementation, we'd check for Copy trait impl)
-            ResolvedType::Named { .. } => false,
+            // Named structs/enums: permissive Copy by default (Phase 5.24+).
+            //
+            // Historically this returned `false`, which caused E022 "use after
+            // move" to fire on every second use of any user struct parameter
+            // — even when the struct contained only primitive fields (Point,
+            // Role, User, etc). Stdlib files like hashmap/hashset accumulated
+            // ~20 E022 errors purely from this over-strict default.
+            //
+            // The heap-allocated container types (Vec, HashMap, String) are
+            // represented as `ResolvedType::Array`, `::Map`, and the Named
+            // `"Vec"`/`"HashMap"` builtins — so they do NOT go through this
+            // arm. Treating user Named types as Copy is the correct default
+            // for Vais's value-oriented semantics.
+            //
+            // This intentionally diverges from Rust's more conservative
+            // default. A user who needs strict move semantics can annotate
+            // with `linear T` or `affine T` (Phase 4.19).
+            ResolvedType::Named { name, .. } => {
+                // Exception: Vec/HashMap/String/Str builtins ARE heap-allocated
+                // and must move (not copy). These are Named with generics.
+                !matches!(
+                    name.as_str(),
+                    "Vec" | "VecMut" | "HashMap" | "HashMapMut" | "String"
+                )
+            }
 
             // Generic types: conservative - not Copy
             ResolvedType::Generic(_) => false,

@@ -30,7 +30,7 @@ fn parse_and_generate_with_config(source: &str, config: JsConfig) -> String {
 
 #[test]
 fn test_public_function_generates_export() {
-    let js = parse_and_generate("P F greet() { 42 }");
+    let js = parse_and_generate("pub fn greet() { 42 }");
     assert!(
         js.contains("export function greet()"),
         "Public function should have 'export'"
@@ -39,7 +39,7 @@ fn test_public_function_generates_export() {
 
 #[test]
 fn test_private_function_no_export() {
-    let js = parse_and_generate("F helper() { 42 }");
+    let js = parse_and_generate("fn helper() { 42 }");
     assert!(js.contains("function helper()"), "Should have function");
     assert!(
         !js.contains("export function helper"),
@@ -49,13 +49,13 @@ fn test_private_function_no_export() {
 
 #[test]
 fn test_async_function() {
-    let js = parse_and_generate("A F fetchData() { 42 }");
+    let js = parse_and_generate("A fn fetchData() { 42 }");
     assert!(js.contains("async function fetchData()"), "Should be async");
 }
 
 #[test]
 fn test_function_with_params() {
-    let js = parse_and_generate("F add(a: i64, b: i64) -> i64 { a + b }");
+    let js = parse_and_generate("fn add(a: i64, b: i64) -> i64 { a + b }");
     assert!(js.contains("function add(a, b)"), "Should have params");
     assert!(js.contains("return"), "Should have return");
     assert!(js.contains("a + b"), "Should have body expression");
@@ -63,7 +63,7 @@ fn test_function_with_params() {
 
 #[test]
 fn test_function_with_default_params() {
-    let js = parse_and_generate("F greet(name: str = \"world\") { name }");
+    let js = parse_and_generate("fn greet(name: str = \"world\") { name }");
     assert!(
         js.contains("name = \"world\""),
         "Should have default parameter value"
@@ -76,7 +76,7 @@ fn test_function_with_default_params() {
 
 #[test]
 fn test_struct_generates_class() {
-    let js = parse_and_generate("S Point { x: f64, y: f64 }");
+    let js = parse_and_generate("struct Point { x: f64, y: f64 }");
     assert!(js.contains("class Point"), "Struct should become class");
     assert!(
         js.contains("constructor(x, y)"),
@@ -88,7 +88,7 @@ fn test_struct_generates_class() {
 
 #[test]
 fn test_public_struct_exports() {
-    let js = parse_and_generate("P S Point { x: f64, y: f64 }");
+    let js = parse_and_generate("pub struct Point { x: f64, y: f64 }");
     assert!(
         js.contains("export class Point"),
         "Public struct should export"
@@ -97,7 +97,7 @@ fn test_public_struct_exports() {
 
 #[test]
 fn test_struct_object_arg_support() {
-    let js = parse_and_generate("S Config { width: i64, height: i64 }");
+    let js = parse_and_generate("struct Config { width: i64, height: i64 }");
     // Multi-field structs support object-style construction
     assert!(js.contains("typeof"), "Should support object arg pattern");
     assert!(js.contains("__obj"), "Should destructure object arg");
@@ -105,7 +105,7 @@ fn test_struct_object_arg_support() {
 
 #[test]
 fn test_struct_single_field() {
-    let js = parse_and_generate("S Wrapper { value: i64 }");
+    let js = parse_and_generate("struct Wrapper { value: i64 }");
     assert!(
         js.contains("class Wrapper"),
         "Single field struct should work"
@@ -119,7 +119,7 @@ fn test_struct_single_field() {
 
 #[test]
 fn test_enum_generates_frozen_object() {
-    let js = parse_and_generate("E Color { Red, Green, Blue }");
+    let js = parse_and_generate("enum Color { Red, Green, Blue }");
     assert!(
         js.contains("const Color = Object.freeze"),
         "Enum should be frozen object"
@@ -131,7 +131,7 @@ fn test_enum_generates_frozen_object() {
 
 #[test]
 fn test_enum_tuple_variant() {
-    let js = parse_and_generate("E Shape { Circle(f64), Rect(f64, f64) }");
+    let js = parse_and_generate("enum Shape { Circle(f64), Rect(f64, f64) }");
     assert!(
         js.contains("Circle(__0)"),
         "Tuple variant should be factory function"
@@ -145,7 +145,7 @@ fn test_enum_tuple_variant() {
 
 #[test]
 fn test_enum_public_export() {
-    let js = parse_and_generate("P E Direction { Up, Down }");
+    let js = parse_and_generate("pub enum Direction { Up, Down }");
     assert!(
         js.contains("export const Direction"),
         "Public enum should export"
@@ -160,9 +160,9 @@ fn test_enum_public_export() {
 fn test_impl_instance_method() {
     let js = parse_and_generate(
         r#"
-        S Counter { value: i64 }
-        X Counter {
-            F increment(self) { self.value + 1 }
+        struct Counter { value: i64 }
+        impl Counter {
+            fn increment(self) { self.value + 1 }
         }
     "#,
     );
@@ -176,9 +176,9 @@ fn test_impl_instance_method() {
 fn test_impl_static_method() {
     let js = parse_and_generate(
         r#"
-        S Counter { value: i64 }
-        X Counter {
-            F new_counter() -> i64 { 0 }
+        struct Counter { value: i64 }
+        impl Counter {
+            fn new_counter() -> i64 { 0 }
         }
     "#,
     );
@@ -193,12 +193,12 @@ fn test_impl_static_method() {
 fn test_impl_trait() {
     let js = parse_and_generate(
         r#"
-        W Display {
-            F display(self) -> str
+        trait Display {
+            fn display(self) -> str
         }
-        S Point { x: f64, y: f64 }
-        X Point: Display {
-            F display(self) -> str { "point" }
+        struct Point { x: f64, y: f64 }
+        impl Point: Display {
+            fn display(self) -> str { "point" }
         }
     "#,
     );
@@ -217,8 +217,8 @@ fn test_impl_trait() {
 fn test_trait_generates_class() {
     let js = parse_and_generate(
         r#"
-        W Drawable {
-            F draw(self) -> str
+        trait Drawable {
+            fn draw(self) -> str
         }
     "#,
     );
@@ -244,7 +244,7 @@ fn test_const_declaration() {
 
 #[test]
 fn test_public_const_exports() {
-    let js = parse_and_generate("P C pi: f64 = 3.14");
+    let js = parse_and_generate("pub const pi: f64 = 3.14");
     assert!(js.contains("export const pi"), "Public const should export");
 }
 
@@ -254,7 +254,7 @@ fn test_public_const_exports() {
 
 #[test]
 fn test_use_generates_import() {
-    let js = parse_and_generate("U math");
+    let js = parse_and_generate("use math");
     assert!(
         js.contains("import * as math from './math.js'"),
         "Use should become import"
@@ -270,7 +270,7 @@ fn test_function_with_server_attribute() {
     let js = parse_and_generate(
         r#"
         #[server]
-        A F loadItems() -> i64 {
+        A fn loadItems() -> i64 {
             42
         }
     "#,
@@ -286,7 +286,7 @@ fn test_function_with_wasm_attribute() {
     let js = parse_and_generate(
         r#"
         #[wasm]
-        F processData(raw: i64) -> i64 {
+        fn processData(raw: i64) -> i64 {
             raw
         }
     "#,
@@ -307,7 +307,7 @@ fn test_custom_indent() {
         indent: "    ".to_string(),
         ..JsConfig::default()
     };
-    let js = parse_and_generate_with_config("F test() { 1 }", config);
+    let js = parse_and_generate_with_config("fn test() { 1 }", config);
     assert!(js.contains("    "), "Should use 4-space indent");
 }
 
@@ -321,19 +321,19 @@ fn test_combined_vaisx_script_output() {
     // regular Vais code (after desugar, the non-reactive parts)
     let js = parse_and_generate(
         r#"
-        S __VxProps__ {
+        struct __VxProps__ {
             initial: i64
         }
 
-        F increment(count: i64) -> i64 {
+        fn increment(count: i64) -> i64 {
             count + 1
         }
 
-        F reset() -> i64 {
+        fn reset() -> i64 {
             0
         }
 
-        P F formatCount(n: i64) -> str {
+        pub fn formatCount(n: i64) -> str {
             "count"
         }
     "#,
@@ -359,10 +359,10 @@ fn test_async_server_function_output() {
     let js = parse_and_generate(
         r#"
         #[server]
-        A F loadItems() -> i64 { 42 }
+        A fn loadItems() -> i64 { 42 }
 
         #[server]
-        A F saveItem(item: i64) -> i64 { item }
+        A fn saveItem(item: i64) -> i64 { item }
     "#,
     );
 
@@ -416,8 +416,8 @@ fn test_tree_shaking_removes_unused() {
 
     let module = vais_parser::parse(
         r#"
-        P F used() -> i64 { 1 }
-        F unused() -> i64 { 2 }
+        pub fn used() -> i64 { 1 }
+        fn unused() -> i64 { 2 }
     "#,
     )
     .expect("Parse failed");

@@ -1,0 +1,34 @@
+# Stdlib self-test: Option<T> + method dispatch on builtin enum
+use std/option
+
+fn main() -> i64 {
+    a: Option<i64> := Some(42)
+    b: Option<i64> := None
+
+    # is_some / is_none
+    I a.is_some() != 1 { return 1 }
+    I a.is_none() != 0 { return 2 }
+    I b.is_some() != 0 { return 3 }
+    I b.is_none() != 1 { return 4 }
+
+    # unwrap_or
+    I a.unwrap_or(0) != 42 { return 5 }
+    I b.unwrap_or(7) != 7 { return 6 }
+
+    # match destructuring
+    av: i64 := match a { Some(v) => v, None => -1 }
+    I av != 42 { return 7 }
+    bv: i64 := match b { Some(v) => v, None => -1 }
+    I bv != -1 { return 8 }
+
+    # nested Option chain via match
+    c: Option<i64> := Some(10)
+    doubled: Option<i64> := match c {
+        Some(v) => Some(v * 2),
+        None    => None,
+    }
+    dv: i64 := match doubled { Some(v) => v, None => 0 }
+    I dv != 20 { return 9 }
+
+    return 0
+}

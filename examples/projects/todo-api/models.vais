@@ -1,12 +1,12 @@
 # models.vais - Data structures for Todo API
 
-S Todo {
+struct Todo {
     id: i64,
     title: str,
     completed: bool
 }
 
-F todo_new(id: i64, title: str, completed: bool) -> Todo {
+fn todo_new(id: i64, title: str, completed: bool) -> Todo {
     Todo {
         id: id,
         title: title,
@@ -14,9 +14,9 @@ F todo_new(id: i64, title: str, completed: bool) -> Todo {
     }
 }
 
-F todo_to_json(todo: Todo) -> str {
+fn todo_to_json(todo: Todo) -> str {
     # Format: {"id":1,"title":"Buy milk","completed":false}
-    completed_str := I todo.completed { "true" } EL { "false" }
+    completed_str := I todo.completed { "true" } else { "false" }
 
     # Build JSON string manually
     result := "{"
@@ -31,7 +31,7 @@ F todo_to_json(todo: Todo) -> str {
     result
 }
 
-F todos_array_to_json(todos: i64, count: i64) -> str {
+fn todos_array_to_json(todos: i64, count: i64) -> str {
     # Format: [{"id":1,...},{"id":2,...}]
     result := "["
 
@@ -60,7 +60,7 @@ F todos_array_to_json(todos: i64, count: i64) -> str {
 }
 
 # Helper functions
-F concat(a: str, b: str) -> str {
+fn concat(a: str, b: str) -> str {
     len_a := strlen(a)
     len_b := strlen(b)
     total := len_a + len_b + 1
@@ -73,11 +73,11 @@ F concat(a: str, b: str) -> str {
     ptr_to_str(buf)
 }
 
-F i64_to_str(n: i64) -> str {
-    I n == 0 { R "0" }
+fn i64_to_str(n: i64) -> str {
+    I n == 0 { return "0" }
 
     is_neg := n < 0
-    val := I is_neg { 0 - n } EL { n }
+    val := I is_neg { 0 - n } else { n }
 
     buf := malloc(32)
     pos := 31

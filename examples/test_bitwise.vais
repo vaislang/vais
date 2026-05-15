@@ -1,5 +1,5 @@
 # Test bitwise operators parsing
-F main() -> i64 {
+fn main() -> i64 {
     # Basic bitwise operations
     a := 12
     b := 5

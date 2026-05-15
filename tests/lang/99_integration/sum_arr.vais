@@ -1,0 +1,33 @@
+# CHECKS: sum a Vec<i64> via two helper fns.
+use std/vec.{vec_new};
+
+fn sum_one_to_n(n: i64) -> i64 {
+    n * (n + 1) / 2
+}
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 1..=10 {
+        v.push(i)
+    }
+
+    direct: i64 := mut 0
+    LF i: 0..v.len() {
+        direct = direct + v[i]
+    }
+    formula: i64 := sum_one_to_n(10)
+    I direct != formula { return 1 }
+    I direct != 55 { return 2 }
+
+    # smaller
+    w: Vec<i64> := mut vec_new()
+    LF i: 1..=5 {
+        w.push(i)
+    }
+    s: i64 := mut 0
+    LF i: 0..w.len() {
+        s = s + w[i]
+    }
+    I s != sum_one_to_n(5) { return 3 }
+    return 0
+}

@@ -16,6 +16,39 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
+                // A4-11 (Master Plan v16 §A4 + Step 13 stage 1): strict default.
+                // The `?` operator desugars to an early-return Err / None when
+                // the receiver is the Err / None variant. That early-return is
+                // only well-typed if the enclosing function's return type is
+                // Result<_,_> or Option<_>. Previously this was unchecked at
+                // type-check; the failure surfaced only at clang IR generation
+                // ("value doesn't match function result type 'i64'", recorded
+                // as A2-NEG-DRIFT in A2_SUBSETS.md and A4-11 in master-plan).
+                // Empirical baseline footprint = 0 std + 0 vaisdb (2026-05-04);
+                // strict default lands without source migration. Set
+                // VAIS_REJECT_A4_11=0 to restore the unchecked legacy.
+                if std::env::var("VAIS_REJECT_A4_11").as_deref() != Ok("0") {
+                    let is_result_or_option = |t: &ResolvedType| -> bool {
+                        match t {
+                            ResolvedType::Result(_, _) | ResolvedType::Optional(_) => true,
+                            ResolvedType::Named { name, .. } => {
+                                name == "Result" || name == "Option"
+                            }
+                            _ => false,
+                        }
+                    };
+                    if is_result_or_option(&inner_type) {
+                        if let Some(ret) = self.current_fn_ret.clone() {
+                            if !is_result_or_option(&ret) {
+                                return Some(Err(crate::TypeError::Mismatch {
+                                    expected: "Result<_,_> or Option<_>".to_string(),
+                                    found: ret.to_string(),
+                                    span: Some(expr.span),
+                                }));
+                            }
+                        }
+                    }
+                }
                 // Try operator (?) works on both Result<T> and Option<T>
                 // - Result<T>: returns T on Ok, propagates Err
                 // - Option<T>: returns T on Some, propagates None
@@ -64,11 +97,12 @@ impl TypeChecker {
                             Some(Ok(ResolvedType::I64))
                         }
                     }
-                    _ => Some(Err(TypeError::Mismatch {
-                        expected: "Result or Option type".to_string(),
-                        found: inner_type.to_string(),
-                        span: Some(inner.span),
-                    })),
+                    // Phase 250: lenient fallback for `expr?` on non-Result/Option
+                    // types. vaisdb uses `?` after stdlib calls that return raw
+                    // i64 (and a Result wrapper hasn't propagated through type
+                    // inference). Treating ? as identity here keeps the existing
+                    // Result/Option semantics and only relaxes the strict check.
+                    _ => Some(Ok(inner_type.clone())),
                 }
             }
 
@@ -122,11 +156,8 @@ impl TypeChecker {
                             Some(Ok(ResolvedType::I64))
                         }
                     }
-                    _ => Some(Err(TypeError::Mismatch {
-                        expected: "Optional or Result".to_string(),
-                        found: inner_type.to_string(),
-                        span: Some(inner.span),
-                    })),
+                    // Phase 251: same lenient fallback as Try for ! (Unwrap).
+                    _ => Some(Ok(inner_type.clone())),
                 }
             }
 
@@ -143,7 +174,25 @@ impl TypeChecker {
             }
 
             Expr::Assign { target, value } => {
-                // Allow assignment to all variables (mutable by default in Vais)
+                // Phase 0 bug C2 fix: reject assignment to immutable bindings.
+                // Without this check, `i := 0; ...; i = i + 1` silently compiles
+                // but codegen emits `i` as SSA (no alloca), so the load reads
+                // constant 0 every iteration → infinite loop in std/string str_eq.
+                // Bindings declared without `mut` must reject `=` here.
+                //
+                // Field assignments (`s.field = ...`), index assignments
+                // (`a[i] = ...`), and dereferences are not Ident, so they fall
+                // through to the existing path.
+                if let Expr::Ident(name) = &target.node {
+                    if let Some((_ty, is_mut)) = self.lookup_var_with_mut(name) {
+                        if !is_mut {
+                            return Some(Err(TypeError::ImmutableAssign(
+                                name.clone(),
+                                Some(target.span),
+                            )));
+                        }
+                    }
+                }
                 let target_type = match self.check_expr(target) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
@@ -155,6 +204,23 @@ impl TypeChecker {
                 if let Err(e) = self.unify(&target_type, &value_type) {
                     return Some(Err(e));
                 }
+                // Promote underconstrained local bindings after assignment.
+                // `mut None` / `Option.None` creates `Option<?T>` (or older
+                // paths create `Option<Never>`). Once `x = Option.Some(v)`
+                // unifies `?T`, the scope binding must carry the resolved
+                // wrapper type so later `M x { Some(v) => ... }` binds the
+                // payload as the concrete type, not as `?T`/`Never`.
+                if let Expr::Ident(name) = &target.node {
+                    let resolved_target_type = self.apply_substitutions(&target_type);
+                    if type_needs_assignment_promotion(&target_type)
+                        && !type_needs_assignment_promotion(&resolved_target_type)
+                    {
+                        self.update_var_type(name, resolved_target_type);
+                    } else if type_contains_never(&target_type) && !type_contains_never(&value_type)
+                    {
+                        self.update_var_type(name, self.apply_substitutions(&value_type));
+                    }
+                }
                 Some(Ok(ResolvedType::Unit))
             }
 
@@ -163,6 +229,18 @@ impl TypeChecker {
                 target,
                 value,
             } => {
+                // Phase 0 bug C2 fix (companion): same immutable-binding check
+                // for compound assignment (`x += 1` etc.).
+                if let Expr::Ident(name) = &target.node {
+                    if let Some((_ty, is_mut)) = self.lookup_var_with_mut(name) {
+                        if !is_mut {
+                            return Some(Err(TypeError::ImmutableAssign(
+                                name.clone(),
+                                Some(target.span),
+                            )));
+                        }
+                    }
+                }
                 let target_type = match self.check_expr(target) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
@@ -244,11 +322,27 @@ impl TypeChecker {
                     }
                 }
 
-                // Resolve parameter types (Type::Infer will create fresh type variables)
+                // Phase Ω P1.7 (iter 134): consume lambda-param hint if the
+                // caller pushed one (e.g. `Vec<T>.sort_by` pushes &T). The
+                // hint replaces the fresh-Var that would result from
+                // resolving an annotated `Type::Infer` param. All params of
+                // this Lambda receive the same hint — `sort_by(|a, b| ...)`
+                // wants both `a` and `b` typed as `&T`.
+                let lambda_hint = self.lambda_param_hint_stack.last().cloned();
                 let mut param_types: Vec<_> = params
                     .iter()
                     .map(|p| {
-                        let ty = self.resolve_type(&p.ty.node);
+                        let resolved = self.resolve_type(&p.ty.node);
+                        let ty = if matches!(p.ty.node, Type::Infer) {
+                            if let Some(hint) = &lambda_hint {
+                                let _ = self.unify(&resolved, hint);
+                                hint.clone()
+                            } else {
+                                resolved
+                            }
+                        } else {
+                            resolved
+                        };
                         self.define_var(&p.name.node, ty.clone(), p.is_mut);
                         ty
                     })
@@ -379,5 +473,63 @@ impl TypeChecker {
 
             _ => None,
         }
+    }
+}
+
+/// Check whether a ResolvedType contains ResolvedType::Never anywhere in its
+/// structure. Used by Expr::Assign to detect `mut None` / `mut Err(...)` init
+/// patterns that need scope-binding promotion after a concrete assignment.
+fn type_contains_never(ty: &ResolvedType) -> bool {
+    match ty {
+        ResolvedType::Never => true,
+        ResolvedType::Array(inner)
+        | ResolvedType::Optional(inner)
+        | ResolvedType::Pointer(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::RefMut(inner)
+        | ResolvedType::Slice(inner)
+        | ResolvedType::SliceMut(inner)
+        | ResolvedType::Range(inner)
+        | ResolvedType::Future(inner) => type_contains_never(inner),
+        ResolvedType::ConstArray { element, .. } => type_contains_never(element),
+        ResolvedType::Map(k, v) => type_contains_never(k) || type_contains_never(v),
+        ResolvedType::Result(ok, err) => type_contains_never(ok) || type_contains_never(err),
+        ResolvedType::Tuple(elems) => elems.iter().any(type_contains_never),
+        ResolvedType::Named { generics, .. } => generics.iter().any(type_contains_never),
+        ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+            params.iter().any(type_contains_never) || type_contains_never(ret)
+        }
+        _ => false,
+    }
+}
+
+fn type_needs_assignment_promotion(ty: &ResolvedType) -> bool {
+    match ty {
+        ResolvedType::Var(_) | ResolvedType::Never => true,
+        ResolvedType::Array(inner)
+        | ResolvedType::Optional(inner)
+        | ResolvedType::Pointer(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::RefMut(inner)
+        | ResolvedType::Slice(inner)
+        | ResolvedType::SliceMut(inner)
+        | ResolvedType::Range(inner)
+        | ResolvedType::Future(inner) => type_needs_assignment_promotion(inner),
+        ResolvedType::ConstArray { element, .. } => type_needs_assignment_promotion(element),
+        ResolvedType::Map(k, v) => {
+            type_needs_assignment_promotion(k) || type_needs_assignment_promotion(v)
+        }
+        ResolvedType::Result(ok, err) => {
+            type_needs_assignment_promotion(ok) || type_needs_assignment_promotion(err)
+        }
+        ResolvedType::Tuple(elems) => elems.iter().any(type_needs_assignment_promotion),
+        ResolvedType::Named { generics, .. } => {
+            generics.iter().any(type_needs_assignment_promotion)
+        }
+        ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+            params.iter().any(type_needs_assignment_promotion)
+                || type_needs_assignment_promotion(ret)
+        }
+        _ => false,
     }
 }

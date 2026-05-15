@@ -1,0 +1,14 @@
+# LIVING_SPEC/05_idioms/idiom_cast_explicit.vais
+# Key concept: ❌ 암시적 변환 기대 vs ✅ `as` 명시 캐스트
+# ✅ DO: `x as f64` — Phase 158 strict rules에 맞는 명시적 변환.
+# ❌ DON'T: bool↔int, int↔float 암시적 — 컴파일러가 차단함.
+
+fn to_float(n: i64) -> f64 {
+    n as f64
+}
+
+fn main() -> i64 {
+    f := to_float(42)
+    i := f as i64
+    i
+}

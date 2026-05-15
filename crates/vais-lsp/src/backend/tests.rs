@@ -248,7 +248,7 @@ fn test_call_graph_entry_construction() {
 #[test]
 fn test_document_construction() {
     let doc = Document {
-        content: Rope::from_str("F main() -> i64 = 42"),
+        content: Rope::from_str("fn main() -> i64 = 42"),
         ast: None,
         version: 1,
         symbol_cache: None,
@@ -260,7 +260,7 @@ fn test_document_construction() {
 
 #[test]
 fn test_document_with_ast() {
-    let source = "F main() -> i64 = 42";
+    let source = "fn main() -> i64 = 42";
     let ast = vais_parser::parse(source).ok();
     let doc = Document {
         content: Rope::from_str(source),
@@ -716,7 +716,7 @@ fn test_symbol_cache_with_call_graph() {
 
 #[test]
 fn test_document_rope_content() {
-    let source = "F main() -> i64 {\n    R 0\n}";
+    let source = "fn main() -> i64 {\n    return 0\n}";
     let doc = Document {
         content: Rope::from_str(source),
         ast: None,

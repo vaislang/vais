@@ -1,0 +1,13 @@
+# LIVING_SPEC/04_stdlib/option_is_some.vais
+# Key concept: Option이 Some인지 판별 (M으로 처리).
+
+fn count_some(a: Option<i64>, b: Option<i64>) -> i64 {
+    c := mut 0
+    match a { Some(_) => { c = c + 1 }, None => {} }
+    match b { Some(_) => { c = c + 1 }, None => {} }
+    c
+}
+
+fn main() -> i64 {
+    count_some(Some(1), None)
+}

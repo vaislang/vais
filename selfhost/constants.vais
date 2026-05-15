@@ -6,216 +6,216 @@
 # ============================================================================
 
 # Keyword tokens (1-30)
-F TOK_KW_F() -> i64 = 1        # function
-F TOK_KW_S() -> i64 = 2        # struct
-F TOK_KW_E() -> i64 = 3        # enum
-F TOK_KW_I() -> i64 = 4        # if
-F TOK_KW_L() -> i64 = 5        # loop
-F TOK_KW_M() -> i64 = 6        # match
-F TOK_KW_W() -> i64 = 7        # trait (With)
-F TOK_KW_X() -> i64 = 8        # impl (eXtend)
-F TOK_KW_T() -> i64 = 9        # type
-F TOK_KW_U() -> i64 = 10       # use
-F TOK_KW_P() -> i64 = 11       # pub
-F TOK_KW_A() -> i64 = 12       # async
-F TOK_KW_R() -> i64 = 13       # return
-F TOK_KW_B() -> i64 = 14       # break
-F TOK_KW_C() -> i64 = 15       # continue
-F TOK_KW_TRUE() -> i64 = 16
-F TOK_KW_FALSE() -> i64 = 17
-F TOK_KW_MUT() -> i64 = 18
-F TOK_KW_ELSE() -> i64 = 19
-F TOK_KW_D() -> i64 = 20       # defer
-F TOK_KW_O() -> i64 = 21       # union
-F TOK_KW_N() -> i64 = 22       # extern
-F TOK_KW_G() -> i64 = 23       # global
-F TOK_KW_Y() -> i64 = 24       # await (also "await" keyword)
-F TOK_KW_SELF() -> i64 = 25    # self
-F TOK_KW_SELF_UPPER() -> i64 = 26 # Self (legacy alias)
-F TOK_KW_SELF_TYPE() -> i64 = 26  # Self (canonical name)
-F TOK_KW_AS() -> i64 = 27      # as
-F TOK_KW_CONST() -> i64 = 28   # const
-F TOK_KW_SPAWN() -> i64 = 29   # spawn
-F TOK_KW_MACRO() -> i64 = 30   # macro
+fn TOK_KW_F() -> i64 = 1        # function
+fn TOK_KW_S() -> i64 = 2        # struct
+fn TOK_KW_E() -> i64 = 3        # enum
+fn TOK_KW_I() -> i64 = 4        # if
+fn TOK_KW_L() -> i64 = 5        # loop
+fn TOK_KW_M() -> i64 = 6        # match
+fn TOK_KW_W() -> i64 = 7        # trait (With)
+fn TOK_KW_X() -> i64 = 8        # impl (eXtend)
+fn TOK_KW_T() -> i64 = 9        # type
+fn TOK_KW_U() -> i64 = 10       # use
+fn TOK_KW_P() -> i64 = 11       # pub
+fn TOK_KW_A() -> i64 = 12       # async
+fn TOK_KW_R() -> i64 = 13       # return
+fn TOK_KW_B() -> i64 = 14       # break
+fn TOK_KW_C() -> i64 = 15       # continue
+fn TOK_KW_TRUE() -> i64 = 16
+fn TOK_KW_FALSE() -> i64 = 17
+fn TOK_KW_MUT() -> i64 = 18
+fn TOK_KW_ELSE() -> i64 = 19
+fn TOK_KW_D() -> i64 = 20       # defer
+fn TOK_KW_O() -> i64 = 21       # union
+fn TOK_KW_N() -> i64 = 22       # extern
+fn TOK_KW_G() -> i64 = 23       # global
+fn TOK_KW_Y() -> i64 = 24       # await (also "await" keyword)
+fn TOK_KW_SELF() -> i64 = 25    # self
+fn TOK_KW_SELF_UPPER() -> i64 = 26 # Self (legacy alias)
+fn TOK_KW_SELF_TYPE() -> i64 = 26  # Self (canonical name)
+fn TOK_KW_AS() -> i64 = 27      # as
+fn TOK_KW_CONST() -> i64 = 28   # const
+fn TOK_KW_SPAWN() -> i64 = 29   # spawn
+fn TOK_KW_MACRO() -> i64 = 30   # macro
 
 # Additional keywords (121-140)
-F TOK_KW_COMPTIME() -> i64 = 121  # comptime
-F TOK_KW_DYN() -> i64 = 122       # dyn
-F TOK_KW_LINEAR() -> i64 = 123    # linear
-F TOK_KW_AFFINE() -> i64 = 124    # affine
-F TOK_KW_MOVE() -> i64 = 125      # move
-F TOK_KW_CONSUME() -> i64 = 126   # consume
-F TOK_KW_LAZY() -> i64 = 127      # lazy
-F TOK_KW_FORCE() -> i64 = 128     # force
+fn TOK_KW_COMPTIME() -> i64 = 121  # comptime
+fn TOK_KW_DYN() -> i64 = 122       # dyn
+fn TOK_KW_LINEAR() -> i64 = 123    # linear
+fn TOK_KW_AFFINE() -> i64 = 124    # affine
+fn TOK_KW_MOVE() -> i64 = 125      # move
+fn TOK_KW_CONSUME() -> i64 = 126   # consume
+fn TOK_KW_LAZY() -> i64 = 127      # lazy
+fn TOK_KW_FORCE() -> i64 = 128     # force
 
 # Type keyword tokens (31-50)
-F TOK_TY_I8() -> i64 = 31
-F TOK_TY_I16() -> i64 = 32
-F TOK_TY_I32() -> i64 = 33
-F TOK_TY_I64() -> i64 = 34
-F TOK_TY_I128() -> i64 = 35
-F TOK_TY_U8() -> i64 = 36
-F TOK_TY_U16() -> i64 = 37
-F TOK_TY_U32() -> i64 = 38
-F TOK_TY_U64() -> i64 = 39
-F TOK_TY_U128() -> i64 = 40
-F TOK_TY_F32() -> i64 = 41
-F TOK_TY_F64() -> i64 = 42
-F TOK_TY_BOOL() -> i64 = 43
-F TOK_TY_STR() -> i64 = 44
+fn TOK_TY_I8() -> i64 = 31
+fn TOK_TY_I16() -> i64 = 32
+fn TOK_TY_I32() -> i64 = 33
+fn TOK_TY_I64() -> i64 = 34
+fn TOK_TY_I128() -> i64 = 35
+fn TOK_TY_U8() -> i64 = 36
+fn TOK_TY_U16() -> i64 = 37
+fn TOK_TY_U32() -> i64 = 38
+fn TOK_TY_U64() -> i64 = 39
+fn TOK_TY_U128() -> i64 = 40
+fn TOK_TY_F32() -> i64 = 41
+fn TOK_TY_F64() -> i64 = 42
+fn TOK_TY_BOOL() -> i64 = 43
+fn TOK_TY_STR() -> i64 = 44
 
 # SIMD vector types (45-50, 141-143)
-F TOK_TY_VEC2F32() -> i64 = 45
-F TOK_TY_VEC4F32() -> i64 = 46
-F TOK_TY_VEC8F32() -> i64 = 47
-F TOK_TY_VEC2F64() -> i64 = 48
-F TOK_TY_VEC4F64() -> i64 = 49
-F TOK_TY_VEC4I32() -> i64 = 50
-F TOK_TY_VEC8I32() -> i64 = 141
-F TOK_TY_VEC2I64() -> i64 = 142
-F TOK_TY_VEC4I64() -> i64 = 143
+fn TOK_TY_VEC2F32() -> i64 = 45
+fn TOK_TY_VEC4F32() -> i64 = 46
+fn TOK_TY_VEC8F32() -> i64 = 47
+fn TOK_TY_VEC2F64() -> i64 = 48
+fn TOK_TY_VEC4F64() -> i64 = 49
+fn TOK_TY_VEC4I32() -> i64 = 50
+fn TOK_TY_VEC8I32() -> i64 = 141
+fn TOK_TY_VEC2I64() -> i64 = 142
+fn TOK_TY_VEC4I64() -> i64 = 143
 
 # Literal tokens (51-60)
-F TOK_INT() -> i64 = 51        # Integer literal
-F TOK_FLOAT() -> i64 = 52      # Float literal
-F TOK_STRING() -> i64 = 53     # String literal
-F TOK_IDENT() -> i64 = 54      # Identifier
+fn TOK_INT() -> i64 = 51        # Integer literal
+fn TOK_FLOAT() -> i64 = 52      # Float literal
+fn TOK_STRING() -> i64 = 53     # String literal
+fn TOK_IDENT() -> i64 = 54      # Identifier
 
 # Operator tokens (61-100)
-F TOK_PLUS() -> i64 = 61       # +
-F TOK_MINUS() -> i64 = 62      # -
-F TOK_STAR() -> i64 = 63       # *
-F TOK_SLASH() -> i64 = 64      # /
-F TOK_PERCENT() -> i64 = 65    # %
-F TOK_LT() -> i64 = 66         # <
-F TOK_GT() -> i64 = 67         # >
-F TOK_LT_EQ() -> i64 = 68      # <=
-F TOK_GT_EQ() -> i64 = 69      # >=
-F TOK_EQ_EQ() -> i64 = 70      # ==
-F TOK_NOT_EQ() -> i64 = 71     # !=
-F TOK_AMP() -> i64 = 72        # &
-F TOK_PIPE() -> i64 = 73       # |
-F TOK_CARET() -> i64 = 74      # ^
-F TOK_TILDE() -> i64 = 75      # ~
-F TOK_SHL() -> i64 = 76        # <<
-F TOK_SHR() -> i64 = 77        # >>
-F TOK_BANG() -> i64 = 78       # !
-F TOK_NOT() -> i64 = 78        # ! (logical not) - same as TOK_BANG
-F TOK_AND() -> i64 = 79        # &&
-F TOK_OR() -> i64 = 80         # ||
+fn TOK_PLUS() -> i64 = 61       # +
+fn TOK_MINUS() -> i64 = 62      # -
+fn TOK_STAR() -> i64 = 63       # *
+fn TOK_SLASH() -> i64 = 64      # /
+fn TOK_PERCENT() -> i64 = 65    # %
+fn TOK_LT() -> i64 = 66         # <
+fn TOK_GT() -> i64 = 67         # >
+fn TOK_LT_EQ() -> i64 = 68      # <=
+fn TOK_GT_EQ() -> i64 = 69      # >=
+fn TOK_EQ_EQ() -> i64 = 70      # ==
+fn TOK_NOT_EQ() -> i64 = 71     # !=
+fn TOK_AMP() -> i64 = 72        # &
+fn TOK_PIPE() -> i64 = 73       # |
+fn TOK_CARET() -> i64 = 74      # ^
+fn TOK_TILDE() -> i64 = 75      # ~
+fn TOK_SHL() -> i64 = 76        # <<
+fn TOK_SHR() -> i64 = 77        # >>
+fn TOK_BANG() -> i64 = 78       # !
+fn TOK_NOT() -> i64 = 78        # ! (logical not) - same as TOK_BANG
+fn TOK_AND() -> i64 = 79        # &&
+fn TOK_OR() -> i64 = 80         # ||
 
 # Assignment tokens (81-90)
-F TOK_EQ() -> i64 = 81         # =
-F TOK_COLON_EQ() -> i64 = 82   # :=
-F TOK_PLUS_EQ() -> i64 = 83    # +=
-F TOK_MINUS_EQ() -> i64 = 84   # -=
-F TOK_STAR_EQ() -> i64 = 85    # *=
-F TOK_SLASH_EQ() -> i64 = 86   # /=
+fn TOK_EQ() -> i64 = 81         # =
+fn TOK_COLON_EQ() -> i64 = 82   # :=
+fn TOK_PLUS_EQ() -> i64 = 83    # +=
+fn TOK_MINUS_EQ() -> i64 = 84   # -=
+fn TOK_STAR_EQ() -> i64 = 85    # *=
+fn TOK_SLASH_EQ() -> i64 = 86   # /=
 
 # Delimiter tokens (91-100)
-F TOK_LPAREN() -> i64 = 91     # (
-F TOK_RPAREN() -> i64 = 92     # )
-F TOK_LBRACE() -> i64 = 93     # {
-F TOK_RBRACE() -> i64 = 94     # }
-F TOK_LBRACKET() -> i64 = 95   # [
-F TOK_RBRACKET() -> i64 = 96   # ]
+fn TOK_LPAREN() -> i64 = 91     # (
+fn TOK_RPAREN() -> i64 = 92     # )
+fn TOK_LBRACE() -> i64 = 93     # {
+fn TOK_RBRACE() -> i64 = 94     # }
+fn TOK_LBRACKET() -> i64 = 95   # [
+fn TOK_RBRACKET() -> i64 = 96   # ]
 
 # Punctuation tokens (101-120)
-F TOK_COMMA() -> i64 = 101     # ,
-F TOK_COLON() -> i64 = 102     # :
-F TOK_SEMI() -> i64 = 103      # ;
-F TOK_DOT() -> i64 = 104       # .
-F TOK_DOT_DOT() -> i64 = 105   # ..
-F TOK_DOT_DOT_EQ() -> i64 = 106 # ..=
-F TOK_ARROW() -> i64 = 107     # ->
-F TOK_FAT_ARROW() -> i64 = 108 # =>
-F TOK_COLON_COLON() -> i64 = 109 # ::
-F TOK_QUESTION() -> i64 = 110  # ?
-F TOK_AT() -> i64 = 111        # @
-F TOK_HASH() -> i64 = 112      # #
-F TOK_PIPE_ARROW() -> i64 = 113  # |>
-F TOK_ELLIPSIS() -> i64 = 114    # ...
-F TOK_DOLLAR() -> i64 = 115      # $
-F TOK_HASH_BRACKET() -> i64 = 116 # #[
-F TOK_LIFETIME() -> i64 = 117    # 'a, 'static, etc.
+fn TOK_COMMA() -> i64 = 101     # ,
+fn TOK_COLON() -> i64 = 102     # :
+fn TOK_SEMI() -> i64 = 103      # ;
+fn TOK_DOT() -> i64 = 104       # .
+fn TOK_DOT_DOT() -> i64 = 105   # ..
+fn TOK_DOT_DOT_EQ() -> i64 = 106 # ..=
+fn TOK_ARROW() -> i64 = 107     # ->
+fn TOK_FAT_ARROW() -> i64 = 108 # =>
+fn TOK_COLON_COLON() -> i64 = 109 # ::
+fn TOK_QUESTION() -> i64 = 110  # ?
+fn TOK_AT() -> i64 = 111        # @
+fn TOK_HASH() -> i64 = 112      # #
+fn TOK_PIPE_ARROW() -> i64 = 113  # |>
+fn TOK_ELLIPSIS() -> i64 = 114    # ...
+fn TOK_DOLLAR() -> i64 = 115      # $
+fn TOK_HASH_BRACKET() -> i64 = 116 # #[
+fn TOK_LIFETIME() -> i64 = 117    # 'a, 'static, etc.
 
 # Special tokens
-F TOK_EOF() -> i64 = 200
-F TOK_ERROR() -> i64 = 201
+fn TOK_EOF() -> i64 = 200
+fn TOK_ERROR() -> i64 = 201
 
 # ============================================================================
 # AST Node Types
 # ============================================================================
 
 # Item types
-F ITEM_FUNCTION() -> i64 = 1
-F ITEM_STRUCT() -> i64 = 2
-F ITEM_USE() -> i64 = 3
-F ITEM_IMPL() -> i64 = 7
+fn ITEM_FUNCTION() -> i64 = 1
+fn ITEM_STRUCT() -> i64 = 2
+fn ITEM_USE() -> i64 = 3
+fn ITEM_IMPL() -> i64 = 7
 
 # Statement types
-F STMT_LET() -> i64 = 10
-F STMT_EXPR() -> i64 = 11
-F STMT_RETURN() -> i64 = 12
-F STMT_BREAK() -> i64 = 13
-F STMT_CONTINUE() -> i64 = 14
+fn STMT_LET() -> i64 = 10
+fn STMT_EXPR() -> i64 = 11
+fn STMT_RETURN() -> i64 = 12
+fn STMT_BREAK() -> i64 = 13
+fn STMT_CONTINUE() -> i64 = 14
 
 # Expression types
-F EXPR_INT() -> i64 = 20
-F EXPR_BOOL() -> i64 = 22
-F EXPR_STRING() -> i64 = 23
-F EXPR_IDENT() -> i64 = 25
-F EXPR_SELF_CALL() -> i64 = 26
-F EXPR_BINARY() -> i64 = 27
-F EXPR_UNARY() -> i64 = 28
-F EXPR_IF() -> i64 = 30
-F EXPR_LOOP() -> i64 = 31
-F EXPR_CALL() -> i64 = 33
-F EXPR_METHOD_CALL() -> i64 = 34
-F EXPR_FIELD() -> i64 = 36
-F EXPR_INDEX() -> i64 = 37
-F EXPR_ARRAY() -> i64 = 38
-F EXPR_STRUCT_LIT() -> i64 = 40
-F EXPR_BLOCK() -> i64 = 42
-F EXPR_ASSIGN() -> i64 = 48
-F EXPR_MATCH() -> i64 = 49
-F EXPR_WHILE() -> i64 = 52
+fn EXPR_INT() -> i64 = 20
+fn EXPR_BOOL() -> i64 = 22
+fn EXPR_STRING() -> i64 = 23
+fn EXPR_IDENT() -> i64 = 25
+fn EXPR_SELF_CALL() -> i64 = 26
+fn EXPR_BINARY() -> i64 = 27
+fn EXPR_UNARY() -> i64 = 28
+fn EXPR_IF() -> i64 = 30
+fn EXPR_LOOP() -> i64 = 31
+fn EXPR_CALL() -> i64 = 33
+fn EXPR_METHOD_CALL() -> i64 = 34
+fn EXPR_FIELD() -> i64 = 36
+fn EXPR_INDEX() -> i64 = 37
+fn EXPR_ARRAY() -> i64 = 38
+fn EXPR_STRUCT_LIT() -> i64 = 40
+fn EXPR_BLOCK() -> i64 = 42
+fn EXPR_ASSIGN() -> i64 = 48
+fn EXPR_MATCH() -> i64 = 49
+fn EXPR_WHILE() -> i64 = 52
 
 # Pattern types
-F PAT_WILDCARD() -> i64 = 80
-F PAT_IDENT() -> i64 = 81
-F PAT_LITERAL() -> i64 = 82
-F PAT_TUPLE() -> i64 = 83
-F PAT_STRUCT() -> i64 = 84
-F PAT_VARIANT() -> i64 = 85
-F PAT_RANGE() -> i64 = 86
-F PAT_OR() -> i64 = 87
+fn PAT_WILDCARD() -> i64 = 80
+fn PAT_IDENT() -> i64 = 81
+fn PAT_LITERAL() -> i64 = 82
+fn PAT_TUPLE() -> i64 = 83
+fn PAT_STRUCT() -> i64 = 84
+fn PAT_VARIANT() -> i64 = 85
+fn PAT_RANGE() -> i64 = 86
+fn PAT_OR() -> i64 = 87
 
 # Binary operators
-F BINOP_ADD() -> i64 = 1
-F BINOP_SUB() -> i64 = 2
-F BINOP_MUL() -> i64 = 3
-F BINOP_DIV() -> i64 = 4
-F BINOP_MOD() -> i64 = 5
-F BINOP_LT() -> i64 = 6
-F BINOP_LTE() -> i64 = 7
-F BINOP_GT() -> i64 = 8
-F BINOP_GTE() -> i64 = 9
-F BINOP_EQ() -> i64 = 10
-F BINOP_NEQ() -> i64 = 11
-F BINOP_AND() -> i64 = 12
-F BINOP_OR() -> i64 = 13
-F BINOP_BIT_AND() -> i64 = 14
-F BINOP_BIT_OR() -> i64 = 15
-F BINOP_BIT_XOR() -> i64 = 16
-F BINOP_SHL() -> i64 = 17
-F BINOP_SHR() -> i64 = 18
+fn BINOP_ADD() -> i64 = 1
+fn BINOP_SUB() -> i64 = 2
+fn BINOP_MUL() -> i64 = 3
+fn BINOP_DIV() -> i64 = 4
+fn BINOP_MOD() -> i64 = 5
+fn BINOP_LT() -> i64 = 6
+fn BINOP_LTE() -> i64 = 7
+fn BINOP_GT() -> i64 = 8
+fn BINOP_GTE() -> i64 = 9
+fn BINOP_EQ() -> i64 = 10
+fn BINOP_NEQ() -> i64 = 11
+fn BINOP_AND() -> i64 = 12
+fn BINOP_OR() -> i64 = 13
+fn BINOP_BIT_AND() -> i64 = 14
+fn BINOP_BIT_OR() -> i64 = 15
+fn BINOP_BIT_XOR() -> i64 = 16
+fn BINOP_SHL() -> i64 = 17
+fn BINOP_SHR() -> i64 = 18
 
 # Unary operators
-F UNOP_NEG() -> i64 = 1
-F UNOP_NOT() -> i64 = 2
+fn UNOP_NEG() -> i64 = 1
+fn UNOP_NOT() -> i64 = 2
 
 # Node sizes
-F ITEM_SIZE() -> i64 = 64
-F EXPR_SIZE() -> i64 = 64
-F STMT_SIZE() -> i64 = 40
+fn ITEM_SIZE() -> i64 = 64
+fn EXPR_SIZE() -> i64 = 64
+fn STMT_SIZE() -> i64 = 40

@@ -27,9 +27,9 @@ fn gen_result(source: &str) -> Result<String, String> {
 fn test_simple_if() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            I x > 0 { R 1 }
-            R 0
+        fn test(x: i64) -> i64 {
+            I x > 0 { return 1 }
+            return 0
         }
     "#,
     );
@@ -40,8 +40,8 @@ fn test_simple_if() {
 fn test_if_else() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            I x > 0 { R 1 } E { R 0 }
+        fn test(x: i64) -> i64 {
+            I x > 0 { return 1 } else { return 0 }
         }
     "#,
     );
@@ -52,10 +52,8 @@ fn test_if_else() {
 fn test_if_else_if() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            I x > 0 { R 1 }
-            E I x < 0 { R -1 }
-            E { R 0 }
+        fn test(x: i64) -> i64 {
+            I x > 0 { return 1 } else I x < 0 { return -1 } else { return 0 }
         }
     "#,
     );
@@ -67,11 +65,8 @@ fn test_if_else_if() {
 fn test_if_else_if_chain() {
     let ir = gen_ok(
         r#"
-        F classify(x: i64) -> i64 {
-            I x > 100 { R 3 }
-            E I x > 50 { R 2 }
-            E I x > 0 { R 1 }
-            E { R 0 }
+        fn classify(x: i64) -> i64 {
+            I x > 100 { return 3 } else I x > 50 { return 2 } else I x > 0 { return 1 } else { return 0 }
         }
     "#,
     );
@@ -82,9 +77,9 @@ fn test_if_else_if_chain() {
 fn test_if_with_block_value() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            y := I x > 0 { 1 } E { 0 }
-            R y
+        fn test(x: i64) -> i64 {
+            y := I x > 0 { 1 } else { 0 }
+            return y
         }
     "#,
     );
@@ -96,12 +91,11 @@ fn test_if_with_block_value() {
 fn test_nested_if() {
     let ir = gen_ok(
         r#"
-        F test(x: i64, y: i64) -> i64 {
+        fn test(x: i64, y: i64) -> i64 {
             I x > 0 {
-                I y > 0 { R 1 }
-                E { R 2 }
+                I y > 0 { return 1 } else { return 2 }
             }
-            R 0
+            return 0
         }
     "#,
     );
@@ -112,11 +106,11 @@ fn test_nested_if() {
 fn test_if_both_branches_return() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 0 {
-                R 1
-            } E {
-                R 0
+                return 1
+            } else {
+                return 0
             }
         }
     "#,
@@ -129,11 +123,11 @@ fn test_if_both_branches_return() {
 fn test_if_only_then_returns() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 0 {
-                R 1
+                return 1
             }
-            R 0
+            return 0
         }
     "#,
     );
@@ -144,12 +138,12 @@ fn test_if_only_then_returns() {
 fn test_if_with_assignments() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             y := 0
             I x > 0 {
                 y = x * 2
             }
-            R y
+            return y
         }
     "#,
     );
@@ -164,8 +158,8 @@ fn test_if_with_assignments() {
 fn test_match_integer_literal() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1 => 10,
                 2 => 20,
                 _ => 0
@@ -181,8 +175,8 @@ fn test_match_integer_literal() {
 fn test_match_wildcard_only() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 _ => 42
             }
         }
@@ -195,8 +189,8 @@ fn test_match_wildcard_only() {
 fn test_match_multiple_int_cases() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 100,
                 1 => 200,
                 2 => 300,
@@ -213,8 +207,8 @@ fn test_match_multiple_int_cases() {
 fn test_match_bool() {
     let ir = gen_ok(
         r#"
-        F test(x: bool) -> i64 {
-            M x {
+        fn test(x: bool) -> i64 {
+            match x {
                 true => 1,
                 _ => 0
             }
@@ -228,8 +222,8 @@ fn test_match_bool() {
 fn test_match_with_variable_binding() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 n => n * 2
             }
         }
@@ -242,9 +236,9 @@ fn test_match_with_variable_binding() {
 fn test_match_enum_variant() {
     let ir = gen_ok(
         r#"
-        E Color { Red, Green, Blue }
-        F test(c: Color) -> i64 {
-            M c {
+        enum Color { Red, Green, Blue }
+        fn test(c: Color) -> i64 {
+            match c {
                 Red => 1,
                 Green => 2,
                 Blue => 3,
@@ -260,9 +254,9 @@ fn test_match_enum_variant() {
 fn test_match_enum_with_payload() {
     let ir = gen_ok(
         r#"
-        E Shape { Circle(i64), Rect(i64, i64) }
-        F area(s: Shape) -> i64 {
-            M s {
+        enum Shape { Circle(i64), Rect(i64, i64) }
+        fn area(s: Shape) -> i64 {
+            match s {
                 Circle(r) => r * r,
                 Rect(w, h) => w * h,
                 _ => 0
@@ -281,8 +275,8 @@ fn test_match_enum_with_payload() {
 fn test_pattern_wildcard() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x { _ => 42 }
+        fn test(x: i64) -> i64 {
+            match x { _ => 42 }
         }
     "#,
     );
@@ -293,8 +287,8 @@ fn test_pattern_wildcard() {
 fn test_pattern_literal_int() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x { 0 => 100, _ => 0 }
+        fn test(x: i64) -> i64 {
+            match x { 0 => 100, _ => 0 }
         }
     "#,
     );
@@ -305,8 +299,8 @@ fn test_pattern_literal_int() {
 fn test_pattern_literal_bool() {
     let ir = gen_ok(
         r#"
-        F test(x: bool) -> i64 {
-            M x { true => 1, _ => 0 }
+        fn test(x: bool) -> i64 {
+            match x { true => 1, _ => 0 }
         }
     "#,
     );
@@ -317,8 +311,8 @@ fn test_pattern_literal_bool() {
 fn test_pattern_identifier_binding() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x { n => n + 1 }
+        fn test(x: i64) -> i64 {
+            match x { n => n + 1 }
         }
     "#,
     );
@@ -329,9 +323,9 @@ fn test_pattern_identifier_binding() {
 fn test_pattern_tuple() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             t := (1, 2)
-            M t {
+            match t {
                 (a, b) => a + b,
                 _ => 0
             }
@@ -345,8 +339,8 @@ fn test_pattern_tuple() {
 fn test_pattern_or() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1 | 2 | 3 => 10,
                 _ => 0
             }
@@ -360,8 +354,8 @@ fn test_pattern_or() {
 fn test_pattern_range_inclusive() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1..=5 => 10,
                 _ => 0
             }
@@ -375,8 +369,8 @@ fn test_pattern_range_inclusive() {
 fn test_pattern_range_exclusive() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1..5 => 10,
                 _ => 0
             }
@@ -391,9 +385,9 @@ fn test_pattern_struct_field() {
     // Struct pattern matching - use result since syntax may vary
     let result = gen_result(
         r#"
-        S Point { x: i64, y: i64 }
-        F test(p: Point) -> i64 {
-            M p {
+        struct Point { x: i64, y: i64 }
+        fn test(p: Point) -> i64 {
+            match p {
                 n => 42,
                 _ => 0
             }
@@ -411,19 +405,19 @@ fn test_pattern_struct_field() {
 fn test_deeply_nested_if_else() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             I x > 10 {
                 I x > 20 {
                     I x > 30 {
-                        R 3
-                    } E {
-                        R 2
+                        return 3
+                    } else {
+                        return 2
                     }
-                } E {
-                    R 1
+                } else {
+                    return 1
                 }
-            } E {
-                R 0
+            } else {
+                return 0
             }
         }
     "#,
@@ -435,8 +429,8 @@ fn test_deeply_nested_if_else() {
 fn test_match_single_arm() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x { _ => 99 }
+        fn test(x: i64) -> i64 {
+            match x { _ => 99 }
         }
     "#,
     );
@@ -447,8 +441,8 @@ fn test_match_single_arm() {
 fn test_match_with_computation_in_arms() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 0 => 0,
                 1 => 1,
                 n => n * n
@@ -463,9 +457,9 @@ fn test_match_with_computation_in_arms() {
 fn test_if_as_expression_with_else_if() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            result := I x > 0 { 1 } E I x < 0 { -1 } E { 0 }
-            R result
+        fn test(x: i64) -> i64 {
+            result := I x > 0 { 1 } else I x < 0 { -1 } else { 0 }
+            return result
         }
     "#,
     );
@@ -476,12 +470,12 @@ fn test_if_as_expression_with_else_if() {
 fn test_match_followed_by_code() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            y := M x {
+        fn test(x: i64) -> i64 {
+            y := match x {
                 0 => 10,
                 _ => 20
             }
-            R y + 1
+            return y + 1
         }
     "#,
     );

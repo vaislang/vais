@@ -1,0 +1,24 @@
+# CHECKS: simple XOR checksum over byte sequence.
+fn checksum(p: i64, n: i64) -> i64 {
+    sum: i64 := mut 0
+    LF i: 0..n {
+        sum = sum ^ load_byte(p + i)
+    }
+    sum
+}
+
+fn main() -> i64 {
+    p1: i64 := str_to_ptr("ab")
+    # 'a' = 97, 'b' = 98 → 97 ^ 98 = 3
+    I checksum(p1, strlen(p1)) != 3 { return 1 }
+
+    p2: i64 := str_to_ptr("aa")
+    # 97 ^ 97 = 0
+    I checksum(p2, strlen(p2)) != 0 { return 2 }
+
+    p3: i64 := str_to_ptr("hello")
+    # 104^101^108^108^111 = ...
+    # 104^101 = 13; 13^108 = 97; 97^108 = 13; 13^111 = 98
+    I checksum(p3, strlen(p3)) != 98 { return 3 }
+    return 0
+}

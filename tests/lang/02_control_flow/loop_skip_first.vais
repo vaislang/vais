@@ -1,0 +1,15 @@
+# CHECKS: skip first iteration via continue.
+fn main() -> i64 {
+    sum: i64 := mut 0
+    n: i64 := mut 0
+
+    LF i: 0..10 {
+        I i == 0 { C }
+        sum = sum + i
+        n = n + 1
+    }
+    # Skip 0; sum 1..9 = 45, n=9
+    I sum != 45 { return 1 }
+    I n != 9 { return 2 }
+    return 0
+}

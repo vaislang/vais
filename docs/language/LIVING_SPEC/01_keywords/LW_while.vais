@@ -1,0 +1,17 @@
+# LIVING_SPEC/01_keywords/LW_while.vais
+# Key concept: LW cond { body } while-loop 구문.
+# 조건이 참인 동안 body를 반복. C (continue), B (break) 사용 가능.
+
+fn count_down(start: i64) -> i64 {
+    n := mut start
+    steps := mut 0
+    LW n > 0 {
+        n = n - 1
+        steps = steps + 1
+    }
+    steps
+}
+
+fn main() -> i64 {
+    count_down(5)
+}

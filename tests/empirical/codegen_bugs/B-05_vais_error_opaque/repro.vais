@@ -1,0 +1,25 @@
+# B-05: VaisError opaque 처리 — store i64 vs %VaisError = type opaque
+#
+# Discovered: 2026-05-09 loop 54 (vais-server password smoke 시도 중).
+#
+# Symptom: clang error
+#   '%t21' defined with type '%VaisError = type opaque' but expected 'i64'
+#   store i64 %t21, i64* %t24
+# in module password_ba3f15e4f2d1a3ef.ll line 706.
+#
+# Trigger context: vais-server auth/password.vais 의 validate_password 가
+# Result<bool, VaisError> return. 이 monomorphization 시 codegen 이
+# VaisError 를 opaque 로 lower 한 후 store i64 로 잘못 처리. B-01 (HashMap
+# ptr/i64), B-04 (Vec<str> ptr/i64) 와 같은 family — generic enum/struct
+# instantiation 에서 silent type coercion.
+#
+# Status: still_silent (build 통과 + clang catches). vais-server password
+# / auth surface 의 broader smoke 차단.
+#
+# Baseline impact: 0 (vais-server runtime 13/13 미사용 path).
+
+use auth/password.{validate_password}
+
+fn main() -> i64 {
+    0
+}

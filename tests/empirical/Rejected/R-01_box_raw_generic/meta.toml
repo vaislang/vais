@@ -1,0 +1,39 @@
+[entry]
+id = "Rejected-01"
+classification = "Rejected at type-check (NOT A4, NOT Controlled)"
+surface = "Box without a type parameter — accessing a field on it is rejected with E030"
+site = "unification.rs:114"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:114"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "F take_box(b: Box) -> i64 { R b.value }"
+expected_per_design = "vaisc check rejects with E030 'no field value on type Box'"
+actual_observed = "E030 fires; type-check exits non-zero"
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified"
+notes = """
+Type-check (not codegen) rejects this. The unification rule at line 114
+allows the bare-Box surface to type-check at the unify level, but
+field access on it is caught by a downstream check before codegen.
+v2 contract requires 3 distinct probes for HARD v2 status. Pending:
+  - method call on raw Box (probably also E030 or E001)
+  - returning a raw Box from a function
+  - struct field of type Box (no params)
+"""
+
+[migration]
+# Rejected surfaces are not migrated by Step 13. They are already safe.
+
+[assertion_kind]
+kind = "check_fails"
+required_stderr_patterns = ["E030", "no field 'value'", "type 'Box'"]
+rationale = """
+E030 is the specific error code the master-plan documents; the no-field
+phrase confirms the rejection is at field access (not some other check
+that happens to fire). The 'type Box' pattern guards against accidentally
+matching a different unrelated message that contains 'no field' and
+'value' but for a different type.
+"""

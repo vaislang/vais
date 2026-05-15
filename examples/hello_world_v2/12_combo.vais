@@ -1,0 +1,20 @@
+# Hello World #12: combination — generic + Vec + match + recursion
+use std/vec.{vec_new};
+
+fn factorial(n: i64) -> i64 {
+    I n <= 1 { return 1 }
+    n * factorial(n - 1)
+}
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 1..=4 {
+        v.push(factorial(i))
+    }
+    # 1!=1, 2!=2, 3!=6, 4!=24 → sum=33
+    sum: i64 := mut 0
+    LF i: 0..v.len() {
+        sum = sum + v[i]
+    }
+    return sum    # exit 33
+}

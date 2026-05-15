@@ -633,8 +633,8 @@ mod tests {
             title: "Test Lesson".to_string(),
             description: "A test".to_string(),
             content: "Content".to_string(),
-            code_template: "F main() -> i64 { }".to_string(),
-            solution: "F main() -> i64 { R 0 }".to_string(),
+            code_template: "fn main() -> i64 { }".to_string(),
+            solution: "fn main() -> i64 { return 0 }".to_string(),
             test_cases: vec![],
             hints: vec!["Try this".to_string()],
         };
@@ -689,7 +689,7 @@ mod tests {
         let tutorial = Tutorial::with_progress_file(temp_file.path());
         let lesson = tutorial.get_lesson(0, 0).unwrap();
 
-        let result = tutorial.validate_code("F main() -> i64 { R 42 }", lesson);
+        let result = tutorial.validate_code("fn main() -> i64 { return 42 }", lesson);
         assert!(result.is_ok());
         let validation = result.unwrap();
         assert!(validation.errors.is_empty());
@@ -856,7 +856,7 @@ mod tests {
             hints: vec![],
         };
         let result = tutorial
-            .validate_code("F main() -> i64 { R 0 }", &lesson)
+            .validate_code("fn main() -> i64 { return 0 }", &lesson)
             .unwrap();
         assert!(!result.success);
         assert!(result
@@ -893,7 +893,7 @@ mod tests {
             hints: vec![],
         };
         let result = tutorial
-            .validate_code("F main() -> i64 { R 0 }", &lesson)
+            .validate_code("fn main() -> i64 { return 0 }", &lesson)
             .unwrap();
         assert!(result.success);
         assert_eq!(result.passed_tests, 2);

@@ -1,0 +1,53 @@
+# Stdlib self-test: StrHashMap<i64> basic operations.
+# REGRESSION for bug C3: prior to the linkonce_odr fix in
+# function_gen/generics.rs, this file failed to link because the same
+# `StrHashMap_hash$i64` specialization was emitted in both std/hashmap and
+# the consumer module. linkonce_odr lets the linker dedupe equivalent copies.
+use std/hashmap
+
+fn main() -> i64 {
+    m: StrHashMap<i64> := mut StrHashMap.with_capacity(16)
+    I m.len() != 0 { return 1 }
+    I m.is_empty() != 1 { return 2 }
+
+    # set + get
+    m.set("alpha", 1)
+    m.set("beta", 2)
+    m.set("gamma", 3)
+    I m.len() != 3 { return 3 }
+    I m.is_empty() != 0 { return 4 }
+
+    I m.get_str("alpha") != 1 { return 5 }
+    I m.get_str("beta") != 2 { return 6 }
+    I m.get_str("gamma") != 3 { return 7 }
+
+    # contains
+    I m.contains("alpha") != 1 { return 8 }
+    I m.contains("missing") != 0 { return 9 }
+
+    # update existing
+    m.set("alpha", 100)
+    I m.get_str("alpha") != 100 { return 10 }
+    # update should not increase size
+    I m.len() != 3 { return 11 }
+
+    # many inserts to trigger rehash
+    big: StrHashMap<i64> := mut StrHashMap.with_capacity(8)
+    big.set("k0", 0)
+    big.set("k1", 1)
+    big.set("k2", 2)
+    big.set("k3", 3)
+    big.set("k4", 4)
+    big.set("k5", 5)
+    big.set("k6", 6)
+    big.set("k7", 7)
+    big.set("k8", 8)
+    big.set("k9", 9)
+    I big.len() != 10 { return 12 }
+    I big.get_str("k0") != 0 { return 13 }
+    I big.get_str("k5") != 5 { return 14 }
+    I big.get_str("k9") != 9 { return 15 }
+    I big.contains("k7") != 1 { return 16 }
+
+    return 0
+}

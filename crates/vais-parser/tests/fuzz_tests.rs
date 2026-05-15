@@ -144,11 +144,11 @@ fn fuzz_random_ascii_strings() {
 
 #[test]
 fn fuzz_mutated_valid_code() {
-    let valid_programs = [
-        "F add(x:i64,y:i64)->i64=x+y",
-        "S Point{x:i64,y:i64}",
-        "E Option<T>{Some(T),None}",
-        "F main()->(){x:=42;y:=x+1;R()}",
+    let valid_programs = vec![
+        "fn add(x:i64,y:i64)->i64=x+y",
+        "struct Point{x:i64,y:i64}",
+        "enum Option<T>{Some(T),None}",
+        "fn main()->(){x:=42;y:=x+1;R()}",
         "T Show{F show(self)->str}",
         "I Show for i64{F show(self)->str=\"number\"}",
     ];
@@ -298,7 +298,7 @@ fn fuzz_deeply_nested_expressions() {
         }
 
         // Nested blocks
-        let mut input3 = String::from("F f()->(){ ");
+        let mut input3 = String::from("fn f()->(){ ");
         for _ in 0..depth {
             input3.push('{');
         }
@@ -348,7 +348,7 @@ fn fuzz_many_sequential_statements() {
     let mut failures = Vec::new();
 
     for count in [100, 500, 1000, 2000] {
-        let mut input = String::from("F f()->(){");
+        let mut input = String::from("fn f()->(){");
         for i in 0..count {
             input.push_str(&format!("x{}:={};", i, i));
         }
@@ -444,7 +444,8 @@ fn fuzz_unicode_and_special_chars() {
 fn fuzz_empty_and_minimal_inputs() {
     let test_cases = vec![
         "", " ", "\n", "\t", "\r\n", "F", "S", "E", "T", "I", "(", ")", "{", "}", "[", "]", ":",
-        ";", ",", "=", "->", "<>", "F()", "F f", "F f(", "F f)", "F f()=", "F f()->", "S{", "E{",
+        ";", ",", "=", "->", "<>", "F()", "F f", "fn f(", "F f)", "fn f()=", "fn f()->", "S{",
+        "E{",
     ];
 
     let mut failures = Vec::new();
@@ -492,7 +493,7 @@ fn fuzz_pathological_patterns() {
         ("{{{{{)))))", "crossed braces/parens"),
         // Keyword spam
         ("F F F F F F F F F F", "repeated F"),
-        ("S S S S S S S S S S", "repeated S"),
+        ("struct S S S S S S S S S", "repeated S"),
         ("R R R R R R R R R R", "repeated R"),
         ("if if if if if if", "repeated if"),
         // Type syntax abuse

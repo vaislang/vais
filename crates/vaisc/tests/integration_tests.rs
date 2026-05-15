@@ -62,13 +62,13 @@ fn test_empty_module() {
 #[test]
 fn test_hello_world() {
     // print is a runtime function, so just test a simple main
-    let source = r#"F main() -> () { () }"#;
+    let source = r#"fn main() -> () { () }"#;
     assert!(compiles(source));
 }
 
 #[test]
 fn test_simple_arithmetic() {
-    let source = "F add(a:i64, b:i64) -> i64 = a + b";
+    let source = "fn add(a:i64, b:i64) -> i64 = a + b";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("define i64 @add"));
     assert!(ir.contains("add i64"));
@@ -76,7 +76,7 @@ fn test_simple_arithmetic() {
 
 #[test]
 fn test_fibonacci() {
-    let source = "F fib(n:i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)";
+    let source = "fn fib(n:i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("define i64 @fib"));
     assert!(ir.contains("call i64 @fib")); // Recursive calls
@@ -86,7 +86,7 @@ fn test_fibonacci() {
 
 #[test]
 fn test_if_else() {
-    let source = "F max(a:i64, b:i64)->i64=I a>b{a}E{b}";
+    let source = "fn max(a:i64, b:i64)->i64=I a>b{a} else {b}";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("icmp sgt"));
     assert!(ir.contains("br i1"));
@@ -95,11 +95,11 @@ fn test_if_else() {
 #[test]
 fn test_nested_if() {
     let source = r#"
-F classify(x: i64) -> i64 {
+fn classify(x: i64) -> i64 {
     I x > 0 {
-        I x > 100 { 2 } E { 1 }
-    } E {
-        I x < 0 - 100 { 0 - 2 } E { 0 - 1 }
+        I x > 100 { 2 } else { 1 }
+    } else {
+        I x < 0 - 100 { 0 - 2 } else { 0 - 1 }
     }
 }
 "#;
@@ -109,7 +109,7 @@ F classify(x: i64) -> i64 {
 #[test]
 fn test_match_expression() {
     let source = r#"
-F digit_name(n:i64) -> str = M n {
+fn digit_name(n:i64) -> str = match n {
     0 => "zero",
     1 => "one",
     2 => "two",
@@ -123,7 +123,7 @@ F digit_name(n:i64) -> str = M n {
 fn test_for_loop() {
     // Test for loop with range - immutable binding
     let source = r#"
-F count_range(n: i64) -> i64 {
+fn count_range(n: i64) -> i64 {
     result := 0;
     L i: 0..n { result };
     result
@@ -136,7 +136,7 @@ F count_range(n: i64) -> i64 {
 fn test_while_loop() {
     // Test while loop syntax without mutable assignment
     let source = r#"
-F check_condition(n: i64) -> i64 {
+fn check_condition(n: i64) -> i64 {
     L _: n > 0 { n };
     0
 }
@@ -148,7 +148,7 @@ F check_condition(n: i64) -> i64 {
 fn test_infinite_loop_with_break() {
     // Test infinite loop with break
     let source = r#"
-F find_limit(x: i64) -> i64 {
+fn find_limit(x: i64) -> i64 {
     L {
         I x > 100 { B x };
         x
@@ -164,8 +164,8 @@ F find_limit(x: i64) -> i64 {
 #[test]
 fn test_struct_definition() {
     let source = r#"
-S Point { x: f64, y: f64 }
-F origin() -> Point = Point { x: 0.0, y: 0.0 }
+struct Point { x: f64, y: f64 }
+fn origin() -> Point = Point { x: 0.0, y: 0.0 }
 "#;
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("%Point = type { double, double }"));
@@ -174,8 +174,8 @@ F origin() -> Point = Point { x: 0.0, y: 0.0 }
 #[test]
 fn test_struct_field_access() {
     let source = r#"
-S Point { x: i64, y: i64 }
-F get_x(p: Point) -> i64 = p.x
+struct Point { x: i64, y: i64 }
+fn get_x(p: Point) -> i64 = p.x
 "#;
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("getelementptr"));
@@ -184,8 +184,8 @@ F get_x(p: Point) -> i64 = p.x
 #[test]
 fn test_empty_struct() {
     let source = r#"
-S Unit {}
-F make_unit() -> Unit = Unit {}
+struct Unit {}
+fn make_unit() -> Unit = Unit {}
 "#;
     assert!(compiles(source));
 }
@@ -196,7 +196,7 @@ F make_unit() -> Unit = Unit {}
 fn test_enum_definition() {
     // Enum definition - path syntax tested separately
     let source = r#"
-E Color { Red, Green, Blue }
+enum Color { Red, Green, Blue }
 "#;
     assert!(compiles(source));
 }
@@ -204,7 +204,7 @@ E Color { Red, Green, Blue }
 #[test]
 fn test_enum_with_data() {
     let source = r#"
-E Shape { Circle(f64), Rectangle(f64, f64) }
+enum Shape { Circle(f64), Rectangle(f64, f64) }
 "#;
     assert!(compiles(source));
 }
@@ -212,8 +212,8 @@ E Shape { Circle(f64), Rectangle(f64, f64) }
 #[test]
 fn test_enum_pattern_match() {
     let source = r#"
-E Result { Ok(i64), Err(str) }
-F handle(r: Result) -> i64 = M r {
+enum Result { Ok(i64), Err(str) }
+fn handle(r: Result) -> i64 = match r {
     Ok(v) => v,
     Err(_) => 0
 }
@@ -224,15 +224,15 @@ F handle(r: Result) -> i64 = M r {
 #[test]
 fn test_enum_unit_variant_matching() {
     let source = r#"
-E Status { Pending, Running, Done }
+enum Status { Pending, Running, Done }
 
-F status_to_code(s: Status) -> i64 = M s {
+fn status_to_code(s: Status) -> i64 = match s {
     Pending => 0,
     Running => 1,
     Done => 2
 }
 
-F test_status() -> i64 {
+fn test_status() -> i64 {
     pending := Pending;
     running := Running;
     done := Done;
@@ -251,22 +251,22 @@ F test_status() -> i64 {
 
 #[test]
 fn test_generic_function() {
-    let source = "F identity<T>(x: T) -> T = x";
+    let source = "fn identity<T>(x: T) -> T = x";
     assert!(compiles(source));
 }
 
 #[test]
 fn test_generic_struct() {
     let source = r#"
-S Box<T> { value: T }
-F get_value<T>(b: Box<T>) -> T = b.value
+struct Box<T> { value: type }
+fn get_value<T>(b: Box<T>) -> type = b.value
 "#;
     assert!(compiles(source));
 }
 
 #[test]
 fn test_generic_with_bounds() {
-    let source = "F compare<T: Ord>(a: T, b: T) -> bool = a < b";
+    let source = "fn compare<T: Ord>(a: T, b: T) -> bool = a < b";
     assert!(compiles(source));
 }
 
@@ -275,7 +275,7 @@ fn test_generic_with_bounds() {
 #[test]
 fn test_simple_lambda() {
     let source = r#"
-F apply_double() -> i64 {
+fn apply_double() -> i64 {
     double := |x:i64| x * 2;
     double(21)
 }
@@ -286,9 +286,9 @@ F apply_double() -> i64 {
 #[test]
 fn test_higher_order_function() {
     let source = r#"
-F apply(f: (i64) -> i64, x: i64) -> i64 = f(x)
-F double(x: i64) -> i64 = x * 2
-F test() -> i64 = apply(double, 21)
+fn apply(f: (i64) -> i64, x: i64) -> i64 = f(x)
+fn double(x: i64) -> i64 = x * 2
+fn test() -> i64 = apply(double, 21)
 "#;
     assert!(compiles(source));
 }
@@ -299,26 +299,26 @@ F test() -> i64 = apply(double, 21)
 fn test_array_type() {
     // Test array type in parameter and indexing
     let source = r#"
-F first(arr: [i64]) -> i64 = arr[0]
+fn first(arr: [i64]) -> i64 = arr[0]
 "#;
     assert!(compiles(source));
 }
 
 #[test]
 fn test_tuple_type() {
-    let source = "F make_pair(a: i64, b: str) -> (i64, str) = (a, b)";
+    let source = "fn make_pair(a: i64, b: str) -> (i64, str) = (a, b)";
     assert!(compiles(source));
 }
 
 #[test]
 fn test_pointer_type() {
-    let source = "F identity_ptr(p: *i64) -> *i64 = p";
+    let source = "fn identity_ptr(p: *i64) -> *i64 = p";
     assert!(compiles(source));
 }
 
 #[test]
 fn test_reference_type() {
-    let source = "F ref_fn(r: &i64) -> i64 = 0";
+    let source = "fn ref_fn(r: &i64) -> i64 = 0";
     assert!(compiles(source));
 }
 
@@ -327,7 +327,7 @@ fn test_reference_type() {
 #[test]
 fn test_arithmetic_operators() {
     let source = r#"
-F math(a: i64, b: i64) -> i64 {
+fn math(a: i64, b: i64) -> i64 {
     x := a + b;
     y := x - a;
     z := y * b;
@@ -346,7 +346,7 @@ F math(a: i64, b: i64) -> i64 {
 #[test]
 fn test_comparison_operators() {
     let source = r#"
-F compare(a: i64, b: i64) -> bool {
+fn compare(a: i64, b: i64) -> bool {
     lt := a < b;
     le := a <= b;
     gt := a > b;
@@ -368,7 +368,7 @@ F compare(a: i64, b: i64) -> bool {
 #[test]
 fn test_bitwise_operators() {
     let source = r#"
-F bits(a: i64, b: i64) -> i64 {
+fn bits(a: i64, b: i64) -> i64 {
     x := a & b;
     y := a | b;
     z := a ^ b;
@@ -387,14 +387,14 @@ F bits(a: i64, b: i64) -> i64 {
 
 #[test]
 fn test_logical_operators() {
-    let source = "F logic(a: bool, b: bool) -> bool = a && b || !a";
+    let source = "fn logic(a: bool, b: bool) -> bool = a && b || !a";
     assert!(compiles(source));
 }
 
 #[test]
 fn test_unary_operators() {
     let source = r#"
-F unary(x: i64) -> i64 {
+fn unary(x: i64) -> i64 {
     neg := -x;
     bitnot := (~x);
     neg + bitnot
@@ -409,7 +409,7 @@ F unary(x: i64) -> i64 {
 fn test_compound_operations() {
     // Test arithmetic operations without mutable assignment
     let source = r#"
-F compound(x: i64) -> i64 {
+fn compound(x: i64) -> i64 {
     y := x + 1;
     z := y - 2;
     w := z * 3;
@@ -424,7 +424,7 @@ F compound(x: i64) -> i64 {
 #[test]
 fn test_trait_definition() {
     let source = r#"
-W Display { F display(s: &Self) -> str = "" }
+trait Display { fn display(s: &Self) -> str = "" }
 "#;
     assert!(compiles(source));
 }
@@ -432,10 +432,10 @@ W Display { F display(s: &Self) -> str = "" }
 #[test]
 fn test_impl_block() {
     let source = r#"
-S Counter { value: i64 }
-X Counter {
-    F new() -> Counter = Counter { value: 0 }
-    F get_val(c: Counter) -> i64 = c.value
+struct Counter { value: i64 }
+impl Counter {
+    fn new() -> Counter = Counter { value: 0 }
+    fn get_val(c: Counter) -> i64 = c.value
 }
 "#;
     assert!(compiles(source));
@@ -445,105 +445,22 @@ X Counter {
 
 #[test]
 fn test_use_statement() {
-    let source = "U std::fs";
-    assert!(compiles(source));
-}
-
-#[test]
-fn test_multi_char_use_statement() {
     let source = "use std::fs";
     assert!(compiles(source));
 }
 
 #[test]
 fn test_pub_function() {
-    let source = "P F public_fn() -> () = ()";
+    let source = "pub fn public_fn() -> () = ()";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("define void @public_fn"));
-}
-
-#[test]
-fn test_multi_char_pub_fn_return() {
-    let source = "pub fn public_fn() -> i64 { return 42 }";
-    let ir = compile_to_ir(source).unwrap();
-    assert!(ir.contains("define i64 @public_fn"));
-}
-
-#[test]
-fn test_format_interpolation_ref_str_method_arg_uses_c_string_pointer() {
-    let source = r#"
-S Checker {}
-
-X Checker {
-    F message(self, name: &str) -> str {
-        "Identifier must start with a letter or underscore: '{name}'"
-    }
-}
-"#;
-    let ir = compile_to_ir(source).expect("source should compile");
-    assert!(
-        ir.contains("extractvalue { i8*, i64 } %name, 0"),
-        "format interpolation should extract the raw C string pointer from &str"
-    );
-    assert!(
-        !ir.contains("i64 %name"),
-        "format interpolation must not pass a &str fat pointer as i64 to snprintf"
-    );
-}
-
-#[test]
-fn test_f64_return_from_i64_expression_emits_numeric_cast() {
-    let source = r#"
-F scale() -> f64 {
-    x := 4
-    y := 2
-    x / y
-}
-"#;
-    let ir = compile_to_ir(source).expect("source should compile");
-    let scale_start = ir.find("define double @scale()").expect("scale IR exists");
-    let scale_rest = &ir[scale_start..];
-    let scale_end = scale_rest.find("\n}").expect("scale IR has an end");
-    let scale_ir = &scale_rest[..scale_end];
-    assert!(
-        scale_ir.contains("sitofp i64"),
-        "i64 expression returned from f64 function should be converted before ret"
-    );
-    let cast_tmp = scale_ir
-        .lines()
-        .find_map(|line| line.trim().split_once(" = sitofp i64").map(|(tmp, _)| tmp))
-        .expect("scale IR should contain a cast temp");
-    assert!(scale_ir.contains(&format!("ret double {}", cast_tmp)));
-}
-
-#[test]
-fn test_try_result_unit_does_not_emit_void_pointer_payload_load() {
-    let source = r#"
-F validate() -> Result<(), str> {
-    Ok(())
-}
-
-F make() -> Result<i64, str> {
-    validate()?;
-    Ok(42)
-}
-"#;
-    let ir = compile_to_ir(source).expect("source should compile");
-    assert!(
-        !ir.contains("void*"),
-        "Result<(), E> try must not bitcast payload storage to void*"
-    );
-    assert!(
-        !ir.contains("load void"),
-        "Result<(), E> try must not load a void payload"
-    );
 }
 
 // ==================== Async Tests ====================
 
 #[test]
 fn test_async_function() {
-    let source = "A F async_fn() -> i64 = 42";
+    let source = "A fn async_fn() -> i64 = 42";
     assert!(compiles(source));
 }
 
@@ -551,27 +468,27 @@ fn test_async_function() {
 
 #[test]
 fn test_type_mismatch_error() {
-    let source = "F f() -> i64 = \"string\"";
+    let source = "fn f() -> i64 = \"string\"";
     assert!(fails_to_compile(source));
 }
 
 #[test]
 fn test_undefined_variable_error() {
-    let source = "F f() -> i64 = undefined_var";
+    let source = "fn f() -> i64 = undefined_var";
     assert!(fails_to_compile(source));
 }
 
 #[test]
 fn test_undefined_function_error() {
-    let source = "F f() -> i64 = unknown_func()";
+    let source = "fn f() -> i64 = unknown_func()";
     assert!(fails_to_compile(source));
 }
 
 #[test]
 fn test_wrong_argument_count_error() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F f() -> i64 = add(1)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn f() -> i64 = add(1)
 "#;
     assert!(fails_to_compile(source));
 }
@@ -579,15 +496,18 @@ F f() -> i64 = add(1)
 #[test]
 fn test_wrong_argument_type_error() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F f() -> i64 = add(1, "two")
+fn add(a: i64, b: i64) -> i64 = a + b
+fn f() -> i64 = add(1, "two")
 "#;
     assert!(fails_to_compile(source));
 }
 
 #[test]
-fn test_if_condition_non_bool_error() {
-    let source = "F f() -> i64 = I 42 { 1 } E { 0 }";
+fn test_if_condition_strict_integer_truthy_rejected() {
+    // A4-06 strict default: `I`/`LW`/ternary/while conditions require bool.
+    // Integer truthy is intentionally rejected to avoid implicit control-flow
+    // coercions.
+    let source = "fn f() -> i64 = I 42 { 1 } else { 0 }";
     assert!(fails_to_compile(source));
 }
 
@@ -596,8 +516,8 @@ fn test_if_condition_non_bool_error() {
 #[test]
 fn test_factorial() {
     let source = r#"
-F factorial(n: i64) -> i64 = n <= 1 ? 1 : n * @(n - 1)
-F main() -> () {
+fn factorial(n: i64) -> i64 = n <= 1 ? 1 : n * @(n - 1)
+fn main() -> () {
     result := factorial(5);
     ()
 }
@@ -608,15 +528,15 @@ F main() -> () {
 #[test]
 fn test_binary_search() {
     let source = r#"
-F binary_search(arr: [i64], target: i64, low: i64, high: i64) -> i64 {
+fn binary_search(arr: [i64], target: i64, low: i64, high: i64) -> i64 {
     I low > high { 0 - 1 }
-    E {
+    else {
         mid := (low + high) / 2;
         I arr[mid] == target { mid }
-        E {
+        else {
             I arr[mid] < target {
                 @(arr, target, mid + 1, high)
-            } E {
+            } else {
                 @(arr, target, low, mid - 1)
             }
         }
@@ -629,12 +549,12 @@ F binary_search(arr: [i64], target: i64, low: i64, high: i64) -> i64 {
 #[test]
 fn test_bubble_sort_structure() {
     let source = r#"
-F swap(arr: *i64, i: i64, j: i64) -> () {
+fn swap(arr: *i64, i: i64, j: i64) -> () {
     temp := arr[i];
     ()
 }
 
-F bubble_sort(arr: *i64, n: i64) -> () {
+fn bubble_sort(arr: *i64, n: i64) -> () {
     L i:0..n {
         L j:0..(n-i-1) {
             I arr[j] > arr[j+1] {
@@ -651,9 +571,9 @@ F bubble_sort(arr: *i64, n: i64) -> () {
 fn test_linked_list_structure() {
     // Test self-referential struct definition
     let source = r#"
-S Node { value: i64, next: *Node }
+struct Node { value: i64, next: *Node }
 
-F get_value(n: Node) -> i64 = n.value
+fn get_value(n: Node) -> i64 = n.value
 "#;
     assert!(compiles(source));
 }
@@ -662,16 +582,16 @@ F get_value(n: Node) -> i64 = n.value
 fn test_multiple_types_and_functions() {
     let source = r#"
 # Types
-S Point { x: f64, y: f64 }
-S Size { width: f64, height: f64 }
-S Rect { x: f64, y: f64, width: f64, height: f64 }
+struct Point { x: f64, y: f64 }
+struct Size { width: f64, height: f64 }
+struct Rect { x: f64, y: f64, width: f64, height: f64 }
 
 # Functions
-F point_new(x: f64, y: f64) -> Point = Point { x: x, y: y }
-F size_new(w: f64, h: f64) -> Size = Size { width: w, height: h }
+fn point_new(x: f64, y: f64) -> Point = Point { x: x, y: y }
+fn size_new(w: f64, h: f64) -> Size = Size { width: w, height: h }
 
 # Main
-F main() -> () {
+fn main() -> () {
     p := point_new(0.0, 0.0);
     s := size_new(100.0, 50.0);
     ()
@@ -684,7 +604,7 @@ F main() -> () {
 
 #[test]
 fn test_ternary_operator() {
-    let source = "F abs(x: i64) -> i64 = x < 0 ? -x : x";
+    let source = "fn abs(x: i64) -> i64 = x < 0 ? -x : x";
     let ir = compile_to_ir(source).unwrap();
     assert!(ir.contains("define i64 @abs"));
     assert!(ir.contains("br i1")); // conditional branch for ternary
@@ -693,7 +613,7 @@ fn test_ternary_operator() {
 #[test]
 fn test_ternary_with_unary_minus() {
     // Test ternary where then branch starts with unary minus
-    let source = "F abs(x: i64) -> i64 = x < 0 ? -x : x";
+    let source = "fn abs(x: i64) -> i64 = x < 0 ? -x : x";
     assert!(compiles(source));
 }
 
@@ -702,9 +622,9 @@ fn test_try_operator_parsing() {
     // Test that ? operator parses correctly
     // Note: Full try operator functionality requires Result/Option types
     let source = r#"
-F maybe_get(opt: i64?) -> i64? {
+fn maybe_get(opt: i64?) -> i64? {
     v := opt?
-    R Some(v)
+    return Some(v)
 }
 "#;
     // This should parse correctly
@@ -716,9 +636,9 @@ F maybe_get(opt: i64?) -> i64? {
 fn test_try_operator_with_binary_op() {
     // Test try operator followed by binary operator
     let source = r#"
-F add_one(opt: i64?) -> i64? {
+fn add_one(opt: i64?) -> i64? {
     v := opt? + 1
-    R Some(v)
+    return Some(v)
 }
 "#;
     let module = vais_parser::parse(source);
@@ -729,9 +649,9 @@ F add_one(opt: i64?) -> i64? {
 fn test_try_and_ternary_together() {
     // Test that try and ternary can coexist
     let source = r#"
-F process(opt: i64?) -> i64? {
+fn process(opt: i64?) -> i64? {
     v := (opt?)
-    R v > 0 ? Some(v) : None
+    return v > 0 ? Some(v) : None
 }
 "#;
     let module = vais_parser::parse(source);
@@ -744,7 +664,7 @@ F process(opt: i64?) -> i64? {
 fn test_const_array_type_literal() {
     // Test parsing of const-sized array with literal size
     let source = r#"
-S Data {
+struct Data {
     values: [i64; 10]
 }
 "#;
@@ -755,7 +675,7 @@ S Data {
 fn test_const_array_in_function_param() {
     // Test parsing const-sized array in function parameter
     let source = r#"
-F process(arr: [i64; 5]) -> i64 {
+fn process(arr: [i64; 5]) -> i64 {
     42
 }
 "#;
@@ -766,10 +686,10 @@ F process(arr: [i64; 5]) -> i64 {
 fn test_const_array_as_return_type() {
     // Test parsing const-sized array as return type
     let source = r#"
-S Container {
+struct Container {
     data: [i64; 3]
 }
-F get_data() -> [i64; 3] {
+fn get_data() -> [i64; 3] {
     [1, 2, 3]
 }
 "#;
@@ -782,7 +702,7 @@ F get_data() -> [i64; 3] {
 fn test_const_generic_parameter() {
     // Test parsing const generic parameter in function
     let source = r#"
-F identity<T, const N: u64>(x: T) -> T {
+fn identity<T, const N: u64>(x: T) -> type {
     x
 }
 "#;
@@ -793,7 +713,7 @@ F identity<T, const N: u64>(x: T) -> T {
 fn test_const_generic_in_struct() {
     // Test parsing const generic parameter in struct
     let source = r#"
-S FixedArray<T, const N: u64> {
+struct FixedArray<T, const N: u64> {
     data: [T; N],
     len: u64
 }
@@ -805,7 +725,7 @@ S FixedArray<T, const N: u64> {
 fn test_const_expr_addition() {
     // Test const expression with addition
     let source = r#"
-F process(arr: [i64; 5 + 3]) -> i64 {
+fn process(arr: [i64; 5 + 3]) -> i64 {
     8
 }
 "#;
@@ -816,7 +736,7 @@ F process(arr: [i64; 5 + 3]) -> i64 {
 fn test_const_expr_multiplication() {
     // Test const expression with multiplication
     let source = r#"
-F process(arr: [i64; 4 * 3]) -> i64 {
+fn process(arr: [i64; 4 * 3]) -> i64 {
     12
 }
 "#;
@@ -827,7 +747,7 @@ F process(arr: [i64; 4 * 3]) -> i64 {
 fn test_const_expr_complex() {
     // Test complex const expression
     let source = r#"
-F process(arr: [i64; 2 * 3 + 4]) -> i64 {
+fn process(arr: [i64; 2 * 3 + 4]) -> i64 {
     10
 }
 "#;
@@ -838,7 +758,7 @@ F process(arr: [i64; 2 * 3 + 4]) -> i64 {
 fn test_const_array_in_nested_type() {
     // Test const array in optional type
     let source = r#"
-S Matrix {
+struct Matrix {
     data: [f64; 9]
 }
 "#;
@@ -849,7 +769,7 @@ S Matrix {
 fn test_multiple_const_generics() {
     // Test multiple const generic parameters
     let source = r#"
-S Matrix<const ROWS: u64, const COLS: u64> {
+struct Matrix<const ROWS: u64, const COLS: u64> {
     data: [f64; ROWS],
     rows: u64,
     cols: u64
@@ -862,7 +782,7 @@ S Matrix<const ROWS: u64, const COLS: u64> {
 fn test_mixed_type_and_const_generics() {
     // Test mixing type and const generics
     let source = r#"
-S Container<T, const N: u64> {
+struct Container<T, const N: u64> {
     elements: [T; N],
     count: u64
 }
@@ -878,7 +798,7 @@ S Container<T, const N: u64> {
 fn test_simd_vec4i32_constructor() {
     // Use i32 vector which doesn't have literal type issues
     let source = r#"
-F test_vec4i32() -> Vec4i32 {
+fn test_vec4i32() -> Vec4i32 {
     vec4i32(1, 2, 3, 4)
 }
 "#;
@@ -890,7 +810,7 @@ F test_vec4i32() -> Vec4i32 {
 #[test]
 fn test_simd_vec4f32_add() {
     let source = r#"
-F test_add(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
+fn test_add(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
     simd_add_vec4f32(a, b)
 }
 "#;
@@ -902,7 +822,7 @@ F test_add(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
 #[test]
 fn test_simd_vec4f32_mul() {
     let source = r#"
-F test_mul(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
+fn test_mul(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
     simd_mul_vec4f32(a, b)
 }
 "#;
@@ -914,7 +834,7 @@ F test_mul(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
 #[test]
 fn test_simd_vec4f32_sub() {
     let source = r#"
-F test_sub(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
+fn test_sub(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
     simd_sub_vec4f32(a, b)
 }
 "#;
@@ -925,7 +845,7 @@ F test_sub(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
 #[test]
 fn test_simd_vec4f32_div() {
     let source = r#"
-F test_div(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
+fn test_div(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
     simd_div_vec4f32(a, b)
 }
 "#;
@@ -936,7 +856,7 @@ F test_div(a: Vec4f32, b: Vec4f32) -> Vec4f32 {
 #[test]
 fn test_simd_vec4i32_add() {
     let source = r#"
-F test_add(a: Vec4i32, b: Vec4i32) -> Vec4i32 {
+fn test_add(a: Vec4i32, b: Vec4i32) -> Vec4i32 {
     simd_add_vec4i32(a, b)
 }
 "#;
@@ -948,7 +868,7 @@ F test_add(a: Vec4i32, b: Vec4i32) -> Vec4i32 {
 #[test]
 fn test_simd_vec8f32_operations() {
     let source = r#"
-F test_vec8(a: Vec8f32, b: Vec8f32) -> Vec8f32 {
+fn test_vec8(a: Vec8f32, b: Vec8f32) -> Vec8f32 {
     c := simd_add_vec8f32(a, b)
     simd_mul_vec8f32(c, b)
 }
@@ -962,7 +882,7 @@ F test_vec8(a: Vec8f32, b: Vec8f32) -> Vec8f32 {
 #[test]
 fn test_simd_reduce_add_vec4f32() {
     let source = r#"
-F test_reduce(v: Vec4f32) -> f32 {
+fn test_reduce(v: Vec4f32) -> f32 {
     simd_reduce_add_vec4f32(v)
 }
 "#;
@@ -973,7 +893,7 @@ F test_reduce(v: Vec4f32) -> f32 {
 #[test]
 fn test_simd_dot_product() {
     let source = r#"
-F dot_product(a: Vec4f32, b: Vec4f32) -> f32 {
+fn dot_product(a: Vec4f32, b: Vec4f32) -> f32 {
     product := simd_mul_vec4f32(a, b)
     simd_reduce_add_vec4f32(product)
 }
@@ -986,7 +906,7 @@ F dot_product(a: Vec4f32, b: Vec4f32) -> f32 {
 #[test]
 fn test_simd_vec2f64_operations() {
     let source = r#"
-F test_vec2f64(a: Vec2f64, b: Vec2f64) -> Vec2f64 {
+fn test_vec2f64(a: Vec2f64, b: Vec2f64) -> Vec2f64 {
     simd_add_vec2f64(a, b)
 }
 "#;
@@ -998,7 +918,7 @@ F test_vec2f64(a: Vec2f64, b: Vec2f64) -> Vec2f64 {
 #[test]
 fn test_simd_vec4f64_operations() {
     let source = r#"
-F test_vec4f64(a: Vec4f64, b: Vec4f64) -> Vec4f64 {
+fn test_vec4f64(a: Vec4f64, b: Vec4f64) -> Vec4f64 {
     simd_mul_vec4f64(a, b)
 }
 "#;
@@ -1010,7 +930,7 @@ F test_vec4f64(a: Vec4f64, b: Vec4f64) -> Vec4f64 {
 #[test]
 fn test_simd_vec2i64_operations() {
     let source = r#"
-F test_vec2i64(a: Vec2i64, b: Vec2i64) -> Vec2i64 {
+fn test_vec2i64(a: Vec2i64, b: Vec2i64) -> Vec2i64 {
     simd_add_vec2i64(a, b)
 }
 "#;
@@ -1022,7 +942,7 @@ F test_vec2i64(a: Vec2i64, b: Vec2i64) -> Vec2i64 {
 #[test]
 fn test_simd_vec4i64_mul() {
     let source = r#"
-F test_mul(a: Vec4i64, b: Vec4i64) -> Vec4i64 {
+fn test_mul(a: Vec4i64, b: Vec4i64) -> Vec4i64 {
     simd_mul_vec4i64(a, b)
 }
 "#;
@@ -1035,7 +955,7 @@ F test_mul(a: Vec4i64, b: Vec4i64) -> Vec4i64 {
 fn test_simd_vec_constructors() {
     // Test integer vector constructors (float constructors have literal type issues)
     let source = r#"
-F test_constructors() -> i32 {
+fn test_constructors() -> i32 {
     v4i32 := vec4i32(1, 2, 3, 4)
     v2i64 := vec2i64(1, 2)
     v4i64 := vec4i64(1, 2, 3, 4)
@@ -1052,11 +972,11 @@ F test_constructors() -> i32 {
 fn test_simd_vec_float_constructors_via_params() {
     // Test float vector constructors with parameters (avoids literal type issues)
     let source = r#"
-F test_f32_constructor(a: f32, b: f32, c: f32, d: f32) -> Vec4f32 {
+fn test_f32_constructor(a: f32, b: f32, c: f32, d: f32) -> Vec4f32 {
     vec4f32(a, b, c, d)
 }
 
-F test_f64_constructor(a: f64, b: f64) -> Vec2f64 {
+fn test_f64_constructor(a: f64, b: f64) -> Vec2f64 {
     vec2f64(a, b)
 }
 "#;
@@ -1068,7 +988,7 @@ F test_f64_constructor(a: f64, b: f64) -> Vec2f64 {
 #[test]
 fn test_simd_reduce_i32() {
     let source = r#"
-F test_reduce(v: Vec4i32) -> i32 {
+fn test_reduce(v: Vec4i32) -> i32 {
     simd_reduce_add_vec4i32(v)
 }
 "#;
@@ -1079,7 +999,7 @@ F test_reduce(v: Vec4i32) -> i32 {
 #[test]
 fn test_simd_reduce_i64() {
     let source = r#"
-F test_reduce(v: Vec2i64) -> i64 {
+fn test_reduce(v: Vec2i64) -> i64 {
     simd_reduce_add_vec2i64(v)
 }
 "#;
@@ -1093,33 +1013,33 @@ F test_reduce(v: Vec2i64) -> i64 {
 fn test_std_option_type() {
     // Test Option<T> enum definition and usage
     let source = r#"
-E Option<T> {
+enum Option<T> {
     None,
     Some(T)
 }
 
-F is_some(opt: Option<i64>) -> i64 {
-    M opt {
+fn is_some(opt: Option<i64>) -> i64 {
+    match opt {
         Some(_) => 1,
         None => 0
     }
 }
 
-F is_none(opt: Option<i64>) -> i64 {
-    M opt {
+fn is_none(opt: Option<i64>) -> i64 {
+    match opt {
         Some(_) => 0,
         None => 1
     }
 }
 
-F unwrap_or(opt: Option<i64>, default: i64) -> i64 {
-    M opt {
+fn unwrap_or(opt: Option<i64>, default: i64) -> i64 {
+    match opt {
         Some(v) => v,
         None => default
     }
 }
 
-F test_option() -> i64 {
+fn test_option() -> i64 {
     some_val := Some(42)
     none_val: Option<i64> = None
     result := unwrap_or(some_val, 0)
@@ -1133,26 +1053,26 @@ F test_option() -> i64 {
 fn test_std_result_type() {
     // Test Result<T, E> enum definition
     let source = r#"
-E Result<T, E> {
+enum Result<T, E> {
     Ok(T),
     Err(E)
 }
 
-F is_ok(r: Result<i64, str>) -> i64 {
-    M r {
+fn is_ok(r: Result<i64, str>) -> i64 {
+    match r {
         Ok(_) => 1,
         Err(_) => 0
     }
 }
 
-F is_err(r: Result<i64, str>) -> i64 {
-    M r {
+fn is_err(r: Result<i64, str>) -> i64 {
+    match r {
         Ok(_) => 0,
         Err(_) => 1
     }
 }
 
-F test_result() -> i64 {
+fn test_result() -> i64 {
     success: Result<i64, str> = Ok(42)
     failure: Result<i64, str> = Err("error")
     is_ok(success)
@@ -1165,67 +1085,67 @@ F test_result() -> i64 {
 fn test_std_vec_struct() {
     // Test Vec<T> struct definition and basic operations
     let source = r#"
-S Vec<T> {
+struct Vec<T> {
     data: i64,
     len: i64,
     cap: i64
 }
 
-X Vec<T> {
-    F with_capacity(capacity: i64) -> Vec<T> {
+impl Vec<T> {
+    fn with_capacity(capacity: i64) -> Vec<T> {
         data := malloc(capacity * 8)
         Vec { data: data, len: 0, cap: capacity }
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 
-    F capacity(&self) -> i64 {
+    fn capacity(&self) -> i64 {
         self.cap
     }
 
-    F is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } else { 0 }
     }
 
-    F get(&self, index: i64) -> T {
+    fn get(&self, index: i64) -> type {
         I index >= 0 && index < self.len {
             ptr := self.data + index * 8
             load_i64(ptr)
-        } E {
+        } else {
             0
         }
     }
 
-    F push(&self, value: T) -> i64 {
+    fn push(&self, value: T) -> i64 {
         I self.len < self.cap {
             ptr := self.data + self.len * 8
             store_i64(ptr, value)
             self.len = self.len + 1
             self.len
-        } E {
+        } else {
             0
         }
     }
 
-    F pop(&self) -> T {
+    fn pop(&self) -> type {
         I self.len > 0 {
             self.len = self.len - 1
             ptr := self.data + self.len * 8
             load_i64(ptr)
-        } E {
+        } else {
             0
         }
     }
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.data)
         0
     }
 }
 
-F test_vec() -> i64 {
+fn test_vec() -> i64 {
     v := Vec.with_capacity(8)
     v.push(1)
     v.push(2)
@@ -1243,31 +1163,31 @@ F test_vec() -> i64 {
 fn test_std_box_struct() {
     // Test Box<T> heap allocation
     let source = r#"
-S Box<T> {
+struct Box<T> {
     ptr: i64
 }
 
-X Box<T> {
-    F new(value: T) -> Box<T> {
+impl Box<T> {
+    fn new(value: T) -> Box<T> {
         ptr := malloc(8)
         store_i64(ptr, value)
         Box { ptr: ptr }
     }
 
-    F get(&self) -> T {
+    fn get(&self) -> type {
         load_i64(self.ptr)
     }
 
-    F set(&self, value: T) -> () {
+    fn set(&self, value: T) -> () {
         store_i64(self.ptr, value)
     }
 
-    F drop(&self) -> () {
+    fn drop(&self) -> () {
         free(self.ptr)
     }
 }
 
-F test_box() -> i64 {
+fn test_box() -> i64 {
     b := Box.new(42)
     val := b.get()
     b.set(100)
@@ -1283,29 +1203,29 @@ F test_box() -> i64 {
 fn test_std_rc_struct() {
     // Test Rc<T> reference counting
     let source = r#"
-S Rc<T> {
+struct Rc<T> {
     ptr: i64,
     count: i64
 }
 
-X Rc<T> {
-    F new(value: T) -> Rc<T> {
+impl Rc<T> {
+    fn new(value: T) -> Rc<T> {
         ptr := malloc(16)
         store_i64(ptr, value)
         store_i64(ptr + 8, 1)
         Rc { ptr: ptr, count: ptr + 8 }
     }
 
-    F get(&self) -> T {
+    fn get(&self) -> type {
         load_i64(self.ptr)
     }
 
-    F strong_count(&self) -> i64 {
+    fn strong_count(&self) -> i64 {
         load_i64(self.count)
     }
 }
 
-F test_rc() -> i64 {
+fn test_rc() -> i64 {
     rc := Rc.new(42)
     count := rc.strong_count()
     val := rc.get()
@@ -1319,55 +1239,55 @@ F test_rc() -> i64 {
 fn test_std_deque_struct() {
     // Test Deque<T> double-ended queue
     let source = r#"
-S Deque<T> {
+struct Deque<T> {
     data: i64,
     head: i64,
     tail: i64,
     cap: i64
 }
 
-X Deque<T> {
-    F with_capacity(capacity: i64) -> Deque<T> {
+impl Deque<T> {
+    fn with_capacity(capacity: i64) -> Deque<T> {
         data := malloc(capacity * 8)
         Deque { data: data, head: 0, tail: 0, cap: capacity }
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         I self.tail >= self.head {
             self.tail - self.head
-        } E {
+        } else {
             self.cap - self.head + self.tail
         }
     }
 
-    F is_empty(&self) -> i64 {
-        I self.head == self.tail { 1 } E { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.head == self.tail { 1 } else { 0 }
     }
 
-    F push_back(&self, value: T) -> i64 {
+    fn push_back(&self, value: T) -> i64 {
         ptr := self.data + self.tail * 8
         store_i64(ptr, value)
         self.tail = (self.tail + 1) % self.cap
         1
     }
 
-    F pop_front(&self) -> T {
+    fn pop_front(&self) -> type {
         I self.head != self.tail {
             ptr := self.data + self.head * 8
             value := load_i64(ptr)
             self.head = (self.head + 1) % self.cap
             value
-        } E {
+        } else {
             0
         }
     }
 
-    F drop(&self) -> () {
+    fn drop(&self) -> () {
         free(self.data)
     }
 }
 
-F test_deque() -> i64 {
+fn test_deque() -> i64 {
     d := Deque.with_capacity(8)
     d.push_back(1)
     d.push_back(2)
@@ -1384,14 +1304,14 @@ F test_deque() -> i64 {
 fn test_std_hashmap_basic() {
     // Test HashMap basic structure
     let source = r#"
-S HashMap<K, V> {
+struct HashMap<K, V> {
     buckets: i64,
     count: i64,
     capacity: i64
 }
 
-X HashMap<K, V> {
-    F new() -> HashMap<K, V> {
+impl HashMap<K, V> {
+    fn new() -> HashMap<K, V> {
         cap := 16
         buckets := malloc(cap * 8)
         L i: 0..cap {
@@ -1400,20 +1320,20 @@ X HashMap<K, V> {
         HashMap { buckets: buckets, count: 0, capacity: cap }
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.count
     }
 
-    F is_empty(&self) -> i64 {
-        I self.count == 0 { 1 } E { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.count == 0 { 1 } else { 0 }
     }
 
-    F drop(&self) -> () {
+    fn drop(&self) -> () {
         free(self.buckets)
     }
 }
 
-F test_hashmap() -> i64 {
+fn test_hashmap() -> i64 {
     m := HashMap.new()
     empty := m.is_empty()
     m.drop()
@@ -1427,38 +1347,38 @@ F test_hashmap() -> i64 {
 fn test_std_iterator_trait() {
     // Test Iterator trait definition (simple version)
     let source = r#"
-W Iterator {
-    F next(&self) -> i64 = 0
-    F has_next(&self) -> i64 = 0
+trait Iterator {
+    fn next(&self) -> i64 = 0
+    fn has_next(&self) -> i64 = 0
 }
 
-S RangeIter {
+struct RangeIter {
     current: i64,
     end: i64
 }
 
-X RangeIter : Iterator {
-    F next(&self) -> i64 {
+impl RangeIter : Iterator {
+    fn next(&self) -> i64 {
         val := self.current
         self.current = self.current + 1
         val
     }
 
-    F has_next(&self) -> i64 {
-        I self.current < self.end { 1 } E { 0 }
+    fn has_next(&self) -> i64 {
+        I self.current < self.end { 1 } else { 0 }
     }
 }
 
 # Test that the trait and impl compile
-F make_iter() -> RangeIter {
+fn make_iter() -> RangeIter {
     RangeIter { current: 0, end: 10 }
 }
 
-F sum_range(n: i64) -> i64 {
+fn sum_range(n: i64) -> i64 {
     n * (n - 1) / 2
 }
 
-F test_iter() -> i64 {
+fn test_iter() -> i64 {
     iter := make_iter()
     sum_range(10)
 }
@@ -1470,14 +1390,14 @@ F test_iter() -> i64 {
 fn test_std_string_operations() {
     // Test string operations
     let source = r#"
-S String {
+struct String {
     data: i64,
     len: i64,
     cap: i64
 }
 
-X String {
-    F from_raw(ptr: i64, len: i64) -> String {
+impl String {
+    fn from_raw(ptr: i64, len: i64) -> String {
         cap := len + 1
         data := malloc(cap)
         memcpy(data, ptr, len)
@@ -1485,24 +1405,24 @@ X String {
         String { data: data, len: len, cap: cap }
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 
-    F is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } else { 0 }
     }
 
-    F as_ptr(&self) -> i64 {
+    fn as_ptr(&self) -> i64 {
         self.data
     }
 
-    F drop(&self) -> () {
+    fn drop(&self) -> () {
         free(self.data)
     }
 }
 
-F test_string() -> i64 {
+fn test_string() -> i64 {
     s := String.from_raw(0, 0)
     len := s.len()
     s.drop()
@@ -1517,16 +1437,16 @@ fn test_std_math_functions() {
     // Test math function signatures (without top-level const which isn't supported)
     let source = r#"
 # Basic math operations
-F abs_f64(x: f64) -> f64 = I x < 0.0 { 0.0 - x } E { x }
-F abs_i64(x: i64) -> i64 = I x < 0 { 0 - x } E { x }
-F min_f64(a: f64, b: f64) -> f64 = I a < b { a } E { b }
-F max_f64(a: f64, b: f64) -> f64 = I a > b { a } E { b }
-F min_i64(a: i64, b: i64) -> i64 = I a < b { a } E { b }
-F max_i64(a: i64, b: i64) -> i64 = I a > b { a } E { b }
-F clamp_f64(x: f64, lo: f64, hi: f64) -> f64 = max_f64(lo, min_f64(x, hi))
-F clamp_i64(x: i64, lo: i64, hi: i64) -> i64 = max_i64(lo, min_i64(x, hi))
+fn abs_f64(x: f64) -> f64 = I x < 0.0 { 0.0 - x } else { x }
+fn abs_i64(x: i64) -> i64 = I x < 0 { 0 - x } else { x }
+fn min_f64(a: f64, b: f64) -> f64 = I a < b { a } else { b }
+fn max_f64(a: f64, b: f64) -> f64 = I a > b { a } else { b }
+fn min_i64(a: i64, b: i64) -> i64 = I a < b { a } else { b }
+fn max_i64(a: i64, b: i64) -> i64 = I a > b { a } else { b }
+fn clamp_f64(x: f64, lo: f64, hi: f64) -> f64 = max_f64(lo, min_f64(x, hi))
+fn clamp_i64(x: i64, lo: i64, hi: i64) -> i64 = max_i64(lo, min_i64(x, hi))
 
-F test_math() -> i64 {
+fn test_math() -> i64 {
     pi := 3.14159265358979323846
     a := abs_i64(0 - 5)
     b := min_i64(3, 7)
@@ -1542,45 +1462,45 @@ F test_math() -> i64 {
 fn test_std_arena_allocator() {
     // Test arena allocator pattern
     let source = r#"
-S Arena {
+struct Arena {
     base: i64,
     offset: i64,
     capacity: i64
 }
 
-X Arena {
-    F new(size: i64) -> Arena {
+impl Arena {
+    fn new(size: i64) -> Arena {
         base := malloc(size)
         Arena { base: base, offset: 0, capacity: size }
     }
 
-    F alloc(&self, size: i64) -> i64 {
+    fn alloc(&self, size: i64) -> i64 {
         I self.offset + size <= self.capacity {
             ptr := self.base + self.offset
             self.offset = self.offset + size
             ptr
-        } E {
+        } else {
             0
         }
     }
 
-    F reset(&self) -> () {
+    fn reset(&self) -> () {
         self.offset = 0
     }
 
-    F drop(&self) -> () {
+    fn drop(&self) -> () {
         free(self.base)
     }
 }
 
-F test_arena() -> i64 {
+fn test_arena() -> i64 {
     arena := Arena.new(1024)
     ptr1 := arena.alloc(64)
     ptr2 := arena.alloc(128)
     arena.reset()
     ptr3 := arena.alloc(64)
     arena.drop()
-    I ptr3 == ptr1 { 1 } E { 0 }
+    I ptr3 == ptr1 { 1 } else { 0 }
 }
 "#;
     assert!(compiles(source));
@@ -1590,41 +1510,41 @@ F test_arena() -> i64 {
 fn test_std_priority_queue() {
     // Test priority queue (min-heap) structure
     let source = r#"
-S PriorityQueue<T> {
+struct PriorityQueue<T> {
     data: i64,
     len: i64,
     cap: i64
 }
 
-X PriorityQueue<T> {
-    F new() -> PriorityQueue<T> {
+impl PriorityQueue<T> {
+    fn new() -> PriorityQueue<T> {
         cap := 16
         data := malloc(cap * 8)
         PriorityQueue { data: data, len: 0, cap: cap }
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 
-    F is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } E { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } else { 0 }
     }
 
-    F peek(&self) -> T {
+    fn peek(&self) -> type {
         I self.len > 0 {
             load_i64(self.data)
-        } E {
+        } else {
             0
         }
     }
 
-    F drop(&self) -> () {
+    fn drop(&self) -> () {
         free(self.data)
     }
 }
 
-F test_pq() -> i64 {
+fn test_pq() -> i64 {
     pq := PriorityQueue.new()
     empty := pq.is_empty()
     pq.drop()
@@ -1638,14 +1558,14 @@ F test_pq() -> i64 {
 fn test_std_set_structure() {
     // Test Set structure (HashSet-like)
     let source = r#"
-S Set<T> {
+struct Set<T> {
     buckets: i64,
     count: i64,
     capacity: i64
 }
 
-X Set<T> {
-    F new() -> Set<T> {
+impl Set<T> {
+    fn new() -> Set<T> {
         cap := 16
         buckets := malloc(cap * 8)
         L i: 0..cap {
@@ -1654,20 +1574,20 @@ X Set<T> {
         Set { buckets: buckets, count: 0, capacity: cap }
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.count
     }
 
-    F is_empty(&self) -> i64 {
-        I self.count == 0 { 1 } E { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.count == 0 { 1 } else { 0 }
     }
 
-    F drop(&self) -> () {
+    fn drop(&self) -> () {
         free(self.buckets)
     }
 }
 
-F test_set() -> i64 {
+fn test_set() -> i64 {
     s := Set.new()
     empty := s.is_empty()
     s.drop()
@@ -1681,44 +1601,44 @@ F test_set() -> i64 {
 fn test_std_future_type() {
     // Test Future type for async operations
     let source = r#"
-E FutureState<T> {
+enum FutureState<T> {
     Pending,
     Ready(T)
 }
 
-S Future<T> {
+struct Future<T> {
     state: FutureState<T>
 }
 
-X Future<T> {
-    F pending() -> Future<T> {
+impl Future<T> {
+    fn pending() -> Future<T> {
         Future { state: Pending }
     }
 
-    F ready(value: T) -> Future<T> {
+    fn ready(value: T) -> Future<T> {
         Future { state: Ready(value) }
     }
 
-    F is_ready(&self) -> i64 {
-        M self.state {
+    fn is_ready(&self) -> i64 {
+        match self.state {
             Ready(_) => 1,
             Pending => 0
         }
     }
 
-    F get(&self) -> T {
-        M self.state {
+    fn get(&self) -> type {
+        match self.state {
             Ready(v) => v,
             Pending => 0
         }
     }
 }
 
-F test_future() -> i64 {
+fn test_future() -> i64 {
     f := Future.ready(42)
     I f.is_ready() == 1 {
         f.get()
-    } E {
+    } else {
         0
     }
 }
@@ -1732,7 +1652,7 @@ F test_future() -> i64 {
 fn test_const_generic_type_tracking() {
     // Verify const generics are tracked separately from type generics
     let source = r#"
-S FixedBuffer<T, const CAP: u64> {
+struct FixedBuffer<T, const CAP: u64> {
     data: [T; CAP],
     capacity: u64
 }
@@ -1744,7 +1664,7 @@ S FixedBuffer<T, const CAP: u64> {
 fn test_const_generic_with_arithmetic() {
     // Const expression arithmetic should be evaluated at compile time
     let source = r#"
-S Grid {
+struct Grid {
     cells: [i64; 3 * 4]
 }
 "#;
@@ -1755,7 +1675,7 @@ S Grid {
 fn test_const_generic_multiple_params() {
     // Multiple const generic parameters should all be tracked
     let source = r#"
-S Tensor<const D1: u64, const D2: u64, const D3: u64> {
+struct Tensor<const D1: u64, const D2: u64, const D3: u64> {
     data: [f64; D1],
     shape0: u64,
     shape1: u64,
@@ -1769,7 +1689,7 @@ S Tensor<const D1: u64, const D2: u64, const D3: u64> {
 fn test_const_generic_function_param() {
     // Const generics in function parameters
     let source = r#"
-F fixed_sum<const N: u64>(arr: [i64; N]) -> i64 {
+fn fixed_sum<const N: u64>(arr: [i64; N]) -> i64 {
     0
 }
 "#;
@@ -1780,7 +1700,7 @@ F fixed_sum<const N: u64>(arr: [i64; N]) -> i64 {
 fn test_const_generic_mixed_with_type() {
     // Mixed type and const generics should be distinguished
     let source = r#"
-F transform<T, const SIZE: u64>(data: [T; SIZE]) -> T {
+fn transform<T, const SIZE: u64>(data: [T; SIZE]) -> type {
     data
 }
 "#;
@@ -1792,7 +1712,7 @@ fn test_const_generic_concrete_array_size() {
     // Concrete const array sizes should evaluate to LLVM array types
     // [f64; 9] is const-sized array syntax
     let source = r#"
-S Matrix3x3 {
+struct Matrix3x3 {
     data: [f64; 9],
     rows: u64
 }
@@ -1806,11 +1726,11 @@ fn test_const_generic_mangling() {
     // Verify that const generic instantiations produce unique mangled names
     // This is tested indirectly through the type system
     let source = r#"
-S SmallBuffer<const N: u64> {
+struct SmallBuffer<const N: u64> {
     data: [i64; N],
     len: u64
 }
-S LargeBuffer<const N: u64> {
+struct LargeBuffer<const N: u64> {
     data: [i64; N],
     len: u64
 }
@@ -1822,7 +1742,7 @@ S LargeBuffer<const N: u64> {
 fn test_const_generic_display() {
     // Test that const generic types display correctly in error messages
     let source = r#"
-S ConstVec<T, const N: u64> {
+struct ConstVec<T, const N: u64> {
     items: [T; N],
     count: u64
 }
@@ -1836,10 +1756,10 @@ S ConstVec<T, const N: u64> {
 fn test_default_parameter_parsing() {
     // Default parameter value should parse correctly
     let source = r#"
-F greet(name: i64, times: i64 = 1) -> i64 {
+fn greet(name: i64, times: i64 = 1) -> i64 {
     name + times
 }
-F main() -> i64 = greet(42, 1)
+fn main() -> i64 = greet(42, 1)
 "#;
     assert!(compiles(source));
 }
@@ -1848,8 +1768,8 @@ F main() -> i64 = greet(42, 1)
 fn test_default_parameter_omitted() {
     // Calling with fewer args when defaults exist should compile
     let source = r#"
-F add_with_default(a: i64, b: i64 = 10) -> i64 = a + b
-F main() -> i64 = add_with_default(32)
+fn add_with_default(a: i64, b: i64 = 10) -> i64 = a + b
+fn main() -> i64 = add_with_default(32)
 "#;
     assert!(compiles(source));
 }
@@ -1858,8 +1778,8 @@ F main() -> i64 = add_with_default(32)
 fn test_multiple_default_parameters() {
     // Multiple default parameters
     let source = r#"
-F compute(x: i64, y: i64 = 5, z: i64 = 10) -> i64 = x + y + z
-F main() -> i64 = compute(27)
+fn compute(x: i64, y: i64 = 5, z: i64 = 10) -> i64 = x + y + z
+fn main() -> i64 = compute(27)
 "#;
     assert!(compiles(source));
 }
@@ -1868,8 +1788,8 @@ F main() -> i64 = compute(27)
 fn test_default_parameter_all_provided() {
     // All args provided even with defaults
     let source = r#"
-F compute(x: i64, y: i64 = 5, z: i64 = 10) -> i64 = x + y + z
-F main() -> i64 = compute(10, 20, 30)
+fn compute(x: i64, y: i64 = 5, z: i64 = 10) -> i64 = x + y + z
+fn main() -> i64 = compute(10, 20, 30)
 "#;
     assert!(compiles(source));
 }
@@ -1878,8 +1798,8 @@ F main() -> i64 = compute(10, 20, 30)
 fn test_default_parameter_expression() {
     // Default value can be an expression
     let source = r#"
-F scale(value: i64, factor: i64 = 2 * 3) -> i64 = value * factor
-F main() -> i64 = scale(7)
+fn scale(value: i64, factor: i64 = 2 * 3) -> i64 = value * factor
+fn main() -> i64 = scale(7)
 "#;
     assert!(compiles(source));
 }
@@ -1889,8 +1809,8 @@ fn test_named_arg_ast_definition() {
     // The NamedArg and CallArgs types exist in the AST
     // This test verifies the AST definitions compile correctly
     let source = r#"
-F identity(x: i64) -> i64 = x
-F main() -> i64 = identity(42)
+fn identity(x: i64) -> i64 = x
+fn main() -> i64 = identity(42)
 "#;
     assert!(compiles(source));
 }
@@ -1900,10 +1820,10 @@ F main() -> i64 = identity(42)
 #[test]
 fn test_string_concatenation() {
     let source = r#"
-F greet(name: str) -> str {
+fn greet(name: str) -> str {
     "Hello, " + name
 }
-F main() -> i64 {
+fn main() -> i64 {
     msg := greet("World")
     strlen(msg)
 }
@@ -1914,14 +1834,14 @@ F main() -> i64 {
 #[test]
 fn test_string_equality() {
     let source = r#"
-F check(s: str) -> i64 {
+fn check(s: str) -> i64 {
     I s == "hello" {
         1
-    } E {
+    } else {
         0
     }
 }
-F main() -> i64 = check("hello")
+fn main() -> i64 = check("hello")
 "#;
     assert!(compiles(source));
 }
@@ -1929,14 +1849,14 @@ F main() -> i64 = check("hello")
 #[test]
 fn test_string_inequality() {
     let source = r#"
-F check(s: str) -> i64 {
+fn check(s: str) -> i64 {
     I s != "world" {
         1
-    } E {
+    } else {
         0
     }
 }
-F main() -> i64 = check("hello")
+fn main() -> i64 = check("hello")
 "#;
     assert!(compiles(source));
 }
@@ -1944,7 +1864,7 @@ F main() -> i64 = check("hello")
 #[test]
 fn test_string_method_len() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello"
     s.len()
 }
@@ -1956,7 +1876,7 @@ F main() -> i64 {
 #[allow(non_snake_case)]
 fn test_string_method_charAt() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello"
     s.charAt(0)
 }
@@ -1967,11 +1887,11 @@ F main() -> i64 {
 #[test]
 fn test_string_method_contains() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello world"
     I s.contains("world") {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -1983,7 +1903,7 @@ F main() -> i64 {
 #[allow(non_snake_case)]
 fn test_string_method_indexOf() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello world"
     s.indexOf("world")
 }
@@ -1994,7 +1914,7 @@ F main() -> i64 {
 #[test]
 fn test_string_method_substring() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello world"
     sub := s.substring(0, 5)
     strlen(sub)
@@ -2007,11 +1927,11 @@ F main() -> i64 {
 #[allow(non_snake_case)]
 fn test_string_method_startsWith() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello world"
     I s.startsWith("hello") {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -2023,11 +1943,11 @@ F main() -> i64 {
 #[allow(non_snake_case)]
 fn test_string_method_endsWith() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello world"
     I s.endsWith("world") {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -2039,11 +1959,11 @@ F main() -> i64 {
 #[allow(non_snake_case)]
 fn test_string_method_isEmpty() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := ""
     I s.isEmpty() {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -2054,10 +1974,10 @@ F main() -> i64 {
 #[test]
 fn test_string_comparison_operators() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     I "abc" < "def" {
         1
-    } E {
+    } else {
         0
     }
 }
@@ -2070,8 +1990,8 @@ F main() -> i64 {
 #[test]
 fn test_generic_identity_single_type() {
     let source = r#"
-F identity<T>(x: T) -> T = x
-F main() -> i64 {
+fn identity<T>(x: T) -> type = x
+fn main() -> i64 {
     identity(42)
 }
 "#;
@@ -2082,8 +2002,8 @@ F main() -> i64 {
 #[test]
 fn test_generic_identity_multiple_types() {
     let source = r#"
-F identity<T>(x: T) -> T = x
-F main() -> i64 {
+fn identity<T>(x: T) -> type = x
+fn main() -> i64 {
     a := identity(42)
     b := identity(3.14)
     a
@@ -2097,8 +2017,8 @@ F main() -> i64 {
 #[test]
 fn test_generic_function_with_operations() {
     let source = r#"
-F add_pair<T>(a: T, b: T) -> T = a + b
-F main() -> i64 {
+fn add_pair<T>(a: T, b: T) -> type = a + b
+fn main() -> i64 {
     add_pair(10, 20)
 }
 "#;
@@ -2109,8 +2029,8 @@ F main() -> i64 {
 #[test]
 fn test_generic_function_call_resolution() {
     let source = r#"
-F wrap<T>(x: T) -> T = x
-F main() -> i64 {
+fn wrap<T>(x: T) -> type = x
+fn main() -> i64 {
     wrap(100)
 }
 "#;
@@ -2123,14 +2043,14 @@ F main() -> i64 {
 #[test]
 fn test_trait_static_dispatch() {
     let source = r#"
-W Drawable {
-    F draw(&self) -> i64
+trait Drawable {
+    fn draw(&self) -> i64
 }
-S Circle { radius: i64 }
-X Circle: Drawable {
-    F draw(&self) -> i64 = self.radius
+struct Circle { radius: i64 }
+impl Circle: Drawable {
+    fn draw(&self) -> i64 = self.radius
 }
-F main() -> i64 {
+fn main() -> i64 {
     c := Circle { radius: 42 }
     c.draw()
 }
@@ -2142,15 +2062,15 @@ F main() -> i64 {
 #[test]
 fn test_trait_dynamic_dispatch_codegen() {
     let source = r#"
-W Drawable {
-    F draw(&self) -> i64
+trait Drawable {
+    fn draw(&self) -> i64
 }
-S Circle { radius: i64 }
-X Circle: Drawable {
-    F draw(&self) -> i64 = self.radius
+struct Circle { radius: i64 }
+impl Circle: Drawable {
+    fn draw(&self) -> i64 = self.radius
 }
-F draw_shape(shape: &dyn Drawable) -> i64 = shape.draw()
-F main() -> i64 {
+fn draw_shape(shape: &dyn Drawable) -> i64 = shape.draw()
+fn main() -> i64 {
     c := Circle { radius: 42 }
     draw_shape(&c)
 }
@@ -2173,19 +2093,19 @@ F main() -> i64 {
 #[test]
 fn test_trait_multiple_impls_dispatch() {
     let source = r#"
-W Shape {
-    F area(&self) -> i64
+trait Shape {
+    fn area(&self) -> i64
 }
-S Rect { w: i64, h: i64 }
-X Rect: Shape {
-    F area(&self) -> i64 = self.w * self.h
+struct Rect { w: i64, h: i64 }
+impl Rect: Shape {
+    fn area(&self) -> i64 = self.w * self.h
 }
-S Square { side: i64 }
-X Square: Shape {
-    F area(&self) -> i64 = self.side * self.side
+struct Square { side: i64 }
+impl Square: Shape {
+    fn area(&self) -> i64 = self.side * self.side
 }
-F get_area(s: &dyn Shape) -> i64 = s.area()
-F main() -> i64 {
+fn get_area(s: &dyn Shape) -> i64 = s.area()
+fn main() -> i64 {
     r := Rect { w: 3, h: 4 }
     s := Square { side: 5 }
     a1 := get_area(&r)
@@ -2203,16 +2123,16 @@ F main() -> i64 {
 #[test]
 fn test_gat_iterator_pattern() {
     let source = r#"
-W Iterable {
-    T Item
-    F iter(&self) -> i64
+trait Iterable {
+    type Item
+    fn iter(&self) -> i64
 }
-S Numbers { count: i64 }
-X Numbers: Iterable {
-    T Item = i64
-    F iter(&self) -> i64 { self.count }
+struct Numbers { count: i64 }
+impl Numbers: Iterable {
+    type Item = i64
+    fn iter(&self) -> i64 { self.count }
 }
-F main() -> i64 {
+fn main() -> i64 {
     n := Numbers { count: 42 }
     n.iter()
 }
@@ -2230,18 +2150,18 @@ F main() -> i64 {
 #[test]
 fn test_gat_container_pattern() {
     let source = r#"
-W Container {
-    T Elem
-    F get(&self, idx: i64) -> i64
-    F size(&self) -> i64
+trait Container {
+    type Elem
+    fn get(&self, idx: i64) -> i64
+    fn size(&self) -> i64
 }
-S IntArray { len: i64 }
-X IntArray: Container {
-    T Elem = i64
-    F get(&self, idx: i64) -> i64 { idx }
-    F size(&self) -> i64 { self.len }
+struct IntArray { len: i64 }
+impl IntArray: Container {
+    type Elem = i64
+    fn get(&self, idx: i64) -> i64 { idx }
+    fn size(&self) -> i64 { self.len }
 }
-F main() -> i64 {
+fn main() -> i64 {
     arr := IntArray { len: 10 }
     arr.size() + arr.get(5)
 }
@@ -2260,16 +2180,16 @@ F main() -> i64 {
 #[test]
 fn test_gat_functor_pattern() {
     let source = r#"
-W Functor {
-    T Item
-    F map_val(&self, x: i64) -> i64
+trait Functor {
+    type Item
+    fn map_val(&self, x: i64) -> i64
 }
-S Wrapper { value: i64 }
-X Wrapper: Functor {
-    T Item = i64
-    F map_val(&self, x: i64) -> i64 { self.value + x }
+struct Wrapper { value: i64 }
+impl Wrapper: Functor {
+    type Item = i64
+    fn map_val(&self, x: i64) -> i64 { self.value + x }
 }
-F main() -> i64 {
+fn main() -> i64 {
     w := Wrapper { value: 10 }
     w.map_val(32)
 }
@@ -2290,15 +2210,15 @@ F main() -> i64 {
 #[test]
 fn test_gat_with_default_type() {
     let source = r#"
-W Collection {
-    T Item = i64
-    F count(&self) -> i64
+trait Collection {
+    type Item = i64
+    fn count(&self) -> i64
 }
-S MyVec { size: i64 }
-X MyVec: Collection {
-    F count(&self) -> i64 { self.size }
+struct MyVec { size: i64 }
+impl MyVec: Collection {
+    fn count(&self) -> i64 { self.size }
 }
-F main() -> i64 {
+fn main() -> i64 {
     v := MyVec { size: 5 }
     v.count()
 }
@@ -2314,20 +2234,20 @@ F main() -> i64 {
 #[test]
 fn test_gat_multiple_associated_types() {
     let source = r#"
-W Pair {
-    T First
-    T Second
-    F get_first(&self) -> i64
-    F get_second(&self) -> i64
+trait Pair {
+    type First
+    type Second
+    fn get_first(&self) -> i64
+    fn get_second(&self) -> i64
 }
-S IntPair { a: i64, b: i64 }
-X IntPair: Pair {
-    T First = i64
-    T Second = i64
-    F get_first(&self) -> i64 { self.a }
-    F get_second(&self) -> i64 { self.b }
+struct IntPair { a: i64, b: i64 }
+impl IntPair: Pair {
+    type First = i64
+    type Second = i64
+    fn get_first(&self) -> i64 { self.a }
+    fn get_second(&self) -> i64 { self.b }
 }
-F main() -> i64 {
+fn main() -> i64 {
     p := IntPair { a: 10, b: 20 }
     p.get_first() + p.get_second()
 }
@@ -2343,9 +2263,9 @@ F main() -> i64 {
 #[test]
 fn test_gat_trait_definition_only() {
     let source = r#"
-W Iterator {
-    T Item
-    F next(&self) -> i64
+trait Iterator {
+    type Item
+    fn next(&self) -> i64
 }
 "#;
     assert!(compiles(source), "GAT trait definition should compile");
@@ -2354,19 +2274,19 @@ W Iterator {
 #[test]
 fn test_gat_static_dispatch() {
     let source = r#"
-W Producer {
-    T Output
-    F produce(&self) -> i64
+trait Producer {
+    type Output
+    fn produce(&self) -> i64
 }
-S Factory { value: i64 }
-X Factory: Producer {
-    T Output = i64
-    F produce(&self) -> i64 { self.value * 2 }
+struct Factory { value: i64 }
+impl Factory: Producer {
+    type Output = i64
+    fn produce(&self) -> i64 { self.value * 2 }
 }
-F call_producer(p: &Factory) -> i64 {
+fn call_producer(p: &Factory) -> i64 {
     p.produce()
 }
-F main() -> i64 {
+fn main() -> i64 {
     f := Factory { value: 21 }
     call_producer(&f)
 }
@@ -2388,13 +2308,13 @@ F main() -> i64 {
 fn test_gat_impl_without_explicit_type() {
     // This should fail because associated type is not provided
     let source = r#"
-W Container {
-    T Elem
-    F size(&self) -> i64
+trait Container {
+    type Elem
+    fn size(&self) -> i64
 }
-S Box { val: i64 }
-X Box: Container {
-    F size(&self) -> i64 { 1 }
+struct Box { val: i64 }
+impl Box: Container {
+    fn size(&self) -> i64 { 1 }
 }
 "#;
     // For now, we allow this (type checker may require explicit types in future)
@@ -2411,11 +2331,11 @@ X Box: Container {
 fn test_dependent_type_positive_literal() {
     // Positive integer satisfies {x: i64 | x > 0}
     let source = r#"
-F test_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn test_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R test_positive(5)
+fn main() -> i64 {
+    return test_positive(5)
 }
 "#;
     assert!(compiles(source));
@@ -2425,11 +2345,11 @@ F main() -> i64 {
 fn test_dependent_type_zero_nonneg() {
     // Zero satisfies {x: i64 | x >= 0}
     let source = r#"
-F test_nonneg(n: {x: i64 | x >= 0}) -> i64 {
-    R n
+fn test_nonneg(n: {x: i64 | x >= 0}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R test_nonneg(0)
+fn main() -> i64 {
+    return test_nonneg(0)
 }
 "#;
     assert!(compiles(source));
@@ -2439,9 +2359,9 @@ F main() -> i64 {
 fn test_dependent_type_negative_violation() {
     // Negative literal violates {x: i64 | x > 0} — should fail to compile
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x: {n: i64 | n > 0} := -5
-    R x
+    return x
 }
 "#;
     assert!(fails_to_compile(source));
@@ -2451,11 +2371,11 @@ F main() -> i64 {
 fn test_dependent_type_call_violation() {
     // Passing negative literal to function with dependent type param
     let source = r#"
-F test_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn test_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R test_positive(-3)
+fn main() -> i64 {
+    return test_positive(-3)
 }
 "#;
     assert!(fails_to_compile(source));
@@ -2465,11 +2385,11 @@ F main() -> i64 {
 fn test_dependent_type_zero_positive_violation() {
     // Zero violates {x: i64 | x > 0}
     let source = r#"
-F test_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn test_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R test_positive(0)
+fn main() -> i64 {
+    return test_positive(0)
 }
 "#;
     assert!(fails_to_compile(source));
@@ -2479,11 +2399,11 @@ F main() -> i64 {
 fn test_dependent_type_bounded_range() {
     // Value within range: {x: i64 | x >= 0} with x = 10
     let source = r#"
-F bounded(n: {x: i64 | x >= 0}) -> i64 {
-    R n + 1
+fn bounded(n: {x: i64 | x >= 0}) -> i64 {
+    return n + 1
 }
-F main() -> i64 {
-    R bounded(10)
+fn main() -> i64 {
+    return bounded(10)
 }
 "#;
     assert!(compiles(source));
@@ -2493,13 +2413,13 @@ F main() -> i64 {
 fn test_dependent_type_runtime_not_checked() {
     // Non-literal values should compile (runtime checking not enforced)
     let source = r#"
-F test_positive(n: {x: i64 | x > 0}) -> i64 {
-    R n
+fn test_positive(n: {x: i64 | x > 0}) -> i64 {
+    return n
 }
-F get_value() -> i64 { R 42 }
-F main() -> i64 {
+fn get_value() -> i64 { return 42 }
+fn main() -> i64 {
     v := get_value()
-    R test_positive(v)
+    return test_positive(v)
 }
 "#;
     assert!(compiles(source));
@@ -2509,11 +2429,11 @@ F main() -> i64 {
 fn test_dependent_type_compound_and_violation() {
     // Compound predicate with && — value violates upper bound
     let source = r#"
-F bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
-    R n
+fn bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R bounded(200)
+fn main() -> i64 {
+    return bounded(200)
 }
 "#;
     assert!(!compiles(source));
@@ -2523,11 +2443,11 @@ F main() -> i64 {
 fn test_dependent_type_compound_and_pass() {
     // Compound predicate with && — value satisfies both bounds
     let source = r#"
-F bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
-    R n
+fn bounded(n: {x: i64 | x >= 0 && x <= 100}) -> i64 {
+    return n
 }
-F main() -> i64 {
-    R bounded(50)
+fn main() -> i64 {
+    return bounded(50)
 }
 "#;
     assert!(compiles(source));
@@ -2539,11 +2459,11 @@ F main() -> i64 {
 fn test_ice_fallback_generic_function() {
     // Generic function should compile (generic resolved before codegen)
     let source = r#"
-F identity<T>(x: T) -> T {
-    R x
+fn identity<T>(x: T) -> type {
+    return x
 }
-F main() -> i64 {
-    R identity(42)
+fn main() -> i64 {
+    return identity(42)
 }
 "#;
     assert!(compiles(source));
@@ -2555,15 +2475,15 @@ fn test_ice_fallback_trait_impl_with_str_method() {
     // (Historically named after ImplTrait but the body only exercises a plain
     //  `X Foo: Describable` impl block, not existential return types.)
     let source = r#"
-W Describable {
-    F describe(&self) -> str
+trait Describable {
+    fn describe(&self) -> str
 }
-S Foo {}
-X Foo: Describable {
-    F describe(&self) -> str { R "foo" }
+struct Foo {}
+impl Foo: Describable {
+    fn describe(&self) -> str { return "foo" }
 }
-F main() -> i64 {
-    R 0
+fn main() -> i64 {
+    return 0
 }
 "#;
     assert!(compiles(source));

@@ -20,9 +20,9 @@ fn e2e_phase32_pattern_nested_tuple() {
     // Matching on a nested tuple extracts all inner fields correctly.
     // (1, (2, 3)) => 1+2+3 = 6, exit code 0 (6 - 6 = 0)
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     pair := (1, (2, 3))
-    M pair {
+    match pair {
         (a, (b, c)) => a + b + c - 6,
         _ => 1
     }
@@ -31,38 +31,38 @@ F main() -> i64 {
     assert_exit_code(source, 0);
 }
 
-// Test 2: Enum variant data extraction — M Shape { Circle(r) => r, Rect(w, h) => w * h }
+// Test 2: Enum variant data extraction — match Shape { Circle(r) => r, Rect(w, h) => w * h }
 #[test]
 fn e2e_phase32_pattern_enum_data() {
     // Enum with data: Rect(3, 7) => 3 * 7 = 21, exit code 21
     let source = r#"
-E Shape {
+enum Shape {
     Circle(i64),
     Rect(i64, i64)
 }
 
-F area(s: Shape) -> i64 {
-    M s {
+fn area(s: Shape) -> i64 {
+    match s {
         Circle(r) => r * r,
         Rect(w, h) => w * h
     }
 }
 
-F main() -> i64 {
-    R area(Rect(3, 7))
+fn main() -> i64 {
+    return area(Rect(3, 7))
 }
 "#;
     assert_exit_code(source, 21);
 }
 
-// Test 3: Or pattern — M x { 1 | 2 | 3 => 10, _ => 0 }
+// Test 3: Or pattern — match x { 1 | 2 | 3 => 10, _ => 0 }
 #[test]
 fn e2e_phase32_pattern_or_simple() {
     // x = 2 matches arm 1|2|3, so result = 10, exit code 10
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 2
-    M x {
+    match x {
         1 | 2 | 3 => 10,
         _ => 0
     }
@@ -71,14 +71,14 @@ F main() -> i64 {
     assert_exit_code(source, 10);
 }
 
-// Test 4: Guard condition — M x { n I n > 10 => 1, _ => 0 }
+// Test 4: Guard condition — match x { n I n > 10 => 1, _ => 0 }
 #[test]
 fn e2e_phase32_pattern_guard() {
     // x = 15: guard n > 10 is true => result 1, exit code 1
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 15
-    M x {
+    match x {
         n I n > 10 => 1,
         _ => 0
     }
@@ -92,9 +92,9 @@ F main() -> i64 {
 fn e2e_phase32_pattern_wildcard_deep() {
     // (99, 5) matches (_, 5) => result 1, exit code 1
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     pair := (99, 5)
-    M pair {
+    match pair {
         (_, 5) => 1,
         _ => 0
     }
@@ -108,8 +108,8 @@ F main() -> i64 {
 fn e2e_phase32_pattern_multiple_arms() {
     // x = 4 matches arm 4 => 40, exit code 40
     let source = r#"
-F label(x: i64) -> i64 {
-    M x {
+fn label(x: i64) -> i64 {
+    match x {
         1 => 10,
         2 => 20,
         3 => 30,
@@ -119,21 +119,21 @@ F label(x: i64) -> i64 {
     }
 }
 
-F main() -> i64 {
-    R label(4)
+fn main() -> i64 {
+    return label(4)
 }
 "#;
     assert_exit_code(source, 40);
 }
 
-// Test 7: Bool value matching — M flag { true => 1, false => 0 }
+// Test 7: Bool value matching — match flag { true => 1, false => 0 }
 #[test]
 fn e2e_phase32_pattern_match_bool() {
     // flag = true => result 1, exit code 1
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     flag := true
-    M flag {
+    match flag {
         true => 1,
         false => 0
     }
@@ -147,15 +147,15 @@ F main() -> i64 {
 fn e2e_phase32_pattern_match_return() {
     // Match result assigned to 'result', then returned. x=3 => arm 3 => 30, exit code 30
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 3
-    result := M x {
+    result := match x {
         1 => 10,
         2 => 20,
         3 => 30,
         _ => 0
     }
-    R result
+    return result
 }
 "#;
     assert_exit_code(source, 30);

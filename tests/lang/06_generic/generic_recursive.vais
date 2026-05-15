@@ -1,0 +1,14 @@
+# CHECKS: generic function calling itself recursively.
+fn count_down<T>(n: i64, init: T) -> T {
+    I n <= 0 { init }
+    else { count_down(n - 1, init) }
+}
+
+fn main() -> i64 {
+    # Pass through 5 levels of recursion
+    a: i64 := count_down(5, 42)
+    I a != 42 { return 1 }
+    b: i64 := count_down(0, 100)
+    I b != 100 { return 2 }
+    return 0
+}

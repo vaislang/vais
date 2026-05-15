@@ -9,23 +9,23 @@
 #   ./log_test
 
 # External function declarations (from log_runtime.c)
-X F __log_init(level: i64) -> i64
-X F __log_set_level(level: i64) -> i64
-X F __log_set_output(target: i64) -> i64
-X F __log_set_file(path: str) -> i64
-X F __log_set_format(format: i64) -> i64
-X F __log_write(level: i64, msg: str) -> i64
-X F __log_with_field(level: i64, msg: str, key: str, value: str) -> i64
-X F __log_with_fields(level: i64, msg: str, fields: str) -> i64
-X F __span_start(name: str) -> i64
-X F __span_end(span_id: i64) -> i64
-X F __span_log(span_id: i64, level: i64, msg: str) -> i64
-X F __span_log_field(span_id: i64, level: i64, msg: str, key: str, value: str) -> i64
-X F __span_trace_id(span_id: i64) -> str
+impl fn __log_init(level: i64) -> i64
+impl fn __log_set_level(level: i64) -> i64
+impl fn __log_set_output(target: i64) -> i64
+impl fn __log_set_file(path: str) -> i64
+impl fn __log_set_format(format: i64) -> i64
+impl fn __log_write(level: i64, msg: str) -> i64
+impl fn __log_with_field(level: i64, msg: str, key: str, value: str) -> i64
+impl fn __log_with_fields(level: i64, msg: str, fields: str) -> i64
+impl fn __span_start(name: str) -> i64
+impl fn __span_end(span_id: i64) -> i64
+impl fn __span_log(span_id: i64, level: i64, msg: str) -> i64
+impl fn __span_log_field(span_id: i64, level: i64, msg: str, key: str, value: str) -> i64
+impl fn __span_trace_id(span_id: i64) -> str
 
 # Helper functions
-X F puts(s: str) -> i64
-X F printf(fmt: str, x: i64) -> i64
+impl fn puts(s: str) -> i64
+impl fn printf(fmt: str, x: i64) -> i64
 
 # Constants - Log Levels
 C LOG_LEVEL_TRACE: i64 = 0
@@ -54,47 +54,47 @@ C LOG_ERR_SPAN: i64 = -6
 C LOG_ERR_WRITE: i64 = -7
 
 # Helper: log convenience functions
-F log_trace(msg: str) -> i64 {
+fn log_trace(msg: str) -> i64 {
     __log_write(LOG_LEVEL_TRACE, msg)
 }
 
-F log_debug(msg: str) -> i64 {
+fn log_debug(msg: str) -> i64 {
     __log_write(LOG_LEVEL_DEBUG, msg)
 }
 
-F log_info(msg: str) -> i64 {
+fn log_info(msg: str) -> i64 {
     __log_write(LOG_LEVEL_INFO, msg)
 }
 
-F log_warn(msg: str) -> i64 {
+fn log_warn(msg: str) -> i64 {
     __log_write(LOG_LEVEL_WARN, msg)
 }
 
-F log_error(msg: str) -> i64 {
+fn log_error(msg: str) -> i64 {
     __log_write(LOG_LEVEL_ERROR, msg)
 }
 
-F info_field(msg: str, key: str, value: str) -> i64 {
+fn info_field(msg: str, key: str, value: str) -> i64 {
     __log_with_field(LOG_LEVEL_INFO, msg, key, value)
 }
 
-F warn_field(msg: str, key: str, value: str) -> i64 {
+fn warn_field(msg: str, key: str, value: str) -> i64 {
     __log_with_field(LOG_LEVEL_WARN, msg, key, value)
 }
 
-F error_field(msg: str, key: str, value: str) -> i64 {
+fn error_field(msg: str, key: str, value: str) -> i64 {
     __log_with_field(LOG_LEVEL_ERROR, msg, key, value)
 }
 
-F log_error_text(code: i64) -> str {
-    I code == 0 { R "Success" }
-    I code == -1 { R "Logger initialization failed" }
-    I code == -2 { R "Failed to open log file" }
-    I code == -3 { R "Invalid log level" }
-    I code == -4 { R "Invalid output target" }
-    I code == -5 { R "Invalid output format" }
-    I code == -6 { R "Span error (invalid ID or operation)" }
-    I code == -7 { R "Write error" }
+fn log_error_text(code: i64) -> str {
+    I code == 0 { return "Success" }
+    I code == -1 { return "Logger initialization failed" }
+    I code == -2 { return "Failed to open log file" }
+    I code == -3 { return "Invalid log level" }
+    I code == -4 { return "Invalid output target" }
+    I code == -5 { return "Invalid output format" }
+    I code == -6 { return "Span error (invalid ID or operation)" }
+    I code == -7 { return "Write error" }
     "Unknown logging error"
 }
 
@@ -102,16 +102,16 @@ F log_error_text(code: i64) -> str {
 # Example 1: Basic Logging
 # ============================================
 
-F test_basic_logging() -> i64 {
+fn test_basic_logging() -> i64 {
     puts("=== Test 1: Basic Logging ===")
 
     # Initialize logger at INFO level
     result := __log_init(LOG_LEVEL_INFO)
     I result == LOG_OK {
         puts("Logger initialized successfully")
-    } EL {
+    } else {
         puts("Failed to initialize logger")
-        R 0
+        return 0
     }
 
     # Log messages at different levels
@@ -129,7 +129,7 @@ F test_basic_logging() -> i64 {
 # Example 2: Structured Logging
 # ============================================
 
-F test_structured_logging() -> i64 {
+fn test_structured_logging() -> i64 {
     puts("=== Test 2: Structured Logging with Fields ===")
 
     # Single field
@@ -153,7 +153,7 @@ F test_structured_logging() -> i64 {
 # Example 3: JSON Output Format
 # ============================================
 
-F test_json_logging() -> i64 {
+fn test_json_logging() -> i64 {
     puts("=== Test 3: JSON Output Format ===")
 
     # Switch to JSON format
@@ -173,7 +173,7 @@ F test_json_logging() -> i64 {
 # Example 4: Log Levels
 # ============================================
 
-F test_log_levels() -> i64 {
+fn test_log_levels() -> i64 {
     puts("=== Test 4: Log Level Filtering ===")
 
     # Set to DEBUG level - TRACE still hidden
@@ -201,19 +201,19 @@ F test_log_levels() -> i64 {
 # Example 5: Span-Based Tracing
 # ============================================
 
-F process_order(order_id: str) -> i64 {
+fn process_order(order_id: str) -> i64 {
     log_info("Processing order")
     0
 }
 
-F test_span_tracing() -> i64 {
+fn test_span_tracing() -> i64 {
     puts("=== Test 5: Span-Based Tracing ===")
 
     # Start a span for request tracking
     span_id := __span_start("handle_request")
     I span_id < 0 {
         puts("Failed to start span")
-        R 0
+        return 0
     }
 
     # All logs within this span will include trace_id
@@ -247,7 +247,7 @@ F test_span_tracing() -> i64 {
 # Example 6: Multiple Spans (Concurrent Requests)
 # ============================================
 
-F test_multiple_spans() -> i64 {
+fn test_multiple_spans() -> i64 {
     puts("=== Test 6: Multiple Concurrent Spans ===")
 
     # Simulate two concurrent requests
@@ -274,7 +274,7 @@ F test_multiple_spans() -> i64 {
 # Example 7: Error Handling
 # ============================================
 
-F test_error_handling() -> i64 {
+fn test_error_handling() -> i64 {
     puts("=== Test 7: Error Handling ===")
 
     # Try to set invalid log level
@@ -306,7 +306,7 @@ F test_error_handling() -> i64 {
 # Example 8: JSON Format with Spans
 # ============================================
 
-F test_json_with_spans() -> i64 {
+fn test_json_with_spans() -> i64 {
     puts("=== Test 8: JSON Format with Span Tracing ===")
 
     # Enable JSON output
@@ -328,7 +328,7 @@ F test_json_with_spans() -> i64 {
 # Main Entry Point
 # ============================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Vais Structured Logging Test Suite")
     puts("===================================\n")
 

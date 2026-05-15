@@ -1,0 +1,1 @@
+check_fails: P001 Unexpected token (found Effect)

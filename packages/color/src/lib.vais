@@ -33,7 +33,7 @@ C ANSI_BG_WHITE: i64 = 47
 # Helper: Format ANSI escape code string
 # Args: code - ANSI code number, text - text to colorize
 # Returns: Pointer to formatted string (allocated, caller must free)
-F ansi_format(code: i64, text: i64) -> i64 {
+fn ansi_format(code: i64, text: i64) -> i64 {
     # Calculate lengths
     text_len := strlen(text)
 
@@ -94,131 +94,131 @@ F ansi_format(code: i64, text: i64) -> i64 {
 # Colorize text in red
 # Args: text - text to colorize
 # Returns: Pointer to formatted string (allocated, caller must free)
-F red(text: i64) -> i64 {
+fn red(text: i64) -> i64 {
     ansi_format(ANSI_RED, text)
 }
 
 # Colorize text in green
-F green(text: i64) -> i64 {
+fn green(text: i64) -> i64 {
     ansi_format(ANSI_GREEN, text)
 }
 
 # Colorize text in yellow
-F yellow(text: i64) -> i64 {
+fn yellow(text: i64) -> i64 {
     ansi_format(ANSI_YELLOW, text)
 }
 
 # Colorize text in blue
-F blue(text: i64) -> i64 {
+fn blue(text: i64) -> i64 {
     ansi_format(ANSI_BLUE, text)
 }
 
 # Colorize text in magenta
-F magenta(text: i64) -> i64 {
+fn magenta(text: i64) -> i64 {
     ansi_format(ANSI_MAGENTA, text)
 }
 
 # Colorize text in cyan
-F cyan(text: i64) -> i64 {
+fn cyan(text: i64) -> i64 {
     ansi_format(ANSI_CYAN, text)
 }
 
 # Colorize text in white
-F white(text: i64) -> i64 {
+fn white(text: i64) -> i64 {
     ansi_format(ANSI_WHITE, text)
 }
 
 # Colorize text in black
-F black(text: i64) -> i64 {
+fn black(text: i64) -> i64 {
     ansi_format(ANSI_BLACK, text)
 }
 
 # Make text bold
-F bold(text: i64) -> i64 {
+fn bold(text: i64) -> i64 {
     ansi_format(ANSI_BOLD, text)
 }
 
 # Make text dim
-F dim(text: i64) -> i64 {
+fn dim(text: i64) -> i64 {
     ansi_format(ANSI_DIM, text)
 }
 
 # Make text italic
-F italic(text: i64) -> i64 {
+fn italic(text: i64) -> i64 {
     ansi_format(ANSI_ITALIC, text)
 }
 
 # Make text underlined
-F underline(text: i64) -> i64 {
+fn underline(text: i64) -> i64 {
     ansi_format(ANSI_UNDERLINE, text)
 }
 
 # Background colors
-F bg_red(text: i64) -> i64 {
+fn bg_red(text: i64) -> i64 {
     ansi_format(ANSI_BG_RED, text)
 }
 
-F bg_green(text: i64) -> i64 {
+fn bg_green(text: i64) -> i64 {
     ansi_format(ANSI_BG_GREEN, text)
 }
 
-F bg_yellow(text: i64) -> i64 {
+fn bg_yellow(text: i64) -> i64 {
     ansi_format(ANSI_BG_YELLOW, text)
 }
 
-F bg_blue(text: i64) -> i64 {
+fn bg_blue(text: i64) -> i64 {
     ansi_format(ANSI_BG_BLUE, text)
 }
 
-F bg_magenta(text: i64) -> i64 {
+fn bg_magenta(text: i64) -> i64 {
     ansi_format(ANSI_BG_MAGENTA, text)
 }
 
-F bg_cyan(text: i64) -> i64 {
+fn bg_cyan(text: i64) -> i64 {
     ansi_format(ANSI_BG_CYAN, text)
 }
 
-F bg_white(text: i64) -> i64 {
+fn bg_white(text: i64) -> i64 {
     ansi_format(ANSI_BG_WHITE, text)
 }
 
-F bg_black(text: i64) -> i64 {
+fn bg_black(text: i64) -> i64 {
     ansi_format(ANSI_BG_BLACK, text)
 }
 
 # Common semantic colors
-F success(text: i64) -> i64 {
+fn success(text: i64) -> i64 {
     green(text)
 }
 
-F error(text: i64) -> i64 {
+fn error(text: i64) -> i64 {
     red(text)
 }
 
-F warning(text: i64) -> i64 {
+fn warning(text: i64) -> i64 {
     yellow(text)
 }
 
-F info(text: i64) -> i64 {
+fn info(text: i64) -> i64 {
     cyan(text)
 }
 
 # Check if terminal supports colors (checks TERM environment variable)
 # Returns: 1 if colors likely supported, 0 otherwise
-F supports_color() -> i64 {
+fn supports_color() -> i64 {
     term := getenv("TERM")
-    I term == 0 { R 0 }
+    I term == 0 { return 0 }
 
     # Check for common color-supporting terminals
-    I str_contains(term, "color") { R 1 }
-    I str_contains(term, "xterm") { R 1 }
-    I str_contains(term, "screen") { R 1 }
-    I str_contains(term, "tmux") { R 1 }
-    I str_contains(term, "linux") { R 1 }
+    I str_contains(term, "color") { return 1 }
+    I str_contains(term, "xterm") { return 1 }
+    I str_contains(term, "screen") { return 1 }
+    I str_contains(term, "tmux") { return 1 }
+    I str_contains(term, "linux") { return 1 }
 
     # Check for NO_COLOR environment variable
     no_color := getenv("NO_COLOR")
-    I no_color != 0 { R 0 }
+    I no_color != 0 { return 0 }
 
     1  # Default to supporting color
 }
@@ -226,8 +226,8 @@ F supports_color() -> i64 {
 # Strip ANSI escape codes from string
 # Args: text - string potentially containing ANSI codes
 # Returns: Pointer to cleaned string (allocated, caller must free)
-F strip_ansi(text: i64) -> i64 {
-    I text == 0 { R 0 }
+fn strip_ansi(text: i64) -> i64 {
+    I text == 0 { return 0 }
 
     len := strlen(text)
     buf := malloc(len + 1)
@@ -266,20 +266,20 @@ F strip_ansi(text: i64) -> i64 {
 }
 
 # Helper functions (require extern)
-X F getenv(name: i64) -> i64
-X F strlen(s: i64) -> i64
-X F malloc(size: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn getenv(name: i64) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
 
 # Helper: Check if string contains substring
-F str_contains(haystack: i64, needle: i64) -> i64 {
-    I haystack == 0 { R 0 }
-    I needle == 0 { R 0 }
+fn str_contains(haystack: i64, needle: i64) -> i64 {
+    I haystack == 0 { return 0 }
+    I needle == 0 { return 0 }
 
     h_len := strlen(haystack)
     n_len := strlen(needle)
 
-    I n_len > h_len { R 0 }
+    I n_len > h_len { return 0 }
 
     i := 0
     L i <= (h_len - n_len) {
@@ -292,7 +292,7 @@ F str_contains(haystack: i64, needle: i64) -> i64 {
             }
             j = j + 1
         }
-        I match { R 1 }
+        I match { return 1 }
         i = i + 1
     }
 

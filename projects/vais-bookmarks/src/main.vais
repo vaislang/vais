@@ -1,12 +1,12 @@
 # main.vais - HTTP Bookmark API Server Entry Point
 
-X F printf(fmt: str) -> i64
-X F puts(s: str) -> i64
-X F exit(code: i64) -> i64
-X F log_info(msg: str) -> i64
+impl fn printf(fmt: str) -> i64
+impl fn puts(s: str) -> i64
+impl fn exit(code: i64) -> i64
+impl fn log_info(msg: str) -> i64
 
 # Main entry point
-F main() -> i64 {
+fn main() -> i64 {
     puts("=================================")
     puts("  Vais Bookmark API Server v1.0")
     puts("=================================")
@@ -22,7 +22,7 @@ F main() -> i64 {
     printf("  Port: %d\n")
     I use_tls == 1 {
         puts("  TLS: Enabled (HTTPS)")
-    } E {
+    } enum {
         puts("  TLS: Disabled (HTTP)")
     }
     puts("")
@@ -53,11 +53,11 @@ F main() -> i64 {
     I result == 0 {
         puts("Server shutdown successfully")
         log_info("Server stopped")
-        R 0
-    } E {
+        return 0
+    } enum {
         puts("Server error occurred")
         log_info("Server stopped with error")
-        R 1
+        return 1
     }
 }
 

@@ -17,6 +17,13 @@ impl CodeGenerator {
     ) -> CodegenResult<(String, String)> {
         // Check if this is an enum variant constructor or builtin
         if let Expr::Ident(name) = &func.node {
+            let expected = self.fn_ctx.expected_expr_types.last().cloned();
+            if let Some((enum_name, tag)) =
+                self.get_tuple_variant_info_with_expected(name, expected.as_ref())
+            {
+                return self.generate_enum_variant_constructor(&enum_name, tag, args, counter);
+            }
+
             // Result/Option variant constructors: look up actual tag from enum registry,
             // falling back to hardcoded values if not registered.
             // NOTE: Tag must match the enum definition order (e.g., E Option { None=0, Some=1 })
@@ -85,22 +92,7 @@ impl CodeGenerator {
                 let raw_ptr = self.extract_str_ptr(&str_val, counter, &mut ir);
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, raw_ptr);
-                return Ok((result, ir));
-            }
-
-            // mult_hash(str) is the generic HashMap<str, V> path after monomorphization.
-            // Hash string contents instead of lowering the fat pointer as an i64 integer.
-            if name == "mult_hash"
-                && args.len() == 1
-                && matches!(self.infer_expr_type(&args[0]), ResolvedType::Str)
-            {
-                let (str_val, str_ir) = self.generate_expr(&args[0], counter)?;
-                let mut ir = str_ir;
-                let raw_ptr = self.string_like_to_i8_ptr(&str_val, counter, &mut ir);
-                let raw_i64 = self.next_temp(counter);
-                write_ir!(ir, "  {} = ptrtoint i8* {} to i64", raw_i64, raw_ptr);
-                let result = self.next_temp(counter);
-                write_ir!(ir, "  {} = call i64 @hash_string(i64 {})", result, raw_i64);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 return Ok((result, ir));
             }
 
@@ -128,6 +120,7 @@ impl CodeGenerator {
                 // Compute length with strlen and build fat pointer
                 let len = self.next_temp(counter);
                 write_ir!(ir, "  {} = call i64 @strlen(i8* {})", len, raw_ptr);
+                self.fn_ctx.record_emitted_type(&len, "i64");
                 let result = self.build_str_fat_ptr(&raw_ptr, &len, counter, &mut ir);
                 return Ok((result, ir));
             }
@@ -200,6 +193,7 @@ impl CodeGenerator {
                 // Convert ptr to i64 for __swap(i64, i64, i64) signature
                 let ptr_i64 = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint ptr {} to i64", ptr_i64, ptr_val);
+                self.fn_ctx.record_emitted_type(&ptr_i64, "i64");
 
                 let dbg_info = self.debug_info.dbg_ref_from_span(span);
                 write_ir!(
@@ -253,12 +247,55 @@ impl CodeGenerator {
         let (fn_name, is_indirect) = if let Expr::Ident(name) = &func.node {
             // Check if this is a generic function that needs monomorphization
             if let Some(instantiations_list) = self.generics.fn_instantiations.get(name) {
-                // Infer argument types to select the right specialization
-                let arg_types: Vec<ResolvedType> =
-                    args.iter().map(|a| self.infer_expr_type(a)).collect();
+                // Infer argument types to select the right specialization.
+                // Phase 0 bug C17 fix: when this call is inside a specialized
+                // generic body (e.g. `identity(x)` inside `double_it$i64`),
+                // the arg types come from `infer_expr_type` which uses local
+                // declared types (T). Substitute via the active spec context
+                // so the mangled call matches a registered specialization
+                // (i.e. resolve identity(x: T) → identity$i64 not identity$T).
+                let arg_types: Vec<ResolvedType> = args
+                    .iter()
+                    .map(|a| {
+                        let raw = self.infer_expr_type(a);
+                        if self.generics.substitutions.is_empty() {
+                            raw
+                        } else {
+                            vais_types::substitute_type(&raw, &self.generics.substitutions)
+                        }
+                    })
+                    .collect();
 
-                // Find the matching instantiation based on argument types
-                let mangled = self.resolve_generic_call(name, &arg_types, instantiations_list);
+                // Phase 16 A2.5: supply TC-known call-site return type as a hint
+                // so generic parameters that only appear in the return type
+                // (e.g. `Vec.with_capacity(cap: i64) -> Vec<T>`) don't collapse
+                // to the I64 default.
+                let file_id = if span.file_id != 0 {
+                    span.file_id
+                } else {
+                    self.current_file_id
+                };
+                let call_span = (file_id, span.start, span.end);
+                let expected_ret = self.expr_types.get(&call_span).cloned().or_else(|| {
+                    // Phase 17.H1 fallback: serial TC path uses a single file_id.
+                    // Match (start, end) only if unique.
+                    let mut iter = self
+                        .expr_types
+                        .iter()
+                        .filter(|((_, s, e), _)| *s == span.start && *e == span.end);
+                    let first = iter.next();
+                    let second = iter.next();
+                    match (first, second) {
+                        (Some((_, ty)), None) => Some(ty.clone()),
+                        _ => None,
+                    }
+                });
+                let mangled = self.resolve_generic_call_with_hint(
+                    name,
+                    &arg_types,
+                    instantiations_list,
+                    expected_ret.as_ref(),
+                );
                 (mangled, false)
             } else if self.types.functions.contains_key(name) {
                 (name.clone(), false)
@@ -351,22 +388,21 @@ impl CodeGenerator {
                 } else {
                     arg
                 };
+            let (mut val, arg_ir) = self.generate_expr(arg_for_gen, counter)?;
+            ir.push_str(&arg_ir);
 
             // Get parameter type from function info if available
             let param_ty = fn_info
                 .as_ref()
                 .and_then(|f| f.signature.params.get(i))
-                .map(|(_, ty, _)| ty.clone());
-
-            let saved_generic_substitutions = param_ty.as_ref().and_then(|expected| {
-                self.push_expected_static_ctor_substitutions(expected, &arg_for_gen.node)
-            });
-            let generated_arg = self.generate_expr(arg_for_gen, counter);
-            if let Some(saved) = saved_generic_substitutions {
-                self.generics.substitutions = saved;
-            }
-            let (mut val, arg_ir) = generated_arg?;
-            ir.push_str(&arg_ir);
+                .map(|(_, ty, _)| ty.clone())
+                .or_else(|| {
+                    self.types
+                        .resolved_function_sigs
+                        .get(&fn_name)
+                        .and_then(|sig| sig.params.get(i))
+                        .map(|(_, ty, _)| ty.clone())
+                });
 
             // For extern C functions with Str or &str parameters, extract the raw i8*
             // pointer from the fat pointer { i8*, i64 } and use i8* as the argument type.
@@ -391,9 +427,82 @@ impl CodeGenerator {
             }
 
             let inferred_ty = self.infer_expr_type(arg_for_gen);
+            let mut did_vec_to_slice = false;
             let arg_ty = if let Some(ref ty) = param_ty {
                 if matches!(ty, ResolvedType::Generic(_)) {
                     self.type_to_llvm(&inferred_ty)
+                } else if Self::is_vec_to_slice_coercion(ty, &inferred_ty) {
+                    // Vec<T> → Slice(T) coercion: materialize a real
+                    // `{ i8*, i64 }` fat pointer by extracting Vec's data
+                    // (field 0, i64 as pointer-int) and len (field 1). The
+                    // val is a `%Vec*` or `%Vec$T*` pointer.
+                    let actual_ty = self.llvm_type_of(&val);
+                    if actual_ty != "{ i8*, i64 }" {
+                        let (vec_struct_ty, vec_ptr) =
+                            if let Some(pointee) = actual_ty.strip_suffix('*') {
+                                (pointee.to_string(), val.clone())
+                            } else if actual_ty.starts_with('%') {
+                                let alloca = self.next_temp(counter);
+                                self.emit_entry_alloca(&alloca, &actual_ty);
+                                write_ir!(
+                                    ir,
+                                    "  store {} {}, {}* {}",
+                                    actual_ty,
+                                    val,
+                                    actual_ty,
+                                    alloca
+                                );
+                                (actual_ty.clone(), alloca)
+                            } else {
+                                ("%Vec".to_string(), val.clone())
+                            };
+                        let data_gep = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                            data_gep,
+                            vec_struct_ty,
+                            vec_struct_ty,
+                            vec_ptr
+                        );
+                        let data_i64 = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_gep);
+                        self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                        let data_i8 = self.next_temp(counter);
+                        write_ir!(ir, "  {} = inttoptr i64 {} to i8*", data_i8, data_i64);
+                        let len_gep = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = getelementptr {}, {}* {}, i32 0, i32 1",
+                            len_gep,
+                            vec_struct_ty,
+                            vec_struct_ty,
+                            vec_ptr
+                        );
+                        let len_val = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load i64, i64* {}", len_val, len_gep);
+                        self.fn_ctx.record_emitted_type(&len_val, "i64");
+                        let fat1 = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                            fat1,
+                            data_i8
+                        );
+                        self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
+                        let fat2 = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = insertvalue {{ i8*, i64 }} {}, i64 {}, 1",
+                            fat2,
+                            fat1,
+                            len_val
+                        );
+                        self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
+                        val = fat2;
+                    }
+                    did_vec_to_slice = true;
+                    "{ i8*, i64 }".to_string()
                 } else {
                     self.type_to_llvm(ty)
                 }
@@ -402,44 +511,27 @@ impl CodeGenerator {
                 self.type_to_llvm(&inferred_ty)
             };
 
-            if let Some(ref pt) = param_ty {
-                if Self::is_vec_to_slice_coercion(pt, &inferred_ty) {
-                    let expr_is_value = self.is_expr_value(arg_for_gen);
-                    if let Some(slice_val) = self.coerce_vec_to_slice_fat_ptr(
-                        &val,
-                        &inferred_ty,
-                        expr_is_value,
-                        counter,
-                        &mut ir,
-                    ) {
-                        val = slice_val;
-                    }
-                }
+            // Short-circuit: the Vec→slice coercion above already produced the
+            // final `{ i8*, i64 }` value in `val`. Skip every downstream
+            // coercion so they don't reinterpret the fat pointer as an i64 etc.
+            if did_vec_to_slice {
+                arg_vals.push(format!("{} {}", arg_ty, val));
+                continue;
             }
 
-            // Integer width coercion: prefer the actual generated SSA type when
-            // known. Inference can conservatively say i64 for byte indexing
-            // expressions even though codegen already emitted an i8 load.
+            // Integer width coercion: if param expects i32 but expr produces i64, trunc.
             if let Some(ref pt) = param_ty {
-                let actual_arg_llvm_ty = self.llvm_type_of(&val);
-                let actual_arg_bits = Self::int_type_width(&actual_arg_llvm_ty);
-                let src_bits = if actual_arg_bits > 0 {
-                    actual_arg_bits
-                } else {
-                    self.get_integer_bits(&inferred_ty)
-                };
-                let dst_bits = if let Some(rest) = arg_ty.strip_prefix('i') {
-                    rest.parse::<u32>().unwrap_or(0)
-                } else {
-                    self.get_integer_bits(pt)
-                };
+                let actual_int_ty = self
+                    .llvm_type_of_checked(&val)
+                    .filter(|ty| ty.starts_with('i') && ty[1..].parse::<u32>().is_ok());
+                let src_bits = actual_int_ty
+                    .as_deref()
+                    .and_then(|ty| ty[1..].parse::<u32>().ok())
+                    .unwrap_or_else(|| self.get_integer_bits(&inferred_ty));
+                let dst_bits = self.get_integer_bits(pt);
                 if src_bits > 0 && dst_bits > 0 && src_bits != dst_bits {
                     let conv_tmp = self.next_temp(counter);
-                    let src_ty = if actual_arg_bits > 0 {
-                        actual_arg_llvm_ty
-                    } else {
-                        format!("i{}", src_bits)
-                    };
+                    let src_ty = actual_int_ty.unwrap_or_else(|| format!("i{}", src_bits));
                     let dst_ty = format!("i{}", dst_bits);
                     if src_bits > dst_bits {
                         write_ir!(
@@ -451,9 +543,9 @@ impl CodeGenerator {
                             dst_ty
                         );
                     } else {
-                        write_ir!(ir, "  {} = zext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
+                        write_ir!(ir, "  {} = sext {} {} to {}", conv_tmp, src_ty, val, dst_ty);
                     }
-                    self.fn_ctx.register_temp_type(&conv_tmp, pt.clone());
+                    self.fn_ctx.record_emitted_type(&conv_tmp, &dst_ty);
                     val = conv_tmp;
                 }
                 // Float coercion: fptrunc double→float or fpext float→double
@@ -468,41 +560,66 @@ impl CodeGenerator {
             // (struct literals generate alloca+stores, returning pointers)
             // Use both param_ty and inferred_ty for struct detection
             let type_to_check = match &param_ty {
+                Some(ResolvedType::Generic(_)) => inferred_ty.clone(),
                 Some(ty) => ty.clone(),
                 None => inferred_ty.clone(),
             };
-            if matches!(type_to_check, ResolvedType::Named { .. })
-                && !self.is_expr_value(arg_for_gen)
-            {
-                let loaded = self.next_temp(counter);
-                write_ir!(ir, "  {} = load {}, {}* {}", loaded, arg_ty, arg_ty, val);
-                val = loaded;
+            if matches!(type_to_check, ResolvedType::Named { .. }) {
+                let actual_val_ty = self.llvm_type_of_checked(&val);
+                let expected_ptr_ty = format!("{}*", arg_ty);
+                let known_named_pointer_local = actual_val_ty.is_none()
+                    && self.fn_ctx.locals.values().any(|local| {
+                        let local_llvm = if local.llvm_name.starts_with('%') {
+                            local.llvm_name.clone()
+                        } else {
+                            format!("%{}", local.llvm_name)
+                        };
+                        local_llvm == val
+                            && matches!(local.ty, ResolvedType::Named { .. })
+                            && (local.is_ssa() || local.is_alloca() || local.is_param())
+                    });
+                let needs_load = actual_val_ty.as_deref() == Some(expected_ptr_ty.as_str())
+                    || actual_val_ty.as_deref() == Some("ptr")
+                    || known_named_pointer_local
+                    || (actual_val_ty.is_none() && !self.is_expr_value(arg_for_gen));
+                if needs_load {
+                    let loaded = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load {}, {}* {}", loaded, arg_ty, arg_ty, val);
+                    self.fn_ctx.record_emitted_type(&loaded, &arg_ty);
+                    val = loaded;
+                }
+            }
+
+            // `str` has value ABI `{ i8*, i64 }`, but `load_typed(..., K)`
+            // materializes aggregate values in a stack slot and returns a pointer.
+            // When the callee expects a string value, load that slot before the call.
+            if arg_ty == "{ i8*, i64 }" {
+                match self.llvm_type_of_checked(&val).as_deref() {
+                    Some("{ i8*, i64 }*") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                            loaded,
+                            val
+                        );
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        val = loaded;
+                    }
+                    Some("ptr") => {
+                        let loaded = self.next_temp(counter);
+                        write_ir!(ir, "  {} = load {{ i8*, i64 }}, ptr {}", loaded, val);
+                        self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                        val = loaded;
+                    }
+                    _ => {}
+                }
             }
 
             // Trait object coercion: &ConcreteType -> &dyn Trait
             // When parameter expects &dyn Trait and argument is a concrete type reference,
             // create a fat pointer { data_ptr, vtable_ptr }
             if let Some(ref param_type) = param_ty {
-                if matches!(
-                    param_type,
-                    ResolvedType::Fn { .. } | ResolvedType::FnPtr { .. }
-                ) {
-                    let val_ty = self.llvm_type_of(&val);
-                    if crate::helpers::is_llvm_integer_scalar(&val_ty) && arg_ty.ends_with('*') {
-                        let fn_ptr = self.next_temp(counter);
-                        write_ir!(
-                            ir,
-                            "  {} = inttoptr {} {} to {}",
-                            fn_ptr,
-                            val_ty,
-                            val,
-                            arg_ty
-                        );
-                        self.fn_ctx.register_temp_type(&fn_ptr, param_type.clone());
-                        val = fn_ptr;
-                    }
-                }
-
                 let dyn_trait = match param_type {
                     ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
                         if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
@@ -537,17 +654,45 @@ impl CodeGenerator {
 
                         match vtable_result {
                             Ok(vtable) => {
-                                // Load the actual struct pointer if we have a pointer-to-pointer
-                                // (Ref expressions return the address of the storage, not the struct)
-                                let struct_ptr = self.next_temp(counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load %{}*, %{}** {}",
-                                    struct_ptr,
-                                    concrete_name,
-                                    concrete_name,
-                                    val
-                                );
+                                let ref_arg_is_direct_ptr = if let Expr::Ref(inner) =
+                                    &arg_for_gen.node
+                                {
+                                    if let Expr::Ident(name) = &inner.node {
+                                        self.fn_ctx.locals.get(name.as_str()).is_some_and(|local| {
+                                            matches!(
+                                                &local.ty,
+                                                ResolvedType::Named { name, .. }
+                                                    if name == &concrete_name
+                                            ) && !local.is_double_ptr
+                                                && (local.is_alloca()
+                                                    || local.is_ssa()
+                                                    || local.is_param())
+                                        })
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                };
+                                let expected_ptr_ty = format!("%{}*", concrete_name);
+                                let actual_val_ty = self.llvm_type_of_checked(&val);
+                                let struct_ptr = if ref_arg_is_direct_ptr
+                                    || actual_val_ty.as_deref() == Some(expected_ptr_ty.as_str())
+                                {
+                                    val.clone()
+                                } else {
+                                    let loaded = self.next_temp(counter);
+                                    write_ir!(
+                                        ir,
+                                        "  {} = load %{}*, %{}** {}",
+                                        loaded,
+                                        concrete_name,
+                                        concrete_name,
+                                        val
+                                    );
+                                    self.fn_ctx.record_emitted_type(&loaded, &expected_ptr_ty);
+                                    loaded
+                                };
                                 // Cast data pointer to i8*
                                 let data_ptr = self.next_temp(counter);
                                 write_ir!(
@@ -566,6 +711,8 @@ impl CodeGenerator {
                                     trait_obj_1,
                                     data_ptr
                                 );
+                                self.fn_ctx
+                                    .record_emitted_type(&trait_obj_1, "{ i8*, i8* }");
                                 let vtable_cast = self.next_temp(counter);
                                 write_ir!(
                                     ir,
@@ -573,6 +720,7 @@ impl CodeGenerator {
                                     vtable_cast,
                                     vtable.global_name
                                 );
+                                self.fn_ctx.record_emitted_type(&vtable_cast, "i8*");
                                 let trait_obj_2 = self.next_temp(counter);
                                 write_ir!(
                                     ir,
@@ -581,6 +729,8 @@ impl CodeGenerator {
                                     trait_obj_1,
                                     vtable_cast
                                 );
+                                self.fn_ctx
+                                    .record_emitted_type(&trait_obj_2, "{ i8*, i8* }");
 
                                 val = trait_obj_2;
                             }
@@ -601,16 +751,6 @@ impl CodeGenerator {
 
             // Convert i64 to str fat pointer { i8*, i64 } when parameter expects str but arg is i64
             if let Some(ref param_type) = param_ty {
-                let param_is_str_fat = matches!(param_type, ResolvedType::Str)
-                    || matches!(param_type, ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
-                        if matches!(inner.as_ref(), ResolvedType::Str));
-                if param_is_str_fat {
-                    if let Some(str_val) =
-                        self.coerce_ref_str_to_str_fat_ptr(&val, &inferred_ty, counter, &mut ir)
-                    {
-                        val = str_val;
-                    }
-                }
                 if matches!(param_type, ResolvedType::Str) {
                     let actual_ty = self.infer_expr_type(arg_for_gen);
                     if matches!(actual_ty, ResolvedType::I64) {
@@ -618,7 +758,29 @@ impl CodeGenerator {
                         write_ir!(ir, "  {} = inttoptr i64 {} to i8*", raw_ptr, val);
                         let len = self.next_temp(counter);
                         write_ir!(ir, "  {} = call i64 @strlen(i8* {})", len, raw_ptr);
+                        self.fn_ctx.record_emitted_type(&len, "i64");
                         val = self.build_str_fat_ptr(&raw_ptr, &len, counter, &mut ir);
+                    }
+                }
+            }
+
+            // Convert str fat pointer { i8*, i64 } to i64 (data pointer) when
+            // parameter expects i64 but arg is str. Common for generic assert_eq
+            // style helpers that take i64 but the test source passes string
+            // literals or string-typed bindings.
+            if let Some(ref param_type) = param_ty {
+                if matches!(param_type, ResolvedType::I64) {
+                    let actual_ty = self.infer_expr_type(arg_for_gen);
+                    if matches!(actual_ty, ResolvedType::Str) {
+                        let val_ty = self.llvm_type_of(&val);
+                        if val_ty == "{ i8*, i64 }" {
+                            let data = self.next_temp(counter);
+                            write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 0", data, val);
+                            let as_i64 = self.next_temp(counter);
+                            write_ir!(ir, "  {} = ptrtoint i8* {} to i64", as_i64, data);
+                            self.fn_ctx.record_emitted_type(&as_i64, "i64");
+                            val = as_i64;
+                        }
                     }
                 }
             }
@@ -628,27 +790,99 @@ impl CodeGenerator {
             // (which is actually a pointer from alloca) to a generic function
             // that uses i64 erasure.
             if arg_ty == "i64" {
+                // Phase B3: when the argument is a plain Ident bound to an
+                // i64-typed local (parameter or SSA), skip ptrtoint regardless
+                // of what llvm_type_of returns. A stale SSA type registry
+                // entry from a prior specialized instance can mis-tag the
+                // parameter as `%Struct*`, producing `ptrtoint %Struct* %p`
+                // where `%p` is really i64. Trust the local type first.
+                let skip_ptrtoint = if let Expr::Ident(ident_name) = &arg_for_gen.node {
+                    self.fn_ctx
+                        .locals
+                        .get(ident_name.as_str())
+                        .map(|l| {
+                            matches!(
+                                l.ty,
+                                ResolvedType::I64
+                                    | ResolvedType::I32
+                                    | ResolvedType::I16
+                                    | ResolvedType::I8
+                                    | ResolvedType::U64
+                                    | ResolvedType::U32
+                                    | ResolvedType::U16
+                                    | ResolvedType::U8
+                                    | ResolvedType::Bool
+                            )
+                        })
+                        .unwrap_or(false)
+                } else {
+                    false
+                };
                 let val_ty = self.llvm_type_of(&val);
-                if val_ty.starts_with('%') && val_ty.ends_with('*') {
+                // Same scalar-shape guard as the named-inferred path below
+                // (line ~750). When the AST is a Binary/Unary/literal/Cast,
+                // the LLVM result is i64-scalar by construction, regardless
+                // of what `llvm_type_of` reports. A polluted SSA registry
+                // entry that mis-tags an `add` result as `%Vec$u8` would
+                // otherwise emit `ptrtoint %Vec$u8* %addresult` against an
+                // actual i64 SSA — invalid IR. (Hit by vaisdb bytebuffer's
+                // `__store_byte(buf + offset + 1, …)` chain.)
+                let scalar_shape_for_ptr = matches!(
+                    &arg_for_gen.node,
+                    Expr::Binary { .. }
+                        | Expr::Unary { .. }
+                        | Expr::Int(_)
+                        | Expr::Float(_)
+                        | Expr::Bool(_)
+                        | Expr::Cast { .. }
+                );
+                if skip_ptrtoint {
+                    // Value is already i64 — no coercion needed.
+                } else if scalar_shape_for_ptr {
+                    // Scalar-by-construction expression result. Trust i64
+                    // and skip ptrtoint regardless of registry mis-tagging.
+                } else if val_ty.starts_with('%') && val_ty.ends_with('*') {
                     // Explicitly pointer-typed → ptrtoint
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {} {} to i64", tmp, val_ty, val);
+                    self.fn_ctx.record_emitted_type(&tmp, "i64");
                     val = tmp;
                 } else if val_ty.starts_with('%') && !val_ty.ends_with('*') && val_ty != "i64" {
                     // Named struct type from local — the SSA value is actually a
                     // pointer (from alloca pattern at function entry). Treat as ptr.
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, val_ty, val);
+                    self.fn_ctx.record_emitted_type(&tmp, "i64");
                     val = tmp;
                 } else if val_ty == "i64" {
-                    // llvm_type_of returned fallback i64 — check the inferred expression type
-                    // to detect Named/struct types that are actually pointers
-                    let inferred = self.infer_expr_type(arg_for_gen);
-                    if matches!(inferred, ResolvedType::Named { .. }) {
-                        let struct_llvm = self.type_to_llvm(&inferred);
-                        let tmp = self.next_temp(counter);
-                        write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
-                        val = tmp;
+                    // Phase 17.H4 iter 21: the AST shape of `arg_for_gen` rules
+                    // out struct values for arithmetic/comparison/boolean
+                    // forms — their LLVM result is scalar by construction.
+                    // Skip the TC-inferred Named→ptrtoint upgrade in those
+                    // cases. A cross-module span collision can otherwise make
+                    // `infer_expr_type` return Vec<u8> for an `i64 add`,
+                    // producing invalid `ptrtoint %Vec$u8* %t` IR.
+                    let scalar_shape = matches!(
+                        &arg_for_gen.node,
+                        Expr::Binary { .. }
+                            | Expr::Unary { .. }
+                            | Expr::Int(_)
+                            | Expr::Float(_)
+                            | Expr::Bool(_)
+                            | Expr::Cast { .. }
+                    );
+                    if !scalar_shape {
+                        // llvm_type_of returned fallback i64 — check the inferred
+                        // expression type to detect Named/struct types that are
+                        // actually pointers.
+                        let inferred = self.infer_expr_type(arg_for_gen);
+                        if matches!(inferred, ResolvedType::Named { .. }) {
+                            let struct_llvm = self.type_to_llvm(&inferred);
+                            let tmp = self.next_temp(counter);
+                            write_ir!(ir, "  {} = ptrtoint {}* {} to i64", tmp, struct_llvm, val);
+                            self.fn_ctx.record_emitted_type(&tmp, "i64");
+                            val = tmp;
+                        }
                     }
                 }
             }
@@ -664,6 +898,7 @@ impl CodeGenerator {
                 if val_ty != "i1" && val_ty.starts_with('i') {
                     let tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = icmp ne {} {}, 0", tmp, val_ty, val);
+                    self.fn_ctx.record_emitted_type(&tmp, "i1");
                     val = tmp;
                 }
             }
@@ -672,19 +907,22 @@ impl CodeGenerator {
             // and differs from arg_ty, coerce. Only check temps with registered
             // types or locals — skip when llvm_type_of falls back to i64.
             {
-                let has_known_type = self.fn_ctx.get_temp_type(&val).is_some()
+                let known_val_ty = self.llvm_type_of_checked(&val);
+                let has_known_type = known_val_ty.is_some()
+                    || self.fn_ctx.get_temp_type(&val).is_some()
                     || self
                         .fn_ctx
                         .locals
                         .contains_key(val.strip_prefix('%').unwrap_or(&val));
                 if has_known_type {
-                    let val_ty = self.llvm_type_of(&val);
+                    let val_ty = known_val_ty.unwrap_or_else(|| self.llvm_type_of(&val));
                     // i1 → wider int: when the arg type is wider and the value
                     // is an i1 (e.g. a raw comparison flowing into an i64 param),
                     // zext up to the expected width.
                     if val_ty == "i1" && arg_ty != "i1" && arg_ty.starts_with('i') {
                         let tmp = self.next_temp(counter);
                         write_ir!(ir, "  {} = zext i1 {} to {}", tmp, val, arg_ty);
+                        self.fn_ctx.record_emitted_type(&tmp, &arg_ty);
                         val = tmp;
                     } else if val_ty != arg_ty
                         && val_ty.starts_with('i')
@@ -697,10 +935,12 @@ impl CodeGenerator {
                         if val_bits > arg_bits {
                             let tmp = self.next_temp(counter);
                             write_ir!(ir, "  {} = trunc {} {} to {}", tmp, val_ty, val, arg_ty);
+                            self.fn_ctx.record_emitted_type(&tmp, &arg_ty);
                             val = tmp;
                         } else if val_bits < arg_bits {
                             let tmp = self.next_temp(counter);
                             write_ir!(ir, "  {} = sext {} {} to {}", tmp, val_ty, val, arg_ty);
+                            self.fn_ctx.record_emitted_type(&tmp, &arg_ty);
                             val = tmp;
                         }
                     }
@@ -717,6 +957,17 @@ impl CodeGenerator {
             if arg_ty.starts_with('%') && !arg_ty.ends_with('*') {
                 let inferred = self.infer_expr_type(arg_for_gen);
                 if !matches!(inferred, ResolvedType::Named { .. }) {
+                    // If val was emitted as a narrow integer (i1/i8/i16/i32),
+                    // zext to i64 first — `inttoptr` requires i64 source here.
+                    // vaisdb prefix.vais hits this when a misuse like
+                    // Vec<CompressedKey>::push(u8_byte) reaches codegen.
+                    let actual = self.llvm_type_of(&val);
+                    if matches!(actual.as_str(), "i1" | "i8" | "i16" | "i32") {
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext {} {} to i64", widened, actual, val);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        val = widened;
+                    }
                     let ptr_tmp = self.next_temp(counter);
                     write_ir!(ir, "  {} = inttoptr i64 {} to {}*", ptr_tmp, val, arg_ty);
                     let loaded = self.next_temp(counter);
@@ -758,6 +1009,7 @@ impl CodeGenerator {
                     );
                     let data_i64 = self.next_temp(counter);
                     write_ir!(ir, "  {} = ptrtoint i8* {} to i64", data_i64, data_ptr);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
                     // Extract length from slice
                     let len = self.next_temp(counter);
                     write_ir!(ir, "  {} = extractvalue {{ i8*, i64 }} {}, 1", len, val);
@@ -812,6 +1064,12 @@ impl CodeGenerator {
                 }
             }
 
+            // Phase E: skip Unit ("void") arguments — callee signature now
+            // elides Unit parameters, so passing `void void` at the call
+            // site would desync the arg count and is rejected by clang.
+            if arg_ty == "void" {
+                continue;
+            }
             arg_vals.push(format!("{} {}", arg_ty, val));
         }
 
@@ -830,7 +1088,14 @@ impl CodeGenerator {
                         let param_ty = fn_info
                             .as_ref()
                             .and_then(|f| f.signature.params.get(i))
-                            .map(|(_, ty, _)| ty.clone());
+                            .map(|(_, ty, _)| ty.clone())
+                            .or_else(|| {
+                                self.types
+                                    .resolved_function_sigs
+                                    .get(&fn_name)
+                                    .and_then(|sig| sig.params.get(i))
+                                    .map(|(_, ty, _)| ty.clone())
+                            });
                         let arg_ty = if let Some(ref pt) = param_ty {
                             self.type_to_llvm(pt)
                         } else {
@@ -867,6 +1132,45 @@ impl CodeGenerator {
                     .resolved_function_sigs
                     .get(&fn_name)
                     .map(|sig| self.type_to_llvm(&sig.ret))
+            })
+            .or_else(|| {
+                // Phase 17.H4 iter 20: TC expr_types fallback for fully
+                // unregistered calls. When neither `fn_info` nor
+                // `resolved_function_sigs` know the call, the TC's
+                // `expr_types` map stamped at the call's span often carries
+                // the correctly-inferred ResolvedType (e.g., `Vec<u64>` for
+                // `to_vec()`, `Str` for `Str.new()`). Without this, codegen
+                // defaulted to `i64` and downstream `store %Vec$u64 %t`
+                // failed at clang link. Use the span's file_id (or the
+                // codegen's current_file_id when span is unstamped) to
+                // avoid cross-module bleed, mirroring infer_expr_type.
+                let file_id = if span.file_id != 0 {
+                    span.file_id
+                } else {
+                    self.current_file_id
+                };
+                let span_key = (file_id, span.start, span.end);
+                let tc_ty_opt = self.expr_types.get(&span_key).cloned().or_else(|| {
+                    // Fallback: serial TC stamped all exprs with the driver's
+                    // single file_id; try unique (start, end) match.
+                    let mut iter = self
+                        .expr_types
+                        .iter()
+                        .filter(|((_, s, e), _)| *s == span.start && *e == span.end);
+                    let first = iter.next();
+                    let second = iter.next();
+                    match (first, second) {
+                        (Some((_, ty)), None) => Some(ty.clone()),
+                        _ => None,
+                    }
+                });
+                tc_ty_opt.and_then(|tc_ty| {
+                    // Reject unresolved Var(_) to avoid "i64" regression via type_to_llvm Generic fallback.
+                    if matches!(&tc_ty, ResolvedType::Var(_)) {
+                        return None;
+                    }
+                    Some(self.type_to_llvm(&tc_ty))
+                })
             })
             .unwrap_or_else(|| "i64".to_string());
 
@@ -912,6 +1216,7 @@ impl CodeGenerator {
                     all_args.join(", "),
                     dbg_info
                 );
+                self.fn_ctx.record_emitted_type(&tmp, "i64");
                 return Ok((tmp, ir));
             }
 
@@ -922,8 +1227,8 @@ impl CodeGenerator {
                 .map(|l| l.is_ssa() || l.is_param())
                 .unwrap_or(false);
 
-            let (ptr_tmp, ptr_ty) = if is_ssa_or_param {
-                // SSA or param: the value IS the function pointer, no load needed.
+            let ptr_tmp = if is_ssa_or_param {
+                // SSA or param: the value IS the function pointer (as i64), no load needed
                 let local = match local_info.as_ref() {
                     Some(l) => l,
                     None => {
@@ -933,141 +1238,50 @@ impl CodeGenerator {
                         )))
                     }
                 };
-                let val = if local.is_ssa() {
+                let val = &local.llvm_name;
+                if local.is_ssa() {
                     // SSA values already include the % prefix (e.g., "%5")
-                    local.llvm_name.clone()
+                    val.clone()
                 } else {
                     // Param names don't include % prefix
-                    format!("%{}", local.llvm_name)
-                };
-                (val, self.type_to_llvm(&local.ty))
+                    format!("%{}", val)
+                }
             } else {
                 // Alloca: load the function pointer from the stack slot
                 let llvm_var_name = local_info
                     .as_ref()
                     .map(|l| l.llvm_name.clone())
                     .unwrap_or_else(|| fn_name.clone());
-                let load_ty = local_info
-                    .as_ref()
-                    .map(|l| self.type_to_llvm(&l.ty))
-                    .unwrap_or_else(|| "i64".to_string());
                 let tmp = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = load {}, {}* %{}",
-                    tmp,
-                    load_ty,
-                    load_ty,
-                    llvm_var_name
-                );
-                (tmp, load_ty)
+                write_ir!(ir, "  {} = load i64, i64* %{}", tmp, llvm_var_name);
+                self.fn_ctx.record_emitted_type(&tmp, "i64");
+                tmp
             };
 
-            // Prefer the declared function-pointer type. Falling back to the
-            // argument-shaped i64 signature preserves the older erased callback ABI.
-            let (fn_type, ret_ty, ret_resolved) = if let Some(local) = local_info.as_ref() {
-                match &local.ty {
-                    ResolvedType::Fn { ret, .. } | ResolvedType::FnPtr { ret, .. } => (
-                        self.type_to_llvm(&local.ty),
-                        self.type_to_llvm(ret.as_ref()),
-                        ret.as_ref().clone(),
-                    ),
-                    _ => {
-                        let arg_types: Vec<String> = all_args
-                            .iter()
-                            .map(|a| a.split_whitespace().next().unwrap_or("i64").to_string())
-                            .collect();
-                        (
-                            format!("i64 ({})*", arg_types.join(", ")),
-                            "i64".to_string(),
-                            ResolvedType::I64,
-                        )
-                    }
-                }
-            } else {
-                let arg_types: Vec<String> = all_args
-                    .iter()
-                    .map(|a| a.split_whitespace().next().unwrap_or("i64").to_string())
-                    .collect();
-                (
-                    format!("i64 ({})*", arg_types.join(", ")),
-                    "i64".to_string(),
-                    ResolvedType::I64,
-                )
-            };
+            // Build function type signature for indirect call (including captures)
+            let arg_types: Vec<String> = all_args
+                .iter()
+                .map(|a| a.split_whitespace().next().unwrap_or("i64").to_string())
+                .collect();
+            let fn_type = format!("i64 ({})*", arg_types.join(", "));
 
-            let ptr_ty_norm = ptr_ty.replace(' ', "");
-            let fn_ty_norm = fn_type.replace(' ', "");
-            let call_target = if ptr_ty_norm == fn_ty_norm {
-                ptr_tmp
-            } else if ptr_ty.ends_with('*') || ptr_ty == "ptr" {
-                let fn_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = bitcast {} {} to {}",
-                    fn_ptr,
-                    ptr_ty,
-                    ptr_tmp,
-                    fn_type
-                );
-                fn_ptr
-            } else {
-                let fn_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = inttoptr {} {} to {}",
-                    fn_ptr,
-                    ptr_ty,
-                    ptr_tmp,
-                    fn_type
-                );
-                fn_ptr
-            };
+            // Cast i64 to function pointer
+            let fn_ptr = self.next_temp(counter);
+            write_ir!(ir, "  {} = inttoptr i64 {} to {}", fn_ptr, ptr_tmp, fn_type);
 
             // Make indirect call with all arguments
-            let dbg_info = self.debug_info.dbg_ref_from_span(span);
-            if ret_ty == "void" {
-                write_ir!(
-                    ir,
-                    "  call void {}({}){}",
-                    call_target,
-                    all_args.join(", "),
-                    dbg_info
-                );
-                Ok(("void".to_string(), ir))
-            } else {
-                let tmp = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = call {} {}({}){}",
-                    tmp,
-                    ret_ty,
-                    call_target,
-                    all_args.join(", "),
-                    dbg_info
-                );
-                self.fn_ctx.register_temp_type(&tmp, ret_resolved);
-                Ok((tmp, ir))
-            }
-        } else if fn_name == "gettimeofday" {
-            let tv_full = arg_vals.first().map(|s| s.as_str()).unwrap_or("i64 0");
-            let tz_full = arg_vals.get(1).map(|s| s.as_str()).unwrap_or("i64 0");
-            let tv_ptr = self.resolve_arg_to_i8_ptr(tv_full, counter, &mut ir);
-            let tz_ptr = self.resolve_arg_to_i8_ptr(tz_full, counter, &mut ir);
-            let i32_result = self.next_temp(counter);
+            let tmp = self.next_temp(counter);
             let dbg_info = self.debug_info.dbg_ref_from_span(span);
             write_ir!(
                 ir,
-                "  {} = call i32 @gettimeofday(i8* {}, i8* {}){}",
-                i32_result,
-                tv_ptr,
-                tz_ptr,
+                "  {} = call i64 {}({}){}",
+                tmp,
+                fn_ptr,
+                all_args.join(", "),
                 dbg_info
             );
-            let result = self.next_temp(counter);
-            write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
-            self.fn_ctx.register_temp_type(&result, ResolvedType::I64);
-            Ok((result, ir))
+            self.fn_ctx.record_emitted_type(&tmp, "i64");
+            Ok((tmp, ir))
         } else if fn_name == "malloc" {
             // Special handling for malloc: call returns i8*, convert to i64
             let ptr_tmp = self.next_temp(counter);
@@ -1079,8 +1293,10 @@ impl CodeGenerator {
                 arg_vals.join(", "),
                 dbg_info
             );
+            self.fn_ctx.record_emitted_type(&ptr_tmp, "i8*");
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
+            self.fn_ctx.record_emitted_type(&result, "i64");
             Ok((result, ir))
         } else if fn_name == "free" {
             // Special handling for free: handle str fat pointer, i8*, or i64
@@ -1115,9 +1331,11 @@ impl CodeGenerator {
                 n_val,
                 dbg_info
             );
+            self.fn_ctx.record_emitted_type(&result, "i8*");
             // Convert result back to i64
             let result_i64 = self.next_temp(counter);
             write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result_i64, result);
+            self.fn_ctx.record_emitted_type(&result_i64, "i64");
             Ok((result_i64, ir))
         } else if fn_name == "slice_data_ptr" {
             // Extract the data pointer from a slice fat pointer {i8*, i64}
@@ -1136,6 +1354,7 @@ impl CodeGenerator {
                 );
                 let result = self.next_temp(counter);
                 write_ir!(ir, "  {} = ptrtoint i8* {} to i64", result, ptr_tmp);
+                self.fn_ctx.record_emitted_type(&result, "i64");
                 Ok((result, ir))
             } else {
                 // Fallback: treat the argument as already an i64 pointer
@@ -1159,6 +1378,7 @@ impl CodeGenerator {
                 ptr_tmp,
                 dbg_info
             );
+            self.fn_ctx.record_emitted_type(&result, "i64");
             Ok((result, ir))
         } else if fn_name == "puts_ptr" {
             // Special handling for puts_ptr: handle str fat pointer, i8*, or i64
@@ -1173,9 +1393,11 @@ impl CodeGenerator {
                 ptr_tmp,
                 dbg_info
             );
+            self.fn_ctx.record_emitted_type(&i32_result, "i32");
             // Convert i32 result to i64 for consistency
             let result = self.next_temp(counter);
             write_ir!(ir, "  {} = sext i32 {} to i64", result, i32_result);
+            self.fn_ctx.record_emitted_type(&result, "i64");
             self.fn_ctx
                 .register_temp_type(&result, vais_types::ResolvedType::I64);
             Ok((result, ir))
@@ -1274,6 +1496,7 @@ impl CodeGenerator {
             }
             let tmp = self.next_temp(counter);
             write_ir!(ir, "  {} = sext i32 {} to i64", tmp, i32_tmp);
+            self.fn_ctx.record_emitted_type(&tmp, "i64");
             // Register as I64 since the sext converts i32→i64.
             // Without this, generate_expr_inner's catch-all registers the
             // semantic return type (I32/U32), causing downstream coercion
@@ -1318,6 +1541,7 @@ impl CodeGenerator {
                     arg_vals.join(", "),
                     dbg_info
                 );
+                self.fn_ctx.record_emitted_type(&tmp, &ret_ty);
             } else {
                 write_ir!(
                     ir,
@@ -1328,6 +1552,7 @@ impl CodeGenerator {
                     arg_vals.join(", "),
                     dbg_info
                 );
+                self.fn_ctx.record_emitted_type(&tmp, &ret_ty);
             }
 
             // For extern C functions returning str, the C function returns i8*
@@ -1342,6 +1567,7 @@ impl CodeGenerator {
                 {
                     let len = self.next_temp(counter);
                     write_ir!(ir, "  {} = call i64 @strlen(i8* {})", len, tmp);
+                    self.fn_ctx.record_emitted_type(&len, "i64");
                     let fat_ptr = self.build_str_fat_ptr(&tmp, &len, counter, &mut ir);
                     return Ok((fat_ptr, ir));
                 }
@@ -1362,8 +1588,15 @@ impl CodeGenerator {
         let (ptr_val, ptr_ir) = self.generate_expr(&args[0], counter)?;
         let mut ir = ptr_ir;
         // Resolve T from generic substitutions
-        let resolved_t = self
-            .get_generic_substitution("T")
+        let explicit_t = args.get(1).and_then(|arg| {
+            if let Expr::Ident(ident) = &arg.node {
+                self.get_generic_substitution(ident)
+            } else {
+                None
+            }
+        });
+        let resolved_t = explicit_t
+            .or_else(|| self.get_generic_substitution("T"))
             .unwrap_or(ResolvedType::I64);
         // In specialized functions, return the concrete type directly (no T→i64 conversion).
         // If resolved_t is a concrete non-i64/non-u64 type and substitutions are non-empty,
@@ -1379,10 +1612,13 @@ impl CodeGenerator {
                 if is_specialized {
                     // Return i8 directly in specialized context
                     write_ir!(ir, "  {} = load i8, i8* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "i8");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i8, i8* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i8");
                     write_ir!(ir, "  {} = zext i8 {} to i64", result, tmp2);
+                    self.fn_ctx.record_emitted_type(&result, "i64");
                 }
             }
             2 => {
@@ -1390,10 +1626,13 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = inttoptr i64 {} to i16*", tmp1, ptr_val);
                 if is_specialized {
                     write_ir!(ir, "  {} = load i16, i16* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "i16");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i16, i16* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i16");
                     write_ir!(ir, "  {} = zext i16 {} to i64", result, tmp2);
+                    self.fn_ctx.record_emitted_type(&result, "i64");
                 }
             }
             4 if matches!(resolved_t, ResolvedType::F32) => {
@@ -1402,10 +1641,12 @@ impl CodeGenerator {
                 if is_specialized {
                     // Return float directly in specialized context
                     write_ir!(ir, "  {} = load float, float* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "float");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     let tmp3 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load float, float* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "float");
                     write_ir!(ir, "  {} = fpext float {} to double", tmp3, tmp2);
                     write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp3);
                 }
@@ -1415,10 +1656,13 @@ impl CodeGenerator {
                 write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
                 if is_specialized {
                     write_ir!(ir, "  {} = load i32, i32* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "i32");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load i32, i32* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i32");
                     write_ir!(ir, "  {} = zext i32 {} to i64", result, tmp2);
+                    self.fn_ctx.record_emitted_type(&result, "i64");
                 }
             }
             _ if matches!(resolved_t, ResolvedType::F64) => {
@@ -1427,55 +1671,37 @@ impl CodeGenerator {
                 if is_specialized {
                     // Return double directly in specialized context
                     write_ir!(ir, "  {} = load double, double* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "double");
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = load double, double* {}", tmp2, tmp1);
+                    self.fn_ctx.record_emitted_type(&tmp2, "double");
                     write_ir!(ir, "  {} = bitcast double {} to i64", result, tmp2);
                 }
             }
-            n if matches!(resolved_t, ResolvedType::Str) => {
-                self.needs_llvm_memcpy = true;
+            n if matches!(resolved_t, ResolvedType::Str) && is_specialized => {
                 let llvm_ty = self.type_to_llvm(&resolved_t);
-                let alloca_tmp = self.next_temp(counter);
-                write_ir!(ir, "  {} = alloca {}", alloca_tmp, llvm_ty);
-                let dst_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = bitcast {}* {} to i8*",
-                    dst_ptr,
-                    llvm_ty,
-                    alloca_tmp
-                );
                 let src_ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to i8*", src_ptr, ptr_val);
                 write_ir!(
                     ir,
-                    "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
-                    dst_ptr,
+                    "  {} = inttoptr i64 {} to {}*",
                     src_ptr,
-                    n
+                    ptr_val,
+                    llvm_ty
                 );
-                if is_specialized {
-                    write_ir!(
-                        ir,
-                        "  {} = load {}, {}* {}",
-                        result,
-                        llvm_ty,
-                        llvm_ty,
-                        alloca_tmp
-                    );
-                } else {
-                    write_ir!(
-                        ir,
-                        "  {} = ptrtoint {}* {} to i64",
-                        result,
-                        llvm_ty,
-                        alloca_tmp
-                    );
-                }
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    result,
+                    llvm_ty,
+                    llvm_ty,
+                    src_ptr
+                );
+                debug_assert_eq!(n, 16);
+                self.fn_ctx.record_emitted_type(&result, &llvm_ty);
             }
-            n if matches!(resolved_t, ResolvedType::Named { .. }) => {
-                // Struct type: copy via memcpy from the array slot to a stack
+            n if matches!(resolved_t, ResolvedType::Named { .. } | ResolvedType::Str) => {
+                // Struct/str type: copy via memcpy from the array slot to a stack
                 // alloca. Return the alloca pointer — struct values in Text IR
                 // are pointer-based, and field access uses GEP on typed pointers.
                 self.needs_llvm_memcpy = true;
@@ -1483,7 +1709,7 @@ impl CodeGenerator {
                 if is_specialized {
                     // In specialized context, return the alloca pointer directly
                     // so downstream code can use GEP for field access.
-                    write_ir!(ir, "  {} = alloca {}", result, llvm_ty);
+                    self.emit_entry_alloca(&result, &llvm_ty);
                     let dst_ptr = self.next_temp(counter);
                     write_ir!(ir, "  {} = bitcast {}* {} to i8*", dst_ptr, llvm_ty, result);
                     let src_ptr = self.next_temp(counter);
@@ -1495,13 +1721,31 @@ impl CodeGenerator {
                         src_ptr,
                         n
                     );
+                    if let ResolvedType::Named { name, .. } = &resolved_t {
+                        let struct_name = self.resolve_struct_name(name);
+                        if let Some(struct_info) = self.types.structs.get(&struct_name) {
+                            if struct_info.has_owned_mask {
+                                let mask_ptr = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
+                                    mask_ptr,
+                                    llvm_ty,
+                                    llvm_ty,
+                                    result,
+                                    struct_info.fields.len()
+                                );
+                                write_ir!(ir, "  store i64 0, i64* {}", mask_ptr);
+                            }
+                        }
+                    }
                 } else {
                     // In generic context, convert alloca pointer to i64 so the
                     // generic code (which uses i64 erasure) can work with it.
                     // The alloca is still needed for memcpy, but we ptrtoint it
                     // so callers see an i64 value.
                     let alloca_tmp = self.next_temp(counter);
-                    write_ir!(ir, "  {} = alloca {}", alloca_tmp, llvm_ty);
+                    self.emit_entry_alloca(&alloca_tmp, &llvm_ty);
                     let dst_ptr = self.next_temp(counter);
                     write_ir!(
                         ir,
@@ -1519,6 +1763,24 @@ impl CodeGenerator {
                         src_ptr,
                         n
                     );
+                    if let ResolvedType::Named { name, .. } = &resolved_t {
+                        let struct_name = self.resolve_struct_name(name);
+                        if let Some(struct_info) = self.types.structs.get(&struct_name) {
+                            if struct_info.has_owned_mask {
+                                let mask_ptr = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
+                                    mask_ptr,
+                                    llvm_ty,
+                                    llvm_ty,
+                                    alloca_tmp,
+                                    struct_info.fields.len()
+                                );
+                                write_ir!(ir, "  store i64 0, i64* {}", mask_ptr);
+                            }
+                        }
+                    }
                     write_ir!(
                         ir,
                         "  {} = ptrtoint {}* {} to i64",
@@ -1539,6 +1801,7 @@ impl CodeGenerator {
                     let tmp1 = self.next_temp(counter);
                     write_ir!(ir, "  {} = inttoptr i64 {} to i64*", tmp1, ptr_val);
                     write_ir!(ir, "  {} = load i64, i64* {}", result, tmp1);
+                    self.fn_ctx.record_emitted_type(&result, "i64");
                 }
             }
         }
@@ -1596,6 +1859,7 @@ impl CodeGenerator {
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = trunc i64 {} to i8", tmp2, val_val);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i8");
                     write_ir!(ir, "  store i8 {}, i8* {}", tmp2, tmp1);
                 }
             }
@@ -1607,6 +1871,7 @@ impl CodeGenerator {
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = trunc i64 {} to i16", tmp2, val_val);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i16");
                     write_ir!(ir, "  store i16 {}, i16* {}", tmp2, tmp1);
                 }
             }
@@ -1624,6 +1889,37 @@ impl CodeGenerator {
                     write_ir!(ir, "  store float {}, float* {}", tmp3, tmp1);
                 }
             }
+            4 if matches!(resolved_t, ResolvedType::Named { .. }) => {
+                // Phase α.1 fix: 4-byte Named struct (e.g., {i16,i16})
+                // must store as the native struct type, not narrow i32.
+                // The val_val may be a pointer-to-struct (alloca form);
+                // load through it before storing.
+                let llvm_ty = self.type_to_llvm(&resolved_t);
+                let tmp1 = self.next_temp(counter);
+                write_ir!(ir, "  {} = inttoptr i64 {} to {}*", tmp1, ptr_val, llvm_ty);
+                let val_to_store = if val_val.starts_with('%') {
+                    let loaded = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}",
+                        loaded,
+                        llvm_ty,
+                        llvm_ty,
+                        val_val
+                    );
+                    loaded
+                } else {
+                    val_val.clone()
+                };
+                write_ir!(
+                    ir,
+                    "  store {} {}, {}* {}",
+                    llvm_ty,
+                    val_to_store,
+                    llvm_ty,
+                    tmp1
+                );
+            }
             4 => {
                 let tmp1 = self.next_temp(counter);
                 write_ir!(ir, "  {} = inttoptr i64 {} to i32*", tmp1, ptr_val);
@@ -1632,6 +1928,7 @@ impl CodeGenerator {
                 } else {
                     let tmp2 = self.next_temp(counter);
                     write_ir!(ir, "  {} = trunc i64 {} to i32", tmp2, val_val);
+                    self.fn_ctx.record_emitted_type(&tmp2, "i32");
                     write_ir!(ir, "  store i32 {}, i32* {}", tmp2, tmp1);
                 }
             }
@@ -1671,8 +1968,27 @@ impl CodeGenerator {
                     );
                 } else {
                     // Specialized context: value is the concrete struct type.
-                    // If val is a value (not pointer), alloca+store to get a pointer
-                    let src_ptr = if self.is_expr_value(&args[1])
+                    // If val is a value (not pointer), alloca+store to get a pointer.
+                    // `load_typed` for Str/Named returns an alloca pointer, so use the
+                    // recorded emitted type before deciding to store the value again.
+                    let val_llvm_ty = self.llvm_type_of(&val_val);
+                    let expected_ptr_ty = format!("{}*", llvm_ty);
+                    let val_is_typed_ptr = val_llvm_ty == expected_ptr_ty
+                        || self
+                            .fn_ctx
+                            .get_emitted_type(&val_val)
+                            .is_some_and(|ty| ty == expected_ptr_ty);
+                    let src_ptr = if val_is_typed_ptr {
+                        let cast = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {} {} to i8*",
+                            cast,
+                            val_llvm_ty,
+                            val_val
+                        );
+                        cast
+                    } else if self.is_expr_value(&args[1])
                         || matches!(resolved_t, ResolvedType::Str)
                     {
                         let tmp_alloca = format!("%__store_typed_tmp.{}", counter);

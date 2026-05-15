@@ -1,0 +1,29 @@
+# CHECKS: nested struct initialization passing structs as field values.
+struct Address {
+    house: i64,
+    zip: i64
+}
+
+struct Person {
+    age: i64,
+    address: Address
+}
+
+fn main() -> i64 {
+    addr: Address := Address { house: 42, zip: 12345 }
+    p: Person := Person { age: 30, address: addr }
+
+    I p.age != 30 { return 1 }
+    I p.address.house != 42 { return 2 }
+    I p.address.zip != 12345 { return 3 }
+
+    # construct inline
+    p2: Person := Person {
+        age: 25,
+        address: Address { house: 100, zip: 99999 }
+    }
+    I p2.age != 25 { return 4 }
+    I p2.address.house != 100 { return 5 }
+    I p2.address.zip != 99999 { return 6 }
+    return 0
+}

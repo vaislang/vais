@@ -3,7 +3,7 @@
 #
 # Run: vaisc run examples/calculator_enum.vais
 
-EN Op {
+enum Op {
     Add(i64, i64),
     Sub(i64, i64),
     Mul(i64, i64),
@@ -11,15 +11,15 @@ EN Op {
     Neg(i64)
 }
 
-F eval(op: Op) -> i64 {
-    M op {
+fn eval(op: Op) -> i64 {
+    match op {
         Op.Add(a, b) => a + b,
         Op.Sub(a, b) => a - b,
         Op.Mul(a, b) => a * b,
         Op.Div(a, b) => {
             I b == 0 {
                 puts("Error: division by zero")
-                R 0
+                return 0
             }
             a / b
         },
@@ -27,7 +27,7 @@ F eval(op: Op) -> i64 {
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     # Basic operations
     r1 := eval(Add(10, 5))
     puts("10 + 5 = {r1}")
@@ -52,5 +52,5 @@ F main() -> i64 {
     total := r1 + r2 + r3 + r4 + r5
     # 15 + 5 + 42 + 25 + (-42) = 45
     puts("Total = {total}")
-    I total == 45 { 0 } EL { 1 }
+    I total == 45 { 0 } else { 1 }
 }

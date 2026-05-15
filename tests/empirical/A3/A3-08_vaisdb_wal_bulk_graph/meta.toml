@@ -1,0 +1,20 @@
+[entry]
+id = "A3-08"
+classification = "A3 quarantine (intended-but-unfinished public API)"
+surface = "vaisdb WAL bulk graph"
+import_form = "vaisdb/wal/bulk_graph"
+filesystem_path = "lang/packages/vaisdb/src/wal/bulk_graph.vais"
+master_plan_version = 16
+[v1_evidence]
+probe_summary = "U vaisdb/wal/bulk_graph; F main() -> i64 { R 0 }"
+expected_per_design = "vaisc check rejects with stable error[CODE]"
+actual_observed_default = "warning + fallback + exit 0"
+actual_observed_strict = "exit 1, error[E_IMPORT_NOT_FOUND]"
+verified_date = "2026-05-03"
+[v2_evidence]
+status = "v1_reverified_under_strict_mode"
+[migration]
+post_certification_expected = "If vaisdb WAL bulk graph is certified, the import resolves and vaisc check exits 0."
+[assertion_kind]
+kind = "check_fails"
+required_stderr_patterns = ["E_IMPORT_NOT_FOUND", "bulk_graph"]

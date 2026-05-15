@@ -18,21 +18,21 @@ C LZ4_MAGIC: i64 = 407710212
 # Extern Declarations
 # ============================================================================
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F str_to_ptr(s: str) -> i64
-X F load_byte(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F store_i64(ptr: i64, val: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
-X F memset(dest: i64, val: i64, n: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn str_to_ptr(s: str) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn store_i64(ptr: i64, val: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn memset(dest: i64, val: i64, n: i64) -> i64
 
 # ============================================================================
 # Result Type
 # ============================================================================
 
-S Lz4Result {
+struct Lz4Result {
     data: i64,
     len: i64,
     status: i64
@@ -42,61 +42,61 @@ S Lz4Result {
 # Helper Functions
 # ============================================================================
 
-F read_u16_le(ptr: i64) -> i64 {
+fn read_u16_le(ptr: i64) -> i64 {
     b0 := load_byte(ptr)
     b1 := load_byte(ptr + 1)
-    R (b0 & 255) | ((b1 & 255) << 8)
+    return (b0 & 255) | ((b1 & 255) << 8)
 }
 
-F write_u16_le(ptr: i64, val: i64) -> i64 {
+fn write_u16_le(ptr: i64, val: i64) -> i64 {
     store_byte(ptr, val & 255)
     store_byte(ptr + 1, (val >> 8) & 255)
-    R 0
+    return 0
 }
 
-F read_u32_le(ptr: i64) -> i64 {
+fn read_u32_le(ptr: i64) -> i64 {
     b0 := load_byte(ptr)
     b1 := load_byte(ptr + 1)
     b2 := load_byte(ptr + 2)
     b3 := load_byte(ptr + 3)
-    R (b0 & 255) | ((b1 & 255) << 8) | ((b2 & 255) << 16) | ((b3 & 255) << 24)
+    return (b0 & 255) | ((b1 & 255) << 8) | ((b2 & 255) << 16) | ((b3 & 255) << 24)
 }
 
-F write_u32_le(ptr: i64, val: i64) -> i64 {
+fn write_u32_le(ptr: i64, val: i64) -> i64 {
     store_byte(ptr, val & 255)
     store_byte(ptr + 1, (val >> 8) & 255)
     store_byte(ptr + 2, (val >> 16) & 255)
     store_byte(ptr + 3, (val >> 24) & 255)
-    R 0
+    return 0
 }
 
-F lz4_hash(val: i64) -> i64 {
+fn lz4_hash(val: i64) -> i64 {
     # Knuth's multiplicative hash
     product := val * 2654435761
     shifted := (product >> 16) & 2147483647
-    R shifted & 65535
+    return shifted & 65535
 }
 
 # ============================================================================
 # LZ4 Block Compression
 # ============================================================================
 
-F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
+fn lz4_compress(src: i64, src_len: i64) -> Lz4Result {
     I src_len == 0 {
         result := Lz4Result { data: 0, len: 0, status: 0 }
-        R result
+        return result
     }
 
     I src_len > LZ4_MAX_INPUT_SIZE {
         result := Lz4Result { data: 0, len: 0, status: -1 }
-        R result
+        return result
     }
 
     # Allocate hash table (65536 entries * 8 bytes = 524288 bytes)
     hash_table := malloc(524288)
     I hash_table == 0 {
         result := Lz4Result { data: 0, len: 0, status: -2 }
-        R result
+        return result
     }
     memset(hash_table, 0, 524288)
 
@@ -106,7 +106,7 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
     I dst == 0 {
         free(hash_table)
         result := Lz4Result { data: 0, len: 0, status: -2 }
-        R result
+        return result
     }
 
     ip := mut 0
@@ -151,14 +151,14 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
         L (ip + match_len) < src_len {
             I load_byte(src + candidate + match_len) == load_byte(src + ip + match_len) {
                 match_len = match_len + 1
-            } E {
+            } enum {
                 B
             }
         }
 
         # Write token
-        token_lit := I literal_len >= 15 { 15 } E { literal_len }
-        token_match := I (match_len - LZ4_MIN_MATCH) >= 15 { 15 } E { match_len - LZ4_MIN_MATCH }
+        token_lit := I literal_len >= 15 { 15 } enum { literal_len }
+        token_match := I (match_len - LZ4_MIN_MATCH) >= 15 { 15 } enum { match_len - LZ4_MIN_MATCH }
         token := (token_lit << 4) | token_match
         store_byte(dst + op, token)
         op = op + 1
@@ -204,7 +204,7 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
     # Write final literals
     final_literals := src_len - anchor
     I final_literals > 0 {
-        token_lit := I final_literals >= 15 { 15 } E { final_literals }
+        token_lit := I final_literals >= 15 { 15 } enum { final_literals }
         token := token_lit << 4
         store_byte(dst + op, token)
         op = op + 1
@@ -227,23 +227,23 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
     free(hash_table)
 
     result := Lz4Result { data: dst, len: op, status: 0 }
-    R result
+    return result
 }
 
 # ============================================================================
 # LZ4 Block Decompression
 # ============================================================================
 
-F lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
+fn lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
     I original_len == 0 {
         result := Lz4Result { data: 0, len: 0, status: 0 }
-        R result
+        return result
     }
 
     dst := malloc(original_len)
     I dst == 0 {
         result := Lz4Result { data: 0, len: 0, status: -2 }
-        R result
+        return result
     }
 
     ip := mut 0
@@ -308,23 +308,23 @@ F lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
     }
 
     result := Lz4Result { data: dst, len: op, status: 0 }
-    R result
+    return result
 }
 
 # ============================================================================
 # LZ4 Frame Format
 # ============================================================================
 
-S Lz4Frame {
+struct Lz4Frame {
     content_size: i64,
     block_max_size: i64
 }
 
-F lz4_frame_compress(src: i64, src_len: i64) -> Lz4Result {
+fn lz4_frame_compress(src: i64, src_len: i64) -> Lz4Result {
     # Compress block first
     block_result := lz4_compress(src, src_len)
     I block_result.status != 0 {
-        R block_result
+        return block_result
     }
 
     # Allocate frame buffer (magic + descriptor + block size + block + end mark)
@@ -333,7 +333,7 @@ F lz4_frame_compress(src: i64, src_len: i64) -> Lz4Result {
     I frame == 0 {
         free(block_result.data)
         result := Lz4Result { data: 0, len: 0, status: -2 }
-        R result
+        return result
     }
 
     pos := mut 0
@@ -365,13 +365,13 @@ F lz4_frame_compress(src: i64, src_len: i64) -> Lz4Result {
     free(block_result.data)
 
     result := Lz4Result { data: frame, len: pos, status: 0 }
-    R result
+    return result
 }
 
-F lz4_frame_decompress(src: i64, src_len: i64) -> Lz4Result {
+fn lz4_frame_decompress(src: i64, src_len: i64) -> Lz4Result {
     I src_len < 11 {
         result := Lz4Result { data: 0, len: 0, status: -3 }
-        R result
+        return result
     }
 
     pos := mut 0
@@ -381,7 +381,7 @@ F lz4_frame_decompress(src: i64, src_len: i64) -> Lz4Result {
     pos = pos + 4
     I magic != LZ4_MAGIC {
         result := Lz4Result { data: 0, len: 0, status: -4 }
-        R result
+        return result
     }
 
     # Skip frame descriptor (3 bytes)
@@ -393,7 +393,7 @@ F lz4_frame_decompress(src: i64, src_len: i64) -> Lz4Result {
 
     I block_size == 0 {
         result := Lz4Result { data: 0, len: 0, status: 0 }
-        R result
+        return result
     }
 
     # For decompression, we need to estimate original size
@@ -403,11 +403,11 @@ F lz4_frame_decompress(src: i64, src_len: i64) -> Lz4Result {
     I block_size > (LZ4_MAX_INPUT_SIZE / 10) {
         estimated_original := LZ4_MAX_INPUT_SIZE
         result := lz4_decompress(src + pos, block_size, estimated_original)
-        R result
-    } E {
+        return result
+    } enum {
         estimated_original := block_size * 10
         result := lz4_decompress(src + pos, block_size, estimated_original)
-        R result
+        return result
     }
 }
 
@@ -416,26 +416,26 @@ F lz4_frame_decompress(src: i64, src_len: i64) -> Lz4Result {
 # ============================================================================
 
 # Calculate string length from pointer (counts bytes until null terminator)
-F ptr_strlen(ptr: i64) -> i64 {
+fn ptr_strlen(ptr: i64) -> i64 {
     len := mut 0
     L load_byte(ptr + len) != 0 {
         len = len + 1
     }
-    R len
+    return len
 }
 
 # Compress a null-terminated string buffer
 # ptr: pointer from str_to_ptr(), automatically calculates length
-F lz4_compress_ptr(ptr: i64) -> Lz4Result {
+fn lz4_compress_ptr(ptr: i64) -> Lz4Result {
     len := ptr_strlen(ptr)
-    R lz4_compress(ptr, len)
+    return lz4_compress(ptr, len)
 }
 
 # ============================================================================
 # Simple XXHash32 (simplified for checksums)
 # ============================================================================
 
-F xxhash32(data: i64, len: i64, seed: i64) -> i64 {
+fn xxhash32(data: i64, len: i64, seed: i64) -> i64 {
     # Simplified version - just accumulate bytes
     h := mut seed + 374761393
     i := mut 0
@@ -447,5 +447,5 @@ F xxhash32(data: i64, len: i64, seed: i64) -> i64 {
         i = i + 1
     }
     h = h + len
-    R h & 2147483647
+    return h & 2147483647
 }

@@ -1,0 +1,14 @@
+# LIVING_SPEC/03_generics/generic_struct.vais
+# Key concept: S Name<T> { field: T } 제네릭 구조체 선언.
+# 필드 타입이 타입 파라미터로 추상화됨.
+
+struct Box<T> {
+    val: T
+}
+
+fn unwrap_i64(b: Box<i64>) -> i64 = b.val
+
+fn main() -> i64 {
+    b := Box { val: 55 }
+    unwrap_i64(b)
+}

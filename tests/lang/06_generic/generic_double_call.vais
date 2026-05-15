@@ -1,0 +1,15 @@
+# CHECKS: generic fn invoked with same T from two different paths.
+fn id<T>(x: T) -> T { x }
+
+fn apply_id_twice(x: i64) -> i64 {
+    a: i64 := id(x)
+    b: i64 := id(a + 1)
+    b
+}
+
+fn main() -> i64 {
+    I apply_id_twice(0) != 1 { return 1 }
+    I apply_id_twice(5) != 6 { return 2 }
+    I apply_id_twice(0 - 10) != 0 - 9 { return 3 }
+    return 0
+}

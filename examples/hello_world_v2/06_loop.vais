@@ -1,0 +1,11 @@
+# Hello World #6: while loop + accumulator
+fn main() -> i64 {
+    n: i64 := 7
+    sum: i64 := mut 0
+    i: i64 := mut 1
+    LW i <= n {
+        sum = sum + i
+        i = i + 1
+    }
+    return sum    # exit 28 (1+2+...+7)
+}

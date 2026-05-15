@@ -4,18 +4,18 @@
 # Extern Declarations
 # ========================================
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F strlen(s: i64) -> i64
-X F str_to_ptr(s: str) -> i64
-X F load_byte(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F store_i64(ptr: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
-X F memset(dest: i64, val: i64, n: i64) -> i64
-X F puts(s: str) -> i64
-X F putchar(c: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn str_to_ptr(s: str) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn store_i64(ptr: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn memset(dest: i64, val: i64, n: i64) -> i64
+impl fn puts(s: str) -> i64
+impl fn putchar(c: i64) -> i64
 
 # ========================================
 # Constants
@@ -31,7 +31,7 @@ C AES_NB: i64 = 4              # Block size in 32-bit words (128/32)
 # Result Struct
 # ========================================
 
-S AesResult {
+struct AesResult {
     data: i64,
     len: i64,
     status: i64    # 0 = OK, -1 = error
@@ -41,10 +41,10 @@ S AesResult {
 # S-Box (SubBytes) - FIPS 197 Standard Values
 # ========================================
 
-F aes_make_sbox() -> i64 {
+fn aes_make_sbox() -> i64 {
     sbox := malloc(256)
     I sbox == 0 {
-        R 0
+        return 0
     }
 
     # AES S-Box values (all 256 entries in decimal)
@@ -336,14 +336,14 @@ F aes_make_sbox() -> i64 {
     store_byte(sbox + 254, 187)
     store_byte(sbox + 255, 22)
 
-    R sbox
+    return sbox
 }
 
 # Inverse S-Box for decryption
-F aes_make_inv_sbox() -> i64 {
+fn aes_make_inv_sbox() -> i64 {
     inv_sbox := malloc(256)
     I inv_sbox == 0 {
-        R 0
+        return 0
     }
 
     # AES Inverse S-Box values (all 256 entries in decimal)
@@ -635,25 +635,25 @@ F aes_make_inv_sbox() -> i64 {
     store_byte(inv_sbox + 254, 12)
     store_byte(inv_sbox + 255, 125)
 
-    R inv_sbox
+    return inv_sbox
 }
 
 # ========================================
 # RCON (Round Constants)
 # ========================================
 
-F aes_rcon(round: i64) -> i64 {
-    I round == 0 { R 1 }
-    I round == 1 { R 2 }
-    I round == 2 { R 4 }
-    I round == 3 { R 8 }
-    I round == 4 { R 16 }
-    I round == 5 { R 32 }
-    I round == 6 { R 64 }
-    I round == 7 { R 128 }
-    I round == 8 { R 27 }
-    I round == 9 { R 54 }
-    R 0
+fn aes_rcon(round: i64) -> i64 {
+    I round == 0 { return 1 }
+    I round == 1 { return 2 }
+    I round == 2 { return 4 }
+    I round == 3 { return 8 }
+    I round == 4 { return 16 }
+    I round == 5 { return 32 }
+    I round == 6 { return 64 }
+    I round == 7 { return 128 }
+    I round == 8 { return 27 }
+    I round == 9 { return 54 }
+    return 0
 }
 
 # ========================================
@@ -661,17 +661,17 @@ F aes_rcon(round: i64) -> i64 {
 # ========================================
 
 # xtime doubling in GF(2^8) with irreducible polynomial 0x1b (27)
-F gf_xtime(a: i64) -> i64 {
+fn gf_xtime(a: i64) -> i64 {
     high_bit := (a >> 7) & 1
     result := (a << 1) & 255
     I high_bit == 1 {
         result = (result ^ 27) & 255
     }
-    R result
+    return result
 }
 
 # Multiply two values in GF(2^8)
-F gf_mul(a: i64, b: i64) -> i64 {
+fn gf_mul(a: i64, b: i64) -> i64 {
     a = a & 255
     b = b & 255
     result := 0
@@ -690,18 +690,18 @@ F gf_mul(a: i64, b: i64) -> i64 {
         i = i + 1
     }
 
-    R result
+    return result
 }
 
 # ========================================
 # Key Expansion (AES-256)
 # ========================================
 
-F aes_key_expand(key: i64, sbox: i64) -> i64 {
+fn aes_key_expand(key: i64, sbox: i64) -> i64 {
     # Allocate memory for 15 round keys (15 * 16 = 240 bytes)
     expanded := malloc(240)
     I expanded == 0 {
-        R 0
+        return 0
     }
 
     # Copy first 32 bytes (8 words) from key
@@ -736,7 +736,7 @@ F aes_key_expand(key: i64, sbox: i64) -> i64 {
             # Rcon: XOR first byte with round constant
             rcon_idx := ((word_idx / 8) - 1) & 4294967295
             b0 = (b0 ^ aes_rcon(rcon_idx)) & 255
-        } E I (word_idx & 7) == 4 {
+        } enum I (word_idx & 7) == 4 {
             # Every 4th word after 8th: SubWord only
             b0 = load_byte(sbox + b0)
             b1 = load_byte(sbox + b1)
@@ -759,14 +759,14 @@ F aes_key_expand(key: i64, sbox: i64) -> i64 {
         i = i + 4
     }
 
-    R expanded
+    return expanded
 }
 
 # ========================================
 # SubBytes Transformations
 # ========================================
 
-F aes_sub_bytes(state: i64, sbox: i64) -> i64 {
+fn aes_sub_bytes(state: i64, sbox: i64) -> i64 {
     i := mut 0
     L i < 16 {
         byte_val := load_byte(state + i)
@@ -774,10 +774,10 @@ F aes_sub_bytes(state: i64, sbox: i64) -> i64 {
         store_byte(state + i, sub_val)
         i = i + 1
     }
-    R state
+    return state
 }
 
-F aes_inv_sub_bytes(state: i64, inv_sbox: i64) -> i64 {
+fn aes_inv_sub_bytes(state: i64, inv_sbox: i64) -> i64 {
     i := mut 0
     L i < 16 {
         byte_val := load_byte(state + i)
@@ -785,14 +785,14 @@ F aes_inv_sub_bytes(state: i64, inv_sbox: i64) -> i64 {
         store_byte(state + i, sub_val)
         i = i + 1
     }
-    R state
+    return state
 }
 
 # ========================================
 # ShiftRows Transformations
 # ========================================
 
-F aes_shift_rows(state: i64) -> i64 {
+fn aes_shift_rows(state: i64) -> i64 {
     # State is column-major: byte[row + 4*col]
     # Row 0: no shift
     # Row 1: left shift 1
@@ -821,10 +821,10 @@ F aes_shift_rows(state: i64) -> i64 {
     store_byte(state + 7, load_byte(state + 3))
     store_byte(state + 3, tmp)
 
-    R state
+    return state
 }
 
-F aes_inv_shift_rows(state: i64) -> i64 {
+fn aes_inv_shift_rows(state: i64) -> i64 {
     # Row 1: right shift 1
     tmp := load_byte(state + 13)
     store_byte(state + 13, load_byte(state + 9))
@@ -847,14 +847,14 @@ F aes_inv_shift_rows(state: i64) -> i64 {
     store_byte(state + 11, load_byte(state + 15))
     store_byte(state + 15, tmp)
 
-    R state
+    return state
 }
 
 # ========================================
 # MixColumns Transformations
 # ========================================
 
-F aes_mix_columns(state: i64) -> i64 {
+fn aes_mix_columns(state: i64) -> i64 {
     # Mix each column using GF(2^8) matrix multiplication
     # Matrix: [2,3,1,1; 1,2,3,1; 1,1,2,3; 3,1,1,2]
 
@@ -880,10 +880,10 @@ F aes_mix_columns(state: i64) -> i64 {
         col = col + 1
     }
 
-    R state
+    return state
 }
 
-F aes_inv_mix_columns(state: i64) -> i64 {
+fn aes_inv_mix_columns(state: i64) -> i64 {
     # Inverse matrix: [14,11,13,9; 9,14,11,13; 13,9,14,11; 11,13,9,14]
 
     col := mut 0
@@ -908,14 +908,14 @@ F aes_inv_mix_columns(state: i64) -> i64 {
         col = col + 1
     }
 
-    R state
+    return state
 }
 
 # ========================================
 # AddRoundKey
 # ========================================
 
-F aes_add_round_key(state: i64, round_keys: i64, round: i64) -> i64 {
+fn aes_add_round_key(state: i64, round_keys: i64, round: i64) -> i64 {
     round_key_offset := round * 16
 
     i := mut 0
@@ -926,33 +926,33 @@ F aes_add_round_key(state: i64, round_keys: i64, round: i64) -> i64 {
         i = i + 1
     }
 
-    R state
+    return state
 }
 
 # ========================================
 # AES-256 Core Structure
 # ========================================
 
-S Aes256 {
+struct Aes256 {
     round_keys: i64,
     sbox: i64,
     inv_sbox: i64
 }
 
-X Aes256 {
-    F new(key: i64) -> Aes256 {
+impl Aes256 {
+    fn new(key: i64) -> Aes256 {
         sbox := aes_make_sbox()
         inv_sbox := aes_make_inv_sbox()
         round_keys := aes_key_expand(key, sbox)
 
-        R Aes256 {
+        return Aes256 {
             round_keys: round_keys,
             sbox: sbox,
             inv_sbox: inv_sbox
         }
     }
 
-    F encrypt_block(&self, block: i64) -> i64 {
+    fn encrypt_block(&self, block: i64) -> i64 {
         # Initial round
         aes_add_round_key(block, self.round_keys, 0)
 
@@ -971,10 +971,10 @@ X Aes256 {
         aes_shift_rows(block)
         aes_add_round_key(block, self.round_keys, 14)
 
-        R block
+        return block
     }
 
-    F decrypt_block(&self, block: i64) -> i64 {
+    fn decrypt_block(&self, block: i64) -> i64 {
         # Initial round
         aes_add_round_key(block, self.round_keys, 14)
 
@@ -993,10 +993,10 @@ X Aes256 {
         aes_inv_sub_bytes(block, self.inv_sbox)
         aes_add_round_key(block, self.round_keys, 0)
 
-        R block
+        return block
     }
 
-    F cleanup(&self) -> i64 {
+    fn cleanup(&self) -> i64 {
         I self.round_keys != 0 {
             free(self.round_keys)
         }
@@ -1006,7 +1006,7 @@ X Aes256 {
         I self.inv_sbox != 0 {
             free(self.inv_sbox)
         }
-        R 0
+        return 0
     }
 }
 
@@ -1014,7 +1014,7 @@ X Aes256 {
 # PKCS7 Padding
 # ========================================
 
-F pkcs7_pad(data: i64, data_len: i64) -> AesResult {
+fn pkcs7_pad(data: i64, data_len: i64) -> AesResult {
     pad_len := 16 - (data_len & 15)
     I pad_len == 0 {
         pad_len = 16
@@ -1023,7 +1023,7 @@ F pkcs7_pad(data: i64, data_len: i64) -> AesResult {
     new_len := data_len + pad_len
     padded := malloc(new_len)
     I padded == 0 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     # Copy original data
@@ -1036,32 +1036,32 @@ F pkcs7_pad(data: i64, data_len: i64) -> AesResult {
         i = i + 1
     }
 
-    R AesResult { data: padded, len: new_len, status: 0 }
+    return AesResult { data: padded, len: new_len, status: 0 }
 }
 
-F pkcs7_unpad(data: i64, data_len: i64) -> AesResult {
+fn pkcs7_unpad(data: i64, data_len: i64) -> AesResult {
     I data_len == 0 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     pad_len := load_byte(data + data_len - 1)
 
     # Validate padding
     I pad_len == 0 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
     I pad_len > 16 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
     I pad_len > data_len {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     # Verify all padding bytes
     i := mut 0
     L i < pad_len {
         I load_byte(data + data_len - 1 - i) != pad_len {
-            R AesResult { data: 0, len: 0, status: -1 }
+            return AesResult { data: 0, len: 0, status: -1 }
         }
         i = i + 1
     }
@@ -1069,23 +1069,23 @@ F pkcs7_unpad(data: i64, data_len: i64) -> AesResult {
     new_len := data_len - pad_len
     unpadded := malloc(new_len)
     I unpadded == 0 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     memcpy(unpadded, data, new_len)
 
-    R AesResult { data: unpadded, len: new_len, status: 0 }
+    return AesResult { data: unpadded, len: new_len, status: 0 }
 }
 
 # ========================================
 # ECB Mode (Electronic Codebook)
 # ========================================
 
-F aes_ecb_encrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
+fn aes_ecb_encrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
     # Apply PKCS7 padding
     pad_result := pkcs7_pad(data, data_len)
     I pad_result.status != 0 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     padded_data := pad_result.data
@@ -1095,7 +1095,7 @@ F aes_ecb_encrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
     output := malloc(padded_len)
     I output == 0 {
         free(padded_data)
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     # Encrypt each block
@@ -1106,7 +1106,7 @@ F aes_ecb_encrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
         I block == 0 {
             free(padded_data)
             free(output)
-            R AesResult { data: 0, len: 0, status: -1 }
+            return AesResult { data: 0, len: 0, status: -1 }
         }
         memcpy(block, padded_data + block_idx, 16)
 
@@ -1121,14 +1121,14 @@ F aes_ecb_encrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
     }
 
     free(padded_data)
-    R AesResult { data: output, len: padded_len, status: 0 }
+    return AesResult { data: output, len: padded_len, status: 0 }
 }
 
-F aes_ecb_decrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
+fn aes_ecb_decrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
     # Allocate output buffer
     output := malloc(data_len)
     I output == 0 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     # Decrypt each block
@@ -1138,7 +1138,7 @@ F aes_ecb_decrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
         block := malloc(16)
         I block == 0 {
             free(output)
-            R AesResult { data: 0, len: 0, status: -1 }
+            return AesResult { data: 0, len: 0, status: -1 }
         }
         memcpy(block, data + block_idx, 16)
 
@@ -1156,18 +1156,18 @@ F aes_ecb_decrypt(aes: &Aes256, data: i64, data_len: i64) -> AesResult {
     unpad_result := pkcs7_unpad(output, data_len)
     free(output)
 
-    R unpad_result
+    return unpad_result
 }
 
 # ========================================
 # CBC Mode (Cipher Block Chaining)
 # ========================================
 
-F aes_cbc_encrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult {
+fn aes_cbc_encrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult {
     # Apply PKCS7 padding
     pad_result := pkcs7_pad(data, data_len)
     I pad_result.status != 0 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     padded_data := pad_result.data
@@ -1177,7 +1177,7 @@ F aes_cbc_encrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
     output := malloc(padded_len)
     I output == 0 {
         free(padded_data)
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     # Allocate previous ciphertext block (initialized with IV)
@@ -1185,7 +1185,7 @@ F aes_cbc_encrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
     I prev_block == 0 {
         free(padded_data)
         free(output)
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
     memcpy(prev_block, iv, 16)
 
@@ -1198,7 +1198,7 @@ F aes_cbc_encrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
             free(padded_data)
             free(output)
             free(prev_block)
-            R AesResult { data: 0, len: 0, status: -1 }
+            return AesResult { data: 0, len: 0, status: -1 }
         }
         memcpy(block, padded_data + block_idx, 16)
 
@@ -1226,21 +1226,21 @@ F aes_cbc_encrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
 
     free(padded_data)
     free(prev_block)
-    R AesResult { data: output, len: padded_len, status: 0 }
+    return AesResult { data: output, len: padded_len, status: 0 }
 }
 
-F aes_cbc_decrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult {
+fn aes_cbc_decrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult {
     # Allocate output buffer
     output := malloc(data_len)
     I output == 0 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     # Allocate previous ciphertext block (initialized with IV)
     prev_block := malloc(16)
     I prev_block == 0 {
         free(output)
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
     memcpy(prev_block, iv, 16)
 
@@ -1252,7 +1252,7 @@ F aes_cbc_decrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
         I cipher_block == 0 {
             free(output)
             free(prev_block)
-            R AesResult { data: 0, len: 0, status: -1 }
+            return AesResult { data: 0, len: 0, status: -1 }
         }
         memcpy(cipher_block, data + block_idx, 16)
 
@@ -1262,7 +1262,7 @@ F aes_cbc_decrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
             free(output)
             free(prev_block)
             free(cipher_block)
-            R AesResult { data: 0, len: 0, status: -1 }
+            return AesResult { data: 0, len: 0, status: -1 }
         }
         memcpy(block, cipher_block, 16)
         aes.decrypt_block(block)
@@ -1293,25 +1293,25 @@ F aes_cbc_decrypt(aes: &Aes256, data: i64, data_len: i64, iv: i64) -> AesResult 
     unpad_result := pkcs7_unpad(output, data_len)
     free(output)
 
-    R unpad_result
+    return unpad_result
 }
 
 # ========================================
 # CTR Mode (Counter)
 # ========================================
 
-F aes_ctr_encrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResult {
+fn aes_ctr_encrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResult {
     # Allocate output buffer
     output := malloc(data_len)
     I output == 0 {
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     # Counter block (8-byte nonce + 8-byte counter)
     counter_block := malloc(16)
     I counter_block == 0 {
         free(output)
-        R AesResult { data: 0, len: 0, status: -1 }
+        return AesResult { data: 0, len: 0, status: -1 }
     }
 
     # Initialize counter with nonce
@@ -1335,7 +1335,7 @@ F aes_ctr_encrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResu
         I keystream == 0 {
             free(output)
             free(counter_block)
-            R AesResult { data: 0, len: 0, status: -1 }
+            return AesResult { data: 0, len: 0, status: -1 }
         }
         memcpy(keystream, counter_block, 16)
         aes.encrypt_block(keystream)
@@ -1360,27 +1360,27 @@ F aes_ctr_encrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResu
     }
 
     free(counter_block)
-    R AesResult { data: output, len: data_len, status: 0 }
+    return AesResult { data: output, len: data_len, status: 0 }
 }
 
-F aes_ctr_decrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResult {
+fn aes_ctr_decrypt(aes: &Aes256, data: i64, data_len: i64, nonce: i64) -> AesResult {
     # CTR mode encryption and decryption are identical
-    R aes_ctr_encrypt(aes, data, data_len, nonce)
+    return aes_ctr_encrypt(aes, data, data_len, nonce)
 }
 
 # ========================================
 # Test Helpers
 # ========================================
 
-F my_print_i64(val: i64) -> i64 {
+fn my_print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
-        R 0
+        return 0
     }
     I val < 0 {
         putchar(45)
         my_print_i64(0 - val)
-        R 0
+        return 0
     }
     I val >= 10 {
         my_print_i64(val / 10)
@@ -1389,56 +1389,56 @@ F my_print_i64(val: i64) -> i64 {
     0
 }
 
-F assert_eq(actual: i64, expected: i64, name: str) -> i64 {
+fn assert_eq(actual: i64, expected: i64, name: str) -> i64 {
     I actual == expected {
         puts("  PASS")
         putchar(10)
-        R 0
+        return 0
     }
     puts("  FAIL - Expected: ")
     my_print_i64(expected)
     puts(", Got: ")
     my_print_i64(actual)
     putchar(10)
-    R -1
+    return -1
 }
 
-F assert_true(val: i64, name: str) -> i64 {
+fn assert_true(val: i64, name: str) -> i64 {
     I val != 0 {
         puts("  PASS")
         putchar(10)
-        R 0
+        return 0
     }
     puts("  FAIL")
     putchar(10)
-    R -1
+    return -1
 }
 
-F mem_equal(a: i64, b: i64, len: i64) -> i64 {
+fn mem_equal(a: i64, b: i64, len: i64) -> i64 {
     i := mut 0
     L i < len {
         I load_byte(a + i) != load_byte(b + i) {
-            R 0
+            return 0
         }
         i = i + 1
     }
-    R 1
+    return 1
 }
 
-F fill_bytes_from_array(ptr: i64, values: i64, count: i64) -> i64 {
+fn fill_bytes_from_array(ptr: i64, values: i64, count: i64) -> i64 {
     i := mut 0
     L i < count {
         store_byte(ptr + i, load_byte(values + i))
         i = i + 1
     }
-    R 0
+    return 0
 }
 
 # ========================================
 # Test: S-Box Values
 # ========================================
 
-F test_sbox() -> i64 {
+fn test_sbox() -> i64 {
     puts("Test: S-Box")
     putchar(10)
 
@@ -1446,7 +1446,7 @@ F test_sbox() -> i64 {
     I sbox == 0 {
         puts("  FAIL: S-Box allocation")
         putchar(10)
-        R -1
+        return -1
     }
 
     # Verify known S-Box values
@@ -1456,14 +1456,14 @@ F test_sbox() -> i64 {
     assert_eq(load_byte(sbox + 255), 22, "sbox[255] == 22")
 
     free(sbox)
-    R 0
+    return 0
 }
 
 # ========================================
 # Test: Inverse S-Box Values
 # ========================================
 
-F test_inv_sbox() -> i64 {
+fn test_inv_sbox() -> i64 {
     puts("Test: Inverse S-Box")
     putchar(10)
 
@@ -1471,7 +1471,7 @@ F test_inv_sbox() -> i64 {
     I inv_sbox == 0 {
         puts("  FAIL: Inverse S-Box allocation")
         putchar(10)
-        R -1
+        return -1
     }
 
     # Verify known inverse S-Box values
@@ -1480,14 +1480,14 @@ F test_inv_sbox() -> i64 {
     assert_eq(load_byte(inv_sbox + 255), 125, "inv_sbox[255] == 125")
 
     free(inv_sbox)
-    R 0
+    return 0
 }
 
 # ========================================
 # Test: Key Expansion
 # ========================================
 
-F test_key_expansion() -> i64 {
+fn test_key_expansion() -> i64 {
     puts("Test: Key Expansion")
     putchar(10)
 
@@ -1496,7 +1496,7 @@ F test_key_expansion() -> i64 {
     I key == 0 {
         puts("  FAIL: Key allocation")
         putchar(10)
-        R -1
+        return -1
     }
 
     i := mut 0
@@ -1513,14 +1513,14 @@ F test_key_expansion() -> i64 {
         putchar(10)
         free(key)
         free(sbox)
-        R -1
+        return -1
     }
 
     # Verify that first 32 bytes match original key
     I mem_equal(round_keys, key, 32) == 1 {
         puts("  PASS: First round key matches original key")
         putchar(10)
-    } E {
+    } enum {
         puts("  FAIL: First round key doesn't match original key")
         putchar(10)
     }
@@ -1528,14 +1528,14 @@ F test_key_expansion() -> i64 {
     free(key)
     free(sbox)
     free(round_keys)
-    R 0
+    return 0
 }
 
 # ========================================
 # Test: FIPS 197 Encryption
 # ========================================
 
-F test_encrypt_block() -> i64 {
+fn test_encrypt_block() -> i64 {
     puts("Test: FIPS 197 Encryption")
     putchar(10)
 
@@ -1545,7 +1545,7 @@ F test_encrypt_block() -> i64 {
     I key == 0 {
         puts("  FAIL: Key allocation")
         putchar(10)
-        R -1
+        return -1
     }
     i := mut 0
     L i < 32 {
@@ -1559,7 +1559,7 @@ F test_encrypt_block() -> i64 {
         puts("  FAIL: Plaintext allocation")
         putchar(10)
         free(key)
-        R -1
+        return -1
     }
     store_byte(plaintext + 0, 0)
     store_byte(plaintext + 1, 17)
@@ -1585,7 +1585,7 @@ F test_encrypt_block() -> i64 {
         putchar(10)
         free(key)
         free(plaintext)
-        R -1
+        return -1
     }
     store_byte(expected + 0, 142)
     store_byte(expected + 1, 162)
@@ -1614,7 +1614,7 @@ F test_encrypt_block() -> i64 {
     I mem_equal(plaintext, expected, 16) == 1 {
         puts("  PASS: Ciphertext matches FIPS 197 test vector")
         putchar(10)
-    } E {
+    } enum {
         puts("  FAIL: Ciphertext doesn't match expected")
         putchar(10)
         puts("  Expected: ")
@@ -1639,14 +1639,14 @@ F test_encrypt_block() -> i64 {
     free(key)
     free(plaintext)
     free(expected)
-    R 0
+    return 0
 }
 
 # ========================================
 # Test: FIPS 197 Decryption
 # ========================================
 
-F test_decrypt_block() -> i64 {
+fn test_decrypt_block() -> i64 {
     puts("Test: FIPS 197 Decryption")
     putchar(10)
 
@@ -1655,7 +1655,7 @@ F test_decrypt_block() -> i64 {
     I key == 0 {
         puts("  FAIL: Key allocation")
         putchar(10)
-        R -1
+        return -1
     }
     i := mut 0
     L i < 32 {
@@ -1669,7 +1669,7 @@ F test_decrypt_block() -> i64 {
         puts("  FAIL: Ciphertext allocation")
         putchar(10)
         free(key)
-        R -1
+        return -1
     }
     store_byte(ciphertext + 0, 142)
     store_byte(ciphertext + 1, 162)
@@ -1695,7 +1695,7 @@ F test_decrypt_block() -> i64 {
         putchar(10)
         free(key)
         free(ciphertext)
-        R -1
+        return -1
     }
     store_byte(expected + 0, 0)
     store_byte(expected + 1, 17)
@@ -1724,7 +1724,7 @@ F test_decrypt_block() -> i64 {
     I mem_equal(ciphertext, expected, 16) == 1 {
         puts("  PASS: Plaintext matches expected")
         putchar(10)
-    } E {
+    } enum {
         puts("  FAIL: Plaintext doesn't match expected")
         putchar(10)
     }
@@ -1733,14 +1733,14 @@ F test_decrypt_block() -> i64 {
     free(key)
     free(ciphertext)
     free(expected)
-    R 0
+    return 0
 }
 
 # ========================================
 # Test: ECB Mode Roundtrip
 # ========================================
 
-F test_ecb_roundtrip() -> i64 {
+fn test_ecb_roundtrip() -> i64 {
     puts("Test: ECB Mode Roundtrip")
     putchar(10)
 
@@ -1749,7 +1749,7 @@ F test_ecb_roundtrip() -> i64 {
     I key == 0 {
         puts("  FAIL: Key allocation")
         putchar(10)
-        R -1
+        return -1
     }
     i := mut 0
     L i < 32 {
@@ -1763,7 +1763,7 @@ F test_ecb_roundtrip() -> i64 {
         puts("  FAIL: Plaintext allocation")
         putchar(10)
         free(key)
-        R -1
+        return -1
     }
     i = 0
     L i < 40 {
@@ -1782,7 +1782,7 @@ F test_ecb_roundtrip() -> i64 {
         aes.cleanup()
         free(key)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Decrypt
@@ -1794,7 +1794,7 @@ F test_ecb_roundtrip() -> i64 {
         aes.cleanup()
         free(key)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Verify roundtrip
@@ -1802,11 +1802,11 @@ F test_ecb_roundtrip() -> i64 {
         I mem_equal(dec_result.data, plaintext, 40) == 1 {
             puts("  PASS: ECB roundtrip successful")
             putchar(10)
-        } E {
+        } enum {
             puts("  FAIL: Decrypted data doesn't match original")
             putchar(10)
         }
-    } E {
+    } enum {
         puts("  FAIL: Decrypted length doesn't match original")
         putchar(10)
     }
@@ -1816,14 +1816,14 @@ F test_ecb_roundtrip() -> i64 {
     aes.cleanup()
     free(key)
     free(plaintext)
-    R 0
+    return 0
 }
 
 # ========================================
 # Test: CBC Mode Roundtrip
 # ========================================
 
-F test_cbc_roundtrip() -> i64 {
+fn test_cbc_roundtrip() -> i64 {
     puts("Test: CBC Mode Roundtrip")
     putchar(10)
 
@@ -1832,7 +1832,7 @@ F test_cbc_roundtrip() -> i64 {
     I key == 0 {
         puts("  FAIL: Key allocation")
         putchar(10)
-        R -1
+        return -1
     }
     i := mut 0
     L i < 32 {
@@ -1846,7 +1846,7 @@ F test_cbc_roundtrip() -> i64 {
         puts("  FAIL: IV allocation")
         putchar(10)
         free(key)
-        R -1
+        return -1
     }
     i = 0
     L i < 16 {
@@ -1861,7 +1861,7 @@ F test_cbc_roundtrip() -> i64 {
         putchar(10)
         free(key)
         free(iv)
-        R -1
+        return -1
     }
     i = 0
     L i < 50 {
@@ -1881,7 +1881,7 @@ F test_cbc_roundtrip() -> i64 {
         free(key)
         free(iv)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Decrypt
@@ -1894,7 +1894,7 @@ F test_cbc_roundtrip() -> i64 {
         free(key)
         free(iv)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Verify roundtrip
@@ -1902,11 +1902,11 @@ F test_cbc_roundtrip() -> i64 {
         I mem_equal(dec_result.data, plaintext, 50) == 1 {
             puts("  PASS: CBC roundtrip successful")
             putchar(10)
-        } E {
+        } enum {
             puts("  FAIL: Decrypted data doesn't match original")
             putchar(10)
         }
-    } E {
+    } enum {
         puts("  FAIL: Decrypted length doesn't match original")
         putchar(10)
     }
@@ -1917,14 +1917,14 @@ F test_cbc_roundtrip() -> i64 {
     free(key)
     free(iv)
     free(plaintext)
-    R 0
+    return 0
 }
 
 # ========================================
 # Test: CTR Mode Roundtrip
 # ========================================
 
-F test_ctr_roundtrip() -> i64 {
+fn test_ctr_roundtrip() -> i64 {
     puts("Test: CTR Mode Roundtrip")
     putchar(10)
 
@@ -1933,7 +1933,7 @@ F test_ctr_roundtrip() -> i64 {
     I key == 0 {
         puts("  FAIL: Key allocation")
         putchar(10)
-        R -1
+        return -1
     }
     i := mut 0
     L i < 32 {
@@ -1947,7 +1947,7 @@ F test_ctr_roundtrip() -> i64 {
         puts("  FAIL: Nonce allocation")
         putchar(10)
         free(key)
-        R -1
+        return -1
     }
     i = 0
     L i < 8 {
@@ -1962,7 +1962,7 @@ F test_ctr_roundtrip() -> i64 {
         putchar(10)
         free(key)
         free(nonce)
-        R -1
+        return -1
     }
     i = 0
     L i < 45 {
@@ -1982,7 +1982,7 @@ F test_ctr_roundtrip() -> i64 {
         free(key)
         free(nonce)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Decrypt (same as encrypt in CTR mode)
@@ -1995,7 +1995,7 @@ F test_ctr_roundtrip() -> i64 {
         free(key)
         free(nonce)
         free(plaintext)
-        R -1
+        return -1
     }
 
     # Verify roundtrip
@@ -2003,11 +2003,11 @@ F test_ctr_roundtrip() -> i64 {
         I mem_equal(dec_result.data, plaintext, 45) == 1 {
             puts("  PASS: CTR roundtrip successful")
             putchar(10)
-        } E {
+        } enum {
             puts("  FAIL: Decrypted data doesn't match original")
             putchar(10)
         }
-    } E {
+    } enum {
         puts("  FAIL: Decrypted length doesn't match original")
         putchar(10)
     }
@@ -2018,14 +2018,14 @@ F test_ctr_roundtrip() -> i64 {
     free(key)
     free(nonce)
     free(plaintext)
-    R 0
+    return 0
 }
 
 # ========================================
 # Test: PKCS7 Padding
 # ========================================
 
-F test_pkcs7_padding() -> i64 {
+fn test_pkcs7_padding() -> i64 {
     puts("Test: PKCS7 Padding")
     putchar(10)
 
@@ -2034,7 +2034,7 @@ F test_pkcs7_padding() -> i64 {
     I data == 0 {
         puts("  FAIL: Data allocation")
         putchar(10)
-        R -1
+        return -1
     }
     i := mut 0
     L i < 13 {
@@ -2048,14 +2048,14 @@ F test_pkcs7_padding() -> i64 {
         puts("  FAIL: Padding failed")
         putchar(10)
         free(data)
-        R -1
+        return -1
     }
 
     # Verify padded length
     I pad_result.len == 16 {
         puts("  PASS: Padded length is 16")
         putchar(10)
-    } E {
+    } enum {
         puts("  FAIL: Padded length is not 16")
         putchar(10)
     }
@@ -2065,7 +2065,7 @@ F test_pkcs7_padding() -> i64 {
     I pad_byte == 3 {
         puts("  PASS: Padding byte is 3")
         putchar(10)
-    } E {
+    } enum {
         puts("  FAIL: Padding byte is not 3")
         putchar(10)
     }
@@ -2077,7 +2077,7 @@ F test_pkcs7_padding() -> i64 {
         putchar(10)
         free(pad_result.data)
         free(data)
-        R -1
+        return -1
     }
 
     # Verify unpadded length
@@ -2085,11 +2085,11 @@ F test_pkcs7_padding() -> i64 {
         I mem_equal(unpad_result.data, data, 13) == 1 {
             puts("  PASS: Unpadded data matches original")
             putchar(10)
-        } E {
+        } enum {
             puts("  FAIL: Unpadded data doesn't match original")
             putchar(10)
         }
-    } E {
+    } enum {
         puts("  FAIL: Unpadded length is not 13")
         putchar(10)
     }
@@ -2097,14 +2097,14 @@ F test_pkcs7_padding() -> i64 {
     free(pad_result.data)
     free(unpad_result.data)
     free(data)
-    R 0
+    return 0
 }
 
 # ========================================
 # Main Test Runner
 # ========================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("===================================")
     putchar(10)
     puts("vais-aes Test Suite")
@@ -2147,5 +2147,5 @@ F main() -> i64 {
     puts("===================================")
     putchar(10)
 
-    R 0
+    return 0
 }

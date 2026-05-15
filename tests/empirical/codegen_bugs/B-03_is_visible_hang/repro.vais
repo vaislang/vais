@@ -1,0 +1,52 @@
+# B-03: is_visible(...) runtime hang
+#
+# Discovered: 2026-05-09 loop 45 (transaction smoke 확장 시도 중).
+#
+# Symptom: build 성공, runtime SIGALRM (10s timeout 초과 hang).
+# Calling vaisdb's storage/txn/visibility.is_visible with valid TxnSnapshot
+# + Clog arguments causes the binary to never terminate. minimal Clog
+# construction + set_status alone exits 0 in <1s; adding the is_visible
+# call hangs.
+#
+# Hypothesis (NOT yet verified): infinite loop or deadlock inside
+# is_visible (vaisdb/src/storage/txn/visibility.vais), possibly within
+# Clog.get_status lookup path. Could be:
+#   - bucket scan that doesn't terminate when status not found
+#   - recursive Mutex/RwLock lock attempt
+#   - HashMap iteration that monomorphizes incorrectly
+#
+# Status: HANG_RESOLVED 2026-05-09 (loop 46 iter 7). Root cause = vaisdb
+# Clog 측 Mutex 명시 unlock 누락. clog.vais 3 사이트 (get_status / set_status
+# / load_pages) 가 `self.lock.lock()` 후 `# guard.drop() # disabled for dev
+# compiler` 주석 — RAII drop 의존. dev compiler 의 Mutex Drop 미구현으로
+# guard 가 drop 안 되고, 후속 lock 시도 시 recursive deadlock.
+#
+# Fix: clog.vais 3 사이트에 `self.lock.unlock()` 명시 호출 추가. std/sync.vais:48-53
+# 의 `Mutex.unlock(&self)` 가 정확히 'when a guard destructor cannot be used'
+# use case 명시.
+#
+# Verification: 본 fixture 재실행 → exit 142 (hang, SIGALRM) → exit 1 (정상
+# logic). INTEGRITY OK pre/post (vaisdb 261/261 + runtime 29/29 유지).
+#
+# Cascade backlog (iter 8+): 같은 anti-pattern 40 사이트 vaisdb 잔존
+# (att / conflict / undo / manager / deadlock / truncation 6 file).
+#
+# Step 16 (Owned/Borrow) 완성 시 RAII drop 자동화로 해소 가능 — 그때까지는
+# 명시적 unlock 필수.
+
+use storage/txn/snapshot.{TxnSnapshot}
+use storage/txn/visibility.{is_visible}
+use storage/txn/clog.{Clog, TxnStatus}
+use storage/page/mvcc.{MvccTupleMeta}
+
+fn main() -> i64 {
+    tuple1 := mut MvccTupleMeta.new_insert(100u64, 0u32)
+    active1 := mut Vec.with_capacity(1)
+    active1.push(100u64)
+    snap1 := mut TxnSnapshot.new(100u64, active1)
+    clog := mut Clog.new(4096u64, 4u32)
+    clog.set_status(100u64, TxnStatus.InProgress)
+
+    visible := is_visible(tuple1.txn_id_create, tuple1.txn_id_expire, tuple1.cmd_id, tuple1.expire_cmd_id, &snap1, &clog)
+    visible ? 0 : 1
+}

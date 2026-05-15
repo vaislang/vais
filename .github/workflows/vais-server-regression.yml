@@ -1,0 +1,116 @@
+name: VaisServer Regression
+
+# vais-server 빌드를 compiler regression suite로 실행한다.
+# Pillar 2.3 (Phase Ω) 산출물 — vaisdb-regression.yml과 동일 패턴.
+#
+# Why: vais-server 빌드 깨짐이 compiler "green" 상태를 통과해 머지되는 패턴 차단.
+#      compiler PR이 vais-server를 깨면 즉시 발견 + 차단됨.
+#
+# Setup: vais-lang 모노레포에서 vais-server checkout.
+#        현재는 wave 1 (smoke test only) — 본격 cross-repo는 후속 단계.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: vais-server-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vais-server-build:
+    name: vais-server wave 1+2 (8 tests) build + link
+    runs-on: ubuntu-latest
+
+    # NOTE (Pillar 2.3 wave 1+2, iter 86 + iter 121):
+    # 8-test suite (wave 1: 2 + wave 2: 6):
+    #   wave 1: test_shutdown=1 (Vec_push undefined), test_http=1 (var-to-llvm typing)
+    #   wave 2: test_error=0, test_status=1, test_response=1, test_pipeline=1,
+    #           test_yaml=3, test_protocol=5
+    # 합계 baseline: 13 (per-test counts in scripts/vais-server-regression.sh)
+    # vais-web 통합은 별도 (Rust workspace cargo test 패턴).
+
+    steps:
+      - name: Checkout vais compiler
+        uses: actions/checkout@v4
+        with:
+          path: vais
+
+      - name: Checkout vais-lang (vais-server)
+        uses: actions/checkout@v4
+        with:
+          repository: vaislang/vais-lang
+          path: vais-lang
+          # vais-lang이 private 또는 별도 자격 필요 시 token 추가:
+          # token: ${{ secrets.VAIS_LANG_PAT }}
+        continue-on-error: true  # repo 부재 시 skip (wave 1만)
+
+      - name: Skip if vais-lang not available
+        id: check_lang
+        run: |
+          if [[ ! -d vais-lang/packages/vais-server ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "ℹ vais-lang/vais-server not available — skipping (wave 1 grace period)"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust toolchain
+        if: steps.check_lang.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        if: steps.check_lang.outputs.skip != 'true'
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17 llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> "$GITHUB_ENV"
+
+      - name: Cache cargo registry
+        if: steps.check_lang.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vais/target
+          key: vais-server-regression-${{ runner.os }}-${{ hashFiles('vais/Cargo.lock') }}
+
+      - name: Build vaisc
+        if: steps.check_lang.outputs.skip != 'true'
+        working-directory: vais
+        run: cargo build --release --bin vaisc
+
+      - name: Setup std symlink
+        if: steps.check_lang.outputs.skip != 'true'
+        run: |
+          mkdir -p /tmp/vais-lib
+          ln -sf "$GITHUB_WORKSPACE/vais/std" /tmp/vais-lib/std
+
+      - name: Run vais-server regression (wave 1+2, 8 tests)
+        if: steps.check_lang.outputs.skip != 'true'
+        env:
+          VAISC: ${{ github.workspace }}/vais/target/release/vaisc
+          SERVER_ROOT: ${{ github.workspace }}/vais-lang/packages/vais-server
+          STD_PATH: /tmp/vais-lib/std
+        working-directory: vais
+        run: ./scripts/vais-server-regression.sh --all
+
+      - name: Upload regression logs on failure
+        if: failure() && steps.check_lang.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vais-server-regression-logs
+          path: |
+            /tmp/test_*.ll
+            /tmp/build_log_*.txt
+          retention-days: 7

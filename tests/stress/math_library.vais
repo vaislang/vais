@@ -3,73 +3,73 @@
 
 # ==================== Vector 2D ====================
 
-S Vec2 {
+struct Vec2 {
     x: i64,
     y: i64
 }
 
-F vec2_new(x: i64, y: i64) -> Vec2 {
+fn vec2_new(x: i64, y: i64) -> Vec2 {
     Vec2 { x: x, y: y }
 }
 
-F vec2_add(a: Vec2, b: Vec2) -> Vec2 {
+fn vec2_add(a: Vec2, b: Vec2) -> Vec2 {
     Vec2 { x: a.x + b.x, y: a.y + b.y }
 }
 
-F vec2_sub(a: Vec2, b: Vec2) -> Vec2 {
+fn vec2_sub(a: Vec2, b: Vec2) -> Vec2 {
     Vec2 { x: a.x - b.x, y: a.y - b.y }
 }
 
-F vec2_mul(v: Vec2, scalar: i64) -> Vec2 {
+fn vec2_mul(v: Vec2, scalar: i64) -> Vec2 {
     Vec2 { x: v.x * scalar, y: v.y * scalar }
 }
 
-F vec2_dot(a: Vec2, b: Vec2) -> i64 {
+fn vec2_dot(a: Vec2, b: Vec2) -> i64 {
     a.x * b.x + a.y * b.y
 }
 
-F vec2_length_squared(v: Vec2) -> i64 {
+fn vec2_length_squared(v: Vec2) -> i64 {
     v.x * v.x + v.y * v.y
 }
 
-F vec2_length(v: Vec2) -> i64 {
+fn vec2_length(v: Vec2) -> i64 {
     isqrt(vec2_length_squared(v))
 }
 
-F vec2_distance(a: Vec2, b: Vec2) -> i64 {
+fn vec2_distance(a: Vec2, b: Vec2) -> i64 {
     diff := vec2_sub(a, b)
     vec2_length(diff)
 }
 
 # ==================== Vector 3D ====================
 
-S Vec3 {
+struct Vec3 {
     x: i64,
     y: i64,
     z: i64
 }
 
-F vec3_new(x: i64, y: i64, z: i64) -> Vec3 {
+fn vec3_new(x: i64, y: i64, z: i64) -> Vec3 {
     Vec3 { x: x, y: y, z: z }
 }
 
-F vec3_add(a: Vec3, b: Vec3) -> Vec3 {
+fn vec3_add(a: Vec3, b: Vec3) -> Vec3 {
     Vec3 { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
 }
 
-F vec3_sub(a: Vec3, b: Vec3) -> Vec3 {
+fn vec3_sub(a: Vec3, b: Vec3) -> Vec3 {
     Vec3 { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
 }
 
-F vec3_mul(v: Vec3, scalar: i64) -> Vec3 {
+fn vec3_mul(v: Vec3, scalar: i64) -> Vec3 {
     Vec3 { x: v.x * scalar, y: v.y * scalar, z: v.z * scalar }
 }
 
-F vec3_dot(a: Vec3, b: Vec3) -> i64 {
+fn vec3_dot(a: Vec3, b: Vec3) -> i64 {
     a.x * b.x + a.y * b.y + a.z * b.z
 }
 
-F vec3_cross(a: Vec3, b: Vec3) -> Vec3 {
+fn vec3_cross(a: Vec3, b: Vec3) -> Vec3 {
     Vec3 {
         x: a.y * b.z - a.z * b.y,
         y: a.z * b.x - a.x * b.z,
@@ -77,82 +77,82 @@ F vec3_cross(a: Vec3, b: Vec3) -> Vec3 {
     }
 }
 
-F vec3_length_squared(v: Vec3) -> i64 {
+fn vec3_length_squared(v: Vec3) -> i64 {
     v.x * v.x + v.y * v.y + v.z * v.z
 }
 
-F vec3_length(v: Vec3) -> i64 {
+fn vec3_length(v: Vec3) -> i64 {
     isqrt(vec3_length_squared(v))
 }
 
 # ==================== Complex Numbers ====================
 
-S Complex {
+struct Complex {
     real: i64,
     imag: i64
 }
 
-F complex_new(real: i64, imag: i64) -> Complex {
+fn complex_new(real: i64, imag: i64) -> Complex {
     Complex { real: real, imag: imag }
 }
 
-F complex_add(a: Complex, b: Complex) -> Complex {
+fn complex_add(a: Complex, b: Complex) -> Complex {
     Complex { real: a.real + b.real, imag: a.imag + b.imag }
 }
 
-F complex_sub(a: Complex, b: Complex) -> Complex {
+fn complex_sub(a: Complex, b: Complex) -> Complex {
     Complex { real: a.real - b.real, imag: a.imag - b.imag }
 }
 
-F complex_mul(a: Complex, b: Complex) -> Complex {
+fn complex_mul(a: Complex, b: Complex) -> Complex {
     Complex {
         real: a.real * b.real - a.imag * b.imag,
         imag: a.real * b.imag + a.imag * b.real
     }
 }
 
-F complex_conjugate(c: Complex) -> Complex {
+fn complex_conjugate(c: Complex) -> Complex {
     Complex { real: c.real, imag: 0 - c.imag }
 }
 
-F complex_magnitude_squared(c: Complex) -> i64 {
+fn complex_magnitude_squared(c: Complex) -> i64 {
     c.real * c.real + c.imag * c.imag
 }
 
-F complex_magnitude(c: Complex) -> i64 {
+fn complex_magnitude(c: Complex) -> i64 {
     isqrt(complex_magnitude_squared(c))
 }
 
 # ==================== Matrix 2x2 ====================
 
-S Matrix2x2 {
+struct Matrix2x2 {
     m00: i64, m01: i64,
     m10: i64, m11: i64
 }
 
-F mat2_new(m00: i64, m01: i64, m10: i64, m11: i64) -> Matrix2x2 {
+fn mat2_new(m00: i64, m01: i64, m10: i64, m11: i64) -> Matrix2x2 {
     Matrix2x2 { m00: m00, m01: m01, m10: m10, m11: m11 }
 }
 
-F mat2_identity() -> Matrix2x2 {
+fn mat2_identity() -> Matrix2x2 {
     mat2_new(1, 0, 0, 1)
 }
 
-F mat2_add(a: Matrix2x2, b: Matrix2x2) -> Matrix2x2 {
+fn mat2_add(a: Matrix2x2, b: Matrix2x2) -> Matrix2x2 {
     mat2_new(
         a.m00 + b.m00, a.m01 + b.m01,
         a.m10 + b.m10, a.m11 + b.m11
     )
 }
 
-F mat2_sub(a: Matrix2x2, b: Matrix2x2) -> Matrix2x2 {
+fn mat2_sub(a: Matrix2x2, b: Matrix2x2) -> Matrix2x2 {
     mat2_new(
         a.m00 - b.m00, a.m01 - b.m01,
         a.m10 - b.m10, a.m11 - b.m11
     )
 }
 
-F mat2_mul(a: Matrix2x2, b: Matrix2x2) -> Matrix2x2 {
+fn mat2_mul(a: Matrix2x2, b: Matrix2x2) -> Matrix2x2 {
     mat2_new(
         a.m00 * b.m00 + a.m01 * b.m10,
         a.m00 * b.m01 + a.m01 * b.m11,
@@ -161,178 +161,178 @@ F mat2_mul(a: Matrix2x2, b: Matrix2x2) -> Matrix2x2 {
     )
 }
 
-F mat2_determinant(m: Matrix2x2) -> i64 {
+fn mat2_determinant(m: Matrix2x2) -> i64 {
     m.m00 * m.m11 - m.m01 * m.m10
 }
 
-F mat2_transpose(m: Matrix2x2) -> Matrix2x2 {
+fn mat2_transpose(m: Matrix2x2) -> Matrix2x2 {
     mat2_new(m.m00, m.m10, m.m01, m.m11)
 }
 
 # ==================== Mathematical Functions ====================
 
 # Integer square root
-F isqrt(n: i64) -> i64 {
+fn isqrt(n: i64) -> i64 {
     I n < 2 {
         n
-    } E {
+    } enum {
         isqrt_helper(n, n / 2)
     }
 }
 
-F isqrt_helper(n: i64, guess: i64) -> i64 {
+fn isqrt_helper(n: i64, guess: i64) -> i64 {
     next := (guess + n / guess) / 2
     I next >= guess {
         guess
-    } E {
+    } enum {
         @(n, next)
     }
 }
 
 # Power function
-F pow(base: i64, exp: i64) -> i64 {
+fn pow(base: i64, exp: i64) -> i64 {
     I exp == 0 {
         1
-    } E I exp == 1 {
+    } enum I exp == 1 {
         base
-    } E I exp % 2 == 0 {
+    } enum I exp % 2 == 0 {
         half := @(base, exp / 2)
         half * half
-    } E {
+    } enum {
         base * @(base, exp - 1)
     }
 }
 
 # Absolute value
-F abs(n: i64) -> i64 {
-    I n < 0 { 0 - n } E { n }
+fn abs(n: i64) -> i64 {
+    I n < 0 { 0 - n } enum { n }
 }
 
 # Maximum of two numbers
-F max(a: i64, b: i64) -> i64 {
-    I a > b { a } E { b }
+fn max(a: i64, b: i64) -> i64 {
+    I a > b { a } enum { b }
 }
 
 # Minimum of two numbers
-F min(a: i64, b: i64) -> i64 {
-    I a < b { a } E { b }
+fn min(a: i64, b: i64) -> i64 {
+    I a < b { a } enum { b }
 }
 
 # Sign function
-F sign(n: i64) -> i64 {
-    I n > 0 { 1 } E I n < 0 { 0 - 1 } E { 0 }
+fn sign(n: i64) -> i64 {
+    I n > 0 { 1 } enum I n < 0 { 0 - 1 } enum { 0 }
 }
 
 # Clamp value to range
-F clamp(value: i64, min_val: i64, max_val: i64) -> i64 {
+fn clamp(value: i64, min_val: i64, max_val: i64) -> i64 {
     I value < min_val { min_val }
-    E I value > max_val { max_val }
-    E { value }
+    enum I value > max_val { max_val }
+    enum { value }
 }
 
 # Linear interpolation
-F lerp(a: i64, b: i64, t: i64) -> i64 {
+fn lerp(a: i64, b: i64, t: i64) -> i64 {
     a + ((b - a) * t) / 100
 }
 
 # ==================== Number Theory ====================
 
 # Greatest common divisor
-F gcd(a: i64, b: i64) -> i64 {
-    I b == 0 { a } E { @(b, a % b) }
+fn gcd(a: i64, b: i64) -> i64 {
+    I b == 0 { a } enum { @(b, a % b) }
 }
 
 # Least common multiple
-F lcm(a: i64, b: i64) -> i64 {
+fn lcm(a: i64, b: i64) -> i64 {
     (a / gcd(a, b)) * b
 }
 
 # Modular exponentiation
-F mod_pow(base: i64, exp: i64, modulo: i64) -> i64 {
+fn mod_pow(base: i64, exp: i64, modulo: i64) -> i64 {
     I exp == 0 {
         1
-    } E I exp % 2 == 0 {
+    } enum I exp % 2 == 0 {
         half := @(base, exp / 2, modulo)
         (half * half) % modulo
-    } E {
+    } enum {
         (base * @(base, exp - 1, modulo)) % modulo
     }
 }
 
 # Factorial
-F factorial(n: i64) -> i64 {
-    I n < 2 { 1 } E { n * @(n - 1) }
+fn factorial(n: i64) -> i64 {
+    I n < 2 { 1 } enum { n * @(n - 1) }
 }
 
 # Binomial coefficient (n choose k)
-F binomial(n: i64, k: i64) -> i64 {
+fn binomial(n: i64, k: i64) -> i64 {
     I k > n { 0 }
-    E I k == 0 || k == n { 1 }
-    E { @(n - 1, k - 1) + @(n - 1, k) }
+    enum I k == 0 || k == n { 1 }
+    enum { @(n - 1, k - 1) + @(n - 1, k) }
 }
 
 # Fibonacci
-F fib(n: i64) -> i64 {
-    I n < 2 { n } E { @(n - 1) + @(n - 2) }
+fn fib(n: i64) -> i64 {
+    I n < 2 { n } enum { @(n - 1) + @(n - 2) }
 }
 
 # Tribonacci
-F tribonacci(n: i64) -> i64 {
+fn tribonacci(n: i64) -> i64 {
     I n == 0 { 0 }
-    E I n == 1 || n == 2 { 1 }
-    E { @(n - 1) + @(n - 2) + @(n - 3) }
+    enum I n == 1 || n == 2 { 1 }
+    enum { @(n - 1) + @(n - 2) + @(n - 3) }
 }
 
 # ==================== Prime Numbers ====================
 
 # Check if number is prime
-F is_prime(n: i64) -> bool {
+fn is_prime(n: i64) -> bool {
     I n < 2 {
         false
-    } E I n == 2 {
+    } enum I n == 2 {
         true
-    } E I n % 2 == 0 {
+    } enum I n % 2 == 0 {
         false
-    } E {
+    } enum {
         is_prime_helper(n, 3)
     }
 }
 
-F is_prime_helper(n: i64, d: i64) -> bool {
+fn is_prime_helper(n: i64, d: i64) -> bool {
     I d * d > n {
         true
-    } E I n % d == 0 {
+    } enum I n % d == 0 {
         false
-    } E {
+    } enum {
         @(n, d + 2)
     }
 }
 
 # Count primes up to n
-F count_primes(n: i64) -> i64 {
+fn count_primes(n: i64) -> i64 {
     count_primes_helper(n, 2, 0)
 }
 
-F count_primes_helper(n: i64, current: i64, count: i64) -> i64 {
+fn count_primes_helper(n: i64, current: i64, count: i64) -> i64 {
     I current > n {
         count
-    } E {
-        new_count := I is_prime(current) { count + 1 } E { count }
+    } enum {
+        new_count := I is_prime(current) { count + 1 } enum { count }
         @(n, current + 1, new_count)
     }
 }
 
 # Nth prime number
-F nth_prime(n: i64) -> i64 {
+fn nth_prime(n: i64) -> i64 {
     nth_prime_helper(n, 2, 0)
 }
 
-F nth_prime_helper(target: i64, current: i64, count: i64) -> i64 {
+fn nth_prime_helper(target: i64, current: i64, count: i64) -> i64 {
     I count == target {
         current - 1
-    } E I is_prime(current) {
+    } enum I is_prime(current) {
         @(target, current + 1, count + 1)
-    } E {
+    } enum {
         @(target, current + 1, count)
     }
 }
@@ -340,64 +340,64 @@ F nth_prime_helper(target: i64, current: i64, count: i64) -> i64 {
 # ==================== Numerical Algorithms ====================
 
 # Sum of arithmetic sequence
-F arithmetic_sum(first: i64, last: i64, count: i64) -> i64 {
+fn arithmetic_sum(first: i64, last: i64, count: i64) -> i64 {
     (count * (first + last)) / 2
 }
 
 # Sum of geometric sequence
-F geometric_sum(first: i64, ratio: i64, count: i64) -> i64 {
+fn geometric_sum(first: i64, ratio: i64, count: i64) -> i64 {
     I count == 0 {
         0
-    } E I count == 1 {
+    } enum I count == 1 {
         first
-    } E {
+    } enum {
         first + @(first * ratio, ratio, count - 1)
     }
 }
 
 # Sum of squares: 1^2 + 2^2 + ... + n^2
-F sum_of_squares(n: i64) -> i64 {
+fn sum_of_squares(n: i64) -> i64 {
     (n * (n + 1) * (2 * n + 1)) / 6
 }
 
 # Sum of cubes: 1^3 + 2^3 + ... + n^3
-F sum_of_cubes(n: i64) -> i64 {
+fn sum_of_cubes(n: i64) -> i64 {
     sum := (n * (n + 1)) / 2
     sum * sum
 }
 
 # Digital root (repeated sum of digits)
-F digital_root(n: i64) -> i64 {
+fn digital_root(n: i64) -> i64 {
     I n < 10 {
         n
-    } E {
+    } enum {
         @(sum_digits(n))
     }
 }
 
-F sum_digits(n: i64) -> i64 {
-    I n < 10 { n } E { (n % 10) + @(n / 10) }
+fn sum_digits(n: i64) -> i64 {
+    I n < 10 { n } enum { (n % 10) + @(n / 10) }
 }
 
 # Perfect number check
-F is_perfect(n: i64) -> bool {
+fn is_perfect(n: i64) -> bool {
     sum_divisors(n, 1, 0) == n
 }
 
-F sum_divisors(n: i64, d: i64, sum: i64) -> i64 {
+fn sum_divisors(n: i64, d: i64, sum: i64) -> i64 {
     I d * d > n {
         sum
-    } E I n % d == 0 {
-        new_sum := I d * d == n { sum + d } E { sum + d + n / d }
+    } enum I n % d == 0 {
+        new_sum := I d * d == n { sum + d } enum { sum + d + n / d }
         @(n, d + 1, new_sum)
-    } E {
+    } enum {
         @(n, d + 1, sum)
     }
 }
 
 # ==================== Test Driver ====================
 
-F main() -> i64 {
+fn main() -> i64 {
     # Test Vec2
     v1 := vec2_new(3, 4)
     v2 := vec2_new(5, 12)
@@ -433,7 +433,7 @@ F main() -> i64 {
     # Verify results
     I v1_len == 5 && sqrt_16 == 4 && fib_10 == 55 && prime_count == 8 {
         0
-    } E {
+    } enum {
         1
     }
 }

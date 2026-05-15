@@ -1,0 +1,32 @@
+[entry]
+id = "Controlled-05"
+classification = "Controlled (runtime correct) — overlaps A4-07 (design pending)"
+surface = "i32 silently widens to i64 at function call site"
+site = "unification.rs:346"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:346"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "take_i64(small) where small: i32 = 16; body returns x + 1"
+expected_per_design = "type-check accepts (Rust-style integer widening)"
+actual_observed = 17
+verified_date = "2026-05-03"
+
+[overlap_with_a4]
+a4_id = "A4-07"
+explanation = """
+Both fixtures cover unification.rs:346. A4-07 documents the DESIGN
+violation (per AI-native L-002, implicit widening is implicit behavior
+in user-facing semantics regardless of runtime correctness). C-05
+documents that the RUNTIME is correct (the widened value propagates
+without corruption). The two fixtures coexist intentionally.
+"""
+
+[v2_evidence]
+status = "v1_reverified"
+notes = "i32 16 widens to i64 16, function adds 1, returns 17. Stable across environments because the value is source-named, not memory-derived."
+
+[assertion_kind]
+kind = "exact_exit"
+expected_exit = 17
+rationale = "16 (small i32) widens to i64 16, take_i64 returns 16 + 1 = 17."

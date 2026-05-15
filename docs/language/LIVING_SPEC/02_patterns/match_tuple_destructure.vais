@@ -1,0 +1,17 @@
+# LIVING_SPEC/02_patterns/match_tuple_destructure.vais
+# Key concept: 튜플 패턴으로 여러 값을 한 번에 분해.
+
+fn classify_point(p: (i64, i64)) -> i64 {
+    match p {
+        (0, 0) => 0,
+        (0, _) => 1,
+        (_, 0) => 2,
+        _ => 3
+    }
+}
+
+fn main() -> i64 {
+    a := classify_point((0, 0))
+    b := classify_point((3, 4))
+    a + b
+}

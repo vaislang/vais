@@ -1,19 +1,19 @@
 # Result and error handling test - minimal
 
-EN MyResult {
+enum MyResult {
     MyOk(i64),
     MyErr(i64)
 }
 
-F make_ok(v: i64) -> MyResult {
+fn make_ok(v: i64) -> MyResult {
     MyOk(v)
 }
 
-F make_err(e: i64) -> MyResult {
+fn make_err(e: i64) -> MyResult {
     MyErr(e)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Result Test ===")
     putchar(10)
 

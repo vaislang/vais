@@ -26,6 +26,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.builder
                         .build_store(ptr, val)
                         .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    self.record_string_assignment_owner(name, &val)?;
                     Ok(val)
                 } else if let Some((global, _ty)) = self.globals.get(name).copied() {
                     self.builder
@@ -60,8 +61,29 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                         return Ok(val);
                     }
                 }
+                // B.4: handle `v[i].field = val` when obj is an Expr::Index
+                // on a Vec<Struct> receiver. Strategy: compute the element
+                // byte-pointer exactly like generate_index's Vec path, bitcast
+                // to the struct pointer type, then build_struct_gep to the
+                // field and store. Mirrors the read path to keep byte-offset
+                // math consistent (idx * elem_size, not LLVM's typed GEP).
+                if let Expr::Index { expr: arr, index } = &obj.node {
+                    if let Some(result) = self.try_generate_vec_struct_field_assign(
+                        arr,
+                        index,
+                        &struct_name,
+                        field_idx,
+                        val,
+                    )? {
+                        return Ok(result);
+                    }
+                }
                 Err(CodegenError::Unsupported(
-                    "Complex field assignment".to_string(),
+                    "Complex field assignment (e.g. `v[i].field = expr` on \
+                     Vec<Struct>) — Phase 3.14 codegen gap. Workaround: \
+                     read the element, modify, write back: \
+                     `p := v[i]; p.field = expr; v[i] = p`"
+                        .to_string(),
                 ))
             }
             Expr::Index { expr: arr, index } => {
@@ -405,13 +427,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     if val.is_float_value() && field_llvm_type.is_int_type() {
                         let bits = self
                             .builder
-                            .build_bit_cast(*val, field_llvm_type, "union_bitcast")
+                            .build_bitcast(*val, field_llvm_type, "union_bitcast")
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         bits
                     } else if val.is_int_value() && field_llvm_type.is_float_type() {
                         let bits = self
                             .builder
-                            .build_bit_cast(*val, field_llvm_type, "union_bitcast")
+                            .build_bitcast(*val, field_llvm_type, "union_bitcast")
                             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                         bits
                     } else {
@@ -426,9 +448,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .into_struct_value();
             }
-        } else if let Some(struct_field_names) = self.struct_fields.get(name) {
+        } else if let Some(struct_field_names_owned) = self.struct_fields.get(name).cloned() {
             // Reorder fields to match struct definition order
-            for (i, def_field_name) in struct_field_names.iter().enumerate() {
+            for (i, def_field_name) in struct_field_names_owned.iter().enumerate() {
                 let val = field_name_values
                     .iter()
                     .find(|(n, _)| n == def_field_name)
@@ -441,9 +463,28 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                             self.context.i64_type().const_int(0, false).into()
                         }
                     });
+                // Phase 0 bug C6 fix: when the field's declared type is an
+                // array and the value arrived as a pointer (because
+                // `generate_array` returns the alloca pointer, not the array
+                // value), load through the pointer so insertvalue sees the
+                // array. Without this, `S P { c: [i64;3] }` triggers
+                // "insertvalue operand type 'ptr' instead of '[3 x i64]'".
+                let coerced_val = if let Some(field_type) =
+                    struct_type.get_field_type_at_index(i as u32)
+                {
+                    if field_type.is_array_type() && val.is_pointer_value() {
+                        self.builder
+                            .build_load(field_type, val.into_pointer_value(), "array_field_load")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    } else {
+                        val
+                    }
+                } else {
+                    val
+                };
                 struct_val = self
                     .builder
-                    .build_insert_value(struct_val, val, i as u32, &format!("field_{}", i))
+                    .build_insert_value(struct_val, coerced_val, i as u32, &format!("field_{}", i))
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?
                     .into_struct_value();
             }
@@ -493,9 +534,274 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Lookup field index by name
         let field_idx = self.get_field_index(&struct_name, field)?;
 
-        let struct_val = obj_val.into_struct_value();
+        // Auto-deref: when obj is a pointer (e.g. &Struct from `&self`),
+        // load the pointee before extracting. Without this, inkwell panics
+        // with "expected StructValue, found PointerValue" at field access
+        // for every method that accesses `self.field` on a reference.
+        let struct_val = if obj_val.is_pointer_value() {
+            if let Some(struct_type) = self.generated_structs.get(&struct_name).copied() {
+                self.builder
+                    .build_load(struct_type, obj_val.into_pointer_value(), "auto_deref")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                    .into_struct_value()
+            } else {
+                obj_val.into_struct_value()
+            }
+        } else {
+            obj_val.into_struct_value()
+        };
         self.builder
             .build_extract_value(struct_val, field_idx, field)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))
+    }
+
+    pub(super) fn generate_tuple_field_access(
+        &mut self,
+        obj: &Expr,
+        index: usize,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let obj_val = self.generate_expr(obj)?;
+        if !obj_val.is_struct_value() {
+            return Err(CodegenError::Unsupported(format!(
+                "tuple field access .{} on non-tuple value",
+                index
+            )));
+        }
+
+        let tuple_val = obj_val.into_struct_value();
+        let field_count = tuple_val.get_type().count_fields() as usize;
+        if index >= field_count {
+            return Err(CodegenError::Unsupported(format!(
+                "tuple field access .{} out of range for {}-element tuple",
+                index, field_count
+            )));
+        }
+
+        self.builder
+            .build_extract_value(tuple_val, index as u32, &format!("tuple_{}", index))
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))
+    }
+
+    /// Phase 6.27b: generate `Enum.Variant { field1: v1, ... }` literal.
+    /// Builds the payload struct from provided fields, heap-allocates,
+    /// stores pointer as i64 in enum.data slot, constructs enum {tag, data}.
+    pub(super) fn generate_enum_struct_variant(
+        &mut self,
+        enum_name: &str,
+        variant_name: &str,
+        fields: &[(Spanned<String>, Spanned<Expr>)],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        // Look up tag
+        let tag = *self
+            .enum_variants
+            .get(&(enum_name.to_string(), variant_name.to_string()))
+            .ok_or_else(|| {
+                CodegenError::UndefinedVar(format!(
+                    "Enum variant not found: {}.{}",
+                    enum_name, variant_name
+                ))
+            })?;
+
+        // Look up payload type and field name order
+        let payload_ty = *self
+            .enum_variant_multi_payload_types
+            .get(&(enum_name.to_string(), variant_name.to_string()))
+            .ok_or_else(|| {
+                CodegenError::UndefinedVar(format!(
+                    "Enum struct-variant payload type not found: {}.{}",
+                    enum_name, variant_name
+                ))
+            })?;
+        let field_names = self
+            .enum_variant_multi_payload_field_names
+            .get(&(enum_name.to_string(), variant_name.to_string()))
+            .cloned()
+            .ok_or_else(|| {
+                CodegenError::UndefinedVar(format!(
+                    "Enum struct-variant field names not found: {}.{}",
+                    enum_name, variant_name
+                ))
+            })?;
+
+        // Build payload struct value by filling fields in declaration order
+        let mut payload = payload_ty.get_undef();
+        for (idx, decl_name) in field_names.iter().enumerate() {
+            // Find the matching provided field expression
+            let (_, expr) = fields
+                .iter()
+                .find(|(n, _)| &n.node == decl_name)
+                .ok_or_else(|| {
+                    CodegenError::UndefinedVar(format!(
+                        "Missing field '{}' in {}.{} construction",
+                        decl_name, enum_name, variant_name
+                    ))
+                })?;
+            let val = self.generate_expr(&expr.node)?;
+            payload = self
+                .builder
+                .build_insert_value(payload, val, idx as u32, &format!("v_field_{}", idx))
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_struct_value();
+        }
+
+        // Heap-allocate and store
+        let i64_ty = self.context.i64_type();
+        let i8_ptr_ty = self.context.i8_type().ptr_type(AddressSpace::default());
+        let target_data = inkwell::targets::TargetData::create(
+            &self.module.get_triple().as_str().to_string_lossy(),
+        );
+        let size_bytes = target_data.get_store_size(&payload_ty);
+        let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+            let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
+            self.module.add_function("malloc", malloc_ty, None)
+        });
+        let size_val = i64_ty.const_int(size_bytes, false);
+        let raw_ptr = self
+            .builder
+            .build_call(malloc_fn, &[size_val.into()], "variant_struct_heap")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| CodegenError::LlvmError("malloc returned no value".to_string()))?
+            .into_pointer_value();
+        let typed_ptr = self
+            .builder
+            .build_bitcast(
+                raw_ptr,
+                payload_ty.ptr_type(AddressSpace::default()),
+                "variant_struct_typed",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        self.builder
+            .build_store(typed_ptr, payload)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let data_as_i64 = self
+            .builder
+            .build_ptr_to_int(typed_ptr, i64_ty, "variant_struct_data_i64")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Build enum { tag, data }
+        let enum_ty = *self.generated_structs.get(enum_name).ok_or_else(|| {
+            CodegenError::UndefinedVar(format!("Enum type not generated: {}", enum_name))
+        })?;
+        let mut enum_val = enum_ty.get_undef();
+        enum_val = self
+            .builder
+            .build_insert_value(
+                enum_val,
+                self.context.i8_type().const_int(tag as u64, false),
+                0,
+                "enum_tag",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        enum_val = self
+            .builder
+            .build_insert_value(enum_val, data_as_i64, 1, "enum_data")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        Ok(enum_val.into())
+    }
+
+    /// B.4: `v[i].field = val` write-through for `Vec<Struct>`. Returns
+    /// `Ok(Some(val))` on a successful write, `Ok(None)` if the receiver is
+    /// not a Vec<Struct> and the caller should fall back to the existing
+    /// unsupported error. Mirrors the byte-offset math from `generate_index`
+    /// (idx * elem_size) to stay consistent with the read path — we must not
+    /// use LLVM's typed GEP here because Vec's data slot is an `i64` raw
+    /// pointer whose typed element layout is only known to Vais, not LLVM.
+    pub(super) fn try_generate_vec_struct_field_assign(
+        &mut self,
+        arr: &Spanned<Expr>,
+        index: &Spanned<Expr>,
+        struct_name: &str,
+        field_idx: u32,
+        val: BasicValueEnum<'ctx>,
+    ) -> CodegenResult<Option<BasicValueEnum<'ctx>>> {
+        // Only handle Vec receivers. If `arr` is not a Vec expression (e.g.
+        // a raw slice), the write-through math below would be wrong — return
+        // None so the caller surfaces the existing Unsupported error.
+        if !self.is_vec_expr(&arr.node) {
+            return Ok(None);
+        }
+
+        let arr_val = self.generate_expr(&arr.node)?;
+        if !arr_val.is_struct_value() {
+            return Ok(None);
+        }
+        let struct_val = arr_val.into_struct_value();
+        let vec_type = struct_val.get_type();
+        if vec_type.count_fields() < 4 {
+            return Ok(None);
+        }
+
+        // Resolve the element's LLVM struct type from struct_name so the
+        // bitcast lands on the right layout and `build_struct_gep` picks the
+        // correct field offset.
+        let elem_struct_ty = self
+            .generated_structs
+            .get(struct_name)
+            .copied()
+            .ok_or_else(|| {
+                CodegenError::UndefinedVar(format!(
+                    "Vec element struct `{}` not registered at codegen",
+                    struct_name
+                ))
+            })?;
+
+        let idx_val = self.generate_expr(&index.node)?;
+        let idx_int = idx_val.into_int_value();
+
+        let data_i64 = self
+            .builder
+            .build_extract_value(struct_val, 0, "vec_data_w")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let i8_ptr_type = self.context.i8_type().ptr_type(AddressSpace::default());
+        let data_ptr = self
+            .builder
+            .build_int_to_ptr(data_i64, i8_ptr_type, "vec_data_ptr_w")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let elem_size = self
+            .builder
+            .build_extract_value(struct_val, 3, "vec_elem_size_w")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let byte_offset = self
+            .builder
+            .build_int_mul(idx_int, elem_size, "byte_offset_w")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        // SAFETY: runtime index from user code — bounds checking is the user's
+        // responsibility (matches the read path).
+        let elem_ptr_i8 = unsafe {
+            self.builder
+                .build_gep(
+                    self.context.i8_type(),
+                    data_ptr,
+                    &[byte_offset],
+                    "vec_elem_ptr_w",
+                )
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        // Bitcast the byte-pointer to the element struct pointer, then GEP
+        // into the field.
+        let elem_ptr_typed = self
+            .builder
+            .build_bitcast(
+                elem_ptr_i8,
+                elem_struct_ty.ptr_type(AddressSpace::default()),
+                "vec_elem_ptr_typed",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        let field_ptr = self
+            .builder
+            .build_struct_gep(elem_struct_ty, elem_ptr_typed, field_idx, "vec_field_ptr")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_store(field_ptr, val)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(Some(val))
     }
 }

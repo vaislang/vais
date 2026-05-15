@@ -32,10 +32,10 @@ fn gen_result(source: &str) -> Result<String, String> {
 fn test_match_on_struct_literal() {
     let ir = gen_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
-            M p {
+            match p {
                 n => 42,
                 _ => 0
             }
@@ -53,9 +53,9 @@ fn test_match_on_struct_literal() {
 fn test_match_complex_enum() {
     let ir = gen_ok(
         r#"
-        E Shape { Circle(i64), Rect(i64, i64), Triangle(i64, i64, i64) }
-        F area(s: Shape) -> i64 {
-            M s {
+        enum Shape { Circle(i64), Rect(i64, i64), Triangle(i64, i64, i64) }
+        fn area(s: Shape) -> i64 {
+            match s {
                 Circle(r) => r * r * 3,
                 Rect(w, h) => w * h,
                 Triangle(a, b, c) => (a + b + c) / 2,
@@ -75,14 +75,12 @@ fn test_match_complex_enum() {
 fn test_match_on_function_result() {
     let ir = gen_ok(
         r#"
-        E Color { Red, Green, Blue }
-        F make_color(x: i64) -> Color {
-            I x == 1 { R Red }
-            E I x == 2 { R Green }
-            E { R Blue }
+        enum Color { Red, Green, Blue }
+        fn make_color(x: i64) -> Color {
+            I x == 1 { return Red } else I x == 2 { return Green } else { return Blue }
         }
-        F test() -> i64 {
-            M make_color(1) {
+        fn test() -> i64 {
+            match make_color(1) {
                 Red => 1,
                 Green => 2,
                 Blue => 3,
@@ -102,9 +100,9 @@ fn test_match_on_function_result() {
 fn test_array_create_and_access() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [10, 20, 30, 40, 50]
-            R arr[2]
+            return arr[2]
         }
     "#,
     );
@@ -119,9 +117,9 @@ fn test_array_create_and_access() {
 fn test_tuple_create() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             t := (1, 2, 3)
-            R 0
+            return 0
         }
     "#,
     );
@@ -136,16 +134,16 @@ fn test_tuple_create() {
 fn test_struct_method_call() {
     let ir = gen_ok(
         r#"
-        S Vec2 { x: i64, y: i64 }
-        X Vec2 {
-            F dot(self, other: Vec2) -> i64 {
+        struct Vec2 { x: i64, y: i64 }
+        impl Vec2 {
+            fn dot(self, other: Vec2) -> i64 {
                 self.x * other.x + self.y * other.y
             }
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             a := Vec2 { x: 1, y: 2 }
             b := Vec2 { x: 3, y: 4 }
-            R a.dot(b)
+            return a.dot(b)
         }
     "#,
     );
@@ -160,9 +158,9 @@ fn test_struct_method_call() {
 fn test_lambda_simple() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := |x: i64| x * 2
-            R f(21)
+            return f(21)
         }
     "#,
     );
@@ -173,10 +171,10 @@ fn test_lambda_simple() {
 fn test_lambda_with_capture() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             y := 10
             f := |x: i64| x + y
-            R f(32)
+            return f(32)
         }
     "#,
     );
@@ -191,9 +189,9 @@ fn test_lambda_with_capture() {
 fn test_let_binding_simple() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
-            R x
+            return x
         }
     "#,
     );
@@ -204,10 +202,10 @@ fn test_let_binding_simple() {
 fn test_let_binding_mutable() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x = 42
-            R x
+            return x
         }
     "#,
     );
@@ -222,14 +220,14 @@ fn test_let_binding_mutable() {
 fn test_if_else_statement() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
+        fn test(x: i64) -> i64 {
             y := mut 0
             I x > 0 {
                 y = 1
-            } E {
+            } else {
                 y = -1
             }
-            R y
+            return y
         }
     "#,
     );
@@ -244,7 +242,7 @@ fn test_if_else_statement() {
 fn test_loop_break_continue() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             i := mut 0
             L {
@@ -253,7 +251,7 @@ fn test_loop_break_continue() {
                 I i % 2 == 0 { C }
                 sum += i
             }
-            R sum
+            return sum
         }
     "#,
     );
@@ -268,12 +266,12 @@ fn test_loop_break_continue() {
 fn test_for_loop_range() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i:0..10 {
                 sum += i
             }
-            R sum
+            return sum
         }
     "#,
     );
@@ -288,9 +286,9 @@ fn test_for_loop_range() {
 fn test_defer_statement() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             D println("cleanup")
-            R 42
+            return 42
         }
     "#,
     );
@@ -305,10 +303,10 @@ fn test_defer_statement() {
 fn test_string_interpolation_int() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
             println(~"answer: {x}")
-            R 0
+            return 0
         }
     "#,
     );
@@ -319,11 +317,11 @@ fn test_string_interpolation_int() {
 fn test_string_interpolation_multi() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 1
             b := 2
             println(~"{a} + {b}")
-            R 0
+            return 0
         }
     "#,
     );
@@ -338,15 +336,15 @@ fn test_string_interpolation_multi() {
 fn test_impl_multiple_methods() {
     let ir = gen_ok(
         r#"
-        S Counter { val: i64 }
-        X Counter {
-            F new() -> Counter = Counter { val: 0 }
-            F get(self) -> i64 = self.val
-            F add(self, n: i64) -> i64 = self.val + n
+        struct Counter { val: i64 }
+        impl Counter {
+            fn new() -> Counter = Counter { val: 0 }
+            fn get(self) -> i64 = self.val
+            fn add(self, n: i64) -> i64 = self.val + n
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Counter.new()
-            R c.get()
+            return c.get()
         }
     "#,
     );
@@ -361,9 +359,9 @@ fn test_impl_multiple_methods() {
 fn test_destructuring_tuple() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             (a, b) := (10, 20)
-            R a + b
+            return a + b
         }
     "#,
     );
@@ -378,9 +376,9 @@ fn test_destructuring_tuple() {
 fn test_tail_call_factorial() {
     let ir = gen_ok(
         r#"
-        F fact(n: i64, acc: i64) -> i64 {
-            I n <= 1 { R acc }
-            R @(n - 1, acc * n)
+        fn fact(n: i64, acc: i64) -> i64 {
+            I n <= 1 { return acc }
+            return @(n - 1, acc * n)
         }
     "#,
     );
@@ -391,9 +389,9 @@ fn test_tail_call_factorial() {
 fn test_tail_call_fibonacci() {
     let ir = gen_ok(
         r#"
-        F fib(n: i64, a: i64, b: i64) -> i64 {
-            I n == 0 { R a }
-            R @(n - 1, b, a + b)
+        fn fib(n: i64, a: i64, b: i64) -> i64 {
+            I n == 0 { return a }
+            return @(n - 1, b, a + b)
         }
     "#,
     );
@@ -408,10 +406,10 @@ fn test_tail_call_fibonacci() {
 fn test_function_many_params() {
     let ir = gen_ok(
         r#"
-        F sum5(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
-            R a + b + c + d + e
+        fn sum5(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
+            return a + b + c + d + e
         }
-        F test() -> i64 = sum5(1, 2, 3, 4, 5)
+        fn test() -> i64 = sum5(1, 2, 3, 4, 5)
     "#,
     );
     assert!(ir.contains("call"));
@@ -425,10 +423,10 @@ fn test_function_many_params() {
 fn test_function_early_return() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            I x < 0 { R -1 }
-            I x == 0 { R 0 }
-            R 1
+        fn test(x: i64) -> i64 {
+            I x < 0 { return -1 }
+            I x == 0 { return 0 }
+            return 1
         }
     "#,
     );
@@ -443,9 +441,9 @@ fn test_function_early_return() {
 fn test_recursive_function() {
     let ir = gen_ok(
         r#"
-        F fib(n: i64) -> i64 {
-            I n <= 1 { R n }
-            R fib(n - 1) + fib(n - 2)
+        fn fib(n: i64) -> i64 {
+            I n <= 1 { return n }
+            return fib(n - 1) + fib(n - 2)
         }
     "#,
     );
@@ -460,9 +458,9 @@ fn test_recursive_function() {
 fn test_match_mixed_enum() {
     let ir = gen_ok(
         r#"
-        E Value { Int(i64), Float(f64), None }
-        F to_int(v: Value) -> i64 {
-            M v {
+        enum Value { Int(i64), Float(f64), None }
+        fn to_int(v: Value) -> i64 {
+            match v {
                 Int(n) => n,
                 Float(f) => 0,
                 None => -1,
@@ -482,13 +480,13 @@ fn test_match_mixed_enum() {
 fn test_nested_blocks() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 1
             b := {
                 c := a + 1
                 c * 2
             }
-            R b
+            return b
         }
     "#,
     );
@@ -503,9 +501,9 @@ fn test_nested_blocks() {
 fn test_println_string() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             println("hello world")
-            R 0
+            return 0
         }
     "#,
     );
@@ -516,9 +514,9 @@ fn test_println_string() {
 fn test_println_integer() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             println(42)
-            R 0
+            return 0
         }
     "#,
     );
@@ -533,11 +531,11 @@ fn test_println_integer() {
 fn test_struct_nested() {
     let ir = gen_ok(
         r#"
-        S Inner { val: i64 }
-        S Outer { inner: Inner, extra: i64 }
-        F test() -> i64 {
+        struct Inner { val: i64 }
+        struct Outer { inner: Inner, extra: i64 }
+        fn test() -> i64 {
             o := Outer { inner: Inner { val: 42 }, extra: 10 }
-            R o.extra
+            return o.extra
         }
     "#,
     );
@@ -552,8 +550,8 @@ fn test_struct_nested() {
 fn test_tail_call_in_match() {
     let ir = gen_ok(
         r#"
-        F process(x: i64) -> i64 {
-            M x {
+        fn process(x: i64) -> i64 {
+            match x {
                 0 => 0,
                 n => @(n - 1)
             }
@@ -571,8 +569,8 @@ fn test_tail_call_in_match() {
 fn test_tail_call_in_ternary() {
     let ir = gen_ok(
         r#"
-        F countdown(n: i64) -> i64 {
-            R n <= 0 ? 0 : @(n - 1)
+        fn countdown(n: i64) -> i64 {
+            return n <= 0 ? 0 : @(n - 1)
         }
     "#,
     );
@@ -587,13 +585,13 @@ fn test_tail_call_in_ternary() {
 fn test_while_loop() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 100
             L {
                 I x <= 0 { B }
                 x -= 7
             }
-            R x
+            return x
         }
     "#,
     );
@@ -608,9 +606,9 @@ fn test_while_loop() {
 fn test_map_literal() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             m := {"a": 1, "b": 2}
-            R 0
+            return 0
         }
     "#,
     );
@@ -625,9 +623,9 @@ fn test_map_literal() {
 fn test_format_string() {
     let result = gen_result(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             s := format("value: {}", 42)
-            R 0
+            return 0
         }
     "#,
     );

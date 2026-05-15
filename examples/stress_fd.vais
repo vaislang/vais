@@ -9,34 +9,34 @@
 # Usage: vaisc stress_fd.vais && ./stress_fd
 
 # External C functions
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F print_i64(val: i64) -> i64
-X F print_str(s: str) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn print_i64(val: i64) -> i64
+impl fn print_str(s: str) -> i64
 
 # Global tracking variables (simulated through parameter passing)
 # In a real implementation, these would be mutable statics or globals
 
 # Simulate opening and closing a file descriptor
-F simulate_fd_cycle(size: i64) -> i64 {
+fn simulate_fd_cycle(size: i64) -> i64 {
     # Allocate memory to simulate resource acquisition
     fd := malloc(size)
 
     # Check if allocation succeeded
     I fd == 0 {
         print_str("ERROR: FD allocation failed\n")
-        R 0
+        return 0
     }
 
     # Immediately close (free) the file descriptor
     result := free(fd)
 
     # Return success
-    R 1
+    return 1
 }
 
 # Test 1: Sequential open/close
-F test_sequential(iterations: i64) -> i64 {
+fn test_sequential(iterations: i64) -> i64 {
     print_str("\n--- Test 1: Sequential Open/Close ---\n")
     print_str("Iterations: ")
     print_i64(iterations)
@@ -63,11 +63,11 @@ F test_sequential(iterations: i64) -> i64 {
     print_i64(iterations)
     print_str("\n")
 
-    R success_count
+    return success_count
 }
 
 # Test 2: Batch operations
-F test_batch(batch_size: i64) -> i64 {
+fn test_batch(batch_size: i64) -> i64 {
     print_str("\n--- Test 2: Batch Open/Close ---\n")
     print_str("Batch size: ")
     print_i64(batch_size)
@@ -94,11 +94,11 @@ F test_batch(batch_size: i64) -> i64 {
     print_i64(batch_size)
     print_str("\n")
 
-    R success_count
+    return success_count
 }
 
 # Test 3: Alternating pattern with different sizes
-F test_alternating(iterations: i64) -> i64 {
+fn test_alternating(iterations: i64) -> i64 {
     print_str("\n--- Test 3: Alternating Pattern ---\n")
     print_str("Iterations: ")
     print_i64(iterations)
@@ -114,9 +114,9 @@ F test_alternating(iterations: i64) -> i64 {
 
         # Alternate between small (2KB) and large (16KB) buffers
         size := I i % 2 == 0 {
-            R 2048
-        } EL {
-            R 16384
+            return 2048
+        } else {
+            return 16384
         }
 
         result := simulate_fd_cycle(size)
@@ -131,11 +131,11 @@ F test_alternating(iterations: i64) -> i64 {
     print_i64(iterations)
     print_str("\n")
 
-    R success_count
+    return success_count
 }
 
 # Test 4: Stress test with varying sizes
-F test_stress(iterations: i64) -> i64 {
+fn test_stress(iterations: i64) -> i64 {
     print_str("\n--- Test 4: Stress Test ---\n")
     print_str("Iterations: ")
     print_i64(iterations)
@@ -151,11 +151,11 @@ F test_stress(iterations: i64) -> i64 {
 
         # Vary sizes: small (1KB), medium (16KB), large (64KB)
         size := I i % 3 == 0 {
-            R 1024
-        } EL I i % 3 == 1 {
-            R 16384
-        } EL {
-            R 65536
+            return 1024
+        } else I i % 3 == 1 {
+            return 16384
+        } else {
+            return 65536
         }
 
         result := simulate_fd_cycle(size)
@@ -170,11 +170,11 @@ F test_stress(iterations: i64) -> i64 {
     print_i64(iterations)
     print_str("\n")
 
-    R success_count
+    return success_count
 }
 
 # Main function
-F main() -> i64 {
+fn main() -> i64 {
     print_str("==============================\n")
     print_str("File Descriptor Stress Test\n")
     print_str("==============================\n")
@@ -203,9 +203,9 @@ F main() -> i64 {
         print_str("FAILURE: ")
         print_i64(leaks)
         print_str(" file descriptor leaks detected!\n")
-        R 1
+        return 1
     }
 
     print_str("SUCCESS: All file descriptors properly closed\n")
-    R 0
+    return 0
 }

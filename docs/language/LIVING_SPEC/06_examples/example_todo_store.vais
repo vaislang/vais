@@ -1,0 +1,56 @@
+# LIVING_SPEC/06_examples/example_todo_store.vais
+# Key concept: 실행 가능한 TODO 저장소 — S/X/Vec/HashMap/Option 종합.
+# Target concepts: S, X, Vec<T>, Option, M, LF
+
+struct Todo {
+    id: i64,
+    title: i64,  # string hashcode로 단순화
+    done: i64    # 1=완료, 0=미완료
+}
+
+struct TodoStore {
+    items: Vec<Todo>,
+    next_id: i64
+}
+
+impl TodoStore {
+    fn add_todo(self, title: i64) -> TodoStore {
+        # 새 TodoStore 반환 (불변 스타일)
+        new_todo := Todo { id: self.next_id, title: title, done: 0 }
+        new_items := self.items
+        new_items.push(new_todo)
+        TodoStore { items: new_items, next_id: self.next_id + 1 }
+    }
+
+    fn count_pending(self) -> i64 {
+        count := mut 0
+        LF i: 0..self.items.len() {
+            match self.items.get(i) {
+                Some(t) => {
+                    I t.done == 0 { count = count + 1 }
+                },
+                None => {}
+            }
+        }
+        count
+    }
+
+    fn count_total(self) -> i64 {
+        self.items.len()
+    }
+}
+
+fn make_empty_store() -> TodoStore {
+    empty: Vec<Todo> = Vec::new()
+    TodoStore { items: empty, next_id: 1 }
+}
+
+fn main() -> i64 {
+    s := mut make_empty_store()
+    s = s.add_todo(100)
+    s = s.add_todo(200)
+    s = s.add_todo(300)
+    # 3개 등록, 0개 완료 → pending == 3
+    s.count_pending() * 10 + s.count_total()
+    # 30 + 3 = 33
+}

@@ -269,10 +269,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - playground.example.com
+    - playground.vaislang.dev
     secretName: vais-playground-tls
   rules:
-  - host: playground.example.com
+  - host: playground.vaislang.dev
     http:
       paths:
       - path: /

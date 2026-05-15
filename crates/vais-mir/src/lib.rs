@@ -1,3 +1,8 @@
+#![cfg_attr(not(test), warn(clippy::unwrap_used))]
+// Warn on `.unwrap()` in non-test code so any new Category D site
+// (user-input reachable panic) is rejected at review time. See
+// `docs/UNWRAP_CLASSIFICATION.md`. Test code is exempt.
+
 //! Middle Intermediate Representation (MIR) for the Vais compiler.
 //!
 //! MIR sits between the typed AST and LLVM IR, providing a platform-independent
@@ -19,9 +24,11 @@
 pub mod borrow_check;
 mod builder;
 pub mod emit_llvm;
+pub mod interpreter;
 pub mod lower;
 pub mod optimize;
 mod types;
+pub mod validate;
 
 pub use builder::MirBuilder;
 pub use types::*;

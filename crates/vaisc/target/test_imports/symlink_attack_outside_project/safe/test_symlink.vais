@@ -1,2 +1,2 @@
-U malicious
-F main() -> () = ()
+use malicious
+fn main() -> () = ()

@@ -22,15 +22,15 @@ fn gen_ok(source: &str) -> String {
 fn test_match_non_void_arms_uses_phi() {
     let ir = gen_ok(
         r#"
-        F do_a() -> i64 { R 1 }
-        F do_b() -> i64 { R 2 }
-        F main() -> i64 {
+        fn do_a() -> i64 { return 1 }
+        fn do_b() -> i64 { return 2 }
+        fn main() -> i64 {
             x := 1
-            result := M x {
+            result := match x {
                 1 => do_a(),
                 _ => do_b()
             }
-            R result
+            return result
         }
     "#,
     );
@@ -53,14 +53,14 @@ fn test_match_non_void_arms_uses_phi() {
 fn test_match_switch_style_non_void() {
     let ir = gen_ok(
         r#"
-        F main() -> i64 {
+        fn main() -> i64 {
             x := 2
-            result := M x {
+            result := match x {
                 1 => 10,
                 2 => 20,
                 _ => 0
             }
-            R result
+            return result
         }
     "#,
     );
@@ -78,17 +78,17 @@ fn test_match_unit_arms_no_phi_void() {
     // The codegen should emit "add i64 0, 0 ; void/Unit placeholder" instead of "phi void".
     let ir = gen_ok(
         r#"
-        F side_effect_a() { }
-        F side_effect_b() { }
-        F run(x: i64) {
-            M x {
+        fn side_effect_a() { }
+        fn side_effect_b() { }
+        fn run(x: i64) {
+            match x {
                 1 => side_effect_a(),
                 _ => side_effect_b()
             }
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             run(1)
-            R 0
+            return 0
         }
     "#,
     );
@@ -105,16 +105,16 @@ fn test_match_unit_arms_no_phi_void() {
 fn test_match_unit_arms_has_placeholder_comment() {
     let ir = gen_ok(
         r#"
-        F noop() { }
-        F run(x: i64) {
-            M x {
+        fn noop() { }
+        fn run(x: i64) {
+            match x {
                 1 => noop(),
                 _ => noop()
             }
         }
-        F main() -> i64 {
+        fn main() -> i64 {
             run(1)
-            R 0
+            return 0
         }
     "#,
     );

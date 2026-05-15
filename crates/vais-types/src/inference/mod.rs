@@ -15,6 +15,7 @@
 //! - Better error messages with more precise location information
 
 mod inference_modes;
+pub mod option_result_bridge;
 mod substitution;
 mod unification;
 

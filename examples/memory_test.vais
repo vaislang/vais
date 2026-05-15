@@ -1,6 +1,6 @@
 # Memory Management Comprehensive Test
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Memory Management Test ===")
     putchar(10)
 
@@ -47,7 +47,7 @@ F main() -> i64 {
         free(rc)
         puts("  Release 2: Freed (last ref)")
         0
-    } EL {
+    } else {
         store_i64(rc, count5 - 1)
         0
     }
@@ -114,7 +114,7 @@ F main() -> i64 {
 }
 
 # Print number helper
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 10000 {
         d1 := n / 10000
         putchar(d1 + 48)

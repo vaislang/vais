@@ -18,7 +18,7 @@ fn test_deeply_nested_expressions() {
     // This test documents the limitation rather than testing graceful handling
     let depth = 50; // Even small depths can overflow in debug builds
     let mut source = String::new();
-    source.push_str("F deep() -> i64 = ");
+    source.push_str("fn deep() -> i64 = ");
     for _ in 0..depth {
         source.push('(');
     }
@@ -37,7 +37,7 @@ fn test_moderate_nesting() {
     // Test a reasonable nesting depth that should work
     let depth = 20;
     let mut source = String::new();
-    source.push_str("F nested() -> i64 = ");
+    source.push_str("fn nested() -> i64 = ");
     for _ in 0..depth {
         source.push('(');
     }
@@ -54,7 +54,7 @@ fn test_moderate_nesting() {
 #[test]
 fn test_long_identifiers() {
     let long_name = "a".repeat(10_000);
-    let source = format!("F {}() -> i64 = 42", long_name);
+    let source = format!("fn {}() -> i64 = 42", long_name);
 
     let result = tokenize(&source);
     assert!(result.is_ok());
@@ -71,7 +71,7 @@ fn test_many_parameters() {
         .map(|i| format!("p{}: i64", i))
         .collect::<Vec<_>>()
         .join(", ");
-    let source = format!("F many({}) -> i64 = 0", params);
+    let source = format!("fn many({}) -> i64 = 0", params);
 
     let result = parse(&source);
     assert!(result.is_ok());
@@ -82,7 +82,7 @@ fn test_many_parameters() {
 fn test_large_string_literal() {
     // Reduced size to avoid stack overflow in debug builds
     let content = "a".repeat(5_000);
-    let source = format!(r#"F large() -> str = "{}""#, content);
+    let source = format!(r#"fn large() -> str = "{}""#, content);
 
     let result = tokenize(&source);
     assert!(result.is_ok());
@@ -94,7 +94,7 @@ fn test_large_string_literal() {
 #[ignore]
 fn test_very_large_string_literal() {
     let content = "a".repeat(100_000);
-    let source = format!(r#"F large() -> str = "{}""#, content);
+    let source = format!(r#"fn large() -> str = "{}""#, content);
 
     let result = tokenize(&source);
     assert!(result.is_ok());
@@ -104,12 +104,12 @@ fn test_very_large_string_literal() {
 #[test]
 fn test_unicode_edge_cases() {
     let test_cases = [
-        r#"F test() -> str = "Hello World""#, // ASCII
-        r#"F test() -> str = "안녕하세요""#,  // Korean
-        r#"F test() -> str = "日本語""#,      // Japanese
-        r#"F test() -> str = "中文""#,        // Chinese
-        r#"F test() -> str = "العربية""#,     // Arabic (RTL)
-        r#"F test() -> str = "Привет""#,      // Cyrillic
+        r#"fn test() -> str = "Hello World""#, // ASCII
+        r#"fn test() -> str = "안녕하세요""#,  // Korean
+        r#"fn test() -> str = "日本語""#,      // Japanese
+        r#"fn test() -> str = "中文""#,        // Chinese
+        r#"fn test() -> str = "العربية""#,     // Arabic (RTL)
+        r#"fn test() -> str = "Привет""#,      // Cyrillic
     ];
 
     for source in test_cases {
@@ -122,7 +122,7 @@ fn test_unicode_edge_cases() {
 /// Test that malformed UTF-8 in comments doesn't crash
 #[test]
 fn test_comment_handling() {
-    let source = "F test() -> i64 = 42 # This is a comment with special chars: <>&\"'";
+    let source = "fn test() -> i64 = 42 # This is a comment with special chars: <>&\"'";
     let result = tokenize(source);
     assert!(result.is_ok());
 }
@@ -131,7 +131,7 @@ fn test_comment_handling() {
 #[test]
 fn test_nested_generics() {
     // Use spaces to prevent >> tokenization issues
-    let source = "F test(x: Vec<Vec<Vec<i64> > >) -> i64 = 0";
+    let source = "fn test(x: Vec<Vec<Vec<i64> > >) -> i64 = 0";
     let _ = parse(source);
 }
 
@@ -152,9 +152,9 @@ fn test_comment_variations() {
     let test_cases = [
         "# comment only",
         "#",
-        "F f() -> i64 = 1 # trailing",
-        "# line1\n# line2\nF f() -> i64 = 1",
-        "F f() -> i64 = 1 ## double hash",
+        "fn f() -> i64 = 1 # trailing",
+        "# line1\n# line2\nfn f() -> i64 = 1",
+        "fn f() -> i64 = 1 ## double hash",
     ];
 
     for source in test_cases {
@@ -168,7 +168,7 @@ fn test_comment_variations() {
 #[ignore]
 fn test_deeply_nested_blocks() {
     let depth = 100;
-    let mut source = String::from("F deep() -> i64 {\n");
+    let mut source = String::from("fn deep() -> i64 {\n");
     for i in 0..depth {
         source.push_str(&format!("x{} := {}\n", i, i));
         source.push_str("{\n");
@@ -186,7 +186,7 @@ fn test_deeply_nested_blocks() {
 #[test]
 fn test_moderate_block_nesting() {
     let depth = 10;
-    let mut source = String::from("F nested_blocks() -> i64 {\n");
+    let mut source = String::from("fn nested_blocks() -> i64 {\n");
     for i in 0..depth {
         source.push_str(&format!("x{} := {}\n", i, i));
         source.push_str("{\n");
@@ -209,7 +209,7 @@ fn test_many_struct_fields() {
         .map(|i| format!("field{}: i64", i))
         .collect::<Vec<_>>()
         .join(", ");
-    let source = format!("S BigStruct {{ {} }}", fields);
+    let source = format!("struct BigStruct {{ {} }}", fields);
 
     let result = parse(&source);
     assert!(result.is_ok());
@@ -223,7 +223,7 @@ fn test_many_enum_variants() {
         .map(|i| format!("Variant{}", i))
         .collect::<Vec<_>>()
         .join(", ");
-    let source = format!("E BigEnum {{ {} }}", variants);
+    let source = format!("enum BigEnum {{ {} }}", variants);
 
     let result = parse(&source);
     assert!(result.is_ok());
@@ -232,13 +232,13 @@ fn test_many_enum_variants() {
 /// Test repeated operators
 #[test]
 fn test_repeated_operators() {
-    let source = "F add() -> i64 = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10";
+    let source = "fn add() -> i64 = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10";
     let result = parse(source);
     assert!(result.is_ok());
 
     // Longer chain
     let ops: String = (1..100).map(|i| format!(" + {}", i)).collect();
-    let source = format!("F long_add() -> i64 = 0{}", ops);
+    let source = format!("fn long_add() -> i64 = 0{}", ops);
     let result = parse(&source);
     assert!(result.is_ok());
 }
@@ -247,7 +247,7 @@ fn test_repeated_operators() {
 #[test]
 fn test_multiple_strings() {
     let source = r#"
-        F strings() -> str {
+        fn strings() -> str {
             a := "first"
             b := "second"
             c := "third"
@@ -265,10 +265,10 @@ fn test_multiple_strings() {
 #[test]
 fn test_type_checker_recursive() {
     let source = r#"
-        S Node {
+        struct Node {
             value: i64
         }
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#;
 
     let module = parse(source).unwrap();
@@ -280,7 +280,7 @@ fn test_type_checker_recursive() {
 #[test]
 fn test_token_alternation() {
     // Rapidly alternating between different token types
-    let source = "F a() -> i64 = 1 + 2 - 3 * 4 / 5 % 6 < 7 > 8 == 9";
+    let source = "fn a() -> i64 = 1 + 2 - 3 * 4 / 5 % 6 < 7 > 8 == 9";
     let result = tokenize(source);
     assert!(result.is_ok());
 }
@@ -289,11 +289,11 @@ fn test_token_alternation() {
 #[test]
 fn test_boundary_integers() {
     let test_cases = [
-        "F f() -> i64 = 0",
-        "F f() -> i64 = 1",
-        "F f() -> i64 = -1",
-        "F f() -> i64 = 9223372036854775807",  // i64::MAX
-        "F f() -> i64 = -9223372036854775808", // i64::MIN (as expression)
+        "fn f() -> i64 = 0",
+        "fn f() -> i64 = 1",
+        "fn f() -> i64 = -1",
+        "fn f() -> i64 = 9223372036854775807",  // i64::MAX
+        "fn f() -> i64 = -9223372036854775808", // i64::MIN (as expression)
     ];
 
     for source in test_cases {
@@ -307,7 +307,7 @@ fn test_large_file_parsing() {
     // Simulate a large file with many function definitions
     let mut source = String::new();
     for i in 0..1000 {
-        source.push_str(&format!("F func{}() -> i64 = {}\n", i, i));
+        source.push_str(&format!("fn func{}() -> i64 = {}\n", i, i));
     }
 
     let result = parse(&source);
@@ -319,7 +319,7 @@ fn test_large_file_parsing() {
 fn test_rapid_parse_cycles() {
     // Parse many small programs to stress allocation/deallocation
     for i in 0..100 {
-        let source = format!("F test{}() -> i64 = {}", i, i);
+        let source = format!("fn test{}() -> i64 = {}", i, i);
         let result = parse(&source);
         assert!(result.is_ok());
         // Result is dropped here, testing cleanup
@@ -329,7 +329,7 @@ fn test_rapid_parse_cycles() {
 /// Test many string allocations
 #[test]
 fn test_many_string_allocations() {
-    let mut source = String::from("F test() -> str {\n");
+    let mut source = String::from("fn test() -> str {\n");
     for i in 0..100 {
         source.push_str(&format!("    s{} := \"string number {}\"\n", i, i));
     }
@@ -343,7 +343,7 @@ fn test_many_string_allocations() {
 #[test]
 fn test_array_allocations() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr1 := [1, 2, 3, 4, 5]
             arr2 := [10, 20, 30, 40, 50]
             arr3 := [100, 200, 300, 400, 500]
@@ -359,11 +359,11 @@ fn test_array_allocations() {
 #[test]
 fn test_struct_allocations() {
     let source = r#"
-        S Point { x: i64, y: i64 }
-        S Rectangle { p1: Point, p2: Point }
-        S Circle { center: Point, radius: i64 }
+        struct Point { x: i64, y: i64 }
+        struct Rectangle { p1: Point, p2: Point }
+        struct Circle { center: Point, radius: i64 }
 
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#;
 
     let result = parse(source);
@@ -378,9 +378,9 @@ fn test_struct_allocations() {
 #[test]
 fn test_complex_nested_allocations() {
     let source = r#"
-        S Node { value: i64 }
+        struct Node { value: i64 }
 
-        F test() -> i64 {
+        fn test() -> i64 {
             a := Node { value: 1 }
             b := Node { value: 2 }
             c := Node { value: 3 }
@@ -398,14 +398,14 @@ fn test_complex_nested_allocations() {
 fn test_error_recovery_no_leaks() {
     // Intentionally malformed programs should not leak memory
     let malformed_programs = [
-        "F f(",               // Incomplete function
-        "F f() ->",           // Incomplete return type
-        "F f() -> i64",       // Missing body
-        "S Point {",          // Incomplete struct
-        "E Color {",          // Incomplete enum
-        "{ { { {",            // Unbalanced braces
-        "))))",               // Unbalanced parentheses
-        "F f() -> i64 = 1 +", // Incomplete expression
+        "fn f(",               // Incomplete function
+        "fn f() ->",           // Incomplete return type
+        "fn f() -> i64",       // Missing body
+        "struct Point {",      // Incomplete struct
+        "enum Color {",        // Incomplete enum
+        "{ { { {",             // Unbalanced braces
+        "))))",                // Unbalanced parentheses
+        "fn f() -> i64 = 1 +", // Incomplete expression
     ];
 
     for source in malformed_programs {
@@ -436,9 +436,9 @@ fn test_tokenization_patterns() {
 #[test]
 fn test_type_checking_complex() {
     let source = r#"
-        S Container<T> { value: T }
+        struct Container<T> { value: type }
 
-        F test() -> i64 {
+        fn test() -> i64 {
             c1 := Container { value: 42 }
             c2 := Container { value: "hello" }
             0
@@ -457,11 +457,11 @@ fn test_type_checking_complex() {
 #[test]
 fn test_special_characters_in_strings() {
     let test_cases = [
-        r#"F f() -> str = "hello\nworld""#,
-        r#"F f() -> str = "tab\there""#,
-        r#"F f() -> str = "quote\"test""#,
-        r#"F f() -> str = "backslash\\test""#,
-        r#"F f() -> str = "unicode\u{1F600}""#,
+        r#"fn f() -> str = "hello\nworld""#,
+        r#"fn f() -> str = "tab\there""#,
+        r#"fn f() -> str = "quote\"test""#,
+        r#"fn f() -> str = "backslash\\test""#,
+        r#"fn f() -> str = "unicode\u{1F600}""#,
     ];
 
     for source in test_cases {
@@ -477,7 +477,7 @@ fn test_long_operation_chains() {
     for i in 1..200 {
         expr.push_str(&format!(" + {}", i));
     }
-    let source = format!("F long_chain() -> i64 = {}", expr);
+    let source = format!("fn long_chain() -> i64 = {}", expr);
 
     let result = parse(&source);
     assert!(result.is_ok());
@@ -494,9 +494,9 @@ fn test_stressful_sequential_parsing() {
     for i in 0..50 {
         let source = format!(
             r#"
-            S Data{} {{ value: i64 }}
+            struct Data{} {{ value: i64 }}
 
-            F process{}(x: i64) -> i64 {{
+            fn process{}(x: i64) -> i64 {{
                 y := x + {}
                 z := y * 2
                 z
@@ -517,15 +517,15 @@ fn test_stressful_sequential_parsing() {
 #[test]
 fn test_string_length_boundaries() {
     // Empty string
-    let source = r#"F f() -> str = """#;
+    let source = r#"fn f() -> str = """#;
     let _ = parse(source);
 
     // Single character
-    let source = r#"F f() -> str = "a""#;
+    let source = r#"fn f() -> str = "a""#;
     let _ = parse(source);
 
     // Medium string
-    let source = format!(r#"F f() -> str = "{}""#, "a".repeat(100));
+    let source = format!(r#"fn f() -> str = "{}""#, "a".repeat(100));
     let _ = parse(&source);
 }
 
@@ -533,7 +533,7 @@ fn test_string_length_boundaries() {
 #[test]
 fn test_collection_operations() {
     let source = r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [1, 2, 3, 4, 5]
             sum := 0
             i := 0
@@ -550,10 +550,10 @@ fn test_collection_operations() {
 #[test]
 fn test_multiple_errors_recovery() {
     let source = r#"
-        F bad1(
-        F bad2() ->
-        F good() -> i64 = 42
-        F bad3() -> i64 =
+        fn bad1(
+        fn bad2() ->
+        fn good() -> i64 = 42
+        fn bad3() -> i64 =
     "#;
 
     // Should not panic or leak memory
@@ -564,13 +564,13 @@ fn test_multiple_errors_recovery() {
 #[test]
 fn test_deeply_nested_types() {
     let source = r#"
-        S Level1 { value: i64 }
-        S Level2 { l1: Level1 }
-        S Level3 { l2: Level2 }
-        S Level4 { l3: Level3 }
-        S Level5 { l4: Level4 }
+        struct Level1 { value: i64 }
+        struct Level2 { l1: Level1 }
+        struct Level3 { l2: Level2 }
+        struct Level4 { l3: Level3 }
+        struct Level5 { l4: Level4 }
 
-        F test() -> i64 = 0
+        fn test() -> i64 = 0
     "#;
 
     let result = parse(source);
@@ -581,9 +581,9 @@ fn test_deeply_nested_types() {
 #[test]
 fn test_pattern_matching_safety() {
     let source = r#"
-        E Option { Some(i64), None }
+        enum Option { Some(i64), None }
 
-        F test(opt: Option) -> i64 {
+        fn test(opt: Option) -> i64 {
             match opt {
                 Some(x) => x,
                 None => 0

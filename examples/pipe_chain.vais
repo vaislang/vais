@@ -3,14 +3,14 @@
 #
 # Run: vaisc run examples/pipe_chain.vais
 
-F double(x: i64) -> i64 = x * 2
-F add_one(x: i64) -> i64 = x + 1
-F square(x: i64) -> i64 = x * x
-F negate(x: i64) -> i64 = 0 - x
-F abs(x: i64) -> i64 = I x < 0 { 0 - x } EL { x }
-F clamp(x: i64) -> i64 = I x > 100 { 100 } EL I x < 0 { 0 } EL { x }
+fn double(x: i64) -> i64 = x * 2
+fn add_one(x: i64) -> i64 = x + 1
+fn square(x: i64) -> i64 = x * x
+fn negate(x: i64) -> i64 = 0 - x
+fn abs(x: i64) -> i64 = I x < 0 { 0 - x } else { x }
+fn clamp(x: i64) -> i64 = I x > 100 { 100 } else I x < 0 { 0 } else { x }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Pipe Chains ===")
 
     # Chain 1: 5 -> 10 -> 11
@@ -37,5 +37,5 @@ F main() -> i64 {
     puts("Total = {total}")
 
     # 11 + 19 + 7 + 100 + 101 = 238
-    I total == 238 { 0 } EL { 1 }
+    I total == 238 { 0 } else { 1 }
 }

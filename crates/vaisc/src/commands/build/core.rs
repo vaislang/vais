@@ -13,12 +13,63 @@ use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use vais_ast::Item;
+use vais_ast::{
+    Expr, FunctionBody, GenericParamKind, IfElse, Item, MatchArm, Module, Pattern, Span, Spanned,
+    Stmt, Type, VariantFields,
+};
 use vais_codegen::TargetTriple;
 use vais_macro::{collect_macros, expand_macros, process_derives, MacroRegistry};
 use vais_plugin::{DiagnosticLevel, PluginRegistry};
 use vais_query::QueryDatabase;
 use vais_types::TypeChecker;
+
+/// Phase 17.H1: FNV-1a 32 hash of a source path for use as TC file_id.
+/// Non-zero — 0 is reserved for synthetic spans.
+fn phase17_fnv1a_file_id(s: &str) -> u32 {
+    const FNV_OFFSET: u32 = 0x811c_9dc5;
+    const FNV_PRIME: u32 = 0x0100_0193;
+    let mut hash = FNV_OFFSET;
+    for byte in s.as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    if hash == 0 {
+        1
+    } else {
+        hash
+    }
+}
+
+/// Walk up from a build input and find the package root used for
+/// package-relative imports.
+fn find_package_source_root(start: &Path) -> Option<PathBuf> {
+    let mut cur = start.parent();
+    while let Some(dir) = cur {
+        if dir.join("vais.toml").is_file() {
+            let src = dir.join("src");
+            return Some(if src.is_dir() { src } else { dir.to_path_buf() });
+        }
+        cur = dir.parent();
+    }
+
+    let mut cur = start.parent();
+    while let Some(dir) = cur {
+        if dir.join("src").is_dir() {
+            return Some(dir.to_path_buf());
+        }
+        cur = dir.parent();
+    }
+
+    let mut cur = start.parent();
+    while let Some(dir) = cur {
+        if dir.file_name().map(|n| n == "src").unwrap_or(false) {
+            return Some(dir.to_path_buf());
+        }
+        cur = dir.parent();
+    }
+
+    None
+}
 
 /// Per-phase compilation timing profile.
 /// Used by `--profile` flag to display detailed pipeline breakdown.
@@ -234,6 +285,19 @@ pub(crate) fn cmd_build(
     let main_source = fs::read_to_string(input)
         .map_err(|e| format!("Cannot read '{}': {}", input.display(), e))?;
 
+    // Step 19 P1 (2026-05-07): emit single-char keyword deprecation
+    // warnings. The lex is a pre-pass that does not affect parser output;
+    // the parser will lex independently. Cost is small (Phase 129 baseline:
+    // 50K LOC ≈ 3.4ms lex), and suppressed via VAIS_SUPPRESS_SINGLE_CHAR_WARN=1.
+    if let Ok((_tokens, deprecation_warnings)) = vais_lexer::tokenize_with_warnings(&main_source) {
+        crate::utils::emit_deprecation_warnings(
+            &deprecation_warnings,
+            &input.display().to_string(),
+        );
+    }
+    // Note: if lex fails here, the parser will report the same error
+    // shortly with a richer span. Don't double-report.
+
     // Initialize query database for memoized parsing
     let mut query_db = QueryDatabase::new();
 
@@ -256,6 +320,8 @@ pub(crate) fn cmd_build(
     let parse_start = std::time::Instant::now();
     let mut loaded_modules: HashSet<PathBuf> = HashSet::new();
     let mut loading_stack: Vec<PathBuf> = Vec::new();
+    let source_root =
+        find_package_source_root(input).or_else(|| input.parent().map(Path::to_path_buf));
     let merged_ast = if use_parallel {
         load_module_with_imports_parallel(
             input,
@@ -263,7 +329,7 @@ pub(crate) fn cmd_build(
             verbose,
             &main_source,
             &query_db,
-            input.parent().map(|p| p as &Path),
+            source_root.as_deref(),
         )?
     } else {
         load_module_with_imports_internal(
@@ -273,7 +339,7 @@ pub(crate) fn cmd_build(
             verbose,
             &main_source,
             &query_db,
-            input.parent().map(|p| p as &Path),
+            source_root.as_deref(),
         )?
     };
     let parse_time = parse_start.elapsed();
@@ -354,6 +420,7 @@ pub(crate) fn cmd_build(
 
     let mut final_ast = macro_expanded_ast;
     process_derives(&mut final_ast).map_err(|e| format!("Derive macro error: {}", e))?;
+    stamp_module_file_ids_for_typecheck(&mut final_ast);
     let macro_time = macro_start.elapsed();
     if let Some(ref mut p) = profile_out {
         p.macro_ms = macro_time.as_secs_f64() * 1000.0;
@@ -506,6 +573,569 @@ pub(crate) fn cmd_build(
 // Helper functions extracted from cmd_build for readability
 // ============================================================================
 
+fn stamp_module_file_ids_for_typecheck(module: &mut Module) {
+    let Some(modules_map) = module.modules_map.as_ref() else {
+        return;
+    };
+
+    let mut item_file_ids = vec![None; module.items.len()];
+    let mut module_entries: Vec<_> = modules_map.iter().collect();
+    module_entries.sort_by(|a, b| a.0.cmp(b.0));
+
+    for (module_path, item_indices) in module_entries {
+        let file_id = phase17_fnv1a_file_id(&module_path.to_string_lossy());
+        for &idx in item_indices {
+            if let Some(slot) = item_file_ids.get_mut(idx) {
+                slot.get_or_insert(file_id);
+            }
+        }
+    }
+
+    for (item, file_id) in module.items.iter_mut().zip(item_file_ids) {
+        if let Some(file_id) = file_id {
+            stamp_spanned_item(item, file_id);
+        }
+    }
+}
+
+fn stamp_span(span: &mut Span, file_id: u32) {
+    span.file_id = file_id;
+}
+
+fn stamp_spanned<T>(spanned: &mut Spanned<T>, file_id: u32) {
+    stamp_span(&mut spanned.span, file_id);
+}
+
+fn stamp_attributes(attributes: &mut [vais_ast::Attribute], file_id: u32) {
+    for attribute in attributes {
+        if let Some(expr) = attribute.expr.as_mut() {
+            stamp_expr(expr, file_id);
+        }
+    }
+}
+
+fn stamp_generic_params(generics: &mut [vais_ast::GenericParam], file_id: u32) {
+    for generic in generics {
+        stamp_spanned(&mut generic.name, file_id);
+        for bound in &mut generic.bounds {
+            stamp_spanned(bound, file_id);
+        }
+        match &mut generic.kind {
+            GenericParamKind::Type { bounds } => {
+                for bound in bounds {
+                    stamp_spanned(bound, file_id);
+                }
+            }
+            GenericParamKind::Const { ty } => stamp_type(ty, file_id),
+            GenericParamKind::Lifetime { .. } => {}
+        }
+    }
+}
+
+fn stamp_where_clause(where_clause: &mut [vais_ast::WherePredicate], file_id: u32) {
+    for predicate in where_clause {
+        stamp_spanned(&mut predicate.ty, file_id);
+        for bound in &mut predicate.bounds {
+            stamp_spanned(bound, file_id);
+        }
+    }
+}
+
+fn stamp_spanned_item(item: &mut Spanned<Item>, file_id: u32) {
+    stamp_spanned(item, file_id);
+    match &mut item.node {
+        Item::Function(function) => stamp_function(function, file_id),
+        Item::Struct(struct_def) => {
+            stamp_spanned(&mut struct_def.name, file_id);
+            stamp_generic_params(&mut struct_def.generics, file_id);
+            for field in &mut struct_def.fields {
+                stamp_field(field, file_id);
+            }
+            for method in &mut struct_def.methods {
+                stamp_spanned(method, file_id);
+                stamp_function(&mut method.node, file_id);
+            }
+            stamp_attributes(&mut struct_def.attributes, file_id);
+            stamp_where_clause(&mut struct_def.where_clause, file_id);
+        }
+        Item::Enum(enum_def) => {
+            stamp_spanned(&mut enum_def.name, file_id);
+            stamp_generic_params(&mut enum_def.generics, file_id);
+            for variant in &mut enum_def.variants {
+                stamp_spanned(&mut variant.name, file_id);
+                stamp_variant_fields(&mut variant.fields, file_id);
+            }
+            stamp_attributes(&mut enum_def.attributes, file_id);
+        }
+        Item::Union(union_def) => {
+            stamp_spanned(&mut union_def.name, file_id);
+            stamp_generic_params(&mut union_def.generics, file_id);
+            for field in &mut union_def.fields {
+                stamp_field(field, file_id);
+            }
+        }
+        Item::TypeAlias(type_alias) => {
+            stamp_spanned(&mut type_alias.name, file_id);
+            stamp_generic_params(&mut type_alias.generics, file_id);
+            stamp_type(&mut type_alias.ty, file_id);
+        }
+        Item::TraitAlias(trait_alias) => {
+            stamp_spanned(&mut trait_alias.name, file_id);
+            stamp_generic_params(&mut trait_alias.generics, file_id);
+            for bound in &mut trait_alias.bounds {
+                stamp_spanned(bound, file_id);
+            }
+        }
+        Item::Use(use_stmt) => stamp_use(use_stmt, file_id),
+        Item::Trait(trait_def) => {
+            stamp_spanned(&mut trait_def.name, file_id);
+            stamp_generic_params(&mut trait_def.generics, file_id);
+            for super_trait in &mut trait_def.super_traits {
+                stamp_spanned(super_trait, file_id);
+            }
+            for associated_type in &mut trait_def.associated_types {
+                stamp_associated_type(associated_type, file_id);
+            }
+            for method in &mut trait_def.methods {
+                stamp_trait_method(method, file_id);
+            }
+            stamp_where_clause(&mut trait_def.where_clause, file_id);
+        }
+        Item::Impl(impl_block) => {
+            stamp_type(&mut impl_block.target_type, file_id);
+            if let Some(trait_name) = &mut impl_block.trait_name {
+                stamp_spanned(trait_name, file_id);
+            }
+            stamp_generic_params(&mut impl_block.generics, file_id);
+            for associated_type in &mut impl_block.associated_types {
+                stamp_spanned(&mut associated_type.name, file_id);
+                stamp_type(&mut associated_type.ty, file_id);
+            }
+            for method in &mut impl_block.methods {
+                stamp_spanned(method, file_id);
+                stamp_function(&mut method.node, file_id);
+            }
+        }
+        Item::Macro(macro_def) => {
+            stamp_spanned(&mut macro_def.name, file_id);
+        }
+        Item::ExternBlock(extern_block) => {
+            for function in &mut extern_block.functions {
+                stamp_spanned(&mut function.name, file_id);
+                stamp_params(&mut function.params, file_id);
+                if let Some(ret_type) = &mut function.ret_type {
+                    stamp_type(ret_type, file_id);
+                }
+                stamp_attributes(&mut function.attributes, file_id);
+            }
+        }
+        Item::Const(const_def) => {
+            stamp_spanned(&mut const_def.name, file_id);
+            stamp_type(&mut const_def.ty, file_id);
+            stamp_expr(&mut const_def.value, file_id);
+            stamp_attributes(&mut const_def.attributes, file_id);
+        }
+        Item::Global(global_def) => {
+            stamp_spanned(&mut global_def.name, file_id);
+            stamp_type(&mut global_def.ty, file_id);
+            stamp_expr(&mut global_def.value, file_id);
+        }
+        Item::Error { .. } => {}
+    }
+}
+
+fn stamp_use(use_stmt: &mut vais_ast::Use, file_id: u32) {
+    for segment in &mut use_stmt.path {
+        stamp_spanned(segment, file_id);
+    }
+    if let Some(alias) = &mut use_stmt.alias {
+        stamp_spanned(alias, file_id);
+    }
+    if let Some(items) = &mut use_stmt.items {
+        for item in items {
+            stamp_spanned(item, file_id);
+        }
+    }
+}
+
+fn stamp_function(function: &mut vais_ast::Function, file_id: u32) {
+    stamp_spanned(&mut function.name, file_id);
+    stamp_generic_params(&mut function.generics, file_id);
+    stamp_params(&mut function.params, file_id);
+    if let Some(ret_type) = &mut function.ret_type {
+        stamp_type(ret_type, file_id);
+    }
+    stamp_function_body(&mut function.body, file_id);
+    stamp_attributes(&mut function.attributes, file_id);
+    stamp_where_clause(&mut function.where_clause, file_id);
+}
+
+fn stamp_params(params: &mut [vais_ast::Param], file_id: u32) {
+    for param in params {
+        stamp_spanned(&mut param.name, file_id);
+        stamp_type(&mut param.ty, file_id);
+        if let Some(default_value) = param.default_value.as_mut() {
+            stamp_expr(default_value, file_id);
+        }
+    }
+}
+
+fn stamp_function_body(body: &mut FunctionBody, file_id: u32) {
+    match body {
+        FunctionBody::Expr(expr) => stamp_expr(expr, file_id),
+        FunctionBody::Block(stmts) => stamp_stmts(stmts, file_id),
+    }
+}
+
+fn stamp_field(field: &mut vais_ast::Field, file_id: u32) {
+    stamp_spanned(&mut field.name, file_id);
+    stamp_type(&mut field.ty, file_id);
+}
+
+fn stamp_variant_fields(fields: &mut VariantFields, file_id: u32) {
+    match fields {
+        VariantFields::Unit => {}
+        VariantFields::Tuple(types) => {
+            for ty in types {
+                stamp_type(ty, file_id);
+            }
+        }
+        VariantFields::Struct(fields) => {
+            for field in fields {
+                stamp_field(field, file_id);
+            }
+        }
+    }
+}
+
+fn stamp_associated_type(associated_type: &mut vais_ast::AssociatedType, file_id: u32) {
+    stamp_spanned(&mut associated_type.name, file_id);
+    stamp_generic_params(&mut associated_type.generics, file_id);
+    for bound in &mut associated_type.bounds {
+        stamp_spanned(bound, file_id);
+    }
+    if let Some(default_ty) = &mut associated_type.default {
+        stamp_type(default_ty, file_id);
+    }
+}
+
+fn stamp_trait_method(method: &mut vais_ast::TraitMethod, file_id: u32) {
+    stamp_spanned(&mut method.name, file_id);
+    stamp_generic_params(&mut method.generics, file_id);
+    stamp_params(&mut method.params, file_id);
+    if let Some(ret_type) = &mut method.ret_type {
+        stamp_type(ret_type, file_id);
+    }
+    if let Some(default_body) = &mut method.default_body {
+        stamp_function_body(default_body, file_id);
+    }
+}
+
+fn stamp_type(ty: &mut Spanned<Type>, file_id: u32) {
+    stamp_spanned(ty, file_id);
+    match &mut ty.node {
+        Type::Named { generics, .. } => {
+            for generic in generics {
+                stamp_type(generic, file_id);
+            }
+        }
+        Type::FnPtr { params, ret, .. } | Type::Fn { params, ret } => {
+            for param in params {
+                stamp_type(param, file_id);
+            }
+            stamp_type(ret, file_id);
+        }
+        Type::Array(inner)
+        | Type::Optional(inner)
+        | Type::Result(inner)
+        | Type::Pointer(inner)
+        | Type::Ref(inner)
+        | Type::RefMut(inner)
+        | Type::Slice(inner)
+        | Type::SliceMut(inner)
+        | Type::RefLifetime { inner, .. }
+        | Type::RefMutLifetime { inner, .. }
+        | Type::Linear(inner)
+        | Type::Affine(inner) => stamp_type(inner, file_id),
+        Type::ConstArray { element, .. } => stamp_type(element, file_id),
+        Type::Map(key, value) => {
+            stamp_type(key, file_id);
+            stamp_type(value, file_id);
+        }
+        Type::Tuple(types) => {
+            for ty in types {
+                stamp_type(ty, file_id);
+            }
+        }
+        Type::DynTrait { generics, .. } => {
+            for generic in generics {
+                stamp_type(generic, file_id);
+            }
+        }
+        Type::Associated { base, generics, .. } => {
+            stamp_type(base, file_id);
+            for generic in generics {
+                stamp_type(generic, file_id);
+            }
+        }
+        Type::Dependent {
+            base, predicate, ..
+        } => {
+            stamp_type(base, file_id);
+            stamp_expr(predicate, file_id);
+        }
+        Type::Unit | Type::Infer => {}
+    }
+}
+
+fn stamp_stmts(stmts: &mut [Spanned<Stmt>], file_id: u32) {
+    for stmt in stmts {
+        stamp_stmt(stmt, file_id);
+    }
+}
+
+fn stamp_stmt(stmt: &mut Spanned<Stmt>, file_id: u32) {
+    stamp_spanned(stmt, file_id);
+    match &mut stmt.node {
+        Stmt::Let {
+            name, ty, value, ..
+        } => {
+            stamp_spanned(name, file_id);
+            if let Some(ty) = ty {
+                stamp_type(ty, file_id);
+            }
+            stamp_expr(value, file_id);
+        }
+        Stmt::LetDestructure { pattern, value, .. } => {
+            stamp_pattern(pattern, file_id);
+            stamp_expr(value, file_id);
+        }
+        Stmt::Expr(expr) | Stmt::Defer(expr) => stamp_expr(expr, file_id),
+        Stmt::Return(expr) | Stmt::Break(expr) => {
+            if let Some(expr) = expr {
+                stamp_expr(expr, file_id);
+            }
+        }
+        Stmt::Continue | Stmt::Error { .. } => {}
+    }
+}
+
+fn stamp_expr(expr: &mut Spanned<Expr>, file_id: u32) {
+    stamp_spanned(expr, file_id);
+    match &mut expr.node {
+        Expr::StringInterp(parts) => {
+            for part in parts {
+                if let vais_ast::StringInterpPart::Expr(expr) = part {
+                    stamp_expr(expr, file_id);
+                }
+            }
+        }
+        Expr::Binary { left, right, .. } => {
+            stamp_expr(left, file_id);
+            stamp_expr(right, file_id);
+        }
+        Expr::Unary { expr, .. }
+        | Expr::Await(expr)
+        | Expr::Try(expr)
+        | Expr::Unwrap(expr)
+        | Expr::Spread(expr)
+        | Expr::Ref(expr)
+        | Expr::Deref(expr)
+        | Expr::Yield(expr)
+        | Expr::Comptime { body: expr }
+        | Expr::Old(expr)
+        | Expr::Assume(expr) => stamp_expr(expr, file_id),
+        Expr::Ternary { cond, then, else_ } => {
+            stamp_expr(cond, file_id);
+            stamp_expr(then, file_id);
+            stamp_expr(else_, file_id);
+        }
+        Expr::If { cond, then, else_ } => {
+            stamp_expr(cond, file_id);
+            stamp_stmts(then, file_id);
+            if let Some(else_) = else_ {
+                stamp_if_else(else_, file_id);
+            }
+        }
+        Expr::Loop {
+            pattern,
+            iter,
+            body,
+        } => {
+            if let Some(pattern) = pattern {
+                stamp_pattern(pattern, file_id);
+            }
+            if let Some(iter) = iter {
+                stamp_expr(iter, file_id);
+            }
+            stamp_stmts(body, file_id);
+        }
+        Expr::While { condition, body } => {
+            stamp_expr(condition, file_id);
+            stamp_stmts(body, file_id);
+        }
+        Expr::Match { expr, arms } => {
+            stamp_expr(expr, file_id);
+            for arm in arms {
+                stamp_match_arm(arm, file_id);
+            }
+        }
+        Expr::Call { func, args } => {
+            stamp_expr(func, file_id);
+            for arg in args {
+                stamp_expr(arg, file_id);
+            }
+        }
+        Expr::MethodCall {
+            receiver,
+            method,
+            args,
+        } => {
+            stamp_expr(receiver, file_id);
+            stamp_spanned(method, file_id);
+            for arg in args {
+                stamp_expr(arg, file_id);
+            }
+        }
+        Expr::StaticMethodCall {
+            type_name,
+            method,
+            args,
+        } => {
+            stamp_spanned(type_name, file_id);
+            stamp_spanned(method, file_id);
+            for arg in args {
+                stamp_expr(arg, file_id);
+            }
+        }
+        Expr::Field { expr, field } => {
+            stamp_expr(expr, file_id);
+            stamp_spanned(field, file_id);
+        }
+        Expr::TupleFieldAccess { expr, .. } => stamp_expr(expr, file_id),
+        Expr::Index { expr, index } => {
+            stamp_expr(expr, file_id);
+            stamp_expr(index, file_id);
+        }
+        Expr::Array(items) | Expr::Tuple(items) => {
+            for item in items {
+                stamp_expr(item, file_id);
+            }
+        }
+        Expr::StructLit { name, fields, .. } => {
+            stamp_spanned(name, file_id);
+            for (field, value) in fields {
+                stamp_spanned(field, file_id);
+                stamp_expr(value, file_id);
+            }
+        }
+        Expr::Range { start, end, .. } => {
+            if let Some(start) = start {
+                stamp_expr(start, file_id);
+            }
+            if let Some(end) = end {
+                stamp_expr(end, file_id);
+            }
+        }
+        Expr::Block(stmts) => stamp_stmts(stmts, file_id),
+        Expr::MapLit(pairs) => {
+            for (key, value) in pairs {
+                stamp_expr(key, file_id);
+                stamp_expr(value, file_id);
+            }
+        }
+        Expr::Cast { expr, ty } => {
+            stamp_expr(expr, file_id);
+            stamp_type(ty, file_id);
+        }
+        Expr::Assign { target, value } | Expr::AssignOp { target, value, .. } => {
+            stamp_expr(target, file_id);
+            stamp_expr(value, file_id);
+        }
+        Expr::Lambda { params, body, .. } => {
+            stamp_params(params, file_id);
+            stamp_expr(body, file_id);
+        }
+        Expr::MacroInvoke(invoke) => {
+            stamp_spanned(&mut invoke.name, file_id);
+        }
+        Expr::Assert { condition, message } => {
+            stamp_expr(condition, file_id);
+            if let Some(message) = message {
+                stamp_expr(message, file_id);
+            }
+        }
+        Expr::EnumAccess { data, .. } => {
+            if let Some(data) = data {
+                stamp_expr(data, file_id);
+            }
+        }
+        Expr::Int(_)
+        | Expr::Float(_)
+        | Expr::Bool(_)
+        | Expr::String(_)
+        | Expr::Unit
+        | Expr::Ident(_)
+        | Expr::SelfCall
+        | Expr::Error { .. } => {}
+    }
+}
+
+fn stamp_if_else(else_: &mut IfElse, file_id: u32) {
+    match else_ {
+        IfElse::ElseIf(cond, stmts, next) => {
+            stamp_expr(cond, file_id);
+            stamp_stmts(stmts, file_id);
+            if let Some(next) = next {
+                stamp_if_else(next, file_id);
+            }
+        }
+        IfElse::Else(stmts) => stamp_stmts(stmts, file_id),
+    }
+}
+
+fn stamp_match_arm(arm: &mut MatchArm, file_id: u32) {
+    stamp_pattern(&mut arm.pattern, file_id);
+    if let Some(guard) = &mut arm.guard {
+        stamp_expr(guard, file_id);
+    }
+    stamp_expr(&mut arm.body, file_id);
+}
+
+fn stamp_pattern(pattern: &mut Spanned<Pattern>, file_id: u32) {
+    stamp_spanned(pattern, file_id);
+    match &mut pattern.node {
+        Pattern::Tuple(patterns)
+        | Pattern::Variant {
+            fields: patterns, ..
+        }
+        | Pattern::Or(patterns) => {
+            for pattern in patterns {
+                stamp_pattern(pattern, file_id);
+            }
+        }
+        Pattern::Struct { name, fields, .. } => {
+            stamp_spanned(name, file_id);
+            for (field, nested) in fields {
+                stamp_spanned(field, file_id);
+                if let Some(nested) = nested {
+                    stamp_pattern(nested, file_id);
+                }
+            }
+        }
+        Pattern::Range { start, end, .. } => {
+            if let Some(start) = start {
+                stamp_pattern(start, file_id);
+            }
+            if let Some(end) = end {
+                stamp_pattern(end, file_id);
+            }
+        }
+        Pattern::Alias { pattern, .. } => stamp_pattern(pattern, file_id),
+        Pattern::Wildcard | Pattern::Ident(_) | Pattern::Literal(_) => {}
+    }
+}
+
 /// Check if we can skip compilation due to cache hit.
 /// Returns Some(Ok(())) if skip is valid, None if compilation is needed.
 fn check_cache_skip(
@@ -651,6 +1281,9 @@ fn run_type_check(
     if !tc_skipped {
         // Calculate imported item count so ownership checker can skip imported items
         let input_canonical = input.canonicalize().unwrap_or_else(|_| input.to_path_buf());
+        // Phase 17.H1: stamp a non-zero file_id so single-module builds
+        // also avoid the 0-vs-0 collision hazard.
+        checker.set_current_file_id(phase17_fnv1a_file_id(&input_canonical.to_string_lossy()));
         if let Ok(original_ast) = query_db.parse(&input_canonical) {
             let original_non_use_count = original_ast
                 .items
@@ -729,6 +1362,14 @@ fn run_type_check(
                 incremental::update_tc_cache(c, final_ast, false);
             }
             return Err(format!("{} type error(s) found", total_errors));
+        }
+
+        if std::env::var("VAIS_CORE_CERTIFY").is_ok_and(|v| v == "1") {
+            let input_canonical = input.canonicalize().unwrap_or_else(|_| input.to_path_buf());
+            let input_file_id = phase17_fnv1a_file_id(&input_canonical.to_string_lossy());
+            checker
+                .assert_fully_resolved_for_codegen_source(input_file_id, main_source.len())
+                .map_err(|e| format!("Core codegen type invariant failed: {}", e))?;
         }
 
         // Update cache: TC passed

@@ -407,6 +407,10 @@ impl<'a> BorrowChecker<'a> {
             Rvalue::Len(place) => {
                 self.check_use(place, location);
             }
+            Rvalue::VecPush(place, operand) => {
+                self.check_use(place, location);
+                self.check_operand(operand, location);
+            }
         }
     }
 

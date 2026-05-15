@@ -2,7 +2,7 @@
 
 # Vais LLM Language Card
 
-Last reviewed: 2026-05-15
+Last reviewed: 2026-05-16
 
 This is the short, AI-facing contract for writing Vais code. It is generated
 from `docs/ai/feature-registry.json`; update that registry and regenerate this file when the
@@ -120,10 +120,12 @@ AI instructions:
 - Use Result&lt;T, E&gt; for recoverable failures and Option&lt;T&gt; for absence.
 - Use match when all handled variants must be visible to the reader.
 - Use ? only where the surrounding function result type matches the propagated error shape.
+- Terminate statement-form ? bindings with ; before the next statement so the parser cannot read them as ternary expressions.
 
 Use:
 
 - `fn checked_div(a: i64, b: i64) -> Result<i64, str>`
+- `value := fallible()?;`
 - `return Err("message")`
 - `Ok(value)`
 - `None`

@@ -34,7 +34,7 @@ async function testPreviewFallbackIsExplicitlyNonCertified() {
   };
 
   const compiler = new VaisCompiler('http://localhost:8080');
-  const result = await compiler.compileAndRun('F main(){ puts("hello") }');
+  const result = await compiler.compileAndRun('fn main(){ puts("hello") }');
 
   assert.equal(compiler.getModeLabel(), 'Preview');
   assert.equal(result.success, true);
@@ -67,7 +67,7 @@ async function testServerWasmModeNamesApiCompileBoundary() {
   };
 
   const compiler = new VaisCompiler('http://localhost:8080');
-  const result = await compiler.compileAndRun('F main()->i64{0}', 'wasm');
+  const result = await compiler.compileAndRun('fn main()->i64{0}', 'wasm');
 
   assert.equal(compiler.getModeLabel(), 'Server-WASM');
   assert.equal(result.success, true);
@@ -95,7 +95,7 @@ async function testBrowserJsModeDoesNotUseApi() {
   };
 
   const compiler = new VaisCompiler('http://localhost:8080', { browserCompiler });
-  const result = await compiler.compileAndRun('F main() -> i64 = 5', 'browser-js');
+  const result = await compiler.compileAndRun('fn main() -> i64 = 5', 'browser-js');
 
   assert.equal(compiler.getModeLabel(), 'Browser-JS');
   assert.equal(result.success, true);

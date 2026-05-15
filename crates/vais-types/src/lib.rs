@@ -1,3 +1,8 @@
+#![cfg_attr(not(test), warn(clippy::unwrap_used))]
+// Warn on `.unwrap()` in non-test code so any new Category D site
+// (user-input reachable panic) is rejected at review time. See
+// `docs/UNWRAP_CLASSIFICATION.md`. Test code is exempt.
+
 //! Vais Type System
 //!
 //! Static type checking with inference for AI-optimized code generation.
@@ -89,13 +94,19 @@ pub use types::{
 /// use vais_types::TypeChecker;
 /// use vais_parser::parse;
 ///
-/// let source = "F id<T>(x:T)->T=x";
+/// let source = "fn id<T>(x:T)->T=x";
 /// let module = parse(source).unwrap();
 ///
 /// let mut checker = TypeChecker::new();
 /// checker.check_module(&module).unwrap();
 /// ```
 pub struct TypeChecker {
+    // Phase 17.H1: file identity used to namespace expr_types keys across
+    // modules. Set via `set_current_file_id` before check_module; used to
+    // stamp every `expr_types.insert` with the active module's id even
+    // when the parser-produced span still has file_id=0.
+    pub(crate) current_file_id: u32,
+
     // Type environment
     pub(crate) structs: HashMap<String, StructDef>,
     pub(crate) enums: HashMap<String, EnumDef>,
@@ -190,7 +201,14 @@ pub struct TypeChecker {
 
     /// Expression types from type checking, keyed by expression span.
     /// Used by codegen to get accurate types instead of re-inferring.
-    pub(crate) expr_types: HashMap<(usize, usize), ResolvedType>,
+    ///
+    /// Phase 17.H1: key is `(file_id, start, end)` — including `file_id`
+    /// prevents span collisions between expressions in different source
+    /// files. Prior to this, two expressions sharing the same byte range
+    /// in different modules could poison each other's stored types
+    /// (observed as "body_size (I64) silently becomes `Vec<u8>`" in
+    /// vaisdb's cross-module builds).
+    pub(crate) expr_types: HashMap<(u32, usize, usize), ResolvedType>,
 
     /// Pending method instantiations accumulated while checking a function body
     /// when type args still contain fresh type variables. Drained at end of
@@ -198,12 +216,38 @@ pub struct TypeChecker {
     /// concrete types (e.g., `Vec.with_capacity(n)` inside `fn -> Vec<i64>`).
     /// Entries: (struct_name, method_name, type_args-possibly-with-vars).
     pub(crate) pending_method_instantiations: Vec<(String, String, Vec<ResolvedType>)>,
+
+    /// Phase 6.27c.3: enum name hint stack for bare-variant disambiguation.
+    /// When an Ident matches a variant in multiple enums (e.g. `Not` lives in
+    /// both `TokenKind` and `UnaryOp`), the topmost hint whose enum contains
+    /// the variant wins over alphabetical sort. Pushed by callers that know
+    /// the expected type (e.g. struct-lit field checks, fn arg checks) and
+    /// popped before the next unrelated expression is checked.
+    pub(crate) enum_hint_stack: Vec<String>,
+
+    /// Phase 17.H4.15: expected-type hint stack. When a caller knows the
+    /// full expected type of a child expression (e.g. struct-literal field
+    /// `applied_versions: Vec.new()` where the field type is
+    /// `Vec<MigrationRecord>`), it pushes that type before recursing into
+    /// `check_expr`. Zero-arg generic static methods like `Vec.new()` then
+    /// unify their fresh generic type vars with the hint, so the call's
+    /// stamped `expr_types` entry carries a fully-resolved generic — codegen
+    /// can then route to the specialized `Vec_new$MigrationRecord`.
+    pub(crate) expected_type_stack: Vec<ResolvedType>,
+
+    /// Phase Ω P1.7 (iter 134): lambda-param hint stack. Pushed by callers
+    /// that know the expected closure-param type (e.g. `Vec<T>.sort_by(|a, b|
+    /// ...)` pushes `&T` so `a`/`b`'s `Type::Infer` resolves to a typed Var
+    /// instead of an opaque fresh one). The Lambda check pops one entry per
+    /// param resolved via Type::Infer.
+    pub(crate) lambda_param_hint_stack: Vec<ResolvedType>,
 }
 
 impl TypeChecker {
     /// Creates a new type checker with built-in types and functions registered.
     pub fn new() -> Self {
         let mut checker = Self {
+            current_file_id: 0,
             structs: HashMap::with_capacity(32),
             enums: HashMap::with_capacity(16),
             unions: HashMap::new(),
@@ -240,6 +284,9 @@ impl TypeChecker {
             moved_vars: HashSet::new(),
             expr_types: HashMap::new(),
             pending_method_instantiations: Vec::new(),
+            enum_hint_stack: Vec::new(),
+            expected_type_stack: Vec::new(),
+            lambda_param_hint_stack: Vec::new(),
         };
         checker.register_builtins();
         checker
@@ -323,6 +370,135 @@ impl TypeChecker {
         self.generic_instantiations.insert(inst);
     }
 
+    /// Record concrete generic struct instantiations that appear inside a type tree.
+    ///
+    /// Method-call based inference already records many instantiations, but HNSW-shaped
+    /// data such as `Vec<Vec<Neighbor>>` can enter through struct fields or explicit
+    /// local annotations before any method call needs the outer container. Codegen must
+    /// still emit both `%Vec$Neighbor` and `%Vec$Vec_Neighbor` before those types are
+    /// allocated or embedded in another struct.
+    pub(crate) fn record_type_instantiations(&mut self, ty: &ResolvedType) {
+        match ty {
+            ResolvedType::Named { name, generics } => {
+                for generic in generics {
+                    self.record_type_instantiations(generic);
+                }
+
+                if generics.is_empty()
+                    || generics
+                        .iter()
+                        .any(Self::contains_unresolved_instantiation_type)
+                {
+                    return;
+                }
+
+                self.add_instantiation(GenericInstantiation::struct_type(name, generics.clone()));
+            }
+            ResolvedType::Pointer(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Optional(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Linear(inner)
+            | ResolvedType::Affine(inner)
+            | ResolvedType::Range(inner)
+            | ResolvedType::Array(inner)
+            | ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. }
+            | ResolvedType::Dependent { base: inner, .. }
+            | ResolvedType::Vector { element: inner, .. } => {
+                self.record_type_instantiations(inner);
+            }
+            ResolvedType::ConstArray { element, .. } => {
+                self.record_type_instantiations(element);
+            }
+            ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
+                self.record_type_instantiations(ok);
+                self.record_type_instantiations(err);
+            }
+            ResolvedType::Tuple(items) => {
+                for item in items {
+                    self.record_type_instantiations(item);
+                }
+            }
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+                for param in params {
+                    self.record_type_instantiations(param);
+                }
+                self.record_type_instantiations(ret);
+            }
+            ResolvedType::DynTrait { generics, .. } => {
+                for generic in generics {
+                    self.record_type_instantiations(generic);
+                }
+            }
+            ResolvedType::Associated { base, generics, .. } => {
+                self.record_type_instantiations(base);
+                for generic in generics {
+                    self.record_type_instantiations(generic);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn contains_unresolved_instantiation_type(ty: &ResolvedType) -> bool {
+        match ty {
+            ResolvedType::Var(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Generic(_)
+            | ResolvedType::ConstGeneric(_)
+            | ResolvedType::Lifetime(_) => true,
+            ResolvedType::Pointer(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Optional(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Linear(inner)
+            | ResolvedType::Affine(inner)
+            | ResolvedType::Range(inner)
+            | ResolvedType::Array(inner)
+            | ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. }
+            | ResolvedType::Dependent { base: inner, .. }
+            | ResolvedType::Vector { element: inner, .. } => {
+                Self::contains_unresolved_instantiation_type(inner)
+            }
+            ResolvedType::ConstArray { element, .. } => {
+                Self::contains_unresolved_instantiation_type(element)
+            }
+            ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
+                Self::contains_unresolved_instantiation_type(ok)
+                    || Self::contains_unresolved_instantiation_type(err)
+            }
+            ResolvedType::Tuple(items) => items
+                .iter()
+                .any(Self::contains_unresolved_instantiation_type),
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+                params
+                    .iter()
+                    .any(Self::contains_unresolved_instantiation_type)
+                    || Self::contains_unresolved_instantiation_type(ret)
+            }
+            ResolvedType::Named { generics, .. } | ResolvedType::DynTrait { generics, .. } => {
+                generics
+                    .iter()
+                    .any(Self::contains_unresolved_instantiation_type)
+            }
+            ResolvedType::Associated { base, generics, .. } => {
+                Self::contains_unresolved_instantiation_type(base)
+                    || generics
+                        .iter()
+                        .any(Self::contains_unresolved_instantiation_type)
+            }
+            _ => false,
+        }
+    }
+
     /// Check if a function has generic parameters
     pub fn is_generic_function(&self, name: &str) -> bool {
         self.functions
@@ -370,9 +546,133 @@ impl TypeChecker {
     }
 
     /// Get expression types recorded during type checking (for passing to codegen).
-    /// Keyed by (span.start, span.end) tuples.
-    pub fn get_expr_types(&self) -> &HashMap<(usize, usize), ResolvedType> {
+    /// Keyed by `(file_id, span.start, span.end)` triples (Phase 17.H1).
+    pub fn get_expr_types(&self) -> &HashMap<(u32, usize, usize), ResolvedType> {
         &self.expr_types
+    }
+
+    /// Return the first type fragment that is not allowed to reach codegen.
+    ///
+    /// Generic and const-generic parameters are intentionally not rejected
+    /// here: generic templates may still carry them until monomorphization.
+    /// `ResolvedType::Var` and `ResolvedType::Unknown` are different — they
+    /// mean type checking did not finish a concrete obligation, so codegen
+    /// would have to guess.
+    pub fn codegen_unresolved_type(ty: &ResolvedType) -> Option<String> {
+        match ty {
+            ResolvedType::Var(id) => Some(format!("type variable #{}", id)),
+            ResolvedType::Unknown => Some("unknown type".to_string()),
+            ResolvedType::Pointer(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::RefMut(inner)
+            | ResolvedType::Optional(inner)
+            | ResolvedType::Slice(inner)
+            | ResolvedType::SliceMut(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Linear(inner)
+            | ResolvedType::Affine(inner)
+            | ResolvedType::Range(inner)
+            | ResolvedType::Array(inner) => Self::codegen_unresolved_type(inner),
+            ResolvedType::ConstArray { element, .. } => Self::codegen_unresolved_type(element),
+            ResolvedType::Result(ok, err) | ResolvedType::Map(ok, err) => {
+                Self::codegen_unresolved_type(ok).or_else(|| Self::codegen_unresolved_type(err))
+            }
+            ResolvedType::Tuple(items) => items.iter().find_map(Self::codegen_unresolved_type),
+            ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+                params
+                    .iter()
+                    .find_map(Self::codegen_unresolved_type)
+                    .or_else(|| Self::codegen_unresolved_type(ret))
+            }
+            ResolvedType::RefLifetime { inner, .. }
+            | ResolvedType::RefMutLifetime { inner, .. } => Self::codegen_unresolved_type(inner),
+            ResolvedType::Dependent { base, .. } => Self::codegen_unresolved_type(base),
+            ResolvedType::Vector { element, .. } => Self::codegen_unresolved_type(element),
+            ResolvedType::Named { generics, .. } | ResolvedType::DynTrait { generics, .. } => {
+                generics.iter().find_map(Self::codegen_unresolved_type)
+            }
+            ResolvedType::Associated { base, generics, .. } => Self::codegen_unresolved_type(base)
+                .or_else(|| generics.iter().find_map(Self::codegen_unresolved_type)),
+            _ => None,
+        }
+    }
+
+    /// Validate the post-typecheck expression type map that codegen consumes.
+    ///
+    /// This is the Core certification boundary: a successful type check must
+    /// not leave `Unknown` or inference variables for codegen to reinterpret.
+    pub fn assert_fully_resolved_for_codegen(&self) -> TypeResult<()> {
+        self.assert_fully_resolved_for_codegen_where(|_| true)
+    }
+
+    /// Validate only expression types stamped for one source file.
+    ///
+    /// This is useful for Core certification while imported generic stdlib
+    /// templates can still contain inference variables that are resolved later
+    /// by monomorphization.
+    pub fn assert_fully_resolved_for_codegen_file(&self, file_id: u32) -> TypeResult<()> {
+        self.assert_fully_resolved_for_codegen_where(|key| key.0 == file_id)
+    }
+
+    /// Validate expression types for the original source range only.
+    ///
+    /// Some build paths combine imported modules into one AST while stamping
+    /// expression types with the main file id. Their spans sit outside the
+    /// original source length, so this keeps Core certification focused on the
+    /// user input file until import/template certification is split out.
+    pub fn assert_fully_resolved_for_codegen_source(
+        &self,
+        file_id: u32,
+        source_len: usize,
+    ) -> TypeResult<()> {
+        self.assert_fully_resolved_for_codegen_where(|key| {
+            key.0 == file_id && key.1 <= source_len && key.2 <= source_len
+        })
+    }
+
+    fn assert_fully_resolved_for_codegen_where<F>(&self, include: F) -> TypeResult<()>
+    where
+        F: Fn(&(u32, usize, usize)) -> bool,
+    {
+        for (key, ty) in self.get_resolved_expr_types() {
+            if !include(&key) {
+                continue;
+            }
+            if let Some(unresolved) = Self::codegen_unresolved_type(&ty) {
+                return Err(TypeError::InferFailed {
+                    kind: "expression type".to_string(),
+                    name: format!("span({},{},{})", key.0, key.1, key.2),
+                    context: format!("codegen input contains {}", unresolved),
+                    span: None,
+                    suggestion: Some(
+                        "Resolve this type during type checking before codegen".to_string(),
+                    ),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Phase 17.H1: set the file identifier used when `check_expr` stamps
+    /// its span key into `expr_types`. The driver should call this before
+    /// `check_module` for each module being typechecked, passing a distinct
+    /// id per source file (typically derived from the canonical source
+    /// path). A stable mapping across runs is not required; only
+    /// uniqueness within a single check session is.
+    pub fn set_current_file_id(&mut self, file_id: u32) {
+        self.current_file_id = file_id;
+    }
+
+    /// Phase 6.27b: return expression types with all type variables resolved
+    /// via the TC's final substitution map. This surfaces information that
+    /// was captured during check_expr but wasn't yet fully unified at that
+    /// point (e.g., `v := Vec.with_capacity(0)` gets Vec<Var(N)>, which
+    /// only becomes Vec<Tuple<..>> after a later `v.push(tuple)` unifies N).
+    pub fn get_resolved_expr_types(&self) -> HashMap<(u32, usize, usize), ResolvedType> {
+        self.expr_types
+            .iter()
+            .map(|(k, v)| (*k, self.apply_substitutions(v)))
+            .collect()
     }
 
     /// Get the set of argument spans that were auto-unwrapped by the
@@ -434,6 +734,13 @@ impl TypeChecker {
         self.globals.extend(other.globals);
         self.warnings.extend(other.warnings);
         self.collected_errors.extend(other.collected_errors);
+
+        // Phase 17.H1: merge per-module expr_types so codegen can look up
+        // TC-resolved types via `(file_id, start, end)` keys. Each source
+        // module stamped its entries with a distinct `file_id`, so keys
+        // cannot collide between modules.
+        self.expr_types.extend(other.expr_types);
+        self.implicit_try_sites.extend(other.implicit_try_sites);
 
         for inst in other.generic_instantiations {
             self.add_instantiation(inst);

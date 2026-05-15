@@ -1,0 +1,3 @@
+use vaisdb/security/types
+
+fn main() -> i64 { return 0 }

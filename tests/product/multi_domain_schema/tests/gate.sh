@@ -15,7 +15,7 @@ WORKSPACE_ROOT="$(cd "$COMPILER_ROOT/.." && pwd)"
 
 VAISC="${VAISC:-${COMPILER_ROOT}/target/release/vaisc}"
 TSC="${TSC:-${WORKSPACE_ROOT}/lang/packages/vais-web/node_modules/.pnpm/node_modules/.bin/tsc}"
-SCHEMA_SOURCE="${SCHEMA_SOURCE:-${FIX}/schema/user.vais}"
+SCHEMA_SOURCE="${WORKSPACE_ROOT}/examples/schema/user.vais"
 WEB_DB_SRC="${WORKSPACE_ROOT}/lang/packages/vais-web/packages/db/src"
 
 ASSERTION_TOTAL=9
@@ -53,6 +53,7 @@ fi
 WORK="$(mktemp -d)"
 SCHEMA="$WORK/schema/user.vais"
 GEN="$WORK/gen/user.d.ts"
+BIN_DIR="$WORK/bin"
 
 cleanup() {
   rm -rf "$WORK"
@@ -60,7 +61,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-mkdir -p "$WORK/schema" "$WORK/gen" "$WORK/consumers" "$WORK/webdb/src" "$WORK/tmp"
+mkdir -p "$WORK/schema" "$WORK/gen" "$WORK/consumers" "$WORK/webdb/src" "$BIN_DIR" "$WORK/tmp"
 cp "$SCHEMA_SOURCE" "$SCHEMA"
 cp "$FIX/consumers/vaisdb_product.vais" "$WORK/consumers/vaisdb_product.vais"
 cp "$FIX/consumers/vais_server_product.vais" "$WORK/consumers/vais_server_product.vais"
@@ -99,11 +100,38 @@ std_path() {
   printf '%s\n' "$std_link"
 }
 
+run_native() {
+  local source="$1"
+  local name="$2"
+  local dep_paths="$3"
+  local bin="$BIN_DIR/$name"
+  VAIS_STD_PATH="$(std_path)" VAIS_DEP_PATHS="$dep_paths" \
+    "$VAISC" build "$source" -o "$bin" --force-rebuild \
+    >/dev/null 2>&1 \
+    && TMPDIR="$WORK/tmp" TMP="$WORK/tmp" TEMP="$WORK/tmp" "$bin" >/dev/null 2>&1
+}
+
 check_vais() {
   local source="$1"
   local dep_paths="$2"
   VAIS_STD_PATH="$(std_path)" VAIS_DEP_PATHS="$dep_paths" \
     "$VAISC" check "$source" >/dev/null 2>&1
+}
+
+run_vaisdb_product() {
+  local rendered="$WORK/consumers/vaisdb_product.rendered.vais"
+  render_vais_consumer "$WORK/consumers/vaisdb_product.vais" "$rendered"
+  local deps="${WORKSPACE_ROOT}/lang/packages/vaisdb/src:$(std_path)"
+  VAIS_STD_PATH="$(std_path)" VAIS_DEP_PATHS="$deps" \
+    run_native "$rendered" "vaisdb_product" "$deps"
+}
+
+run_server_product() {
+  local rendered="$WORK/consumers/vais_server_product.rendered.vais"
+  render_vais_consumer "$WORK/consumers/vais_server_product.vais" "$rendered"
+  local deps="${WORKSPACE_ROOT}/lang/packages/vais-server:${WORKSPACE_ROOT}/lang/packages/vaisdb/src:$(std_path)"
+  VAIS_STD_PATH="$(std_path)" VAIS_DEP_PATHS="$deps" \
+    run_native "$rendered" "vais_server_product" "$deps"
 }
 
 check_vaisdb_product() {
@@ -156,18 +184,18 @@ else
   echo "  [1] emit-ts shared schema              OK"
 fi
 
-if [[ "$GATE_EXIT" == "0" ]] && ! check_vaisdb_product; then
-  echo "FIXTURE_DRIFT: VaisDB product consumer failed to type-check on shared schema" >&2
+if [[ "$GATE_EXIT" == "0" ]] && ! run_vaisdb_product; then
+  echo "FIXTURE_DRIFT: VaisDB product consumer failed on shared schema" >&2
   record_fail 2
 else
-  [[ "$GATE_EXIT" == "0" ]] && echo "  [2] VaisDB catalog product type-check   OK"
+  [[ "$GATE_EXIT" == "0" ]] && echo "  [2] VaisDB catalog product run          OK"
 fi
 
-if [[ "$GATE_EXIT" == "0" ]] && ! check_server_product; then
-  echo "FIXTURE_DRIFT: vais-server product consumer failed to type-check on shared schema" >&2
+if [[ "$GATE_EXIT" == "0" ]] && ! run_server_product; then
+  echo "FIXTURE_DRIFT: vais-server product consumer failed on shared schema" >&2
   record_fail 2
 else
-  [[ "$GATE_EXIT" == "0" ]] && echo "  [3] vais-server context type-check      OK"
+  [[ "$GATE_EXIT" == "0" ]] && echo "  [3] vais-server response product run    OK"
 fi
 
 if [[ "$GATE_EXIT" == "0" ]] && ! check_web_product; then

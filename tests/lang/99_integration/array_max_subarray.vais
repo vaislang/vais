@@ -1,0 +1,48 @@
+# CHECKS: max-subarray sum (Kadane's algorithm).
+use std/vec.{vec_new};
+
+fn max_subarray(v: &Vec<i64>) -> i64 {
+    I v.len() == 0 { return 0 }
+    best: i64 := mut v[0]
+    cur: i64 := mut v[0]
+    LF i: 1..v.len() {
+        I cur + v[i] > v[i] {
+            cur = cur + v[i]
+        } else {
+            cur = v[i]
+        }
+        I cur > best { best = cur }
+    }
+    best
+}
+
+fn main() -> i64 {
+    # all positive: max = sum
+    v: Vec<i64> := mut vec_new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    I max_subarray(&v) != 10 { return 1 }
+
+    # mix: max = 6 (4 + 0 - 1 + 0 - 2 + 5? actually 4 + (-1) + (-2) + 5 = 6)
+    w: Vec<i64> := mut vec_new()
+    w.push(4)
+    w.push(0 - 1)
+    w.push(0 - 2)
+    w.push(5)
+    I max_subarray(&w) != 6 { return 2 }
+
+    # all negative
+    n: Vec<i64> := mut vec_new()
+    n.push(0 - 1)
+    n.push(0 - 5)
+    n.push(0 - 3)
+    I max_subarray(&n) != 0 - 1 { return 3 }
+
+    # single
+    s: Vec<i64> := mut vec_new()
+    s.push(42)
+    I max_subarray(&s) != 42 { return 4 }
+    return 0
+}

@@ -13,7 +13,7 @@ C MAX_LINE_LEN: i64 = 1024
 C MAX_VARS: i64 = 100
 
 # DotEnv state
-S DotEnv {
+struct DotEnv {
     loaded: i64,    # Number of variables loaded
     errors: i64     # Number of errors encountered
 }
@@ -21,10 +21,10 @@ S DotEnv {
 # Load .env file and set environment variables
 # Args: path - path to .env file
 # Returns: 0 on success, -1 on error
-F dotenv_load(path: i64) -> i64 {
+fn dotenv_load(path: i64) -> i64 {
     # Open file for reading
     file := fopen(path, "r")
-    I file == 0 { R -1 }
+    I file == 0 { return -1 }
 
     line_buf := malloc(MAX_LINE_LEN)
     loaded := 0
@@ -43,36 +43,36 @@ F dotenv_load(path: i64) -> i64 {
     free(line_buf)
     fclose(file)
 
-    I loaded > 0 { 0 } E { -1 }
+    I loaded > 0 { 0 } enum { -1 }
 }
 
 # Load .env file from default location (.env in current directory)
 # Returns: 0 on success, -1 on error
-F dotenv_load_default() -> i64 {
+fn dotenv_load_default() -> i64 {
     dotenv_load(".env")
 }
 
 # Parse and set a single line from .env file
 # Args: line - line to parse
 # Returns: 1 if variable was set, 0 otherwise
-F dotenv_parse_line(line: i64) -> i64 {
-    I line == 0 { R 0 }
+fn dotenv_parse_line(line: i64) -> i64 {
+    I line == 0 { return 0 }
 
     # Skip leading whitespace
     pos := 0
     L 1 {
         c := load_byte(line + pos)
-        I c == 0 { R 0 }
+        I c == 0 { return 0 }
         I c != 32 { I c != 9 { B } }  # Not space or tab
         pos = pos + 1
     }
 
     # Skip empty lines and comments
     c := load_byte(line + pos)
-    I c == 0 { R 0 }
-    I c == 10 { R 0 }  # Newline
-    I c == 13 { R 0 }  # Carriage return
-    I c == 35 { R 0 }  # Comment (#)
+    I c == 0 { return 0 }
+    I c == 10 { return 0 }  # Newline
+    I c == 13 { return 0 }  # Carriage return
+    I c == 35 { return 0 }  # Comment (#)
 
     # Skip "export " prefix
     I c == 101 {  # 'e'
@@ -85,14 +85,14 @@ F dotenv_parse_line(line: i64) -> i64 {
     key_start := pos
     L 1 {
         c = load_byte(line + pos)
-        I c == 0 { R 0 }
+        I c == 0 { return 0 }
         I c == 61 { B }  # '=' found
-        I c == 32 { R 0 }  # Invalid: space before '='
+        I c == 32 { return 0 }  # Invalid: space before '='
         pos = pos + 1
     }
 
     key_len := pos - key_start
-    I key_len == 0 { R 0 }
+    I key_len == 0 { return 0 }
 
     key := malloc(key_len + 1)
     memcpy(key, line + key_start, key_len)
@@ -128,7 +128,7 @@ F dotenv_parse_line(line: i64) -> i64 {
         free(key)
         free(value)
 
-        R I result == 0 { 1 } E { 0 }
+        return I result == 0 { 1 } enum { 0 }
     }
 
     # Unquoted value - read until newline or comment
@@ -155,49 +155,49 @@ F dotenv_parse_line(line: i64) -> i64 {
     free(key)
     free(value)
 
-    I result == 0 { 1 } E { 0 }
+    I result == 0 { 1 } enum { 0 }
 }
 
 # Get environment variable loaded from .env
 # Args: key - variable name
 # Returns: Pointer to value string, or 0 if not found
-F dotenv_get(key: i64) -> i64 {
+fn dotenv_get(key: i64) -> i64 {
     getenv(key)
 }
 
 # Check if environment variable exists
 # Args: key - variable name
 # Returns: 1 if exists, 0 otherwise
-F dotenv_has(key: i64) -> i64 {
+fn dotenv_has(key: i64) -> i64 {
     value := getenv(key)
-    I value == 0 { 0 } E { 1 }
+    I value == 0 { 0 } enum { 1 }
 }
 
 # Load .env file with custom name
 # Args: filename - name of .env file
 # Returns: 0 on success, -1 on error
-F dotenv_load_file(filename: i64) -> i64 {
+fn dotenv_load_file(filename: i64) -> i64 {
     dotenv_load(filename)
 }
 
 # Helper: Check string prefix
-F str_prefix_eq(str: i64, prefix: i64, len: i64) -> i64 {
-    I str == 0 { R 0 }
-    I prefix == 0 { R 0 }
+fn str_prefix_eq(str: i64, prefix: i64, len: i64) -> i64 {
+    I str == 0 { return 0 }
+    I prefix == 0 { return 0 }
 
     i := 0
     L i < len {
         cs := load_byte(str + i)
         cp := load_byte(prefix + i)
-        I cs != cp { R 0 }
+        I cs != cp { return 0 }
         i = i + 1
     }
     1
 }
 
 # Helper: Trim trailing whitespace
-F str_trim_end(s: i64) -> i64 {
-    I s == 0 { R s }
+fn str_trim_end(s: i64) -> i64 {
+    I s == 0 { return s }
 
     len := strlen(s)
     L len > 0 {
@@ -211,12 +211,12 @@ F str_trim_end(s: i64) -> i64 {
 }
 
 # Extern functions
-X F fopen(path: i64, mode: i64) -> i64
-X F fclose(file: i64) -> i64
-X F fgets_ptr(buffer: i64, size: i64, stream: i64) -> i64
-X F setenv(name: i64, value: i64, overwrite: i64) -> i64
-X F getenv(name: i64) -> i64
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F strlen(s: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn fopen(path: i64, mode: i64) -> i64
+impl fn fclose(file: i64) -> i64
+impl fn fgets_ptr(buffer: i64, size: i64, stream: i64) -> i64
+impl fn setenv(name: i64, value: i64, overwrite: i64) -> i64
+impl fn getenv(name: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64

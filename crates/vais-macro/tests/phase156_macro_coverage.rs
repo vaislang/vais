@@ -13,8 +13,9 @@
 //! - ExpansionError display
 
 use vais_ast::{
-    Delimiter, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement, MacroRule,
-    MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, RepetitionKind, Span, Spanned,
+    Delimiter, Item, MacroDef, MacroInvoke, MacroLiteral, MacroPattern, MacroPatternElement,
+    MacroRule, MacroTemplate, MacroTemplateElement, MacroToken, MetaVarKind, Module,
+    RepetitionKind, Span, Spanned,
 };
 use vais_macro::{
     collect_macros, expand_macros, process_derives, register_async_macros,
@@ -623,7 +624,7 @@ fn test_ast_expander_with_non_empty_module() {
     let registry = MacroRegistry::new();
     let mut expander = AstExpander::new(&registry);
 
-    let source = "F add(a: i64, b: i64) -> i64 = a + b";
+    let source = "fn add(a: i64, b: i64) -> i64 = a + b";
     let module = parse(source).unwrap();
     let result = expander.expand_module(module);
     assert!(result.is_ok());
@@ -634,7 +635,7 @@ fn test_expand_macros_with_undefined_macro_in_source() {
     use vais_parser::parse;
 
     let registry = MacroRegistry::new(); // empty registry
-    let source = "F test() = 42";
+    let source = "fn test() = 42";
     let module = parse(source).unwrap();
     // No macro invocations → no error
     let result = expand_macros(module, &registry);
@@ -643,15 +644,52 @@ fn test_expand_macros_with_undefined_macro_in_source() {
 
 #[test]
 fn test_collect_macros_multiple_defs() {
-    use vais_parser::parse;
-
-    let source = r#"
-        macro foo! { ($x:expr) => { $x } }
-        macro bar! { ($a:expr, $b:expr) => { $a + $b } }
-        F dummy() = 1
-    "#;
-
-    let module = parse(source).unwrap();
+    let module = Module {
+        items: vec![
+            Spanned::new(
+                Item::Macro(MacroDef {
+                    name: Spanned::new("foo".to_string(), Span::new(0, 3)),
+                    rules: vec![MacroRule {
+                        pattern: MacroPattern::Sequence(vec![MacroPatternElement::MetaVar {
+                            name: "x".to_string(),
+                            kind: MetaVarKind::Expr,
+                        }]),
+                        template: MacroTemplate::Sequence(vec![MacroTemplateElement::MetaVar(
+                            "x".to_string(),
+                        )]),
+                    }],
+                    is_pub: false,
+                }),
+                Span::new(0, 0),
+            ),
+            Spanned::new(
+                Item::Macro(MacroDef {
+                    name: Spanned::new("bar".to_string(), Span::new(0, 3)),
+                    rules: vec![MacroRule {
+                        pattern: MacroPattern::Sequence(vec![
+                            MacroPatternElement::MetaVar {
+                                name: "a".to_string(),
+                                kind: MetaVarKind::Expr,
+                            },
+                            MacroPatternElement::Token(MacroToken::Punct(',')),
+                            MacroPatternElement::MetaVar {
+                                name: "b".to_string(),
+                                kind: MetaVarKind::Expr,
+                            },
+                        ]),
+                        template: MacroTemplate::Sequence(vec![
+                            MacroTemplateElement::MetaVar("a".to_string()),
+                            MacroTemplateElement::Token(MacroToken::Punct('+')),
+                            MacroTemplateElement::MetaVar("b".to_string()),
+                        ]),
+                    }],
+                    is_pub: false,
+                }),
+                Span::new(0, 0),
+            ),
+        ],
+        modules_map: None,
+    };
     let mut registry = MacroRegistry::new();
     collect_macros(&module, &mut registry);
 
@@ -684,8 +722,8 @@ fn test_process_derives_module_with_items() {
     use vais_parser::parse;
 
     let source = r#"
-        S Point { x: i64, y: i64 }
-        F origin() -> Point = Point { x: 0, y: 0 }
+        struct Point { x: i64, y: i64 }
+        fn origin() -> Point = Point { x: 0, y: 0 }
     "#;
     let module = parse(source).unwrap();
     let mut module = module;

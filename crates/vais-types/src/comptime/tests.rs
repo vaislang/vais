@@ -3,7 +3,7 @@ use vais_parser::parse;
 
 #[test]
 fn test_comptime_simple_arithmetic() {
-    let source = "F test()->i64=comptime{4*8}";
+    let source = "fn test()->i64=comptime{4*8}";
     let module = parse(source).unwrap();
 
     if let Item::Function(func) = &module.items[0].node {
@@ -20,7 +20,7 @@ fn test_comptime_simple_arithmetic() {
 #[test]
 fn test_comptime_with_loop() {
     // Test that a comptime block with a loop parses and evaluates
-    let source = r#"F test()->i64=comptime{x:=5381 L i:0..10{x=x*33+i} x}"#;
+    let source = r#"fn test()->i64=comptime{x:=5381 L i:0..10{x=x*33+i} x}"#;
     let result = parse(source);
 
     // For now, just check that parsing succeeds

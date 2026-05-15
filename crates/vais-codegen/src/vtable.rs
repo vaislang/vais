@@ -24,6 +24,40 @@ use vais_types::{ResolvedType, TraitDef};
 /// LLVM IR type for trait object (fat pointer)
 pub const TRAIT_OBJECT_TYPE: &str = "{ i8*, i8* }";
 
+/// Stable, deterministic method ordering for vtable layout
+/// (DEFERRED #19 step 2a-C-1 audit finding).
+///
+/// trait_def.methods is a HashMap — iteration order is non-deterministic
+/// across separate calls. Three sites need to agree on the slot order:
+///   1. generate_vtable (info.methods Vec)
+///   2. generate_vtable_global / _typed (slot emission)
+///   3. generate_dynamic_call / _typed via trait_dispatch::generate_dyn_method_call
+///      (slot indexing at dispatch site)
+///
+/// If any site iterates `trait_def.methods` directly, two sites can pick
+/// different orders → mis-indexed vtable slots → wrong method dispatched
+/// at runtime (silent corruption of single-impl baselines that happen to
+/// be correct under static fallback). Inkwell side already does this via
+/// `vtable_inkwell::method_order`; text-IR side now mirrors that.
+pub(crate) fn sorted_method_names(trait_def: &TraitDef) -> Vec<String> {
+    let mut names: Vec<String> = trait_def.methods.keys().cloned().collect();
+    names.sort();
+    names
+}
+
+/// Static (string-only) vtable return type — used by call sites that
+/// do not have access to a CodeGenerator (e.g. inkwell-side which has
+/// its own type mapper). For the text-IR backend prefer
+/// `vtable_ret_type_resolved` which lowers full ResolvedTypes
+/// (Result/Option/Named) accurately.
+///
+/// History: the legacy `&'static str` flavor compressed every non-Str
+/// non-Unit return to `i64`, which is correct only when the actual
+/// return is i64-shaped. vaisdb baseline relies on `Result<T,E>` /
+/// struct returns from dyn methods, where the silent
+/// fallback-to-static-call accidentally produced correct IR. The
+/// text-IR vtable dispatch path (DEFERRED #17) uses the resolved
+/// flavor to avoid the IR-shape mismatch.
 pub(crate) fn vtable_ret_type(ret: &ResolvedType, is_async: bool) -> &'static str {
     if is_async {
         "i64"
@@ -139,10 +173,14 @@ done:
 
         let global_name = format!("@vtable_{}_{}", impl_type, trait_def.name);
 
-        // Collect methods in declaration order
+        // Collect methods in deterministic alphabetical order
+        // (DEFERRED #19 step 2a-C-1 audit fix). Previously iterated
+        // HashMap directly, which produced non-deterministic slot
+        // ordering — see `sorted_method_names` doc.
         let mut methods = Vec::new();
-        for (method_name, method_sig) in &trait_def.methods {
-            if let Some(impl_name) = method_impls.get(method_name) {
+        for method_name in sorted_method_names(trait_def) {
+            let method_sig = &trait_def.methods[&method_name];
+            if let Some(impl_name) = method_impls.get(&method_name) {
                 methods.push((method_name.clone(), impl_name.clone()));
             } else if method_sig.has_default {
                 // Method has default implementation, use the default
@@ -171,6 +209,33 @@ done:
         Ok(info)
     }
 
+    /// ResolvedType-aware vtable struct LLVM IR string
+    /// (DEFERRED #17 step 2a-A). Uses caller-provided per-method
+    /// `(arg_llvm_tys, ret_llvm_ty)` instead of the legacy
+    /// "everything is i64" approximation. Caller must produce the LLVM
+    /// type strings (e.g. via `CodeGenerator::type_to_llvm`).
+    ///
+    /// `methods_typed[i]` is `(arg_types_excluding_self, ret_type)` for
+    /// the method at trait_def.methods's iteration index `i`.
+    pub fn vtable_struct_type_typed(
+        trait_def: &TraitDef,
+        methods_typed: &[(Vec<String>, String)],
+    ) -> String {
+        let mut fields = vec!["i8*".to_string(), "i64".to_string(), "i64".to_string()];
+
+        for (arg_tys, ret_ty) in methods_typed {
+            let mut param_list = vec!["i8*".to_string()];
+            for ty in arg_tys {
+                param_list.push(ty.clone());
+            }
+            let fn_ptr_ty = format!("{}({})*", ret_ty, param_list.join(", "));
+            fields.push(fn_ptr_ty);
+        }
+
+        let _ = trait_def; // currently only used for slot count via methods_typed.len()
+        format!("{{ {} }}", fields.join(", "))
+    }
+
     /// Get LLVM IR type for a vtable struct
     pub fn vtable_struct_type(trait_def: &TraitDef) -> String {
         // VTable layout:
@@ -178,6 +243,11 @@ done:
         // - size: i64              ; size of concrete type
         // - align: i64             ; alignment of concrete type
         // - methods: fn_ptr*...    ; method function pointers
+        //
+        // Methods are emitted in alphabetical order (sorted_method_names)
+        // to match the slot order produced by `generate_vtable` and the
+        // index used by `generate_dyn_method_call`. See DEFERRED #19
+        // step 2a-C-1 audit.
 
         let mut fields = vec![
             "i8*".to_string(), // drop function or null
@@ -185,8 +255,9 @@ done:
             "i64".to_string(), // align
         ];
 
-        // Add method function pointer types
-        for method_sig in trait_def.methods.values() {
+        // Add method function pointer types in deterministic order.
+        for method_name in sorted_method_names(trait_def) {
+            let method_sig = &trait_def.methods[&method_name];
             // Method signature: (self: i8*, params...) -> ret
             let mut param_types = vec!["i8*".to_string()]; // self pointer
             for (_param_name, _param_ty, _) in &method_sig.params[1..] {
@@ -201,6 +272,78 @@ done:
         }
 
         format!("{{ {} }}", fields.join(", "))
+    }
+
+    /// ResolvedType-aware vtable global emission (DEFERRED #17 step
+    /// 2a-A). Uses caller-provided per-method `(arg_tys, ret_ty)` —
+    /// **must match the same `methods_typed` passed to
+    /// `vtable_struct_type_typed` and `generate_dynamic_call_typed`**.
+    ///
+    /// `methods_typed[i]` corresponds to `info.methods[i]` (declaration
+    /// order, same as how trait_def.methods iterates).
+    pub fn generate_vtable_global_typed(
+        &self,
+        info: &VtableInfo,
+        trait_def: &TraitDef,
+        type_size: usize,
+        type_align: usize,
+        methods_typed: &[(Vec<String>, String)],
+    ) -> String {
+        let vtable_type = Self::vtable_struct_type_typed(trait_def, methods_typed);
+
+        let drop_fn_name = Self::get_drop_function_name(&info.impl_type);
+        let drop_fn_ptr = format!("i8* bitcast (void(i8*)* @{} to i8*)", drop_fn_name);
+
+        let mut values = vec![
+            drop_fn_ptr,
+            format!("i64 {}", type_size),
+            format!("i64 {}", type_align),
+        ];
+
+        for (idx, (method_name, impl_name)) in info.methods.iter().enumerate() {
+            if impl_name == "null" {
+                values.push("null".to_string());
+                continue;
+            }
+            let (arg_tys, ret_ty) = match methods_typed.get(idx) {
+                Some(entry) => entry,
+                None => {
+                    values.push("null".to_string());
+                    continue;
+                }
+            };
+
+            // vtable slot type (self: i8*).
+            let mut vtable_param_types = vec!["i8*".to_string()];
+            for ty in arg_tys {
+                vtable_param_types.push(ty.clone());
+            }
+            // concrete impl type (self: %Type*).
+            let mut concrete_param_types = vec![format!("%{}*", info.impl_type)];
+            for ty in arg_tys {
+                concrete_param_types.push(ty.clone());
+            }
+
+            let vtable_fn_type = format!("{}({})*", ret_ty, vtable_param_types.join(", "));
+            let concrete_fn_type = format!("{}({})*", ret_ty, concrete_param_types.join(", "));
+
+            // bitcast (concrete @impl to vtable_fn_type) so the constant
+            // expression's destination type matches the slot's
+            // declared fn-ptr type.
+            values.push(format!(
+                "{} bitcast ({} @{} to {})",
+                vtable_fn_type, concrete_fn_type, impl_name, vtable_fn_type
+            ));
+
+            let _ = method_name; // kept for potential future name-validation
+        }
+
+        format!(
+            "{} = internal constant {} {{ {} }}",
+            info.global_name,
+            vtable_type,
+            values.join(", ")
+        )
     }
 
     /// Generate LLVM IR for a vtable global constant
@@ -343,6 +486,145 @@ done:
 
     /// Generate LLVM IR for a dynamic method call through vtable
     /// Returns (ir_code, result_value) for the call result
+    /// Typed-args variant of `generate_dynamic_call` (DEFERRED #17 step
+    /// 2a-A). Each arg is `(llvm_ty, val_str)` so the indirect-call
+    /// signature precisely matches the impl methods registered in the
+    /// vtable.  The legacy `generate_dynamic_call` widens every arg to
+    /// `i64` which does not match impls returning `Result<T,E>` / structs.
+    ///
+    /// `methods_typed` enumerates **all** trait methods' (arg-tys, ret-ty)
+    /// in trait-iteration order — required so `vtable_struct_type_typed`
+    /// reproduces the same bitcast destination type used at vtable
+    /// emission. `method_index` indexes into this same enumeration.
+    #[allow(clippy::too_many_arguments)]
+    pub fn generate_dynamic_call_typed(
+        &self,
+        trait_object: &str,
+        method_index: usize,
+        args_typed: &[(String, String)],
+        ret_type: &str,
+        trait_def: &TraitDef,
+        methods_typed: &[(Vec<String>, String)],
+        temp_counter: &mut usize,
+    ) -> (String, String) {
+        // Convert the typed args to the legacy untyped shape that
+        // generate_dynamic_call accepts, but pass the precise per-arg
+        // type list via a separate vector so the indirect-call fn-ptr
+        // type and the call-site arg list both reflect impl ABI.
+        let mut ir = String::new();
+
+        // Extract data pointer from trait object
+        let data_ptr = format!("%dyn_data_{}", *temp_counter);
+        *temp_counter += 1;
+
+        write_ir!(
+            ir,
+            "  {} = extractvalue {} {}, 0",
+            data_ptr,
+            TRAIT_OBJECT_TYPE,
+            trait_object
+        );
+
+        // Extract vtable pointer from trait object
+        let vtable_ptr = format!("%dyn_vtable_{}", *temp_counter);
+        *temp_counter += 1;
+
+        write_ir!(
+            ir,
+            "  {} = extractvalue {} {}, 1",
+            vtable_ptr,
+            TRAIT_OBJECT_TYPE,
+            trait_object
+        );
+
+        // Cast vtable pointer to the correct vtable type — must match the
+        // ResolvedType-aware shape used at vtable emission (DEFERRED #17
+        // 2a-A). methods_typed determines the per-slot fn-ptr types.
+        let vtable_type = Self::vtable_struct_type_typed(trait_def, methods_typed);
+        let vtable_cast = format!("%vtable_typed_{}", *temp_counter);
+        *temp_counter += 1;
+
+        write_ir!(
+            ir,
+            "  {} = bitcast i8* {} to {}*",
+            vtable_cast,
+            vtable_ptr,
+            vtable_type
+        );
+
+        // Get the method function pointer from vtable
+        // Method index is offset by 3 (drop, size, align)
+        let vtable_slot = method_index + 3;
+        let fn_ptr_ptr = format!("%fn_ptr_ptr_{}", *temp_counter);
+        *temp_counter += 1;
+
+        write_ir!(
+            ir,
+            "  {} = getelementptr {}, {}* {}, i32 0, i32 {}",
+            fn_ptr_ptr,
+            vtable_type,
+            vtable_type,
+            vtable_cast,
+            vtable_slot
+        );
+
+        // Load the function pointer using the precise impl ABI:
+        //   ret_type(i8*, arg_ty_0, arg_ty_1, ...)*
+        let fn_ptr = format!("%fn_ptr_{}", *temp_counter);
+        *temp_counter += 1;
+
+        let extra_arg_types: String = args_typed
+            .iter()
+            .map(|(ty, _)| ty.clone())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let fn_type = if extra_arg_types.is_empty() {
+            format!("{}(i8*)*", ret_type)
+        } else {
+            format!("{}(i8*, {})*", ret_type, extra_arg_types)
+        };
+
+        write_ir!(
+            ir,
+            "  {} = load {}, {}* {}",
+            fn_ptr,
+            fn_type,
+            fn_type,
+            fn_ptr_ptr
+        );
+
+        // Build argument list: data_ptr (i8*) + per-arg precise typed values.
+        let mut call_args: Vec<String> = vec![format!("i8* {}", data_ptr)];
+        for (ty, val) in args_typed {
+            call_args.push(format!("{} {}", ty, val));
+        }
+
+        let result = if ret_type == "void" {
+            write_ir!(
+                ir,
+                "  call {} {}({})",
+                ret_type,
+                fn_ptr,
+                call_args.join(", ")
+            );
+            "".to_string()
+        } else {
+            let result_name = format!("%dyn_result_{}", *temp_counter);
+            *temp_counter += 1;
+            write_ir!(
+                ir,
+                "  {} = call {} {}({})",
+                result_name,
+                ret_type,
+                fn_ptr,
+                call_args.join(", ")
+            );
+            result_name
+        };
+
+        (ir, result)
+    }
+
     pub fn generate_dynamic_call(
         &self,
         trait_object: &str,

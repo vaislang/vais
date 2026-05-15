@@ -1,0 +1,30 @@
+# CHECKS: build a transformed Vec by doubling each element.
+use std/vec.{vec_new};
+
+fn double_all(v: &Vec<i64>) -> Vec<i64> {
+    out: Vec<i64> := mut vec_new()
+    LF i: 0..v.len() {
+        out.push(v[i] * 2)
+    }
+    out
+}
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    v.push(5)
+
+    d: Vec<i64> := double_all(&v)
+    I d.len() != 5 { return 1 }
+    I d[0] != 2 { return 2 }
+    I d[2] != 6 { return 3 }
+    I d[4] != 10 { return 4 }
+
+    # original unchanged
+    I v[0] != 1 { return 5 }
+    I v[4] != 5 { return 6 }
+    return 0
+}

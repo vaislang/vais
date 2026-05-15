@@ -1,0 +1,27 @@
+# CHECKS: match on Option<Option<i64>> for two-level destructuring.
+# REGRESSION for bug C7: prior to the fix, `Some(Some(v))` and `Some(None)`
+# arms collapsed to a single tag check (both check outer Some), and the
+# inner Some payload was decoded with the wrong type. Two-part fix:
+# (1) `push_inner_scrutinee_for_variant` updates the scrutinee stack as we
+#     recurse into nested patterns so inner-payload type lookups work.
+# (2) `Pattern::Variant` check now AND-s in the inner pattern check when
+#     any field is itself a Variant/Literal/Range.
+fn deep_unwrap(o: Option<Option<i64>>) -> i64 {
+    match o {
+        Some(Some(v)) => v,
+        Some(None)    => 0 - 1,
+        None          => 0 - 2
+    }
+}
+
+fn main() -> i64 {
+    a: Option<Option<i64>> := Some(Some(42))
+    I deep_unwrap(a) != 42 { return 1 }
+
+    b: Option<Option<i64>> := Some(None)
+    I deep_unwrap(b) != 0 - 1 { return 2 }
+
+    c: Option<Option<i64>> := None
+    I deep_unwrap(c) != 0 - 2 { return 3 }
+    return 0
+}

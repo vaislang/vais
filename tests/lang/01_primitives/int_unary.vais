@@ -1,0 +1,9 @@
+# CHECKS: unary minus + complement
+fn main() -> i64 {
+    a: i64 := 5
+    b: i64 := -a
+    I b != -5 { return 1 }
+    c: i64 := -(-7)
+    I c != 7 { return 2 }
+    return 0
+}

@@ -1,29 +1,29 @@
 # Runtime benchmark: Matrix multiplication
 # 50x50 matrix multiply using heap-allocated arrays (i64 arrays via malloc)
 
-N F malloc(size: i64) -> i64
-N F free(ptr: i64) -> i64
+N fn malloc(size: i64) -> i64
+N fn free(ptr: i64) -> i64
 
-F mat_new(rows: i64, cols: i64) -> i64 {
+fn mat_new(rows: i64, cols: i64) -> i64 {
     ptr := malloc(rows * cols * 8)
     ptr
 }
 
-F mat_set(ptr: i64, cols: i64, row: i64, col: i64, val: i64) -> i64 {
+fn mat_set(ptr: i64, cols: i64, row: i64, col: i64, val: i64) -> i64 {
     offset := (row * cols + col) * 8
     store_i64(ptr + offset, val)
     0
 }
 
-F mat_get(ptr: i64, cols: i64, row: i64, col: i64) -> i64 {
+fn mat_get(ptr: i64, cols: i64, row: i64, col: i64) -> i64 {
     offset := (row * cols + col) * 8
     load_i64(ptr + offset)
 }
 
-N F store_i64(addr: i64, val: i64) -> i64
-N F load_i64(addr: i64) -> i64
+N fn store_i64(addr: i64, val: i64) -> i64
+N fn load_i64(addr: i64) -> i64
 
-F mat_mul(a: i64, b: i64, c: i64, n: i64) -> i64 {
+fn mat_mul(a: i64, b: i64, c: i64, n: i64) -> i64 {
     i := mut 0
     LW i < n {
         j := mut 0
@@ -44,7 +44,7 @@ F mat_mul(a: i64, b: i64, c: i64, n: i64) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     n := 50
     a := mat_new(n, n)
     b := mat_new(n, n)

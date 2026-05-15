@@ -3,14 +3,14 @@
 # Hypothesis: Phase 191 #2c (nested container recursion) + Phase 192 Group B
 #             (main-path struct lit specialized layout) 이후 작동해야 함.
 
-U std/vec
+use std/vec
 
-S Person {
+struct Person {
     name: str,
     age: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec.with_capacity(4)
     v.push(Person { name: "Alice", age: 30 })
     v.push(Person { name: "Bob",   age: 25 })
@@ -24,7 +24,7 @@ F main() -> i64 {
     total := mut 0
     LF i:0..n {
         opt := v.get_opt(i)
-        M opt {
+        match opt {
             Some(p) => { total = total + p.age },
             None    => {}
         }
@@ -33,5 +33,5 @@ F main() -> i64 {
 
     v.drop()
     # Expected: len=3, total=95, exit 0
-    I total == 95 { 0 } EL { 1 }
+    I total == 95 { 0 } else { 1 }
 }

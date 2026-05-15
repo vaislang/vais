@@ -1,0 +1,21 @@
+# CHECKS: classify a sequence of strings via match — integration test
+fn day_to_num(s: str) -> i64 {
+    match s {
+        "mon" => 1,
+        "tue" => 2,
+        "wed" => 3,
+        "thu" => 4,
+        "fri" => 5,
+        "sat" => 6,
+        "sun" => 7,
+        _     => 0,
+    }
+}
+
+fn main() -> i64 {
+    sum: i64 := day_to_num("mon") + day_to_num("wed") + day_to_num("fri")
+    # 1 + 3 + 5 = 9
+    I sum != 9 { return 1 }
+    I day_to_num("xyz") != 0 { return 2 }
+    return 0
+}

@@ -1,0 +1,15 @@
+# CHECKS: early return short-circuits later branches
+fn first_negative_index(a: i64, b: i64, c: i64) -> i64 {
+    I a < 0 { return 0 }
+    I b < 0 { return 1 }
+    I c < 0 { return 2 }
+    return -1
+}
+
+fn main() -> i64 {
+    I first_negative_index(-1, 2, 3) != 0  { return 1 }
+    I first_negative_index(1, -2, 3) != 1  { return 2 }
+    I first_negative_index(1, 2, -3) != 2  { return 3 }
+    I first_negative_index(1, 2, 3)  != -1 { return 4 }
+    return 0
+}

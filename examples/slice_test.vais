@@ -2,7 +2,7 @@
 # Each slice consumes the source array under Vais ownership rules,
 # so we create a fresh array literal for each demo.
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing array slicing:")
 
     # Basic slice: arr[1..3] -> [20, 30]

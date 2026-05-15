@@ -11,7 +11,7 @@ on:
         required: false
         default: '300'
       target:
-        description: 'Fuzz target (fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen, fuzz_full_pipeline, all)'
+        description: 'Fuzz target (fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen, fuzz_full_pipeline, fuzz_mir_native_diff, all)'
         required: false
         default: 'all'
 
@@ -25,7 +25,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen]
+        # fuzz_mir_native_diff (Master Plan v17 §I-6 Step 17 stage 3): the
+        # MIR-vs-native differential oracle. Path A (MIR interpreter) and
+        # Path B (vais-jit Cranelift in-process) both LANDED 2026-05-04.
+        # Nightly runs surface diff findings if the two arms disagree.
+        target: [fuzz_lexer, fuzz_parser, fuzz_type_checker, fuzz_codegen, fuzz_mir_native_diff]
 
     steps:
       - name: Checkout repository
@@ -48,6 +52,19 @@ jobs:
           key: fuzz-corpus-${{ matrix.target }}-${{ github.sha }}
           restore-keys: |
             fuzz-corpus-${{ matrix.target }}-
+
+      - name: Seed corpus from tracked seeds
+        # corpus/ is gitignored; cached corpus may be empty on first run.
+        # corpus_seeds/<target>/ is the tracked initial seed set. Copy any
+        # missing seeds into corpus/<target>/ before fuzzing.
+        run: |
+          if [ -d "fuzz/corpus_seeds/${{ matrix.target }}" ]; then
+            mkdir -p "fuzz/corpus/${{ matrix.target }}"
+            cp -n fuzz/corpus_seeds/${{ matrix.target }}/* fuzz/corpus/${{ matrix.target }}/ 2>/dev/null || true
+            echo "Seeded $(ls fuzz/corpus/${{ matrix.target }} | wc -l) entries"
+          else
+            echo "No tracked seeds for ${{ matrix.target }}; relying on cache + libFuzzer mutation"
+          fi
 
       - name: Run fuzzer
         working-directory: fuzz
@@ -82,8 +99,25 @@ jobs:
           path: fuzz/corpus/${{ matrix.target }}/
           retention-days: 7
 
+  # NOTE: workspace-wide ASAN/UBSAN job below is best-effort SUPERSEDED
+  # by the dedicated .github/workflows/asan.yml + tsan.yml workflows,
+  # which already gate on push/pull_request with continue-on-error: false
+  # (PR-blocking) on the targeted packages (vais-lexer / vais-parser /
+  # vais-ast / vais-types).
+  #
+  # Master Plan v17 §I-6 Step 17 stage 4:
+  #   - 4a (LANDED 2026-05-04): Per-package ASAN/TSAN PR-blocking gates
+  #     already exist in asan.yml/tsan.yml.
+  #   - 4b (LANDED 2026-05-04): Miri PR-blocking promoted from best-effort
+  #     after empirical day-1 baseline + fresh nightly 1.97 re-measurement
+  #     (single-user vais repo policy: PR-block + revert on first failure
+  #     rather than 7-day passive accumulation). See miri-tests job below
+  #     for the comment block + revert policy.
+  #
+  # The workspace-wide sanitizer-tests block remains best-effort to avoid
+  # double-running the same coverage with different timeouts than asan.yml.
   sanitizer-tests:
-    name: Sanitizer Tests
+    name: Sanitizer Tests (workspace, best-effort)
     runs-on: ubuntu-latest
 
     steps:
@@ -112,7 +146,28 @@ jobs:
         continue-on-error: true
 
   miri-tests:
-    name: Miri Undefined Behavior Check
+    # Step 17 stage 4b LANDED 2026-05-04 (B+D path):
+    #
+    # Promoted from best-effort (`|| true`) to PR-blocking after empirical
+    # day-1 baseline confirmed false-positive 0 across 4 core crates
+    # (lib-only) under fresh nightly 1.97 + Miri Tree-Borrows. See
+    # STEP17_FINDINGS Stage 4b LANDED section for the empirical evidence
+    # + 3 false-positive sources we surveyed (toolchain churn, Miri model
+    # change, dep update). single-user vais repo policy: PR-block + revert
+    # on first failure rather than 7-day passive accumulation.
+    #
+    # Lib-only is intentional — proptest fuzz tests are NOT included
+    # here; they belong to the matrix above (fuzz_lexer / fuzz_parser /
+    # etc.) which has its own runtime budget.
+    #
+    # Revert policy if Miri ever turns up red:
+    # 1. Suffix the failing line with ` || true` to immediately unblock
+    #    PRs (commit message: "phase2-step17-stage4b-revert: ...").
+    # 2. File STEP17_FINDINGS finding F-MIR-NN with the Miri output.
+    # 3. Triage as either real UB (compiler fix) or Miri false-positive
+    #    (toolchain pin / sanitizer narrow scope).
+    # 4. Re-promote after fix.
+    name: Miri Undefined Behavior Check (PR-blocking; lib only)
     runs-on: ubuntu-latest
 
     steps:
@@ -129,12 +184,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm-17-dev libpolly-17-dev
 
-      - name: Run miri on core crates
+      - name: Run miri on core crates (lib-only, fail-fast)
         run: |
-          cargo +nightly miri test -p vais-lexer -- --test-threads=1 2>&1 || true
-          cargo +nightly miri test -p vais-parser -- --test-threads=1 2>&1 || true
-          cargo +nightly miri test -p vais-ast -- --test-threads=1 2>&1 || true
-          cargo +nightly miri test -p vais-types -- --test-threads=1 2>&1 || true
+          cargo +nightly miri test -p vais-lexer  --lib -- --test-threads=1
+          cargo +nightly miri test -p vais-parser --lib -- --test-threads=1
+          cargo +nightly miri test -p vais-ast    --lib -- --test-threads=1
+          cargo +nightly miri test -p vais-types  --lib -- --test-threads=1
         env:
           MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-tree-borrows"
 

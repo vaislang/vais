@@ -1,0 +1,23 @@
+# LIVING_SPEC/02_patterns/match_result_ok_err.vais
+# Key concept: Result<T, E>를 Ok/Err 매칭으로 분기.
+
+fn divide(a: i64, b: i64) -> Result<i64, i64> {
+    I b == 0 {
+        Err(1)
+    } else {
+        Ok(a / b)
+    }
+}
+
+fn run(a: i64, b: i64) -> i64 {
+    match divide(a, b) {
+        Ok(v) => v,
+        Err(code) => -code
+    }
+}
+
+fn main() -> i64 {
+    a := run(10, 2)
+    b := run(10, 0)
+    a + b
+}

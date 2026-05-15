@@ -1,4 +1,4 @@
-P S User {
+pub struct User {
     id: i64,
     email: str,
     name: str,

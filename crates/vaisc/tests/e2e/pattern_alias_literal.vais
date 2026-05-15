@@ -1,7 +1,7 @@
 # Pattern alias with literal
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
-    M x {
+    match x {
         n @ 42 => n,
         _ => 0
     }

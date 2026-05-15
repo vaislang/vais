@@ -13,15 +13,15 @@ fn e2e_phase32_async_recursive() {
     // @ operator (self-recursion) used inside an async function.
     // AsyncPollContext enables proper return wrapping in recursive poll functions.
     let source = r#"
-A F countdown(n: i64) -> i64 {
+A fn countdown(n: i64) -> i64 {
     I n <= 0 {
-        R 0
+        return 0
     }
     inner := @(n - 1).await
-    R inner + 1
+    return inner + 1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := countdown(5).await
     result - 5
 }
@@ -34,15 +34,15 @@ F main() -> i64 {
 fn e2e_phase32_async_with_match() {
     // Match inside an async function on a parameter.
     let source = r#"
-A F classify(n: i64) -> i64 {
-    M n {
+A fn classify(n: i64) -> i64 {
+    match n {
         0 => 0,
         1 => 1,
         _ => 2
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := classify(0).await
     b := classify(1).await
     c := classify(99).await
@@ -57,11 +57,11 @@ F main() -> i64 {
 fn e2e_phase32_async_multiple_awaits_sequential() {
     // Tests that codegen correctly handles 4 sequential await sites in one function.
     let source = r#"
-A F inc(x: i64) -> i64 {
+A fn inc(x: i64) -> i64 {
     x + 1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := inc(10).await
     b := inc(a).await
     c := inc(b).await
@@ -76,16 +76,16 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_async_nested_functions() {
     let source = r#"
-A F base(x: i64) -> i64 {
+A fn base(x: i64) -> i64 {
     x * 3
 }
 
-A F wrapper(x: i64) -> i64 {
+A fn wrapper(x: i64) -> i64 {
     inner := base(x).await
     inner + x
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := wrapper(7).await
     result - 28
 }
@@ -97,12 +97,12 @@ F main() -> i64 {
 #[test]
 fn e2e_phase32_async_with_closure() {
     let source = r#"
-A F apply_offset(base: i64, offset: i64) -> i64 {
+A fn apply_offset(base: i64, offset: i64) -> i64 {
     adder := |x| x + offset
     adder(base)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := apply_offset(30, 12).await
     result - 42
 }
@@ -115,14 +115,14 @@ F main() -> i64 {
 fn e2e_phase32_async_bool_return() {
     // Async function returning bool — dynamic poll return type resolution (i1 not i64)
     let source = r#"
-A F is_positive(n: i64) -> bool {
+A fn is_positive(n: i64) -> bool {
     n > 0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     t := is_positive(5).await
     f := is_positive(0 - 1).await
-    I t { I f { 1 } E { 0 } } E { 1 }
+    I t { I f { 1 } else { 0 } } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -133,14 +133,14 @@ F main() -> i64 {
 fn e2e_phase32_async_early_return() {
     // Async function with early return — AsyncPollContext wraps return values as poll results
     let source = r#"
-A F safe_div(a: i64, b: i64) -> i64 {
+A fn safe_div(a: i64, b: i64) -> i64 {
     I b == 0 {
-        R 0
+        return 0
     }
     a / b
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     zero_case := safe_div(100, 0).await
     normal_case := safe_div(84, 2).await
     zero_case + normal_case - 42

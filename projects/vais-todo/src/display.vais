@@ -1,10 +1,10 @@
 # display.vais - Colored terminal output for TODO items
 
-X F puts(s: str) -> i64
-X F printf(fmt: str) -> i64
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F sprintf(buf: str, fmt: str) -> i64
+impl fn puts(s: str) -> i64
+impl fn printf(fmt: str) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn sprintf(buf: str, fmt: str) -> i64
 
 # ANSI color codes
 C COLOR_RESET := "\x1b[0m"
@@ -16,7 +16,7 @@ C COLOR_GRAY := "\x1b[90m"
 C COLOR_BOLD := "\x1b[1m"
 
 # Display a single TODO item with color
-F display_todo(todo: Todo) -> i64 {
+fn display_todo(todo: Todo) -> i64 {
     C buf := malloc(512)
 
     # Choose color based on done status
@@ -41,16 +41,16 @@ F display_todo(todo: Todo) -> i64 {
     puts("\n")
 
     free(buf)
-    R 0
+    return 0
 }
 
 # Display the entire TODO list
-F display_list(list: TodoList) -> i64 {
+fn display_list(list: TodoList) -> i64 {
     I list.count == 0 {
         puts(COLOR_GRAY)
         puts("No TODO items yet. Use 'add <description>' to create one.\n")
         puts(COLOR_RESET)
-        R 0
+        return 0
     }
 
     puts(COLOR_BOLD)
@@ -62,7 +62,7 @@ F display_list(list: TodoList) -> i64 {
     L {
         I i >= list.count {
             puts("\n")
-            R display_summary(list)
+            return display_summary(list)
         }
 
         # Get todo at index i
@@ -83,11 +83,11 @@ F display_list(list: TodoList) -> i64 {
         C i := i + 1
     }
 
-    R 0
+    return 0
 }
 
 # Display summary statistics
-F display_summary(list: TodoList) -> i64 {
+fn display_summary(list: TodoList) -> i64 {
     C total := list.count
     C pending := todolist_count_pending(list)
     C done := todolist_count_done(list)
@@ -118,11 +118,11 @@ F display_summary(list: TodoList) -> i64 {
     puts("\n")
 
     free(buf)
-    R 0
+    return 0
 }
 
 # Display help message
-F display_help() -> i64 {
+fn display_help() -> i64 {
     puts(COLOR_BOLD)
     puts("Vais TODO - Terminal TODO Manager\n")
     puts(COLOR_RESET)
@@ -155,36 +155,36 @@ F display_help() -> i64 {
     puts("  vais-todo remove 2\n")
     puts("\n")
 
-    R 0
+    return 0
 }
 
 # Display error message
-F display_error(msg: str) -> i64 {
+fn display_error(msg: str) -> i64 {
     puts(COLOR_RED)
     puts("Error: ")
     puts(msg)
     puts(COLOR_RESET)
     puts("\n")
-    R 0
+    return 0
 }
 
 # Display success message
-F display_success(msg: str) -> i64 {
+fn display_success(msg: str) -> i64 {
     puts(COLOR_GREEN)
     puts("✓ ")
     puts(msg)
     puts(COLOR_RESET)
     puts("\n")
-    R 0
+    return 0
 }
 
 # Display list with filter
-F display_list_filtered(list: TodoList, show_done: i64) -> i64 {
+fn display_list_filtered(list: TodoList, show_done: i64) -> i64 {
     I list.count == 0 {
         puts(COLOR_GRAY)
         puts("No TODO items.\n")
         puts(COLOR_RESET)
-        R 0
+        return 0
     }
 
     C shown := 0
@@ -195,10 +195,10 @@ F display_list_filtered(list: TodoList, show_done: i64) -> i64 {
                 puts(COLOR_GRAY)
                 puts("No items match the filter.\n")
                 puts(COLOR_RESET)
-            } E {
+            } enum {
                 puts("\n")
             }
-            R 0
+            return 0
         }
 
         # Get todo at index i
@@ -223,5 +223,5 @@ F display_list_filtered(list: TodoList, show_done: i64) -> i64 {
         C i := i + 1
     }
 
-    R 0
+    return 0
 }

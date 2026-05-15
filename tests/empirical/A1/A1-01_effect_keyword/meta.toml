@@ -1,0 +1,38 @@
+[entry]
+id = "A1-01"
+classification = "A1 hard block (uncertified-unused keyword: effect)"
+surface = "effect KEYWORD declaration form (`effect Foo {}` and modifier positions)"
+keyword = "effect"
+master_plan_version = 22
+
+[v1_evidence]
+probe_summary = "effect Logger {}; F main() -> i64 { R 0 }"
+expected_per_design = "vaisc check rejects with stable error[P001] Unexpected token — `effect` is reserved with no grammar production yet (compiler/docs/language/LEXER_KEYWORDS.md)"
+actual_observed_default = "exit 1, error[P001] found Effect (parser top-level reject)"
+verified_date = "2026-05-05"
+
+[v2_evidence]
+status = "v1_verified_baseline_zero_use"
+notes = """
+Baseline use count = 0 verified via grep:
+  grep -rE "\\beffect\\b" compiler/std/ lang/packages/ --include='*.vais'
+returns 0 matches (2026-05-05).
+
+Parser-level: Token::Effect has zero match arms in
+crates/vais-parser/src/. The lexer emits the token but every parser
+context that could see it falls into the unexpected-token P001 path.
+That is the current hard-block diagnostic.
+"""
+
+[migration]
+post_certification_expected = "If `effect` is ever certified into a real effect-system surface (e.g. `effect Logger { F log(msg: str) }`), the fixture's check_fails contract no longer holds. At that point this fixture migrates to a positive form proving the certified surface, OR is removed if `effect` graduates entirely out of A1."
+
+[assertion_kind]
+kind = "check_fails"
+required_stderr_patterns = ["P001", "Effect"]
+rationale = """
+P001 is the parser's stable Unexpected-token error code. The literal
+substring `Effect` confirms the diagnostic identifies the offending
+token (Logos token name), so a future grammar production that swallows
+`effect` silently would trigger DRIFT.
+"""

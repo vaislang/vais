@@ -1,0 +1,19 @@
+# CHECKS: Option<i64> Some/None match
+fn main() -> i64 {
+    a: Option<i64> := Some(42)
+    b: Option<i64> := None
+
+    va: i64 := match a {
+        Some(v) => v,
+        None => -1,
+    }
+    I va != 42 { return 1 }
+
+    vb: i64 := match b {
+        Some(v) => v,
+        None => -1,
+    }
+    I vb != -1 { return 2 }
+
+    return 0
+}

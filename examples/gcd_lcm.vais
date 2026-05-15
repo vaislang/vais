@@ -4,15 +4,15 @@
 # Run: vaisc run examples/gcd_lcm.vais
 
 # GCD using Euclidean algorithm with self-recursion
-F gcd(a: i64, b: i64) -> i64 = b == 0 ? a : @(b, a % b)
+fn gcd(a: i64, b: i64) -> i64 = b == 0 ? a : @(b, a % b)
 
 # LCM via GCD
-F lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
+fn lcm(a: i64, b: i64) -> i64 = a / gcd(a, b) * b
 
 # Check if two numbers are coprime
-F coprime(a: i64, b: i64) -> i64 = gcd(a, b) == 1 ? 1 : 0
+fn coprime(a: i64, b: i64) -> i64 = gcd(a, b) == 1 ? 1 : 0
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== GCD & LCM ===")
 
     g1 := gcd(48, 18)
@@ -36,5 +36,5 @@ F main() -> i64 {
     # Verify: 6 + 25 + 36 + 35 + 1 + 0 = 103
     total := g1 + g2 + l1 + l2 + c1 + c2
     puts("Total = {total}")
-    I total == 103 { 0 } EL { 1 }
+    I total == 103 { 0 } else { 1 }
 }

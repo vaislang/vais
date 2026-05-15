@@ -1,0 +1,3 @@
+pub fn inner_call() -> Result<i64, str> {
+    return Ok(42)
+}

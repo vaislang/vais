@@ -1,0 +1,20 @@
+# CHECKS: early `R` from inside a match arm body.
+fn categorize(n: i64) -> i64 {
+    match n {
+        0 => { return 100 },
+        1 => { return 200 },
+        2 => { return 300 },
+        _ => 0
+    }
+    # unreachable for matched values; reached only for default
+    999
+}
+
+fn main() -> i64 {
+    I categorize(0) != 100 { return 1 }
+    I categorize(1) != 200 { return 2 }
+    I categorize(2) != 300 { return 3 }
+    # default falls through
+    I categorize(99) != 999 { return 4 }
+    return 0
+}

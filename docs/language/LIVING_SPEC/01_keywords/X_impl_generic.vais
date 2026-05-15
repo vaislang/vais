@@ -1,0 +1,23 @@
+# LIVING_SPEC/01_keywords/X_impl_generic.vais
+# Key concept: X<T> Type<T> { F method(self) -> T } 제네릭 impl.
+# 타입 파라미터 T를 받아 여러 타입에 동작하는 메서드 구현.
+
+struct Pair<T> {
+    first: T,
+    second: T
+}
+
+impl<T> Pair<T> {
+    fn swap(self) -> Pair<T> {
+        Pair { first: self.second, second: self.first }
+    }
+    fn fst(self) -> T {
+        self.first
+    }
+}
+
+fn main() -> i64 {
+    p := Pair { first: 3, second: 7 }
+    q := p.swap()
+    q.fst()
+}

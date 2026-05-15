@@ -1,0 +1,17 @@
+# LIVING_SPEC/01_keywords/S_struct_simple.vais
+# Key concept: S Name { field: Type, ... } 구조체 선언.
+# 생성: Name { field: value } 리터럴. 접근: instance.field.
+
+struct Point {
+    x: i64,
+    y: i64
+}
+
+fn manhattan(p: Point) -> i64 {
+    p.x + p.y
+}
+
+fn main() -> i64 {
+    p := Point { x: 3, y: 4 }
+    manhattan(p)
+}

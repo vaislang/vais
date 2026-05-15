@@ -3,11 +3,74 @@
 //! Contains generate_assign_expr, generate_ident_expr, and generate_assign_op_expr.
 //! Core binary/unary/cast helpers are in expr_helpers.
 
+use crate::helpers::is_str_like_resolved;
 use crate::{format_did_you_mean, suggest_similar, CodeGenerator, CodegenError, CodegenResult};
 use vais_ast::{BinOp, Expr, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
+    fn assignment_target_expected_type(&self, target: &Spanned<Expr>) -> Option<ResolvedType> {
+        match &target.node {
+            Expr::Ident(name) => self
+                .fn_ctx
+                .locals
+                .get(name)
+                .map(|local| local.ty.clone())
+                .or_else(|| {
+                    self.types
+                        .globals
+                        .get(name)
+                        .map(|global| global._ty.clone())
+                }),
+            Expr::Field {
+                expr: obj_expr,
+                field,
+            } => {
+                let obj_type = self.infer_expr_type(obj_expr);
+                let resolved_type = match &obj_type {
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        inner.as_ref().clone()
+                    }
+                    other => other.clone(),
+                };
+
+                if let ResolvedType::Named { name, .. } = &resolved_type {
+                    let struct_name = self.resolve_struct_name(name);
+                    self.types
+                        .structs
+                        .get(&struct_name)
+                        .and_then(|struct_info| {
+                            struct_info
+                                .fields
+                                .iter()
+                                .find(|(field_name, _)| field_name == &field.node)
+                                .map(|(_, field_ty)| field_ty.clone())
+                        })
+                } else {
+                    None
+                }
+            }
+            Expr::Index { expr: arr_expr, .. } => {
+                let arr_ty = self.infer_expr_type(arr_expr);
+                self.resolve_index_access(&arr_ty)
+                    .ok()
+                    .and_then(|access| access.elem_resolved)
+            }
+            _ => None,
+        }
+    }
+
+    fn should_push_assignment_expected(target: &Spanned<Expr>, ty: &ResolvedType) -> bool {
+        if type_contains_never(ty) {
+            return false;
+        }
+
+        match &target.node {
+            Expr::Ident(_) => !generics_all_empty_enum(ty),
+            _ => true,
+        }
+    }
+
     /// Generate assign expression
     #[inline(never)]
     pub(crate) fn generate_assign_expr(
@@ -16,7 +79,42 @@ impl CodeGenerator {
         value: &Spanned<Expr>,
         counter: &mut usize,
     ) -> CodegenResult<(String, String)> {
-        let (val, val_ir) = self.generate_expr(value, counter)?;
+        let target_expected_ty = self.assignment_target_expected_type(target);
+        let pushed_expected = target_expected_ty
+            .as_ref()
+            .filter(|ty| Self::should_push_assignment_expected(target, ty))
+            .cloned();
+        if let Some(expected) = pushed_expected.clone() {
+            self.fn_ctx.expected_expr_types.push(expected);
+        }
+
+        // Phase 6.27b iteration 34: codegen-side mirror of TC's Never-promotion on
+        // Expr::Assign. If the target local's type contains Never (from `mut None`
+        // init) and the RHS has a concrete wrapper type, update the local's
+        // recorded type so later field access through `Some(x) => x.field` sees
+        // the promoted type rather than Optional(Named{Option, generics=[]}).
+        if let Expr::Ident(name) = &target.node {
+            let has_never = self
+                .fn_ctx
+                .locals
+                .get(name)
+                .map(|l| type_contains_never(&l.ty) || generics_all_empty_enum(&l.ty))
+                .unwrap_or(false);
+            if has_never {
+                let value_ty = self.infer_expr_type(value);
+                if !type_contains_never(&value_ty) && !generics_all_empty_enum(&value_ty) {
+                    if let Some(local) = self.fn_ctx.locals.get_mut(name) {
+                        local.ty = value_ty;
+                    }
+                }
+            }
+        }
+
+        let value_result = self.generate_expr(value, counter);
+        if pushed_expected.is_some() {
+            self.fn_ctx.expected_expr_types.pop();
+        }
+        let (val, val_ir) = value_result?;
         let mut ir = val_ir;
 
         if let Expr::Ident(name) = &target.node {
@@ -50,6 +148,10 @@ impl CodeGenerator {
                                 "  %{} = alloca {}\n  store {} {}, {}* %{}",
                                 alloca_name, llvm_ty, llvm_ty, old_ssa_val, llvm_ty, alloca_name
                             ));
+                            self.fn_ctx.record_emitted_type(
+                                &format!("%{}", alloca_name),
+                                &format!("{}*", llvm_ty),
+                            );
                         } else {
                             // Fallback: alloca only; the reassignment store covers the
                             // reachable paths (legacy behavior). Non-immediate SSA values
@@ -57,26 +159,10 @@ impl CodeGenerator {
                             // definitions may not dominate it.
                             self.emit_entry_alloca(&format!("%{}", alloca_name), &llvm_ty);
                         }
-                        // Now store the new (reassignment) value. Named RHS
-                        // expressions such as unit enum variants produce an
-                        // alloca pointer; assignment stores the value.
-                        let store_val = if matches!(local_ty, ResolvedType::Named { .. })
-                            && !self.is_expr_value(value)
-                        {
-                            let loaded = self.next_temp(counter);
-                            write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
-                            loaded
-                        } else {
-                            val.clone()
-                        };
-                        let actual_val_ty = self.llvm_type_of(&store_val);
-                        let coerced_val = self.coerce_int_width(
-                            &store_val,
-                            &actual_val_ty,
-                            &llvm_ty,
-                            counter,
-                            &mut ir,
-                        );
+                        // Now store the new (reassignment) value
+                        let actual_val_ty = self.llvm_type_of(&val);
+                        let coerced_val =
+                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir);
                         write_ir!(
                             ir,
                             "  store {} {}, {}* %{}",
@@ -92,23 +178,22 @@ impl CodeGenerator {
                     } else {
                         let llvm_ty = self.type_to_llvm(&local.ty);
                         // Coerce value width to match local variable type
-                        let store_val = if matches!(local.ty, ResolvedType::Named { .. })
-                            && !self.is_expr_value(value)
-                        {
+                        let actual_val_ty = self.llvm_type_of(&val);
+                        // Phase 17.H4.8b: if the local's type is Named (struct/enum)
+                        // and the rhs `val` is actually a pointer to that struct
+                        // (e.g., Some(x) → alloca %Option + stores, yielding %tN
+                        // of type %Option*), load before storing so we store a
+                        // value, not a pointer-as-value.
+                        let needs_load = matches!(local.ty, ResolvedType::Named { .. })
+                            && val.starts_with('%')
+                            && actual_val_ty == format!("{}*", llvm_ty);
+                        let coerced_val = if needs_load {
                             let loaded = self.next_temp(counter);
                             write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
                             loaded
                         } else {
-                            val.clone()
+                            self.coerce_int_width(&val, &actual_val_ty, &llvm_ty, counter, &mut ir)
                         };
-                        let actual_val_ty = self.llvm_type_of(&store_val);
-                        let coerced_val = self.coerce_int_width(
-                            &store_val,
-                            &actual_val_ty,
-                            &llvm_ty,
-                            counter,
-                            &mut ir,
-                        );
                         // Store the value into the alloca.
                         write_ir!(
                             ir,
@@ -118,6 +203,32 @@ impl CodeGenerator {
                             llvm_ty,
                             local.llvm_name
                         );
+                    }
+                    if is_str_like_resolved(&local.ty) {
+                        let val_key = val
+                            .strip_prefix("{ i8*, i64 } ")
+                            .unwrap_or(&val)
+                            .trim()
+                            .to_string();
+                        if let Some(slot) = self.fn_ctx.string_value_slot.get(&val_key).cloned() {
+                            self.fn_ctx
+                                .var_string_slot
+                                .insert(name.clone(), slot.clone());
+                            self.transfer_string_slot_to_var_scope(name, &slot);
+                            if let Some(extras) = self.fn_ctx.phi_extra_slots.remove(&val_key) {
+                                let mut all = vec![slot];
+                                for extra in extras {
+                                    self.transfer_string_slot_to_var_scope(name, &extra);
+                                    all.push(extra);
+                                }
+                                self.fn_ctx.var_string_slots_multi.insert(name.clone(), all);
+                            } else {
+                                self.fn_ctx.var_string_slots_multi.remove(name);
+                            }
+                        } else {
+                            self.fn_ctx.var_string_slot.remove(name);
+                            self.fn_ctx.var_string_slots_multi.remove(name);
+                        }
                     }
                 }
             } else if let Some(global_ty) = self.types.globals.get(name).map(|g| g._ty.clone()) {
@@ -167,23 +278,29 @@ impl CodeGenerator {
                         // Coerce value to match field type
                         let actual_val_ty = self.llvm_type_of(&val);
                         let coerced_val = if matches!(field_ty, ResolvedType::Named { .. })
-                            && !self.is_expr_value(value)
-                        {
-                            let loaded = self.next_temp(counter);
-                            write_ir!(ir, "  {} = load {}, {}* {}", loaded, llvm_ty, llvm_ty, val);
-                            loaded
-                        } else if matches!(field_ty, ResolvedType::Named { .. })
                             && val.starts_with('%')
                         {
                             // Named field type: the value may be a pointer to the struct
                             // (e.g., SSA param spill %__severity_ptr). Find the local by
                             // matching llvm_name since the val is the LLVM name, not source name.
-                            let is_ssa_named_ptr = self.fn_ctx.locals.values().any(|local| {
-                                local.llvm_name == val
-                                    && local.is_ssa()
-                                    && matches!(local.ty, ResolvedType::Named { .. })
-                            });
-                            if is_ssa_named_ptr {
+                            let actual_checked = self.llvm_type_of_checked(&val);
+                            let is_ssa_named_ptr = actual_checked.is_none()
+                                && self.fn_ctx.locals.values().any(|local| {
+                                    local.llvm_name == val
+                                        && local.is_ssa()
+                                        && matches!(local.ty, ResolvedType::Named { .. })
+                                });
+                            // Phase 17.H4.8: also load when the rhs is an
+                            // alloca'd struct literal. A struct literal
+                            // emits `%tN = alloca %T; store fields @ %tN`,
+                            // so `val = %tN` is a pointer, not a value.
+                            // Ground-truth emitted LLVM type decides whether
+                            // this SSA name is a pointer or an aggregate value.
+                            let is_alloca_named_ptr =
+                                actual_checked.as_deref().is_some_and(|actual| {
+                                    actual == "ptr" || actual == format!("{}*", llvm_ty)
+                                });
+                            if is_ssa_named_ptr || is_alloca_named_ptr {
                                 let loaded = self.next_temp(counter);
                                 write_ir!(
                                     ir,
@@ -193,6 +310,7 @@ impl CodeGenerator {
                                     llvm_ty,
                                     val
                                 );
+                                self.fn_ctx.record_emitted_type(&loaded, &llvm_ty);
                                 loaded
                             } else {
                                 self.coerce_int_width(
@@ -214,6 +332,40 @@ impl CodeGenerator {
                             llvm_ty,
                             field_ptr
                         );
+                        if struct_info.has_owned_mask && matches!(field_ty, ResolvedType::Str) {
+                            let val_key = val
+                                .strip_prefix("{ i8*, i64 } ")
+                                .unwrap_or(&val)
+                                .trim()
+                                .to_string();
+                            if let Some(slot) = self.fn_ctx.string_value_slot.remove(&val_key) {
+                                let mask_ptr = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 {}",
+                                    mask_ptr,
+                                    struct_name,
+                                    struct_name,
+                                    obj_val,
+                                    struct_info.fields.len()
+                                );
+                                let old_mask = self.next_temp(counter);
+                                write_ir!(ir, "  {} = load i64, i64* {}", old_mask, mask_ptr);
+                                let new_mask = self.next_temp(counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = or i64 {}, {}",
+                                    new_mask,
+                                    old_mask,
+                                    1u64 << field_idx
+                                );
+                                write_ir!(ir, "  store i64 {}, i64* {}", new_mask, mask_ptr);
+                                write_ir!(ir, "  store i8* null, i8** {}", slot);
+                                if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                                    frame.retain(|s| s != &slot);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -228,37 +380,82 @@ impl CodeGenerator {
             ir.push_str(&arr_ir);
             ir.push_str(&idx_ir);
 
-            // Infer element type for correct GEP + store
+            // Phase Ω P1.3 (iter 98 LANDED): single-source index access derivation.
+            // Path 2 (data write simple) migrated to use resolve_index_access.
+            // Behavior preserved: Ref/RefMut peel happens inside helper; the local
+            // `arr_ty_inner` binding kept only for downstream `vec_llvm_ty` lookup
+            // in the VecData branch below.
             let arr_ty = self.infer_expr_type(arr_expr);
-            let (elem_llvm_ty, is_fat_ptr) = match &arr_ty {
-                ResolvedType::Pointer(elem) => (self.type_to_llvm(elem), false),
-                ResolvedType::Array(elem) => (self.type_to_llvm(elem), false),
-                ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) => {
-                    (self.type_to_llvm(elem), true)
-                }
-                _ => ("i64".to_string(), false),
+            let arr_ty_inner = match &arr_ty {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                other => other,
+            };
+            // Local enum kept for the GEP/store emit logic below — maps from
+            // helper's AccessKind to the assignment-side three-way enum.
+            // FatPtr + StrByte both treated as FatSlice (str-index assign not
+            // supported, falls into helper's catch-all errorr if it reaches).
+            enum AccessKind {
+                Direct,
+                FatSlice,
+                VecData,
+            }
+            let acc = self.resolve_index_access(&arr_ty)?;
+            let elem_llvm_ty = acc.elem_llvm.clone();
+            let access = match acc.access_kind {
+                crate::index_access::AccessKind::Direct => AccessKind::Direct,
+                crate::index_access::AccessKind::FatPtr
+                | crate::index_access::AccessKind::StrByte => AccessKind::FatSlice,
+                crate::index_access::AccessKind::VecData => AccessKind::VecData,
             };
 
-            // For fat pointer slices { i8*, i64 }, extract data pointer and bitcast
-            let base_ptr = if is_fat_ptr {
-                let data_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = extractvalue {{ i8*, i64 }} {}, 0",
-                    data_ptr,
-                    arr_val
-                );
-                let typed_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = bitcast i8* {} to {}*",
-                    typed_ptr,
-                    data_ptr,
-                    elem_llvm_ty
-                );
-                typed_ptr
-            } else {
-                arr_val.clone()
+            // Build the pointer we will GEP through.
+            let base_ptr = match access {
+                AccessKind::FatSlice => {
+                    let data_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                        data_ptr,
+                        arr_val
+                    );
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast i8* {} to {}*",
+                        typed_ptr,
+                        data_ptr,
+                        elem_llvm_ty
+                    );
+                    typed_ptr
+                }
+                AccessKind::VecData => {
+                    // Vec layout is `{ i64, i64, i64, i64, i64 }` where field 0
+                    // is the data pointer stored as an i64. Load it, then
+                    // inttoptr to a typed T* for the GEP/store.
+                    let vec_llvm_ty = self.type_to_llvm(arr_ty_inner);
+                    let data_slot = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                        data_slot,
+                        vec_llvm_ty,
+                        vec_llvm_ty,
+                        arr_val
+                    );
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_slot);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        typed_ptr,
+                        data_i64,
+                        elem_llvm_ty
+                    );
+                    typed_ptr
+                }
+                AccessKind::Direct => arr_val.clone(),
             };
 
             let elem_ptr = self.next_temp(counter);
@@ -272,8 +469,44 @@ impl CodeGenerator {
                 idx_val
             );
             // Coerce value to match element type (e.g., i8 from trunc → i64 for Vec store)
-            let val_ty = self.llvm_type_of(&val);
-            let store_val = self.coerce_int_width(&val, &val_ty, &elem_llvm_ty, counter, &mut ir);
+            let actual_val_ty = self.llvm_type_of_checked(&val);
+            let val_ty = actual_val_ty
+                .clone()
+                .unwrap_or_else(|| self.llvm_type_of(&val));
+            // Phase α.1 fix: when storing a struct value but `val` is a
+            // pointer-to-struct (alloca form), load through the pointer to
+            // get the struct value before storing.
+            //
+            // Heuristic: if elem type is a named struct (`%T`) AND val is an
+            // SSA register starting with %, AND either val_ty is `%T*` or the
+            // val is identifiably an alloca/local (looking up locals map), the
+            // value needs a load. The `val_ty` lookup may fall back to "i64"
+            // when the alloca wasn't recorded; in that case we still infer the
+            // load from the elem type and the val's local-binding.
+            let elem_is_named_struct = elem_llvm_ty.starts_with('%')
+                && !elem_llvm_ty.contains('{')
+                && !elem_llvm_ty.contains('[');
+            let expected_ptr_ty = format!("{}*", elem_llvm_ty);
+            let needs_load = elem_is_named_struct
+                && val.starts_with('%')
+                && (actual_val_ty.as_deref() == Some(expected_ptr_ty.as_str())
+                    || actual_val_ty.as_deref() == Some("ptr")
+                    || (actual_val_ty.is_none() && !self.is_expr_value(value)));
+            let store_val = if needs_load {
+                let loaded = self.next_temp(counter);
+                write_ir!(
+                    ir,
+                    "  {} = load {}, {}* {}",
+                    loaded,
+                    elem_llvm_ty,
+                    elem_llvm_ty,
+                    val
+                );
+                self.fn_ctx.record_emitted_type(&loaded, &elem_llvm_ty);
+                loaded
+            } else {
+                self.coerce_int_width(&val, &val_ty, &elem_llvm_ty, counter, &mut ir)
+            };
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",
@@ -313,46 +546,34 @@ impl CodeGenerator {
                     "  {} = load {}, {}* %{}\n",
                     tmp, llvm_ty, llvm_ty, local.llvm_name
                 );
+                // Phase E.6: register the load result's type so downstream
+                // passes (coerce, phi, cast) see the correct width instead
+                // of falling back to i64. This is the single biggest source
+                // of "i64 vs <N-bit>" mismatches across vaisdb tests.
+                self.fn_ctx.register_temp_type(&tmp, local.ty.clone());
+                if is_str_like_resolved(&local.ty) {
+                    if let Some(slots) = self.fn_ctx.var_string_slots_multi.get(name).cloned() {
+                        if let Some(first) = slots.first() {
+                            self.fn_ctx
+                                .string_value_slot
+                                .insert(tmp.clone(), first.clone());
+                            if slots.len() > 1 {
+                                self.fn_ctx
+                                    .phi_extra_slots
+                                    .insert(tmp.clone(), slots[1..].to_vec());
+                            }
+                        }
+                    } else if let Some(slot) = self.fn_ctx.var_string_slot.get(name).cloned() {
+                        self.fn_ctx.string_value_slot.insert(tmp.clone(), slot);
+                    }
+                }
                 Ok((tmp, ir))
             }
         } else if name == "self" {
             // Handle self reference
             Ok(("%self".to_string(), String::new()))
         } else if self.is_unit_enum_variant(name) {
-            // Unit enum variant (e.g., None)
-            // Create enum value on stack with just the tag
-            // Clone enum info to avoid borrow conflict with self.next_temp/emit_entry_alloca
-            let mut found = None;
-            for enum_info in self.types.enums.values() {
-                for (tag, variant) in enum_info.variants.iter().enumerate() {
-                    if variant.name == name {
-                        found = Some((enum_info.name.clone(), tag));
-                        break;
-                    }
-                }
-                if found.is_some() {
-                    break;
-                }
-            }
-            if let Some((enum_name, tag)) = found {
-                let mut ir = String::new();
-                let enum_ptr = self.next_temp(counter);
-                self.emit_entry_alloca(&enum_ptr, &format!("%{}", enum_name));
-                // Store tag
-                let tag_ptr = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = getelementptr %{}, %{}* {}, i32 0, i32 0",
-                    tag_ptr,
-                    enum_name,
-                    enum_name,
-                    enum_ptr
-                );
-                write_ir!(ir, "  store i32 {}, i32* {}", tag, tag_ptr);
-                return Ok((enum_ptr, ir));
-            }
-            // Fallback if not found (shouldn't happen)
-            Ok((format!("@{}", name), String::new()))
+            self.generate_unit_enum_variant(name, counter)
         } else if let Some(const_info) = self.types.constants.get(name).cloned() {
             // Constant reference - inline the constant value
             self.generate_expr(&const_info.value, counter)
@@ -361,6 +582,9 @@ impl CodeGenerator {
             let llvm_ty = self.type_to_llvm(&global_info._ty);
             let tmp = self.next_temp(counter);
             let ir = format!("  {} = load {}, {}* @{}\n", tmp, llvm_ty, llvm_ty, name);
+            // Phase E.6: register load result type (see alloca-local comment).
+            self.fn_ctx
+                .register_temp_type(&tmp, global_info._ty.clone());
             Ok((tmp, ir))
         } else if let Some(fn_info) = self.types.functions.get(name).cloned() {
             // Function reference used as a value — convert function pointer to i64
@@ -520,14 +744,53 @@ impl CodeGenerator {
             _ => return Err(CodegenError::Unsupported(format!("compound {:?}", op))),
         };
 
+        // Determine the target's native integer width so the arithmetic is
+        // performed in that width (e.g. `size: u32` += 8 uses `add i32`).
+        let target_ty = self.infer_expr_type(target);
+        let target_bits = self.get_integer_bits(&target_ty);
+        let op_ty = if target_bits > 0 {
+            format!("i{}", target_bits)
+        } else {
+            "i64".to_string()
+        };
+
+        // Coerce both operands to the target integer width.
+        let coerce =
+            |val: &str, bits: u32, cg: &mut Self, ir: &mut String, counter: &mut usize| -> String {
+                if bits == target_bits || target_bits == 0 {
+                    val.to_string()
+                } else if bits > target_bits {
+                    let t = cg.next_temp(counter);
+                    write_ir!(ir, "  {} = trunc i{} {} to i{}", t, bits, val, target_bits);
+                    t
+                } else {
+                    let t = cg.next_temp(counter);
+                    write_ir!(ir, "  {} = sext i{} {} to i{}", t, bits, val, target_bits);
+                    t
+                }
+            };
+        let current_bits = self
+            .llvm_type_of(&current_val)
+            .strip_prefix('i')
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(64);
+        let rhs_bits = self
+            .llvm_type_of(&rhs_val)
+            .strip_prefix('i')
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(64);
+        let current_coerced = coerce(&current_val, current_bits, self, &mut ir, counter);
+        let rhs_coerced = coerce(&rhs_val, rhs_bits, self, &mut ir, counter);
+
         let result = self.next_temp(counter);
         write_ir!(
             ir,
-            "  {} = {} i64 {}, {}",
+            "  {} = {} {} {}, {}",
             result,
             op_str,
-            current_val,
-            rhs_val
+            op_ty,
+            current_coerced,
+            rhs_coerced
         );
 
         if let Expr::Ident(name) = &target.node {
@@ -597,18 +860,94 @@ impl CodeGenerator {
         } = &target.node
         {
             // Array/Vec element compound assignment: arr[idx] += value
+            //
+            // Phase Ω P1.3 iter 101 LANDED:
+            //   stash@{0} `phaseO_compound_assign_fix` 통합 + helper migration.
+            //   iter 74 -3 vaisdb regression은 P1.2 (Vec.push + HashMap.insert
+            //   builtin dispatch fix) 이전 상태에서만 발생. P1.2 LANDED 후
+            //   재시도 결과 cascade 0건 (vaisdb-regression --all 8=8 hold,
+            //   3 runs 검증).
+            //
+            // ADR 0001 §1 R1 invariant:
+            //   Compound assign GEP의 elem_llvm은 array의 ResolvedType에서
+            //   도출 (Vec<T>, [T], *T, &[T], &mut [T]). llvm_type_of(arr_val)
+            //   폴백 금지 (untracked SSA / %Vec$T* 케이스 깨짐).
+            //
+            // R2 차단: index_invariant_test.rs compound_assign_i32/i64 (4 case)
+            // R3 audit: Path 1 (data read) + Path 2 (simple assign) 동일 패턴
             let (arr_val, arr_ir) = self.generate_expr(arr_expr, counter)?;
             let (idx_val, idx_ir) = self.generate_expr(idx_expr, counter)?;
             ir.push_str(&arr_ir);
             ir.push_str(&idx_ir);
-            // Use inferred element type instead of hardcoded i64
-            let arr_type = self.infer_expr_type(arr_expr);
-            let elem_llvm = match &arr_type {
-                ResolvedType::Array(inner) | ResolvedType::Pointer(inner) => {
-                    self.type_to_llvm(inner)
-                }
-                _ => self.llvm_type_of(&arr_val),
+
+            // Single-source helper (Phase Ω P1.3, iter 97).
+            // Path 2 (simple assign)와 동일 패턴: helper 4-variant AccessKind
+            // → Path 3 local 3-variant (FatSlice = FatPtr + StrByte).
+            let arr_ty = self.infer_expr_type(arr_expr);
+            let arr_ty_inner = match &arr_ty {
+                ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => inner.as_ref(),
+                other => other,
             };
+            enum AccessKind {
+                Direct,
+                FatSlice,
+                VecData,
+            }
+            let acc = self.resolve_index_access(&arr_ty)?;
+            let elem_llvm = acc.elem_llvm.clone();
+            let access = match acc.access_kind {
+                crate::index_access::AccessKind::Direct => AccessKind::Direct,
+                crate::index_access::AccessKind::FatPtr
+                | crate::index_access::AccessKind::StrByte => AccessKind::FatSlice,
+                crate::index_access::AccessKind::VecData => AccessKind::VecData,
+            };
+
+            let base_ptr = match access {
+                AccessKind::FatSlice => {
+                    let data_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = extractvalue {{ i8*, i64 }} {}, 0",
+                        data_ptr,
+                        arr_val
+                    );
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = bitcast i8* {} to {}*",
+                        typed_ptr,
+                        data_ptr,
+                        elem_llvm
+                    );
+                    typed_ptr
+                }
+                AccessKind::VecData => {
+                    let vec_llvm_ty = self.type_to_llvm(arr_ty_inner);
+                    let data_slot = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr {}, {}* {}, i32 0, i32 0",
+                        data_slot,
+                        vec_llvm_ty,
+                        vec_llvm_ty,
+                        arr_val
+                    );
+                    let data_i64 = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", data_i64, data_slot);
+                    self.fn_ctx.record_emitted_type(&data_i64, "i64");
+                    let typed_ptr = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}*",
+                        typed_ptr,
+                        data_i64,
+                        elem_llvm
+                    );
+                    typed_ptr
+                }
+                AccessKind::Direct => arr_val.clone(),
+            };
+
             let elem_ptr = self.next_temp(counter);
             write_ir!(
                 ir,
@@ -616,7 +955,7 @@ impl CodeGenerator {
                 elem_ptr,
                 elem_llvm,
                 elem_llvm,
-                arr_val,
+                base_ptr,
                 idx_val
             );
             write_ir!(
@@ -631,4 +970,43 @@ impl CodeGenerator {
 
         Ok((result, ir))
     }
+}
+
+/// Check whether a ResolvedType contains ResolvedType::Never anywhere.
+/// Mirror of vais-types checker_expr/special.rs `type_contains_never`.
+fn type_contains_never(ty: &ResolvedType) -> bool {
+    match ty {
+        ResolvedType::Never => true,
+        ResolvedType::Array(inner)
+        | ResolvedType::Optional(inner)
+        | ResolvedType::Pointer(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::RefMut(inner)
+        | ResolvedType::Slice(inner)
+        | ResolvedType::SliceMut(inner)
+        | ResolvedType::Range(inner)
+        | ResolvedType::Future(inner) => type_contains_never(inner),
+        ResolvedType::ConstArray { element, .. } => type_contains_never(element),
+        ResolvedType::Map(k, v) => type_contains_never(k) || type_contains_never(v),
+        ResolvedType::Result(ok, err) => type_contains_never(ok) || type_contains_never(err),
+        ResolvedType::Tuple(elems) => elems.iter().any(type_contains_never),
+        ResolvedType::Named { generics, .. } => generics.iter().any(type_contains_never),
+        ResolvedType::Fn { params, ret, .. } | ResolvedType::FnPtr { params, ret, .. } => {
+            params.iter().any(type_contains_never) || type_contains_never(ret)
+        }
+        _ => false,
+    }
+}
+
+/// Detect the `Named { name: "Option"|"Result", generics: [] }` pattern that
+/// codegen-local `infer_expr_type` emits for bare `None` / `Err(...)` idents.
+/// This is functionally equivalent to `Optional(Never)` but erased one level,
+/// so we must promote its scope binding when a concrete wrapper arrives.
+fn generics_all_empty_enum(ty: &ResolvedType) -> bool {
+    if let ResolvedType::Named { name, generics } = ty {
+        if generics.is_empty() && matches!(name.as_str(), "Option" | "Result") {
+            return true;
+        }
+    }
+    false
 }

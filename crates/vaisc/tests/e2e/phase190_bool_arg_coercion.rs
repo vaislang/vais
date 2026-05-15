@@ -16,11 +16,11 @@ use super::helpers::*;
 fn e2e_phase190_bool_local_to_bool_param_compiles() {
     assert_compiles(
         r#"
-F takes_bool(flag: bool) -> i64 {
-  I flag { 1 } E { 0 }
+fn takes_bool(flag: bool) -> i64 {
+  I flag { 1 } else { 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   x := 5
   is_big := x > 3
   takes_bool(is_big)
@@ -33,11 +33,11 @@ F main() -> i64 {
 fn e2e_phase190_bool_inline_comparison_to_bool_param_compiles() {
     assert_compiles(
         r#"
-F takes_bool(flag: bool) -> i64 {
-  I flag { 42 } E { 0 }
+fn takes_bool(flag: bool) -> i64 {
+  I flag { 42 } else { 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   n := 10
   takes_bool(n > 5)
 }
@@ -49,11 +49,11 @@ F main() -> i64 {
 fn e2e_phase190_multiple_bool_params_compiles() {
     assert_compiles(
         r#"
-F both(a: bool, b: bool) -> i64 {
-  I a { I b { 3 } E { 2 } } E { I b { 1 } E { 0 } }
+fn both(a: bool, b: bool) -> i64 {
+  I a { I b { 3 } else { 2 } } else { I b { 1 } else { 0 } }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
   x := 5
   y := 10
   both(x > 3, y > 3)

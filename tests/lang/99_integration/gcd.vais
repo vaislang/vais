@@ -1,0 +1,19 @@
+# CHECKS: Euclidean GCD using while + modulo
+fn gcd(a: i64, b: i64) -> i64 {
+    x: i64 := mut a
+    y: i64 := mut b
+    LW y != 0 {
+        t: i64 := y
+        y = x % y
+        x = t
+    }
+    x
+}
+
+fn main() -> i64 {
+    I gcd(24, 36) != 12 { return 1 }
+    I gcd(100, 75) != 25 { return 2 }
+    I gcd(13, 17) != 1   { return 3 }
+    I gcd(0, 5)   != 5   { return 4 }
+    return 0
+}

@@ -1,0 +1,88 @@
+name: VaisWeb Regression
+
+# vais-web (Rust workspace) cargo test를 compiler regression suite로 실행한다.
+# Pillar 2.3 wave 2 (Phase Ω) 산출물.
+#
+# Why: vais-web은 vais 컴파일러 crates에 의존하므로 compiler 변경이 vais-web을 깨면
+#      즉시 발견 + 차단됨.
+#
+# vais-web 자체는 Rust workspace (vaisx-compiler/parser/wasm) — cargo test 패턴.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: vais-web-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vais-web-build:
+    name: vais-web cargo test --workspace
+    runs-on: ubuntu-latest
+
+    # NOTE (Pillar 2.3 wave 2, iter 87):
+    # Full vais-web cargo test --workspace (271 passed baseline).
+    # Compiler crates 의존이므로 vais 컴파일러 변경 시 즉시 검출.
+
+    steps:
+      - name: Checkout vais compiler
+        uses: actions/checkout@v4
+        with:
+          path: vais
+
+      - name: Checkout vais-lang (vais-web)
+        uses: actions/checkout@v4
+        with:
+          repository: vaislang/vais-lang
+          path: vais-lang
+          # vais-lang이 private 또는 별도 자격 필요 시 token 추가:
+          # token: ${{ secrets.VAIS_LANG_PAT }}
+        continue-on-error: true  # repo 부재 시 skip (wave 2 grace period)
+
+      - name: Skip if vais-lang not available
+        id: check_lang
+        run: |
+          if [[ ! -d vais-lang/packages/vais-web ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "ℹ vais-lang/vais-web not available — skipping (wave 2 grace period)"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust toolchain
+        if: steps.check_lang.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        if: steps.check_lang.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vais-lang/packages/vais-web/target
+          key: vais-web-regression-${{ runner.os }}-${{ hashFiles('vais-lang/packages/vais-web/Cargo.lock') }}
+
+      - name: Run vais-web regression (cargo test --workspace)
+        if: steps.check_lang.outputs.skip != 'true'
+        env:
+          WEB_ROOT: ${{ github.workspace }}/vais-lang/packages/vais-web
+        working-directory: vais
+        run: ./scripts/vais-web-regression.sh
+
+      - name: Upload regression logs on failure
+        if: failure() && steps.check_lang.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vais-web-regression-logs
+          path: |
+            vais-lang/packages/vais-web/target/debug/deps/*.log
+          retention-days: 7

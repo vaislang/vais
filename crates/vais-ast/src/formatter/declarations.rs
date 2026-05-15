@@ -38,7 +38,7 @@ impl Formatter {
         self.push_indent();
         for func in &e.functions {
             self.output.push_str(&self.indent());
-            self.output.push_str("F ");
+            self.output.push_str("fn ");
             self.output.push_str(&func.name.node);
             self.output.push('(');
 
@@ -74,9 +74,9 @@ impl Formatter {
         let indent = self.indent();
         self.output.push_str(&indent);
         if c.is_pub {
-            self.output.push_str("P ");
+            self.output.push_str("pub ");
         }
-        self.output.push_str("C ");
+        self.output.push_str("const ");
         self.output.push_str(&c.name.node);
         self.output.push_str(": ");
         self.output.push_str(&self.format_type(&c.ty.node));
@@ -91,7 +91,7 @@ impl Formatter {
         let indent = self.indent();
         self.output.push_str(&indent);
         if g.is_pub {
-            self.output.push_str("P ");
+            self.output.push_str("pub ");
         }
         self.output.push_str("G ");
         self.output.push_str(&g.name.node);
@@ -133,7 +133,7 @@ impl Formatter {
         }
 
         // F name
-        self.output.push_str("F ");
+        self.output.push_str("fn ");
         self.output.push_str(&f.name.node);
 
         // Generics
@@ -210,7 +210,7 @@ impl Formatter {
         if s.is_pub {
             self.output.push_str("pub ");
         }
-        self.output.push_str("S ");
+        self.output.push_str("struct ");
         self.output.push_str(&s.name.node);
 
         // Generics
@@ -263,7 +263,7 @@ impl Formatter {
         if e.is_pub {
             self.output.push_str("pub ");
         }
-        self.output.push_str("E ");
+        self.output.push_str("enum ");
         self.output.push_str(&e.name.node);
 
         // Generics
@@ -368,7 +368,7 @@ impl Formatter {
         if t.is_pub {
             self.output.push_str("pub ");
         }
-        self.output.push_str("T ");
+        self.output.push_str("type ");
         self.output.push_str(&t.name.node);
 
         if !t.generics.is_empty() {
@@ -395,7 +395,7 @@ impl Formatter {
         if ta.is_pub {
             self.output.push_str("pub ");
         }
-        self.output.push_str("T ");
+        self.output.push_str("type ");
         self.output.push_str(&ta.name.node);
         if !ta.generics.is_empty() {
             self.output.push('<');
@@ -420,7 +420,7 @@ impl Formatter {
         let indent = self.indent();
 
         self.output.push_str(&indent);
-        self.output.push_str("U ");
+        self.output.push_str("use ");
         let path: Vec<&str> = u.path.iter().map(|p| p.node.as_str()).collect();
         self.output.push_str(&path.join("::"));
 
@@ -456,7 +456,7 @@ impl Formatter {
         if t.is_pub {
             self.output.push_str("pub ");
         }
-        self.output.push_str("W ");
+        self.output.push_str("trait ");
         self.output.push_str(&t.name.node);
 
         if !t.generics.is_empty() {
@@ -484,7 +484,7 @@ impl Formatter {
         // Associated types (with GAT support)
         for at in &t.associated_types {
             self.output.push_str(&self.indent());
-            self.output.push_str("T ");
+            self.output.push_str("type ");
             self.output.push_str(&at.name.node);
             // GAT: output generic parameters
             if !at.generics.is_empty() {
@@ -527,7 +527,7 @@ impl Formatter {
             if method.is_async {
                 self.output.push_str("A ");
             }
-            self.output.push_str("F ");
+            self.output.push_str("fn ");
             self.output.push_str(&method.name.node);
             self.output.push('(');
             let params: Vec<String> = method
@@ -576,7 +576,7 @@ impl Formatter {
         let indent = self.indent();
 
         self.output.push_str(&indent);
-        self.output.push_str("X ");
+        self.output.push_str("impl ");
         self.output.push_str(&self.format_type(&i.target_type.node));
 
         if let Some(trait_name) = &i.trait_name {

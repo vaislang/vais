@@ -1,14 +1,14 @@
 # Vais Self-Hosting Compiler - MIR Bounds Check Elimination Tests
 # Tests the mir_bounds.vais module for range analysis and bounds check optimization.
 
-U mir
-U mir_bounds
-U mir_analysis
+use mir
+use mir_bounds
+use mir_analysis
 
 # ============================================================================
 # Test 1: Value Range - Constant
 # ============================================================================
-F test_value_range_const() -> i64 {
+fn test_value_range_const() -> i64 {
     print_str("Test 1: value_range_const [5, 6) safe for length 10...")
 
     # Create constant range [5, 6)
@@ -26,32 +26,32 @@ F test_value_range_const() -> i64 {
         print_i64(lo)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     I hi != 6 {
         print_str(" FAIL: hi should be 6, got ")
         print_i64(hi)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     I hi_sym != (0 - 1) {
         print_str(" FAIL: hi_sym should be -1, got ")
         print_i64(hi_sym)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     I has_lo != 1 {
         print_str(" FAIL: has_lo should be 1, got ")
         print_i64(has_lo)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     # Check is_safe_for_const_length(10) returns 1 (5 < 10 and 6 <= 10)
     safe := value_range_is_safe_for_const_length(range, 10)
@@ -60,8 +60,8 @@ F test_value_range_const() -> i64 {
         print_i64(safe)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     # Check is_safe_for_const_length(5) returns 0 (6 > 5)
     unsafe := value_range_is_safe_for_const_length(range, 5)
@@ -70,18 +70,18 @@ F test_value_range_const() -> i64 {
         print_i64(unsafe)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     value_range_free(range)
     print_str(" PASS\n")
-    R 1
+    return 1
 }
 
 # ============================================================================
 # Test 2: Value Range - Bounded
 # ============================================================================
-F test_value_range_bounded() -> i64 {
+fn test_value_range_bounded() -> i64 {
     print_str("Test 2: value_range_bounded [0, 10) safety checks...")
 
     # Create bounded range [0, 10)
@@ -94,8 +94,8 @@ F test_value_range_bounded() -> i64 {
         print_i64(safe)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     # Check is_safe_for_const_length(5) returns 0 (10 > 5)
     unsafe := value_range_is_safe_for_const_length(range, 5)
@@ -104,8 +104,8 @@ F test_value_range_bounded() -> i64 {
         print_i64(unsafe)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     # Check is_safe_for_const_length(15) returns 1 (0 >= 0 and 10 <= 15)
     safe15 := value_range_is_safe_for_const_length(range, 15)
@@ -114,18 +114,18 @@ F test_value_range_bounded() -> i64 {
         print_i64(safe15)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     value_range_free(range)
     print_str(" PASS\n")
-    R 1
+    return 1
 }
 
 # ============================================================================
 # Test 3: Value Range - Unbounded
 # ============================================================================
-F test_value_range_unbounded() -> i64 {
+fn test_value_range_unbounded() -> i64 {
     print_str("Test 3: value_range_new() unbounded range...")
 
     # Create unbounded range
@@ -142,24 +142,24 @@ F test_value_range_unbounded() -> i64 {
         print_i64(lo)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     I hi != (0 - 1) {
         print_str(" FAIL: hi should be -1, got ")
         print_i64(hi)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     I has_lo != 0 {
         print_str(" FAIL: has_lo should be 0, got ")
         print_i64(has_lo)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     # Unbounded range should never be safe
     safe := value_range_is_safe_for_const_length(range, 100)
@@ -168,18 +168,18 @@ F test_value_range_unbounded() -> i64 {
         print_i64(safe)
         print_str("\n")
         value_range_free(range)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     value_range_free(range)
     print_str(" PASS\n")
-    R 1
+    return 1
 }
 
 # ============================================================================
 # Test 4: Range Analysis Creation
 # ============================================================================
-F test_range_analysis_creation() -> i64 {
+fn test_range_analysis_creation() -> i64 {
     print_str("Test 4: range_analysis_new(5) initialization...")
 
     # Create range analysis for 5 locals
@@ -198,21 +198,21 @@ F test_range_analysis_creation() -> i64 {
         print_i64(ranges_len)
         print_str("\n")
         range_analysis_free(analysis)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     # Verify all ranges are initialized (not null)
     i := mut 0
     L {
-        I i >= ranges_len { B } EL { 0 }
+        I i >= ranges_len { B } else { 0 }
         range_ptr := load_i64(ranges_ptr + i * 8)
         I range_ptr == 0 {
             print_str(" FAIL: range[")
             print_i64(i)
             print_str("] should be initialized\n")
             range_analysis_free(analysis)
-            R 0
-        } EL { 0 }
+            return 0
+        } else { 0 }
         # Verify each range is unbounded by default
         has_lo := load_i64(range_ptr + 24)
         I has_lo != 0 {
@@ -222,8 +222,8 @@ F test_range_analysis_creation() -> i64 {
             print_i64(has_lo)
             print_str("\n")
             range_analysis_free(analysis)
-            R 0
-        } EL { 0 }
+            return 0
+        } else { 0 }
         i = i + 1
     }
 
@@ -233,26 +233,26 @@ F test_range_analysis_creation() -> i64 {
         print_i64(eliminable_len)
         print_str("\n")
         range_analysis_free(analysis)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     I eliminated_count != 0 {
         print_str(" FAIL: eliminated_count should be 0, got ")
         print_i64(eliminated_count)
         print_str("\n")
         range_analysis_free(analysis)
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     range_analysis_free(analysis)
     print_str(" PASS\n")
-    R 1
+    return 1
 }
 
 # ============================================================================
 # Test 5: Bounds Check Module Analysis
 # ============================================================================
-F test_bounds_check_module() -> i64 {
+fn test_bounds_check_module() -> i64 {
     print_str("Test 5: bounds_check_analyze_module() on simple module...")
 
     # Create a minimal MIR module with one function body
@@ -294,17 +294,17 @@ F test_bounds_check_module() -> i64 {
         print_i64(eliminated)
         print_str("\n")
         # Note: proper cleanup would free all allocated memory
-        R 0
-    } EL { 0 }
+        return 0
+    } else { 0 }
 
     print_str(" PASS\n")
-    R 1
+    return 1
 }
 
 # ============================================================================
 # Main Test Runner
 # ============================================================================
-F main() -> i64 {
+fn main() -> i64 {
     print_str("\n=== MIR Bounds Check Elimination Tests ===\n\n")
 
     passed := mut 0
@@ -312,23 +312,23 @@ F main() -> i64 {
 
     I test_value_range_const() == 1 {
         passed = passed + 1
-    } EL { 0 }
+    } else { 0 }
 
     I test_value_range_bounded() == 1 {
         passed = passed + 1
-    } EL { 0 }
+    } else { 0 }
 
     I test_value_range_unbounded() == 1 {
         passed = passed + 1
-    } EL { 0 }
+    } else { 0 }
 
     I test_range_analysis_creation() == 1 {
         passed = passed + 1
-    } EL { 0 }
+    } else { 0 }
 
     I test_bounds_check_module() == 1 {
         passed = passed + 1
-    } EL { 0 }
+    } else { 0 }
 
     print_str("\n=== Summary ===\n")
     print_str("Passed: ")
@@ -339,9 +339,9 @@ F main() -> i64 {
 
     I passed == total {
         print_str("All tests passed!\n")
-        R 0
-    } EL {
+        return 0
+    } else {
         print_str("Some tests failed.\n")
-        R 1
+        return 1
     }
 }

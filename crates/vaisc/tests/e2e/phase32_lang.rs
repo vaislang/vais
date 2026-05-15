@@ -22,13 +22,13 @@ use super::helpers::*;
 fn e2e_phase32_defer_in_loop() {
     // defer inside a L loop iteration — 3 iterations, n=3
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     n := mut 0
     L i:0..3 {
         D { }
         n = n + 1
     }
-    R n
+    return n
 }
 "#;
     assert_exit_code(source, 3);

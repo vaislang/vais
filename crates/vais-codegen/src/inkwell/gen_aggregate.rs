@@ -189,6 +189,60 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Looks up the variable's resolved type from `var_resolved_types` and extracts
     /// the inner element type for Slice/SliceMut/Array/Vec<T>. Falls back to i64 if unknown.
     fn infer_element_llvm_type(&self, arr_expr: &Expr) -> inkwell::types::BasicTypeEnum<'ctx> {
+        // Phase 3.14: handle struct-field Vec<T> via type-name string parse.
+        if let Expr::Field {
+            expr: object,
+            field,
+        } = arr_expr
+        {
+            if let Expr::Ident(parent_name) = &object.node {
+                let parent_struct = match self.var_resolved_types.get(parent_name) {
+                    Some(vais_types::ResolvedType::Named { name, .. }) => Some(name.clone()),
+                    Some(vais_types::ResolvedType::Ref(inner))
+                    | Some(vais_types::ResolvedType::RefMut(inner)) => {
+                        if let vais_types::ResolvedType::Named { name, .. } = inner.as_ref() {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+                if let Some(ps) = parent_struct {
+                    if let Some(fields) = self.struct_field_type_names.get(&ps) {
+                        for (fname, ftype) in fields {
+                            if fname == &field.node {
+                                // Parse "Vec<Column>" / "Vec<u64>" style
+                                if let Some(start) = ftype.find('<') {
+                                    if ftype.ends_with('>') && ftype.starts_with("Vec<") {
+                                        let inner_name = &ftype[start + 1..ftype.len() - 1];
+                                        let inner_ty = match inner_name {
+                                            "i8" => vais_types::ResolvedType::I8,
+                                            "i16" => vais_types::ResolvedType::I16,
+                                            "i32" => vais_types::ResolvedType::I32,
+                                            "i64" => vais_types::ResolvedType::I64,
+                                            "u8" => vais_types::ResolvedType::U8,
+                                            "u16" => vais_types::ResolvedType::U16,
+                                            "u32" => vais_types::ResolvedType::U32,
+                                            "u64" => vais_types::ResolvedType::U64,
+                                            "f32" => vais_types::ResolvedType::F32,
+                                            "f64" => vais_types::ResolvedType::F64,
+                                            "bool" => vais_types::ResolvedType::Bool,
+                                            "str" => vais_types::ResolvedType::Str,
+                                            other => vais_types::ResolvedType::Named {
+                                                name: other.to_string(),
+                                                generics: vec![],
+                                            },
+                                        };
+                                        return self.type_mapper.map_type(&inner_ty);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if let Expr::Ident(name) = arr_expr {
             match self.var_resolved_types.get(name) {
                 Some(
@@ -213,16 +267,54 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     }
 
     /// Check if an expression resolves to a Vec type (Named { name: "Vec", ... }).
-    fn is_vec_expr(&self, arr_expr: &Expr) -> bool {
-        if let Expr::Ident(name) = arr_expr {
-            if let Some(vais_types::ResolvedType::Named {
-                name: type_name, ..
-            }) = self.var_resolved_types.get(name)
-            {
-                return type_name == "Vec";
+    /// Phase 3.14: also handles Expr::Field for struct-embedded Vec<T> by
+    /// looking up the parent struct's field type via struct_field_type_names
+    /// and parsing the type string.
+    pub(super) fn is_vec_expr(&self, arr_expr: &Expr) -> bool {
+        match arr_expr {
+            Expr::Ident(name) => {
+                if let Some(vais_types::ResolvedType::Named {
+                    name: type_name, ..
+                }) = self.var_resolved_types.get(name)
+                {
+                    return type_name == "Vec";
+                }
+                false
             }
+            Expr::Field {
+                expr: object,
+                field,
+            } => {
+                // Resolve parent struct name from the object's type
+                let parent_struct = if let Expr::Ident(parent_name) = &object.node {
+                    match self.var_resolved_types.get(parent_name) {
+                        Some(vais_types::ResolvedType::Named { name, .. }) => name.clone(),
+                        Some(vais_types::ResolvedType::Ref(inner))
+                        | Some(vais_types::ResolvedType::RefMut(inner)) => {
+                            if let vais_types::ResolvedType::Named { name, .. } = inner.as_ref() {
+                                name.clone()
+                            } else {
+                                return false;
+                            }
+                        }
+                        _ => return false,
+                    }
+                } else {
+                    return false;
+                };
+                let fields = match self.struct_field_type_names.get(&parent_struct) {
+                    Some(f) => f,
+                    None => return false,
+                };
+                for (fname, ftype) in fields {
+                    if fname == &field.node {
+                        return ftype.starts_with("Vec<") || ftype == "Vec";
+                    }
+                }
+                false
+            }
+            _ => false,
         }
-        false
     }
 
     pub(super) fn generate_index(
@@ -363,6 +455,49 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
         }
 
+        // Phase 3.14 safety: clean error for struct values that didn't match
+        // any prior arm (Vec 4-field or Slice 2-field). Without this the
+        // into_pointer_value() call below panics in inkwell.
+        if arr_val.is_struct_value() {
+            return Err(CodegenError::TypeError(
+                "Cannot index into this struct value directly at codegen. \
+                 If this is `obj.vec_field[i]` with a struct-embedded Vec, \
+                 the type lookup may have failed. Workaround: copy to a \
+                 local first — `v := obj.vec_field; x := v[i]`."
+                    .to_string(),
+            ));
+        }
+
+        // Phase 0 bug C6 fix: a fixed-size array value (e.g. extracted from
+        // a struct field via `extractvalue %T %p, 0`) arrives as an
+        // ArrayValue, not a PointerValue. Spill to an alloca so we can GEP
+        // through it. This handles `S P { c: [i64;3] } let p := P{...}; p.c[i]`.
+        if arr_val.is_array_value() {
+            let array_val = arr_val.into_array_value();
+            let array_ty = array_val.get_type();
+            let tmp = self
+                .builder
+                .build_alloca(array_ty, "array_tmp")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            self.builder
+                .build_store(tmp, array_val)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            let idx_int = idx_val.into_int_value();
+            let zero = self.context.i64_type().const_zero();
+            // SAFETY: `tmp` is an alloca of `array_ty`, and the GEP uses the
+            // canonical `[0, idx]` path into that aggregate. Runtime bounds are
+            // enforced by the source language/checker before codegen reaches here.
+            let elem_ptr = unsafe {
+                self.builder
+                    .build_gep(array_ty, tmp, &[zero, idx_int], "array_elem_ptr")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            };
+            return self
+                .builder
+                .build_load(inferred_elem_type, elem_ptr, "array_elem")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()));
+        }
+
         // Regular array/pointer indexing — use inferred element type
         let arr_ptr = arr_val.into_pointer_value();
         let idx_int = idx_val.into_int_value();
@@ -485,7 +620,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_call(malloc_fn, &[byte_size.into()], "slice_raw")
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?
             .try_as_basic_value()
-            .basic()
+            .left()
             .ok_or_else(|| {
                 CodegenError::LlvmError("ICE: malloc call returned void instead of pointer".into())
             })?;
@@ -494,11 +629,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let current_fn = self
                 .builder
                 .get_insert_block()
-                .unwrap()
+                .expect("invariant: builder positioned in a basic block before struct-malloc alloca-slot setup")
                 .get_parent()
-                .unwrap();
-            let entry_block = current_fn.get_first_basic_block().unwrap();
-            let current_block = self.builder.get_insert_block().unwrap();
+                .expect("invariant: basic block owned by a function during struct-malloc alloca-slot setup");
+            let entry_block = current_fn.get_first_basic_block().expect(
+                "invariant: function has at least one basic block (entry) when placing alloca slot",
+            );
+            let current_block = self.builder.get_insert_block().expect(
+                "invariant: builder still positioned in a basic block after retrieving entry block",
+            );
             if let Some(terminator) = entry_block.get_terminator() {
                 self.builder.position_before(&terminator);
             } else {
@@ -689,6 +828,115 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // Also generate the receiver value as fallback (for non-method calls or unknown receivers)
         let receiver_val = self.generate_expr(receiver)?;
 
+        // B.2: str method dispatch (inkwell backend). Receiver types covered:
+        //   - `ResolvedType::Str` via `var_resolved_types` (for Ident receivers)
+        //   - LLVM { i8*, i64 } fat pointer at the value level (all other cases —
+        //     string literals, function returns, etc.)
+        // Methods dispatched inline (no TypeName_method lookup):
+        //   - char_at(i) → i8 at ptr+i, zext to i64
+        //   - parse_f64() / parse_f32() → strtod/strtof + Result<f{64,32}, str>
+        //   - parse_i64() / parse_i32() → strtoll + Result<i{64,32}, str>
+        //   - parse_u64() / parse_u32() → strtoull + Result<u{64,32}, str>
+        // The text-IR backend has (now unreachable) inline copies in string_ops.rs;
+        // this is the live path for `vaisc build` which defaults to inkwell.
+        let receiver_is_str = match receiver {
+            Expr::Ident(name) => matches!(
+                self.var_resolved_types.get(name),
+                Some(vais_types::ResolvedType::Str)
+            ),
+            _ => false,
+        } || Self::is_str_fat_pointer(&receiver_val);
+        if receiver_is_str {
+            if let Some(result) = self.try_generate_str_method(&receiver_val, method, args)? {
+                return Ok(result);
+            }
+        }
+
+        // F-23 dispatch (A4-12 step 2b-5c — DEFERRED #18): if the receiver
+        // is an Ident whose `var_resolved_types` entry is `DynTrait` /
+        // `Ref(DynTrait)` / `RefMut(DynTrait)`, route the method call
+        // through vtable indirection. The receiver value (already
+        // generated above as `receiver_val`) is the fat pointer
+        // { data_ptr, vtable_ptr } emitted by the caller (2b-5b
+        // create_trait_object_inkwell wrapping).
+        //
+        // If the receiver is dyn but `receiver_val` is NOT a fat-pointer
+        // struct value (e.g. caller failed to wrap because impl_type
+        // could not be inferred), fall back to the original L-002
+        // hard-error to preserve the silent → loud invariant.
+        if let Expr::Ident(name) = receiver {
+            let dyn_trait_name = self.var_resolved_types.get(name).and_then(|rt| {
+                use vais_types::ResolvedType;
+                match rt {
+                    ResolvedType::DynTrait { trait_name, .. } => Some(trait_name.clone()),
+                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => {
+                        if let ResolvedType::DynTrait { trait_name, .. } = inner.as_ref() {
+                            Some(trait_name.clone())
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                }
+            });
+
+            if let Some(trait_name) = dyn_trait_name {
+                // Check that receiver_val is the expected fat pointer
+                // { i8*, i8* } shape. If not, the caller didn't wrap
+                // (impl_type inference failed) — preserve loud rejection.
+                let is_fat = if let BasicValueEnum::StructValue(sv) = receiver_val {
+                    let st = sv.get_type();
+                    st.count_fields() == 2
+                        && st
+                            .get_field_type_at_index(0)
+                            .map(|t| t.is_pointer_type())
+                            .unwrap_or(false)
+                        && st
+                            .get_field_type_at_index(1)
+                            .map(|t| t.is_pointer_type())
+                            .unwrap_or(false)
+                } else {
+                    false
+                };
+
+                if !is_fat {
+                    return Err(CodegenError::Unsupported(format!(
+                        "dyn trait method call `.{}` on receiver `{}`: receiver \
+                         was not wrapped as a fat pointer (caller failed to \
+                         infer concrete impl type at the call site). \
+                         L-002 north star: refusing silent dispatch.",
+                        method, name
+                    )));
+                }
+
+                // Generate args (widen each non-i64 IntValue to i64 to
+                // match the simplified vtable ABI from 2b-4).
+                let mut arg_values: Vec<BasicValueEnum<'ctx>> = Vec::with_capacity(args.len());
+                for a in args {
+                    arg_values.push(self.generate_expr(&a.node)?);
+                }
+
+                let trait_obj = receiver_val.into_struct_value();
+                match self.generate_dynamic_call_inkwell(
+                    trait_obj,
+                    &trait_name,
+                    method,
+                    &arg_values,
+                ) {
+                    Some(Some(ret_val)) => return Ok(ret_val),
+                    Some(None) => return Ok(self.unit_value()),
+                    None => {
+                        return Err(CodegenError::Unsupported(format!(
+                            "dyn trait method call `.{}` on `{}` (trait `{}`): \
+                             vtable lookup failed — trait not registered, \
+                             method unknown, or builder error.",
+                            method, name, trait_name
+                        )));
+                    }
+                }
+            }
+        }
+
         // Try qualified name: TypeName_method
         let qualified_name = struct_name.as_ref().map(|sn| format!("{}_{}", sn, method));
 
@@ -723,6 +971,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             )));
         } else {
             // Struct name unknown — scan all registered structs for a matching method.
+            // (F-23 dyn-receiver case is rejected earlier — see the F-23 GUARD
+            // block before the qualified_name lookup. By the time we reach this
+            // arm the receiver is guaranteed to NOT be `&dyn`/`&mut dyn`/`dyn`.)
             // Collect into a sorted Vec first to make the search order deterministic.
             let mut candidates: Vec<String> = self.generated_structs.keys().cloned().collect();
             candidates.sort();
@@ -782,7 +1033,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         Ok(call
             .try_as_basic_value()
-            .basic()
+            .left()
             .unwrap_or_else(|| self.unit_value()))
     }
 
@@ -1061,5 +1312,447 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             }
             _ => {}
         }
+    }
+
+    // ========== B.2: str method dispatch (inkwell backend) ==========
+
+    /// Detect a value that looks like the str fat-pointer ABI `{ i8*, i64 }`.
+    /// Used as a fallback when var_resolved_types doesn't classify the receiver
+    /// as Str (e.g., string literals, function returns, complex expressions).
+    fn is_str_fat_pointer(v: &BasicValueEnum<'_>) -> bool {
+        if !v.is_struct_value() {
+            return false;
+        }
+        let st = v.into_struct_value().get_type();
+        if st.count_fields() != 2 {
+            return false;
+        }
+        let f0 = st.get_field_type_at_index(0);
+        let f1 = st.get_field_type_at_index(1);
+        matches!(f0, Some(t) if t.is_pointer_type())
+            && matches!(f1, Some(t) if t.is_int_type() && t.into_int_type().get_bit_width() == 64)
+    }
+
+    /// Try to lower `<str>.method(args)` for a known builtin method. Returns
+    /// `Ok(Some(value))` on a hit, `Ok(None)` if `method` is not a recognized
+    /// str builtin (caller falls back to TypeName_method lookup).
+    fn try_generate_str_method(
+        &mut self,
+        recv: &BasicValueEnum<'ctx>,
+        method: &str,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<Option<BasicValueEnum<'ctx>>> {
+        match method {
+            "char_at" | "charAt" => Ok(Some(self.str_method_char_at(recv, args)?)),
+            "parse_i64" | "parse_int" => {
+                Ok(Some(self.str_method_parse_int(
+                    recv, /*signed=*/ true, /*bits=*/ 64,
+                )?))
+            }
+            "parse_i32" => Ok(Some(self.str_method_parse_int(recv, true, 32)?)),
+            "parse_u64" => Ok(Some(self.str_method_parse_int(recv, false, 64)?)),
+            "parse_u32" => Ok(Some(self.str_method_parse_int(recv, false, 32)?)),
+            "parse_f64" => Ok(Some(self.str_method_parse_float(recv, /*bits=*/ 64)?)),
+            "parse_f32" => Ok(Some(self.str_method_parse_float(recv, 32)?)),
+            _ => Ok(None),
+        }
+    }
+
+    /// `s.char_at(i) -> u8` (typed as u8 by TC; we return as i8 — promotion to
+    /// i64 in `as` casts is handled by the cast layer).
+    fn str_method_char_at(
+        &mut self,
+        recv: &BasicValueEnum<'ctx>,
+        args: &[Spanned<Expr>],
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        if args.is_empty() {
+            return Err(CodegenError::Unsupported(
+                "char_at requires 1 argument".to_string(),
+            ));
+        }
+        let raw_ptr = self.extract_str_raw_ptr(*recv)?;
+        let idx_val = self.generate_expr(&args[0].node)?;
+        let idx_i64 = self.coerce_to_i64(idx_val)?;
+        let i8_ty = self.context.i8_type();
+        // SAFETY: `raw_ptr` is extracted from the canonical Vais string
+        // `{ptr,len}` representation. `char_at` callers are responsible for
+        // bounds validation before indexing into the byte buffer.
+        let elem_ptr = unsafe {
+            self.builder
+                .build_in_bounds_gep(i8_ty, raw_ptr, &[idx_i64], "char_at_ptr")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        let byte = self
+            .builder
+            .build_load(i8_ty, elem_ptr, "char_at_byte")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        Ok(byte)
+    }
+
+    /// `s.parse_iN()` / `s.parse_uN()` → `Result<iN/uN, str>` via strtoll/strtoull.
+    /// Success criterion: end pointer landed past the start AND points at NUL
+    /// (full string consumed). Otherwise return `Err("parse error")`.
+    fn str_method_parse_int(
+        &mut self,
+        recv: &BasicValueEnum<'ctx>,
+        signed: bool,
+        bits: u32,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        use inkwell::AddressSpace;
+        let i8_ty = self.context.i8_type();
+        let i32_ty = self.context.i32_type();
+        let i64_ty = self.context.i64_type();
+        let i8_ptr_ty = i8_ty.ptr_type(AddressSpace::default());
+        let i8_ptr_ptr_ty = i8_ptr_ty.ptr_type(AddressSpace::default());
+
+        // Declare extern long long strtoll(const char*, char**, int)
+        // or unsigned long long strtoull(...).
+        let extern_name = if signed { "strtoll" } else { "strtoull" };
+        let strto_fn = self.module.get_function(extern_name).unwrap_or_else(|| {
+            let fn_ty = i64_ty.fn_type(
+                &[i8_ptr_ty.into(), i8_ptr_ptr_ty.into(), i32_ty.into()],
+                false,
+            );
+            self.module.add_function(extern_name, fn_ty, None)
+        });
+
+        let raw_ptr = self.extract_str_raw_ptr(*recv)?;
+        let endptr_alloca = self
+            .builder
+            .build_alloca(i8_ptr_ty, "parse_endptr")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let base = i32_ty.const_int(10, false);
+        let parsed_full = self
+            .builder
+            .build_call(
+                strto_fn,
+                &[raw_ptr.into(), endptr_alloca.into(), base.into()],
+                "parse_int_call",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| CodegenError::LlvmError("strtoll returned no value".into()))?
+            .into_int_value();
+
+        // Truncate / extend to requested bit width if not 64.
+        let parsed = if bits == 64 {
+            parsed_full
+        } else {
+            let target_ty = self.context.custom_width_int_type(bits);
+            self.builder
+                .build_int_truncate(parsed_full, target_ty, "parse_int_trunc")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+
+        // Success check: endptr > raw_ptr AND *endptr == 0 (NUL terminator —
+        // caller must trust the str is NUL-terminated, which all Vais string
+        // literals are).
+        let endptr_loaded = self
+            .builder
+            .build_load(i8_ptr_ty, endptr_alloca, "parse_endptr_loaded")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        let end_int = self
+            .builder
+            .build_ptr_to_int(endptr_loaded, i64_ty, "parse_end_int")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let raw_int = self
+            .builder
+            .build_ptr_to_int(raw_ptr, i64_ty, "parse_raw_int")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let advanced = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                end_int,
+                raw_int,
+                "parse_advanced",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let last_byte = self
+            .builder
+            .build_load(i8_ty, endptr_loaded, "parse_last_byte")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let consumed_all = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                last_byte,
+                i8_ty.const_int(0, false),
+                "parse_consumed_all",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let success = self
+            .builder
+            .build_and(advanced, consumed_all, "parse_success")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Pack payload as i64 for the Result { i32 tag, { i64 } payload } ABI.
+        let payload_ok = if bits == 64 {
+            parsed
+        } else {
+            // Zero/sign-extend back to i64 for the payload slot.
+            if signed {
+                self.builder
+                    .build_int_s_extend(parsed, i64_ty, "parse_ok_sext")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            } else {
+                self.builder
+                    .build_int_z_extend(parsed, i64_ty, "parse_ok_zext")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            }
+        };
+        let err_payload_i64 = self.build_static_err_payload_i64("parse error")?;
+        let chosen_payload = self
+            .builder
+            .build_select(success, payload_ok, err_payload_i64, "parse_payload")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        // Tag: success → 0 (Ok), failure → 1 (Err).
+        let tag = self
+            .builder
+            .build_select(
+                success,
+                self.context.i32_type().const_int(0, false),
+                self.context.i32_type().const_int(1, false),
+                "parse_tag",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        self.assemble_result_struct(tag, chosen_payload)
+    }
+
+    /// `s.parse_fN()` → `Result<fN, str>` via strtod/strtof.
+    /// Success criterion mirrors parse_int: full string consumed.
+    fn str_method_parse_float(
+        &mut self,
+        recv: &BasicValueEnum<'ctx>,
+        bits: u32,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        use inkwell::AddressSpace;
+        let i8_ty = self.context.i8_type();
+        let i64_ty = self.context.i64_type();
+        let f64_ty = self.context.f64_type();
+        let f32_ty = self.context.f32_type();
+        let i8_ptr_ty = i8_ty.ptr_type(AddressSpace::default());
+        let i8_ptr_ptr_ty = i8_ptr_ty.ptr_type(AddressSpace::default());
+
+        let raw_ptr = self.extract_str_raw_ptr(*recv)?;
+        let endptr_alloca = self
+            .builder
+            .build_alloca(i8_ptr_ty, "parse_endptr")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Always go through strtod (returns f64), then convert. f32 path uses
+        // fptrunc — bounds-clamp via float comparison would over-engineer the
+        // simple case; tolerate inf/-inf for now.
+        let strtod_fn = self.module.get_function("strtod").unwrap_or_else(|| {
+            let fn_ty = f64_ty.fn_type(&[i8_ptr_ty.into(), i8_ptr_ptr_ty.into()], false);
+            self.module.add_function("strtod", fn_ty, None)
+        });
+        let parsed_f64 = self
+            .builder
+            .build_call(
+                strtod_fn,
+                &[raw_ptr.into(), endptr_alloca.into()],
+                "parse_f_call",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .try_as_basic_value()
+            .left()
+            .ok_or_else(|| CodegenError::LlvmError("strtod returned no value".into()))?
+            .into_float_value();
+
+        // Success: endptr advanced + landed on NUL.
+        let endptr_loaded = self
+            .builder
+            .build_load(i8_ptr_ty, endptr_alloca, "parse_endptr_loaded")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        let end_int = self
+            .builder
+            .build_ptr_to_int(endptr_loaded, i64_ty, "parse_end_int")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let raw_int = self
+            .builder
+            .build_ptr_to_int(raw_ptr, i64_ty, "parse_raw_int")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let advanced = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                end_int,
+                raw_int,
+                "parse_advanced",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let last_byte = self
+            .builder
+            .build_load(i8_ty, endptr_loaded, "parse_last_byte")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let consumed_all = self
+            .builder
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                last_byte,
+                i8_ty.const_int(0, false),
+                "parse_consumed_all",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        let success = self
+            .builder
+            .build_and(advanced, consumed_all, "parse_success")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+
+        // Pack payload as i64. f64 → bitcast i64. f32 → fptrunc → bitcast i32 → zext i64.
+        let payload_ok = if bits == 64 {
+            self.builder
+                .build_bitcast(parsed_f64, i64_ty, "parse_ok_f64_bits")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_int_value()
+        } else {
+            let parsed_f32 = self
+                .builder
+                .build_float_trunc(parsed_f64, f32_ty, "parse_f32_trunc")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+            let bits_i32 = self
+                .builder
+                .build_bitcast(parsed_f32, self.context.i32_type(), "parse_ok_f32_bits")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                .into_int_value();
+            self.builder
+                .build_int_z_extend(bits_i32, i64_ty, "parse_ok_f32_to_i64")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        let err_payload_i64 = self.build_static_err_payload_i64("parse error")?;
+        let chosen_payload = self
+            .builder
+            .build_select(success, payload_ok, err_payload_i64, "parse_payload")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        let tag = self
+            .builder
+            .build_select(
+                success,
+                self.context.i32_type().const_int(0, false),
+                self.context.i32_type().const_int(1, false),
+                "parse_tag",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_int_value();
+        self.assemble_result_struct(tag, chosen_payload)
+    }
+
+    /// Pack a static `str` constant (always "parse error" today) into the
+    /// Result-payload i64 slot. The Err branch uses this when parsing fails.
+    /// Layout: heap-alloc'd `{ i8*, i64 }` fat pointer, ptrtoint to i64.
+    /// Heap allocation matches B.1's >8B struct path so the match-arm decoder
+    /// recovers the str via int_to_ptr+load.
+    fn build_static_err_payload_i64(
+        &mut self,
+        msg: &str,
+    ) -> CodegenResult<inkwell::values::IntValue<'ctx>> {
+        use inkwell::AddressSpace;
+        let i8_ty = self.context.i8_type();
+        let i64_ty = self.context.i64_type();
+        let i8_ptr_ty = i8_ty.ptr_type(AddressSpace::default());
+
+        // Build a global string constant for the message, then assemble a fat
+        // pointer struct on the heap.
+        let str_global = self
+            .builder
+            .build_global_string_ptr(msg, "parse_err_msg")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .as_pointer_value();
+        let len = i64_ty.const_int(msg.len() as u64, false);
+        let fat_ty = self
+            .context
+            .struct_type(&[i8_ptr_ty.into(), i64_ty.into()], false);
+        let mut fat_undef = fat_ty.get_undef();
+        fat_undef = self
+            .builder
+            .build_insert_value(fat_undef, str_global, 0, "parse_err_fat_p")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        fat_undef = self
+            .builder
+            .build_insert_value(fat_undef, len, 1, "parse_err_fat_l")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+
+        // Heap-allocate via malloc(16) and store, then ptrtoint to i64. Matches
+        // B.1's >8B struct payload path; gen_match.rs's payload decoder will
+        // int_to_ptr + load symmetrically.
+        let malloc_fn = self.module.get_function("malloc").unwrap_or_else(|| {
+            let malloc_ty = i8_ptr_ty.fn_type(&[i64_ty.into()], false);
+            self.module.add_function("malloc", malloc_ty, None)
+        });
+        let size = i64_ty.const_int(16, false);
+        let heap_ptr = self
+            .builder
+            .build_call(malloc_fn, &[size.into()], "parse_err_heap")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .try_as_basic_value()
+            .left()
+            .expect("invariant: malloc returns LLVM pointer value, not void")
+            .into_pointer_value();
+        let typed_ptr = self
+            .builder
+            .build_bitcast(
+                heap_ptr,
+                fat_ty.ptr_type(AddressSpace::default()),
+                "parse_err_heap_typed",
+            )
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_pointer_value();
+        self.builder
+            .build_store(typed_ptr, fat_undef)
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+        self.builder
+            .build_ptr_to_int(heap_ptr, i64_ty, "parse_err_payload")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))
+    }
+
+    /// Assemble the canonical Result `{ i32 tag, { i64 } payload }` value.
+    fn assemble_result_struct(
+        &mut self,
+        tag: inkwell::values::IntValue<'ctx>,
+        payload: inkwell::values::IntValue<'ctx>,
+    ) -> CodegenResult<BasicValueEnum<'ctx>> {
+        let result_ty = self.type_mapper.option_result_type();
+        let payload_ty = self.type_mapper.option_result_payload_type();
+        let tag_bits = tag.get_type().get_bit_width();
+        let tag_i32 = if tag_bits == 32 {
+            tag
+        } else if tag_bits < 32 {
+            self.builder
+                .build_int_z_extend(tag, self.context.i32_type(), "result_tag_i32")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else {
+            self.builder
+                .build_int_truncate(tag, self.context.i32_type(), "result_tag_i32")
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        };
+        let mut payload_struct = payload_ty.get_undef();
+        payload_struct = self
+            .builder
+            .build_insert_value(payload_struct, payload, 0, "result_payload_i64")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        let mut val = result_ty.get_undef();
+        val = self
+            .builder
+            .build_insert_value(val, tag_i32, 0, "result_tag")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        val = self
+            .builder
+            .build_insert_value(val, payload_struct, 1, "result_payload")
+            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+            .into_struct_value();
+        Ok(val.into())
     }
 }

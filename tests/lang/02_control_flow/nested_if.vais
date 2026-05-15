@@ -1,0 +1,24 @@
+# CHECKS: nested if-else with multiple branches
+fn classify(n: i64) -> i64 {
+    I n < 0 {
+        return -1
+    } else {
+        I n == 0 {
+            return 0
+        } else {
+            I n < 10 {
+                return 1
+            } else {
+                return 2
+            }
+        }
+    }
+}
+
+fn main() -> i64 {
+    I classify(-5) != -1 { return 1 }
+    I classify(0)  != 0  { return 2 }
+    I classify(5)  != 1  { return 3 }
+    I classify(20) != 2  { return 4 }
+    return 0
+}

@@ -1,0 +1,24 @@
+# CHECKS: Collatz conjecture step count for several seeds.
+fn collatz_steps(n: i64) -> i64 {
+    steps: i64 := mut 0
+    cur: i64 := mut n
+    L {
+        I cur <= 1 { B steps }
+        I (cur & 1) == 0 {
+            cur = cur / 2
+        } else {
+            cur = cur * 3 + 1
+        }
+        steps = steps + 1
+    }
+}
+
+fn main() -> i64 {
+    # Known: Collatz(1)=0, (2)=1, (3)=7, (6)=8, (27)=111
+    I collatz_steps(1) != 0 { return 1 }
+    I collatz_steps(2) != 1 { return 2 }
+    I collatz_steps(3) != 7 { return 3 }
+    I collatz_steps(6) != 8 { return 4 }
+    I collatz_steps(27) != 111 { return 5 }
+    return 0
+}

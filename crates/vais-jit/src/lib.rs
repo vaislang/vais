@@ -49,7 +49,7 @@
 //! ```
 
 mod compiler;
-mod runtime;
+pub mod runtime;
 mod tiered;
 mod types;
 

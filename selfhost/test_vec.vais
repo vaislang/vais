@@ -3,41 +3,41 @@
 # ============================================================================
 # Tests all functions in vec.vais module
 
-U vec
+use vec
 
 # ============================================================================
 # Test Infrastructure
 # ============================================================================
 
-F print_i64(val: i64) -> i64 {
+fn print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } EL I val < 0 {
+    } else I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } EL {
+    } else {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } EL { 0 }
+        } else { 0 }
         putchar(48 + (val % 10))
         0
     }
 }
 
-F println_i64(val: i64) -> i64 {
+fn println_i64(val: i64) -> i64 {
     print_i64(val)
     putchar(10)
     0
 }
 
-F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+fn assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
     I actual == expected {
         puts("[PASS] ")
         puts(test_name)
         1
-    } EL {
+    } else {
         puts("[FAIL] ")
         puts(test_name)
         puts("  Expected: ")
@@ -48,12 +48,12 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
     }
 }
 
-F assert_neq(actual: i64, expected: i64, test_name: str) -> i64 {
+fn assert_neq(actual: i64, expected: i64, test_name: str) -> i64 {
     I actual != expected {
         puts("[PASS] ")
         puts(test_name)
         1
-    } EL {
+    } else {
         puts("[FAIL] ")
         puts(test_name)
         puts("  Values should be different but both are: ")
@@ -66,7 +66,7 @@ F assert_neq(actual: i64, expected: i64, test_name: str) -> i64 {
 # Constructor Tests
 # ============================================================================
 
-F test_vec_new() -> i64 {
+fn test_vec_new() -> i64 {
     puts("\n--- Constructor Tests ---")
 
     v := vec_new()
@@ -79,7 +79,7 @@ F test_vec_new() -> i64 {
     r1 + r2 + r3 + r4
 }
 
-F test_vec_with_cap() -> i64 {
+fn test_vec_with_cap() -> i64 {
     v := vec_with_cap(16)
     r1 := assert_neq(v, 0, "vec_with_cap(16) returns non-null")
     r2 := assert_eq(vec_len(v), 0, "vec_with_cap(16) has len=0")
@@ -98,7 +98,7 @@ F test_vec_with_cap() -> i64 {
 # Push/Pop Tests
 # ============================================================================
 
-F test_vec_push_pop() -> i64 {
+fn test_vec_push_pop() -> i64 {
     puts("\n--- Push/Pop Tests ---")
 
     v := vec_new()
@@ -128,7 +128,7 @@ F test_vec_push_pop() -> i64 {
 # Element Access Tests
 # ============================================================================
 
-F test_vec_get_set() -> i64 {
+fn test_vec_get_set() -> i64 {
     puts("\n--- Element Access Tests ---")
 
     v := vec_new()
@@ -150,7 +150,7 @@ F test_vec_get_set() -> i64 {
     r1 + r2 + r3 + r4 + r5 + r6
 }
 
-F test_vec_get_checked() -> i64 {
+fn test_vec_get_checked() -> i64 {
     puts("\n--- Checked Access Tests ---")
 
     v := vec_new()
@@ -182,7 +182,7 @@ F test_vec_get_checked() -> i64 {
     r1 + r2 + r3 + r4 + r5 + r6
 }
 
-F test_vec_first_last() -> i64 {
+fn test_vec_first_last() -> i64 {
     puts("\n--- First/Last Tests ---")
 
     v := vec_new()
@@ -206,7 +206,7 @@ F test_vec_first_last() -> i64 {
 # Insert/Remove Tests
 # ============================================================================
 
-F test_vec_insert() -> i64 {
+fn test_vec_insert() -> i64 {
     puts("\n--- Insert Tests ---")
 
     v := vec_new()
@@ -231,7 +231,7 @@ F test_vec_insert() -> i64 {
     r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8
 }
 
-F test_vec_remove() -> i64 {
+fn test_vec_remove() -> i64 {
     puts("\n--- Remove Tests ---")
 
     v := vec_new()
@@ -257,7 +257,7 @@ F test_vec_remove() -> i64 {
     r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8
 }
 
-F test_vec_swap_remove() -> i64 {
+fn test_vec_swap_remove() -> i64 {
     puts("\n--- Swap Remove Tests ---")
 
     v := vec_new()
@@ -282,7 +282,7 @@ F test_vec_swap_remove() -> i64 {
 # Clear/Truncate Tests
 # ============================================================================
 
-F test_vec_clear_truncate() -> i64 {
+fn test_vec_clear_truncate() -> i64 {
     puts("\n--- Clear/Truncate Tests ---")
 
     v := vec_new()
@@ -320,7 +320,7 @@ F test_vec_clear_truncate() -> i64 {
 # Search Tests
 # ============================================================================
 
-F test_vec_search() -> i64 {
+fn test_vec_search() -> i64 {
     puts("\n--- Search Tests ---")
 
     v := vec_new()
@@ -348,7 +348,7 @@ F test_vec_search() -> i64 {
 # Bulk Operations Tests
 # ============================================================================
 
-F test_vec_extend() -> i64 {
+fn test_vec_extend() -> i64 {
     puts("\n--- Extend Tests ---")
 
     v1 := vec_new()
@@ -374,7 +374,7 @@ F test_vec_extend() -> i64 {
     r1 + r2 + r3 + r4 + r5 + r6
 }
 
-F test_vec_clone() -> i64 {
+fn test_vec_clone() -> i64 {
     puts("\n--- Clone Tests ---")
 
     v1 := vec_new()
@@ -404,7 +404,7 @@ F test_vec_clone() -> i64 {
 # Reverse Tests
 # ============================================================================
 
-F test_vec_reverse() -> i64 {
+fn test_vec_reverse() -> i64 {
     puts("\n--- Reverse Tests ---")
 
     v := vec_new()
@@ -431,7 +431,7 @@ F test_vec_reverse() -> i64 {
 # Sort Tests
 # ============================================================================
 
-F test_vec_sort() -> i64 {
+fn test_vec_sort() -> i64 {
     puts("\n--- Sort Tests ---")
 
     v := vec_new()
@@ -464,7 +464,7 @@ F test_vec_sort() -> i64 {
 # Growth Tests (indirect via push)
 # ============================================================================
 
-F test_vec_growth() -> i64 {
+fn test_vec_growth() -> i64 {
     puts("\n--- Growth Tests ---")
 
     v := vec_with_cap(4)
@@ -502,7 +502,7 @@ F test_vec_growth() -> i64 {
 # Main Test Runner
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("===========================================")
     puts("  Vec Test Suite")
     puts("===========================================")
@@ -571,7 +571,7 @@ F main() -> i64 {
     I passed == total {
         puts("\nAll tests PASSED!")
         0
-    } EL {
+    } else {
         puts("\nSome tests FAILED!")
         1
     }

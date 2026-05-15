@@ -41,7 +41,7 @@ proptest! {
             Just("\"hello\""),
         ],
     ) {
-        let source = format!("F {}() -> {} {}", name, ret_type, body);
+        let source = format!("fn {}() -> {} {}", name, ret_type, body);
         let _ = parse_and_check(&source);
     }
 
@@ -51,7 +51,7 @@ proptest! {
         op in prop_oneof![Just("+"), Just("-"), Just("*"), Just("/"), Just("%")],
         rhs in prop_oneof![Just("1"), Just("2"), Just("42"), Just("100")],
     ) {
-        let source = format!("F f() -> i64 {} {} {}", lhs, op, rhs);
+        let source = format!("fn f() -> i64 {} {} {}", lhs, op, rhs);
         let _ = parse_and_check(&source);
     }
 
@@ -60,7 +60,7 @@ proptest! {
         count in 1usize..10,
     ) {
         let mut lines = Vec::new();
-        lines.push("F f() -> i64 {".to_string());
+        lines.push("fn f() -> i64 {".to_string());
         for i in 0..count {
             lines.push(format!("    x{} := {}", i, i * 7));
         }
@@ -88,7 +88,7 @@ proptest! {
             .map(|i| format!("f{}: {}", i, i * 10))
             .collect();
         let source = format!(
-            "S {} {{\n{}\n}}\n\nF main() -> i64 {{\n    s := {} {{ {} }}\n    s.f0\n}}",
+            "struct {} {{\n{}\n}}\n\nfn main() -> i64 {{\n    s := {} {{ {} }}\n    s.f0\n}}",
             name,
             fields.join(",\n"),
             name,
@@ -109,7 +109,7 @@ proptest! {
             .join(", ");
         let generics = type_params.join(", ");
         let source = format!(
-            "F identity<{generics}>({params}) -> {} {{\n    x0\n}}",
+            "fn identity<{generics}>({params}) -> {} {{\n    x0\n}}",
             type_params[0]
         );
         let _ = parse_and_check(&source);
@@ -119,9 +119,9 @@ proptest! {
     fn type_checker_never_panics_on_if_expressions(
         depth in 1usize..8,
     ) {
-        let mut source = String::from("F f(x: i64) -> i64 ");
+        let mut source = String::from("fn f(x: i64) -> i64 ");
         for i in 0..depth {
-            source.push_str(&format!("I x == {} {{ {} }} E ", i, i * 10));
+            source.push_str(&format!("if x == {} {{ {} }} else ", i, i * 10));
         }
         source.push_str("{ 0 }");
         let _ = parse_and_check(&source);
@@ -132,7 +132,7 @@ proptest! {
         base_case in 0i64..10,
     ) {
         let source = format!(
-            "F fib(n: i64) -> i64 I n <= {} {{ n }} E {{ @(n - 1) + @(n - 2) }}",
+            "fn fib(n: i64) -> i64 I n <= {} {{ n }} else {{ @(n - 1) + @(n - 2) }}",
             base_case
         );
         let _ = parse_and_check(&source);
@@ -145,11 +145,11 @@ proptest! {
         let mut methods = Vec::new();
         let mut impls = Vec::new();
         for i in 0..method_count {
-            methods.push(format!("    F m{}(self) -> i64", i));
-            impls.push(format!("    F m{}(self) -> i64 {}", i, i * 100));
+            methods.push(format!("    fn m{}(self) -> i64", i));
+            impls.push(format!("    fn m{}(self) -> i64 {}", i, i * 100));
         }
         let source = format!(
-            "W MyTrait {{\n{}\n}}\n\nS MyStruct {{}}\n\nX MyStruct: MyTrait {{\n{}\n}}",
+            "trait MyTrait {{\n{}\n}}\n\nstruct MyStruct {{}}\n\nX MyStruct: MyTrait {{\n{}\n}}",
             methods.join("\n"),
             impls.join("\n")
         );

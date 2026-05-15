@@ -1,3 +1,8 @@
+#![cfg_attr(not(test), warn(clippy::unwrap_used))]
+// Warn on `.unwrap()` in non-test code so any new Category D site
+// (user-input reachable panic) is rejected at review time. See
+// `docs/UNWRAP_CLASSIFICATION.md`. Test code is exempt.
+
 //! Vais LLVM Code Generator
 //!
 //! Generates LLVM IR from typed AST for native code generation.
@@ -52,6 +57,7 @@ pub mod cross_compile;
 pub mod debug;
 mod diagnostics;
 mod emit;
+mod emit_typed;
 mod error;
 mod expr;
 mod expr_helpers;
@@ -69,6 +75,7 @@ mod generate_expr_loop;
 mod generate_expr_struct;
 mod generics_helpers;
 mod helpers;
+mod index_access;
 mod init;
 pub mod ir_verify;
 mod lambda_closure;
@@ -288,10 +295,20 @@ pub struct CodeGenerator {
     // Counter for unique global constant names
     pub(crate) ref_constant_counter: usize,
 
-    // Expression types from type checker, keyed by (span.start, span.end).
+    // Expression types from type checker, keyed by (file_id, span.start, span.end).
     // Used by infer_expr_type to look up TC-resolved types before falling back
     // to the legacy inference heuristics.
-    pub(crate) expr_types: HashMap<(usize, usize), ResolvedType>,
+    //
+    // Phase 17.H1: file_id included in the key prevents cross-module span
+    // collisions from poisoning codegen's TC lookup.
+    pub(crate) expr_types: HashMap<(u32, usize, usize), ResolvedType>,
+
+    // Phase 17.H1: per-module file id used when codegen looks up
+    // `expr_types` by span. Parser-produced spans are currently stamped
+    // with file_id=0; codegen falls back to this value so lookups still
+    // locate the entries TC stored under the driver-supplied id. Set via
+    // [`CodeGenerator::set_current_file_id`] before per-module codegen.
+    pub(crate) current_file_id: u32,
 
     // Argument spans that were implicitly unwrapped by the implicit error
     // propagation pass (Phase 4b.1 / #7, `--implicit-try`). For each span

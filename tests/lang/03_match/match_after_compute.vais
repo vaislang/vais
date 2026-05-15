@@ -1,0 +1,23 @@
+# CHECKS: match on the result of an arithmetic computation.
+fn bucket(n: i64) -> i64 {
+    match (n / 10) {
+        0 => 1,
+        1 => 2,
+        2 => 3,
+        3 | 4 | 5 => 4,
+        _ => 5
+    }
+}
+
+fn main() -> i64 {
+    I bucket(0) != 1 { return 1 }
+    I bucket(5) != 1 { return 2 }
+    I bucket(15) != 2 { return 3 }
+    I bucket(25) != 3 { return 4 }
+    I bucket(35) != 4 { return 5 }
+    I bucket(45) != 4 { return 6 }
+    I bucket(55) != 4 { return 7 }
+    I bucket(75) != 5 { return 8 }
+    I bucket(99) != 5 { return 9 }
+    return 0
+}

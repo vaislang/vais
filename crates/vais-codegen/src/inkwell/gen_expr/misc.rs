@@ -20,11 +20,36 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             Ok(val.into_pointer_value())
         } else if val.is_struct_value() {
             let struct_val = val.into_struct_value();
-            let ptr = self
+            let field0 = self
                 .builder
                 .build_extract_value(struct_val, 0, "str_raw_ptr")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
-            Ok(ptr.into_pointer_value())
+            // Field 0 might be a pointer (normal str) OR an i64 (struct where
+            // first field happens to be an i64 pointer stored as integer).
+            // Handle both — cast i64 → ptr when needed.
+            if field0.is_pointer_value() {
+                Ok(field0.into_pointer_value())
+            } else if field0.is_int_value() {
+                let i8_ptr_type = self
+                    .context
+                    .i8_type()
+                    .ptr_type(inkwell::AddressSpace::default());
+                self.builder
+                    .build_int_to_ptr(field0.into_int_value(), i8_ptr_type, "str_raw_ptr_from_i64")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))
+            } else if field0.is_struct_value() {
+                // Nested struct — recurse. This happens when a struct's first
+                // field is itself a fat pointer `{ ptr, i64 }` (a `str` or
+                // slice field), or any wrapper type that stores its pointer
+                // at field 0.
+                self.extract_str_raw_ptr(field0)
+            } else {
+                // Give a clearer error than the inkwell panic.
+                Err(CodegenError::InternalError(format!(
+                    "extract_str_raw_ptr: struct field 0 is neither pointer nor int: {:?}",
+                    field0
+                )))
+            }
         } else {
             // Fallback: inttoptr
             let i8_ptr_type = self
@@ -59,7 +84,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let fv = v.into_float_value();
             let bitcast = self
                 .builder
-                .build_bit_cast(fv, i64_type, "coerce_f2i")
+                .build_bitcast(fv, i64_type, "coerce_f2i")
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
             Ok(bitcast.into_int_value())
         } else if v.is_pointer_value() {
@@ -91,9 +116,12 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         };
 
         let ptr = self.generate_expr(inner)?;
+        if ptr.get_type() == pointee_llvm_type {
+            return Ok(ptr);
+        }
         let ptr_val = if ptr.is_pointer_value() {
             ptr.into_pointer_value()
-        } else {
+        } else if ptr.is_int_value() {
             // IntValue (i64) → PointerValue via inttoptr
             let int_val = ptr.into_int_value();
             self.builder
@@ -105,6 +133,8 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     "deref_ptr",
                 )
                 .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+        } else {
+            return Ok(ptr);
         };
         // Load using the inferred pointee type (context-based, not hardcoded i64)
         self.builder
@@ -148,14 +178,28 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let src_width = val.into_int_value().get_type().get_bit_width();
             let dst_width = target_type.into_int_type().get_bit_width();
             if src_width < dst_width {
-                let result = self
-                    .builder
-                    .build_int_s_extend(
-                        val.into_int_value(),
-                        target_type.into_int_type(),
-                        "cast_sext",
-                    )
-                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                // Phase 0 bug C8 fix: i1 (bool) widening must use zext, not
+                // sext. `true` is i1 1 → sext gives all-1s (-1, or 255 mod
+                // 256) but `true as i64` should be 1. zext zero-fills the
+                // upper bits, yielding 1. For other narrow→wide casts we
+                // preserve sign.
+                let result = if src_width == 1 {
+                    self.builder
+                        .build_int_z_extend(
+                            val.into_int_value(),
+                            target_type.into_int_type(),
+                            "cast_zext_bool",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                } else {
+                    self.builder
+                        .build_int_s_extend(
+                            val.into_int_value(),
+                            target_type.into_int_type(),
+                            "cast_sext",
+                        )
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                };
                 Ok(result.into())
             } else if src_width > dst_width {
                 let result = self

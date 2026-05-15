@@ -1,7 +1,7 @@
 # Runtime benchmark: Quicksort
 # Sorts 10000 elements and returns checksum
 
-F quicksort(arr: i64, low: i64, high: i64) -> i64 {
+fn quicksort(arr: i64, low: i64, high: i64) -> i64 {
     I low < high {
         pivot_idx := partition(arr, low, high)
         quicksort(arr, low, pivot_idx - 1)
@@ -10,7 +10,7 @@ F quicksort(arr: i64, low: i64, high: i64) -> i64 {
     0
 }
 
-F partition(arr: i64, low: i64, high: i64) -> i64 {
+fn partition(arr: i64, low: i64, high: i64) -> i64 {
     pivot := load_i64(arr + high * 8)
     i := mut low - 1
     j := mut low
@@ -31,7 +31,7 @@ F partition(arr: i64, low: i64, high: i64) -> i64 {
     i
 }
 
-F checksum(arr: i64, n: i64) -> i64 {
+fn checksum(arr: i64, n: i64) -> i64 {
     sum := mut 0
     i := mut 0
     LW i < n {
@@ -41,7 +41,7 @@ F checksum(arr: i64, n: i64) -> i64 {
     sum
 }
 
-F main() {
+fn main() {
     n := 10000
     arr := malloc(n * 8)
 

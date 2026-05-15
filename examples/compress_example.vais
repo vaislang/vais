@@ -1,9 +1,9 @@
 # Compression Library Example
 # Demonstrates gzip and deflate compression/decompression
 
-U std/compress
+use std/compress
 
-F main() -> i64 {
+fn main() -> i64 {
     __println("=== Vais Compression Library Demo ===\n")
 
     # Test data
@@ -35,12 +35,12 @@ F main() -> i64 {
             __println("")
             __println("Decompression successful!")
             decomp_result.free()
-        } EL {
+        } else {
             __println("Decompression failed!")
         }
 
         gzip_result.free()
-    } EL {
+    } else {
         __println("Gzip compression failed! Error: ")
         __print_i64(gzip_result.status)
         __println("")
@@ -56,7 +56,7 @@ F main() -> i64 {
 
         # Deflate should be slightly smaller than gzip (no header)
         deflate_result.free()
-    } EL {
+    } else {
         __println("Deflate compression failed!")
     }
 
@@ -92,7 +92,7 @@ F main() -> i64 {
             r3.free()
         }
         compressor.free()
-    } EL {
+    } else {
         __println("Failed to create compressor")
     }
 
@@ -129,8 +129,8 @@ F main() -> i64 {
 }
 
 # External functions needed for demo
-X F __println(s: str) -> i64
-X F __print_i64(n: i64) -> i64
-X F __strlen(s: str) -> i64
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
+impl fn __println(s: str) -> i64
+impl fn __print_i64(n: i64) -> i64
+impl fn __strlen(s: str) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64

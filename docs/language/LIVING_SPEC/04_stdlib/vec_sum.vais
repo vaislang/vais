@@ -1,0 +1,21 @@
+# LIVING_SPEC/04_stdlib/vec_sum.vais
+# Key concept: LF로 Vec를 순회하며 누적.
+
+fn sum_vec(v: Vec<i64>) -> i64 {
+    s := mut 0
+    LF i: 0..v.len() {
+        match v.get(i) {
+            Some(n) => { s = s + n },
+            None => {}
+        }
+    }
+    s
+}
+
+fn main() -> i64 {
+    v: Vec<i64> = Vec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    sum_vec(v)  # 60
+}

@@ -1,0 +1,240 @@
+use vector/hnsw/types
+use vector/hnsw/search
+use vector/distance
+use storage/error
+
+struct RecallStore {
+    n1: HnswNode,
+    n2: HnswNode,
+    n3: HnswNode,
+    n4: HnswNode,
+    n5: HnswNode,
+    n6: HnswNode,
+    n7: HnswNode,
+    n8: HnswNode,
+    v1: Vec<f32>,
+    v2: Vec<f32>,
+    v3: Vec<f32>,
+    v4: Vec<f32>,
+    v5: Vec<f32>,
+    v6: Vec<f32>,
+    v7: Vec<f32>,
+    v8: Vec<f32>,
+}
+
+impl RecallStore {
+    fn new(
+        n1: HnswNode,
+        n2: HnswNode,
+        n3: HnswNode,
+        n4: HnswNode,
+        n5: HnswNode,
+        n6: HnswNode,
+        n7: HnswNode,
+        n8: HnswNode,
+        v1: Vec<f32>,
+        v2: Vec<f32>,
+        v3: Vec<f32>,
+        v4: Vec<f32>,
+        v5: Vec<f32>,
+        v6: Vec<f32>,
+        v7: Vec<f32>,
+        v8: Vec<f32>
+    ) -> RecallStore {
+        RecallStore {
+            n1,
+            n2,
+            n3,
+            n4,
+            n5,
+            n6,
+            n7,
+            n8,
+            v1,
+            v2,
+            v3,
+            v4,
+            v5,
+            v6,
+            v7,
+            v8,
+        }
+    }
+}
+
+impl RecallStore : NodeStore {
+    fn load_node(self, node_id: u64) -> Result<HnswNode, VaisError> {
+        I node_id == 1 { return Ok(self.n1.clone()) }
+        I node_id == 2 { return Ok(self.n2.clone()) }
+        I node_id == 3 { return Ok(self.n3.clone()) }
+        I node_id == 4 { return Ok(self.n4.clone()) }
+        I node_id == 5 { return Ok(self.n5.clone()) }
+        I node_id == 6 { return Ok(self.n6.clone()) }
+        I node_id == 7 { return Ok(self.n7.clone()) }
+        I node_id == 8 { return Ok(self.n8.clone()) }
+        Err(err_internal("missing larger recall node"))
+    }
+
+    fn load_vector(self, node_id: u64) -> Result<Vec<f32>, VaisError> {
+        I node_id == 1 { return Ok(self.v1.clone()) }
+        I node_id == 2 { return Ok(self.v2.clone()) }
+        I node_id == 3 { return Ok(self.v3.clone()) }
+        I node_id == 4 { return Ok(self.v4.clone()) }
+        I node_id == 5 { return Ok(self.v5.clone()) }
+        I node_id == 6 { return Ok(self.v6.clone()) }
+        I node_id == 7 { return Ok(self.v7.clone()) }
+        I node_id == 8 { return Ok(self.v8.clone()) }
+        Err(err_internal("missing larger recall vector"))
+    }
+
+    fn store_node(mut self, node: HnswNode) -> Result<(), VaisError> {
+        I node.node_id == 1 {
+            self.n1 = node
+            return Ok(())
+        }
+        I node.node_id == 2 {
+            self.n2 = node
+            return Ok(())
+        }
+        I node.node_id == 3 {
+            self.n3 = node
+            return Ok(())
+        }
+        I node.node_id == 4 {
+            self.n4 = node
+            return Ok(())
+        }
+        I node.node_id == 5 {
+            self.n5 = node
+            return Ok(())
+        }
+        I node.node_id == 6 {
+            self.n6 = node
+            return Ok(())
+        }
+        I node.node_id == 7 {
+            self.n7 = node
+            return Ok(())
+        }
+        I node.node_id == 8 {
+            self.n8 = node
+            return Ok(())
+        }
+        Err(err_internal("unexpected larger recall node"))
+    }
+
+    fn allocate_node_id(mut self) -> u64 {
+        9
+    }
+
+    fn get_file_page(self, node_id: u64) -> Result<(u8, u32), VaisError> {
+        I node_id >= 1 && node_id <= 8 {
+            return Ok((1 as u8, node_id as u32))
+        }
+        Err(err_internal("missing larger recall node page"))
+    }
+
+    fn allocate_node_page(mut self, node_id: u64) -> Result<(u8, u32), VaisError> {
+        Ok((1 as u8, node_id as u32))
+    }
+}
+
+fn vec2(a: f32, b: f32) -> Vec<f32> {
+    values: Vec<f32> := mut Vec.with_capacity(2)
+    values.push(a)
+    values.push(b)
+    values
+}
+
+fn main() -> i64 {
+    n1 := mut HnswNode.new(1, 0 as u32, 0 as u16, 0 as u8, 10, 1 as u32)
+    n2 := mut HnswNode.new(2, 0 as u32, 0 as u16, 0 as u8, 10, 2 as u32)
+    n3 := mut HnswNode.new(3, 0 as u32, 0 as u16, 0 as u8, 10, 3 as u32)
+    n4 := mut HnswNode.new(4, 0 as u32, 0 as u16, 0 as u8, 10, 4 as u32)
+    n5 := mut HnswNode.new(5, 0 as u32, 0 as u16, 0 as u8, 10, 5 as u32)
+    n6 := mut HnswNode.new(6, 0 as u32, 0 as u16, 0 as u8, 10, 6 as u32)
+    n7 := mut HnswNode.new(7, 0 as u32, 0 as u16, 0 as u8, 10, 7 as u32)
+    n8 := mut HnswNode.new(8, 0 as u32, 0 as u16, 0 as u8, 10, 8 as u32)
+
+    match n1.add_neighbor(0 as u8, HnswNeighbor.new(2, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 1 }, }
+    match n2.add_neighbor(0 as u8, HnswNeighbor.new(1, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 2 }, }
+    match n2.add_neighbor(0 as u8, HnswNeighbor.new(3, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 3 }, }
+    match n3.add_neighbor(0 as u8, HnswNeighbor.new(2, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 4 }, }
+    match n3.add_neighbor(0 as u8, HnswNeighbor.new(4, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 5 }, }
+    match n4.add_neighbor(0 as u8, HnswNeighbor.new(3, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 6 }, }
+    match n4.add_neighbor(0 as u8, HnswNeighbor.new(5, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 7 }, }
+    match n5.add_neighbor(0 as u8, HnswNeighbor.new(4, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 8 }, }
+    match n5.add_neighbor(0 as u8, HnswNeighbor.new(6, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 9 }, }
+    match n6.add_neighbor(0 as u8, HnswNeighbor.new(5, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 10 }, }
+    match n6.add_neighbor(0 as u8, HnswNeighbor.new(7, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 11 }, }
+    match n7.add_neighbor(0 as u8, HnswNeighbor.new(6, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 12 }, }
+    match n7.add_neighbor(0 as u8, HnswNeighbor.new(8, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 13 }, }
+    match n8.add_neighbor(0 as u8, HnswNeighbor.new(7, 1.0 as f32)) { Ok(_) => {}, Err(_) => { return 14 }, }
+
+    cfg := mut match HnswConfig.new(2 as u16, 4 as u16, 4 as u32, 4 as u32, 16 as u64, DISTANCE_L2) {
+        Ok(v) => v,
+        Err(_) => { return 15 },
+    }
+    cfg.dim = 2 as u32
+    cfg.metric = DISTANCE_L2
+
+    meta := mut HnswMeta.new(cfg, 41 as u32)
+    meta.update_entry_point(1, 0 as u8)
+    meta.add_node()
+    meta.add_node()
+    meta.add_node()
+    meta.add_node()
+    meta.add_node()
+    meta.add_node()
+    meta.add_node()
+    meta.add_node()
+
+    store := mut RecallStore.new(
+        n1,
+        n2,
+        n3,
+        n4,
+        n5,
+        n6,
+        n7,
+        n8,
+        vec2(0.0, 0.0),
+        vec2(1.0, 0.0),
+        vec2(2.0, 0.0),
+        vec2(3.0, 0.0),
+        vec2(4.0, 0.0),
+        vec2(5.0, 0.0),
+        vec2(6.0, 0.0),
+        vec2(7.0, 0.0),
+    )
+    distance := mut DistanceComputer.new(L2)
+    query := mut vec2(6.2 as f32, 0.0)
+
+    result := mut match knn_search(&query, 3, 4 as u32, &meta, &mut store, &distance) {
+        Ok(v) => v,
+        Err(e) => {
+            I e.code == "VE-02-03-001" { return 16 }
+            I e.code == "VE-02-03-002" { return 17 }
+            I e.code == "VE-02-03-003" { return 18 }
+            I e.code == "VAIS-0205001" { return 19 }
+            I e.code == "VAIS-0205002" { return 20 }
+            return 21
+        },
+    }
+
+    I result.results.len() != 3 { return 22 }
+    I result.distance_computations != 8 { return 23 }
+    I result.nodes_visited != 8 { return 24 }
+
+    first := mut &result.results[0]
+    second := mut &result.results[1]
+    third := mut &result.results[2]
+    I first.node_id != 7 { return 25 }
+    I !approx_eq_f32(first.distance, 0.2 as f32, 0.0001 as f32) { return 26 }
+    I second.node_id != 8 { return 27 }
+    I !approx_eq_f32(second.distance, 0.8 as f32, 0.0001 as f32) { return 28 }
+    I third.node_id != 6 { return 29 }
+    I !approx_eq_f32(third.distance, 1.2 as f32, 0.0001 as f32) { return 30 }
+
+    return 0
+}

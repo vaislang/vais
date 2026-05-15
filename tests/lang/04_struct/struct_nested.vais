@@ -1,0 +1,22 @@
+# CHECKS: nested struct field access
+struct Point {
+    x: i64,
+    y: i64,
+}
+
+struct Line {
+    a: Point,
+    b: Point,
+}
+
+fn main() -> i64 {
+    l: Line := Line {
+        a: Point { x: 1, y: 2 },
+        b: Point { x: 3, y: 4 },
+    }
+    I l.a.x != 1 { return 1 }
+    I l.a.y != 2 { return 2 }
+    I l.b.x != 3 { return 3 }
+    I l.b.y != 4 { return 4 }
+    return 0
+}

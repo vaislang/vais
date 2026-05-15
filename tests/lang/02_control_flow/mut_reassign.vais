@@ -1,0 +1,30 @@
+# CHECKS: `:= mut <int>` allows reassignment via `=` and accumulates correctly.
+# REGRESSION for bug C2: previously, `i := 0` (without `mut`) silently accepted
+# `i = i + 1` but codegen emitted i as SSA, so the load read constant 0 every
+# iteration. The TC fix in checker_expr/special.rs Expr::Assign now rejects
+# assignment to non-mut bindings; this test confirms the `mut` path still works.
+fn sum_to_n(n: i64) -> i64 {
+    sum: i64 := mut 0
+    i: i64 := mut 0
+    L {
+        I i >= n { B sum }
+        sum = sum + i
+        i = i + 1
+    }
+}
+
+fn main() -> i64 {
+    # 0+1+2+3+4 = 10
+    a: i64 := sum_to_n(5)
+    I a != 10 { return 1 }
+
+    # 0+1+...+9 = 45
+    b: i64 := sum_to_n(10)
+    I b != 45 { return 2 }
+
+    # n=0 → empty sum
+    c: i64 := sum_to_n(0)
+    I c != 0 { return 3 }
+
+    return 0
+}

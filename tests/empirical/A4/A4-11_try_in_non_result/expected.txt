@@ -1,0 +1,1 @@
+build_fails: clang IR mismatch (ret { i8, i64 } in i64-returning function)

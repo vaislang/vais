@@ -8,15 +8,15 @@
 #   4. Function summary purity analysis
 #   5. Module-level analysis integration
 
-U mir
-U mir_alias
+use mir
+use mir_alias
 
 # ============================================================================
 # Test 1: Disjoint Stack and Heap Pointers
 # ============================================================================
 # Two pointers with different bases (Stack vs Heap) should never alias.
 
-F test_disjoint_stack_heap() -> i64 {
+fn test_disjoint_stack_heap() -> i64 {
     ctx := alias_ctx_new()
 
     # Create two pointer infos: one Stack, one Heap
@@ -37,12 +37,12 @@ F test_disjoint_stack_heap() -> i64 {
     # Should return ALIAS_NO()
     I result == ALIAS_NO() {
         print_str("PASS: test_disjoint_stack_heap\n")
-        R 1
-    } EL {
+        return 1
+    } else {
         print_str("FAIL: test_disjoint_stack_heap - expected ALIAS_NO, got ")
         print_i64(result)
         print_str("\n")
-        R 0
+        return 0
     }
 }
 
@@ -51,7 +51,7 @@ F test_disjoint_stack_heap() -> i64 {
 # ============================================================================
 # Two pointers with same base and same known offset must alias.
 
-F test_same_base_must_alias() -> i64 {
+fn test_same_base_must_alias() -> i64 {
     ctx := alias_ctx_new()
 
     # Create two pointers with same Stack base (name 100) and offset 16
@@ -70,12 +70,12 @@ F test_same_base_must_alias() -> i64 {
 
     I result == ALIAS_MUST() {
         print_str("PASS: test_same_base_must_alias\n")
-        R 1
-    } EL {
+        return 1
+    } else {
         print_str("FAIL: test_same_base_must_alias - expected ALIAS_MUST, got ")
         print_i64(result)
         print_str("\n")
-        R 0
+        return 0
     }
 }
 
@@ -84,7 +84,7 @@ F test_same_base_must_alias() -> i64 {
 # ============================================================================
 # Pointers passed as call arguments should be marked as escaping.
 
-F test_escape_analysis() -> i64 {
+fn test_escape_analysis() -> i64 {
     ctx := alias_ctx_new()
 
     # Build a simple MIR body with a call terminator
@@ -141,10 +141,10 @@ F test_escape_analysis() -> i64 {
 
     I escapes == 1 {
         print_str("PASS: test_escape_analysis\n")
-        R 1
-    } EL {
+        return 1
+    } else {
         print_str("FAIL: test_escape_analysis - pointer should escape\n")
-        R 0
+        return 0
     }
 }
 
@@ -153,7 +153,7 @@ F test_escape_analysis() -> i64 {
 # ============================================================================
 # A function with no modifications or allocations should be marked pure/readonly.
 
-F test_function_summary_purity() -> i64 {
+fn test_function_summary_purity() -> i64 {
     # Build a simple MIR body with no modifying statements
     body_ptr := malloc(56)
     store_i64(body_ptr, 1)  # name_idx = 1
@@ -189,14 +189,14 @@ F test_function_summary_purity() -> i64 {
     # Should be pure (no modifications, no allocations)
     I is_pure == 1 {
         print_str("PASS: test_function_summary_purity\n")
-        R 1
-    } EL {
+        return 1
+    } else {
         print_str("FAIL: test_function_summary_purity - expected is_pure=1, got ")
         print_i64(is_pure)
         print_str(", modifies_len=")
         print_i64(modifies_len)
         print_str("\n")
-        R 0
+        return 0
     }
 }
 
@@ -205,7 +205,7 @@ F test_function_summary_purity() -> i64 {
 # ============================================================================
 # Analyze a simple module with 2 bodies, verify report counts.
 
-F test_module_analysis() -> i64 {
+fn test_module_analysis() -> i64 {
     ctx := alias_ctx_new()
 
     # Create MIR module
@@ -265,12 +265,12 @@ F test_module_analysis() -> i64 {
         print_str("PASS: test_module_analysis - found ")
         print_i64(func_count)
         print_str(" functions\n")
-        R 1
-    } EL {
+        return 1
+    } else {
         print_str("FAIL: test_module_analysis - expected 2 functions, got ")
         print_i64(func_count)
         print_str("\n")
-        R 0
+        return 0
     }
 }
 
@@ -278,7 +278,7 @@ F test_module_analysis() -> i64 {
 # Main Test Runner
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     print_str("=== MIR Alias Analysis Tests ===\n\n")
 
     passed := mut 0
@@ -289,35 +289,35 @@ F main() -> i64 {
     I test_disjoint_stack_heap() == 1 {
         passed = passed + 1
         0
-    } EL { 0 }
+    } else { 0 }
 
     # Test 2
     total = total + 1
     I test_same_base_must_alias() == 1 {
         passed = passed + 1
         0
-    } EL { 0 }
+    } else { 0 }
 
     # Test 3
     total = total + 1
     I test_escape_analysis() == 1 {
         passed = passed + 1
         0
-    } EL { 0 }
+    } else { 0 }
 
     # Test 4
     total = total + 1
     I test_function_summary_purity() == 1 {
         passed = passed + 1
         0
-    } EL { 0 }
+    } else { 0 }
 
     # Test 5
     total = total + 1
     I test_module_analysis() == 1 {
         passed = passed + 1
         0
-    } EL { 0 }
+    } else { 0 }
 
     # Print summary
     print_str("\n=== Test Summary ===\n")
@@ -329,9 +329,9 @@ F main() -> i64 {
 
     I passed == total {
         print_str("All tests passed!\n")
-        R 0
-    } EL {
+        return 0
+    } else {
         print_str("Some tests failed.\n")
-        R 1
+        return 1
     }
 }

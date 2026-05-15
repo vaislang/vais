@@ -1,0 +1,9 @@
+# CHECKS: for-each over an integer range
+fn main() -> i64 {
+    sum: i64 := mut 0
+    LF i: 1..=10 {
+        sum = sum + i
+    }
+    I sum != 55 { return 1 }
+    return 0
+}

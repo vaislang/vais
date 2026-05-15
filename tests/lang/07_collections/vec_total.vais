@@ -1,0 +1,29 @@
+# CHECKS: Vec<i64> sum via accumulator.
+use std/vec.{vec_new};
+
+fn sum_all(v: &Vec<i64>) -> i64 {
+    s: i64 := mut 0
+    LF i: 0..v.len() {
+        s = s + v[i]
+    }
+    s
+}
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 1..=100 {
+        v.push(i)
+    }
+    # 1+2+...+100 = 5050
+    I sum_all(&v) != 5050 { return 1 }
+
+    e: Vec<i64> := mut vec_new()
+    I sum_all(&e) != 0 { return 2 }
+
+    s: Vec<i64> := mut vec_new()
+    s.push(0 - 5)
+    s.push(5)
+    s.push(0)
+    I sum_all(&s) != 0 { return 3 }
+    return 0
+}

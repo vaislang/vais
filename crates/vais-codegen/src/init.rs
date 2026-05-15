@@ -53,6 +53,7 @@ impl CodeGenerator {
             fn_ctx: FunctionContext {
                 current_function: None,
                 current_return_type: None,
+                expected_expr_types: Vec::new(),
                 locals: HashMap::with_capacity(32),
                 label_counter: 0,
                 loop_stack: Vec::with_capacity(4),
@@ -66,8 +67,10 @@ impl CodeGenerator {
                 pending_return_skip_slot: Vec::new(),
                 var_string_slot: HashMap::new(),
                 var_string_slots_multi: HashMap::new(),
+                var_string_scope_depth: HashMap::new(),
                 phi_extra_slots: HashMap::new(),
                 temp_var_types: HashMap::with_capacity(64),
+                actual_llvm_type: HashMap::with_capacity(64),
                 scope_stack: Vec::with_capacity(8),
                 scope_str_stack: Vec::with_capacity(8),
                 scope_drop_label_counter: 0,
@@ -125,6 +128,7 @@ impl CodeGenerator {
             ref_constants: Vec::new(),
             ref_constant_counter: 0,
             expr_types: HashMap::new(),
+            current_file_id: 0,
             implicit_try_sites: std::collections::HashSet::new(),
         };
 
@@ -194,11 +198,43 @@ impl CodeGenerator {
         self.types.type_aliases = aliases;
     }
 
+    /// Phase 17.H4.14: inject generic struct AST templates from stdlib (or
+    /// any other module not reachable via the module's own import closure).
+    /// Driver calls this with pre-parsed `S Vec<T>`, `S HashMap<K, V>`,
+    /// etc. so `try_generate_vec_specialization` can find method bodies
+    /// for on-demand monomorphization when the user didn't write `U std/vec`
+    /// explicitly (e.g., vaisdb relies on auto-availability of Vec).
+    pub fn inject_generic_struct_templates(&mut self, structs: Vec<std::rc::Rc<vais_ast::Struct>>) {
+        for s in structs {
+            if !s.generics.is_empty() {
+                self.generics
+                    .struct_defs
+                    .entry(s.name.node.clone())
+                    .or_insert(s);
+            }
+        }
+    }
+
     /// Set expression types from the type checker.
     /// These are used by `infer_expr_type` to look up TC-resolved types before
     /// falling back to the legacy heuristic inference.
-    pub fn set_expr_types(&mut self, types: HashMap<(usize, usize), vais_types::ResolvedType>) {
+    ///
+    /// Phase 17.H1: key type is `(file_id, start, end)` to prevent
+    /// cross-module span collisions.
+    pub fn set_expr_types(
+        &mut self,
+        types: HashMap<(u32, usize, usize), vais_types::ResolvedType>,
+    ) {
         self.expr_types = types;
+    }
+
+    /// Phase 17.H1: set the current module's file id used as the lookup
+    /// fallback in `expr_types.get((file_id_or_current, start, end))`.
+    /// Callers should set this to match the id the TC used for the same
+    /// module before `set_expr_types`. A value of 0 is the sentinel for
+    /// "no file id known" and preserves the pre-H1 lookup behavior.
+    pub fn set_current_file_id(&mut self, file_id: u32) {
+        self.current_file_id = file_id;
     }
 
     /// Set the implicit-try argument spans collected by the type checker
@@ -263,8 +299,8 @@ impl CodeGenerator {
     ///
     /// In strict mode, ICE-level type fallbacks (`Var`, `Unknown`, `Lifetime`
     /// reaching codegen) become hard errors instead of warnings with i64
-    /// fallback. Generic/ConstGeneric fallbacks are also hard errors; the
-    /// historical strict-generic opt-in was removed in Phase 191.
+    /// fallback. Generic/ConstGeneric fallback behavior is now strict
+    /// unconditionally (Phase 191).
     pub fn set_strict_type_mode(&mut self, strict: bool) {
         self.strict_type_mode = strict;
     }

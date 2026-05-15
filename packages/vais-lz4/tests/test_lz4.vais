@@ -4,87 +4,87 @@
 # Extern Declarations
 # ============================================================================
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F str_to_ptr(s: str) -> i64
-X F load_byte(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F memcpy(dest: i64, src: i64, n: i64) -> i64
-X F puts(s: str) -> i64
-X F putchar(c: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn str_to_ptr(s: str) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn memcpy(dest: i64, src: i64, n: i64) -> i64
+impl fn puts(s: str) -> i64
+impl fn putchar(c: i64) -> i64
 
 # ============================================================================
 # Test Helpers
 # ============================================================================
 
-F ptr_strlen(ptr: i64) -> i64 {
+fn ptr_strlen(ptr: i64) -> i64 {
     len := mut 0
     L load_byte(ptr + len) != 0 {
         len = len + 1
     }
-    R len
+    return len
 }
 
-F my_print_i64(val: i64) -> i64 {
+fn my_print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
-        R 0
+        return 0
     }
 
     I val < 0 {
         putchar(45)
         my_print_i64(0 - val)
-        R 0
+        return 0
     }
 
     I val >= 10 {
         my_print_i64(val / 10)
         0
-    } E {
+    } enum {
         0
     }
     putchar(48 + (val % 10))
     0
 }
 
-F assert_eq(actual: i64, expected: i64) -> i64 {
+fn assert_eq(actual: i64, expected: i64) -> i64 {
     I actual == expected {
         puts("  PASS")
         putchar(10)
-        R 1
-    } E {
+        return 1
+    } enum {
         puts("  FAIL - expected ")
         my_print_i64(expected)
         puts(", got ")
         my_print_i64(actual)
         putchar(10)
-        R 0
+        return 0
     }
 }
 
-F assert_true(val: i64) -> i64 {
+fn assert_true(val: i64) -> i64 {
     I val != 0 {
         puts("  PASS")
         putchar(10)
-        R 1
-    } E {
+        return 1
+    } enum {
         puts("  FAIL")
         putchar(10)
-        R 0
+        return 0
     }
 }
 
-F mem_equal(a: i64, b: i64, len: i64) -> i64 {
+fn mem_equal(a: i64, b: i64, len: i64) -> i64 {
     i := mut 0
     L i < len {
         I load_byte(a + i) != load_byte(b + i) {
-            R 0
-        } E {
+            return 0
+        } enum {
             0
         }
         i = i + 1
     }
-    R 1
+    return 1
 }
 
 # ============================================================================
@@ -99,70 +99,70 @@ C LZ4_LAST_LITERALS: i64 = 5
 C LZ4_MF_LIMIT: i64 = 12
 C LZ4_MAGIC: i64 = 407710212
 
-S Lz4Result {
+struct Lz4Result {
     data: i64,
     len: i64,
     status: i64
 }
 
-X F load_i64(ptr: i64) -> i64
-X F store_i64(ptr: i64, val: i64) -> i64
-X F memset(dest: i64, val: i64, n: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn store_i64(ptr: i64, val: i64) -> i64
+impl fn memset(dest: i64, val: i64, n: i64) -> i64
 
-F read_u16_le(ptr: i64) -> i64 {
+fn read_u16_le(ptr: i64) -> i64 {
     b0 := load_byte(ptr)
     b1 := load_byte(ptr + 1)
-    R (b0 & 255) | ((b1 & 255) << 8)
+    return (b0 & 255) | ((b1 & 255) << 8)
 }
 
-F write_u16_le(ptr: i64, val: i64) -> i64 {
+fn write_u16_le(ptr: i64, val: i64) -> i64 {
     store_byte(ptr, val & 255)
     store_byte(ptr + 1, (val >> 8) & 255)
-    R 0
+    return 0
 }
 
-F read_u32_le(ptr: i64) -> i64 {
+fn read_u32_le(ptr: i64) -> i64 {
     b0 := load_byte(ptr)
     b1 := load_byte(ptr + 1)
     b2 := load_byte(ptr + 2)
     b3 := load_byte(ptr + 3)
-    R (b0 & 255) | ((b1 & 255) << 8) | ((b2 & 255) << 16) | ((b3 & 255) << 24)
+    return (b0 & 255) | ((b1 & 255) << 8) | ((b2 & 255) << 16) | ((b3 & 255) << 24)
 }
 
-F write_u32_le(ptr: i64, val: i64) -> i64 {
+fn write_u32_le(ptr: i64, val: i64) -> i64 {
     store_byte(ptr, val & 255)
     store_byte(ptr + 1, (val >> 8) & 255)
     store_byte(ptr + 2, (val >> 16) & 255)
     store_byte(ptr + 3, (val >> 24) & 255)
-    R 0
+    return 0
 }
 
-F lz4_hash(val: i64) -> i64 {
+fn lz4_hash(val: i64) -> i64 {
     product := val * 2654435761
     shifted := (product >> 16) & 2147483647
-    R shifted & 65535
+    return shifted & 65535
 }
 
-F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
+fn lz4_compress(src: i64, src_len: i64) -> Lz4Result {
     I src_len == 0 {
         result := Lz4Result { data: 0, len: 0, status: 0 }
-        R result
-    } E {
+        return result
+    } enum {
         0
     }
 
     I src_len > LZ4_MAX_INPUT_SIZE {
         result := Lz4Result { data: 0, len: 0, status: -1 }
-        R result
-    } E {
+        return result
+    } enum {
         0
     }
 
     hash_table := malloc(524288)
     I hash_table == 0 {
         result := Lz4Result { data: 0, len: 0, status: -2 }
-        R result
-    } E {
+        return result
+    } enum {
         0
     }
     memset(hash_table, 0, 524288)
@@ -172,8 +172,8 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
     I dst == 0 {
         free(hash_table)
         result := Lz4Result { data: 0, len: 0, status: -2 }
-        R result
-    } E {
+        return result
+    } enum {
         0
     }
 
@@ -195,22 +195,22 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
                 I v1 == v2 {
                     match_found = 1
                     0
-                } E {
+                } enum {
                     0
                 }
                 0
-            } E {
+            } enum {
                 0
             }
             0
-        } E {
+        } enum {
             0
         }
 
         I match_found == 0 {
             ip = ip + 1
             C
-        } E {
+        } enum {
             0
         }
 
@@ -220,7 +220,7 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
         L (ip + match_len) < src_len {
             I load_byte(src + candidate + match_len) == load_byte(src + ip + match_len) {
                 match_len = match_len + 1
-            } E {
+            } enum {
                 B
             }
         }
@@ -228,13 +228,13 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
         token_lit := mut 0
         I literal_len >= 15 {
             token_lit = 15
-        } E {
+        } enum {
             token_lit = literal_len
         }
         token_match := mut 0
         I (match_len - LZ4_MIN_MATCH) >= 15 {
             token_match = 15
-        } E {
+        } enum {
             token_match = match_len - LZ4_MIN_MATCH
         }
         token := (token_lit << 4) | token_match
@@ -251,7 +251,7 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
             store_byte(dst + op, extra)
             op = op + 1
             0
-        } E {
+        } enum {
             0
         }
 
@@ -272,7 +272,7 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
             store_byte(dst + op, extra)
             op = op + 1
             0
-        } E {
+        } enum {
             0
         }
 
@@ -285,7 +285,7 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
         token_lit := mut 0
         I final_literals >= 15 {
             token_lit = 15
-        } E {
+        } enum {
             token_lit = final_literals
         }
         token := token_lit << 4
@@ -302,36 +302,36 @@ F lz4_compress(src: i64, src_len: i64) -> Lz4Result {
             store_byte(dst + op, extra)
             op = op + 1
             0
-        } E {
+        } enum {
             0
         }
 
         memcpy(dst + op, src + anchor, final_literals)
         op = op + final_literals
         0
-    } E {
+    } enum {
         0
     }
 
     free(hash_table)
 
     result := Lz4Result { data: dst, len: op, status: 0 }
-    R result
+    return result
 }
 
-F lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
+fn lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
     I original_len == 0 {
         result := Lz4Result { data: 0, len: 0, status: 0 }
-        R result
-    } E {
+        return result
+    } enum {
         0
     }
 
     dst := malloc(original_len)
     I dst == 0 {
         result := Lz4Result { data: 0, len: 0, status: -2 }
-        R result
-    } E {
+        return result
+    } enum {
         0
     }
 
@@ -350,12 +350,12 @@ F lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
                 literal_len = literal_len + extra_byte
                 I extra_byte != 255 {
                     B
-                } E {
+                } enum {
                     0
                 }
             }
             0
-        } E {
+        } enum {
             0
         }
 
@@ -364,13 +364,13 @@ F lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
             ip = ip + literal_len
             op = op + literal_len
             0
-        } E {
+        } enum {
             0
         }
 
         I ip >= src_len {
             B
-        } E {
+        } enum {
             0
         }
 
@@ -386,12 +386,12 @@ F lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
                 match_len = match_len + extra_byte
                 I extra_byte != 255 {
                     B
-                } E {
+                } enum {
                     0
                 }
             }
             0
-        } E {
+        } enum {
             0
         }
 
@@ -406,14 +406,14 @@ F lz4_decompress(src: i64, src_len: i64, original_len: i64) -> Lz4Result {
     }
 
     result := Lz4Result { data: dst, len: op, status: 0 }
-    R result
+    return result
 }
 
-F lz4_frame_compress(src: i64, src_len: i64) -> Lz4Result {
+fn lz4_frame_compress(src: i64, src_len: i64) -> Lz4Result {
     block_result := lz4_compress(src, src_len)
     I block_result.status != 0 {
-        R block_result
-    } E {
+        return block_result
+    } enum {
         0
     }
 
@@ -422,8 +422,8 @@ F lz4_frame_compress(src: i64, src_len: i64) -> Lz4Result {
     I frame == 0 {
         free(block_result.data)
         result := Lz4Result { data: 0, len: 0, status: -2 }
-        R result
-    } E {
+        return result
+    } enum {
         0
     }
 
@@ -451,14 +451,14 @@ F lz4_frame_compress(src: i64, src_len: i64) -> Lz4Result {
     free(block_result.data)
 
     result := Lz4Result { data: frame, len: pos, status: 0 }
-    R result
+    return result
 }
 
 # ============================================================================
 # Test Functions
 # ============================================================================
 
-F test_lz4_compress_empty() -> i64 {
+fn test_lz4_compress_empty() -> i64 {
     puts("test_lz4_compress_empty")
     putchar(10)
 
@@ -468,10 +468,10 @@ F test_lz4_compress_empty() -> i64 {
     puts("empty output len: ")
     assert_eq(result.len, 0)
 
-    R 1
+    return 1
 }
 
-F test_lz4_roundtrip_simple() -> i64 {
+fn test_lz4_roundtrip_simple() -> i64 {
     puts("test_lz4_roundtrip_simple")
     putchar(10)
 
@@ -481,7 +481,7 @@ F test_lz4_roundtrip_simple() -> i64 {
     compressed := lz4_compress(input, input_len)
     puts("compress status: ")
     assert_eq(compressed.status, 0)
-    has_data := I compressed.len > 0 { 1 } E { 0 }
+    has_data := I compressed.len > 0 { 1 } enum { 0 }
     puts("has data: ")
     assert_true(has_data)
 
@@ -498,10 +498,10 @@ F test_lz4_roundtrip_simple() -> i64 {
     free(compressed.data)
     free(decompressed.data)
 
-    R 1
+    return 1
 }
 
-F test_lz4_roundtrip_repeated() -> i64 {
+fn test_lz4_roundtrip_repeated() -> i64 {
     puts("test_lz4_roundtrip_repeated")
     putchar(10)
 
@@ -517,12 +517,12 @@ F test_lz4_roundtrip_repeated() -> i64 {
     compressed := lz4_compress(input, input_len)
     puts("compress status: ")
     assert_eq(compressed.status, 0)
-    has_data := I compressed.len > 0 { 1 } E { 0 }
+    has_data := I compressed.len > 0 { 1 } enum { 0 }
     puts("has data: ")
     assert_true(has_data)
 
     ratio := (input_len * 100) / compressed.len
-    good_ratio := I ratio > 100 { 1 } E { 0 }
+    good_ratio := I ratio > 100 { 1 } enum { 0 }
     puts("good ratio: ")
     assert_true(good_ratio)
 
@@ -540,10 +540,10 @@ F test_lz4_roundtrip_repeated() -> i64 {
     free(compressed.data)
     free(decompressed.data)
 
-    R 1
+    return 1
 }
 
-F test_lz4_decompress_literals() -> i64 {
+fn test_lz4_decompress_literals() -> i64 {
     puts("test_lz4_decompress_literals")
     putchar(10)
 
@@ -561,7 +561,7 @@ F test_lz4_decompress_literals() -> i64 {
     assert_eq(compressed.status, 0)
 
     ratio := (compressed.len * 100) / input_len
-    poor_ratio := I ratio > 80 { 1 } E { 0 }
+    poor_ratio := I ratio > 80 { 1 } enum { 0 }
     puts("poor ratio: ")
     assert_true(poor_ratio)
 
@@ -579,10 +579,10 @@ F test_lz4_decompress_literals() -> i64 {
     free(compressed.data)
     free(decompressed.data)
 
-    R 1
+    return 1
 }
 
-F test_lz4_frame_magic() -> i64 {
+fn test_lz4_frame_magic() -> i64 {
     puts("test_lz4_frame_magic")
     putchar(10)
 
@@ -592,7 +592,7 @@ F test_lz4_frame_magic() -> i64 {
     frame_result := lz4_frame_compress(input, input_len)
     puts("frame compress status: ")
     assert_eq(frame_result.status, 0)
-    has_min_size := I frame_result.len > 11 { 1 } E { 0 }
+    has_min_size := I frame_result.len > 11 { 1 } enum { 0 }
     puts("frame min size: ")
     assert_true(has_min_size)
 
@@ -602,14 +602,14 @@ F test_lz4_frame_magic() -> i64 {
 
     free(frame_result.data)
 
-    R 1
+    return 1
 }
 
 # ============================================================================
 # Main Test Runner
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Running LZ4 tests...")
     putchar(10)
 
@@ -630,5 +630,5 @@ F main() -> i64 {
 
     puts("All tests completed!")
 
-    R 0
+    return 0
 }

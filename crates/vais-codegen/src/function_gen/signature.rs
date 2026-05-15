@@ -28,12 +28,15 @@ impl CodeGenerator {
     /// Clears locals, resets label counter and loop stack.
     pub(crate) fn initialize_function_state(&mut self, func_name: &str) {
         self.fn_ctx.current_function = Some(func_name.to_string());
+        self.fn_ctx.current_return_type = None;
         self.fn_ctx.locals.clear();
+        self.fn_ctx.expected_expr_types.clear();
         self.fn_ctx.label_counter = 0;
         self.fn_ctx.loop_stack.clear();
         self.fn_ctx.future_poll_fns.clear();
         self.fn_ctx.async_poll_context = None;
         self.fn_ctx.temp_var_types.clear();
+        self.fn_ctx.actual_llvm_type.clear();
         self.fn_ctx.scope_stack.clear();
         self.fn_ctx.entry_allocas.clear();
         // Don't clear pending_specialized_ir — accumulate across functions
@@ -53,14 +56,63 @@ impl CodeGenerator {
     }
 
     pub(crate) fn generate_extern_decl(&self, info: &FunctionInfo) -> String {
+        // Phase E: filter out Unit (`void`) parameters. LLVM only permits
+        // `void` as a function return type, not as a parameter type.
+        // Generic specializations like `RwLock_new$unit` erase their `T`
+        // parameter to Unit → previous emission produced
+        // `declare %RwLock$unit @RwLock_new$unit(void)` which clang rejected
+        // with "void type only allowed for function results".
+        //
+        // Also resolve `Self` in param / return positions: method extern
+        // decls reach here with `Named("Self")` which otherwise prints as
+        // `%Self` (undefined in cross-module IR). Parse the struct name
+        // from the mangled function name (format: "<Struct>_<method>"
+        // or "<Struct>_<method>$<args>") and rewrite Self → Struct.
+        let self_struct: Option<String> = {
+            let name = &info.signature.name;
+            let base = name.split('$').next().unwrap_or(name);
+            base.split_once('_')
+                .map(|(s, _)| s.to_string())
+                .filter(|s| self.types.structs.contains_key(s) || self.types.enums.contains_key(s))
+        };
+        let resolve_self = |ty: &ResolvedType| -> ResolvedType {
+            if let (ResolvedType::Named { name, generics }, Some(struct_name)) =
+                (ty, self_struct.as_ref())
+            {
+                if name == "Self" {
+                    return ResolvedType::Named {
+                        name: struct_name.clone(),
+                        generics: generics.clone(),
+                    };
+                }
+            }
+            ty.clone()
+        };
+        // Phase 17.H4 iter 18: `type_to_llvm_extern` lowers `&str` → `i8*`
+        // for C ABI compatibility. That is correct for true extern C
+        // functions (malloc, free, fopen …), but wrong for **cross-module
+        // Vais function declares** which must preserve the fat pointer
+        // `{ i8*, i64 }` ABI that call sites emit via `type_to_llvm`.
+        // Mismatch caused `declare i64 @fnv1a_hash(i8*)` vs
+        // `call i64 @fnv1a_hash({ i8*, i64 } %t0)` — clang link error
+        // `'%t0' defined with type 'ptr' but expected '{ ptr, i64 }'`.
+        // Use native ABI for non-extern (Vais-owned) functions.
+        let lower = |ty: &ResolvedType| -> String {
+            if info.is_extern {
+                self.type_to_llvm_extern(ty)
+            } else {
+                self.type_to_llvm(ty)
+            }
+        };
         let params: Vec<_> = info
             .signature
             .params
             .iter()
-            .map(|(_, ty, _)| self.type_to_llvm_extern(ty))
+            .filter(|(_, ty, _)| !matches!(ty, ResolvedType::Unit))
+            .map(|(_, ty, _)| lower(&resolve_self(ty)))
             .collect();
 
-        let ret = self.type_to_llvm_extern(&info.signature.ret);
+        let ret = lower(&resolve_self(&info.signature.ret));
 
         // Special handling for C memory functions: declare with C ABI types
         // to match call-site IR (which uses i8* for pointers).
@@ -70,7 +122,6 @@ impl CodeGenerator {
             "malloc" => return "declare i8* @malloc(i64)".to_string(),
             "free" => return "declare void @free(i8*)".to_string(),
             "realloc" => return "declare i8* @realloc(i8*, i64)".to_string(),
-            "gettimeofday" => return "declare i32 @gettimeofday(i8*, i8*)".to_string(),
             _ => {}
         }
 

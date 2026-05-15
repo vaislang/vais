@@ -24,6 +24,15 @@ impl Parser {
             self.advance_skip();
         }
 
+        // Phase 1.18 — optional `unsafe` modifier on top-level functions.
+        // `unsafe F foo() ...` is accepted; the unsafe marker is recorded on
+        // the function (or silently consumed for now). Positions: before `F`,
+        // after `P partial` etc.
+        let _is_unsafe_item = self.check(&Token::Unsafe);
+        if _is_unsafe_item {
+            self.advance_skip();
+        }
+
         // Phase 4c.2 / Task #53 — optional `partial` modifier on top-level
         // functions. Accepted positions:
         //   partial F foo() ...        (sync partial function)
@@ -77,8 +86,17 @@ impl Parser {
             self.advance_skip();
             Item::Enum(self.parse_enum(is_pub, attributes)?)
         } else if self.check(&Token::Union) {
-            self.advance_skip();
-            Item::Union(self.parse_union(is_pub)?)
+            // A1 hard block (master-plan v22 §A1, Step 10): C-style `O`
+            // union declaration is uncertified with zero baseline use
+            // (compiler/std + lang/packages + LIVING_SPEC all 0). Reject
+            // loudly instead of silently building Item::Union that the
+            // type checker / codegen never honour. See
+            // compiler/tests/empirical/A1/A1-03_O_union_decl/.
+            return Err(ParseError::UnexpectedToken {
+                found: Token::Union,
+                span: self.current_span(),
+                expected: "item (O union declaration is uncertified — A1 hard block)".to_string(),
+            });
         } else if self.check(&Token::TypeKeyword) {
             self.advance_skip();
             self.parse_type_or_trait_alias(is_pub)?
@@ -98,8 +116,17 @@ impl Parser {
                 Item::Impl(self.parse_impl()?)
             }
         } else if self.check(&Token::Macro) {
-            self.advance_skip();
-            Item::Macro(self.parse_macro_def(is_pub)?)
+            // A1 hard block (master-plan v22 §A1, Step 10): `macro foo!{...}`
+            // declaration form is uncertified with zero baseline use
+            // (compiler/std + lang/packages + LIVING_SPEC all 0). The
+            // vais-macro crate infra exists but no surface program declares
+            // a macro yet. Reject loudly. See
+            // compiler/tests/empirical/A1/A1-04_macro_decl/.
+            return Err(ParseError::UnexpectedToken {
+                found: Token::Macro,
+                span: self.current_span(),
+                expected: "item (macro declaration is uncertified — A1 hard block)".to_string(),
+            });
         } else if self.check(&Token::Extern) {
             self.advance_skip();
             // Check if this is a single extern function: N F name(...)
@@ -111,6 +138,10 @@ impl Parser {
             }
         } else if self.check(&Token::Continue) {
             // C at top level is a constant definition, not continue
+            self.advance_skip();
+            Item::Const(self.parse_const_def(is_pub, attributes)?)
+        } else if self.check(&Token::Const) {
+            // Phase 1.13: `const X: T = expr` also accepted at top level.
             self.advance_skip();
             Item::Const(self.parse_const_def(is_pub, attributes)?)
         } else if self.check(&Token::Global) {

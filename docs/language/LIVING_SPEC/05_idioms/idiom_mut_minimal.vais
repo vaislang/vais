@@ -1,0 +1,14 @@
+# LIVING_SPEC/05_idioms/idiom_mut_minimal.vais
+# Key concept: ❌ 기본 mut vs ✅ 기본 immutable
+# ✅ DO: x := expr — mut 없으면 불변, 의도치 않은 수정 방지.
+# ❌ DON'T: x := mut expr — 습관적 mut는 리팩토링 때 추적 어려움.
+
+fn compute(n: i64) -> i64 {
+    a := n * 2
+    b := a + 10
+    b
+}
+
+fn main() -> i64 {
+    compute(5)
+}

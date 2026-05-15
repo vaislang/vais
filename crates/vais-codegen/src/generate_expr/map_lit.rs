@@ -52,6 +52,8 @@ impl CodeGenerator {
                 keys_ptr,
                 i
             );
+            self.fn_ctx
+                .record_emitted_type(&k_elem_ptr, &format!("{}*", key_ty));
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",
@@ -73,6 +75,8 @@ impl CodeGenerator {
                 vals_ptr,
                 i
             );
+            self.fn_ctx
+                .record_emitted_type(&v_elem_ptr, &format!("{}*", val_ty));
             write_ir!(
                 ir,
                 "  store {} {}, {}* {}",
@@ -93,6 +97,8 @@ impl CodeGenerator {
             keys_arr_ty,
             keys_ptr
         );
+        self.fn_ctx
+            .record_emitted_type(&result, &format!("{}*", key_ty));
 
         Ok((result, ir))
     }

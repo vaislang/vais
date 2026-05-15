@@ -1,0 +1,3 @@
+use server/api/grpc
+
+fn main() -> i64 { return 0 }

@@ -1,0 +1,32 @@
+# CHECKS: match arm returns a struct value.
+struct Pair {
+    a: i64,
+    b: i64
+}
+
+fn lookup(idx: i64) -> Pair {
+    match idx {
+        0 => Pair { a: 10, b: 20 },
+        1 => Pair { a: 30, b: 40 },
+        2 => Pair { a: 50, b: 60 },
+        _ => Pair { a: 0, b: 0 }
+    }
+}
+
+fn main() -> i64 {
+    p0: Pair := lookup(0)
+    I p0.a != 10 { return 1 }
+    I p0.b != 20 { return 2 }
+
+    p1: Pair := lookup(1)
+    I p1.a != 30 { return 3 }
+    I p1.b != 40 { return 4 }
+
+    p2: Pair := lookup(2)
+    I p2.a + p2.b != 110 { return 5 }
+
+    p_def: Pair := lookup(99)
+    I p_def.a != 0 { return 6 }
+    I p_def.b != 0 { return 7 }
+    return 0
+}

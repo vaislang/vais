@@ -1,0 +1,94 @@
+use src/http/header
+use src/http/method
+use src/http/request
+use src/router/router
+
+fn smoke_request_headers() -> i64 {
+    req := mut Request.new(HttpMethod.Post, "/users")
+    req.headers = req.headers.set(CONTENT_TYPE, "application/json; charset=utf-8")
+    req.headers = req.headers.set(USER_AGENT, "vais-smoke")
+
+    I req.method.to_str() != "POST" {
+        println("FAIL request method")
+        return 1
+    }
+    I req.path != "/users" {
+        println("FAIL request path")
+        return 2
+    }
+    I req.get_header(CONTENT_TYPE) != "application/json; charset=utf-8" {
+        println("FAIL request content-type header")
+        return 3
+    }
+    I req.content_type() != "application/json; charset=utf-8" {
+        println("FAIL request content_type")
+        return 4
+    }
+    I req.is_json() != 1 {
+        println("FAIL request is_json")
+        return 5
+    }
+    I req.headers.has(USER_AGENT) != 1 {
+        println("FAIL request has_header")
+        return 6
+    }
+
+    0
+}
+
+fn smoke_router_static() -> i64 {
+    router := mut Router.new()
+    router.get("/health", 10)
+    router.post("/users", 20)
+
+    found := router.match_route(METHOD_GET, "/health")
+    I !found.is_found() {
+        println("FAIL router get /health found")
+        return 10
+    }
+    I found.handler_id != 10 {
+        println("FAIL router get /health handler")
+        return 11
+    }
+
+    post_found := router.match_route(METHOD_POST, "/users")
+    I !post_found.is_found() {
+        println("FAIL router post /users found")
+        return 12
+    }
+    I post_found.handler_id != 20 {
+        println("FAIL router post /users handler")
+        return 13
+    }
+
+    missing := router.match_route(METHOD_GET, "/missing")
+    I !missing.is_not_found() {
+        println("FAIL router missing path")
+        return 14
+    }
+
+    wrong_method := router.match_route(METHOD_POST, "/health")
+    I !wrong_method.is_method_not_allowed() {
+        println("FAIL router method not allowed")
+        return 15
+    }
+    I wrong_method.allowed_methods.len() == 0 {
+        println("FAIL router allowed methods")
+        return 16
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    failures := mut 0
+    failures += smoke_request_headers()
+    failures += smoke_router_static()
+
+    I failures > 0 {
+        println("VAIS_SERVER_REQUEST_ROUTER_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_REQUEST_ROUTER_RUNTIME_OK")
+    0
+}

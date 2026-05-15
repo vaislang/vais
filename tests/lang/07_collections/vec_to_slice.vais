@@ -1,0 +1,27 @@
+# CHECKS: passing Vec<T> contents into a function that takes &[T] (slice)
+# via explicit `&v[0..v.len()]` slice expression. Wave 4a originally
+# tracked an *implicit* Vec→slice coercion; that remains a separate
+# follow-up. The explicit form below already works and exercises:
+#   - Vec<T> push + len
+#   - Range expression (0..v.len()) producing a slice
+#   - &slice fat-pointer ABI matching the callee's `&[i64]` parameter
+use std/vec.{vec_new}
+
+fn sum_slice(s: &[i64]) -> i64 {
+    total: i64 := mut 0
+    LF i: 0..s.len() {
+        total = total + s[i]
+    }
+    total
+}
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.push(4)
+    s: i64 := sum_slice(&v[0..v.len()])
+    I s != 10 { return 1 }
+    return 0
+}

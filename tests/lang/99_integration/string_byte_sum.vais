@@ -1,0 +1,25 @@
+# CHECKS: byte-wise sum of a string (simple hash).
+fn byte_sum(p: i64, n: i64) -> i64 {
+    s: i64 := mut 0
+    LF i: 0..n {
+        s = s + load_byte(p + i)
+    }
+    s
+}
+
+fn main() -> i64 {
+    p1: i64 := str_to_ptr("a")
+    I byte_sum(p1, 1) != 97 { return 1 }
+
+    p2: i64 := str_to_ptr("abc")
+    # 97+98+99 = 294
+    I byte_sum(p2, 3) != 294 { return 2 }
+
+    p3: i64 := str_to_ptr("hello")
+    # 104+101+108+108+111 = 532
+    I byte_sum(p3, 5) != 532 { return 3 }
+
+    p4: i64 := str_to_ptr("")
+    I byte_sum(p4, 0) != 0 { return 4 }
+    return 0
+}

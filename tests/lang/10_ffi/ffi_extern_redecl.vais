@@ -1,0 +1,13 @@
+# CHECKS: extern declaration of a function whose name overlaps with a
+# libm/runtime intrinsic resolves to the existing declaration instead
+# of being renamed to `<name>.1` (REGRESSION C12).
+impl fn sqrt(x: f64) -> f64
+impl fn cos(x: f64) -> f64
+
+fn main() -> i64 {
+    r: f64 := sqrt(25.0)
+    I r < 4.999 || r > 5.001 { return 1 }
+    c: f64 := cos(0.0)
+    I c < 0.999 || c > 1.001 { return 2 }
+    return 0
+}

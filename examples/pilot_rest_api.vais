@@ -21,44 +21,44 @@
 # Low-level helpers
 # =====================================================
 
-F strlen_ptr(s: i64) -> i64 {
+fn strlen_ptr(s: i64) -> i64 {
     strlen_rec(s, 0)
 }
 
-F strlen_rec(s: i64, idx: i64) -> i64 {
+fn strlen_rec(s: i64, idx: i64) -> i64 {
     I load_byte(s + idx) == 0 { idx }
-    EL { strlen_rec(s, idx + 1) }
+    else { strlen_rec(s, idx + 1) }
 }
 
-F copy_bytes(dst: i64, src: i64, len: i64, idx: i64) -> i64 {
-    I idx >= len { 0 } EL {
+fn copy_bytes(dst: i64, src: i64, len: i64, idx: i64) -> i64 {
+    I idx >= len { 0 } else {
         store_byte(dst + idx, load_byte(src + idx))
         copy_bytes(dst, src, len, idx + 1)
     }
 }
 
-F mem_zero(ptr: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } EL {
+fn mem_zero(ptr: i64, count: i64, idx: i64) -> i64 {
+    I idx >= count { 0 } else {
         store_i64(ptr + idx * 8, 0)
         mem_zero(ptr, count, idx + 1)
     }
 }
 
-F str_eq_ptr(a: i64, b: i64, len: i64) -> i64 {
+fn str_eq_ptr(a: i64, b: i64, len: i64) -> i64 {
     str_eq_rec(a, b, len, 0)
 }
 
-F str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
+fn str_eq_rec(a: i64, b: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { 1 }
-    EL I load_byte(a + idx) != load_byte(b + idx) { 0 }
-    EL { str_eq_rec(a, b, len, idx + 1) }
+    else I load_byte(a + idx) != load_byte(b + idx) { 0 }
+    else { str_eq_rec(a, b, len, idx + 1) }
 }
 
 # =====================================================
 # Growable buffer
 # =====================================================
 
-F buf_new() -> i64 {
+fn buf_new() -> i64 {
     b := malloc(24)
     store_i64(b, malloc(256))
     store_i64(b + 8, 0)
@@ -66,10 +66,10 @@ F buf_new() -> i64 {
     b
 }
 
-F buf_data(b: i64) -> i64 { load_i64(b) }
-F buf_len(b: i64) -> i64 { load_i64(b + 8) }
+fn buf_data(b: i64) -> i64 { load_i64(b) }
+fn buf_len(b: i64) -> i64 { load_i64(b + 8) }
 
-F buf_grow(b: i64) -> i64 {
+fn buf_grow(b: i64) -> i64 {
     old_cap := load_i64(b + 16)
     new_cap := old_cap * 2
     new_data := malloc(new_cap)
@@ -81,14 +81,14 @@ F buf_grow(b: i64) -> i64 {
     0
 }
 
-F buf_ensure(b: i64, needed: i64) -> i64 {
+fn buf_ensure(b: i64, needed: i64) -> i64 {
     I load_i64(b + 8) + needed >= load_i64(b + 16) {
         buf_grow(b)
         buf_ensure(b, needed)
-    } EL { 0 }
+    } else { 0 }
 }
 
-F buf_push_byte(b: i64, c: i64) -> i64 {
+fn buf_push_byte(b: i64, c: i64) -> i64 {
     buf_ensure(b, 1)
     data := load_i64(b)
     len := load_i64(b + 8)
@@ -97,29 +97,29 @@ F buf_push_byte(b: i64, c: i64) -> i64 {
     0
 }
 
-F buf_push_str(b: i64, s: i64, slen: i64) -> i64 {
+fn buf_push_str(b: i64, s: i64, slen: i64) -> i64 {
     buf_push_str_rec(b, s, slen, 0)
 }
 
-F buf_push_str_rec(b: i64, s: i64, slen: i64, idx: i64) -> i64 {
-    I idx >= slen { 0 } EL {
+fn buf_push_str_rec(b: i64, s: i64, slen: i64, idx: i64) -> i64 {
+    I idx >= slen { 0 } else {
         buf_push_byte(b, load_byte(s + idx))
         buf_push_str_rec(b, s, slen, idx + 1)
     }
 }
 
-F buf_push_cstr(b: i64, s: i64) -> i64 {
+fn buf_push_cstr(b: i64, s: i64) -> i64 {
     buf_push_str(b, s, strlen_ptr(s))
 }
 
-F buf_to_cstr(b: i64) -> i64 {
+fn buf_to_cstr(b: i64) -> i64 {
     buf_push_byte(b, 0)
     data := load_i64(b)
     store_i64(b, 0)
     data
 }
 
-F buf_free(b: i64) -> i64 {
+fn buf_free(b: i64) -> i64 {
     data := load_i64(b)
     I data != 0 { free(data) }
     free(b)
@@ -130,15 +130,15 @@ F buf_free(b: i64) -> i64 {
 # Integer to string
 # =====================================================
 
-F i64_to_str(n: i64) -> i64 {
+fn i64_to_str(n: i64) -> i64 {
     I n == 0 {
         buf := malloc(2)
         store_byte(buf, 48)
         store_byte(buf + 1, 0)
-        R buf
+        return buf
     }
-    is_neg := I n < 0 { 1 } EL { 0 }
-    abs_n := I is_neg == 1 { 0 - n } EL { n }
+    is_neg := I n < 0 { 1 } else { 0 }
+    abs_n := I is_neg == 1 { 0 - n } else { n }
     digits := count_digits(abs_n, 0)
     total := digits + is_neg
     buf := malloc(total + 1)
@@ -148,37 +148,37 @@ F i64_to_str(n: i64) -> i64 {
     buf
 }
 
-F count_digits(n: i64, acc: i64) -> i64 {
+fn count_digits(n: i64, acc: i64) -> i64 {
     I n == 0 { acc }
-    EL { count_digits(n / 10, acc + 1) }
+    else { count_digits(n / 10, acc + 1) }
 }
 
-F fill_digits(buf: i64, n: i64, pos: i64) -> i64 {
+fn fill_digits(buf: i64, n: i64, pos: i64) -> i64 {
     I n == 0 { 0 }
-    EL {
+    else {
         store_byte(buf + pos, n % 10 + 48)
         fill_digits(buf, n / 10, pos - 1)
     }
 }
 
 # String to integer
-F str_to_i64(s: i64, len: i64) -> i64 {
+fn str_to_i64(s: i64, len: i64) -> i64 {
     I len == 0 { 0 }
-    EL {
-        is_neg := I load_byte(s) == 45 { 1 } EL { 0 }
+    else {
+        is_neg := I load_byte(s) == 45 { 1 } else { 0 }
         start := is_neg
         val := parse_int_rec(s, len, start, 0)
-        I is_neg == 1 { 0 - val } EL { val }
+        I is_neg == 1 { 0 - val } else { val }
     }
 }
 
-F parse_int_rec(s: i64, len: i64, idx: i64, acc: i64) -> i64 {
+fn parse_int_rec(s: i64, len: i64, idx: i64, acc: i64) -> i64 {
     I idx >= len { acc }
-    EL {
+    else {
         c := load_byte(s + idx)
         I c >= 48 && c <= 57 {
             parse_int_rec(s, len, idx + 1, acc * 10 + (c - 48))
-        } EL { acc }
+        } else { acc }
     }
 }
 
@@ -186,22 +186,22 @@ F parse_int_rec(s: i64, len: i64, idx: i64, acc: i64) -> i64 {
 # Hash table (generic key-value store)
 # =====================================================
 
-F hash_str(s: i64, len: i64) -> i64 {
+fn hash_str(s: i64, len: i64) -> i64 {
     hash_str_rec(s, len, 0, 5381)
 }
 
-F hash_str_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
-    I idx >= len { h } EL {
+fn hash_str_rec(s: i64, len: i64, idx: i64, h: i64) -> i64 {
+    I idx >= len { h } else {
         c := load_byte(s + idx)
         new_h := h * 33 + c
-        abs_h := I new_h < 0 { 0 - new_h } EL { new_h }
+        abs_h := I new_h < 0 { 0 - new_h } else { new_h }
         hash_str_rec(s, len, idx + 1, abs_h)
     }
 }
 
 # Table: [buckets, size, cap]
 # TableNode: [key, key_len, value, next]
-F tbl_new() -> i64 {
+fn tbl_new() -> i64 {
     cap := 16
     buckets := malloc(cap * 8)
     mem_zero(buckets, cap, 0)
@@ -212,9 +212,9 @@ F tbl_new() -> i64 {
     tbl
 }
 
-F tbl_size(tbl: i64) -> i64 { load_i64(tbl + 8) }
+fn tbl_size(tbl: i64) -> i64 { load_i64(tbl + 8) }
 
-F tbl_set(tbl: i64, key: i64, key_len: i64, value: i64) -> i64 {
+fn tbl_set(tbl: i64, key: i64, key_len: i64, value: i64) -> i64 {
     buckets := load_i64(tbl)
     cap := load_i64(tbl + 16)
     h := hash_str(key, key_len) % cap
@@ -222,7 +222,7 @@ F tbl_set(tbl: i64, key: i64, key_len: i64, value: i64) -> i64 {
     existing := tbl_find_node(load_i64(buckets + h * 8), key, key_len)
     I existing != 0 {
         store_i64(existing + 16, value)
-        R 0
+        return 0
     }
     # New node
     nd := malloc(32)
@@ -238,26 +238,26 @@ F tbl_set(tbl: i64, key: i64, key_len: i64, value: i64) -> i64 {
     0
 }
 
-F tbl_find_node(nd: i64, key: i64, key_len: i64) -> i64 {
+fn tbl_find_node(nd: i64, key: i64, key_len: i64) -> i64 {
     I nd == 0 { 0 }
-    EL {
+    else {
         nk := load_i64(nd)
         nk_len := load_i64(nd + 8)
         I nk_len == key_len && str_eq_ptr(nk, key, key_len) == 1 { nd }
-        EL { tbl_find_node(load_i64(nd + 24), key, key_len) }
+        else { tbl_find_node(load_i64(nd + 24), key, key_len) }
     }
 }
 
-F tbl_get(tbl: i64, key: i64, key_len: i64) -> i64 {
+fn tbl_get(tbl: i64, key: i64, key_len: i64) -> i64 {
     buckets := load_i64(tbl)
     cap := load_i64(tbl + 16)
     h := hash_str(key, key_len) % cap
     nd := tbl_find_node(load_i64(buckets + h * 8), key, key_len)
     I nd == 0 { 0 }
-    EL { load_i64(nd + 16) }
+    else { load_i64(nd + 16) }
 }
 
-F tbl_delete(tbl: i64, key: i64, key_len: i64) -> i64 {
+fn tbl_delete(tbl: i64, key: i64, key_len: i64) -> i64 {
     buckets := load_i64(tbl)
     cap := load_i64(tbl + 16)
     h := hash_str(key, key_len) % cap
@@ -266,10 +266,10 @@ F tbl_delete(tbl: i64, key: i64, key_len: i64) -> i64 {
     result
 }
 
-F tbl_delete_chain(prev_ptr: i64, key: i64, key_len: i64) -> i64 {
+fn tbl_delete_chain(prev_ptr: i64, key: i64, key_len: i64) -> i64 {
     nd := load_i64(prev_ptr)
     I nd == 0 { 0 }
-    EL {
+    else {
         nk := load_i64(nd)
         nk_len := load_i64(nd + 8)
         I nk_len == key_len && str_eq_ptr(nk, key, key_len) == 1 {
@@ -279,14 +279,14 @@ F tbl_delete_chain(prev_ptr: i64, key: i64, key_len: i64) -> i64 {
             free(nk)
             free(nd)
             1
-        } EL {
+        } else {
             tbl_delete_chain(nd + 24, key, key_len)
         }
     }
 }
 
 # Collect all entries: returns [array_ptr, count]
-F tbl_entries(tbl: i64) -> i64 {
+fn tbl_entries(tbl: i64) -> i64 {
     size := tbl_size(tbl)
     cap := load_i64(tbl + 16)
     buckets := load_i64(tbl)
@@ -297,16 +297,16 @@ F tbl_entries(tbl: i64) -> i64 {
     result
 }
 
-F tbl_collect_buckets(buckets: i64, cap: i64, idx: i64, result: i64) -> i64 {
-    I idx >= cap { 0 } EL {
+fn tbl_collect_buckets(buckets: i64, cap: i64, idx: i64, result: i64) -> i64 {
+    I idx >= cap { 0 } else {
         nd := load_i64(buckets + idx * 8)
         tbl_collect_chain(nd, result)
         tbl_collect_buckets(buckets, cap, idx + 1, result)
     }
 }
 
-F tbl_collect_chain(nd: i64, result: i64) -> i64 {
-    I nd == 0 { 0 } EL {
+fn tbl_collect_chain(nd: i64, result: i64) -> i64 {
+    I nd == 0 { 0 } else {
         arr := load_i64(result)
         count := load_i64(result + 8)
         store_i64(arr + count * 8, nd)
@@ -322,39 +322,39 @@ F tbl_collect_chain(nd: i64, result: i64) -> i64 {
 # Request struct: [method, method_len, path, path_len, body, body_len, headers_tbl]
 C REQ_SIZE: i64 = 56
 
-F req_new() -> i64 {
+fn req_new() -> i64 {
     r := malloc(56)
     mem_zero(r, 7, 0)
     r
 }
 
-F req_method(r: i64) -> i64 { load_i64(r) }
-F req_method_len(r: i64) -> i64 { load_i64(r + 8) }
-F req_path(r: i64) -> i64 { load_i64(r + 16) }
-F req_path_len(r: i64) -> i64 { load_i64(r + 24) }
-F req_body(r: i64) -> i64 { load_i64(r + 32) }
-F req_body_len(r: i64) -> i64 { load_i64(r + 40) }
-F req_headers(r: i64) -> i64 { load_i64(r + 48) }
+fn req_method(r: i64) -> i64 { load_i64(r) }
+fn req_method_len(r: i64) -> i64 { load_i64(r + 8) }
+fn req_path(r: i64) -> i64 { load_i64(r + 16) }
+fn req_path_len(r: i64) -> i64 { load_i64(r + 24) }
+fn req_body(r: i64) -> i64 { load_i64(r + 32) }
+fn req_body_len(r: i64) -> i64 { load_i64(r + 40) }
+fn req_headers(r: i64) -> i64 { load_i64(r + 48) }
 
-F req_free(r: i64) -> i64 {
+fn req_free(r: i64) -> i64 {
     free(r)
     0
 }
 
 # Parse raw HTTP request text into Request struct
 # Format: "METHOD /path HTTP/1.1\r\nHeader: Value\r\n\r\nbody"
-F parse_request(raw: i64, raw_len: i64) -> i64 {
+fn parse_request(raw: i64, raw_len: i64) -> i64 {
     r := req_new()
     # Parse method: read until space
     method_end := find_byte(raw, raw_len, 32, 0)  # space
-    I method_end < 0 { free(r); R 0 }
+    I method_end < 0 { free(r); return 0 }
     store_i64(r, raw)
     store_i64(r + 8, method_end)
 
     # Parse path: read after space until next space
     path_start := method_end + 1
     path_end := find_byte(raw, raw_len, 32, path_start)  # space
-    I path_end < 0 { free(r); R 0 }
+    I path_end < 0 { free(r); return 0 }
     store_i64(r + 16, raw + path_start)
     store_i64(r + 24, path_end - path_start)
 
@@ -376,28 +376,28 @@ F parse_request(raw: i64, raw_len: i64) -> i64 {
     r
 }
 
-F find_byte(data: i64, len: i64, target: i64, start: i64) -> i64 {
+fn find_byte(data: i64, len: i64, target: i64, start: i64) -> i64 {
     I start >= len { 0 - 1 }
-    EL I load_byte(data + start) == target { start }
-    EL { find_byte(data, len, target, start + 1) }
+    else I load_byte(data + start) == target { start }
+    else { find_byte(data, len, target, start + 1) }
 }
 
-F find_double_crlf(data: i64, len: i64, idx: i64) -> i64 {
+fn find_double_crlf(data: i64, len: i64, idx: i64) -> i64 {
     I idx + 3 >= len { 0 - 1 }
-    EL I load_byte(data + idx) == 13 && load_byte(data + idx + 1) == 10 && load_byte(data + idx + 2) == 13 && load_byte(data + idx + 3) == 10 {
+    else I load_byte(data + idx) == 13 && load_byte(data + idx + 1) == 10 && load_byte(data + idx + 2) == 13 && load_byte(data + idx + 3) == 10 {
         idx + 4
     }
-    EL { find_double_crlf(data, len, idx + 1) }
+    else { find_double_crlf(data, len, idx + 1) }
 }
 
-F parse_headers_rec(raw: i64, start: i64, end_pos: i64, headers: i64) -> i64 {
+fn parse_headers_rec(raw: i64, start: i64, end_pos: i64, headers: i64) -> i64 {
     I start >= end_pos { 0 }
-    EL {
+    else {
         # Find colon
         colon := find_byte(raw, end_pos, 58, start)  # ':'
-        I colon < 0 { R 0 }
+        I colon < 0 { return 0 }
         # Find line end
-        line_end := find_byte(raw, end_pos, 13, start)  # \r
+        line_end := mut find_byte(raw, end_pos, 13, start)  # \r
         I line_end < 0 { line_end = end_pos }
         # Key: [start, colon), Value: [colon+2, line_end) (skip ": ")
         key := raw + start
@@ -413,12 +413,12 @@ F parse_headers_rec(raw: i64, start: i64, end_pos: i64, headers: i64) -> i64 {
 }
 
 # Check if request method matches
-F req_is_method(r: i64, method: i64) -> i64 {
+fn req_is_method(r: i64, method: i64) -> i64 {
     m := req_method(r)
     m_len := req_method_len(r)
     expected_len := strlen_ptr(method)
     I m_len != expected_len { 0 }
-    EL { str_eq_ptr(m, method, m_len) }
+    else { str_eq_ptr(m, method, m_len) }
 }
 
 # =====================================================
@@ -426,7 +426,7 @@ F req_is_method(r: i64, method: i64) -> i64 {
 # =====================================================
 
 # Response: [status, status_text, content_type, body, body_len]
-F resp_new(status: i64, text: i64) -> i64 {
+fn resp_new(status: i64, text: i64) -> i64 {
     r := malloc(40)
     store_i64(r, status)
     store_i64(r + 8, text)
@@ -436,24 +436,24 @@ F resp_new(status: i64, text: i64) -> i64 {
     r
 }
 
-F resp_set_body(r: i64, body: i64, body_len: i64) -> i64 {
+fn resp_set_body(r: i64, body: i64, body_len: i64) -> i64 {
     store_i64(r + 24, body)
     store_i64(r + 32, body_len)
     0
 }
 
-F resp_set_content_type(r: i64, ct: i64) -> i64 {
+fn resp_set_content_type(r: i64, ct: i64) -> i64 {
     store_i64(r + 16, ct)
     0
 }
 
-F resp_set_json_body(r: i64, json: i64) -> i64 {
+fn resp_set_json_body(r: i64, json: i64) -> i64 {
     resp_set_content_type(r, str_to_ptr("application/json"))
     resp_set_body(r, json, strlen_ptr(json))
 }
 
 # Build HTTP response string
-F resp_to_string(r: i64) -> i64 {
+fn resp_to_string(r: i64) -> i64 {
     b := buf_new()
     # Status line
     buf_push_cstr(b, str_to_ptr("HTTP/1.1 "))
@@ -489,40 +489,40 @@ F resp_to_string(r: i64) -> i64 {
 }
 
 # Convenience response constructors
-F resp_ok(body: i64) -> i64 {
+fn resp_ok(body: i64) -> i64 {
     r := resp_new(200, str_to_ptr("OK"))
     resp_set_json_body(r, body)
     r
 }
 
-F resp_created(body: i64) -> i64 {
+fn resp_created(body: i64) -> i64 {
     r := resp_new(201, str_to_ptr("Created"))
     resp_set_json_body(r, body)
     r
 }
 
-F resp_no_content() -> i64 {
+fn resp_no_content() -> i64 {
     resp_new(204, str_to_ptr("No Content"))
 }
 
-F resp_bad_request(msg: i64) -> i64 {
+fn resp_bad_request(msg: i64) -> i64 {
     r := resp_new(400, str_to_ptr("Bad Request"))
     resp_set_json_body(r, msg)
     r
 }
 
-F resp_not_found() -> i64 {
+fn resp_not_found() -> i64 {
     r := resp_new(404, str_to_ptr("Not Found"))
     body := str_to_ptr("Not Found")
     resp_set_body(r, body, 9)
     r
 }
 
-F resp_method_not_allowed() -> i64 {
+fn resp_method_not_allowed() -> i64 {
     resp_new(405, str_to_ptr("Method Not Allowed"))
 }
 
-F resp_server_error(msg: i64) -> i64 {
+fn resp_server_error(msg: i64) -> i64 {
     r := resp_new(500, str_to_ptr("Internal Server Error"))
     resp_set_body(r, msg, strlen_ptr(msg))
     r
@@ -533,43 +533,43 @@ F resp_server_error(msg: i64) -> i64 {
 # =====================================================
 
 # Build JSON object string manually
-F json_obj_start(b: i64) -> i64 {
+fn json_obj_start(b: i64) -> i64 {
     buf_push_byte(b, 123)  # '{'
 }
 
-F json_obj_end(b: i64) -> i64 {
+fn json_obj_end(b: i64) -> i64 {
     buf_push_byte(b, 125)  # '}'
 }
 
-F json_arr_start(b: i64) -> i64 {
+fn json_arr_start(b: i64) -> i64 {
     buf_push_byte(b, 91)  # '['
 }
 
-F json_arr_end(b: i64) -> i64 {
+fn json_arr_end(b: i64) -> i64 {
     buf_push_byte(b, 93)  # ']'
 }
 
-F json_key(b: i64, key: i64) -> i64 {
+fn json_key(b: i64, key: i64) -> i64 {
     buf_push_byte(b, 34)
     buf_push_cstr(b, key)
     buf_push_byte(b, 34)
     buf_push_byte(b, 58)
 }
 
-F json_str_val(b: i64, val: i64) -> i64 {
+fn json_str_val(b: i64, val: i64) -> i64 {
     buf_push_byte(b, 34)
     buf_push_cstr(b, val)
     buf_push_byte(b, 34)
 }
 
-F json_int_val(b: i64, val: i64) -> i64 {
+fn json_int_val(b: i64, val: i64) -> i64 {
     s := i64_to_str(val)
     buf_push_cstr(b, s)
     free(s)
     0
 }
 
-F json_comma(b: i64) -> i64 {
+fn json_comma(b: i64) -> i64 {
     buf_push_byte(b, 44)
 }
 
@@ -579,7 +579,7 @@ F json_comma(b: i64) -> i64 {
 
 # Route: [method, method_len, pattern, pattern_len, handler_id]
 # Routes array: [routes_ptr, count, cap]
-F router_new() -> i64 {
+fn router_new() -> i64 {
     cap := 16
     r := malloc(24)
     store_i64(r, malloc(cap * 40))  # 40 bytes per route
@@ -588,7 +588,7 @@ F router_new() -> i64 {
     r
 }
 
-F router_add(router: i64, method: i64, pattern: i64, handler_id: i64) -> i64 {
+fn router_add(router: i64, method: i64, pattern: i64, handler_id: i64) -> i64 {
     routes := load_i64(router)
     count := load_i64(router + 8)
     offset := count * 40
@@ -602,15 +602,15 @@ F router_add(router: i64, method: i64, pattern: i64, handler_id: i64) -> i64 {
 }
 
 # Match a request against routes, returns handler_id or -1
-F router_match(router: i64, req: i64) -> i64 {
+fn router_match(router: i64, req: i64) -> i64 {
     routes := load_i64(router)
     count := load_i64(router + 8)
     router_match_rec(routes, count, 0, req)
 }
 
-F router_match_rec(routes: i64, count: i64, idx: i64, req: i64) -> i64 {
+fn router_match_rec(routes: i64, count: i64, idx: i64, req: i64) -> i64 {
     I idx >= count { 0 - 1 }
-    EL {
+    else {
         offset := idx * 40
         r_method := load_i64(routes + offset)
         r_method_len := load_i64(routes + offset + 8)
@@ -623,7 +623,7 @@ F router_match_rec(routes: i64, count: i64, idx: i64, req: i64) -> i64 {
         I req_m_len == r_method_len && str_eq_ptr(req_m, r_method, r_method_len) == 1 {
             # Check path match (with :param support)
             I path_matches(req_path(req), req_path_len(req), r_pattern, r_pattern_len) == 1 {
-                R r_handler
+                return r_handler
             }
         }
         router_match_rec(routes, count, idx + 1, req)
@@ -632,15 +632,15 @@ F router_match_rec(routes: i64, count: i64, idx: i64, req: i64) -> i64 {
 
 # Path matching with :param support
 # e.g., "/users/:id" matches "/users/42"
-F path_matches(path: i64, path_len: i64, pattern: i64, pat_len: i64) -> i64 {
+fn path_matches(path: i64, path_len: i64, pattern: i64, pat_len: i64) -> i64 {
     path_match_rec(path, path_len, 0, pattern, pat_len, 0)
 }
 
-F path_match_rec(path: i64, path_len: i64, pi: i64, pat: i64, pat_len: i64, qi: i64) -> i64 {
+fn path_match_rec(path: i64, path_len: i64, pi: i64, pat: i64, pat_len: i64, qi: i64) -> i64 {
     # Both exhausted: match
     I pi >= path_len && qi >= pat_len { 1 }
     # Pattern has :param segment
-    EL I qi < pat_len && load_byte(pat + qi) == 58 {
+    else I qi < pat_len && load_byte(pat + qi) == 58 {
         # Skip param name in pattern until '/' or end
         next_slash_q := find_byte(pat, pat_len, 47, qi)
         # Skip actual value in path until '/' or end
@@ -649,32 +649,32 @@ F path_match_rec(path: i64, path_len: i64, pi: i64, pat: i64, pat_len: i64, qi: 
             # Both end without more slashes
             1
         }
-        EL I next_slash_q < 0 && next_slash_p >= 0 { 0 }
-        EL I next_slash_q >= 0 && next_slash_p < 0 { 0 }
-        EL {
+        else I next_slash_q < 0 && next_slash_p >= 0 { 0 }
+        else I next_slash_q >= 0 && next_slash_p < 0 { 0 }
+        else {
             # Continue matching after the slash
             path_match_rec(path, path_len, next_slash_p, pat, pat_len, next_slash_q)
         }
     }
     # Both have chars: compare
-    EL I pi < path_len && qi < pat_len {
+    else I pi < path_len && qi < pat_len {
         I load_byte(path + pi) == load_byte(pat + qi) {
             path_match_rec(path, path_len, pi + 1, pat, pat_len, qi + 1)
-        } EL { 0 }
+        } else { 0 }
     }
     # Length mismatch
-    EL { 0 }
+    else { 0 }
 }
 
 # Extract path parameter value
 # Given path="/users/42" and pattern="/users/:id", extract "42"
-F extract_path_param(path: i64, path_len: i64, pattern: i64, pat_len: i64) -> i64 {
+fn extract_path_param(path: i64, path_len: i64, pattern: i64, pat_len: i64) -> i64 {
     # Find the colon position in pattern
     colon_pos := find_byte(pattern, pat_len, 58, 0)
-    I colon_pos < 0 { R 0 }
+    I colon_pos < 0 { return 0 }
     # The value starts at the same position in the path
     val_start := colon_pos
-    val_end := find_byte(path, path_len, 47, val_start)
+    val_end := mut find_byte(path, path_len, 47, val_start)
     I val_end < 0 { val_end = path_len }
     val_len := val_end - val_start
     # Copy value
@@ -690,22 +690,22 @@ F extract_path_param(path: i64, path_len: i64, pattern: i64, pat_len: i64) -> i6
 
 # Item: [id, name, name_len, value, created]
 # Store: [items_tbl, next_id]
-F store_new() -> i64 {
+fn store_new() -> i64 {
     s := malloc(16)
     store_i64(s, tbl_new())  # items hash table (id_str → item_ptr)
     store_i64(s + 8, 1)      # next_id starts at 1
     s
 }
 
-F store_next_id(s: i64) -> i64 {
+fn store_next_id(s: i64) -> i64 {
     id := load_i64(s + 8)
     store_i64(s + 8, id + 1)
     id
 }
 
-F store_items(s: i64) -> i64 { load_i64(s) }
+fn store_items(s: i64) -> i64 { load_i64(s) }
 
-F store_create(s: i64, name: i64, name_len: i64, value: i64) -> i64 {
+fn store_create(s: i64, name: i64, name_len: i64, value: i64) -> i64 {
     id := store_next_id(s)
     item := malloc(40)
     store_i64(item, id)
@@ -724,7 +724,7 @@ F store_create(s: i64, name: i64, name_len: i64, value: i64) -> i64 {
     item
 }
 
-F store_get(s: i64, id: i64) -> i64 {
+fn store_get(s: i64, id: i64) -> i64 {
     id_str := i64_to_str(id)
     id_str_len := strlen_ptr(id_str)
     result := tbl_get(store_items(s), id_str, id_str_len)
@@ -732,7 +732,7 @@ F store_get(s: i64, id: i64) -> i64 {
     result
 }
 
-F store_delete(s: i64, id: i64) -> i64 {
+fn store_delete(s: i64, id: i64) -> i64 {
     id_str := i64_to_str(id)
     id_str_len := strlen_ptr(id_str)
     result := tbl_delete(store_items(s), id_str, id_str_len)
@@ -740,9 +740,9 @@ F store_delete(s: i64, id: i64) -> i64 {
     result
 }
 
-F store_update(s: i64, id: i64, name: i64, name_len: i64, value: i64) -> i64 {
+fn store_update(s: i64, id: i64, name: i64, name_len: i64, value: i64) -> i64 {
     item := store_get(s, id)
-    I item == 0 { R 0 }
+    I item == 0 { return 0 }
     # Update fields
     old_name := load_i64(item + 8)
     I old_name != 0 { free(old_name) }
@@ -755,12 +755,12 @@ F store_update(s: i64, id: i64, name: i64, name_len: i64, value: i64) -> i64 {
     1
 }
 
-F store_count(s: i64) -> i64 {
+fn store_count(s: i64) -> i64 {
     tbl_size(store_items(s))
 }
 
 # Serialize item to JSON
-F item_to_json(item: i64) -> i64 {
+fn item_to_json(item: i64) -> i64 {
     b := buf_new()
     json_obj_start(b)
     json_key(b, str_to_ptr("id"))
@@ -776,7 +776,7 @@ F item_to_json(item: i64) -> i64 {
 }
 
 # Serialize all items to JSON array
-F store_to_json_array(s: i64) -> i64 {
+fn store_to_json_array(s: i64) -> i64 {
     b := buf_new()
     json_arr_start(b)
     info := tbl_entries(store_items(s))
@@ -789,8 +789,8 @@ F store_to_json_array(s: i64) -> i64 {
     buf_to_cstr(b)
 }
 
-F store_items_json_rec(b: i64, arr: i64, count: i64, idx: i64) -> i64 {
-    I idx >= count { 0 } EL {
+fn store_items_json_rec(b: i64, arr: i64, count: i64, idx: i64) -> i64 {
+    I idx >= count { 0 } else {
         I idx > 0 { json_comma(b) }
         nd := load_i64(arr + idx * 8)
         item := load_i64(nd + 16)  # value from table node
@@ -813,17 +813,17 @@ C H_UPDATE_ITEM: i64 = 4
 C H_DELETE_ITEM: i64 = 5
 C H_HEALTH: i64 = 6
 
-F handle_request(handler_id: i64, req: i64, store: i64) -> i64 {
+fn handle_request(handler_id: i64, req: i64, store: i64) -> i64 {
     I handler_id == 1 { handle_list_items(store) }
-    EL I handler_id == 2 { handle_create_item(req, store) }
-    EL I handler_id == 3 { handle_get_item(req, store) }
-    EL I handler_id == 4 { handle_update_item(req, store) }
-    EL I handler_id == 5 { handle_delete_item(req, store) }
-    EL I handler_id == 6 { handle_health() }
-    EL { resp_server_error(str_to_ptr("Unknown handler")) }
+    else I handler_id == 2 { handle_create_item(req, store) }
+    else I handler_id == 3 { handle_get_item(req, store) }
+    else I handler_id == 4 { handle_update_item(req, store) }
+    else I handler_id == 5 { handle_delete_item(req, store) }
+    else I handler_id == 6 { handle_health() }
+    else { resp_server_error(str_to_ptr("Unknown handler")) }
 }
 
-F handle_health() -> i64 {
+fn handle_health() -> i64 {
     b := buf_new()
     json_obj_start(b)
     json_key(b, str_to_ptr("status"))
@@ -833,22 +833,22 @@ F handle_health() -> i64 {
     resp_ok(body)
 }
 
-F handle_list_items(store: i64) -> i64 {
+fn handle_list_items(store: i64) -> i64 {
     json := store_to_json_array(store)
     resp_ok(json)
 }
 
-F handle_create_item(req: i64, store: i64) -> i64 {
+fn handle_create_item(req: i64, store: i64) -> i64 {
     # Parse simple JSON body to extract name and value
     body := req_body(req)
     body_len := req_body_len(req)
     I body == 0 || body_len == 0 {
-        R resp_bad_request(str_to_ptr("Missing body"))
+        return resp_bad_request(str_to_ptr("Missing body"))
     }
     # Simple extraction: find "name" and "value" fields
     name := extract_json_string(body, body_len, str_to_ptr("name"), 4)
     I name == 0 {
-        R resp_bad_request(str_to_ptr("Missing name field"))
+        return resp_bad_request(str_to_ptr("Missing name field"))
     }
     name_len := strlen_ptr(name)
     value := extract_json_int(body, body_len, str_to_ptr("value"), 5)
@@ -858,58 +858,58 @@ F handle_create_item(req: i64, store: i64) -> i64 {
     resp_created(json)
 }
 
-F handle_get_item(req: i64, store: i64) -> i64 {
+fn handle_get_item(req: i64, store: i64) -> i64 {
     # Extract ID from path /items/:id
     path := req_path(req)
     path_len := req_path_len(req)
     id_str := extract_path_param(path, path_len, str_to_ptr("/items/:id"), 10)
-    I id_str == 0 { R resp_bad_request(str_to_ptr("Invalid ID")) }
+    I id_str == 0 { return resp_bad_request(str_to_ptr("Invalid ID")) }
     id := str_to_i64(id_str, strlen_ptr(id_str))
     free(id_str)
     item := store_get(store, id)
     I item == 0 { resp_not_found() }
-    EL {
+    else {
         json := item_to_json(item)
         resp_ok(json)
     }
 }
 
-F handle_update_item(req: i64, store: i64) -> i64 {
+fn handle_update_item(req: i64, store: i64) -> i64 {
     path := req_path(req)
     path_len := req_path_len(req)
     id_str := extract_path_param(path, path_len, str_to_ptr("/items/:id"), 10)
-    I id_str == 0 { R resp_bad_request(str_to_ptr("Invalid ID")) }
+    I id_str == 0 { return resp_bad_request(str_to_ptr("Invalid ID")) }
     id := str_to_i64(id_str, strlen_ptr(id_str))
     free(id_str)
     body := req_body(req)
     body_len := req_body_len(req)
     I body == 0 || body_len == 0 {
-        R resp_bad_request(str_to_ptr("Missing body"))
+        return resp_bad_request(str_to_ptr("Missing body"))
     }
     name := extract_json_string(body, body_len, str_to_ptr("name"), 4)
-    I name == 0 { R resp_bad_request(str_to_ptr("Missing name")) }
+    I name == 0 { return resp_bad_request(str_to_ptr("Missing name")) }
     name_len := strlen_ptr(name)
     value := extract_json_int(body, body_len, str_to_ptr("value"), 5)
     result := store_update(store, id, name, name_len, value)
     free(name)
     I result == 0 { resp_not_found() }
-    EL {
+    else {
         item := store_get(store, id)
         json := item_to_json(item)
         resp_ok(json)
     }
 }
 
-F handle_delete_item(req: i64, store: i64) -> i64 {
+fn handle_delete_item(req: i64, store: i64) -> i64 {
     path := req_path(req)
     path_len := req_path_len(req)
     id_str := extract_path_param(path, path_len, str_to_ptr("/items/:id"), 10)
-    I id_str == 0 { R resp_bad_request(str_to_ptr("Invalid ID")) }
+    I id_str == 0 { return resp_bad_request(str_to_ptr("Invalid ID")) }
     id := str_to_i64(id_str, strlen_ptr(id_str))
     free(id_str)
     result := store_delete(store, id)
     I result == 0 { resp_not_found() }
-    EL { resp_no_content() }
+    else { resp_no_content() }
 }
 
 # =====================================================
@@ -918,18 +918,18 @@ F handle_delete_item(req: i64, store: i64) -> i64 {
 
 # Extract string value for a given key from JSON body
 # Returns malloc'd string or 0
-F extract_json_string(body: i64, body_len: i64, key: i64, key_len: i64) -> i64 {
+fn extract_json_string(body: i64, body_len: i64, key: i64, key_len: i64) -> i64 {
     # Find "key" in body
     pos := find_json_key(body, body_len, key, key_len, 0)
-    I pos < 0 { R 0 }
+    I pos < 0 { return 0 }
     # After key, skip ": " and opening "
-    val_start := skip_json_ws(body, body_len, pos)
-    I val_start >= body_len { R 0 }
-    I load_byte(body + val_start) != 34 { R 0 }  # must be "
+    val_start := mut skip_json_ws(body, body_len, pos)
+    I val_start >= body_len { return 0 }
+    I load_byte(body + val_start) != 34 { return 0 }  # must be "
     val_start = val_start + 1
     # Find closing "
     val_end := find_byte(body, body_len, 34, val_start)
-    I val_end < 0 { R 0 }
+    I val_end < 0 { return 0 }
     val_len := val_end - val_start
     result := malloc(val_len + 1)
     copy_bytes(result, body + val_start, val_len, 0)
@@ -938,36 +938,36 @@ F extract_json_string(body: i64, body_len: i64, key: i64, key_len: i64) -> i64 {
 }
 
 # Extract integer value for a given key
-F extract_json_int(body: i64, body_len: i64, key: i64, key_len: i64) -> i64 {
+fn extract_json_int(body: i64, body_len: i64, key: i64, key_len: i64) -> i64 {
     pos := find_json_key(body, body_len, key, key_len, 0)
-    I pos < 0 { R 0 }
+    I pos < 0 { return 0 }
     val_start := skip_json_ws(body, body_len, pos)
-    I val_start >= body_len { R 0 }
+    I val_start >= body_len { return 0 }
     # Read digits
     str_to_i64(body + val_start, body_len - val_start)
 }
 
-F find_json_key(body: i64, body_len: i64, key: i64, key_len: i64, start: i64) -> i64 {
+fn find_json_key(body: i64, body_len: i64, key: i64, key_len: i64, start: i64) -> i64 {
     # Find "key": pattern
     I start + key_len + 3 > body_len { 0 - 1 }
-    EL I load_byte(body + start) == 34 && str_eq_ptr(body + start + 1, key, key_len) == 1 && load_byte(body + start + 1 + key_len) == 34 {
+    else I load_byte(body + start) == 34 && str_eq_ptr(body + start + 1, key, key_len) == 1 && load_byte(body + start + 1 + key_len) == 34 {
         # Found key, skip past ":"
         after_key := start + 1 + key_len + 1  # past closing "
         colon := skip_json_ws(body, body_len, after_key)
         I colon < body_len && load_byte(body + colon) == 58 {
             colon + 1
-        } EL { 0 - 1 }
+        } else { 0 - 1 }
     }
-    EL { find_json_key(body, body_len, key, key_len, start + 1) }
+    else { find_json_key(body, body_len, key, key_len, start + 1) }
 }
 
-F skip_json_ws(body: i64, body_len: i64, pos: i64) -> i64 {
+fn skip_json_ws(body: i64, body_len: i64, pos: i64) -> i64 {
     I pos >= body_len { pos }
-    EL {
+    else {
         c := load_byte(body + pos)
         I c == 32 || c == 9 || c == 10 || c == 13 {
             skip_json_ws(body, body_len, pos + 1)
-        } EL { pos }
+        } else { pos }
     }
 }
 
@@ -976,7 +976,7 @@ F skip_json_ws(body: i64, body_len: i64, pos: i64) -> i64 {
 # =====================================================
 
 # Build a raw HTTP request string for testing
-F make_request(method: i64, path: i64, body: i64) -> i64 {
+fn make_request(method: i64, path: i64, body: i64) -> i64 {
     b := buf_new()
     buf_push_cstr(b, method)
     buf_push_byte(b, 32)
@@ -1005,34 +1005,34 @@ F make_request(method: i64, path: i64, body: i64) -> i64 {
 # =====================================================
 
 # Test 1: Hash table CRUD
-F test_hash_table() -> i64 {
+fn test_hash_table() -> i64 {
     tbl := tbl_new()
     tbl_set(tbl, str_to_ptr("name"), 4, 42)
     tbl_set(tbl, str_to_ptr("age"), 3, 30)
-    result := 0
+    result := mut 0
     I tbl_size(tbl) == 2 { result = result + 1 }
     I tbl_get(tbl, str_to_ptr("name"), 4) == 42 { result = result + 1 }
     result
 }
 
 # Test 2: Hash table update & delete
-F test_hash_table_update() -> i64 {
+fn test_hash_table_update() -> i64 {
     tbl := tbl_new()
     tbl_set(tbl, str_to_ptr("x"), 1, 10)
     tbl_set(tbl, str_to_ptr("x"), 1, 20)  # update
-    result := 0
+    result := mut 0
     I tbl_get(tbl, str_to_ptr("x"), 1) == 20 { result = result + 1 }
     I tbl_size(tbl) == 1 { result = result + 1 }  # should not duplicate
     result
 }
 
 # Test 3: Request parsing
-F test_request_parsing() -> i64 {
+fn test_request_parsing() -> i64 {
     raw := make_request(str_to_ptr("GET"), str_to_ptr("/items"), 0)
     raw_len := strlen_ptr(raw)
     req := parse_request(raw, raw_len)
-    I req == 0 { free(raw); R 0 }
-    result := 0
+    I req == 0 { free(raw); return 0 }
+    result := mut 0
     I req_is_method(req, str_to_ptr("GET")) == 1 { result = result + 1 }
     I req_path_len(req) == 6 { result = result + 1 }  # "/items"
     free(raw)
@@ -1041,10 +1041,10 @@ F test_request_parsing() -> i64 {
 }
 
 # Test 4: Response building
-F test_response_building() -> i64 {
+fn test_response_building() -> i64 {
     r := resp_ok(str_to_ptr("test"))
     s := resp_to_string(r)
-    result := 0
+    result := mut 0
     I strlen_ptr(s) > 30 { result = result + 1 }
     # Check status code in response
     I load_byte(s + 9) == 50 { result = result + 1 }  # '2' from "200"
@@ -1054,14 +1054,14 @@ F test_response_building() -> i64 {
 }
 
 # Test 5: Router matching
-F test_router_basic() -> i64 {
+fn test_router_basic() -> i64 {
     router := router_new()
     router_add(router, str_to_ptr("GET"), str_to_ptr("/health"), 6)
     router_add(router, str_to_ptr("GET"), str_to_ptr("/items"), 1)
     router_add(router, str_to_ptr("POST"), str_to_ptr("/items"), 2)
     raw := make_request(str_to_ptr("GET"), str_to_ptr("/health"), 0)
     req := parse_request(raw, strlen_ptr(raw))
-    result := 0
+    result := mut 0
     handler := router_match(router, req)
     I handler == 6 { result = result + 1 }
     free(raw)
@@ -1077,8 +1077,8 @@ F test_router_basic() -> i64 {
 }
 
 # Test 6: Path parameter matching
-F test_path_params() -> i64 {
-    result := 0
+fn test_path_params() -> i64 {
+    result := mut 0
     I path_matches(str_to_ptr("/items/42"), 9, str_to_ptr("/items/:id"), 10) == 1 {
         result = result + 1
     }
@@ -1089,9 +1089,9 @@ F test_path_params() -> i64 {
 }
 
 # Test 7: Path parameter extraction
-F test_path_extraction() -> i64 {
+fn test_path_extraction() -> i64 {
     id := extract_path_param(str_to_ptr("/items/42"), 9, str_to_ptr("/items/:id"), 10)
-    result := 0
+    result := mut 0
     I id != 0 {
         I str_to_i64(id, strlen_ptr(id)) == 42 { result = result + 1 }
         free(id)
@@ -1105,21 +1105,21 @@ F test_path_extraction() -> i64 {
 }
 
 # Test 8: Store CRUD
-F test_store_crud() -> i64 {
+fn test_store_crud() -> i64 {
     s := store_new()
     item := store_create(s, str_to_ptr("widget"), 6, 100)
-    result := 0
+    result := mut 0
     I store_count(s) == 1 { result = result + 1 }
     I load_i64(item) == 1 { result = result + 1 }  # id should be 1
     result
 }
 
 # Test 9: Store get & update
-F test_store_get_update() -> i64 {
+fn test_store_get_update() -> i64 {
     s := store_new()
     store_create(s, str_to_ptr("alpha"), 5, 10)
     store_create(s, str_to_ptr("beta"), 4, 20)
-    result := 0
+    result := mut 0
     item := store_get(s, 1)
     I item != 0 && load_i64(item + 24) == 10 { result = result + 1 }
     store_update(s, 1, str_to_ptr("updated"), 7, 99)
@@ -1129,10 +1129,10 @@ F test_store_get_update() -> i64 {
 }
 
 # Test 10: Store delete
-F test_store_delete() -> i64 {
+fn test_store_delete() -> i64 {
     s := store_new()
     store_create(s, str_to_ptr("temp"), 4, 1)
-    result := 0
+    result := mut 0
     I store_count(s) == 1 { result = result + 1 }
     store_delete(s, 1)
     I store_count(s) == 0 { result = result + 1 }
@@ -1140,7 +1140,7 @@ F test_store_delete() -> i64 {
 }
 
 # Test 11: Full pipeline - health check
-F test_health_endpoint() -> i64 {
+fn test_health_endpoint() -> i64 {
     store := store_new()
     router := router_new()
     router_add(router, str_to_ptr("GET"), str_to_ptr("/health"), 6)
@@ -1148,7 +1148,7 @@ F test_health_endpoint() -> i64 {
     req := parse_request(raw, strlen_ptr(raw))
     handler := router_match(router, req)
     resp := handle_request(handler, req, store)
-    result := 0
+    result := mut 0
     I load_i64(resp) == 200 { result = result + 1 }
     s := resp_to_string(resp)
     I strlen_ptr(s) > 20 { result = result + 1 }
@@ -1159,7 +1159,7 @@ F test_health_endpoint() -> i64 {
 }
 
 # Test 12: Full pipeline - list items (empty)
-F test_list_empty() -> i64 {
+fn test_list_empty() -> i64 {
     store := store_new()
     router := router_new()
     router_add(router, str_to_ptr("GET"), str_to_ptr("/items"), 1)
@@ -1167,7 +1167,7 @@ F test_list_empty() -> i64 {
     req := parse_request(raw, strlen_ptr(raw))
     handler := router_match(router, req)
     resp := handle_request(handler, req, store)
-    result := 0
+    result := mut 0
     I load_i64(resp) == 200 { result = result + 1 }
     # Body should be "[]" (empty array)
     body := load_i64(resp + 24)
@@ -1178,8 +1178,8 @@ F test_list_empty() -> i64 {
 }
 
 # Test 13: Integer to string and back
-F test_int_conversion() -> i64 {
-    result := 0
+fn test_int_conversion() -> i64 {
+    result := mut 0
     s1 := i64_to_str(42)
     I str_to_i64(s1, strlen_ptr(s1)) == 42 { result = result + 1 }
     free(s1)
@@ -1190,7 +1190,7 @@ F test_int_conversion() -> i64 {
 }
 
 # Test 14: JSON builder
-F test_json_builder() -> i64 {
+fn test_json_builder() -> i64 {
     b := buf_new()
     json_obj_start(b)
     json_key(b, str_to_ptr("id"))
@@ -1200,7 +1200,7 @@ F test_json_builder() -> i64 {
     json_str_val(b, str_to_ptr("test"))
     json_obj_end(b)
     s := buf_to_cstr(b)
-    result := 0
+    result := mut 0
     I strlen_ptr(s) > 10 { result = result + 1 }
     # Verify it starts with '{' (123)
     I load_byte(s) == 123 { result = result + 1 }
@@ -1210,8 +1210,8 @@ F test_json_builder() -> i64 {
 }
 
 # Main: Run all tests
-F main() -> i64 {
-    score := 0
+fn main() -> i64 {
+    score := mut 0
     score = score + test_hash_table()
     score = score + test_hash_table_update()
     score = score + test_request_parsing()

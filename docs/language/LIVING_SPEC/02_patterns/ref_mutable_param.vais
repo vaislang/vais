@@ -1,0 +1,15 @@
+# LIVING_SPEC/02_patterns/ref_mutable_param.vais
+# Key concept: `&mut T` 파라미터로 가변 참조 전달. 원본을 직접 수정.
+
+struct Counter { value: i64 }
+
+fn bump(c: &mut Counter) {
+    c.value = c.value + 1
+}
+
+fn main() -> i64 {
+    c := mut Counter { value: 0 }
+    bump(&mut c)
+    bump(&mut c)
+    c.value
+}

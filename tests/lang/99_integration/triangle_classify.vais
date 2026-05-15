@@ -1,0 +1,16 @@
+# CHECKS: triangle classification via match-on-bool patterns.
+fn classify(a: i64, b: i64, c: i64) -> i64 {
+    I a == b && b == c { return 1 }    # equilateral
+    I a == b || b == c || a == c { return 2 }  # isoceles
+    3   # scalene
+}
+
+fn main() -> i64 {
+    I classify(5, 5, 5) != 1 { return 1 }
+    I classify(3, 3, 5) != 2 { return 2 }
+    I classify(5, 3, 3) != 2 { return 3 }
+    I classify(3, 5, 3) != 2 { return 4 }
+    I classify(3, 4, 5) != 3 { return 5 }
+    I classify(7, 8, 9) != 3 { return 6 }
+    return 0
+}

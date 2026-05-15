@@ -472,6 +472,15 @@ impl Parser {
     pub(crate) fn parse_factor(&mut self) -> ParseResult<Spanned<Expr>> {
         let mut left = self.parse_unary()?;
 
+        // Phase 6.28.1: block-terminated expressions (I / L / LW / LF / M / `{`)
+        // must not consume a following `*` as Mul — it's the start of the next
+        // statement's Deref. Without this, `LW cond { body } \n *ptr = v`
+        // parses as `(LW{}) * ptr = v` and E001 "expected numeric, found ()"
+        // surfaces on the LW span. Rust uses the same rule.
+        if super::is_block_terminated_expr(&left.node) {
+            return Ok(left);
+        }
+
         loop {
             let op = if self.check(&Token::Star) {
                 Some(BinOp::Mul)

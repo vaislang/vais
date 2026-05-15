@@ -1,0 +1,18 @@
+# CHECKS: struct with bool field.
+struct Toggle {
+    enabled: bool,
+    count: i64
+}
+
+fn main() -> i64 {
+    t: Toggle := mut Toggle { enabled: true, count: 0 }
+    I (t.enabled as i64) != 1 { return 1 }
+    I t.count != 0 { return 2 }
+
+    t.count = 5
+    I t.count != 5 { return 3 }
+
+    t.enabled = false
+    I (t.enabled as i64) != 0 { return 4 }
+    return 0
+}

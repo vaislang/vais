@@ -6,8 +6,24 @@ use crate::expressions::Expr;
 ///
 /// Spans track the start and end positions of AST nodes in the source code,
 /// enabling precise error messages and IDE features like go-to-definition.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// ## Phase 17.H1: cross-module uniqueness via `file_id`
+///
+/// `file_id` is a per-source-file identifier assigned by the parser/driver.
+/// Two expressions in *different* source files can have the same
+/// `(start, end)` byte range without clashing once both carry distinct
+/// `file_id` values.
+///
+/// TC's `expr_types` map is keyed by the `Span` triple, so prior to this
+/// field a `body_size` expression in `constants.vais` could get its type
+/// silently replaced by a span-colliding expression elsewhere (observed in
+/// Phase 16 session 8 — "TC span bleed"). `file_id: 0` remains valid as a
+/// "synthetic / unknown source" sentinel so callers that don't yet thread
+/// file identity (macros, codegen-constructed spans) continue to compile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub struct Span {
+    /// Identifier of the source file (0 = synthetic / unknown).
+    pub file_id: u32,
     /// Byte offset of the start of this span in the source file
     pub start: usize,
     /// Byte offset of the end of this span in the source file
@@ -15,17 +31,41 @@ pub struct Span {
 }
 
 impl Span {
-    /// Creates a new span from start and end positions.
+    /// Creates a new span from start and end positions, with `file_id = 0`
+    /// (synthetic / unknown source). Prefer [`Span::with_file`] whenever the
+    /// source file is known — keeping `file_id = 0` reintroduces the
+    /// cross-module span-collision hazard that motivated this field.
     pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
+        Self {
+            file_id: 0,
+            start,
+            end,
+        }
+    }
+
+    /// Creates a new span with an explicit source `file_id`.
+    pub fn with_file(file_id: u32, start: usize, end: usize) -> Self {
+        Self {
+            file_id,
+            start,
+            end,
+        }
     }
 
     /// Merges two spans into a single span covering both ranges.
     ///
     /// The resulting span starts at the minimum start position and
-    /// ends at the maximum end position of the two input spans.
+    /// ends at the maximum end position of the two input spans. If the
+    /// two inputs disagree on `file_id`, the left operand's id wins —
+    /// cross-file merge is only legal for synthetic spans and the caller
+    /// is responsible for keeping merged spans within one file.
     pub fn merge(self, other: Span) -> Span {
         Span {
+            file_id: if self.file_id != 0 {
+                self.file_id
+            } else {
+                other.file_id
+            },
             start: self.start.min(other.start),
             end: self.end.max(other.end),
         }

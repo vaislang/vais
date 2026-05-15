@@ -1,0 +1,41 @@
+# CHECKS: struct with two related methods that share state.
+struct BankAccount {
+    balance: i64,
+    history_count: i64
+}
+
+impl BankAccount {
+    fn new() -> BankAccount {
+        BankAccount { balance: 0, history_count: 0 }
+    }
+    fn deposit(&self, amount: i64) {
+        self.balance = self.balance + amount
+        self.history_count = self.history_count + 1
+    }
+    fn withdraw(&self, amount: i64) -> i64 {
+        I amount > self.balance { return 0 }
+        self.balance = self.balance - amount
+        self.history_count = self.history_count + 1
+        1
+    }
+}
+
+fn main() -> i64 {
+    a: BankAccount := mut BankAccount.new()
+    I a.balance != 0 { return 1 }
+
+    a.deposit(100)
+    a.deposit(50)
+    I a.balance != 150 { return 2 }
+    I a.history_count != 2 { return 3 }
+
+    I a.withdraw(80) != 1 { return 4 }
+    I a.balance != 70 { return 5 }
+    I a.history_count != 3 { return 6 }
+
+    # overdraw fails
+    I a.withdraw(200) != 0 { return 7 }
+    I a.balance != 70 { return 8 }
+    I a.history_count != 3 { return 9 }   # not bumped on failure
+    return 0
+}

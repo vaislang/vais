@@ -286,7 +286,7 @@ mod tests {
     #[test]
     fn test_registry_result_ok() {
         let result: RegistryResult<i32> = Ok(42);
-        assert!(matches!(result, Ok(42)));
+        assert_eq!(result.unwrap(), 42);
     }
 
     #[test]

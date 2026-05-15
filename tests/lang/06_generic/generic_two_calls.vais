@@ -1,0 +1,10 @@
+# CHECKS: two generic helpers used in same fn body.
+fn id_a<T>(x: T) -> T { x }
+fn id_b<T>(x: T) -> T { x }
+
+fn main() -> i64 {
+    I id_a(10) + id_b(20) != 30 { return 1 }
+    I id_a(id_b(id_a(7))) != 7 { return 2 }
+    I id_a(0) + id_a(1) + id_b(2) + id_b(3) != 6 { return 3 }
+    return 0
+}

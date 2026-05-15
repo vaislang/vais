@@ -1,0 +1,26 @@
+# CHECKS: match on parity (n % 2).
+fn parity_kind(n: i64) -> i64 {
+    match n % 2 {
+        0 => 1,
+        _ => 2
+    }
+}
+
+fn divisible_by(n: i64, k: i64) -> i64 {
+    match n % k {
+        0 => 1,
+        _ => 0
+    }
+}
+
+fn main() -> i64 {
+    I parity_kind(0) != 1 { return 1 }
+    I parity_kind(2) != 1 { return 2 }
+    I parity_kind(7) != 2 { return 3 }
+    I parity_kind(0 - 4) != 1 { return 4 }
+
+    I divisible_by(15, 3) != 1 { return 5 }
+    I divisible_by(15, 4) != 0 { return 6 }
+    I divisible_by(100, 25) != 1 { return 7 }
+    return 0
+}

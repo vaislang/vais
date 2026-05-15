@@ -1,44 +1,44 @@
 # SHA-256 Test Suite
 # Tests against NIST FIPS 180-4 test vectors and additional cases
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F strlen(s: i64) -> i64
-X F str_to_ptr(s: str) -> i64
-X F load_byte(ptr: i64) -> i64
-X F store_byte(ptr: i64, val: i64) -> i64
-X F load_i64(ptr: i64) -> i64
-X F print_str(s: str) -> i64
-X F print_i64(val: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn strlen(s: i64) -> i64
+impl fn str_to_ptr(s: str) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn store_byte(ptr: i64, val: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+impl fn print_str(s: str) -> i64
+impl fn print_i64(val: i64) -> i64
 
 # Import SHA-256 functions (these would be from lib.vais)
-X F sha256_init() -> i64
-X F sha256_update(state: i64, data: i64, len: i64) -> i64
-X F sha256_finalize(state: i64) -> i64
-X F sha256_hash(data: i64, len: i64) -> i64
-X F sha256_hex(hash: i64) -> i64
+impl fn sha256_init() -> i64
+impl fn sha256_update(state: i64, data: i64, len: i64) -> i64
+impl fn sha256_finalize(state: i64) -> i64
+impl fn sha256_hash(data: i64, len: i64) -> i64
+impl fn sha256_hex(hash: i64) -> i64
 
 # Helper: Compare hex strings
-F hex_equal(hex: i64, expected: str) -> i64 {
+fn hex_equal(hex: i64, expected: str) -> i64 {
     exp_ptr := str_to_ptr(expected)
     i := mut 0
     L i < 64 {
         h := load_byte(hex + i)
         e := load_byte(exp_ptr + i)
         I h != e {
-            R 0
+            return 0
         }
         i = i + 1
     }
-    R 1
+    return 1
 }
 
 # Helper: Print test result
-F print_test_result(name: str, passed: i64) -> i64 {
+fn print_test_result(name: str, passed: i64) -> i64 {
     print_str(name)
     I passed == 1 {
         print_str(": PASS\n")
-    } E {
+    } enum {
         print_str(": FAIL\n")
     }
     passed
@@ -48,7 +48,7 @@ F print_test_result(name: str, passed: i64) -> i64 {
 # Test 1: Empty string
 # ============================================================================
 
-F test_empty_string() -> i64 {
+fn test_empty_string() -> i64 {
     # SHA-256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
     empty := malloc(1)
     store_byte(empty, 0)
@@ -69,7 +69,7 @@ F test_empty_string() -> i64 {
 # Test 2: "abc" (NIST test vector)
 # ============================================================================
 
-F test_abc() -> i64 {
+fn test_abc() -> i64 {
     # SHA-256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
     # Note: NIST vector is ba7816bf8f01cfea414140de5dae2223b0c04e78232093f9d16aacfb7ddd1e6a
     # But the standard test vector for "abc" is:
@@ -90,7 +90,7 @@ F test_abc() -> i64 {
 # Test 3: "hello"
 # ============================================================================
 
-F test_hello() -> i64 {
+fn test_hello() -> i64 {
     # SHA-256("hello") = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
     data := str_to_ptr("hello")
     hash := sha256_hash(data, 5)
@@ -108,7 +108,7 @@ F test_hello() -> i64 {
 # Test 4: "The quick brown fox jumps over the lazy dog"
 # ============================================================================
 
-F test_quick_fox() -> i64 {
+fn test_quick_fox() -> i64 {
     # SHA-256("The quick brown fox jumps over the lazy dog")
     # = d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592
     data := str_to_ptr("The quick brown fox jumps over the lazy dog")
@@ -127,7 +127,7 @@ F test_quick_fox() -> i64 {
 # Test 5: Multiple update calls
 # ============================================================================
 
-F test_multiple_updates() -> i64 {
+fn test_multiple_updates() -> i64 {
     # Test that multiple update calls produce same result as single call
     # Using "hello world" split as "hello" + " world"
 
@@ -164,7 +164,7 @@ F test_multiple_updates() -> i64 {
 # Test 6: Hex output format
 # ============================================================================
 
-F test_hex_format() -> i64 {
+fn test_hex_format() -> i64 {
     # Test that hex output is properly formatted (64 hex chars, lowercase)
     data := str_to_ptr("test")
     hash := sha256_hash(data, 4)
@@ -189,7 +189,7 @@ F test_hex_format() -> i64 {
             }
             i = i + 1
         }
-    } E {
+    } enum {
         valid = 0
     }
 
@@ -203,7 +203,7 @@ F test_hex_format() -> i64 {
 # Test 7: Different inputs produce different hashes
 # ============================================================================
 
-F test_different_inputs() -> i64 {
+fn test_different_inputs() -> i64 {
     data1 := str_to_ptr("apple")
     data2 := str_to_ptr("orange")
 
@@ -230,7 +230,7 @@ F test_different_inputs() -> i64 {
 # Test 8: Long message (multi-block)
 # ============================================================================
 
-F test_long_message() -> i64 {
+fn test_long_message() -> i64 {
     # Test a message that spans multiple 64-byte blocks
     # Using 100-byte message: "a" repeated 100 times
     data := malloc(101)
@@ -259,7 +259,7 @@ F test_long_message() -> i64 {
 # Test 9: Single byte message
 # ============================================================================
 
-F test_single_byte() -> i64 {
+fn test_single_byte() -> i64 {
     # SHA-256("a") = ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb
     data := str_to_ptr("a")
     hash := sha256_hash(data, 1)
@@ -277,7 +277,7 @@ F test_single_byte() -> i64 {
 # Test 10: Boundary case - 55 bytes (just before padding length field)
 # ============================================================================
 
-F test_55_bytes() -> i64 {
+fn test_55_bytes() -> i64 {
     # Test 55-byte message (fits in one block with padding and length)
     data := malloc(56)
     i := mut 0
@@ -305,7 +305,7 @@ F test_55_bytes() -> i64 {
 # Main - Run all tests
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     print_str("\n=== SHA-256 Test Suite ===\n\n")
 
     passed := mut 0
@@ -331,9 +331,9 @@ F main() -> i64 {
 
     I passed == total {
         print_str("All tests passed!\n")
-        R 0
-    } E {
+        return 0
+    } enum {
         print_str("Some tests failed.\n")
-        R 1
+        return 1
     }
 }

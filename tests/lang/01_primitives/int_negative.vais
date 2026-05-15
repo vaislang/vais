@@ -1,0 +1,12 @@
+# CHECKS: negative integer arithmetic + comparison
+fn main() -> i64 {
+    a: i64 := -10
+    b: i64 := 3
+    sum: i64 := a + b
+    I sum != -7 { return 1 }
+    diff: i64 := a - b
+    I diff != -13 { return 2 }
+    I !(a < 0)  { return 3 }
+    I !(a < b)  { return 4 }
+    return 0
+}

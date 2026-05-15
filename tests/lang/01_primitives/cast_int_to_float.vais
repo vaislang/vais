@@ -1,0 +1,25 @@
+# CHECKS: i64 → f64 cast preserves value.
+fn main() -> i64 {
+    a: i64 := 5
+    fa: f64 := a as f64
+    I (fa as i64) != 5 { return 1 }
+
+    b: i64 := 100
+    fb: f64 := b as f64
+    fc: f64 := fb / 4.0
+    # 100.0 / 4.0 = 25.0
+    I (fc as i64) != 25 { return 2 }
+
+    # negative cast
+    n: i64 := 0 - 42
+    nf: f64 := n as f64
+    I (nf as i64) != 0 - 42 { return 3 }
+
+    # integer reciprocal patterns
+    x: i64 := 10
+    inv: f64 := 1.0 / (x as f64)
+    # 1/10 = 0.1, * 100 = 10
+    res: f64 := inv * 100.0
+    I (res as i64) != 10 { return 4 }
+    return 0
+}

@@ -1,8 +1,8 @@
 # Property-Based Testing Library for Vais
 # Provides QuickCheck/PropTest style automated testing with shrinking
 
-U std/random
-U std/test
+use std/random
+use std/test
 
 # ============================================
 # Constants
@@ -30,7 +30,7 @@ C PROP_DISCARD: i64 = 2    # Input doesn't satisfy precondition
 # Generator - Produces random test values
 # ============================================
 
-S Generator {
+struct Generator {
     gen_type: i64,
     min: i64,
     max: i64,
@@ -40,9 +40,9 @@ S Generator {
     max_len: i64       # Max length for Vec generator
 }
 
-X Generator {
+impl Generator {
     # Create a generator for i64 values in full range
-    F i64_any() -> Generator {
+    fn i64_any() -> Generator {
         Generator {
             gen_type: GEN_I64,
             min: -9223372036854775807,
@@ -55,7 +55,7 @@ X Generator {
     }
 
     # Create a generator for i64 values in a range
-    F i64_range(min: i64, max: i64) -> Generator {
+    fn i64_range(min: i64, max: i64) -> Generator {
         Generator {
             gen_type: GEN_I64_RANGE,
             min: min,
@@ -68,24 +68,24 @@ X Generator {
     }
 
     # Create a generator for small positive i64 (useful for array sizes)
-    F i64_small() -> Generator {
+    fn i64_small() -> Generator {
         Generator.i64_range(0, 100)
     }
 
     # Create a generator for positive i64 (1 to MAX)
-    F i64_positive() -> Generator {
+    fn i64_positive() -> Generator {
         Generator.i64_range(1, 9223372036854775807)
     }
 
     # Create a generator for non-zero i64 (-MAX to -1, 1 to MAX)
-    F i64_nonzero() -> Generator {
+    fn i64_nonzero() -> Generator {
         # Note: This is a simplified version that generates in full range
         # except zero. A more sophisticated version could use weighted selection.
         Generator.i64_range(-9223372036854775807, 9223372036854775807)
     }
 
     # Create a generator for boolean values
-    F bool_any() -> Generator {
+    fn bool_any() -> Generator {
         Generator {
             gen_type: GEN_BOOL,
             min: 0,
@@ -98,7 +98,7 @@ X Generator {
     }
 
     # Create a generator for f64 values in [0, 1)
-    F f64_unit() -> Generator {
+    fn f64_unit() -> Generator {
         Generator {
             gen_type: GEN_F64,
             min: 0,
@@ -111,7 +111,7 @@ X Generator {
     }
 
     # Create a generator for f64 values in a range
-    F f64_range(min: f64, max: f64) -> Generator {
+    fn f64_range(min: f64, max: f64) -> Generator {
         Generator {
             gen_type: GEN_F64_RANGE,
             min: 0,
@@ -124,8 +124,8 @@ X Generator {
     }
 
     # Generate a single random value using this generator
-    F generate(&self) -> i64 {
-        M self.gen_type {
+    fn generate(&self) -> i64 {
+        match self.gen_type {
             GEN_I64 => random_range(self.min, self.max),
             GEN_I64_RANGE => random_range(self.min, self.max),
             GEN_BOOL => random_bool(),
@@ -143,15 +143,15 @@ X Generator {
     }
 
     # Shrink a failing value towards smaller counterexample
-    F shrink(&self, value: i64) -> i64 {
-        M self.gen_type {
+    fn shrink(&self, value: i64) -> i64 {
+        match self.gen_type {
             GEN_I64 | GEN_I64_RANGE => {
                 # Shrink towards zero
                 I value == 0 {
                     0
-                } EL I value > 0 {
+                } else I value > 0 {
                     value / 2
-                } EL {
+                } else {
                     (value + 1) / 2   # Shrink negative towards zero
                 }
             },
@@ -161,7 +161,7 @@ X Generator {
                 f := i64_bits_to_f64(value)
                 I f == 0.0 {
                     0
-                } EL {
+                } else {
                     f64_to_i64_bits(f / 2.0)
                 }
             },
@@ -170,13 +170,13 @@ X Generator {
     }
 
     # Check if value can be shrunk further
-    F can_shrink(&self, value: i64) -> i64 {
-        M self.gen_type {
-            GEN_I64 | GEN_I64_RANGE => value != 0,
-            GEN_BOOL => value != 0,
+    fn can_shrink(&self, value: i64) -> i64 {
+        match self.gen_type {
+            GEN_I64 | GEN_I64_RANGE => I value != 0 { 1 } else { 0 },
+            GEN_BOOL => I value != 0 { 1 } else { 0 },
             GEN_F64 | GEN_F64_RANGE => {
                 f := i64_bits_to_f64(value)
-                f != 0.0
+                I f != 0.0 { 1 } else { 0 }
             },
             _ => 0
         }
@@ -187,7 +187,7 @@ X Generator {
 # PropertyResult - Result of a property test
 # ============================================
 
-S PropertyResult {
+struct PropertyResult {
     status: i64,
     message: str,
     counterexample: i64,    # The failing input value
@@ -196,8 +196,8 @@ S PropertyResult {
     shrink_steps: i64       # Number of shrinking steps
 }
 
-X PropertyResult {
-    F passed(test_cases: i64) -> PropertyResult {
+impl PropertyResult {
+    fn passed(test_cases: i64) -> PropertyResult {
         PropertyResult {
             status: PROP_PASSED,
             message: "",
@@ -208,7 +208,7 @@ X PropertyResult {
         }
     }
 
-    F failed(message: str, counterexample: i64, shrunk_value: i64, test_cases: i64, shrink_steps: i64) -> PropertyResult {
+    fn failed(message: str, counterexample: i64, shrunk_value: i64, test_cases: i64, shrink_steps: i64) -> PropertyResult {
         PropertyResult {
             status: PROP_FAILED,
             message: message,
@@ -219,12 +219,12 @@ X PropertyResult {
         }
     }
 
-    F is_passed(&self) -> i64 {
-        self.status == PROP_PASSED
+    fn is_passed(&self) -> i64 {
+        I self.status == PROP_PASSED { 1 } else { 0 }
     }
 
-    F is_failed(&self) -> i64 {
-        self.status == PROP_FAILED
+    fn is_failed(&self) -> i64 {
+        I self.status == PROP_FAILED { 1 } else { 0 }
     }
 }
 
@@ -232,7 +232,7 @@ X PropertyResult {
 # Property - A testable property
 # ============================================
 
-S Property {
+struct Property {
     name: str,
     test_fn: i64,          # Function pointer: (i64) -> i64 (0=pass, non-0=fail)
     generator: Generator,
@@ -240,8 +240,8 @@ S Property {
     seed: i64
 }
 
-X Property {
-    F new(name: str, test_fn: i64, gen: Generator) -> Property {
+impl Property {
+    fn new(name: str, test_fn: i64, gen: Generator) -> Property {
         Property {
             name: name,
             test_fn: test_fn,
@@ -251,21 +251,21 @@ X Property {
         }
     }
 
-    F with_tests(&self, n: i64) -> Property {
+    fn with_tests(&self, n: i64) -> Property {
         self.num_tests = n
-        self
+        (*self)
     }
 
-    F with_seed(&self, seed: i64) -> Property {
+    fn with_seed(&self, seed: i64) -> Property {
         self.seed = seed
-        self
+        (*self)
     }
 
     # Run the property test
-    F check(&self) -> PropertyResult {
+    fn check(&self) -> PropertyResult {
         random_seed(self.seed)
 
-        i := 0
+        i := mut 0
         LW i < self.num_tests {
             # Generate random input
             value := self.generator.generate()
@@ -277,7 +277,7 @@ X Property {
             I result != 0 {
                 # Property failed! Try to shrink the counterexample
                 shrunk := shrink_counterexample(&self.generator, self.test_fn, value)
-                R PropertyResult.failed(
+                return PropertyResult.failed(
                     "Property violated",
                     value,
                     shrunk.value,
@@ -297,17 +297,20 @@ X Property {
 # Shrinking Support
 # ============================================
 
-S ShrinkResult {
+struct ShrinkResult {
     value: i64,
     steps: i64
 }
 
 # Shrink a counterexample to find minimal failing case
-F shrink_counterexample(gen: &Generator, test_fn: i64, initial: i64) -> ShrinkResult {
-    current := initial
-    steps := 0
+fn shrink_counterexample(gen: &Generator, test_fn: i64, initial: i64) -> ShrinkResult {
+    current := mut initial
+    steps := mut 0
 
-    LW steps < MAX_SHRINK_ATTEMPTS && gen.can_shrink(current) {
+    # Guard: combine i64 check against MAX_SHRINK_ATTEMPTS with
+    # can_shrink() (i64) via nested I expression — mixing bool `<`
+    # with i64 `&&` is not accepted by TC.
+    LW (I steps < MAX_SHRINK_ATTEMPTS { gen.can_shrink(current) } else { 0 }) != 0 {
         shrunk := gen.shrink(current)
 
         # Check if shrunk value still fails
@@ -317,7 +320,7 @@ F shrink_counterexample(gen: &Generator, test_fn: i64, initial: i64) -> ShrinkRe
             # Shrunk value still fails - use it
             current = shrunk
             steps = steps + 1
-        } EL {
+        } else {
             # Shrunk value passes - can't shrink further this way
             B
         }
@@ -328,7 +331,7 @@ F shrink_counterexample(gen: &Generator, test_fn: i64, initial: i64) -> ShrinkRe
 
 # Helper to call a test function pointer
 # In real implementation this would use function pointers
-F call_test_fn(fn_ptr: i64, arg: i64) -> i64 {
+fn call_test_fn(fn_ptr: i64, arg: i64) -> i64 {
     # This is a placeholder - actual implementation depends on runtime
     # Real code would cast fn_ptr to function type and call it
     # For now, assume tests are registered differently
@@ -340,7 +343,7 @@ F call_test_fn(fn_ptr: i64, arg: i64) -> i64 {
 # ============================================
 
 # Convert f64 to its bit representation as i64
-F f64_to_i64_bits(f: f64) -> i64 {
+fn f64_to_i64_bits(f: f64) -> i64 {
     # Placeholder - actual implementation needs runtime support
     # or use a union type
     ptr := malloc(8)
@@ -351,7 +354,7 @@ F f64_to_i64_bits(f: f64) -> i64 {
 }
 
 # Convert i64 bits back to f64
-F i64_bits_to_f64(bits: i64) -> f64 {
+fn i64_bits_to_f64(bits: i64) -> f64 {
     ptr := malloc(8)
     store_i64(ptr, bits)
     result := load_f64(ptr)
@@ -364,16 +367,16 @@ F i64_bits_to_f64(bits: i64) -> f64 {
 # ============================================
 
 # Run a simple property test
-F prop_check(name: str, test_fn: i64, gen: Generator) -> PropertyResult {
+fn prop_check(name: str, test_fn: i64, gen: Generator) -> PropertyResult {
     prop := Property.new(name, test_fn, gen)
     prop.check()
 }
 
 # Assert a property holds, panic if not
-F prop_assert(name: str, test_fn: i64, gen: Generator) -> i64 {
+partial fn prop_assert(name: str, test_fn: i64, gen: Generator) -> i64 {
     result := prop_check(name, test_fn, gen)
 
-    I result.is_failed() {
+    I result.is_failed() != 0 {
         # Print failure info
         puts_str("Property failed: ")
         puts_str(name)
@@ -387,8 +390,9 @@ F prop_assert(name: str, test_fn: i64, gen: Generator) -> i64 {
         print_i64(result.shrink_steps)
         puts_str(" shrinking steps\n")
 
-        # Panic
-        assert(0)
+        # Panic — use explicit bool condition since `assert` is a special
+        # AST form expecting bool, not a regular function call.
+        assert(false)
     }
 
     1
@@ -399,22 +403,22 @@ F prop_assert(name: str, test_fn: i64, gen: Generator) -> i64 {
 # ============================================
 
 # Check that a function is idempotent: f(f(x)) == f(x)
-F prop_idempotent(f: i64, x: i64) -> i64 {
+fn prop_idempotent(f: i64, x: i64) -> i64 {
     fx := call_test_fn(f, x)
     ffx := call_test_fn(f, fx)
-    fx == ffx
+    I fx == ffx { 1 } else { 0 }
 }
 
 # Check commutativity: f(a, b) == f(b, a)
 # Note: requires 2-arg function support
-F prop_commutative(f: i64, a: i64, b: i64) -> i64 {
+fn prop_commutative(f: i64, a: i64, b: i64) -> i64 {
     # Placeholder - needs 2-arg function call support
     1
 }
 
 # Check associativity: f(f(a, b), c) == f(a, f(b, c))
 # Note: requires 2-arg function support
-F prop_associative(f: i64, a: i64, b: i64, c: i64) -> i64 {
+fn prop_associative(f: i64, a: i64, b: i64, c: i64) -> i64 {
     # Placeholder - needs 2-arg function call support
     1
 }
@@ -423,31 +427,31 @@ F prop_associative(f: i64, a: i64, b: i64, c: i64) -> i64 {
 # Memory helpers (extern)
 # ============================================
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F puts_str(s: str) -> i64
-X F print_i64(n: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn puts_str(s: str) -> i64
+impl fn print_i64(n: i64) -> i64
 
 # Memory load/store
-F store_f64(ptr: i64, val: f64) -> i64 {
+fn store_f64(ptr: i64, val: f64) -> i64 {
     # Actual implementation would be:
     # *((f64*)ptr) = val
     0
 }
 
-F load_f64(ptr: i64) -> f64 {
+fn load_f64(ptr: i64) -> f64 {
     # Actual implementation would be:
     # return *((f64*)ptr)
     0.0
 }
 
-F store_i64(ptr: i64, val: i64) -> i64 {
+fn store_i64(ptr: i64, val: i64) -> i64 {
     __store_i64(ptr, val)
 }
 
-F load_i64(ptr: i64) -> i64 {
+fn load_i64(ptr: i64) -> i64 {
     __load_i64(ptr)
 }
 
-X F __store_i64(ptr: i64, val: i64) -> i64
-X F __load_i64(ptr: i64) -> i64
+impl fn __store_i64(ptr: i64, val: i64) -> i64
+impl fn __load_i64(ptr: i64) -> i64

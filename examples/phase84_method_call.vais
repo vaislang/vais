@@ -1,19 +1,19 @@
 # Phase 84: Struct method call
-S Counter {
+struct Counter {
     value: i64
 }
 
-X Counter {
-    F new() -> Counter {
+impl Counter {
+    fn new() -> Counter {
         Counter { value: 0 }
     }
 
-    F get(self) -> i64 {
+    fn get(self) -> i64 {
         self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := Counter.new()
     result := c.get()
     puts("method call done")

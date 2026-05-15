@@ -56,6 +56,25 @@ impl CodeGenerator {
                     for method in &impl_block.methods {
                         self.register_method(&type_name, &method.node)?;
                     }
+                    // Phase 17.H4.13: propagate impl methods to struct_defs
+                    // for generic monomorphization. Without this,
+                    // try_generate_vec_specialization finds the Vec struct
+                    // template (registered from `S Vec<T>`) but the methods
+                    // (`F new`, `F push`, ...) defined in `X Vec<T> { ... }`
+                    // impl blocks aren't attached — so specialization fails
+                    // and codegen falls back to unmangled `@Vec_new`.
+                    if let Some(struct_def) = self.generics.struct_defs.get_mut(&type_name) {
+                        let struct_mut = std::rc::Rc::make_mut(struct_def);
+                        for method in &impl_block.methods {
+                            if !struct_mut
+                                .methods
+                                .iter()
+                                .any(|m| m.node.name.node == method.node.name.node)
+                            {
+                                struct_mut.methods.push(method.clone());
+                            }
+                        }
+                    }
                     // Register trait impl for vtable generation
                     if let Some(ref trait_name) = impl_block.trait_name {
                         let mut method_impls = HashMap::new();
@@ -368,14 +387,47 @@ impl CodeGenerator {
             }
         }
 
-        // Generate specialized struct types from instantiations
+        // Generate specialized struct types from instantiations. Method
+        // instantiations on generic structs also require the receiver's concrete
+        // struct layout (e.g., HashMap.with_capacity<u64, Node> returns
+        // %HashMap$u64_Node), even if the type checker did not emit a separate
+        // Struct instantiation record.
         for inst in instantiations {
-            if let vais_types::InstantiationKind::Struct = inst.kind {
-                if let Some(generic_struct) =
-                    self.generics.struct_defs.get(&inst.base_name).cloned()
-                {
-                    self.generate_specialized_struct_type(&generic_struct, inst, &mut ir)?;
+            match &inst.kind {
+                vais_types::InstantiationKind::Struct => {
+                    if let Some(generic_struct) =
+                        self.generics.struct_defs.get(&inst.base_name).cloned()
+                    {
+                        self.generate_specialized_struct_type(&generic_struct, inst, &mut ir)?;
+                    }
                 }
+                vais_types::InstantiationKind::Method { struct_name } => {
+                    if inst.type_args.iter().any(|t| {
+                        matches!(
+                            t,
+                            ResolvedType::Unknown | ResolvedType::Generic(_) | ResolvedType::Var(_)
+                        )
+                    }) {
+                        continue;
+                    }
+                    if let Some(generic_struct) =
+                        self.generics.struct_defs.get(struct_name).cloned()
+                    {
+                        let struct_inst = vais_types::GenericInstantiation {
+                            kind: vais_types::InstantiationKind::Struct,
+                            base_name: struct_name.clone(),
+                            mangled_name: vais_types::mangle_name(struct_name, &inst.type_args),
+                            type_args: inst.type_args.clone(),
+                            const_args: Vec::new(),
+                        };
+                        self.generate_specialized_struct_type(
+                            &generic_struct,
+                            &struct_inst,
+                            &mut ir,
+                        )?;
+                    }
+                }
+                vais_types::InstantiationKind::Function => {}
             }
         }
 
@@ -577,6 +629,10 @@ impl CodeGenerator {
                 declared_fns.insert(info.signature.name.clone());
                 continue;
             }
+            if crate::function_gen::runtime::is_main_runtime_c_decl(&info.signature.name) {
+                declared_fns.insert(info.signature.name.clone());
+                continue;
+            }
             if !declared_fns.contains(&info.signature.name) {
                 ir.push_str(&self.generate_extern_decl(info));
                 ir.push('\n');
@@ -587,12 +643,24 @@ impl CodeGenerator {
         // Generate string constants (after processing functions to collect all strings)
         let mut body_ir = String::new();
         // Generate specialized functions from instantiations
-        eprintln!(
-            "[P1.7] generating {} specialized functions",
-            instantiations.len()
-        );
         for inst in instantiations {
             if let vais_types::InstantiationKind::Function = inst.kind {
+                // Phase 0 bug C14 fix: skip instantiations whose type args
+                // contain Unknown / Generic / Var. These slip in when TC
+                // can't infer T at a call site (e.g. bare `None` literal
+                // without a context type), and the resulting `$unknown`
+                // mangled name produces structurally invalid IR (Unit-typed
+                // load, phi/ret type mismatch). The valid concrete spec is
+                // already generated next to it from the well-typed call
+                // sites, so dropping the bogus one is safe.
+                if inst.type_args.iter().any(|t| {
+                    matches!(
+                        t,
+                        ResolvedType::Unknown | ResolvedType::Generic(_) | ResolvedType::Var(_)
+                    )
+                }) {
+                    continue;
+                }
                 if let Some(generic_fn) = self
                     .generics
                     .function_templates

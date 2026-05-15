@@ -10,27 +10,27 @@
 #        curl http://localhost:8080/health
 
 # External function declarations
-X F __tcp_listen(port: i64) -> i64
-X F __tcp_accept(listener_fd: i64) -> i64
-X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
-X F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
-X F __tcp_close(fd: i64) -> i64
-X F __strlen(s: str) -> i64
-X F __str_copy_to(dst: i64, src: str) -> i64
-X F __str_eq(a: str, b: str) -> i64
-X F __i64_to_str(dst: i64, value: i64) -> i64
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __memcpy(dst: i64, src: i64, len: i64) -> i64
-X F __find_header_end(buffer: i64, len: i64) -> i64
-X F __str_starts_with(s: str, prefix: str) -> i64
-X F __substr(s: str, start: i64, len: i64) -> str
-X F __log_request(method: str, path: str, status: i64) -> i64
-X F __print_server_start(host: str, port: i64) -> i64
+impl fn __tcp_listen(port: i64) -> i64
+impl fn __tcp_accept(listener_fd: i64) -> i64
+impl fn __tcp_send(fd: i64, data: i64, len: i64) -> i64
+impl fn __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+impl fn __tcp_close(fd: i64) -> i64
+impl fn __strlen(s: str) -> i64
+impl fn __str_copy_to(dst: i64, src: str) -> i64
+impl fn __str_eq(a: str, b: str) -> i64
+impl fn __i64_to_str(dst: i64, value: i64) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __memcpy(dst: i64, src: i64, len: i64) -> i64
+impl fn __find_header_end(buffer: i64, len: i64) -> i64
+impl fn __str_starts_with(s: str, prefix: str) -> i64
+impl fn __substr(s: str, start: i64, len: i64) -> str
+impl fn __log_request(method: str, path: str, status: i64) -> i64
+impl fn __print_server_start(host: str, port: i64) -> i64
 
 # Build a JSON body buffer from key and value strings
 # Returns pointer to null-terminated JSON string (caller must free)
-F make_json(key: str, value: str) -> i64 {
+fn make_json(key: str, value: str) -> i64 {
     buf := __malloc(512)
     pos := 0
     store_byte(buf + pos, 123)
@@ -54,7 +54,7 @@ F make_json(key: str, value: str) -> i64 {
 }
 
 # Send an HTTP response (plain text body, single str param)
-F send_ok(fd: i64, body: str) -> i64 {
+fn send_ok(fd: i64, body: str) -> i64 {
     buf := __malloc(4096)
     pos := 0
     pos = pos + __str_copy_to(buf + pos, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ")
@@ -66,7 +66,7 @@ F send_ok(fd: i64, body: str) -> i64 {
     0
 }
 
-F send_html(fd: i64, body: str) -> i64 {
+fn send_html(fd: i64, body: str) -> i64 {
     buf := __malloc(4096)
     pos := 0
     pos = pos + __str_copy_to(buf + pos, "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ")
@@ -78,7 +78,7 @@ F send_html(fd: i64, body: str) -> i64 {
     0
 }
 
-F send_404(fd: i64) -> i64 {
+fn send_404(fd: i64) -> i64 {
     j := make_json("error", "Not Found")
     buf := __malloc(4096)
     pos := 0
@@ -93,7 +93,7 @@ F send_404(fd: i64) -> i64 {
 }
 
 # Extract HTTP method from raw request buffer
-F extract_method(buffer: i64, len: i64) -> str {
+fn extract_method(buffer: i64, len: i64) -> str {
     pos := 0
     LW pos < len {
         I load_byte(buffer + pos) == 32 { B }
@@ -106,7 +106,7 @@ F extract_method(buffer: i64, len: i64) -> str {
 }
 
 # Extract HTTP path from raw request buffer
-F extract_path(buffer: i64, len: i64) -> str {
+fn extract_path(buffer: i64, len: i64) -> str {
     pos := 0
     LW pos < len {
         I load_byte(buffer + pos) == 32 { B }
@@ -125,14 +125,14 @@ F extract_path(buffer: i64, len: i64) -> str {
     p as str
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     port := 8080
     __print_server_start("0.0.0.0", port)
 
     listener := __tcp_listen(port)
     I listener < 0 {
         puts("Failed to start server")
-        R 1
+        return 1
     }
 
     # Accept and handle connections in a loop

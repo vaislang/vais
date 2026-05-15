@@ -1,0 +1,14 @@
+# CHECKS: integer modulo (%) on i64.
+fn main() -> i64 {
+    I 10 % 3 != 1 { return 1 }
+    I 10 % 5 != 0 { return 2 }
+    I 100 % 7 != 2 { return 3 }
+    I 0 % 5 != 0 { return 4 }
+    I 1 % 1 != 0 { return 5 }
+
+    # negative dividend follows truncated division
+    a: i64 := 0 - 10
+    I a % 3 != 0 - 1 { return 6 }
+
+    return 0
+}

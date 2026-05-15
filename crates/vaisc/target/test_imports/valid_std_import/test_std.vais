@@ -1,2 +1,2 @@
-U std/vec
-F main() -> () = ()
+use std/vec
+fn main() -> () = ()

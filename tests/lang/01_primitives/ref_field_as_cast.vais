@@ -1,0 +1,28 @@
+# CHECKS: parser precedence `&self.field as i64` binds as `(&self.field) as i64`
+# (REGRESSION C19). Previously parsed as `&((self.field) as i64)` — the inner
+# cast loaded the field's value, so `&` then took the address of the loaded
+# value, breaking pointer-based FFI like `__atomic_*`.
+
+struct Cell {
+    value: i64
+}
+
+impl Cell {
+    fn new(v: i64) -> Cell {
+        Cell { value: v }
+    }
+    fn addr_as_int(&self) -> i64 {
+        &self.value as i64
+    }
+}
+
+fn main() -> i64 {
+    c: Cell := mut Cell.new(42)
+    p1: i64 := c.addr_as_int()
+    p2: i64 := c.addr_as_int()
+    # The two calls must return the same field address.
+    I p1 != p2 { return 1 }
+    # The address must NOT equal the field's value (42).
+    I p1 == 42 { return 2 }
+    return 0
+}

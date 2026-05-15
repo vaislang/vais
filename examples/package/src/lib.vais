@@ -2,23 +2,23 @@
 # This demonstrates the structure of a publishable package
 
 # Public function that other packages can use
-F pub greet(name: str) -> str {
+fn pub greet(name: str) -> str {
     concat("Hello, ", name, "!")
 }
 
 # Public struct
-S pub Person {
+struct pub Person {
     name: str,
     age: i64,
 }
 
 # Implementation block
-X Person {
-    F pub new(name: str, age: i64) -> Person {
+impl Person {
+    fn pub new(name: str, age: i64) -> Person {
         Person { name: name, age: age }
     }
 
-    F pub introduce(self) -> str {
+    fn pub introduce(self) -> str {
         concat(
             "My name is ",
             self.name,
@@ -30,13 +30,13 @@ X Person {
 }
 
 # Helper function (private by default)
-F concat(a: str, b: str, c: str) -> str {
+fn concat(a: str, b: str, c: str) -> str {
     # String concatenation implementation
     # This is a simplified example
     a
 }
 
-F i64_to_str(n: i64) -> str {
+fn i64_to_str(n: i64) -> str {
     # Integer to string conversion
     # This is a simplified example
     "42"

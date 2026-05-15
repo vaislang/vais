@@ -4,15 +4,15 @@
 # ===== Stack =====
 # Fixed-capacity stack backed by a *i64 array.
 
-S Stack {
+struct Stack {
     data: *i64,
     top: i64,
     cap: i64
 }
 
-X Stack {
+impl Stack {
     # Push a value. Returns 1 on success, 0 if full.
-    F push(&self, val: i64) -> i64 {
+    fn push(&self, val: i64) -> i64 {
         I self.top >= self.cap { ret 0; }
         self.data[self.top] = val
         self.top = self.top + 1
@@ -20,29 +20,29 @@ X Stack {
     }
 
     # Pop a value. Returns the value, or -1 if empty.
-    F pop(&self) -> i64 {
+    fn pop(&self) -> i64 {
         I self.top <= 0 { ret 0 - 1; }
         self.top = self.top - 1
         self.data[self.top]
     }
 
     # Peek at the top value without removing. Returns -1 if empty.
-    F peek(&self) -> i64 {
+    fn peek(&self) -> i64 {
         I self.top <= 0 { ret 0 - 1; }
         self.data[self.top - 1]
     }
 
     # Return current size
-    F size(&self) -> i64 = self.top
+    fn size(&self) -> i64 = self.top
 
     # Check if empty (returns 1 if empty)
-    F is_empty(&self) -> i64 = self.top == 0 ? 1 : 0
+    fn is_empty(&self) -> i64 = self.top == 0 ? 1 : 0
 }
 
 # ===== Queue =====
 # Fixed-capacity circular queue backed by a *i64 array.
 
-S Queue {
+struct Queue {
     data: *i64,
     head: i64,
     tail: i64,
@@ -50,9 +50,9 @@ S Queue {
     cap: i64
 }
 
-X Queue {
+impl Queue {
     # Enqueue a value. Returns 1 on success, 0 if full.
-    F enqueue(&self, val: i64) -> i64 {
+    fn enqueue(&self, val: i64) -> i64 {
         I self.count >= self.cap { ret 0; }
         self.data[self.tail] = val
         self.tail = (self.tail + 1) % self.cap
@@ -61,7 +61,7 @@ X Queue {
     }
 
     # Dequeue a value. Returns the value, or -1 if empty.
-    F dequeue(&self) -> i64 {
+    fn dequeue(&self) -> i64 {
         I self.count <= 0 { ret 0 - 1; }
         val := self.data[self.head]
         self.head = (self.head + 1) % self.cap
@@ -70,21 +70,21 @@ X Queue {
     }
 
     # Peek at the front value without removing. Returns -1 if empty.
-    F front(&self) -> i64 {
+    fn front(&self) -> i64 {
         I self.count <= 0 { ret 0 - 1; }
         self.data[self.head]
     }
 
     # Return current size
-    F size(&self) -> i64 = self.count
+    fn size(&self) -> i64 = self.count
 
     # Check if empty (returns 1 if empty)
-    F is_empty(&self) -> i64 = self.count == 0 ? 1 : 0
+    fn is_empty(&self) -> i64 = self.count == 0 ? 1 : 0
 }
 
 # --- Demo main ---
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== data-structures demo ===")
 
     # --- Stack demo ---

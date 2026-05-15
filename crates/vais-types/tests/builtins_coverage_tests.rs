@@ -35,9 +35,9 @@ fn check_err(source: &str) {
 fn test_builtin_printf() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             printf("hello %d\n", 42)
-            R 0
+            return 0
         }
     "#,
     );
@@ -47,9 +47,9 @@ fn test_builtin_printf() {
 fn test_builtin_puts() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             puts("hello")
-            R 0
+            return 0
         }
     "#,
     );
@@ -59,9 +59,9 @@ fn test_builtin_puts() {
 fn test_builtin_putchar() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             putchar(65)
-            R 0
+            return 0
         }
     "#,
     );
@@ -71,9 +71,9 @@ fn test_builtin_putchar() {
 fn test_builtin_malloc() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ptr := malloc(100)
-            R ptr
+            return ptr
         }
     "#,
     );
@@ -83,10 +83,10 @@ fn test_builtin_malloc() {
 fn test_builtin_free() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ptr := malloc(100)
             free(ptr)
-            R 0
+            return 0
         }
     "#,
     );
@@ -100,9 +100,9 @@ fn test_builtin_free() {
 fn test_builtin_println_string() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             println("hello world")
-            R 0
+            return 0
         }
     "#,
     );
@@ -112,9 +112,9 @@ fn test_builtin_println_string() {
 fn test_builtin_println_format() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             println("value: %d", 42)
-            R 0
+            return 0
         }
     "#,
     );
@@ -124,9 +124,9 @@ fn test_builtin_println_format() {
 fn test_builtin_print_string() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             print("hello")
-            R 0
+            return 0
         }
     "#,
     );
@@ -140,13 +140,13 @@ fn test_builtin_print_string() {
 fn test_builtin_memcpy() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             src := malloc(100)
             dst := malloc(100)
             memcpy(dst, src, 100)
             free(src)
             free(dst)
-            R 0
+            return 0
         }
     "#,
     );
@@ -156,13 +156,13 @@ fn test_builtin_memcpy() {
 fn test_builtin_memcmp() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := malloc(100)
             b := malloc(100)
             result := memcmp(a, b, 100)
             free(a)
             free(b)
-            R result
+            return result
         }
     "#,
     );
@@ -176,8 +176,8 @@ fn test_builtin_memcmp() {
 fn test_builtin_labs() {
     check_ok(
         r#"
-        F test() -> i64 {
-            R labs(-42)
+        fn test() -> i64 {
+            return labs(-42)
         }
     "#,
     );
@@ -191,10 +191,10 @@ fn test_builtin_labs() {
 fn test_builtin_fopen_fclose() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := fopen("test.txt", "r")
             fclose(f)
-            R 0
+            return 0
         }
     "#,
     );
@@ -208,8 +208,8 @@ fn test_builtin_fopen_fclose() {
 fn test_builtin_sin() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R sin(0.0)
+        fn test() -> f64 {
+            return sin(0.0)
         }
     "#,
     );
@@ -219,8 +219,8 @@ fn test_builtin_sin() {
 fn test_builtin_cos() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R cos(0.0)
+        fn test() -> f64 {
+            return cos(0.0)
         }
     "#,
     );
@@ -230,8 +230,8 @@ fn test_builtin_cos() {
 fn test_builtin_sqrt() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R sqrt(4.0)
+        fn test() -> f64 {
+            return sqrt(4.0)
         }
     "#,
     );
@@ -241,8 +241,8 @@ fn test_builtin_sqrt() {
 fn test_builtin_pow() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R pow(2.0, 10.0)
+        fn test() -> f64 {
+            return pow(2.0, 10.0)
         }
     "#,
     );
@@ -252,8 +252,8 @@ fn test_builtin_pow() {
 fn test_builtin_log() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R log(1.0)
+        fn test() -> f64 {
+            return log(1.0)
         }
     "#,
     );
@@ -263,8 +263,8 @@ fn test_builtin_log() {
 fn test_builtin_floor() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R floor(3.7)
+        fn test() -> f64 {
+            return floor(3.7)
         }
     "#,
     );
@@ -274,8 +274,8 @@ fn test_builtin_floor() {
 fn test_builtin_ceil() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R ceil(3.2)
+        fn test() -> f64 {
+            return ceil(3.2)
         }
     "#,
     );
@@ -285,8 +285,8 @@ fn test_builtin_ceil() {
 fn test_builtin_exp() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R exp(1.0)
+        fn test() -> f64 {
+            return exp(1.0)
         }
     "#,
     );
@@ -296,8 +296,8 @@ fn test_builtin_exp() {
 fn test_builtin_tan() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R tan(0.0)
+        fn test() -> f64 {
+            return tan(0.0)
         }
     "#,
     );
@@ -307,8 +307,8 @@ fn test_builtin_tan() {
 fn test_builtin_atan2() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R atan2(1.0, 1.0)
+        fn test() -> f64 {
+            return atan2(1.0, 1.0)
         }
     "#,
     );
@@ -324,9 +324,9 @@ fn test_builtin_exit() {
     // stay `total`. Phase 196 P196-D removed exit from PANIC_BUILTINS.
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             exit(0)
-            R 0
+            return 0
         }
     "#,
     );
@@ -336,9 +336,9 @@ fn test_builtin_exit() {
 fn test_builtin_getenv() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             e := getenv("HOME")
-            R 0
+            return 0
         }
     "#,
     );
@@ -348,9 +348,9 @@ fn test_builtin_getenv() {
 fn test_builtin_system() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             result := system("echo hi")
-            R 0
+            return 0
         }
     "#,
     );
@@ -360,9 +360,9 @@ fn test_builtin_system() {
 fn test_builtin_raise() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             raise(0)
-            R 0
+            return 0
         }
     "#,
     );
@@ -376,13 +376,13 @@ fn test_builtin_raise() {
 fn test_builtin_fread() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := fopen("test.txt", "r")
             buf := malloc(100)
             n := fread(buf, 1, 100, f)
             fclose(f)
             free(buf)
-            R n
+            return n
         }
     "#,
     );
@@ -392,13 +392,13 @@ fn test_builtin_fread() {
 fn test_builtin_fwrite() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := fopen("test.txt", "w")
             buf := malloc(100)
             n := fwrite(buf, 1, 100, f)
             fclose(f)
             free(buf)
-            R n
+            return n
         }
     "#,
     );
@@ -412,9 +412,9 @@ fn test_builtin_fwrite() {
 fn test_builtin_gc_alloc() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ptr := gc_alloc(100, 1)
-            R ptr
+            return ptr
         }
     "#,
     );
@@ -424,10 +424,10 @@ fn test_builtin_gc_alloc() {
 fn test_builtin_gc_collect() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             gc_init()
             gc_collect()
-            R 0
+            return 0
         }
     "#,
     );
@@ -441,10 +441,10 @@ fn test_builtin_gc_collect() {
 fn test_option_some_none() {
     check_ok(
         r#"
-        E MyOption { Some(i64), None }
-        F test() -> i64 {
+        enum MyOption { Some(i64), None }
+        fn test() -> i64 {
             x := Some(42)
-            M x {
+            match x {
                 Some(v) => v,
                 None => 0,
                 _ => -1
@@ -458,10 +458,10 @@ fn test_option_some_none() {
 fn test_result_ok_err() {
     check_ok(
         r#"
-        E MyResult { Ok(i64), Err(i64) }
-        F test() -> i64 {
+        enum MyResult { Ok(i64), Err(i64) }
+        fn test() -> i64 {
             x := Ok(42)
-            M x {
+            match x {
                 Ok(v) => v,
                 Err(e) => e,
                 _ => -1
@@ -479,12 +479,12 @@ fn test_result_ok_err() {
 fn test_builtin_load_store() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ptr := malloc(8)
             store_i64(ptr, 42)
             v := load_i64(ptr)
             free(ptr)
-            R v
+            return v
         }
     "#,
     );
@@ -498,11 +498,11 @@ fn test_builtin_load_store() {
 fn test_multiple_builtins() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             ptr := malloc(256)
             println("allocated buffer")
             free(ptr)
-            R 0
+            return 0
         }
     "#,
     );
@@ -516,9 +516,9 @@ fn test_multiple_builtins() {
 fn test_builtin_sizeof() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
-            R sizeof(x)
+            return sizeof(x)
         }
     "#,
     );
@@ -532,8 +532,8 @@ fn test_builtin_sizeof() {
 fn test_builtin_atol() {
     check_ok(
         r#"
-        F test() -> i64 {
-            R atol("123")
+        fn test() -> i64 {
+            return atol("123")
         }
     "#,
     );
@@ -543,8 +543,8 @@ fn test_builtin_atol() {
 fn test_builtin_atof() {
     check_ok(
         r#"
-        F test() -> f64 {
-            R atof("3.14")
+        fn test() -> f64 {
+            return atof("3.14")
         }
     "#,
     );
@@ -558,8 +558,8 @@ fn test_builtin_atof() {
 fn test_builtin_strlen() {
     check_ok(
         r#"
-        F test() -> i64 {
-            R strlen("hello")
+        fn test() -> i64 {
+            return strlen("hello")
         }
     "#,
     );
@@ -569,8 +569,8 @@ fn test_builtin_strlen() {
 fn test_builtin_str_to_ptr() {
     check_ok(
         r#"
-        F test() -> i64 {
-            R str_to_ptr("hello")
+        fn test() -> i64 {
+            return str_to_ptr("hello")
         }
     "#,
     );
@@ -588,7 +588,7 @@ fn test_phase24_array_iter_is_noop_at_type_level() {
     // .iter() on [T] (Array<T>) returns the receiver, item type is still T.
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [10, 20, 30]
             sum := mut 0
             LF x: arr.iter() {
@@ -605,7 +605,7 @@ fn test_phase24_array_enumerate_returns_tuple_iterator() {
     // .enumerate() yields (i64, T) — tuple destructuring in LF must bind both.
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [10, 20, 30]
             sum := mut 0
             LF (i, x): arr.enumerate() {
@@ -622,7 +622,7 @@ fn test_phase24_array_iter_enumerate_chain() {
     // .iter().enumerate() is the canonical Rust-style form — both yield (i64, T).
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [100, 200]
             sum := mut 0
             LF (i, x): arr.iter().enumerate() {
@@ -639,7 +639,7 @@ fn test_phase24_enumerate_bindings_are_usable_as_i64() {
     // Index binding must unify with i64 in arithmetic.
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [5, 15, 25]
             acc := mut 0
             LF (idx, val): arr.enumerate() {
@@ -659,7 +659,7 @@ fn test_phase24_tuple_pattern_in_foreach_generally() {
     // register_pattern_bindings path in control_flow.rs independently.
     check_ok(
         r#"
-        F pairs() -> i64 {
+        fn pairs() -> i64 {
             arr := [1, 2, 3]
             total := mut 0
             LF (i, x): arr.enumerate() {

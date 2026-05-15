@@ -20,7 +20,7 @@ fn lower_and_emit(source: &str) -> String {
 
 #[test]
 fn test_emit_module_header() {
-    let ir = lower_and_emit("F noop() -> i64 = 0");
+    let ir = lower_and_emit("fn noop() -> i64 = 0");
     assert!(ir.contains("; ModuleID = 'main'"));
     assert!(ir.contains("target triple = \"x86_64-apple-darwin\""));
     assert!(ir.contains("declare i32 @putchar(i32)"));
@@ -29,14 +29,14 @@ fn test_emit_module_header() {
 
 #[test]
 fn test_emit_simple_function() {
-    let ir = lower_and_emit("F answer() -> i64 = 42");
+    let ir = lower_and_emit("fn answer() -> i64 = 42");
     assert!(ir.contains("define i64 @answer()"));
     assert!(ir.contains("ret i64"));
 }
 
 #[test]
 fn test_emit_function_with_params() {
-    let ir = lower_and_emit("F add(a: i64, b: i64) -> i64 = a + b");
+    let ir = lower_and_emit("fn add(a: i64, b: i64) -> i64 = a + b");
     assert!(ir.contains("define i64 @add(i64 %_1, i64 %_2)"));
     assert!(ir.contains("add i64"));
 }
@@ -45,9 +45,9 @@ fn test_emit_function_with_params() {
 fn test_emit_multiple_functions() {
     let ir = lower_and_emit(
         r#"
-        F one() -> i64 = 1
-        F two() -> i64 = 2
-        F three() -> i64 = 3
+        fn one() -> i64 = 1
+        fn two() -> i64 = 2
+        fn three() -> i64 = 3
     "#,
     );
     assert!(ir.contains("define i64 @one()"));
@@ -61,7 +61,7 @@ fn test_emit_multiple_functions() {
 
 #[test]
 fn test_opt_level_none() {
-    let source = "F f() -> i64 = 0";
+    let source = "fn f() -> i64 = 0";
     let module = vais_parser::parse(source).unwrap();
     let mut mir = lower_module(&module);
     optimize_mir_module(&mut mir);
@@ -71,7 +71,7 @@ fn test_opt_level_none() {
 
 #[test]
 fn test_opt_level_default() {
-    let source = "F f() -> i64 = 0";
+    let source = "fn f() -> i64 = 0";
     let module = vais_parser::parse(source).unwrap();
     let mut mir = lower_module(&module);
     optimize_mir_module(&mut mir);
@@ -84,7 +84,7 @@ fn test_opt_level_default() {
 
 #[test]
 fn test_opt_level_size() {
-    let source = "F f() -> i64 = 0";
+    let source = "fn f() -> i64 = 0";
     let module = vais_parser::parse(source).unwrap();
     let mut mir = lower_module(&module);
     optimize_mir_module(&mut mir);
@@ -94,7 +94,7 @@ fn test_opt_level_size() {
 
 #[test]
 fn test_opt_level_min_size() {
-    let source = "F f() -> i64 = 0";
+    let source = "fn f() -> i64 = 0";
     let module = vais_parser::parse(source).unwrap();
     let mut mir = lower_module(&module);
     optimize_mir_module(&mut mir);
@@ -108,7 +108,7 @@ fn test_opt_level_min_size() {
 
 #[test]
 fn test_emit_with_debug_info() {
-    let source = "F f(x: i64) -> i64 = x + 1";
+    let source = "fn f(x: i64) -> i64 = x + 1";
     let module = vais_parser::parse(source).unwrap();
     let mut mir = lower_module(&module);
     optimize_mir_module(&mut mir);
@@ -119,7 +119,7 @@ fn test_emit_with_debug_info() {
 
 #[test]
 fn test_emit_without_debug_info() {
-    let source = "F f(x: i64) -> i64 = x + 1";
+    let source = "fn f(x: i64) -> i64 = x + 1";
     let module = vais_parser::parse(source).unwrap();
     let mut mir = lower_module(&module);
     optimize_mir_module(&mut mir);
@@ -133,19 +133,19 @@ fn test_emit_without_debug_info() {
 
 #[test]
 fn test_emit_bool_type() {
-    let ir = lower_and_emit("F is_zero(x: i64) -> bool = x == 0");
+    let ir = lower_and_emit("fn is_zero(x: i64) -> bool = x == 0");
     assert!(ir.contains("i1") || ir.contains("bool") || ir.contains("icmp"));
 }
 
 #[test]
 fn test_emit_f64_type() {
-    let ir = lower_and_emit("F pi() -> f64 = 3.14");
+    let ir = lower_and_emit("fn pi() -> f64 = 3.14");
     assert!(ir.contains("double") || ir.contains("f64"));
 }
 
 #[test]
 fn test_emit_i32_type() {
-    let ir = lower_and_emit("F small(x: i32) -> i32 = x");
+    let ir = lower_and_emit("fn small(x: i32) -> i32 = x");
     assert!(ir.contains("i32"));
 }
 
@@ -157,7 +157,7 @@ fn test_emit_i32_type() {
 fn test_emit_arithmetic_ops() {
     let ir = lower_and_emit(
         r#"
-        F arith(a: i64, b: i64) -> i64 = {
+        fn arith(a: i64, b: i64) -> i64 = {
             c := a + b
             d := c - a
             e := d * b
@@ -175,7 +175,7 @@ fn test_emit_arithmetic_ops() {
 
 #[test]
 fn test_emit_comparison_ops() {
-    let ir = lower_and_emit("F cmp(a: i64, b: i64) -> bool = a < b");
+    let ir = lower_and_emit("fn cmp(a: i64, b: i64) -> bool = a < b");
     assert!(ir.contains("icmp") || ir.contains("slt"));
 }
 
@@ -183,7 +183,7 @@ fn test_emit_comparison_ops() {
 fn test_emit_bitwise_ops() {
     let ir = lower_and_emit(
         r#"
-        F bits(a: i64, b: i64) -> i64 = {
+        fn bits(a: i64, b: i64) -> i64 = {
             c := a & b
             d := c | b
             e := d ^ a
@@ -202,13 +202,13 @@ fn test_emit_bitwise_ops() {
 
 #[test]
 fn test_emit_negation() {
-    let ir = lower_and_emit("F neg(x: i64) -> i64 = -x");
+    let ir = lower_and_emit("fn neg(x: i64) -> i64 = -x");
     assert!(ir.contains("sub") && ir.contains("0"));
 }
 
 #[test]
 fn test_emit_not() {
-    let ir = lower_and_emit("F flip(x: i64) -> i64 = !x");
+    let ir = lower_and_emit("fn flip(x: i64) -> i64 = !x");
     assert!(ir.contains("xor"));
 }
 
@@ -218,14 +218,14 @@ fn test_emit_not() {
 
 #[test]
 fn test_emit_if_else() {
-    let ir = lower_and_emit("F abs(x: i64) -> i64 = I x < 0 { 0 - x } E { x }");
+    let ir = lower_and_emit("fn abs(x: i64) -> i64 = I x < 0 { 0 - x } else { x }");
     assert!(ir.contains("br "));
     assert!(ir.contains("bb1:") || ir.contains("bb2:"));
 }
 
 #[test]
 fn test_emit_ternary() {
-    let ir = lower_and_emit("F max(a: i64, b: i64) -> i64 = a > b ? a : b");
+    let ir = lower_and_emit("fn max(a: i64, b: i64) -> i64 = a > b ? a : b");
     assert!(ir.contains("br "));
 }
 
@@ -233,7 +233,7 @@ fn test_emit_ternary() {
 fn test_emit_match() {
     let ir = lower_and_emit(
         r#"
-        F classify(x: i64) -> i64 = M x {
+        fn classify(x: i64) -> i64 = match x {
             0 => 10,
             1 => 20,
             _ => 30
@@ -251,8 +251,8 @@ fn test_emit_match() {
 fn test_emit_function_call() {
     let ir = lower_and_emit(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F use_double(x: i64) -> i64 = double(x)
+        fn double(x: i64) -> i64 = x * 2
+        fn use_double(x: i64) -> i64 = double(x)
     "#,
     );
     assert!(ir.contains("call i64 @double("));
@@ -260,7 +260,7 @@ fn test_emit_function_call() {
 
 #[test]
 fn test_emit_recursive_call() {
-    let ir = lower_and_emit("F fib(n: i64) -> i64 = I n < 2 { n } E { @(n - 1) + @(n - 2) }");
+    let ir = lower_and_emit("fn fib(n: i64) -> i64 = I n < 2 { n } else { @(n - 1) + @(n - 2) }");
     // Should have a tailcall or a call to fib
     assert!(ir.contains("fib") || ir.contains("tailcall") || ir.contains("call"));
 }
@@ -273,8 +273,8 @@ fn test_emit_recursive_call() {
 fn test_emit_struct_type() {
     let ir = lower_and_emit(
         r#"
-        S Point { x: f64, y: f64 }
-        F origin() -> i64 = 0
+        struct Point { x: f64, y: f64 }
+        fn origin() -> i64 = 0
     "#,
     );
     assert!(ir.contains("%Point = type {") || ir.contains("Point"));
@@ -286,7 +286,7 @@ fn test_emit_struct_type() {
 
 #[test]
 fn test_emit_linux_target() {
-    let source = "F f() -> i64 = 0";
+    let source = "fn f() -> i64 = 0";
     let module = vais_parser::parse(source).unwrap();
     let mir = lower_module(&module);
     let ir = emit_llvm_ir(&mir, "x86_64-unknown-linux-gnu");
@@ -295,7 +295,7 @@ fn test_emit_linux_target() {
 
 #[test]
 fn test_emit_wasm_target() {
-    let source = "F f() -> i64 = 0";
+    let source = "fn f() -> i64 = 0";
     let module = vais_parser::parse(source).unwrap();
     let mir = lower_module(&module);
     let ir = emit_llvm_ir(&mir, "wasm32-unknown-unknown");
@@ -308,7 +308,7 @@ fn test_emit_wasm_target() {
 
 #[test]
 fn test_emit_empty_module() {
-    let source = "F noop() -> i64 = 0";
+    let source = "fn noop() -> i64 = 0";
     let module = vais_parser::parse(source).unwrap();
     let mir = lower_module(&module);
     let ir = emit_llvm_ir(&mir, "aarch64-apple-darwin");
@@ -320,7 +320,7 @@ fn test_emit_empty_module() {
 fn test_emit_multiple_blocks() {
     let ir = lower_and_emit(
         r#"
-        F multi(x: i64) -> i64 = I x > 10 { I x > 20 { 3 } E { 2 } } E { 1 }
+        fn multi(x: i64) -> i64 = I x > 10 { I x > 20 { 3 } else { 2 } } else { 1 }
     "#,
     );
     // Nested if produces multiple blocks
@@ -331,7 +331,7 @@ fn test_emit_multiple_blocks() {
 fn test_emit_let_binding() {
     let ir = lower_and_emit(
         r#"
-        F compute() -> i64 = {
+        fn compute() -> i64 = {
             a := 10
             b := 20
             a + b

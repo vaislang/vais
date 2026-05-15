@@ -1,0 +1,20 @@
+# LIVING_SPEC/01_keywords/T_type_alias.vais
+# Key concept: T AliasName = ExistingType 타입 별칭 선언.
+# 긴 타입명을 짧게 줄이거나 의미를 명확하게 할 때 사용.
+
+type Meters = i64
+type Score = i64
+
+fn distance(a: Meters, b: Meters) -> Meters {
+    b - a
+}
+
+fn clamp(s: Score, hi: Score) -> Score {
+    s > hi ? hi : s
+}
+
+fn main() -> i64 {
+    d := distance(10, 35)
+    s := clamp(120, 100)
+    d + s
+}

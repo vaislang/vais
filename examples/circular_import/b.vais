@@ -1,6 +1,6 @@
 # Circular import test - module b
-U a
+use a
 
-F bar() -> i64 {
-    R 10
+fn bar() -> i64 {
+    return 10
 }

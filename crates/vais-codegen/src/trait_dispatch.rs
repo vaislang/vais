@@ -152,20 +152,53 @@ impl CodeGenerator {
             .map_err(CodegenError::TypeError)
     }
 
-    /// Generate all vtable globals for the module
+    /// Generate all vtable globals for the module.
+    ///
+    /// 2a-A (DEFERRED #17): use `generate_vtable_global_typed` so each
+    /// vtable's slot fn-ptr type strings precisely match the impl
+    /// methods' return / arg types. Pre-2a-A this used the simplified
+    /// `generate_vtable_global` (everything was `i64`), which silently
+    /// produced IR-shape mismatches at the indirect-call dispatch site
+    /// for impls with `Result<T,E>` / struct returns.
     pub fn generate_vtable_globals(&self) -> String {
         let mut ir = String::new();
 
         for vtable_info in self.vtable_generator.get_vtables() {
             if let Some(trait_def) = self.types.trait_defs.get(&vtable_info.trait_name) {
-                let type_size = 8; // Default size, could be refined
-                let type_align = 8; // Default alignment
+                let type_size = 8;
+                let type_align = 8;
 
-                ir.push_str(&self.vtable_generator.generate_vtable_global(
+                // Build per-method (arg_tys, ret_ty) in deterministic
+                // alphabetical order — must match info.methods order
+                // (now also sorted; DEFERRED #19 2a-C-1 audit fix).
+                let methods_typed: Vec<(Vec<String>, String)> =
+                    super::vtable::sorted_method_names(trait_def)
+                        .into_iter()
+                        .map(|name| {
+                            let sig = &trait_def.methods[&name];
+                            let arg_tys: Vec<String> = sig
+                                .params
+                                .iter()
+                                .skip(1) // self
+                                .map(|(_n, ty, _mut)| self.type_to_llvm(ty))
+                                .collect();
+                            let ret_ty = if sig.is_async {
+                                String::from("i64")
+                            } else if matches!(sig.ret, ResolvedType::Unit) {
+                                String::from("void")
+                            } else {
+                                self.type_to_llvm(&sig.ret)
+                            };
+                            (arg_tys, ret_ty)
+                        })
+                        .collect();
+
+                ir.push_str(&self.vtable_generator.generate_vtable_global_typed(
                     vtable_info,
                     trait_def,
                     type_size,
                     type_align,
+                    &methods_typed,
                 ));
                 ir.push('\n');
             }
@@ -199,7 +232,15 @@ impl CodeGenerator {
         Ok((val, ir))
     }
 
-    /// Generate code for a dynamic method call on a trait object
+    /// Generate code for a dynamic method call on a trait object.
+    ///
+    /// 2a-A (DEFERRED #17): use `type_to_llvm(&method_sig.ret)` to lower
+    /// the trait method's declared return type to a precise LLVM IR
+    /// string instead of the legacy `vtable_ret_type` 4-bucket
+    /// approximation (Unit→void, Str→fat, async→i64, all-else→i64).
+    /// The legacy bucket misclassified `Result<T,E>` / `Option<T>` /
+    /// struct returns as `i64`, producing IR-shape mismatches at the
+    /// caller's `extractvalue` site (vaisdb baseline regression cause).
     pub fn generate_dyn_method_call(
         &self,
         trait_object: &str,
@@ -213,11 +254,14 @@ impl CodeGenerator {
                 CodegenError::Unsupported(format!("Unknown trait: {}", trait_name))
             })?;
 
-        // Find method index in trait
-        let method_names: Vec<&String> = trait_def.methods.keys().collect();
-        let method_index = method_names
+        // Method dispatch index — must match the slot order used by
+        // generate_vtable / generate_vtable_global. All sites use
+        // `sorted_method_names` (alphabetical) for determinism per
+        // DEFERRED #19 step 2a-C-1 audit fix.
+        let sorted = super::vtable::sorted_method_names(trait_def);
+        let method_index = sorted
             .iter()
-            .position(|&n| n == method_name)
+            .position(|n| n == method_name)
             .ok_or_else(|| {
                 CodegenError::Unsupported(format!(
                     "Method {} not found in trait {}",
@@ -225,7 +269,7 @@ impl CodeGenerator {
                 ))
             })?;
 
-        // Get return type
+        // Get method signature
         let method_sig = trait_def.methods.get(method_name).ok_or_else(|| {
             CodegenError::Unsupported(format!(
                 "Method {} not found in trait {}",
@@ -233,14 +277,64 @@ impl CodeGenerator {
             ))
         })?;
 
-        let ret_type = super::vtable::vtable_ret_type(&method_sig.ret, method_sig.is_async);
+        // 2a-A: precise ResolvedType-aware LLVM lowering for return.
+        let ret_type_string: String = if method_sig.is_async {
+            String::from("i64")
+        } else if matches!(method_sig.ret, ResolvedType::Unit) {
+            String::from("void")
+        } else {
+            self.type_to_llvm(&method_sig.ret)
+        };
 
-        Ok(self.vtable_generator.generate_dynamic_call(
+        // 2a-A: precise per-arg LLVM type list. method_sig.params[0] is
+        // self, args[i] corresponds to method_sig.params[i+1].
+        let arg_types_typed: Vec<(String, String)> = args
+            .iter()
+            .enumerate()
+            .map(|(i, val)| {
+                let pty = method_sig
+                    .params
+                    .get(i + 1)
+                    .map(|(_n, ty, _mut)| ty.clone())
+                    .unwrap_or(ResolvedType::I64);
+                let llvm_ty = self.type_to_llvm(&pty);
+                (llvm_ty, val.clone())
+            })
+            .collect();
+
+        // 2a-A: per-trait-method (arg_tys, ret_ty) in deterministic
+        // alphabetical order — must match the shape used by
+        // `generate_vtable_globals` so emission/dispatch sides agree
+        // (DEFERRED #19 2a-C-1 audit fix).
+        let methods_typed: Vec<(Vec<String>, String)> =
+            super::vtable::sorted_method_names(trait_def)
+                .into_iter()
+                .map(|name| {
+                    let sig = &trait_def.methods[&name];
+                    let arg_tys: Vec<String> = sig
+                        .params
+                        .iter()
+                        .skip(1)
+                        .map(|(_n, ty, _mut)| self.type_to_llvm(ty))
+                        .collect();
+                    let ret_ty = if sig.is_async {
+                        String::from("i64")
+                    } else if matches!(sig.ret, ResolvedType::Unit) {
+                        String::from("void")
+                    } else {
+                        self.type_to_llvm(&sig.ret)
+                    };
+                    (arg_tys, ret_ty)
+                })
+                .collect();
+
+        Ok(self.vtable_generator.generate_dynamic_call_typed(
             trait_object,
             method_index,
-            args,
-            ret_type,
+            &arg_types_typed,
+            &ret_type_string,
             trait_def,
+            &methods_typed,
             counter,
         ))
     }

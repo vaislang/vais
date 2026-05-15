@@ -65,9 +65,9 @@ fn e2e_phase4c3_pure_arithmetic_compiles() {
     // This is the minimal smoke test for the lexer+parser+AST+TC
     // pipeline on the `pure` prefix.
     let source = r#"
-pure F add(a: i64, b: i64) -> i64 = a + b
+pure fn add(a: i64, b: i64) -> i64 = a + b
 
-F main() -> i64 = add(2, 3)
+fn main() -> i64 = add(2, 3)
 "#;
     assert_exit_code(source, 5);
 }
@@ -78,12 +78,12 @@ fn e2e_phase4c3_pure_recursion_compiles() {
     // fixed point on a trivial cycle (fn -> self) — the worklist must
     // not get stuck.
     let source = r#"
-pure F fact(n: i64) -> i64 {
-    I n <= 1 { R 1 }
-    R n * fact(n - 1)
+pure fn fact(n: i64) -> i64 {
+    I n <= 1 { return 1 }
+    return n * fact(n - 1)
 }
 
-F main() -> i64 = fact(5)
+fn main() -> i64 = fact(5)
 "#;
     assert_exit_code(source, 120);
 }
@@ -94,11 +94,11 @@ fn e2e_phase4c3_pure_calls_pure_compiles() {
     // Exercises the transitive propagation with a real edge in the
     // call graph (not just self-recursion).
     let source = r#"
-pure F sq(x: i64) -> i64 = x * x
+pure fn sq(x: i64) -> i64 = x * x
 
-pure F sum_of_squares(a: i64, b: i64) -> i64 = sq(a) + sq(b)
+pure fn sum_of_squares(a: i64, b: i64) -> i64 = sq(a) + sq(b)
 
-F main() -> i64 = sum_of_squares(3, 4)
+fn main() -> i64 = sum_of_squares(3, 4)
 "#;
     assert_exit_code(source, 25);
 }
@@ -108,12 +108,12 @@ fn e2e_phase4c3_io_with_println_compiles() {
     // `io F` is allowed to call IO builtins. Critical regression
     // guard for the subtype rule `pure ⊆ io`.
     let source = r#"
-io F greet() -> i64 {
+io fn greet() -> i64 {
     println("hi")
-    R 0
+    return 0
 }
 
-F main() -> i64 = greet()
+fn main() -> i64 = greet()
 "#;
     assert_exit_code(source, 0);
 }
@@ -122,14 +122,14 @@ F main() -> i64 = greet()
 fn e2e_phase4c3_io_calling_pure_compiles() {
     // An io function may call a pure callee — classical subtype.
     let source = r#"
-pure F double(x: i64) -> i64 = x * 2
+pure fn double(x: i64) -> i64 = x * 2
 
-io F log_doubled(x: i64) -> i64 {
+io fn log_doubled(x: i64) -> i64 {
     println("logging")
-    R double(x)
+    return double(x)
 }
 
-F main() -> i64 = log_doubled(7)
+fn main() -> i64 = log_doubled(7)
 "#;
     assert_exit_code(source, 14);
 }
@@ -144,16 +144,16 @@ fn e2e_phase4c3_alloc_with_malloc_compiles() {
     // effect-purity gate; the returned pointer is cast to i64 and
     // not actually dereferenced.
     let source = r#"
-N F malloc(size: i64) -> i64
-N F free(ptr: i64) -> i64
+N fn malloc(size: i64) -> i64
+N fn free(ptr: i64) -> i64
 
-alloc F make_buf(n: i64) -> i64 {
+alloc fn make_buf(n: i64) -> i64 {
     ptr := malloc(n)
     free(ptr)
-    R n
+    return n
 }
 
-F main() -> i64 = make_buf(64)
+fn main() -> i64 = make_buf(64)
 "#;
     assert_exit_code(source, 64);
 }
@@ -165,12 +165,12 @@ fn e2e_phase4c3_untagged_caller_with_println_compiles() {
     // the regression guard that proves non-declared code keeps
     // compiling unchanged.
     let source = r#"
-F maybe_log() -> i64 {
+fn maybe_log() -> i64 {
     println("just a log")
-    R 42
+    return 42
 }
 
-F main() -> i64 = maybe_log()
+fn main() -> i64 = maybe_log()
 "#;
     assert_exit_code(source, 42);
 }
@@ -193,12 +193,12 @@ fn e2e_phase4c3_pure_calling_println_is_rejected() {
     // The core negative: a pure function directly calls an IO builtin.
     // The effect-purity gate must reject it.
     let source = r#"
-pure F bad() -> i64 {
+pure fn bad() -> i64 {
     println("hi")
-    R 0
+    return 0
 }
 
-F main() -> i64 = bad()
+fn main() -> i64 = bad()
 "#;
     assert_compile_error(source);
 }
@@ -208,13 +208,13 @@ fn e2e_phase4c3_pure_calling_malloc_is_rejected() {
     // `pure F` cannot allocate. Same shape as the println case but
     // exercising the Alloc flag rather than the IO flag.
     let source = r#"
-N F malloc(size: i64) -> i64
+N fn malloc(size: i64) -> i64
 
-pure F oops() -> i64 {
-    R malloc(16)
+pure fn oops() -> i64 {
+    return malloc(16)
 }
 
-F main() -> i64 = oops()
+fn main() -> i64 = oops()
 "#;
     assert_compile_error(source);
 }
@@ -226,14 +226,14 @@ fn e2e_phase4c3_pure_transitive_io_is_rejected() {
     // pure caller even though the pure body syntactically looks
     // effect-free.
     let source = r#"
-F helper() -> i64 {
+fn helper() -> i64 {
     println("sneaky")
-    R 1
+    return 1
 }
 
-pure F top() -> i64 = helper()
+pure fn top() -> i64 = helper()
 
-F main() -> i64 = top()
+fn main() -> i64 = top()
 "#;
     assert_compile_error(source);
 }
@@ -243,14 +243,14 @@ fn e2e_phase4c3_io_calling_malloc_is_rejected() {
     // `io F` may call IO builtins but may NOT allocate — io and
     // alloc are disjoint in the subtype lattice.
     let source = r#"
-N F malloc(size: i64) -> i64
+N fn malloc(size: i64) -> i64
 
-io F oops() -> i64 {
+io fn oops() -> i64 {
     println("allocating now")
-    R malloc(32)
+    return malloc(32)
 }
 
-F main() -> i64 = oops()
+fn main() -> i64 = oops()
 "#;
     assert_compile_error(source);
 }
@@ -260,14 +260,14 @@ fn e2e_phase4c3_alloc_calling_println_is_rejected() {
     // `alloc F` may allocate but may NOT perform IO — symmetric
     // companion of the io-calling-malloc case.
     let source = r#"
-N F malloc(size: i64) -> i64
+N fn malloc(size: i64) -> i64
 
-alloc F oops() -> i64 {
+alloc fn oops() -> i64 {
     println("side effect")
-    R malloc(8)
+    return malloc(8)
 }
 
-F main() -> i64 = oops()
+fn main() -> i64 = oops()
 "#;
     assert_compile_error(source);
 }
@@ -291,12 +291,12 @@ fn e2e_phase4c3_partial_pure_composes_compiles() {
     // correct Phase 4c.2 behaviour but orthogonal to what this test
     // wants to exercise (Phase 4c.3 purity on a partial function).
     let source = r#"
-partial pure F checked_sqrt(x: i64) -> i64 {
+partial pure fn checked_sqrt(x: i64) -> i64 {
     assert(x >= 0)
-    R x * x
+    return x * x
 }
 
-partial F main() -> i64 = checked_sqrt(5)
+partial fn main() -> i64 = checked_sqrt(5)
 "#;
     assert_exit_code(source, 25);
 }
@@ -306,9 +306,9 @@ fn e2e_phase4c3_pub_pure_compiles() {
     // `P pure F` — the canonical public-pure shape. Tests that
     // `pub` followed by the effect prefix parses correctly.
     let source = r#"
-P pure F triple(x: i64) -> i64 = x * 3
+pub pure fn triple(x: i64) -> i64 = x * 3
 
-F main() -> i64 = triple(7)
+fn main() -> i64 = triple(7)
 "#;
     assert_exit_code(source, 21);
 }

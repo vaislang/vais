@@ -9,6 +9,30 @@ use vais_lexer::Token;
 
 use crate::{ParseError, ParseResult, Parser};
 
+/// Phase 1.16: detect primitive-lookalike identifiers that don't match a
+/// real Vais primitive. Returns true for things like `i65`, `u500`, `f128`
+/// (not a valid Vais primitive — f32/f64 only).
+fn is_primitive_lookalike_but_invalid(name: &str) -> bool {
+    // Valid Vais primitives (keep in sync with lexer + LANGUAGE_SPEC).
+    const VALID: &[&str] = &[
+        "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
+    ];
+    if VALID.contains(&name) {
+        return false;
+    }
+    let mut chars = name.chars();
+    let first = match chars.next() {
+        Some(c) => c,
+        None => return false,
+    };
+    if !matches!(first, 'i' | 'u' | 'f') {
+        return false;
+    }
+    let rest: String = chars.collect();
+    // Lookalike: first char is i/u/f and all remaining chars are digits.
+    !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+}
+
 impl Parser {
     /// Parse generic parameters: `<T, U>` or `<T: Trait, U: Trait1 + Trait2>` or `<const N: u64>` or `<'a, 'b>`
     pub(crate) fn parse_generics(&mut self) -> ParseResult<Vec<GenericParam>> {
@@ -599,6 +623,12 @@ impl Parser {
             }
         } else if let Some(tok) = self.peek() {
             // Check for function pointer type: fn(...) -> T
+            // Two paths: (a) Token::Ident("fn") — pre-Step-15 path when
+            // `fn` was not a lexer keyword; (b) Token::Function — post
+            // Step 15 wave 2 fn-alias once the lexer recognizes `fn` as
+            // the multi-char form of `F`. Both must reach
+            // `parse_fn_ptr_type` so existing `fn(i64) -> i64` syntax
+            // keeps working under either lexer state.
             if let Token::Ident(s) = &tok.token {
                 if s == "fn" {
                     self.advance(); // consume 'fn'
@@ -609,12 +639,16 @@ impl Parser {
                 }
             }
             if matches!(tok.token, Token::Function) {
+                // Disambiguate: only treat as fn-pointer type if the next
+                // token is `(`. Otherwise this is a malformed type and we
+                // fall through to the regular type-name path so the
+                // existing error reporting stays intact.
                 let next_is_lparen = self
                     .peek_next()
-                    .map(|next| matches!(next.token, Token::LParen))
+                    .map(|t| matches!(t.token, Token::LParen))
                     .unwrap_or(false);
                 if next_is_lparen {
-                    self.advance(); // consume `fn` / `F`
+                    self.advance(); // consume `fn` (Token::Function)
                     return Ok(Spanned::new(
                         self.parse_fn_ptr_type()?,
                         Span::new(start, self.prev_span().end),
@@ -622,8 +656,30 @@ impl Parser {
                 }
             }
             let name = self.parse_type_name()?;
+            // Phase 1.16: reject primitive-lookalike identifiers that don't
+            // match a real primitive (e.g. `i65`, `u500`, `f32xx`). This
+            // catches typos early rather than letting them through as
+            // Named types that fail TC later with a confusing message.
+            if is_primitive_lookalike_but_invalid(&name) {
+                return Err(ParseError::UnexpectedToken {
+                    found: Token::Ident(name.clone()),
+                    span: start..self.prev_span().end,
+                    expected: format!(
+                        "a valid primitive (i8/i16/i32/i64/i128/u8..u128/f32/f64) — `{}` is not recognized",
+                        name
+                    ),
+                });
+            }
             let generics = if self.check(&Token::Lt) {
                 self.advance();
+                // Phase 1.17: empty generic list `Vec<>` rejected.
+                if self.check_gt() {
+                    return Err(ParseError::UnexpectedToken {
+                        found: Token::Gt,
+                        span: self.current_span(),
+                        expected: format!("at least one type argument inside `{}<...>`", name),
+                    });
+                }
                 let mut generics = Vec::new();
                 while !self.check_gt() && !self.is_at_end() {
                     generics.push(self.parse_type()?);

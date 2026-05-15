@@ -2,18 +2,18 @@
 # Handles module resolution, import chains, and circular dependency detection
 
 # Print i64 helper
-F print_i64(val: i64) -> i64 {
+fn print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } EL I val < 0 {
+    } else I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } EL {
+    } else {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } EL { 0 }
+        } else { 0 }
         putchar(48 + (val % 10))
         0
     }
@@ -23,16 +23,16 @@ F print_i64(val: i64) -> i64 {
 # Module Resolution Status
 # ============================================================================
 
-F MOD_STATUS_UNKNOWN() -> i64 = 0    # Not yet processed
-F MOD_STATUS_LOADING() -> i64 = 1    # Currently being loaded (cycle detection)
-F MOD_STATUS_LOADED() -> i64 = 2     # Successfully loaded
-F MOD_STATUS_ERROR() -> i64 = 3      # Error during loading
+fn MOD_STATUS_UNKNOWN() -> i64 = 0    # Not yet processed
+fn MOD_STATUS_LOADING() -> i64 = 1    # Currently being loaded (cycle detection)
+fn MOD_STATUS_LOADED() -> i64 = 2     # Successfully loaded
+fn MOD_STATUS_ERROR() -> i64 = 3      # Error during loading
 
 # ============================================================================
 # Module Entry - Represents a loaded module
 # ============================================================================
 
-S ModuleEntry {
+struct ModuleEntry {
     name_idx: i64,       # String index for module name
     path_idx: i64,       # String index for resolved file path
     status: i64,         # Loading status (MOD_STATUS_*)
@@ -43,9 +43,9 @@ S ModuleEntry {
     deps_cap: i64        # Capacity of deps array
 }
 
-X ModuleEntry {
+impl ModuleEntry {
     # Create new module entry
-    F new(name_idx: i64, path_idx: i64) -> ModuleEntry = ModuleEntry {
+    fn new(name_idx: i64, path_idx: i64) -> ModuleEntry = ModuleEntry {
         name_idx: name_idx,
         path_idx: path_idx,
         status: MOD_STATUS_UNKNOWN(),
@@ -57,13 +57,13 @@ X ModuleEntry {
     }
 
     # Add a dependency
-    F add_dep(&self, dep_idx: i64) -> i64 {
+    fn add_dep(&self, dep_idx: i64) -> i64 {
         # Check if already exists
         i: mut i64 = 0
         L {
-            I i >= self.deps_len { B } EL { 0 }
+            I i >= self.deps_len { B } else { 0 }
             I load_i64(self.deps_ptr + i * 8) == dep_idx {
-                R 0  # Already exists
+                return 0  # Already exists
             }
             i = i + 1
         }
@@ -77,7 +77,7 @@ X ModuleEntry {
             self.deps_ptr = new_ptr
             self.deps_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         store_i64(self.deps_ptr + self.deps_len * 8, dep_idx)
         self.deps_len = self.deps_len + 1
@@ -85,12 +85,12 @@ X ModuleEntry {
     }
 
     # Check if has dependency
-    F has_dep(&self, dep_idx: i64) -> i64 {
+    fn has_dep(&self, dep_idx: i64) -> i64 {
         i: mut i64 = 0
         L {
-            I i >= self.deps_len { R 0 }
+            I i >= self.deps_len { return 0 }
             I load_i64(self.deps_ptr + i * 8) == dep_idx {
-                R 1
+                return 1
             }
             i = i + 1
         }
@@ -98,15 +98,15 @@ X ModuleEntry {
     }
 
     # Free resources
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.deps_ptr != 0 {
             free(self.deps_ptr)
             0
-        } EL { 0 }
+        } else { 0 }
         I self.source_ptr != 0 {
             free(self.source_ptr)
             0
-        } EL { 0 }
+        } else { 0 }
         1
     }
 }
@@ -115,7 +115,7 @@ X ModuleEntry {
 # Module Registry - Tracks all modules and their dependencies
 # ============================================================================
 
-S ModuleRegistry {
+struct ModuleRegistry {
     entries_ptr: i64,    # Array of ModuleEntry
     entries_len: i64,    # Number of entries
     entries_cap: i64,    # Capacity
@@ -124,11 +124,11 @@ S ModuleRegistry {
 }
 
 # Size of ModuleEntry: 9 fields * 8 bytes = 72 bytes
-F MODULE_ENTRY_SIZE() -> i64 = 72
+fn MODULE_ENTRY_SIZE() -> i64 = 72
 
-X ModuleRegistry {
+impl ModuleRegistry {
     # Create new registry with base path
-    F new(base_path_idx: i64, initial_cap: i64) -> ModuleRegistry {
+    fn new(base_path_idx: i64, initial_cap: i64) -> ModuleRegistry {
         entries := malloc(initial_cap * MODULE_ENTRY_SIZE())
         ModuleRegistry {
             entries_ptr: entries,
@@ -140,16 +140,16 @@ X ModuleRegistry {
     }
 
     # Get entry pointer by index
-    F get_entry_ptr(&self, idx: i64) -> i64 {
+    fn get_entry_ptr(&self, idx: i64) -> i64 {
         self.entries_ptr + idx * self.entry_size
     }
 
     # Register a new module (returns index, or existing index if already registered)
-    F register(&self, name_idx: i64, path_idx: i64) -> i64 {
+    fn register(&self, name_idx: i64, path_idx: i64) -> i64 {
         # Check if already registered
         existing := @.find_by_name(name_idx)
         I existing >= 0 {
-            R existing
+            return existing
         }
 
         # Grow if needed
@@ -161,7 +161,7 @@ X ModuleRegistry {
             self.entries_ptr = new_ptr
             self.entries_cap = new_cap
             0
-        } EL { 0 }
+        } else { 0 }
 
         # Create new entry
         idx := self.entries_len
@@ -182,14 +182,14 @@ X ModuleRegistry {
     }
 
     # Find module by name index
-    F find_by_name(&self, name_idx: i64) -> i64 {
+    fn find_by_name(&self, name_idx: i64) -> i64 {
         i: mut i64 = 0
         L {
-            I i >= self.entries_len { R 0 - 1 }
+            I i >= self.entries_len { return 0 - 1 }
             entry_ptr := @.get_entry_ptr(i)
             stored_name := load_i64(entry_ptr)
             I stored_name == name_idx {
-                R i
+                return i
             }
             i = i + 1
         }
@@ -197,37 +197,37 @@ X ModuleRegistry {
     }
 
     # Get module status
-    F get_status(&self, idx: i64) -> i64 {
-        I idx < 0 || idx >= self.entries_len { R MOD_STATUS_ERROR() }
+    fn get_status(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.entries_len { return MOD_STATUS_ERROR() }
         entry_ptr := @.get_entry_ptr(idx)
         load_i64(entry_ptr + 16)
     }
 
     # Set module status
-    F set_status(&self, idx: i64, status: i64) -> i64 {
-        I idx < 0 || idx >= self.entries_len { R 0 }
+    fn set_status(&self, idx: i64, status: i64) -> i64 {
+        I idx < 0 || idx >= self.entries_len { return 0 }
         entry_ptr := @.get_entry_ptr(idx)
         store_i64(entry_ptr + 16, status)
         1
     }
 
     # Get module name index
-    F get_name(&self, idx: i64) -> i64 {
-        I idx < 0 || idx >= self.entries_len { R 0 - 1 }
+    fn get_name(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.entries_len { return 0 - 1 }
         entry_ptr := @.get_entry_ptr(idx)
         load_i64(entry_ptr)
     }
 
     # Get module path index
-    F get_path(&self, idx: i64) -> i64 {
-        I idx < 0 || idx >= self.entries_len { R 0 - 1 }
+    fn get_path(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.entries_len { return 0 - 1 }
         entry_ptr := @.get_entry_ptr(idx)
         load_i64(entry_ptr + 8)
     }
 
     # Add dependency from src_idx to dep_idx
-    F add_dependency(&self, src_idx: i64, dep_idx: i64) -> i64 {
-        I src_idx < 0 || src_idx >= self.entries_len { R 0 }
+    fn add_dependency(&self, src_idx: i64, dep_idx: i64) -> i64 {
+        I src_idx < 0 || src_idx >= self.entries_len { return 0 }
         entry_ptr := @.get_entry_ptr(src_idx)
 
         deps_ptr: mut i64 = load_i64(entry_ptr + 40)
@@ -237,9 +237,9 @@ X ModuleRegistry {
         # Check if already exists
         i: mut i64 = 0
         L {
-            I i >= deps_len { B } EL { 0 }
+            I i >= deps_len { B } else { 0 }
             I load_i64(deps_ptr + i * 8) == dep_idx {
-                R 1  # Already exists
+                return 1  # Already exists
             }
             i = i + 1
         }
@@ -255,7 +255,7 @@ X ModuleRegistry {
             store_i64(entry_ptr + 40, new_ptr)
             store_i64(entry_ptr + 56, new_cap)
             0
-        } EL { 0 }
+        } else { 0 }
 
         store_i64(deps_ptr + deps_len * 8, dep_idx)
         store_i64(entry_ptr + 48, deps_len + 1)
@@ -263,24 +263,24 @@ X ModuleRegistry {
     }
 
     # Get number of modules
-    F size(&self) -> i64 = self.entries_len
+    fn size(&self) -> i64 = self.entries_len
 
     # Free all resources
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         i: mut i64 = 0
         L {
-            I i >= self.entries_len { B } EL { 0 }
+            I i >= self.entries_len { B } else { 0 }
             entry_ptr := @.get_entry_ptr(i)
             deps_ptr := load_i64(entry_ptr + 40)
             source_ptr := load_i64(entry_ptr + 24)
             I deps_ptr != 0 {
                 free(deps_ptr)
                 0
-            } EL { 0 }
+            } else { 0 }
             I source_ptr != 0 {
                 free(source_ptr)
                 0
-            } EL { 0 }
+            } else { 0 }
             i = i + 1
         }
         free(self.entries_ptr)
@@ -292,7 +292,7 @@ X ModuleRegistry {
 # Cycle Detector - Detects circular dependencies using DFS
 # ============================================================================
 
-S CycleDetector {
+struct CycleDetector {
     visited: i64,        # Bitmap: visited[i] = 1 if visited
     in_stack: i64,       # Bitmap: in_stack[i] = 1 if in current DFS path
     cycle_path: i64,     # Array storing cycle path (module indices)
@@ -300,8 +300,8 @@ S CycleDetector {
     capacity: i64        # Max number of modules
 }
 
-X CycleDetector {
-    F new(capacity: i64) -> CycleDetector {
+impl CycleDetector {
+    fn new(capacity: i64) -> CycleDetector {
         visited := malloc(capacity)
         in_stack := malloc(capacity)
         cycle_path := malloc(capacity * 8)
@@ -309,7 +309,7 @@ X CycleDetector {
         # Initialize to 0
         i: mut i64 = 0
         L {
-            I i >= capacity { B } EL { 0 }
+            I i >= capacity { B } else { 0 }
             store_byte(visited + i, 0)
             store_byte(in_stack + i, 0)
             i = i + 1
@@ -325,10 +325,10 @@ X CycleDetector {
     }
 
     # Reset state for new detection
-    F reset(&self) -> i64 {
+    fn reset(&self) -> i64 {
         i: mut i64 = 0
         L {
-            I i >= self.capacity { B } EL { 0 }
+            I i >= self.capacity { B } else { 0 }
             store_byte(self.visited + i, 0)
             store_byte(self.in_stack + i, 0)
             i = i + 1
@@ -338,61 +338,61 @@ X CycleDetector {
     }
 
     # Check if node is visited
-    F is_visited(&self, idx: i64) -> i64 {
-        I idx < 0 || idx >= self.capacity { R 1 }
+    fn is_visited(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { return 1 }
         load_byte(self.visited + idx)
     }
 
     # Check if node is in current stack
-    F is_in_stack(&self, idx: i64) -> i64 {
-        I idx < 0 || idx >= self.capacity { R 0 }
+    fn is_in_stack(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { return 0 }
         load_byte(self.in_stack + idx)
     }
 
     # Mark node as visited
-    F mark_visited(&self, idx: i64) -> i64 {
-        I idx < 0 || idx >= self.capacity { R 0 }
+    fn mark_visited(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { return 0 }
         store_byte(self.visited + idx, 1)
         1
     }
 
     # Push node onto stack
-    F push_stack(&self, idx: i64) -> i64 {
-        I idx < 0 || idx >= self.capacity { R 0 }
+    fn push_stack(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { return 0 }
         store_byte(self.in_stack + idx, 1)
         1
     }
 
     # Pop node from stack
-    F pop_stack(&self, idx: i64) -> i64 {
-        I idx < 0 || idx >= self.capacity { R 0 }
+    fn pop_stack(&self, idx: i64) -> i64 {
+        I idx < 0 || idx >= self.capacity { return 0 }
         store_byte(self.in_stack + idx, 0)
         1
     }
 
     # Record cycle path
-    F record_cycle(&self, idx: i64) -> i64 {
+    fn record_cycle(&self, idx: i64) -> i64 {
         I self.cycle_len < self.capacity {
             store_i64(self.cycle_path + self.cycle_len * 8, idx)
             self.cycle_len = self.cycle_len + 1
             1
-        } EL { 0 }
+        } else { 0 }
     }
 
     # Get cycle path at position
-    F get_cycle_node(&self, pos: i64) -> i64 {
-        I pos < 0 || pos >= self.cycle_len { R 0 - 1 }
+    fn get_cycle_node(&self, pos: i64) -> i64 {
+        I pos < 0 || pos >= self.cycle_len { return 0 - 1 }
         load_i64(self.cycle_path + pos * 8)
     }
 
     # Clear cycle path
-    F clear_cycle(&self) -> i64 {
+    fn clear_cycle(&self) -> i64 {
         self.cycle_len = 0
         1
     }
 
     # Free resources
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.visited)
         free(self.in_stack)
         free(self.cycle_path)
@@ -404,7 +404,7 @@ X CycleDetector {
 # Module Resolver - Main entry point for module loading and resolution
 # ============================================================================
 
-S ModuleResolver {
+struct ModuleResolver {
     registry: i64,       # Pointer to ModuleRegistry
     detector: i64,       # Pointer to CycleDetector
     stringpool: i64,     # Pointer to GlobalStringPool
@@ -415,17 +415,17 @@ S ModuleResolver {
 }
 
 # Error codes
-F ERR_NONE() -> i64 = 0
-F ERR_FILE_NOT_FOUND() -> i64 = 1
-F ERR_CIRCULAR_DEP() -> i64 = 2
-F ERR_PARSE_FAILED() -> i64 = 3
-F ERR_INTERNAL() -> i64 = 4
+fn ERR_NONE() -> i64 = 0
+fn ERR_FILE_NOT_FOUND() -> i64 = 1
+fn ERR_CIRCULAR_DEP() -> i64 = 2
+fn ERR_PARSE_FAILED() -> i64 = 3
+fn ERR_INTERNAL() -> i64 = 4
 
-X ModuleResolver {
+impl ModuleResolver {
     # Create new resolver
     # registry_ptr: pointer to ModuleRegistry
     # stringpool_ptr: pointer to GlobalStringPool
-    F new(registry_ptr: i64, stringpool_ptr: i64) -> ModuleResolver {
+    fn new(registry_ptr: i64, stringpool_ptr: i64) -> ModuleResolver {
         detector := malloc(40)  # CycleDetector size
         search_paths := malloc(64)  # 8 paths initially
 
@@ -435,7 +435,7 @@ X ModuleResolver {
         det_cycle := malloc(256 * 8)
         i: mut i64 = 0
         L {
-            I i >= 256 { B } EL { 0 }
+            I i >= 256 { B } else { 0 }
             store_byte(det_visited + i, 0)
             store_byte(det_stack + i, 0)
             i = i + 1
@@ -458,7 +458,7 @@ X ModuleResolver {
     }
 
     # Add search path for module resolution
-    F add_search_path(&self, path_idx: i64) -> i64 {
+    fn add_search_path(&self, path_idx: i64) -> i64 {
         store_i64(self.search_paths + self.search_count * 8, path_idx)
         self.search_count = self.search_count + 1
         1
@@ -466,19 +466,19 @@ X ModuleResolver {
 
     # Check for circular dependencies starting from module idx
     # Returns 1 if cycle detected, 0 otherwise
-    F check_cycle_from(&self, idx: i64, registry: i64) -> i64 {
+    fn check_cycle_from(&self, idx: i64, registry: i64) -> i64 {
         # Simple DFS cycle detection
         det_visited := load_i64(self.detector)
         det_stack := load_i64(self.detector + 8)
 
         # If already visited and not in stack, no cycle through this node
         I load_byte(det_visited + idx) == 1 {
-            R 0
+            return 0
         }
 
         # If in stack, we found a cycle
         I load_byte(det_stack + idx) == 1 {
-            R 1
+            return 1
         }
 
         # Mark as in stack
@@ -491,10 +491,10 @@ X ModuleResolver {
 
         i: mut i64 = 0
         L {
-            I i >= deps_len { B } EL { 0 }
+            I i >= deps_len { B } else { 0 }
             dep_idx := load_i64(deps_ptr + i * 8)
             I @.check_cycle_from(dep_idx, registry) == 1 {
-                R 1
+                return 1
             }
             i = i + 1
         }
@@ -506,7 +506,7 @@ X ModuleResolver {
     }
 
     # Check all modules for cycles
-    F check_all_cycles(&self) -> i64 {
+    fn check_all_cycles(&self) -> i64 {
         # Reset detector state
         det_visited := load_i64(self.detector)
         det_stack := load_i64(self.detector + 8)
@@ -514,7 +514,7 @@ X ModuleResolver {
 
         i: mut i64 = 0
         L {
-            I i >= det_capacity { B } EL { 0 }
+            I i >= det_capacity { B } else { 0 }
             store_byte(det_visited + i, 0)
             store_byte(det_stack + i, 0)
             i = i + 1
@@ -527,14 +527,14 @@ X ModuleResolver {
 
         i = 0
         L {
-            I i >= reg_len { B } EL { 0 }
+            I i >= reg_len { B } else { 0 }
             I load_byte(det_visited + i) == 0 {
                 I @.check_cycle_from(i, reg_entries) == 1 {
                     self.error_code = ERR_CIRCULAR_DEP()
-                    R 1
+                    return 1
                 }
                 0
-            } EL { 0 }
+            } else { 0 }
             i = i + 1
         }
 
@@ -542,17 +542,17 @@ X ModuleResolver {
     }
 
     # Get last error code
-    F get_error(&self) -> i64 = self.error_code
+    fn get_error(&self) -> i64 = self.error_code
 
     # Clear error state
-    F clear_error(&self) -> i64 {
+    fn clear_error(&self) -> i64 {
         self.error_code = ERR_NONE()
         self.error_msg_idx = -1
         1
     }
 
     # Free resources
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         # Free detector
         det_visited := load_i64(self.detector)
         det_stack := load_i64(self.detector + 8)
@@ -570,7 +570,7 @@ X ModuleResolver {
 # Topological Sort - Returns modules in dependency order
 # ============================================================================
 
-S TopologicalSort {
+struct TopologicalSort {
     result: i64,      # Array of module indices in sorted order
     result_len: i64,  # Number of modules in result
     visited: i64,     # Visited bitmap
@@ -578,15 +578,15 @@ S TopologicalSort {
     capacity: i64     # Max capacity
 }
 
-X TopologicalSort {
-    F new(capacity: i64) -> TopologicalSort {
+impl TopologicalSort {
+    fn new(capacity: i64) -> TopologicalSort {
         result := malloc(capacity * 8)
         visited := malloc(capacity)
         temp := malloc(capacity)
 
         i: mut i64 = 0
         L {
-            I i >= capacity { B } EL { 0 }
+            I i >= capacity { B } else { 0 }
             store_byte(visited + i, 0)
             store_byte(temp + i, 0)
             i = i + 1
@@ -602,10 +602,10 @@ X TopologicalSort {
     }
 
     # Reset for new sort
-    F reset(&self) -> i64 {
+    fn reset(&self) -> i64 {
         i: mut i64 = 0
         L {
-            I i >= self.capacity { B } EL { 0 }
+            I i >= self.capacity { B } else { 0 }
             store_byte(self.visited + i, 0)
             store_byte(self.temp + i, 0)
             i = i + 1
@@ -616,14 +616,14 @@ X TopologicalSort {
 
     # Visit node for topological sort
     # Returns 0 on success, 1 if cycle detected
-    F visit(&self, idx: i64, registry_entries: i64) -> i64 {
+    fn visit(&self, idx: i64, registry_entries: i64) -> i64 {
         # If temp marked, we have a cycle
         I load_byte(self.temp + idx) == 1 {
-            R 1
+            return 1
         }
         # If already visited, done
         I load_byte(self.visited + idx) == 1 {
-            R 0
+            return 0
         }
 
         # Mark temporarily
@@ -636,10 +636,10 @@ X TopologicalSort {
 
         i: mut i64 = 0
         L {
-            I i >= deps_len { B } EL { 0 }
+            I i >= deps_len { B } else { 0 }
             dep_idx := load_i64(deps_ptr + i * 8)
             I @.visit(dep_idx, registry_entries) == 1 {
-                R 1  # Cycle detected
+                return 1  # Cycle detected
             }
             i = i + 1
         }
@@ -656,34 +656,34 @@ X TopologicalSort {
 
     # Sort all modules
     # Returns 0 on success, 1 if cycle detected
-    F sort(&self, registry_entries: i64, module_count: i64) -> i64 {
+    fn sort(&self, registry_entries: i64, module_count: i64) -> i64 {
         @.reset()
 
         i: mut i64 = 0
         L {
-            I i >= module_count { B } EL { 0 }
+            I i >= module_count { B } else { 0 }
             I load_byte(self.visited + i) == 0 {
                 I @.visit(i, registry_entries) == 1 {
-                    R 1
+                    return 1
                 }
                 0
-            } EL { 0 }
+            } else { 0 }
             i = i + 1
         }
         0
     }
 
     # Get sorted module at position
-    F get(&self, pos: i64) -> i64 {
-        I pos < 0 || pos >= self.result_len { R 0 - 1 }
+    fn get(&self, pos: i64) -> i64 {
+        I pos < 0 || pos >= self.result_len { return 0 - 1 }
         load_i64(self.result + pos * 8)
     }
 
     # Get count of sorted modules
-    F len(&self) -> i64 = self.result_len
+    fn len(&self) -> i64 = self.result_len
 
     # Free resources
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.result)
         free(self.visited)
         free(self.temp)
@@ -695,7 +695,7 @@ X TopologicalSort {
 # Test function
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Module System Tests ===\n")
 
     # Test ModuleRegistry
@@ -723,14 +723,14 @@ F main() -> i64 {
         puts("Topological sort succeeded, order: ")
         i: mut i64 = 0
         L {
-            I i >= sorter.len() { B } EL { 0 }
+            I i >= sorter.len() { B } else { 0 }
             print_i64(sorter.get(i))
             putchar(32)
             i = i + 1
         }
         putchar(10)
         puts("PASS: No cycles detected\n")
-    } EL {
+    } else {
         puts("FAIL: Cycle detected\n")
     }
 
@@ -743,7 +743,7 @@ F main() -> i64 {
 
     I result2 == 1 {
         puts("PASS: Cycle correctly detected\n")
-    } EL {
+    } else {
         puts("FAIL: Cycle not detected\n")
     }
 

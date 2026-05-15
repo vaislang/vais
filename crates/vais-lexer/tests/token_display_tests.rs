@@ -12,21 +12,21 @@ fn assert_token_display(token: &Token, expected: &str) {
 
 #[test]
 fn test_keyword_display() {
-    assert_token_display(&Token::Function, "F");
-    assert_token_display(&Token::Struct, "S");
-    assert_token_display(&Token::Enum, "E");
+    assert_token_display(&Token::Function, "fn");
+    assert_token_display(&Token::Struct, "struct");
+    assert_token_display(&Token::Enum, "enum");
     assert_token_display(&Token::If, "I");
     assert_token_display(&Token::Loop, "L");
-    assert_token_display(&Token::Match, "M");
+    assert_token_display(&Token::Match, "match");
     assert_token_display(&Token::Async, "A");
-    assert_token_display(&Token::Return, "R");
+    assert_token_display(&Token::Return, "return");
     assert_token_display(&Token::Break, "B");
     assert_token_display(&Token::Continue, "C");
-    assert_token_display(&Token::TypeKeyword, "T");
-    assert_token_display(&Token::Use, "U");
-    assert_token_display(&Token::Pub, "P");
-    assert_token_display(&Token::Trait, "W");
-    assert_token_display(&Token::Impl, "X");
+    assert_token_display(&Token::TypeKeyword, "type");
+    assert_token_display(&Token::Use, "use");
+    assert_token_display(&Token::Pub, "pub");
+    assert_token_display(&Token::Trait, "trait");
+    assert_token_display(&Token::Impl, "impl");
     assert_token_display(&Token::Defer, "D");
     assert_token_display(&Token::Union, "O");
     assert_token_display(&Token::Extern, "N");
@@ -89,7 +89,7 @@ fn test_literal_display() {
     assert_token_display(&Token::Int(42), "42");
     assert_token_display(&Token::Int(0), "0");
     assert_token_display(&Token::Int(9999), "9999");
-    assert_token_display(&Token::Float(2.5), "2.5");
+    assert_token_display(&Token::Float(3.14), "3.14");
     assert_token_display(&Token::Float(0.0), "0");
     assert_token_display(&Token::String("hello".to_string()), "\"hello\"");
     assert_token_display(&Token::Ident("foo".to_string()), "foo");
@@ -179,15 +179,15 @@ fn test_lifetime_display() {
 #[test]
 fn test_tokenize_all_keywords() {
     // Tokenize a source that uses many different keywords
-    let source = "F S E I L M A R B C T U P W X D O N G";
+    let source = "fn struct enum I L match A return B C type use pub trait impl D O N G";
     let tokens = tokenize(source).unwrap();
     let kinds: Vec<_> = tokens.iter().map(|t| format!("{}", t.token)).collect();
-    assert!(kinds.contains(&"F".to_string()));
-    assert!(kinds.contains(&"S".to_string()));
-    assert!(kinds.contains(&"E".to_string()));
+    assert!(kinds.contains(&"fn".to_string()));
+    assert!(kinds.contains(&"struct".to_string()));
+    assert!(kinds.contains(&"enum".to_string()));
     assert!(kinds.contains(&"I".to_string()));
     assert!(kinds.contains(&"L".to_string()));
-    assert!(kinds.contains(&"M".to_string()));
+    assert!(kinds.contains(&"match".to_string()));
 }
 
 #[test]
@@ -331,7 +331,7 @@ fn test_tokenize_comment_only() {
 
 #[test]
 fn test_tokenize_multiple_lines() {
-    let source = "F a() -> i64 = 1\nF b() -> i64 = 2\nF c() -> i64 = 3";
+    let source = "fn a() -> i64 = 1\nfn b() -> i64 = 2\nfn c() -> i64 = 3";
     let tokens = tokenize(source).unwrap();
     let fn_count: usize = tokens.iter().filter(|t| t.token == Token::Function).count();
     assert_eq!(fn_count, 3);

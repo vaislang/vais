@@ -1,26 +1,26 @@
 # todo.vais - TODO data model and business logic
 
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F time(ptr: i64) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn time(ptr: i64) -> i64
 
-S Todo {
+struct Todo {
     id: i64,
     description: str,
     done: i64,         # 0 = pending, 1 = done
     created_at: i64    # timestamp
 }
 
-S TodoList {
+struct TodoList {
     items_ptr: i64,    # pointer to Todo array
     count: i64,
     next_id: i64
 }
 
 # Create a new Todo item
-F todo_new(id: i64, desc: str) -> Todo {
+fn todo_new(id: i64, desc: str) -> Todo {
     C timestamp := time(0)
-    R Todo {
+    return Todo {
         id: id,
         description: desc,
         done: 0,
@@ -29,11 +29,11 @@ F todo_new(id: i64, desc: str) -> Todo {
 }
 
 # Create a new empty TodoList
-F todolist_new() -> TodoList {
+fn todolist_new() -> TodoList {
     C initial_capacity := 10
     C size := initial_capacity * 32  # sizeof(Todo) = 32 bytes approx
     C ptr := malloc(size)
-    R TodoList {
+    return TodoList {
         items_ptr: ptr,
         count: 0,
         next_id: 1
@@ -41,7 +41,7 @@ F todolist_new() -> TodoList {
 }
 
 # Add a new todo item to the list
-F todolist_add(list: TodoList, desc: str) -> TodoList {
+fn todolist_add(list: TodoList, desc: str) -> TodoList {
     C new_todo := todo_new(list.next_id, desc)
 
     # Simple array append (no bounds checking for this example)
@@ -51,7 +51,7 @@ F todolist_add(list: TodoList, desc: str) -> TodoList {
     # Store todo fields at the calculated offset
     # (In real implementation, would use memcpy or struct assignment)
 
-    R TodoList {
+    return TodoList {
         items_ptr: list.items_ptr,
         count: list.count + 1,
         next_id: list.next_id + 1
@@ -59,12 +59,12 @@ F todolist_add(list: TodoList, desc: str) -> TodoList {
 }
 
 # Mark a todo item as done
-F todolist_done(list: TodoList, id: i64) -> i64 {
+fn todolist_done(list: TodoList, id: i64) -> i64 {
     C count := list.count
     C i := 0
     L {
         I i >= count {
-            R -1  # Not found
+            return -1  # Not found
         }
 
         # Check if this is the item we're looking for
@@ -76,41 +76,41 @@ F todolist_done(list: TodoList, id: i64) -> i64 {
 
         I i == id - 1 {
             # Mark as done (set done field to 1)
-            R 0  # Success
+            return 0  # Success
         }
 
         C i := i + 1
     }
-    R -1
+    return -1
 }
 
 # Remove a todo item by id
-F todolist_remove(list: TodoList, id: i64) -> i64 {
+fn todolist_remove(list: TodoList, id: i64) -> i64 {
     C count := list.count
     C i := 0
     L {
         I i >= count {
-            R -1  # Not found
+            return -1  # Not found
         }
 
         I i == id - 1 {
             # Shift remaining items left
-            R 0  # Success
+            return 0  # Success
         }
 
         C i := i + 1
     }
-    R -1
+    return -1
 }
 
 # Count pending (not done) items
-F todolist_count_pending(list: TodoList) -> i64 {
+fn todolist_count_pending(list: TodoList) -> i64 {
     C count := list.count
     C pending := 0
     C i := 0
     L {
         I i >= count {
-            R pending
+            return pending
         }
 
         # Check done field for each item
@@ -122,20 +122,20 @@ F todolist_count_pending(list: TodoList) -> i64 {
 
         C i := i + 1
     }
-    R pending
+    return pending
 }
 
 # Count completed items
-F todolist_count_done(list: TodoList) -> i64 {
+fn todolist_count_done(list: TodoList) -> i64 {
     C total := list.count
     C pending := todolist_count_pending(list)
-    R total - pending
+    return total - pending
 }
 
 # Free the TodoList memory
-F todolist_free(list: TodoList) -> i64 {
+fn todolist_free(list: TodoList) -> i64 {
     I list.items_ptr != 0 {
         free(list.items_ptr)
     }
-    R 0
+    return 0
 }

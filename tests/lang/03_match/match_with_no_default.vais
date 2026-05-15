@@ -1,0 +1,27 @@
+# CHECKS: exhaustive match without `_` (when all variants enumerated).
+enum Sign {
+    Positive,
+    Zero,
+    Negative
+}
+
+fn sign_of(n: i64) -> Sign {
+    I n > 0 { return Positive }
+    I n < 0 { return Negative }
+    Zero
+}
+
+fn to_int(s: Sign) -> i64 {
+    match s {
+        Positive => 1,
+        Zero => 0,
+        Negative => 0 - 1
+    }
+}
+
+fn main() -> i64 {
+    I to_int(sign_of(42)) != 1 { return 1 }
+    I to_int(sign_of(0)) != 0 { return 2 }
+    I to_int(sign_of(0 - 7)) != 0 - 1 { return 3 }
+    return 0
+}

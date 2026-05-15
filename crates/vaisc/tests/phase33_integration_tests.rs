@@ -128,9 +128,9 @@ C TLS_ERR_HANDSHAKE: i64 = -6
 C TLS_ERR_READ: i64 = -7
 C TLS_ERR_WRITE: i64 = -8
 
-F main() -> i64 {
+fn main() -> i64 {
     result := TLS_OK
-    I result == 0 { 0 } E { 1 }
+    I result == 0 { 0 } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -143,12 +143,12 @@ fn phase33_tls_mode_constants_compile() {
 C TLS_MODE_CLIENT: i64 = 1
 C TLS_MODE_SERVER: i64 = 2
 
-F main() -> i64 {
+fn main() -> i64 {
     client_mode := TLS_MODE_CLIENT
     server_mode := TLS_MODE_SERVER
     I client_mode == 1 {
-        I server_mode == 2 { 0 } E { 1 }
-    } E { 2 }
+        I server_mode == 2 { 0 } else { 1 }
+    } else { 2 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -158,14 +158,14 @@ F main() -> i64 {
 fn phase33_tls_context_struct_compiles() {
     // Test that TlsContext struct definition compiles
     let source = r#"
-S TlsContext {
+struct TlsContext {
     handle: i64,
     mode: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     ctx := TlsContext { handle: 0, mode: 1 }
-    I ctx.mode == 1 { 0 } E { 1 }
+    I ctx.mode == 1 { 0 } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -175,14 +175,14 @@ F main() -> i64 {
 fn phase33_tls_conn_struct_compiles() {
     // Test that TlsConn struct definition compiles
     let source = r#"
-S TlsConn {
+struct TlsConn {
     ssl: i64,
     fd: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     conn := TlsConn { ssl: 0, fd: 5 }
-    I conn.fd == 5 { 0 } E { 1 }
+    I conn.fd == 5 { 0 } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -195,18 +195,18 @@ fn phase33_tls_extern_declarations_compile() {
 C TLS_MODE_CLIENT: i64 = 1
 C TLS_MODE_SERVER: i64 = 2
 
-S TlsCtx {
+struct TlsCtx {
     mode: i64,
     handle: i64
 }
 
-F tls_ctx_new_mock(mode: i64) -> TlsCtx {
+fn tls_ctx_new_mock(mode: i64) -> TlsCtx {
     TlsCtx { mode: mode, handle: 100 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     ctx := tls_ctx_new_mock(TLS_MODE_CLIENT)
-    I ctx.mode == TLS_MODE_CLIENT { 0 } E { 1 }
+    I ctx.mode == TLS_MODE_CLIENT { 0 } else { 1 }
 }
 "#;
     // ctx.mode = TLS_MODE_CLIENT = 1, so returns 0
@@ -226,15 +226,15 @@ C PLATFORM_MACOS: i64 = 1
 C PLATFORM_LINUX: i64 = 2
 C PLATFORM_WINDOWS: i64 = 3
 
-F main() -> i64 {
+fn main() -> i64 {
     macos := PLATFORM_MACOS
     linux := PLATFORM_LINUX
     windows := PLATFORM_WINDOWS
     I macos == 1 {
         I linux == 2 {
-            I windows == 3 { 0 } E { 3 }
-        } E { 2 }
-    } E { 1 }
+            I windows == 3 { 0 } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -252,15 +252,15 @@ C REACTOR_DELETE: i64 = 2
 C REACTOR_ONESHOT: i64 = 16
 C REACTOR_MAX_EVENTS: i64 = 64
 
-F main() -> i64 {
+fn main() -> i64 {
     read_filter := REACTOR_READ
     write_filter := REACTOR_WRITE
     max_events := REACTOR_MAX_EVENTS
     I read_filter == -1 {
         I write_filter == -2 {
-            I max_events == 64 { 0 } E { 3 }
-        } E { 2 }
-    } E { 1 }
+            I max_events == 64 { 0 } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -270,17 +270,17 @@ F main() -> i64 {
 fn phase33_async_reactor_event_struct_compiles() {
     // Test that ReactorEvent struct compiles
     let source = r#"
-S ReactorEvent {
+struct ReactorEvent {
     fd: i64,
     filter: i64,
     udata: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     evt := ReactorEvent { fd: 3, filter: -1, udata: 0 }
     I evt.fd == 3 {
-        I evt.filter == -1 { 0 } E { 2 }
-    } E { 1 }
+        I evt.filter == -1 { 0 } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -293,20 +293,20 @@ fn phase33_async_reactor_extern_declarations_compile() {
 C REACTOR_READ: i64 = -1
 C REACTOR_WRITE: i64 = -2
 
-S ReactorConfig {
+struct ReactorConfig {
     backend_fd: i64,
     max_events: i64
 }
 
-F create_reactor_mock(max_events: i64) -> ReactorConfig {
+fn create_reactor_mock(max_events: i64) -> ReactorConfig {
     ReactorConfig { backend_fd: 42, max_events: max_events }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     r := create_reactor_mock(64)
     I r.backend_fd == 42 {
-        I r.max_events == 64 { 0 } E { 2 }
-    } E { 1 }
+        I r.max_events == 64 { 0 } else { 2 }
+    } else { 1 }
 }
 "#;
     // backend_fd=42, max_events=64, so returns 0
@@ -317,23 +317,23 @@ F main() -> i64 {
 fn phase33_async_reactor_struct_compiles() {
     // Test that Reactor struct with methods compiles
     let source = r#"
-S Reactor {
+struct Reactor {
     kq: i64,
     events_buf: i64
 }
 
-F create_reactor(kq_fd: i64, buf_ptr: i64) -> Reactor {
+fn create_reactor(kq_fd: i64, buf_ptr: i64) -> Reactor {
     Reactor { kq: kq_fd, events_buf: buf_ptr }
 }
 
-F get_kq(r: Reactor) -> i64 {
+fn get_kq(r: Reactor) -> i64 {
     r.kq
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     reactor := create_reactor(42, 1024)
     kq := get_kq(reactor)
-    I kq == 42 { 0 } E { 1 }
+    I kq == 42 { 0 } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -353,7 +353,7 @@ C LOG_LEVEL_INFO: i64 = 2
 C LOG_LEVEL_WARN: i64 = 3
 C LOG_LEVEL_ERROR: i64 = 4
 
-F main() -> i64 {
+fn main() -> i64 {
     trace := LOG_LEVEL_TRACE
     debug := LOG_LEVEL_DEBUG
     info := LOG_LEVEL_INFO
@@ -363,11 +363,11 @@ F main() -> i64 {
         I debug == 1 {
             I info == 2 {
                 I warn == 3 {
-                    I error == 4 { 0 } E { 5 }
-                } E { 4 }
-            } E { 3 }
-        } E { 2 }
-    } E { 1 }
+                    I error == 4 { 0 } else { 5 }
+                } else { 4 }
+            } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -381,15 +381,15 @@ C LOG_OUTPUT_STDOUT: i64 = 0
 C LOG_OUTPUT_STDERR: i64 = 1
 C LOG_OUTPUT_FILE: i64 = 2
 
-F main() -> i64 {
+fn main() -> i64 {
     stdout := LOG_OUTPUT_STDOUT
     stderr := LOG_OUTPUT_STDERR
     file := LOG_OUTPUT_FILE
     I stdout == 0 {
         I stderr == 1 {
-            I file == 2 { 0 } E { 3 }
-        } E { 2 }
-    } E { 1 }
+            I file == 2 { 0 } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -402,12 +402,12 @@ fn phase33_logging_format_constants_compile() {
 C LOG_FORMAT_TEXT: i64 = 0
 C LOG_FORMAT_JSON: i64 = 1
 
-F main() -> i64 {
+fn main() -> i64 {
     text := LOG_FORMAT_TEXT
     json := LOG_FORMAT_JSON
     I text == 0 {
-        I json == 1 { 0 } E { 2 }
-    } E { 1 }
+        I json == 1 { 0 } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -418,13 +418,13 @@ F main() -> i64 {
 fn phase33_logging_basic_output() {
     // Test that basic logging functions work and produce output
     let source = r#"
-X F log_init(level: i64) -> i64
-X F log_info(msg: i64) -> i64
-X F log_warn(msg: i64) -> i64
-X F log_error(msg: i64) -> i64
-X F __make_string(s: i64) -> i64
+impl fn log_init(level: i64) -> i64
+impl fn log_info(msg: i64) -> i64
+impl fn log_warn(msg: i64) -> i64
+impl fn log_error(msg: i64) -> i64
+impl fn __make_string(s: i64) -> i64
 
-F main() -> i64 {
+fn main() -> i64 {
     log_init(2)  # LOG_LEVEL_INFO
     
     info_msg := __make_string(1000)
@@ -457,15 +457,15 @@ F main() -> i64 {
 fn phase33_logging_json_format() {
     // Test that JSON format logging works
     let source = r#"
-X F log_init(level: i64) -> i64
-X F log_set_format(format: i64) -> i64
-X F log_info(msg: i64) -> i64
-X F __make_string(s: i64) -> i64
+impl fn log_init(level: i64) -> i64
+impl fn log_set_format(format: i64) -> i64
+impl fn log_info(msg: i64) -> i64
+impl fn __make_string(s: i64) -> i64
 
 C LOG_LEVEL_INFO: i64 = 2
 C LOG_FORMAT_JSON: i64 = 1
 
-F main() -> i64 {
+fn main() -> i64 {
     log_init(LOG_LEVEL_INFO)
     log_set_format(LOG_FORMAT_JSON)
     
@@ -505,15 +505,15 @@ C COMPRESS_ERR_DATA: i64 = -4
 C COMPRESS_ERR_STREAM: i64 = -5
 C COMPRESS_ERR_VERSION: i64 = -6
 
-F main() -> i64 {
+fn main() -> i64 {
     ok := COMPRESS_OK
     err_init := COMPRESS_ERR_INIT
     err_param := COMPRESS_ERR_PARAM
     I ok == 0 {
         I err_init == -1 {
-            I err_param == -2 { 0 } E { 3 }
-        } E { 2 }
-    } E { 1 }
+            I err_param == -2 { 0 } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -526,12 +526,12 @@ fn phase33_compress_algorithm_constants_compile() {
 C COMPRESS_DEFLATE: i64 = 0
 C COMPRESS_GZIP: i64 = 1
 
-F main() -> i64 {
+fn main() -> i64 {
     deflate := COMPRESS_DEFLATE
     gzip := COMPRESS_GZIP
     I deflate == 0 {
-        I gzip == 1 { 0 } E { 2 }
-    } E { 1 }
+        I gzip == 1 { 0 } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -545,15 +545,15 @@ C COMPRESS_LEVEL_FAST: i64 = 1
 C COMPRESS_LEVEL_DEFAULT: i64 = 6
 C COMPRESS_LEVEL_BEST: i64 = 9
 
-F main() -> i64 {
+fn main() -> i64 {
     fast := COMPRESS_LEVEL_FAST
     default := COMPRESS_LEVEL_DEFAULT
     best := COMPRESS_LEVEL_BEST
     I fast == 1 {
         I default == 6 {
-            I best == 9 { 0 } E { 3 }
-        } E { 2 }
-    } E { 1 }
+            I best == 9 { 0 } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -563,17 +563,17 @@ F main() -> i64 {
 fn phase33_compress_result_struct_compiles() {
     // Test that CompressResult struct compiles
     let source = r#"
-S CompressResult {
+struct CompressResult {
     status: i64,
     data_ptr: i64,
     data_len: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     result := CompressResult { status: 0, data_ptr: 1024, data_len: 256 }
     I result.status == 0 {
-        I result.data_len == 256 { 0 } E { 2 }
-    } E { 1 }
+        I result.data_len == 256 { 0 } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -584,19 +584,19 @@ F main() -> i64 {
 fn phase33_compress_gzip_roundtrip() {
     // Test gzip compression and decompression roundtrip
     let source = r#"
-X F gzip_compress(data: i64, len: i64) -> i64  # Returns CompressResult ptr
-X F gzip_decompress(data: i64, len: i64) -> i64  # Returns CompressResult ptr
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __strlen(s: i64) -> i64
-X F __strcmp(s1: i64, s2: i64) -> i64
-X F result_status(result_ptr: i64) -> i64
-X F result_data_ptr(result_ptr: i64) -> i64
-X F result_data_len(result_ptr: i64) -> i64
+impl fn gzip_compress(data: i64, len: i64) -> i64  # Returns CompressResult ptr
+impl fn gzip_decompress(data: i64, len: i64) -> i64  # Returns CompressResult ptr
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __strlen(s: i64) -> i64
+impl fn __strcmp(s1: i64, s2: i64) -> i64
+impl fn result_status(result_ptr: i64) -> i64
+impl fn result_data_ptr(result_ptr: i64) -> i64
+impl fn result_data_len(result_ptr: i64) -> i64
 
 C COMPRESS_OK: i64 = 0
 
-F main() -> i64 {
+fn main() -> i64 {
     # Original data: "Hello, World!"
     original := __malloc(14)
     # (In real test, would populate with actual string)
@@ -606,7 +606,7 @@ F main() -> i64 {
     status1 := result_status(compress_result)
     
     I status1 != COMPRESS_OK {
-        R 1
+        return 1
     }
     
     compressed_ptr := result_data_ptr(compress_result)
@@ -617,7 +617,7 @@ F main() -> i64 {
     status2 := result_status(decompress_result)
     
     I status2 != COMPRESS_OK {
-        R 2
+        return 2
     }
     
     # Cleanup
@@ -670,7 +670,7 @@ C LOG_FORMAT_JSON: i64 = 1
 C COMPRESS_OK: i64 = 0
 C COMPRESS_GZIP: i64 = 1
 
-F main() -> i64 {
+fn main() -> i64 {
     tls := TLS_OK
     platform := PLATFORM_MACOS
     log_level := LOG_LEVEL_INFO
@@ -679,10 +679,10 @@ F main() -> i64 {
     I tls == 0 {
         I platform == 1 {
             I log_level == 2 {
-                I compress == 0 { 0 } E { 4 }
-            } E { 3 }
-        } E { 2 }
-    } E { 1 }
+                I compress == 0 { 0 } else { 4 }
+            } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -693,31 +693,31 @@ fn phase33_combined_structs_compile() {
     // Test that structs from multiple Phase 33 libraries can coexist
     let source = r#"
 # TLS structs
-S TlsContext {
+struct TlsContext {
     handle: i64,
     mode: i64
 }
 
-S TlsConn {
+struct TlsConn {
     ssl: i64,
     fd: i64
 }
 
 # Async structs
-S ReactorEvent {
+struct ReactorEvent {
     fd: i64,
     filter: i64,
     udata: i64
 }
 
 # Compression structs
-S CompressResult {
+struct CompressResult {
     status: i64,
     data_ptr: i64,
     data_len: i64
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     tls_ctx := TlsContext { handle: 100, mode: 1 }
     tls_conn := TlsConn { ssl: 200, fd: 3 }
     evt := ReactorEvent { fd: 5, filter: -1, udata: 0 }
@@ -726,10 +726,10 @@ F main() -> i64 {
     I tls_ctx.handle == 100 {
         I tls_conn.fd == 3 {
             I evt.fd == 5 {
-                I compress_res.data_len == 512 { 0 } E { 4 }
-            } E { 3 }
-        } E { 2 }
-    } E { 1 }
+                I compress_res.data_len == 512 { 0 } else { 4 }
+            } else { 3 }
+        } else { 2 }
+    } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);
@@ -745,19 +745,19 @@ C COMPRESS_OK: i64 = 0
 C COMPRESS_ERR_DATA: i64 = -4
 C LOG_LEVEL_ERROR: i64 = 4
 
-F check_all_ok(tls_result: i64, compress_result: i64) -> i64 {
+fn check_all_ok(tls_result: i64, compress_result: i64) -> i64 {
     I tls_result == 0 {
-        I compress_result == 0 { 1 } E { 0 }
-    } E { 0 }
+        I compress_result == 0 { 1 } else { 0 }
+    } else { 0 }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     tls_res := TLS_OK
     compress_res := COMPRESS_OK
     
     all_ok := check_all_ok(tls_res, compress_res)
     
-    I all_ok == 1 { 0 } E { 1 }
+    I all_ok == 1 { 0 } else { 1 }
 }
 "#;
     assert_exit_code(source, 0);

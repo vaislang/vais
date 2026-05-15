@@ -1,0 +1,21 @@
+# CHECKS: struct with struct field — deep field access.
+struct Inner {
+    val: i64
+}
+
+struct Outer {
+    a: Inner,
+    b: Inner
+}
+
+fn main() -> i64 {
+    o: Outer := Outer {
+        a: Inner { val: 10 },
+        b: Inner { val: 20 }
+    }
+
+    I o.a.val != 10 { return 1 }
+    I o.b.val != 20 { return 2 }
+    I o.a.val + o.b.val != 30 { return 3 }
+    return 0
+}

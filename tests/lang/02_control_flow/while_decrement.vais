@@ -1,0 +1,13 @@
+# CHECKS: while loop counting down.
+fn main() -> i64 {
+    n: i64 := mut 10
+    sum: i64 := mut 0
+    LW n > 0 {
+        sum = sum + n
+        n = n - 1
+    }
+    # 10+9+...+1 = 55
+    I sum != 55 { return 1 }
+    I n != 0 { return 2 }
+    return 0
+}

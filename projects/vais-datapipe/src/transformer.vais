@@ -1,13 +1,13 @@
 # transformer.vais - Data transformation operations (filter, map, aggregate)
 
-X F strcmp(a: str, b: str) -> i64
-X F atoi(s: str) -> i64
-X F atof(s: str) -> i64
-X F toupper(c: i64) -> i64
-X F strlen(s: str) -> i64
+impl fn strcmp(a: str, b: str) -> i64
+impl fn atoi(s: str) -> i64
+impl fn atof(s: str) -> i64
+impl fn toupper(c: i64) -> i64
+impl fn strlen(s: str) -> i64
 
 # Transformer structure
-S Transformer {
+struct Transformer {
     filter_enabled: i64,
     filter_field_index: i64,
     filter_threshold: i64,
@@ -16,7 +16,7 @@ S Transformer {
 }
 
 # Aggregation stats
-S AggregateStats {
+struct AggregateStats {
     total_count: i64,
     sum: i64,
     min_value: i64,
@@ -24,7 +24,7 @@ S AggregateStats {
 }
 
 # Create a new transformer with default settings
-F transformer_new() -> Transformer {
+fn transformer_new() -> Transformer {
     C trans := Transformer {
         filter_enabled: 0,
         filter_field_index: 0,
@@ -33,11 +33,11 @@ F transformer_new() -> Transformer {
         aggregate_enabled: 0,
     }
 
-    R trans
+    return trans
 }
 
 # Enable filtering by field value
-F transformer_set_filter(trans: Transformer, field_index: i64, threshold: i64) -> Transformer {
+fn transformer_set_filter(trans: Transformer, field_index: i64, threshold: i64) -> Transformer {
     C updated := Transformer {
         filter_enabled: 1,
         filter_field_index: field_index,
@@ -46,11 +46,11 @@ F transformer_set_filter(trans: Transformer, field_index: i64, threshold: i64) -
         aggregate_enabled: trans.aggregate_enabled,
     }
 
-    R updated
+    return updated
 }
 
 # Enable mapping transformations
-F transformer_enable_map(trans: Transformer) -> Transformer {
+fn transformer_enable_map(trans: Transformer) -> Transformer {
     C updated := Transformer {
         filter_enabled: trans.filter_enabled,
         filter_field_index: trans.filter_field_index,
@@ -59,11 +59,11 @@ F transformer_enable_map(trans: Transformer) -> Transformer {
         aggregate_enabled: trans.aggregate_enabled,
     }
 
-    R updated
+    return updated
 }
 
 # Enable aggregation
-F transformer_enable_aggregate(trans: Transformer) -> Transformer {
+fn transformer_enable_aggregate(trans: Transformer) -> Transformer {
     C updated := Transformer {
         filter_enabled: trans.filter_enabled,
         filter_field_index: trans.filter_field_index,
@@ -72,20 +72,20 @@ F transformer_enable_aggregate(trans: Transformer) -> Transformer {
         aggregate_enabled: 1,
     }
 
-    R updated
+    return updated
 }
 
 # Check if row passes filter
-F transformer_should_keep_row(trans: Transformer, row: CsvRow) -> i64 {
+fn transformer_should_keep_row(trans: Transformer, row: CsvRow) -> i64 {
     I trans.filter_enabled == 0 {
-        R 1
+        return 1
     }
 
     # Get field value
     C field_ptr := csv_row_get_field(row, trans.filter_field_index)
 
     I field_ptr == 0 {
-        R 0
+        return 0
     }
 
     # Compare with threshold (simplified)
@@ -93,47 +93,47 @@ F transformer_should_keep_row(trans: Transformer, row: CsvRow) -> i64 {
     C value := trans.filter_threshold + 10
 
     I value > trans.filter_threshold {
-        R 1
+        return 1
     }
 
-    R 0
+    return 0
 }
 
 # Transform a field value (e.g., uppercase)
-F transformer_map_field(field: i64, field_size: i64) -> i64 {
+fn transformer_map_field(field: i64, field_size: i64) -> i64 {
     I field == 0 {
-        R 0
+        return 0
     }
 
     # Simple transformation: iterate through string and uppercase
     C i := 0
     L {
         I i >= field_size {
-            R 0
+            return 0
         }
 
         # In real implementation, would uppercase each character
         i = i + 1
 
         I i >= field_size {
-            R 0
+            return 0
         }
     }
 
-    R 0
+    return 0
 }
 
 # Transform entire row
-F transformer_map_row(trans: Transformer, row: CsvRow) -> CsvRow {
+fn transformer_map_row(trans: Transformer, row: CsvRow) -> CsvRow {
     I trans.map_enabled == 0 {
-        R row
+        return row
     }
 
     # Transform each field
     C i := 0
     L {
         I i >= row.field_count {
-            R row
+            return row
         }
 
         C field := csv_row_get_field(row, i)
@@ -144,15 +144,15 @@ F transformer_map_row(trans: Transformer, row: CsvRow) -> CsvRow {
         i = i + 1
 
         I i >= row.field_count {
-            R row
+            return row
         }
     }
 
-    R row
+    return row
 }
 
 # Initialize aggregate stats
-F aggregate_stats_new() -> AggregateStats {
+fn aggregate_stats_new() -> AggregateStats {
     C stats := AggregateStats {
         total_count: 0,
         sum: 0,
@@ -160,11 +160,11 @@ F aggregate_stats_new() -> AggregateStats {
         max_value: 0,
     }
 
-    R stats
+    return stats
 }
 
 # Update aggregate stats with a new value
-F aggregate_stats_update(stats: AggregateStats, value: i64) -> AggregateStats {
+fn aggregate_stats_update(stats: AggregateStats, value: i64) -> AggregateStats {
     C new_count := stats.total_count + 1
     C new_sum := stats.sum + value
 
@@ -185,30 +185,30 @@ F aggregate_stats_update(stats: AggregateStats, value: i64) -> AggregateStats {
         max_value: new_max,
     }
 
-    R updated
+    return updated
 }
 
 # Calculate average from aggregate stats
-F aggregate_stats_average(stats: AggregateStats) -> i64 {
+fn aggregate_stats_average(stats: AggregateStats) -> i64 {
     I stats.total_count == 0 {
-        R 0
+        return 0
     }
 
     C avg := stats.sum / stats.total_count
-    R avg
+    return avg
 }
 
 # Process row for aggregation
-F transformer_aggregate_row(trans: Transformer, stats: AggregateStats, row: CsvRow, field_index: i64) -> AggregateStats {
+fn transformer_aggregate_row(trans: Transformer, stats: AggregateStats, row: CsvRow, field_index: i64) -> AggregateStats {
     I trans.aggregate_enabled == 0 {
-        R stats
+        return stats
     }
 
     # Get field value
     C field_ptr := csv_row_get_field(row, field_index)
 
     I field_ptr == 0 {
-        R stats
+        return stats
     }
 
     # Parse field as integer (simplified)
@@ -217,5 +217,5 @@ F transformer_aggregate_row(trans: Transformer, stats: AggregateStats, row: CsvR
     # Update stats
     C updated_stats := aggregate_stats_update(stats, value)
 
-    R updated_stats
+    return updated_stats
 }

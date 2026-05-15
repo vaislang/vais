@@ -1,38 +1,38 @@
 # storage.vais - JSON file persistence for TODO data
 
-X F fopen(path: str, mode: str) -> i64
-X F fclose(file: i64) -> i64
-X F fputs(s: str, file: i64) -> i64
-X F fgets(buf: str, size: i64, file: i64) -> str
-X F fprintf(file: i64, fmt: str) -> i64
-X F fscanf(file: i64, fmt: str) -> i64
-X F getenv(name: str) -> str
-X F strlen(s: str) -> i64
-X F strcat(dest: str, src: str) -> str
-X F strcpy(dest: str, src: str) -> str
-X F malloc(size: i64) -> i64
-X F sprintf(buf: str, fmt: str) -> i64
-X F atoi(s: str) -> i64
+impl fn fopen(path: str, mode: str) -> i64
+impl fn fclose(file: i64) -> i64
+impl fn fputs(s: str, file: i64) -> i64
+impl fn fgets(buf: str, size: i64, file: i64) -> str
+impl fn fprintf(file: i64, fmt: str) -> i64
+impl fn fscanf(file: i64, fmt: str) -> i64
+impl fn getenv(name: str) -> str
+impl fn strlen(s: str) -> i64
+impl fn strcat(dest: str, src: str) -> str
+impl fn strcpy(dest: str, src: str) -> str
+impl fn malloc(size: i64) -> i64
+impl fn sprintf(buf: str, fmt: str) -> i64
+impl fn atoi(s: str) -> i64
 
 # Get the default storage path (~/.vais-todo.json)
-F storage_get_default_path() -> str {
+fn storage_get_default_path() -> str {
     C home := getenv("HOME")
     I home == "" {
-        R ".vais-todo.json"  # Fallback to current directory
+        return ".vais-todo.json"  # Fallback to current directory
     }
 
     # Construct path: HOME + "/.vais-todo.json"
     C path := malloc(256)
     strcpy(path, home)
     strcat(path, "/.vais-todo.json")
-    R path
+    return path
 }
 
 # Save TodoList to JSON file
-F storage_save(list: TodoList, path: str) -> i64 {
+fn storage_save(list: TodoList, path: str) -> i64 {
     C file := fopen(path, "w")
     I file == 0 {
-        R -1  # Failed to open file
+        return -1  # Failed to open file
     }
 
     # Write JSON header
@@ -47,7 +47,7 @@ F storage_save(list: TodoList, path: str) -> i64 {
             fputs("  ]\n", file)
             fputs("}\n", file)
             fclose(file)
-            R 0
+            return 0
         }
 
         # Write todo as JSON object
@@ -72,7 +72,7 @@ F storage_save(list: TodoList, path: str) -> i64 {
         # Close object
         I i < list.count - 1 {
             fputs("    },\n", file)
-        } E {
+        } enum {
             fputs("    }\n", file)
         }
 
@@ -80,15 +80,15 @@ F storage_save(list: TodoList, path: str) -> i64 {
         C i := i + 1
     }
 
-    R 0
+    return 0
 }
 
 # Load TodoList from JSON file
-F storage_load(path: str) -> TodoList {
+fn storage_load(path: str) -> TodoList {
     C file := fopen(path, "r")
     I file == 0 {
         # File doesn't exist, return empty list
-        R todolist_new()
+        return todolist_new()
     }
 
     # Create a new list
@@ -103,7 +103,7 @@ F storage_load(path: str) -> TodoList {
         I line == "" {
             fclose(file)
             free(buf)
-            R list
+            return list
         }
 
         # Count items (very simplified parsing)
@@ -114,11 +114,11 @@ F storage_load(path: str) -> TodoList {
 
     fclose(file)
     free(buf)
-    R list
+    return list
 }
 
 # Helper: Write formatted integer to file
-F storage_write_int(file: i64, name: str, value: i64) -> i64 {
+fn storage_write_int(file: i64, name: str, value: i64) -> i64 {
     C buf := malloc(256)
     fputs("      \"", file)
     fputs(name, file)
@@ -126,15 +126,15 @@ F storage_write_int(file: i64, name: str, value: i64) -> i64 {
     sprintf(buf, "%d")
     fputs(buf, file)
     free(buf)
-    R 0
+    return 0
 }
 
 # Helper: Write formatted string to file
-F storage_write_string(file: i64, name: str, value: str) -> i64 {
+fn storage_write_string(file: i64, name: str, value: str) -> i64 {
     fputs("      \"", file)
     fputs(name, file)
     fputs("\": \"", file)
     fputs(value, file)
     fputs("\"", file)
-    R 0
+    return 0
 }

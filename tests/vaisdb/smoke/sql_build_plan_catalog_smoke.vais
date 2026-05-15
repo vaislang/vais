@@ -1,0 +1,166 @@
+use sql/parser/parser
+use sql/parser/ast
+use sql/parser/token
+use sql/planner/mod
+use sql/catalog/manager
+use sql/catalog/schema
+use storage/btree/tree
+
+fn make_catalog() -> CatalogManager {
+    tree := mut BTree.new(1 as u32, 0 as u8, 4096 as u32)
+    catalog := mut CatalogManager.new(tree)
+
+    table := mut TableInfo.new(100 as u32, "docs", 2 as u16, 7 as u32)
+    table.row_count_estimate = 120 as u64
+    ignored_table := mut catalog.tables.push(table)
+
+    ignored_col_id := mut catalog.columns.push(
+        ColumnInfo.new_primary_key(100 as u32, 0 as u16, "id", SqlType.Int)
+    )
+    ignored_col_title := mut catalog.columns.push(
+        ColumnInfo.new(100 as u32, 1 as u16, "title", SqlType.Text)
+    )
+
+    index_columns: Vec<str> := mut Vec.with_capacity(1)
+    index_columns.push("id")
+    index := mut IndexInfo.new(1 as u32, "idx_docs_id", 100 as u32, index_columns, 9 as u32)
+    ignored_index := mut catalog.indexes.push(index)
+
+    catalog
+}
+
+fn check_int_literal(expr: &Expr, expected: i64, code: i64) -> i64 {
+    match expr {
+        Expr.Literal { value } => {
+            match value {
+                SqlValue.IntVal { v } => {
+                    I *v != expected { return code }
+                    return 0
+                },
+                _ => { return code },
+            }
+        },
+        _ => { return code },
+    }
+}
+
+fn check_index_scan(plan: &PlanNode) -> i64 {
+    match plan {
+        PlanNode.IndexScan { table, index, residual, .. } => {
+            I table != "docs" { return 30 }
+            I index != "idx_docs_id" { return 31 }
+            match residual {
+                Some(_) => { return 32 },
+                None => {},
+            }
+            return 0
+        },
+        PlanNode.SeqScan { .. } => { return 33 },
+        _ => { return 34 },
+    }
+}
+
+fn main() -> i64 {
+    catalog := mut make_catalog()
+    match catalog.get_table("docs") {
+        Some(info) => {
+            I info.table_id as i64 != 100 { return 1 }
+            I info.row_count_estimate as i64 != 120 { return 2 }
+        },
+        None => { return 3 },
+    }
+
+    match catalog.get_first_index_for_table(100 as u32) {
+        Some(index_info) => {
+            I index_info.name != "idx_docs_id" { return 5 }
+        },
+        None => { return 4 },
+    }
+
+    plan_query := mut SelectQuery.empty()
+    plan_from: Vec<TableRef> := mut Vec.with_capacity(1)
+    plan_from.push(TableRef.Table { name: "docs", alias: None })
+    plan_query.from = Some(plan_from)
+    plan_query.select_list.push(SelectItem.Expr {
+        expr: Expr.ColumnRef { table: None, column: "id" },
+        alias: Some("doc_id"),
+    })
+    plan_query.where_clause = Some(Expr.BinaryOp {
+        left: Box.new(Expr.ColumnRef { table: None, column: "id" }),
+        op: BinOp.Eq,
+        right: Box.new(Expr.Literal { value: SqlValue.IntVal { v: 7 } }),
+    })
+    plan_query.limit = Some(Expr.Literal { value: SqlValue.IntVal { v: 2 } })
+
+    plan_result: Result<PlanNode, VaisError> := mut build_plan(&plan_query, &catalog)
+
+    plan := mut match plan_result {
+        Ok(v) => v,
+        Err(_) => { return 9 },
+    }
+
+    match &plan {
+        PlanNode.Project { input, columns } => {
+            I columns.len() != 1 { return 10 }
+            match &columns[0].alias {
+                Some(alias) => {
+                    I alias != "doc_id" { return 11 }
+                },
+                None => { return 12 },
+            }
+            match &columns[0].expr {
+                Expr.ColumnRef { table, column } => {
+                    match table {
+                        Some(_) => { return 13 },
+                        None => {},
+                    }
+                    I column != "id" { return 14 }
+                },
+                _ => { return 15 },
+            }
+
+            match input.as_ref() {
+                PlanNode.Limit { input: limited_input, limit, offset } => {
+                    match limit {
+                        Some(v) => {
+                            I *v != 2 { return 16 }
+                        },
+                        None => { return 17 },
+                    }
+                    match offset {
+                        Some(_) => { return 18 },
+                        None => {},
+                    }
+                    index_code := mut check_index_scan(limited_input.as_ref())
+                    I index_code != 0 { return index_code }
+                },
+                _ => { return 19 },
+            }
+        },
+        _ => { return 20 },
+    }
+
+    cost := mut match estimate_cost(&plan, &catalog) {
+        Ok(v) => v,
+        Err(_) => { return 21 },
+    }
+    I cost.row_estimate != 2 { return 22 }
+    I cost.total() <= 0.0 { return 23 }
+
+    missing_query := mut SelectQuery.empty()
+    missing_from: Vec<TableRef> := mut Vec.with_capacity(1)
+    missing_from.push(TableRef.Table { name: "missing", alias: None })
+    missing_query.from = Some(missing_from)
+    missing_query.select_list.push(SelectItem.AllColumns)
+    match build_plan(&missing_query, &catalog) {
+        Ok(_) => { return 24 },
+        Err(e) => {
+            I e.code != "VAIS-0108001" { return 25 }
+        },
+    }
+
+    literal_code := mut check_int_literal(&Expr.Literal { value: SqlValue.IntVal { v: 7 } }, 7, 26)
+    I literal_code != 0 { return literal_code }
+
+    return 0
+}

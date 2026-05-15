@@ -1,0 +1,22 @@
+# CHECKS: invoke generic struct method (REGRESSION C17).
+struct Cell<T> {
+    value: T
+}
+
+impl Cell<T> {
+    fn new(v: T) -> Cell<T> { Cell { value: v } }
+    fn get(&self) -> T { self.value }
+    fn set(&self, v: T) { self.value = v }
+}
+
+fn main() -> i64 {
+    c: Cell<i64> := mut Cell.new(42)
+    I c.get() != 42 { return 1 }
+
+    c.set(100)
+    I c.get() != 100 { return 2 }
+
+    c.set(0 - 5)
+    I c.get() != 0 - 5 { return 3 }
+    return 0
+}

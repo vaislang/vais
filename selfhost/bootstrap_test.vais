@@ -5,35 +5,35 @@
 # Test Infrastructure
 # ============================================================================
 
-F print_i64(val: i64) -> i64 {
+fn print_i64(val: i64) -> i64 {
     I val == 0 {
         putchar(48)
         0
-    } EL I val < 0 {
+    } else I val < 0 {
         putchar(45)
         print_i64(0 - val)
-    } EL {
+    } else {
         I val >= 10 {
             print_i64(val / 10)
             0
-        } EL { 0 }
+        } else { 0 }
         putchar(48 + (val % 10))
         0
     }
 }
 
-F println_i64(val: i64) -> i64 {
+fn println_i64(val: i64) -> i64 {
     print_i64(val)
     putchar(10)
     0
 }
 
-F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
+fn assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
     I actual == expected {
         puts("[PASS]")
         puts(test_name)
         1
-    } EL {
+    } else {
         puts("[FAIL]")
         puts(test_name)
         puts("  Expected:")
@@ -44,12 +44,12 @@ F assert_eq(actual: i64, expected: i64, test_name: str) -> i64 {
     }
 }
 
-F assert_neq(a: i64, b: i64, test_name: str) -> i64 {
+fn assert_neq(a: i64, b: i64, test_name: str) -> i64 {
     I a != b {
         puts("[PASS]")
         puts(test_name)
         1
-    } EL {
+    } else {
         puts("[FAIL]")
         puts(test_name)
         0
@@ -60,44 +60,44 @@ F assert_neq(a: i64, b: i64, test_name: str) -> i64 {
 # StringBuffer Tests
 # ============================================================================
 
-S StringBuffer {
+struct StringBuffer {
     data: i64,
     len: i64,
     cap: i64
 }
 
-X StringBuffer {
-    F new(initial_cap: i64) -> StringBuffer {
+impl StringBuffer {
+    fn new(initial_cap: i64) -> StringBuffer {
         data := malloc(initial_cap)
         StringBuffer { data: data, len: 0, cap: initial_cap }
     }
 
-    F append_byte(&self, byte: i64) -> i64 {
+    fn append_byte(&self, byte: i64) -> i64 {
         I self.len >= self.cap {
             @.grow()
             0
-        } EL { 0 }
+        } else { 0 }
         store_byte(self.data + self.len, byte)
         self.len = self.len + 1
         1
     }
 
-    F append_cstr(&self, s: str) -> i64 {
+    fn append_cstr(&self, s: str) -> i64 {
         len := strlen(s)
         I self.len + len > self.cap {
             @.grow_to(self.len + len + 1024)
             0
-        } EL { 0 }
+        } else { 0 }
         memcpy_str(self.data + self.len, s, len)
         self.len = self.len + len
         1
     }
 
-    F grow(&self) -> i64 {
+    fn grow(&self) -> i64 {
         @.grow_to(self.cap * 2)
     }
 
-    F grow_to(&self, new_cap: i64) -> i64 {
+    fn grow_to(&self, new_cap: i64) -> i64 {
         new_data := malloc(new_cap)
         memcpy(new_data, self.data, self.len)
         free(self.data)
@@ -106,17 +106,17 @@ X StringBuffer {
         1
     }
 
-    F get_byte(&self, idx: i64) -> i64 {
+    fn get_byte(&self, idx: i64) -> i64 {
         load_byte(self.data + idx)
     }
 
-    F free(&self) -> i64 {
+    fn free(&self) -> i64 {
         free(self.data)
         1
     }
 }
 
-F test_string_buffer() -> i64 {
+fn test_string_buffer() -> i64 {
     puts("\n=== StringBuffer Tests ===")
 
     buf := StringBuffer.new(16)
@@ -152,7 +152,7 @@ F test_string_buffer() -> i64 {
 # Token Constants Tests
 # ============================================================================
 
-F test_token_constants() -> i64 {
+fn test_token_constants() -> i64 {
     puts("\n=== Token Constants Tests ===")
 
     TOK_EOF := 0
@@ -182,14 +182,14 @@ F test_token_constants() -> i64 {
 # AST Node Kind Tests
 # ============================================================================
 
-F AST_INT_LIT() -> i64 = 1
-F AST_FLOAT_LIT() -> i64 = 2
-F AST_IDENT() -> i64 = 5
-F AST_BINARY() -> i64 = 6
-F AST_IF() -> i64 = 9
-F AST_FN_DEF() -> i64 = 13
+fn AST_INT_LIT() -> i64 = 1
+fn AST_FLOAT_LIT() -> i64 = 2
+fn AST_IDENT() -> i64 = 5
+fn AST_BINARY() -> i64 = 6
+fn AST_IF() -> i64 = 9
+fn AST_FN_DEF() -> i64 = 13
 
-F test_ast_node_kinds() -> i64 {
+fn test_ast_node_kinds() -> i64 {
     puts("\n=== AST Node Kind Tests ===")
 
     r1 := assert_neq(AST_INT_LIT(), AST_FLOAT_LIT(), "INT_LIT != FLOAT_LIT")
@@ -205,14 +205,14 @@ F test_ast_node_kinds() -> i64 {
 # LLVM Type Mapping Tests
 # ============================================================================
 
-F LLVM_VOID() -> i64 = 0
-F LLVM_I1() -> i64 = 1
-F LLVM_I8() -> i64 = 2
-F LLVM_I32() -> i64 = 4
-F LLVM_I64() -> i64 = 5
-F LLVM_PTR() -> i64 = 9
+fn LLVM_VOID() -> i64 = 0
+fn LLVM_I1() -> i64 = 1
+fn LLVM_I8() -> i64 = 2
+fn LLVM_I32() -> i64 = 4
+fn LLVM_I64() -> i64 = 5
+fn LLVM_PTR() -> i64 = 9
 
-F test_llvm_type_mapping() -> i64 {
+fn test_llvm_type_mapping() -> i64 {
     puts("\n=== LLVM Type Mapping Tests ===")
 
     r1 := assert_eq(LLVM_VOID(), 0, "LLVM_VOID = 0")
@@ -229,7 +229,7 @@ F test_llvm_type_mapping() -> i64 {
 # Binary Operator Tests
 # ============================================================================
 
-F test_binary_operators() -> i64 {
+fn test_binary_operators() -> i64 {
     puts("\n=== Binary Operator Tests ===")
 
     r1 := assert_eq(5 + 3, 8, "5 + 3 = 8")
@@ -239,12 +239,12 @@ F test_binary_operators() -> i64 {
     r5 := assert_eq(17 % 5, 2, "17 % 5 = 2")
 
     # Comparison tests using conditional expressions
-    r6 := assert_eq(I 3 < 5 { 1 } EL { 0 }, 1, "3 < 5")
-    r7 := assert_eq(I 5 <= 5 { 1 } EL { 0 }, 1, "5 <= 5")
-    r8 := assert_eq(I 7 > 3 { 1 } EL { 0 }, 1, "7 > 3")
-    r9 := assert_eq(I 5 >= 5 { 1 } EL { 0 }, 1, "5 >= 5")
-    r10 := assert_eq(I 4 == 4 { 1 } EL { 0 }, 1, "4 == 4")
-    r11 := assert_eq(I 4 != 5 { 1 } EL { 0 }, 1, "4 != 5")
+    r6 := assert_eq(I 3 < 5 { 1 } else { 0 }, 1, "3 < 5")
+    r7 := assert_eq(I 5 <= 5 { 1 } else { 0 }, 1, "5 <= 5")
+    r8 := assert_eq(I 7 > 3 { 1 } else { 0 }, 1, "7 > 3")
+    r9 := assert_eq(I 5 >= 5 { 1 } else { 0 }, 1, "5 >= 5")
+    r10 := assert_eq(I 4 == 4 { 1 } else { 0 }, 1, "4 == 4")
+    r11 := assert_eq(I 4 != 5 { 1 } else { 0 }, 1, "4 != 5")
 
     r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9 + r10 + r11
 }
@@ -253,27 +253,27 @@ F test_binary_operators() -> i64 {
 # Control Flow Tests
 # ============================================================================
 
-F test_control_flow() -> i64 {
+fn test_control_flow() -> i64 {
     puts("\n=== Control Flow Tests ===")
 
     x := 10
-    result1 := I x > 5 { 1 } EL { 0 }
+    result1 := I x > 5 { 1 } else { 0 }
     r1 := assert_eq(result1, 1, "if x > 5 then 1 else 0")
 
-    result2 := I x < 5 { 1 } EL { 0 }
+    result2 := I x < 5 { 1 } else { 0 }
     r2 := assert_eq(result2, 0, "if x < 5 then 1 else 0")
 
     y := 20
     result3 := I x > 5 {
-        I y > 15 { 2 } EL { 1 }
-    } EL { 0 }
+        I y > 15 { 2 } else { 1 }
+    } else { 0 }
     r3 := assert_eq(result3, 2, "nested if: x > 5 && y > 15")
 
     # Loop test
     counter: mut i64 = 0
     sum: mut i64 = 0
     L {
-        I counter >= 5 { B } EL { 0 }
+        I counter >= 5 { B } else { 0 }
         sum = sum + counter
         counter = counter + 1
     }
@@ -287,7 +287,7 @@ F test_control_flow() -> i64 {
 # Memory Operations Tests
 # ============================================================================
 
-F test_memory_operations() -> i64 {
+fn test_memory_operations() -> i64 {
     puts("\n=== Memory Operations Tests ===")
 
     ptr := malloc(64)
@@ -318,22 +318,22 @@ F test_memory_operations() -> i64 {
 # Expression Evaluator Integration Test
 # ============================================================================
 
-F OP_ADD() -> i64 = 1
-F OP_SUB() -> i64 = 2
-F OP_MUL() -> i64 = 3
-F OP_DIV() -> i64 = 4
-F OP_MOD() -> i64 = 5
+fn OP_ADD() -> i64 = 1
+fn OP_SUB() -> i64 = 2
+fn OP_MUL() -> i64 = 3
+fn OP_DIV() -> i64 = 4
+fn OP_MOD() -> i64 = 5
 
-F eval_simple_expr(a: i64, b: i64, op: i64) -> i64 {
+fn eval_simple_expr(a: i64, b: i64, op: i64) -> i64 {
     I op == OP_ADD() { a + b }
-    EL I op == OP_SUB() { a - b }
-    EL I op == OP_MUL() { a * b }
-    EL I op == OP_DIV() { a / b }
-    EL I op == OP_MOD() { a % b }
-    EL { 0 }
+    else I op == OP_SUB() { a - b }
+    else I op == OP_MUL() { a * b }
+    else I op == OP_DIV() { a / b }
+    else I op == OP_MOD() { a % b }
+    else { 0 }
 }
 
-F test_expression_evaluator() -> i64 {
+fn test_expression_evaluator() -> i64 {
     puts("\n=== Expression Evaluator Test ===")
 
     r1 := assert_eq(eval_simple_expr(10, 3, OP_ADD()), 13, "eval: 10 + 3 = 13")
@@ -349,7 +349,7 @@ F test_expression_evaluator() -> i64 {
 # Main Test Runner
 # ============================================================================
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("===========================================")
     puts("  Vais Self-Hosting Compiler Bootstrap Test")
     puts("===========================================")
@@ -394,7 +394,7 @@ F main() -> i64 {
     I passed == total {
         puts("\nAll tests PASSED!")
         0
-    } EL {
+    } else {
         puts("\nSome tests FAILED!")
         1
     }

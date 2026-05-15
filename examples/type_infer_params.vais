@@ -2,18 +2,18 @@
 # Parameters without type annotations are inferred from usage
 
 # Simple arithmetic - inferred as i64 from + operator and return type
-F add(a, b) -> i64 = a + b
+fn add(a, b) -> i64 = a + b
 
 # Inferred from function body operations
-F multiply(x, y) -> i64 {
-    R x * y
+fn multiply(x, y) -> i64 {
+    return x * y
 }
 
 # Mixed: some annotated, some inferred
-F mixed(a: i64, b) -> i64 = a + b
+fn mixed(a: i64, b) -> i64 = a + b
 
 # Entry point
-F main() -> i64 {
+fn main() -> i64 {
     result := add(3, 4)
     println("{result}")
 
@@ -23,5 +23,5 @@ F main() -> i64 {
     mx := mixed(10, 20)
     println("{mx}")
 
-    R 0
+    return 0
 }

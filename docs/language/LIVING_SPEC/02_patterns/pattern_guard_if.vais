@@ -1,0 +1,18 @@
+# LIVING_SPEC/02_patterns/pattern_guard_if.vais
+# Key concept: match arm guard — `pattern I cond => body`.
+# Vais는 guard에 single-char `I` 키워드 사용 (not `if` ident).
+
+fn sign(n: i64) -> i64 {
+    match n {
+        x I x < 0 => -1,
+        0 => 0,
+        _ => 1
+    }
+}
+
+fn main() -> i64 {
+    a := sign(-5)
+    b := sign(0)
+    c := sign(7)
+    a + b + c
+}

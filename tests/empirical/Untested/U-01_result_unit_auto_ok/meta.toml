@@ -1,0 +1,38 @@
+[entry]
+id = "Untested-01"
+empirical_classification = "Rejected (reclassification candidate)"
+master_plan_classification = "Untested (deferred — treat as A4 candidate by default)"
+surface = "Unit () silently wrapped as Ok(()) when Result<T,E> is expected"
+site = "unification.rs:366"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:366"
+master_plan_version = 16
+
+[v1_evidence]
+probe_summary = "F do_nothing() { R }; F take_result() -> Result<i64,str> { R do_nothing() }"
+expected_per_design = "deferred — was A4 candidate by default"
+actual_observed = "E001 fires; type-check exits non-zero"
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "reclassification_recommended"
+recommendation = "Move from Untested → Rejected in master-plan.toml. The type checker already produces a stable diagnostic (E001) for this case."
+notes = """
+The unification rule at line 366 has the coercion code (similar to line
+98 which is Site 23 / Rejected-03), but a downstream check produces
+E001 before any silent path is reached. This matches the pattern of
+Optional ↔ T (Rejected-03): unification accepts permissively, but
+function-return position checking catches the mismatch.
+"""
+
+[migration]
+# After master-plan reclassifies, this fixture moves to
+# compiler/tests/empirical/Rejected/R-04_result_unit_auto_ok/.
+
+[assertion_kind]
+kind = "check_fails"
+required_stderr_patterns = ["E001", "expected Result", "found ()"]
+rationale = """
+E001 confirms type mismatch; 'expected Result' confirms the failure is
+on the Result side; 'found ()' confirms the actual type is Unit. Three
+patterns together pin the rejection to this specific surface.
+"""

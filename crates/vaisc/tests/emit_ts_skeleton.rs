@@ -39,7 +39,7 @@ fn emit_ts_basic_struct() {
 
     std::fs::write(
         &input_path,
-        "P S User {\n  id: i64,\n  name: str,\n  active: bool,\n}\n",
+        "pub struct User {\n  id: i64,\n  name: str,\n  active: bool,\n}\n",
     )
     .expect("write input");
 
@@ -118,7 +118,7 @@ fn emit_ts_unsupported_field_errors() {
     let output_path = dir.path().join("bad.d.ts");
 
     // Stage 2 routes raw pointer `*i64` to EMIT_TS_009 specifically.
-    std::fs::write(&input_path, "P S X {\n  v: *i64,\n}\n").expect("write input");
+    std::fs::write(&input_path, "pub struct X {\n  v: *i64,\n}\n").expect("write input");
 
     let output = Command::new(&vaisc)
         .args([
@@ -167,7 +167,7 @@ fn emit_ts_skips_private_struct() {
     // Two structs: one public, one private.
     std::fs::write(
         &input_path,
-        "P S Public {\n  x: i64,\n}\nS Private {\n  y: i64,\n}\n",
+        "pub struct Public {\n  x: i64,\n}\nstruct Private {\n  y: i64,\n}\n",
     )
     .expect("write input");
 

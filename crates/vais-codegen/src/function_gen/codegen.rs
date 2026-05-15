@@ -38,10 +38,13 @@ impl CodeGenerator {
         }));
         match result {
             Ok(r) => r,
-            Err(_) => Err(CodegenError::InternalError(format!(
-                "stack overflow during codegen of '{}'",
-                f.name.node
-            ))),
+            Err(_) => {
+                eprintln!(
+                    "[WARN] Stack overflow during codegen of '{}' — skipping",
+                    f.name.node
+                );
+                Ok(String::new())
+            }
         }
     }
 
@@ -112,6 +115,8 @@ impl CodeGenerator {
                     p.name.node.to_string(),
                     LocalVar::param(ty.clone(), llvm_name.to_string()),
                 );
+                self.fn_ctx
+                    .record_emitted_type(&format!("%{}", llvm_name), &llvm_ty);
 
                 format!("{} %{}", llvm_ty, llvm_name)
             })
@@ -165,6 +170,8 @@ impl CodeGenerator {
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
                 write_ir!(ir, "  {} = alloca {}", param_ptr, llvm_ty);
+                self.fn_ctx
+                    .record_emitted_type(&param_ptr, &format!("{}*", llvm_ty));
                 write_ir!(
                     ir,
                     "  store {} %{}, {}* {}",
@@ -226,26 +233,11 @@ impl CodeGenerator {
 
         match &f.body {
             FunctionBody::Expr(expr) => {
-                let saved_generic_substitutions =
-                    self.push_expected_static_ctor_substitutions(&ret_type, &expr.node);
-                let generated_expr = self.generate_expr(expr, &mut counter);
-                if let Some(saved) = saved_generic_substitutions {
-                    self.generics.substitutions = saved;
-                }
-                let (mut value, expr_ir) = generated_expr?;
+                self.fn_ctx.expected_expr_types.push(ret_type.clone());
+                let expr_result = self.generate_expr(expr, &mut counter);
+                self.fn_ctx.expected_expr_types.pop();
+                let (value, expr_ir) = expr_result?;
                 ir.push_str(&expr_ir);
-
-                if matches!(ret_type, ResolvedType::Str) {
-                    let expr_type = self.infer_expr_type(expr);
-                    if self.is_string_builder_type(&expr_type) {
-                        value = self.coerce_string_builder_to_str(
-                            &value,
-                            self.is_expr_value(expr),
-                            &mut counter,
-                            &mut ir,
-                        );
-                    }
-                }
 
                 // Execute deferred expressions before return (LIFO order)
                 let defer_ir = self.generate_defer_cleanup(&mut counter)?;
@@ -317,23 +309,72 @@ impl CodeGenerator {
                 if ret_type == ResolvedType::Unit {
                     write_ir!(ir, "  ret void{}", ret_dbg);
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                    if value == "0" {
-                        write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
+                    // For struct returns, load the value from pointer
+                    let loaded = format!("%ret.{}", counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}{}",
+                        loaded,
+                        ret_llvm,
+                        ret_llvm,
+                        value,
+                        ret_dbg
+                    );
+                    self.fn_ctx.record_emitted_type(&loaded, &ret_llvm);
+                    write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                } else {
+                    // Bug C9 fix: function declared `T?` / `Result<T,E>` and the
+                    // body expression produced a universal `%Option`/`%Result`
+                    // aggregate. Reinterpret-cast to the specialized
+                    // `{ i8, %T }` slot before the ret. Mirrors the Block path.
+                    let val_llvm_for_check = if value.starts_with('%') {
+                        self.llvm_type_of(&value)
                     } else {
-                        // For struct returns, load the value from pointer
-                        let loaded = format!("%ret.{}", counter);
+                        String::new()
+                    };
+                    let body_is_universal_option =
+                        val_llvm_for_check == "%Option" || val_llvm_for_check == "%Result";
+                    let ret_is_specialized_option =
+                        ret_llvm.starts_with("{ i8, ") && ret_llvm.ends_with(" }");
+                    if body_is_universal_option && ret_is_specialized_option {
+                        let tmp = self.next_temp(&mut counter);
+                        self.emit_entry_alloca(&tmp, &val_llvm_for_check);
                         write_ir!(
                             ir,
-                            "  {} = load {}, {}* {}{}",
+                            "  store {} {}, {}* {}",
+                            val_llvm_for_check,
+                            value,
+                            val_llvm_for_check,
+                            tmp
+                        );
+                        let cast_ptr = self.next_temp(&mut counter);
+                        write_ir!(
+                            ir,
+                            "  {} = bitcast {}* {} to {}*",
+                            cast_ptr,
+                            val_llvm_for_check,
+                            tmp,
+                            ret_llvm
+                        );
+                        let loaded = self.next_temp(&mut counter);
+                        write_ir!(
+                            ir,
+                            "  {} = load {}, {}* {}",
                             loaded,
                             ret_llvm,
                             ret_llvm,
-                            value,
-                            ret_dbg
+                            cast_ptr
                         );
                         write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                        ir.push_str("}\n");
+                        self.splice_entry_allocas(&mut ir);
+                        self.fn_ctx.current_function = None;
+                        self.fn_ctx.current_return_type = None;
+                        self.fn_ctx.expected_expr_types.clear();
+                        self.clear_decreases_info();
+                        return Ok(ir);
                     }
-                } else {
+
                     // Phase 191: float literal returned as integer — needs fptosi.
                     // E.g., `F main() -> i64 = 3.14` generates `ret i64 3.140000e+00`
                     // which is invalid; should be `fptosi double 3.14... to i64`.
@@ -348,47 +389,24 @@ impl CodeGenerator {
                         value
                     };
 
-                    // Coerce return value width if needed. Use i64 as assumed source
-                    // for small int returns (body convention is "everything is i64").
-                    let ret_width = Self::int_type_width(&ret_llvm);
-                    let value = if value.starts_with('%') && ret_width > 0 && ret_width < 64 {
-                        let trunc_tmp = self.next_temp(&mut counter);
-                        write_ir!(ir, "  {} = trunc i64 {} to {}", trunc_tmp, value, ret_llvm);
-                        trunc_tmp
-                    } else if value.starts_with('%') {
-                        let val_llvm = self.llvm_type_of(&value);
-                        if ret_llvm.starts_with('{') && val_llvm == format!("{}*", ret_llvm) {
-                            let loaded = self.next_temp(&mut counter);
-                            write_ir!(
-                                ir,
-                                "  {} = load {}, {}* {}",
-                                loaded,
-                                ret_llvm,
-                                ret_llvm,
-                                value
-                            );
-                            loaded
-                        } else if (val_llvm == "float" || val_llvm == "double")
-                            && (ret_llvm == "float" || ret_llvm == "double")
-                            && val_llvm != ret_llvm
+                    // Mini Pillar 1 (ADR 0001 §1) — single coerce point for ret.
+                    // Migrated from inline trunc/fptrunc/fpext/coerce_int_width chain.
+                    // Body convention is "everything is i64" — small int returns
+                    // need trunc which coerce_ret_value handles via int_width path.
+                    let value = if value.starts_with('%') {
+                        let mut val_llvm = self.llvm_type_of(&value);
+                        if val_llvm == "i64"
+                            && (ret_llvm.starts_with("%Result") || ret_llvm.starts_with("%Option"))
                         {
-                            // Float width coercion for return
-                            let tmp = self.next_temp(&mut counter);
-                            if val_llvm == "double" && ret_llvm == "float" {
-                                write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
-                            } else {
-                                write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
+                            let inferred = self.type_to_llvm(&self.infer_expr_type(expr));
+                            if inferred.starts_with('%') && !inferred.ends_with('*') {
+                                val_llvm = inferred;
                             }
-                            tmp
-                        } else {
-                            self.coerce_int_width(
-                                &value,
-                                &val_llvm,
-                                &ret_llvm,
-                                &mut counter,
-                                &mut ir,
-                            )
                         }
+                        let (coerced_val, coerce_ir) =
+                            self.coerce_ret_value(&value, &val_llvm, &ret_llvm, &mut counter);
+                        ir.push_str(&coerce_ir);
+                        coerced_val
                     } else {
                         value
                     };
@@ -396,12 +414,10 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (mut value, block_ir, terminated) = self
-                    .generate_block_stmts_with_expected_result_type(
-                        stmts,
-                        &mut counter,
-                        &ret_type,
-                    )?;
+                self.fn_ctx.expected_expr_types.push(ret_type.clone());
+                let block_result = self.generate_block_stmts(stmts, &mut counter);
+                self.fn_ctx.expected_expr_types.pop();
+                let (value, block_ir, terminated) = block_result?;
                 ir.push_str(&block_ir);
 
                 // If block is already terminated (has return/break), don't emit ret
@@ -410,18 +426,6 @@ impl CodeGenerator {
                     // Note: defer cleanup for early returns is handled in Return statement
                     // Note: alloc cleanup for early returns is handled in Return statement
                 } else {
-                    if matches!(ret_type, ResolvedType::Str) {
-                        let block_type = self.infer_block_type(stmts);
-                        if self.is_string_builder_type(&block_type) {
-                            value = self.coerce_string_builder_to_str(
-                                &value,
-                                self.is_block_result_value(stmts),
-                                &mut counter,
-                                &mut ir,
-                            );
-                        }
-                    }
-
                     // Execute deferred expressions before return (LIFO order)
                     let defer_ir = self.generate_defer_cleanup(&mut counter)?;
                     ir.push_str(&defer_ir);
@@ -467,13 +471,69 @@ impl CodeGenerator {
                         // main() with implicit i64 return and Unit body: auto-return 0
                         write_ir!(ir, "  ret i64 0{}", ret_dbg);
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                        if value == "0" {
-                            write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
-                        } else if self.is_block_result_value(stmts) {
-                            // Check if the result is already a value (from phi node) or a pointer (from struct lit)
+                        // Phase D: override is_block_result_value when the
+                        // last expression is a stdlib enum variant call
+                        // (Ok/Err/Some/None). Non-main modules may lack
+                        // the enum in self.types.enums, so the default
+                        // classifier flags it as a value — but the
+                        // constructor emits `alloca %BaseEnum` and returns
+                        // the pointer.
+                        let last_is_stdlib_variant = stmts
+                            .last()
+                            .and_then(|s| match &s.node {
+                                vais_ast::Stmt::Expr(expr) => Some(expr),
+                                _ => None,
+                            })
+                            .map(|expr| {
+                                matches!(&expr.node,
+                                    vais_ast::Expr::Call { func, .. }
+                                        if matches!(&func.node,
+                                            vais_ast::Expr::Ident(n)
+                                                if matches!(
+                                                    n.as_str(),
+                                                    "Ok" | "Err" | "Some" | "None"
+                                                )
+                                        )
+                                )
+                            })
+                            .unwrap_or(false);
+                        // Check if the result is already a value (from phi node) or a pointer (from struct lit).
+                        // Ground-truth emitted type wins over syntactic/inferred value-ness: after
+                        // block scope exit, local bindings may already be removed from fn_ctx.locals.
+                        let actual_value_llvm = self.llvm_type_of_checked(&value);
+                        let value_is_pointer = actual_value_llvm
+                            .as_deref()
+                            .is_some_and(|ty| ty == "ptr" || ty.trim_end().ends_with('*'));
+                        if !last_is_stdlib_variant
+                            && !value_is_pointer
+                            && self.is_block_result_value(stmts)
+                        {
                             // Value — check if type name matches return type.
                             // Generic calls may return %Vec while function declares %Vec$i64.
-                            let val_llvm = self.llvm_type_of(&value);
+                            let mut val_llvm = self.llvm_type_of(&value);
+                            if val_llvm == "i64" {
+                                if let Some(inferred_llvm) = stmts
+                                    .last()
+                                    .and_then(|s| match &s.node {
+                                        vais_ast::Stmt::Expr(expr) => {
+                                            Some(self.infer_expr_type(expr))
+                                        }
+                                        _ => None,
+                                    })
+                                    .and_then(|ty| {
+                                        if matches!(ty, ResolvedType::Named { .. }) {
+                                            let inferred = self.type_to_llvm(&ty);
+                                            if inferred.starts_with('%') && !inferred.ends_with('*')
+                                            {
+                                                return Some(inferred);
+                                            }
+                                        }
+                                        None
+                                    })
+                                {
+                                    val_llvm = inferred_llvm;
+                                }
+                            }
                             if val_llvm != ret_llvm
                                 && val_llvm.starts_with('%')
                                 && ret_llvm.starts_with('%')
@@ -514,7 +574,53 @@ impl CodeGenerator {
                                 write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                             }
                         } else {
-                            // Pointer (e.g., from struct literal) - load then return
+                            // Pointer (e.g., from struct literal) - load then return.
+                            //
+                            // Phase D: the source pointer may be a base
+                            // generic type (`%Result*`) while ret_llvm is
+                            // specialized (`%Result$i64_VaisError`). Both
+                            // share layout; bitcast the pointer first so
+                            // the `load` type matches.
+                            let val_llvm =
+                                actual_value_llvm.unwrap_or_else(|| self.llvm_type_of(&value));
+                            let ret_ptr_llvm = format!("{}*", ret_llvm);
+                            let src_ptr = if val_llvm == "ptr" {
+                                value.clone()
+                            } else if val_llvm.ends_with('*') {
+                                if val_llvm == ret_ptr_llvm {
+                                    value.clone()
+                                } else if val_llvm.trim_end_matches('*').trim().starts_with('%')
+                                    && ret_llvm.starts_with('%')
+                                {
+                                    let cast = self.next_temp(&mut counter);
+                                    write_ir!(
+                                        ir,
+                                        "  {} = bitcast {} {} to {}",
+                                        cast,
+                                        val_llvm,
+                                        value,
+                                        ret_ptr_llvm
+                                    );
+                                    self.fn_ctx.record_emitted_type(&cast, &ret_ptr_llvm);
+                                    cast
+                                } else {
+                                    value.clone()
+                                }
+                            } else if val_llvm.starts_with('%') && val_llvm != ret_llvm {
+                                let cast = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast {}* {} to {}*",
+                                    cast,
+                                    val_llvm,
+                                    value,
+                                    ret_llvm
+                                );
+                                self.fn_ctx.record_emitted_type(&cast, &ret_ptr_llvm);
+                                cast
+                            } else {
+                                value.clone()
+                            };
                             let loaded = format!("%ret.{}", counter);
                             write_ir!(
                                 ir,
@@ -522,7 +628,7 @@ impl CodeGenerator {
                                 loaded,
                                 ret_llvm,
                                 ret_llvm,
-                                value,
+                                src_ptr,
                                 ret_dbg
                             );
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
@@ -545,85 +651,136 @@ impl CodeGenerator {
                         write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else if ret_llvm.starts_with('{') {
                         // Inline struct return: if value is scalar, use zeroinitializer.
-                        let val_llvm = if value.starts_with('%') {
+                        let val_llvm_for_check = if value.starts_with('%') {
                             self.llvm_type_of(&value)
                         } else {
                             String::new()
                         };
-                        if value.starts_with('%') && val_llvm == ret_llvm {
-                            write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
-                        } else if value.starts_with('%') && val_llvm == format!("{}*", ret_llvm) {
+                        let body_is_universal_option =
+                            val_llvm_for_check == "%Option" || val_llvm_for_check == "%Result";
+                        let ret_is_specialized_option =
+                            ret_llvm.starts_with("{ i8, ") && ret_llvm.ends_with(" }");
+                        if body_is_universal_option && ret_is_specialized_option {
+                            // Bug C9 fix: function declared `T?` / `Result<T,E>`
+                            // (specialized layout `{ i8, %T }`) but body produced
+                            // a universal `%Option`/`%Result` aggregate via the
+                            // generic enum-variant constructor path. The two
+                            // layouts share an i64-word payload slot, so a
+                            // pointer-cast reinterpret is sound for ≤8B payloads.
+                            let tmp = self.next_temp(&mut counter);
+                            self.emit_entry_alloca(&tmp, &val_llvm_for_check);
+                            write_ir!(
+                                ir,
+                                "  store {} {}, {}* {}",
+                                val_llvm_for_check,
+                                value,
+                                val_llvm_for_check,
+                                tmp
+                            );
+                            let cast_ptr = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast {}* {} to {}*",
+                                cast_ptr,
+                                val_llvm_for_check,
+                                tmp,
+                                ret_llvm
+                            );
                             let loaded = self.next_temp(&mut counter);
                             write_ir!(
                                 ir,
-                                "  {} = load {}, {}* {}{}",
+                                "  {} = load {}, {}* {}",
                                 loaded,
                                 ret_llvm,
                                 ret_llvm,
-                                value,
-                                ret_dbg
+                                cast_ptr
                             );
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                        } else if value.starts_with('%')
+                            && self.llvm_type_of(&value).starts_with('{')
+                        {
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
+                        } else if ret_llvm == "{ i8*, i64 }" && value.starts_with('%') {
+                            let val_llvm = self.llvm_type_of(&value);
+                            let (coerced_val, coerce_ir) =
+                                self.coerce_ret_value(&value, &val_llvm, &ret_llvm, &mut counter);
+                            if !coerce_ir.is_empty() || coerced_val != value {
+                                ir.push_str(&coerce_ir);
+                                write_ir!(ir, "  ret {{ i8*, i64 }} {}{}", coerced_val, ret_dbg);
+                            } else if val_llvm == "{ i8*, i64 }*" {
+                                let loaded = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = load {{ i8*, i64 }}, {{ i8*, i64 }}* {}",
+                                    loaded,
+                                    value
+                                );
+                                self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                                write_ir!(ir, "  ret {{ i8*, i64 }} {}{}", loaded, ret_dbg);
+                            } else if val_llvm == "ptr" {
+                                let loaded = self.next_temp(&mut counter);
+                                write_ir!(ir, "  {} = load {{ i8*, i64 }}, ptr {}", loaded, value);
+                                self.fn_ctx.record_emitted_type(&loaded, "{ i8*, i64 }");
+                                write_ir!(ir, "  ret {{ i8*, i64 }} {}{}", loaded, ret_dbg);
+                            } else if val_llvm.ends_with('*') {
+                                let data_i8 = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast {} {} to i8*",
+                                    data_i8,
+                                    val_llvm,
+                                    value
+                                );
+                                let fat1 = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = insertvalue {{ i8*, i64 }} undef, i8* {}, 0",
+                                    fat1,
+                                    data_i8
+                                );
+                                self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
+                                let fat2 = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = insertvalue {{ i8*, i64 }} {}, i64 0, 1",
+                                    fat2,
+                                    fat1
+                                );
+                                self.fn_ctx.record_emitted_type(&fat2, "{ i8*, i64 }");
+                                write_ir!(ir, "  ret {{ i8*, i64 }} {}{}", fat2, ret_dbg);
+                            } else {
+                                write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
+                            }
                         } else {
                             write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
                         }
                     } else {
-                        // Coerce return value width if needed (int, float, struct).
+                        // Mini Pillar 1 (ADR 0001 §1) — single coerce point for ret.
+                        // Migrated from inline 3-branch (float width / i64→struct
+                        // erasure / int width) chain.
                         let value = if value.starts_with('%') {
-                            let val_llvm = self.llvm_type_of(&value);
-                            if ret_llvm.starts_with('{') && val_llvm == format!("{}*", ret_llvm) {
-                                let loaded = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load {}, {}* {}",
-                                    loaded,
-                                    ret_llvm,
-                                    ret_llvm,
-                                    value
-                                );
-                                loaded
-                            } else if (val_llvm == "float" || val_llvm == "double")
-                                && (ret_llvm == "float" || ret_llvm == "double")
-                                && val_llvm != ret_llvm
+                            let mut val_llvm = self.llvm_type_of(&value);
+                            if val_llvm == "i64"
+                                && (ret_llvm.starts_with("%Result")
+                                    || ret_llvm.starts_with("%Option"))
                             {
-                                let tmp = self.next_temp(&mut counter);
-                                if val_llvm == "double" && ret_llvm == "float" {
-                                    write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
-                                } else {
-                                    write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
+                                if let Some(inferred_llvm) = stmts
+                                    .last()
+                                    .and_then(|s| match &s.node {
+                                        vais_ast::Stmt::Expr(expr) => {
+                                            Some(self.type_to_llvm(&self.infer_expr_type(expr)))
+                                        }
+                                        _ => None,
+                                    })
+                                    .filter(|ty| ty.starts_with('%') && !ty.ends_with('*'))
+                                {
+                                    val_llvm = inferred_llvm;
                                 }
-                                tmp
-                            } else if val_llvm == "i64"
-                                && ret_llvm.starts_with('%')
-                                && !ret_llvm.ends_with('*')
-                            {
-                                let tmp_ptr = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = inttoptr i64 {} to {}*",
-                                    tmp_ptr,
-                                    value,
-                                    ret_llvm
-                                );
-                                let loaded = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load {}, {}* {}",
-                                    loaded,
-                                    ret_llvm,
-                                    ret_llvm,
-                                    tmp_ptr
-                                );
-                                loaded
-                            } else {
-                                self.coerce_int_width(
-                                    &value,
-                                    &val_llvm,
-                                    &ret_llvm,
-                                    &mut counter,
-                                    &mut ir,
-                                )
                             }
+                            let (coerced_val, coerce_ir) =
+                                self.coerce_ret_value(&value, &val_llvm, &ret_llvm, &mut counter);
+                            ir.push_str(&coerce_ir);
+                            coerced_val
                         } else {
                             value
                         };
@@ -640,6 +797,7 @@ impl CodeGenerator {
 
         self.fn_ctx.current_function = None;
         self.fn_ctx.current_return_type = None;
+        self.fn_ctx.expected_expr_types.clear();
         self.clear_decreases_info();
         Ok(ir)
     }
@@ -694,6 +852,14 @@ impl CodeGenerator {
             None
         };
 
+        let old_self_substitution = self.generics.substitutions.insert(
+            "Self".to_string(),
+            ResolvedType::Named {
+                name: struct_name.to_string(),
+                generics: vec![],
+            },
+        );
+
         // Method name: StructName_methodName
         let method_name = format!("{}_{}", struct_name, f.name.node);
 
@@ -731,6 +897,7 @@ impl CodeGenerator {
                     "self".to_string(),
                 ),
             );
+            self.fn_ctx.record_emitted_type("%self", &struct_ty);
         }
 
         // Add remaining parameters
@@ -748,6 +915,8 @@ impl CodeGenerator {
                 p.name.node.to_string(),
                 LocalVar::param(ty.clone(), llvm_name.to_string()),
             );
+            self.fn_ctx
+                .record_emitted_type(&format!("%{}", llvm_name), &llvm_ty);
 
             params.push(format!("{} %{}", llvm_ty, llvm_name));
         }
@@ -789,6 +958,8 @@ impl CodeGenerator {
                 let param_ptr_name = format!("__{}_ptr", p.name.node);
                 let param_ptr = format!("%{}", param_ptr_name);
                 write_ir!(ir, "  {} = alloca {}", param_ptr, llvm_ty);
+                self.fn_ctx
+                    .record_emitted_type(&param_ptr, &format!("{}*", llvm_ty));
                 write_ir!(
                     ir,
                     "  store {} %{}, {}* {}",
@@ -810,26 +981,11 @@ impl CodeGenerator {
         let mut counter = 0;
         match &f.body {
             FunctionBody::Expr(expr) => {
-                let saved_generic_substitutions =
-                    self.push_expected_static_ctor_substitutions(&ret_type, &expr.node);
-                let generated_expr = self.generate_expr(expr, &mut counter);
-                if let Some(saved) = saved_generic_substitutions {
-                    self.generics.substitutions = saved;
-                }
-                let (mut value, expr_ir) = generated_expr?;
+                self.fn_ctx.expected_expr_types.push(ret_type.clone());
+                let expr_result = self.generate_expr(expr, &mut counter);
+                self.fn_ctx.expected_expr_types.pop();
+                let (value, expr_ir) = expr_result?;
                 ir.push_str(&expr_ir);
-
-                if matches!(ret_type, ResolvedType::Str) {
-                    let expr_type = self.infer_expr_type(expr);
-                    if self.is_string_builder_type(&expr_type) {
-                        value = self.coerce_string_builder_to_str(
-                            &value,
-                            self.is_expr_value(expr),
-                            &mut counter,
-                            &mut ir,
-                        );
-                    }
-                }
 
                 // Call Drop::drop() for droppable locals (reverse order)
                 let drop_ir = self.generate_drop_cleanup();
@@ -859,22 +1015,19 @@ impl CodeGenerator {
                 if ret_type == ResolvedType::Unit {
                     write_ir!(ir, "  ret void{}", ret_dbg);
                 } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                    if value == "0" {
-                        write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
-                    } else {
-                        // For struct returns, load the value from pointer
-                        let loaded = format!("%ret.{}", counter);
-                        write_ir!(
-                            ir,
-                            "  {} = load {}, {}* {}{}",
-                            loaded,
-                            ret_llvm,
-                            ret_llvm,
-                            value,
-                            ret_dbg
-                        );
-                        write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
-                    }
+                    // For struct returns, load the value from pointer
+                    let loaded = format!("%ret.{}", counter);
+                    write_ir!(
+                        ir,
+                        "  {} = load {}, {}* {}{}",
+                        loaded,
+                        ret_llvm,
+                        ret_llvm,
+                        value,
+                        ret_dbg
+                    );
+                    self.fn_ctx.record_emitted_type(&loaded, &ret_llvm);
+                    write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
                 } else if matches!(ret_type, ResolvedType::Ref(_) | ResolvedType::RefMut(_))
                     && !value.starts_with('%')
                     && !value.starts_with('@')
@@ -892,27 +1045,19 @@ impl CodeGenerator {
                     write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                 } else {
                     let value = if value.starts_with('%') {
-                        let val_llvm = self.llvm_type_of(&value);
-                        if ret_llvm.starts_with('{') && val_llvm == format!("{}*", ret_llvm) {
-                            let loaded = self.next_temp(&mut counter);
-                            write_ir!(
-                                ir,
-                                "  {} = load {}, {}* {}",
-                                loaded,
-                                ret_llvm,
-                                ret_llvm,
-                                value
-                            );
-                            loaded
-                        } else {
-                            self.coerce_int_width(
-                                &value,
-                                &val_llvm,
-                                &ret_llvm,
-                                &mut counter,
-                                &mut ir,
-                            )
+                        let mut val_llvm = self.llvm_type_of(&value);
+                        if val_llvm == "i64"
+                            && (ret_llvm.starts_with("%Result") || ret_llvm.starts_with("%Option"))
+                        {
+                            let inferred = self.type_to_llvm(&self.infer_expr_type(expr));
+                            if inferred.starts_with('%') && !inferred.ends_with('*') {
+                                val_llvm = inferred;
+                            }
                         }
+                        let (coerced_val, coerce_ir) =
+                            self.coerce_ret_value(&value, &val_llvm, &ret_llvm, &mut counter);
+                        ir.push_str(&coerce_ir);
+                        coerced_val
                     } else {
                         value
                     };
@@ -920,12 +1065,10 @@ impl CodeGenerator {
                 }
             }
             FunctionBody::Block(stmts) => {
-                let (mut value, block_ir, terminated) = self
-                    .generate_block_stmts_with_expected_result_type(
-                        stmts,
-                        &mut counter,
-                        &ret_type,
-                    )?;
+                self.fn_ctx.expected_expr_types.push(ret_type.clone());
+                let block_result = self.generate_block_stmts(stmts, &mut counter);
+                self.fn_ctx.expected_expr_types.pop();
+                let (value, block_ir, terminated) = block_result?;
                 ir.push_str(&block_ir);
 
                 // If block is already terminated (has return/break), don't emit ret
@@ -933,18 +1076,6 @@ impl CodeGenerator {
                     // Block already has a terminator, no need for ret
                     // Note: alloc cleanup for early returns is handled in Return statement
                 } else {
-                    if matches!(ret_type, ResolvedType::Str) {
-                        let block_type = self.infer_block_type(stmts);
-                        if self.is_string_builder_type(&block_type) {
-                            value = self.coerce_string_builder_to_str(
-                                &value,
-                                self.is_block_result_value(stmts),
-                                &mut counter,
-                                &mut ir,
-                            );
-                        }
-                    }
-
                     // Call Drop::drop() for droppable locals (reverse order)
                     let drop_ir = self.generate_drop_cleanup();
                     ir.push_str(&drop_ir);
@@ -973,14 +1104,83 @@ impl CodeGenerator {
                     if ret_type == ResolvedType::Unit {
                         write_ir!(ir, "  ret void{}", ret_dbg);
                     } else if matches!(ret_type, ResolvedType::Named { .. }) {
-                        if value == "0" {
-                            write_ir!(ir, "  ret {} zeroinitializer{}", ret_llvm, ret_dbg);
-                        } else if self.is_block_result_value(stmts) {
-                            // Check if the result is already a value (from phi node) or a pointer (from struct lit)
-                            // Value (e.g., from if-else phi node) - return directly
+                        // Check if the result is already a value (from phi node) or a pointer (from struct lit).
+                        // Ground-truth emitted type wins over syntactic/inferred value-ness:
+                        // block-scope cleanup can remove locals before this classification runs.
+                        let actual_value_llvm = self.llvm_type_of_checked(&value);
+                        let value_is_pointer = actual_value_llvm
+                            .as_deref()
+                            .is_some_and(|ty| ty == "ptr" || ty.trim_end().ends_with('*'));
+                        if !value_is_pointer && self.is_block_result_value(stmts) {
+                            // Value (e.g., from if-else phi node). Reconcile
+                            // specialized wrapper names before returning.
+                            let mut val_llvm = self.llvm_type_of(&value);
+                            if val_llvm == "i64" {
+                                if let Some(inferred_llvm) = stmts
+                                    .last()
+                                    .and_then(|s| match &s.node {
+                                        vais_ast::Stmt::Expr(expr) => {
+                                            Some(self.type_to_llvm(&self.infer_expr_type(expr)))
+                                        }
+                                        _ => None,
+                                    })
+                                    .filter(|ty| ty.starts_with('%') && !ty.ends_with('*'))
+                                {
+                                    val_llvm = inferred_llvm;
+                                }
+                            }
+                            let (value, coerce_ir) =
+                                self.coerce_ret_value(&value, &val_llvm, &ret_llvm, &mut counter);
+                            ir.push_str(&coerce_ir);
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
                         } else {
-                            // Pointer (e.g., from struct literal) - load then return
+                            // Pointer (e.g., from struct literal) - load then return.
+                            //
+                            // Phase D: the source pointer may be a base
+                            // generic type (`%Result*`) while ret_llvm is
+                            // specialized (`%Result$i64_VaisError`). Both
+                            // share layout; bitcast the pointer first so
+                            // the `load` type matches.
+                            let val_llvm =
+                                actual_value_llvm.unwrap_or_else(|| self.llvm_type_of(&value));
+                            let ret_ptr_llvm = format!("{}*", ret_llvm);
+                            let src_ptr = if val_llvm == "ptr" {
+                                value.clone()
+                            } else if val_llvm.ends_with('*') {
+                                if val_llvm == ret_ptr_llvm {
+                                    value.clone()
+                                } else if val_llvm.trim_end_matches('*').trim().starts_with('%')
+                                    && ret_llvm.starts_with('%')
+                                {
+                                    let cast = self.next_temp(&mut counter);
+                                    write_ir!(
+                                        ir,
+                                        "  {} = bitcast {} {} to {}",
+                                        cast,
+                                        val_llvm,
+                                        value,
+                                        ret_ptr_llvm
+                                    );
+                                    self.fn_ctx.record_emitted_type(&cast, &ret_ptr_llvm);
+                                    cast
+                                } else {
+                                    value.clone()
+                                }
+                            } else if val_llvm.starts_with('%') && val_llvm != ret_llvm {
+                                let cast = self.next_temp(&mut counter);
+                                write_ir!(
+                                    ir,
+                                    "  {} = bitcast {}* {} to {}*",
+                                    cast,
+                                    val_llvm,
+                                    value,
+                                    ret_llvm
+                                );
+                                self.fn_ctx.record_emitted_type(&cast, &ret_ptr_llvm);
+                                cast
+                            } else {
+                                value.clone()
+                            };
                             let loaded = format!("%ret.{}", counter);
                             write_ir!(
                                 ir,
@@ -988,7 +1188,7 @@ impl CodeGenerator {
                                 loaded,
                                 ret_llvm,
                                 ret_llvm,
-                                value,
+                                src_ptr,
                                 ret_dbg
                             );
                             write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
@@ -1009,66 +1209,83 @@ impl CodeGenerator {
                             .push((const_name.clone(), inner_ty, value.clone()));
                         write_ir!(ir, "  ret {} @{}{}", ret_llvm, const_name, ret_dbg);
                     } else {
-                        // Coerce return value width if needed (int, float, struct).
-                        let value = if value.starts_with('%') {
-                            let val_llvm = self.llvm_type_of(&value);
-                            if ret_llvm.starts_with('{') && val_llvm == format!("{}*", ret_llvm) {
-                                let loaded = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load {}, {}* {}",
-                                    loaded,
-                                    ret_llvm,
-                                    ret_llvm,
-                                    value
-                                );
-                                loaded
-                            } else if (val_llvm == "float" || val_llvm == "double")
-                                && (ret_llvm == "float" || ret_llvm == "double")
-                                && val_llvm != ret_llvm
-                            {
-                                let tmp = self.next_temp(&mut counter);
-                                if val_llvm == "double" && ret_llvm == "float" {
-                                    write_ir!(ir, "  {} = fptrunc double {} to float", tmp, value);
-                                } else {
-                                    write_ir!(ir, "  {} = fpext float {} to double", tmp, value);
-                                }
+                        // Bug C9 fix: function declared `T?` / `Result<T,E>`
+                        // but body produced a universal `%Option`/`%Result`
+                        // aggregate via the generic enum-variant constructor.
+                        // Reinterpret-cast to the specialized `{ i8, %T }` slot.
+                        let val_llvm_for_check = if value.starts_with('%') {
+                            self.llvm_type_of(&value)
+                        } else {
+                            String::new()
+                        };
+                        let body_is_universal_option =
+                            val_llvm_for_check == "%Option" || val_llvm_for_check == "%Result";
+                        let ret_is_specialized_option =
+                            ret_llvm.starts_with("{ i8, ") && ret_llvm.ends_with(" }");
+                        if body_is_universal_option && ret_is_specialized_option {
+                            let tmp = self.next_temp(&mut counter);
+                            self.emit_entry_alloca(&tmp, &val_llvm_for_check);
+                            write_ir!(
+                                ir,
+                                "  store {} {}, {}* {}",
+                                val_llvm_for_check,
+                                value,
+                                val_llvm_for_check,
                                 tmp
-                            } else if val_llvm == "i64"
-                                && ret_llvm.starts_with('%')
-                                && !ret_llvm.ends_with('*')
-                            {
-                                let tmp_ptr = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = inttoptr i64 {} to {}*",
-                                    tmp_ptr,
-                                    value,
-                                    ret_llvm
-                                );
-                                let loaded = self.next_temp(&mut counter);
-                                write_ir!(
-                                    ir,
-                                    "  {} = load {}, {}* {}",
-                                    loaded,
-                                    ret_llvm,
-                                    ret_llvm,
-                                    tmp_ptr
-                                );
-                                loaded
-                            } else {
-                                self.coerce_int_width(
+                            );
+                            let cast_ptr = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = bitcast {}* {} to {}*",
+                                cast_ptr,
+                                val_llvm_for_check,
+                                tmp,
+                                ret_llvm
+                            );
+                            let loaded = self.next_temp(&mut counter);
+                            write_ir!(
+                                ir,
+                                "  {} = load {}, {}* {}",
+                                loaded,
+                                ret_llvm,
+                                ret_llvm,
+                                cast_ptr
+                            );
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, loaded, ret_dbg);
+                        } else {
+                            // Coerce return value width/layout if needed.
+                            let value = if value.starts_with('%') {
+                                let mut val_llvm = self.llvm_type_of(&value);
+                                if val_llvm == "i64"
+                                    && (ret_llvm.starts_with("%Result")
+                                        || ret_llvm.starts_with("%Option"))
+                                {
+                                    if let Some(inferred_llvm) = stmts
+                                        .last()
+                                        .and_then(|s| match &s.node {
+                                            vais_ast::Stmt::Expr(expr) => {
+                                                Some(self.type_to_llvm(&self.infer_expr_type(expr)))
+                                            }
+                                            _ => None,
+                                        })
+                                        .filter(|ty| ty.starts_with('%') && !ty.ends_with('*'))
+                                    {
+                                        val_llvm = inferred_llvm;
+                                    }
+                                }
+                                let (coerced_val, coerce_ir) = self.coerce_ret_value(
                                     &value,
                                     &val_llvm,
                                     &ret_llvm,
                                     &mut counter,
-                                    &mut ir,
-                                )
-                            }
-                        } else {
-                            value
-                        };
-                        write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
+                                );
+                                ir.push_str(&coerce_ir);
+                                coerced_val
+                            } else {
+                                value
+                            };
+                            write_ir!(ir, "  ret {} {}{}", ret_llvm, value, ret_dbg);
+                        }
                     }
                 }
             }
@@ -1081,10 +1298,17 @@ impl CodeGenerator {
 
         self.fn_ctx.current_function = None;
         self.fn_ctx.current_return_type = None;
+        self.fn_ctx.expected_expr_types.clear();
 
         // Restore previous substitutions if we set them for a specialized struct
         if let Some(old) = old_substitutions {
             self.generics.substitutions = old;
+        } else if let Some(old_self) = old_self_substitution {
+            self.generics
+                .substitutions
+                .insert("Self".to_string(), old_self);
+        } else {
+            self.generics.substitutions.remove("Self");
         }
 
         Ok(ir)

@@ -195,12 +195,10 @@ mod tests {
 
     #[test]
     fn test_incremental_stats_with_miss_reasons() {
-        let mut stats = IncrementalStats {
-            cache_misses: 2,
-            files_checked: 3,
-            cache_hits: 1,
-            ..Default::default()
-        };
+        let mut stats = IncrementalStats::default();
+        stats.cache_misses = 2;
+        stats.files_checked = 3;
+        stats.cache_hits = 1;
 
         let file = PathBuf::from("test.vais");
         stats
@@ -275,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_cache_miss_reason_all_variants() {
-        let variants = [
+        let variants = vec![
             CacheMissReason::NewFile,
             CacheMissReason::ContentHashChanged,
             CacheMissReason::SignatureChanged,

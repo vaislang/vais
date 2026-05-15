@@ -1,0 +1,22 @@
+# LIVING_SPEC/04_stdlib/result_try_operator.vais
+# Key concept: `?`는 Result/Option에서 값 꺼내거나 에러 전파.
+# NOTE: `?` 뒤에 `:=` 바인딩은 파서 이슈 — 별도 문으로 분리.
+
+fn step(n: i64) -> Result<i64, i64> {
+    I n < 0 { Err(1) } else { Ok(n + 1) }
+}
+
+fn wrap(x: i64) -> Result<i64, i64> {
+    r := step(x)
+    match r {
+        Ok(v) => Ok(v * 2),
+        Err(e) => Err(e)
+    }
+}
+
+fn main() -> i64 {
+    match wrap(5) {
+        Ok(v) => v,
+        Err(_) => -1
+    }
+}

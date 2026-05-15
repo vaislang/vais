@@ -12,8 +12,8 @@ use super::helpers::*;
 fn e2e_p134_pat_literal_int() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 42 {
+fn main() -> i64 {
+    match 42 {
         0 => 0,
         42 => 42,
         _ => 99
@@ -28,9 +28,9 @@ F main() -> i64 {
 fn e2e_p134_pat_literal_zero() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 0
-    M x {
+    match x {
         0 => 42,
         _ => 0
     }
@@ -44,9 +44,9 @@ F main() -> i64 {
 fn e2e_p134_pat_literal_negative() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := -1
-    result := M x {
+    result := match x {
         -1 => 42,
         0 => 0,
         _ => 99
@@ -62,8 +62,8 @@ F main() -> i64 {
 fn e2e_p134_pat_literal_bool_true() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M true {
+fn main() -> i64 {
+    match true {
         true => 42,
         false => 0
     }
@@ -77,8 +77,8 @@ F main() -> i64 {
 fn e2e_p134_pat_literal_bool_false() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M false {
+fn main() -> i64 {
+    match false {
         true => 0,
         false => 42
     }
@@ -94,8 +94,8 @@ F main() -> i64 {
 fn e2e_p134_pat_variable_bind() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 42 {
+fn main() -> i64 {
+    match 42 {
         n => n
     }
 }
@@ -108,8 +108,8 @@ F main() -> i64 {
 fn e2e_p134_pat_variable_with_fallback() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 42 {
+fn main() -> i64 {
+    match 42 {
         0 => 0,
         n => n
     }
@@ -123,8 +123,8 @@ F main() -> i64 {
 fn e2e_p134_pat_variable_expr() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 21 {
+fn main() -> i64 {
+    match 21 {
         n => n * 2
     }
 }
@@ -139,8 +139,8 @@ F main() -> i64 {
 fn e2e_p134_pat_wildcard_default() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 999 {
+fn main() -> i64 {
+    match 999 {
         0 => 0,
         1 => 1,
         _ => 42
@@ -155,8 +155,8 @@ F main() -> i64 {
 fn e2e_p134_pat_wildcard_first_match_wins() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 5 {
+fn main() -> i64 {
+    match 5 {
         5 => 42,
         _ => 0
     }
@@ -172,8 +172,8 @@ F main() -> i64 {
 fn e2e_p134_pat_or_two() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 2 {
+fn main() -> i64 {
+    match 2 {
         1 | 2 => 42,
         _ => 0
     }
@@ -187,8 +187,8 @@ F main() -> i64 {
 fn e2e_p134_pat_or_three() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 3 {
+fn main() -> i64 {
+    match 3 {
         1 | 2 | 3 => 42,
         _ => 0
     }
@@ -202,8 +202,8 @@ F main() -> i64 {
 fn e2e_p134_pat_or_no_match() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 5 {
+fn main() -> i64 {
+    match 5 {
         1 | 2 | 3 => 0,
         _ => 42
     }
@@ -217,8 +217,8 @@ F main() -> i64 {
 fn e2e_p134_pat_or_with_wildcard() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 100 {
+fn main() -> i64 {
+    match 100 {
         0 | 1 => 0,
         _ => 42
     }
@@ -234,8 +234,8 @@ F main() -> i64 {
 fn e2e_p134_pat_guard_greater() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 50 {
+fn main() -> i64 {
+    match 50 {
         n I n > 40 => 42,
         _ => 0
     }
@@ -249,8 +249,8 @@ F main() -> i64 {
 fn e2e_p134_pat_guard_less() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 5 {
+fn main() -> i64 {
+    match 5 {
         n I n < 10 => 42,
         _ => 0
     }
@@ -264,8 +264,8 @@ F main() -> i64 {
 fn e2e_p134_pat_guard_equal() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 42 {
+fn main() -> i64 {
+    match 42 {
         n I n == 42 => n,
         _ => 0
     }
@@ -279,8 +279,8 @@ F main() -> i64 {
 fn e2e_p134_pat_guard_false() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 5 {
+fn main() -> i64 {
+    match 5 {
         n I n > 100 => 0,
         _ => 42
     }
@@ -294,9 +294,9 @@ F main() -> i64 {
 fn e2e_p134_pat_guard_complex() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    M 42 {
-        n I n > 10 => I n == 42 { n } E { 0 },
+fn main() -> i64 {
+    match 42 {
+        n I n > 10 => I n == 42 { n } else { 0 },
         _ => 0
     }
 }
@@ -311,10 +311,10 @@ F main() -> i64 {
 fn e2e_p134_pat_enum_simple() {
     assert_exit_code(
         r#"
-E Dir { Up, Down, Left, Right }
-F main() -> i64 {
+enum Dir { Up, Down, Left, Right }
+fn main() -> i64 {
     d := Right
-    M d {
+    match d {
         Up => 1,
         Down => 2,
         Left => 3,
@@ -330,17 +330,17 @@ F main() -> i64 {
 fn e2e_p134_pat_enum_with_data() {
     assert_exit_code(
         r#"
-E Expr {
+enum Expr {
     Num(i64),
     Neg(i64)
 }
-F eval(e: Expr) -> i64 {
-    M e {
+fn eval(e: Expr) -> i64 {
+    match e {
         Num(n) => n,
         Neg(n) => 0 - n
     }
 }
-F main() -> i64 = eval(Num(42))
+fn main() -> i64 = eval(Num(42))
 "#,
         42,
     );
@@ -350,17 +350,17 @@ F main() -> i64 = eval(Num(42))
 fn e2e_p134_pat_enum_two_fields() {
     assert_exit_code(
         r#"
-E Op {
+enum Op {
     Add(i64, i64),
     Mul(i64, i64)
 }
-F calc(op: Op) -> i64 {
-    M op {
+fn calc(op: Op) -> i64 {
+    match op {
         Add(a, b) => a + b,
         Mul(a, b) => a * b
     }
 }
-F main() -> i64 = calc(Add(20, 22))
+fn main() -> i64 = calc(Add(20, 22))
 "#,
         42,
     );
@@ -370,19 +370,19 @@ F main() -> i64 = calc(Add(20, 22))
 fn e2e_p134_pat_enum_mixed_arms() {
     assert_exit_code(
         r#"
-E Token {
+enum Token {
     Int(i64),
     Bool(bool),
     None
 }
-F val(t: Token) -> i64 {
-    M t {
+fn val(t: Token) -> i64 {
+    match t {
         Int(n) => n,
-        Bool(b) => I b { 1 } E { 0 },
+        Bool(b) => I b { 1 } else { 0 },
         None => 0
     }
 }
-F main() -> i64 = val(Int(42))
+fn main() -> i64 = val(Int(42))
 "#,
         42,
     );
@@ -394,9 +394,9 @@ F main() -> i64 = val(Int(42))
 fn e2e_p134_pat_tuple_basic() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     pair := (20, 22)
-    M pair {
+    match pair {
         (a, b) => a + b
     }
 }
@@ -409,9 +409,9 @@ F main() -> i64 {
 fn e2e_p134_pat_tuple_triple() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     t := (10, 20, 12)
-    M t {
+    match t {
         (a, b, c) => a + b + c
     }
 }
@@ -424,9 +424,9 @@ F main() -> i64 {
 fn e2e_p134_pat_tuple_with_literal() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     pair := (1, 42)
-    M pair {
+    match pair {
         (0, _) => 0,
         (1, v) => v,
         _ => 99
@@ -441,9 +441,9 @@ F main() -> i64 {
 fn e2e_p134_pat_nested_tuple() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     nested := (10, 32)
-    M nested {
+    match nested {
         (a, b) => a + b
     }
 }
@@ -458,9 +458,9 @@ F main() -> i64 {
 fn e2e_p134_pat_match_as_expr() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 3
-    result := M x {
+    result := match x {
         1 => 10,
         2 => 20,
         3 => 42,
@@ -477,13 +477,13 @@ F main() -> i64 {
 fn e2e_p134_pat_match_in_fn_return() {
     assert_exit_code(
         r#"
-F classify(n: i64) -> i64 {
-    M n {
+fn classify(n: i64) -> i64 {
+    match n {
         0 => 0,
         _ => 42
     }
 }
-F main() -> i64 = classify(99)
+fn main() -> i64 = classify(99)
 "#,
         42,
     );
@@ -493,9 +493,9 @@ F main() -> i64 = classify(99)
 fn e2e_p134_pat_match_in_addition() {
     assert_exit_code(
         r#"
-F main() -> i64 {
-    a := M 1 { 1 => 20, _ => 0 }
-    b := M 2 { 2 => 22, _ => 0 }
+fn main() -> i64 {
+    a := match 1 { 1 => 20, _ => 0 }
+    b := match 2 { 2 => 22, _ => 0 }
     a + b
 }
 "#,
@@ -509,9 +509,9 @@ F main() -> i64 {
 fn e2e_p134_pat_many_arms() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 7
-    M x {
+    match x {
         1 => 10,
         2 => 20,
         3 => 30,
@@ -531,9 +531,9 @@ F main() -> i64 {
 fn e2e_p134_pat_arms_with_blocks() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 2
-    M x {
+    match x {
         1 => {
             a := 10
             a + 5
@@ -557,8 +557,8 @@ F main() -> i64 {
 fn e2e_p134_pat_match_in_loop() {
     assert_exit_code(
         r#"
-F classify(x: i64) -> i64 {
-    M x {
+fn classify(x: i64) -> i64 {
+    match x {
         0 => 10,
         1 => 5,
         2 => 7,
@@ -568,7 +568,7 @@ F classify(x: i64) -> i64 {
         _ => 0
     }
 }
-F main() -> i64 {
+fn main() -> i64 {
     sum := mut 0
     L i:0..6 {
         sum = sum + classify(i)
@@ -584,7 +584,7 @@ F main() -> i64 {
 fn e2e_p134_pat_match_break_condition() {
     assert_exit_code(
         r#"
-F main() -> i64 {
+fn main() -> i64 {
     result := mut 0
     L i:0..100 {
         I i == 42 { result = 42; B }
@@ -602,9 +602,9 @@ F main() -> i64 {
 fn e2e_p134_pat_match_fn_result() {
     assert_exit_code(
         r#"
-F compute(x: i64) -> i64 = x * 2
-F main() -> i64 {
-    M compute(21) {
+fn compute(x: i64) -> i64 = x * 2
+fn main() -> i64 {
+    match compute(21) {
         42 => 42,
         _ => 0
     }
@@ -618,10 +618,10 @@ F main() -> i64 {
 fn e2e_p134_pat_match_nested_fn() {
     assert_exit_code(
         r#"
-F double(x: i64) -> i64 = x * 2
-F inc(x: i64) -> i64 = x + 1
-F main() -> i64 {
-    M double(inc(20)) {
+fn double(x: i64) -> i64 = x * 2
+fn inc(x: i64) -> i64 = x + 1
+fn main() -> i64 {
+    match double(inc(20)) {
         42 => 42,
         _ => 0
     }
@@ -629,4 +629,36 @@ F main() -> i64 {
 "#,
         42,
     );
+}
+
+#[test]
+fn e2e_p134_pat_ref_unit_variant_uses_match_enum_context() {
+    let source = r#"
+enum FrameState { Empty, Busy }
+enum PlanNode { Scan, Empty }
+
+fn classify(node: &PlanNode) -> i64 {
+    match node {
+        PlanNode.Empty => 42,
+        _ => 0,
+    }
+}
+
+fn main() -> i64 {
+    node := mut PlanNode.Empty
+    classify(&node)
+}
+"#;
+    let ir = compile_to_ir(source).expect("qualified unit pattern should compile");
+    assert!(
+        ir.contains("getelementptr %PlanNode, %PlanNode* %node"),
+        "expected ref enum unit pattern to use PlanNode tag check, IR was:\n{}",
+        ir
+    );
+    assert!(
+        !ir.contains("getelementptr %FrameState, %FrameState* %node"),
+        "ref enum unit pattern used a global duplicate variant lookup:\n{}",
+        ir
+    );
+    assert_exit_code(source, 42);
 }

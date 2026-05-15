@@ -1,0 +1,32 @@
+# CHECKS: find max value in Vec<i64>.
+use std/vec.{vec_new};
+
+fn vec_max(v: &Vec<i64>) -> i64 {
+    I v.len() == 0 { return 0 - 1 }
+    best: i64 := mut v[0]
+    LF i: 1..v.len() {
+        I v[i] > best { best = v[i] }
+    }
+    best
+}
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    v.push(3)
+    v.push(1)
+    v.push(7)
+    v.push(2)
+    v.push(5)
+    I vec_max(&v) != 7 { return 1 }
+
+    n: Vec<i64> := mut vec_new()
+    n.push(0 - 5)
+    n.push(0 - 3)
+    n.push(0 - 10)
+    I vec_max(&n) != 0 - 3 { return 2 }
+
+    s: Vec<i64> := mut vec_new()
+    s.push(42)
+    I vec_max(&s) != 42 { return 3 }
+    return 0
+}

@@ -7,7 +7,11 @@ mod ownership_tests {
     use vais_ast::Span;
 
     fn make_span() -> Span {
-        Span { start: 0, end: 0 }
+        Span {
+            file_id: 0,
+            start: 0,
+            end: 0,
+        }
     }
 
     #[test]
@@ -24,11 +28,13 @@ mod ownership_tests {
     #[test]
     fn test_non_copy_type_moved_on_use() {
         let mut checker = OwnershipChecker::new();
-        // Use a Named type which is non-Copy (Str is Copy as a fat pointer)
-        let non_copy = ResolvedType::Named {
+        // Phase 5.24+: user Named structs are Copy by default. To get move
+        // semantics, wrap with Linear (documented escape hatch) or use a
+        // heap-allocated builtin name ("Vec"/"HashMap"/etc.).
+        let non_copy = ResolvedType::Linear(Box::new(ResolvedType::Named {
             name: "MyStruct".to_string(),
             generics: vec![],
-        };
+        }));
         checker.define_var("s", non_copy, false, Some(make_span()));
 
         // First use moves the value
@@ -132,10 +138,11 @@ mod ownership_tests {
     #[test]
     fn test_cannot_borrow_moved_value() {
         let mut checker = OwnershipChecker::new();
-        let non_copy = ResolvedType::Named {
+        // Phase 5.24+: see test_non_copy_type_moved_on_use comment.
+        let non_copy = ResolvedType::Linear(Box::new(ResolvedType::Named {
             name: "MyStruct".to_string(),
             generics: vec![],
-        };
+        }));
         checker.define_var("s", non_copy, false, Some(make_span()));
 
         // Move the value
@@ -221,14 +228,15 @@ mod ownership_tests {
     #[test]
     fn test_collecting_mode() {
         let mut checker = OwnershipChecker::new_collecting();
-        let non_copy1 = ResolvedType::Named {
+        // Phase 5.24+: see test_non_copy_type_moved_on_use comment.
+        let non_copy1 = ResolvedType::Linear(Box::new(ResolvedType::Named {
             name: "MyStruct".to_string(),
             generics: vec![],
-        };
-        let non_copy2 = ResolvedType::Named {
+        }));
+        let non_copy2 = ResolvedType::Linear(Box::new(ResolvedType::Named {
             name: "MyStruct".to_string(),
             generics: vec![],
-        };
+        }));
         checker.define_var("s1", non_copy1, false, Some(make_span()));
         checker.define_var("s2", non_copy2, false, Some(make_span()));
 
@@ -479,10 +487,11 @@ mod ownership_tests {
     fn test_double_move_detection() {
         // Moving a value twice should detect on the second move
         let mut checker = OwnershipChecker::new();
-        let non_copy = ResolvedType::Named {
+        // Phase 5.24+: see test_non_copy_type_moved_on_use comment.
+        let non_copy = ResolvedType::Linear(Box::new(ResolvedType::Named {
             name: "Buffer".to_string(),
             generics: vec![],
-        };
+        }));
         checker.define_var("buf", non_copy, false, Some(make_span()));
 
         assert!(checker.use_var("buf", Some(make_span())).is_ok());
@@ -579,10 +588,11 @@ mod ownership_tests {
     #[test]
     fn test_borrow_after_move_is_error() {
         let mut checker = OwnershipChecker::new();
-        let non_copy = ResolvedType::Named {
+        // Phase 5.24+: see test_non_copy_type_moved_on_use comment.
+        let non_copy = ResolvedType::Linear(Box::new(ResolvedType::Named {
             name: "Data".to_string(),
             generics: vec![],
-        };
+        }));
         checker.define_var("d", non_copy, false, Some(make_span()));
 
         // Move the value
@@ -662,10 +672,11 @@ mod ownership_tests {
     #[test]
     fn test_collecting_mode_gathers_all_errors() {
         let mut checker = OwnershipChecker::new_collecting();
-        let non_copy = ResolvedType::Named {
+        // Phase 5.24+: see test_non_copy_type_moved_on_use comment.
+        let non_copy = ResolvedType::Linear(Box::new(ResolvedType::Named {
             name: "A".to_string(),
             generics: vec![],
-        };
+        }));
 
         // Create 3 variables and move all of them
         for name in &["a", "b", "c"] {
@@ -683,10 +694,11 @@ mod ownership_tests {
     #[test]
     fn test_take_errors_clears_list() {
         let mut checker = OwnershipChecker::new_collecting();
-        let non_copy = ResolvedType::Named {
+        // Phase 5.24+: see test_non_copy_type_moved_on_use comment.
+        let non_copy = ResolvedType::Linear(Box::new(ResolvedType::Named {
             name: "X".to_string(),
             generics: vec![],
-        };
+        }));
         checker.define_var("x", non_copy, false, Some(make_span()));
         let _ = checker.use_var("x", Some(make_span()));
         let _ = checker.use_var("x", Some(make_span()));
@@ -770,10 +782,13 @@ mod ownership_tests {
 
     #[test]
     fn test_result_not_copy_if_err_not_copy() {
+        // Phase 5.24: Named user types default to Copy (value-oriented semantics).
+        // To exercise the "inner not Copy" path, use a known heap-allocated
+        // Named (String/Vec/HashMap) or an explicit Linear/Affine wrapper.
         assert!(!OwnershipChecker::is_copy_type(&ResolvedType::Result(
             Box::new(ResolvedType::I64),
             Box::new(ResolvedType::Named {
-                name: "Error".to_string(),
+                name: "String".to_string(),
                 generics: vec![]
             }),
         )));

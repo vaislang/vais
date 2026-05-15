@@ -105,6 +105,10 @@ where
         Rvalue::Len(place) => {
             f(place.local);
         }
+        Rvalue::VecPush(place, operand) => {
+            f(place.local);
+            visit_operand_locals(operand, f);
+        }
     }
 }
 

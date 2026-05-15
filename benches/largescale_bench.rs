@@ -38,10 +38,10 @@ fn generate_large_project(target_lines: usize) -> String {
 
         // Structs
         for s in 0..structs_per_module {
-            code.push_str(&format!("S Mod{}Struct{} {{\n", m, s));
-            code.push_str("    field_a: i64,\n");
-            code.push_str("    field_b: i64,\n");
-            code.push_str("    field_c: bool\n");
+            code.push_str(&format!("struct Mod{}Struct{} {{\n", m, s));
+            code.push_str(&format!("    field_a: i64,\n"));
+            code.push_str(&format!("    field_b: i64,\n"));
+            code.push_str(&format!("    field_c: bool\n"));
             code.push_str("}\n\n");
             lines += 6;
 
@@ -52,10 +52,10 @@ fn generate_large_project(target_lines: usize) -> String {
 
         // Enums
         for e in 0..enums_per_module {
-            code.push_str(&format!("E Mod{}Result{} {{\n", m, e));
-            code.push_str("    Ok(i64),\n");
-            code.push_str("    Err(i64),\n");
-            code.push_str("    None\n");
+            code.push_str(&format!("enum Mod{}Result{} {{\n", m, e));
+            code.push_str(&format!("    Ok(i64),\n"));
+            code.push_str(&format!("    Err(i64),\n"));
+            code.push_str(&format!("    None\n"));
             code.push_str("}\n\n");
             lines += 6;
 
@@ -73,7 +73,10 @@ fn generate_large_project(target_lines: usize) -> String {
             match f % 5 {
                 0 => {
                     // Simple arithmetic
-                    code.push_str(&format!("F mod{}_func{}(x: i64, y: i64) -> i64 {{\n", m, f));
+                    code.push_str(&format!(
+                        "fn mod{}_func{}(x: i64, y: i64) -> i64 {{\n",
+                        m, f
+                    ));
                     code.push_str(&format!("    a := x * {} + y\n", f + 1));
                     code.push_str(&format!("    b := a - {} * x\n", f % 7 + 1));
                     code.push_str("    R a + b\n");
@@ -82,7 +85,7 @@ fn generate_large_project(target_lines: usize) -> String {
                 }
                 1 => {
                     // Recursive
-                    code.push_str(&format!("F mod{}_rec{}(n: i64) -> i64 {{\n", m, f));
+                    code.push_str(&format!("fn mod{}_rec{}(n: i64) -> i64 {{\n", m, f));
                     code.push_str(&format!("    I n <= 1 {{ R {} }}\n", f % 3 + 1));
                     code.push_str("    R n * @(n - 1)\n");
                     code.push_str("}\n\n");
@@ -90,7 +93,7 @@ fn generate_large_project(target_lines: usize) -> String {
                 }
                 2 => {
                     // Conditional chain
-                    code.push_str(&format!("F mod{}_cond{}(x: i64) -> i64 {{\n", m, f));
+                    code.push_str(&format!("fn mod{}_cond{}(x: i64) -> i64 {{\n", m, f));
                     code.push_str(&format!("    I x < {} {{ R x * 2 }}\n", f * 3));
                     code.push_str(&format!("    I x < {} {{ R x + {} }}\n", f * 10, f));
                     code.push_str("    R x\n");
@@ -99,7 +102,7 @@ fn generate_large_project(target_lines: usize) -> String {
                 }
                 3 => {
                     // Loop-based
-                    code.push_str(&format!("F mod{}_loop{}(n: i64) -> i64 {{\n", m, f));
+                    code.push_str(&format!("fn mod{}_loop{}(n: i64) -> i64 {{\n", m, f));
                     code.push_str("    sum := mut 0\n");
                     code.push_str("    i := mut 0\n");
                     code.push_str("    L {\n");
@@ -113,7 +116,7 @@ fn generate_large_project(target_lines: usize) -> String {
                 _ => {
                     // Multi-expression
                     code.push_str(&format!(
-                        "F mod{}_multi{}(a: i64, b: i64, c: i64) -> i64 {{\n",
+                        "fn mod{}_multi{}(a: i64, b: i64, c: i64) -> i64 {{\n",
                         m, f
                     ));
                     code.push_str(&format!("    x := a * {} + b\n", f));
@@ -128,7 +131,7 @@ fn generate_large_project(target_lines: usize) -> String {
     }
 
     // Entry point
-    code.push_str("F main() -> i64 {\n");
+    code.push_str("fn main() -> i64 {\n");
     code.push_str("    result := mod0_func0(1, 2)\n");
     code.push_str("    R result\n");
     code.push_str("}\n");

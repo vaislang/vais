@@ -1,0 +1,28 @@
+# LIVING_SPEC/02_patterns/phase2_10_option_struct_rewrap.vais
+# Key concept: Phase 2.10 TC reproducer — `Some(r.field)` 재포장이
+# TC 레벨에서 통과함을 실측으로 증명.
+#
+# Status:
+#   - TC(`vaisc check`): ✓ 통과
+#   - Codegen(`vaisc build`): ✗ C004 "Aggregate extract index out of range"
+#     → CODEGEN_FEATURES.md "Option<Struct> parameter + match-arm rewrap"
+#       Phase 3.14/3.15 gap. LIVING_SPEC 테스트는 TC-only 이므로 이 파일은
+#       통과로 카운트됨.
+
+struct Role { role_id: u64, }
+
+fn simpler(opt: Option<Role>) -> Option<u64> {
+    match opt {
+        Some(r) => Some(r.role_id),
+        None => None,
+    }
+}
+
+fn main() -> i64 {
+    r := Role { role_id: 42 }
+    o := Some(r)
+    match simpler(o) {
+        Some(v) => v as i64,
+        None => -1,
+    }
+}

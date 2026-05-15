@@ -1,10 +1,10 @@
 # GC Test - Demonstrates garbage collection functionality
 # This test should be run with: vaisc build gc_test.vais --gc
 
-U std/gc
+use std/gc
 
 # Test 1: Basic allocation
-F test_basic_alloc() -> i64 {
+fn test_basic_alloc() -> i64 {
     puts("Test 1: Basic allocation...")
 
     # Initialize GC
@@ -18,15 +18,15 @@ F test_basic_alloc() -> i64 {
     # Check allocation
     LW ptr1 == 0 {
         puts("  FAIL: ptr1 allocation failed")
-        R 1
+        return 1
     }
     LW ptr2 == 0 {
         puts("  FAIL: ptr2 allocation failed")
-        R 1
+        return 1
     }
     LW ptr3 == 0 {
         puts("  FAIL: ptr3 allocation failed")
-        R 1
+        return 1
     }
 
     puts("  PASS: All allocations succeeded")
@@ -34,7 +34,7 @@ F test_basic_alloc() -> i64 {
 }
 
 # Test 2: GC statistics
-F test_gc_stats() -> i64 {
+fn test_gc_stats() -> i64 {
     puts("Test 2: GC statistics...")
 
     gc_init()
@@ -54,11 +54,11 @@ F test_gc_stats() -> i64 {
 
     LW bytes == 0 {
         puts("  FAIL: No bytes allocated")
-        R 1
+        return 1
     }
     LW objects == 0 {
         puts("  FAIL: No objects tracked")
-        R 1
+        return 1
     }
 
     puts("  PASS: GC tracking objects")
@@ -66,7 +66,7 @@ F test_gc_stats() -> i64 {
 }
 
 # Test 3: Manual GC collection
-F test_manual_collect() -> i64 {
+fn test_manual_collect() -> i64 {
     puts("Test 3: Manual garbage collection...")
 
     gc_init()
@@ -93,7 +93,7 @@ F test_manual_collect() -> i64 {
 
     LW after_collections <= before_collections {
         puts("  FAIL: GC collection did not increment")
-        R 1
+        return 1
     }
 
     puts("  PASS: GC collection executed")
@@ -101,7 +101,7 @@ F test_manual_collect() -> i64 {
 }
 
 # Test 4: Root registration
-F test_gc_roots() -> i64 {
+fn test_gc_roots() -> i64 {
     puts("Test 4: GC root registration...")
 
     gc_init()
@@ -123,7 +123,7 @@ F test_gc_roots() -> i64 {
 }
 
 # Test 5: GC threshold
-F test_gc_threshold() -> i64 {
+fn test_gc_threshold() -> i64 {
     puts("Test 5: GC threshold...")
 
     gc_init()
@@ -155,7 +155,7 @@ F test_gc_threshold() -> i64 {
 }
 
 # Test 6: Large allocation
-F test_large_alloc() -> i64 {
+fn test_large_alloc() -> i64 {
     puts("Test 6: Large allocation...")
 
     gc_init()
@@ -165,7 +165,7 @@ F test_large_alloc() -> i64 {
 
     LW ptr == 0 {
         puts("  FAIL: Large allocation failed")
-        R 1
+        return 1
     }
 
     bytes := gc_bytes_allocated()
@@ -173,7 +173,7 @@ F test_large_alloc() -> i64 {
 
     LW bytes < 1048576 {
         puts("  FAIL: Allocation size mismatch")
-        R 1
+        return 1
     }
 
     puts("  PASS: Large allocation succeeded")
@@ -181,7 +181,7 @@ F test_large_alloc() -> i64 {
 }
 
 # Test 7: Memory stress test
-F test_memory_stress() -> i64 {
+fn test_memory_stress() -> i64 {
     puts("Test 7: Memory stress test...")
 
     gc_init()
@@ -193,7 +193,7 @@ F test_memory_stress() -> i64 {
         ptr := gc_alloc(256, 0)
         LW ptr == 0 {
             puts("  FAIL: Allocation failed during stress test")
-            R 1
+            return 1
         }
         i = i + 1
     }
@@ -210,31 +210,31 @@ F test_memory_stress() -> i64 {
 }
 
 # Main test runner
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Vais GC Test Suite ===\n")
 
     result := mut 0
 
     result = test_basic_alloc()
-    LW result != 0 { R result }
+    LW result != 0 { return result }
 
     result = test_gc_stats()
-    LW result != 0 { R result }
+    LW result != 0 { return result }
 
     result = test_manual_collect()
-    LW result != 0 { R result }
+    LW result != 0 { return result }
 
     result = test_gc_roots()
-    LW result != 0 { R result }
+    LW result != 0 { return result }
 
     result = test_gc_threshold()
-    LW result != 0 { R result }
+    LW result != 0 { return result }
 
     result = test_large_alloc()
-    LW result != 0 { R result }
+    LW result != 0 { return result }
 
     result = test_memory_stress()
-    LW result != 0 { R result }
+    LW result != 0 { return result }
 
     puts("\n=== All Tests Passed ===")
     gc_print_stats()

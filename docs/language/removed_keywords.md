@@ -72,6 +72,68 @@ result := (spawn slow_compute(10)).await
 result := slow_compute(10).await
 ```
 
+## Single-char declaration / control / modifier forms (Step 19 P4)
+
+**Removed in**: commit `2b485860` — `phase2-step19-p4: lexer single-char retire LANDED + 4 test file 정정` (loop 25, 2026-05-08).
+
+**Was**: `F` `S` `E` `EN` `EL` `M` `R` `T` `U` `P` `W` `X` (12 forms) all lexed to keyword tokens (Function / Struct / Enum / EnumKeyword / Else / Match / Return / TypeKeyword / Use / Pub / Trait / Impl).
+
+```vais
+F add(a: i64, b: i64) -> i64 { R a + b }
+S Point { x: f64, y: f64 }
+E Color { Red, Green }
+EN Result<T, E> { Ok(T), Err(E) }     // unambiguous form
+W Show { F show(&self) -> str }
+X Show: Color { F show(&self) -> str { "color" } }
+M x { 1 => "one", _ => "?" }
+T MyId = i64
+U std::io
+P F public_fn() -> i64 { 42 }
+```
+
+**Rationale**: Two empirical findings invalidated the original "AI token efficiency" justification for single-char keywords:
+
+1. **LESSONS L-009 (codemod readability trap)**: a token-level `single → multi` codemod could not avoid clobbering generic-param positions. `EN Result<T, E>` re-rendered as `enum Result<type, enum>` because `T` and `E` lex as keywords in type position. The codemod was byte-correct under round-trip, but the intermediate output regressed readability — the very property single-char keywords were supposed to deliver.
+2. **LESSONS L-010 (token-efficiency hypothesis empirically false)**: measured against `cl100k_base` (Anthropic / OpenAI BPE family), a 27-line factorial / Point / Result fixture lexed to **156 tokens single-form vs 156 tokens multi-form** — zero token difference. The 7.7% byte saving translated to ~0.1% of a 1M-token context window. Single-char saved disk bytes, not LLM tokens.
+
+The justification therefore shrank to qualitative aesthetics, while the cost (codemod traps, dual-syntax infrastructure, OOD against Rust/Swift/Carbon training corpora) was structural. User decision (2026-05-06) retired all 12 forms.
+
+Design doc: `docs/design/single-char-keyword-retirement.md`.
+6-phase migration record (P1 deprecation warning → P2 generic param rename [aborted, L-011] → P3 codemod migration → P4 lexer atomic [this commit] → P5 doc cleanup → P6 infra retire) is in `WORKLOG.md` loops 16~25.
+
+**Migration**: token-by-token canonical replacement.
+
+| Retired | Canonical |
+|---------|-----------|
+| `F`     | `fn`      |
+| `S`     | `struct`  |
+| `E`     | `enum` (declaration) or `else` (after `}`) — context determines which |
+| `EN`    | `enum`    |
+| `EL`    | `else`    |
+| `M`     | `match`   |
+| `R`     | `return`  |
+| `T`     | `type`    |
+| `U`     | `use`     |
+| `P`     | `pub`     |
+| `W`     | `trait`   |
+| `X`     | `impl`    |
+
+Non-retired single-char keywords (`I` `L` `A` `B` `C` `D` `O` `N` `G` `Y`) remain. They were not retired because no multi-char alias was canonicalized for them and they are less prone to the L-009 generic-param trap (`I` vs identifier `i` differs only in case, and the parser does not encounter `I` in type position the way it encounters `T` / `E`).
+
+```vais
+// Before (Step 19 retired, 2026-05-08)
+F add(a: i64, b: i64) -> i64 { R a + b }
+EN Result<T, E> { Ok(T), Err(E) }
+M x { 1 => "one", _ => "?" }
+
+// After (canonical)
+fn add(a: i64, b: i64) -> i64 { return a + b }
+enum Result<T, E> { Ok(T), Err(E) }
+match x { 1 => "one", _ => "?" }
+```
+
+For mechanical rewrites use `vaisc fmt --to=multi` (the dual-syntax codemod from Step 15 stage 3, retained even after I-4 retirement because it is the migration tool, not a runtime feature). Apply only at declaration-leading positions: `(^|\n|\\n|{|;)` followed by retired-form + space. Do NOT apply inside type positions (`<T>`, `(x: T)`, `-> T`) — see LESSONS L-009.
+
 ## How a future removal should be documented
 
 If another keyword ever needs to come out:

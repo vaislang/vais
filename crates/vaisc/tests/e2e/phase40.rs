@@ -16,18 +16,18 @@ use super::helpers::*;
 fn e2e_phase40_trait_bounds_generic_call_satisfied() {
     // Generic function with Clone bound, i64 satisfies it (builtin)
     let source = r#"
-W Cloneable {
-    F clone_val(&self) -> i64
+trait Cloneable {
+    fn clone_val(&self) -> i64
 }
 
 # i64 built-in impl (simulated by allowing generic call)
-F identity<T>(x: T) -> T {
+fn identity<T>(x: T) -> type {
     x
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     x := identity(42)
-    R x
+    return x
 }
 "#;
     assert_exit_code(source, 42);
@@ -37,36 +37,36 @@ F main() -> i64 {
 fn e2e_phase40_trait_bounds_multiple_bounds_satisfied() {
     // Multiple trait bounds satisfied by struct with both implementations
     let source = r#"
-W Numeric {
-    F value(&self) -> i64
+trait Numeric {
+    fn value(&self) -> i64
 }
 
-W Printable {
-    F to_str(&self) -> i64
+trait Printable {
+    fn to_str(&self) -> i64
 }
 
-S Point { x: i64, y: i64 }
+struct Point { x: i64, y: i64 }
 
-X Point: Numeric {
-    F value(&self) -> i64 {
+impl Point: Numeric {
+    fn value(&self) -> i64 {
         self.x + self.y
     }
 }
 
-X Point: Printable {
-    F to_str(&self) -> i64 {
+impl Point: Printable {
+    fn to_str(&self) -> i64 {
         self.x * 10 + self.y
     }
 }
 
 # Generic function requiring both traits (parse-level test)
-F process<T>(val: &T) -> i64 {
+fn process<T>(val: &T) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Point { x: 3, y: 4 }
-    R p.value()
+    return p.value()
 }
 "#;
     assert_exit_code(source, 7);
@@ -76,28 +76,28 @@ F main() -> i64 {
 fn e2e_phase40_where_clause_bounds_satisfied() {
     // Where clause trait bounds satisfied (compile-only, trait dispatch not fully implemented)
     let source = r#"
-W Summable {
-    F sum(&self) -> i64
+trait Summable {
+    fn sum(&self) -> i64
 }
 
-S Pair { a: i64, b: i64 }
+struct Pair { a: i64, b: i64 }
 
-X Pair: Summable {
-    F sum(&self) -> i64 {
+impl Pair: Summable {
+    fn sum(&self) -> i64 {
         self.a + self.b
     }
 }
 
-F compute<T>(val: &T) -> i64
+fn compute<T>(val: &T) -> i64
 where T: Summable
 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Pair { a: 10, b: 32 }
     result := compute(&p)
-    R 42
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -107,27 +107,27 @@ F main() -> i64 {
 fn e2e_phase40_struct_with_trait_bounds() {
     // Struct implements trait, used in generic bound function (compile-only)
     let source = r#"
-W Summable {
-    F sum(&self) -> i64
+trait Summable {
+    fn sum(&self) -> i64
 }
 
-S Point { x: i64, y: i64 }
+struct Point { x: i64, y: i64 }
 
-X Point: Summable {
-    F sum(&self) -> i64 {
+impl Point: Summable {
+    fn sum(&self) -> i64 {
         self.x + self.y
     }
 }
 
-F add_all<T: Summable>(a: &T, b: &T) -> i64 {
+fn add_all<T: Summable>(a: &T, b: &T) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p1 := Point { x: 5, y: 7 }
     p2 := Point { x: 10, y: 20 }
     result := add_all(&p1, &p2)
-    R 42
+    return 42
 }
 "#;
     assert_exit_code(source, 42);
@@ -137,18 +137,18 @@ F main() -> i64 {
 fn e2e_phase40_generic_substitution_nested() {
     // Nested generic calls with type substitution
     let source = r#"
-F identity<T>(x: T) -> T {
+fn identity<T>(x: T) -> type {
     x
 }
 
-F double_identity<U>(y: U) -> U {
+fn double_identity<U>(y: U) -> use {
     identity(y)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := identity(10)
     b := double_identity(32)
-    R a + b
+    return a + b
 }
 "#;
     assert_exit_code(source, 42);
@@ -161,35 +161,35 @@ F main() -> i64 {
 fn e2e_phase40_trait_alias_with_bounds() {
     // Trait alias used in bounds (from Phase 37 but testing bounds verification)
     let source = r#"
-W Numeric {
-    F value(&self) -> i64
+trait Numeric {
+    fn value(&self) -> i64
 }
 
-W Copyable {
-    F copy(&self) -> i64
+trait Copyable {
+    fn copy(&self) -> i64
 }
 
-T NumericCopy = Numeric + Copyable
+type NumericCopy = Numeric + Copyable
 
-S Number { n: i64 }
+struct Number { n: i64 }
 
-X Number: Numeric {
-    F value(&self) -> i64 {
+impl Number: Numeric {
+    fn value(&self) -> i64 {
         self.n
     }
 }
 
-X Number: Copyable {
-    F copy(&self) -> i64 {
+impl Number: Copyable {
+    fn copy(&self) -> i64 {
         self.n
     }
 }
 
-F use_numeric<T: NumericCopy>(x: &T) -> i64 {
+fn use_numeric<T: NumericCopy>(x: &T) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     42
 }
 "#;
@@ -200,14 +200,14 @@ F main() -> i64 {
 fn e2e_phase40_generic_function_no_bounds() {
     // Generic function without bounds works normally
     let source = r#"
-F wrap<T>(x: T) -> T {
+fn wrap<T>(x: T) -> type {
     x
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := wrap(21)
     b := wrap(21)
-    R a + b
+    return a + b
 }
 "#;
     assert_exit_code(source, 42);
@@ -217,37 +217,37 @@ F main() -> i64 {
 fn e2e_phase40_multiple_generic_params_with_bounds() {
     // Multiple generic parameters with different bounds (compile-only)
     let source = r#"
-W TraitA {
-    F method_a(&self) -> i64
+trait TraitA {
+    fn method_a(&self) -> i64
 }
 
-W TraitB {
-    F method_b(&self) -> i64
+trait TraitB {
+    fn method_b(&self) -> i64
 }
 
-S TypeA { val: i64 }
-S TypeB { val: i64 }
+struct TypeA { val: i64 }
+struct TypeB { val: i64 }
 
-X TypeA: TraitA {
-    F method_a(&self) -> i64 {
+impl TypeA: TraitA {
+    fn method_a(&self) -> i64 {
         self.val
     }
 }
 
-X TypeB: TraitB {
-    F method_b(&self) -> i64 {
+impl TypeB: TraitB {
+    fn method_b(&self) -> i64 {
         self.val * 2
     }
 }
 
-F combine<T: TraitA, U: TraitB>(a: &T, b: &U) -> i64 {
+fn combine<T: TraitA, U: TraitB>(a: &T, b: &U) -> i64 {
     42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     ta := TypeA { val: 10 }
     tb := TypeB { val: 16 }
-    R combine(&ta, &tb)
+    return combine(&ta, &tb)
 }
 "#;
     assert_exit_code(source, 42);
@@ -257,17 +257,17 @@ F main() -> i64 {
 fn e2e_phase40_generic_struct_instantiation() {
     // Generic struct with type substitution (Vec-like)
     let source = r#"
-S Container<T> {
+struct Container<T> {
     value: T
 }
 
-F make_container<T>(val: T) -> Container<T> {
+fn make_container<T>(val: T) -> Container<T> {
     Container { value: val }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     c := make_container(42)
-    R c.value
+    return c.value
 }
 "#;
     assert_exit_code(source, 42);
@@ -279,23 +279,23 @@ F main() -> i64 {
 fn e2e_phase40_trait_bounds_violation_error() {
     // Struct doesn't implement required trait
     let source = r#"
-W Hashable {
-    F hash(&self) -> i64
+trait Hashable {
+    fn hash(&self) -> i64
 }
 
-S Unhashable {
+struct Unhashable {
     x: i64
 }
 
 # Unhashable does NOT implement Hashable
 
-F needs_hash<T: Hashable>(x: &T) -> i64 {
+fn needs_hash<T: Hashable>(x: &T) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     s := Unhashable { x: 1 }
-    R needs_hash(&s)
+    return needs_hash(&s)
 }
 "#;
     assert_compile_error(source);
@@ -305,25 +305,25 @@ F main() -> i64 {
 fn e2e_phase40_where_clause_bounds_violation_error() {
     // Where clause bound violated
     let source = r#"
-W Printable {
-    F print(&self) -> i64
+trait Printable {
+    fn print(&self) -> i64
 }
 
-S Unprintable {
+struct Unprintable {
     val: i64
 }
 
 # Unprintable does NOT implement Printable
 
-F show<T>(x: &T) -> i64
+fn show<T>(x: &T) -> i64
 where T: Printable
 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     u := Unprintable { val: 5 }
-    R show(&u)
+    return show(&u)
 }
 "#;
     assert_compile_error(source);
@@ -333,32 +333,32 @@ F main() -> i64 {
 fn e2e_phase40_multiple_bounds_partial_violation_error() {
     // Satisfies one bound but not the other
     let source = r#"
-W TraitA {
-    F method_a(&self) -> i64
+trait TraitA {
+    fn method_a(&self) -> i64
 }
 
-W TraitB {
-    F method_b(&self) -> i64
+trait TraitB {
+    fn method_b(&self) -> i64
 }
 
-S Partial {
+struct Partial {
     n: i64
 }
 
 # Only implements TraitA, not TraitB
-X Partial: TraitA {
-    F method_a(&self) -> i64 {
+impl Partial: TraitA {
+    fn method_a(&self) -> i64 {
         self.n
     }
 }
 
-F needs_both<T: TraitA + TraitB>(x: &T) -> i64 {
+fn needs_both<T: TraitA + TraitB>(x: &T) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     p := Partial { n: 1 }
-    R needs_both(&p)
+    return needs_both(&p)
 }
 "#;
     assert_compile_error(source);
@@ -368,23 +368,23 @@ F main() -> i64 {
 fn e2e_phase40_recursive_generic_bounds_error() {
     // Generic instantiation that recursively violates bounds
     let source = r#"
-W Constraint {
-    F check(&self) -> i64
+trait Constraint {
+    fn check(&self) -> i64
 }
 
-S Outer<T> {
+struct Outer<T> {
     inner: T
 }
 
 # Outer does NOT implement Constraint for any T
 
-F validate<T: Constraint>(x: &T) -> i64 {
+fn validate<T: Constraint>(x: &T) -> i64 {
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     o := Outer { inner: 42 }
-    R validate(&o)
+    return validate(&o)
 }
 "#;
     assert_compile_error(source);
@@ -396,18 +396,18 @@ F main() -> i64 {
 fn e2e_phase40_builtin_type_with_bounds() {
     // Verify that builtin types (i64, bool) can be used in generic contexts
     let source = r#"
-F passthrough<T>(x: T) -> T {
+fn passthrough<T>(x: T) -> type {
     x
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     a := passthrough(21)
     b := passthrough(21)
     c := passthrough(true)
     I c {
-        R a + b
-    } E {
-        R 0
+        return a + b
+    } else {
+        return 0
     }
 }
 "#;
@@ -418,25 +418,25 @@ F main() -> i64 {
 fn e2e_phase40_trait_method_call_with_bounds() {
     // Trait method through generic bound (compile-only, trait dispatch stub)
     let source = r#"
-W Summable {
-    F sum(&self) -> i64
+trait Summable {
+    fn sum(&self) -> i64
 }
 
-S Vec2 { x: i64, y: i64 }
+struct Vec2 { x: i64, y: i64 }
 
-X Vec2: Summable {
-    F sum(&self) -> i64 {
+impl Vec2: Summable {
+    fn sum(&self) -> i64 {
         self.x + self.y
     }
 }
 
-F get_sum<T: Summable>(val: &T) -> i64 {
+fn get_sum<T: Summable>(val: &T) -> i64 {
     42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec2 { x: 30, y: 12 }
-    R get_sum(&v)
+    return get_sum(&v)
 }
 "#;
     assert_exit_code(source, 42);
@@ -446,29 +446,29 @@ F main() -> i64 {
 fn e2e_phase40_nested_where_clause() {
     // Multiple where clause constraints (compile-only)
     let source = r#"
-W TraitA {
-    F method_a(&self) -> i64
+trait TraitA {
+    fn method_a(&self) -> i64
 }
 
-W TraitB {
-    F method_b(&self) -> i64
+trait TraitB {
+    fn method_b(&self) -> i64
 }
 
-S MyType { val: i64 }
+struct MyType { val: i64 }
 
-X MyType: TraitA {
-    F method_a(&self) -> i64 {
+impl MyType: TraitA {
+    fn method_a(&self) -> i64 {
         self.val
     }
 }
 
-X MyType: TraitB {
-    F method_b(&self) -> i64 {
+impl MyType: TraitB {
+    fn method_b(&self) -> i64 {
         self.val * 2
     }
 }
 
-F complex<T, U>(x: &T, y: &U) -> i64
+fn complex<T, U>(x: &T, y: &U) -> i64
 where
     T: TraitA,
     U: TraitB
@@ -476,10 +476,10 @@ where
     42
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     t1 := MyType { val: 10 }
     t2 := MyType { val: 16 }
-    R complex(&t1, &t2)
+    return complex(&t1, &t2)
 }
 "#;
     assert_exit_code(source, 42);
@@ -489,17 +489,17 @@ F main() -> i64 {
 fn e2e_phase40_generic_substitution_in_struct_field() {
     // Generic substitution with struct fields
     let source = r#"
-S Wrapper<T> {
+struct Wrapper<T> {
     data: T
 }
 
-F unwrap<T>(w: Wrapper<T>) -> T {
+fn unwrap<T>(w: Wrapper<T>) -> type {
     w.data
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     w := Wrapper { data: 42 }
-    R unwrap(w)
+    return unwrap(w)
 }
 "#;
     assert_exit_code(source, 42);

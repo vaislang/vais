@@ -1,0 +1,32 @@
+# CHECKS: enum with 2 unit-only variants and dispatch (REGRESSION C18).
+# `flip(t) -> Toggle` returns enum constructor from match arms — was the
+# original C18 dominance bug. Fix in inkwell/gen_match.rs treats unit-variant
+# idents as patterns (not bindings) in pattern bindings, matching TC behavior.
+enum Toggle {
+    On,
+    Off
+}
+
+fn flip(t: Toggle) -> Toggle {
+    match t {
+        On => Off,
+        Off => On
+    }
+}
+
+fn to_int(t: Toggle) -> i64 {
+    match t {
+        On => 1,
+        Off => 0
+    }
+}
+
+fn main() -> i64 {
+    I to_int(On) != 1 { return 1 }
+    I to_int(Off) != 0 { return 2 }
+
+    I to_int(flip(On)) != 0 { return 3 }
+    I to_int(flip(Off)) != 1 { return 4 }
+    I to_int(flip(flip(On))) != 1 { return 5 }
+    return 0
+}

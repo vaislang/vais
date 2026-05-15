@@ -1,0 +1,39 @@
+[entry]
+id = "A2-04"
+classification = "A2 certified subset (inline-only)"
+surface = "Closures: closure literal passed directly to a closure-typed parameter without escape"
+predicate = "see compiler/docs/certification/A2_SUBSETS.md §A2-04 — inline-only closure use"
+master_plan_version = 17
+landed = "2026-05-04"
+
+[positive]
+probe = "probe_pos.vais"
+expected_exit = 42
+description = "F apply(f: |i64| -> i64, x: i64) { f(x) }; main calls apply(|n| n + 1, 41) → 42."
+
+[negative]
+probe = "probe_neg.vais"
+expected_behavior = "exit ≠ 42 (currently silent corruption; see F-18 finding)"
+description = "make_adder(5) returns a closure capturing x=5; main calls add5(37) expecting 42 but getting wrong runtime value (observed 245). Type checker accepts; codegen produces a binary that runs to a wrong answer."
+
+[f_18_finding]
+note = """
+Escape-closure silent corruption discovered during A2-04 promotion
+empirical work (2026-05-04). The closure-returning function passes
+the type checker AND builds AND runs, but the captured environment
+is not properly preserved across the call boundary, producing a
+wrong runtime result.
+
+This is a NEW silent surface (assertion_kind = "exit_not" with
+forbidden_set = [42]). Master-plan v17+ candidate for A4
+inventory expansion (e.g. A4-12 Escape-closure capture loss).
+"""
+
+[assertion_kind]
+kind_positive = "exact_exit"
+expected_exit_positive = 42
+kind_negative = "exit_not"
+forbidden_set_negative = [42]
+
+[migration]
+post_tighten = "When the closure escape-analysis check tightens, migrate negative probe to check_fails."

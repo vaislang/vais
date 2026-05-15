@@ -1,0 +1,30 @@
+# CHECKS: Caesar cipher shift on bytes (count shifts that produce different chars).
+fn count_changed(p: i64, n: i64, shift: i64) -> i64 {
+    changed: i64 := mut 0
+    LF i: 0..n {
+        c: i64 := load_byte(p + i)
+        I c >= 97 && c <= 122 {
+            shifted: i64 := ((c - 97 + shift) % 26) + 97
+            I shifted != c { changed = changed + 1 }
+        }
+    }
+    changed
+}
+
+fn main() -> i64 {
+    p: i64 := str_to_ptr("hello")
+    n: i64 := strlen(p)
+
+    # shift 0 → no change
+    I count_changed(p, n, 0) != 0 { return 1 }
+
+    # shift 1 → all 5 letters shift
+    I count_changed(p, n, 1) != 5 { return 2 }
+
+    # shift 26 → wraps back, no change
+    I count_changed(p, n, 26) != 0 { return 3 }
+
+    # shift 13 → all change
+    I count_changed(p, n, 13) != 5 { return 4 }
+    return 0
+}

@@ -1,1 +1,1 @@
-Type error: Mismatch { expected: "i64", found: "str", span: None }
+Type error: Mismatch { expected: "i64", found: "str", span: Some(Span { file_id: 0, start: 37, end: 51 }) }

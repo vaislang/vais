@@ -1,0 +1,277 @@
+# LIVING_SPEC/06_examples/example_calculator.vais
+# Key concept: recursive-descent expression evaluator with tokenizer.
+# Target concepts: EN/M/S/X/L/LW/F/R — enum tokens, struct state, match dispatch.
+
+# ─── Token type enum ───────────────────────────────────────────────────────────
+
+enum TokenKind {
+    TInt,    # integer literal
+    TPlus,
+    TMinus,
+    TStar,
+    TSlash,
+    TLParen,
+    TRParen,
+    TEof
+}
+
+# A single token: kind + integer value (only meaningful for TInt)
+struct Token {
+    kind: TokenKind,
+    value: i64
+}
+
+# ─── Tokenizer ─────────────────────────────────────────────────────────────────
+# Tokenizes a Vec<i64> of ASCII codepoints. pos tracks the read position.
+
+struct Tokenizer {
+    chars: Vec<i64>,
+    pos:   i64
+}
+
+impl Tokenizer {
+    fn new(chars: Vec<i64>) -> Tokenizer {
+        Tokenizer { chars: chars, pos: 0 }
+    }
+
+    # Peek at current char (returns 0 at end-of-input)
+    fn peek(&self) -> i64 {
+        match self.chars.get(self.pos) {
+            Some(c) => *c,
+            None    => 0
+        }
+    }
+
+    # Consume current char and advance position
+    fn advance(&mut self) -> i64 {
+        c := self.peek()
+        self.pos = self.pos + 1
+        c
+    }
+
+    # Skip ASCII space characters (codepoint 32)
+    fn skip_ws(&mut self) -> i64 {
+        L {
+            I self.peek() != 32 { B }
+            self.advance()
+        }
+        0
+    }
+
+    # Lex and return the next token
+    fn next_token(&mut self) -> Token {
+        self.skip_ws()
+        c := self.peek()
+        # End of input
+        I c == 0 {
+            return Token { kind: TEof, value: 0 }
+        }
+        # Digit range 48..57  ('0'..'9')
+        I c >= 48 & c <= 57 {
+            num := mut 0
+            L {
+                d := self.peek()
+                I d < 48 | d > 57 { B }
+                num = num * 10 + (self.advance() - 48)
+            }
+            return Token { kind: TInt, value: num }
+        }
+        # Single-char operators
+        self.advance()
+        match c {
+            43 => Token { kind: TPlus,   value: 0 },   # +
+            45 => Token { kind: TMinus,  value: 0 },   # -
+            42 => Token { kind: TStar,   value: 0 },   # *
+            47 => Token { kind: TSlash,  value: 0 },   # /
+            40 => Token { kind: TLParen, value: 0 },   # (
+            41 => Token { kind: TRParen, value: 0 },   # )
+            _  => Token { kind: TEof,    value: 0 }
+        }
+    }
+}
+
+# ─── Parser / Evaluator ────────────────────────────────────────────────────────
+# Holds a flat Vec<Token> and a position cursor.
+# Grammar:
+#   expr   = term   ( ('+' | '-') term   )*
+#   term   = factor ( ('*' | '/') factor )*
+#   factor = INT | '(' expr ')'
+
+struct Parser {
+    tokens: Vec<Token>,
+    pos:    i64
+}
+
+impl Parser {
+    fn new(tokens: Vec<Token>) -> Parser {
+        Parser { tokens: tokens, pos: 0 }
+    }
+
+    # Return current token without consuming it
+    fn current(&self) -> Token {
+        match self.tokens.get(self.pos) {
+            Some(t) => *t,
+            None    => Token { kind: TEof, value: 0 }
+        }
+    }
+
+    # Consume and return the current token
+    fn eat(&mut self) -> Token {
+        t := self.current()
+        self.pos = self.pos + 1
+        t
+    }
+
+    # factor = INT | '(' expr ')'
+    fn factor(&mut self) -> i64 {
+        t := self.eat()
+        match t.kind {
+            TInt    => t.value,
+            TLParen => {
+                v := self.expr()
+                self.eat()   # consume closing ')'
+                v
+            },
+            _ => 0
+        }
+    }
+
+    # term = factor ( ('*' | '/') factor )*
+    fn term(&mut self) -> i64 {
+        left := mut self.factor()
+        L {
+            k := self.current().kind
+            match k {
+                TStar  => {
+                    self.eat()
+                    left = left * self.factor()
+                },
+                TSlash => {
+                    self.eat()
+                    r := self.factor()
+                    I r == 0 {
+                        puts("Error: divide by zero")
+                    } else {
+                        left = left / r
+                    }
+                },
+                _ => { B }
+            }
+        }
+        left
+    }
+
+    # expr = term ( ('+' | '-') term )*
+    fn expr(&mut self) -> i64 {
+        left := mut self.term()
+        L {
+            k := self.current().kind
+            match k {
+                TPlus  => {
+                    self.eat()
+                    left = left + self.term()
+                },
+                TMinus => {
+                    self.eat()
+                    left = left - self.term()
+                },
+                _ => { B }
+            }
+        }
+        left
+    }
+}
+
+# ─── Input helpers ─────────────────────────────────────────────────────────────
+# Build Vec<i64> of ASCII codepoints for each demo expression.
+
+# "2 + 3 * 4"  (expected result: 14)
+fn chars_expr1() -> Vec<i64> {
+    v: Vec<i64> = Vec::new()
+    v.push(50)   # '2'
+    v.push(32)   # ' '
+    v.push(43)   # '+'
+    v.push(32)   # ' '
+    v.push(51)   # '3'
+    v.push(32)   # ' '
+    v.push(42)   # '*'
+    v.push(32)   # ' '
+    v.push(52)   # '4'
+    v
+}
+
+# "10 - (2 + 3)"  (expected result: 5)
+fn chars_expr2() -> Vec<i64> {
+    v: Vec<i64> = Vec::new()
+    v.push(49)   # '1'
+    v.push(48)   # '0'
+    v.push(32)   # ' '
+    v.push(45)   # '-'
+    v.push(32)   # ' '
+    v.push(40)   # '('
+    v.push(50)   # '2'
+    v.push(32)   # ' '
+    v.push(43)   # '+'
+    v.push(32)   # ' '
+    v.push(51)   # '3'
+    v.push(41)   # ')'
+    v
+}
+
+# "(4 + 6) / 2"  (expected result: 5)
+fn chars_expr3() -> Vec<i64> {
+    v: Vec<i64> = Vec::new()
+    v.push(40)   # '('
+    v.push(52)   # '4'
+    v.push(32)   # ' '
+    v.push(43)   # '+'
+    v.push(32)   # ' '
+    v.push(54)   # '6'
+    v.push(41)   # ')'
+    v.push(32)   # ' '
+    v.push(47)   # '/'
+    v.push(32)   # ' '
+    v.push(50)   # '2'
+    v
+}
+
+# Tokenize a Vec<i64> char buffer into a Vec<Token>
+fn tokenize(chars: Vec<i64>) -> Vec<Token> {
+    tz := mut Tokenizer::new(chars)
+    tokens: Vec<Token> = Vec::new()
+    L {
+        tok := tz.next_token()
+        match tok.kind {
+            TEof => { tokens.push(tok); B },
+            _    => tokens.push(tok)
+        }
+    }
+    tokens
+}
+
+# Evaluate an expression given as a char Vec
+fn calc(chars: Vec<i64>) -> i64 {
+    tokens := tokenize(chars)
+    p := mut Parser::new(tokens)
+    p.expr()
+}
+
+# ─── main ──────────────────────────────────────────────────────────────────────
+
+fn main() -> i64 {
+    puts("=== Vais Calculator ===")
+
+    r1 := calc(chars_expr1())
+    puts("2 + 3 * 4       = {r1}")   # 14
+
+    r2 := calc(chars_expr2())
+    puts("10 - (2 + 3)    = {r2}")   # 5
+
+    r3 := calc(chars_expr3())
+    puts("(4 + 6) / 2     = {r3}")   # 5
+
+    puts("Expected: 14, 5, 5")
+
+    ok := r1 == 14 & r2 == 5 & r3 == 5
+    I ok { puts("All correct!"); 0 } else { puts("FAIL"); 1 }
+}

@@ -8,6 +8,26 @@
 # - Request/Response builder pattern
 # - Query string parsing
 
+# Local Headers / Request struct stubs mirroring std/http.vais layout.
+# A full `U std/http` import would be ideal, but triggers an unrelated
+# bare-`None` codegen bug in Headers::get (tracked separately). These
+# local stubs keep layout compatible so __parse_request (extern) can
+# return Request and RequestCtx::from_raw can read the fields.
+struct Headers {
+    items: i64,
+    count: i64,
+    capacity: i64
+}
+
+struct Request {
+    method: i64,
+    path: str,
+    version: str,
+    headers: Headers,
+    body: i64,
+    body_len: i64
+}
+
 # ============================================
 # Constants
 # ============================================
@@ -46,19 +66,19 @@ C METHOD_OPTIONS: i64 = 7
 # Path Parameters
 # ============================================
 
-S PathParam {
+struct PathParam {
     name: str,
     value: str
 }
 
-S PathParams {
+struct PathParams {
     items: i64,      # Pointer to array of PathParam
     count: i64,
     capacity: i64
 }
 
-X PathParams {
-    F new() -> PathParams {
+impl PathParams {
+    fn new() -> PathParams {
         capacity := MAX_PARAMS
         items := __malloc(capacity * 16)  # 16 bytes per PathParam (2 pointers)
         PathParams {
@@ -69,9 +89,9 @@ X PathParams {
     }
 
     # Add a path parameter
-    F add(&self, name: str, value: str) -> i64 {
+    fn add(&self, name: str, value: str) -> i64 {
         I self.count >= self.capacity {
-            R -1
+            return -1
         }
         offset := self.count * 16
         __store_ptr(self.items + offset, name as i64)
@@ -81,14 +101,14 @@ X PathParams {
     }
 
     # Get parameter value by name
-    F get(&self, name: str) -> str? {
-        i := 0
+    fn get(&self, name: str) -> str? {
+        i := mut 0
         LW i < self.count {
             offset := i * 16
             param_name := __load_ptr(self.items + offset) as str
             I __str_eq(param_name, name) == 1 {
                 value := __load_ptr(self.items + offset + 8) as str
-                R Some(value)
+                return Some(value)
             }
             i = i + 1
         }
@@ -96,18 +116,18 @@ X PathParams {
     }
 
     # Get parameter count
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.count
     }
 
     # Clear all parameters
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         self.count = 0
         0
     }
 
     # Free memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.items != 0 {
             __free(self.items)
             self.items = 0
@@ -120,19 +140,19 @@ X PathParams {
 # Query String Parameters
 # ============================================
 
-S QueryParam {
+struct QueryParam {
     key: str,
     value: str
 }
 
-S QueryParams {
+struct QueryParams {
     items: i64,      # Pointer to array of QueryParam
     count: i64,
     capacity: i64
 }
 
-X QueryParams {
-    F new() -> QueryParams {
+impl QueryParams {
+    fn new() -> QueryParams {
         capacity := MAX_QUERY_PARAMS
         items := __malloc(capacity * 16)
         QueryParams {
@@ -143,19 +163,19 @@ X QueryParams {
     }
 
     # Parse query string (e.g., "key1=val1&key2=val2")
-    F parse(query: str) -> QueryParams {
+    fn parse(query: str) -> QueryParams {
         params := QueryParams::new()
         I query as i64 == 0 {
-            R params
+            return params
         }
 
         len := __strlen(query)
         I len == 0 {
-            R params
+            return params
         }
 
         # Parse key=value pairs separated by &
-        pos := 0
+        pos := mut 0
         LW pos < len {
             # Find key start
             key_start := pos
@@ -191,7 +211,7 @@ X QueryParams {
                     I pos < len {
                         pos = pos + 1  # skip '&'
                     }
-                } EL {
+                } else {
                     # Key without value
                     key := __substr(query, key_start, pos - key_start)
                     params.add(key, "")
@@ -203,9 +223,9 @@ X QueryParams {
     }
 
     # Add a query parameter
-    F add(&self, key: str, value: str) -> i64 {
+    fn add(&self, key: str, value: str) -> i64 {
         I self.count >= self.capacity {
-            R -1
+            return -1
         }
         offset := self.count * 16
         __store_ptr(self.items + offset, key as i64)
@@ -215,14 +235,14 @@ X QueryParams {
     }
 
     # Get parameter value by key
-    F get(&self, key: str) -> str? {
-        i := 0
+    fn get(&self, key: str) -> str? {
+        i := mut 0
         LW i < self.count {
             offset := i * 16
             param_key := __load_ptr(self.items + offset) as str
             I __str_eq(param_key, key) == 1 {
                 value := __load_ptr(self.items + offset + 8) as str
-                R Some(value)
+                return Some(value)
             }
             i = i + 1
         }
@@ -230,13 +250,13 @@ X QueryParams {
     }
 
     # Check if key exists
-    F has(&self, key: str) -> i64 {
-        i := 0
+    fn has(&self, key: str) -> i64 {
+        i := mut 0
         LW i < self.count {
             offset := i * 16
             param_key := __load_ptr(self.items + offset) as str
             I __str_eq(param_key, key) == 1 {
-                R 1
+                return 1
             }
             i = i + 1
         }
@@ -244,12 +264,12 @@ X QueryParams {
     }
 
     # Get count
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.count
     }
 
     # Free memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         I self.items != 0 {
             __free(self.items)
             self.items = 0
@@ -262,7 +282,7 @@ X QueryParams {
 # Enhanced Request Context
 # ============================================
 
-S RequestCtx {
+struct RequestCtx {
     method: i64,
     path: str,
     full_path: str,     # Original path including query string
@@ -276,18 +296,18 @@ S RequestCtx {
     query: QueryParams
 }
 
-X RequestCtx {
+impl RequestCtx {
     # Create from raw request data
-    F from_raw(method: i64, path: str, version: str,
+    fn from_raw(method: i64, path: str, version: str,
                header_items: i64, header_count: i64, header_capacity: i64,
                body: i64, body_len: i64) -> RequestCtx {
         # Split path and query string
-        clean_path := path
-        query_str := ""
+        clean_path := mut path
+        query_str := mut ""
 
         # Find '?' in path
         path_len := __strlen(path)
-        i := 0
+        i := mut 0
         LW i < path_len {
             ch := __load_byte_at(path as i64, i)
             I ch == 63 {  # '?'
@@ -314,14 +334,14 @@ X RequestCtx {
     }
 
     # Get a header value by name (case-insensitive)
-    F get_header(&self, name: str) -> str? {
-        i := 0
+    fn get_header(&self, name: str) -> str? {
+        i := mut 0
         LW i < self.header_count {
             offset := i * 16
             header_name := __load_ptr(self.headers + offset) as str
             I __str_eq_ignore_case(header_name, name) == 1 {
                 value := __load_ptr(self.headers + offset + 8) as str
-                R Some(value)
+                return Some(value)
             }
             i = i + 1
         }
@@ -329,8 +349,8 @@ X RequestCtx {
     }
 
     # Get method as string
-    F method_str(&self) -> str {
-        M self.method {
+    fn method_str(&self) -> str {
+        match self.method {
             1 => "GET",
             2 => "POST",
             3 => "PUT",
@@ -343,33 +363,33 @@ X RequestCtx {
     }
 
     # Get body as string
-    F body_text(&self) -> str {
+    fn body_text(&self) -> str {
         I self.body != 0 & self.body_len > 0 {
             self.body as str
-        } EL {
+        } else {
             ""
         }
     }
 
     # Get a path parameter
-    F param(&self, name: str) -> str? {
+    fn param(&self, name: str) -> str? {
         self.params.get(name)
     }
 
     # Get a query parameter
-    F query_param(&self, key: str) -> str? {
+    fn query_param(&self, key: str) -> str? {
         self.query.get(key)
     }
 
     # Get content type
-    F content_type(&self) -> str? {
+    fn content_type(&self) -> str? {
         self.get_header("Content-Type")
     }
 
     # Check if request is JSON
-    F is_json(&self) -> i64 {
+    fn is_json(&self) -> i64 {
         ct := self.content_type()
-        M ct {
+        match ct {
             Some(v) => __str_starts_with(v, "application/json"),
             None => 0
         }
@@ -380,7 +400,7 @@ X RequestCtx {
 # Response Builder
 # ============================================
 
-S ResponseBuilder {
+struct ResponseBuilder {
     status: i64,
     status_text: str,
     headers: i64,       # Pointer to header array
@@ -390,8 +410,8 @@ S ResponseBuilder {
     body_len: i64
 }
 
-X ResponseBuilder {
-    F new(status: i64) -> ResponseBuilder {
+impl ResponseBuilder {
+    fn new(status: i64) -> ResponseBuilder {
         capacity := 16
         headers := __malloc(capacity * 16)
         ResponseBuilder {
@@ -405,44 +425,44 @@ X ResponseBuilder {
         }
     }
 
-    F ok() -> ResponseBuilder {
+    fn ok() -> ResponseBuilder {
         ResponseBuilder::new(200)
     }
 
-    F created() -> ResponseBuilder {
+    fn created() -> ResponseBuilder {
         ResponseBuilder::new(201)
     }
 
-    F no_content() -> ResponseBuilder {
+    fn no_content() -> ResponseBuilder {
         ResponseBuilder::new(204)
     }
 
-    F bad_request() -> ResponseBuilder {
+    fn bad_request() -> ResponseBuilder {
         ResponseBuilder::new(400)
     }
 
-    F unauthorized() -> ResponseBuilder {
+    fn unauthorized() -> ResponseBuilder {
         ResponseBuilder::new(401)
     }
 
-    F forbidden() -> ResponseBuilder {
+    fn forbidden() -> ResponseBuilder {
         ResponseBuilder::new(403)
     }
 
-    F not_found() -> ResponseBuilder {
+    fn not_found() -> ResponseBuilder {
         ResponseBuilder::new(404)
     }
 
-    F method_not_allowed() -> ResponseBuilder {
+    fn method_not_allowed() -> ResponseBuilder {
         ResponseBuilder::new(405)
     }
 
-    F internal_error() -> ResponseBuilder {
+    fn internal_error() -> ResponseBuilder {
         ResponseBuilder::new(500)
     }
 
     # Set a header
-    F header(&self, name: str, value: str) -> ResponseBuilder {
+    fn header(&self, name: str, value: str) -> ResponseBuilder {
         I self.header_count >= self.header_capacity {
             new_capacity := self.header_capacity * 2
             new_headers := __malloc(new_capacity * 16)
@@ -455,72 +475,72 @@ X ResponseBuilder {
         __store_ptr(self.headers + offset, name as i64)
         __store_ptr(self.headers + offset + 8, value as i64)
         self.header_count = self.header_count + 1
-        self
+        (*self)
     }
 
     # Set text body
-    F text(&self, content: str) -> ResponseBuilder {
+    fn text(&self, content: str) -> ResponseBuilder {
         self.body = content as i64
         self.body_len = __strlen(content)
         self.header("Content-Type", "text/plain; charset=utf-8")
     }
 
     # Set JSON body
-    F json(&self, content: str) -> ResponseBuilder {
+    fn json(&self, content: str) -> ResponseBuilder {
         self.body = content as i64
         self.body_len = __strlen(content)
         self.header("Content-Type", "application/json")
     }
 
     # Set HTML body
-    F html(&self, content: str) -> ResponseBuilder {
+    fn html(&self, content: str) -> ResponseBuilder {
         self.body = content as i64
         self.body_len = __strlen(content)
         self.header("Content-Type", "text/html; charset=utf-8")
     }
 
     # Set raw body
-    F body(&self, data: i64, len: i64) -> ResponseBuilder {
+    fn body(&self, data: i64, len: i64) -> ResponseBuilder {
         self.body = data
         self.body_len = len
-        self
+        (*self)
     }
 
     # Set content type
-    F content_type(&self, ct: str) -> ResponseBuilder {
+    fn content_type(&self, ct: str) -> ResponseBuilder {
         self.header("Content-Type", ct)
     }
 
     # Add CORS headers
-    F cors(&self, origin: str) -> ResponseBuilder {
+    fn cors(&self, origin: str) -> ResponseBuilder {
         self.header("Access-Control-Allow-Origin", origin)
             .header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
             .header("Access-Control-Allow-Headers", "Content-Type, Authorization")
     }
 
     # Set cache control
-    F cache(&self, max_age: i64) -> ResponseBuilder {
+    fn cache(&self, max_age: i64) -> ResponseBuilder {
         buf := __malloc(64)
-        pos := __str_copy_to(buf, "max-age=")
+        pos := mut __str_copy_to(buf, "max-age=")
         pos = pos + __i64_to_str(buf + pos, max_age)
         __store_byte(buf + pos, 0)  # null terminate
         self.header("Cache-Control", buf as str)
     }
 
     # Redirect to another URL
-    F redirect(url: str) -> ResponseBuilder {
+    fn redirect(url: str) -> ResponseBuilder {
         ResponseBuilder::new(302)
             .header("Location", url)
     }
 
-    F redirect_permanent(url: str) -> ResponseBuilder {
+    fn redirect_permanent(url: str) -> ResponseBuilder {
         ResponseBuilder::new(301)
             .header("Location", url)
     }
 
     # Serialize to buffer for sending
-    F serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
-        pos := 0
+    fn serialize(&self, buffer: i64, buffer_size: i64) -> i64 {
+        pos := mut 0
 
         # Status line: HTTP/1.1 STATUS STATUS_TEXT\r\n
         pos = pos + __str_copy_to(buffer + pos, "HTTP/1.1 ")
@@ -533,7 +553,7 @@ X ResponseBuilder {
         pos = pos + 2
 
         # Headers
-        i := 0
+        i := mut 0
         LW i < self.header_count {
             offset := i * 16
             name := __load_ptr(self.headers + offset) as str
@@ -556,7 +576,7 @@ X ResponseBuilder {
             __store_byte(buffer + pos, 13)
             __store_byte(buffer + pos + 1, 10)
             pos = pos + 2
-        } EL {
+        } else {
             pos = pos + __str_copy_to(buffer + pos, "Content-Length: 0")
             __store_byte(buffer + pos, 13)
             __store_byte(buffer + pos + 1, 10)
@@ -593,7 +613,7 @@ C SEG_LITERAL: i64 = 0   # Exact match (e.g., "users")
 C SEG_PARAM: i64 = 1     # Parameter capture (e.g., ":id")
 C SEG_WILDCARD: i64 = 2  # Wildcard match (e.g., "*")
 
-S RoutePattern {
+struct RoutePattern {
     method: i64,
     pattern: str,
     handler_ptr: i64,
@@ -603,15 +623,15 @@ S RoutePattern {
     seg_count: i64
 }
 
-X RoutePattern {
+impl RoutePattern {
     # Parse a route pattern into segments
-    F parse(method: i64, pattern: str, handler: i64) -> RoutePattern {
+    fn parse(method: i64, pattern: str, handler: i64) -> RoutePattern {
         seg_types := __malloc(MAX_PATH_SEGMENTS * 8)
         seg_values := __malloc(MAX_PATH_SEGMENTS * 8)
-        seg_count := 0
+        seg_count := mut 0
 
         pat_len := __strlen(pattern)
-        pos := 0
+        pos := mut 0
 
         # Skip leading /
         I pos < pat_len {
@@ -643,10 +663,10 @@ X RoutePattern {
                     # Store name without ':'
                     param_name := __substr(pattern, seg_start + 1, seg_len - 1)
                     __store_ptr(seg_values + seg_count * 8, param_name as i64)
-                } EL I first_ch == 42 {  # '*'
+                } else I first_ch == 42 {  # '*'
                     __store_i64(seg_types + seg_count * 8, SEG_WILDCARD)
                     __store_ptr(seg_values + seg_count * 8, seg_str as i64)
-                } EL {
+                } else {
                     __store_i64(seg_types + seg_count * 8, SEG_LITERAL)
                     __store_ptr(seg_values + seg_count * 8, seg_str as i64)
                 }
@@ -671,10 +691,10 @@ X RoutePattern {
 
     # Match a request path against this pattern
     # Returns 1 if matched, 0 if not. Populates params on match.
-    F matches(&self, path: str, params: &PathParams) -> i64 {
+    fn matches(&self, path: str, params: &PathParams) -> i64 {
         path_len := __strlen(path)
-        pos := 0
-        seg_idx := 0
+        pos := mut 0
+        seg_idx := mut 0
 
         # Skip leading /
         I pos < path_len {
@@ -687,7 +707,7 @@ X RoutePattern {
         LW seg_idx < self.seg_count {
             # No more path segments but pattern expects more
             I pos >= path_len {
-                R 0
+                return 0
             }
 
             # Extract current path segment
@@ -709,14 +729,14 @@ X RoutePattern {
             I seg_type == SEG_LITERAL {
                 # Exact match required
                 I __str_eq(path_seg, seg_val) != 1 {
-                    R 0
+                    return 0
                 }
-            } EL I seg_type == SEG_PARAM {
+            } else I seg_type == SEG_PARAM {
                 # Capture parameter
                 params.add(seg_val, path_seg)
-            } EL I seg_type == SEG_WILDCARD {
+            } else I seg_type == SEG_WILDCARD {
                 # Wildcard matches rest of path
-                R 1
+                return 1
             }
 
             seg_idx = seg_idx + 1
@@ -733,7 +753,7 @@ X RoutePattern {
         # All pattern segments consumed; path should also be consumed
         I pos >= path_len {
             1
-        } EL {
+        } else {
             0
         }
     }
@@ -746,20 +766,20 @@ X RoutePattern {
 # Middleware function signature: (RequestCtx, ResponseBuilder) -> ResponseBuilder
 # A middleware can modify the request context or response, or short-circuit
 
-S Middleware {
+struct Middleware {
     name: str,
     handler_ptr: i64,   # Function pointer
     priority: i64       # Lower = runs first
 }
 
-S MiddlewareChain {
+struct MiddlewareChain {
     items: i64,      # Array of Middleware
     count: i64,
     capacity: i64
 }
 
-X MiddlewareChain {
-    F new() -> MiddlewareChain {
+impl MiddlewareChain {
+    fn new() -> MiddlewareChain {
         capacity := MAX_MIDDLEWARES
         items := __malloc(capacity * 24)  # 24 bytes per Middleware
         MiddlewareChain {
@@ -770,23 +790,23 @@ X MiddlewareChain {
     }
 
     # Add a middleware
-    F add(&self, name: str, handler: i64, priority: i64) -> MiddlewareChain {
+    fn add(&self, name: str, handler: i64, priority: i64) -> MiddlewareChain {
         I self.count >= self.capacity {
-            R self
+            return (*self)
         }
         offset := self.count * 24
         __store_ptr(self.items + offset, name as i64)
         __store_ptr(self.items + offset + 8, handler)
         __store_i64(self.items + offset + 16, priority)
         self.count = self.count + 1
-        self
+        (*self)
     }
 
     # Execute all middleware in priority order
     # Returns the (possibly modified) ResponseBuilder
-    F execute(&self, ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder {
-        result := response
-        i := 0
+    fn execute(&self, ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder {
+        result := mut response
+        i := mut 0
         LW i < self.count {
             offset := i * 24
             handler := __load_ptr(self.items + offset + 8)
@@ -799,7 +819,7 @@ X MiddlewareChain {
     }
 
     # Get count
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.count
     }
 }
@@ -808,14 +828,14 @@ X MiddlewareChain {
 # Static File Server
 # ============================================
 
-S StaticFiles {
+struct StaticFiles {
     root_dir: str,
     prefix: str,       # URL prefix (e.g., "/static")
     index_file: str    # Default index file (e.g., "index.html")
 }
 
-X StaticFiles {
-    F new(root_dir: str, prefix: str) -> StaticFiles {
+impl StaticFiles {
+    fn new(root_dir: str, prefix: str) -> StaticFiles {
         StaticFiles {
             root_dir: root_dir,
             prefix: prefix,
@@ -823,17 +843,17 @@ X StaticFiles {
         }
     }
 
-    F with_index(&self, index: str) -> StaticFiles {
+    fn with_index(&self, index: str) -> StaticFiles {
         self.index_file = index
-        self
+        (*self)
     }
 
     # Determine MIME type from file extension
-    F mime_type(path: str) -> str {
+    fn mime_type(path: str) -> str {
         len := __strlen(path)
 
         # Find last dot
-        dot_pos := len - 1
+        dot_pos := mut len - 1
         LW dot_pos >= 0 {
             ch := __load_byte_at(path as i64, dot_pos)
             I ch == 46 {  # '.'
@@ -843,55 +863,55 @@ X StaticFiles {
         }
 
         I dot_pos < 0 {
-            R "application/octet-stream"
+            return "application/octet-stream"
         }
 
         ext := __substr(path, dot_pos + 1, len - dot_pos - 1)
 
         I __str_eq_ignore_case(ext, "html") == 1 | __str_eq_ignore_case(ext, "htm") == 1 {
             "text/html; charset=utf-8"
-        } EL I __str_eq_ignore_case(ext, "css") == 1 {
+        } else I __str_eq_ignore_case(ext, "css") == 1 {
             "text/css; charset=utf-8"
-        } EL I __str_eq_ignore_case(ext, "js") == 1 {
+        } else I __str_eq_ignore_case(ext, "js") == 1 {
             "application/javascript; charset=utf-8"
-        } EL I __str_eq_ignore_case(ext, "json") == 1 {
+        } else I __str_eq_ignore_case(ext, "json") == 1 {
             "application/json"
-        } EL I __str_eq_ignore_case(ext, "txt") == 1 {
+        } else I __str_eq_ignore_case(ext, "txt") == 1 {
             "text/plain; charset=utf-8"
-        } EL I __str_eq_ignore_case(ext, "png") == 1 {
+        } else I __str_eq_ignore_case(ext, "png") == 1 {
             "image/png"
-        } EL I __str_eq_ignore_case(ext, "jpg") == 1 | __str_eq_ignore_case(ext, "jpeg") == 1 {
+        } else I __str_eq_ignore_case(ext, "jpg") == 1 | __str_eq_ignore_case(ext, "jpeg") == 1 {
             "image/jpeg"
-        } EL I __str_eq_ignore_case(ext, "gif") == 1 {
+        } else I __str_eq_ignore_case(ext, "gif") == 1 {
             "image/gif"
-        } EL I __str_eq_ignore_case(ext, "svg") == 1 {
+        } else I __str_eq_ignore_case(ext, "svg") == 1 {
             "image/svg+xml"
-        } EL I __str_eq_ignore_case(ext, "ico") == 1 {
+        } else I __str_eq_ignore_case(ext, "ico") == 1 {
             "image/x-icon"
-        } EL I __str_eq_ignore_case(ext, "wasm") == 1 {
+        } else I __str_eq_ignore_case(ext, "wasm") == 1 {
             "application/wasm"
-        } EL I __str_eq_ignore_case(ext, "xml") == 1 {
+        } else I __str_eq_ignore_case(ext, "xml") == 1 {
             "application/xml"
-        } EL I __str_eq_ignore_case(ext, "pdf") == 1 {
+        } else I __str_eq_ignore_case(ext, "pdf") == 1 {
             "application/pdf"
-        } EL I __str_eq_ignore_case(ext, "woff") == 1 {
+        } else I __str_eq_ignore_case(ext, "woff") == 1 {
             "font/woff"
-        } EL I __str_eq_ignore_case(ext, "woff2") == 1 {
+        } else I __str_eq_ignore_case(ext, "woff2") == 1 {
             "font/woff2"
-        } EL {
+        } else {
             "application/octet-stream"
         }
     }
 
     # Check for path traversal attacks (.. in path)
-    F is_safe_path(path: str) -> i64 {
+    fn is_safe_path(path: str) -> i64 {
         len := __strlen(path)
-        i := 0
+        i := mut 0
         LW i < len - 1 {
             ch1 := __load_byte_at(path as i64, i)
             ch2 := __load_byte_at(path as i64, i + 1)
             I ch1 == 46 & ch2 == 46 {  # ".."
-                R 0
+                return 0
             }
             i = i + 1
         }
@@ -899,19 +919,19 @@ X StaticFiles {
     }
 
     # Serve a file, returns ResponseBuilder
-    F serve(&self, req_path: str) -> ResponseBuilder {
+    fn serve(&self, req_path: str) -> ResponseBuilder {
         # Strip prefix from path
         prefix_len := __strlen(self.prefix)
         path_len := __strlen(req_path)
 
         I path_len < prefix_len {
-            R ResponseBuilder::not_found().text("Not Found")
+            return ResponseBuilder::not_found().text("Not Found")
         }
 
         # Check prefix matches
         prefix_match := __str_starts_with_n(req_path, self.prefix, prefix_len)
         I prefix_match != 1 {
-            R ResponseBuilder::not_found().text("Not Found")
+            return ResponseBuilder::not_found().text("Not Found")
         }
 
         # Get relative path after prefix
@@ -919,17 +939,17 @@ X StaticFiles {
 
         # Security: check for path traversal
         I StaticFiles::is_safe_path(rel_path) != 1 {
-            R ResponseBuilder::forbidden().text("Forbidden")
+            return ResponseBuilder::forbidden().text("Forbidden")
         }
 
         # Build full file path
-        full_path := __str_concat3(self.root_dir, "/", rel_path)
+        full_path := mut __str_concat3(self.root_dir, "/", rel_path)
 
         # Check if path ends with / or is empty -> serve index
         rel_len := __strlen(rel_path)
         I rel_len == 0 {
             full_path = __str_concat3(self.root_dir, "/", self.index_file)
-        } EL {
+        } else {
             last_ch := __load_byte_at(rel_path as i64, rel_len - 1)
             I last_ch == 47 {  # '/'
                 full_path = __str_concat3(full_path, "", self.index_file)
@@ -939,12 +959,12 @@ X StaticFiles {
         # Read file
         file_data := __read_file(full_path as i64)
         I file_data == 0 {
-            R ResponseBuilder::not_found().text("Not Found")
+            return ResponseBuilder::not_found().text("Not Found")
         }
 
         file_size := __file_size(full_path as i64)
         I file_size < 0 {
-            R ResponseBuilder::not_found().text("Not Found")
+            return ResponseBuilder::not_found().text("Not Found")
         }
 
         # Determine content type
@@ -960,7 +980,7 @@ X StaticFiles {
 # Application (Main HTTP Server Framework)
 # ============================================
 
-S App {
+struct App {
     host: str,
     port: i64,
     routes: i64,        # Array of RoutePattern pointers
@@ -973,8 +993,8 @@ S App {
     tls_enabled: i64    # 1 if HTTPS mode, 0 for HTTP
 }
 
-X App {
-    F new(port: i64) -> App {
+impl App {
+    fn new(port: i64) -> App {
         route_capacity := MAX_ROUTES
         routes := __malloc(route_capacity * 8)
         App {
@@ -991,37 +1011,37 @@ X App {
         }
     }
 
-    F bind(host: str, port: i64) -> App {
+    fn bind(host: str, port: i64) -> App {
         app := App::new(port)
         app.host = host
         app
     }
 
     # Enable HTTPS with certificate and key files
-    F with_tls(&self, cert_path: str, key_path: str) -> App {
+    fn with_tls(&self, cert_path: str, key_path: str) -> App {
         ctx := __tls_ctx_new(1)  # server mode
         I ctx == 0 {
-            R self
+            return (*self)
         }
         cert_result := __tls_ctx_load_cert(ctx, cert_path)
         I cert_result != 0 {
             __tls_ctx_free(ctx)
-            R self
+            return (*self)
         }
         key_result := __tls_ctx_load_key(ctx, key_path)
         I key_result != 0 {
             __tls_ctx_free(ctx)
-            R self
+            return (*self)
         }
         self.tls_ctx = ctx
         self.tls_enabled = 1
-        self
+        (*self)
     }
 
     # Add a route with pattern matching
-    F route(&self, method: i64, pattern: str, handler: i64) -> App {
+    fn route(&self, method: i64, pattern: str, handler: i64) -> App {
         I self.route_count >= self.route_capacity {
-            R self
+            return (*self)
         }
 
         # Allocate and store RoutePattern
@@ -1031,61 +1051,61 @@ X App {
 
         __store_ptr(self.routes + self.route_count * 8, rp)
         self.route_count = self.route_count + 1
-        self
+        (*self)
     }
 
     # Convenience methods for common HTTP methods
-    F get(&self, pattern: str, handler: i64) -> App {
+    fn get(&self, pattern: str, handler: i64) -> App {
         self.route(METHOD_GET, pattern, handler)
     }
 
-    F post(&self, pattern: str, handler: i64) -> App {
+    fn post(&self, pattern: str, handler: i64) -> App {
         self.route(METHOD_POST, pattern, handler)
     }
 
-    F put(&self, pattern: str, handler: i64) -> App {
+    fn put(&self, pattern: str, handler: i64) -> App {
         self.route(METHOD_PUT, pattern, handler)
     }
 
-    F delete(&self, pattern: str, handler: i64) -> App {
+    fn delete(&self, pattern: str, handler: i64) -> App {
         self.route(METHOD_DELETE, pattern, handler)
     }
 
-    F patch(&self, pattern: str, handler: i64) -> App {
+    fn patch(&self, pattern: str, handler: i64) -> App {
         self.route(METHOD_PATCH, pattern, handler)
     }
 
     # Add middleware
-    F use_middleware(&self, name: str, handler: i64) -> App {
+    fn use_middleware(&self, name: str, handler: i64) -> App {
         self.middleware.add(name, handler, self.middleware.len())
-        self
+        (*self)
     }
 
-    F use_middleware_with_priority(&self, name: str, handler: i64, priority: i64) -> App {
+    fn use_middleware_with_priority(&self, name: str, handler: i64, priority: i64) -> App {
         self.middleware.add(name, handler, priority)
-        self
+        (*self)
     }
 
     # Set static file serving
-    F serve_static(&self, prefix: str, root_dir: str) -> App {
+    fn serve_static(&self, prefix: str, root_dir: str) -> App {
         sf := __malloc(24)  # Size of StaticFiles
         static_files := StaticFiles::new(root_dir, prefix)
         __memcpy(sf, &static_files as i64, 24)
         self.static_files = sf
-        self
+        (*self)
     }
 
     # Run the server (blocking)
-    F run(&self) -> i64 {
+    fn run(&self) -> i64 {
         listener_fd := __tcp_listen(self.port)
         I listener_fd < 0 {
-            R -1
+            return -1
         }
 
         self.running = 1
         I self.tls_enabled == 1 {
             __print_server_start_tls(self.host, self.port)
-        } EL {
+        } else {
             __print_server_start(self.host, self.port)
         }
 
@@ -1097,7 +1117,7 @@ X App {
 
             I self.tls_enabled == 1 {
                 self.handle_request_tls(client_fd)
-            } EL {
+            } else {
                 self.handle_request(client_fd)
             }
             __tcp_close(client_fd)
@@ -1114,12 +1134,12 @@ X App {
     }
 
     # Handle a single request (plain HTTP)
-    F handle_request(&self, fd: i64) -> i64 {
+    fn handle_request(&self, fd: i64) -> i64 {
         # Read request data
         buffer := __malloc(8192 + 1048576)  # header + body max
-        total := 0
+        total := mut 0
 
-        LW 1 {
+        LW true {
             n := __tcp_recv(fd, buffer + total, 4096)
             I n <= 0 {
                 B
@@ -1132,7 +1152,7 @@ X App {
 
         I total <= 0 {
             __free(buffer)
-            R -1
+            return -1
         }
 
         # Parse raw request
@@ -1147,7 +1167,7 @@ X App {
         )
 
         # Find matching route
-        response := self.find_and_handle(&ctx)
+        response := mut self.find_and_handle(&ctx)
 
         # Execute middleware chain (post-processing)
         response = self.middleware.execute(&ctx, response)
@@ -1162,25 +1182,25 @@ X App {
     }
 
     # Handle a single request over TLS (HTTPS)
-    F handle_request_tls(&self, fd: i64) -> i64 {
+    fn handle_request_tls(&self, fd: i64) -> i64 {
         # Create TLS connection
         tls := __tls_new(self.tls_ctx, fd)
         I tls == 0 {
-            R -1
+            return -1
         }
 
         # TLS handshake (server accept)
         hs_result := __tls_accept(tls)
         I hs_result != 0 {
             __tls_free(tls)
-            R -1
+            return -1
         }
 
         # Read request data via TLS
         buffer := __malloc(8192 + 1048576)
-        total := 0
+        total := mut 0
 
-        LW 1 {
+        LW true {
             n := __tls_read(tls, buffer + total, 4096)
             I n <= 0 {
                 B
@@ -1195,7 +1215,7 @@ X App {
             __free(buffer)
             __tls_shutdown(tls)
             __tls_free(tls)
-            R -1
+            return -1
         }
 
         # Parse raw request
@@ -1210,7 +1230,7 @@ X App {
         )
 
         # Find matching route
-        response := self.find_and_handle(&ctx)
+        response := mut self.find_and_handle(&ctx)
 
         # Execute middleware chain (post-processing)
         response = self.middleware.execute(&ctx, response)
@@ -1229,9 +1249,9 @@ X App {
     }
 
     # Find matching route and execute handler
-    F find_and_handle(&self, ctx: &RequestCtx) -> ResponseBuilder {
+    fn find_and_handle(&self, ctx: &RequestCtx) -> ResponseBuilder {
         # Try each route
-        i := 0
+        i := mut 0
         LW i < self.route_count {
             rp_ptr := __load_ptr(self.routes + i * 8)
             I rp_ptr != 0 {
@@ -1253,7 +1273,7 @@ X App {
                         # Set params on context
                         ctx.params = params
                         # Call handler
-                        R __call_app_handler(handler, ctx)
+                        return __call_app_handler(handler, ctx)
                     }
                     params.drop()
                 }
@@ -1272,13 +1292,13 @@ X App {
                     prefix: sf_prefix,
                     index_file: sf_index
                 }
-                R static_handler.serve(ctx.path)
+                return static_handler.serve(ctx.path)
             }
         }
 
         # Handle OPTIONS for CORS preflight
         I ctx.method == METHOD_OPTIONS {
-            R ResponseBuilder::no_content()
+            return ResponseBuilder::no_content()
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
                 .header("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -1289,7 +1309,7 @@ X App {
     }
 
     # Stop the server
-    F stop(&self) -> i64 {
+    fn stop(&self) -> i64 {
         self.running = 0
         0
     }
@@ -1300,21 +1320,21 @@ X App {
 # ============================================
 
 # CORS middleware - adds CORS headers to all responses
-F cors_middleware(origin: str) -> i64 {
+fn cors_middleware(origin: str) -> i64 {
     # Return a function pointer that adds CORS headers
     # This is a simplified version - in practice, you'd use closures
     __make_cors_handler(origin as i64)
 }
 
 # Logging middleware handler
-F logging_middleware_handler(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder {
+fn logging_middleware_handler(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder {
     # Log request: METHOD PATH -> STATUS
     __log_request(ctx.method_str(), ctx.path, response.status)
     response
 }
 
 # Default CORS handler - allows all origins
-F default_cors_handler(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder {
+fn default_cors_handler(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder {
     response
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
@@ -1326,48 +1346,48 @@ F default_cors_handler(ctx: &RequestCtx, response: ResponseBuilder) -> ResponseB
 # ============================================
 
 # Create a new App
-F app(port: i64) -> App {
+fn app(port: i64) -> App {
     App::new(port)
 }
 
 # Create a response builder
-F response(status: i64) -> ResponseBuilder {
+fn response(status: i64) -> ResponseBuilder {
     ResponseBuilder::new(status)
 }
 
 # Create common responses
-F ok() -> ResponseBuilder {
+fn ok() -> ResponseBuilder {
     ResponseBuilder::ok()
 }
 
-F created() -> ResponseBuilder {
+fn created() -> ResponseBuilder {
     ResponseBuilder::created()
 }
 
-F not_found() -> ResponseBuilder {
+fn not_found() -> ResponseBuilder {
     ResponseBuilder::not_found()
 }
 
-F bad_request() -> ResponseBuilder {
+fn bad_request() -> ResponseBuilder {
     ResponseBuilder::bad_request()
 }
 
-F internal_error() -> ResponseBuilder {
+fn internal_error() -> ResponseBuilder {
     ResponseBuilder::internal_error()
 }
 
 # JSON response helper
-F json_response(data: str) -> ResponseBuilder {
+fn json_response(data: str) -> ResponseBuilder {
     ResponseBuilder::ok().json(data)
 }
 
 # HTML response helper
-F html_response(content: str) -> ResponseBuilder {
+fn html_response(content: str) -> ResponseBuilder {
     ResponseBuilder::ok().html(content)
 }
 
 # Text response helper
-F text_response(content: str) -> ResponseBuilder {
+fn text_response(content: str) -> ResponseBuilder {
     ResponseBuilder::ok().text(content)
 }
 
@@ -1376,65 +1396,65 @@ F text_response(content: str) -> ResponseBuilder {
 # ============================================
 
 # TCP operations (from std/http.vais runtime)
-X F __tcp_connect(host: i64, port: i64) -> i64
-X F __tcp_listen(port: i64) -> i64
-X F __tcp_accept(listener_fd: i64) -> i64
-X F __tcp_send(fd: i64, data: i64, len: i64) -> i64
-X F __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
-X F __tcp_close(fd: i64) -> i64
+impl fn __tcp_connect(host: i64, port: i64) -> i64
+impl fn __tcp_listen(port: i64) -> i64
+impl fn __tcp_accept(listener_fd: i64) -> i64
+impl fn __tcp_send(fd: i64, data: i64, len: i64) -> i64
+impl fn __tcp_recv(fd: i64, buffer: i64, len: i64) -> i64
+impl fn __tcp_close(fd: i64) -> i64
 
 # String operations
-X F __strlen(s: str) -> i64
-X F __str_copy_to(dst: i64, src: str) -> i64
-X F __str_eq(a: str, b: str) -> i64
-X F __str_eq_ignore_case(a: str, b: str) -> i64
-X F __i64_to_str(dst: i64, value: i64) -> i64
-X F __str_starts_with(s: str, prefix: str) -> i64
-X F __str_starts_with_n(s: str, prefix: str, n: i64) -> i64
-X F __substr(s: str, start: i64, len: i64) -> str
-X F __str_concat3(a: str, b: str, c: str) -> str
-X F __load_byte_at(ptr: i64, offset: i64) -> i64
+impl fn __strlen(s: str) -> i64
+impl fn __str_copy_to(dst: i64, src: str) -> i64
+impl fn __str_eq(a: str, b: str) -> i64
+impl fn __str_eq_ignore_case(a: str, b: str) -> i64
+impl fn __i64_to_str(dst: i64, value: i64) -> i64
+impl fn __str_starts_with(s: str, prefix: str) -> i64
+impl fn __str_starts_with_n(s: str, prefix: str, n: i64) -> i64
+impl fn __substr(s: str, start: i64, len: i64) -> str
+impl fn __str_concat3(a: str, b: str, c: str) -> str
+impl fn __load_byte_at(ptr: i64, offset: i64) -> i64
 
 # Memory operations
-X F __malloc(size: i64) -> i64
-X F __free(ptr: i64) -> i64
-X F __memcpy(dst: i64, src: i64, len: i64) -> i64
-X F __store_byte(ptr: i64, value: i64) -> i64
-X F __store_ptr(ptr: i64, value: i64) -> i64
-X F __store_i64(ptr: i64, value: i64) -> i64
-X F __load_ptr(ptr: i64) -> i64
-X F __load_i64(ptr: i64) -> i64
+impl fn __malloc(size: i64) -> i64
+impl fn __free(ptr: i64) -> i64
+impl fn __memcpy(dst: i64, src: i64, len: i64) -> i64
+impl fn __store_byte(ptr: i64, value: i64) -> i64
+impl fn __store_ptr(ptr: i64, value: i64) -> i64
+impl fn __store_i64(ptr: i64, value: i64) -> i64
+impl fn __load_ptr(ptr: i64) -> i64
+impl fn __load_i64(ptr: i64) -> i64
 
 # HTTP parsing
-X F __find_header_end(buffer: i64, len: i64) -> i64
-X F __parse_request(buffer: i64, len: i64) -> Request
-X F __status_to_text(status: i64) -> str
+impl fn __find_header_end(buffer: i64, len: i64) -> i64
+impl fn __parse_request(buffer: i64, len: i64) -> Request
+impl fn __status_to_text(status: i64) -> str
 
 # File operations (from std/file.vais runtime)
-X F __read_file(path: i64) -> i64
-X F __file_size(path: i64) -> i64
+impl fn __read_file(path: i64) -> i64
+impl fn __file_size(path: i64) -> i64
 
 # Handler calling
-X F __call_app_handler(handler: i64, ctx: &RequestCtx) -> ResponseBuilder
-X F __call_middleware(handler: i64, ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder
-X F __match_path(seg_types: i64, seg_values: i64, seg_count: i64, path: str, params: &PathParams) -> i64
+impl fn __call_app_handler(handler: i64, ctx: &RequestCtx) -> ResponseBuilder
+impl fn __call_middleware(handler: i64, ctx: &RequestCtx, response: ResponseBuilder) -> ResponseBuilder
+impl fn __match_path(seg_types: i64, seg_values: i64, seg_count: i64, path: str, params: &PathParams) -> i64
 
 # Logging
-X F __log_request(method: str, path: str, status: i64) -> i64
-X F __print_server_start(host: str, port: i64) -> i64
-X F __print_server_start_tls(host: str, port: i64) -> i64
+impl fn __log_request(method: str, path: str, status: i64) -> i64
+impl fn __print_server_start(host: str, port: i64) -> i64
+impl fn __print_server_start_tls(host: str, port: i64) -> i64
 
 # CORS handler factory
-X F __make_cors_handler(origin: i64) -> i64
+impl fn __make_cors_handler(origin: i64) -> i64
 
 # TLS operations (from tls_runtime.c)
-X F __tls_ctx_new(mode: i64) -> i64
-X F __tls_ctx_free(handle: i64) -> i64
-X F __tls_ctx_load_cert(handle: i64, path: str) -> i64
-X F __tls_ctx_load_key(handle: i64, path: str) -> i64
-X F __tls_new(ctx: i64, fd: i64) -> i64
-X F __tls_free(handle: i64) -> i64
-X F __tls_accept(handle: i64) -> i64
-X F __tls_read(handle: i64, buf: i64, len: i64) -> i64
-X F __tls_write(handle: i64, data: i64, len: i64) -> i64
-X F __tls_shutdown(handle: i64) -> i64
+impl fn __tls_ctx_new(mode: i64) -> i64
+impl fn __tls_ctx_free(handle: i64) -> i64
+impl fn __tls_ctx_load_cert(handle: i64, path: str) -> i64
+impl fn __tls_ctx_load_key(handle: i64, path: str) -> i64
+impl fn __tls_new(ctx: i64, fd: i64) -> i64
+impl fn __tls_free(handle: i64) -> i64
+impl fn __tls_accept(handle: i64) -> i64
+impl fn __tls_read(handle: i64, buf: i64, len: i64) -> i64
+impl fn __tls_write(handle: i64, data: i64, len: i64) -> i64
+impl fn __tls_shutdown(handle: i64) -> i64

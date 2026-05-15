@@ -94,7 +94,7 @@ exit:
 "#;
     let reductions = detect_reductions(ir, "loop");
     // Both %i (induction) and %acc are detected as Add reductions
-    assert!(!reductions.is_empty());
+    assert!(reductions.len() >= 1);
     let acc_reduction = reductions.iter().find(|(var, _)| var == "%acc");
     assert!(acc_reduction.is_some(), "Should detect %acc as a reduction");
     assert_eq!(acc_reduction.unwrap().1, ReductionKind::Add);
@@ -159,7 +159,7 @@ fn test_vector_width_default() {
 #[test]
 fn test_vector_width_clone_copy() {
     let w = VectorWidth::SSE;
-    let cloned = w;
+    let cloned = w.clone();
     let copied = w;
     assert_eq!(w, cloned);
     assert_eq!(w, copied);

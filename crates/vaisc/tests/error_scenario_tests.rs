@@ -108,12 +108,12 @@ fn assert_exit_code(source: &str, expected: i32) {
 
 #[test]
 fn error_undefined_variable() {
-    assert_error_contains("F main() -> i64 = unknown_var", "Undefined");
+    assert_error_contains("fn main() -> i64 = unknown_var", "Undefined");
 }
 
 #[test]
 fn error_undefined_function_call() {
-    assert_error_contains("F main() -> i64 = unknown_func(42)", "Undefined");
+    assert_error_contains("fn main() -> i64 = unknown_func(42)", "Undefined");
 }
 
 // ==================== Type Mismatch Errors ====================
@@ -121,19 +121,19 @@ fn error_undefined_function_call() {
 #[test]
 fn error_type_mismatch_return_type() {
     // Return string where i64 expected
-    assert_error_contains(r#"F main() -> i64 = "hello""#, "Mismatch");
+    assert_error_contains(r#"fn main() -> i64 = "hello""#, "Mismatch");
 }
 
 #[test]
 fn error_invalid_binary_operator() {
     // Cannot add string and number
-    assert_error_contains(r#"F main() -> i64 = "hello" + 42"#, "Mismatch");
+    assert_error_contains(r#"fn main() -> i64 = "hello" + 42"#, "Mismatch");
 }
 
 #[test]
 fn error_invalid_comparison_types() {
     // Cannot compare string to number
-    assert_error_contains(r#"F main() -> bool = "hello" > 42"#, "Mismatch");
+    assert_error_contains(r#"fn main() -> bool = "hello" > 42"#, "Mismatch");
 }
 
 // ==================== Function Signature Errors ====================
@@ -141,8 +141,8 @@ fn error_invalid_comparison_types() {
 #[test]
 fn error_wrong_argument_count() {
     let source = r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1)
 "#;
     assert_error_contains(source, "ArgCount");
 }
@@ -151,8 +151,8 @@ F main() -> i64 = add(1)
 fn error_duplicate_function_definition() {
     // Phase 73: TC now detects duplicate function definitions (E034/Duplicate)
     let source = r#"
-F main() -> i64 = 0
-F main() -> i64 = 1
+fn main() -> i64 = 0
+fn main() -> i64 = 1
 "#;
     assert_error_contains(source, "Duplicate");
 }
@@ -160,7 +160,7 @@ F main() -> i64 = 1
 #[test]
 fn error_missing_return_type_unconstrained() {
     // Phase 61: Function with unconstrained parameters should fail
-    assert_compile_error("F add(a, b) { a + b }");
+    assert_compile_error("fn add(a, b) { a + b }");
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn error_recursive_without_return_type() {
     // So this actually compiles successfully with inferred types
     // Wrap with main() to verify execution: fib(10) = 55
     assert_exit_code(
-        "F fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)\nF main() -> i64 = fib(10)",
+        "fn fib(n: i64) -> i64 = n < 2 ? n : @(n-1) + @(n-2)\nfn main() -> i64 = fib(10)",
         55,
     );
 }
@@ -180,9 +180,9 @@ fn error_recursive_without_return_type() {
 #[test]
 fn error_struct_field_access_on_non_struct() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
-    R x.field
+    return x.field
 }
 "#;
     assert_error_contains(source, "field");
@@ -191,7 +191,7 @@ F main() -> i64 {
 #[test]
 fn error_unknown_struct_type() {
     assert_error_contains(
-        "F main() -> i64 { p := UnknownStruct { x: 1 }; 0 }",
+        "fn main() -> i64 { p := UnknownStruct { x: 1 }; 0 }",
         "Unknown",
     );
 }
@@ -200,10 +200,10 @@ fn error_unknown_struct_type() {
 fn error_missing_struct_field() {
     // Note: Current implementation may auto-initialize missing fields or have different behavior
     let source = r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 1 }
-    R 0
+    return 0
 }
 "#;
     // Check if this compiles - implementation may vary
@@ -220,10 +220,10 @@ F main() -> i64 {
 #[test]
 fn error_unknown_struct_field() {
     let source = r#"
-S Point { x: i64, y: i64 }
-F main() -> i64 {
+struct Point { x: i64, y: i64 }
+fn main() -> i64 {
     p := Point { x: 1, y: 2, z: 3 }
-    R 0
+    return 0
 }
 "#;
     assert_compile_error(source);
@@ -233,28 +233,24 @@ F main() -> i64 {
 
 #[test]
 fn error_break_outside_loop() {
-    assert_error_contains("F main() -> i64 { B; 0 }", "break");
+    assert_error_contains("fn main() -> i64 { B; 0 }", "break");
 }
 
 #[test]
 fn error_continue_outside_loop() {
-    assert_error_contains("F main() -> i64 { C; 0 }", "continue");
+    assert_error_contains("fn main() -> i64 { C; 0 }", "continue");
 }
 
 #[test]
 fn error_assignment_to_immutable() {
-    // Note: Current implementation allows reassignment without 'mut'
-    // This test documents the current behavior
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 5
     x = 10
-    R x
+    return x
 }
 "#;
-    // Currently this compiles - mutability checking may be added in future
-    // x is reassigned to 10 and returned, so exit code is 10
-    assert_exit_code(source, 10);
+    assert_error_contains(source, "ImmutableAssign");
 }
 
 // ==================== Edge Cases ====================
@@ -262,13 +258,13 @@ F main() -> i64 {
 #[test]
 fn error_empty_function_body() {
     // Function with empty body should fail if return type is not ()
-    assert_compile_error("F main() -> i64 { }");
+    assert_compile_error("fn main() -> i64 { }");
 }
 
 #[test]
 fn error_division_by_zero_literal() {
     // Some compilers detect this at compile time
-    let source = "F main() -> i64 = 42 / 0";
+    let source = "fn main() -> i64 = 42 / 0";
     // This may or may not be caught at compile time depending on implementation
     // For now, we just try to compile it - it might succeed and fail at runtime
     let result = compile_to_ir(source);
@@ -288,8 +284,8 @@ fn positive_constrained_type_inference() {
     // add(1, 2) = 3, so exit code is 3
     assert_exit_code(
         r#"
-F add(a: i64, b: i64) -> i64 = a + b
-F main() -> i64 = add(1, 2)
+fn add(a: i64, b: i64) -> i64 = a + b
+fn main() -> i64 = add(1, 2)
 "#,
         3,
     );
@@ -300,7 +296,7 @@ fn positive_explicit_types() {
     // With explicit types, should always compile and run
     // Wrap with main() to verify execution: add(20, 22) = 42
     assert_exit_code(
-        "F add(a: i64, b: i64) -> i64 { R a + b }\nF main() -> i64 = add(20, 22)",
+        "fn add(a: i64, b: i64) -> i64 { return a + b }\nfn main() -> i64 = add(20, 22)",
         42,
     );
 }
@@ -311,10 +307,10 @@ fn positive_explicit_types() {
 fn error_unknown_enum_variant() {
     // Note: This tests enum variant validation
     let source = r#"
-E Color { Red, Blue }
-F main() -> i64 {
+enum Color { Red, Blue }
+fn main() -> i64 {
     c := Red
-    M c {
+    match c {
         Red => 1,
         Green => 0
     }

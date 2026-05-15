@@ -1,0 +1,17 @@
+# CHECKS: match with integer ranges
+fn bucket(n: i64) -> i64 {
+    match n {
+        0..=9    => 0,
+        10..=99  => 1,
+        100..=999=> 2,
+        _        => 3,
+    }
+}
+
+fn main() -> i64 {
+    I bucket(5)    != 0 { return 1 }
+    I bucket(42)   != 1 { return 2 }
+    I bucket(500)  != 2 { return 3 }
+    I bucket(5000) != 3 { return 4 }
+    return 0
+}

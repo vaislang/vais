@@ -1,0 +1,17 @@
+fn main() -> i64 {
+    a: Result<i64, i64> := Ok(42)
+    b: Result<i64, i64> := Err(7)
+
+    va: i64 := match a {
+        Ok(v) => v,
+        Err(e) => e,
+    }
+    vb: i64 := match b {
+        Ok(v) => v,
+        Err(e) => e,
+    }
+
+    I va != 42 { return 1 }
+    I vb != 7 { return 2 }
+    return 0
+}

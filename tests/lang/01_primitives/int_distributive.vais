@@ -1,0 +1,20 @@
+# CHECKS: distributive law a*(b+c) = a*b + a*c.
+fn main() -> i64 {
+    a: i64 := 7
+    b: i64 := 3
+    c: i64 := 5
+    I a * (b + c) != a * b + a * c { return 1 }
+    I (a + b) * c != a * c + b * c { return 2 }
+
+    # negative
+    I (0 - a) * (b + c) != 0 - (a * b + a * c) { return 3 }
+
+    # with zero
+    I a * (0 + 0) != 0 { return 4 }
+
+    # large values
+    big: i64 := 1000
+    bigger: i64 := 200
+    I big * (bigger + 1) != big * bigger + big { return 5 }
+    return 0
+}

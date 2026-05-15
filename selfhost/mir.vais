@@ -12,29 +12,29 @@
 # MIR Type Constants (mirrors MirType enum in Rust)
 # ============================================================================
 
-F MIR_TY_I8() -> i64 = 1
-F MIR_TY_I16() -> i64 = 2
-F MIR_TY_I32() -> i64 = 3
-F MIR_TY_I64() -> i64 = 4
-F MIR_TY_I128() -> i64 = 5
-F MIR_TY_U8() -> i64 = 6
-F MIR_TY_U16() -> i64 = 7
-F MIR_TY_U32() -> i64 = 8
-F MIR_TY_U64() -> i64 = 9
-F MIR_TY_U128() -> i64 = 10
-F MIR_TY_F32() -> i64 = 11
-F MIR_TY_F64() -> i64 = 12
-F MIR_TY_BOOL() -> i64 = 13
-F MIR_TY_STR() -> i64 = 14
-F MIR_TY_UNIT() -> i64 = 15
-F MIR_TY_POINTER() -> i64 = 16
-F MIR_TY_REF() -> i64 = 17
-F MIR_TY_ARRAY() -> i64 = 18
-F MIR_TY_TUPLE() -> i64 = 19
-F MIR_TY_STRUCT() -> i64 = 20
-F MIR_TY_ENUM() -> i64 = 21
-F MIR_TY_FUNCTION() -> i64 = 22
-F MIR_TY_NEVER() -> i64 = 23
+fn MIR_TY_I8() -> i64 = 1
+fn MIR_TY_I16() -> i64 = 2
+fn MIR_TY_I32() -> i64 = 3
+fn MIR_TY_I64() -> i64 = 4
+fn MIR_TY_I128() -> i64 = 5
+fn MIR_TY_U8() -> i64 = 6
+fn MIR_TY_U16() -> i64 = 7
+fn MIR_TY_U32() -> i64 = 8
+fn MIR_TY_U64() -> i64 = 9
+fn MIR_TY_U128() -> i64 = 10
+fn MIR_TY_F32() -> i64 = 11
+fn MIR_TY_F64() -> i64 = 12
+fn MIR_TY_BOOL() -> i64 = 13
+fn MIR_TY_STR() -> i64 = 14
+fn MIR_TY_UNIT() -> i64 = 15
+fn MIR_TY_POINTER() -> i64 = 16
+fn MIR_TY_REF() -> i64 = 17
+fn MIR_TY_ARRAY() -> i64 = 18
+fn MIR_TY_TUPLE() -> i64 = 19
+fn MIR_TY_STRUCT() -> i64 = 20
+fn MIR_TY_ENUM() -> i64 = 21
+fn MIR_TY_FUNCTION() -> i64 = 22
+fn MIR_TY_NEVER() -> i64 = 23
 
 # ============================================================================
 # MirType — type representation with optional inner type / name
@@ -46,64 +46,64 @@ F MIR_TY_NEVER() -> i64 = 23
 # For Function: inner_type_ptr = param types array, inner_count = param count,
 #               name_idx reused as return type ptr
 
-S MirType {
+struct MirType {
     kind: i64,
     inner_type_ptr: i64,
     inner_count: i64,
     name_idx: i64
 }
 
-F mir_type_prim(kind: i64) -> i64 {
+fn mir_type_prim(kind: i64) -> i64 {
     ptr := malloc(32)
     store_i64(ptr, kind)
     store_i64(ptr + 8, 0)
     store_i64(ptr + 16, 0)
     store_i64(ptr + 24, 0)
-    R ptr
+    return ptr
 }
 
-F mir_type_inner(kind: i64, inner: i64) -> i64 {
+fn mir_type_inner(kind: i64, inner: i64) -> i64 {
     ptr := malloc(32)
     store_i64(ptr, kind)
     store_i64(ptr + 8, inner)
     store_i64(ptr + 16, 0)
     store_i64(ptr + 24, 0)
-    R ptr
+    return ptr
 }
 
 # Mutable reference type: REF with inner_count=1 to distinguish &mut T from &T
-F mir_type_mut_ref(inner: i64) -> i64 {
+fn mir_type_mut_ref(inner: i64) -> i64 {
     ptr := malloc(32)
     store_i64(ptr, MIR_TY_REF())
     store_i64(ptr + 8, inner)
     store_i64(ptr + 16, 1)  # inner_count=1 → mutable ref
     store_i64(ptr + 24, 0)
-    R ptr
+    return ptr
 }
 
-F mir_type_named(kind: i64, name_idx: i64) -> i64 {
+fn mir_type_named(kind: i64, name_idx: i64) -> i64 {
     ptr := malloc(32)
     store_i64(ptr, kind)
     store_i64(ptr + 8, 0)
     store_i64(ptr + 16, 0)
     store_i64(ptr + 24, name_idx)
-    R ptr
+    return ptr
 }
 
 # ============================================================================
 # Operand — values used in MIR instructions
 # ============================================================================
 
-F OPERAND_COPY() -> i64 = 1
-F OPERAND_MOVE() -> i64 = 2
-F OPERAND_CONSTANT() -> i64 = 3
+fn OPERAND_COPY() -> i64 = 1
+fn OPERAND_MOVE() -> i64 = 2
+fn OPERAND_CONSTANT() -> i64 = 3
 
 # Constant kinds
-F CONST_INT() -> i64 = 1
-F CONST_FLOAT() -> i64 = 2
-F CONST_BOOL() -> i64 = 3
-F CONST_STR() -> i64 = 4
-F CONST_UNIT() -> i64 = 5
+fn CONST_INT() -> i64 = 1
+fn CONST_FLOAT() -> i64 = 2
+fn CONST_BOOL() -> i64 = 3
+fn CONST_STR() -> i64 = 4
+fn CONST_UNIT() -> i64 = 5
 
 # Operand struct: 40 bytes
 #   kind: OPERAND_COPY/MOVE/CONSTANT
@@ -111,7 +111,7 @@ F CONST_UNIT() -> i64 = 5
 #   const_kind: for Constant — CONST_INT/FLOAT/BOOL/STR/UNIT
 #   const_value: integer/bool value (or string pool index for STR)
 #   const_float_bits: f64 value stored as i64 bits
-S Operand {
+struct Operand {
     kind: i64,
     local_idx: i64,
     const_kind: i64,
@@ -119,64 +119,64 @@ S Operand {
     const_float_bits: i64
 }
 
-F operand_copy(local_idx: i64) -> i64 {
+fn operand_copy(local_idx: i64) -> i64 {
     ptr := malloc(40)
     store_i64(ptr, OPERAND_COPY())
     store_i64(ptr + 8, local_idx)
     store_i64(ptr + 16, 0)
     store_i64(ptr + 24, 0)
     store_i64(ptr + 32, 0)
-    R ptr
+    return ptr
 }
 
-F operand_move(local_idx: i64) -> i64 {
+fn operand_move(local_idx: i64) -> i64 {
     ptr := malloc(40)
     store_i64(ptr, OPERAND_MOVE())
     store_i64(ptr + 8, local_idx)
     store_i64(ptr + 16, 0)
     store_i64(ptr + 24, 0)
     store_i64(ptr + 32, 0)
-    R ptr
+    return ptr
 }
 
-F operand_const_int(value: i64) -> i64 {
+fn operand_const_int(value: i64) -> i64 {
     ptr := malloc(40)
     store_i64(ptr, OPERAND_CONSTANT())
     store_i64(ptr + 8, 0)
     store_i64(ptr + 16, CONST_INT())
     store_i64(ptr + 24, value)
     store_i64(ptr + 32, 0)
-    R ptr
+    return ptr
 }
 
-F operand_const_bool(value: i64) -> i64 {
+fn operand_const_bool(value: i64) -> i64 {
     ptr := malloc(40)
     store_i64(ptr, OPERAND_CONSTANT())
     store_i64(ptr + 8, 0)
     store_i64(ptr + 16, CONST_BOOL())
     store_i64(ptr + 24, value)
     store_i64(ptr + 32, 0)
-    R ptr
+    return ptr
 }
 
-F operand_const_str(str_idx: i64) -> i64 {
+fn operand_const_str(str_idx: i64) -> i64 {
     ptr := malloc(40)
     store_i64(ptr, OPERAND_CONSTANT())
     store_i64(ptr + 8, 0)
     store_i64(ptr + 16, CONST_STR())
     store_i64(ptr + 24, str_idx)
     store_i64(ptr + 32, 0)
-    R ptr
+    return ptr
 }
 
-F operand_const_unit() -> i64 {
+fn operand_const_unit() -> i64 {
     ptr := malloc(40)
     store_i64(ptr, OPERAND_CONSTANT())
     store_i64(ptr + 8, 0)
     store_i64(ptr + 16, CONST_UNIT())
     store_i64(ptr + 24, 0)
     store_i64(ptr + 32, 0)
-    R ptr
+    return ptr
 }
 
 # ============================================================================
@@ -184,32 +184,32 @@ F operand_const_unit() -> i64 {
 # ============================================================================
 # Projections: Deref=1, Field(idx)=2, Index(local)=3
 
-F PROJ_DEREF() -> i64 = 1
-F PROJ_FIELD() -> i64 = 2
-F PROJ_INDEX() -> i64 = 3
+fn PROJ_DEREF() -> i64 = 1
+fn PROJ_FIELD() -> i64 = 2
+fn PROJ_INDEX() -> i64 = 3
 
 # Projection: 16 bytes (kind + value)
-S Projection {
+struct Projection {
     kind: i64,
     value: i64
 }
 
 # Place: 24 bytes
-S Place {
+struct Place {
     local_idx: i64,
     proj_ptr: i64,
     proj_len: i64
 }
 
-F place_local(local_idx: i64) -> i64 {
+fn place_local(local_idx: i64) -> i64 {
     ptr := malloc(24)
     store_i64(ptr, local_idx)
     store_i64(ptr + 8, 0)
     store_i64(ptr + 16, 0)
-    R ptr
+    return ptr
 }
 
-F place_field(local_idx: i64, field_idx: i64) -> i64 {
+fn place_field(local_idx: i64, field_idx: i64) -> i64 {
     proj := malloc(16)
     store_i64(proj, PROJ_FIELD())
     store_i64(proj + 8, field_idx)
@@ -217,10 +217,10 @@ F place_field(local_idx: i64, field_idx: i64) -> i64 {
     store_i64(ptr, local_idx)
     store_i64(ptr + 8, proj)
     store_i64(ptr + 16, 1)
-    R ptr
+    return ptr
 }
 
-F place_deref(local_idx: i64) -> i64 {
+fn place_deref(local_idx: i64) -> i64 {
     proj := malloc(16)
     store_i64(proj, PROJ_DEREF())
     store_i64(proj + 8, 0)
@@ -228,10 +228,10 @@ F place_deref(local_idx: i64) -> i64 {
     store_i64(ptr, local_idx)
     store_i64(ptr + 8, proj)
     store_i64(ptr + 16, 1)
-    R ptr
+    return ptr
 }
 
-F place_index(local_idx: i64, index_local: i64) -> i64 {
+fn place_index(local_idx: i64, index_local: i64) -> i64 {
     proj := malloc(16)
     store_i64(proj, PROJ_INDEX())
     store_i64(proj + 8, index_local)
@@ -239,54 +239,54 @@ F place_index(local_idx: i64, index_local: i64) -> i64 {
     store_i64(ptr, local_idx)
     store_i64(ptr + 8, proj)
     store_i64(ptr + 16, 1)
-    R ptr
+    return ptr
 }
 
 # ============================================================================
 # Binary & Unary Operators
 # ============================================================================
 
-F BINOP_ADD() -> i64 = 1
-F BINOP_SUB() -> i64 = 2
-F BINOP_MUL() -> i64 = 3
-F BINOP_DIV() -> i64 = 4
-F BINOP_REM() -> i64 = 5
-F BINOP_BIT_AND() -> i64 = 6
-F BINOP_BIT_OR() -> i64 = 7
-F BINOP_BIT_XOR() -> i64 = 8
-F BINOP_SHL() -> i64 = 9
-F BINOP_SHR() -> i64 = 10
-F BINOP_EQ() -> i64 = 11
-F BINOP_NE() -> i64 = 12
-F BINOP_LT() -> i64 = 13
-F BINOP_LE() -> i64 = 14
-F BINOP_GT() -> i64 = 15
-F BINOP_GE() -> i64 = 16
+fn BINOP_ADD() -> i64 = 1
+fn BINOP_SUB() -> i64 = 2
+fn BINOP_MUL() -> i64 = 3
+fn BINOP_DIV() -> i64 = 4
+fn BINOP_REM() -> i64 = 5
+fn BINOP_BIT_AND() -> i64 = 6
+fn BINOP_BIT_OR() -> i64 = 7
+fn BINOP_BIT_XOR() -> i64 = 8
+fn BINOP_SHL() -> i64 = 9
+fn BINOP_SHR() -> i64 = 10
+fn BINOP_EQ() -> i64 = 11
+fn BINOP_NE() -> i64 = 12
+fn BINOP_LT() -> i64 = 13
+fn BINOP_LE() -> i64 = 14
+fn BINOP_GT() -> i64 = 15
+fn BINOP_GE() -> i64 = 16
 
-F UNOP_NEG() -> i64 = 1
-F UNOP_NOT() -> i64 = 2
+fn UNOP_NEG() -> i64 = 1
+fn UNOP_NOT() -> i64 = 2
 
 # ============================================================================
 # Rvalue — right-hand side of assignments
 # ============================================================================
 
-F RVALUE_USE() -> i64 = 1
-F RVALUE_BINOP() -> i64 = 2
-F RVALUE_UNOP() -> i64 = 3
-F RVALUE_REF() -> i64 = 4
-F RVALUE_AGGREGATE() -> i64 = 5
-F RVALUE_DISCRIMINANT() -> i64 = 6
-F RVALUE_CAST() -> i64 = 7
-F RVALUE_LEN() -> i64 = 8
+fn RVALUE_USE() -> i64 = 1
+fn RVALUE_BINOP() -> i64 = 2
+fn RVALUE_UNOP() -> i64 = 3
+fn RVALUE_REF() -> i64 = 4
+fn RVALUE_AGGREGATE() -> i64 = 5
+fn RVALUE_DISCRIMINANT() -> i64 = 6
+fn RVALUE_CAST() -> i64 = 7
+fn RVALUE_LEN() -> i64 = 8
 
 # Aggregate kinds
-F AGG_TUPLE() -> i64 = 1
-F AGG_ARRAY() -> i64 = 2
-F AGG_STRUCT() -> i64 = 3
-F AGG_ENUM() -> i64 = 4
+fn AGG_TUPLE() -> i64 = 1
+fn AGG_ARRAY() -> i64 = 2
+fn AGG_STRUCT() -> i64 = 3
+fn AGG_ENUM() -> i64 = 4
 
 # Rvalue: 72 bytes (flexible union-like struct)
-S Rvalue {
+struct Rvalue {
     kind: i64,
     operand_ptr: i64,
     op: i64,
@@ -298,7 +298,7 @@ S Rvalue {
     agg_operands_len: i64
 }
 
-F rvalue_use(operand_ptr: i64) -> i64 {
+fn rvalue_use(operand_ptr: i64) -> i64 {
     ptr := malloc(72)
     store_i64(ptr, RVALUE_USE())
     store_i64(ptr + 8, operand_ptr)
@@ -309,10 +309,10 @@ F rvalue_use(operand_ptr: i64) -> i64 {
     store_i64(ptr + 48, 0)
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
-    R ptr
+    return ptr
 }
 
-F rvalue_binop(op: i64, lhs_ptr: i64, rhs_ptr: i64) -> i64 {
+fn rvalue_binop(op: i64, lhs_ptr: i64, rhs_ptr: i64) -> i64 {
     ptr := malloc(72)
     store_i64(ptr, RVALUE_BINOP())
     store_i64(ptr + 8, 0)
@@ -323,10 +323,10 @@ F rvalue_binop(op: i64, lhs_ptr: i64, rhs_ptr: i64) -> i64 {
     store_i64(ptr + 48, 0)
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
-    R ptr
+    return ptr
 }
 
-F rvalue_unop(op: i64, operand_ptr: i64) -> i64 {
+fn rvalue_unop(op: i64, operand_ptr: i64) -> i64 {
     ptr := malloc(72)
     store_i64(ptr, RVALUE_UNOP())
     store_i64(ptr + 8, operand_ptr)
@@ -337,10 +337,10 @@ F rvalue_unop(op: i64, operand_ptr: i64) -> i64 {
     store_i64(ptr + 48, 0)
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
-    R ptr
+    return ptr
 }
 
-F rvalue_ref(place_ptr: i64) -> i64 {
+fn rvalue_ref(place_ptr: i64) -> i64 {
     ptr := malloc(72)
     store_i64(ptr, RVALUE_REF())
     store_i64(ptr + 8, 0)
@@ -351,10 +351,10 @@ F rvalue_ref(place_ptr: i64) -> i64 {
     store_i64(ptr + 48, 0)
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
-    R ptr
+    return ptr
 }
 
-F rvalue_aggregate(agg_kind: i64, operands_ptr: i64, operands_len: i64) -> i64 {
+fn rvalue_aggregate(agg_kind: i64, operands_ptr: i64, operands_len: i64) -> i64 {
     ptr := malloc(72)
     store_i64(ptr, RVALUE_AGGREGATE())
     store_i64(ptr + 8, 0)
@@ -365,10 +365,10 @@ F rvalue_aggregate(agg_kind: i64, operands_ptr: i64, operands_len: i64) -> i64 {
     store_i64(ptr + 48, agg_kind)
     store_i64(ptr + 56, operands_ptr)
     store_i64(ptr + 64, operands_len)
-    R ptr
+    return ptr
 }
 
-F rvalue_discriminant(place_ptr: i64) -> i64 {
+fn rvalue_discriminant(place_ptr: i64) -> i64 {
     ptr := malloc(72)
     store_i64(ptr, RVALUE_DISCRIMINANT())
     store_i64(ptr + 8, 0)
@@ -379,10 +379,10 @@ F rvalue_discriminant(place_ptr: i64) -> i64 {
     store_i64(ptr + 48, 0)
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
-    R ptr
+    return ptr
 }
 
-F rvalue_cast(operand_ptr: i64, target_type_ptr: i64) -> i64 {
+fn rvalue_cast(operand_ptr: i64, target_type_ptr: i64) -> i64 {
     ptr := malloc(72)
     store_i64(ptr, RVALUE_CAST())
     store_i64(ptr + 8, operand_ptr)
@@ -393,10 +393,10 @@ F rvalue_cast(operand_ptr: i64, target_type_ptr: i64) -> i64 {
     store_i64(ptr + 48, 0)
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
-    R ptr
+    return ptr
 }
 
-F rvalue_len(place_ptr: i64) -> i64 {
+fn rvalue_len(place_ptr: i64) -> i64 {
     ptr := malloc(72)
     store_i64(ptr, RVALUE_LEN())
     store_i64(ptr + 8, 0)
@@ -407,62 +407,62 @@ F rvalue_len(place_ptr: i64) -> i64 {
     store_i64(ptr + 48, 0)
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
-    R ptr
+    return ptr
 }
 
 # ============================================================================
 # Statement — non-terminating instruction in a basic block
 # ============================================================================
 
-F STMT_MIR_ASSIGN() -> i64 = 1
-F STMT_MIR_DROP() -> i64 = 2
-F STMT_MIR_NOP() -> i64 = 3
+fn STMT_MIR_ASSIGN() -> i64 = 1
+fn STMT_MIR_DROP() -> i64 = 2
+fn STMT_MIR_NOP() -> i64 = 3
 
 # Statement: 24 bytes
-S MirStmt {
+struct MirStmt {
     kind: i64,
     place_ptr: i64,
     rvalue_ptr: i64
 }
 
-F mir_stmt_assign(place_ptr: i64, rvalue_ptr: i64) -> i64 {
+fn mir_stmt_assign(place_ptr: i64, rvalue_ptr: i64) -> i64 {
     ptr := malloc(24)
     store_i64(ptr, STMT_MIR_ASSIGN())
     store_i64(ptr + 8, place_ptr)
     store_i64(ptr + 16, rvalue_ptr)
-    R ptr
+    return ptr
 }
 
-F mir_stmt_drop(place_ptr: i64) -> i64 {
+fn mir_stmt_drop(place_ptr: i64) -> i64 {
     ptr := malloc(24)
     store_i64(ptr, STMT_MIR_DROP())
     store_i64(ptr + 8, place_ptr)
     store_i64(ptr + 16, 0)
-    R ptr
+    return ptr
 }
 
-F mir_stmt_nop() -> i64 {
+fn mir_stmt_nop() -> i64 {
     ptr := malloc(24)
     store_i64(ptr, STMT_MIR_NOP())
     store_i64(ptr + 8, 0)
     store_i64(ptr + 16, 0)
-    R ptr
+    return ptr
 }
 
 # ============================================================================
 # Terminator — control flow transfer ending a basic block
 # ============================================================================
 
-F TERM_GOTO() -> i64 = 1
-F TERM_SWITCH_INT() -> i64 = 2
-F TERM_RETURN() -> i64 = 3
-F TERM_CALL() -> i64 = 4
-F TERM_TAIL_CALL() -> i64 = 5
-F TERM_UNREACHABLE() -> i64 = 6
-F TERM_ASSERT() -> i64 = 7
+fn TERM_GOTO() -> i64 = 1
+fn TERM_SWITCH_INT() -> i64 = 2
+fn TERM_RETURN() -> i64 = 3
+fn TERM_CALL() -> i64 = 4
+fn TERM_TAIL_CALL() -> i64 = 5
+fn TERM_UNREACHABLE() -> i64 = 6
+fn TERM_ASSERT() -> i64 = 7
 
 # Terminator: 80 bytes (union-like)
-S Terminator {
+struct Terminator {
     kind: i64,
     goto_target: i64,
     switch_disc_ptr: i64,
@@ -475,7 +475,7 @@ S Terminator {
     call_dest_ptr: i64
 }
 
-F term_goto(target_bb: i64) -> i64 {
+fn term_goto(target_bb: i64) -> i64 {
     ptr := malloc(80)
     store_i64(ptr, TERM_GOTO())
     store_i64(ptr + 8, target_bb)
@@ -487,10 +487,10 @@ F term_goto(target_bb: i64) -> i64 {
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
     store_i64(ptr + 72, 0)
-    R ptr
+    return ptr
 }
 
-F term_return() -> i64 {
+fn term_return() -> i64 {
     ptr := malloc(80)
     store_i64(ptr, TERM_RETURN())
     store_i64(ptr + 8, 0)
@@ -502,10 +502,10 @@ F term_return() -> i64 {
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
     store_i64(ptr + 72, 0)
-    R ptr
+    return ptr
 }
 
-F term_call(func_idx: i64, args_ptr: i64, args_len: i64, dest_ptr: i64, target_bb: i64) -> i64 {
+fn term_call(func_idx: i64, args_ptr: i64, args_len: i64, dest_ptr: i64, target_bb: i64) -> i64 {
     ptr := malloc(80)
     store_i64(ptr, TERM_CALL())
     store_i64(ptr + 8, target_bb)
@@ -517,10 +517,10 @@ F term_call(func_idx: i64, args_ptr: i64, args_len: i64, dest_ptr: i64, target_b
     store_i64(ptr + 56, args_ptr)
     store_i64(ptr + 64, args_len)
     store_i64(ptr + 72, dest_ptr)
-    R ptr
+    return ptr
 }
 
-F term_tail_call(func_idx: i64, args_ptr: i64, args_len: i64) -> i64 {
+fn term_tail_call(func_idx: i64, args_ptr: i64, args_len: i64) -> i64 {
     ptr := malloc(80)
     store_i64(ptr, TERM_TAIL_CALL())
     store_i64(ptr + 8, 0)
@@ -532,10 +532,10 @@ F term_tail_call(func_idx: i64, args_ptr: i64, args_len: i64) -> i64 {
     store_i64(ptr + 56, args_ptr)
     store_i64(ptr + 64, args_len)
     store_i64(ptr + 72, 0)
-    R ptr
+    return ptr
 }
 
-F term_switch_int(disc_ptr: i64, targets_ptr: i64, targets_len: i64, otherwise_bb: i64) -> i64 {
+fn term_switch_int(disc_ptr: i64, targets_ptr: i64, targets_len: i64, otherwise_bb: i64) -> i64 {
     ptr := malloc(80)
     store_i64(ptr, TERM_SWITCH_INT())
     store_i64(ptr + 8, 0)
@@ -547,10 +547,10 @@ F term_switch_int(disc_ptr: i64, targets_ptr: i64, targets_len: i64, otherwise_b
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
     store_i64(ptr + 72, 0)
-    R ptr
+    return ptr
 }
 
-F term_unreachable() -> i64 {
+fn term_unreachable() -> i64 {
     ptr := malloc(80)
     store_i64(ptr, TERM_UNREACHABLE())
     store_i64(ptr + 8, 0)
@@ -562,7 +562,7 @@ F term_unreachable() -> i64 {
     store_i64(ptr + 56, 0)
     store_i64(ptr + 64, 0)
     store_i64(ptr + 72, 0)
-    R ptr
+    return ptr
 }
 
 # ============================================================================
@@ -570,32 +570,32 @@ F term_unreachable() -> i64 {
 # ============================================================================
 
 # BasicBlock: 24 bytes
-S MirBasicBlock {
+struct MirBasicBlock {
     stmts_ptr: i64,
     stmts_len: i64,
     term_ptr: i64
 }
 
-F mir_bb_new() -> i64 {
+fn mir_bb_new() -> i64 {
     stmts := malloc(8 * 64)
     ptr := malloc(24)
     store_i64(ptr, stmts)
     store_i64(ptr + 8, 0)
     store_i64(ptr + 16, 0)
-    R ptr
+    return ptr
 }
 
-F mir_bb_add_stmt(bb_ptr: i64, stmt_ptr: i64) -> i64 {
+fn mir_bb_add_stmt(bb_ptr: i64, stmt_ptr: i64) -> i64 {
     stmts := load_i64(bb_ptr)
     len := load_i64(bb_ptr + 8)
     store_i64(stmts + len * 8, stmt_ptr)
     store_i64(bb_ptr + 8, len + 1)
-    R 1
+    return 1
 }
 
-F mir_bb_set_term(bb_ptr: i64, term_ptr: i64) -> i64 {
+fn mir_bb_set_term(bb_ptr: i64, term_ptr: i64) -> i64 {
     store_i64(bb_ptr + 16, term_ptr)
-    R 1
+    return 1
 }
 
 # ============================================================================
@@ -603,18 +603,18 @@ F mir_bb_set_term(bb_ptr: i64, term_ptr: i64) -> i64 {
 # ============================================================================
 
 # LocalDecl: 24 bytes
-S MirLocalDecl {
+struct MirLocalDecl {
     name_idx: i64,
     type_ptr: i64,
     is_mutable: i64
 }
 
-F mir_local_decl(name_idx: i64, type_ptr: i64, is_mutable: i64) -> i64 {
+fn mir_local_decl(name_idx: i64, type_ptr: i64, is_mutable: i64) -> i64 {
     ptr := malloc(24)
     store_i64(ptr, name_idx)
     store_i64(ptr + 8, type_ptr)
     store_i64(ptr + 16, is_mutable)
-    R ptr
+    return ptr
 }
 
 # ============================================================================
@@ -622,7 +622,7 @@ F mir_local_decl(name_idx: i64, type_ptr: i64, is_mutable: i64) -> i64 {
 # ============================================================================
 
 # MirBody: 56 bytes
-S MirBody {
+struct MirBody {
     name_idx: i64,
     params_ptr: i64,
     params_len: i64,
@@ -638,7 +638,7 @@ S MirBody {
 # ============================================================================
 
 # MirModule: 48 bytes
-S MirModule {
+struct MirModule {
     name_idx: i64,
     bodies_ptr: i64,
     bodies_len: i64,
@@ -648,7 +648,7 @@ S MirModule {
     enums_len: i64
 }
 
-F mir_module_new(name_idx: i64) -> i64 {
+fn mir_module_new(name_idx: i64) -> i64 {
     ptr := malloc(56)
     store_i64(ptr, name_idx)
     store_i64(ptr + 8, malloc(8 * 128))
@@ -657,13 +657,13 @@ F mir_module_new(name_idx: i64) -> i64 {
     store_i64(ptr + 32, 0)
     store_i64(ptr + 40, malloc(8 * 64))
     store_i64(ptr + 48, 0)
-    R ptr
+    return ptr
 }
 
-F mir_module_add_body(mod_ptr: i64, body_ptr: i64) -> i64 {
+fn mir_module_add_body(mod_ptr: i64, body_ptr: i64) -> i64 {
     bodies := load_i64(mod_ptr + 8)
     len := load_i64(mod_ptr + 16)
     store_i64(bodies + len * 8, body_ptr)
     store_i64(mod_ptr + 16, len + 1)
-    R 1
+    return 1
 }

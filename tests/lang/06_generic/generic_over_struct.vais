@@ -1,0 +1,29 @@
+# CHECKS: generic function takes a generic Pair<i64, i64>, returns a field.
+struct Pair<A, B> {
+    first: A,
+    second: B
+}
+
+fn take_first<A, B>(p: Pair<A, B>) -> A {
+    p.first
+}
+
+fn take_second<A, B>(p: Pair<A, B>) -> B {
+    p.second
+}
+
+fn main() -> i64 {
+    p: Pair<i64, i64> := Pair { first: 10, second: 20 }
+    I take_first(p) != 10 { return 1 }
+    q: Pair<i64, i64> := Pair { first: 100, second: 200 }
+    I take_second(q) != 200 { return 2 }
+
+    # nested
+    r: Pair<i64, i64> := Pair {
+        first: take_first(Pair { first: 5, second: 6 }),
+        second: take_second(Pair { first: 7, second: 8 })
+    }
+    I r.first != 5 { return 3 }
+    I r.second != 8 { return 4 }
+    return 0
+}

@@ -3,7 +3,7 @@
 #
 # Run: vaisc run examples/bubble_sort.vais
 
-F bubble_sort(arr: *i64, len: i64) -> i64 {
+fn bubble_sort(arr: *i64, len: i64) -> i64 {
     i := mut 0
     LW i < len - 1 {
         j := mut 0
@@ -21,14 +21,14 @@ F bubble_sort(arr: *i64, len: i64) -> i64 {
     0
 }
 
-F print_array(arr: *i64, len: i64) -> i64 {
+fn print_array(arr: *i64, len: i64) -> i64 {
     LF i:0..len {
         puts("{arr[i]}")
     }
     0
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     arr: *i64 = [64, 25, 12, 22, 11, 90, 45, 33]
     len := 8
 
@@ -48,5 +48,5 @@ F main() -> i64 {
             ok = 0
         }
     }
-    I ok == 1 { 0 } EL { 1 }
+    I ok == 1 { 0 } else { 1 }
 }

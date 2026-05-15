@@ -1,6 +1,6 @@
 # Simple closure test - lambda with captured variables
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Closure Test ===")
 
     # Test 1: Simple capture

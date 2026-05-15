@@ -1,0 +1,25 @@
+# CHECKS: generic struct method that uses T internally.
+struct Wrap<T> {
+    inner: T
+}
+
+impl Wrap<T> {
+    fn new(v: T) -> Wrap<T> {
+        Wrap { inner: v }
+    }
+    fn get(&self) -> T {
+        self.inner
+    }
+}
+
+fn main() -> i64 {
+    w: Wrap<i64> := Wrap.new(42)
+    I w.get() != 42 { return 1 }
+
+    w2: Wrap<i64> := Wrap.new(0 - 7)
+    I w2.get() != 0 - 7 { return 2 }
+
+    w3: Wrap<i64> := Wrap { inner: 100 }
+    I w3.get() != 100 { return 3 }
+    return 0
+}

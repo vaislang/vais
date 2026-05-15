@@ -1,0 +1,18 @@
+# LIVING_SPEC/05_idioms/idiom_impl_colocation.vais
+# Key concept: ❌ 다른 파일에 X 분리 vs ✅ S와 X 같은 파일
+# ✅ DO: S와 X를 같은 파일에 — Phase 2.9 decision (option a).
+# ❌ DON'T: S는 foo.vais에, X는 bar.vais에 — 단일 파일 빌드 시 메서드 미보임.
+
+struct Counter { count: i64 }
+
+impl Counter {
+    fn bump(self) -> Counter { Counter { count: self.count + 1 } }
+    fn get(self) -> i64 { self.count }
+}
+
+fn main() -> i64 {
+    c := Counter { count: 0 }
+    c2 := c.bump()
+    c3 := c2.bump()
+    c3.get()
+}

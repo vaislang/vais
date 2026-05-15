@@ -1,14 +1,14 @@
 # Test generic struct
-S Pair<T> {
+struct Pair<T> {
     first: T,
     second: T
 }
 
-X Pair {
-    F sum(&self) -> i64 = self.first + self.second
+impl Pair {
+    fn sum(&self) -> i64 = self.first + self.second
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing generic struct:")
 
     p := Pair { first: 10, second: 20 }

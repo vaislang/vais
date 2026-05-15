@@ -1,5 +1,5 @@
-F match_test(x: i64) -> str {
-    M x {
+fn match_test(x: i64) -> str {
+    match x {
         0 => "zero",
         1 | 2 | 3 => "small",
         n I n < 10 => "medium",
@@ -7,8 +7,8 @@ F match_test(x: i64) -> str {
     }
 }
 
-F destructure(p: Point) -> i64 {
-    M p {
+fn destructure(p: Point) -> i64 {
+    match p {
         Point { x: 0, y } => y,
         Point { x, y: 0 } => x,
         Point { x, y } => x + y

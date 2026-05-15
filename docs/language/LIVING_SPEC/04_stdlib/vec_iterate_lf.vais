@@ -1,0 +1,26 @@
+# LIVING_SPEC/04_stdlib/vec_iterate_lf.vais
+# Key concept: Vec를 순회할 때 L { } 루프와 인덱스 변수를 사용한다.
+# .get(i) → Some(v) 패턴으로 각 원소에 접근.
+
+fn sum_vec(v: Vec<i64>) -> i64 {
+    total := mut 0
+    i := mut 0
+    L {
+        I i >= v.len() { B }
+        item := v.get(i)
+        match item {
+            Some(x) => { total = total + x },
+            None    => { i = v.len() }
+        }
+        i = i + 1
+    }
+    total
+}
+
+fn main() -> i64 {
+    v: Vec<i64> = Vec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    sum_vec(v)   # 6
+}

@@ -1,20 +1,20 @@
 # HTTP types with routing
 struct Response {
-    status: i64,
-    body: i64,
+    status: i,
+    body: i,
 }
 
-fn route(path: i64) -> Response {
+fn route(path) -> Response {
     I path == 1 {
-        Response { status: 200, body: 1 }
-    } else I path == 2 {
-        Response { status: 200, body: 2 }
-    } else {
-        Response { status: 404, body: 0 }
+        Response(200, 1)
+    } enum I path == 2 {
+        Response(200, 2)
+    } enum {
+        Response(404, 0)
     }
 }
 
-fn main() -> i64 {
+fn main() {
     res := route(1)
     println("status={res.status} body={res.body}")
     res2 := route(2)

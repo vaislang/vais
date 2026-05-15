@@ -1,0 +1,18 @@
+# LIVING_SPEC/01_keywords/EN_enum_generic.vais
+# Key concept: Generic enum — EN Name<T> { Variant(T), ... }
+
+enum Box<T> {
+    Empty,
+    Full(T)
+}
+
+fn get_or(b: Box<i64>, def: i64) -> i64 {
+    match b {
+        Empty => def,
+        Full(v) => v
+    }
+}
+
+fn main() -> i64 {
+    get_or(Full(42), 0) + get_or(Empty, 99)
+}

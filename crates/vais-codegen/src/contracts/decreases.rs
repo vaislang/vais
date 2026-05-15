@@ -191,6 +191,7 @@ impl CodeGenerator {
                     let cmp_result = format!("%decreases_cmp_{}", *counter);
                     *counter += 1;
                     write_ir!(ir, "  {} = icmp sge i64 {}, 0", cmp_result, value);
+                    self.fn_ctx.record_emitted_type(&cmp_result, "i1");
                     write_ir!(
                         ir,
                         "  br i1 {}, label %{}, label %{}",

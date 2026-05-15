@@ -1,0 +1,9 @@
+fn do_nothing() {
+    return
+}
+fn take_result() -> Result<i64, str> {
+    return do_nothing()
+}
+fn main() -> i64 {
+    return 0
+}

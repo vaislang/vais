@@ -1,0 +1,25 @@
+# CHECKS: detect perfect squares via sqrt-ish search.
+fn is_perfect_square(n: i64) -> i64 {
+    I n < 0 { return 0 }
+    I n == 0 { return 1 }
+    i: i64 := mut 1
+    LW i * i <= n {
+        I i * i == n { return 1 }
+        i = i + 1
+    }
+    0
+}
+
+fn main() -> i64 {
+    I is_perfect_square(0) != 1 { return 1 }
+    I is_perfect_square(1) != 1 { return 2 }
+    I is_perfect_square(4) != 1 { return 3 }
+    I is_perfect_square(9) != 1 { return 4 }
+    I is_perfect_square(100) != 1 { return 5 }
+    I is_perfect_square(2) != 0 { return 6 }
+    I is_perfect_square(3) != 0 { return 7 }
+    I is_perfect_square(99) != 0 { return 8 }
+    I is_perfect_square(10000) != 1 { return 9 }
+    I is_perfect_square(0 - 5) != 0 { return 10 }
+    return 0
+}

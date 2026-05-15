@@ -3,7 +3,7 @@
 use crate::commands::compile::compile_ir_to_binary;
 use crate::error_formatter;
 use crate::package;
-use crate::runtime::extract_used_modules;
+use crate::runtime::{extract_used_modules, get_runtime_for_module};
 use colored::Colorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -222,7 +222,51 @@ pub(crate) fn optimize_and_output(
         };
 
         // Extract used modules from AST for smart C runtime linking
-        let used_modules = extract_used_modules(final_ast);
+        let mut used_modules = extract_used_modules(final_ast);
+        for module_path in loaded_modules {
+            if module_path.ends_with(Path::new("src/auth/runtime.vais")) {
+                used_modules.insert("src::auth::runtime".to_string());
+                continue;
+            }
+            let is_std_file = module_path
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .and_then(|name| name.to_str())
+                == Some("std");
+            if !is_std_file {
+                continue;
+            }
+            let Some(stem) = module_path.file_stem().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            let module_name = format!("std::{stem}");
+            if get_runtime_for_module(&module_name).is_some() {
+                used_modules.insert(module_name);
+            }
+        }
+        if let Some(modules_map) = &final_ast.modules_map {
+            for module_path in modules_map.keys() {
+                if module_path.ends_with(Path::new("src/auth/runtime.vais")) {
+                    used_modules.insert("src::auth::runtime".to_string());
+                    continue;
+                }
+                let is_std_file = module_path
+                    .parent()
+                    .and_then(|parent| parent.file_name())
+                    .and_then(|name| name.to_str())
+                    == Some("std");
+                if !is_std_file {
+                    continue;
+                }
+                let Some(stem) = module_path.file_stem().and_then(|name| name.to_str()) else {
+                    continue;
+                };
+                let module_name = format!("std::{stem}");
+                if get_runtime_for_module(&module_name).is_some() {
+                    used_modules.insert(module_name);
+                }
+            }
+        }
         if verbose && !used_modules.is_empty() {
             let std_modules: Vec<_> = used_modules
                 .iter()

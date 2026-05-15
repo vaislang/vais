@@ -81,7 +81,12 @@ impl OwnershipChecker {
         Ok(())
     }
 
-    /// Check if an expression causes a move (for non-Copy types)
+    /// Check if an expression causes a move (for non-Copy types).
+    ///
+    /// Current AST ownership paths handle consuming sites inline to avoid
+    /// double-visiting expressions; keep this as the shared helper for the
+    /// next ownership-site consolidation.
+    #[allow(dead_code)]
     pub(super) fn check_move_from_expr(&mut self, expr: &Spanned<Expr>) -> TypeResult<()> {
         if let Expr::Ident(name) = &expr.node {
             // This variable is being used as a value (e.g., passed to function, assigned)

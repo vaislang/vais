@@ -1,0 +1,3 @@
+use vaisdb/sql/advanced
+
+fn main() -> i64 { return 0 }

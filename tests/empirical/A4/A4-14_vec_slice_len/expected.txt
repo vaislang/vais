@@ -1,0 +1,4 @@
+surface=Vec ↔ Slice (.len() path) specified-safe coercion
+expected_per_design=exit 3 (Vec length)
+actual_observed=exit 3 after call-site slice materialization
+assertion=exit_eq, expected=3

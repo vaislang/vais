@@ -15,7 +15,6 @@
 #   String::with_capacity(n)    - n 바이트 용량의 빈 String 생성
 #   String::from_str(s)         - str 리터럴로부터 String 생성
 #   .push_char(c)               - 문자(i8) 하나 추가
-#   .push_byte(b)               - 바이트 하나 추가
 #   .push_str(s)                - str 슬라이스 추가
 #   .append(other)              - 다른 String 뒤에 이어 붙이기
 #   .len()                      - 바이트 길이 반환
@@ -50,45 +49,60 @@
 # Stores: data pointer, length, capacity
 # Updated to use Option<T> for error handling
 
-U std/option
+use std/option
 
 # Str is an alias for the primitive str type
 # Used widely in vaisdb and other projects
-T Str = str
+type Str = str
 
-S String {
+struct String {
     data: i64,      # Pointer to char array (i8*)
     len: i64,       # Current length (excluding null terminator)
     cap: i64        # Allocated capacity
 }
 
-X String {
+impl String {
     # Create a new empty string with given capacity
-    F with_capacity(capacity: i64) -> String {
+    fn with_capacity(capacity: i64) -> String {
         data := malloc(capacity)
         String { data: data, len: 0, cap: capacity }
     }
 
     # Get the length of the string
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.len
     }
 
     # Get the capacity of the string
-    F capacity(&self) -> i64 {
+    fn capacity(&self) -> i64 {
         self.cap
     }
 
     # Check if string is empty
-    F is_empty(&self) -> i64 {
-        I self.len == 0 { 1 } EL { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.len == 0 { 1 } else { 0 }
+    }
+
+    # Return underlying byte storage as a Vec<u8>. Phase 218.
+    # Note: Vais lacks zero-copy slice views over String storage, so this
+    # returns a fresh Vec<u8>. vaisdb's chunking code only iterates so the
+    # extra allocation is acceptable.
+    fn as_bytes(&self) -> Vec<u8> {
+        result: Vec<u8> := Vec.with_capacity(self.len)
+        i := mut 0
+        L {
+            I i >= self.len { B }
+            result.push(load_byte(self.data + i) as u8)
+            i = i + 1
+        }
+        result
     }
 
     # Get character at index (returns ASCII value)
-    F char_at(&self, index: i64) -> i64 {
+    fn char_at(&self, index: i64) -> i64 {
         I index < 0 || index >= self.len {
             0  # Return 0 for out of bounds
-        } EL {
+        } else {
             # Load byte at index
             ptr := self.data + index
             load_byte(ptr)
@@ -97,17 +111,16 @@ X String {
 
     # Get character at index using Option type
     # Returns Some(char) if index is valid, None otherwise
-    F char_at_opt(&self, index: i64) -> Option<i64> {
+    fn char_at_opt(&self, index: i64) -> Option<i64> {
         I index < 0 || index >= self.len {
-            None
-        } EL {
-            ptr := self.data + index
-            Some(load_byte(ptr))
+            return Option.None
         }
+        ptr := self.data + index
+        Option.Some(load_byte(ptr))
     }
 
     # Push a character to the end
-    F push_char(&self, c: i64) -> i64 {
+    fn push_char(&self, c: i64) -> i64 {
         # Check if we need to grow
         I self.len >= self.cap - 1 {
             @.grow()
@@ -121,14 +134,14 @@ X String {
         self.len
     }
 
-    # Push a raw byte to the end
-    F push_byte(&self, b: i64) -> i64 {
+    # Alias for push_char — vaisdb uses push_byte name. Phase 226.
+    fn push_byte(&self, b: i64) -> i64 {
         @.push_char(b)
     }
 
     # Grow the string capacity (double it)
-    F grow(&self) -> i64 {
-        new_cap := self.cap * 2
+    fn grow(&self) -> i64 {
+        new_cap := mut self.cap * 2
         I new_cap < 16 {
             new_cap = 16
         }
@@ -142,68 +155,68 @@ X String {
     }
 
     # Clear the string
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         self.len = 0
         store_byte(self.data, 0)
         0
     }
 
     # Print the string
-    F print(&self) -> i64 {
-        puts_ptr(self.data)
+    fn print(&self) -> i64 {
+        puts_ptr(self.data) as i64
     }
 
     # ===== Additional String Methods =====
 
     # Check if string starts with a given prefix (null-terminated i64 pointer)
-    F starts_with(&self, prefix: i64) -> i64 {
+    fn starts_with(&self, prefix: i64) -> i64 {
         prefix_len := strlen(prefix)
-        I prefix_len > self.len { R 0 }
+        I prefix_len > self.len { return 0 }
         str_starts_with_rec(self.data, prefix, prefix_len, 0)
     }
 
     # Check if string ends with a given suffix (null-terminated i64 pointer)
-    F ends_with(&self, suffix: i64) -> i64 {
+    fn ends_with(&self, suffix: i64) -> i64 {
         suffix_len := strlen(suffix)
-        I suffix_len > self.len { R 0 }
+        I suffix_len > self.len { return 0 }
         offset := self.len - suffix_len
         str_ends_with_rec(self.data, offset, suffix, suffix_len, 0)
     }
 
     # Convert to uppercase, returns new pointer (caller must free)
-    F to_uppercase(&self) -> i64 {
+    fn to_uppercase(&self) -> i64 {
         str_to_upper(self.data, self.len)
     }
 
     # Convert to lowercase, returns new pointer (caller must free)
-    F to_lowercase(&self) -> i64 {
+    fn to_lowercase(&self) -> i64 {
         str_to_lower(self.data, self.len)
     }
 
     # Parse string as integer, returns the value (0 if invalid)
-    F parse_int(&self) -> i64 {
+    fn parse_int(&self) -> i64 {
         str_parse_int(self.data, self.len)
     }
 
     # Get character count (ASCII: same as len; handles UTF-8 multi-byte)
-    F char_count(&self) -> i64 {
+    fn char_count(&self) -> i64 {
         str_char_count(self.data, self.len)
     }
 
     # Check if string contains a substring (null-terminated i64 pointer)
-    F contains_str(&self, needle: i64) -> i64 {
+    fn contains_str(&self, needle: i64) -> i64 {
         needle_len := strlen(needle)
         str_contains_raw(self.data, self.len, needle, needle_len)
     }
 
     # Find index of substring, returns -1 if not found
-    F index_of(&self, needle: i64) -> i64 {
+    fn index_of(&self, needle: i64) -> i64 {
         needle_len := strlen(needle)
         str_index_of_raw(self.data, self.len, needle, needle_len)
     }
 
     # Free the string memory
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.data)
         self.data = 0
         self.len = 0
@@ -213,7 +226,7 @@ X String {
 }
 
 # Helper: Create string from literal
-F str_from(s: i64) -> String {
+fn str_from(s: i64) -> String {
     # s is pointer to null-terminated string
     len := strlen(s)
     cap := len + 16
@@ -223,7 +236,7 @@ F str_from(s: i64) -> String {
 }
 
 # Helper: Concatenate two strings
-F str_concat(a: String, b: String) -> String {
+fn str_concat(a: String, b: String) -> String {
     new_len := a.len + b.len
     new_cap := new_len + 16
     data := malloc(new_cap)
@@ -233,7 +246,9 @@ F str_concat(a: String, b: String) -> String {
 }
 
 # Helper: Get substring
-F str_substring(s: String, start: i64, end: i64) -> String {
+fn str_substring(s: String, start: i64, end: i64) -> String {
+    start := mut start
+    end := mut end
     I start < 0 {
         start = 0
     }
@@ -242,7 +257,7 @@ F str_substring(s: String, start: i64, end: i64) -> String {
     }
     I start >= end {
         String.with_capacity(16)
-    } EL {
+    } else {
         new_len := end - start
         new_cap := new_len + 16
         data := malloc(new_cap)
@@ -253,14 +268,14 @@ F str_substring(s: String, start: i64, end: i64) -> String {
 }
 
 # Helper: Check if string contains character
-F str_contains_char(s: String, c: i64) -> i64 {
-    i := 0
+fn str_contains_char(s: String, c: i64) -> i64 {
+    i := mut 0
     L {
         I i >= s.len {
-            R 0
+            return 0
         }
         I s.char_at(i) == c {
-            R 1
+            return 1
         }
         i = i + 1
     }
@@ -268,18 +283,14 @@ F str_contains_char(s: String, c: i64) -> i64 {
 }
 
 # Helper: Compare two strings
-F str_eq(a: String, b: String) -> i64 {
+fn str_eq(a: String, b: String) -> i64 {
     I a.len != b.len {
         0
-    } EL {
-        i := 0
+    } else {
+        i := mut 0
         L {
-            I i >= a.len {
-                B 1
-            }
-            I a.char_at(i) != b.char_at(i) {
-                B 0
-            }
+            I i >= a.len { B 1 }
+            I a.char_at(i) != b.char_at(i) { B 0 }
             i = i + 1
         }
     }
@@ -292,19 +303,19 @@ F str_eq(a: String, b: String) -> i64 {
 # =====================================================
 
 # Check if byte is whitespace
-F is_whitespace(c: i64) -> i64 {
-    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } EL { 0 }
+fn is_whitespace(c: i64) -> i64 {
+    I c == 32 || c == 9 || c == 10 || c == 13 { 1 } else { 0 }
 }
 
 # Trim leading whitespace — returns { data_ptr: i64, len: i64 } via result ptr
 # result_ptr: pointer to 16-byte struct where data_ptr and len are stored
-F str_trim_start(data: i64, len: i64) -> i64 {
+fn str_trim_start(data: i64, len: i64) -> i64 {
     start := str_find_first_non_ws(data, len, 0)
     new_len := len - start
     I new_len <= 0 {
         buf := malloc(1)
         store_byte(buf, 0)
-        R buf
+        return buf
     }
     buf := malloc(new_len + 1)
     memcpy(buf, data + start, new_len)
@@ -312,22 +323,22 @@ F str_trim_start(data: i64, len: i64) -> i64 {
     buf
 }
 
-F str_find_first_non_ws(data: i64, len: i64, idx: i64) -> i64 {
+fn str_find_first_non_ws(data: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { len }
-    EL {
+    else {
         c := load_byte(data + idx)
         I is_whitespace(c) == 1 { str_find_first_non_ws(data, len, idx + 1) }
-        EL { idx }
+        else { idx }
     }
 }
 
 # Trim trailing whitespace — returns pointer to new null-terminated string
-F str_trim_end(data: i64, len: i64) -> i64 {
+fn str_trim_end(data: i64, len: i64) -> i64 {
     end := str_find_last_non_ws(data, len)
     I end <= 0 {
         buf := malloc(1)
         store_byte(buf, 0)
-        R buf
+        return buf
     }
     buf := malloc(end + 1)
     memcpy(buf, data, end)
@@ -335,23 +346,23 @@ F str_trim_end(data: i64, len: i64) -> i64 {
     buf
 }
 
-F str_find_last_non_ws(data: i64, len: i64) -> i64 {
+fn str_find_last_non_ws(data: i64, len: i64) -> i64 {
     I len <= 0 { 0 }
-    EL {
+    else {
         c := load_byte(data + len - 1)
         I is_whitespace(c) == 1 { str_find_last_non_ws(data, len - 1) }
-        EL { len }
+        else { len }
     }
 }
 
 # Trim both sides — returns pointer to new null-terminated string
-F str_trim(data: i64, len: i64) -> i64 {
+fn str_trim(data: i64, len: i64) -> i64 {
     start := str_find_first_non_ws(data, len, 0)
     end := str_find_last_non_ws(data, len)
     I start >= end {
         buf := malloc(1)
         store_byte(buf, 0)
-        R buf
+        return buf
     }
     new_len := end - start
     buf := malloc(new_len + 1)
@@ -363,39 +374,39 @@ F str_trim(data: i64, len: i64) -> i64 {
 # Count UTF-8 characters in a byte buffer.
 # Multi-byte characters: continuation bytes (10xxxxxx, 0x80-0xBF) are not counted.
 # This gives the number of Unicode code points, not the byte length.
-F str_char_count(data: i64, len: i64) -> i64 {
+fn str_char_count(data: i64, len: i64) -> i64 {
     str_char_count_rec(data, len, 0, 0)
 }
 
-F str_char_count_rec(data: i64, len: i64, idx: i64, count: i64) -> i64 {
+fn str_char_count_rec(data: i64, len: i64, idx: i64, count: i64) -> i64 {
     I idx >= len { count }
-    EL {
+    else {
         byte := load_byte(data + idx)
         # Count only leading bytes (not continuation bytes 10xxxxxx)
         # A continuation byte has bit pattern 10xxxxxx (0x80 <= byte <= 0xBF)
-        is_continuation := I byte >= 128 && byte < 192 { 1 } EL { 0 }
+        is_continuation := I byte >= 128 && byte < 192 { 1 } else { 0 }
         str_char_count_rec(data, len, idx + 1, count + 1 - is_continuation)
     }
 }
 
 # Convert to uppercase (ASCII a-z + Latin-1 Supplement U+00E0-U+00FE)
 # Returns pointer to new null-terminated string
-F str_to_upper(data: i64, len: i64) -> i64 {
+fn str_to_upper(data: i64, len: i64) -> i64 {
     buf := malloc(len + 1)
     str_to_upper_rec(data, len, 0, buf)
     store_byte(buf + len, 0)
     buf
 }
 
-F str_to_upper_rec(data: i64, len: i64, idx: i64, buf: i64) -> i64 {
+fn str_to_upper_rec(data: i64, len: i64, idx: i64, buf: i64) -> i64 {
     I idx >= len { 0 }
-    EL {
+    else {
         c := load_byte(data + idx)
         # ASCII lowercase a-z (0x61-0x7A)
         out_c := I c >= 97 && c <= 122 { c - 32 }
         # Latin-1 Supplement lowercase (0xE0-0xFE, excluding 0xF7 which is division sign)
-        EL I c >= 224 && c <= 254 && c != 247 { c - 32 }
-        EL { c }
+        else I c >= 224 && c <= 254 && c != 247 { c - 32 }
+        else { c }
         store_byte(buf + idx, out_c)
         str_to_upper_rec(data, len, idx + 1, buf)
     }
@@ -403,87 +414,87 @@ F str_to_upper_rec(data: i64, len: i64, idx: i64, buf: i64) -> i64 {
 
 # Convert to lowercase (ASCII A-Z + Latin-1 Supplement U+00C0-U+00DE)
 # Returns pointer to new null-terminated string
-F str_to_lower(data: i64, len: i64) -> i64 {
+fn str_to_lower(data: i64, len: i64) -> i64 {
     buf := malloc(len + 1)
     str_to_lower_rec(data, len, 0, buf)
     store_byte(buf + len, 0)
     buf
 }
 
-F str_to_lower_rec(data: i64, len: i64, idx: i64, buf: i64) -> i64 {
+fn str_to_lower_rec(data: i64, len: i64, idx: i64, buf: i64) -> i64 {
     I idx >= len { 0 }
-    EL {
+    else {
         c := load_byte(data + idx)
         # ASCII uppercase A-Z (0x41-0x5A)
         out_c := I c >= 65 && c <= 90 { c + 32 }
         # Latin-1 Supplement uppercase (0xC0-0xDE, excluding 0xD7 which is multiplication sign)
-        EL I c >= 192 && c <= 222 && c != 215 { c + 32 }
-        EL { c }
+        else I c >= 192 && c <= 222 && c != 215 { c + 32 }
+        else { c }
         store_byte(buf + idx, out_c)
         str_to_lower_rec(data, len, idx + 1, buf)
     }
 }
 
 # Check if data starts with prefix
-F str_starts_with_raw(data: i64, data_len: i64, prefix: i64, prefix_len: i64) -> i64 {
-    I prefix_len > data_len { R 0 }
+fn str_starts_with_raw(data: i64, data_len: i64, prefix: i64, prefix_len: i64) -> i64 {
+    I prefix_len > data_len { return 0 }
     str_starts_with_rec(data, prefix, prefix_len, 0)
 }
 
-F str_starts_with_rec(data: i64, prefix: i64, prefix_len: i64, idx: i64) -> i64 {
+fn str_starts_with_rec(data: i64, prefix: i64, prefix_len: i64, idx: i64) -> i64 {
     I idx >= prefix_len { 1 }
-    EL I load_byte(data + idx) != load_byte(prefix + idx) { 0 }
-    EL { str_starts_with_rec(data, prefix, prefix_len, idx + 1) }
+    else I load_byte(data + idx) != load_byte(prefix + idx) { 0 }
+    else { str_starts_with_rec(data, prefix, prefix_len, idx + 1) }
 }
 
 # Check if data ends with suffix
-F str_ends_with_raw(data: i64, data_len: i64, suffix: i64, suffix_len: i64) -> i64 {
-    I suffix_len > data_len { R 0 }
+fn str_ends_with_raw(data: i64, data_len: i64, suffix: i64, suffix_len: i64) -> i64 {
+    I suffix_len > data_len { return 0 }
     offset := data_len - suffix_len
     str_ends_with_rec(data, offset, suffix, suffix_len, 0)
 }
 
-F str_ends_with_rec(data: i64, offset: i64, suffix: i64, suffix_len: i64, idx: i64) -> i64 {
+fn str_ends_with_rec(data: i64, offset: i64, suffix: i64, suffix_len: i64, idx: i64) -> i64 {
     I idx >= suffix_len { 1 }
-    EL I load_byte(data + offset + idx) != load_byte(suffix + idx) { 0 }
-    EL { str_ends_with_rec(data, offset, suffix, suffix_len, idx + 1) }
+    else I load_byte(data + offset + idx) != load_byte(suffix + idx) { 0 }
+    else { str_ends_with_rec(data, offset, suffix, suffix_len, idx + 1) }
 }
 
 # Find first index of needle in haystack, returns -1 if not found
-F str_index_of_raw(haystack: i64, h_len: i64, needle: i64, n_len: i64) -> i64 {
-    I n_len == 0 { R 0 }
-    I n_len > h_len { R 0 - 1 }
+fn str_index_of_raw(haystack: i64, h_len: i64, needle: i64, n_len: i64) -> i64 {
+    I n_len == 0 { return 0 }
+    I n_len > h_len { return 0 - 1 }
     str_index_of_rec(haystack, h_len, needle, n_len, 0)
 }
 
-F str_index_of_rec(haystack: i64, h_len: i64, needle: i64, n_len: i64, pos: i64) -> i64 {
+fn str_index_of_rec(haystack: i64, h_len: i64, needle: i64, n_len: i64, pos: i64) -> i64 {
     I pos + n_len > h_len { 0 - 1 }
-    EL {
+    else {
         I str_match_at(haystack, pos, needle, n_len, 0) == 1 { pos }
-        EL { str_index_of_rec(haystack, h_len, needle, n_len, pos + 1) }
+        else { str_index_of_rec(haystack, h_len, needle, n_len, pos + 1) }
     }
 }
 
-F str_match_at(haystack: i64, offset: i64, needle: i64, n_len: i64, idx: i64) -> i64 {
+fn str_match_at(haystack: i64, offset: i64, needle: i64, n_len: i64, idx: i64) -> i64 {
     I idx >= n_len { 1 }
-    EL I load_byte(haystack + offset + idx) != load_byte(needle + idx) { 0 }
-    EL { str_match_at(haystack, offset, needle, n_len, idx + 1) }
+    else I load_byte(haystack + offset + idx) != load_byte(needle + idx) { 0 }
+    else { str_match_at(haystack, offset, needle, n_len, idx + 1) }
 }
 
 # Check if haystack contains needle
-F str_contains_raw(haystack: i64, h_len: i64, needle: i64, n_len: i64) -> i64 {
+fn str_contains_raw(haystack: i64, h_len: i64, needle: i64, n_len: i64) -> i64 {
     idx := str_index_of_raw(haystack, h_len, needle, n_len)
-    I idx >= 0 { 1 } EL { 0 }
+    I idx >= 0 { 1 } else { 0 }
 }
 
 # Replace all occurrences of old with new_str in data
 # Returns pointer to new null-terminated string
-F str_replace_raw(data: i64, d_len: i64, old: i64, o_len: i64, new_s: i64, n_len: i64) -> i64 {
+fn str_replace_raw(data: i64, d_len: i64, old: i64, o_len: i64, new_s: i64, n_len: i64) -> i64 {
     I o_len == 0 {
         buf := malloc(d_len + 1)
         I d_len > 0 { memcpy(buf, data, d_len) }
         store_byte(buf + d_len, 0)
-        R buf
+        return buf
     }
     # Use a large buffer for the result
     buf := malloc(d_len * 2 + n_len * 16 + 1)
@@ -492,13 +503,13 @@ F str_replace_raw(data: i64, d_len: i64, old: i64, o_len: i64, new_s: i64, n_len
     buf
 }
 
-F str_replace_rec(data: i64, d_len: i64, old: i64, o_len: i64, new_s: i64, n_len: i64, pos: i64, buf: i64, out_pos: i64) -> i64 {
+fn str_replace_rec(data: i64, d_len: i64, old: i64, o_len: i64, new_s: i64, n_len: i64, pos: i64, buf: i64, out_pos: i64) -> i64 {
     I pos >= d_len { out_pos }
-    EL I pos + o_len <= d_len && str_match_at(data, pos, old, o_len, 0) == 1 {
+    else I pos + o_len <= d_len && str_match_at(data, pos, old, o_len, 0) == 1 {
         # Match found — copy replacement
         I n_len > 0 { memcpy(buf + out_pos, new_s, n_len) }
         str_replace_rec(data, d_len, old, o_len, new_s, n_len, pos + o_len, buf, out_pos + n_len)
-    } EL {
+    } else {
         store_byte(buf + out_pos, load_byte(data + pos))
         str_replace_rec(data, d_len, old, o_len, new_s, n_len, pos + 1, buf, out_pos + 1)
     }
@@ -511,7 +522,7 @@ F str_replace_rec(data: i64, d_len: i64, old: i64, o_len: i64, new_s: i64, n_len
 # Split data by a single character delimiter
 # Returns pointer to SplitResult struct { parts_ptr: i64, count: i64 }
 # Each part is { data_ptr: i64, len: i64, cap: i64 }
-F str_split_char(data: i64, len: i64, delim: i64) -> i64 {
+fn str_split_char(data: i64, len: i64, delim: i64) -> i64 {
     # Count parts
     count := str_count_delim(data, len, delim, 0, 1)
 
@@ -526,16 +537,16 @@ F str_split_char(data: i64, len: i64, delim: i64) -> i64 {
     result
 }
 
-F str_count_delim(data: i64, len: i64, delim: i64, idx: i64, count: i64) -> i64 {
+fn str_count_delim(data: i64, len: i64, delim: i64, idx: i64, count: i64) -> i64 {
     I idx >= len { count }
-    EL {
+    else {
         c := load_byte(data + idx)
         I c == delim { str_count_delim(data, len, delim, idx + 1, count + 1) }
-        EL { str_count_delim(data, len, delim, idx + 1, count) }
+        else { str_count_delim(data, len, delim, idx + 1, count) }
     }
 }
 
-F str_split_fill(data: i64, len: i64, delim: i64, idx: i64, start: i64, part_idx: i64, parts: i64) -> i64 {
+fn str_split_fill(data: i64, len: i64, delim: i64, idx: i64, start: i64, part_idx: i64, parts: i64) -> i64 {
     I idx >= len {
         # Last part
         part_len := idx - start
@@ -548,7 +559,7 @@ F str_split_fill(data: i64, len: i64, delim: i64, idx: i64, start: i64, part_idx
         store_i64(part_ptr + 16, part_len + 16)
         store_i64(parts + part_idx * 8, part_ptr)
         0
-    } EL I load_byte(data + idx) == delim {
+    } else I load_byte(data + idx) == delim {
         part_len := idx - start
         part_data := malloc(part_len + 16)
         I part_len > 0 { memcpy(part_data, data + start, part_len) }
@@ -559,40 +570,40 @@ F str_split_fill(data: i64, len: i64, delim: i64, idx: i64, start: i64, part_idx
         store_i64(part_ptr + 16, part_len + 16)
         store_i64(parts + part_idx * 8, part_ptr)
         str_split_fill(data, len, delim, idx + 1, idx + 1, part_idx + 1, parts)
-    } EL {
+    } else {
         str_split_fill(data, len, delim, idx + 1, start, part_idx, parts)
     }
 }
 
 # Get number of parts from split result
-F split_count(split_result: i64) -> i64 {
+fn split_count(split_result: i64) -> i64 {
     load_i64(split_result + 8)
 }
 
 # Get part at index from split result (returns pointer to String struct)
-F split_get(split_result: i64, index: i64) -> i64 {
+fn split_get(split_result: i64, index: i64) -> i64 {
     parts := load_i64(split_result)
     count := load_i64(split_result + 8)
     I index < 0 || index >= count { 0 }
-    EL { load_i64(parts + index * 8) }
+    else { load_i64(parts + index * 8) }
 }
 
 # Get part data pointer (for direct use with puts_ptr)
-F split_get_data(split_result: i64, index: i64) -> i64 {
+fn split_get_data(split_result: i64, index: i64) -> i64 {
     part := split_get(split_result, index)
     I part == 0 { 0 }
-    EL { load_i64(part) }
+    else { load_i64(part) }
 }
 
 # Get part length
-F split_get_len(split_result: i64, index: i64) -> i64 {
+fn split_get_len(split_result: i64, index: i64) -> i64 {
     part := split_get(split_result, index)
     I part == 0 { 0 }
-    EL { load_i64(part + 8) }
+    else { load_i64(part + 8) }
 }
 
 # Free split result and all parts
-F split_free(split_result: i64) -> i64 {
+fn split_free(split_result: i64) -> i64 {
     parts := load_i64(split_result)
     count := load_i64(split_result + 8)
     split_free_rec(parts, count, 0)
@@ -601,9 +612,9 @@ F split_free(split_result: i64) -> i64 {
     0
 }
 
-F split_free_rec(parts: i64, count: i64, idx: i64) -> i64 {
+fn split_free_rec(parts: i64, count: i64, idx: i64) -> i64 {
     I idx >= count { 0 }
-    EL {
+    else {
         part := load_i64(parts + idx * 8)
         I part != 0 {
             data := load_i64(part)
@@ -616,12 +627,12 @@ F split_free_rec(parts: i64, count: i64, idx: i64) -> i64 {
 
 # Join strings from a split result with a delimiter character
 # Returns pointer to new null-terminated string (i64)
-F str_join_char(split_result: i64, delim: i64) -> i64 {
+fn str_join_char(split_result: i64, delim: i64) -> i64 {
     count := load_i64(split_result + 8)
     I count == 0 {
         buf := malloc(1)
         store_byte(buf, 0)
-        R buf
+        return buf
     }
 
     # Calculate total length
@@ -632,18 +643,18 @@ F str_join_char(split_result: i64, delim: i64) -> i64 {
     buf
 }
 
-F str_join_total_len(split_result: i64, count: i64, idx: i64, acc: i64) -> i64 {
+fn str_join_total_len(split_result: i64, count: i64, idx: i64, acc: i64) -> i64 {
     I idx >= count { acc }
-    EL { str_join_total_len(split_result, count, idx + 1, acc + split_get_len(split_result, idx)) }
+    else { str_join_total_len(split_result, count, idx + 1, acc + split_get_len(split_result, idx)) }
 }
 
-F str_join_fill(split_result: i64, count: i64, delim: i64, idx: i64, buf: i64, pos: i64) -> i64 {
+fn str_join_fill(split_result: i64, count: i64, delim: i64, idx: i64, buf: i64, pos: i64) -> i64 {
     I idx >= count { pos }
-    EL {
+    else {
         new_pos := I idx > 0 {
             store_byte(buf + pos, delim)
             pos + 1
-        } EL { pos }
+        } else { pos }
         part_data := split_get_data(split_result, idx)
         part_len := split_get_len(split_result, idx)
         I part_len > 0 { memcpy(buf + new_pos, part_data, part_len) }
@@ -656,22 +667,26 @@ F str_join_fill(split_result: i64, count: i64, delim: i64, idx: i64, buf: i64, p
 # =====================================================
 
 # Return the byte at position `i` of primitive `str` `s`, or 0 if out of bounds.
-F str_byte_at(s: str, i: i64) -> i64 {
+# Unlike `String.char_at`, this operates on the `str`/`&str` literal type
+# directly — useful for parsers and validators that avoid allocating a
+# `String` wrapper. Added in Phase 210 for vaisdb migration (previously
+# `s[i]` indexing on `&str` produced E001).
+fn str_byte_at(s: str, i: i64) -> i64 {
     len := str_len(s)
     I i < 0 || i >= len {
         0
-    } EL {
+    } else {
         ptr := str_to_ptr(s)
         load_byte(ptr + i)
     }
 }
 
 # Return the length of primitive `str` `s` in bytes.
-F str_len(s: str) -> i64 {
+fn str_len(s: str) -> i64 {
     __strlen(s)
 }
 
-X F __strlen(s: str) -> i64
+impl fn __strlen(s: str) -> i64
 
 # =====================================================
 # String to integer conversion (raw pointer API)
@@ -680,24 +695,24 @@ X F __strlen(s: str) -> i64
 # Parse a string as an i64 integer
 # Returns the parsed value, or 0 if empty/invalid
 # Handles optional leading '-' sign
-F str_parse_int(data: i64, len: i64) -> i64 {
-    I len <= 0 { R 0 }
+fn str_parse_int(data: i64, len: i64) -> i64 {
+    I len <= 0 { return 0 }
     first := load_byte(data)
     I first == 45 {
         # Negative number
-        I len == 1 { R 0 }
+        I len == 1 { return 0 }
         0 - str_parse_int_digits(data, len, 1, 0)
-    } EL {
+    } else {
         str_parse_int_digits(data, len, 0, 0)
     }
 }
 
-F str_parse_int_digits(data: i64, len: i64, idx: i64, acc: i64) -> i64 {
+fn str_parse_int_digits(data: i64, len: i64, idx: i64, acc: i64) -> i64 {
     I idx >= len { acc }
-    EL {
+    else {
         c := load_byte(data + idx)
         I c < 48 || c > 57 { acc }
-        EL {
+        else {
             str_parse_int_digits(data, len, idx + 1, acc * 10 + c - 48)
         }
     }
@@ -708,24 +723,24 @@ F str_parse_int_digits(data: i64, len: i64, idx: i64, acc: i64) -> i64 {
 # =====================================================
 
 # Convert i64 to null-terminated string (returns i64 pointer)
-F str_from_int(n: i64) -> i64 {
+fn str_from_int(n: i64) -> i64 {
     I n == 0 {
         buf := malloc(2)
         store_byte(buf, 48)
         store_byte(buf + 1, 0)
-        R buf
+        return buf
     }
 
     buf := malloc(24)
-    is_neg := I n < 0 { 1 } EL { 0 }
-    val := I n < 0 { 0 - n } EL { n }
+    is_neg := I n < 0 { 1 } else { 0 }
+    val := I n < 0 { 0 - n } else { n }
 
     # Build digits in reverse
     tmp := malloc(24)
     digit_count := str_from_int_digits(tmp, val, 0)
 
     # Write to buf
-    pos := 0
+    pos := mut 0
     I is_neg == 1 {
         store_byte(buf, 45)   # '-'
         pos = 1
@@ -737,21 +752,21 @@ F str_from_int(n: i64) -> i64 {
     buf
 }
 
-F str_from_int_digits(tmp: i64, val: i64, count: i64) -> i64 {
+fn str_from_int_digits(tmp: i64, val: i64, count: i64) -> i64 {
     I val == 0 { count }
-    EL {
+    else {
         store_byte(tmp + count, 48 + val % 10)
         str_from_int_digits(tmp, val / 10, count + 1)
     }
 }
 
-F str_from_int_reverse(buf: i64, tmp: i64, digit_count: i64, pos: i64) -> i64 {
+fn str_from_int_reverse(buf: i64, tmp: i64, digit_count: i64, pos: i64) -> i64 {
     str_from_int_rev_rec(buf, tmp, digit_count - 1, pos)
 }
 
-F str_from_int_rev_rec(buf: i64, tmp: i64, idx: i64, pos: i64) -> i64 {
+fn str_from_int_rev_rec(buf: i64, tmp: i64, idx: i64, pos: i64) -> i64 {
     I idx < 0 { pos }
-    EL {
+    else {
         store_byte(buf + pos, load_byte(tmp + idx))
         str_from_int_rev_rec(buf, tmp, idx - 1, pos + 1)
     }
@@ -762,17 +777,17 @@ F str_from_int_rev_rec(buf: i64, tmp: i64, idx: i64, pos: i64) -> i64 {
 # Clamps start/end to valid range. Returns new null-terminated i64 pointer.
 # =====================================================
 
-F str_slice(s: i64, start: i64, end: i64) -> i64 {
+fn str_slice(s: i64, start: i64, end: i64) -> i64 {
     len := strlen(s)
     # Clamp bounds
-    s_start := I start < 0 { 0 } EL { start }
-    s_end := I end > len { len } EL { end }
+    s_start := I start < 0 { 0 } else { start }
+    s_end := mut (I end > len { len } else { end })
     I s_start > s_end { s_end = s_start }
     new_len := s_end - s_start
     I new_len <= 0 {
         buf := malloc(1)
         store_byte(buf, 0)
-        R buf
+        return buf
     }
     buf := malloc(new_len + 1)
     memcpy(buf, s + s_start, new_len)
@@ -786,12 +801,12 @@ F str_slice(s: i64, start: i64, end: i64) -> i64 {
 # Returns 0.0 on empty or invalid input.
 # =====================================================
 
-F str_to_f64(s: i64) -> f64 {
+fn str_to_f64(s: i64) -> f64 {
     len := strlen(s)
-    I len <= 0 { R 0.0 }
+    I len <= 0 { return 0.0 }
     # Detect sign
-    is_neg := 0
-    idx := 0
+    is_neg := mut 0
+    idx := mut 0
     first := load_byte(s)
     I first == 45 {
         is_neg = 1
@@ -804,35 +819,35 @@ F str_to_f64(s: i64) -> f64 {
     result := I int_end < len && load_byte(s + int_end) == 46 {
         frac := str_to_f64_frac(s, len, int_end + 1, 0.1, 0.0)
         int_val + frac
-    } EL {
+    } else {
         int_val
     }
-    I is_neg == 1 { 0.0 - result } EL { result }
+    I is_neg == 1 { 0.0 - result } else { result }
 }
 
-F str_to_f64_int(s: i64, len: i64, idx: i64, acc: f64) -> f64 {
+fn str_to_f64_int(s: i64, len: i64, idx: i64, acc: f64) -> f64 {
     I idx >= len { acc }
-    EL {
+    else {
         c := load_byte(s + idx)
         I c < 48 || c > 57 { acc }
-        EL { str_to_f64_int(s, len, idx + 1, acc * 10.0 + (c - 48) as f64) }
+        else { str_to_f64_int(s, len, idx + 1, acc * 10.0 + (c - 48) as f64) }
     }
 }
 
-F str_to_f64_int_end(s: i64, len: i64, idx: i64) -> i64 {
+fn str_to_f64_int_end(s: i64, len: i64, idx: i64) -> i64 {
     I idx >= len { idx }
-    EL {
+    else {
         c := load_byte(s + idx)
         I c < 48 || c > 57 { idx }
-        EL { str_to_f64_int_end(s, len, idx + 1) }
+        else { str_to_f64_int_end(s, len, idx + 1) }
     }
 }
 
-F str_to_f64_frac(s: i64, len: i64, idx: i64, place: f64, acc: f64) -> f64 {
+fn str_to_f64_frac(s: i64, len: i64, idx: i64, place: f64, acc: f64) -> f64 {
     I idx >= len { acc }
-    EL {
+    else {
         c := load_byte(s + idx)
         I c < 48 || c > 57 { acc }
-        EL { str_to_f64_frac(s, len, idx + 1, place * 0.1, acc + (c - 48) as f64 * place) }
+        else { str_to_f64_frac(s, len, idx + 1, place * 0.1, acc + (c - 48) as f64 * place) }
     }
 }

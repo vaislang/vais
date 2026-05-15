@@ -10,7 +10,6 @@
 #   memset(dest, value, n) -> i64   - dest[0..n)을 value로 채움
 #   memmove(dest, src, n) -> i64    - 겹치는 영역도 안전하게 복사
 #   memcmp(s1, s2, n) -> i64        - 두 메모리 블록 비교 (0=같음, <0/>0)
-#   memchr(s, c, n) -> i64          - s[0..n)에서 바이트 c 검색 (포인터/0)
 #
 # 참고:
 #   memcpy는 컴파일러 빌트인으로 제공됨 (extern 선언 불필요)
@@ -21,292 +20,286 @@
 #   mem_copy(dst, src, n)          - n 바이트 복사 (memcpy 래퍼)
 #   mem_move(dst, src, n)          - n 바이트 이동 (겹침 안전)
 #   mem_eq(a, b, n) -> i64         - n 바이트가 동일하면 1 반환
-#   mem_alloc(n) -> i64            - n 바이트 힙 할당 (0이면 패닉)
 #   mem_alloc_zeroed(n) -> i64     - n 바이트 할당 후 0 초기화
-#   mem_realloc(ptr, n) -> i64     - 기존 할당 크기 변경
-#   mem_free(ptr)                  - 힙 메모리 해제
-#   mem_read_i64(ptr) -> i64       - 포인터에서 i64 읽기
-#   mem_write_i64(ptr, val)        - 포인터에 i64 쓰기
-#   mem_read_i32(ptr) -> i32       - 포인터에서 i32 읽기
-#   mem_write_i32(ptr, val)        - 포인터에 i32 쓰기
-#
-# 사용 예제:
-#
-#   U std/memory
-#
-#   # 버퍼 할당 및 초기화
-#   buf := mem_alloc_zeroed(1024)
-#
-#   # 데이터 복사
-#   src := mem_alloc(64)
-#   mem_copy(buf, src, 64)
-#
-#   # 메모리 비교
-#   same := mem_eq(buf, src, 64)
-#   print("{same}")      # 출력: 1 (동일)
-#
-#   # 정수 읽기/쓰기
-#   mem_write_i64(buf, 999)
-#   val := mem_read_i64(buf)
-#   print("{val}")       # 출력: 999
-#
-#   # 해제
-#   mem_free(buf)
-#   mem_free(src)
-#
-// std/memory.vais - Low-level memory operations
-// Provides direct memory manipulation functions similar to C's string.h
 
-// ============================================================================
-// External C Functions
-// ============================================================================
+# External C Functions
+N fn memset(dest: i64, value: i64, n: i64) -> i64
+N fn memmove(dest: i64, src: i64, n: i64) -> i64
 
-// memset is provided by libc
-X F memset(dest: i64, value: i64, n: i64) -> i64
+# Memory Fill Operations
+fn mem_set(dest: i64, value: i64, n: i64) -> i64 {
+    memset(dest, value, n)
+}
 
-// memcpy is a builtin
-// X F memcpy(dest: i64, src: i64, n: i64) -> i64
+fn mem_zero(dest: i64, n: i64) -> i64 {
+    memset(dest, 0, n)
+}
 
-// memmove is provided by libc (handles overlapping regions)
-X F memmove(dest: i64, src: i64, n: i64) -> i64
-
-// memcmp is provided by libc
-X F memcmp(s1: i64, s2: i64, n: i64) -> i64
-
-// ============================================================================
-// Memory Fill Operations
-// ============================================================================
-
-/// Fill memory with a byte value
-/// Returns the destination pointer
-F mem_set(dest: i64, value: i64, n: i64) -> i64 = memset(dest, value, n)
-
-/// Fill memory with zeros
-F mem_zero(dest: i64, n: i64) -> i64 = memset(dest, 0, n)
-
-/// Fill memory with a pattern (i64 value repeated)
-F mem_fill_i64(dest: i64, value: i64, count: i64) -> i64 {
-    LF i := 0; i < count; i = i + 1 {
-        store_i64(dest + i * 8, value);
+# Fill memory with a pattern (i64 value repeated)
+fn mem_fill_i64(dest: i64, value: i64, count: i64) -> i64 {
+    i := mut 0
+    LW i < count {
+        store_i64(dest + i * 8, value)
+        i = i + 1
     }
     dest
 }
 
-// ============================================================================
-// Memory Copy Operations
-// ============================================================================
+# Memory Copy Operations
+fn mem_copy(dest: i64, src: i64, n: i64) -> i64 {
+    memcpy(dest, src, n)
+}
 
-/// Copy n bytes from src to dest (non-overlapping)
-F mem_copy(dest: i64, src: i64, n: i64) -> i64 = memcpy(dest, src, n)
+fn mem_move(dest: i64, src: i64, n: i64) -> i64 {
+    memmove(dest, src, n)
+}
 
-/// Copy n bytes from src to dest (handles overlapping regions)
-F mem_move(dest: i64, src: i64, n: i64) -> i64 = memmove(dest, src, n)
-
-/// Copy n i64 values from src to dest
-F mem_copy_i64(dest: i64, src: i64, count: i64) -> i64 {
-    LF i := 0; i < count; i = i + 1 {
-        store_i64(dest + i * 8, load_i64(src + i * 8));
+# Copy n i64 values from src to dest
+fn mem_copy_i64(dest: i64, src: i64, count: i64) -> i64 {
+    i := mut 0
+    LW i < count {
+        store_i64(dest + i * 8, load_i64(src + i * 8))
+        i = i + 1
     }
     dest
 }
 
-// ============================================================================
-// Memory Comparison Operations
-// ============================================================================
+# Memory Comparison Operations
+fn mem_cmp(s1: i64, s2: i64, n: i64) -> i64 {
+    memcmp(s1, s2, n)
+}
 
-/// Compare n bytes of two memory regions
-/// Returns 0 if equal, negative if s1 < s2, positive if s1 > s2
-F mem_cmp(s1: i64, s2: i64, n: i64) -> i64 = memcmp(s1, s2, n)
+# Returns 1 if n bytes are equal, else 0
+fn mem_eq(s1: i64, s2: i64, n: i64) -> i64 {
+    I memcmp(s1, s2, n) == 0 { 1 } else { 0 }
+}
 
-/// Check if n bytes of two memory regions are equal
-F mem_eq(s1: i64, s2: i64, n: i64) -> Bool = memcmp(s1, s2, n) == 0
-
-/// Find first occurrence of byte in memory
-/// Returns offset from start, or -1 if not found
-F mem_chr(ptr: i64, byte: i64, n: i64) -> i64 {
-    LF i := 0; i < n; i = i + 1 {
-        I load_byte(ptr + i) == byte { R i }
+# Find first occurrence of byte in memory; -1 if not found
+fn mem_chr(ptr: i64, byte: i64, n: i64) -> i64 {
+    i := mut 0
+    LW i < n {
+        I load_byte(ptr + i) == byte {
+            return i
+        }
+        i = i + 1
     }
     -1
 }
 
-/// Find last occurrence of byte in memory
-/// Returns offset from start, or -1 if not found
-F mem_rchr(ptr: i64, byte: i64, n: i64) -> i64 {
-    LF i := n - 1; i >= 0; i = i - 1 {
-        I load_byte(ptr + i) == byte { R i }
+# Find last occurrence of byte in memory; -1 if not found
+fn mem_rchr(ptr: i64, byte: i64, n: i64) -> i64 {
+    i := mut n - 1
+    LW i >= 0 {
+        I load_byte(ptr + i) == byte {
+            return i
+        }
+        i = i - 1
     }
     -1
 }
 
-// ============================================================================
-// Memory Search Operations
-// ============================================================================
+# Find first occurrence of pattern in memory; -1 if not found
+fn mem_find(haystack: i64, haystack_len: i64, needle: i64, needle_len: i64) -> i64 {
+    I needle_len == 0 {
+        return 0
+    }
+    I needle_len > haystack_len {
+        return -1
+    }
 
-/// Find first occurrence of pattern in memory
-/// Returns offset from start, or -1 if not found
-F mem_find(haystack: i64, haystack_len: i64, needle: i64, needle_len: i64) -> i64 {
-    I needle_len == 0 { R 0 }
-    I needle_len > haystack_len { R -1 }
+    first_byte := load_byte(needle)
+    max_start := haystack_len - needle_len
 
-    first_byte := load_byte(needle);
-    max_start := haystack_len - needle_len;
-
-    LF i := 0; i <= max_start; i = i + 1 {
+    i := mut 0
+    LW i <= max_start {
         I load_byte(haystack + i) == first_byte {
-            I mem_eq(haystack + i, needle, needle_len) {
-                R i
+            I mem_eq(haystack + i, needle, needle_len) == 1 {
+                return i
             }
         }
+        i = i + 1
     }
     -1
 }
 
-// ============================================================================
-// Memory Allocation Helpers
-// ============================================================================
-
-/// Allocate and zero-initialize memory
-F mem_alloc_zeroed(size: i64) -> i64 {
-    ptr := malloc(size);
+# Memory Allocation Helpers
+fn mem_alloc_zeroed(size: i64) -> i64 {
+    ptr := malloc(size)
     I ptr != 0 {
-        mem_zero(ptr, size);
+        mem_zero(ptr, size)
     }
     ptr
 }
 
-/// Reallocate memory (copies old content, frees old block)
-F mem_realloc(old_ptr: i64, old_size: i64, new_size: i64) -> i64 {
-    I old_ptr == 0 { R malloc(new_size) }
+fn mem_realloc(old_ptr: i64, old_size: i64, new_size: i64) -> i64 {
+    I old_ptr == 0 {
+        return malloc(new_size)
+    }
     I new_size == 0 {
-        free(old_ptr);
-        R 0
+        free(old_ptr)
+        return 0
     }
 
-    new_ptr := malloc(new_size);
+    new_ptr := malloc(new_size)
     I new_ptr != 0 {
-        copy_size := I old_size < new_size { old_size } EL { new_size };
-        mem_copy(new_ptr, old_ptr, copy_size);
-        free(old_ptr);
+        copy_size := I old_size < new_size { old_size } else { new_size }
+        mem_copy(new_ptr, old_ptr, copy_size)
+        free(old_ptr)
     }
     new_ptr
 }
 
-/// Duplicate memory block
-F mem_dup(src: i64, size: i64) -> i64 {
-    I src == 0 | size == 0 { R 0 }
+fn mem_dup(src: i64, size: i64) -> i64 {
+    I src == 0 {
+        return 0
+    }
+    I size == 0 {
+        return 0
+    }
 
-    dst := malloc(size);
+    dst := malloc(size)
     I dst != 0 {
-        mem_copy(dst, src, size);
+        mem_copy(dst, src, size)
     }
     dst
 }
 
-// ============================================================================
-// Pointer Arithmetic Helpers
-// ============================================================================
-
-/// Align pointer up to alignment boundary
-/// alignment must be a power of 2
-F ptr_align_up(ptr: i64, alignment: i64) -> i64 {
-    mask := alignment - 1;
+# Pointer Arithmetic Helpers
+fn ptr_align_up(ptr: i64, alignment: i64) -> i64 {
+    mask := alignment - 1
     (ptr + mask) & (~mask)
 }
 
-/// Align pointer down to alignment boundary
-/// alignment must be a power of 2
-F ptr_align_down(ptr: i64, alignment: i64) -> i64 {
-    mask := alignment - 1;
+fn ptr_align_down(ptr: i64, alignment: i64) -> i64 {
+    mask := alignment - 1
     ptr & (~mask)
 }
 
-/// Check if pointer is aligned to boundary
-F ptr_is_aligned(ptr: i64, alignment: i64) -> Bool {
-    mask := alignment - 1;
-    (ptr & mask) == 0
+fn ptr_is_aligned(ptr: i64, alignment: i64) -> i64 {
+    mask := alignment - 1
+    I (ptr & mask) == 0 { 1 } else { 0 }
 }
 
-/// Calculate distance between two pointers
-F ptr_diff(p1: i64, p2: i64) -> i64 = p1 - p2
+fn ptr_diff(p1: i64, p2: i64) -> i64 {
+    p1 - p2
+}
 
-/// Offset pointer by bytes
-F ptr_offset(ptr: i64, offset: i64) -> i64 = ptr + offset
+fn ptr_offset(ptr: i64, offset: i64) -> i64 {
+    ptr + offset
+}
 
-/// Offset pointer by element count (for i64 elements)
-F ptr_offset_i64(ptr: i64, count: i64) -> i64 = ptr + count * 8
+fn ptr_offset_i64(ptr: i64, count: i64) -> i64 {
+    ptr + count * 8
+}
 
-// ============================================================================
-// Byte Swap Operations (Endianness)
-// ============================================================================
-
-/// Swap bytes of a 16-bit value
-F bswap16(x: i64) -> i64 {
+# Byte Swap Operations (Endianness)
+fn bswap16(x: i64) -> i64 {
     ((x & 255) * 256) | ((x / 256) & 255)
 }
 
-/// Swap bytes of a 32-bit value
-F bswap32(x: i64) -> i64 {
-    b0 := (x & 255) * 16777216;        // byte 0 -> byte 3
-    b1 := ((x / 256) & 255) * 65536;   // byte 1 -> byte 2
-    b2 := ((x / 65536) & 255) * 256;   // byte 2 -> byte 1
-    b3 := (x / 16777216) & 255;        // byte 3 -> byte 0
+fn bswap32(x: i64) -> i64 {
+    b0 := (x & 255) * 16777216
+    b1 := ((x / 256) & 255) * 65536
+    b2 := ((x / 65536) & 255) * 256
+    b3 := (x / 16777216) & 255
     b0 | b1 | b2 | b3
 }
 
-/// Swap bytes of a 64-bit value
-F bswap64(x: i64) -> i64 {
-    low := bswap32(x & 4294967295);
-    high := bswap32((x / 4294967296) & 4294967295);
+fn bswap64(x: i64) -> i64 {
+    low := bswap32(x & 4294967295)
+    high := bswap32((x / 4294967296) & 4294967295)
     (low * 4294967296) | high
 }
 
-// ============================================================================
-// Bit Manipulation
-// ============================================================================
-
-/// Count leading zeros in a 64-bit value
-F clz64(x: i64) -> i64 {
-    I x == 0 { R 64 }
-    n := 0;
-    I (x & 0xFFFFFFFF00000000) == 0 { n = n + 32; x = x * 4294967296; }
-    I (x & 0xFFFF000000000000) == 0 { n = n + 16; x = x * 65536; }
-    I (x & 0xFF00000000000000) == 0 { n = n + 8; x = x * 256; }
-    I (x & 0xF000000000000000) == 0 { n = n + 4; x = x * 16; }
-    I (x & 0xC000000000000000) == 0 { n = n + 2; x = x * 4; }
-    I (x & 0x8000000000000000) == 0 { n = n + 1; }
+# Bit Manipulation
+fn clz64(x: i64) -> i64 {
+    I x == 0 {
+        return 64
+    }
+    n := mut 0
+    y := mut x
+    I (y & 0xFFFFFFFF00000000) == 0 {
+        n = n + 32
+        y = y * 4294967296
+    }
+    I (y & 0xFFFF000000000000) == 0 {
+        n = n + 16
+        y = y * 65536
+    }
+    I (y & 0xFF00000000000000) == 0 {
+        n = n + 8
+        y = y * 256
+    }
+    I (y & 0xF000000000000000) == 0 {
+        n = n + 4
+        y = y * 16
+    }
+    I (y & 0xC000000000000000) == 0 {
+        n = n + 2
+        y = y * 4
+    }
+    I (y & 0x8000000000000000) == 0 {
+        n = n + 1
+    }
     n
 }
 
-/// Count trailing zeros in a 64-bit value
-F ctz64(x: i64) -> i64 {
-    I x == 0 { R 64 }
-    n := 0;
-    I (x & 0xFFFFFFFF) == 0 { n = n + 32; x = x / 4294967296; }
-    I (x & 0xFFFF) == 0 { n = n + 16; x = x / 65536; }
-    I (x & 0xFF) == 0 { n = n + 8; x = x / 256; }
-    I (x & 0xF) == 0 { n = n + 4; x = x / 16; }
-    I (x & 0x3) == 0 { n = n + 2; x = x / 4; }
-    I (x & 0x1) == 0 { n = n + 1; }
+fn ctz64(x: i64) -> i64 {
+    I x == 0 {
+        return 64
+    }
+    n := mut 0
+    y := mut x
+    I (y & 0xFFFFFFFF) == 0 {
+        n = n + 32
+        y = y / 4294967296
+    }
+    I (y & 0xFFFF) == 0 {
+        n = n + 16
+        y = y / 65536
+    }
+    I (y & 0xFF) == 0 {
+        n = n + 8
+        y = y / 256
+    }
+    I (y & 0xF) == 0 {
+        n = n + 4
+        y = y / 16
+    }
+    I (y & 0x3) == 0 {
+        n = n + 2
+        y = y / 4
+    }
+    I (y & 0x1) == 0 {
+        n = n + 1
+    }
     n
 }
 
-/// Count set bits (population count) in a 64-bit value
-F popcount64(x: i64) -> i64 {
-    count := 0;
-    LW x != 0 {
-        count = count + (x & 1);
-        x = x / 2;
+fn popcount64(x: i64) -> i64 {
+    count := mut 0
+    y := mut x
+    LW y != 0 {
+        count = count + (y & 1)
+        y = y / 2
     }
     count
 }
 
-/// Check if value is a power of 2
-F is_power_of_2(x: i64) -> Bool = x > 0 & (x & (x - 1)) == 0
+fn is_power_of_2(x: i64) -> i64 {
+    I x > 0 {
+        I (x & (x - 1)) == 0 { 1 } else { 0 }
+    } else {
+        0
+    }
+}
 
-/// Round up to next power of 2
-F next_power_of_2(x: i64) -> i64 {
-    I x <= 0 { R 1 }
-    I is_power_of_2(x) { R x }
-    R 1 * (1 << (64 - clz64(x)))
+fn next_power_of_2(x: i64) -> i64 {
+    I x <= 0 {
+        return 1
+    }
+    I is_power_of_2(x) == 1 {
+        return x
+    }
+    return 1 * (1 << (64 - clz64(x)))
 }

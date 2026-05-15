@@ -1,0 +1,5 @@
+fn take_i64(x: i64) -> i64 { return x }
+
+fn take_box(b: Box<i64>) -> i64 { return take_i64(b) }
+
+fn main() -> i64 { return 0 }

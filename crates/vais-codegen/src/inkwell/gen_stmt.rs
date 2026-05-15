@@ -13,6 +13,19 @@ use super::generator::{InkwellCodeGenerator, LoopContext};
 use crate::{CodegenError, CodegenResult};
 
 impl<'ctx> InkwellCodeGenerator<'ctx> {
+    fn static_elem_size(ty: &ResolvedType) -> u64 {
+        match ty {
+            ResolvedType::Bool | ResolvedType::I8 | ResolvedType::U8 => 1,
+            ResolvedType::I16 | ResolvedType::U16 => 2,
+            ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 => 4,
+            ResolvedType::Str
+            | ResolvedType::Slice(_)
+            | ResolvedType::SliceMut(_)
+            | ResolvedType::Tuple(_) => 16,
+            _ => 8,
+        }
+    }
+
     pub(super) fn generate_block(
         &mut self,
         stmts: &[Spanned<Stmt>],
@@ -123,38 +136,32 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     }
                 }
 
-                // Owning-string binding: if the RHS is a tracked concat result,
-                // record the slot under this variable's name. A later
-                // `return x` or `x + y` reaches through the alloca load (which
-                // produces a fresh SSA), and we use var_string_slot to recover
-                // the slot for ownership transfer / intermediate free. If the
-                // RHS is a PHI merging multiple concat results (if/match as
-                // expression), transfer the extra slots into the multi-slot
-                // map. See RFC-001 §4.5 / §4.6 (team-review fix 2026-04-14).
-                if val.is_struct_value() {
-                    use inkwell::values::AsValueRef;
-                    let key = val.into_struct_value().as_value_ref() as usize;
-                    if let Some(slot) = self.string_value_slot.get(&key).copied() {
-                        self.var_string_slot.insert(name.node.clone(), slot);
-                        let extras = self.phi_extra_slots.remove(&key).unwrap_or_default();
-                        if !extras.is_empty() {
-                            let owned: Vec<_> = std::iter::once(slot).chain(extras).collect();
-                            self.var_string_slots_multi.insert(name.node.clone(), owned);
-                        }
-                        // Ownership stays with the enclosing block's scope
-                        // frame. The variable and the scope frame share the
-                        // slot: `return x` via var_string_slot hands the slot
-                        // to the caller; otherwise the scope-drop at block
-                        // exit frees it. This keeps loop-body allocations
-                        // freed per iteration.
+                let owned_string_slots = self.take_owned_string_slots_for_value(&val);
+                if let Some(slots) = &owned_string_slots {
+                    if let Some(first) = slots.first().copied() {
+                        self.var_string_slot.insert(name.node.clone(), first);
+                    }
+                    if slots.len() > 1 {
+                        self.var_string_slots_multi
+                            .insert(name.node.clone(), slots.clone());
+                    } else {
+                        self.var_string_slots_multi.remove(&name.node);
                     }
                 }
+
+                let binding_resolved = if let Some(t) = ty.as_ref() {
+                    Some(self.ast_type_to_resolved(&t.node))
+                } else {
+                    self.infer_resolved_type_from_rhs(&value.node)
+                };
                 // Track resolved type for variables with type annotations
                 // (used for element/pointee type inference in slice indexing and deref)
-                if let Some(t) = ty.as_ref() {
-                    let resolved = self.ast_type_to_resolved(&t.node);
+                if let Some(resolved) = binding_resolved.clone() {
                     self.var_resolved_types.insert(name.node.clone(), resolved);
                 }
+                let is_str_binding = matches!(binding_resolved.as_ref(), Some(ResolvedType::Str))
+                    || matches!(&value.node, Expr::String(_) | Expr::StringInterp(_))
+                    || owned_string_slots.is_some();
 
                 let var_type = if let Some(t) = ty.as_ref() {
                     let resolved = self.ast_type_to_resolved(&t.node);
@@ -188,10 +195,129 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     .builder
                     .build_alloca(var_type, &name.node)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                // Phase 0 bug C13 fix: when the binding has an explicit narrow
+                // integer type (e.g. `a: u32 := 100`), the RHS literal is
+                // typed i64 by default. Storing i64 into an i32 alloca writes
+                // 8 bytes against a 4-byte slot, clobbering adjacent allocas.
+                // Truncate first if widths differ.
+                let store_val = if val.is_int_value() && var_type.is_int_type() {
+                    let val_int = val.into_int_value();
+                    let val_w = val_int.get_type().get_bit_width();
+                    let dst_w = var_type.into_int_type().get_bit_width();
+                    if val_w > dst_w {
+                        self.builder
+                            .build_int_truncate(val_int, var_type.into_int_type(), "narrow_init")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into()
+                    } else if val_w < dst_w {
+                        // Widen: zext for u-types, sext for i-types — but
+                        // the resolved type is already in `var_type`, and
+                        // i64-narrow ops are unsigned-friendly. Default zext.
+                        self.builder
+                            .build_int_z_extend(val_int, var_type.into_int_type(), "widen_init")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                            .into()
+                    } else {
+                        val
+                    }
+                } else {
+                    val
+                };
+                // Bug C15 fix: when the annotated type is `[T; N]` (ConstArray
+                // → LLVM `[N x T]`) and the RHS produced a pointer to the
+                // array literal (Expr::Array returns a `[N x T]*`), `build_store`
+                // would write 8 bytes (the pointer) into the N*sizeof(T)-byte
+                // alloca slot, leaving the rest as garbage. Load the array
+                // value through the pointer first, then store by-value.
+                let store_val = if let (Some(t), Expr::Array(elements)) = (ty.as_ref(), &value.node)
+                {
+                    let resolved = self.ast_type_to_resolved(&t.node);
+                    if let ResolvedType::Named { name, generics } = &resolved {
+                        if name == "Vec" && !generics.is_empty() && store_val.is_pointer_value() {
+                            let i64_type = self.context.i64_type();
+                            let ptr_as_i64 = self
+                                .builder
+                                .build_ptr_to_int(
+                                    store_val.into_pointer_value(),
+                                    i64_type,
+                                    "vec_literal_data",
+                                )
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            let len = i64_type.const_int(elements.len() as u64, false);
+                            let elem_size =
+                                i64_type.const_int(Self::static_elem_size(&generics[0]), false);
+                            let owned = i64_type.const_zero();
+                            let vec_ty = var_type.into_struct_type();
+                            let mut vec_val = vec_ty.get_undef();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, ptr_as_i64, 0, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, len, 1, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, len, 2, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, elem_size, 3, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val = self
+                                .builder
+                                .build_insert_value(vec_val, owned, 4, "vec_literal")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?
+                                .into_struct_value();
+                            vec_val.into()
+                        } else if var_type.is_array_type() && store_val.is_pointer_value() {
+                            let array_val = self
+                                .builder
+                                .build_load(var_type, store_val.into_pointer_value(), "arr_init")
+                                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                            array_val
+                        } else {
+                            store_val
+                        }
+                    } else if var_type.is_array_type() && store_val.is_pointer_value() {
+                        let array_val = self
+                            .builder
+                            .build_load(var_type, store_val.into_pointer_value(), "arr_init")
+                            .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                        array_val
+                    } else {
+                        store_val
+                    }
+                } else if var_type.is_array_type() && store_val.is_pointer_value() {
+                    let array_val = self
+                        .builder
+                        .build_load(var_type, store_val.into_pointer_value(), "arr_init")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    array_val
+                } else {
+                    store_val
+                };
                 self.builder
-                    .build_store(alloca, val)
+                    .build_store(alloca, store_val)
                     .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
                 self.locals.insert(name.node.clone(), (alloca, var_type));
+                if is_str_binding {
+                    let depth = self.scope_str_stack.len().saturating_sub(1);
+                    self.var_string_scope_depth.insert(name.node.clone(), depth);
+                    self.var_resolved_types
+                        .entry(name.node.clone())
+                        .or_insert(ResolvedType::Str);
+                    if let Some(slots) = &owned_string_slots {
+                        for slot in slots {
+                            self.transfer_string_slot_to_var_scope(&name.node, *slot);
+                        }
+                    }
+                }
 
                 // Record struct type for variable (from StructLit, function return type, or type annotation)
                 if let Some(sn) = struct_type_name {
@@ -523,6 +649,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             break_block: loop_end,
             continue_block: loop_inc,
             scope_str_depth: self.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         // Branch to condition check
@@ -604,9 +731,18 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // End block
         self.builder.position_at_end(loop_end);
-        self.loop_stack.pop();
-
-        // For loops return unit
+        // B.6: honor break-with-value even in range-for loops (e.g., early
+        // `B found` inside `L i : 0..n { ... }`).
+        let popped = self.loop_stack.pop();
+        if let Some(ctx) = popped {
+            if let Some((slot, ty)) = ctx.break_value_slot {
+                let loaded = self
+                    .builder
+                    .build_load(ty, slot, "loop_break_value_load")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(loaded);
+            }
+        }
         Ok(self.unit_value())
     }
 
@@ -632,6 +768,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             break_block: loop_end,
             continue_block: loop_start,
             scope_str_depth: self.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         // Allocate an alloca to cache the iterator value when both a pattern and an
@@ -747,9 +884,19 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Loop end
         self.builder.position_at_end(loop_end);
-        self.loop_stack.pop();
-
-        // Loops return unit by default
+        // B.6: pop the loop context AFTER reading its break_value_slot so we
+        // can emit the post-loop value load. Loops with no break-with-value
+        // fall back to unit.
+        let popped = self.loop_stack.pop();
+        if let Some(ctx) = popped {
+            if let Some((slot, ty)) = ctx.break_value_slot {
+                let loaded = self
+                    .builder
+                    .build_load(ty, slot, "loop_break_value_load")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(loaded);
+            }
+        }
         Ok(self.unit_value())
     }
 
@@ -777,6 +924,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             break_block: loop_end,
             continue_block: loop_cond,
             scope_str_depth: self.scope_str_stack.len(),
+            break_value_slot: None,
         });
 
         // Branch to condition check
@@ -830,9 +978,17 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
 
         // Loop end
         self.builder.position_at_end(loop_end);
-        self.loop_stack.pop();
-
-        // While loops return unit
+        // B.6: honor break-with-value in while loops too.
+        let popped = self.loop_stack.pop();
+        if let Some(ctx) = popped {
+            if let Some((slot, ty)) = ctx.break_value_slot {
+                let loaded = self
+                    .builder
+                    .build_load(ty, slot, "loop_break_value_load")
+                    .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                return Ok(loaded);
+            }
+        }
         Ok(self.unit_value())
     }
 
@@ -872,9 +1028,9 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         let current_fn = self
             .builder
             .get_insert_block()
-            .unwrap()
+            .expect("invariant: builder positioned in a basic block before deferred-free codegen")
             .get_parent()
-            .unwrap();
+            .expect("invariant: basic block owned by a function during deferred-free codegen");
         let free_block = self.context.append_basic_block(current_fn, "ifr_free");
         let after = self.context.append_basic_block(current_fn, "ifr_after");
         self.builder
@@ -891,6 +1047,113 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             .build_unconditional_branch(after)
             .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         self.builder.position_at_end(after);
+        Ok(())
+    }
+
+    pub(super) fn take_owned_string_slots_for_value(
+        &mut self,
+        val: &inkwell::values::BasicValueEnum<'ctx>,
+    ) -> Option<Vec<inkwell::values::PointerValue<'ctx>>> {
+        if !val.is_struct_value() {
+            return None;
+        }
+        use inkwell::values::AsValueRef;
+        let key = val.into_struct_value().as_value_ref() as usize;
+        let slot = self.string_value_slot.get(&key).copied()?;
+        let extras = self.phi_extra_slots.remove(&key).unwrap_or_default();
+        Some(std::iter::once(slot).chain(extras).collect())
+    }
+
+    pub(super) fn transfer_string_slot_to_var_scope(
+        &mut self,
+        var_name: &str,
+        slot: inkwell::values::PointerValue<'ctx>,
+    ) {
+        let Some(target_depth) = self.var_string_scope_depth.get(var_name).copied() else {
+            return;
+        };
+        if target_depth >= self.scope_str_stack.len() {
+            return;
+        }
+
+        for (idx, frame) in self.scope_str_stack.iter_mut().enumerate() {
+            if idx != target_depth {
+                frame.retain(|existing| *existing != slot);
+            }
+        }
+        let target = &mut self.scope_str_stack[target_depth];
+        if !target.contains(&slot) {
+            target.push(slot);
+        }
+    }
+
+    fn release_replaced_string_slot(
+        &mut self,
+        slot: inkwell::values::PointerValue<'ctx>,
+    ) -> CodegenResult<()> {
+        let still_tracked = self.string_value_slot.values().any(|s| *s == slot);
+        if still_tracked {
+            self.emit_free_slot(slot)?;
+            self.string_value_slot.retain(|_, s| *s != slot);
+        }
+        for frame in self.scope_str_stack.iter_mut() {
+            frame.retain(|existing| *existing != slot);
+        }
+        Ok(())
+    }
+
+    pub(super) fn record_string_assignment_owner(
+        &mut self,
+        name: &str,
+        val: &inkwell::values::BasicValueEnum<'ctx>,
+    ) -> CodegenResult<()> {
+        let is_string_local = matches!(self.var_resolved_types.get(name), Some(ResolvedType::Str))
+            || self.var_string_scope_depth.contains_key(name)
+            || self.var_string_slot.contains_key(name)
+            || self.var_string_slots_multi.contains_key(name);
+        if !is_string_local {
+            return Ok(());
+        }
+
+        let old_slots = self
+            .var_string_slots_multi
+            .get(name)
+            .cloned()
+            .or_else(|| {
+                self.var_string_slot
+                    .get(name)
+                    .copied()
+                    .map(|slot| vec![slot])
+            })
+            .unwrap_or_default();
+        let new_slots = self.take_owned_string_slots_for_value(val);
+
+        if let Some(slots) = &new_slots {
+            for old in old_slots {
+                if !slots.contains(&old) {
+                    self.release_replaced_string_slot(old)?;
+                }
+            }
+            if let Some(first) = slots.first().copied() {
+                self.var_string_slot.insert(name.to_string(), first);
+            }
+            if slots.len() > 1 {
+                self.var_string_slots_multi
+                    .insert(name.to_string(), slots.clone());
+            } else {
+                self.var_string_slots_multi.remove(name);
+            }
+            for slot in slots {
+                self.transfer_string_slot_to_var_scope(name, *slot);
+            }
+        } else {
+            for old in old_slots {
+                self.release_replaced_string_slot(old)?;
+            }
+            self.var_string_slot.remove(name);
+            self.var_string_slots_multi.remove(name);
+        }
+
         Ok(())
     }
 
@@ -1022,9 +1285,11 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             let current_fn = self
                 .builder
                 .get_insert_block()
-                .unwrap()
+                .expect(
+                    "invariant: builder positioned in a basic block before alloc-cleanup codegen",
+                )
                 .get_parent()
-                .unwrap();
+                .expect("invariant: basic block owned by a function during alloc-cleanup codegen");
             let free_block = self.context.append_basic_block(current_fn, "free_alloc");
             let skip_block = self.context.append_basic_block(current_fn, "skip_free");
             self.builder
@@ -1059,10 +1324,67 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             (ctx.break_block, ctx.scope_str_depth)
         };
 
-        // Generate value if present (for loop with value)
+        // B.6: propagate `B value` through a per-loop alloca. The slot is
+        // lazy-allocated on first break-with-value; subsequent breaks reuse
+        // it. The loop-end block loads from the slot to produce the loop
+        // expression's value. Without a value, we preserve the legacy
+        // unit-returning semantics.
         if let Some(val_expr) = value {
-            let _val = self.generate_expr(val_expr)?;
-            // In a full implementation, this would be used for loop-with-value
+            let val = self.generate_expr(val_expr)?;
+            let val_type = val.get_type();
+
+            // Lazy-allocate the slot at the current loop context. Must happen
+            // AFTER value generation so we have a concrete type to alloca.
+            let slot = {
+                let ctx = self
+                    .loop_stack
+                    .last()
+                    .expect("loop_stack verified non-empty above");
+                if let Some((slot_ptr, _)) = ctx.break_value_slot {
+                    slot_ptr
+                } else {
+                    // Phase 0 bug C1 fix: hoist the alloca into the entry
+                    // block so it dominates every break site (which may be
+                    // inside `I`/`M` arms inside the loop body) AND the loop
+                    // end load. Just calling build_alloca emits at the
+                    // current insertion point — usually inside a `then` block
+                    // where the break sits — which produces invalid IR
+                    // ("Instruction does not dominate all uses") when the
+                    // break value is later read at loop end. The hoist also
+                    // lets mem2reg promote the slot to SSA in optimized
+                    // builds.
+                    let current_block = self.builder.get_insert_block().ok_or_else(|| {
+                        CodegenError::LlvmError(
+                            "no insert block when allocating loop break slot".to_string(),
+                        )
+                    })?;
+                    let entry_block = current_block
+                        .get_parent()
+                        .and_then(|f| f.get_first_basic_block())
+                        .ok_or_else(|| {
+                            CodegenError::LlvmError(
+                                "no entry block for loop break slot".to_string(),
+                            )
+                        })?;
+                    if let Some(term) = entry_block.get_terminator() {
+                        self.builder.position_before(&term);
+                    } else {
+                        self.builder.position_at_end(entry_block);
+                    }
+                    let alloca = self
+                        .builder
+                        .build_alloca(val_type, "loop_break_value")
+                        .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    self.builder.position_at_end(current_block);
+                    // Record for later breaks and for the loop-end load.
+                    let idx = self.loop_stack.len() - 1;
+                    self.loop_stack[idx].break_value_slot = Some((alloca, val_type));
+                    alloca
+                }
+            };
+            self.builder
+                .build_store(slot, val)
+                .map_err(|e| CodegenError::LlvmError(e.to_string()))?;
         }
 
         self.emit_loop_scope_cleanup(loop_depth)?;
@@ -1112,6 +1434,57 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
             self.scope_str_stack[idx].clear();
         }
         Ok(())
+    }
+
+    /// B.2: best-effort recovery of a `let` RHS's resolved type when the user
+    /// did not write an annotation. Used by the `let` statement to populate
+    /// `var_resolved_types` so later match expressions can look up the type
+    /// via the scrutinee-type stack (see gen_match.rs).
+    /// Currently covers:
+    ///   - known str builtin methods (parse_*, char_at) via fixed signatures
+    ///   - named function calls whose signature we already tracked in
+    ///     `resolved_function_sigs`
+    ///
+    /// Returns None when the type cannot be inferred — callers must leave
+    /// `var_resolved_types` alone in that case.
+    pub(super) fn infer_resolved_type_from_rhs(
+        &self,
+        rhs: &Expr,
+    ) -> Option<vais_types::ResolvedType> {
+        use vais_types::ResolvedType as R;
+        match rhs {
+            Expr::String(_) | Expr::StringInterp(_) => Some(R::Str),
+            Expr::Ident(name) => self.var_resolved_types.get(name).cloned(),
+            Expr::Binary { op, left, right } if matches!(*op, vais_ast::BinOp::Add) => {
+                let left_ty = self.infer_resolved_type_from_rhs(&left.node);
+                let right_ty = self.infer_resolved_type_from_rhs(&right.node);
+                if matches!(left_ty, Some(R::Str)) || matches!(right_ty, Some(R::Str)) {
+                    Some(R::Str)
+                } else {
+                    None
+                }
+            }
+            Expr::MethodCall { method, .. } => match method.node.as_str() {
+                "parse_i64" | "parse_int" => Some(R::Result(Box::new(R::I64), Box::new(R::Str))),
+                "parse_i32" => Some(R::Result(Box::new(R::I32), Box::new(R::Str))),
+                "parse_u64" => Some(R::Result(Box::new(R::U64), Box::new(R::Str))),
+                "parse_u32" => Some(R::Result(Box::new(R::U32), Box::new(R::Str))),
+                "parse_f64" => Some(R::Result(Box::new(R::F64), Box::new(R::Str))),
+                "parse_f32" => Some(R::Result(Box::new(R::F32), Box::new(R::Str))),
+                "char_at" | "charAt" => Some(R::U8),
+                _ => None,
+            },
+            Expr::Call { func, .. } => {
+                if let Expr::Ident(fn_name) = &func.node {
+                    self.resolved_function_sigs
+                        .get(fn_name.as_str())
+                        .map(|sig| sig.ret.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
     // ========== Array/Tuple/Index ==========

@@ -200,8 +200,10 @@ Certified or main-reproducible gates currently include:
 - Multi-domain product schema gate: `9/9`
 
 Scoped integration evidence currently includes std/package/server/database/web
-runtime and package counts. A single full ecosystem runtime aggregate main gate
-is still pending.
+runtime and package counts. The single full ecosystem runtime aggregate main gate
+is promoted via `bash scripts/check-integrity.sh` with the sibling `lang`
+workspace; broader product-complete DB/server/web behavior remains outside the
+public claim boundary.
 
 ## Performance
 

@@ -1,0 +1,30 @@
+# CHECKS: all 6 i64 comparison operators with mixed signs.
+fn main() -> i64 {
+    a: i64 := 5
+    b: i64 := 5
+    c: i64 := 7
+    d: i64 := 0 - 3
+
+    # equality
+    I a == b {} else { return 1 }
+    I a != c {} else { return 2 }
+
+    # less / greater
+    I a < c {} else { return 3 }
+    I c > a {} else { return 4 }
+    I d < a {} else { return 5 }
+    I a > d {} else { return 6 }
+
+    # less-or-equal
+    I a <= b {} else { return 7 }
+    I a <= c {} else { return 8 }
+
+    # greater-or-equal
+    I a >= b {} else { return 9 }
+    I c >= a {} else { return 10 }
+
+    # negative comparisons
+    I (0 - 5) < (0 - 3) {} else { return 11 }
+    I (0 - 1) > (0 - 100) {} else { return 12 }
+    return 0
+}

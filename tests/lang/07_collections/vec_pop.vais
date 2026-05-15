@@ -1,0 +1,26 @@
+# CHECKS: Vec push then iteration with size tracking.
+use std/vec.{vec_new};
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 0..10 {
+        v.push(i * i)
+    }
+    I v.len() != 10 { return 1 }
+
+    # sum across the vec
+    sum: i64 := mut 0
+    LF i: 0..v.len() {
+        sum = sum + v[i]
+    }
+    # sum of squares 0..10 = 285
+    I sum != 285 { return 2 }
+
+    # min and max via traversal
+    max: i64 := mut 0 - 1
+    LF i: 0..v.len() {
+        I v[i] > max { max = v[i] }
+    }
+    I max != 81 { return 3 }
+    return 0
+}

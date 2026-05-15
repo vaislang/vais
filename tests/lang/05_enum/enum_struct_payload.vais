@@ -1,0 +1,22 @@
+# CHECKS: enum variant with struct payload (>8 bytes)
+# REGRESSION: Phase 17 layer 8 — Tuple payload of Result<Tuple, _>
+struct Big {
+    a: i64,
+    b: i64,
+    c: i64,
+}
+
+fn make_big(x: i64) -> Option<Big> {
+    Some(Big { a: x, b: x * 2, c: x * 3 })
+}
+
+fn main() -> i64 {
+    o: Option<Big> := make_big(5)
+    sum: i64 := match o {
+        Some(big) => big.a + big.b + big.c,
+        None => 0,
+    }
+    # 5 + 10 + 15 = 30
+    I sum != 30 { return 1 }
+    return 0
+}

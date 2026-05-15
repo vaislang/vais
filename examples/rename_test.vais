@@ -1,33 +1,33 @@
 # Test file for LSP rename functionality
 
 # Structure with fields
-S Point {
+struct Point {
     x: i64,
     y: i64
 }
 
 # Function using the structure
-F create_point(a: i64, b: i64) -> Point {
-    R Point { x: a, y: b }
+fn create_point(a: i64, b: i64) -> Point {
+    return Point { x: a, y: b }
 }
 
 # Function with local variables
-F calculate(value: i64) -> i64 {
+fn calculate(value: i64) -> i64 {
     result := value * 2
     temp := result + 10
-    R temp
+    return temp
 }
 
 # Enum definition
-EN Color {
+enum Color {
     Red,
     Green,
     Blue
 }
 
 # Function using enum
-F get_color_value(color: Color) -> i64 {
-    M color {
+fn get_color_value(color: Color) -> i64 {
+    match color {
         Red => 1,
         Green => 2,
         Blue => 3
@@ -35,7 +35,7 @@ F get_color_value(color: Color) -> i64 {
 }
 
 # Main function
-F main() -> i64 {
+fn main() -> i64 {
     point := create_point(10, 20)
     x_val := point.x
     computed := calculate(x_val)
@@ -43,5 +43,5 @@ F main() -> i64 {
     my_color := Red
     color_val := get_color_value(my_color)
 
-    R computed + color_val
+    return computed + color_val
 }

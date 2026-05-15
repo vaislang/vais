@@ -28,9 +28,9 @@ fn gen_result(source: &str) -> Result<String, String> {
 fn test_simple_binding() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
-            R x
+            return x
         }
     "#,
     );
@@ -41,10 +41,10 @@ fn test_simple_binding() {
 fn test_mutable_binding() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x = 42
-            R x
+            return x
         }
     "#,
     );
@@ -55,10 +55,10 @@ fn test_mutable_binding() {
 fn test_rebind_variable() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 1
             x := 2
-            R x
+            return x
         }
     "#,
     );
@@ -69,11 +69,11 @@ fn test_rebind_variable() {
 fn test_multiple_bindings() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 1
             b := 2
             c := 3
-            R a + b + c
+            return a + b + c
         }
     "#,
     );
@@ -84,9 +84,9 @@ fn test_multiple_bindings() {
 fn test_binding_from_expression() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 10 * 2 + 5
-            R x
+            return x
         }
     "#,
     );
@@ -97,10 +97,10 @@ fn test_binding_from_expression() {
 fn test_binding_from_function_call() {
     let ir = gen_ok(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F test() -> i64 {
+        fn double(x: i64) -> i64 = x * 2
+        fn test() -> i64 {
             x := double(21)
-            R x
+            return x
         }
     "#,
     );
@@ -115,10 +115,10 @@ fn test_binding_from_function_call() {
 fn test_struct_creation() {
     let ir = gen_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 3, y: 4 }
-            R p.x
+            return p.x
         }
     "#,
     );
@@ -129,10 +129,10 @@ fn test_struct_creation() {
 fn test_struct_field_access() {
     let ir = gen_ok(
         r#"
-        S Vec2 { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Vec2 { x: i64, y: i64 }
+        fn test() -> i64 {
             v := Vec2 { x: 10, y: 20 }
-            R v.x + v.y
+            return v.x + v.y
         }
     "#,
     );
@@ -143,11 +143,11 @@ fn test_struct_field_access() {
 fn test_struct_passed_to_function() {
     let ir = gen_ok(
         r#"
-        S Pair { a: i64, b: i64 }
-        F sum_pair(p: Pair) -> i64 = p.a + p.b
-        F test() -> i64 {
+        struct Pair { a: i64, b: i64 }
+        fn sum_pair(p: Pair) -> i64 = p.a + p.b
+        fn test() -> i64 {
             p := Pair { a: 3, b: 7 }
-            R sum_pair(p)
+            return sum_pair(p)
         }
     "#,
     );
@@ -158,11 +158,11 @@ fn test_struct_passed_to_function() {
 fn test_nested_struct() {
     let ir = gen_ok(
         r#"
-        S Inner { val: i64 }
-        S Outer { inner: Inner, extra: i64 }
-        F test() -> i64 {
+        struct Inner { val: i64 }
+        struct Outer { inner: Inner, extra: i64 }
+        fn test() -> i64 {
             o := Outer { inner: Inner { val: 42 }, extra: 10 }
-            R o.extra
+            return o.extra
         }
     "#,
     );
@@ -177,10 +177,10 @@ fn test_nested_struct() {
 fn test_enum_creation_unit_variant() {
     let result = gen_result(
         r#"
-        E Color { Red, Green, Blue }
-        F test() -> i64 {
+        enum Color { Red, Green, Blue }
+        fn test() -> i64 {
             c := Red
-            R 0
+            return 0
         }
     "#,
     );
@@ -192,10 +192,10 @@ fn test_enum_creation_unit_variant() {
 fn test_enum_creation_with_payload() {
     let ir = gen_ok(
         r#"
-        E Maybe { Nothing, Just(i64) }
-        F test() -> i64 {
+        enum Maybe { Nothing, Just(i64) }
+        fn test() -> i64 {
             m := Maybe::Just(42)
-            R 0
+            return 0
         }
     "#,
     );
@@ -206,9 +206,9 @@ fn test_enum_creation_with_payload() {
 fn test_enum_match_extracts_payload() {
     let ir = gen_ok(
         r#"
-        E Maybe { Nothing, Just(i64) }
-        F unwrap_or(m: Maybe, default: i64) -> i64 {
-            M m {
+        enum Maybe { Nothing, Just(i64) }
+        fn unwrap_or(m: Maybe, default: i64) -> i64 {
+            match m {
                 Just(v) => v,
                 _ => default
             }
@@ -226,9 +226,9 @@ fn test_enum_match_extracts_payload() {
 fn test_closure_basic() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := |x: i64| x * 2
-            R f(21)
+            return f(21)
         }
     "#,
     );
@@ -239,10 +239,10 @@ fn test_closure_basic() {
 fn test_closure_captures_local() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             y := 10
             f := |x: i64| x + y
-            R f(32)
+            return f(32)
         }
     "#,
     );
@@ -253,9 +253,9 @@ fn test_closure_captures_local() {
 fn test_closure_multiple_params() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             f := |a: i64, b: i64| a + b
-            R f(10, 20)
+            return f(10, 20)
         }
     "#,
     );
@@ -270,12 +270,12 @@ fn test_closure_multiple_params() {
 fn test_loop_variable_scope() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i: 0..5 {
                 sum = sum + i
             }
-            R sum
+            return sum
         }
     "#,
     );
@@ -286,13 +286,13 @@ fn test_loop_variable_scope() {
 fn test_loop_with_break() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             result := mut 0
             L i: 0..100 {
                 I i == 10 { B }
                 result = i
             }
-            R result
+            return result
         }
     "#,
     );
@@ -303,13 +303,13 @@ fn test_loop_with_break() {
 fn test_loop_with_continue() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i: 0..10 {
                 I i % 2 == 0 { C }
                 sum = sum + i
             }
-            R sum
+            return sum
         }
     "#,
     );
@@ -324,9 +324,9 @@ fn test_loop_with_continue() {
 fn test_return_local_value() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
-            R x
+            return x
         }
     "#,
     );
@@ -337,8 +337,8 @@ fn test_return_local_value() {
 fn test_return_computed_value() {
     let ir = gen_ok(
         r#"
-        F test(a: i64, b: i64) -> i64 {
-            R a * b + 1
+        fn test(a: i64, b: i64) -> i64 {
+            return a * b + 1
         }
     "#,
     );
@@ -349,7 +349,7 @@ fn test_return_computed_value() {
 fn test_auto_return() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 { 42 }
+        fn test() -> i64 { 42 }
     "#,
     );
     assert!(!ir.is_empty());
@@ -359,7 +359,7 @@ fn test_auto_return() {
 fn test_expression_body_function() {
     let ir = gen_ok(
         r#"
-        F square(x: i64) -> i64 = x * x
+        fn square(x: i64) -> i64 = x * x
     "#,
     );
     assert!(!ir.is_empty());
@@ -373,13 +373,13 @@ fn test_expression_body_function() {
 fn test_block_scoping() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 1
             y := {
                 z := x + 1
                 z * 2
             }
-            R y
+            return y
         }
     "#,
     );
@@ -390,13 +390,13 @@ fn test_block_scoping() {
 fn test_shadowing_in_nested_scope() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 1
             y := {
                 x := 10
                 x
             }
-            R x + y
+            return x + y
         }
     "#,
     );
@@ -411,10 +411,10 @@ fn test_shadowing_in_nested_scope() {
 fn test_bool_binding() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             flag := true
-            I flag { R 1 }
-            R 0
+            I flag { return 1 }
+            return 0
         }
     "#,
     );
@@ -425,9 +425,9 @@ fn test_bool_binding() {
 fn test_string_binding() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             s := "hello"
-            R 0
+            return 0
         }
     "#,
     );
@@ -438,12 +438,12 @@ fn test_string_binding() {
 fn test_multiple_function_calls() {
     let ir = gen_ok(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F mul(a: i64, b: i64) -> i64 = a * b
-        F test() -> i64 {
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn mul(a: i64, b: i64) -> i64 = a * b
+        fn test() -> i64 {
             x := add(1, 2)
             y := mul(x, 3)
-            R y
+            return y
         }
     "#,
     );
@@ -454,9 +454,9 @@ fn test_multiple_function_calls() {
 fn test_recursive_call_ownership() {
     let ir = gen_ok(
         r#"
-        F fib(n: i64) -> i64 {
-            I n <= 1 { R n }
-            R fib(n - 1) + fib(n - 2)
+        fn fib(n: i64) -> i64 {
+            I n <= 1 { return n }
+            return fib(n - 1) + fib(n - 2)
         }
     "#,
     );
@@ -471,10 +471,10 @@ fn test_recursive_call_ownership() {
 fn test_chained_operations() {
     let ir = gen_ok(
         r#"
-        F inc(x: i64) -> i64 = x + 1
-        F dbl(x: i64) -> i64 = x * 2
-        F test() -> i64 {
-            R dbl(inc(inc(5)))
+        fn inc(x: i64) -> i64 = x + 1
+        fn dbl(x: i64) -> i64 = x * 2
+        fn test() -> i64 {
+            return dbl(inc(inc(5)))
         }
     "#,
     );
@@ -485,10 +485,10 @@ fn test_chained_operations() {
 fn test_pipe_operator() {
     let result = gen_result(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F inc(x: i64) -> i64 = x + 1
-        F test() -> i64 {
-            R 5 |> double |> inc
+        fn double(x: i64) -> i64 = x * 2
+        fn inc(x: i64) -> i64 = x + 1
+        fn test() -> i64 {
+            return 5 |> double |> inc
         }
     "#,
     );
@@ -499,8 +499,8 @@ fn test_pipe_operator() {
 fn test_ternary_operator() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            R x > 0 ? x : -x
+        fn test(x: i64) -> i64 {
+            return x > 0 ? x : -x
         }
     "#,
     );
@@ -511,12 +511,12 @@ fn test_ternary_operator() {
 fn test_compound_assignment() {
     let ir = gen_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 10
             x += 5
             x -= 3
             x *= 2
-            R x
+            return x
         }
     "#,
     );
@@ -527,8 +527,8 @@ fn test_compound_assignment() {
 fn test_unary_negation() {
     let ir = gen_ok(
         r#"
-        F test(x: i64) -> i64 {
-            R -x
+        fn test(x: i64) -> i64 {
+            return -x
         }
     "#,
     );
@@ -539,9 +539,9 @@ fn test_unary_negation() {
 fn test_logical_not() {
     let ir = gen_ok(
         r#"
-        F test(x: bool) -> i64 {
-            I !x { R 1 }
-            R 0
+        fn test(x: bool) -> i64 {
+            I !x { return 1 }
+            return 0
         }
     "#,
     );

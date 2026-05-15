@@ -1,0 +1,20 @@
+# CHECKS: arithmetic identities.
+fn main() -> i64 {
+    LF n: 0 - 5..=5 {
+        # n + 0 = n
+        I n + 0 != n { return 1 }
+        # 0 + n = n
+        I 0 + n != n { return 2 }
+        # n - 0 = n
+        I n - 0 != n { return 3 }
+        # n * 1 = n
+        I n * 1 != n { return 4 }
+        # 1 * n = n
+        I 1 * n != n { return 5 }
+        # n * 0 = 0
+        I n * 0 != 0 { return 6 }
+        # 0 * n = 0
+        I 0 * n != 0 { return 7 }
+    }
+    return 0
+}

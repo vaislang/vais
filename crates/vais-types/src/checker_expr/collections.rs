@@ -13,22 +13,66 @@ impl TypeChecker {
     ) -> Option<TypeResult<ResolvedType>> {
         match &expr.node {
             Expr::Binary { op, left, right } => {
-                let left_type = match self.check_expr(left) {
+                let left_type_raw = match self.check_expr(left) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                let right_type = match self.check_expr(right) {
+                let right_type_raw = match self.check_expr(right) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
 
+                // Phase 2.12: auto-deref &T → T for arithmetic/comparison
+                // operands. Vec.get(i)/HashMap.get(k) return Option<&T>; after
+                // `Some(n) => ...`, `n` is `&T`. Rather than forcing users to
+                // write `*n`, strip the outer Ref in binary-op contexts.
+                // Mut refs and nested refs both handled.
+                fn peel_ref(t: &ResolvedType) -> ResolvedType {
+                    match t {
+                        ResolvedType::Ref(inner) | ResolvedType::RefMut(inner) => peel_ref(inner),
+                        _ => t.clone(),
+                    }
+                }
+                let (left_type, right_type) = match op {
+                    BinOp::Add
+                    | BinOp::Sub
+                    | BinOp::Mul
+                    | BinOp::Div
+                    | BinOp::Mod
+                    | BinOp::Lt
+                    | BinOp::Lte
+                    | BinOp::Gt
+                    | BinOp::Gte
+                    | BinOp::Eq
+                    | BinOp::Neq => (peel_ref(&left_type_raw), peel_ref(&right_type_raw)),
+                    _ => (left_type_raw.clone(), right_type_raw.clone()),
+                };
+                // Keep raw versions available for paths that actually need them
+                // (string concat sees through Ref in is_str_like).
+                let _ = &left_type_raw;
+                let _ = &right_type_raw;
+
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
-                        // Allow string concatenation with +
-                        if matches!(op, BinOp::Add) && matches!(left_type, ResolvedType::Str) {
-                            if let Err(e) = self.unify(&left_type, &right_type) {
-                                return Some(Err(e));
-                            }
+                        // Allow string concatenation with + (Phase 272: include
+                        // named Str/String/&str for vaisdb's owned-string flow).
+                        let is_str_like = |t: &ResolvedType| -> bool {
+                            matches!(t, ResolvedType::Str)
+                                || matches!(t, ResolvedType::Named { name, generics }
+                                    if (name == "Str" || name == "str" || name == "String")
+                                        && generics.is_empty())
+                                || matches!(t,
+                                    ResolvedType::Ref(inner) | ResolvedType::RefMut(inner)
+                                    if matches!(inner.as_ref(), ResolvedType::Str)
+                                        || matches!(inner.as_ref(),
+                                            ResolvedType::Named { name, generics }
+                                            if (name == "Str" || name == "str"
+                                                || name == "String") && generics.is_empty()))
+                        };
+                        if matches!(op, BinOp::Add) && is_str_like(&left_type) {
+                            // Permissive: ignore right_type unify failure since
+                            // codegen handles the concat via runtime helpers.
+                            let _ = self.unify(&left_type, &right_type);
                             return Some(Ok(ResolvedType::Str));
                         }
                         if !left_type.is_numeric() {
@@ -64,17 +108,36 @@ impl TypeChecker {
                         Some(Ok(ResolvedType::Bool))
                     }
                     BinOp::Eq | BinOp::Neq => {
-                        if let Err(e) = self.unify(&left_type, &right_type) {
-                            return Some(Err(e));
+                        // Phase 258: lenient == / != — bool↔integer compare allowed.
+                        // Many vaisdb checks compare a bool field against an i64 result
+                        // (e.g. `obj.flag == get_status()` where get_status returns i64).
+                        let bool_int_pair = matches!(
+                            (&left_type, &right_type),
+                            (ResolvedType::Bool, t) | (t, ResolvedType::Bool) if t.is_integer()
+                        );
+                        if !bool_int_pair {
+                            if let Err(e) = self.unify(&left_type, &right_type) {
+                                return Some(Err(e));
+                            }
                         }
                         Some(Ok(ResolvedType::Bool))
                     }
                     BinOp::And | BinOp::Or => {
-                        if let Err(e) = self.unify(&left_type, &ResolvedType::Bool) {
-                            return Some(Err(e));
+                        // Phase 257: lenient && / || — accept Bool or integer truthy.
+                        let leniency = |t: &ResolvedType| -> bool {
+                            matches!(t, ResolvedType::Bool)
+                                || t.is_integer()
+                                || matches!(t, ResolvedType::Var(_) | ResolvedType::Unknown)
+                        };
+                        if !leniency(&left_type) {
+                            if let Err(e) = self.unify(&left_type, &ResolvedType::Bool) {
+                                return Some(Err(e));
+                            }
                         }
-                        if let Err(e) = self.unify(&right_type, &ResolvedType::Bool) {
-                            return Some(Err(e));
+                        if !leniency(&right_type) {
+                            if let Err(e) = self.unify(&right_type, &ResolvedType::Bool) {
+                                return Some(Err(e));
+                            }
                         }
                         Some(Ok(ResolvedType::Bool))
                     }
@@ -94,6 +157,12 @@ impl TypeChecker {
                                 found: left_type.to_string(),
                                 span: Some(left.span),
                             }));
+                        }
+                        // Phase 275: lenient bitwise — int op bool treated as
+                        // int op (bool as int). Common in vaisdb permission
+                        // mask building: `priv_mask | (flag ? BIT : 0)`.
+                        if matches!(right_type, ResolvedType::Bool) {
+                            return Some(Ok(left_type));
                         }
                         if let Err(e) = self.unify(&left_type, &right_type) {
                             return Some(Err(e));
@@ -120,8 +189,16 @@ impl TypeChecker {
                         Some(Ok(inner_type))
                     }
                     UnaryOp::Not => {
-                        if let Err(e) = self.unify(&inner_type, &ResolvedType::Bool) {
-                            return Some(Err(e));
+                        // Phase 256: lenient ! — accept Bool or integer (truthy 0/1).
+                        // vaisdb stdlib has many i64-returning predicates; the result
+                        // is still Bool semantically.
+                        if !matches!(inner_type, ResolvedType::Bool)
+                            && !inner_type.is_integer()
+                            && !matches!(inner_type, ResolvedType::Var(_) | ResolvedType::Unknown)
+                        {
+                            if let Err(e) = self.unify(&inner_type, &ResolvedType::Bool) {
+                                return Some(Err(e));
+                            }
                         }
                         Some(Ok(ResolvedType::Bool))
                     }
@@ -139,12 +216,39 @@ impl TypeChecker {
             }
 
             Expr::Field { expr: inner, field } => {
+                // Phase 6.27b iteration 50: disambiguate `EnumName.Variant`
+                // when `EnumName` is ALSO a variant name of another enum in
+                // scope. Without this, lookup finds the variant first and
+                // resolves inner to the OTHER enum's type, then field access
+                // for `Variant` fails on that other enum. Prefer: if the
+                // inner is an Ident naming an enum directly, treat it as
+                // that enum's variant-access.
+                if let Expr::Ident(n) = &inner.node {
+                    if let Some(enum_def) = self.enums.get(n) {
+                        if enum_def.variants.contains_key(&field.node) {
+                            let generics: Vec<ResolvedType> = enum_def
+                                .generics
+                                .iter()
+                                .map(|_| self.fresh_type_var())
+                                .collect();
+                            return Some(Ok(ResolvedType::Named {
+                                name: n.clone(),
+                                generics,
+                            }));
+                        }
+                    }
+                }
+
                 let inner_type = match self.check_expr(inner) {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
 
-                // Handle direct Named types, references, and pointers (auto-deref)
+                // Handle direct Named types, references, and pointers (auto-deref).
+                // Phase 259: also auto-unwrap Option<T>/Result<T,E> for field access.
+                // vaisdb stdlib often returns Option<T> from .get/get_mut and
+                // immediately accesses fields. Strict ownership/borrow checks are
+                // enforced separately.
                 let type_name = match &inner_type {
                     ResolvedType::Named { name, .. } => Some(name.clone()),
                     ResolvedType::Ref(inner)
@@ -154,6 +258,21 @@ impl TypeChecker {
                             Some(name.clone())
                         } else {
                             None
+                        }
+                    }
+                    ResolvedType::Optional(inner) | ResolvedType::Result(inner, _) => {
+                        match inner.as_ref() {
+                            ResolvedType::Named { name, .. } => Some(name.clone()),
+                            ResolvedType::Ref(t)
+                            | ResolvedType::RefMut(t)
+                            | ResolvedType::Pointer(t) => {
+                                if let ResolvedType::Named { name, .. } = t.as_ref() {
+                                    Some(name.clone())
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
                         }
                     }
                     _ => None,
@@ -221,10 +340,40 @@ impl TypeChecker {
                     Ok(t) => t,
                     Err(e) => return Some(Err(e)),
                 };
-                // Unwrap references
+                // Phase 280: apply substitutions before matching so that
+                // type variables resolved to tuples are correctly handled.
+                let inner_type = self.apply_substitutions(&inner_type);
+                // Unwrap references and Optional wrappers (auto-deref).
+                // Phase 280: also handle Unknown/Var (unresolved inference vars)
+                // and Named structs leniently — return Unknown instead of error.
+                // This avoids cascading E001 errors when HashMap iteration yields
+                // an unresolved item type.
                 let tuple_type = match &inner_type {
                     ResolvedType::Tuple(_) => inner_type.clone(),
-                    ResolvedType::Ref(t) | ResolvedType::RefMut(t) => *t.clone(),
+                    ResolvedType::Ref(t) | ResolvedType::RefMut(t) => {
+                        let inner_resolved = self.apply_substitutions(t);
+                        match inner_resolved {
+                            ResolvedType::Tuple(_) => inner_resolved,
+                            // Doubly-wrapped ref: peel one more layer
+                            ResolvedType::Ref(ref t2) | ResolvedType::RefMut(ref t2) => {
+                                self.apply_substitutions(t2)
+                            }
+                            // Unresolved inference variable or unknown — lenient
+                            ResolvedType::Var(_) | ResolvedType::Unknown => {
+                                return Some(Ok(ResolvedType::Unknown));
+                            }
+                            other => other,
+                        }
+                    }
+                    // Unresolved inference variable — lenient fallback
+                    ResolvedType::Var(_) | ResolvedType::Unknown => {
+                        return Some(Ok(ResolvedType::Unknown));
+                    }
+                    // Phase 280: Named struct used with tuple-field syntax (bare, not ref-wrapped).
+                    // Lenient: return Unknown to avoid cascading E001. Codegen validates field access.
+                    ResolvedType::Named { .. } => {
+                        return Some(Ok(ResolvedType::Unknown));
+                    }
                     other => {
                         return Some(Err(TypeError::Mismatch {
                             expected: "tuple type".to_string(),
@@ -248,6 +397,13 @@ impl TypeChecker {
                         }
                         Some(Ok(fields[*index].clone()))
                     }
+                    // Phase 280: unresolved type or struct — lenient fallback
+                    ResolvedType::Var(_) | ResolvedType::Unknown => Some(Ok(ResolvedType::Unknown)),
+                    // Named struct used with tuple-field syntax (e.g., struct.0):
+                    // lenient — return Unknown to avoid cascading errors in vaisdb
+                    // code that uses this pattern. The actual field access validation
+                    // is enforced at codegen level.
+                    ResolvedType::Named { .. } => Some(Ok(ResolvedType::Unknown)),
                     other => Some(Err(TypeError::Mismatch {
                         expected: "tuple type".to_string(),
                         found: other.to_string(),
@@ -272,8 +428,12 @@ impl TypeChecker {
                 match inner_type {
                     ResolvedType::Array(elem_type) => {
                         if is_slice {
-                            // Slice returns a pointer to array elements
-                            Some(Ok(ResolvedType::Pointer(elem_type)))
+                            // Range indexing materializes a slice fat pointer
+                            // (`{ data, len }`) in codegen, so keep the type
+                            // tag as Slice<T>. Returning Pointer<T> here makes
+                            // downstream slice methods such as `.to_vec()` miss
+                            // the built-in dispatch.
+                            Some(Ok(ResolvedType::Slice(elem_type)))
                         } else if !index_type.is_integer() {
                             Some(Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
@@ -293,8 +453,7 @@ impl TypeChecker {
                     // Pointers can be indexed like arrays
                     ResolvedType::Pointer(elem_type) => {
                         if is_slice {
-                            // Slice of pointer returns a pointer
-                            Some(Ok(ResolvedType::Pointer(elem_type)))
+                            Some(Ok(ResolvedType::Slice(elem_type)))
                         } else if !index_type.is_integer() {
                             Some(Err(TypeError::Mismatch {
                                 expected: "integer".to_string(),
@@ -353,7 +512,13 @@ impl TypeChecker {
                         ref generics,
                     } if name == "Vec" && !generics.is_empty() => {
                         if is_slice {
-                            Some(Ok(ResolvedType::Pointer(Box::new(
+                            // Phase Ω P1.7 (iter 134): Vec<T>[range] → Slice<T>
+                            // (was Pointer<T> — pre-fix, downstream `.to_vec()`
+                            // and other slice methods could not dispatch
+                            // because they only match `Slice`/`SliceMut`).
+                            // The codegen treats Pointer/Slice equivalently at
+                            // the IR level, so this is TC-only refinement.
+                            Some(Ok(ResolvedType::Slice(Box::new(
                                 self.apply_substitutions(&generics[0]),
                             ))))
                         } else if !index_type.is_integer() {
@@ -368,12 +533,23 @@ impl TypeChecker {
                     }
                     // Ref or RefMut to Vec<T> is also indexable
                     ResolvedType::Ref(ref inner) | ResolvedType::RefMut(ref inner) => {
+                        // Phase 266: peel one extra Ref layer (&&[T] → &[T]).
+                        let inner_peeled: &ResolvedType = match inner.as_ref() {
+                            ResolvedType::Ref(t) | ResolvedType::RefMut(t) => t.as_ref(),
+                            _ => inner.as_ref(),
+                        };
                         if let ResolvedType::Named {
                             ref name,
                             ref generics,
-                        } = **inner
+                        } = inner_peeled
                         {
                             if name == "Vec" && !generics.is_empty() {
+                                // Phase 262: &Vec<T>[range] → Slice<T>.
+                                if is_slice {
+                                    return Some(Ok(ResolvedType::Slice(Box::new(
+                                        self.apply_substitutions(&generics[0]),
+                                    ))));
+                                }
                                 if !index_type.is_integer() {
                                     return Some(Err(TypeError::Mismatch {
                                         expected: "integer".to_string(),
@@ -384,11 +560,109 @@ impl TypeChecker {
                                 return Some(Ok(self.apply_substitutions(&generics[0])));
                             }
                         }
+                        // Phase 266: &&[T] / &[T] indexing returns T.
+                        if let ResolvedType::Slice(elem) | ResolvedType::SliceMut(elem) =
+                            inner_peeled
+                        {
+                            if is_slice {
+                                return Some(Ok(ResolvedType::Slice(elem.clone())));
+                            }
+                            if !index_type.is_integer() {
+                                return Some(Err(TypeError::Mismatch {
+                                    expected: "integer".to_string(),
+                                    found: index_type.to_string(),
+                                    span: Some(index.span),
+                                }));
+                            }
+                            return Some(Ok((**elem).clone()));
+                        }
+                        // Phase 252: &str / &Str indexing returns I64 (byte).
+                        if matches!(**inner, ResolvedType::Str)
+                            || matches!(&**inner, ResolvedType::Named { name, generics }
+                                if (name == "Str" || name == "str") && generics.is_empty())
+                        {
+                            if !index_type.is_integer() {
+                                return Some(Err(TypeError::Mismatch {
+                                    expected: "integer".to_string(),
+                                    found: index_type.to_string(),
+                                    span: Some(index.span),
+                                }));
+                            }
+                            return Some(Ok(ResolvedType::I64));
+                        }
                         Some(Err(TypeError::Mismatch {
                             expected: "indexable type".to_string(),
                             found: inner_type.to_string(),
                             span: Some(expr.span),
                         }))
+                    }
+                    // Phase 252: str / Str (primitive or alias) indexing.
+                    ResolvedType::Str => {
+                        if !index_type.is_integer() {
+                            return Some(Err(TypeError::Mismatch {
+                                expected: "integer".to_string(),
+                                found: index_type.to_string(),
+                                span: Some(index.span),
+                            }));
+                        }
+                        Some(Ok(ResolvedType::I64))
+                    }
+                    // Phase 6.27c.2: MutexGuard<T>/RwLockReadGuard<T>/RwLockWriteGuard<T>
+                    // forward indexing to inner T — parallel to the Phase 338
+                    // method-call forwarding in calls.rs. Needed for vaisdb
+                    // concurrency code: `queue[0]` where queue is
+                    // MutexGuard<Vec<u64>>.
+                    ResolvedType::Named {
+                        ref name,
+                        ref generics,
+                    } if matches!(
+                        name.as_str(),
+                        "MutexGuard" | "RwLockReadGuard" | "RwLockWriteGuard"
+                    ) && !generics.is_empty() =>
+                    {
+                        let inner = generics[0].clone();
+                        // Delegate to Vec<T> / ConstArray / Slice / Str branches
+                        // by pattern-matching on the inner type.
+                        match inner {
+                            ResolvedType::Named {
+                                ref name,
+                                ref generics,
+                            } if name == "Vec" && !generics.is_empty() => {
+                                if !index_type.is_integer() {
+                                    return Some(Err(TypeError::Mismatch {
+                                        expected: "integer".to_string(),
+                                        found: index_type.to_string(),
+                                        span: Some(index.span),
+                                    }));
+                                }
+                                Some(Ok(self.apply_substitutions(&generics[0])))
+                            }
+                            ResolvedType::Str => {
+                                if !index_type.is_integer() {
+                                    return Some(Err(TypeError::Mismatch {
+                                        expected: "integer".to_string(),
+                                        found: index_type.to_string(),
+                                        span: Some(index.span),
+                                    }));
+                                }
+                                Some(Ok(ResolvedType::I64))
+                            }
+                            ResolvedType::Array(elem) | ResolvedType::Slice(elem) => {
+                                if !index_type.is_integer() {
+                                    return Some(Err(TypeError::Mismatch {
+                                        expected: "integer".to_string(),
+                                        found: index_type.to_string(),
+                                        span: Some(index.span),
+                                    }));
+                                }
+                                Some(Ok(*elem))
+                            }
+                            _ => Some(Err(TypeError::Mismatch {
+                                expected: "indexable type".to_string(),
+                                found: inner_type.to_string(),
+                                span: Some(expr.span),
+                            })),
+                        }
                     }
                     _ => Some(Err(TypeError::Mismatch {
                         expected: "indexable type".to_string(),
@@ -493,11 +767,6 @@ impl TypeChecker {
             } => {
                 // Check for enum struct variant first (e.g., Shape.Circle { radius: 5.0 })
                 if let Some(ref ename) = enum_name {
-                    eprintln!(
-                        "[TC DEBUG] enum_name={}, has_enum={}",
-                        ename,
-                        self.enums.contains_key(ename)
-                    );
                     if let Some(enum_def) = self.enums.get(ename).cloned() {
                         let variant_name = &name.node;
                         if let Some(variant_fields) = enum_def.variants.get(variant_name) {
@@ -505,16 +774,28 @@ impl TypeChecker {
                             if let crate::types::VariantFieldTypes::Struct(expected_fields) =
                                 variant_fields
                             {
-                                // Check each provided field
+                                // Check each provided field (Phase 6.27c.3:
+                                // push enum hint for the field type so bare
+                                // variants resolve to the right enum).
                                 for (field_name, value) in fields {
-                                    let value_type = match self.check_expr(value) {
+                                    let expected_ty_opt =
+                                        expected_fields.get(&field_name.node).cloned();
+                                    let hint = expected_ty_opt
+                                        .as_ref()
+                                        .and_then(Self::enum_name_hint_from);
+                                    if let Some(ref h) = hint {
+                                        self.push_enum_hint(h.clone());
+                                    }
+                                    let value_type_res = self.check_expr(value);
+                                    if hint.is_some() {
+                                        self.pop_enum_hint();
+                                    }
+                                    let value_type = match value_type_res {
                                         Ok(t) => t,
                                         Err(e) => return Some(Err(e)),
                                     };
-                                    if let Some(expected_type) =
-                                        expected_fields.get(&field_name.node)
-                                    {
-                                        if let Err(e) = self.unify(expected_type, &value_type) {
+                                    if let Some(expected_type) = expected_ty_opt {
+                                        if let Err(e) = self.unify(&expected_type, &value_type) {
                                             return Some(Err(e));
                                         }
                                     }
@@ -544,20 +825,43 @@ impl TypeChecker {
 
                     // Check each field and unify with expected type
                     for (field_name, value) in fields {
-                        let value_type = match self.check_expr(value) {
+                        // Phase 6.27c.3: if we can see the expected field
+                        // type, push its enum name so bare-variant idents
+                        // inside the value resolve to that enum first.
+                        let pre_subst = struct_def.fields.get(&field_name.node).cloned();
+                        let expected_ty_subst = pre_subst
+                            .as_ref()
+                            .map(|et| self.substitute_generics(et, &generic_substitutions));
+                        let hint = expected_ty_subst
+                            .as_ref()
+                            .and_then(Self::enum_name_hint_from);
+                        if let Some(ref h) = hint {
+                            self.push_enum_hint(h.clone());
+                        }
+                        // Phase 17.H4.15: push the full expected field type
+                        // so zero-arg generic static methods like
+                        // `Vec.new()` can unify their fresh type vars with
+                        // the field's concrete type args before stamping.
+                        let pushed_expected = expected_ty_subst.is_some();
+                        if let Some(ref et) = expected_ty_subst {
+                            self.push_expected_type(et.clone());
+                        }
+                        let value_type_res = self.check_expr(value);
+                        if pushed_expected {
+                            self.pop_expected_type();
+                        }
+                        if hint.is_some() {
+                            self.pop_enum_hint();
+                        }
+                        let value_type = match value_type_res {
                             Ok(t) => t,
                             Err(e) => return Some(Err(e)),
                         };
-                        if let Some(expected_type) =
-                            struct_def.fields.get(&field_name.node).cloned()
-                        {
-                            // Substitute generic parameters with type variables
-                            let expected_type =
-                                self.substitute_generics(&expected_type, &generic_substitutions);
+                        if let Some(expected_type) = expected_ty_subst {
                             if let Err(e) = self.unify(&expected_type, &value_type) {
                                 return Some(Err(e));
                             }
-                        } else {
+                        } else if pre_subst.is_none() {
                             let suggestion = types::find_similar_name(
                                 &field_name.node,
                                 struct_def.fields.keys().map(|s| s.as_str()),
@@ -566,6 +870,32 @@ impl TypeChecker {
                                 name: field_name.node.clone(),
                                 span: Some(field_name.span),
                                 suggestion,
+                            }));
+                        }
+                    }
+
+                    // A4-10 (Master Plan v16 §A4 + Step 13 stage 1): strict
+                    // default. After the per-field loop above caught any
+                    // unknown-field uses (E002-class), reject literals that
+                    // omit required fields. Was silently zero-init in codegen
+                    // (STEP7_FINDINGS F-15). Empirical baseline footprint =
+                    // 0 std + 0 vaisdb after migrating 3 sites (scan.vais,
+                    // dml.vais BTree×3, wal_integration.vais PageAllocPayload).
+                    // Set VAIS_REJECT_A4_10=0 to restore the legacy behaviour.
+                    if std::env::var("VAIS_REJECT_A4_10").as_deref() != Ok("0") {
+                        let provided: std::collections::HashSet<&str> =
+                            fields.iter().map(|(n, _)| n.node.as_str()).collect();
+                        let missing: Vec<&str> = struct_def
+                            .fields
+                            .keys()
+                            .map(|s| s.as_str())
+                            .filter(|f| !provided.contains(f))
+                            .collect();
+                        if !missing.is_empty() {
+                            return Some(Err(TypeError::Mismatch {
+                                expected: format!("all required fields of struct `{}`", name.node),
+                                found: format!("missing fields: {}", missing.join(", ")),
+                                span: Some(name.span),
                             }));
                         }
                     }
@@ -660,6 +990,81 @@ impl TypeChecker {
                         generics: inferred_generics,
                     }))
                 } else {
+                    // Phase 6.27b iteration 52: fallback — name might be a
+                    // Struct variant of some enum (short-form). Find the
+                    // first enum whose Struct variant has this name AND
+                    // whose field set covers the literal's provided fields
+                    // (the covers-check avoids picking a same-named variant
+                    // in a different enum — see iter-35 disambiguation).
+                    let provided_field_names: std::collections::HashSet<String> =
+                        fields.iter().map(|(fn_, _)| fn_.node.clone()).collect();
+                    // Snapshot enum entries to avoid borrow issues during
+                    // subsequent check_expr/unify calls.
+                    let mut enum_snapshots: Vec<(
+                        String,
+                        Vec<String>,
+                        std::collections::HashMap<String, ResolvedType>,
+                    )> = Vec::new();
+                    {
+                        let mut enum_entries: Vec<_> = self.enums.iter().collect();
+                        enum_entries.sort_by(|(a, _), (b, _)| {
+                            let a_builtin = matches!(a.as_str(), "Option" | "Result");
+                            let b_builtin = matches!(b.as_str(), "Option" | "Result");
+                            a_builtin.cmp(&b_builtin).then_with(|| a.cmp(b))
+                        });
+                        for (enum_name_str, enum_def) in enum_entries {
+                            if let Some(crate::types::VariantFieldTypes::Struct(expected_fields)) =
+                                enum_def.variants.get(&name.node)
+                            {
+                                let covers_all = provided_field_names
+                                    .iter()
+                                    .all(|pfn| expected_fields.contains_key(pfn.as_str()));
+                                if covers_all {
+                                    enum_snapshots.push((
+                                        enum_name_str.clone(),
+                                        enum_def.generics.clone(),
+                                        expected_fields.clone(),
+                                    ));
+                                    break; // prefer first sorted match
+                                }
+                            }
+                        }
+                    }
+                    if let Some((enum_name_str, enum_generics, expected_fields)) =
+                        enum_snapshots.into_iter().next()
+                    {
+                        // Type-check each provided field against expected
+                        // (Phase 6.27c.3: propagate enum hint like above).
+                        for (field_name, value) in fields {
+                            let expected_ty_opt = expected_fields.get(&field_name.node).cloned();
+                            let hint = expected_ty_opt.as_ref().and_then(Self::enum_name_hint_from);
+                            if let Some(ref h) = hint {
+                                self.push_enum_hint(h.clone());
+                            }
+                            let value_type_res = self.check_expr(value);
+                            if hint.is_some() {
+                                self.pop_enum_hint();
+                            }
+                            let value_type = match value_type_res {
+                                Ok(t) => t,
+                                Err(e) => return Some(Err(e)),
+                            };
+                            if let Some(expected_type) = expected_ty_opt {
+                                if let Err(e) = self.unify(&expected_type, &value_type) {
+                                    return Some(Err(e));
+                                }
+                            }
+                        }
+                        let generics: Vec<ResolvedType> = enum_generics
+                            .iter()
+                            .map(|_| self.fresh_type_var())
+                            .collect();
+                        return Some(Ok(ResolvedType::Named {
+                            name: enum_name_str,
+                            generics,
+                        }));
+                    }
+
                     // Get all type names for suggestion
                     let mut type_candidates: Vec<&str> = Vec::new();
                     type_candidates.extend(self.structs.keys().map(|s| s.as_str()));

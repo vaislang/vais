@@ -7,6 +7,7 @@ mod gc;
 mod io;
 mod math;
 mod memory;
+pub mod method_returns;
 mod print;
 mod simd;
 mod stdlib;

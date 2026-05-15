@@ -179,10 +179,10 @@ mod tests {
         assert_eq!(pool.len(), 1000);
 
         // Re-intern all — should return same IDs
-        for (i, expected_id) in ids.iter().enumerate().take(1000) {
+        for i in 0..1000 {
             let s = format!("var_{}", i);
             let id = pool.intern(&s);
-            assert_eq!(id, *expected_id);
+            assert_eq!(id, ids[i]);
         }
         assert_eq!(pool.len(), 1000); // No growth
     }

@@ -1,0 +1,13 @@
+# LIVING_SPEC/01_keywords/const_compile_time.vais
+# Key concept: `const NAME: Type = expr` — 컴파일 타임 상수.
+# Phase 1.13: top-level `const` 선언 지원됨 (기존에는 `C`만 허용).
+
+const MAX: i64 = 100
+
+fn clamp(x: i64) -> i64 {
+    I x > MAX { MAX } else { x }
+}
+
+fn main() -> i64 {
+    clamp(150) + clamp(50)  # 100 + 50 = 150
+}

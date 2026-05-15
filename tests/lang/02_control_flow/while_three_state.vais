@@ -1,0 +1,20 @@
+# CHECKS: while loop with 3 mutable state variables.
+fn main() -> i64 {
+    a: i64 := mut 0
+    b: i64 := mut 1
+    n: i64 := mut 0
+
+    # Compute fib(15) iteratively, with separate counter
+    LW n < 15 {
+        next: i64 := a + b
+        a = b
+        b = next
+        n = n + 1
+    }
+    # fib sequence: a=0, b=1 -> after 1: a=1,b=1 -> after 2: a=1,b=2
+    # fib(15): a should be 610, b = 987
+    I a != 610 { return 1 }
+    I b != 987 { return 2 }
+    I n != 15 { return 3 }
+    return 0
+}

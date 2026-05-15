@@ -1,0 +1,11 @@
+# CHECKS: extern C function declaration + call (libc abs).
+impl fn abs(x: i64) -> i64
+
+fn main() -> i64 {
+    I abs(5) != 5 { return 1 }
+    I abs(0 - 7) != 7 { return 2 }
+    I abs(0) != 0 { return 3 }
+    I abs(100) != 100 { return 4 }
+    I abs(0 - 999) != 999 { return 5 }
+    return 0
+}

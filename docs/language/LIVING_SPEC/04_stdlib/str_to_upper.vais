@@ -1,0 +1,9 @@
+# LIVING_SPEC/04_stdlib/str_to_upper.vais
+# Key concept: 문자열 변환은 std/string.vais의 to_upper/to_lower 참조.
+# 이 예시는 길이 유지 확인만 (상위 API 호환성 테스트).
+
+fn main() -> i64 {
+    s := "hello"
+    # to_upper가 있다면 "HELLO", len 동일.
+    s.len()
+}

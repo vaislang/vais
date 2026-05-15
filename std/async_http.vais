@@ -56,13 +56,13 @@ C CT_OCTET: i64 = 5
 # HTTP Header Pair
 # ============================================
 
-S AsyncHeader {
+struct AsyncHeader {
     name: str,
     value: str
 }
 
-X AsyncHeader {
-    F new(name: str, value: str) -> AsyncHeader {
+impl AsyncHeader {
+    fn new(name: str, value: str) -> AsyncHeader {
         AsyncHeader { name: name, value: value }
     }
 }
@@ -71,7 +71,7 @@ X AsyncHeader {
 # HTTP Request (parsed from client)
 # ============================================
 
-S AsyncHttpRequest {
+struct AsyncHttpRequest {
     method: i64,
     path: str,
     query: str,
@@ -84,8 +84,8 @@ S AsyncHttpRequest {
     keep_alive: i64     # 1 if Connection: keep-alive
 }
 
-X AsyncHttpRequest {
-    F new() -> AsyncHttpRequest {
+impl AsyncHttpRequest {
+    fn new() -> AsyncHttpRequest {
         headers := malloc(MAX_HEADERS * 16)
         AsyncHttpRequest {
             method: ASYNC_HTTP_GET,
@@ -101,18 +101,18 @@ X AsyncHttpRequest {
         }
     }
 
-    F method_str(&self) -> str {
-        I self.method == ASYNC_HTTP_GET { R "GET" }
-        I self.method == ASYNC_HTTP_POST { R "POST" }
-        I self.method == ASYNC_HTTP_PUT { R "PUT" }
-        I self.method == ASYNC_HTTP_DELETE { R "DELETE" }
-        I self.method == ASYNC_HTTP_PATCH { R "PATCH" }
-        I self.method == ASYNC_HTTP_HEAD { R "HEAD" }
-        I self.method == ASYNC_HTTP_OPTIONS { R "OPTIONS" }
+    fn method_str(&self) -> str {
+        I self.method == ASYNC_HTTP_GET { return "GET" }
+        I self.method == ASYNC_HTTP_POST { return "POST" }
+        I self.method == ASYNC_HTTP_PUT { return "PUT" }
+        I self.method == ASYNC_HTTP_DELETE { return "DELETE" }
+        I self.method == ASYNC_HTTP_PATCH { return "PATCH" }
+        I self.method == ASYNC_HTTP_HEAD { return "HEAD" }
+        I self.method == ASYNC_HTTP_OPTIONS { return "OPTIONS" }
         "UNKNOWN"
     }
 
-    F get_header(&self, name: str) -> str {
+    fn get_header(&self, name: str) -> str {
         i := mut 0
         L {
             I i >= self.header_count { B }
@@ -124,16 +124,16 @@ X AsyncHttpRequest {
         ""
     }
 
-    F is_get(&self) -> i64 {
-        I self.method == ASYNC_HTTP_GET { 1 } EL { 0 }
+    fn is_get(&self) -> i64 {
+        I self.method == ASYNC_HTTP_GET { 1 } else { 0 }
     }
 
-    F is_post(&self) -> i64 {
-        I self.method == ASYNC_HTTP_POST { 1 } EL { 0 }
+    fn is_post(&self) -> i64 {
+        I self.method == ASYNC_HTTP_POST { 1 } else { 0 }
     }
 
-    F has_body(&self) -> i64 {
-        I self.body_len > 0 { 1 } EL { 0 }
+    fn has_body(&self) -> i64 {
+        I self.body_len > 0 { 1 } else { 0 }
     }
 }
 
@@ -141,7 +141,7 @@ X AsyncHttpRequest {
 # HTTP Response (built by handler)
 # ============================================
 
-S AsyncHttpResponse {
+struct AsyncHttpResponse {
     status: i64,
     headers: i64,       # ptr to AsyncHeader array
     header_count: i64,
@@ -150,8 +150,8 @@ S AsyncHttpResponse {
     content_type: i64
 }
 
-X AsyncHttpResponse {
-    F new(status: i64) -> AsyncHttpResponse {
+impl AsyncHttpResponse {
+    fn new(status: i64) -> AsyncHttpResponse {
         headers := malloc(MAX_HEADERS * 16)
         AsyncHttpResponse {
             status: status,
@@ -163,47 +163,47 @@ X AsyncHttpResponse {
         }
     }
 
-    F ok() -> AsyncHttpResponse {
+    fn ok() -> AsyncHttpResponse {
         AsyncHttpResponse::new(STATUS_OK)
     }
 
-    F not_found() -> AsyncHttpResponse {
+    fn not_found() -> AsyncHttpResponse {
         resp := AsyncHttpResponse::new(STATUS_NOT_FOUND)
         resp.content_type = CT_TEXT
         resp
     }
 
-    F bad_request() -> AsyncHttpResponse {
+    fn bad_request() -> AsyncHttpResponse {
         AsyncHttpResponse::new(STATUS_BAD_REQUEST)
     }
 
-    F internal_error() -> AsyncHttpResponse {
+    fn internal_error() -> AsyncHttpResponse {
         AsyncHttpResponse::new(STATUS_INTERNAL_ERROR)
     }
 
-    F with_text(&mut self, text: str) -> i64 {
+    fn with_text(&mut self, text: str) -> i64 {
         self.body = str_to_ptr(text)
         self.body_len = strlen(text)
         self.content_type = CT_TEXT
         0
     }
 
-    F with_html(&mut self, html: str) -> i64 {
+    fn with_html(&mut self, html: str) -> i64 {
         self.body = str_to_ptr(html)
         self.body_len = strlen(html)
         self.content_type = CT_HTML
         0
     }
 
-    F with_json(&mut self, json: str) -> i64 {
+    fn with_json(&mut self, json: str) -> i64 {
         self.body = str_to_ptr(json)
         self.body_len = strlen(json)
         self.content_type = CT_JSON
         0
     }
 
-    F add_header(&mut self, name: str, value: str) -> i64 {
-        I self.header_count >= MAX_HEADERS { R -1 }
+    fn add_header(&mut self, name: str, value: str) -> i64 {
+        I self.header_count >= MAX_HEADERS { return -1 }
         offset := self.header_count * 16
         store_i64(self.headers + offset, str_to_ptr(name))
         store_i64(self.headers + offset + 8, str_to_ptr(value))
@@ -211,28 +211,28 @@ X AsyncHttpResponse {
         0
     }
 
-    F status_text(&self) -> str {
-        I self.status == 200 { R "OK" }
-        I self.status == 201 { R "Created" }
-        I self.status == 204 { R "No Content" }
-        I self.status == 301 { R "Moved Permanently" }
-        I self.status == 400 { R "Bad Request" }
-        I self.status == 401 { R "Unauthorized" }
-        I self.status == 403 { R "Forbidden" }
-        I self.status == 404 { R "Not Found" }
-        I self.status == 405 { R "Method Not Allowed" }
-        I self.status == 500 { R "Internal Server Error" }
-        I self.status == 502 { R "Bad Gateway" }
-        I self.status == 503 { R "Service Unavailable" }
+    fn status_text(&self) -> str {
+        I self.status == 200 { return "OK" }
+        I self.status == 201 { return "Created" }
+        I self.status == 204 { return "No Content" }
+        I self.status == 301 { return "Moved Permanently" }
+        I self.status == 400 { return "Bad Request" }
+        I self.status == 401 { return "Unauthorized" }
+        I self.status == 403 { return "Forbidden" }
+        I self.status == 404 { return "Not Found" }
+        I self.status == 405 { return "Method Not Allowed" }
+        I self.status == 500 { return "Internal Server Error" }
+        I self.status == 502 { return "Bad Gateway" }
+        I self.status == 503 { return "Service Unavailable" }
         "Unknown"
     }
 
-    F content_type_str(&self) -> str {
-        I self.content_type == CT_TEXT { R "text/plain" }
-        I self.content_type == CT_HTML { R "text/html" }
-        I self.content_type == CT_JSON { R "application/json" }
-        I self.content_type == CT_FORM { R "application/x-www-form-urlencoded" }
-        I self.content_type == CT_OCTET { R "application/octet-stream" }
+    fn content_type_str(&self) -> str {
+        I self.content_type == CT_TEXT { return "text/plain" }
+        I self.content_type == CT_HTML { return "text/html" }
+        I self.content_type == CT_JSON { return "application/json" }
+        I self.content_type == CT_FORM { return "application/x-www-form-urlencoded" }
+        I self.content_type == CT_OCTET { return "application/octet-stream" }
         "text/plain"
     }
 }
@@ -241,21 +241,21 @@ X AsyncHttpResponse {
 # Route — maps method+path to handler
 # ============================================
 
-S Route {
+struct Route {
     method: i64,
     path: str,
     handler: i64        # function pointer: (AsyncHttpRequest) -> AsyncHttpResponse
 }
 
-X Route {
-    F new(method: i64, path: str, handler: i64) -> Route {
+impl Route {
+    fn new(method: i64, path: str, handler: i64) -> Route {
         Route { method: method, path: path, handler: handler }
     }
 
-    F matches(&self, method: i64, path: str) -> i64 {
-        I self.method != method { R 0 }
+    fn matches(&self, method: i64, path: str) -> i64 {
+        I self.method != method { return 0 }
         # Simple exact match (no path params in async version)
-        I self.path == path { 1 } EL { 0 }
+        I self.path == path { 1 } else { 0 }
     }
 }
 
@@ -263,36 +263,36 @@ X Route {
 # Router — collection of routes
 # ============================================
 
-S Router {
+struct Router {
     routes: i64,        # ptr to Route array
     count: i64,
     capacity: i64
 }
 
-X Router {
-    F new() -> Router {
+impl Router {
+    fn new() -> Router {
         routes := malloc(MAX_ROUTES * 24)   # 24 bytes per Route (i64+str+i64)
         Router { routes: routes, count: 0, capacity: MAX_ROUTES }
     }
 
-    F get(&mut self, path: str, handler: i64) -> i64 {
+    fn get(&mut self, path: str, handler: i64) -> i64 {
         self.add_route(ASYNC_HTTP_GET, path, handler)
     }
 
-    F post(&mut self, path: str, handler: i64) -> i64 {
+    fn post(&mut self, path: str, handler: i64) -> i64 {
         self.add_route(ASYNC_HTTP_POST, path, handler)
     }
 
-    F put(&mut self, path: str, handler: i64) -> i64 {
+    fn put(&mut self, path: str, handler: i64) -> i64 {
         self.add_route(ASYNC_HTTP_PUT, path, handler)
     }
 
-    F delete(&mut self, path: str, handler: i64) -> i64 {
+    fn delete(&mut self, path: str, handler: i64) -> i64 {
         self.add_route(ASYNC_HTTP_DELETE, path, handler)
     }
 
-    F add_route(&mut self, method: i64, path: str, handler: i64) -> i64 {
-        I self.count >= self.capacity { R -1 }
+    fn add_route(&mut self, method: i64, path: str, handler: i64) -> i64 {
+        I self.count >= self.capacity { return -1 }
         offset := self.count * 24
         store_i64(self.routes + offset, method)
         store_i64(self.routes + offset + 8, str_to_ptr(path))
@@ -301,7 +301,7 @@ X Router {
         0
     }
 
-    F find_handler(&self, method: i64, path: str) -> i64 {
+    fn find_handler(&self, method: i64, path: str) -> i64 {
         i := mut 0
         L {
             I i >= self.count { B }
@@ -311,14 +311,14 @@ X Router {
             r_handler := load_i64(self.routes + offset + 16)
             I r_method == method {
                 # Compare path
-                R r_handler
+                return r_handler
             }
             i = i + 1
         }
         0   # no handler found
     }
 
-    F route_count(&self) -> i64 {
+    fn route_count(&self) -> i64 {
         self.count
     }
 }
@@ -327,32 +327,32 @@ X Router {
 # Middleware
 # ============================================
 
-S Middleware {
+struct Middleware {
     name: str,
     pre_handler: i64,   # fn(AsyncHttpRequest) -> AsyncHttpRequest (or 0 to skip)
     post_handler: i64    # fn(AsyncHttpResponse) -> AsyncHttpResponse (or 0 to skip)
 }
 
-X Middleware {
-    F new(name: str, pre: i64, post: i64) -> Middleware {
+impl Middleware {
+    fn new(name: str, pre: i64, post: i64) -> Middleware {
         Middleware { name: name, pre_handler: pre, post_handler: post }
     }
 }
 
-S MiddlewareChain {
+struct MiddlewareChain {
     items: i64,         # ptr to Middleware array
     count: i64,
     capacity: i64
 }
 
-X MiddlewareChain {
-    F new() -> MiddlewareChain {
+impl MiddlewareChain {
+    fn new() -> MiddlewareChain {
         items := malloc(MAX_MIDDLEWARE * 24)
         MiddlewareChain { items: items, count: 0, capacity: MAX_MIDDLEWARE }
     }
 
-    F add(&mut self, mw: Middleware) -> i64 {
-        I self.count >= self.capacity { R -1 }
+    fn add(&mut self, mw: Middleware) -> i64 {
+        I self.count >= self.capacity { return -1 }
         offset := self.count * 24
         store_i64(self.items + offset, str_to_ptr(mw.name))
         store_i64(self.items + offset + 8, mw.pre_handler)
@@ -361,7 +361,7 @@ X MiddlewareChain {
         0
     }
 
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.count
     }
 }
@@ -370,7 +370,7 @@ X MiddlewareChain {
 # AsyncHttpServer
 # ============================================
 
-S AsyncHttpServer {
+struct AsyncHttpServer {
     host: str,
     port: i64,
     fd: i64,
@@ -382,8 +382,8 @@ S AsyncHttpServer {
     request_count: i64
 }
 
-X AsyncHttpServer {
-    F new(host: str, port: i64) -> AsyncHttpServer {
+impl AsyncHttpServer {
+    fn new(host: str, port: i64) -> AsyncHttpServer {
         AsyncHttpServer {
             host: host,
             port: port,
@@ -397,29 +397,29 @@ X AsyncHttpServer {
         }
     }
 
-    F route_get(&mut self, path: str, handler: i64) -> i64 {
+    fn route_get(&mut self, path: str, handler: i64) -> i64 {
         self.router.get(path, handler)
     }
 
-    F route_post(&mut self, path: str, handler: i64) -> i64 {
+    fn route_post(&mut self, path: str, handler: i64) -> i64 {
         self.router.post(path, handler)
     }
 
-    F route_put(&mut self, path: str, handler: i64) -> i64 {
+    fn route_put(&mut self, path: str, handler: i64) -> i64 {
         self.router.put(path, handler)
     }
 
-    F route_delete(&mut self, path: str, handler: i64) -> i64 {
+    fn route_delete(&mut self, path: str, handler: i64) -> i64 {
         self.router.delete(path, handler)
     }
 
-    F use_middleware(&mut self, mw: Middleware) -> i64 {
+    fn use_middleware(&mut self, mw: Middleware) -> i64 {
         self.middleware.add(mw)
     }
 
     # Start listening (non-blocking setup)
     # In a real async runtime, this would register with the event loop
-    F bind(&mut self) -> i64 {
+    fn bind(&mut self) -> i64 {
         # Simulated: store fd as port number (real impl would call socket/bind/listen)
         self.fd = self.port
         self.is_running = 1
@@ -428,8 +428,8 @@ X AsyncHttpServer {
 
     # Process one request (poll-based)
     # Returns number of requests processed (0 or 1)
-    F poll_once(&mut self) -> i64 {
-        I self.is_running == 0 { R -1 }
+    fn poll_once(&mut self) -> i64 {
+        I self.is_running == 0 { return -1 }
         # In a real async runtime, this would:
         # 1. Check for new connections via accept()
         # 2. Read request data from connected clients
@@ -441,8 +441,8 @@ X AsyncHttpServer {
     }
 
     # Run the accept loop for N iterations (simulated)
-    F run_iterations(&mut self, max_iter: i64) -> i64 {
-        I self.is_running == 0 { R -1 }
+    fn run_iterations(&mut self, max_iter: i64) -> i64 {
+        I self.is_running == 0 { return -1 }
         processed := mut 0
         i := mut 0
         L {
@@ -456,21 +456,21 @@ X AsyncHttpServer {
         processed
     }
 
-    F stop(&mut self) -> i64 {
+    fn stop(&mut self) -> i64 {
         self.is_running = 0
         self.fd = -1
         0
     }
 
-    F stats_requests(&self) -> i64 {
+    fn stats_requests(&self) -> i64 {
         self.request_count
     }
 
-    F stats_connections(&self) -> i64 {
+    fn stats_connections(&self) -> i64 {
         self.connection_count
     }
 
-    F is_listening(&self) -> i64 {
+    fn is_listening(&self) -> i64 {
         self.is_running
     }
 }
@@ -479,7 +479,7 @@ X AsyncHttpServer {
 # AsyncHttpClient
 # ============================================
 
-S AsyncHttpClient {
+struct AsyncHttpClient {
     base_url: str,
     timeout_ms: i64,
     default_headers: i64,   # ptr to header array
@@ -488,8 +488,8 @@ S AsyncHttpClient {
     follow_redirects: i64
 }
 
-X AsyncHttpClient {
-    F new() -> AsyncHttpClient {
+impl AsyncHttpClient {
+    fn new() -> AsyncHttpClient {
         headers := malloc(MAX_HEADERS * 16)
         AsyncHttpClient {
             base_url: "",
@@ -501,24 +501,24 @@ X AsyncHttpClient {
         }
     }
 
-    F with_base_url(url: str) -> AsyncHttpClient {
+    fn with_base_url(url: str) -> AsyncHttpClient {
         client := AsyncHttpClient::new()
         client.base_url = url
         client
     }
 
-    F set_timeout(&mut self, ms: i64) -> i64 {
+    fn set_timeout(&mut self, ms: i64) -> i64 {
         self.timeout_ms = ms
         0
     }
 
-    F set_follow_redirects(&mut self, follow: i64) -> i64 {
+    fn set_follow_redirects(&mut self, follow: i64) -> i64 {
         self.follow_redirects = follow
         0
     }
 
-    F add_default_header(&mut self, name: str, value: str) -> i64 {
-        I self.header_count >= MAX_HEADERS { R -1 }
+    fn add_default_header(&mut self, name: str, value: str) -> i64 {
+        I self.header_count >= MAX_HEADERS { return -1 }
         offset := self.header_count * 16
         store_i64(self.default_headers + offset, str_to_ptr(name))
         store_i64(self.default_headers + offset + 8, str_to_ptr(value))
@@ -528,22 +528,22 @@ X AsyncHttpClient {
 
     # Make a GET request
     # Returns an AsyncHttpResponse
-    F get(&self, path: str) -> AsyncHttpResponse {
+    fn get(&self, path: str) -> AsyncHttpResponse {
         self.request(ASYNC_HTTP_GET, path, 0, 0)
     }
 
     # Make a POST request with body
-    F post(&self, path: str, body: str) -> AsyncHttpResponse {
+    fn post(&self, path: str, body: str) -> AsyncHttpResponse {
         self.request(ASYNC_HTTP_POST, path, str_to_ptr(body), strlen(body))
     }
 
     # Make a PUT request with body
-    F put(&self, path: str, body: str) -> AsyncHttpResponse {
+    fn put(&self, path: str, body: str) -> AsyncHttpResponse {
         self.request(ASYNC_HTTP_PUT, path, str_to_ptr(body), strlen(body))
     }
 
     # Make a DELETE request
-    F delete(&self, path: str) -> AsyncHttpResponse {
+    fn delete(&self, path: str) -> AsyncHttpResponse {
         self.request(ASYNC_HTTP_DELETE, path, 0, 0)
     }
 
@@ -554,14 +554,14 @@ X AsyncHttpClient {
     # 3. Send HTTP request headers + body
     # 4. Read HTTP response headers + body
     # 5. Parse and return response
-    F request(&self, method: i64, path: str, body: i64, body_len: i64) -> AsyncHttpResponse {
+    fn request(&self, method: i64, path: str, body: i64, body_len: i64) -> AsyncHttpResponse {
         # Simulated response for now
         resp := AsyncHttpResponse::ok()
         resp
     }
 
     # POST JSON convenience method
-    F post_json(&self, path: str, json: str) -> AsyncHttpResponse {
+    fn post_json(&self, path: str, json: str) -> AsyncHttpResponse {
         resp := self.request(ASYNC_HTTP_POST, path, str_to_ptr(json), strlen(json))
         resp
     }
@@ -571,7 +571,7 @@ X AsyncHttpClient {
 # HTTP Request Parser (simple HTTP/1.1)
 # ============================================
 
-S HttpParser {
+struct HttpParser {
     buf: i64,           # ptr to read buffer
     buf_len: i64,
     pos: i64,
@@ -585,8 +585,8 @@ S HttpParser {
     content_length: i64
 }
 
-X HttpParser {
-    F new(buf: i64, len: i64) -> HttpParser {
+impl HttpParser {
+    fn new(buf: i64, len: i64) -> HttpParser {
         headers := malloc(MAX_HEADERS * 16)
         HttpParser {
             buf: buf,
@@ -604,9 +604,9 @@ X HttpParser {
     }
 
     # Parse the request line: METHOD PATH HTTP/VERSION
-    F parse_request_line(&mut self) -> i64 {
+    fn parse_request_line(&mut self) -> i64 {
         # Read method
-        I self.buf_len < 4 { R -1 }
+        I self.buf_len < 4 { return -1 }
 
         first := load_byte(self.buf)
 
@@ -614,31 +614,31 @@ X HttpParser {
         I first == 71 {
             self.method = ASYNC_HTTP_GET
             self.pos = 4    # "GET "
-        } EL I first == 80 {
+        } else I first == 80 {
             second := load_byte(self.buf + 1)
             I second == 79 {
                 self.method = ASYNC_HTTP_POST
                 self.pos = 5    # "POST "
-            } EL I second == 85 {
+            } else I second == 85 {
                 self.method = ASYNC_HTTP_PUT
                 self.pos = 4    # "PUT "
-            } EL I second == 65 {
+            } else I second == 65 {
                 self.method = ASYNC_HTTP_PATCH
                 self.pos = 6    # "PATCH "
-            } EL {
-                R -1
+            } else {
+                return -1
             }
-        } EL I first == 68 {
+        } else I first == 68 {
             self.method = ASYNC_HTTP_DELETE
             self.pos = 7    # "DELETE "
-        } EL I first == 72 {
+        } else I first == 72 {
             self.method = ASYNC_HTTP_HEAD
             self.pos = 5    # "HEAD "
-        } EL I first == 79 {
+        } else I first == 79 {
             self.method = ASYNC_HTTP_OPTIONS
             self.pos = 8    # "OPTIONS "
-        } EL {
-            R -1
+        } else {
+            return -1
         }
 
         # Skip to end of request line (find \r\n or \n)
@@ -647,7 +647,7 @@ X HttpParser {
     }
 
     # Parse headers section
-    F parse_headers(&mut self) -> i64 {
+    fn parse_headers(&mut self) -> i64 {
         count := mut 0
         # In a full implementation, iterate lines between request line and blank line
         # Each line: "Name: Value\r\n"
@@ -656,17 +656,17 @@ X HttpParser {
     }
 
     # Get parsed method
-    F get_method(&self) -> i64 {
+    fn get_method(&self) -> i64 {
         self.method
     }
 
     # Get parsed path
-    F get_path(&self) -> str {
+    fn get_path(&self) -> str {
         self.path
     }
 
     # Get content length from headers
-    F get_content_length(&self) -> i64 {
+    fn get_content_length(&self) -> i64 {
         self.content_length
     }
 }
@@ -675,20 +675,20 @@ X HttpParser {
 # Response Serializer
 # ============================================
 
-S ResponseWriter {
+struct ResponseWriter {
     buf: i64,           # output buffer ptr
     buf_len: i64,
     capacity: i64
 }
 
-X ResponseWriter {
-    F new(capacity: i64) -> ResponseWriter {
+impl ResponseWriter {
+    fn new(capacity: i64) -> ResponseWriter {
         buf := malloc(capacity)
         ResponseWriter { buf: buf, buf_len: 0, capacity: capacity }
     }
 
     # Write response status line
-    F write_status(&mut self, status: i64, text: str) -> i64 {
+    fn write_status(&mut self, status: i64, text: str) -> i64 {
         # "HTTP/1.1 200 OK\r\n"
         # Simplified: just track buffer length
         self.buf_len = self.buf_len + 17   # approximate
@@ -696,7 +696,7 @@ X ResponseWriter {
     }
 
     # Write a header line
-    F write_header(&mut self, name: str, value: str) -> i64 {
+    fn write_header(&mut self, name: str, value: str) -> i64 {
         # "Name: Value\r\n"
         name_len := strlen(name)
         val_len := strlen(value)
@@ -705,20 +705,20 @@ X ResponseWriter {
     }
 
     # Write end of headers
-    F write_headers_end(&mut self) -> i64 {
+    fn write_headers_end(&mut self) -> i64 {
         # "\r\n"
         self.buf_len = self.buf_len + 2
         0
     }
 
     # Write body
-    F write_body(&mut self, data: i64, len: i64) -> i64 {
+    fn write_body(&mut self, data: i64, len: i64) -> i64 {
         self.buf_len = self.buf_len + len
         0
     }
 
     # Serialize full response
-    F serialize(&mut self, resp: AsyncHttpResponse) -> i64 {
+    fn serialize(&mut self, resp: AsyncHttpResponse) -> i64 {
         self.write_status(resp.status, resp.status_text())
         self.write_header("Content-Type", resp.content_type_str())
 
@@ -740,15 +740,15 @@ X ResponseWriter {
         self.buf_len
     }
 
-    F get_buffer(&self) -> i64 {
+    fn get_buffer(&self) -> i64 {
         self.buf
     }
 
-    F get_length(&self) -> i64 {
+    fn get_length(&self) -> i64 {
         self.buf_len
     }
 
-    F reset(&mut self) -> i64 {
+    fn reset(&mut self) -> i64 {
         self.buf_len = 0
         0
     }
@@ -758,15 +758,15 @@ X ResponseWriter {
 # Connection Pool
 # ============================================
 
-S ConnectionPool {
+struct ConnectionPool {
     connections: i64,   # ptr to fd array
     count: i64,
     capacity: i64,
     max_idle: i64       # max idle connections
 }
 
-X ConnectionPool {
-    F new(capacity: i64) -> ConnectionPool {
+impl ConnectionPool {
+    fn new(capacity: i64) -> ConnectionPool {
         connections := malloc(capacity * 8)
         ConnectionPool {
             connections: connections,
@@ -776,26 +776,26 @@ X ConnectionPool {
         }
     }
 
-    F acquire(&mut self) -> i64 {
-        I self.count == 0 { R -1 }
+    fn acquire(&mut self) -> i64 {
+        I self.count == 0 { return -1 }
         self.count = self.count - 1
         fd := load_i64(self.connections + self.count * 8)
         fd
     }
 
-    F release(&mut self, fd: i64) -> i64 {
-        I self.count >= self.capacity { R -1 }
+    fn release(&mut self, fd: i64) -> i64 {
+        I self.count >= self.capacity { return -1 }
         store_i64(self.connections + self.count * 8, fd)
         self.count = self.count + 1
         0
     }
 
-    F available(&self) -> i64 {
+    fn available(&self) -> i64 {
         self.count
     }
 
-    F is_empty(&self) -> i64 {
-        I self.count == 0 { 1 } EL { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.count == 0 { 1 } else { 0 }
     }
 }
 
@@ -804,65 +804,65 @@ X ConnectionPool {
 # ============================================
 
 # Create a new async HTTP server on the given host:port
-F async_http_server(host: str, port: i64) -> AsyncHttpServer {
+fn async_http_server(host: str, port: i64) -> AsyncHttpServer {
     AsyncHttpServer::new(host, port)
 }
 
 # Create a new async HTTP client
-F async_http_client() -> AsyncHttpClient {
+fn async_http_client() -> AsyncHttpClient {
     AsyncHttpClient::new()
 }
 
 # Create a client with base URL
-F async_http_client_for(url: str) -> AsyncHttpClient {
+fn async_http_client_for(url: str) -> AsyncHttpClient {
     AsyncHttpClient::with_base_url(url)
 }
 
 # Create a simple text response
-F text_response(status: i64, text: str) -> AsyncHttpResponse {
+fn text_response(status: i64, text: str) -> AsyncHttpResponse {
     resp := mut AsyncHttpResponse::new(status)
     resp.with_text(text)
     resp
 }
 
 # Create a JSON response
-F json_response(status: i64, json: str) -> AsyncHttpResponse {
+fn json_response(status: i64, json: str) -> AsyncHttpResponse {
     resp := mut AsyncHttpResponse::new(status)
     resp.with_json(json)
     resp
 }
 
 # Create an HTML response
-F html_response(status: i64, html: str) -> AsyncHttpResponse {
+fn html_response(status: i64, html: str) -> AsyncHttpResponse {
     resp := mut AsyncHttpResponse::new(status)
     resp.with_html(html)
     resp
 }
 
 # Create a connection pool
-F connection_pool(capacity: i64) -> ConnectionPool {
+fn connection_pool(capacity: i64) -> ConnectionPool {
     ConnectionPool::new(capacity)
 }
 
 # Create logging middleware
-F logging_middleware() -> Middleware {
+fn logging_middleware() -> Middleware {
     Middleware::new("logging", 0, 0)
 }
 
 # Create CORS middleware
-F cors_middleware() -> Middleware {
+fn cors_middleware() -> Middleware {
     Middleware::new("cors", 0, 0)
 }
 
 # Simple route matcher utility
 # Returns 1 if path matches pattern, 0 otherwise
-F path_matches(path: str, pattern: str) -> i64 {
-    I path == pattern { 1 } EL { 0 }
+fn path_matches(path: str, pattern: str) -> i64 {
+    I path == pattern { 1 } else { 0 }
 }
 
 # Parse query string parameter (simple key=value extraction)
 # Returns pointer to value string, or 0 if not found
-F query_param(query: str, key: str) -> i64 {
+fn query_param(query: str, key: str) -> i64 {
     # Simplified: would need full query string parser
     0
 }

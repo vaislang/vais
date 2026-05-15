@@ -1,7 +1,7 @@
 // Collatz Conjecture
 // Generates Collatz sequence for a given number
 
-F collatz_length(n: i64) -> i64 {
+fn collatz_length(n: i64) -> i64 {
     mut count := 0
 
     L n != 1 {
@@ -15,12 +15,12 @@ F collatz_length(n: i64) -> i64 {
     }
 
     println("1")
-    R count + 1
+    return count + 1
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Collatz sequence for 27:")
     length := collatz_length(27)
     println("Sequence length: {}", length)
-    R 0
+    return 0
 }

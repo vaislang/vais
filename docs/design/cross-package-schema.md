@@ -1,7 +1,7 @@
 # Cross-Package Schema Consumption Infra Design
 
-Status: Final v6 design + 2026-05-13 main-port evidence update
-Last verified: 2026-05-13
+Status: Final v6 — Order Step 3 of Master Plan v16, self-completed by main thread
+Last verified: 2026-05-03
 
 Codex iteration history: v1 REVISE 5 → v2 REVISE 5 → v3 REVISE 6 → v4
 REVISE 2 → v5 REVISE 4. After v5 the v5 defects were addressed in v6
@@ -46,39 +46,32 @@ Master Plan v16 §I-3 frames the decision as:
 
 This document chooses **(a)**.
 
-## What already exists (verified 2026-05-13)
+## What already exists (verified 2026-05-03)
 
 - **vaisc commands** (`compiler/crates/vaisc/src/commands/`):
-  `emit_ts.rs` is wired through `crates/vaisc/src/main.rs` as
-  `vaisc emit-ts <input.vais> --output <output.d.ts>`.
+  `build/`, `compile/`, `pkg/`, `fix.rs`, `simple.rs`, `advanced.rs`, `test.rs`,
+  `build_js.rs`. **No `emit_ts` / `.d.ts` emission code currently exists**
+  (verified via `grep -rn 'emit_ts\|\.d\.ts'` returning zero hits).
 - **vaisx-compiler** (`lang/packages/vais-web/crates/vaisx-compiler/`):
   Modules `analyze.rs`, `codegen_js.rs`, `ir.rs`, `error.rs`, `lib.rs`. Cargo
   description: "VaisX reactivity compiler — dependency analysis & JS code
   generation". Currently emits JS, not TS. No schema-reading logic.
 - **vais-types** (`compiler/crates/vais-types/`): owns the canonical type
-  representation (`ResolvedType`). The current main-port emitter runs the
-  parser and type checker before emitting, but the lowering implementation is
-  AST-driven. `emit_ts_exhaustiveness.rs` guards future growth of
-  `ResolvedType` and AST `Item` variants; a future hardening pass should route
-  runtime lowering through checker-resolved types instead of relying on AST
-  type syntax.
-- **Schema fixtures**:
-  `tests/empirical/cross_package_schema/tests/gate.sh positive|negative`
-  passed `11/11 + 4/4`, and
-  `tests/product/multi_domain_schema/tests/gate.sh` passed `9/9` locally on
-  2026-05-13.
+  representation (`ResolvedType` + 670-LOC `inference/unification.rs`). The
+  emit-ts subcommand will read post-checker `ResolvedType` directly — no
+  re-parsing.
 
 ## Decision matrix (full audit, codex v1 defect 3 expanded)
 
 | Dimension | (a) vaisc emit-ts | (b) vaisx-compiler schema-aware TS |
 |---|---|---|
 | **Crate touched** | `vaisc` + read from `vais-types` | `vaisx-compiler` + `vaisx-parser` |
-| **Source of TC truth** | `vaisc` parser + type checker; current main-port lowering is AST-driven with `ResolvedType` exhaustiveness guard | Re-parses `.vais` via vaisx-parser (focused subset) |
+| **Source of TC truth** | Compiler-native `ResolvedType` post-check | Re-parses `.vais` via vaisx-parser (focused subset) |
 | **Output format** | `.d.ts` per pub-exposed schema type | `.d.ts` embedded in build artifact + JSON bundle |
 | **TC fidelity** | Highest (uses real type-checker) | Lower (parser-subset semantic drift risk) |
 | **Risk to Core** | Adds emit path inside compiler crate | None — lives in lang/, separable |
 | **Multi-target** | Yes — `.d.ts` consumable by any TS toolchain | No — coupled to vais-web build |
-| **vaisdb / vais-server** | Direct `.vais` consumers; cross gate runs native after schema concatenation, product gate type-checks through package APIs | N/A — they don't use vaisx |
+| **vaisdb / vais-server** | Direct (consume `.vais` schema natively) | N/A — they don't use vaisx |
 | **Code reuse** | ~0 (new emit module) | High (vaisx-compiler already emits) |
 | **Effort estimate** | 4-6 weeks | 2-3 weeks (but +drift maintenance burden) |
 | **Failure mode** | Schema with unsupported type → hard fail with stable error code | Drift between vaisc and vaisx schema views (silent until consumer divergence) |
@@ -130,7 +123,7 @@ Verified against real schema-bearing code in `lang/packages/vaisdb/src/sql/types
 | `Future<T>` / async types | `EMIT_TS_012` | Effect-typed; not a structural schema type. (codex v2 defect 1) |
 | `Vector<T>` (SIMD), `ConstArray<T,N>` | `EMIT_TS_013` | Backend-specific layout. (codex v2 defect 1) |
 | Dependent / refinement types | `EMIT_TS_014` | Predicate erasure would silently weaken contracts. (codex v2 defect 1) |
-| **Catch-all: any other `ResolvedType` variant** | `EMIT_TS_999` | Lowering classification must be exhaustive. New `ResolvedType` variants added to the type checker MUST extend either the lowering table or the rejection table. The current runtime emitter is AST-driven, so `emit_ts_exhaustiveness_test` guards classification drift while CLI tests and schema gates guard emitted behavior. |
+| **Catch-all: any other `ResolvedType` variant** | `EMIT_TS_999` | Lowering must be exhaustive. Any `ResolvedType` discriminant not in the lowering table OR the EMIT_TS_001-014 list emits EMIT_TS_999 with the variant name. New `ResolvedType` variants added to the type checker MUST extend either table — CI gate `emit_ts_exhaustiveness_test` enforces this by enumerating `ResolvedType::*` and asserting every variant is classified. |
 
 Each error references the offending source `.vais` file:line. Consumers see
 emit failure, not a downgraded `.d.ts` that compiles but lies.
@@ -170,16 +163,13 @@ negative empirical fixture under `compiler/tests/empirical/emit_ts/`.
 
 ## Implementation outline
 
-1. New subcommand under `compiler/crates/vaisc/src/commands/`:
-   `emit_ts.rs`.
+1. New subcommand under `compiler/crates/vaisc/src/commands/`. New file
+   `emit_ts.rs` (estimated ~500 LOC + 300 LOC test fixtures).
 2. CLI: `vaisc emit-ts <input.vais> --output <output.d.ts>`. Default emits
    only `pub` types declared at module top-level. Flag `--all` to emit
-   private types remains a design target; it is not wired into the current
-   main-port CLI.
-3. Input: source is parsed and type-checked by `vaisc`; current main-port
-   lowering reads AST type syntax after the type-check succeeds. Moving runtime
-   lowering to checker-resolved `ResolvedType` remains a follow-up hardening
-   item.
+   private types (escape hatch; not wired into CI gate).
+3. Input: typed schema via `vais-types` `ResolvedType` post-checker. No
+   re-parsing.
 4. Output: a single `.d.ts` file. Header comment carries: source path,
    vaisc version (semver string), input file content hash (sha256 hex), and
    list of erased information (e.g. "ownership info on `&T` not
@@ -340,11 +330,9 @@ Four assertions:
 
 ### Wiring into CI
 
-The main-port branch exposes the gate runners and exact commands, but the full
-aggregate `compiler/scripts/check-integrity.sh` runner is still pending main
-port. When that aggregate runner lands, this section should be wired as a new
-integrity section. The exact assertion count is computed by the gate runner
-from the assertions defined in this document:
+The gate is added to `compiler/scripts/check-integrity.sh` as a new
+section. The exact assertion count is computed by the gate runner from
+the assertions defined in this document:
 
 - **Positive gate** (11 assertions):
   - Phase 0 baseline (6): emit-ts succeeds; vaisdb_table.vais checks
@@ -359,11 +347,16 @@ from the assertions defined in this document:
   schema; vaisdb_table.vais consumer (which constructs `User { ... }`
   literally) now fails.
 
-Total: 15. A future aggregate runner can add
-`INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=15` to `master-plan.toml`
-`[[baseline_lock.threshold]]`. The threshold must be computed from the spec,
-not declared independently. (codex v5 defect 3 fix — count derived from spec,
-no drift surface.)
+Total: 15. `INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN=15` is added to
+`master-plan.toml` `[[baseline_lock.threshold]]` when this gate is
+implemented in Step 8. The threshold is computed from the spec, not
+declared independently — gate-runner reports
+`CROSS_PACKAGE_SCHEMA OK: <N>/15` and the threshold script catches
+regressions. (codex v5 defect 3 fix — count derived from spec, no
+drift surface.)
+
+`scripts/check-threshold-monotonic.sh` covers the new threshold
+automatically.
 
 ## Open questions resolved (codex v1 defect 1)
 
@@ -381,18 +374,17 @@ no drift surface.)
 ## Sequencing
 
 - **Step 8** (cross-package schema consumption implementation, Master Plan
-  v16 budget 1-2 months) consumed this design. The current main-port
-  deliverable is working `vaisc emit-ts` plus
-  `compiler/tests/empirical/cross_package_schema/` with both local workspace
-  gates passing. CI aggregation remains pending with `scripts/check-integrity.sh`.
+  v16 budget 1-2 months) consumes this design. Step 8 deliverable: working
+  `vaisc emit-ts` + the `compiler/tests/empirical/cross_package_schema/`
+  fixture with both gates passing in CI.
 - **Step 7** (surface inventory lock + retro-validation) creates the
   `compiler/tests/empirical/` directory used here. Step 7 starts in parallel.
-- **Step 14** (I-3 multi-domain product) has a main-port fixture under
-  `compiler/tests/product/multi_domain_schema/`. It emits TS, type-checks
-  VaisDB catalog and vais-server context consumers through real package APIs,
-  type-checks a vais-web DB schema-builder consumer, and proves field-rename
-  propagation. Native DB/server runtime coverage remains integration evidence
-  until the sibling packages and aggregate runtime gate are ported to main.
+- **Step 14** (I-3 multi-domain product) is closed in master-plan v115:
+  root `examples/schema/user.vais` now feeds a product gate that emits TS,
+  runs VaisDB catalog and vais-server response consumers natively, type-checks
+  a vais-web DB schema-builder consumer, and proves field-rename propagation.
+  Earlier live deploy plus crash/recovery/transaction smokes remain the
+  product-side runtime coverage for this initiative.
 
 ## Self-audit (Master Plan v16 invariant compliance)
 

@@ -1,10 +1,10 @@
 # Simple test for Option/Result error handling improvements
 
-U std/vec
-U std/hashmap
-U std/option
+use std/vec
+use std/hashmap
+use std/option
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing Option/Result improvements")
 
     # Test Vec with Option
@@ -14,19 +14,19 @@ F main() -> i64 {
     v.push(30)
 
     result := v.get_opt(1)
-    M result {
+    match result {
         Some(_) => puts("Vec get_opt(1) = Some"),
         None => puts("Vec get_opt(1) = None")
     }
 
     result2 := v.get_opt(99)
-    M result2 {
+    match result2 {
         None => puts("Out of bounds returns None"),
         Some(_) => puts("Unexpected Some value")
     }
 
     pop_val := v.pop_opt()
-    M pop_val {
+    match pop_val {
         Some(_) => puts("Vec pop_opt = Some"),
         None => puts("Vec pop_opt = None")
     }
@@ -38,13 +38,13 @@ F main() -> i64 {
     map.set(5, 500)
 
     map_result := map.get_opt(5)
-    M map_result {
+    match map_result {
         Some(_) => puts("HashMap get_opt(5) = Some"),
         None => puts("HashMap get_opt(5) = None")
     }
 
     map_result2 := map.get_opt(999)
-    M map_result2 {
+    match map_result2 {
         None => puts("Key not found returns None"),
         Some(_) => puts("Unexpected Some value")
     }

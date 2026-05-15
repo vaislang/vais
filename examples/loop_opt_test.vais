@@ -1,27 +1,27 @@
 # Loop optimization test (recursive version)
 
-F sum_to_n_rec(i: i64, n: i64, acc: i64) -> i64 {
+fn sum_to_n_rec(i: i64, n: i64, acc: i64) -> i64 {
     I i >= n { acc }
-    EL { sum_to_n_rec(i + 1, n, acc + i) }
+    else { sum_to_n_rec(i + 1, n, acc + i) }
 }
 
-F sum_to_n(n: i64) -> i64 {
+fn sum_to_n(n: i64) -> i64 {
     sum_to_n_rec(0, n, 0)
 }
 
-F sum_squares_rec(i: i64, n: i64, acc: i64) -> i64 {
+fn sum_squares_rec(i: i64, n: i64, acc: i64) -> i64 {
     I i >= n { acc }
-    EL {
+    else {
         sq := i * i
         sum_squares_rec(i + 1, n, acc + sq)
     }
 }
 
-F sum_squares(n: i64) -> i64 {
+fn sum_squares(n: i64) -> i64 {
     sum_squares_rec(0, n, 0)
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Loop Optimization Test ===")
 
     s1 := sum_to_n(10)
@@ -38,11 +38,11 @@ F main() -> i64 {
     0
 }
 
-F print_num(n: i64) -> i64 {
+fn print_num(n: i64) -> i64 {
     I n >= 10 {
         print_num(n / 10)
         0
-    } EL { 0 }
+    } else { 0 }
     putchar(n % 10 + 48)
     0
 }

@@ -1,33 +1,33 @@
 // Primality Test
 // Checks if a number is prime
 
-F is_prime(n: i64) -> bool {
+fn is_prime(n: i64) -> bool {
     I n < 2 {
-        R false
+        return false
     }
     I n == 2 {
-        R true
+        return true
     }
     I n % 2 == 0 {
-        R false
+        return false
     }
 
     mut i := 3
     L i * i <= n {
         I n % i == 0 {
-            R false
+            return false
         }
         i := i + 2
     }
-    R true
+    return true
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     println("Prime numbers up to 50:")
     L i := 2; i <= 50; i := i + 1 {
         I is_prime(i) {
             println("{}", i)
         }
     }
-    R 0
+    return 0
 }

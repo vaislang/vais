@@ -29,3 +29,7 @@ coverage-clean = "llvm-cov clean --workspace"
 # Run tests with output
 # Usage: cargo test-verbose
 test-verbose = "test --verbose"
+
+# Run integrity test matrix (syntax + stages + ecosystem health)
+# Usage: cargo integrity
+integrity = "test -p vaisc --test integrity --release -- --nocapture"

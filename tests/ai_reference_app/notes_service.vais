@@ -1,0 +1,67 @@
+# AI docs reference app: notes/task service core.
+#
+# This file intentionally uses only canonical public syntax documented in
+# docs/ai/LLM_LANGUAGE_CARD.md and docs/LANGUAGE_SPEC.md.
+
+struct Note {
+    id: i64,
+    title_len: i64,
+    done: bool
+}
+
+fn done_bonus(done: bool) -> i64 = done as i64
+
+fn read_ref(value: &i64) -> i64 = *value
+
+fn validate_id(id: i64) -> Result<i64, i64> {
+    I id <= 0 {
+        return Err(1)
+    }
+    Ok(id)
+}
+
+fn find_title_len(id: i64) -> Option<i64> {
+    match id {
+        1 => Some(10),
+        2 => Some(8),
+        3 => Some(10),
+        _ => None
+    }
+}
+
+fn note_score(note: &Note) -> i64 {
+    note.id + note.title_len + done_bonus(note.done)
+}
+
+fn make_score(id: i64, title_len: i64, done: bool) -> i64 {
+    note := Note { id: id, title_len: title_len, done: done }
+    note_score(&note)
+}
+
+fn score_lookup(id: i64) -> Result<i64, i64> {
+    checked_id := validate_id(id)?;
+    match find_title_len(checked_id) {
+        Some(title_len) => Ok(make_score(checked_id, title_len, checked_id == 2)),
+        None => Err(2)
+    }
+}
+
+fn expect_score(id: i64, expected: i64) -> i64 {
+    match score_lookup(id) {
+        Ok(score) => I score == expected { 0 } else { 10 },
+        Err(_) => 20,
+    }
+}
+
+fn expect_missing(id: i64) -> i64 {
+    match score_lookup(id) {
+        Ok(_) => 30,
+        Err(code) => I code > 0 { 0 } else { 40 },
+    }
+}
+
+fn main() -> i64 {
+    seed := 7
+    ref_score := read_ref(&seed)
+    expect_score(1, 11) + expect_score(2, 11) + expect_missing(4) + expect_missing(0) + ref_score - 7
+}

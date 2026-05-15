@@ -1,0 +1,25 @@
+# CHECKS: enum where some variants take payloads, others don't.
+enum Token {
+    Eof,
+    Num(i64),
+    Plus,
+    Minus
+}
+
+fn to_value(t: Token) -> i64 {
+    match t {
+        Eof => 0,
+        Num(n) => n,
+        Plus => 100,
+        Minus => 200
+    }
+}
+
+fn main() -> i64 {
+    I to_value(Eof) != 0 { return 1 }
+    I to_value(Num(42)) != 42 { return 2 }
+    I to_value(Num(0 - 5)) != 0 - 5 { return 3 }
+    I to_value(Plus) != 100 { return 4 }
+    I to_value(Minus) != 200 { return 5 }
+    return 0
+}

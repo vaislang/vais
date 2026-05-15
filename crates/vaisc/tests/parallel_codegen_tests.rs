@@ -21,7 +21,11 @@ fn create_vais_file(dir: &std::path::Path, name: &str, content: &str) -> PathBuf
 fn test_single_module_codegen() {
     let temp_dir = TempDir::new().unwrap();
 
-    let main_file = create_vais_file(temp_dir.path(), "main.vais", "F main() -> i32 { R 42 }");
+    let main_file = create_vais_file(
+        temp_dir.path(),
+        "main.vais",
+        "fn main() -> i32 { return 42 }",
+    );
 
     // Run vaisc to compile
     let output = Command::new("cargo")
@@ -57,9 +61,9 @@ fn test_dependency_graph_levels() {
     let temp_dir = TempDir::new().unwrap();
 
     // Create three modules with dependencies: main -> util -> base
-    let base_content = "F base_func() -> i32 { R 1 }";
-    let util_content = "F util_func() -> i32 { R base_func() + 1 }";
-    let main_content = "F main() -> i32 { R util_func() + 1 }";
+    let base_content = "fn base_func() -> i32 { return 1 }";
+    let util_content = "fn util_func() -> i32 { return base_func() + 1 }";
+    let main_content = "fn main() -> i32 { return util_func() + 1 }";
 
     let base_file = create_vais_file(temp_dir.path(), "base.vais", base_content);
     let util_file = create_vais_file(temp_dir.path(), "util.vais", util_content);
@@ -186,8 +190,8 @@ fn test_independent_modules_parallel() {
     let temp_dir = TempDir::new().unwrap();
 
     // Create two completely independent modules
-    let module_a_content = "F func_a() -> i32 { R 1 }";
-    let module_b_content = "F func_b() -> i32 { R 2 }";
+    let module_a_content = "fn func_a() -> i32 { return 1 }";
+    let module_b_content = "fn func_b() -> i32 { return 2 }";
 
     let file_a = create_vais_file(temp_dir.path(), "module_a.vais", module_a_content);
     let file_b = create_vais_file(temp_dir.path(), "module_b.vais", module_b_content);

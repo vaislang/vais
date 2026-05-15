@@ -1,0 +1,24 @@
+# CHECKS: nested match expressions.
+fn outer(a: i64, b: i64) -> i64 {
+    match a {
+        0 => match b {
+            0 => 1,
+            _ => 2
+        },
+        1 => match b {
+            0 => 3,
+            _ => 4
+        },
+        _ => 5
+    }
+}
+
+fn main() -> i64 {
+    I outer(0, 0) != 1 { return 1 }
+    I outer(0, 5) != 2 { return 2 }
+    I outer(1, 0) != 3 { return 3 }
+    I outer(1, 99) != 4 { return 4 }
+    I outer(7, 0) != 5 { return 5 }
+    I outer(7, 7) != 5 { return 6 }
+    return 0
+}

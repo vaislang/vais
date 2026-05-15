@@ -1,0 +1,31 @@
+# LIVING_SPEC/04_stdlib/vec_map_filter.vais
+# Key concept: Vec에 map/filter 내장이 없으므로 LF 루프로 구현한다.
+# 짝수만 골라 2배한 새 Vec 생성 예제.
+
+fn do_filter(src: Vec<i64>) -> Vec<i64> {
+    dst: Vec<i64> = Vec::new()
+    i := mut 0
+    L {
+        I i >= src.len() { B }
+        item := src.get(i)
+        match item {
+            Some(x) => {
+                v := x as i64
+                I v % 2 == 0 { dst.push(v * 2) }
+            },
+            None => { i = src.len() }
+        }
+        i = i + 1
+    }
+    dst
+}
+
+fn main() -> i64 {
+    src: Vec<i64> = Vec::new()
+    src.push(1)
+    src.push(2)
+    src.push(3)
+    src.push(4)
+    result := do_filter(src)
+    result.len()   # 2 (elements: [4, 8])
+}

@@ -1,0 +1,142 @@
+use src/auth/session
+use src/auth/runtime
+
+fn smoke_session_create_get_destroy() -> i64 {
+    store := mut SessionStore.new()
+    created := store.create("user1", 60)
+
+    I store.count() != 1 {
+        println("FAIL session create count")
+        return 1
+    }
+    I created.session_id == "" {
+        println("FAIL session non-empty id")
+        return 2
+    }
+    I !created.session_id.starts_with("sess_") {
+        println("FAIL session id prefix")
+        return 10
+    }
+    I created.session_id.len() != 69 {
+        println("FAIL session id random hex length")
+        return 11
+    }
+    I created.user_id != "user1" {
+        println("FAIL session user id")
+        return 3
+    }
+    I created.created_at != 1000 {
+        println("FAIL session created_at")
+        return 4
+    }
+    I created.expires_at != 1060 {
+        println("FAIL session expires_at")
+        return 5
+    }
+    I store.get(created.session_id) != created.session_id {
+        println("FAIL session get live")
+        return 6
+    }
+
+    second := store.create("user1", 60)
+    I second.session_id == created.session_id {
+        println("FAIL session random id uniqueness")
+        return 12
+    }
+    store.destroy(second.session_id)
+
+    full := store.get_session(created.session_id)
+    I full.user_id != "user1" {
+        println("FAIL session get full")
+        return 7
+    }
+
+    store.destroy(created.session_id)
+    I store.count() != 0 {
+        println("FAIL session destroy count")
+        return 8
+    }
+    I store.get(created.session_id) != "" {
+        println("FAIL session destroyed lookup")
+        return 9
+    }
+
+    0
+}
+
+fn smoke_session_data_bag() -> i64 {
+    store := mut SessionStore.new()
+    created := store.create("data-user", 60)
+
+    store.set_data(created.session_id, "role", "admin")
+    I store.get_data(created.session_id, "role") != "admin" {
+        println("FAIL session data insert")
+        return 20
+    }
+
+    store.set_data(created.session_id, "role", "editor")
+    I store.get_data(created.session_id, "role") != "editor" {
+        println("FAIL session data update")
+        return 21
+    }
+
+    I store.get_data(created.session_id, "missing") != "" {
+        println("FAIL session missing data")
+        return 22
+    }
+
+    0
+}
+
+fn smoke_session_expiry_and_cleanup() -> i64 {
+    store := mut SessionStore.new()
+    live := Session.new("live", "user", 900, 1100)
+    expired := Session.new("expired", "user", 900, 999)
+    store.sessions.push(live)
+    store.sessions.push(expired)
+
+    I store.count() != 2 {
+        println("FAIL session manual count")
+        return 30
+    }
+    I store.get("live") != "live" {
+        println("FAIL session live lookup")
+        return 31
+    }
+    I store.get("expired") != "" {
+        println("FAIL session expired lookup")
+        return 32
+    }
+
+    store.cleanup()
+    I store.count() != 1 {
+        println("FAIL session cleanup count")
+        return 33
+    }
+    I store.get("live") != "live" {
+        println("FAIL session cleanup kept live")
+        return 34
+    }
+    I store.get("expired") != "" {
+        println("FAIL session cleanup removed expired")
+        return 35
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    auth_set_test_time_sec(1000)
+
+    failures := mut 0
+    failures += smoke_session_create_get_destroy()
+    failures += smoke_session_data_bag()
+    failures += smoke_session_expiry_and_cleanup()
+
+    I failures > 0 {
+        println("VAIS_SERVER_AUTH_SESSION_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_AUTH_SESSION_RUNTIME_OK")
+    0
+}

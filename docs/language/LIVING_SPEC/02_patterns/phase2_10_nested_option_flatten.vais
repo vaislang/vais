@@ -1,0 +1,24 @@
+# LIVING_SPEC/02_patterns/phase2_10_nested_option_flatten.vais
+# Key concept: Phase 2.10 TC reproducer — 중첩 Option<Option<T>>의 평탄화
+# 패턴(`Some(inner) => inner`, `None => None`)이 TC 레벨에서 통과함.
+#
+# Status:
+#   - TC(`vaisc check`): ✓ 통과
+#   - Codegen(`vaisc build`): ✗ C004 "Aggregate extract index out of range"
+#     → Option<Option<T>> 파라미터 lowering 또한 Phase 3.14/3.15 gap 에
+#       해당. LIVING_SPEC TC-only 카운트에서만 pass.
+
+fn flat(oo: Option<Option<i64>>) -> Option<i64> {
+    match oo {
+        Some(inner) => inner,
+        None => None,
+    }
+}
+
+fn main() -> i64 {
+    x: Option<Option<i64>> := Some(Some(100))
+    match flat(x) {
+        Some(v) => v,
+        None => -1,
+    }
+}

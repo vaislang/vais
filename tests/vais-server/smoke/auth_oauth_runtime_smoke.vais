@@ -1,0 +1,266 @@
+use std/error
+use src/auth/oauth
+use src/auth/runtime
+
+fn smoke_oauth_authorization_urls() -> i64 {
+    google := OAuthConfig.google("gid", "gsecret", "http://localhost/callback")
+    google_url := get_authorization_url_with_state(google, "state-fixed")
+    expected_google := "https://accounts.google.com/o/oauth2/v2/auth?client_id=gid&redirect_uri=http://localhost/callback&response_type=code&state=state-fixed&scope=openid email profile"
+    I google_url != expected_google {
+        println("FAIL oauth google authorization url")
+        return 1
+    }
+
+    github := OAuthConfig.github("ghid", "ghsecret", "http://localhost/gh")
+    github_url := get_authorization_url_with_state(github, "gh-state")
+    expected_github := "https://github.com/login/oauth/authorize?client_id=ghid&redirect_uri=http://localhost/gh&response_type=code&state=gh-state&scope=read:user user:email"
+    I github_url != expected_github {
+        println("FAIL oauth github authorization url")
+        return 2
+    }
+
+    scopes := Vec.new()
+    scopes.push("openid")
+    scopes.push("profile")
+    custom := OAuthConfig.custom_with_scopes("cid", "csecret", "http://localhost/custom", "https://idp.example/auth", "https://idp.example/token", scopes)
+    custom_url := get_authorization_url_with_state(custom, "custom-state")
+    expected_custom := "https://idp.example/auth?client_id=cid&redirect_uri=http://localhost/custom&response_type=code&state=custom-state&scope=openid profile"
+    I custom_url != expected_custom {
+        println("FAIL oauth custom scoped authorization url")
+        println(custom_url)
+        return 8
+    }
+
+    generated_url := get_authorization_url(OAuthConfig.github("ghid", "ghsecret", "http://localhost/gh"))
+    generated_prefix := "https://github.com/login/oauth/authorize?client_id=ghid&redirect_uri=http://localhost/gh&response_type=code&state=state_"
+    I !generated_url.starts_with(generated_prefix) {
+        println("FAIL oauth generated state url")
+        return 3
+    }
+    I !generated_url.ends_with("&scope=read:user user:email") {
+        println("FAIL oauth generated scope suffix")
+        return 4
+    }
+
+    state1 := OAuthStateParam.generate()
+    state2 := OAuthStateParam.generate()
+    I !state1.value.starts_with("state_") {
+        println("FAIL oauth state prefix")
+        return 5
+    }
+    I state1.value.len() != 70 {
+        println("FAIL oauth state length")
+        return 6
+    }
+    I state1.value == state2.value {
+        println("FAIL oauth state uniqueness")
+        return 7
+    }
+
+    0
+}
+
+fn smoke_oauth_state_validation() -> i64 {
+    ok_state := validate_state("state-fixed", "state-fixed")
+    match ok_state {
+        Ok(ok) => {
+            I !ok {
+                println("FAIL oauth state false")
+                return 10
+            }
+        },
+        Err(_) => {
+            println("FAIL oauth state rejected")
+            return 11
+        },
+    }
+
+    missing := validate_state("", "state-fixed")
+    match missing {
+        Ok(_) => {
+            println("FAIL oauth missing state accepted")
+            return 12
+        },
+        Err(e) => {
+            I e.message == "" {
+                println("FAIL oauth missing state empty message")
+                return 13
+            }
+        },
+    }
+
+    mismatch := validate_state("wrong", "state-fixed")
+    match mismatch {
+        Ok(_) => {
+            println("FAIL oauth mismatched state accepted")
+            return 14
+        },
+        Err(e) => {
+            I e.message == "" {
+                println("FAIL oauth mismatched state empty message")
+                return 15
+            }
+        },
+    }
+
+    0
+}
+
+fn smoke_oauth_exchange_code() -> i64 {
+    config := OAuthConfig.google("gid", "gsecret", "http://localhost/callback")
+    token_result := exchange_code("code123", config)
+    match token_result {
+        Err(_) => {
+            println("FAIL oauth exchange rejected")
+            return 20
+        },
+        Ok(token) => {
+            I token.access_token != "mock_access_token" {
+                println("FAIL oauth exchange access token")
+                return 21
+            }
+            I token.token_type != "Bearer" {
+                println("FAIL oauth exchange token type")
+                return 22
+            }
+            I token.expires_in != 3600 {
+                println("FAIL oauth exchange expiry")
+                return 23
+            }
+            I token.refresh_token != "mock_refresh_token" {
+                println("FAIL oauth exchange refresh token")
+                return 24
+            }
+            I !token.has_refresh() {
+                println("FAIL oauth exchange has refresh")
+                return 25
+            }
+            I token.scope != "openid email profile" {
+                println("FAIL oauth exchange scope")
+                return 26
+            }
+        },
+    }
+
+    empty_code := exchange_code("", config)
+    match empty_code {
+        Ok(_) => {
+            println("FAIL oauth empty code accepted")
+            return 27
+        },
+        Err(e) => {
+            I e.message == "" {
+                println("FAIL oauth empty code empty message")
+                return 28
+            }
+        },
+    }
+
+    missing_client := OAuthConfig.google("", "gsecret", "http://localhost/callback")
+    missing_client_result := exchange_code("code123", missing_client)
+    match missing_client_result {
+        Ok(_) => {
+            println("FAIL oauth missing client accepted")
+            return 29
+        },
+        Err(e) => {
+            I e.message == "" {
+                println("FAIL oauth missing client empty message")
+                return 30
+            }
+        },
+    }
+
+    missing_secret := OAuthConfig.google("gid", "", "http://localhost/callback")
+    missing_secret_result := exchange_code("code123", missing_secret)
+    match missing_secret_result {
+        Ok(_) => {
+            println("FAIL oauth missing secret accepted")
+            return 31
+        },
+        Err(e) => {
+            I e.message == "" {
+                println("FAIL oauth missing secret empty message")
+                return 32
+            }
+        },
+    }
+
+    0
+}
+
+fn smoke_oauth_token_response_parse() -> i64 {
+    body := "{\"access_token\":\"live-access\",\"token_type\":\"Bearer\",\"expires_in\":7200,\"refresh_token\":\"live-refresh\",\"scope\":\"openid email\"}"
+    parsed := parse_oauth_token_response(body, "fallback")
+    match parsed {
+        Err(e) => {
+            println("FAIL oauth token json parse rejected")
+            println(e.message)
+            return 40
+        },
+        Ok(token) => {
+            I token.access_token != "live-access" {
+                println("FAIL oauth parsed access token")
+                return 41
+            }
+            I token.token_type != "Bearer" {
+                println("FAIL oauth parsed token type")
+                return 42
+            }
+            I token.expires_in != 7200 {
+                println("FAIL oauth parsed expires")
+                return 43
+            }
+            I token.refresh_token != "live-refresh" {
+                println("FAIL oauth parsed refresh")
+                return 44
+            }
+            I token.scope != "openid email" {
+                println("FAIL oauth parsed scope")
+                return 45
+            }
+        },
+    }
+
+    missing := parse_oauth_token_response("{\"token_type\":\"Bearer\"}", "fallback")
+    match missing {
+        Ok(_) => {
+            println("FAIL oauth missing access accepted")
+            return 46
+        },
+        Err(e) => {
+            I e.message == "" {
+                println("FAIL oauth missing access empty message")
+                return 47
+            }
+        },
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    auth_set_test_time_sec(1000)
+    I auth_current_time_ms() != 1000000 {
+        println("FAIL oauth smoke runtime pin")
+        return 90
+    }
+    I oauth_i64_to_str(1000000) != "1000000" {
+        println("FAIL oauth i64 string conversion")
+        println(oauth_i64_to_str(1000000))
+        return 91
+    }
+
+    failures := mut 0
+    failures += smoke_oauth_authorization_urls()
+    failures += smoke_oauth_state_validation()
+    failures += smoke_oauth_exchange_code()
+    failures += smoke_oauth_token_response_parse()
+
+    I failures > 0 {
+        println("VAIS_SERVER_AUTH_OAUTH_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_AUTH_OAUTH_RUNTIME_OK")
+    0
+}

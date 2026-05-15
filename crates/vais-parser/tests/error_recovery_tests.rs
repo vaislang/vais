@@ -31,19 +31,19 @@ fn parse_ok(source: &str) {
 
 #[test]
 fn test_missing_function_name() {
-    let msg = parse_err("F (x: i64) -> i64 = x");
+    let msg = parse_err("fn (x: i64) -> i64 = x");
     assert!(!msg.is_empty());
 }
 
 #[test]
 fn test_missing_function_name_no_params() {
-    let msg = parse_err("F -> i64 = 42");
+    let msg = parse_err("fn -> i64 = 42");
     assert!(!msg.is_empty());
 }
 
 #[test]
 fn test_function_keyword_only() {
-    let msg = parse_err("F");
+    let msg = parse_err("fn");
     assert!(!msg.is_empty());
 }
 
@@ -53,7 +53,7 @@ fn test_function_keyword_only() {
 
 #[test]
 fn test_unclosed_paren_in_function() {
-    let result = parse("F broken(x: i64 -> i64 = x");
+    let result = parse("fn broken(x: i64 -> i64 = x");
     assert!(result.is_err());
     if let Err(e) = result {
         let code = e.error_code();
@@ -63,31 +63,31 @@ fn test_unclosed_paren_in_function() {
 
 #[test]
 fn test_unclosed_brace_in_function_body() {
-    let result = parse("F test() -> i64 { R 42");
+    let result = parse("fn test() -> i64 { return 42");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_unclosed_bracket_in_array() {
-    let result = parse("F test() -> *i64 = [1, 2, 3");
+    let result = parse("fn test() -> *i64 = [1, 2, 3");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_extra_closing_paren() {
-    let result = parse("F test(x: i64)) -> i64 = x");
+    let result = parse("fn test(x: i64)) -> i64 = x");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_extra_closing_brace() {
-    let result = parse("F test() -> i64 { R 42 }}");
+    let result = parse("fn test() -> i64 { return 42 }}");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_mismatched_delimiters() {
-    let result = parse("F test() -> i64 { R 42 )");
+    let result = parse("fn test() -> i64 { return 42 )");
     assert!(result.is_err());
 }
 
@@ -97,7 +97,7 @@ fn test_mismatched_delimiters() {
 
 #[test]
 fn test_struct_no_closing_brace() {
-    let result = parse("S Point{x: f64");
+    let result = parse("struct Point{x: f64");
     assert!(result.is_err());
     if let Err(e) = result {
         let code = e.error_code();
@@ -107,26 +107,26 @@ fn test_struct_no_closing_brace() {
 
 #[test]
 fn test_struct_missing_field_type() {
-    let result = parse("S Point{x:, y: f64}");
+    let result = parse("struct Point{x:, y: f64}");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_struct_keyword_only() {
-    let result = parse("S");
+    let result = parse("struct");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_struct_no_name() {
-    let result = parse("S {x: i64}");
+    let result = parse("struct {x: i64}");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_struct_missing_field_separator() {
     // Missing comma between fields
-    let result = parse("S Point{x: i64 y: i64}");
+    let result = parse("struct Point{x: i64 y: i64}");
     // This may or may not error depending on parser behavior
     // but the test exercises the path
     let _ = result;
@@ -138,19 +138,19 @@ fn test_struct_missing_field_separator() {
 
 #[test]
 fn test_enum_unclosed() {
-    let result = parse("E Color{Red, Green");
+    let result = parse("enum Color{Red, Green");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_enum_no_name() {
-    let result = parse("E {A, B}");
+    let result = parse("enum {A, B}");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_enum_keyword_only() {
-    let result = parse("E");
+    let result = parse("enum");
     assert!(result.is_err());
 }
 
@@ -160,34 +160,34 @@ fn test_enum_keyword_only() {
 
 #[test]
 fn test_incomplete_binary_expr_missing_rhs() {
-    let result = parse("F test() -> i64 = 42 +");
+    let result = parse("fn test() -> i64 = 42 +");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incomplete_binary_expr_missing_lhs() {
-    let result = parse("F test() -> i64 = + 42");
+    let result = parse("fn test() -> i64 = + 42");
     // May parse as unary + or error
     let _ = result;
 }
 
 #[test]
 fn test_double_operator() {
-    let result = parse("F test() -> i64 = 1 ++ 2");
+    let result = parse("fn test() -> i64 = 1 ++ 2");
     // May parse as unary or error
     let _ = result;
 }
 
 #[test]
 fn test_empty_parentheses_expr() {
-    let result = parse("F test() -> i64 = ()");
+    let result = parse("fn test() -> i64 = ()");
     // () is unit, may be valid
     let _ = result;
 }
 
 #[test]
 fn test_unclosed_string_literal() {
-    let result = parse("F test() -> str = \"hello");
+    let result = parse("fn test() -> str = \"hello");
     assert!(result.is_err());
 }
 
@@ -237,19 +237,19 @@ fn test_operators_only() {
 
 #[test]
 fn test_function_no_body() {
-    let result = parse("F test(x: i64) -> i64");
+    let result = parse("fn test(x: i64) -> i64");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_function_empty_block_body() {
     // Empty block body - may be valid (returns unit)
-    parse_ok("F test(){}");
+    parse_ok("fn test(){}");
 }
 
 #[test]
 fn test_function_missing_return_type_arrow() {
-    let result = parse("F test() i64 = 42");
+    let result = parse("fn test() i64 = 42");
     // Missing -> arrow
     assert!(result.is_err());
 }
@@ -284,88 +284,88 @@ fn test_multiple_comments() {
 
 #[test]
 fn test_simple_function_ok() {
-    parse_ok("F test() -> i64 = 42");
+    parse_ok("fn test() -> i64 = 42");
 }
 
 #[test]
 fn test_function_with_params_ok() {
-    parse_ok("F add(a: i64, b: i64) -> i64 = a + b");
+    parse_ok("fn add(a: i64, b: i64) -> i64 = a + b");
 }
 
 #[test]
 fn test_struct_ok() {
-    parse_ok("S Point{x: i64, y: i64}");
+    parse_ok("struct Point{x: i64, y: i64}");
 }
 
 #[test]
 fn test_enum_ok() {
-    parse_ok("E Color{Red, Green, Blue}");
+    parse_ok("enum Color{Red, Green, Blue}");
 }
 
 #[test]
 fn test_trait_ok() {
-    parse_ok("W Printable{F to_str(self)->str}");
+    parse_ok("trait Printable{fn to_str(self)->str}");
 }
 
 #[test]
 fn test_impl_ok() {
-    parse_ok("S Num{val:i64} X Num{F get(self)->i64=self.val}");
+    parse_ok("struct Num{val:i64} impl Num{fn get(self)->i64=self.val}");
 }
 
 #[test]
 fn test_if_else_ok() {
-    parse_ok("F test(x:i64)->i64{I x>0{R 1}E{R 0}}");
+    parse_ok("fn test(x:i64)->i64{I x>0{return 1}else{return 0}}");
 }
 
 #[test]
 fn test_loop_ok() {
-    parse_ok("F test()->i64{x:=0;L _:x<10{x=x+1};x}");
+    parse_ok("fn test()->i64{x:=0;L _:x<10{x=x+1};x}");
 }
 
 #[test]
 fn test_for_range_ok() {
-    parse_ok("F test()->i64{s:=0;L i:0..10{s=s+i};s}");
+    parse_ok("fn test()->i64{s:=0;L i:0..10{s=s+i};s}");
 }
 
 #[test]
 fn test_match_ok() {
-    parse_ok("F test(x:i64)->i64{M x{0=>1,1=>2,_=>0}}");
+    parse_ok("fn test(x:i64)->i64{match x{0=>1,1=>2,_=>0}}");
 }
 
 #[test]
 fn test_lambda_ok() {
     // Vais lambda: no return type annotation in closure syntax
-    parse_ok("F test()->i64{f:=|x:i64|{x+1};f(41)}");
+    parse_ok("fn test()->i64{f:=|x:i64|{x+1};f(41)}");
 }
 
 #[test]
 fn test_pipe_operator_ok() {
-    parse_ok("F double(x:i64)->i64=x*2 F test(x:i64)->i64=x|>double");
+    parse_ok("fn double(x:i64)->i64=x*2 fn test(x:i64)->i64=x|>double");
 }
 
 #[test]
 fn test_self_recursion_ok() {
-    parse_ok("F fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)");
+    parse_ok("fn fib(n:i64)->i64=n<2?n:@(n-1)+@(n-2)");
 }
 
 #[test]
 fn test_string_interpolation_ok() {
-    parse_ok("F test()->str=\"hello\"");
+    parse_ok("fn test()->str=\"hello\"");
 }
 
 #[test]
 fn test_array_literal_ok() {
-    parse_ok("F test()->*i64=[1,2,3]");
+    parse_ok("fn test()->*i64=[1,2,3]");
 }
 
 #[test]
 fn test_generic_function_ok() {
-    parse_ok("F id<T>(x:T)->T=x");
+    parse_ok("fn id<T>(x:T)->T=x");
 }
 
 #[test]
 fn test_type_alias_ok() {
-    parse_ok("T Num = i64");
+    parse_ok("type Num = i64");
 }
 
 // ============================================================================
@@ -374,7 +374,7 @@ fn test_type_alias_ok() {
 
 #[test]
 fn test_error_code_unexpected_token() {
-    let result = parse("F test(x: i64 -> i64 = x");
+    let result = parse("fn test(x: i64 -> i64 = x");
     if let Err(e) = result {
         let code = e.error_code();
         assert!(code == "P001" || code == "P002", "Got: {}", code);
@@ -383,7 +383,7 @@ fn test_error_code_unexpected_token() {
 
 #[test]
 fn test_error_code_unexpected_eof() {
-    let result = parse("F test(x: i64");
+    let result = parse("fn test(x: i64");
     if let Err(e) = result {
         let code = e.error_code();
         assert!(code == "P001" || code == "P002", "Got: {}", code);
@@ -392,7 +392,7 @@ fn test_error_code_unexpected_eof() {
 
 #[test]
 fn test_error_span_present() {
-    let result = parse("F (x: i64) -> i64 = x");
+    let result = parse("fn (x: i64) -> i64 = x");
     if let Err(e) = result {
         // Most errors should have a span
         let _span = e.span(); // Some or None
@@ -401,7 +401,7 @@ fn test_error_span_present() {
 
 #[test]
 fn test_error_localized_title() {
-    let result = parse("F (x: i64) -> i64 = x");
+    let result = parse("fn (x: i64) -> i64 = x");
     if let Err(e) = result {
         let title = e.localized_title();
         assert!(!title.is_empty(), "Localized title should not be empty");
@@ -410,7 +410,7 @@ fn test_error_localized_title() {
 
 #[test]
 fn test_error_localized_message() {
-    let result = parse("F (x: i64) -> i64 = x");
+    let result = parse("fn (x: i64) -> i64 = x");
     if let Err(e) = result {
         let msg = e.localized_message();
         assert!(!msg.is_empty(), "Localized message should not be empty");
@@ -423,7 +423,7 @@ fn test_error_localized_message() {
 
 #[test]
 fn test_recovery_mode_single_error() {
-    let (module, errors) = parse_with_recovery("F (x: i64) -> i64 = x");
+    let (module, errors) = parse_with_recovery("fn (x: i64) -> i64 = x");
     // Should recover with at least one error
     assert!(
         !errors.is_empty() || module.items.is_empty(),
@@ -433,13 +433,13 @@ fn test_recovery_mode_single_error() {
 
 #[test]
 fn test_recovery_mode_multiple_errors() {
-    let (module, errors) = parse_with_recovery("F F F");
+    let (module, errors) = parse_with_recovery("fn fn fn");
     let _ = (module, errors); // Just exercise the path
 }
 
 #[test]
 fn test_recovery_mode_valid_code() {
-    let (module, errors) = parse_with_recovery("F test()->i64=42");
+    let (module, errors) = parse_with_recovery("fn test()->i64=42");
     assert!(
         errors.is_empty(),
         "Valid code should have no errors: {:?}",
@@ -457,7 +457,7 @@ fn test_recovery_mode_empty() {
 
 #[test]
 fn test_recovery_mode_partial_valid() {
-    let (_module, _errors) = parse_with_recovery("F test()->i64=42 F broken(");
+    let (_module, _errors) = parse_with_recovery("fn test()->i64=42 fn broken(");
     // First function might be recovered, second should error
 }
 
@@ -467,28 +467,28 @@ fn test_recovery_mode_partial_valid() {
 
 #[test]
 fn test_nested_generics_ok() {
-    parse_ok("F test<T,U>(x:T,y:U)->T=x");
+    parse_ok("fn test<T,U>(x:T,y:U)->T=x");
 }
 
 #[test]
 fn test_where_clause_ok() {
     // where clause requires trait bounds, not primitive types
-    parse_ok("F test<T>(x:T)->T where T:Clone{R x}");
+    parse_ok("fn test<T>(x:T)->T where T:Clone{return x}");
 }
 
 #[test]
 fn test_multiple_functions_ok() {
-    parse_ok("F a()->i64=1 F b()->i64=2 F c()->i64=3");
+    parse_ok("fn a()->i64=1 fn b()->i64=2 fn c()->i64=3");
 }
 
 #[test]
 fn test_nested_blocks_ok() {
-    parse_ok("F test()->i64{{{{42}}}}");
+    parse_ok("fn test()->i64{{{{42}}}}");
 }
 
 #[test]
 fn test_chained_method_calls_ok() {
-    parse_ok("S Val{x:i64} X Val{F get(self)->i64=self.x}");
+    parse_ok("struct Val{x:i64} impl Val{fn get(self)->i64=self.x}");
 }
 
 // ============================================================================
@@ -497,19 +497,19 @@ fn test_chained_method_calls_ok() {
 
 #[test]
 fn test_match_no_arms() {
-    let result = parse("F test(x:i64)->i64{M x{}}");
+    let result = parse("fn test(x:i64)->i64{match x{}}");
     // Empty match may or may not be valid
     let _ = result;
 }
 
 #[test]
 fn test_match_wildcard_only() {
-    parse_ok("F test(x:i64)->i64{M x{_=>42}}");
+    parse_ok("fn test(x:i64)->i64{match x{_=>42}}");
 }
 
 #[test]
 fn test_match_multiple_arms() {
-    parse_ok("F test(x:i64)->i64{M x{0=>10,1=>20,2=>30,_=>0}}");
+    parse_ok("fn test(x:i64)->i64{match x{0=>10,1=>20,2=>30,_=>0}}");
 }
 
 // ============================================================================
@@ -518,32 +518,32 @@ fn test_match_multiple_arms() {
 
 #[test]
 fn test_pointer_type_ok() {
-    parse_ok("F test(p:*i64)->i64=0");
+    parse_ok("fn test(p:*i64)->i64=0");
 }
 
 #[test]
 fn test_nested_pointer_ok() {
-    parse_ok("F test(p:**i64)->i64=0");
+    parse_ok("fn test(p:**i64)->i64=0");
 }
 
 #[test]
 fn test_array_type_ok() {
-    parse_ok("F test(a:[i64;3])->i64=0");
+    parse_ok("fn test(a:[i64;3])->i64=0");
 }
 
 #[test]
 fn test_generic_type_ok() {
-    parse_ok("F test<T>(x:Vec<T>)->i64=0");
+    parse_ok("fn test<T>(x:Vec<T>)->i64=0");
 }
 
 #[test]
 fn test_result_type_ok() {
-    parse_ok("F test()->Result<i64,str>{R 42}");
+    parse_ok("fn test()->Result<i64,str>{return 42}");
 }
 
 #[test]
 fn test_option_type_ok() {
-    parse_ok("F test()->Option<i64>{R 42}");
+    parse_ok("fn test()->Option<i64>{return 42}");
 }
 
 // ============================================================================
@@ -552,7 +552,7 @@ fn test_option_type_ok() {
 
 #[test]
 fn test_attribute_ok() {
-    parse_ok("#[cfg(test)] F test()->i64=42");
+    parse_ok("#[cfg(test)] fn test()->i64=42");
 }
 
 // ============================================================================
@@ -561,7 +561,7 @@ fn test_attribute_ok() {
 
 #[test]
 fn test_extern_block_ok() {
-    parse_ok("N{F printf(fmt:str)->i64}");
+    parse_ok("N{fn printf(fmt:str)->i64}");
 }
 
 #[test]
@@ -575,7 +575,7 @@ fn test_extern_empty_ok() {
 
 #[test]
 fn test_use_statement_ok() {
-    parse_ok("U std::io");
+    parse_ok("use std::io");
 }
 
 // ============================================================================
@@ -593,7 +593,7 @@ fn test_global_ok() {
 
 #[test]
 fn test_defer_ok() {
-    parse_ok("F test()->i64{D{};R 42}");
+    parse_ok("fn test()->i64{D{};return 42}");
 }
 
 // ============================================================================
@@ -603,13 +603,13 @@ fn test_defer_ok() {
 #[test]
 fn test_break_in_function() {
     // Break outside loop - parser accepts, type checker may reject
-    let _ = parse("F test()->i64{B;R 0}");
+    let _ = parse("fn test()->i64{B;return 0}");
 }
 
 #[test]
 fn test_continue_in_function() {
     // Continue outside loop
-    let _ = parse("F test()->i64{C;R 0}");
+    let _ = parse("fn test()->i64{C;return 0}");
 }
 
 // ============================================================================
@@ -618,14 +618,14 @@ fn test_continue_in_function() {
 
 #[test]
 fn test_nested_error_in_if() {
-    let result = parse("F test()->i64{I {R 1}E{R 0}}");
+    let result = parse("fn test()->i64{I {return 1}else{return 0}}");
     // Missing condition after I
     assert!(result.is_err());
 }
 
 #[test]
 fn test_nested_error_in_match() {
-    let result = parse("F test(x:i64)->i64{M {0=>1}}");
+    let result = parse("fn test(x:i64)->i64{match {0=>1}}");
     // Missing match expression
     assert!(result.is_err());
 }
@@ -633,13 +633,15 @@ fn test_nested_error_in_match() {
 #[test]
 fn test_nested_error_in_loop() {
     // Completely malformed loop with no valid body
-    let result = parse("F test()->i64{L 123abc{B};R 0}");
+    let result = parse("fn test()->i64{L 123abc{B};return 0}");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_deeply_nested_structure() {
-    parse_ok("F test(x:i64)->i64{I x>0{I x>10{I x>100{R 3}E{R 2}}E{R 1}}E{R 0}}");
+    parse_ok(
+        "fn test(x:i64)->i64{I x>0{I x>10{I x>100{return 3}else{return 2}}else{return 1}}else{return 0}}",
+    );
 }
 
 // ============================================================================
@@ -648,12 +650,12 @@ fn test_deeply_nested_structure() {
 
 #[test]
 fn test_string_with_escape() {
-    parse_ok("F test()->str=\"hello\\nworld\"");
+    parse_ok("fn test()->str=\"hello\\nworld\"");
 }
 
 #[test]
 fn test_string_empty() {
-    parse_ok("F test()->str=\"\"");
+    parse_ok("fn test()->str=\"\"");
 }
 
 // ============================================================================
@@ -662,13 +664,13 @@ fn test_string_empty() {
 
 #[test]
 fn test_struct_enum_function_combo() {
-    parse_ok("S Point{x:i64,y:i64} E Color{Red,Blue} F test()->i64=42");
+    parse_ok("struct Point{x:i64,y:i64} enum Color{Red,Blue} fn test()->i64=42");
 }
 
 #[test]
 fn test_many_functions() {
     let src = (0..10)
-        .map(|i| format!("F f{}()->i64={}", i, i))
+        .map(|i| format!("fn f{}()->i64={}", i, i))
         .collect::<Vec<_>>()
         .join(" ");
     parse_ok(&src);
@@ -680,7 +682,7 @@ fn test_many_functions() {
 
 #[test]
 fn test_error_display_not_empty() {
-    let result = parse("F (");
+    let result = parse("fn (");
     if let Err(e) = result {
         let msg = format!("{}", e);
         assert!(!msg.is_empty(), "Error display should not be empty");
@@ -689,7 +691,7 @@ fn test_error_display_not_empty() {
 
 #[test]
 fn test_error_debug_not_empty() {
-    let result = parse("F (");
+    let result = parse("fn (");
     if let Err(e) = result {
         let msg = format!("{:?}", e);
         assert!(!msg.is_empty(), "Error debug should not be empty");

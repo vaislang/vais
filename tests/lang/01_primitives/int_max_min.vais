@@ -1,0 +1,22 @@
+# CHECKS: i64 boundary values and arithmetic at edges.
+fn main() -> i64 {
+    # i64::MAX = 9223372036854775807
+    max: i64 := 9223372036854775807
+    I max != 9223372036854775807 { return 1 }
+
+    # i64::MIN = -9223372036854775808 (write as 0 - max - 1 to avoid parser issues)
+    min: i64 := 0 - 9223372036854775807 - 1
+    I min != 0 - 9223372036854775807 - 1 { return 2 }
+
+    # max + min == -1
+    I max + min != 0 - 1 { return 3 }
+
+    # mid = max / 2
+    mid: i64 := max / 2
+    I mid != 4611686018427387903 { return 4 }
+
+    # large multiplication that fits in i64: 1B * 1B = 1e18 (under MAX)
+    big: i64 := 1000000000 * 1000000000
+    I big != 1000000000000000000 { return 5 }
+    return 0
+}

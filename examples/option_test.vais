@@ -1,10 +1,10 @@
 # Test for generic Option<T>
 
-U std/option
+use std/option
 
-F main() -> i64 {
+fn main() -> i64 {
     x := Some(42)
-    M x {
+    match x {
         Some(v) => v,
         None => 0
     }

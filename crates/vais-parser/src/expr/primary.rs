@@ -5,7 +5,7 @@
 //! pattern matching, and string interpolation.
 
 use vais_ast::*;
-use vais_lexer::Token;
+use vais_lexer::{SpannedToken, Token};
 
 use crate::{ParseError, ParseResult, Parser};
 
@@ -63,7 +63,7 @@ impl Parser {
     /// Parse primary expression
     pub(crate) fn parse_primary(&mut self) -> ParseResult<Spanned<Expr>> {
         self.enter_depth()?;
-        let result = self.parse_primary_inner();
+        let result = self.parse_primary_dispatch();
         self.exit_depth();
         result
     }
@@ -158,11 +158,49 @@ impl Parser {
         Ok(Expr::StringInterp(parts))
     }
 
-    fn parse_primary_inner(&mut self) -> ParseResult<Spanned<Expr>> {
-        let start = self.current_span().start;
+    fn parse_primary_dispatch(&mut self) -> ParseResult<Spanned<Expr>> {
         let span = self.current_span();
         let tok = self.advance().ok_or(ParseError::UnexpectedEof { span })?;
+        let start = tok.span.start;
 
+        if matches!(&tok.token, Token::LParen) {
+            return self.parse_paren_or_tuple_expr(start);
+        }
+
+        self.parse_primary_inner(start, tok)
+    }
+
+    fn parse_paren_or_tuple_expr(&mut self, start: usize) -> ParseResult<Spanned<Expr>> {
+        if self.check(&Token::RParen) {
+            self.advance_skip();
+            let end = self.prev_span().end;
+            return Ok(Spanned::new(Expr::Unit, Span::new(start, end)));
+        }
+
+        let expr = self.parse_expr()?;
+        if self.check(&Token::Comma) {
+            let mut exprs = vec![expr];
+            while self.check(&Token::Comma) {
+                self.advance_skip();
+                if self.check(&Token::RParen) {
+                    break;
+                }
+                exprs.push(self.parse_expr()?);
+            }
+            self.expect_skip(&Token::RParen)?;
+            let end = self.prev_span().end;
+            return Ok(Spanned::new(Expr::Tuple(exprs), Span::new(start, end)));
+        }
+
+        self.expect_skip(&Token::RParen)?;
+        Ok(expr)
+    }
+
+    fn parse_primary_inner(
+        &mut self,
+        start: usize,
+        tok: SpannedToken,
+    ) -> ParseResult<Spanned<Expr>> {
         let expr = match tok.token {
             Token::Int(n) => {
                 // Check for type suffix: 0u16, 1i32, etc.
@@ -296,29 +334,6 @@ impl Parser {
                     ));
                 }
                 Expr::Ident(name)
-            }
-            Token::LParen => {
-                if self.check(&Token::RParen) {
-                    self.advance_skip();
-                    Expr::Unit
-                } else {
-                    let expr = self.parse_expr()?;
-                    if self.check(&Token::Comma) {
-                        let mut exprs = vec![expr];
-                        while self.check(&Token::Comma) {
-                            self.advance_skip();
-                            if self.check(&Token::RParen) {
-                                break;
-                            }
-                            exprs.push(self.parse_expr()?);
-                        }
-                        self.expect_skip(&Token::RParen)?;
-                        let end = self.prev_span().end;
-                        return Ok(Spanned::new(Expr::Tuple(exprs), Span::new(start, end)));
-                    }
-                    self.expect_skip(&Token::RParen)?;
-                    return Ok(expr);
-                }
             }
             Token::LBracket => {
                 let mut exprs = Vec::new();
@@ -483,6 +498,26 @@ impl Parser {
                     Expr::Comptime {
                         body: Box::new(body),
                     },
+                    Span::new(start, end),
+                ));
+            }
+            Token::Unsafe => {
+                // Phase 3.17: unsafe block expression: unsafe { expr }.
+                // Current semantics: pass-through — the body is evaluated
+                // exactly like a regular block. The unsafe marker is
+                // consumed for future borrow-checker / effect-system
+                // integration but does not change codegen today.
+                // (This matches the item-level `unsafe F` in Phase 1.18.)
+                self.expect_skip(&Token::LBrace)?;
+                let body = self.parse_expr()?;
+                self.expect_skip(&Token::RBrace)?;
+                // Wrap in a Block to keep the block-expression shape.
+                let end = self.prev_span().end;
+                return Ok(Spanned::new(
+                    Expr::Block(vec![Spanned::new(
+                        vais_ast::Stmt::Expr(Box::new(body)),
+                        Span::new(start, end),
+                    )]),
                     Span::new(start, end),
                 ));
             }
@@ -865,23 +900,39 @@ impl Parser {
                                 fields,
                             }
                         } else if self.check(&Token::LBrace) {
+                            // Phase 300b: struct-style enum variant pattern
+                            //   `Enum.Variant { field1, field2: pat2, .. }`
+                            // Parse as Pattern::Struct with the variant name so the
+                            // type checker can recover field types (shared path with
+                            // get_struct_or_variant_fields which already looks up
+                            // enum variants by name).
                             self.advance_skip();
-                            let mut fields = Vec::new();
+                            let mut fields: Vec<(Spanned<String>, Option<Spanned<Pattern>>)> =
+                                Vec::new();
                             while !self.check(&Token::RBrace) && !self.is_at_end() {
-                                // Support `..` rest pattern in variant struct patterns
+                                // Support `..` rest pattern
                                 if self.check(&Token::DotDot) {
                                     self.advance();
                                     break;
                                 }
-                                fields.push(self.parse_pattern()?);
+                                let field_name = self.parse_ident()?;
+                                // Check for `: pattern`
+                                let field_pat = if self.check(&Token::Colon) {
+                                    self.advance_skip();
+                                    Some(self.parse_pattern()?)
+                                } else {
+                                    None // shorthand: `x` means `x: x`
+                                };
+                                fields.push((field_name, field_pat));
                                 if !self.check(&Token::RBrace) && !self.check(&Token::DotDot) {
                                     self.expect_skip(&Token::Comma)?;
                                 }
                             }
                             self.expect_skip(&Token::RBrace)?;
-                            Pattern::Variant {
+                            Pattern::Struct {
                                 name: Spanned::new(variant_name, Span::new(start, start)),
                                 fields,
+                                enum_name: Some(name.clone()),
                             }
                         } else {
                             // Simple qualified variant: `EnumType.Variant`
@@ -936,6 +987,7 @@ impl Parser {
                         Pattern::Struct {
                             name: Spanned::new(name, Span::new(start, start)),
                             fields,
+                            enum_name: None,
                         }
                     } else {
                         Pattern::Ident(name)

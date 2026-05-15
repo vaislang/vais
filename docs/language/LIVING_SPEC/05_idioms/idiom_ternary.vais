@@ -1,0 +1,12 @@
+# LIVING_SPEC/05_idioms/idiom_ternary.vais
+# Key concept: ❌ 2줄짜리 I/EL vs ✅ 삼항 `cond ? a : b`
+# ✅ DO: 단순 선택은 삼항으로 간결하게.
+# ❌ DON'T: 복잡한 조건은 I/EL 블록으로 명료하게.
+
+fn abs(n: i64) -> i64 {
+    n < 0 ? -n : n
+}
+
+fn main() -> i64 {
+    abs(-7) + abs(5)
+}

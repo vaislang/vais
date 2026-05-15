@@ -71,6 +71,9 @@ pub(crate) struct FunctionContext {
     pub(crate) current_function: Option<String>,
     /// Current function's return type (for generating ret instructions in nested contexts)
     pub(crate) current_return_type: Option<ResolvedType>,
+    /// Expected type for the expression currently being generated.
+    /// Used to disambiguate short enum constructors such as `None`.
+    pub(crate) expected_expr_types: Vec<ResolvedType>,
     /// Local variables in current function
     pub(crate) locals: HashMap<String, crate::types::LocalVar>,
     /// Label counter for unique basic block names
@@ -118,6 +121,11 @@ pub(crate) struct FunctionContext {
     /// `var_string_slots_multi`.
     pub(crate) var_string_slots_multi: std::collections::HashMap<String, Vec<String>>,
 
+    /// Lexical string-scope frame where a `str` local was declared. Assignments
+    /// inside deeper blocks move the newly owned slot back to this frame so the
+    /// inner block cleanup does not free a value still owned by the outer local.
+    pub(crate) var_string_scope_depth: std::collections::HashMap<String, usize>,
+
     /// For PHI results (str-producing if/match), the PHI's SSA is registered
     /// against its first incoming slot in `string_value_slot`; any additional
     /// slots go here keyed by PHI SSA. The let-binding hook pulls these into
@@ -138,6 +146,21 @@ pub(crate) struct FunctionContext {
     /// and consumed by store/binary/icmp/call emission to fix width mismatches
     /// and void-call naming issues (R2 IR Type Tracking).
     pub(crate) temp_var_types: HashMap<String, ResolvedType>,
+
+    /// Maps SSA temporary names to their **actual emitted LLVM type string**.
+    ///
+    /// Invariant: if the IR contains `%tN = <op> ... : T`, then
+    /// `actual_llvm_type["%tN"] == T` as an LLVM type string ("i64", "i1",
+    /// "%Vec$u8", "{ i8*, i64 }", etc.).
+    ///
+    /// This is the **ground-truth** track populated at emission time, consulted
+    /// *before* `temp_var_types` by `llvm_type_of_checked`. It exists because the
+    /// ResolvedType→type_to_llvm projection can disagree with the actually-emitted
+    /// LLVM type (e.g., registered `%Vec$u8` while the instruction emitted
+    /// `add i64`), causing downstream coerce miscompilation.
+    ///
+    /// Phase 17.H4 iter 26+ refactor — see compiler/docs/refactor/llvm-ground-truth.md.
+    pub(crate) actual_llvm_type: HashMap<String, String>,
 
     /// Scope stack for block-scoped drop cleanup.
     /// Each entry is a list of variable names declared in that scope (in declaration order).
@@ -193,6 +216,28 @@ impl FunctionContext {
     /// Look up the resolved type of a temporary variable.
     pub(crate) fn get_temp_type(&self, name: &str) -> Option<&ResolvedType> {
         self.temp_var_types.get(name)
+    }
+
+    /// Record the **actually emitted** LLVM type of a named temporary.
+    ///
+    /// Call this at every IR emission site that produces a new `%tN`. The string
+    /// stored MUST match what the LLVM type-checker will see for that SSA value,
+    /// which is determined by the emitted instruction, not by any AST inference.
+    ///
+    /// See [`FunctionContext::actual_llvm_type`] for the invariant.
+    pub(crate) fn record_emitted_type(&mut self, name: &str, llvm_ty: &str) {
+        self.actual_llvm_type
+            .insert(name.to_string(), llvm_ty.to_string());
+    }
+
+    /// Look up the actually emitted LLVM type of a named temporary, if recorded.
+    ///
+    /// Returns `None` for temporaries whose emission site has not yet been
+    /// migrated to the ground-truth track. Callers falling through this miss
+    /// should defer to [`FunctionContext::get_temp_type`] and the legacy
+    /// `type_to_llvm` projection.
+    pub(crate) fn get_emitted_type(&self, name: &str) -> Option<&str> {
+        self.actual_llvm_type.get(name).map(String::as_str)
     }
 }
 

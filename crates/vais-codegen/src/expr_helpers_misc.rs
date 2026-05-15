@@ -8,17 +8,6 @@ use vais_ast::{Expr, Param, Spanned};
 use vais_types::ResolvedType;
 
 impl CodeGenerator {
-    fn enum_error_tag_for_type(&self, ty: &ResolvedType) -> i32 {
-        let variant = match ty {
-            ResolvedType::Optional(_) => "None",
-            ResolvedType::Result(_, _) => "Err",
-            ResolvedType::Named { name, .. } if name == "Option" => "None",
-            ResolvedType::Named { name, .. } if name == "Result" => "Err",
-            _ => "Err",
-        };
-        self.get_enum_variant_tag(variant)
-    }
-
     /// Resolve the poll function name for an await expression. Matches `Call`
     /// and `MethodCall` expressions whose callee names an async function; other
     /// expressions return `None` and the caller falls back to the generic path.
@@ -153,6 +142,7 @@ impl CodeGenerator {
             poll_func,
             future_ptr
         );
+        self.fn_ctx.record_emitted_type(&poll_result, &poll_ret_ty);
 
         let status = self.next_temp(counter);
         write_ir!(
@@ -162,9 +152,11 @@ impl CodeGenerator {
             poll_ret_ty,
             poll_result
         );
+        self.fn_ctx.record_emitted_type(&status, "i64");
 
         let is_ready = self.next_temp(counter);
         write_ir!(ir, "  {} = icmp eq i64 {}, 1", is_ready, status);
+        self.fn_ctx.record_emitted_type(&is_ready, "i1");
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}\n",
@@ -187,6 +179,7 @@ impl CodeGenerator {
             poll_ret_ty,
             poll_result
         );
+        self.fn_ctx.record_emitted_type(&result, &inner_ret_llvm);
 
         Ok((result, ir))
     }
@@ -223,12 +216,14 @@ impl CodeGenerator {
                         let llvm_ty = self.type_to_llvm(&ty);
                         let spill_name = format!("__refcap_{}", cap_name);
                         let spill_ptr = format!("%{}", spill_name);
-                        write_ir!(capture_ir, "  {} = alloca {}", spill_ptr, llvm_ty);
                         let val = if local.is_param() {
                             format!("%{}", local.llvm_name)
                         } else {
                             local.llvm_name.clone()
                         };
+                        write_ir!(capture_ir, "  {} = alloca {}", spill_ptr, llvm_ty);
+                        self.fn_ctx
+                            .record_emitted_type(&spill_ptr, &format!("{}*", llvm_ty));
                         write_ir!(
                             capture_ir,
                             "  store {} {}, {}* {}",
@@ -280,6 +275,7 @@ impl CodeGenerator {
                                 ptr,
                                 val
                             );
+                            self.fn_ctx.record_emitted_type(&ptr, "i8*");
                             let len = format!("%__cap_len_{}", id);
                             write_ir!(
                                 capture_ir,
@@ -287,6 +283,7 @@ impl CodeGenerator {
                                 len,
                                 val
                             );
+                            self.fn_ctx.record_emitted_type(&len, "i64");
                             let alloc_sz = format!("%__cap_sz_{}", id);
                             write_ir!(capture_ir, "  {} = add i64 {}, 1", alloc_sz, len);
                             let new_buf = format!("%__cap_buf_{}", id);
@@ -296,6 +293,7 @@ impl CodeGenerator {
                                 new_buf,
                                 alloc_sz
                             );
+                            self.fn_ctx.record_emitted_type(&new_buf, "i8*");
                             write_ir!(
                                 capture_ir,
                                 "  call void @llvm.memcpy.p0i8.p0i8.i64(i8* {}, i8* {}, i64 {}, i1 false)",
@@ -310,6 +308,7 @@ impl CodeGenerator {
                                 fat0,
                                 new_buf
                             );
+                            self.fn_ctx.record_emitted_type(&fat0, "{ i8*, i64 }");
                             let fat1 = format!("%__cap_fat1_{}", id);
                             write_ir!(
                                 capture_ir,
@@ -318,6 +317,7 @@ impl CodeGenerator {
                                 fat0,
                                 len
                             );
+                            self.fn_ctx.record_emitted_type(&fat1, "{ i8*, i64 }");
                             fat1
                         } else {
                             val
@@ -456,8 +456,6 @@ impl CodeGenerator {
 
         ir.push_str("  ; Try expression (?)\n");
 
-        // Option/Result and user-defined enums share the canonical enum ABI:
-        // { i32 tag, { i64 payload... } }.
         let (tag_type, extract_payload) = ("i32", true);
 
         // Extract tag (field 0)
@@ -470,21 +468,14 @@ impl CodeGenerator {
             inner_val
         );
 
-        // Result propagates Err; Option propagates None. Tags are declaration-order.
-        let error_tag = self.enum_error_tag_for_type(&inner_type);
+        // Check if Err (tag != 0)
         let is_err = self.next_temp(counter);
         let err_label = self.next_label("try_err");
         let ok_label = self.next_label("try_ok");
         let merge_label = self.next_label("try_merge");
 
-        write_ir!(
-            ir,
-            "  {} = icmp eq {} {}, {}",
-            is_err,
-            tag_type,
-            tag,
-            error_tag
-        );
+        write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
+        self.fn_ctx.record_emitted_type(&is_err, "i1");
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}\n",
@@ -493,6 +484,88 @@ impl CodeGenerator {
             ok_label
         );
 
+        // Err branch: early return
+        write_ir!(ir, "{}:", err_label);
+        // Phase D: if the inner Result's LLVM type differs from the
+        // enclosing function's return type (e.g. `Result<i64, VaisError>`
+        // propagated out of a function returning `Result<PageHeader,
+        // VaisError>`), bitcast-transport the value through an alloca.
+        // Both sides share the erased `{ i32, { i64 } }` layout, so a
+        // pointer reinterpret + load preserves the semantic value. Without
+        // this the `ret` emits a type mismatch against the function sig.
+        let ret_llvm = self
+            .fn_ctx
+            .current_return_type
+            .as_ref()
+            .map(|t| self.type_to_llvm(t))
+            .unwrap_or_else(|| llvm_type.clone());
+        if ret_llvm != llvm_type && ret_llvm.starts_with('%') && llvm_type.starts_with('%') {
+            let spill = self.next_temp(counter);
+            write_ir!(ir, "  {} = alloca {}", spill, llvm_type);
+            self.fn_ctx
+                .record_emitted_type(&spill, &format!("{}*", llvm_type));
+            write_ir!(
+                ir,
+                "  store {} {}, {}* {}",
+                llvm_type,
+                inner_val,
+                llvm_type,
+                spill
+            );
+            let cast = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = bitcast {}* {} to {}*",
+                cast,
+                llvm_type,
+                spill,
+                ret_llvm
+            );
+            let loaded = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = load {}, {}* {}",
+                loaded,
+                ret_llvm,
+                ret_llvm,
+                cast
+            );
+            write_ir!(
+                ir,
+                "  ret {} {}  ; early return on Err (layout-compatible cast)\n",
+                ret_llvm,
+                loaded
+            );
+        } else {
+            write_ir!(
+                ir,
+                "  ret {} {}  ; early return on Err\n",
+                llvm_type,
+                inner_val
+            );
+        }
+
+        // Ok branch: extract payload value
+        write_ir!(ir, "{}:", ok_label);
+        let value = self.next_temp(counter);
+        if extract_payload {
+            write_ir!(
+                ir,
+                "  {} = extractvalue {} {}, 1, 0",
+                value,
+                llvm_type,
+                inner_val
+            );
+        } else {
+            write_ir!(
+                ir,
+                "  {} = extractvalue {} {}, 1",
+                value,
+                llvm_type,
+                inner_val
+            );
+        }
+        // For non-i64 types, convert ptrtoint'd pointer back to original type
         let try_unwrap_type = match &inner_type {
             ResolvedType::Result(ok, _) => Some(ok.as_ref().clone()),
             ResolvedType::Optional(inner) => Some(inner.as_ref().clone()),
@@ -505,61 +578,47 @@ impl CodeGenerator {
             _ => None,
         };
 
-        // Err branch: early return
-        write_ir!(ir, "{}:", err_label);
-        write_ir!(
-            ir,
-            "  ret {} {}  ; early return on Err\n",
-            llvm_type,
-            inner_val
-        );
-
-        // Ok branch: extract payload value
-        write_ir!(ir, "{}:", ok_label);
-        let value = if matches!(try_unwrap_type, Some(ResolvedType::Unit)) {
-            "void".to_string()
-        } else {
-            let value = self.next_temp(counter);
-            if extract_payload {
-                write_ir!(
-                    ir,
-                    "  {} = extractvalue {} {}, 1, 0",
-                    value,
-                    llvm_type,
-                    inner_val
-                );
-            } else {
-                write_ir!(
-                    ir,
-                    "  {} = extractvalue {} {}, 1",
-                    value,
-                    llvm_type,
-                    inner_val
-                );
-            }
-            value
-        };
-
         let final_value = if let Some(ref try_ty) = try_unwrap_type {
-            if matches!(try_ty, ResolvedType::Unit) {
-                value
+            let try_llvm = self.type_to_llvm(try_ty);
+            // Phase E: `Result<(), E>` / `Option<()>` — Unit payload has
+            // no value to load. Skip the bitcast/load and return a stable
+            // placeholder ("void") so downstream code treats this as a
+            // statement-expression with no value.
+            if try_llvm == "void" {
+                self.fn_ctx.current_block.clone_from(&ok_label);
+                return Ok(("void".to_string(), ir));
+            }
+            if try_llvm.ends_with('*') {
+                let actual = self.llvm_type_of(&value);
+                if actual != try_llvm && actual.starts_with('i') {
+                    let mut int_val = value.clone();
+                    if matches!(actual.as_str(), "i1" | "i8" | "i16" | "i32") {
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext {} {} to i64", widened, actual, value);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        int_val = widened;
+                    }
+                    let ptr_value = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}",
+                        ptr_value,
+                        int_val,
+                        try_llvm
+                    );
+                    self.fn_ctx.record_emitted_type(&ptr_value, &try_llvm);
+                    ptr_value
+                } else {
+                    value
+                }
             } else {
-                let try_llvm = self.type_to_llvm(try_ty);
                 let needs_cast = try_llvm != "i64"
                     && try_llvm != "i32"
                     && try_llvm != "i16"
                     && try_llvm != "i8"
                     && try_llvm != "i1"
                     && !try_llvm.ends_with('*');
-                if Self::int_type_width(&try_llvm) > 0 && try_llvm != "i64" {
-                    let narrowed = self.next_temp(counter);
-                    write_ir!(ir, "  {} = trunc i64 {} to {}", narrowed, value, try_llvm);
-                    narrowed
-                } else if try_llvm.ends_with('*') {
-                    let ptr = self.next_temp(counter);
-                    write_ir!(ir, "  {} = inttoptr i64 {} to {}", ptr, value, try_llvm);
-                    ptr
-                } else if needs_cast {
+                if needs_cast {
                     let type_size = self.compute_sizeof(try_ty);
                     if type_size > 8 {
                         // Large struct: payload holds a heap pointer (from Ok/Err constructor)
@@ -622,7 +681,22 @@ impl CodeGenerator {
                         loaded
                     }
                 } else {
-                    value
+                    // Phase 17.H3.2: primitive payload path. The extractvalue
+                    // slot is the Result's declared payload type (often the
+                    // erased i64), but `try_llvm` is the narrower primitive
+                    // (i8/i16/i32/i1). Truncate when widths mismatch so the
+                    // downstream store / assign receives the right type.
+                    let actual = self.llvm_type_of(&value);
+                    if actual != try_llvm
+                        && actual.starts_with('i')
+                        && try_llvm.starts_with('i')
+                        && Self::int_type_width(&actual) > 0
+                        && Self::int_type_width(&try_llvm) > 0
+                    {
+                        self.coerce_int_width(&value, &actual, &try_llvm, counter, &mut ir)
+                    } else {
+                        value
+                    }
                 }
             }
         } else {
@@ -631,9 +705,7 @@ impl CodeGenerator {
 
         // Register the Try result type for downstream tracking
         if let Some(ref try_ty) = try_unwrap_type {
-            if !matches!(try_ty, ResolvedType::Unit) {
-                self.fn_ctx.register_temp_type(&final_value, try_ty.clone());
-            }
+            self.fn_ctx.register_temp_type(&final_value, try_ty.clone());
         }
 
         write_ir!(ir, "  br label %{}\n", merge_label);
@@ -655,13 +727,17 @@ impl CodeGenerator {
         let inner_type = self.infer_expr_type(inner);
         let llvm_type = self.type_to_llvm(&inner_type);
 
+        // The Err/None branch below references `@.unwrap_panic_msg` and
+        // calls `@abort()`. Both are emitted as module-level declares /
+        // constants by `emit.rs::emit_string_constants` only when this
+        // flag is set, so flip it here before any IR is appended.
+        self.needs_unwrap_panic = true;
+
         let (inner_val, inner_ir) = self.generate_expr(inner, counter)?;
         let mut ir = inner_ir;
 
         ir.push_str("  ; Unwrap expression\n");
 
-        // Option/Result and user-defined enums share the canonical enum ABI:
-        // { i32 tag, { i64 payload... } }.
         let (tag_type, extract_payload) = ("i32", true);
 
         // Extract tag (field 0)
@@ -674,20 +750,13 @@ impl CodeGenerator {
             inner_val
         );
 
-        // Panic on Err/None. Tags are declaration-order.
-        let error_tag = self.enum_error_tag_for_type(&inner_type);
+        // Check if Err/None (tag != 0)
         let is_err = self.next_temp(counter);
         let err_label = self.next_label("unwrap_err");
         let ok_label = self.next_label("unwrap_ok");
 
-        write_ir!(
-            ir,
-            "  {} = icmp eq {} {}, {}",
-            is_err,
-            tag_type,
-            tag,
-            error_tag
-        );
+        write_ir!(ir, "  {} = icmp ne {} {}, 0", is_err, tag_type, tag);
+        self.fn_ctx.record_emitted_type(&is_err, "i1");
         write_ir!(
             ir,
             "  br i1 {}, label %{}, label %{}\n",
@@ -742,30 +811,67 @@ impl CodeGenerator {
 
         if let Some(ref unwrap_ty) = unwrap_type {
             let unwrap_llvm = self.type_to_llvm(unwrap_ty);
+            // Phase 17.H4.2: Unit payload — no value to load. Mirror the
+            // Try (?) operator's void-skip behavior. Return "void" so the
+            // downstream code sees a statement-expression with no value.
+            if unwrap_llvm == "void" {
+                return Ok(("void".to_string(), ir));
+            }
+            // Payload slot is i64; if the real Ok type is narrower, truncate so
+            // later consumers see a value matching the advertised type. Without
+            // this, callers assume `sext i32 <v> to i64` while the slot load
+            // actually produced an i64, which clang rejects.
+            let narrow_bits = match unwrap_llvm.as_str() {
+                "i32" => Some(32u32),
+                "i16" => Some(16),
+                "i8" => Some(8),
+                "i1" => Some(1),
+                _ => None,
+            };
+            if let Some(bits) = narrow_bits {
+                let trunc_tmp = self.next_temp(counter);
+                write_ir!(ir, "  {} = trunc i64 {} to i{}", trunc_tmp, value, bits);
+                self.fn_ctx
+                    .register_temp_type(&trunc_tmp, unwrap_ty.clone());
+                return Ok((trunc_tmp, ir));
+            }
+            // For floats, bitcast the i64 slot to the matching width.
+            if unwrap_llvm == "double" || unwrap_llvm == "float" {
+                let fval = self.next_temp(counter);
+                write_ir!(ir, "  {} = bitcast i64 {} to {}", fval, value, unwrap_llvm);
+                self.fn_ctx.register_temp_type(&fval, unwrap_ty.clone());
+                return Ok((fval, ir));
+            }
+            if unwrap_llvm.ends_with('*') {
+                let actual = self.llvm_type_of(&value);
+                if actual != unwrap_llvm && actual.starts_with('i') {
+                    let mut int_val = value.clone();
+                    if matches!(actual.as_str(), "i1" | "i8" | "i16" | "i32") {
+                        let widened = self.next_temp(counter);
+                        write_ir!(ir, "  {} = zext {} {} to i64", widened, actual, value);
+                        self.fn_ctx.record_emitted_type(&widened, "i64");
+                        int_val = widened;
+                    }
+                    let ptr_value = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = inttoptr i64 {} to {}",
+                        ptr_value,
+                        int_val,
+                        unwrap_llvm
+                    );
+                    self.fn_ctx.record_emitted_type(&ptr_value, &unwrap_llvm);
+                    self.fn_ctx
+                        .register_temp_type(&ptr_value, unwrap_ty.clone());
+                    return Ok((ptr_value, ir));
+                }
+            }
             let needs_cast = unwrap_llvm != "i64"
                 && unwrap_llvm != "i32"
                 && unwrap_llvm != "i16"
                 && unwrap_llvm != "i8"
                 && unwrap_llvm != "i1"
                 && !unwrap_llvm.ends_with('*');
-            if Self::int_type_width(&unwrap_llvm) > 0 && unwrap_llvm != "i64" {
-                let narrowed = self.next_temp(counter);
-                write_ir!(
-                    ir,
-                    "  {} = trunc i64 {} to {}",
-                    narrowed,
-                    value,
-                    unwrap_llvm
-                );
-                self.fn_ctx.register_temp_type(&narrowed, unwrap_ty.clone());
-                return Ok((narrowed, ir));
-            }
-            if unwrap_llvm.ends_with('*') {
-                let ptr = self.next_temp(counter);
-                write_ir!(ir, "  {} = inttoptr i64 {} to {}", ptr, value, unwrap_llvm);
-                self.fn_ctx.register_temp_type(&ptr, unwrap_ty.clone());
-                return Ok((ptr, ir));
-            }
             if needs_cast {
                 let type_size = self.compute_sizeof(unwrap_ty);
                 if type_size > 8 {
@@ -1038,6 +1144,7 @@ impl CodeGenerator {
                 vec_ty,
                 arg_vals[0]
             );
+            self.fn_ctx.record_emitted_type(&result, &elem_ty);
         } else {
             write_ir!(
                 ir,
@@ -1048,6 +1155,7 @@ impl CodeGenerator {
                 vec_ty,
                 arg_vals[0]
             );
+            self.fn_ctx.record_emitted_type(&result, &elem_ty);
         }
 
         Ok((result, ir))

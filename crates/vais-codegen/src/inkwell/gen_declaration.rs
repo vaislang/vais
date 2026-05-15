@@ -151,18 +151,15 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     pub(super) fn define_enum(&mut self, e: &ast::Enum) -> CodegenResult<StructType<'ctx>> {
         let enum_name = &e.name.node;
 
-        // If already defined and its variants were registered, return existing.
-        // Builtin erased Option/Result may be created first by type mapping; in
-        // that case we still need to register source-declared variant tags below.
+        // If already defined, return existing
         if let Some(existing) = self.generated_structs.get(enum_name) {
-            if self.enum_variants.keys().any(|(e, _)| e == enum_name) {
-                return Ok(*existing);
-            }
+            return Ok(*existing);
         }
 
-        if e.variants.len() > i32::MAX as usize {
+        // Validate variant count fits in i8 tag
+        if e.variants.len() > 255 {
             return Err(CodegenError::Unsupported(format!(
-                "Enum '{}' has {} variants (max i32::MAX due to i32 tag)",
+                "Enum '{}' has {} variants (max 255 due to i8 tag)",
                 enum_name,
                 e.variants.len()
             )));
@@ -223,45 +220,37 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                     self.enum_variant_multi_payload_types
                         .insert((enum_name.clone(), variant.name.node.clone()), payload_ty);
                 }
+            } else if let ast::VariantFields::Struct(fields) = &variant.fields {
+                // Phase 6.27b: struct-variant (named fields) support.
+                // `EN E { Variant { f1: T1, f2: T2, ... } }` — build anonymous struct
+                // type packing all declared field types, and record the field name
+                // list so Pattern::Struct bindings can map named patterns to indices.
+                if !fields.is_empty() {
+                    let mut field_ll_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = Vec::new();
+                    let mut field_names: Vec<String> = Vec::new();
+                    for f in fields {
+                        let resolved = self.ast_type_to_resolved(&f.ty.node);
+                        field_ll_types.push(self.type_mapper.map_type(&resolved));
+                        field_names.push(f.name.node.clone());
+                    }
+                    let payload_ty = self.context.struct_type(&field_ll_types, false);
+                    self.enum_variant_multi_payload_types
+                        .insert((enum_name.clone(), variant.name.node.clone()), payload_ty);
+                    self.enum_variant_multi_payload_field_names
+                        .insert((enum_name.clone(), variant.name.node.clone()), field_names);
+                }
             }
         }
 
-        let max_field_count = e
-            .variants
-            .iter()
-            .map(|variant| match &variant.fields {
-                ast::VariantFields::Unit => 0usize,
-                ast::VariantFields::Tuple(types) => types.len(),
-                ast::VariantFields::Struct(fields) => fields.len(),
-            })
-            .max()
-            .unwrap_or(0);
-
-        // Create enum as a named struct matching the text backend:
-        // unit-only: `%E = type { i32 }`
-        // payload:   `%E = type { i32, { i64, ... } }`
-        let enum_type = if let Some(existing) = self.generated_structs.get(enum_name).copied() {
-            existing
-        } else if let Some(existing) = self.type_mapper.get_registered_struct(enum_name) {
-            existing
-        } else {
-            self.context.opaque_struct_type(enum_name)
-        };
-
-        if enum_type.count_fields() == 0 {
-            if max_field_count == 0 {
-                enum_type.set_body(&[self.context.i32_type().into()], false);
-            } else {
-                let payload_fields: Vec<_> = (0..max_field_count)
-                    .map(|_| self.context.i64_type().into())
-                    .collect();
-                let payload_type = self.context.struct_type(&payload_fields, false);
-                enum_type.set_body(
-                    &[self.context.i32_type().into(), payload_type.into()],
-                    false,
-                );
-            }
-        }
+        // Create enum as struct: { i8 tag, i64 data }
+        // Must match the layout used in gen_expr.rs for variant construction
+        let enum_type = self.context.struct_type(
+            &[
+                self.context.i8_type().into(),
+                self.context.i64_type().into(),
+            ],
+            false,
+        );
 
         self.generated_structs.insert(enum_name.clone(), enum_type);
         self.type_mapper.register_struct(enum_name, enum_type);
@@ -275,6 +264,16 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     ) -> CodegenResult<()> {
         for func in &extern_block.functions {
             let fn_name = &func.name.node;
+
+            // Bug C12 fix: if a function with this name was already declared
+            // (e.g., a libm/runtime intrinsic auto-emitted by an earlier pass),
+            // reuse it instead of calling `module.add_function` a second time.
+            // LLVM would otherwise rename the duplicate to `<name>.1`, and
+            // call sites would emit references to the missing renamed symbol.
+            if let Some(existing) = self.module.get_function(fn_name) {
+                self.functions.insert(fn_name.clone(), existing);
+                continue;
+            }
 
             // Build parameter types
             let param_types: Vec<BasicMetadataTypeEnum> = func
@@ -361,6 +360,7 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
     /// Emits `@name = global T <initializer>` and stores the pointer+type in
     /// `self.globals` so subsequent identifier lookups and assignments can find it.
     pub(super) fn define_global(&mut self, global_def: &ast::GlobalDef) -> CodegenResult<()> {
+        use inkwell::types::BasicTypeEnum;
         let name = &global_def.name.node;
         let resolved = self.ast_type_to_resolved(&global_def.ty.node);
         let ll_type = self.type_mapper.map_type(&resolved);
@@ -371,7 +371,14 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
         // `evaluate_const_expr` succeeds and the types match. Non-constant initializers
         // (e.g. array literals with dynamic elements) stay at zero — callers write to
         // the global at runtime.
-        let zero: BasicValueEnum<'ctx> = ll_type.const_zero();
+        let zero: BasicValueEnum<'ctx> = match ll_type {
+            BasicTypeEnum::IntType(it) => it.const_zero().into(),
+            BasicTypeEnum::FloatType(ft) => ft.const_zero().into(),
+            BasicTypeEnum::PointerType(pt) => pt.const_null().into(),
+            BasicTypeEnum::StructType(st) => st.const_zero().into(),
+            BasicTypeEnum::ArrayType(at) => at.const_zero().into(),
+            BasicTypeEnum::VectorType(vt) => vt.const_zero().into(),
+        };
         global.set_initializer(&zero);
 
         if let Ok(init_val) = self.evaluate_const_expr(&global_def.value.node) {
@@ -500,6 +507,13 @@ impl<'ctx> InkwellCodeGenerator<'ctx> {
                 };
                 Ok(result.into())
             }
+            // B.3: `const N: T = comptime { expr }` — treat the comptime block
+            // as a transparent constant-folding marker. The body must itself be
+            // a const-expressible expression (integer arithmetic, float
+            // literal, bool literal, unary, nested comptime). This unblocks the
+            // idiomatic "compile-time computed constant" pattern without
+            // requiring a full comptime evaluator.
+            Expr::Comptime { body } => self.evaluate_const_expr(&body.node),
             _ => Err(CodegenError::Unsupported(format!("Const expr: {:?}", expr))),
         }
     }

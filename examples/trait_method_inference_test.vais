@@ -2,37 +2,37 @@
 # This demonstrates that methods from trait implementations are properly resolved
 
 # Define Iterator trait
-W Iterator {
-    F next(&self) -> i64
-    F has_next(&self) -> i64
+trait Iterator {
+    fn next(&self) -> i64
+    fn has_next(&self) -> i64
 }
 
 # Custom iterator
-S SimpleCounter {
+struct SimpleCounter {
     value: i64
 }
 
 # Regular impl (not trait)
-X SimpleCounter {
-    F new(v: i64) -> SimpleCounter {
+impl SimpleCounter {
+    fn new(v: i64) -> SimpleCounter {
         SimpleCounter { value: v }
     }
 }
 
 # Trait impl
-X SimpleCounter: Iterator {
-    F next(&self) -> i64 {
+impl SimpleCounter: Iterator {
+    fn next(&self) -> i64 {
         current := self.value
         self.value = self.value + 1
         current
     }
 
-    F has_next(&self) -> i64 {
-        I self.value < 10 { 1 } EL { 0 }
+    fn has_next(&self) -> i64 {
+        I self.value < 10 { 1 } else { 0 }
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("Testing trait method resolution:")
 
     # Create counter using struct method

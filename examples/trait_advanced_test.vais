@@ -1,33 +1,33 @@
 # Advanced trait test: Super traits and Associated types
 
 # Base trait
-W Printable {
-    F print(&self) -> i64
+trait Printable {
+    fn print(&self) -> i64
 }
 
 # Trait with super trait
-W Displayable: Printable {
-    F format(&self) -> i64
+trait Displayable: Printable {
+    fn format(&self) -> i64
 }
 
 # Trait with associated type
-W Container {
-    T Item                     # Associated type declaration
-    F get(&self) -> i64
-    F size(&self) -> i64
+trait Container {
+    type Item                     # Associated type declaration
+    fn get(&self) -> i64
+    fn size(&self) -> i64
 }
 
 # Simple struct
-S Counter { value: i64 }
+struct Counter { value: i64 }
 
 # Implement Printable
-X Counter: Printable {
-    F print(&self) -> i64 {
+impl Counter: Printable {
+    fn print(&self) -> i64 {
         self.value
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     puts("=== Advanced Trait Test ===")
     putchar(10)
 

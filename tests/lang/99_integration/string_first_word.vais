@@ -1,0 +1,25 @@
+# CHECKS: find length of first word (chars until space or end).
+fn first_word_len(p: i64, n: i64) -> i64 {
+    LF i: 0..n {
+        I load_byte(p + i) == 32 { return i }
+    }
+    n
+}
+
+fn main() -> i64 {
+    p1: i64 := str_to_ptr("hello world")
+    I first_word_len(p1, strlen(p1)) != 5 { return 1 }
+
+    p2: i64 := str_to_ptr("foo")
+    I first_word_len(p2, strlen(p2)) != 3 { return 2 }
+
+    p3: i64 := str_to_ptr("a b c")
+    I first_word_len(p3, strlen(p3)) != 1 { return 3 }
+
+    p4: i64 := str_to_ptr(" leading")
+    I first_word_len(p4, strlen(p4)) != 0 { return 4 }
+
+    p5: i64 := str_to_ptr("")
+    I first_word_len(p5, 0) != 0 { return 5 }
+    return 0
+}

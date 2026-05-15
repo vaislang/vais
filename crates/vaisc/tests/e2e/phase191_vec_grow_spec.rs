@@ -22,14 +22,14 @@ use super::helpers::*;
 ///
 /// We use an inline local Vec struct with 5 fields (data, len, cap,
 /// elem_size, owned) to match stdlib Vec<T>'s layout (Phase 191 #2a Iter A).
-/// This avoids the separate "U std/vec" dependency while still exercising
+/// This avoids the separate "use std/vec" dependency while still exercising
 /// the same dispatch path.
 #[test]
 fn e2e_phase191_vec_grow_spec_from_push() {
     assert_exit_code(
         r#"
 # Local Vec<T> definition mirroring std/vec layout
-S Vec<T> {
+struct Vec<T> {
     data: i64,
     len: i64,
     cap: i64,
@@ -37,9 +37,9 @@ S Vec<T> {
     owned: i64
 }
 
-X Vec<T> {
-    F grow(&self) -> i64 {
-        new_cap := I self.cap * 2 < 8 { 8 } EL { self.cap * 2 }
+impl Vec<T> {
+    fn grow(&self) -> i64 {
+        new_cap := I self.cap * 2 < 8 { 8 } else { self.cap * 2 }
         new_data := malloc(new_cap * self.elem_size)
         memcpy(new_data, self.data, self.len * self.elem_size)
         free(self.data)
@@ -48,7 +48,7 @@ X Vec<T> {
         new_cap
     }
 
-    F push(&self, value: T) -> i64 {
+    fn push(&self, value: T) -> i64 {
         I self.len >= self.cap {
             @.grow()
         }
@@ -58,14 +58,14 @@ X Vec<T> {
         self.len
     }
 
-    F drop(&self) -> i64 {
+    fn drop(&self) -> i64 {
         free(self.data)
         self.data = 0
         0
     }
 }
 
-F main() -> i64 {
+fn main() -> i64 {
     v := Vec { data: 0, len: 0, cap: 0, elem_size: 8, owned: 0 }
     # Triggers Vec_grow$i64 via Vec_push$i64's @.grow() path
     v.push(1)

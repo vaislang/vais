@@ -30,7 +30,7 @@ fn generate_generic_heavy_code(num_generics: usize) -> String {
     // Generate generic struct definitions
     for i in 0..num_generics {
         code.push_str(&format!(
-            "S Container{}<T> {{\n    value: T,\n    count: i64\n}}\n\n",
+            "struct Container{}<T> {{\n    value: T,\n    count: i64\n}}\n\n",
             i
         ));
     }
@@ -124,7 +124,7 @@ fn generate_large_file(target_lines: usize) -> String {
             break;
         }
         code.push_str(&format!(
-            "S Point{} {{\n    x: i64,\n    y: i64,\n    z: i64,\n    w: i64\n}}\n\n",
+            "struct Point{} {{\n    x: i64,\n    y: i64,\n    z: i64,\n    w: i64\n}}\n\n",
             s
         ));
         lines += 7;
@@ -136,7 +136,7 @@ fn generate_large_file(target_lines: usize) -> String {
             break;
         }
         code.push_str(&format!(
-            "E Result{} {{\n    Ok(i64),\n    Err(i64),\n    Pending,\n    Cancelled\n}}\n\n",
+            "enum Result{} {{\n    Ok(i64),\n    Err(i64),\n    Pending,\n    Cancelled\n}}\n\n",
             e
         ));
         lines += 7;
@@ -470,7 +470,7 @@ fn bench_struct_heavy(c: &mut Criterion) {
     // Define structs
     for s in 0..num_structs {
         code.push_str(&format!(
-            "S Data{} {{\n    a: i64,\n    b: i64,\n    c: i64,\n    d: i64,\n    e: i64\n}}\n\n",
+            "struct Data{} {{\n    a: i64,\n    b: i64,\n    c: i64,\n    d: i64,\n    e: i64\n}}\n\n",
             s
         ));
     }
@@ -529,7 +529,7 @@ fn bench_function_heavy(c: &mut Criterion) {
     // Define functions
     for f in 0..num_funcs {
         code.push_str(&format!(
-            "F func_{}(x: i64, y: i64) -> i64 {{\n    R x * {} + y * {}\n}}\n\n",
+            "fn func_{}(x: i64, y: i64) -> i64 {{\n    R x * {} + y * {}\n}}\n\n",
             f,
             f % 10 + 1,
             f % 7 + 1

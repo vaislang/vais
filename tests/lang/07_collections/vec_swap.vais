@@ -1,0 +1,21 @@
+# CHECKS: swap two elements in a Vec by index.
+use std/vec.{vec_new};
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    LF i: 0..5 {
+        v.push(i * 10)   # [0, 10, 20, 30, 40]
+    }
+
+    # swap idx 1 and 3
+    tmp: i64 := v[1]
+    v[1] = v[3]
+    v[3] = tmp
+
+    I v[0] != 0 { return 1 }
+    I v[1] != 30 { return 2 }
+    I v[2] != 20 { return 3 }
+    I v[3] != 10 { return 4 }
+    I v[4] != 40 { return 5 }
+    return 0
+}

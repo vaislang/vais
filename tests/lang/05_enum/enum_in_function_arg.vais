@@ -1,0 +1,39 @@
+# CHECKS: function takes enum as parameter and dispatches.
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right
+}
+
+fn dx(d: Direction) -> i64 {
+    match d {
+        Up => 0,
+        Down => 0,
+        Left => 0 - 1,
+        Right => 1
+    }
+}
+
+fn dy(d: Direction) -> i64 {
+    match d {
+        Up => 0 - 1,
+        Down => 1,
+        Left => 0,
+        Right => 0
+    }
+}
+
+fn main() -> i64 {
+    I dx(Up) != 0 { return 1 }
+    I dy(Up) != 0 - 1 { return 2 }
+    I dx(Right) != 1 { return 3 }
+    I dy(Down) != 1 { return 4 }
+
+    # combine
+    sx: i64 := dx(Right) + dx(Right) + dx(Left)
+    I sx != 1 { return 5 }
+    sy: i64 := dy(Down) + dy(Up)
+    I sy != 0 { return 6 }
+    return 0
+}

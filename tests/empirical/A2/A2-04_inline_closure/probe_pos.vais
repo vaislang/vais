@@ -1,0 +1,6 @@
+fn apply(f: |i64| -> i64, x: i64) -> i64 {
+    f(x)
+}
+fn main() -> i64 {
+    return apply(|n| n + 1, 41)
+}

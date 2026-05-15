@@ -30,23 +30,23 @@
 #   visited.remove(&42)
 #
 
-U std/hash
+use std/hash
 
 # Helper function to initialize bucket array
-F hashset_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
+fn hashset_init_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
     I idx >= cap {
         0
-    } EL {
+    } else {
         store_i64(buckets + idx * 8, 0)
         hashset_init_buckets(buckets, idx + 1, cap)
     }
 }
 
 # Helper function for clear - free entry chain
-F hashset_clear_entries(entry_ptr: i64) -> i64 {
+fn hashset_clear_entries(entry_ptr: i64) -> i64 {
     I entry_ptr == 0 {
         0
-    } EL {
+    } else {
         next := load_i64(entry_ptr + 8)
         free(entry_ptr)
         hashset_clear_entries(next)
@@ -54,10 +54,10 @@ F hashset_clear_entries(entry_ptr: i64) -> i64 {
 }
 
 # Helper function for clear - process all buckets
-F hashset_clear_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
+fn hashset_clear_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
     I idx >= cap {
         0
-    } EL {
+    } else {
         entry_ptr := load_i64(buckets + idx * 8)
         hashset_clear_entries(entry_ptr)
         store_i64(buckets + idx * 8, 0)
@@ -66,10 +66,10 @@ F hashset_clear_buckets(buckets: i64, idx: i64, cap: i64) -> i64 {
 }
 
 # Helper to count total entries
-F hashset_count_entries(buckets: i64, idx: i64, cap: i64) -> i64 {
+fn hashset_count_entries(buckets: i64, idx: i64, cap: i64) -> i64 {
     I idx >= cap {
         0
-    } EL {
+    } else {
         entry_ptr := load_i64(buckets + idx * 8)
         chain_count := hashset_count_chain(entry_ptr)
         chain_count + hashset_count_entries(buckets, idx + 1, cap)
@@ -77,20 +77,20 @@ F hashset_count_entries(buckets: i64, idx: i64, cap: i64) -> i64 {
 }
 
 # Helper to count entries in a chain
-F hashset_count_chain(entry_ptr: i64) -> i64 {
+fn hashset_count_chain(entry_ptr: i64) -> i64 {
     I entry_ptr == 0 {
         0
-    } EL {
+    } else {
         next := load_i64(entry_ptr + 8)
         1 + hashset_count_chain(next)
     }
 }
 
 # Rehash helper: iterate buckets
-F hashset_rehash_bucket_raw(new_buckets: i64, new_cap: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
+fn hashset_rehash_bucket_raw(new_buckets: i64, new_cap: i64, old_buckets: i64, idx: i64, old_cap: i64) -> i64 {
     I idx >= old_cap {
         0
-    } EL {
+    } else {
         entry_ptr := load_i64(old_buckets + idx * 8)
         hashset_rehash_entries_raw(new_buckets, new_cap, entry_ptr)
         hashset_rehash_bucket_raw(new_buckets, new_cap, old_buckets, idx + 1, old_cap)
@@ -98,10 +98,10 @@ F hashset_rehash_bucket_raw(new_buckets: i64, new_cap: i64, old_buckets: i64, id
 }
 
 # Rehash helper: process entry chain
-F hashset_rehash_entries_raw(new_buckets: i64, new_cap: i64, entry_ptr: i64) -> i64 {
+fn hashset_rehash_entries_raw(new_buckets: i64, new_cap: i64, entry_ptr: i64) -> i64 {
     I entry_ptr == 0 {
         0
-    } EL {
+    } else {
         value := load_typed(entry_ptr)
         next := load_i64(entry_ptr + 8)
 
@@ -123,52 +123,58 @@ F hashset_rehash_entries_raw(new_buckets: i64, new_cap: i64, entry_ptr: i64) -> 
 }
 
 # Entry node for linked list in each bucket
-S HashSetEntry<T> {
+struct HashSetEntry<T> {
     value: T,       # The value stored in the set
     next: i64       # Pointer to next HashSetEntry (0 if none)
 }
 
 # HashSet structure - generic hash set using separate chaining
-S HashSet<T> {
+struct HashSet<T> {
     buckets: i64,   # Pointer to array of bucket heads (entry pointers)
     size: i64,      # Number of elements
     cap: i64        # Number of buckets
 }
 
-X HashSet<T> {
+impl HashSet<T> {
+    # Create a new HashSet with the default capacity (16 buckets)
+    fn new() -> HashSet<T> {
+        set: HashSet<T> := mut HashSet.with_capacity(16)
+        set
+    }
+
     # Create a new HashSet with given capacity
-    F with_capacity(capacity: i64) -> HashSet<T> {
-        cap := I capacity < 8 { 8 } EL { capacity }
+    fn with_capacity(capacity: i64) -> HashSet<T> {
+        cap := I capacity < 8 { 8 } else { capacity }
         buckets := malloc(cap * 8)
         hashset_init_buckets(buckets, 0, cap)
         HashSet { buckets: buckets, size: 0, cap: cap }
     }
 
     # Get number of elements
-    F len(&self) -> i64 {
+    fn len(&self) -> i64 {
         self.size
     }
 
     # Check if empty
-    F is_empty(&self) -> i64 {
-        I self.size == 0 { 1 } EL { 0 }
+    fn is_empty(&self) -> i64 {
+        I self.size == 0 { 1 } else { 0 }
     }
 
     # Compute bucket index for a value
-    F hash_idx(&self, value: T) -> i64 {
+    fn hash_idx(&self, value: T) -> i64 {
         h := mult_hash(value)
         h % self.cap
     }
 
     # Check if value exists in chain
-    F contains_in_chain(&self, entry_ptr: i64, value: T) -> i64 {
+    fn contains_in_chain(&self, entry_ptr: i64, value: T) -> i64 {
         I entry_ptr == 0 {
             0
-        } EL {
+        } else {
             entry_val := load_typed(entry_ptr)
             I entry_val == value {
                 1
-            } EL {
+            } else {
                 next := load_i64(entry_ptr + 8)
                 @.contains_in_chain(next, value)
             }
@@ -176,7 +182,7 @@ X HashSet<T> {
     }
 
     # Check if value exists in set (takes reference to value)
-    F contains(&self, value: &T) -> i64 {
+    fn contains(&self, value: &T) -> i64 {
         v := *value
         idx := @.hash_idx(v)
         entry_ptr := load_i64(self.buckets + idx * 8)
@@ -184,11 +190,11 @@ X HashSet<T> {
     }
 
     # Insert value into set (idempotent - safe to call with existing value)
-    F insert(&self, value: T) -> i64 {
+    fn insert(&self, value: T) -> i64 {
         # Check if already exists
         I @.contains(&value) == 1 {
             0
-        } EL {
+        } else {
             idx := @.hash_idx(value)
             entry_ptr := load_i64(self.buckets + idx * 8)
 
@@ -209,7 +215,7 @@ X HashSet<T> {
 
     # Remove value from set (takes reference to value)
     # Returns 1 if removed, 0 if not found
-    F remove(&self, value: &T) -> i64 {
+    fn remove(&self, value: &T) -> i64 {
         v := *value
         idx := @.hash_idx(v)
         entry_ptr := load_i64(self.buckets + idx * 8)
@@ -217,24 +223,24 @@ X HashSet<T> {
     }
 
     # Helper to remove from chain
-    F remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, value: T) -> i64 {
+    fn remove_from_chain(&self, bucket_idx: i64, prev_ptr: i64, entry_ptr: i64, value: T) -> i64 {
         I entry_ptr == 0 {
             0
-        } EL {
+        } else {
             entry_val := load_typed(entry_ptr)
             I entry_val == value {
                 next := load_i64(entry_ptr + 8)
                 _ := I prev_ptr == 0 {
                     store_i64(self.buckets + bucket_idx * 8, next)
                     0
-                } EL {
+                } else {
                     store_i64(prev_ptr + 8, next)
                     0
                 }
                 free(entry_ptr)
                 self.size = self.size - 1
                 1
-            } EL {
+            } else {
                 next := load_i64(entry_ptr + 8)
                 @.remove_from_chain(bucket_idx, entry_ptr, next, value)
             }
@@ -242,7 +248,7 @@ X HashSet<T> {
     }
 
     # Rehash to double capacity
-    F rehash(&self) -> i64 {
+    fn rehash(&self) -> i64 {
         old_buckets := self.buckets
         old_cap := self.cap
         new_cap := old_cap * 2
@@ -262,14 +268,14 @@ X HashSet<T> {
     }
 
     # Clear all elements
-    F clear(&self) -> i64 {
+    fn clear(&self) -> i64 {
         hashset_clear_buckets(self.buckets, 0, self.cap)
         self.size = 0
         0
     }
 
     # Free all memory
-    F free(&self) -> i64 {
+    fn free(&self) -> i64 {
         @.clear()
         free(self.buckets)
         self.buckets = 0
@@ -279,6 +285,6 @@ X HashSet<T> {
 }
 
 # Convenience constructor - create new HashSet with default capacity
-F hashset_new() -> HashSet<i64> {
+fn hashset_new() -> HashSet<i64> {
     HashSet.with_capacity(16)
 }

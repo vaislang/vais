@@ -35,7 +35,7 @@ impl Parser {
         Ok(ExternBlock { abi, functions })
     }
 
-    /// Parse extern function declaration: `F name(params) -> ret_type;`
+    /// Parse extern function declaration: `fn name(params) -> ret_type;`
     /// Supports attributes like `#\[wasm_import("env", "js_alert")\]` before the function keyword.
     fn parse_extern_function(&mut self) -> ParseResult<ExternFunction> {
         // Parse optional attributes before function keyword
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_extern_block_simple() {
-        let source = r#"N "C" { F puts(s: *i8) -> i32; }"#;
+        let source = r#"N "C" { fn puts(s: *i8) -> i32; }"#;
         let tokens = tokenize(source).unwrap();
         let mut parser = Parser::new(tokens);
         let module = parser.parse_module().unwrap();
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn test_extern_block_vararg() {
-        let source = r#"N "C" { F printf(fmt: *i8, ...) -> i32; }"#;
+        let source = r#"N "C" { fn printf(fmt: *i8, ...) -> i32; }"#;
         let tokens = tokenize(source).unwrap();
         let mut parser = Parser::new(tokens);
         let module = parser.parse_module().unwrap();
@@ -208,9 +208,9 @@ mod tests {
     fn test_extern_block_multiple_functions() {
         let source = r#"
         N "C" {
-            F malloc(size: i64) -> *i8;
-            F free(ptr: *i8) -> ();
-            F printf(fmt: *i8, ...) -> i32;
+            fn malloc(size: i64) -> *i8;
+            fn free(ptr: *i8) -> ();
+            fn printf(fmt: *i8, ...) -> i32;
         }
         "#;
         let tokens = tokenize(source).unwrap();
@@ -233,7 +233,7 @@ mod tests {
         let source = r#"
         N "C" {
             #[wasm_import("env", "js_alert")]
-            F alert(msg: *i8);
+            fn alert(msg: *i8);
         }
         "#;
         let tokens = tokenize(source).unwrap();
@@ -256,7 +256,7 @@ mod tests {
     fn test_wasm_export_attribute_on_function() {
         let source = r#"
         #[wasm_export("add")]
-        F add(a: i64, b: i64) -> i64 = a + b
+        fn add(a: i64, b: i64) -> i64 = a + b
         "#;
         let tokens = tokenize(source).unwrap();
         let mut parser = Parser::new(tokens);
@@ -278,7 +278,7 @@ mod tests {
         let source = r#"
         N "C" {
             #[wasm_import]
-            F console_log(msg: *i8);
+            fn console_log(msg: *i8);
         }
         "#;
         let tokens = tokenize(source).unwrap();
@@ -296,10 +296,10 @@ mod tests {
 
     #[test]
     fn test_wasm_export_on_single_extern() {
-        // X F syntax with wasm_export attribute
+        // impl fn syntax with wasm_export attribute
         let source = r#"
         #[wasm_export("greet")]
-        X F greet(name: *i8) -> i64
+        impl fn greet(name: *i8) -> i64
         "#;
         let tokens = tokenize(source).unwrap();
         let mut parser = Parser::new(tokens);
@@ -321,12 +321,12 @@ mod tests {
         let source = r#"
         N "C" {
             #[wasm_import("env", "fetch")]
-            F js_fetch(url: *i8) -> i64;
+            fn js_fetch(url: *i8) -> i64;
 
-            F malloc(size: i64) -> *i8;
+            fn malloc(size: i64) -> *i8;
 
             #[wasm_import("env", "setTimeout")]
-            F js_set_timeout(callback: i64, ms: i64);
+            fn js_set_timeout(callback: i64, ms: i64);
         }
         "#;
         let tokens = tokenize(source).unwrap();
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn test_function_pointer_type() {
-        let source = "F test(callback: fn(i64, i64) -> i64) -> i64 = callback(1, 2)";
+        let source = "fn test(callback: fn(i64, i64) -> i64) -> i64 = callback(1, 2)";
         let tokens = tokenize(source).unwrap();
         let mut parser = Parser::new(tokens);
         let module = parser.parse_module().unwrap();
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn test_function_pointer_vararg() {
-        let source = "S Handler { callback: fn(i32, ...) -> i32 }";
+        let source = "struct Handler { callback: fn(i32, ...) -> i32 }";
         let tokens = tokenize(source).unwrap();
         let mut parser = Parser::new(tokens);
         let module = parser.parse_module().unwrap();

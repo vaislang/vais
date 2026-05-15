@@ -1,0 +1,44 @@
+# A4-02 — Pointer<T> ↔ i64
+# Empirical fixture metadata.
+
+[entry]
+id = "A4-02"
+classification = "A4-runtime-silent"
+surface = "Raw pointer *i64 silently unified with i64 in function call"
+site = "unification.rs:410"
+site_full_path = "compiler/crates/vais-types/src/inference/unification.rs:410"
+master_plan_version = 17
+
+[v1_evidence]
+probe_summary = "take_i64(p) where p: *i64 = &val"
+expected_per_design = "type-check rejection (no implicit *i64 → i64 unification)"
+actual_observed = 184  # master-plan.toml v1 sentinel — environment-specific
+actual_observed_macos_arm64_release_2026_05_03 = 56  # this build
+verified_date = "2026-05-03"
+
+[v2_evidence]
+status = "v1_reverified_with_protocol_revision"
+notes = """
+Cannot use exact_exit: master-plan v1 sentinel = 184 but this build
+observes 56. Difference is stack-allocator placement of `val` under
+different toolchain versions / optimization. Switched to exit_not per
+Step 7 protocol revision (EXCLUDED_FEATURES.md §Assertion-kind tri-form).
+
+The well-typed program (take_i64(*p) with *i64 ↔ i64 rejected at
+type-check) would return 42 — that exact value is what the surface
+MUST NOT produce. Any other exit value proves silent corruption.
+
+v2 contract requires 3 distinct probes for HARD v2 status. Pending:
+  - return-position pointer (F main() -> i64 { p })
+  - struct field pointer
+  - vector of pointers
+"""
+
+[migration]
+post_removal_expected = "vaisc check exits non-zero with stable error code (TBD; proposal: E_TYPE_POINTER_I64_MISMATCH)"
+post_removal_action = "Replace with negative fixture; remove forbidden_set; expect non-zero on `vaisc check`."
+
+[assertion_kind]
+kind = "exit_not"
+forbidden_set = [42]
+forbidden_set_rationale = "well-typed dereference take_i64(*p) where val=42 returns 42. defective rule passes address (or lower bits) instead."

@@ -1,0 +1,25 @@
+# CHECKS: Vec push, read len, push more, read updated len.
+use std/vec.{vec_new};
+
+fn main() -> i64 {
+    v: Vec<i64> := mut vec_new()
+    I v.len() != 0 { return 1 }
+
+    LF i: 0..5 {
+        v.push(i)
+    }
+    I v.len() != 5 { return 2 }
+
+    # push another batch
+    LF i: 100..105 {
+        v.push(i)
+    }
+    I v.len() != 10 { return 3 }
+
+    # spot-check
+    I v[0] != 0 { return 4 }
+    I v[4] != 4 { return 5 }
+    I v[5] != 100 { return 6 }
+    I v[9] != 104 { return 7 }
+    return 0
+}

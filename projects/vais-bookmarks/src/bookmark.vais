@@ -1,17 +1,17 @@
 # bookmark.vais - Bookmark data model and store
 
 # External C functions for memory and string operations
-X F malloc(size: i64) -> i64
-X F free(ptr: i64) -> i64
-X F time(ptr: i64) -> i64
-X F strcmp(a: str, b: str) -> i64
-X F strlen(s: str) -> i64
-X F strstr(haystack: str, needle: str) -> i64
-X F strcpy(dest: i64, src: str) -> i64
-X F sprintf(buf: i64, fmt: str) -> i64
+impl fn malloc(size: i64) -> i64
+impl fn free(ptr: i64) -> i64
+impl fn time(ptr: i64) -> i64
+impl fn strcmp(a: str, b: str) -> i64
+impl fn strlen(s: str) -> i64
+impl fn strstr(haystack: str, needle: str) -> i64
+impl fn strcpy(dest: i64, src: str) -> i64
+impl fn sprintf(buf: i64, fmt: str) -> i64
 
 # Bookmark structure
-S Bookmark {
+struct Bookmark {
     id: i64,
     title: str,
     url: str,
@@ -21,7 +21,7 @@ S Bookmark {
 }
 
 # Bookmark store (in-memory database)
-S BookmarkStore {
+struct BookmarkStore {
     items_ptr: i64,    # Pointer to array of Bookmark*
     count: i64,
     capacity: i64,
@@ -29,9 +29,9 @@ S BookmarkStore {
 }
 
 # Create a new bookmark
-F bookmark_new(id: i64, title: str, url: str, tags: str) -> Bookmark {
+fn bookmark_new(id: i64, title: str, url: str, tags: str) -> Bookmark {
     C timestamp := time(0)
-    R Bookmark {
+    return Bookmark {
         id: id,
         title: title,
         url: url,
@@ -42,10 +42,10 @@ F bookmark_new(id: i64, title: str, url: str, tags: str) -> Bookmark {
 }
 
 # Initialize a new bookmark store
-F store_new() -> BookmarkStore {
+fn store_new() -> BookmarkStore {
     C capacity := 100
     C items_ptr := malloc(capacity * 8)  # Array of pointers (8 bytes each)
-    R BookmarkStore {
+    return BookmarkStore {
         items_ptr: items_ptr,
         count: 0,
         capacity: capacity,
@@ -54,9 +54,9 @@ F store_new() -> BookmarkStore {
 }
 
 # Add a bookmark to the store
-F store_add(store: BookmarkStore, title: str, url: str, tags: str) -> i64 {
+fn store_add(store: BookmarkStore, title: str, url: str, tags: str) -> i64 {
     I store.count >= store.capacity {
-        R 0  # Store is full
+        return 0  # Store is full
     }
 
     C id := store.next_id
@@ -72,41 +72,41 @@ F store_add(store: BookmarkStore, title: str, url: str, tags: str) -> i64 {
     store.count := store.count + 1
     store.next_id := store.next_id + 1
 
-    R id
+    return id
 }
 
 # Get bookmark by ID
-F store_get(store: BookmarkStore, id: i64) -> i64 {
+fn store_get(store: BookmarkStore, id: i64) -> i64 {
     C i := 0
     L i < store.count {
         # In real impl: would retrieve actual bookmark from items_ptr[i]
         # For now, return pointer if ID matches
         I i + 1 == id {
             C ptr := store.items_ptr + (i * 8)
-            R ptr
+            return ptr
         }
         i := i + 1
     }
-    R 0  # Not found
+    return 0  # Not found
 }
 
 # Update bookmark
-F store_update(store: BookmarkStore, id: i64, title: str, url: str, tags: str) -> i64 {
+fn store_update(store: BookmarkStore, id: i64, title: str, url: str, tags: str) -> i64 {
     C i := 0
     L i < store.count {
         I i + 1 == id {
             # Update timestamp
             C timestamp := time(0)
             # In real impl: would update bookmark fields
-            R 1  # Success
+            return 1  # Success
         }
         i := i + 1
     }
-    R 0  # Not found
+    return 0  # Not found
 }
 
 # Delete bookmark
-F store_delete(store: BookmarkStore, id: i64) -> i64 {
+fn store_delete(store: BookmarkStore, id: i64) -> i64 {
     C i := 0
     L i < store.count {
         I i + 1 == id {
@@ -117,18 +117,18 @@ F store_delete(store: BookmarkStore, id: i64) -> i64 {
                 j := j + 1
             }
             store.count := store.count - 1
-            R 1  # Success
+            return 1  # Success
         }
         i := i + 1
     }
-    R 0  # Not found
+    return 0  # Not found
 }
 
 # Search bookmarks by query (title, url, or tags)
-F store_search(store: BookmarkStore, query: str) -> i64 {
+fn store_search(store: BookmarkStore, query: str) -> i64 {
     # Return count of matches (simplified)
     I strlen(query) == 0 {
-        R store.count
+        return store.count
     }
 
     C matches := 0
@@ -139,10 +139,10 @@ F store_search(store: BookmarkStore, query: str) -> i64 {
         i := i + 1
     }
 
-    R matches
+    return matches
 }
 
 # Get all bookmarks count
-F store_count(store: BookmarkStore) -> i64 {
-    R store.count
+fn store_count(store: BookmarkStore) -> i64 {
+    return store.count
 }

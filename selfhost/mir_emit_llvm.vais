@@ -6,7 +6,7 @@
 #   Emission is hierarchical: Module → Body → BasicBlock → Statement/Terminator.
 #   Mirrors crates/vais-mir/src/emit_llvm.rs using selfhost patterns from codegen.vais.
 
-U mir
+use mir
 
 # ============================================================================
 # MIR Emitter State
@@ -19,7 +19,7 @@ U mir
 #   reg_counter(8)                                       = unique register counter
 #   current_body(8)                                      = ptr to current MirBody
 #   string_consts_ptr(8) + string_consts_len(8) + string_consts_cap(8) = string constants
-S MirEmitter {
+struct MirEmitter {
     output_data: i64,
     output_len: i64,
     output_cap: i64,
@@ -34,7 +34,7 @@ S MirEmitter {
     string_consts_cap: i64
 }
 
-F mir_emitter_new(sp_data: i64, sp_offsets: i64, sp_count: i64) -> i64 {
+fn mir_emitter_new(sp_data: i64, sp_offsets: i64, sp_count: i64) -> i64 {
     cap := 1024 * 64
     em := malloc(96)
     store_i64(em, malloc(cap))       # output_data
@@ -51,14 +51,14 @@ F mir_emitter_new(sp_data: i64, sp_offsets: i64, sp_count: i64) -> i64 {
     store_i64(em + 72, malloc(8 * sc_cap))  # string_consts_ptr
     store_i64(em + 80, 0)                    # string_consts_len
     store_i64(em + 88, sc_cap)               # string_consts_cap
-    R em
+    return em
 }
 
 # ============================================================================
 # Output helpers
 # ============================================================================
 
-F me_emit_ptr(em: i64, ptr: i64, len: i64) -> i64 {
+fn me_emit_ptr(em: i64, ptr: i64, len: i64) -> i64 {
     out_data: mut i64 = load_i64(em)
     out_len := load_i64(em + 8)
     out_cap := load_i64(em + 16)
@@ -72,14 +72,14 @@ F me_emit_ptr(em: i64, ptr: i64, len: i64) -> i64 {
         store_i64(em + 16, new_cap)
         out_data = new_data
         0
-    } EL { 0 }
+    } else { 0 }
 
     memcpy(out_data + out_len, ptr, len)
     store_i64(em + 8, out_len + len)
     1
 }
 
-F me_emit_cstr(em: i64, s: str) -> i64 {
+fn me_emit_cstr(em: i64, s: str) -> i64 {
     len := strlen(s)
     out_data: mut i64 = load_i64(em)
     out_len := load_i64(em + 8)
@@ -94,26 +94,26 @@ F me_emit_cstr(em: i64, s: str) -> i64 {
         store_i64(em + 16, new_cap)
         out_data = new_data
         0
-    } EL { 0 }
+    } else { 0 }
 
     memcpy_str(out_data + out_len, s, len)
     store_i64(em + 8, out_len + len)
     1
 }
 
-F me_emit_i64(em: i64, value: i64) -> i64 {
+fn me_emit_i64(em: i64, value: i64) -> i64 {
     I value == 0 {
         me_emit_cstr(em, "0")
-    } EL I value < 0 {
+    } else I value < 0 {
         me_emit_cstr(em, "-")
         me_emit_i64(em, 0 - value)
-    } EL {
+    } else {
         me_emit_positive_i64(em, value)
     }
 }
 
-F me_emit_positive_i64(em: i64, value: i64) -> i64 {
-    I value == 0 { R 1 }
+fn me_emit_positive_i64(em: i64, value: i64) -> i64 {
+    I value == 0 { return 1 }
     me_emit_positive_i64(em, value / 10)
     digit := (value % 10) + 48
     tb := load_i64(em + 48)
@@ -121,20 +121,20 @@ F me_emit_positive_i64(em: i64, value: i64) -> i64 {
     me_emit_ptr(em, tb, 1)
 }
 
-F me_emit_newline(em: i64) -> i64 {
+fn me_emit_newline(em: i64) -> i64 {
     tb := load_i64(em + 48)
     store_byte(tb, 10)
     me_emit_ptr(em, tb, 1)
 }
 
-F me_emit_byte(em: i64, byte: i64) -> i64 {
+fn me_emit_byte(em: i64, byte: i64) -> i64 {
     tb := load_i64(em + 48)
     store_byte(tb, byte)
     me_emit_ptr(em, tb, 1)
 }
 
 # Emit string from string pool by index
-F me_emit_string_idx(em: i64, idx: i64) -> i64 {
+fn me_emit_string_idx(em: i64, idx: i64) -> i64 {
     sp_offsets := load_i64(em + 32)
     sp_data := load_i64(em + 24)
     entry_ptr := sp_offsets + idx * 16
@@ -144,7 +144,7 @@ F me_emit_string_idx(em: i64, idx: i64) -> i64 {
 }
 
 # Get string pool pointer
-F me_get_string_ptr(em: i64, idx: i64) -> i64 {
+fn me_get_string_ptr(em: i64, idx: i64) -> i64 {
     sp_offsets := load_i64(em + 32)
     sp_data := load_i64(em + 24)
     entry_ptr := sp_offsets + idx * 16
@@ -152,27 +152,27 @@ F me_get_string_ptr(em: i64, idx: i64) -> i64 {
     sp_data + offset
 }
 
-F me_get_string_len(em: i64, idx: i64) -> i64 {
+fn me_get_string_len(em: i64, idx: i64) -> i64 {
     sp_offsets := load_i64(em + 32)
     entry_ptr := sp_offsets + idx * 16
     load_i64(entry_ptr + 8)
 }
 
 # Fresh register %N
-F me_fresh_reg(em: i64) -> i64 {
+fn me_fresh_reg(em: i64) -> i64 {
     n := load_i64(em + 56)
     store_i64(em + 56, n + 1)
     n
 }
 
 # Emit register name %N
-F me_emit_reg(em: i64, n: i64) -> i64 {
+fn me_emit_reg(em: i64, n: i64) -> i64 {
     me_emit_cstr(em, "%")
     me_emit_i64(em, n)
 }
 
 # Record string constant for later global emission
-F me_add_string_const(em: i64, str_idx: i64) -> i64 {
+fn me_add_string_const(em: i64, str_idx: i64) -> i64 {
     sc_ptr := load_i64(em + 72)
     sc_len := load_i64(em + 80)
     sc_cap := load_i64(em + 88)
@@ -180,8 +180,8 @@ F me_add_string_const(em: i64, str_idx: i64) -> i64 {
     # Check if already recorded
     i := mut 0
     L {
-        I i >= sc_len { B } EL { 0 }
-        I load_i64(sc_ptr + i * 8) == str_idx { R i }
+        I i >= sc_len { B } else { 0 }
+        I load_i64(sc_ptr + i * 8) == str_idx { return i }
         i = i + 1
     }
 
@@ -195,7 +195,7 @@ F me_add_string_const(em: i64, str_idx: i64) -> i64 {
         store_i64(em + 88, new_cap)
         sc_ptr = new_ptr
         0
-    } EL { 0 }
+    } else { 0 }
 
     store_i64(sc_ptr + sc_len * 8, str_idx)
     store_i64(em + 80, sc_len + 1)
@@ -206,123 +206,123 @@ F me_add_string_const(em: i64, str_idx: i64) -> i64 {
 # MIR Type → LLVM IR type string
 # ============================================================================
 
-F me_emit_type(em: i64, ty_ptr: i64) -> i64 {
+fn me_emit_type(em: i64, ty_ptr: i64) -> i64 {
     kind := load_i64(ty_ptr)
 
     I kind == MIR_TY_I8() { me_emit_cstr(em, "i8") }
-    EL I kind == MIR_TY_I16() { me_emit_cstr(em, "i16") }
-    EL I kind == MIR_TY_I32() { me_emit_cstr(em, "i32") }
-    EL I kind == MIR_TY_I64() { me_emit_cstr(em, "i64") }
-    EL I kind == MIR_TY_I128() { me_emit_cstr(em, "i128") }
-    EL I kind == MIR_TY_U8() { me_emit_cstr(em, "i8") }
-    EL I kind == MIR_TY_U16() { me_emit_cstr(em, "i16") }
-    EL I kind == MIR_TY_U32() { me_emit_cstr(em, "i32") }
-    EL I kind == MIR_TY_U64() { me_emit_cstr(em, "i64") }
-    EL I kind == MIR_TY_U128() { me_emit_cstr(em, "i128") }
-    EL I kind == MIR_TY_F32() { me_emit_cstr(em, "float") }
-    EL I kind == MIR_TY_F64() { me_emit_cstr(em, "double") }
-    EL I kind == MIR_TY_BOOL() { me_emit_cstr(em, "i1") }
-    EL I kind == MIR_TY_STR() { me_emit_cstr(em, "i8*") }
-    EL I kind == MIR_TY_UNIT() { me_emit_cstr(em, "void") }
-    EL I kind == MIR_TY_NEVER() { me_emit_cstr(em, "void") }
-    EL I kind == MIR_TY_POINTER() {
+    else I kind == MIR_TY_I16() { me_emit_cstr(em, "i16") }
+    else I kind == MIR_TY_I32() { me_emit_cstr(em, "i32") }
+    else I kind == MIR_TY_I64() { me_emit_cstr(em, "i64") }
+    else I kind == MIR_TY_I128() { me_emit_cstr(em, "i128") }
+    else I kind == MIR_TY_U8() { me_emit_cstr(em, "i8") }
+    else I kind == MIR_TY_U16() { me_emit_cstr(em, "i16") }
+    else I kind == MIR_TY_U32() { me_emit_cstr(em, "i32") }
+    else I kind == MIR_TY_U64() { me_emit_cstr(em, "i64") }
+    else I kind == MIR_TY_U128() { me_emit_cstr(em, "i128") }
+    else I kind == MIR_TY_F32() { me_emit_cstr(em, "float") }
+    else I kind == MIR_TY_F64() { me_emit_cstr(em, "double") }
+    else I kind == MIR_TY_BOOL() { me_emit_cstr(em, "i1") }
+    else I kind == MIR_TY_STR() { me_emit_cstr(em, "i8*") }
+    else I kind == MIR_TY_UNIT() { me_emit_cstr(em, "void") }
+    else I kind == MIR_TY_NEVER() { me_emit_cstr(em, "void") }
+    else I kind == MIR_TY_POINTER() {
         inner := load_i64(ty_ptr + 8)
         I inner != 0 {
             me_emit_type(em, inner)
             me_emit_cstr(em, "*")
-        } EL {
+        } else {
             me_emit_cstr(em, "i8*")
         }
     }
-    EL I kind == MIR_TY_REF() {
+    else I kind == MIR_TY_REF() {
         inner := load_i64(ty_ptr + 8)
         I inner != 0 {
             me_emit_type(em, inner)
             me_emit_cstr(em, "*")
-        } EL {
+        } else {
             me_emit_cstr(em, "i8*")
         }
     }
-    EL I kind == MIR_TY_ARRAY() {
+    else I kind == MIR_TY_ARRAY() {
         inner := load_i64(ty_ptr + 8)
         count := load_i64(ty_ptr + 16)
         me_emit_cstr(em, "[")
         me_emit_i64(em, count)
         me_emit_cstr(em, " x ")
-        I inner != 0 { me_emit_type(em, inner) } EL { me_emit_cstr(em, "i64") }
+        I inner != 0 { me_emit_type(em, inner) } else { me_emit_cstr(em, "i64") }
         me_emit_cstr(em, "]")
     }
-    EL I kind == MIR_TY_TUPLE() {
+    else I kind == MIR_TY_TUPLE() {
         inner_arr := load_i64(ty_ptr + 8)
         count := load_i64(ty_ptr + 16)
         me_emit_cstr(em, "{ ")
         i := mut 0
         L {
-            I i >= count { B } EL { 0 }
-            I i > 0 { me_emit_cstr(em, ", ") } EL { 0 }
+            I i >= count { B } else { 0 }
+            I i > 0 { me_emit_cstr(em, ", ") } else { 0 }
             elem_ty := load_i64(inner_arr + i * 8)
             me_emit_type(em, elem_ty)
             i = i + 1
         }
         me_emit_cstr(em, " }")
     }
-    EL I kind == MIR_TY_STRUCT() {
+    else I kind == MIR_TY_STRUCT() {
         name_idx := load_i64(ty_ptr + 24)
         me_emit_cstr(em, "%")
         me_emit_string_idx(em, name_idx)
     }
-    EL I kind == MIR_TY_ENUM() {
+    else I kind == MIR_TY_ENUM() {
         name_idx := load_i64(ty_ptr + 24)
         me_emit_cstr(em, "%")
         me_emit_string_idx(em, name_idx)
     }
-    EL I kind == MIR_TY_FUNCTION() {
+    else I kind == MIR_TY_FUNCTION() {
         # Return type stored in name_idx field, params in inner_type_ptr
         ret_ty := load_i64(ty_ptr + 24)
         params_arr := load_i64(ty_ptr + 8)
         params_count := load_i64(ty_ptr + 16)
-        I ret_ty != 0 { me_emit_type(em, ret_ty) } EL { me_emit_cstr(em, "void") }
+        I ret_ty != 0 { me_emit_type(em, ret_ty) } else { me_emit_cstr(em, "void") }
         me_emit_cstr(em, " (")
         i := mut 0
         L {
-            I i >= params_count { B } EL { 0 }
-            I i > 0 { me_emit_cstr(em, ", ") } EL { 0 }
+            I i >= params_count { B } else { 0 }
+            I i > 0 { me_emit_cstr(em, ", ") } else { 0 }
             p_ty := load_i64(params_arr + i * 8)
             me_emit_type(em, p_ty)
             i = i + 1
         }
         me_emit_cstr(em, ")")
     }
-    EL {
+    else {
         # Unknown type → default i64
         me_emit_cstr(em, "i64")
     }
 }
 
 # Check if type is floating point (for binop selection)
-F me_type_is_float(ty_ptr: i64) -> i64 {
+fn me_type_is_float(ty_ptr: i64) -> i64 {
     kind := load_i64(ty_ptr)
     I kind == MIR_TY_F32() { 1 }
-    EL I kind == MIR_TY_F64() { 1 }
-    EL { 0 }
+    else I kind == MIR_TY_F64() { 1 }
+    else { 0 }
 }
 
 # Check if type is void/unit
-F me_type_is_void(ty_ptr: i64) -> i64 {
+fn me_type_is_void(ty_ptr: i64) -> i64 {
     kind := load_i64(ty_ptr)
     I kind == MIR_TY_UNIT() { 1 }
-    EL I kind == MIR_TY_NEVER() { 1 }
-    EL { 0 }
+    else I kind == MIR_TY_NEVER() { 1 }
+    else { 0 }
 }
 
 # ============================================================================
 # Block label helpers
 # ============================================================================
 
-F me_emit_bb_label(em: i64, bb_idx: i64) -> i64 {
+fn me_emit_bb_label(em: i64, bb_idx: i64) -> i64 {
     I bb_idx == 0 {
         me_emit_cstr(em, "entry")
-    } EL {
+    } else {
         me_emit_cstr(em, "bb")
         me_emit_i64(em, bb_idx)
     }
@@ -335,7 +335,7 @@ F me_emit_bb_label(em: i64, bb_idx: i64) -> i64 {
 # Emit operand value inline (for use in instructions)
 # For Copy/Move: emits %_N (local reference)
 # For Constant: emits literal value
-F me_emit_operand(em: i64, op_ptr: i64) -> i64 {
+fn me_emit_operand(em: i64, op_ptr: i64) -> i64 {
     kind := load_i64(op_ptr)
 
     I kind == OPERAND_COPY() {
@@ -343,28 +343,28 @@ F me_emit_operand(em: i64, op_ptr: i64) -> i64 {
         me_emit_cstr(em, "%_")
         me_emit_i64(em, local_idx)
     }
-    EL I kind == OPERAND_MOVE() {
+    else I kind == OPERAND_MOVE() {
         local_idx := load_i64(op_ptr + 8)
         me_emit_cstr(em, "%_")
         me_emit_i64(em, local_idx)
     }
-    EL I kind == OPERAND_CONSTANT() {
+    else I kind == OPERAND_CONSTANT() {
         const_kind := load_i64(op_ptr + 16)
         I const_kind == CONST_INT() {
             value := load_i64(op_ptr + 24)
             me_emit_i64(em, value)
         }
-        EL I const_kind == CONST_BOOL() {
+        else I const_kind == CONST_BOOL() {
             value := load_i64(op_ptr + 24)
             me_emit_i64(em, value)
         }
-        EL I const_kind == CONST_FLOAT() {
+        else I const_kind == CONST_FLOAT() {
             # Emit float as hex double for LLVM
             bits := load_i64(op_ptr + 32)
             me_emit_cstr(em, "0x")
             me_emit_hex_i64(em, bits)
         }
-        EL I const_kind == CONST_STR() {
+        else I const_kind == CONST_STR() {
             str_idx := load_i64(op_ptr + 24)
             # Record for global emission, emit as getelementptr reference
             sc_id := me_add_string_const(em, str_idx)
@@ -377,24 +377,24 @@ F me_emit_operand(em: i64, op_ptr: i64) -> i64 {
             me_emit_i64(em, sc_id)
             me_emit_cstr(em, ", i64 0, i64 0)")
         }
-        EL I const_kind == CONST_UNIT() {
+        else I const_kind == CONST_UNIT() {
             me_emit_cstr(em, "0")
         }
-        EL { me_emit_cstr(em, "0") }
+        else { me_emit_cstr(em, "0") }
     }
-    EL { me_emit_cstr(em, "0") }
+    else { me_emit_cstr(em, "0") }
 }
 
 # Emit hex representation of i64 (for float constants)
-F me_emit_hex_i64(em: i64, value: i64) -> i64 {
+fn me_emit_hex_i64(em: i64, value: i64) -> i64 {
     # Emit 16 hex digits (big-endian)
     i := mut 60
     L {
-        I i < 0 { R 1 }
+        I i < 0 { return 1 }
         nibble := (value / me_pow2(i)) % 16
         I nibble < 10 {
             me_emit_i64(em, nibble)
-        } EL {
+        } else {
             tb := load_i64(em + 48)
             store_byte(tb, 55 + nibble)  # 'A' = 65, 65 - 10 = 55
             me_emit_ptr(em, tb, 1)
@@ -405,12 +405,12 @@ F me_emit_hex_i64(em: i64, value: i64) -> i64 {
 }
 
 # Power of 2 helper (bit shift)
-F me_pow2(n: i64) -> i64 {
-    I n <= 0 { R 1 }
+fn me_pow2(n: i64) -> i64 {
+    I n <= 0 { return 1 }
     result := mut 1
     i := mut 0
     L {
-        I i >= n { R result }
+        I i >= n { return result }
         result = result * 2
         i = i + 1
     }
@@ -418,36 +418,36 @@ F me_pow2(n: i64) -> i64 {
 }
 
 # Get the LLVM type of an operand
-F me_operand_type(em: i64, op_ptr: i64) -> i64 {
+fn me_operand_type(em: i64, op_ptr: i64) -> i64 {
     kind := load_i64(op_ptr)
 
     I kind == OPERAND_COPY() {
         local_idx := load_i64(op_ptr + 8)
         me_local_type(em, local_idx)
     }
-    EL I kind == OPERAND_MOVE() {
+    else I kind == OPERAND_MOVE() {
         local_idx := load_i64(op_ptr + 8)
         me_local_type(em, local_idx)
     }
-    EL I kind == OPERAND_CONSTANT() {
+    else I kind == OPERAND_CONSTANT() {
         const_kind := load_i64(op_ptr + 16)
         I const_kind == CONST_INT() { mir_type_prim(MIR_TY_I64()) }
-        EL I const_kind == CONST_FLOAT() { mir_type_prim(MIR_TY_F64()) }
-        EL I const_kind == CONST_BOOL() { mir_type_prim(MIR_TY_BOOL()) }
-        EL I const_kind == CONST_STR() { mir_type_prim(MIR_TY_STR()) }
-        EL { mir_type_prim(MIR_TY_UNIT()) }
+        else I const_kind == CONST_FLOAT() { mir_type_prim(MIR_TY_F64()) }
+        else I const_kind == CONST_BOOL() { mir_type_prim(MIR_TY_BOOL()) }
+        else I const_kind == CONST_STR() { mir_type_prim(MIR_TY_STR()) }
+        else { mir_type_prim(MIR_TY_UNIT()) }
     }
-    EL { mir_type_prim(MIR_TY_I64()) }
+    else { mir_type_prim(MIR_TY_I64()) }
 }
 
 # Get local variable's type from current body
-F me_local_type(em: i64, local_idx: i64) -> i64 {
+fn me_local_type(em: i64, local_idx: i64) -> i64 {
     body := load_i64(em + 64)
-    I body == 0 { R mir_type_prim(MIR_TY_I64()) }
+    I body == 0 { return mir_type_prim(MIR_TY_I64()) }
 
     locals_ptr := load_i64(body + 32)
     locals_len := load_i64(body + 40)
-    I local_idx >= locals_len { R mir_type_prim(MIR_TY_I64()) }
+    I local_idx >= locals_len { return mir_type_prim(MIR_TY_I64()) }
 
     local_decl := load_i64(locals_ptr + local_idx * 8)
     # LocalDecl: name_idx(8), type_ptr(8), is_mutable(8)
@@ -458,61 +458,61 @@ F me_local_type(em: i64, local_idx: i64) -> i64 {
 # Binary/Unary operator → LLVM instruction
 # ============================================================================
 
-F me_emit_binop(em: i64, op: i64, dest_ty: i64) -> i64 {
+fn me_emit_binop(em: i64, op: i64, dest_ty: i64) -> i64 {
     is_float := me_type_is_float(dest_ty)
 
     I op == BINOP_ADD() {
-        I is_float == 1 { me_emit_cstr(em, "fadd") } EL { me_emit_cstr(em, "add") }
+        I is_float == 1 { me_emit_cstr(em, "fadd") } else { me_emit_cstr(em, "add") }
     }
-    EL I op == BINOP_SUB() {
-        I is_float == 1 { me_emit_cstr(em, "fsub") } EL { me_emit_cstr(em, "sub") }
+    else I op == BINOP_SUB() {
+        I is_float == 1 { me_emit_cstr(em, "fsub") } else { me_emit_cstr(em, "sub") }
     }
-    EL I op == BINOP_MUL() {
-        I is_float == 1 { me_emit_cstr(em, "fmul") } EL { me_emit_cstr(em, "mul") }
+    else I op == BINOP_MUL() {
+        I is_float == 1 { me_emit_cstr(em, "fmul") } else { me_emit_cstr(em, "mul") }
     }
-    EL I op == BINOP_DIV() {
-        I is_float == 1 { me_emit_cstr(em, "fdiv") } EL { me_emit_cstr(em, "sdiv") }
+    else I op == BINOP_DIV() {
+        I is_float == 1 { me_emit_cstr(em, "fdiv") } else { me_emit_cstr(em, "sdiv") }
     }
-    EL I op == BINOP_REM() {
-        I is_float == 1 { me_emit_cstr(em, "frem") } EL { me_emit_cstr(em, "srem") }
+    else I op == BINOP_REM() {
+        I is_float == 1 { me_emit_cstr(em, "frem") } else { me_emit_cstr(em, "srem") }
     }
-    EL I op == BINOP_BIT_AND() { me_emit_cstr(em, "and") }
-    EL I op == BINOP_BIT_OR() { me_emit_cstr(em, "or") }
-    EL I op == BINOP_BIT_XOR() { me_emit_cstr(em, "xor") }
-    EL I op == BINOP_SHL() { me_emit_cstr(em, "shl") }
-    EL I op == BINOP_SHR() { me_emit_cstr(em, "ashr") }
-    EL I op == BINOP_EQ() {
-        I is_float == 1 { me_emit_cstr(em, "fcmp oeq") } EL { me_emit_cstr(em, "icmp eq") }
+    else I op == BINOP_BIT_AND() { me_emit_cstr(em, "and") }
+    else I op == BINOP_BIT_OR() { me_emit_cstr(em, "or") }
+    else I op == BINOP_BIT_XOR() { me_emit_cstr(em, "xor") }
+    else I op == BINOP_SHL() { me_emit_cstr(em, "shl") }
+    else I op == BINOP_SHR() { me_emit_cstr(em, "ashr") }
+    else I op == BINOP_EQ() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp oeq") } else { me_emit_cstr(em, "icmp eq") }
     }
-    EL I op == BINOP_NE() {
-        I is_float == 1 { me_emit_cstr(em, "fcmp one") } EL { me_emit_cstr(em, "icmp ne") }
+    else I op == BINOP_NE() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp one") } else { me_emit_cstr(em, "icmp ne") }
     }
-    EL I op == BINOP_LT() {
-        I is_float == 1 { me_emit_cstr(em, "fcmp olt") } EL { me_emit_cstr(em, "icmp slt") }
+    else I op == BINOP_LT() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp olt") } else { me_emit_cstr(em, "icmp slt") }
     }
-    EL I op == BINOP_LE() {
-        I is_float == 1 { me_emit_cstr(em, "fcmp ole") } EL { me_emit_cstr(em, "icmp sle") }
+    else I op == BINOP_LE() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp ole") } else { me_emit_cstr(em, "icmp sle") }
     }
-    EL I op == BINOP_GT() {
-        I is_float == 1 { me_emit_cstr(em, "fcmp ogt") } EL { me_emit_cstr(em, "icmp sgt") }
+    else I op == BINOP_GT() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp ogt") } else { me_emit_cstr(em, "icmp sgt") }
     }
-    EL I op == BINOP_GE() {
-        I is_float == 1 { me_emit_cstr(em, "fcmp oge") } EL { me_emit_cstr(em, "icmp sge") }
+    else I op == BINOP_GE() {
+        I is_float == 1 { me_emit_cstr(em, "fcmp oge") } else { me_emit_cstr(em, "icmp sge") }
     }
-    EL { me_emit_cstr(em, "add") }
+    else { me_emit_cstr(em, "add") }
 }
 
 # Check if binop is a comparison (produces i1)
-F me_binop_is_cmp(op: i64) -> i64 {
+fn me_binop_is_cmp(op: i64) -> i64 {
     I op >= BINOP_EQ() { 1 }
-    EL { 0 }
+    else { 0 }
 }
 
 # ============================================================================
 # Statement emission
 # ============================================================================
 
-F me_emit_statement(em: i64, stmt_ptr: i64) -> i64 {
+fn me_emit_statement(em: i64, stmt_ptr: i64) -> i64 {
     kind := load_i64(stmt_ptr)
 
     I kind == STMT_MIR_ASSIGN() {
@@ -520,22 +520,22 @@ F me_emit_statement(em: i64, stmt_ptr: i64) -> i64 {
         rvalue_ptr := load_i64(stmt_ptr + 16)
         me_emit_assign(em, place_ptr, rvalue_ptr)
     }
-    EL I kind == STMT_MIR_DROP() {
+    else I kind == STMT_MIR_DROP() {
         me_emit_cstr(em, "  ; drop")
         me_emit_newline(em)
     }
-    EL I kind == STMT_MIR_NOP() {
+    else I kind == STMT_MIR_NOP() {
         me_emit_cstr(em, "  ; nop")
         me_emit_newline(em)
     }
-    EL { 0 }
+    else { 0 }
 }
 
 # ============================================================================
 # Assignment emission
 # ============================================================================
 
-F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
+fn me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
     local_idx := load_i64(place_ptr)
     proj_ptr := load_i64(place_ptr + 8)
     proj_len := load_i64(place_ptr + 16)
@@ -553,7 +553,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
         me_emit_operand(em, operand)
         me_emit_newline(em)
     }
-    EL I rv_kind == RVALUE_BINOP() {
+    else I rv_kind == RVALUE_BINOP() {
         op := load_i64(rvalue_ptr + 16)
         lhs := load_i64(rvalue_ptr + 24)
         rhs := load_i64(rvalue_ptr + 32)
@@ -582,7 +582,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
             me_emit_cstr(em, " to ")
             me_emit_type(em, dest_ty)
             me_emit_newline(em)
-        } EL {
+        } else {
             me_emit_cstr(em, "  %_")
             me_emit_i64(em, local_idx)
             me_emit_cstr(em, " = ")
@@ -596,7 +596,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
             me_emit_newline(em)
         }
     }
-    EL I rv_kind == RVALUE_UNOP() {
+    else I rv_kind == RVALUE_UNOP() {
         op := load_i64(rvalue_ptr + 16)
         operand := load_i64(rvalue_ptr + 8)
 
@@ -609,7 +609,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
             me_emit_cstr(em, " 0, ")
             me_emit_operand(em, operand)
             me_emit_newline(em)
-        } EL I op == UNOP_NOT() {
+        } else I op == UNOP_NOT() {
             # xor <type> <val>, -1
             me_emit_cstr(em, "  %_")
             me_emit_i64(em, local_idx)
@@ -619,9 +619,9 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
             me_emit_operand(em, operand)
             me_emit_cstr(em, ", -1")
             me_emit_newline(em)
-        } EL { 0 }
+        } else { 0 }
     }
-    EL I rv_kind == RVALUE_CAST() {
+    else I rv_kind == RVALUE_CAST() {
         operand := load_i64(rvalue_ptr + 8)
         target_ty := load_i64(rvalue_ptr + 40)
         # Simple identity or bitcast
@@ -634,7 +634,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
         me_emit_cstr(em, "  ; cast")
         me_emit_newline(em)
     }
-    EL I rv_kind == RVALUE_REF() {
+    else I rv_kind == RVALUE_REF() {
         ref_place := load_i64(rvalue_ptr + 40)
         ref_local := load_i64(ref_place)
         me_emit_cstr(em, "  %_")
@@ -647,7 +647,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
         me_emit_cstr(em, ".addr, i32 0")
         me_emit_newline(em)
     }
-    EL I rv_kind == RVALUE_AGGREGATE() {
+    else I rv_kind == RVALUE_AGGREGATE() {
         agg_kind := load_i64(rvalue_ptr + 48)
         agg_ops := load_i64(rvalue_ptr + 56)
         agg_len := load_i64(rvalue_ptr + 64)
@@ -664,7 +664,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
         me_emit_cstr(em, " 0, 0")
         me_emit_newline(em)
     }
-    EL I rv_kind == RVALUE_DISCRIMINANT() {
+    else I rv_kind == RVALUE_DISCRIMINANT() {
         disc_place := load_i64(rvalue_ptr + 40)
         disc_local := load_i64(disc_place)
         me_emit_cstr(em, "  %_")
@@ -674,7 +674,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
         me_emit_cstr(em, "  ; discriminant")
         me_emit_newline(em)
     }
-    EL I rv_kind == RVALUE_LEN() {
+    else I rv_kind == RVALUE_LEN() {
         len_place := load_i64(rvalue_ptr + 40)
         len_local := load_i64(len_place)
         me_emit_cstr(em, "  %_")
@@ -684,7 +684,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
         me_emit_cstr(em, "  ; len")
         me_emit_newline(em)
     }
-    EL {
+    else {
         me_emit_cstr(em, "  ; unknown rvalue kind=")
         me_emit_i64(em, rv_kind)
         me_emit_newline(em)
@@ -695,7 +695,7 @@ F me_emit_assign(em: i64, place_ptr: i64, rvalue_ptr: i64) -> i64 {
 # Terminator emission
 # ============================================================================
 
-F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
+fn me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
     kind := load_i64(term_ptr)
 
     I kind == TERM_GOTO() {
@@ -704,7 +704,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
         me_emit_bb_label(em, target)
         me_emit_newline(em)
     }
-    EL I kind == TERM_SWITCH_INT() {
+    else I kind == TERM_SWITCH_INT() {
         disc_ptr := load_i64(term_ptr + 16)
         targets_ptr := load_i64(term_ptr + 24)
         targets_len := load_i64(term_ptr + 32)
@@ -732,7 +732,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
             me_emit_cstr(em, ", label %")
             me_emit_bb_label(em, otherwise)
             me_emit_newline(em)
-        } EL {
+        } else {
             # Multi-target → switch instruction
             me_emit_cstr(em, "  switch i64 ")
             me_emit_operand(em, disc_ptr)
@@ -743,7 +743,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 
             i := mut 0
             L {
-                I i >= targets_len { B } EL { 0 }
+                I i >= targets_len { B } else { 0 }
                 val := load_i64(targets_ptr + i * 16)
                 target_bb := load_i64(targets_ptr + i * 16 + 8)
                 me_emit_cstr(em, "    i64 ")
@@ -758,20 +758,20 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
             me_emit_newline(em)
         }
     }
-    EL I kind == TERM_RETURN() {
+    else I kind == TERM_RETURN() {
         body := load_i64(em + 64)
         ret_ty := load_i64(body + 24)
         I me_type_is_void(ret_ty) == 1 {
             me_emit_cstr(em, "  ret void")
             me_emit_newline(em)
-        } EL {
+        } else {
             me_emit_cstr(em, "  ret ")
             me_emit_type(em, ret_ty)
             me_emit_cstr(em, " %_0")
             me_emit_newline(em)
         }
     }
-    EL I kind == TERM_CALL() {
+    else I kind == TERM_CALL() {
         target_bb := load_i64(term_ptr + 8)
         func_idx := load_i64(term_ptr + 48)
         args_ptr := load_i64(term_ptr + 56)
@@ -783,7 +783,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 
         I me_type_is_void(dest_ty) == 1 {
             me_emit_cstr(em, "  call void @")
-        } EL {
+        } else {
             me_emit_cstr(em, "  %_")
             me_emit_i64(em, dest_local)
             me_emit_cstr(em, " = call ")
@@ -795,8 +795,8 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 
         i := mut 0
         L {
-            I i >= args_len { B } EL { 0 }
-            I i > 0 { me_emit_cstr(em, ", ") } EL { 0 }
+            I i >= args_len { B } else { 0 }
+            I i > 0 { me_emit_cstr(em, ", ") } else { 0 }
             arg_op := load_i64(args_ptr + i * 8)
             arg_ty := me_operand_type(em, arg_op)
             me_emit_type(em, arg_ty)
@@ -811,7 +811,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
         me_emit_bb_label(em, target_bb)
         me_emit_newline(em)
     }
-    EL I kind == TERM_TAIL_CALL() {
+    else I kind == TERM_TAIL_CALL() {
         func_idx := load_i64(term_ptr + 48)
         args_ptr := load_i64(term_ptr + 56)
         args_len := load_i64(term_ptr + 64)
@@ -821,7 +821,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 
         I me_type_is_void(ret_ty) == 1 {
             me_emit_cstr(em, "  musttail call void @")
-        } EL {
+        } else {
             me_emit_cstr(em, "  %_0 = musttail call ")
             me_emit_type(em, ret_ty)
             me_emit_cstr(em, " @")
@@ -831,8 +831,8 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 
         i := mut 0
         L {
-            I i >= args_len { B } EL { 0 }
-            I i > 0 { me_emit_cstr(em, ", ") } EL { 0 }
+            I i >= args_len { B } else { 0 }
+            I i > 0 { me_emit_cstr(em, ", ") } else { 0 }
             arg_op := load_i64(args_ptr + i * 8)
             arg_ty := me_operand_type(em, arg_op)
             me_emit_type(em, arg_ty)
@@ -845,18 +845,18 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 
         I me_type_is_void(ret_ty) == 1 {
             me_emit_cstr(em, "  ret void")
-        } EL {
+        } else {
             me_emit_cstr(em, "  ret ")
             me_emit_type(em, ret_ty)
             me_emit_cstr(em, " %_0")
         }
         me_emit_newline(em)
     }
-    EL I kind == TERM_UNREACHABLE() {
+    else I kind == TERM_UNREACHABLE() {
         me_emit_cstr(em, "  unreachable")
         me_emit_newline(em)
     }
-    EL I kind == TERM_ASSERT() {
+    else I kind == TERM_ASSERT() {
         # Assert: cond is first arg operand in call_args
         # Reusing call fields: call_func_idx = expected, call_args_ptr = cond operand
         # Actually, assert has: disc_ptr = cond, targets(0).value = expected,
@@ -881,7 +881,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
         me_emit_cstr(em, ", label %assert_fail")
         me_emit_newline(em)
     }
-    EL {
+    else {
         me_emit_cstr(em, "  ; unknown terminator kind=")
         me_emit_i64(em, kind)
         me_emit_newline(em)
@@ -892,7 +892,7 @@ F me_emit_terminator(em: i64, term_ptr: i64) -> i64 {
 # Function body emission
 # ============================================================================
 
-F me_emit_body(em: i64, body_ptr: i64) -> i64 {
+fn me_emit_body(em: i64, body_ptr: i64) -> i64 {
     # Set current body
     store_i64(em + 64, body_ptr)
     # Reset register counter
@@ -917,8 +917,8 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
     # Parameters
     i := mut 0
     L {
-        I i >= params_len { B } EL { 0 }
-        I i > 0 { me_emit_cstr(em, ", ") } EL { 0 }
+        I i >= params_len { B } else { 0 }
+        I i > 0 { me_emit_cstr(em, ", ") } else { 0 }
         param_ty := load_i64(params_ptr + i * 8)
         me_emit_type(em, param_ty)
         me_emit_cstr(em, " %_")
@@ -936,12 +936,12 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
         me_emit_type(em, ret_ty)
         me_emit_newline(em)
         0
-    } EL { 0 }
+    } else { 0 }
 
     # Allocate temporaries (locals after params)
     i = params_len + 1
     L {
-        I i >= locals_len { B } EL { 0 }
+        I i >= locals_len { B } else { 0 }
         local_decl := load_i64(locals_ptr + i * 8)
         local_ty := load_i64(local_decl + 8)
         me_emit_cstr(em, "  %_")
@@ -955,11 +955,11 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
     # Emit basic blocks
     bi := mut 0
     L {
-        I bi >= blocks_len { B } EL { 0 }
+        I bi >= blocks_len { B } else { 0 }
 
         I bi == 0 {
             me_emit_cstr(em, "entry:")
-        } EL {
+        } else {
             me_emit_cstr(em, "bb")
             me_emit_i64(em, bi)
             me_emit_cstr(em, ":")
@@ -974,7 +974,7 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
         # Emit statements
         si := mut 0
         L {
-            I si >= stmts_len { B } EL { 0 }
+            I si >= stmts_len { B } else { 0 }
             stmt_ptr := load_i64(stmts_ptr + si * 8)
             me_emit_statement(em, stmt_ptr)
             si = si + 1
@@ -984,7 +984,7 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
         I term_ptr != 0 {
             me_emit_terminator(em, term_ptr)
             0
-        } EL {
+        } else {
             me_emit_cstr(em, "  unreachable  ; missing terminator")
             me_emit_newline(em)
         }
@@ -1001,7 +1001,7 @@ F me_emit_body(em: i64, body_ptr: i64) -> i64 {
 # Module emission — top-level entry point
 # ============================================================================
 
-F me_emit_module(em: i64, mod_ptr: i64) -> i64 {
+fn me_emit_module(em: i64, mod_ptr: i64) -> i64 {
     name_idx := load_i64(mod_ptr)
     bodies_ptr := load_i64(mod_ptr + 8)
     bodies_len := load_i64(mod_ptr + 16)
@@ -1034,7 +1034,7 @@ F me_emit_module(em: i64, mod_ptr: i64) -> i64 {
     # Function bodies
     i := mut 0
     L {
-        I i >= bodies_len { B } EL { 0 }
+        I i >= bodies_len { B } else { 0 }
         body_ptr := load_i64(bodies_ptr + i * 8)
         me_emit_body(em, body_ptr)
         i = i + 1
@@ -1053,18 +1053,18 @@ F me_emit_module(em: i64, mod_ptr: i64) -> i64 {
 # String constant globals
 # ============================================================================
 
-F me_emit_string_constants(em: i64) -> i64 {
+fn me_emit_string_constants(em: i64) -> i64 {
     sc_ptr := load_i64(em + 72)
     sc_len := load_i64(em + 80)
 
-    I sc_len == 0 { R 1 }
+    I sc_len == 0 { return 1 }
 
     me_emit_cstr(em, "; String constants")
     me_emit_newline(em)
 
     i := mut 0
     L {
-        I i >= sc_len { R 1 }
+        I i >= sc_len { return 1 }
 
         str_idx := load_i64(sc_ptr + i * 8)
         sptr := me_get_string_ptr(em, str_idx)
@@ -1085,32 +1085,32 @@ F me_emit_string_constants(em: i64) -> i64 {
     me_emit_newline(em)
 }
 
-F me_emit_escaped_bytes(em: i64, ptr: i64, len: i64) -> i64 {
+fn me_emit_escaped_bytes(em: i64, ptr: i64, len: i64) -> i64 {
     i := mut 0
     L {
-        I i >= len { R 1 }
+        I i >= len { return 1 }
         byte := load_byte(ptr + i)
         I byte == 10 {
             # newline → \0A
             me_emit_cstr(em, "\\0A")
-        } EL I byte == 13 {
+        } else I byte == 13 {
             me_emit_cstr(em, "\\0D")
-        } EL I byte == 9 {
+        } else I byte == 9 {
             me_emit_cstr(em, "\\09")
-        } EL I byte == 34 {
+        } else I byte == 34 {
             # double quote → \22
             me_emit_cstr(em, "\\22")
-        } EL I byte == 92 {
+        } else I byte == 92 {
             # backslash → \5C
             me_emit_cstr(em, "\\5C")
-        } EL I byte < 32 {
+        } else I byte < 32 {
             # Non-printable → \XX
             me_emit_cstr(em, "\\")
             me_emit_hex_byte(em, byte)
-        } EL I byte > 126 {
+        } else I byte > 126 {
             me_emit_cstr(em, "\\")
             me_emit_hex_byte(em, byte)
-        } EL {
+        } else {
             me_emit_byte(em, byte)
         }
         i = i + 1
@@ -1118,17 +1118,17 @@ F me_emit_escaped_bytes(em: i64, ptr: i64, len: i64) -> i64 {
     1
 }
 
-F me_emit_hex_byte(em: i64, byte: i64) -> i64 {
+fn me_emit_hex_byte(em: i64, byte: i64) -> i64 {
     hi := byte / 16
     lo := byte % 16
     I hi < 10 {
         me_emit_byte(em, hi + 48)
-    } EL {
+    } else {
         me_emit_byte(em, hi + 55)
     }
     I lo < 10 {
         me_emit_byte(em, lo + 48)
-    } EL {
+    } else {
         me_emit_byte(em, lo + 55)
     }
 }
@@ -1137,7 +1137,7 @@ F me_emit_hex_byte(em: i64, byte: i64) -> i64 {
 # Helper builtins (emitted at end of module)
 # ============================================================================
 
-F me_emit_builtins(em: i64) -> i64 {
+fn me_emit_builtins(em: i64) -> i64 {
     me_emit_cstr(em, "; --- Builtins ---")
     me_emit_newline(em)
 
@@ -1202,7 +1202,7 @@ F me_emit_builtins(em: i64) -> i64 {
 # ============================================================================
 
 # Returns: output data ptr. Sets out_len_ptr to output length.
-F mir_emit_llvm(mod_ptr: i64, sp_data: i64, sp_offsets: i64, sp_count: i64, out_len_ptr: i64) -> i64 {
+fn mir_emit_llvm(mod_ptr: i64, sp_data: i64, sp_offsets: i64, sp_count: i64, out_len_ptr: i64) -> i64 {
     em := mir_emitter_new(sp_data, sp_offsets, sp_count)
     me_emit_module(em, mod_ptr)
 
@@ -1210,19 +1210,19 @@ F mir_emit_llvm(mod_ptr: i64, sp_data: i64, sp_offsets: i64, sp_count: i64, out_
     out_len := load_i64(em + 8)
     store_i64(out_len_ptr, out_len)
 
-    R out_data
+    return out_data
 }
 
 # Convenience: emit and write to file (path as i64 pointer)
-F mir_emit_llvm_to_file(mod_ptr: i64, sp_data: i64, sp_offsets: i64, sp_count: i64, path_ptr: i64) -> i64 {
+fn mir_emit_llvm_to_file(mod_ptr: i64, sp_data: i64, sp_offsets: i64, sp_count: i64, path_ptr: i64) -> i64 {
     len_buf := malloc(8)
     data := mir_emit_llvm(mod_ptr, sp_data, sp_offsets, sp_count, len_buf)
     len := load_i64(len_buf)
     free(len_buf)
 
     fp := fopen_ptr(path_ptr, "wb")
-    I fp == 0 { R 0 }
+    I fp == 0 { return 0 }
     fwrite(data, 1, len, fp)
     fclose(fp)
-    R 1
+    return 1
 }

@@ -2,8 +2,8 @@
 # Tests the borrow checker implementation in mir_borrow.vais
 # Validates ownership and borrowing rules at MIR level.
 
-U mir
-U mir_borrow
+use mir
+use mir_borrow
 
 # ============================================================================
 # Test 1: No error case (clean code with no borrows)
@@ -16,7 +16,7 @@ U mir_borrow
 #   _2 = Copy(_1)
 #   _0 = Use(_2)
 #   return
-F test_no_error() -> i64 {
+fn test_no_error() -> i64 {
     # Create locals array: 3 locals (return, param, temp)
     locals_ptr := malloc(8 * 3)
     store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
@@ -47,7 +47,7 @@ F test_no_error() -> i64 {
     error_count := mir_borrow_check_body(body)
 
     # Return 0 if PASS, 1 if FAIL
-    I error_count == 0 { 0 } EL { 1 }
+    I error_count == 0 { 0 } else { 1 }
 }
 
 # ============================================================================
@@ -62,7 +62,7 @@ F test_no_error() -> i64 {
 #   _2 = Move(_1)         # Move _1 to _2
 #   _3 = Use(Copy(_1))    # Use _1 after move → ERROR!
 #   return
-F test_use_after_move() -> i64 {
+fn test_use_after_move() -> i64 {
     # Create locals: str param is non-Copy
     locals_ptr := malloc(8 * 4)
     store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
@@ -92,7 +92,7 @@ F test_use_after_move() -> i64 {
 
     # Expect BC_ERR_USE_AFTER_MOVE
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } EL { 1 }
+    I error_count > 0 { 0 } else { 1 }
 }
 
 # ============================================================================
@@ -107,7 +107,7 @@ F test_use_after_move() -> i64 {
 #   _2 = &mut _1
 #   _3 = &mut _1          # Two &mut to same local → ERROR!
 #   return
-F test_double_mut_borrow() -> i64 {
+fn test_double_mut_borrow() -> i64 {
     # Create locals
     locals_ptr := malloc(8 * 4)
     store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
@@ -137,7 +137,7 @@ F test_double_mut_borrow() -> i64 {
 
     # Expect BC_ERR_DOUBLE_MUT_BORROW
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } EL { 1 }
+    I error_count > 0 { 0 } else { 1 }
 }
 
 # ============================================================================
@@ -152,7 +152,7 @@ F test_double_mut_borrow() -> i64 {
 #   _2 = &mut _1
 #   _3 = &_1              # &mut + & conflict → ERROR!
 #   return
-F test_mut_immut_conflict() -> i64 {
+fn test_mut_immut_conflict() -> i64 {
     # Create locals
     locals_ptr := malloc(8 * 4)
     store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
@@ -182,7 +182,7 @@ F test_mut_immut_conflict() -> i64 {
 
     # Expect BC_ERR_MUT_IMMUT_CONFLICT
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } EL { 1 }
+    I error_count > 0 { 0 } else { 1 }
 }
 
 # ============================================================================
@@ -197,7 +197,7 @@ F test_mut_immut_conflict() -> i64 {
 #   _2 = Move(_1)         # Move Copy type
 #   _3 = Copy(_1)         # Use after move - OK for Copy types!
 #   return
-F test_copy_type_ok() -> i64 {
+fn test_copy_type_ok() -> i64 {
     # Create locals (all i64, which is Copy)
     locals_ptr := malloc(8 * 4)
     store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
@@ -227,7 +227,7 @@ F test_copy_type_ok() -> i64 {
 
     # Expect 0 errors (Copy type allows use after move)
     error_count := mir_borrow_check_body(body)
-    I error_count == 0 { 0 } EL { 1 }
+    I error_count == 0 { 0 } else { 1 }
 }
 
 # ============================================================================
@@ -242,7 +242,7 @@ F test_copy_type_ok() -> i64 {
 #   _2 = &mut _1
 #   _1 = Use(Const(42))   # Assign to borrowed variable → ERROR!
 #   return
-F test_assign_while_borrowed() -> i64 {
+fn test_assign_while_borrowed() -> i64 {
     # Create locals
     locals_ptr := malloc(8 * 4)
     store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
@@ -272,7 +272,7 @@ F test_assign_while_borrowed() -> i64 {
 
     # Expect BC_ERR_ASSIGN_WHILE_BORROWED
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } EL { 1 }
+    I error_count > 0 { 0 } else { 1 }
 }
 
 # ============================================================================
@@ -286,7 +286,7 @@ F test_assign_while_borrowed() -> i64 {
 #   _2 = &_1
 #   drop(_1)              # Drop borrowed variable → ERROR!
 #   return
-F test_drop_while_borrowed() -> i64 {
+fn test_drop_while_borrowed() -> i64 {
     # Create locals
     locals_ptr := malloc(8 * 3)
     store_i64(locals_ptr, mir_local_decl(0, mir_type_prim(MIR_TY_I64()), 0))
@@ -315,13 +315,13 @@ F test_drop_while_borrowed() -> i64 {
 
     # Expect BC_ERR_MOVE_WHILE_BORROWED or similar
     error_count := mir_borrow_check_body(body)
-    I error_count > 0 { 0 } EL { 1 }
+    I error_count > 0 { 0 } else { 1 }
 }
 
 # ============================================================================
 # Main - Run all tests and report results
 # ============================================================================
-F main() -> i64 {
+fn main() -> i64 {
     # Test 1: No error
     result1 := test_no_error()
     putchar(48 + result1)
@@ -359,5 +359,5 @@ F main() -> i64 {
 
     # Return 0 if all passed, 1 otherwise
     total := result1 + result2 + result3 + result4 + result5 + result6 + result7
-    I total == 0 { 0 } EL { 1 }
+    I total == 0 { 0 } else { 1 }
 }

@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod wasm_component_tests {
+mod tests {
     use crate::wasm_component::*;
     use vais_types::ResolvedType;
 

@@ -1,0 +1,10 @@
+# CHECKS: if-else as expression yielding a value
+fn main() -> i64 {
+    n: i64 := mut 10
+    s: i64 := I n > 5 { 100 } else { 200 }
+    I s != 100 { return 1 }
+    n = 3
+    s2: i64 := I n > 5 { 100 } else { 200 }
+    I s2 != 200 { return 2 }
+    return 0
+}

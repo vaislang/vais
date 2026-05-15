@@ -32,9 +32,9 @@ fn check_err(source: &str) {
 fn test_array_literal_i64() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [1, 2, 3, 4, 5]
-            R 0
+            return 0
         }
     "#,
     );
@@ -44,9 +44,9 @@ fn test_array_literal_i64() {
 fn test_array_literal_single() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [42]
-            R 0
+            return 0
         }
     "#,
     );
@@ -56,9 +56,9 @@ fn test_array_literal_single() {
 fn test_array_index_access() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             arr := [10, 20, 30]
-            R arr[1]
+            return arr[1]
         }
     "#,
     );
@@ -72,9 +72,9 @@ fn test_array_index_access() {
 fn test_tuple_creation() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             t := (1, 2, 3)
-            R 0
+            return 0
         }
     "#,
     );
@@ -84,9 +84,9 @@ fn test_tuple_creation() {
 fn test_tuple_mixed_types() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             t := (1, true, 3)
-            R 0
+            return 0
         }
     "#,
     );
@@ -100,9 +100,9 @@ fn test_tuple_mixed_types() {
 fn test_map_literal() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             m := {"a": 1, "b": 2, "c": 3}
-            R 0
+            return 0
         }
     "#,
     );
@@ -116,8 +116,8 @@ fn test_map_literal() {
 fn test_call_wrong_arity() {
     check_err(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F test() -> i64 = add(1)
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn test() -> i64 = add(1)
     "#,
     );
 }
@@ -126,8 +126,8 @@ fn test_call_wrong_arity() {
 fn test_call_too_many_args() {
     check_err(
         r#"
-        F add(a: i64, b: i64) -> i64 = a + b
-        F test() -> i64 = add(1, 2, 3)
+        fn add(a: i64, b: i64) -> i64 = a + b
+        fn test() -> i64 = add(1, 2, 3)
     "#,
     );
 }
@@ -140,8 +140,8 @@ fn test_call_too_many_args() {
 fn test_generic_function_call() {
     check_ok(
         r#"
-        F identity<T>(x: T) -> T = x
-        F test() -> i64 = identity(42)
+        fn identity<T>(x: T) -> T = x
+        fn test() -> i64 = identity(42)
     "#,
     );
 }
@@ -150,8 +150,8 @@ fn test_generic_function_call() {
 fn test_generic_function_multiple_params() {
     check_ok(
         r#"
-        F first<A, B>(a: A, b: B) -> A = a
-        F test() -> i64 = first(42, true)
+        fn first<A, B>(a: A, b: B) -> A = a
+        fn test() -> i64 = first(42, true)
     "#,
     );
 }
@@ -164,14 +164,14 @@ fn test_generic_function_multiple_params() {
 fn test_method_call_return_type() {
     check_ok(
         r#"
-        S Counter { val: i64 }
-        X Counter {
-            F get(self) -> i64 = self.val
-            F inc(self) -> i64 = self.val + 1
+        struct Counter { val: i64 }
+        impl Counter {
+            fn get(self) -> i64 = self.val
+            fn inc(self) -> i64 = self.val + 1
         }
-        F test() -> i64 {
+        fn test() -> i64 {
             c := Counter { val: 10 }
-            R c.get() + c.inc()
+            return c.get() + c.inc()
         }
     "#,
     );
@@ -185,7 +185,7 @@ fn test_method_call_return_type() {
 fn test_call_undefined_function() {
     check_err(
         r#"
-        F test() -> i64 = nonexistent(42)
+        fn test() -> i64 = nonexistent(42)
     "#,
     );
 }
@@ -198,10 +198,10 @@ fn test_call_undefined_function() {
 fn test_string_interp_type() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
             s := ~"value: {x}"
-            R 0
+            return 0
         }
     "#,
     );
@@ -211,11 +211,11 @@ fn test_string_interp_type() {
 fn test_string_interp_multiple_vars() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             a := 1
             b := 2
             s := ~"{a} + {b}"
-            R 0
+            return 0
         }
     "#,
     );
@@ -233,9 +233,9 @@ fn test_assert_bool_condition() {
     // predated that rule.
     check_ok(
         r#"
-        partial F test(x: i64) -> i64 {
+        partial fn test(x: i64) -> i64 {
             assert(x > 0)
-            R x
+            return x
         }
     "#,
     );
@@ -249,9 +249,9 @@ fn test_assert_bool_condition() {
 fn test_if_expr_consistent_types() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            result := I x > 0 { 1 } E { 0 }
-            R result
+        fn test(x: i64) -> i64 {
+            result := I x > 0 { 1 } else { 0 }
+            return result
         }
     "#,
     );
@@ -261,11 +261,8 @@ fn test_if_expr_consistent_types() {
 fn test_if_else_if_chain() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            R I x > 100 { 3 }
-              E I x > 50 { 2 }
-              E I x > 0 { 1 }
-              E { 0 }
+        fn test(x: i64) -> i64 {
+            return I x > 100 { 3 } else I x > 50 { 2 } else I x > 0 { 1 } else { 0 }
         }
     "#,
     );
@@ -279,8 +276,8 @@ fn test_if_else_if_chain() {
 fn test_match_all_arms_same_type() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1 => 10,
                 2 => 20,
                 _ => 0
@@ -294,8 +291,8 @@ fn test_match_all_arms_same_type() {
 fn test_match_with_guard() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 n I n > 10 => n * 2,
                 n => n
             }
@@ -308,9 +305,9 @@ fn test_match_with_guard() {
 fn test_match_enum_exhaustive() {
     check_ok(
         r#"
-        E Dir { North, South, East, West }
-        F test(d: Dir) -> i64 {
-            M d {
+        enum Dir { North, South, East, West }
+        fn test(d: Dir) -> i64 {
+            match d {
                 North => 0,
                 South => 1,
                 East => 2,
@@ -330,12 +327,12 @@ fn test_match_enum_exhaustive() {
 fn test_for_loop_type() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             sum := mut 0
             L i:0..10 {
                 sum += i
             }
-            R sum
+            return sum
         }
     "#,
     );
@@ -345,13 +342,13 @@ fn test_for_loop_type() {
 fn test_infinite_loop_with_break() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             L {
                 x += 1
                 I x >= 10 { B }
             }
-            R x
+            return x
         }
     "#,
     );
@@ -365,9 +362,9 @@ fn test_infinite_loop_with_break() {
 fn test_let_simple() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 42
-            R x
+            return x
         }
     "#,
     );
@@ -377,10 +374,10 @@ fn test_let_simple() {
 fn test_let_mutable() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := mut 0
             x = 42
-            R x
+            return x
         }
     "#,
     );
@@ -390,9 +387,9 @@ fn test_let_mutable() {
 fn test_let_with_computation() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 21 * 2
-            R x
+            return x
         }
     "#,
     );
@@ -406,8 +403,8 @@ fn test_let_with_computation() {
 fn test_return_correct_type() {
     check_ok(
         r#"
-        F test() -> i64 {
-            R 42
+        fn test() -> i64 {
+            return 42
         }
     "#,
     );
@@ -417,8 +414,8 @@ fn test_return_correct_type() {
 fn test_return_bool() {
     check_ok(
         r#"
-        F test() -> bool {
-            R true
+        fn test() -> bool {
+            return true
         }
     "#,
     );
@@ -432,10 +429,10 @@ fn test_return_bool() {
 fn test_struct_literal_correct_fields() {
     check_ok(
         r#"
-        S Point { x: i64, y: i64 }
-        F test() -> i64 {
+        struct Point { x: i64, y: i64 }
+        fn test() -> i64 {
             p := Point { x: 1, y: 2 }
-            R p.x + p.y
+            return p.x + p.y
         }
     "#,
     );
@@ -445,10 +442,10 @@ fn test_struct_literal_correct_fields() {
 fn test_struct_field_access() {
     check_ok(
         r#"
-        S Rect { w: i64, h: i64 }
-        F test() -> i64 {
+        struct Rect { w: i64, h: i64 }
+        fn test() -> i64 {
             r := Rect { w: 10, h: 20 }
-            R r.w * r.h
+            return r.w * r.h
         }
     "#,
     );
@@ -462,10 +459,10 @@ fn test_struct_field_access() {
 fn test_enum_variant_with_payload() {
     check_ok(
         r#"
-        E Value { Int(i64), None }
-        F test() -> i64 {
+        enum Value { Int(i64), None }
+        fn test() -> i64 {
             v := Int(42)
-            M v {
+            match v {
                 Int(n) => n,
                 None => 0,
                 _ => -1
@@ -483,9 +480,9 @@ fn test_enum_variant_with_payload() {
 fn test_recursive_function() {
     check_ok(
         r#"
-        F fib(n: i64) -> i64 {
-            I n <= 1 { R n }
-            R fib(n - 1) + fib(n - 2)
+        fn fib(n: i64) -> i64 {
+            I n <= 1 { return n }
+            return fib(n - 1) + fib(n - 2)
         }
     "#,
     );
@@ -499,9 +496,9 @@ fn test_recursive_function() {
 fn test_self_call() {
     check_ok(
         r#"
-        F fact(n: i64, acc: i64) -> i64 {
-            I n <= 1 { R acc }
-            R @(n - 1, acc * n)
+        fn fact(n: i64, acc: i64) -> i64 {
+            I n <= 1 { return acc }
+            return @(n - 1, acc * n)
         }
     "#,
     );
@@ -515,10 +512,10 @@ fn test_self_call() {
 fn test_pipe_operator() {
     check_ok(
         r#"
-        F double(x: i64) -> i64 = x * 2
-        F inc(x: i64) -> i64 = x + 1
-        F test() -> i64 {
-            R 5 |> double |> inc
+        fn double(x: i64) -> i64 = x * 2
+        fn inc(x: i64) -> i64 = x + 1
+        fn test() -> i64 {
+            return 5 |> double |> inc
         }
     "#,
     );
@@ -532,8 +529,8 @@ fn test_pipe_operator() {
 fn test_ternary_type_check() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            R x > 0 ? 1 : 0
+        fn test(x: i64) -> i64 {
+            return x > 0 ? 1 : 0
         }
     "#,
     );
@@ -547,9 +544,9 @@ fn test_ternary_type_check() {
 fn test_global_constant() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             x := 100
-            R x
+            return x
         }
     "#,
     );
@@ -563,9 +560,9 @@ fn test_global_constant() {
 fn test_nested_array() {
     check_ok(
         r#"
-        F test() -> i64 {
+        fn test() -> i64 {
             matrix := [[1, 2], [3, 4]]
-            R 0
+            return 0
         }
     "#,
     );
@@ -579,8 +576,8 @@ fn test_nested_array() {
 fn test_match_or_pattern() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1 | 2 | 3 => 10,
                 _ => 0
             }
@@ -597,8 +594,8 @@ fn test_match_or_pattern() {
 fn test_match_range_pattern() {
     check_ok(
         r#"
-        F test(x: i64) -> i64 {
-            M x {
+        fn test(x: i64) -> i64 {
+            match x {
                 1..=10 => 1,
                 _ => 0
             }

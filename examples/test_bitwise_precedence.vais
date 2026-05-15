@@ -1,5 +1,5 @@
 # Test bitwise operator precedence
-F main() -> i64 {
+fn main() -> i64 {
     # Test 1: & has higher precedence than |
     # 8 | 4 & 2 should be 8 | (4 & 2) = 8 | 0 = 8
     test1 := 8 | 4 & 2

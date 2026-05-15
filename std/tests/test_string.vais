@@ -1,0 +1,77 @@
+# Stdlib self-test: String dynamic string + helper functions
+use std/string
+use std/vec
+
+fn main() -> i64 {
+    # with_capacity creates an empty growable string
+    s: String := mut String.with_capacity(16)
+    I s.len() != 0 { return 1 }
+    I s.is_empty() != 1 { return 2 }
+    I s.capacity() < 16 { return 3 }
+
+    # push_char appends bytes ('A' = 65, 'B' = 66, 'C' = 67)
+    s.push_char(65)
+    s.push_char(66)
+    s.push_char(67)
+    I s.len() != 3 { return 4 }
+    I s.is_empty() != 0 { return 5 }
+
+    # char_at reads bytes back
+    I s.char_at(0) != 65 { return 6 }
+    I s.char_at(1) != 66 { return 7 }
+    I s.char_at(2) != 67 { return 8 }
+    # out-of-bounds returns 0
+    I s.char_at(99) != 0 { return 9 }
+
+    # char_at_opt returns Some/None
+    co: Option<i64> := s.char_at_opt(1)
+    cv: i64 := match co { Some(v) => v, None => -1 }
+    I cv != 66 { return 10 }
+    co2: Option<i64> := s.char_at_opt(50)
+    is_none: i64 := match co2 { Some(_) => 0, None => 1 }
+    I is_none != 1 { return 11 }
+
+    # grow path: push beyond capacity. Start at small cap to exercise grow().
+    # Bug C5 (String.grow with cap < 16 segfault) was fixed by adding `mut`
+    # to the `new_cap := self.cap * 2` binding.
+    big: String := mut String.with_capacity(4)
+    LF i: 0..50 {
+        big.push_char(65 + (i % 26))
+    }
+    I big.len() != 50 { return 12 }
+    I big.capacity() < 50 { return 13 }
+    I big.char_at(0) != 65 { return 14 }
+    I big.char_at(25) != 90 { return 15 }  # 'Z'
+    I big.char_at(26) != 65 { return 16 }  # wrap back to 'A'
+
+    # clear resets length but preserves capacity
+    cap_before: i64 := big.capacity()
+    big.clear()
+    I big.len() != 0 { return 17 }
+    I big.is_empty() != 1 { return 18 }
+    I big.capacity() != cap_before { return 19 }
+
+    # str_from constructs from literal pointer
+    fs: String := mut str_from(str_to_ptr("hello"))
+    I fs.len() != 5 { return 20 }
+    I fs.char_at(0) != 104 { return 21 }  # 'h'
+    I fs.char_at(4) != 111 { return 22 }  # 'o'
+
+    # str_concat
+    a: String := mut str_from(str_to_ptr("foo"))
+    b: String := mut str_from(str_to_ptr("bar"))
+    cat: String := mut str_concat(a, b)
+    I cat.len() != 6 { return 23 }
+    I cat.char_at(0) != 102 { return 24 }  # 'f'
+    I cat.char_at(3) != 98  { return 25 }  # 'b'
+    I cat.char_at(5) != 114 { return 26 }  # 'r'
+
+    # str_eq
+    e1: String := mut str_from(str_to_ptr("same"))
+    e2: String := mut str_from(str_to_ptr("same"))
+    e3: String := mut str_from(str_to_ptr("diff"))
+    I str_eq(e1, e2) != 1 { return 27 }
+    I str_eq(e1, e3) != 0 { return 28 }
+
+    return 0
+}

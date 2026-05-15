@@ -370,20 +370,40 @@ pub(super) fn add_runtime_and_native_libs(
     let mut linked_libs: HashSet<&str> = HashSet::new();
     let mut linked_runtimes: Vec<String> = Vec::new();
 
+    if let Some(rt_path) = find_runtime_file("auth_runtime.c") {
+        let rt_str = rt_path.to_str().unwrap_or("auth_runtime.c").to_string();
+        linked_runtimes.push(rt_str.clone());
+        args.push(rt_str);
+        if verbose {
+            println!(
+                "{} Linking auth runtime from: {}",
+                "info:".blue().bold(),
+                rt_path.display()
+            );
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linked_libs.insert("-lcrypto");
+        args.push("-lcrypto".to_string());
+    }
+
     for module in used_modules {
         if let Some(runtime_info) = get_runtime_for_module(module) {
-            if let Some(rt_path) = find_runtime_file(runtime_info.file) {
-                let rt_str = rt_path.to_str().unwrap_or(runtime_info.file).to_string();
-                if !linked_runtimes.contains(&rt_str) {
-                    linked_runtimes.push(rt_str.clone());
-                    args.push(rt_str);
-                    if verbose {
-                        println!(
-                            "{} Linking {} runtime from: {}",
-                            "info:".blue().bold(),
-                            module.strip_prefix("std::").unwrap_or(module),
-                            rt_path.display()
-                        );
+            for runtime_file in runtime_files_for_module(module, runtime_info.file) {
+                if let Some(rt_path) = find_runtime_file(runtime_file) {
+                    let rt_str = rt_path.to_str().unwrap_or(runtime_file).to_string();
+                    if !linked_runtimes.contains(&rt_str) {
+                        linked_runtimes.push(rt_str.clone());
+                        args.push(rt_str);
+                        if verbose {
+                            println!(
+                                "{} Linking {} runtime from: {}",
+                                "info:".blue().bold(),
+                                module.strip_prefix("std::").unwrap_or(module),
+                                rt_path.display()
+                            );
+                        }
                     }
                 }
             }
@@ -395,30 +415,6 @@ pub(super) fn add_runtime_and_native_libs(
                     linked_libs.insert(lib);
                     args.push(lib.to_string());
                 }
-            }
-        }
-    }
-
-    // Transitive std modules are compiled per-module and may reference sync
-    // helpers even when the root AST did not import `std/sync` directly.
-    if !linked_runtimes
-        .iter()
-        .any(|rt| rt.ends_with("sync_runtime.c"))
-    {
-        if let Some(sync_rt_path) = find_sync_runtime() {
-            let rt_str = sync_rt_path
-                .to_str()
-                .unwrap_or("sync_runtime.c")
-                .to_string();
-            linked_runtimes.push(rt_str.clone());
-            args.push(rt_str);
-            needs_pthread = true;
-            if verbose {
-                println!(
-                    "{} Linking sync runtime from: {} (transitive fallback)",
-                    "info:".blue().bold(),
-                    sync_rt_path.display()
-                );
             }
         }
     }
@@ -621,13 +617,26 @@ pub(crate) fn add_runtime_libs(
     let mut linked_libs: HashSet<&str> = HashSet::new();
     let mut linked_runtimes: Vec<String> = Vec::new();
 
+    if let Some(rt_path) = find_runtime_file("auth_runtime.c") {
+        let rt_str = rt_path.to_str().unwrap_or("auth_runtime.c").to_string();
+        linked_runtimes.push(rt_str.clone());
+        args.push(rt_str);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linked_libs.insert("-lcrypto");
+        args.push("-lcrypto".to_string());
+    }
+
     for module in used_modules {
         if let Some(runtime_info) = get_runtime_for_module(module) {
-            if let Some(rt_path) = find_runtime_file(runtime_info.file) {
-                let rt_str = rt_path.to_str().unwrap_or(runtime_info.file).to_string();
-                if !linked_runtimes.contains(&rt_str) {
-                    linked_runtimes.push(rt_str.clone());
-                    args.push(rt_str);
+            for runtime_file in runtime_files_for_module(module, runtime_info.file) {
+                if let Some(rt_path) = find_runtime_file(runtime_file) {
+                    let rt_str = rt_path.to_str().unwrap_or(runtime_file).to_string();
+                    if !linked_runtimes.contains(&rt_str) {
+                        linked_runtimes.push(rt_str.clone());
+                        args.push(rt_str);
+                    }
                 }
             }
             if runtime_info.needs_pthread {
@@ -639,23 +648,6 @@ pub(crate) fn add_runtime_libs(
                     args.push(lib.to_string());
                 }
             }
-        }
-    }
-
-    // Transitive std modules can require sync helpers even when the root module
-    // did not import std::sync directly.
-    if !linked_runtimes
-        .iter()
-        .any(|rt| rt.ends_with("sync_runtime.c"))
-    {
-        if let Some(sync_rt_path) = find_sync_runtime() {
-            let rt_str = sync_rt_path
-                .to_str()
-                .unwrap_or("sync_runtime.c")
-                .to_string();
-            linked_runtimes.push(rt_str.clone());
-            args.push(rt_str);
-            needs_pthread = true;
         }
     }
 

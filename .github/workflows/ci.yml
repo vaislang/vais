@@ -117,14 +117,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-docs-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-docs-
+            ${{ runner.os }}-cargo-docs-v2-
 
       - name: Check documentation
         env:
@@ -176,14 +175,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-clippy-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-clippy-
+            ${{ runner.os }}-cargo-clippy-v2-
 
       - name: Run clippy (Linux/macOS)
         if: runner.os != 'Windows'
@@ -245,14 +243,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-check-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-check-
+            ${{ runner.os }}-cargo-check-v2-
 
       - name: Run cargo check (Linux/macOS)
         if: runner.os != 'Windows'
@@ -296,10 +293,10 @@ jobs:
           echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
           echo "CC=clang-17" >> $GITHUB_ENV
 
-      - name: Install LLVM 17 (macOS)
+      - name: Install LLVM 17 and OpenSSL (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm@17
+          brew install llvm@17 openssl@3
           echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
 
       - name: Install LLVM 17 (Windows)
@@ -314,14 +311,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-
+            ${{ runner.os }}-cargo-test-v2-
 
       - name: Run tests (Linux/macOS)
         if: runner.os != 'Windows'
@@ -372,14 +368,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-coverage-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-coverage-
+            ${{ runner.os }}-cargo-coverage-v2-
 
       - name: Generate coverage reports (lcov)
         # cargo-llvm-cov uses LLVM source-based coverage instrumentation.
@@ -484,14 +479,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-e2e-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-e2e-
+            ${{ runner.os }}-cargo-e2e-v2-
 
       - name: Build vaisc compiler
         run: cargo build --release -p vaisc
@@ -554,14 +548,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-bindings-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-bindings-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-bindings-
+            ${{ runner.os }}-cargo-bindings-v2-
 
       - name: Install Python & maturin (Ubuntu)
         id: python-setup-linux
@@ -623,3 +616,58 @@ jobs:
 
       - name: Run cargo deny check
         run: cargo deny check
+
+  # ---------- Phase 0 conformance gate ----------
+  # Trust target for v1.0: lang/, stdlib/, hello_world all green.
+  # See compiler/docs/PHASE_0_LANGUAGE_STABILIZATION.md and
+  # compiler/STATUS.md for criteria.
+  phase0:
+    name: Phase 0 Conformance (lang + stdlib + hello-world)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main"
+          sudo apt-get update
+          sudo apt-get install -y llvm-17-dev libpolly-17-dev clang-17
+          echo "LLVM_SYS_170_PREFIX=/usr/lib/llvm-17" >> $GITHUB_ENV
+          echo "CC=clang-17" >> $GITHUB_ENV
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/
+          key: ${{ runner.os }}-phase0-v2-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-phase0-v2-
+
+      - name: Build vaisc
+        run: cargo build --bin vaisc --release
+
+      - name: Set up stdlib symlink
+        run: |
+          mkdir -p /tmp/vais-lib
+          ln -sf "$GITHUB_WORKSPACE/std" /tmp/vais-lib/std
+
+      - name: Install vaisc to ~/.cargo/bin
+        run: |
+          mkdir -p ~/.cargo/bin
+          cp target/release/vaisc ~/.cargo/bin/vaisc
+
+      - name: Run language conformance suite
+        run: cd tests/lang && bash run_lang_tests.sh
+
+      - name: Run stdlib self-tests
+        run: cd std/tests && bash run.sh
+
+      - name: Run hello world examples
+        run: cd examples/hello_world_v2 && make check

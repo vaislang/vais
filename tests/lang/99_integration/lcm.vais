@@ -1,0 +1,21 @@
+# CHECKS: LCM via GCD (Euclidean algorithm).
+fn gcd(a: i64, b: i64) -> i64 {
+    I b == 0 { return a }
+    gcd(b, a % b)
+}
+
+fn lcm(a: i64, b: i64) -> i64 {
+    a / gcd(a, b) * b
+}
+
+fn main() -> i64 {
+    I gcd(12, 18) != 6 { return 1 }
+    I gcd(7, 13) != 1 { return 2 }
+    I gcd(100, 25) != 25 { return 3 }
+
+    I lcm(4, 6) != 12 { return 4 }
+    I lcm(7, 13) != 91 { return 5 }
+    I lcm(12, 18) != 36 { return 6 }
+    I lcm(100, 75) != 300 { return 7 }
+    return 0
+}

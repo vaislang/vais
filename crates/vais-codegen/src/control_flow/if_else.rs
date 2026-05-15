@@ -25,6 +25,19 @@ impl CodeGenerator {
 
                 // Infer the type of the then block for phi node
                 let then_type = self.infer_block_type(then_stmts);
+                // Detect terminating else branches (e.g. `R Err(...)` / early
+                // return) so we don't fall back to I64 when only the then arm
+                // actually reaches the merge.
+                let else_is_terminating = else_branch
+                    .as_ref()
+                    .map(|eb| match eb.as_ref() {
+                        IfElse::Else(stmts) => matches!(
+                            stmts.last().map(|s| &s.node),
+                            Some(vais_ast::Stmt::Return(_))
+                        ),
+                        IfElse::ElseIf(..) => false,
+                    })
+                    .unwrap_or(false);
                 let else_type_resolved = if let Some(eb) = else_branch {
                     match eb.as_ref() {
                         IfElse::Else(stmts) => self.infer_block_type(stmts),
@@ -33,13 +46,42 @@ impl CodeGenerator {
                 } else {
                     vais_types::ResolvedType::I64
                 };
-                let block_type =
-                    if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type_resolved) {
-                        vais_types::ResolvedType::I64
-                    } else {
-                        then_type.clone()
+                let mut block_type = if else_is_terminating {
+                    // Else terminates → phi has a single incoming from the
+                    // then branch; keep its type so F64/narrow ints aren't
+                    // widened to I64.
+                    then_type.clone()
+                } else if self.type_to_llvm(&then_type) != self.type_to_llvm(&else_type_resolved) {
+                    // Type mismatch — prefer the wider/more informative type.
+                    // Float ↔ anything: use float (caller must coerce the
+                    // integer side in its arm block before branching).
+                    let picked = match (&then_type, &else_type_resolved) {
+                        (vais_types::ResolvedType::F64, _) | (_, vais_types::ResolvedType::F64) => {
+                            Some(vais_types::ResolvedType::F64)
+                        }
+                        (vais_types::ResolvedType::F32, _) | (_, vais_types::ResolvedType::F32) => {
+                            Some(vais_types::ResolvedType::F32)
+                        }
+                        _ => None,
                     };
-                let llvm_type = self.type_to_llvm(&block_type);
+                    picked.unwrap_or(vais_types::ResolvedType::I64)
+                } else {
+                    then_type.clone()
+                };
+                if let Some(expected) = self.fn_ctx.expected_expr_types.last().cloned() {
+                    let has_i64_fallback = matches!(block_type, ResolvedType::I64)
+                        || matches!(then_type, ResolvedType::I64)
+                        || matches!(else_type_resolved, ResolvedType::I64);
+                    let should_use_expected = has_i64_fallback
+                        && (matches!(expected, ResolvedType::Named { .. })
+                            || (matches!(expected, ResolvedType::Str)
+                                && (matches!(then_type, ResolvedType::Str)
+                                    || matches!(else_type_resolved, ResolvedType::Str))));
+                    if should_use_expected {
+                        block_type = expected;
+                    }
+                }
+                let mut llvm_type = self.type_to_llvm(&block_type);
 
                 // Check each branch independently for struct pointer vs value
                 let is_named_phi = matches!(&block_type, ResolvedType::Named { .. });
@@ -86,24 +128,57 @@ impl CodeGenerator {
                     loaded
                 } else if !then_terminated {
                     // Coerce integer width if the value type differs from the phi type
-                    let actual_ty = if matches!(
-                        then_type,
-                        vais_types::ResolvedType::F32 | vais_types::ResolvedType::F64
-                    ) {
-                        self.type_to_llvm(&then_type)
-                    } else {
-                        self.llvm_type_of(&then_val)
-                    };
-                    if actual_ty != llvm_type
-                        && (actual_ty == "float" || actual_ty == "double")
+                    let actual_ty = self.llvm_type_of(&then_val);
+                    let coerced =
+                        self.coerce_int_width(&then_val, &actual_ty, &llvm_type, counter, &mut ir);
+                    // Also coerce float width (e.g., float→double or double→float for phi)
+                    let actual_after = self.llvm_type_of(&coerced);
+                    if actual_after != llvm_type
+                        && (actual_after == "float" || actual_after == "double")
                         && (llvm_type == "float" || llvm_type == "double")
                     {
-                        self.coerce_float_width(&then_val, &actual_ty, &llvm_type, counter, &mut ir)
+                        let tmp = self.next_temp(counter);
+                        if actual_after == "float" {
+                            write_ir!(ir, "  {} = fpext float {} to double", tmp, coerced);
+                        } else {
+                            write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
+                        }
+                        tmp
+                    } else if actual_after.starts_with('i')
+                        && !actual_after.contains('*')
+                        && (llvm_type == "double" || llvm_type == "float")
+                    {
+                        // Int → float coercion for the phi: happens when the
+                        // phi type was picked as a float (block_type mismatch
+                        // resolver) but this arm produced an integer value.
+                        // `sitofp` is placed here in the arm block before
+                        // `br merge`, satisfying the PHI top-of-block rule.
+                        let tmp = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = sitofp {} {} to {}",
+                            tmp,
+                            actual_after,
+                            coerced,
+                            llvm_type
+                        );
+                        tmp
                     } else {
-                        self.coerce_int_width(&then_val, &actual_ty, &llvm_type, counter, &mut ir)
+                        coerced
                     }
                 } else {
                     then_val // move: not used after
+                };
+                let then_val_for_phi = if !then_terminated {
+                    self.coerce_if_phi_incoming(
+                        then_val_for_phi,
+                        &llvm_type,
+                        &block_type,
+                        counter,
+                        &mut ir,
+                    )
+                } else {
+                    then_val_for_phi
                 };
 
                 let then_actual_block = std::mem::take(&mut self.fn_ctx.current_block); // take ownership
@@ -125,6 +200,40 @@ impl CodeGenerator {
                         ("0".to_string(), String::new(), false, String::new())
                     };
                 ir.push_str(&else_ir);
+
+                // Post-else phi type refinement: if the else branch's actual
+                // emitted value (e.g., a nested if-else phi that resolved to
+                // double) is a float while the phi type was picked as an
+                // integer, widen the phi to the float type. The then branch's
+                // value was already coerced above (via then_val_for_phi) —
+                // since that coercion looks for int→float and emits sitofp in
+                // the then-block when llvm_type is float, we need to fixup
+                // the then-block too if we're upgrading now.
+                if !else_terminated && has_else {
+                    if let Some(else_actual) = self.llvm_type_of_checked(&else_val) {
+                        let is_float = matches!(else_actual.as_str(), "float" | "double");
+                        let phi_is_int =
+                            llvm_type.starts_with('i') && !llvm_type.starts_with("i8*");
+                        if is_float && phi_is_int {
+                            block_type = match else_actual.as_str() {
+                                "double" => vais_types::ResolvedType::F64,
+                                "float" => vais_types::ResolvedType::F32,
+                                _ => block_type,
+                            };
+                            llvm_type = else_actual;
+                            // NOTE: then_val_for_phi above was computed with
+                            // the old (int) llvm_type and may already be an
+                            // integer. We can't retroactively coerce it in
+                            // the then-block because we've already emitted
+                            // `br local_merge`. This upgrade therefore only
+                            // helps when the then branch *also* produced a
+                            // float (compatible) or terminated early. Pure
+                            // int/float if-else pairs will still mismatch —
+                            // those need block_type resolution at entry time
+                            // (out of B2 scope).
+                        }
+                    }
+                }
 
                 // For struct results, load the value before branch if it's a pointer
                 // But if else_val comes from a nested if-else (indicated by non-empty nested_last_block),
@@ -160,24 +269,54 @@ impl CodeGenerator {
                     loaded
                 } else if !else_terminated && has_else {
                     // Coerce integer width if the value type differs from the phi type
-                    let actual_ty = if matches!(
-                        else_type_resolved,
-                        vais_types::ResolvedType::F32 | vais_types::ResolvedType::F64
-                    ) {
-                        self.type_to_llvm(&else_type_resolved)
-                    } else {
-                        self.llvm_type_of(&else_val)
-                    };
-                    if actual_ty != llvm_type
-                        && (actual_ty == "float" || actual_ty == "double")
+                    let actual_ty = self.llvm_type_of(&else_val);
+                    let coerced =
+                        self.coerce_int_width(&else_val, &actual_ty, &llvm_type, counter, &mut ir);
+                    // Also coerce float width (e.g., float→double or double→float for phi)
+                    let actual_after = self.llvm_type_of(&coerced);
+                    if actual_after != llvm_type
+                        && (actual_after == "float" || actual_after == "double")
                         && (llvm_type == "float" || llvm_type == "double")
                     {
-                        self.coerce_float_width(&else_val, &actual_ty, &llvm_type, counter, &mut ir)
+                        let tmp = self.next_temp(counter);
+                        if actual_after == "float" {
+                            write_ir!(ir, "  {} = fpext float {} to double", tmp, coerced);
+                        } else {
+                            write_ir!(ir, "  {} = fptrunc double {} to float", tmp, coerced);
+                        }
+                        tmp
+                    } else if actual_after.starts_with('i')
+                        && !actual_after.contains('*')
+                        && (llvm_type == "double" || llvm_type == "float")
+                    {
+                        // Arm-block int → float coercion, dominance-safe
+                        // (emitted before `br merge`, not in merge block).
+                        let tmp = self.next_temp(counter);
+                        write_ir!(
+                            ir,
+                            "  {} = sitofp {} {} to {}",
+                            tmp,
+                            actual_after,
+                            coerced,
+                            llvm_type
+                        );
+                        tmp
                     } else {
-                        self.coerce_int_width(&else_val, &actual_ty, &llvm_type, counter, &mut ir)
+                        coerced
                     }
                 } else {
                     else_val // move: not used after
+                };
+                let else_val_for_phi = if !else_terminated && has_else {
+                    self.coerce_if_phi_incoming(
+                        else_val_for_phi,
+                        &llvm_type,
+                        &block_type,
+                        counter,
+                        &mut ir,
+                    )
+                } else {
+                    else_val_for_phi
                 };
 
                 let else_from_label = if !else_terminated {
@@ -213,17 +352,21 @@ impl CodeGenerator {
                 // (phi nodes cannot have void type in LLVM IR)
                 let is_void_type = matches!(block_type, ResolvedType::Unit);
 
-                // Check for struct/non-struct type mismatch
-                let phi_is_struct = llvm_type.starts_with('{') || llvm_type.starts_with('%');
+                // Note: the previous float-widening LUB pass was removed.
+                // Emitting `sitofp` in the merge block before the phi node
+                // violates LLVM's "PHI nodes must be grouped at top of basic
+                // block" rule. Float/integer mismatches must be handled by
+                // arm-block coercion (pre-br) or deferred to the consumer.
                 let then_actual_ty = self.llvm_type_of(&then_val_for_phi);
                 let else_actual_ty = self.llvm_type_of(&else_val_for_phi);
+                let phi_is_struct = llvm_type.starts_with('{') || llvm_type.starts_with('%');
                 let phi_type_mismatch = if phi_is_struct {
                     (!then_from_label.is_empty()
                         && then_actual_ty.starts_with('i')
                         && !then_val_for_phi.starts_with("zeroinitializer"))
                         || (!else_from_label.is_empty()
                             && else_actual_ty.starts_with('i')
-                            && else_val_for_phi != "0")
+                            && !else_val_for_phi.starts_with("zeroinitializer"))
                 } else {
                     (!then_from_label.is_empty()
                         && (then_actual_ty.starts_with('{') || then_actual_ty.starts_with('%')))
@@ -232,7 +375,9 @@ impl CodeGenerator {
                 };
 
                 // Build phi node only from non-terminated predecessors and non-void types
-                if is_void_type || phi_type_mismatch {
+                let phi_mismatch_requires_placeholder =
+                    phi_type_mismatch && llvm_type != "{ i8*, i64 }";
+                if is_void_type || phi_mismatch_requires_placeholder {
                     // When the phi type is str { i8*, i64 }, use a zeroinitializer instead
                     // of void placeholder (i64 0) to avoid type mismatch downstream.
                     if llvm_type == "{ i8*, i64 }" {
@@ -241,6 +386,7 @@ impl CodeGenerator {
                             "  {} = insertvalue {{ i8*, i64 }} {{ i8* null, i64 0 }}, i64 0, 1",
                             result
                         );
+                        self.fn_ctx.record_emitted_type(&result, "{ i8*, i64 }");
                         self.fn_ctx
                             .register_temp_type(&result, vais_types::ResolvedType::Str);
                     } else {
@@ -252,12 +398,27 @@ impl CodeGenerator {
                     // Substitute "void" placeholders (from void-returning calls
                     // as the last block expression) with a literal 0 — phi cannot
                     // accept void as an incoming value.
-                    let then_safe = if then_val_for_phi == "void" {
+                    let then_is_void = then_val_for_phi == "void";
+                    let else_is_void = else_val_for_phi == "void";
+                    // B-04a fix: phi incoming 으로 constant zeroinitializer 직접 사용.
+                    // 이전 코드는 merge block 안에 `insertvalue` SSA temp 를 emit 한 후
+                    // 그 temp 를 phi incoming 으로 썼는데, 이는 LLVM 의 "PHI nodes must
+                    // be grouped at top of basic block" 규칙을 위반.
+                    // 같은 fix 가 expr_helpers_control.rs (outer if-else) 에도 있음.
+                    let then_safe = if llvm_type == "{ i8*, i64 }"
+                        && (then_actual_ty.starts_with('i') || then_is_void)
+                    {
+                        "zeroinitializer".to_string()
+                    } else if then_is_void {
                         "0".to_string()
                     } else {
                         then_val_for_phi.clone()
                     };
-                    let else_safe = if else_val_for_phi == "void" {
+                    let else_safe = if llvm_type == "{ i8*, i64 }"
+                        && (else_actual_ty.starts_with('i') || else_is_void)
+                    {
+                        "zeroinitializer".to_string()
+                    } else if else_is_void {
                         "0".to_string()
                     } else {
                         else_val_for_phi.clone()
@@ -272,6 +433,7 @@ impl CodeGenerator {
                         else_safe,
                         else_from_label
                     );
+                    self.fn_ctx.record_emitted_type(&result, &llvm_type);
                     // Register the phi result type so a parent if-else (which
                     // sees this nested merge as its else_val) can detect it
                     // as the correct struct/enum type rather than the i64
@@ -325,6 +487,7 @@ impl CodeGenerator {
                         safe,
                         then_from_label
                     );
+                    self.fn_ctx.record_emitted_type(&result, &llvm_type);
                     self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else if !else_from_label.is_empty() {
                     let safe = if else_val_for_phi == "void" {
@@ -340,6 +503,7 @@ impl CodeGenerator {
                         safe,
                         else_from_label
                     );
+                    self.fn_ctx.record_emitted_type(&result, &llvm_type);
                     self.fn_ctx.register_temp_type(&result, block_type.clone());
                 } else {
                     // Unreachable merge block — add terminator

@@ -1,0 +1,64 @@
+use server/embedded
+use storage/constants
+use storage/file
+
+fn embedded_file_exists(db_path: str, file_name: str) -> bool {
+    path := mut db_path.clone() + "/" + file_name
+    path_exists(&path)
+}
+
+fn main() -> i64 {
+    db_path := mut "embedded_durability_db"
+    durability_lsn := mut 424242 as u64
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 1 },
+    }
+    I !db.is_open() { return 2 }
+    I db.database.page_size != PAGE_SIZE_8K { return 3 }
+    I db.database.meta.last_checkpoint_lsn != 0 { return 4 }
+
+    db.database.meta.last_checkpoint_lsn = durability_lsn
+    match db.database.flush_meta() {
+        Ok(_) => {},
+        Err(_) => { return 5 },
+    }
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 6 },
+    }
+    I db.is_open() { return 7 }
+
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_DATA) { return 8 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_META) { return 9 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_VECTORS) { return 10 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_GRAPH) { return 11 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_FULLTEXT) { return 12 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_UNDO) { return 13 }
+    I !embedded_file_exists(db_path.clone(), FILE_NAME_LOCK) { return 14 }
+
+    reopen_cfg := mut EmbeddedConfig.default()
+    reopen_cfg = reopen_cfg.with_data_dir(db_path.clone())
+
+    reopened := mut match EmbeddedDatabase.open(reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 20 },
+    }
+    I !reopened.is_open() { return 21 }
+    I reopened.database.page_size != PAGE_SIZE_8K { return 22 }
+    I reopened.database.meta.last_checkpoint_lsn != durability_lsn { return 23 }
+    I reopened.database.meta.next_txn_id != 1 { return 24 }
+
+    match reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 25 },
+    }
+    I reopened.is_open() { return 26 }
+
+    return 0
+}

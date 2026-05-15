@@ -1,0 +1,28 @@
+# CHECKS: generic identity-style fn `unwrap_or<T>(o: Option<T>, default: T) -> T`.
+# REGRESSION for bug C14: prior to the fix, a bare `None` literal at a generic
+# call site triggered an extra `$unknown` specialization with Unit-erased T,
+# producing invalid IR. Fix in `module_gen/instantiations.rs` skips
+# instantiations whose type_args contain Unknown/Generic/Var.
+fn unwrap_or<T>(o: Option<T>, default: T) -> T {
+    match o {
+        Some(v) => v,
+        None    => default
+    }
+}
+
+fn main() -> i64 {
+    a: i64 := unwrap_or(Some(42), 0)
+    I a != 42 { return 1 }
+
+    # bare `None` at call site — was a bug, now works
+    nope: Option<i64> := None
+    b: i64 := unwrap_or(nope, 99)
+    I b != 99 { return 2 }
+
+    # nested
+    inner: Option<i64> := Some(7)
+    outer: Option<i64> := Some(unwrap_or(inner, 0))
+    c: i64 := unwrap_or(outer, 0)
+    I c != 7 { return 3 }
+    return 0
+}

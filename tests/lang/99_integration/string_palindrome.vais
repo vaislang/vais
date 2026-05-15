@@ -1,0 +1,35 @@
+# CHECKS: string palindrome detection by walking bytes from both ends.
+fn is_palindrome(p: i64, n: i64) -> i64 {
+    lo: i64 := mut 0
+    hi: i64 := mut n - 1
+    L {
+        I lo >= hi { B 1 }
+        I load_byte(p + lo) != load_byte(p + hi) { B 0 }
+        lo = lo + 1
+        hi = hi - 1
+    }
+}
+
+fn main() -> i64 {
+    p1: i64 := str_to_ptr("racecar")
+    I is_palindrome(p1, strlen(p1)) != 1 { return 1 }
+
+    p2: i64 := str_to_ptr("hello")
+    I is_palindrome(p2, strlen(p2)) != 0 { return 2 }
+
+    p3: i64 := str_to_ptr("a")
+    I is_palindrome(p3, strlen(p3)) != 1 { return 3 }
+
+    p4: i64 := str_to_ptr("aa")
+    I is_palindrome(p4, strlen(p4)) != 1 { return 4 }
+
+    p5: i64 := str_to_ptr("aba")
+    I is_palindrome(p5, strlen(p5)) != 1 { return 5 }
+
+    p6: i64 := str_to_ptr("abba")
+    I is_palindrome(p6, strlen(p6)) != 1 { return 6 }
+
+    p7: i64 := str_to_ptr("abc")
+    I is_palindrome(p7, strlen(p7)) != 0 { return 7 }
+    return 0
+}

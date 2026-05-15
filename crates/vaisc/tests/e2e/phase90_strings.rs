@@ -10,7 +10,7 @@ use super::helpers::*;
 #[test]
 fn e2e_str_simple_literal() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello"
     42
 }
@@ -21,7 +21,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_empty_literal() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := ""
     42
 }
@@ -32,7 +32,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_with_spaces() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello world"
     42
 }
@@ -43,7 +43,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_with_numbers() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "test 123"
     42
 }
@@ -54,7 +54,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_escape_newline() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "line1\nline2"
     42
 }
@@ -65,7 +65,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_escape_tab() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "col1\tcol2"
     42
 }
@@ -78,10 +78,10 @@ F main() -> i64 {
 #[test]
 fn e2e_str_equal() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := "hello"
     b := "hello"
-    I a == b { 42 } E { 0 }
+    I a == b { 42 } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -90,10 +90,10 @@ F main() -> i64 {
 #[test]
 fn e2e_str_not_equal() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := "hello"
     b := "world"
-    I a != b { 42 } E { 0 }
+    I a != b { 42 } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -104,8 +104,8 @@ F main() -> i64 {
 #[test]
 fn e2e_str_passed_to_function() {
     let source = r#"
-F greet(name: str) -> i64 = 42
-F main() -> i64 = greet("world")
+fn greet(name: str) -> i64 = 42
+fn main() -> i64 = greet("world")
 "#;
     assert_exit_code(source, 42);
 }
@@ -113,8 +113,8 @@ F main() -> i64 = greet("world")
 #[test]
 fn e2e_str_multiple_params() {
     let source = r#"
-F combine(a: str, b: str) -> i64 = 42
-F main() -> i64 = combine("hello", "world")
+fn combine(a: str, b: str) -> i64 = 42
+fn main() -> i64 = combine("hello", "world")
 "#;
     assert_exit_code(source, 42);
 }
@@ -124,7 +124,7 @@ F main() -> i64 = combine("hello", "world")
 #[test]
 fn e2e_str_interpolation_basic() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     x := 42
     s := ~"value is {x}"
     42
@@ -136,7 +136,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_interpolation_expr() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := 20
     b := 22
     s := ~"sum is {a + b}"
@@ -151,7 +151,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_print_hello() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     print("hello")
     0
 }
@@ -162,7 +162,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_print_number() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     print_i64(42)
     0
 }
@@ -173,7 +173,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_println() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     println("test")
     0
 }
@@ -186,10 +186,10 @@ F main() -> i64 {
 #[test]
 fn e2e_str_assign_and_use() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "hello"
     t := s
-    I t == "hello" { 42 } E { 0 }
+    I t == "hello" { 42 } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -198,11 +198,11 @@ F main() -> i64 {
 #[test]
 fn e2e_str_multiple_variables() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     a := "alpha"
     b := "beta"
     c := "gamma"
-    I a != b { I b != c { 42 } E { 0 } } E { 0 }
+    I a != b { I b != c { 42 } else { 0 } } else { 0 }
 }
 "#;
     assert_exit_code(source, 42);
@@ -211,8 +211,8 @@ F main() -> i64 {
 #[test]
 fn e2e_str_in_struct() {
     let source = r#"
-S Named { name: str, id: i64 }
-F main() -> i64 {
+struct Named { name: str, id: i64 }
+fn main() -> i64 {
     n := Named { name: "test", id: 42 }
     n.id
 }
@@ -225,7 +225,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_long_string() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "this is a moderately long string for testing purposes only"
     42
 }
@@ -236,7 +236,7 @@ F main() -> i64 {
 #[test]
 fn e2e_str_special_chars() {
     let source = r#"
-F main() -> i64 {
+fn main() -> i64 {
     s := "special: !@#$%^&*()"
     42
 }
