@@ -109,7 +109,7 @@ jobs:
 
       - name: Upload regression logs on failure
         if: failure() && steps.check_lang.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vaisdb-regression-logs
           path: |
