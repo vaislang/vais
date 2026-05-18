@@ -97,7 +97,7 @@ tokio = { version = "1", features = ["full"] }
 rayon = "1.10"
 
 # Cryptography
-sha2 = "0.10"
+sha2 = "0.11"
 
 # Archive handling
 flate2 = "1.0"
