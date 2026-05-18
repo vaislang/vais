@@ -17,7 +17,7 @@ miette = { workspace = true }
 colored = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-rustyline = "17"
+rustyline = "18"
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

@@ -39,7 +39,7 @@ clap = { version = "4.5", features = ["derive"] }
 miette = { workspace = true }
 thiserror = { workspace = true }
 colored = { workspace = true }
-rustyline = "17"
+rustyline = "18"
 sha2 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
