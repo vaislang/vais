@@ -24,7 +24,7 @@ vais-codegen = { path = "../vais-codegen" }
 
 # DWARF parsing
 gimli = "0.33"
-object = { version = "0.38", features = ["read"] }
+object = { version = "0.39", features = ["read"] }
 
 # Utilities
 thiserror.workspace = true
