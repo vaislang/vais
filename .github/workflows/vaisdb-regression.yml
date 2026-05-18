@@ -41,12 +41,12 @@ jobs:
 
     steps:
       - name: Checkout vais compiler
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: vais
 
       - name: Checkout vais-lang (vaisdb)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: vaislang/vais-lang
           path: vais-lang
