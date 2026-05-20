@@ -508,6 +508,31 @@ fn main() -> i64 {
     column_list_result.free_owned_text()
     column_list_result.free_owned_text()
 
+    arbitrary_id_result := mut match reopened.query("select * from people where id = 103") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I arbitrary_id_result.column_count() != 2 as u64 { return 255 }
+    I arbitrary_id_result.row_count() != 1 as u64 { return 255 }
+    arbitrary_id_cols := mut arbitrary_id_result.get_columns()
+    I !expect_column(arbitrary_id_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(arbitrary_id_cols, 1, "name", "TEXT") { return 255 }
+    arbitrary_id_rows := mut arbitrary_id_result.get_rows()
+    arbitrary_id_row := mut &arbitrary_id_rows[0]
+    I !expect_cell(arbitrary_id_row, 0, "103") { return 255 }
+    I !expect_cell(arbitrary_id_row, 1, "barbara") { return 255 }
+    arbitrary_id_result.free_owned_text()
+    arbitrary_id_result.free_owned_text()
+
+    arbitrary_missing := mut match reopened.query("select * from people where id = 12345") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I arbitrary_missing.column_count() != 2 as u64 { return 255 }
+    I arbitrary_missing.row_count() != 0 as u64 { return 255 }
+    arbitrary_missing.free_owned_text()
+    arbitrary_missing.free_owned_text()
+
     inserted_partial := mut match reopened.execute("insert into people (id) values (104), (105)") {
         Ok(n) => n,
         Err(_) => { return 137 },
@@ -574,6 +599,18 @@ fn main() -> i64 {
     I !expect_cell(partial_reopened_update_row, 1, "lovelace") { return 230 }
     partial_reopened_update.free_owned_text()
     partial_reopened_update.free_owned_text()
+
+    partial_reopened_arbitrary := mut match partial_reopened.query("select * from people where 103 = id") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I partial_reopened_arbitrary.row_count() != 1 as u64 { return 255 }
+    partial_reopened_arbitrary_rows := mut partial_reopened_arbitrary.get_rows()
+    partial_reopened_arbitrary_row := mut &partial_reopened_arbitrary_rows[0]
+    I !expect_cell(partial_reopened_arbitrary_row, 0, "103") { return 255 }
+    I !expect_cell(partial_reopened_arbitrary_row, 1, "barbara") { return 255 }
+    partial_reopened_arbitrary.free_owned_text()
+    partial_reopened_arbitrary.free_owned_text()
 
     inserted_explicit_null := mut match partial_reopened.execute("insert into people (name, id) values (NULL, 106), ('dorothy', NULL)") {
         Ok(n) => n,
@@ -815,6 +852,10 @@ fn main() -> i64 {
     # SELECT * / SELECT name, id must be rejected, not silently run.
     match neg_db.query("select count(*) from people") {
         Ok(_) => { return 205 },
+        Err(_) => {},
+    }
+    match neg_db.query("select * from people where name = 'ada'") {
+        Ok(_) => { return 255 },
         Err(_) => {},
     }
     match neg_db.query("select id + 1 from people") {
