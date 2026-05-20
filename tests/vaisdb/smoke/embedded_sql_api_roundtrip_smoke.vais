@@ -32,6 +32,10 @@
 #     `update people set name = 'lovelace' where id = 42` path, including
 #     stale tuple hiding and current row visibility through public SELECT after
 #     explicit recovery.
+#   - Promotes bounded WAL redo recovery evidence for the fixed plain
+#     `delete from people where id = 7` path, including target hiding,
+#     survivor visibility, and row-count proof through public SELECT after
+#     explicit recovery.
 #
 # This keeps broader SQL planning out of scope; it locks the first SQLite-like
 # in-process SQL API boundary over the already-certified catalog + heap DML
@@ -171,6 +175,56 @@ fn expect_people_update_wal_recovery(db_path: str, page_id: u32, start_lsn: u64,
     match recovered.close() {
         Ok(_) => {},
         Err(_) => { return 240 },
+    }
+
+    0
+}
+
+fn expect_people_delete_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, pre_delete_page: Vec<u8>) -> i64 {
+    replay_code := mut expect_page_wal_recovery(db_path.clone(), page_id, start_lsn, pre_delete_page, 1 as u64, 1 as u64)
+    I replay_code != 0 {
+        return replay_code
+    }
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path)
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+    recovered := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 241 },
+    }
+
+    deleted_probe := mut match recovered.query("select * from people where id = 7") {
+        Ok(r) => r,
+        Err(_) => { return 242 },
+    }
+    I deleted_probe.row_count() != 0 as u64 { return 243 }
+    deleted_probe.free_owned_text()
+    deleted_probe.free_owned_text()
+
+    survivor := mut match recovered.query("select * from people where id = 42") {
+        Ok(r) => r,
+        Err(_) => { return 244 },
+    }
+    I survivor.row_count() != 1 as u64 { return 245 }
+    survivor_rows := mut survivor.get_rows()
+    survivor_row := mut &survivor_rows[0]
+    I !expect_cell(survivor_row, 0, "42") { return 246 }
+    I !expect_cell(survivor_row, 1, "lovelace") { return 247 }
+    survivor.free_owned_text()
+    survivor.free_owned_text()
+
+    all_rows := mut match recovered.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 248 },
+    }
+    I all_rows.row_count() != 11 as u64 { return 249 }
+    all_rows.free_owned_text()
+    all_rows.free_owned_text()
+
+    match recovered.close() {
+        Ok(_) => {},
+        Err(_) => { return 250 },
     }
 
     0
@@ -1015,6 +1069,23 @@ fn main() -> i64 {
         Ok(v) => v,
         Err(_) => { return 255 },
     }
+    delete_page_id := mut 0 as u32
+    match delete_db.catalog.get_table("people") {
+        Some(info) => {
+            delete_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I delete_page_id == 0 { return 255 }
+    people_pre_delete_frame := mut match delete_db.pool.fetch_page(FILE_ID_DATA, delete_page_id) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    people_pre_delete_page_ref := mut delete_db.pool.get_page(people_pre_delete_frame)
+    people_pre_delete_page := mut copy_smoke_page(people_pre_delete_page_ref)
+    delete_db.pool.unpin_page(people_pre_delete_frame, false)
+    people_delete_recovery_start_lsn := mut delete_db.gcm.current_lsn()
+
     deleted := mut match delete_db.execute("delete from people where id = 7") {
         Ok(n) => n,
         Err(_) => { return 255 },
@@ -1051,6 +1122,10 @@ fn main() -> i64 {
     match delete_db.close() {
         Ok(_) => {},
         Err(_) => { return 255 },
+    }
+    people_delete_recovery_code := mut expect_people_delete_wal_recovery(db_path.clone(), delete_page_id, people_delete_recovery_start_lsn, people_pre_delete_page)
+    I people_delete_recovery_code != 0 {
+        return people_delete_recovery_code
     }
 
     delete_reopen_cfg := mut EmbeddedConfig.default()
