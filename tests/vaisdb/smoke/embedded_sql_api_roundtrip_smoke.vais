@@ -24,6 +24,9 @@
 #     persist through close/reopen. Composite/table-level constraints, foreign
 #     key/reference constraints, and non-literal/default type-mismatch forms
 #     stay rejected.
+#   - Promotes descriptor-backed books(id INT, title TEXT) CREATE,
+#     values-only INSERT, and unfiltered SELECT, including close/reopen
+#     visibility and negative books filter/join/projection boundaries.
 #
 # This keeps broader SQL planning out of scope; it locks the first SQLite-like
 # in-process SQL API boundary over the already-certified catalog + heap DML
@@ -1035,6 +1038,124 @@ fn main() -> i64 {
     match neg_db.close() {
         Ok(_) => {},
         Err(_) => { return 207 },
+    }
+
+    # --- Descriptor-backed second table: books(id INT, title TEXT) ---
+    #
+    # This is the first schema-driven descriptor slice beyond hard-coded
+    # people-table recognition. It accepts only the registered books descriptor
+    # shape and keeps filters, broad projections, joins, and unregistered tables
+    # rejected.
+    books_suffix := mut time_micros()
+    books_path := mut "embedded_sql_api_roundtrip_books_db_{books_suffix}"
+    books_cfg := mut EmbeddedConfig.default()
+    books_cfg = books_cfg.with_data_dir(books_path.clone())
+    books_cfg = books_cfg.with_page_size(PAGE_SIZE_8K)
+    books_db := mut match EmbeddedDatabase.open(books_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 230 },
+    }
+    books_created := mut match books_db.execute("create table books (id int, title text)") {
+        Ok(v) => v,
+        Err(_) => { return 231 },
+    }
+    I books_created != 0 as u64 { return 232 }
+    books_inserted_a := mut match books_db.execute("insert into books values (1, 'dune')") {
+        Ok(v) => v,
+        Err(_) => { return 233 },
+    }
+    I books_inserted_a != 1 as u64 { return 234 }
+    books_inserted_b := mut match books_db.execute("insert into books values (2, 'foundation')") {
+        Ok(v) => v,
+        Err(_) => { return 235 },
+    }
+    I books_inserted_b != 1 as u64 { return 236 }
+
+    books_result := mut match books_db.query("select * from books") {
+        Ok(r) => r,
+        Err(_) => { return 237 },
+    }
+    I books_result.column_count() != 2 as u64 { return 238 }
+    I books_result.row_count() != 2 as u64 { return 239 }
+    books_cols := mut books_result.get_columns()
+    I !expect_column(books_cols, 0, "id", "INT") { return 240 }
+    I !expect_column(books_cols, 1, "title", "TEXT") { return 241 }
+    books_rows := mut books_result.get_rows()
+    books_row0 := mut &books_rows[0]
+    books_row1 := mut &books_rows[1]
+    I !expect_cell(books_row0, 0, "1") { return 242 }
+    I !expect_cell(books_row0, 1, "dune") { return 243 }
+    I !expect_cell(books_row1, 0, "2") { return 244 }
+    I !expect_cell(books_row1, 1, "foundation") { return 245 }
+    books_result.free_owned_text()
+    books_result.free_owned_text()
+
+    books_projection := mut match books_db.query("select id, title from books") {
+        Ok(r) => r,
+        Err(_) => { return 246 },
+    }
+    I books_projection.column_count() != 2 as u64 { return 247 }
+    I books_projection.row_count() != 2 as u64 { return 248 }
+    books_projection_cols := mut books_projection.get_columns()
+    I !expect_column(books_projection_cols, 0, "id", "INT") { return 249 }
+    I !expect_column(books_projection_cols, 1, "title", "TEXT") { return 250 }
+    books_projection.free_owned_text()
+    books_projection.free_owned_text()
+
+    match books_db.query("select title from books") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match books_db.query("select * from books where id = 1") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match books_db.query("select books.id, books.title from books") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match books_db.query("select * from books join people on books.id = people.id") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match books_db.execute("create table magazines (id int, title text)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+
+    match books_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    books_reopen_cfg := mut EmbeddedConfig.default()
+    books_reopen_cfg = books_reopen_cfg.with_data_dir(books_path.clone())
+    books_reopen_cfg = books_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    books_reopened := mut match EmbeddedDatabase.open(books_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    books_reopened_result := mut match books_reopened.query("select * from books") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I books_reopened_result.column_count() != 2 as u64 { return 255 }
+    I books_reopened_result.row_count() != 2 as u64 { return 255 }
+    books_reopened_cols := mut books_reopened_result.get_columns()
+    I !expect_column(books_reopened_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(books_reopened_cols, 1, "title", "TEXT") { return 255 }
+    books_reopened_rows := mut books_reopened_result.get_rows()
+    books_reopened_row0 := mut &books_reopened_rows[0]
+    books_reopened_row1 := mut &books_reopened_rows[1]
+    I !expect_cell(books_reopened_row0, 0, "1") { return 255 }
+    I !expect_cell(books_reopened_row0, 1, "dune") { return 255 }
+    I !expect_cell(books_reopened_row1, 0, "2") { return 255 }
+    I !expect_cell(books_reopened_row1, 1, "foundation") { return 255 }
+    books_reopened_result.free_owned_text()
+    books_reopened_result.free_owned_text()
+    match books_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
     }
 
     # --- Promoted PRIMARY KEY subset: people(id INT PRIMARY KEY, name TEXT) ---
