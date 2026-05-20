@@ -3,12 +3,14 @@ use src/core/config
 use src/core/context
 use server/embedded
 use storage/constants
+use std/vec
 
 fn check_server_surface() -> i64 {
     app := mut App.new(ServerConfig.default())
     app.get("/db/health", "db_health_handler")
+    app.get("/db/books", "db_books_handler")
 
-    I app.route_count() != 1 {
+    I app.route_count() != 2 {
         println("FAIL app route registration")
         return 1
     }
@@ -37,6 +39,133 @@ fn check_server_surface() -> i64 {
     return 0
 }
 
+fn cell_or_empty(row: &Vec<Option<str>>, idx: u64) -> str {
+    match row[idx] {
+        Some(v) => v,
+        None => "",
+    }
+}
+
+fn setup_books_db(db_path: str) -> i64 {
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 20 },
+    }
+
+    created := mut match db.execute("create table books (id int, title text)") {
+        Ok(v) => v,
+        Err(_) => { return 21 },
+    }
+    I created != 0 as u64 { return 22 }
+
+    inserted_a := mut match db.execute("insert into books values (1, 'dune')") {
+        Ok(v) => v,
+        Err(_) => { return 23 },
+    }
+    I inserted_a != 1 as u64 { return 24 }
+
+    inserted_b := mut match db.execute("insert into books values (2, 'foundation')") {
+        Ok(v) => v,
+        Err(_) => { return 25 },
+    }
+    I inserted_b != 1 as u64 { return 26 }
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 27 },
+    }
+
+    0
+}
+
+fn db_books_handler(db_path: str) -> Response {
+    ctx := mut Context.new("GET", "/db/books")
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_unavailable\"}") },
+    }
+
+    result := mut match db.query("select * from books") {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        },
+    }
+
+    I result.row_count() != 2 as u64 {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(500, "{\"error\":\"db_unexpected_rows\"}")
+    }
+
+    rows := mut result.get_rows()
+    row0 := mut &rows[0]
+    row1 := mut &rows[1]
+    I cell_or_empty(row0, 0) != "1" || cell_or_empty(row0, 1) != "dune" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(500, "{\"error\":\"db_unexpected_row\"}")
+    }
+    I cell_or_empty(row1, 0) != "2" || cell_or_empty(row1, 1) != "foundation" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(500, "{\"error\":\"db_unexpected_row\"}")
+    }
+    body := mut "{\"data\":[{\"id\":1,\"title\":\"dune\"},{\"id\":2,\"title\":\"foundation\"}]}"
+
+    result.free_owned_text()
+    result.free_owned_text()
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_close_failed\"}") },
+    }
+
+    ctx.json(200, body)
+}
+
+fn check_books_route(db_path: str) -> i64 {
+    response := mut db_books_handler(db_path)
+    I response.status != 200 {
+        println("FAIL db books response status")
+        return 30
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db books response content type")
+        return 31
+    }
+    I response.body != "{\"data\":[{\"id\":1,\"title\":\"dune\"},{\"id\":2,\"title\":\"foundation\"}]}" {
+        println("FAIL db books response body")
+        println(response.body)
+        return 32
+    }
+    0
+}
+
 fn main() -> i64 {
     db_path := mut "server_vaisdb_integration_db"
 
@@ -45,18 +174,14 @@ fn main() -> i64 {
         return server_status
     }
 
-    cfg := mut EmbeddedConfig.default()
-    cfg = cfg.with_data_dir(db_path.clone())
-    cfg = cfg.with_page_size(PAGE_SIZE_8K)
-
-    db := mut match EmbeddedDatabase.open(cfg) {
-        Ok(v) => v,
-        Err(_) => { return 2 },
+    setup_status := mut setup_books_db(db_path.clone())
+    I setup_status != 0 {
+        return setup_status
     }
 
-    match db.close() {
-        Ok(_) => {},
-        Err(_) => { return 16 },
+    route_status := mut check_books_route(db_path.clone())
+    I route_status != 0 {
+        return route_status
     }
 
     println("VAIS_SERVER_VAISDB_INTEGRATION_OK")
