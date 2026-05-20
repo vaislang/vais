@@ -267,6 +267,38 @@ fn main() -> i64 {
     projected_id_name.free_owned_text()
     projected_id_name.free_owned_text()
 
+    projected_id := mut match db.query("select id from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I projected_id.column_count() != 1 as u64 { return 255 }
+    I projected_id.row_count() != 2 as u64 { return 255 }
+    projected_id_cols := mut projected_id.get_columns()
+    I !expect_column(projected_id_cols, 0, "id", "INT") { return 255 }
+    projected_id_rows := mut projected_id.get_rows()
+    projected_id_row0 := mut &projected_id_rows[0]
+    projected_id_row1 := mut &projected_id_rows[1]
+    I !expect_cell(projected_id_row0, 0, "42") { return 255 }
+    I !expect_cell(projected_id_row1, 0, "7") { return 255 }
+    projected_id.free_owned_text()
+    projected_id.free_owned_text()
+
+    projected_name := mut match db.query("select name from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I projected_name.column_count() != 1 as u64 { return 255 }
+    I projected_name.row_count() != 2 as u64 { return 255 }
+    projected_name_cols := mut projected_name.get_columns()
+    I !expect_column(projected_name_cols, 0, "name", "TEXT") { return 255 }
+    projected_name_rows := mut projected_name.get_rows()
+    projected_name_row0 := mut &projected_name_rows[0]
+    projected_name_row1 := mut &projected_name_rows[1]
+    I !expect_cell(projected_name_row0, 0, "ada") { return 255 }
+    I !expect_cell(projected_name_row1, 0, "grace") { return 255 }
+    projected_name.free_owned_text()
+    projected_name.free_owned_text()
+
     qualified := mut match db.query("select people.name, people.id from people where people.id = 7") {
         Ok(r) => r,
         Err(_) => { return 80 },
@@ -298,6 +330,34 @@ fn main() -> i64 {
     I !expect_cell(qualified_id_name_row, 1, "grace") { return 255 }
     qualified_id_name.free_owned_text()
     qualified_id_name.free_owned_text()
+
+    qualified_id := mut match db.query("select people.id from people where people.id = 7") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I qualified_id.column_count() != 1 as u64 { return 255 }
+    I qualified_id.row_count() != 1 as u64 { return 255 }
+    qualified_id_cols := mut qualified_id.get_columns()
+    I !expect_column(qualified_id_cols, 0, "id", "INT") { return 255 }
+    qualified_id_rows := mut qualified_id.get_rows()
+    qualified_id_row := mut &qualified_id_rows[0]
+    I !expect_cell(qualified_id_row, 0, "7") { return 255 }
+    qualified_id.free_owned_text()
+    qualified_id.free_owned_text()
+
+    qualified_name := mut match db.query("select people.name from people where 7 = people.id") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I qualified_name.column_count() != 1 as u64 { return 255 }
+    I qualified_name.row_count() != 1 as u64 { return 255 }
+    qualified_name_cols := mut qualified_name.get_columns()
+    I !expect_column(qualified_name_cols, 0, "name", "TEXT") { return 255 }
+    qualified_name_rows := mut qualified_name.get_rows()
+    qualified_name_row := mut &qualified_name_rows[0]
+    I !expect_cell(qualified_name_row, 0, "grace") { return 255 }
+    qualified_name.free_owned_text()
+    qualified_name.free_owned_text()
 
     aliased := mut match db.query("select p.name, p.id from people as p where p.id = 42") {
         Ok(r) => r,
@@ -346,6 +406,20 @@ fn main() -> i64 {
     I !expect_cell(output_alias_id_name_row, 1, "ada") { return 255 }
     output_alias_id_name.free_owned_text()
     output_alias_id_name.free_owned_text()
+
+    output_alias_single := mut match db.query("select id as person_id from people where id = 42") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I output_alias_single.column_count() != 1 as u64 { return 255 }
+    I output_alias_single.row_count() != 1 as u64 { return 255 }
+    output_alias_single_cols := mut output_alias_single.get_columns()
+    I !expect_column(output_alias_single_cols, 0, "person_id", "INT") { return 255 }
+    output_alias_single_rows := mut output_alias_single.get_rows()
+    output_alias_single_row := mut &output_alias_single_rows[0]
+    I !expect_cell(output_alias_single_row, 0, "42") { return 255 }
+    output_alias_single.free_owned_text()
+    output_alias_single.free_owned_text()
 
     qualified_output_alias := mut match db.query("select p.name person_name, p.id as person_id from people p where p.id = 42") {
         Ok(r) => r,
@@ -919,6 +993,10 @@ fn main() -> i64 {
     # SELECT * / SELECT name, id must be rejected, not silently run.
     match neg_db.query("select count(*) from people") {
         Ok(_) => { return 205 },
+        Err(_) => {},
+    }
+    match neg_db.query("select id, id from people") {
+        Ok(_) => { return 255 },
         Err(_) => {},
     }
     match neg_db.query("select * from people where name = 'ada'") {
