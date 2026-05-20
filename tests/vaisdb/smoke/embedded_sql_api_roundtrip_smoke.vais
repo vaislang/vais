@@ -28,6 +28,10 @@
 #     values-only INSERT, and unfiltered SELECT, including close/reopen
 #     visibility, bounded WAL redo recovery evidence for values-only INSERT,
 #     and negative books filter/join/projection boundaries.
+#   - Promotes bounded WAL redo recovery evidence for the fixed plain
+#     `update people set name = 'lovelace' where id = 42` path, including
+#     stale tuple hiding and current row visibility through public SELECT after
+#     explicit recovery.
 #
 # This keeps broader SQL planning out of scope; it locks the first SQLite-like
 # in-process SQL API boundary over the already-certified catalog + heap DML
@@ -75,26 +79,26 @@ fn copy_smoke_page(data: &[u8]) -> Vec<u8> {
     out
 }
 
-fn expect_books_insert_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, pre_insert_page: Vec<u8>) -> i64 {
+fn expect_page_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, pre_mutation_page: Vec<u8>, min_txn_entries: u64, min_records_redone: u64) -> i64 {
     data_path := mut db_path.clone() + "/" + FILE_NAME_DATA
     page_offset := mut (page_id as u64) * (PAGE_SIZE_8K as u64)
 
     restore_file := mut match File.open(data_path.clone(), "rw+") {
         Ok(f) => f,
-        Err(_) => { return 255 },
+        Err(_) => { return 224 },
     }
-    match restore_file.write_at(page_offset, &pre_insert_page[0..pre_insert_page.len()]) {
+    match restore_file.write_at(page_offset, &pre_mutation_page[0..pre_mutation_page.len()]) {
         Ok(_) => {},
-        Err(_) => { return 255 },
+        Err(_) => { return 225 },
     }
     match restore_file.fsync() {
         Ok(_) => {},
-        Err(_) => { return 255 },
+        Err(_) => { return 226 },
     }
 
     recovery_file := mut match File.open(data_path, "rw+") {
         Ok(f) => f,
-        Err(_) => { return 255 },
+        Err(_) => { return 227 },
     }
     files: Vec<File> := mut Vec.with_capacity(1)
     files.push(recovery_file)
@@ -104,23 +108,69 @@ fn expect_books_insert_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, 
 
     analysis := mut match recovery_analysis(&wal_dir, start_lsn) {
         Ok(v) => v,
-        Err(_) => { return 255 },
+        Err(_) => { return 228 },
     }
-    I analysis.txn_entries.len() < 2 {
-        return 255
+    I analysis.txn_entries.len() < min_txn_entries {
+        return 229
     }
 
     records_redone := mut match recovery_redo(&wal_dir, &analysis, &mut pool) {
         Ok(v) => v,
-        Err(_) => { return 255 },
+        Err(_) => { return 230 },
     }
-    I records_redone < 2 as u64 {
-        return 255
+    I records_redone < min_records_redone {
+        return 231
     }
 
     match pool.flush_all() {
         Ok(_) => {},
-        Err(_) => { return 255 },
+        Err(_) => { return 232 },
+    }
+
+    0
+}
+
+fn expect_books_insert_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, pre_insert_page: Vec<u8>) -> i64 {
+    expect_page_wal_recovery(db_path, page_id, start_lsn, pre_insert_page, 2 as u64, 2 as u64)
+}
+
+fn expect_people_update_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, pre_update_page: Vec<u8>) -> i64 {
+    replay_code := mut expect_page_wal_recovery(db_path.clone(), page_id, start_lsn, pre_update_page, 1 as u64, 1 as u64)
+    I replay_code != 0 {
+        return replay_code
+    }
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path)
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+    recovered := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 233 },
+    }
+
+    current := mut match recovered.query("select * from people where id = 42") {
+        Ok(r) => r,
+        Err(_) => { return 234 },
+    }
+    I current.row_count() != 1 as u64 { return 235 }
+    rows := mut current.get_rows()
+    row := mut &rows[0]
+    I !expect_cell(row, 0, "42") { return 236 }
+    I !expect_cell(row, 1, "lovelace") { return 237 }
+    current.free_owned_text()
+    current.free_owned_text()
+
+    all_rows := mut match recovered.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 238 },
+    }
+    I all_rows.row_count() != 2 as u64 { return 239 }
+    all_rows.free_owned_text()
+    all_rows.free_owned_text()
+
+    match recovered.close() {
+        Ok(_) => {},
+        Err(_) => { return 240 },
     }
 
     0
@@ -635,6 +685,23 @@ fn main() -> i64 {
     reopened_grace.free_owned_text()
     reopened_grace.free_owned_text()
 
+    people_page_id := mut 0 as u32
+    match reopened.catalog.get_table("people") {
+        Some(info) => {
+            people_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I people_page_id == 0 { return 255 }
+    people_pre_update_frame := mut match reopened.pool.fetch_page(FILE_ID_DATA, people_page_id) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    people_pre_update_page_ref := mut reopened.pool.get_page(people_pre_update_frame)
+    people_pre_update_page := mut copy_smoke_page(people_pre_update_page_ref)
+    reopened.pool.unpin_page(people_pre_update_frame, false)
+    people_update_recovery_start_lsn := mut reopened.gcm.current_lsn()
+
     updated := mut match reopened.execute("update people set name = 'lovelace' where id = 42") {
         Ok(n) => n,
         Err(_) => { return 218 },
@@ -652,6 +719,19 @@ fn main() -> i64 {
     I !expect_cell(updated_row, 1, "lovelace") { return 223 }
     updated_result.free_owned_text()
     updated_result.free_owned_text()
+
+    match reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+    people_update_recovery_code := mut expect_people_update_wal_recovery(db_path.clone(), people_page_id, people_update_recovery_start_lsn, people_pre_update_page)
+    I people_update_recovery_code != 0 {
+        return people_update_recovery_code
+    }
+    reopened = match EmbeddedDatabase.open(reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
 
     inserted_many := mut match reopened.execute("insert into people values (100, 'linus'), (101, 'margaret')") {
         Ok(n) => n,
