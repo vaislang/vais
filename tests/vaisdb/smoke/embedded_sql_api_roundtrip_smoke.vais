@@ -26,7 +26,8 @@
 #     stay rejected.
 #   - Promotes descriptor-backed books(id INT, title TEXT) CREATE,
 #     values-only INSERT, and unfiltered SELECT, including close/reopen
-#     visibility and negative books filter/join/projection boundaries.
+#     visibility, bounded WAL redo recovery evidence for values-only INSERT,
+#     and negative books filter/join/projection boundaries.
 #
 # This keeps broader SQL planning out of scope; it locks the first SQLite-like
 # in-process SQL API boundary over the already-certified catalog + heap DML
@@ -35,6 +36,11 @@
 
 use server/embedded
 use storage/constants
+use storage/file
+use storage/page/manager
+use storage/buffer/pool
+use storage/recovery/redo
+use storage/wal/lsn
 use sql/parser/token
 use std/time
 
@@ -57,6 +63,67 @@ fn expect_none_cell(row: &Vec<Option<str>>, idx: u64) -> bool {
 fn expect_column(cols: &Vec<EmbeddedColumn>, idx: u64, expected_name: str, expected_type: str) -> bool {
     col := mut &cols[idx]
     (__str_eq(col.name, expected_name) != 0) && (__str_eq(col.type_name, expected_type) != 0)
+}
+
+fn copy_smoke_page(data: &[u8]) -> Vec<u8> {
+    out: Vec<u8> := mut Vec.with_capacity(data.len())
+    i := mut 0u64
+    LW i < data.len() {
+        out.push(data[i])
+        i = i + 1
+    }
+    out
+}
+
+fn expect_books_insert_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, pre_insert_page: Vec<u8>) -> i64 {
+    data_path := mut db_path.clone() + "/" + FILE_NAME_DATA
+    page_offset := mut (page_id as u64) * (PAGE_SIZE_8K as u64)
+
+    restore_file := mut match File.open(data_path.clone(), "rw+") {
+        Ok(f) => f,
+        Err(_) => { return 255 },
+    }
+    match restore_file.write_at(page_offset, &pre_insert_page[0..pre_insert_page.len()]) {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+    match restore_file.fsync() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    recovery_file := mut match File.open(data_path, "rw+") {
+        Ok(f) => f,
+        Err(_) => { return 255 },
+    }
+    files: Vec<File> := mut Vec.with_capacity(1)
+    files.push(recovery_file)
+    manager := mut PageManager.new(files, PAGE_SIZE_8K)
+    pool := mut BufferPool.new(manager, PAGE_SIZE_8K, 4 as u32)
+    wal_dir := mut db_path.clone() + "/" + DIR_NAME_WAL
+
+    analysis := mut match recovery_analysis(&wal_dir, start_lsn) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    I analysis.txn_entries.len() < 2 {
+        return 255
+    }
+
+    records_redone := mut match recovery_redo(&wal_dir, &analysis, &mut pool) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    I records_redone < 2 as u64 {
+        return 255
+    }
+
+    match pool.flush_all() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    0
 }
 
 fn expect_token_text_free_idempotent() -> i64 {
@@ -1060,6 +1127,24 @@ fn main() -> i64 {
         Err(_) => { return 231 },
     }
     I books_created != 0 as u64 { return 232 }
+    books_page_id := mut 0 as u32
+    match books_db.catalog.get_table("books") {
+        Some(info) => {
+            books_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I books_page_id == 0 { return 255 }
+    books_empty_frame := mut match books_db.pool.fetch_page(FILE_ID_DATA, books_page_id) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    books_empty_page_ref := mut books_db.pool.get_page(books_empty_frame)
+    books_pre_insert_page := mut copy_smoke_page(books_empty_page_ref)
+    books_db.pool.unpin_page(books_empty_frame, false)
+
+    books_insert_recovery_start_lsn := mut books_db.gcm.current_lsn()
+
     books_inserted_a := mut match books_db.execute("insert into books values (1, 'dune')") {
         Ok(v) => v,
         Err(_) => { return 233 },
@@ -1126,6 +1211,10 @@ fn main() -> i64 {
     match books_db.close() {
         Ok(_) => {},
         Err(_) => { return 255 },
+    }
+    books_recovery_code := mut expect_books_insert_wal_recovery(books_path.clone(), books_page_id, books_insert_recovery_start_lsn, books_pre_insert_page)
+    I books_recovery_code != 0 {
+        return books_recovery_code
     }
 
     books_reopen_cfg := mut EmbeddedConfig.default()
