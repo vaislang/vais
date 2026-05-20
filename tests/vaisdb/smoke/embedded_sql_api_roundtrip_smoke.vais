@@ -999,7 +999,31 @@ fn main() -> i64 {
         Ok(_) => { return 255 },
         Err(_) => {},
     }
+    # Unsupported filters/predicates: only id equality against INT literals is
+    # promoted. Text filters, boolean predicates, non-equality comparisons, and
+    # expression predicates must stay rejected before any name-filter or planner
+    # bridge promotion.
     match neg_db.query("select * from people where name = 'ada'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match neg_db.query("select id from people where name = 'ada'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match neg_db.query("select * from people where id = 42 and name = 'ada'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match neg_db.query("select * from people where id = 42 or id = 7") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match neg_db.query("select * from people where id > 7") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match neg_db.query("select * from people where id + 1 = 43") {
         Ok(_) => { return 255 },
         Err(_) => {},
     }
