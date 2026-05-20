@@ -49,7 +49,7 @@ is not yet a single `origin/main` gate.
 | vais-server runtime | `20/20` | Scoped runtime evidence |
 | Vais Web runtime | `61/77` | Scoped runtime evidence |
 | Vais Web unit | `390/390` | Scoped package evidence |
-| Vais Web packages | `3272/3272` | Scoped package evidence |
+| Vais Web packages | `3277/3277` | Scoped package evidence |
 | Vais Web full-build | `24/24` | Scoped full-build evidence |
 | Package full-build | `2/2` | Scoped package evidence |
 

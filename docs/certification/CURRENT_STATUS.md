@@ -80,7 +80,7 @@ single source for current pass counts. CI fails on drift.
 | vais-server runtime | `smoke=25/25` |
 | vais-web runtime | `smoke=61/77` |
 | vais-web unit | `tests=390/390` |
-| vais-web packages | `tests=3272/3272` |
+| vais-web packages | `tests=3277/3277` |
 | vais-web full-build | `packages=24/24` |
 | Cross-package schema gate | `gate=15/15` |
 | Multi-domain product gate | `gate=9/9` |
