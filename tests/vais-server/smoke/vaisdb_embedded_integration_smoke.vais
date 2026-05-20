@@ -166,8 +166,27 @@ fn check_books_route(db_path: str) -> i64 {
     0
 }
 
+fn check_books_route_missing_catalog(db_path: str) -> i64 {
+    response := mut db_books_handler(db_path)
+    I response.status != 500 {
+        println("FAIL db books missing catalog status")
+        return 35
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db books missing catalog content type")
+        return 36
+    }
+    I response.body != "{\"error\":\"db_query_failed\"}" {
+        println("FAIL db books missing catalog body")
+        println(response.body)
+        return 37
+    }
+    0
+}
+
 fn main() -> i64 {
     db_path := mut "server_vaisdb_integration_db"
+    missing_catalog_path := mut "server_vaisdb_missing_catalog_db"
 
     server_status := mut check_server_surface()
     I server_status != 0 {
@@ -182,6 +201,11 @@ fn main() -> i64 {
     route_status := mut check_books_route(db_path.clone())
     I route_status != 0 {
         return route_status
+    }
+
+    missing_catalog_status := mut check_books_route_missing_catalog(missing_catalog_path.clone())
+    I missing_catalog_status != 0 {
+        return missing_catalog_status
     }
 
     println("VAIS_SERVER_VAISDB_INTEGRATION_OK")
