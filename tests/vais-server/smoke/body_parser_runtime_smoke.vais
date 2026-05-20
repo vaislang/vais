@@ -94,6 +94,164 @@ fn smoke_json_body() -> i64 {
     0
 }
 
+fn expect_json_malformed(body: str, code: i64) -> i64 {
+    parsed := parse_body("application/json", body)
+    match parsed {
+        Ok(_) => {
+            println("FAIL malformed json accepted")
+            code
+        },
+        Err(e) => {
+            I e != "malformed json body" {
+                println("FAIL malformed json wrong error")
+                return code + 1
+            }
+            0
+        },
+    }
+}
+
+fn smoke_json_body_strict_grammar() -> i64 {
+    nested_obj := parse_body("application/json", "{\"obj\":{\"a\":1,\"b\":[true,null]}}")
+    match nested_obj {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json nested object rejected")
+            return 29
+        },
+    }
+
+    nested_arr := parse_body("application/json", "{\"arr\":[1,2,3]}")
+    match nested_arr {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json nested array rejected")
+            return 28
+        },
+    }
+
+    nested_arr_ws := parse_body("application/json", "{\"arr\": [1,2,3]}")
+    match nested_arr_ws {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json nested array ws rejected")
+            return 26
+        },
+    }
+
+    exponent_num := parse_body("application/json", "{\"exp\":-1.25e+2}")
+    match exponent_num {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json exponent rejected")
+            return 27
+        },
+    }
+
+    exponent_num_ws := parse_body("application/json", "{\"exp\": -1.25e+2}")
+    match exponent_num_ws {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json exponent ws rejected")
+            return 25
+        },
+    }
+
+    combined_no_ws := parse_body(
+        "application/json",
+        "{\"obj\":{\"a\":1,\"b\":[true,null]},\"arr\":[1,2,3],\"exp\":-1.25e+2}"
+    )
+    match combined_no_ws {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json combined no-ws rejected")
+            return 24
+        },
+    }
+
+    combined_outer_ws := parse_body(
+        "application/json",
+        " {\"obj\":{\"a\":1,\"b\":[true,null]},\"arr\":[1,2,3],\"exp\":-1.25e+2} "
+    )
+    match combined_outer_ws {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json combined outer-ws rejected")
+            return 23
+        },
+    }
+
+    combined_inner_ws := parse_body(
+        "application/json",
+        "{\"obj\": {\"a\":1,\"b\":[true,null]}, \"arr\": [1,2,3], \"exp\": -1.25e+2}"
+    )
+    match combined_inner_ws {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json combined inner-ws rejected")
+            return 22
+        },
+    }
+
+    object_edge_body := "{ " + "\"a\"" + ":1 }"
+    object_edge_ws := parse_body("application/json", object_edge_body)
+    match object_edge_ws {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json object edge-ws rejected")
+            return 21
+        },
+    }
+
+    after_colon_ws := parse_body("application/json", "{\"a\": 1}")
+    match after_colon_ws {
+        Ok(_) => {},
+        Err(_) => {
+            println("FAIL strict json after-colon-ws rejected")
+            return 20
+        },
+    }
+
+    spaced_head := " { " + "\"obj\"" + ": {\"a\":1,\"b\":[true,null]}, "
+    spaced_mid := spaced_head + "\"arr\"" + ": [1,2,3], "
+    spaced_body := spaced_mid + "\"exp\"" + ": -1.25e+2 } "
+    parsed := parse_body("application/json", spaced_body)
+    match parsed {
+        Ok(json_pairs) => {
+            I json_pairs.len() != 3 {
+                println("FAIL strict json pair count")
+                return 30
+            }
+            I kv_vec_get(json_pairs, "obj") != "{\"a\":1,\"b\":[true,null]}" {
+                println("FAIL strict json nested object")
+                return 31
+            }
+            I kv_vec_get(json_pairs, "arr") != "[1,2,3]" {
+                println("FAIL strict json nested array")
+                return 32
+            }
+            I kv_vec_get(json_pairs, "exp") != "-1.25e+2" {
+                println("FAIL strict json exponent")
+                return 33
+            }
+        },
+        Err(_) => {
+            println("FAIL strict json valid body rejected")
+            return 34
+        },
+    }
+
+    fail := mut 0
+    fail += expect_json_malformed("{\"a\":}", 40)
+    fail += expect_json_malformed("{\"a\":1,}", 42)
+    fail += expect_json_malformed("{\"a\":01}", 44)
+    fail += expect_json_malformed("{\"a\":\"\\q\"}", 46)
+    fail += expect_json_malformed("{\"a\":[1,]}", 48)
+    fail += expect_json_malformed("{\"a\":true}x", 50)
+    fail += expect_json_malformed("{\"a\":truex}", 52)
+    fail
+}
+
 fn smoke_request_body_and_errors() -> i64 {
     req := mut Request.new(HttpMethod.Post, "/submit")
     req.headers = req.headers.set(CONTENT_TYPE, "application/json")
@@ -152,6 +310,7 @@ fn main() -> i64 {
     failures := mut 0
     failures += smoke_form_body()
     failures += smoke_json_body()
+    failures += smoke_json_body_strict_grammar()
     failures += smoke_request_body_and_errors()
 
     I failures > 0 {

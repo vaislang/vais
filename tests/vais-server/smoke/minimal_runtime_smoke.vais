@@ -75,6 +75,48 @@ fn smoke_context_response() -> i64 {
     0
 }
 
+fn smoke_is_hex_char(c: i64) -> i64 {
+    I c >= 48 && c <= 57 { return 1 }
+    I c >= 97 && c <= 102 { return 1 }
+    0
+}
+
+fn smoke_is_hex_slice(s: str, i: i64) -> i64 {
+    I i >= s.len() { return 1 }
+    I smoke_is_hex_char(s.char_at(i)) != 1 { return 0 }
+    smoke_is_hex_slice(s, i + 1)
+}
+
+fn smoke_context_request_id() -> i64 {
+    ctx1 := Context.new("GET", "/health")
+    ctx2 := Context.new("GET", "/health")
+    id1 := ctx1.request_id
+    id2 := ctx2.request_id
+
+    I !id1.starts_with("req-") {
+        println("FAIL context request id prefix")
+        println(id1)
+        return 1
+    }
+    I id1.len() != 20 {
+        println("FAIL context request id length")
+        println(id1)
+        return 1
+    }
+    I smoke_is_hex_slice(id1.substring(4, id1.len()), 0) != 1 {
+        println("FAIL context request id hex")
+        println(id1)
+        return 1
+    }
+    I id1 == id2 {
+        println("FAIL context request id uniqueness")
+        println(id1)
+        println(id2)
+        return 1
+    }
+    0
+}
+
 fn smoke_http_primitives() -> i64 {
     ok := STATUS_OK
     I ok.code != 200 {
@@ -132,6 +174,7 @@ fn main() -> i64 {
     failures := mut 0
     failures += smoke_config_app()
     failures += smoke_context_response()
+    failures += smoke_context_request_id()
     failures += smoke_http_primitives()
     failures += smoke_error_mapping()
 

@@ -1,0 +1,118 @@
+use src/util/log_json
+
+fn smoke_contains(haystack: str, needle: str) -> i64 {
+    smoke_contains_rec(haystack, needle, 0)
+}
+
+fn smoke_contains_rec(haystack: str, needle: str, i: i64) -> i64 {
+    I needle.len() == 0 { return 1 }
+    I i >= haystack.len() { return 0 }
+    I smoke_match_prefix(haystack, needle, i, 0) == 1 { return 1 }
+    smoke_contains_rec(haystack, needle, i + 1)
+}
+
+fn smoke_match_prefix(haystack: str, needle: str, hi: i64, ni: i64) -> i64 {
+    nc := needle.char_at(ni)
+    I nc == 0 { return 1 }
+    hc := haystack.char_at(hi)
+    I hc == 0 { return 0 }
+    I hc != nc { return 0 }
+    smoke_match_prefix(haystack, needle, hi + 1, ni + 1)
+}
+
+fn smoke_is_hex_char(c: i64) -> i64 {
+    I c >= 48 && c <= 57 { return 1 }
+    I c >= 97 && c <= 102 { return 1 }
+    0
+}
+
+fn smoke_is_hex_slice(s: str, i: i64) -> i64 {
+    I i >= s.len() { return 1 }
+    I smoke_is_hex_char(s.char_at(i)) != 1 { return 0 }
+    smoke_is_hex_slice(s, i + 1)
+}
+
+fn check_basic_entry_json() -> i64 {
+    entry := JsonLogEntry.new("1712188800000", "INFO", "GET", "/health", 200, 12, "req-00000001")
+    json := entry.to_json()
+    expected := "{\"ts\":\"1712188800000\",\"level\":\"INFO\",\"method\":\"GET\",\"path\":\"/health\",\"status\":200,\"latency_ms\":12,\"request_id\":\"req-00000001\"}"
+
+    I json != expected {
+        println("FAIL log json basic entry")
+        println(json)
+        return 1
+    }
+    0
+}
+
+fn check_escaped_entry_json() -> i64 {
+    entry := JsonLogEntry.new("2026-05-16T12:00:00Z", "INFO", "GET", "/users/\"ada\"\\root\nline", 404, 137, "req-\"abc\"")
+    json := entry.to_json()
+
+    I smoke_contains(json, "\"path\":\"/users/\\\"ada\\\"\\\\root\\nline\"") != 1 {
+        println("FAIL log json escaped path")
+        println(json)
+        return 10
+    }
+    I smoke_contains(json, "\"request_id\":\"req-\\\"abc\\\"\"") != 1 {
+        println("FAIL log json escaped request_id")
+        println(json)
+        return 11
+    }
+    I smoke_contains(json, "\"status\":404") != 1 {
+        println("FAIL log json status numeric")
+        println(json)
+        return 12
+    }
+    I smoke_contains(json, "\"latency_ms\":137") != 1 {
+        println("FAIL log json latency numeric")
+        println(json)
+        return 13
+    }
+    0
+}
+
+fn check_generate_request_id() -> i64 {
+    id1 := generate_request_id()
+    id2 := generate_request_id()
+    id3 := generate_request_id()
+
+    I !id1.starts_with("req-") {
+        println("FAIL request id prefix")
+        println(id1)
+        return 20
+    }
+    I id1.len() != 20 {
+        println("FAIL request id length")
+        println(id1)
+        return 21
+    }
+    I smoke_is_hex_slice(id1.substring(4, id1.len()), 0) != 1 {
+        println("FAIL request id hex")
+        println(id1)
+        return 22
+    }
+    I id1 == id2 || id1 == id3 || id2 == id3 {
+        println("FAIL request id uniqueness")
+        println(id1)
+        println(id2)
+        println(id3)
+        return 23
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    failures := mut 0
+    failures += check_basic_entry_json()
+    failures += check_escaped_entry_json()
+    failures += check_generate_request_id()
+
+    I failures > 0 {
+        println("VAIS_SERVER_LOG_JSON_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_LOG_JSON_RUNTIME_OK")
+    0
+}

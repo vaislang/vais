@@ -9,8 +9,10 @@
 #   INTEGRITY_VAISDB_MIN=261               minimum vaisdb_files pass count
 #   INTEGRITY_HTTP_CLIENT_RUNTIME_MIN=15   minimum http_client runtime smoke
 #   INTEGRITY_TLS_RUNTIME_MIN=2            minimum std/tls runtime smoke
-#   INTEGRITY_VAISDB_RUNTIME_MIN=34        minimum vaisdb runtime smoke
-#   INTEGRITY_SERVER_RUNTIME_MIN=20        minimum vais-server runtime smoke
+#   INTEGRITY_SQLITE_RUNTIME_MIN=3         minimum std/sqlite runtime smoke
+#   INTEGRITY_POSTGRES_RUNTIME_MIN=1       minimum std/postgres runtime smoke
+#   INTEGRITY_VAISDB_RUNTIME_MIN=37        minimum vaisdb runtime smoke
+#   INTEGRITY_SERVER_RUNTIME_MIN=25        minimum vais-server runtime smoke
 #   INTEGRITY_WEB_RUNTIME_MIN=61           minimum vais-web runtime smoke
 #   INTEGRITY_WEB_UNIT_MIN=390             minimum vais-web unit tests
 #   INTEGRITY_WEB_PACKAGES_MIN=3272        minimum vais-web non-kit packages tests
@@ -59,8 +61,11 @@ INTEGRITY_VAISDB_MIN="${INTEGRITY_VAISDB_MIN:-261}"
 # These minima are the current promoted gate counts as of 2026-05-03.
 INTEGRITY_HTTP_CLIENT_RUNTIME_MIN="${INTEGRITY_HTTP_CLIENT_RUNTIME_MIN:-15}"
 INTEGRITY_TLS_RUNTIME_MIN="${INTEGRITY_TLS_RUNTIME_MIN:-2}"
-INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-34}"
-INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-20}"
+# std/sqlite runtime smoke baseline.
+INTEGRITY_SQLITE_RUNTIME_MIN="${INTEGRITY_SQLITE_RUNTIME_MIN:-3}"
+INTEGRITY_POSTGRES_RUNTIME_MIN="${INTEGRITY_POSTGRES_RUNTIME_MIN:-1}"
+INTEGRITY_VAISDB_RUNTIME_MIN="${INTEGRITY_VAISDB_RUNTIME_MIN:-37}"
+INTEGRITY_SERVER_RUNTIME_MIN="${INTEGRITY_SERVER_RUNTIME_MIN:-25}"
 INTEGRITY_WEB_RUNTIME_MIN="${INTEGRITY_WEB_RUNTIME_MIN:-61}"
 INTEGRITY_WEB_UNIT_MIN="${INTEGRITY_WEB_UNIT_MIN:-390}"
 INTEGRITY_WEB_PACKAGES_MIN="${INTEGRITY_WEB_PACKAGES_MIN:-3272}"
@@ -195,6 +200,24 @@ echo "check-integrity: running std/tls runtime smoke tests..."
 
 TLS_RUNTIME_EXIT=0
 cargo test -p vaisc --test e2e --release phase_tls_runtime -- --nocapture --test-threads=1 2>&1 | tee "${TLS_RUNTIME_LOG}" || TLS_RUNTIME_EXIT=$?
+
+# ---------------------------------------------------------------------------
+# Run std/sqlite runtime smoke tests (TEXT-column read/free ownership boundary)
+# ---------------------------------------------------------------------------
+SQLITE_RUNTIME_LOG="/tmp/sqlite-runtime-smoke.log"
+echo "check-integrity: running std/sqlite runtime smoke tests..."
+
+SQLITE_RUNTIME_EXIT=0
+cargo test -p vaisc --test e2e --release phase_sqlite_runtime -- --nocapture --test-threads=1 2>&1 | tee "${SQLITE_RUNTIME_LOG}" || SQLITE_RUNTIME_EXIT=$?
+
+# ---------------------------------------------------------------------------
+# Run std/postgres runtime smoke tests (TEXT owned-copy/free boundary)
+# ---------------------------------------------------------------------------
+POSTGRES_RUNTIME_LOG="/tmp/postgres-runtime-smoke.log"
+echo "check-integrity: running std/postgres runtime smoke tests..."
+
+POSTGRES_RUNTIME_EXIT=0
+cargo test -p vaisc --test e2e --release phase_postgres_runtime -- --nocapture --test-threads=1 2>&1 | tee "${POSTGRES_RUNTIME_LOG}" || POSTGRES_RUNTIME_EXIT=$?
 
 # ---------------------------------------------------------------------------
 # Run package full-build smoke tests (Phase 1 100% Gap close, master-plan v78)
@@ -555,6 +578,16 @@ TLS_RUNTIME_PASSED="${TLS_RUNTIME_PASSED:-0}"
 TLS_RUNTIME_TOTAL="$(parse_cargo_running "${TLS_RUNTIME_LOG}")"
 TLS_RUNTIME_TOTAL="${TLS_RUNTIME_TOTAL:-${TLS_RUNTIME_PASSED}}"
 TLS_RUNTIME_TOTAL="${TLS_RUNTIME_TOTAL:-0}"
+SQLITE_RUNTIME_PASSED="$(parse_cargo_passed "${SQLITE_RUNTIME_LOG}")"
+SQLITE_RUNTIME_PASSED="${SQLITE_RUNTIME_PASSED:-0}"
+SQLITE_RUNTIME_TOTAL="$(parse_cargo_running "${SQLITE_RUNTIME_LOG}")"
+SQLITE_RUNTIME_TOTAL="${SQLITE_RUNTIME_TOTAL:-${SQLITE_RUNTIME_PASSED}}"
+SQLITE_RUNTIME_TOTAL="${SQLITE_RUNTIME_TOTAL:-0}"
+POSTGRES_RUNTIME_PASSED="$(parse_cargo_passed "${POSTGRES_RUNTIME_LOG}")"
+POSTGRES_RUNTIME_PASSED="${POSTGRES_RUNTIME_PASSED:-0}"
+POSTGRES_RUNTIME_TOTAL="$(parse_cargo_running "${POSTGRES_RUNTIME_LOG}")"
+POSTGRES_RUNTIME_TOTAL="${POSTGRES_RUNTIME_TOTAL:-${POSTGRES_RUNTIME_PASSED}}"
+POSTGRES_RUNTIME_TOTAL="${POSTGRES_RUNTIME_TOTAL:-0}"
 
 PKG_FULL_BUILD_PASSED="$(parse_cargo_passed "${PKG_FULL_BUILD_LOG}")"
 PKG_FULL_BUILD_PASSED="${PKG_FULL_BUILD_PASSED:-0}"
@@ -632,6 +665,14 @@ fi
 if [ -n "${TLS_RUNTIME_PASSED}" ] && [ "${TLS_RUNTIME_PASSED}" -lt "${INTEGRITY_TLS_RUNTIME_MIN}" ]; then
     REGRESSION=1
     REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: tls_runtime baseline=${INTEGRITY_TLS_RUNTIME_MIN} current=${TLS_RUNTIME_PASSED}/${TLS_RUNTIME_TOTAL}\n"
+fi
+if [ -n "${SQLITE_RUNTIME_PASSED}" ] && [ "${SQLITE_RUNTIME_PASSED}" -lt "${INTEGRITY_SQLITE_RUNTIME_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: sqlite_runtime baseline=${INTEGRITY_SQLITE_RUNTIME_MIN} current=${SQLITE_RUNTIME_PASSED}/${SQLITE_RUNTIME_TOTAL}\n"
+fi
+if [ -n "${POSTGRES_RUNTIME_PASSED}" ] && [ "${POSTGRES_RUNTIME_PASSED}" -lt "${INTEGRITY_POSTGRES_RUNTIME_MIN}" ]; then
+    REGRESSION=1
+    REGRESSION_MSG="${REGRESSION_MSG}  REGRESSION: postgres_runtime baseline=${INTEGRITY_POSTGRES_RUNTIME_MIN} current=${POSTGRES_RUNTIME_PASSED}/${POSTGRES_RUNTIME_TOTAL}\n"
 fi
 if [ -n "${PKG_FULL_BUILD_PASSED}" ] && [ "${PKG_FULL_BUILD_PASSED}" -lt "${INTEGRITY_PKG_FULL_BUILD_MIN}" ]; then
     REGRESSION=1
@@ -733,6 +774,18 @@ fi
 if [ "${TLS_RUNTIME_EXIT}" -ne 0 ]; then
     echo ""
     echo "TLS RUNTIME SMOKE FAILED: cargo test phase_tls_runtime exited ${TLS_RUNTIME_EXIT}"
+    OVERALL_EXIT=1
+fi
+
+if [ "${SQLITE_RUNTIME_EXIT}" -ne 0 ]; then
+    echo ""
+    echo "SQLITE RUNTIME SMOKE FAILED: cargo test phase_sqlite_runtime exited ${SQLITE_RUNTIME_EXIT}"
+    OVERALL_EXIT=1
+fi
+
+if [ "${POSTGRES_RUNTIME_EXIT}" -ne 0 ]; then
+    echo ""
+    echo "POSTGRES RUNTIME SMOKE FAILED: cargo test phase_postgres_runtime exited ${POSTGRES_RUNTIME_EXIT}"
     OVERALL_EXIT=1
 fi
 
@@ -844,6 +897,18 @@ print_gate_summary() {
         echo "TLS RUNTIME FAIL: exit=${TLS_RUNTIME_EXIT} smoke=${TLS_RUNTIME_PASSED}/${TLS_RUNTIME_TOTAL}"
     fi
 
+    if [ "${SQLITE_RUNTIME_EXIT}" -eq 0 ]; then
+        echo "SQLITE RUNTIME OK: smoke=${SQLITE_RUNTIME_PASSED}/${SQLITE_RUNTIME_TOTAL}"
+    else
+        echo "SQLITE RUNTIME FAIL: exit=${SQLITE_RUNTIME_EXIT} smoke=${SQLITE_RUNTIME_PASSED}/${SQLITE_RUNTIME_TOTAL}"
+    fi
+
+    if [ "${POSTGRES_RUNTIME_EXIT}" -eq 0 ]; then
+        echo "POSTGRES RUNTIME OK: smoke=${POSTGRES_RUNTIME_PASSED}/${POSTGRES_RUNTIME_TOTAL}"
+    else
+        echo "POSTGRES RUNTIME FAIL: exit=${POSTGRES_RUNTIME_EXIT} smoke=${POSTGRES_RUNTIME_PASSED}/${POSTGRES_RUNTIME_TOTAL}"
+    fi
+
     # Phase 1 100% Gap (master-plan v79): locked at 2/2. Display always
     # reports the current count for visibility.
     echo "PKG FULL BUILD: smoke=${PKG_FULL_BUILD_PASSED}/${PKG_FULL_BUILD_TOTAL} (threshold=${INTEGRITY_PKG_FULL_BUILD_MIN})"
@@ -904,7 +969,7 @@ if [ "${OVERALL_EXIT}" -eq 0 ]; then
     else
         PKG_FULL_BUILD_STATUS="threshold-met-${PKG_FULL_BUILD_PASSED}/${PKG_FULL_BUILD_TOTAL}"
     fi
-    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok web_full_build=ok cross_package_schema=ok multi_domain_product=ok pkg_full_build=${PKG_FULL_BUILD_STATUS}"
+    echo "INTEGRITY OK: core=ok mir=ok codegen=ok unsafe_audit=ok ecosystem=ok backend=ok http_client_runtime=ok tls_runtime=ok sqlite_runtime=ok postgres_runtime=ok vaisdb_runtime=ok server_runtime=ok web_runtime=ok web_unit=ok web_packages=ok web_full_build=ok cross_package_schema=ok multi_domain_product=ok pkg_full_build=${PKG_FULL_BUILD_STATUS}"
     exit 0
 else
     print_gate_summary

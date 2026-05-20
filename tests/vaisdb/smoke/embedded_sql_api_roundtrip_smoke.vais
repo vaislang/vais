@@ -1,0 +1,3582 @@
+# EmbeddedDatabase public SQL API round-trip runtime smoke.
+#
+# Characterization scope (slice 2 — public embedded SQL surface):
+#   - Opens an EmbeddedDatabase with a real .vaisdb directory.
+#   - Executes tokenized fixed CREATE TABLE through EmbeddedDatabase.execute().
+#   - Executes tokenized fixed INSERT VALUES forms through EmbeddedDatabase.execute().
+#   - Explicitly frees tokenizer-owned identifier/string token text twice.
+#   - Reads multiple rows back through EmbeddedDatabase.query("SELECT * FROM ...").
+#   - Reads a fixed-form projected query and verifies column/result ordering.
+#   - Reads fixed-form WHERE id filters and verifies match/no-match behavior.
+#   - Explicitly frees query result row text payloads and verifies the free is
+#     idempotent.
+#   - Closes the handle, flips is_open=false, and rejects repeated close plus
+#     SQL calls after close.
+#   - Reopens the same data directory and reads both rows back through the
+#     persisted catalog root + heap path.
+#   - Pins the provisional embedded SQL boundary with negative assertions:
+#     out-of-shape SQL (non-people table name, JOIN, INSERT ... SELECT, and an
+#     unsupported projection/expression shape) must return Err from the public
+#     EmbeddedDatabase.execute()/query() API instead of silently succeeding.
+#   - Promotes the narrow NOT NULL, literal DEFAULT, id PRIMARY KEY,
+#     name UNIQUE, and id CHECK subsets on the fixed people(id INT, name TEXT)
+#     shape. NOT NULL flags, literal defaults, and promoted constraint metadata
+#     persist through close/reopen. Composite/table-level constraints, foreign
+#     key/reference constraints, and non-literal/default type-mismatch forms
+#     stay rejected.
+#
+# This keeps broader SQL planning out of scope; it locks the first SQLite-like
+# in-process SQL API boundary over the already-certified catalog + heap DML
+# path. The negative block below pins that boundary as executable: it does NOT
+# add any new accepted SQL behavior — it only proves the current rejection.
+
+use server/embedded
+use storage/constants
+use sql/parser/token
+use std/time
+
+impl fn __str_eq(a: str, b: str) -> i64
+
+fn expect_cell(row: &Vec<Option<str>>, idx: u64, expected: str) -> bool {
+    match row[idx] {
+        Some(v) => __str_eq(v, expected) != 0,
+        None => false,
+    }
+}
+
+fn expect_none_cell(row: &Vec<Option<str>>, idx: u64) -> bool {
+    match row[idx] {
+        Some(_) => false,
+        None => true,
+    }
+}
+
+fn expect_column(cols: &Vec<EmbeddedColumn>, idx: u64, expected_name: str, expected_type: str) -> bool {
+    col := mut &cols[idx]
+    (__str_eq(col.name, expected_name) != 0) && (__str_eq(col.type_name, expected_type) != 0)
+}
+
+fn expect_token_text_free_idempotent() -> i64 {
+    tokenizer := mut Tokenizer.new("insert into people values (7, 'token_payload')")
+    tokens := mut match tokenizer.tokenize_all() {
+        Ok(v) => v,
+        Err(_) => { return 70 },
+    }
+    I tokens.len() < 9 { return 71 }
+
+    match &tokens[2].kind {
+        TokenKind.Identifier { v } => {
+            I __str_eq(*v, "people") == 0 { return 72 }
+        },
+        _ => { return 73 },
+    }
+    match &tokens[7].kind {
+        TokenKind.StringLit { v } => {
+            I __str_eq(*v, "token_payload") == 0 { return 74 }
+        },
+        _ => { return 75 },
+    }
+
+    free_token_vec_owned_text(&mut tokens)
+    free_token_vec_owned_text(&mut tokens)
+
+    match &tokens[2].kind {
+        TokenKind.Eof => {},
+        _ => { return 76 },
+    }
+    match &tokens[7].kind {
+        TokenKind.Eof => {},
+        _ => { return 77 },
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    token_free_code := mut expect_token_text_free_idempotent()
+    I token_free_code != 0 { return token_free_code }
+
+    db_suffix := mut time_micros()
+    db_path := mut "embedded_sql_api_roundtrip_db_{db_suffix}"
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 1 },
+    }
+
+    # Still-unsupported people-table CREATE forms keep deterministic rejection.
+    # Only simple INT/TEXT literal defaults and the fixed column-level
+    # PRIMARY KEY/UNIQUE/CHECK shapes are promoted; type-mismatched defaults,
+    # name PRIMARY KEY, id UNIQUE, table-level/composite constraints,
+    # foreign-key/reference constraints, and unsupported CHECK forms are not in
+    # the promoted shape.
+    match db.execute("create table people (id int check (id > 0), name text)") {
+        Ok(_) => { return 196 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text check (name = 'ada'))") {
+        Ok(_) => { return 198 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text not null unique check (name = 'ada'))") {
+        Ok(_) => { return 199 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text default true)") {
+        Ok(_) => { return 208 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text primary key)") {
+        Ok(_) => { return 209 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int primary key, name text default 'anon')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int unique, name text)") {
+        Ok(_) => { return 210 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text, primary key (id))") {
+        Ok(_) => { return 211 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text, primary key (id, name))") {
+        Ok(_) => { return 212 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text, unique (name))") {
+        Ok(_) => { return 213 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text, unique (id, name))") {
+        Ok(_) => { return 214 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text, check (id > 0))") {
+        Ok(_) => { return 215 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int, name text, foreign key (id) references other (id))") {
+        Ok(_) => { return 216 },
+        Err(_) => {},
+    }
+    match db.execute("create table people (id int references other (id), name text)") {
+        Ok(_) => { return 217 },
+        Err(_) => {},
+    }
+
+    created := mut match db.execute("create table people (id int, name text)") {
+        Ok(n) => n,
+        Err(_) => { return 2 },
+    }
+    I created != 0 as u64 { return 3 }
+
+    inserted := mut match db.execute("INSERT INTO people VALUES (42, 'ada');") {
+        Ok(n) => n,
+        Err(_) => { return 4 },
+    }
+    I inserted != 1 as u64 { return 5 }
+
+    inserted2 := mut match db.execute(" insert into people values (7, 'grace') ") {
+        Ok(n) => n,
+        Err(_) => { return 6 },
+    }
+    I inserted2 != 1 as u64 { return 7 }
+
+    result := mut match db.query("SELECT * FROM people;") {
+        Ok(r) => r,
+        Err(_) => { return 8 },
+    }
+    I result.column_count() != 2 as u64 { return 9 }
+    I result.row_count() != 2 as u64 { return 10 }
+    columns := mut result.get_columns()
+    I !expect_column(columns, 0, "id", "INT") { return 11 }
+    I !expect_column(columns, 1, "name", "TEXT") { return 12 }
+
+    rows := mut result.get_rows()
+    row0 := mut &rows[0]
+    row1 := mut &rows[1]
+    I !expect_cell(row0, 0, "42") { return 13 }
+    I !expect_cell(row0, 1, "ada") { return 14 }
+    I !expect_cell(row1, 0, "7") { return 15 }
+    I !expect_cell(row1, 1, "grace") { return 16 }
+
+    result.free_owned_text()
+    result.free_owned_text()
+    freed_rows := mut result.get_rows()
+    freed_row0 := mut &freed_rows[0]
+    freed_row1 := mut &freed_rows[1]
+    match freed_row0[0] {
+        Some(_) => { return 17 },
+        None => {},
+    }
+    match freed_row0[1] {
+        Some(_) => { return 18 },
+        None => {},
+    }
+    match freed_row1[0] {
+        Some(_) => { return 19 },
+        None => {},
+    }
+    match freed_row1[1] {
+        Some(_) => { return 20 },
+        None => {},
+    }
+
+    projected := mut match db.query("select name, id from people") {
+        Ok(r) => r,
+        Err(_) => { return 21 },
+    }
+    I projected.column_count() != 2 as u64 { return 22 }
+    I projected.row_count() != 2 as u64 { return 23 }
+    projected_cols := mut projected.get_columns()
+    I !expect_column(projected_cols, 0, "name", "TEXT") { return 24 }
+    I !expect_column(projected_cols, 1, "id", "INT") { return 25 }
+    projected_rows := mut projected.get_rows()
+    projected_row0 := mut &projected_rows[0]
+    projected_row1 := mut &projected_rows[1]
+    I !expect_cell(projected_row0, 0, "ada") { return 26 }
+    I !expect_cell(projected_row0, 1, "42") { return 27 }
+    I !expect_cell(projected_row1, 0, "grace") { return 28 }
+    I !expect_cell(projected_row1, 1, "7") { return 29 }
+    projected.free_owned_text()
+    projected.free_owned_text()
+
+    qualified := mut match db.query("select people.name, people.id from people where people.id = 7") {
+        Ok(r) => r,
+        Err(_) => { return 80 },
+    }
+    I qualified.column_count() != 2 as u64 { return 81 }
+    I qualified.row_count() != 1 as u64 { return 82 }
+    qualified_cols := mut qualified.get_columns()
+    I !expect_column(qualified_cols, 0, "name", "TEXT") { return 83 }
+    I !expect_column(qualified_cols, 1, "id", "INT") { return 84 }
+    qualified_rows := mut qualified.get_rows()
+    qualified_row := mut &qualified_rows[0]
+    I !expect_cell(qualified_row, 0, "grace") { return 85 }
+    I !expect_cell(qualified_row, 1, "7") { return 86 }
+    qualified.free_owned_text()
+    qualified.free_owned_text()
+
+    aliased := mut match db.query("select p.name, p.id from people as p where p.id = 42") {
+        Ok(r) => r,
+        Err(_) => { return 87 },
+    }
+    I aliased.column_count() != 2 as u64 { return 88 }
+    I aliased.row_count() != 1 as u64 { return 89 }
+    aliased_cols := mut aliased.get_columns()
+    I !expect_column(aliased_cols, 0, "name", "TEXT") { return 90 }
+    I !expect_column(aliased_cols, 1, "id", "INT") { return 91 }
+    aliased_rows := mut aliased.get_rows()
+    aliased_row := mut &aliased_rows[0]
+    I !expect_cell(aliased_row, 0, "ada") { return 92 }
+    I !expect_cell(aliased_row, 1, "42") { return 93 }
+    aliased.free_owned_text()
+    aliased.free_owned_text()
+
+    output_alias := mut match db.query("select name as person_name, id as person_id from people where id = 42") {
+        Ok(r) => r,
+        Err(_) => { return 123 },
+    }
+    I output_alias.column_count() != 2 as u64 { return 124 }
+    I output_alias.row_count() != 1 as u64 { return 125 }
+    output_alias_cols := mut output_alias.get_columns()
+    I !expect_column(output_alias_cols, 0, "person_name", "TEXT") { return 126 }
+    I !expect_column(output_alias_cols, 1, "person_id", "INT") { return 127 }
+    output_alias_rows := mut output_alias.get_rows()
+    output_alias_row := mut &output_alias_rows[0]
+    I !expect_cell(output_alias_row, 0, "ada") { return 128 }
+    I !expect_cell(output_alias_row, 1, "42") { return 129 }
+    output_alias.free_owned_text()
+    output_alias.free_owned_text()
+
+    qualified_output_alias := mut match db.query("select p.name person_name, p.id as person_id from people p where p.id = 42") {
+        Ok(r) => r,
+        Err(_) => { return 130 },
+    }
+    I qualified_output_alias.column_count() != 2 as u64 { return 131 }
+    I qualified_output_alias.row_count() != 1 as u64 { return 132 }
+    qualified_output_alias_cols := mut qualified_output_alias.get_columns()
+    I !expect_column(qualified_output_alias_cols, 0, "person_name", "TEXT") { return 133 }
+    I !expect_column(qualified_output_alias_cols, 1, "person_id", "INT") { return 134 }
+    qualified_output_alias_rows := mut qualified_output_alias.get_rows()
+    qualified_output_alias_row := mut &qualified_output_alias_rows[0]
+    I !expect_cell(qualified_output_alias_row, 0, "ada") { return 135 }
+    I !expect_cell(qualified_output_alias_row, 1, "42") { return 136 }
+    qualified_output_alias.free_owned_text()
+    qualified_output_alias.free_owned_text()
+
+    aliased_star := mut match db.query("select p.* from people p where p.id = 7") {
+        Ok(r) => r,
+        Err(_) => { return 94 },
+    }
+    I aliased_star.column_count() != 2 as u64 { return 95 }
+    I aliased_star.row_count() != 1 as u64 { return 96 }
+    aliased_star_cols := mut aliased_star.get_columns()
+    I !expect_column(aliased_star_cols, 0, "id", "INT") { return 97 }
+    I !expect_column(aliased_star_cols, 1, "name", "TEXT") { return 98 }
+    aliased_star_rows := mut aliased_star.get_rows()
+    aliased_star_row := mut &aliased_star_rows[0]
+    I !expect_cell(aliased_star_row, 0, "7") { return 99 }
+    I !expect_cell(aliased_star_row, 1, "grace") { return 100 }
+    aliased_star.free_owned_text()
+    aliased_star.free_owned_text()
+
+    filtered := mut match db.query("SELECT * FROM people WHERE id = 42;") {
+        Ok(r) => r,
+        Err(_) => { return 30 },
+    }
+    I filtered.column_count() != 2 as u64 { return 31 }
+    I filtered.row_count() != 1 as u64 { return 32 }
+    filtered_cols := mut filtered.get_columns()
+    I !expect_column(filtered_cols, 0, "id", "INT") { return 33 }
+    I !expect_column(filtered_cols, 1, "name", "TEXT") { return 34 }
+    filtered_rows := mut filtered.get_rows()
+    filtered_row := mut &filtered_rows[0]
+    I !expect_cell(filtered_row, 0, "42") { return 35 }
+    I !expect_cell(filtered_row, 1, "ada") { return 36 }
+    filtered.free_owned_text()
+    filtered.free_owned_text()
+
+    filtered_grace := mut match db.query("select * from people where id = 7") {
+        Ok(r) => r,
+        Err(_) => { return 37 },
+    }
+    I filtered_grace.column_count() != 2 as u64 { return 38 }
+    I filtered_grace.row_count() != 1 as u64 { return 39 }
+    filtered_grace_cols := mut filtered_grace.get_columns()
+    I !expect_column(filtered_grace_cols, 0, "id", "INT") { return 40 }
+    I !expect_column(filtered_grace_cols, 1, "name", "TEXT") { return 41 }
+    filtered_grace_rows := mut filtered_grace.get_rows()
+    filtered_grace_row := mut &filtered_grace_rows[0]
+    I !expect_cell(filtered_grace_row, 0, "7") { return 42 }
+    I !expect_cell(filtered_grace_row, 1, "grace") { return 43 }
+    filtered_grace.free_owned_text()
+    filtered_grace.free_owned_text()
+
+    missing := mut match db.query(" select * from people where id = 99 ") {
+        Ok(r) => r,
+        Err(_) => { return 44 },
+    }
+    I missing.column_count() != 2 as u64 { return 45 }
+    I missing.row_count() != 0 as u64 { return 46 }
+    missing_cols := mut missing.get_columns()
+    I !expect_column(missing_cols, 0, "id", "INT") { return 47 }
+    I !expect_column(missing_cols, 1, "name", "TEXT") { return 48 }
+    missing.free_owned_text()
+    missing.free_owned_text()
+
+    manual_cols: Vec<EmbeddedColumn> := mut Vec.with_capacity(1)
+    manual_cols.push(EmbeddedColumn.new("literal", "TEXT"))
+    manual_result := mut EmbeddedResult.new(manual_cols)
+    manual_row: Vec<Option<str>> := mut Vec.with_capacity(1)
+    manual_row.push(Some("borrowed"))
+    manual_result.add_row(manual_row)
+    manual_result.free_owned_text()
+    manual_rows := mut manual_result.get_rows()
+    manual_first := mut &manual_rows[0]
+    I !expect_cell(manual_first, 0, "borrowed") { return 49 }
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 50 },
+    }
+    I db.is_open() { return 51 }
+
+    match db.close() {
+        Ok(_) => { return 52 },
+        Err(_) => {},
+    }
+    match db.execute("INSERT INTO people VALUES (42, 'ada');") {
+        Ok(_) => { return 53 },
+        Err(_) => {},
+    }
+    match db.query("SELECT * FROM people;") {
+        Ok(_) => { return 54 },
+        Err(_) => {},
+    }
+
+    reopen_cfg := mut EmbeddedConfig.default()
+    reopen_cfg = reopen_cfg.with_data_dir(db_path.clone())
+    reopen_cfg = reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    reopened := mut match EmbeddedDatabase.open(reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 55 },
+    }
+    reopened_result := mut match reopened.query("SELECT * FROM people;") {
+        Ok(r) => r,
+        Err(_) => { return 56 },
+    }
+    I reopened_result.column_count() != 2 as u64 { return 57 }
+    I reopened_result.row_count() != 2 as u64 { return 58 }
+    reopened_cols := mut reopened_result.get_columns()
+    I !expect_column(reopened_cols, 0, "id", "INT") { return 59 }
+    I !expect_column(reopened_cols, 1, "name", "TEXT") { return 60 }
+    reopened_rows := mut reopened_result.get_rows()
+    reopened_row0 := mut &reopened_rows[0]
+    reopened_row1 := mut &reopened_rows[1]
+    I !expect_cell(reopened_row0, 0, "42") { return 61 }
+    I !expect_cell(reopened_row0, 1, "ada") { return 62 }
+    I !expect_cell(reopened_row1, 0, "7") { return 63 }
+    I !expect_cell(reopened_row1, 1, "grace") { return 64 }
+    reopened_result.free_owned_text()
+    reopened_result.free_owned_text()
+
+    reopened_grace := mut match reopened.query("select * from people where 7 = id") {
+        Ok(r) => r,
+        Err(_) => { return 65 },
+    }
+    I reopened_grace.row_count() != 1 as u64 { return 66 }
+    reopened_grace_rows := mut reopened_grace.get_rows()
+    reopened_grace_row := mut &reopened_grace_rows[0]
+    I !expect_cell(reopened_grace_row, 0, "7") { return 67 }
+    I !expect_cell(reopened_grace_row, 1, "grace") { return 68 }
+    reopened_grace.free_owned_text()
+    reopened_grace.free_owned_text()
+
+    updated := mut match reopened.execute("update people set name = 'lovelace' where id = 42") {
+        Ok(n) => n,
+        Err(_) => { return 218 },
+    }
+    I updated != 1 as u64 { return 219 }
+
+    updated_result := mut match reopened.query("select * from people where id = 42") {
+        Ok(r) => r,
+        Err(_) => { return 220 },
+    }
+    I updated_result.row_count() != 1 as u64 { return 221 }
+    updated_rows := mut updated_result.get_rows()
+    updated_row := mut &updated_rows[0]
+    I !expect_cell(updated_row, 0, "42") { return 222 }
+    I !expect_cell(updated_row, 1, "lovelace") { return 223 }
+    updated_result.free_owned_text()
+    updated_result.free_owned_text()
+
+    inserted_many := mut match reopened.execute("insert into people values (100, 'linus'), (101, 'margaret')") {
+        Ok(n) => n,
+        Err(_) => { return 101 },
+    }
+    I inserted_many != 2 as u64 { return 102 }
+
+    multi_result := mut match reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 103 },
+    }
+    I multi_result.column_count() != 2 as u64 { return 104 }
+    I multi_result.row_count() != 4 as u64 { return 105 }
+    multi_cols := mut multi_result.get_columns()
+    I !expect_column(multi_cols, 0, "id", "INT") { return 106 }
+    I !expect_column(multi_cols, 1, "name", "TEXT") { return 107 }
+    multi_rows := mut multi_result.get_rows()
+    multi_row2 := mut &multi_rows[2]
+    multi_row3 := mut &multi_rows[3]
+    I !expect_cell(multi_row2, 0, "100") { return 108 }
+    I !expect_cell(multi_row2, 1, "linus") { return 109 }
+    I !expect_cell(multi_row3, 0, "101") { return 110 }
+    I !expect_cell(multi_row3, 1, "margaret") { return 111 }
+    multi_result.free_owned_text()
+    multi_result.free_owned_text()
+
+    inserted_columns := mut match reopened.execute("insert into people (name, id) values ('katherine', 102), ('barbara', 103)") {
+        Ok(n) => n,
+        Err(_) => { return 112 },
+    }
+    I inserted_columns != 2 as u64 { return 113 }
+
+    column_list_result := mut match reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 114 },
+    }
+    I column_list_result.column_count() != 2 as u64 { return 115 }
+    I column_list_result.row_count() != 6 as u64 { return 116 }
+    column_list_cols := mut column_list_result.get_columns()
+    I !expect_column(column_list_cols, 0, "id", "INT") { return 117 }
+    I !expect_column(column_list_cols, 1, "name", "TEXT") { return 118 }
+    column_list_rows := mut column_list_result.get_rows()
+    column_list_row4 := mut &column_list_rows[4]
+    column_list_row5 := mut &column_list_rows[5]
+    I !expect_cell(column_list_row4, 0, "102") { return 119 }
+    I !expect_cell(column_list_row4, 1, "katherine") { return 120 }
+    I !expect_cell(column_list_row5, 0, "103") { return 121 }
+    I !expect_cell(column_list_row5, 1, "barbara") { return 122 }
+    column_list_result.free_owned_text()
+    column_list_result.free_owned_text()
+
+    inserted_partial := mut match reopened.execute("insert into people (id) values (104), (105)") {
+        Ok(n) => n,
+        Err(_) => { return 137 },
+    }
+    I inserted_partial != 2 as u64 { return 138 }
+
+    partial_result := mut match reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 139 },
+    }
+    I partial_result.column_count() != 2 as u64 { return 140 }
+    I partial_result.row_count() != 8 as u64 { return 141 }
+    partial_cols := mut partial_result.get_columns()
+    I !expect_column(partial_cols, 0, "id", "INT") { return 142 }
+    I !expect_column(partial_cols, 1, "name", "TEXT") { return 143 }
+    partial_rows := mut partial_result.get_rows()
+    partial_row6 := mut &partial_rows[6]
+    partial_row7 := mut &partial_rows[7]
+    I !expect_cell(partial_row6, 0, "104") { return 144 }
+    I !expect_none_cell(partial_row6, 1) { return 145 }
+    I !expect_cell(partial_row7, 0, "105") { return 146 }
+    I !expect_none_cell(partial_row7, 1) { return 147 }
+    partial_result.free_owned_text()
+    partial_result.free_owned_text()
+
+    match reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 148 },
+    }
+
+    partial_reopen_cfg := mut EmbeddedConfig.default()
+    partial_reopen_cfg = partial_reopen_cfg.with_data_dir(db_path.clone())
+    partial_reopen_cfg = partial_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    partial_reopened := mut match EmbeddedDatabase.open(partial_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 149 },
+    }
+    partial_reopened_result := mut match partial_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 150 },
+    }
+    I partial_reopened_result.column_count() != 2 as u64 { return 151 }
+    I partial_reopened_result.row_count() != 8 as u64 { return 152 }
+    partial_reopened_cols := mut partial_reopened_result.get_columns()
+    I !expect_column(partial_reopened_cols, 0, "id", "INT") { return 153 }
+    I !expect_column(partial_reopened_cols, 1, "name", "TEXT") { return 154 }
+    partial_reopened_rows := mut partial_reopened_result.get_rows()
+    partial_reopened_row6 := mut &partial_reopened_rows[6]
+    partial_reopened_row7 := mut &partial_reopened_rows[7]
+    I !expect_cell(partial_reopened_row6, 0, "104") { return 155 }
+    I !expect_none_cell(partial_reopened_row6, 1) { return 156 }
+    I !expect_cell(partial_reopened_row7, 0, "105") { return 157 }
+    I !expect_none_cell(partial_reopened_row7, 1) { return 158 }
+    partial_reopened_result.free_owned_text()
+    partial_reopened_result.free_owned_text()
+
+    partial_reopened_update := mut match partial_reopened.query("select * from people where id = 42") {
+        Ok(r) => r,
+        Err(_) => { return 228 },
+    }
+    I partial_reopened_update.row_count() != 1 as u64 { return 229 }
+    partial_reopened_update_rows := mut partial_reopened_update.get_rows()
+    partial_reopened_update_row := mut &partial_reopened_update_rows[0]
+    I !expect_cell(partial_reopened_update_row, 1, "lovelace") { return 230 }
+    partial_reopened_update.free_owned_text()
+    partial_reopened_update.free_owned_text()
+
+    inserted_explicit_null := mut match partial_reopened.execute("insert into people (name, id) values (NULL, 106), ('dorothy', NULL)") {
+        Ok(n) => n,
+        Err(_) => { return 159 },
+    }
+    I inserted_explicit_null != 2 as u64 { return 160 }
+
+    explicit_null_result := mut match partial_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 161 },
+    }
+    I explicit_null_result.column_count() != 2 as u64 { return 162 }
+    I explicit_null_result.row_count() != 10 as u64 { return 163 }
+    explicit_null_rows := mut explicit_null_result.get_rows()
+    explicit_null_row8 := mut &explicit_null_rows[8]
+    explicit_null_row9 := mut &explicit_null_rows[9]
+    I !expect_cell(explicit_null_row8, 0, "106") { return 164 }
+    I !expect_none_cell(explicit_null_row8, 1) { return 165 }
+    I !expect_none_cell(explicit_null_row9, 0) { return 166 }
+    I !expect_cell(explicit_null_row9, 1, "dorothy") { return 167 }
+    explicit_null_result.free_owned_text()
+    explicit_null_result.free_owned_text()
+
+    match partial_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 168 },
+    }
+
+    explicit_null_reopen_cfg := mut EmbeddedConfig.default()
+    explicit_null_reopen_cfg = explicit_null_reopen_cfg.with_data_dir(db_path.clone())
+    explicit_null_reopen_cfg = explicit_null_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    explicit_null_reopened := mut match EmbeddedDatabase.open(explicit_null_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 169 },
+    }
+    explicit_null_reopened_result := mut match explicit_null_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 170 },
+    }
+    I explicit_null_reopened_result.column_count() != 2 as u64 { return 171 }
+    I explicit_null_reopened_result.row_count() != 10 as u64 { return 172 }
+    explicit_null_reopened_rows := mut explicit_null_reopened_result.get_rows()
+    explicit_null_reopened_row8 := mut &explicit_null_reopened_rows[8]
+    explicit_null_reopened_row9 := mut &explicit_null_reopened_rows[9]
+    I !expect_cell(explicit_null_reopened_row8, 0, "106") { return 173 }
+    I !expect_none_cell(explicit_null_reopened_row8, 1) { return 174 }
+    I !expect_none_cell(explicit_null_reopened_row9, 0) { return 175 }
+    I !expect_cell(explicit_null_reopened_row9, 1, "dorothy") { return 176 }
+    explicit_null_reopened_result.free_owned_text()
+    explicit_null_reopened_result.free_owned_text()
+
+    inserted_default := mut match explicit_null_reopened.execute("insert into people (id, name) values (DEFAULT, 'grace'), (107, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 177 },
+    }
+    I inserted_default != 2 as u64 { return 178 }
+
+    default_result := mut match explicit_null_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 179 },
+    }
+    I default_result.column_count() != 2 as u64 { return 180 }
+    I default_result.row_count() != 12 as u64 { return 181 }
+    default_rows := mut default_result.get_rows()
+    default_row10 := mut &default_rows[10]
+    default_row11 := mut &default_rows[11]
+    I !expect_none_cell(default_row10, 0) { return 182 }
+    I !expect_cell(default_row10, 1, "grace") { return 183 }
+    I !expect_cell(default_row11, 0, "107") { return 184 }
+    I !expect_none_cell(default_row11, 1) { return 185 }
+    default_result.free_owned_text()
+    default_result.free_owned_text()
+
+    match explicit_null_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 186 },
+    }
+
+    default_reopen_cfg := mut EmbeddedConfig.default()
+    default_reopen_cfg = default_reopen_cfg.with_data_dir(db_path.clone())
+    default_reopen_cfg = default_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    default_reopened := mut match EmbeddedDatabase.open(default_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 187 },
+    }
+    default_reopened_result := mut match default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 188 },
+    }
+    I default_reopened_result.column_count() != 2 as u64 { return 189 }
+    I default_reopened_result.row_count() != 12 as u64 { return 190 }
+    default_reopened_rows := mut default_reopened_result.get_rows()
+    default_reopened_row10 := mut &default_reopened_rows[10]
+    default_reopened_row11 := mut &default_reopened_rows[11]
+    I !expect_none_cell(default_reopened_row10, 0) { return 191 }
+    I !expect_cell(default_reopened_row10, 1, "grace") { return 192 }
+    I !expect_cell(default_reopened_row11, 0, "107") { return 193 }
+    I !expect_none_cell(default_reopened_row11, 1) { return 194 }
+    default_reopened_result.free_owned_text()
+    default_reopened_result.free_owned_text()
+
+    match default_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 195 },
+    }
+
+    delete_cfg := mut EmbeddedConfig.default()
+    delete_cfg = delete_cfg.with_data_dir(db_path.clone())
+    delete_cfg = delete_cfg.with_page_size(PAGE_SIZE_8K)
+    delete_db := mut match EmbeddedDatabase.open(delete_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    deleted := mut match delete_db.execute("delete from people where id = 7") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I deleted != 1 as u64 { return 255 }
+
+    deleted_probe := mut match delete_db.query("select * from people where id = 7") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I deleted_probe.row_count() != 0 as u64 { return 255 }
+    deleted_probe.free_owned_text()
+    deleted_probe.free_owned_text()
+
+    delete_count_result := mut match delete_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I delete_count_result.row_count() != 11 as u64 { return 255 }
+    delete_count_result.free_owned_text()
+    delete_count_result.free_owned_text()
+
+    delete_updated_probe := mut match delete_db.query("select * from people where id = 42") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I delete_updated_probe.row_count() != 1 as u64 { return 255 }
+    delete_updated_rows := mut delete_updated_probe.get_rows()
+    delete_updated_row := mut &delete_updated_rows[0]
+    I !expect_cell(delete_updated_row, 1, "lovelace") { return 255 }
+    delete_updated_probe.free_owned_text()
+    delete_updated_probe.free_owned_text()
+
+    match delete_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    delete_reopen_cfg := mut EmbeddedConfig.default()
+    delete_reopen_cfg = delete_reopen_cfg.with_data_dir(db_path.clone())
+    delete_reopen_cfg = delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    delete_reopened := mut match EmbeddedDatabase.open(delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    delete_reopened_probe := mut match delete_reopened.query("select * from people where id = 7") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I delete_reopened_probe.row_count() != 0 as u64 { return 255 }
+    delete_reopened_probe.free_owned_text()
+    delete_reopened_probe.free_owned_text()
+
+    match delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    # --- Negative boundary: out-of-shape SQL must return Err, not succeed ---
+    #
+    # The provisional embedded SQL surface is shape-recognition over the fixed
+    # people-table forms only (see docs/design/db-required-language-profile.md).
+    # These assertions pin that boundary so future widening is a deliberate,
+    # gated change. They add no new accepted SQL behavior. If any call below
+    # returns Ok, the smoke fails loudly with a dedicated exit code instead of
+    # the rejection being lost in prose.
+    neg_cfg := mut EmbeddedConfig.default()
+    neg_cfg = neg_cfg.with_data_dir(db_path.clone())
+    neg_cfg = neg_cfg.with_page_size(PAGE_SIZE_8K)
+    neg_db := mut match EmbeddedDatabase.open(neg_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 198 },
+    }
+
+    # Non-people table name: CREATE/INSERT/SELECT against a table the fixed
+    # shape recognizer does not know must be rejected, not silently accepted.
+    match neg_db.execute("create table accounts (id int, name text)") {
+        Ok(_) => { return 200 },
+        Err(_) => {},
+    }
+    match neg_db.execute("insert into accounts values (1, 'eve')") {
+        Ok(_) => { return 201 },
+        Err(_) => {},
+    }
+    match neg_db.query("select * from accounts") {
+        Ok(_) => { return 202 },
+        Err(_) => {},
+    }
+
+    # JOIN: multi-table SELECT is outside the promoted single-table shapes.
+    match neg_db.query("select people.name from people join accounts on people.id = accounts.id") {
+        Ok(_) => { return 203 },
+        Err(_) => {},
+    }
+
+    # INSERT ... SELECT: query-sourced INSERT is not a promoted shape.
+    match neg_db.execute("insert into people select id, name from people") {
+        Ok(_) => { return 204 },
+        Err(_) => {},
+    }
+
+    # UPDATE: only the fixed plain-table `SET name = <string literal> WHERE id
+    # = <int literal>` shape is promoted. Other mutation shapes remain Err.
+    match neg_db.execute("update people set id = 99 where id = 42") {
+        Ok(_) => { return 224 },
+        Err(_) => {},
+    }
+    match neg_db.execute("update people set name = 'no_where'") {
+        Ok(_) => { return 225 },
+        Err(_) => {},
+    }
+    match neg_db.execute("update people set name = name where id = 42") {
+        Ok(_) => { return 226 },
+        Err(_) => {},
+    }
+    match neg_db.execute("delete from people") {
+        Ok(_) => { return 227 },
+        Err(_) => {},
+    }
+    match neg_db.execute("delete from people where name = 'grace'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+
+    # Unsupported projection/expression: aggregate/computed projections outside
+    # SELECT * / SELECT name, id must be rejected, not silently run.
+    match neg_db.query("select count(*) from people") {
+        Ok(_) => { return 205 },
+        Err(_) => {},
+    }
+    match neg_db.query("select id + 1 from people") {
+        Ok(_) => { return 206 },
+        Err(_) => {},
+    }
+
+    match neg_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 207 },
+    }
+
+    # --- Promoted PRIMARY KEY subset: people(id INT PRIMARY KEY, name TEXT) ---
+    #
+    # The fixed id primary key is stored in catalog column metadata and creates
+    # a primary B+Tree index. Duplicate id values and explicit NULL id values
+    # must be rejected before and after close/reopen.
+    pk_suffix := mut time_micros()
+    pk_path := mut "embedded_sql_api_roundtrip_pk_db_{pk_suffix}"
+    pk_cfg := mut EmbeddedConfig.default()
+    pk_cfg = pk_cfg.with_data_dir(pk_path.clone())
+    pk_cfg = pk_cfg.with_page_size(PAGE_SIZE_8K)
+    pk_db := mut match EmbeddedDatabase.open(pk_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 230 },
+    }
+
+    pk_created := mut match pk_db.execute("create table people (id int primary key, name text)") {
+        Ok(n) => n,
+        Err(_) => { return 231 },
+    }
+    I pk_created != 0 as u64 { return 232 }
+
+    pk_inserted := mut match pk_db.execute("insert into people values (1, 'ada'), (2, 'grace')") {
+        Ok(n) => n,
+        Err(_) => { return 233 },
+    }
+    I pk_inserted != 2 as u64 { return 234 }
+
+    match pk_db.execute("insert into people values (1, 'duplicate')") {
+        Ok(_) => { return 235 },
+        Err(_) => {},
+    }
+    match pk_db.execute("insert into people (name, id) values ('missing', NULL)") {
+        Ok(_) => { return 236 },
+        Err(_) => {},
+    }
+    pk_updated := mut match pk_db.execute("update people set name = 'ada-updated' where id = 1") {
+        Ok(n) => n,
+        Err(_) => { return 90 },
+    }
+    I pk_updated != 1 as u64 { return 91 }
+
+    pk_updated_result := mut match pk_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 92 },
+    }
+    I pk_updated_result.row_count() != 2 as u64 { return 93 }
+    pk_updated_rows := mut pk_updated_result.get_rows()
+    pk_updated_seen := mut false
+    pk_updated_seen_other := mut false
+    LF ri: 0..pk_updated_rows.len() {
+        candidate := mut &pk_updated_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada-updated") {
+            pk_updated_seen = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") {
+            pk_updated_seen_other = true
+        }
+    }
+    I !pk_updated_seen { return 94 }
+    I !pk_updated_seen_other { return 95 }
+    pk_updated_result.free_owned_text()
+    pk_updated_result.free_owned_text()
+
+    match pk_db.execute("update people set id = 9 where id = 1") {
+        Ok(_) => { return 96 },
+        Err(_) => {},
+    }
+    match pk_db.execute("update people set name = name where id = 1") {
+        Ok(_) => { return 97 },
+        Err(_) => {},
+    }
+
+    pk_result := mut match pk_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 237 },
+    }
+    I pk_result.row_count() != 2 as u64 { return 238 }
+    pk_rows := mut pk_result.get_rows()
+    pk_seen_updated := mut false
+    pk_seen_grace := mut false
+    LF ri: 0..pk_rows.len() {
+        candidate := mut &pk_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada-updated") {
+            pk_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") {
+            pk_seen_grace = true
+        }
+    }
+    I !pk_seen_updated { return 239 }
+    I !pk_seen_grace { return 241 }
+    pk_result.free_owned_text()
+    pk_result.free_owned_text()
+
+    pk_deleted := mut match pk_db.execute("delete from people where id = 1") {
+        Ok(n) => n,
+        Err(_) => { return 45 },
+    }
+    I pk_deleted != 1 as u64 { return 46 }
+
+    pk_after_delete := mut match pk_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 47 },
+    }
+    I pk_after_delete.row_count() != 1 as u64 { return 48 }
+    pk_after_delete_rows := mut pk_after_delete.get_rows()
+    pk_after_delete_row0 := mut &pk_after_delete_rows[0]
+    I !expect_cell(pk_after_delete_row0, 0, "2") { return 49 }
+    I !expect_cell(pk_after_delete_row0, 1, "grace") { return 50 }
+    pk_after_delete.free_owned_text()
+    pk_after_delete.free_owned_text()
+
+    pk_reinsert_deleted := mut match pk_db.execute("insert into people values (1, 'reused')") {
+        Ok(n) => n,
+        Err(_) => { return 51 },
+    }
+    I pk_reinsert_deleted != 1 as u64 { return 52 }
+
+    match pk_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 243 },
+    }
+
+    pk_reopen_cfg := mut EmbeddedConfig.default()
+    pk_reopen_cfg = pk_reopen_cfg.with_data_dir(pk_path.clone())
+    pk_reopen_cfg = pk_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    pk_reopened := mut match EmbeddedDatabase.open(pk_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 244 },
+    }
+
+    match pk_reopened.execute("insert into people values (1, 'duplicate')") {
+        Ok(_) => { return 245 },
+        Err(_) => {},
+    }
+    pk_after_dup_probe := mut match pk_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 222 },
+    }
+    I pk_after_dup_probe.row_count() != 2 as u64 {
+        return 223
+    }
+    pk_after_dup_probe.free_owned_text()
+    pk_after_dup_probe.free_owned_text()
+    match pk_reopened.execute("insert into people (name, id) values ('missing', NULL)") {
+        Ok(_) => { return 246 },
+        Err(_) => {},
+    }
+    pk_after_reopen := mut match pk_reopened.execute("insert into people values (3, 'hopper')") {
+        Ok(n) => n,
+        Err(_) => { return 247 },
+    }
+    I pk_after_reopen != 1 as u64 { return 248 }
+
+    pk_reopened_result := mut match pk_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 249 },
+    }
+    I pk_reopened_result.row_count() != 3 as u64 { return 250 }
+    pk_reopened_rows := mut pk_reopened_result.get_rows()
+    pk_reopened_row2 := mut &pk_reopened_rows[2]
+    I !expect_cell(pk_reopened_row2, 0, "3") { return 251 }
+    I !expect_cell(pk_reopened_row2, 1, "hopper") { return 252 }
+    pk_reopened_result.free_owned_text()
+    pk_reopened_result.free_owned_text()
+
+    match pk_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 253 },
+    }
+
+    # --- Promoted UNIQUE subset: people(id INT, name TEXT [NOT NULL] UNIQUE) ---
+    #
+    # The non-null shape rejects duplicate names. Nullable UNIQUE additionally
+    # keeps SQL NULL-distinct semantics by skipping NULL-bearing physical index
+    # entries while still rejecting duplicate non-NULL keys.
+    unique_suffix := mut time_micros()
+    unique_path := mut "embedded_sql_api_roundtrip_unique_db_{unique_suffix}"
+    unique_cfg := mut EmbeddedConfig.default()
+    unique_cfg = unique_cfg.with_data_dir(unique_path.clone())
+    unique_cfg = unique_cfg.with_page_size(PAGE_SIZE_8K)
+    unique_db := mut match EmbeddedDatabase.open(unique_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 69 },
+    }
+
+    unique_created := mut match unique_db.execute("create table people (id int, name text not null unique)") {
+        Ok(n) => n,
+        Err(_) => { return 78 },
+    }
+    I unique_created != 0 as u64 { return 79 }
+
+    unique_inserted_first := mut match unique_db.execute("insert into people values (1, 'ada')") {
+        Ok(n) => n,
+        Err(_) => { return 197 },
+    }
+    I unique_inserted_first != 1 as u64 { return 199 }
+    unique_inserted_second := mut match unique_db.execute("insert into people values (2, 'grace')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I unique_inserted_second != 1 as u64 { return 255 }
+
+    match unique_db.execute("insert into people values (3, 'ada')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match unique_db.execute("insert into people (id) values (4)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match unique_db.execute("update people set name = 'grace' where id = 1") {
+        Ok(_) => { return 98 },
+        Err(_) => {},
+    }
+
+    unique_updated := mut match unique_db.execute("update people set name = 'hopper' where id = 1") {
+        Ok(n) => n,
+        Err(_) => { return 70 },
+    }
+    I unique_updated != 1 as u64 { return 71 }
+
+    unique_after_update := mut match unique_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 72 },
+    }
+    I unique_after_update.row_count() != 2 as u64 { return 73 }
+    unique_after_update_rows := mut unique_after_update.get_rows()
+    unique_update_seen := mut false
+    unique_update_survivor_seen := mut false
+    LF ri: 0..unique_after_update_rows.len() {
+        candidate := mut &unique_after_update_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "hopper") {
+            unique_update_seen = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") {
+            unique_update_survivor_seen = true
+        }
+    }
+    I !unique_update_seen { return 74 }
+    I !unique_update_survivor_seen { return 75 }
+    unique_after_update.free_owned_text()
+    unique_after_update.free_owned_text()
+
+    unique_reuse_old_key := mut match unique_db.execute("insert into people values (3, 'ada')") {
+        Ok(n) => n,
+        Err(_) => { return 76 },
+    }
+    I unique_reuse_old_key != 1 as u64 { return 77 }
+
+    match unique_db.execute("insert into people values (4, 'hopper')") {
+        Ok(_) => { return 99 },
+        Err(_) => {},
+    }
+
+    unique_deleted := mut match unique_db.execute("delete from people where id = 3") {
+        Ok(n) => n,
+        Err(_) => { return 100 },
+    }
+    I unique_deleted != 1 as u64 { return 101 }
+
+    unique_reinsert_deleted := mut match unique_db.execute("insert into people values (3, 'ada')") {
+        Ok(n) => n,
+        Err(_) => { return 102 },
+    }
+    I unique_reinsert_deleted != 1 as u64 { return 103 }
+
+    match unique_db.execute("insert into people values (4, 'ada')") {
+        Ok(_) => { return 80 },
+        Err(_) => {},
+    }
+    unique_probe := mut match unique_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 81 },
+    }
+    I unique_probe.row_count() != 3 as u64 { return 82 }
+    unique_probe.free_owned_text()
+    unique_probe.free_owned_text()
+
+    match unique_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    unique_reopen_cfg := mut EmbeddedConfig.default()
+    unique_reopen_cfg = unique_reopen_cfg.with_data_dir(unique_path.clone())
+    unique_reopen_cfg = unique_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    unique_reopened := mut match EmbeddedDatabase.open(unique_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+
+    match unique_reopened.execute("insert into people values (3, 'ada')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    unique_after_dup_probe := mut match unique_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I unique_after_dup_probe.row_count() != 3 as u64 { return 255 }
+    unique_after_dup_probe.free_owned_text()
+    unique_after_dup_probe.free_owned_text()
+
+    unique_after_reopen := mut match unique_reopened.execute("insert into people values (4, 'lovelace')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I unique_after_reopen != 1 as u64 { return 255 }
+
+    unique_reopened_result := mut match unique_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I unique_reopened_result.row_count() != 4 as u64 { return 255 }
+    unique_rows := mut unique_reopened_result.get_rows()
+    unique_row3 := mut &unique_rows[3]
+    I !expect_cell(unique_row3, 0, "4") { return 255 }
+    I !expect_cell(unique_row3, 1, "lovelace") { return 255 }
+    unique_reopened_result.free_owned_text()
+    unique_reopened_result.free_owned_text()
+
+    match unique_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    nullable_unique_suffix := mut time_micros()
+    nullable_unique_path := mut "embedded_sql_api_roundtrip_nullable_unique_db_{nullable_unique_suffix}"
+    nullable_unique_cfg := mut EmbeddedConfig.default()
+    nullable_unique_cfg = nullable_unique_cfg.with_data_dir(nullable_unique_path.clone())
+    nullable_unique_cfg = nullable_unique_cfg.with_page_size(PAGE_SIZE_8K)
+    nullable_unique_db := mut match EmbeddedDatabase.open(nullable_unique_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+
+    nullable_unique_created := mut match nullable_unique_db.execute("create table people (id int, name text unique)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I nullable_unique_created != 0 as u64 { return 255 }
+    nullable_unique_inserted := mut match nullable_unique_db.execute("insert into people values (1, 'ada'), (2, NULL), (3, NULL)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I nullable_unique_inserted != 3 as u64 { return 255 }
+    match nullable_unique_db.execute("insert into people values (4, 'ada')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+
+    nullable_unique_updated := mut match nullable_unique_db.execute("update people set name = 'grace' where id = 1") {
+        Ok(n) => n,
+        Err(_) => { return 83 },
+    }
+    I nullable_unique_updated != 1 as u64 { return 84 }
+
+    nullable_unique_after_update := mut match nullable_unique_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 85 },
+    }
+    I nullable_unique_after_update.row_count() != 3 as u64 { return 86 }
+    nullable_unique_after_update_rows := mut nullable_unique_after_update.get_rows()
+    nullable_unique_update_seen := mut false
+    LF ri: 0..nullable_unique_after_update_rows.len() {
+        candidate := mut &nullable_unique_after_update_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "grace") {
+            nullable_unique_update_seen = true
+        }
+    }
+    I !nullable_unique_update_seen { return 87 }
+    nullable_unique_after_update.free_owned_text()
+    nullable_unique_after_update.free_owned_text()
+
+    nullable_unique_reuse_old_key := mut match nullable_unique_db.execute("insert into people values (6, 'ada')") {
+        Ok(n) => n,
+        Err(_) => { return 88 },
+    }
+    I nullable_unique_reuse_old_key != 1 as u64 { return 89 }
+
+    match nullable_unique_db.execute("insert into people values (7, 'grace')") {
+        Ok(_) => { return 90 },
+        Err(_) => {},
+    }
+
+    nullable_unique_deleted := mut match nullable_unique_db.execute("delete from people where id = 6") {
+        Ok(n) => n,
+        Err(_) => { return 91 },
+    }
+    I nullable_unique_deleted != 1 as u64 { return 92 }
+
+    nullable_unique_reinsert_deleted := mut match nullable_unique_db.execute("insert into people values (6, 'ada')") {
+        Ok(n) => n,
+        Err(_) => { return 93 },
+    }
+    I nullable_unique_reinsert_deleted != 1 as u64 { return 94 }
+
+    match nullable_unique_db.execute("insert into people values (7, 'ada')") {
+        Ok(_) => { return 95 },
+        Err(_) => {},
+    }
+    nullable_unique_probe := mut match nullable_unique_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I nullable_unique_probe.row_count() != 4 as u64 { return 255 }
+    nullable_unique_probe.free_owned_text()
+    nullable_unique_probe.free_owned_text()
+    match nullable_unique_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    nullable_unique_reopen_cfg := mut EmbeddedConfig.default()
+    nullable_unique_reopen_cfg = nullable_unique_reopen_cfg.with_data_dir(nullable_unique_path.clone())
+    nullable_unique_reopen_cfg = nullable_unique_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    nullable_unique_reopened := mut match EmbeddedDatabase.open(nullable_unique_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    nullable_unique_null_after_reopen := mut match nullable_unique_reopened.execute("insert into people values (4, NULL)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I nullable_unique_null_after_reopen != 1 as u64 { return 255 }
+    match nullable_unique_reopened.execute("insert into people values (5, 'ada')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    nullable_unique_after_dup_probe := mut match nullable_unique_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I nullable_unique_after_dup_probe.row_count() != 5 as u64 { return 255 }
+    nullable_unique_after_dup_probe.free_owned_text()
+    nullable_unique_after_dup_probe.free_owned_text()
+    nullable_unique_distinct_after_reopen := mut match nullable_unique_reopened.execute("insert into people values (5, 'lovelace')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I nullable_unique_distinct_after_reopen != 1 as u64 { return 255 }
+    nullable_unique_reopened_result := mut match nullable_unique_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I nullable_unique_reopened_result.row_count() != 6 as u64 { return 255 }
+    nullable_unique_rows := mut nullable_unique_reopened_result.get_rows()
+    nullable_unique_row5 := mut &nullable_unique_rows[5]
+    I !expect_cell(nullable_unique_row5, 0, "5") { return 255 }
+    I !expect_cell(nullable_unique_row5, 1, "lovelace") { return 255 }
+    nullable_unique_reopened_result.free_owned_text()
+    nullable_unique_reopened_result.free_owned_text()
+    match nullable_unique_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    # --- Promoted CHECK subset: people(id INT NOT NULL CHECK (id > 0), name TEXT) ---
+    #
+    # CHECK is promoted only after the expression is persisted in ColumnInfo
+    # and ConstraintChecker enforces it before and after reopen.
+    check_suffix := mut time_micros()
+    check_path := mut "embedded_sql_api_roundtrip_check_db_{check_suffix}"
+    check_cfg := mut EmbeddedConfig.default()
+    check_cfg = check_cfg.with_data_dir(check_path.clone())
+    check_cfg = check_cfg.with_page_size(PAGE_SIZE_8K)
+    check_db := mut match EmbeddedDatabase.open(check_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 30 },
+    }
+    check_created := mut match check_db.execute("create table people (id int not null check (id > 0), name text)") {
+        Ok(n) => n,
+        Err(_) => { return 31 },
+    }
+    I check_created != 0 as u64 { return 32 }
+    check_inserted := mut match check_db.execute("insert into people values (1, 'ada'), (2, 'grace')") {
+        Ok(n) => n,
+        Err(_) => { return 33 },
+    }
+    I check_inserted != 2 as u64 { return 34 }
+    match check_db.execute("insert into people values (0, 'zero')") {
+        Ok(_) => { return 35 },
+        Err(_) => {},
+    }
+    match check_db.execute("insert into people (name, id) values ('zero', 0)") {
+        Ok(_) => { return 36 },
+        Err(_) => {},
+    }
+    match check_db.execute("insert into people (name, id) values ('null_id', NULL)") {
+        Ok(_) => { return 37 },
+        Err(_) => {},
+    }
+    match check_db.execute("insert into people (name) values ('missing_id')") {
+        Ok(_) => { return 38 },
+        Err(_) => {},
+    }
+    check_updated := mut match check_db.execute("update people set name = 'ada-updated' where id = 1") {
+        Ok(n) => n,
+        Err(_) => { return 120 },
+    }
+    I check_updated != 1 as u64 { return 121 }
+    check_updated_result := mut match check_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 122 },
+    }
+    I check_updated_result.row_count() != 2 as u64 { return 123 }
+    check_updated_rows := mut check_updated_result.get_rows()
+    check_seen_updated := mut false
+    check_seen_other := mut false
+    LF ri: 0..check_updated_rows.len() {
+        candidate := mut &check_updated_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada-updated") {
+            check_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") {
+            check_seen_other = true
+        }
+    }
+    I !check_seen_updated { return 124 }
+    I !check_seen_other { return 125 }
+    check_updated_result.free_owned_text()
+    check_updated_result.free_owned_text()
+    match check_db.execute("update people set id = 0 where id = 1") {
+        Ok(_) => { return 126 },
+        Err(_) => {},
+    }
+    match check_db.execute("update people set name = name where id = 1") {
+        Ok(_) => { return 127 },
+        Err(_) => {},
+    }
+    check_probe := mut match check_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 39 },
+    }
+    I check_probe.row_count() != 2 as u64 { return 40 }
+    check_probe.free_owned_text()
+    check_probe.free_owned_text()
+    match check_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 41 },
+    }
+
+    check_reopen_cfg := mut EmbeddedConfig.default()
+    check_reopen_cfg = check_reopen_cfg.with_data_dir(check_path.clone())
+    check_reopen_cfg = check_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    check_reopened := mut match EmbeddedDatabase.open(check_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 42 },
+    }
+    match check_reopened.execute("insert into people values (0, 'zero')") {
+        Ok(_) => { return 43 },
+        Err(_) => {},
+    }
+    check_after_dup_probe := mut match check_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 44 },
+    }
+    I check_after_dup_probe.row_count() != 2 as u64 { return 45 }
+    check_reopened_rows := mut check_after_dup_probe.get_rows()
+    check_reopened_seen_updated := mut false
+    check_reopened_seen_other := mut false
+    LF ri: 0..check_reopened_rows.len() {
+        candidate := mut &check_reopened_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada-updated") {
+            check_reopened_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") {
+            check_reopened_seen_other = true
+        }
+    }
+    I !check_reopened_seen_updated { return 128 }
+    I !check_reopened_seen_other { return 129 }
+    check_after_dup_probe.free_owned_text()
+    check_after_dup_probe.free_owned_text()
+    check_after_reopen := mut match check_reopened.execute("insert into people values (3, 'hopper')") {
+        Ok(n) => n,
+        Err(_) => { return 46 },
+    }
+    I check_after_reopen != 1 as u64 { return 47 }
+    check_reopened_result := mut match check_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 48 },
+    }
+    I check_reopened_result.row_count() != 3 as u64 { return 49 }
+    check_rows := mut check_reopened_result.get_rows()
+    check_row2 := mut &check_rows[2]
+    I !expect_cell(check_row2, 0, "3") { return 50 }
+    I !expect_cell(check_row2, 1, "hopper") { return 51 }
+    check_reopened_result.free_owned_text()
+    check_reopened_result.free_owned_text()
+    match check_reopened.execute("delete from people") {
+        Ok(_) => { return 130 },
+        Err(_) => {},
+    }
+    match check_reopened.execute("delete from people where name = 'grace'") {
+        Ok(_) => { return 131 },
+        Err(_) => {},
+    }
+    check_deleted := mut match check_reopened.execute("delete from people where id = 2") {
+        Ok(n) => n,
+        Err(_) => { return 132 },
+    }
+    I check_deleted != 1 as u64 { return 133 }
+    check_deleted_result := mut match check_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 134 },
+    }
+    I check_deleted_result.row_count() != 2 as u64 { return 135 }
+    check_deleted_rows := mut check_deleted_result.get_rows()
+    check_deleted_seen_updated := mut false
+    check_deleted_seen_hopper := mut false
+    check_deleted_seen_removed := mut false
+    LF ri: 0..check_deleted_rows.len() {
+        candidate := mut &check_deleted_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada-updated") {
+            check_deleted_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "3") && expect_cell(candidate, 1, "hopper") {
+            check_deleted_seen_hopper = true
+        }
+        I expect_cell(candidate, 0, "2") {
+            check_deleted_seen_removed = true
+        }
+    }
+    I !check_deleted_seen_updated { return 136 }
+    I !check_deleted_seen_hopper { return 137 }
+    I check_deleted_seen_removed { return 138 }
+    check_deleted_result.free_owned_text()
+    check_deleted_result.free_owned_text()
+    match check_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 52 },
+    }
+
+    check_delete_reopen_cfg := mut EmbeddedConfig.default()
+    check_delete_reopen_cfg = check_delete_reopen_cfg.with_data_dir(check_path.clone())
+    check_delete_reopen_cfg = check_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    check_delete_reopened := mut match EmbeddedDatabase.open(check_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 139 },
+    }
+    match check_delete_reopened.execute("insert into people values (0, 'zero')") {
+        Ok(_) => { return 140 },
+        Err(_) => {},
+    }
+    check_delete_reopened_result := mut match check_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 141 },
+    }
+    I check_delete_reopened_result.row_count() != 2 as u64 { return 142 }
+    check_delete_reopened_rows := mut check_delete_reopened_result.get_rows()
+    check_delete_reopened_seen_updated := mut false
+    check_delete_reopened_seen_hopper := mut false
+    check_delete_reopened_seen_removed := mut false
+    LF ri: 0..check_delete_reopened_rows.len() {
+        candidate := mut &check_delete_reopened_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada-updated") {
+            check_delete_reopened_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "3") && expect_cell(candidate, 1, "hopper") {
+            check_delete_reopened_seen_hopper = true
+        }
+        I expect_cell(candidate, 0, "2") {
+            check_delete_reopened_seen_removed = true
+        }
+    }
+    I !check_delete_reopened_seen_updated { return 143 }
+    I !check_delete_reopened_seen_hopper { return 144 }
+    I check_delete_reopened_seen_removed { return 145 }
+    check_delete_reopened_result.free_owned_text()
+    check_delete_reopened_result.free_owned_text()
+    match check_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 146 },
+    }
+
+    # --- Promoted NOT NULL subset: people(id INT NOT NULL, name TEXT) ---
+    #
+    # The narrow promoted subset stores an explicit NOT NULL constraint on the
+    # `id` column. The catalog persists the nullable flag and the shared
+    # ConstraintChecker enforces it on INSERT: a NULL `id` row must return Err,
+    # while a fully-specified row succeeds and round-trips through reopen.
+    # `name` stays nullable, so a partial INSERT omitting `name` still works.
+    nn_suffix := mut time_micros()
+    nn_path := mut "embedded_sql_api_roundtrip_nn_db_{nn_suffix}"
+    nn_cfg := mut EmbeddedConfig.default()
+    nn_cfg = nn_cfg.with_data_dir(nn_path.clone())
+    nn_cfg = nn_cfg.with_page_size(PAGE_SIZE_8K)
+    nn_db := mut match EmbeddedDatabase.open(nn_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 211 },
+    }
+
+    nn_created := mut match nn_db.execute("create table people (id int not null, name text)") {
+        Ok(n) => n,
+        Err(_) => { return 212 },
+    }
+    I nn_created != 0 as u64 { return 213 }
+
+    # A second CREATE for the same table is still rejected even when the same
+    # promoted shape is written with different keyword case.
+    match nn_db.execute("create table people (id int NOT NULL, name text)") {
+        Ok(_) => { return 214 },
+        Err(_) => {},
+    }
+
+    nn_inserted := mut match nn_db.execute("insert into people values (1, 'ada')") {
+        Ok(n) => n,
+        Err(_) => { return 215 },
+    }
+    I nn_inserted != 1 as u64 { return 216 }
+
+    # NOT NULL is enforced: an explicit NULL into `id` must return Err.
+    match nn_db.execute("insert into people (name, id) values ('eve', NULL)") {
+        Ok(_) => { return 217 },
+        Err(_) => {},
+    }
+    # Omitting the NOT NULL `id` column (no default) must also return Err.
+    match nn_db.execute("insert into people (name) values ('eve')") {
+        Ok(_) => { return 218 },
+        Err(_) => {},
+    }
+    nn_updated := mut match nn_db.execute("update people set name = 'ada-updated' where id = 1") {
+        Ok(n) => n,
+        Err(_) => { return 147 },
+    }
+    I nn_updated != 1 as u64 { return 148 }
+    match nn_db.execute("update people set id = 9 where id = 1") {
+        Ok(_) => { return 149 },
+        Err(_) => {},
+    }
+    match nn_db.execute("update people set name = name where id = 1") {
+        Ok(_) => { return 150 },
+        Err(_) => {},
+    }
+    # `name` stays nullable: a partial INSERT supplying only `id` succeeds.
+    nn_partial := mut match nn_db.execute("insert into people (id) values (2)") {
+        Ok(n) => n,
+        Err(_) => { return 219 },
+    }
+    I nn_partial != 1 as u64 { return 220 }
+
+    nn_result := mut match nn_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 221 },
+    }
+    I nn_result.column_count() != 2 as u64 { return 222 }
+    I nn_result.row_count() != 2 as u64 { return 223 }
+    nn_rows := mut nn_result.get_rows()
+    nn_row0 := mut &nn_rows[0]
+    nn_row1 := mut &nn_rows[1]
+    I !expect_cell(nn_row0, 0, "1") { return 224 }
+    I !expect_cell(nn_row0, 1, "ada-updated") { return 225 }
+    I !expect_cell(nn_row1, 0, "2") { return 226 }
+    I !expect_none_cell(nn_row1, 1) { return 227 }
+    nn_result.free_owned_text()
+    nn_result.free_owned_text()
+
+    match nn_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 228 },
+    }
+
+    # Reopen: the NOT NULL constraint persists through the catalog root, and a
+    # NULL `id` INSERT is still rejected after reload.
+    nn_reopen_cfg := mut EmbeddedConfig.default()
+    nn_reopen_cfg = nn_reopen_cfg.with_data_dir(nn_path.clone())
+    nn_reopen_cfg = nn_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    nn_reopened := mut match EmbeddedDatabase.open(nn_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 229 },
+    }
+    nn_reopened_result := mut match nn_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 230 },
+    }
+    I nn_reopened_result.row_count() != 2 as u64 { return 231 }
+    nn_reopened_rows := mut nn_reopened_result.get_rows()
+    nn_reopened_row0 := mut &nn_reopened_rows[0]
+    I !expect_cell(nn_reopened_row0, 0, "1") { return 232 }
+    I !expect_cell(nn_reopened_row0, 1, "ada-updated") { return 233 }
+    nn_reopened_result.free_owned_text()
+    nn_reopened_result.free_owned_text()
+
+    match nn_reopened.execute("insert into people (name, id) values ('eve', NULL)") {
+        Ok(_) => { return 234 },
+        Err(_) => {},
+    }
+    match nn_reopened.execute("delete from people") {
+        Ok(_) => { return 151 },
+        Err(_) => {},
+    }
+    match nn_reopened.execute("delete from people where name = 'ada-updated'") {
+        Ok(_) => { return 152 },
+        Err(_) => {},
+    }
+    nn_deleted := mut match nn_reopened.execute("delete from people where id = 2") {
+        Ok(n) => n,
+        Err(_) => { return 153 },
+    }
+    I nn_deleted != 1 as u64 { return 154 }
+    nn_deleted_result := mut match nn_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 155 },
+    }
+    I nn_deleted_result.row_count() != 1 as u64 { return 156 }
+    nn_deleted_rows := mut nn_deleted_result.get_rows()
+    nn_deleted_seen_updated := mut false
+    nn_deleted_seen_removed := mut false
+    LF ri: 0..nn_deleted_rows.len() {
+        candidate := mut &nn_deleted_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada-updated") {
+            nn_deleted_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "2") {
+            nn_deleted_seen_removed = true
+        }
+    }
+    I !nn_deleted_seen_updated { return 157 }
+    I nn_deleted_seen_removed { return 158 }
+    nn_deleted_result.free_owned_text()
+    nn_deleted_result.free_owned_text()
+
+    match nn_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 235 },
+    }
+
+    nn_delete_reopen_cfg := mut EmbeddedConfig.default()
+    nn_delete_reopen_cfg = nn_delete_reopen_cfg.with_data_dir(nn_path.clone())
+    nn_delete_reopen_cfg = nn_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    nn_delete_reopened := mut match EmbeddedDatabase.open(nn_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 159 },
+    }
+    match nn_delete_reopened.execute("insert into people (name, id) values ('eve', NULL)") {
+        Ok(_) => { return 160 },
+        Err(_) => {},
+    }
+    nn_delete_reopened_result := mut match nn_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 161 },
+    }
+    I nn_delete_reopened_result.row_count() != 1 as u64 { return 162 }
+    nn_delete_reopened_rows := mut nn_delete_reopened_result.get_rows()
+    nn_delete_reopened_row0 := mut &nn_delete_reopened_rows[0]
+    I !expect_cell(nn_delete_reopened_row0, 0, "1") { return 163 }
+    I !expect_cell(nn_delete_reopened_row0, 1, "ada-updated") { return 164 }
+    nn_delete_reopened_result.free_owned_text()
+    nn_delete_reopened_result.free_owned_text()
+    match nn_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 165 },
+    }
+
+    # Fresh uppercase keyword variation of the same promoted shape succeeds.
+    nn_upper_suffix := mut time_micros()
+    nn_upper_path := mut "embedded_sql_api_roundtrip_nn_upper_db_{nn_upper_suffix}"
+    nn_upper_cfg := mut EmbeddedConfig.default()
+    nn_upper_cfg = nn_upper_cfg.with_data_dir(nn_upper_path.clone())
+    nn_upper_cfg = nn_upper_cfg.with_page_size(PAGE_SIZE_8K)
+    nn_upper_db := mut match EmbeddedDatabase.open(nn_upper_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 236 },
+    }
+    nn_upper_created := mut match nn_upper_db.execute(" CREATE TABLE people (id INT NOT NULL, name TEXT); ") {
+        Ok(n) => n,
+        Err(_) => { return 237 },
+    }
+    I nn_upper_created != 0 as u64 { return 238 }
+    match nn_upper_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 239 },
+    }
+
+    # --- Promoted NOT NULL subset: people(id INT, name TEXT NOT NULL) ---
+    #
+    # The fixed `name` column now also stores an explicit NOT NULL flag. The
+    # shared ConstraintChecker rejects explicit NULL and omitted `name` cells,
+    # while `id` stays nullable in this shape.
+    name_nn_suffix := mut time_micros()
+    name_nn_path := mut "embedded_sql_api_roundtrip_name_nn_db_{name_nn_suffix}"
+    name_nn_cfg := mut EmbeddedConfig.default()
+    name_nn_cfg = name_nn_cfg.with_data_dir(name_nn_path.clone())
+    name_nn_cfg = name_nn_cfg.with_page_size(PAGE_SIZE_8K)
+    name_nn_db := mut match EmbeddedDatabase.open(name_nn_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 240 },
+    }
+    name_nn_created := mut match name_nn_db.execute("create table people (id int, name text not null)") {
+        Ok(n) => n,
+        Err(_) => { return 241 },
+    }
+    I name_nn_created != 0 as u64 { return 242 }
+
+    name_nn_inserted := mut match name_nn_db.execute("insert into people values (10, 'ada')") {
+        Ok(n) => n,
+        Err(_) => { return 243 },
+    }
+    I name_nn_inserted != 1 as u64 { return 244 }
+
+    match name_nn_db.execute("insert into people (id, name) values (11, NULL)") {
+        Ok(_) => { return 245 },
+        Err(_) => {},
+    }
+    match name_nn_db.execute("insert into people (id) values (12)") {
+        Ok(_) => { return 246 },
+        Err(_) => {},
+    }
+    name_nn_updated := mut match name_nn_db.execute("update people set name = 'ada-updated' where id = 10") {
+        Ok(n) => n,
+        Err(_) => { return 166 },
+    }
+    I name_nn_updated != 1 as u64 { return 167 }
+    match name_nn_db.execute("update people set id = 14 where id = 10") {
+        Ok(_) => { return 168 },
+        Err(_) => {},
+    }
+    match name_nn_db.execute("update people set name = name where id = 10") {
+        Ok(_) => { return 169 },
+        Err(_) => {},
+    }
+
+    name_nn_id_null := mut match name_nn_db.execute("insert into people (name) values ('grace')") {
+        Ok(n) => n,
+        Err(_) => { return 247 },
+    }
+    I name_nn_id_null != 1 as u64 { return 248 }
+
+    name_nn_result := mut match name_nn_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 249 },
+    }
+    I name_nn_result.row_count() != 2 as u64 { return 250 }
+    name_nn_rows := mut name_nn_result.get_rows()
+    name_nn_row0 := mut &name_nn_rows[0]
+    name_nn_row1 := mut &name_nn_rows[1]
+    I !expect_cell(name_nn_row0, 0, "10") { return 251 }
+    I !expect_cell(name_nn_row0, 1, "ada-updated") { return 252 }
+    I !expect_none_cell(name_nn_row1, 0) { return 253 }
+    I !expect_cell(name_nn_row1, 1, "grace") { return 254 }
+    name_nn_result.free_owned_text()
+    name_nn_result.free_owned_text()
+
+    match name_nn_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    name_nn_reopen_cfg := mut EmbeddedConfig.default()
+    name_nn_reopen_cfg = name_nn_reopen_cfg.with_data_dir(name_nn_path.clone())
+    name_nn_reopen_cfg = name_nn_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    name_nn_reopened := mut match EmbeddedDatabase.open(name_nn_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    name_nn_reopened_result := mut match name_nn_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_nn_reopened_result.row_count() != 2 as u64 { return 255 }
+    name_nn_reopened_rows := mut name_nn_reopened_result.get_rows()
+    name_nn_reopened_row0 := mut &name_nn_reopened_rows[0]
+    name_nn_reopened_row1 := mut &name_nn_reopened_rows[1]
+    I !expect_cell(name_nn_reopened_row0, 0, "10") { return 170 }
+    I !expect_cell(name_nn_reopened_row0, 1, "ada-updated") { return 171 }
+    I !expect_none_cell(name_nn_reopened_row1, 0) { return 172 }
+    I !expect_cell(name_nn_reopened_row1, 1, "grace") { return 173 }
+    name_nn_reopened_result.free_owned_text()
+    name_nn_reopened_result.free_owned_text()
+    match name_nn_reopened.execute("insert into people (id, name) values (13, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match name_nn_reopened.execute("delete from people") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match name_nn_reopened.execute("delete from people where name = 'ada-updated'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_nn_deleted := mut match name_nn_reopened.execute("delete from people where id = 10") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_nn_deleted != 1 as u64 { return 255 }
+    name_nn_deleted_result := mut match name_nn_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_nn_deleted_result.row_count() != 1 as u64 { return 255 }
+    name_nn_deleted_rows := mut name_nn_deleted_result.get_rows()
+    name_nn_deleted_row0 := mut &name_nn_deleted_rows[0]
+    I !expect_none_cell(name_nn_deleted_row0, 0) { return 255 }
+    I !expect_cell(name_nn_deleted_row0, 1, "grace") { return 255 }
+    name_nn_deleted_result.free_owned_text()
+    name_nn_deleted_result.free_owned_text()
+    match name_nn_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    name_nn_delete_reopen_cfg := mut EmbeddedConfig.default()
+    name_nn_delete_reopen_cfg = name_nn_delete_reopen_cfg.with_data_dir(name_nn_path.clone())
+    name_nn_delete_reopen_cfg = name_nn_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    name_nn_delete_reopened := mut match EmbeddedDatabase.open(name_nn_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match name_nn_delete_reopened.execute("insert into people (id, name) values (13, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_nn_delete_reopened_result := mut match name_nn_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_nn_delete_reopened_result.row_count() != 1 as u64 { return 255 }
+    name_nn_delete_reopened_rows := mut name_nn_delete_reopened_result.get_rows()
+    name_nn_delete_reopened_row0 := mut &name_nn_delete_reopened_rows[0]
+    I !expect_none_cell(name_nn_delete_reopened_row0, 0) { return 255 }
+    I !expect_cell(name_nn_delete_reopened_row0, 1, "grace") { return 255 }
+    name_nn_delete_reopened_result.free_owned_text()
+    name_nn_delete_reopened_result.free_owned_text()
+    match name_nn_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    # --- Promoted literal DEFAULT DDL subset ----------------------------
+    #
+    # Literal defaults on the fixed id/name columns are catalog metadata. They
+    # must materialize repeatedly for omitted columns and DEFAULT markers, and
+    # survive close/reopen without consuming the stored default strings.
+    default_ddl_suffix := mut time_micros()
+    default_ddl_path := mut "embedded_sql_api_roundtrip_default_ddl_db_{default_ddl_suffix}"
+    default_ddl_cfg := mut EmbeddedConfig.default()
+    default_ddl_cfg = default_ddl_cfg.with_data_dir(default_ddl_path.clone())
+    default_ddl_cfg = default_ddl_cfg.with_page_size(PAGE_SIZE_8K)
+    default_ddl_db := mut match EmbeddedDatabase.open(default_ddl_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    default_ddl_created := mut match default_ddl_db.execute(" CREATE TABLE people (id INT DEFAULT 7, name TEXT DEFAULT 'anon'); ") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_created != 0 as u64 { return 255 }
+
+    default_ddl_insert_omitted_name := mut match default_ddl_db.execute("insert into people (id) values (100), (101)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_insert_omitted_name != 2 as u64 { return 255 }
+    default_ddl_insert_omitted_id := mut match default_ddl_db.execute("insert into people (name) values ('lovelace')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_insert_omitted_id != 1 as u64 { return 255 }
+    default_ddl_insert_markers := mut match default_ddl_db.execute("insert into people (id, name) values (DEFAULT, 'turing'), (102, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_insert_markers != 2 as u64 { return 255 }
+
+    default_ddl_result := mut match default_ddl_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_result.row_count() != 5 as u64 { return 255 }
+    default_ddl_rows := mut default_ddl_result.get_rows()
+    default_ddl_row0 := mut &default_ddl_rows[0]
+    default_ddl_row1 := mut &default_ddl_rows[1]
+    default_ddl_row2 := mut &default_ddl_rows[2]
+    default_ddl_row3 := mut &default_ddl_rows[3]
+    default_ddl_row4 := mut &default_ddl_rows[4]
+    I !expect_cell(default_ddl_row0, 0, "100") { return 255 }
+    I !expect_cell(default_ddl_row0, 1, "anon") { return 255 }
+    I !expect_cell(default_ddl_row1, 0, "101") { return 255 }
+    I !expect_cell(default_ddl_row1, 1, "anon") { return 255 }
+    I !expect_cell(default_ddl_row2, 0, "7") { return 255 }
+    I !expect_cell(default_ddl_row2, 1, "lovelace") { return 255 }
+    I !expect_cell(default_ddl_row3, 0, "7") { return 255 }
+    I !expect_cell(default_ddl_row3, 1, "turing") { return 255 }
+    I !expect_cell(default_ddl_row4, 0, "102") { return 255 }
+    I !expect_cell(default_ddl_row4, 1, "anon") { return 255 }
+    default_ddl_result.free_owned_text()
+    default_ddl_result.free_owned_text()
+
+    match default_ddl_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    default_ddl_reopen_cfg := mut EmbeddedConfig.default()
+    default_ddl_reopen_cfg = default_ddl_reopen_cfg.with_data_dir(default_ddl_path.clone())
+    default_ddl_reopen_cfg = default_ddl_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    default_ddl_reopened := mut match EmbeddedDatabase.open(default_ddl_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    default_ddl_after_reopen := mut match default_ddl_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_after_reopen != 1 as u64 { return 255 }
+    default_ddl_reopened_result := mut match default_ddl_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_reopened_result.row_count() != 6 as u64 { return 255 }
+    default_ddl_reopened_rows := mut default_ddl_reopened_result.get_rows()
+    default_ddl_reopened_row5 := mut &default_ddl_reopened_rows[5]
+    I !expect_cell(default_ddl_reopened_row5, 0, "7") { return 255 }
+    I !expect_cell(default_ddl_reopened_row5, 1, "anon") { return 255 }
+    default_ddl_reopened_result.free_owned_text()
+    default_ddl_reopened_result.free_owned_text()
+    default_ddl_updated := mut match default_ddl_reopened.execute("update people set name = 'anon-updated' where id = 100") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_updated != 1 as u64 { return 255 }
+    match default_ddl_reopened.execute("update people set id = 108 where id = 100") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match default_ddl_reopened.execute("update people set name = name where id = 100") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match default_ddl_reopened.execute("update people set name = 'missing-where'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match default_ddl_reopened.execute("delete from people") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match default_ddl_reopened.execute("delete from people where name = 'anon-updated'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    default_ddl_updated_result := mut match default_ddl_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_updated_result.row_count() != 6 as u64 { return 255 }
+    default_ddl_updated_rows := mut default_ddl_updated_result.get_rows()
+    default_ddl_seen_updated := mut false
+    default_ddl_seen_stale := mut false
+    default_ddl_seen_default := mut false
+    LF ri: 0..default_ddl_updated_rows.len() {
+        candidate := mut &default_ddl_updated_rows[ri]
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "anon-updated") {
+            default_ddl_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "anon") {
+            default_ddl_seen_stale = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "anon") {
+            default_ddl_seen_default = true
+        }
+    }
+    I !default_ddl_seen_updated { return 255 }
+    I default_ddl_seen_stale { return 255 }
+    I !default_ddl_seen_default { return 255 }
+    default_ddl_updated_result.free_owned_text()
+    default_ddl_updated_result.free_owned_text()
+    match default_ddl_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    default_ddl_update_reopen_cfg := mut EmbeddedConfig.default()
+    default_ddl_update_reopen_cfg = default_ddl_update_reopen_cfg.with_data_dir(default_ddl_path.clone())
+    default_ddl_update_reopen_cfg = default_ddl_update_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    default_ddl_update_reopened := mut match EmbeddedDatabase.open(default_ddl_update_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    default_ddl_update_default := mut match default_ddl_update_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_update_default != 1 as u64 { return 255 }
+    default_ddl_update_reopened_result := mut match default_ddl_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_update_reopened_result.row_count() != 7 as u64 { return 255 }
+    default_ddl_update_reopened_rows := mut default_ddl_update_reopened_result.get_rows()
+    default_ddl_reopen_seen_updated := mut false
+    default_ddl_reopen_seen_stale := mut false
+    default_ddl_reopen_default_count := mut 0
+    LF ri: 0..default_ddl_update_reopened_rows.len() {
+        candidate := mut &default_ddl_update_reopened_rows[ri]
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "anon-updated") {
+            default_ddl_reopen_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "anon") {
+            default_ddl_reopen_seen_stale = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "anon") {
+            default_ddl_reopen_default_count += 1
+        }
+    }
+    I !default_ddl_reopen_seen_updated { return 255 }
+    I default_ddl_reopen_seen_stale { return 255 }
+    I default_ddl_reopen_default_count < 2 { return 255 }
+    default_ddl_update_reopened_result.free_owned_text()
+    default_ddl_update_reopened_result.free_owned_text()
+    default_ddl_deleted := mut match default_ddl_update_reopened.execute("delete from people where id = 100") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_deleted != 1 as u64 { return 255 }
+    default_ddl_deleted_result := mut match default_ddl_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_deleted_result.row_count() != 6 as u64 { return 255 }
+    default_ddl_deleted_rows := mut default_ddl_deleted_result.get_rows()
+    default_ddl_deleted_seen_target := mut false
+    default_ddl_deleted_seen_survivor := mut false
+    default_ddl_deleted_default_count := mut 0
+    LF ri: 0..default_ddl_deleted_rows.len() {
+        candidate := mut &default_ddl_deleted_rows[ri]
+        I expect_cell(candidate, 0, "100") {
+            default_ddl_deleted_seen_target = true
+        }
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "anon") {
+            default_ddl_deleted_seen_survivor = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "anon") {
+            default_ddl_deleted_default_count += 1
+        }
+    }
+    I default_ddl_deleted_seen_target { return 255 }
+    I !default_ddl_deleted_seen_survivor { return 255 }
+    I default_ddl_deleted_default_count < 2 { return 255 }
+    default_ddl_deleted_result.free_owned_text()
+    default_ddl_deleted_result.free_owned_text()
+    match default_ddl_update_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    default_ddl_delete_reopen_cfg := mut EmbeddedConfig.default()
+    default_ddl_delete_reopen_cfg = default_ddl_delete_reopen_cfg.with_data_dir(default_ddl_path.clone())
+    default_ddl_delete_reopen_cfg = default_ddl_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    default_ddl_delete_reopened := mut match EmbeddedDatabase.open(default_ddl_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    default_ddl_delete_default := mut match default_ddl_delete_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_delete_default != 1 as u64 { return 255 }
+    default_ddl_delete_reopened_result := mut match default_ddl_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I default_ddl_delete_reopened_result.row_count() != 7 as u64 { return 255 }
+    default_ddl_delete_reopened_rows := mut default_ddl_delete_reopened_result.get_rows()
+    default_ddl_delete_seen_target := mut false
+    default_ddl_delete_seen_survivor := mut false
+    default_ddl_delete_default_count := mut 0
+    LF ri: 0..default_ddl_delete_reopened_rows.len() {
+        candidate := mut &default_ddl_delete_reopened_rows[ri]
+        I expect_cell(candidate, 0, "100") {
+            default_ddl_delete_seen_target = true
+        }
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "anon") {
+            default_ddl_delete_seen_survivor = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "anon") {
+            default_ddl_delete_default_count += 1
+        }
+    }
+    I default_ddl_delete_seen_target { return 255 }
+    I !default_ddl_delete_seen_survivor { return 255 }
+    I default_ddl_delete_default_count < 3 { return 255 }
+    default_ddl_delete_reopened_result.free_owned_text()
+    default_ddl_delete_reopened_result.free_owned_text()
+    match default_ddl_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    # Single-column literal DEFAULT DDL keeps the other fixed nullable column
+    # default-less; omitted/default-marker values on that column materialize
+    # NULL, while the defaulted column materializes the stored literal.
+    id_default_suffix := mut time_micros()
+    id_default_path := mut "embedded_sql_api_roundtrip_id_default_db_{id_default_suffix}"
+    id_default_cfg := mut EmbeddedConfig.default()
+    id_default_cfg = id_default_cfg.with_data_dir(id_default_path.clone())
+    id_default_cfg = id_default_cfg.with_page_size(PAGE_SIZE_8K)
+    id_default_db := mut match EmbeddedDatabase.open(id_default_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    id_default_created := mut match id_default_db.execute("CREATE TABLE people (id INT DEFAULT 7, name TEXT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_default_created != 0 as u64 { return 255 }
+
+    id_default_insert_omitted_name := mut match id_default_db.execute("insert into people (id) values (101)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_default_insert_omitted_name != 1 as u64 { return 255 }
+    id_default_insert_omitted_id := mut match id_default_db.execute("insert into people (name) values ('hopper')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_default_insert_omitted_id != 1 as u64 { return 255 }
+    id_default_insert_markers := mut match id_default_db.execute("insert into people (id, name) values (DEFAULT, 'hamilton'), (102, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_default_insert_markers != 2 as u64 { return 255 }
+
+    id_default_result := mut match id_default_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_default_result.row_count() != 4 as u64 { return 255 }
+    id_default_rows := mut id_default_result.get_rows()
+    id_default_row0 := mut &id_default_rows[0]
+    id_default_row1 := mut &id_default_rows[1]
+    id_default_row2 := mut &id_default_rows[2]
+    id_default_row3 := mut &id_default_rows[3]
+    I !expect_cell(id_default_row0, 0, "101") { return 255 }
+    I !expect_none_cell(id_default_row0, 1) { return 255 }
+    I !expect_cell(id_default_row1, 0, "7") { return 255 }
+    I !expect_cell(id_default_row1, 1, "hopper") { return 255 }
+    I !expect_cell(id_default_row2, 0, "7") { return 255 }
+    I !expect_cell(id_default_row2, 1, "hamilton") { return 255 }
+    I !expect_cell(id_default_row3, 0, "102") { return 255 }
+    I !expect_none_cell(id_default_row3, 1) { return 255 }
+    id_default_result.free_owned_text()
+    id_default_result.free_owned_text()
+
+    match id_default_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    id_default_reopen_cfg := mut EmbeddedConfig.default()
+    id_default_reopen_cfg = id_default_reopen_cfg.with_data_dir(id_default_path.clone())
+    id_default_reopen_cfg = id_default_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    id_default_reopened := mut match EmbeddedDatabase.open(id_default_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    id_default_after_reopen := mut match id_default_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_default_after_reopen != 1 as u64 { return 255 }
+    id_default_reopened_result := mut match id_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_default_reopened_result.row_count() != 5 as u64 { return 255 }
+    id_default_reopened_rows := mut id_default_reopened_result.get_rows()
+    id_default_reopened_row4 := mut &id_default_reopened_rows[4]
+    I !expect_cell(id_default_reopened_row4, 0, "7") { return 255 }
+    I !expect_none_cell(id_default_reopened_row4, 1) { return 255 }
+    id_default_reopened_result.free_owned_text()
+    id_default_reopened_result.free_owned_text()
+    id_default_updated := mut match id_default_reopened.execute("update people set name = 'id-default-updated' where id = 101") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_default_updated != 1 as u64 { return 255 }
+    match id_default_reopened.execute("update people set id = 108 where id = 101") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match id_default_reopened.execute("update people set name = name where id = 101") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match id_default_reopened.execute("update people set name = 'missing-where'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match id_default_reopened.execute("delete from people") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match id_default_reopened.execute("delete from people where name = 'id-default-updated'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    id_default_updated_result := mut match id_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_default_updated_result.row_count() != 5 as u64 { return 255 }
+    id_default_updated_rows := mut id_default_updated_result.get_rows()
+    id_default_seen_updated := mut false
+    id_default_seen_stale := mut false
+    id_default_null_default_count := mut 0
+    LF ri: 0..id_default_updated_rows.len() {
+        candidate := mut &id_default_updated_rows[ri]
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "id-default-updated") {
+            id_default_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "101") && expect_none_cell(candidate, 1) {
+            id_default_seen_stale = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_none_cell(candidate, 1) {
+            id_default_null_default_count += 1
+        }
+    }
+    I !id_default_seen_updated { return 255 }
+    I id_default_seen_stale { return 255 }
+    I id_default_null_default_count < 1 { return 255 }
+    id_default_updated_result.free_owned_text()
+    id_default_updated_result.free_owned_text()
+    match id_default_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    id_default_update_reopen_cfg := mut EmbeddedConfig.default()
+    id_default_update_reopen_cfg = id_default_update_reopen_cfg.with_data_dir(id_default_path.clone())
+    id_default_update_reopen_cfg = id_default_update_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    id_default_update_reopened := mut match EmbeddedDatabase.open(id_default_update_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    id_default_update_default := mut match id_default_update_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_default_update_default != 1 as u64 { return 255 }
+    id_default_update_reopened_result := mut match id_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_default_update_reopened_result.row_count() != 6 as u64 { return 255 }
+    id_default_update_reopened_rows := mut id_default_update_reopened_result.get_rows()
+    id_default_reopen_seen_updated := mut false
+    id_default_reopen_seen_stale := mut false
+    id_default_reopen_null_default_count := mut 0
+    LF ri: 0..id_default_update_reopened_rows.len() {
+        candidate := mut &id_default_update_reopened_rows[ri]
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "id-default-updated") {
+            id_default_reopen_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "101") && expect_none_cell(candidate, 1) {
+            id_default_reopen_seen_stale = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_none_cell(candidate, 1) {
+            id_default_reopen_null_default_count += 1
+        }
+    }
+    I !id_default_reopen_seen_updated { return 255 }
+    I id_default_reopen_seen_stale { return 255 }
+    I id_default_reopen_null_default_count < 2 { return 255 }
+    id_default_update_reopened_result.free_owned_text()
+    id_default_update_reopened_result.free_owned_text()
+    id_default_deleted := mut match id_default_update_reopened.execute("delete from people where id = 101") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_default_deleted != 1 as u64 { return 255 }
+    id_default_deleted_result := mut match id_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_default_deleted_result.row_count() != 5 as u64 { return 255 }
+    id_default_deleted_rows := mut id_default_deleted_result.get_rows()
+    id_default_deleted_seen_target := mut false
+    id_default_deleted_seen_survivor := mut false
+    id_default_deleted_null_default_count := mut 0
+    LF ri: 0..id_default_deleted_rows.len() {
+        candidate := mut &id_default_deleted_rows[ri]
+        I expect_cell(candidate, 0, "101") {
+            id_default_deleted_seen_target = true
+        }
+        I expect_cell(candidate, 0, "102") && expect_none_cell(candidate, 1) {
+            id_default_deleted_seen_survivor = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_none_cell(candidate, 1) {
+            id_default_deleted_null_default_count += 1
+        }
+    }
+    I id_default_deleted_seen_target { return 255 }
+    I !id_default_deleted_seen_survivor { return 255 }
+    I id_default_deleted_null_default_count < 2 { return 255 }
+    id_default_deleted_result.free_owned_text()
+    id_default_deleted_result.free_owned_text()
+    match id_default_update_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    id_default_delete_reopen_cfg := mut EmbeddedConfig.default()
+    id_default_delete_reopen_cfg = id_default_delete_reopen_cfg.with_data_dir(id_default_path.clone())
+    id_default_delete_reopen_cfg = id_default_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    id_default_delete_reopened := mut match EmbeddedDatabase.open(id_default_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    id_default_delete_default := mut match id_default_delete_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_default_delete_default != 1 as u64 { return 255 }
+    id_default_delete_reopened_result := mut match id_default_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_default_delete_reopened_result.row_count() != 6 as u64 { return 255 }
+    id_default_delete_reopened_rows := mut id_default_delete_reopened_result.get_rows()
+    id_default_delete_seen_target := mut false
+    id_default_delete_seen_survivor := mut false
+    id_default_delete_null_default_count := mut 0
+    LF ri: 0..id_default_delete_reopened_rows.len() {
+        candidate := mut &id_default_delete_reopened_rows[ri]
+        I expect_cell(candidate, 0, "101") {
+            id_default_delete_seen_target = true
+        }
+        I expect_cell(candidate, 0, "102") && expect_none_cell(candidate, 1) {
+            id_default_delete_seen_survivor = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_none_cell(candidate, 1) {
+            id_default_delete_null_default_count += 1
+        }
+    }
+    I id_default_delete_seen_target { return 255 }
+    I !id_default_delete_seen_survivor { return 255 }
+    I id_default_delete_null_default_count < 3 { return 255 }
+    id_default_delete_reopened_result.free_owned_text()
+    id_default_delete_reopened_result.free_owned_text()
+    match id_default_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    name_default_suffix := mut time_micros()
+    name_default_path := mut "embedded_sql_api_roundtrip_name_default_db_{name_default_suffix}"
+    name_default_cfg := mut EmbeddedConfig.default()
+    name_default_cfg = name_default_cfg.with_data_dir(name_default_path.clone())
+    name_default_cfg = name_default_cfg.with_page_size(PAGE_SIZE_8K)
+    name_default_db := mut match EmbeddedDatabase.open(name_default_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    name_default_created := mut match name_default_db.execute("CREATE TABLE people (id INT, name TEXT DEFAULT 'anon')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_default_created != 0 as u64 { return 255 }
+
+    name_default_insert_omitted_name := mut match name_default_db.execute("insert into people (id) values (100), (101)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_default_insert_omitted_name != 2 as u64 { return 255 }
+    name_default_insert_omitted_id := mut match name_default_db.execute("insert into people (name) values ('lovelace')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_default_insert_omitted_id != 1 as u64 { return 255 }
+    name_default_insert_markers := mut match name_default_db.execute("insert into people (id, name) values (DEFAULT, 'turing'), (102, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_default_insert_markers != 2 as u64 { return 255 }
+
+    name_default_result := mut match name_default_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_default_result.row_count() != 5 as u64 { return 255 }
+    name_default_rows := mut name_default_result.get_rows()
+    name_default_row0 := mut &name_default_rows[0]
+    name_default_row1 := mut &name_default_rows[1]
+    name_default_row2 := mut &name_default_rows[2]
+    name_default_row3 := mut &name_default_rows[3]
+    name_default_row4 := mut &name_default_rows[4]
+    I !expect_cell(name_default_row0, 0, "100") { return 255 }
+    I !expect_cell(name_default_row0, 1, "anon") { return 255 }
+    I !expect_cell(name_default_row1, 0, "101") { return 255 }
+    I !expect_cell(name_default_row1, 1, "anon") { return 255 }
+    I !expect_none_cell(name_default_row2, 0) { return 255 }
+    I !expect_cell(name_default_row2, 1, "lovelace") { return 255 }
+    I !expect_none_cell(name_default_row3, 0) { return 255 }
+    I !expect_cell(name_default_row3, 1, "turing") { return 255 }
+    I !expect_cell(name_default_row4, 0, "102") { return 255 }
+    I !expect_cell(name_default_row4, 1, "anon") { return 255 }
+    name_default_result.free_owned_text()
+    name_default_result.free_owned_text()
+
+    match name_default_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    name_default_reopen_cfg := mut EmbeddedConfig.default()
+    name_default_reopen_cfg = name_default_reopen_cfg.with_data_dir(name_default_path.clone())
+    name_default_reopen_cfg = name_default_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    name_default_reopened := mut match EmbeddedDatabase.open(name_default_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    name_default_after_reopen := mut match name_default_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_default_after_reopen != 1 as u64 { return 255 }
+    name_default_reopened_result := mut match name_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_default_reopened_result.row_count() != 6 as u64 { return 255 }
+    name_default_reopened_rows := mut name_default_reopened_result.get_rows()
+    name_default_reopened_row5 := mut &name_default_reopened_rows[5]
+    I !expect_none_cell(name_default_reopened_row5, 0) { return 255 }
+    I !expect_cell(name_default_reopened_row5, 1, "anon") { return 255 }
+    name_default_reopened_result.free_owned_text()
+    name_default_reopened_result.free_owned_text()
+    name_default_updated := mut match name_default_reopened.execute("update people set name = 'name-default-updated' where id = 100") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_default_updated != 1 as u64 { return 255 }
+    match name_default_reopened.execute("update people set id = 108 where id = 100") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match name_default_reopened.execute("update people set name = name where id = 100") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match name_default_reopened.execute("update people set name = 'missing-where'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_default_updated_result := mut match name_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_default_updated_result.row_count() != 6 as u64 { return 255 }
+    name_default_updated_rows := mut name_default_updated_result.get_rows()
+    name_default_seen_updated := mut false
+    name_default_seen_stale := mut false
+    name_default_null_default_count := mut 0
+    LF ri: 0..name_default_updated_rows.len() {
+        candidate := mut &name_default_updated_rows[ri]
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "name-default-updated") {
+            name_default_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "anon") {
+            name_default_seen_stale = true
+        }
+        I expect_none_cell(candidate, 0) && expect_cell(candidate, 1, "anon") {
+            name_default_null_default_count += 1
+        }
+    }
+    I !name_default_seen_updated { return 255 }
+    I name_default_seen_stale { return 255 }
+    I name_default_null_default_count < 1 { return 255 }
+    name_default_updated_result.free_owned_text()
+    name_default_updated_result.free_owned_text()
+    match name_default_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    name_default_update_reopen_cfg := mut EmbeddedConfig.default()
+    name_default_update_reopen_cfg = name_default_update_reopen_cfg.with_data_dir(name_default_path.clone())
+    name_default_update_reopen_cfg = name_default_update_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    name_default_update_reopened := mut match EmbeddedDatabase.open(name_default_update_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    name_default_update_default := mut match name_default_update_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_default_update_default != 1 as u64 { return 255 }
+    name_default_update_reopened_result := mut match name_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_default_update_reopened_result.row_count() != 7 as u64 { return 255 }
+    name_default_update_reopened_rows := mut name_default_update_reopened_result.get_rows()
+    name_default_reopen_seen_updated := mut false
+    name_default_reopen_seen_stale := mut false
+    name_default_reopen_null_default_count := mut 0
+    LF ri: 0..name_default_update_reopened_rows.len() {
+        candidate := mut &name_default_update_reopened_rows[ri]
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "name-default-updated") {
+            name_default_reopen_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "anon") {
+            name_default_reopen_seen_stale = true
+        }
+        I expect_none_cell(candidate, 0) && expect_cell(candidate, 1, "anon") {
+            name_default_reopen_null_default_count += 1
+        }
+    }
+    I !name_default_reopen_seen_updated { return 255 }
+    I name_default_reopen_seen_stale { return 255 }
+    I name_default_reopen_null_default_count < 2 { return 255 }
+    name_default_update_reopened_result.free_owned_text()
+    name_default_update_reopened_result.free_owned_text()
+    match name_default_update_reopened.execute("delete from people") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match name_default_update_reopened.execute("delete from people where name = 'name-default-updated'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_default_deleted := mut match name_default_update_reopened.execute("delete from people where id = 100") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_default_deleted != 1 as u64 { return 255 }
+    name_default_deleted_result := mut match name_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_default_deleted_result.row_count() != 6 as u64 { return 255 }
+    name_default_deleted_rows := mut name_default_deleted_result.get_rows()
+    name_default_deleted_seen_target := mut false
+    name_default_deleted_seen_survivor := mut false
+    name_default_deleted_null_default_count := mut 0
+    LF ri: 0..name_default_deleted_rows.len() {
+        candidate := mut &name_default_deleted_rows[ri]
+        I expect_cell(candidate, 0, "100") {
+            name_default_deleted_seen_target = true
+        }
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "anon") {
+            name_default_deleted_seen_survivor = true
+        }
+        I expect_none_cell(candidate, 0) && expect_cell(candidate, 1, "anon") {
+            name_default_deleted_null_default_count += 1
+        }
+    }
+    I name_default_deleted_seen_target { return 255 }
+    I !name_default_deleted_seen_survivor { return 255 }
+    I name_default_deleted_null_default_count < 2 { return 255 }
+    name_default_deleted_result.free_owned_text()
+    name_default_deleted_result.free_owned_text()
+    match name_default_update_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    name_default_delete_reopen_cfg := mut EmbeddedConfig.default()
+    name_default_delete_reopen_cfg = name_default_delete_reopen_cfg.with_data_dir(name_default_path.clone())
+    name_default_delete_reopen_cfg = name_default_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    name_default_delete_reopened := mut match EmbeddedDatabase.open(name_default_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    name_default_delete_default := mut match name_default_delete_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_default_delete_default != 1 as u64 { return 255 }
+    name_default_delete_reopened_result := mut match name_default_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_default_delete_reopened_result.row_count() != 7 as u64 { return 255 }
+    name_default_delete_reopened_rows := mut name_default_delete_reopened_result.get_rows()
+    name_default_delete_seen_target := mut false
+    name_default_delete_seen_survivor := mut false
+    name_default_delete_null_default_count := mut 0
+    LF ri: 0..name_default_delete_reopened_rows.len() {
+        candidate := mut &name_default_delete_reopened_rows[ri]
+        I expect_cell(candidate, 0, "100") {
+            name_default_delete_seen_target = true
+        }
+        I expect_cell(candidate, 0, "102") && expect_cell(candidate, 1, "anon") {
+            name_default_delete_seen_survivor = true
+        }
+        I expect_none_cell(candidate, 0) && expect_cell(candidate, 1, "anon") {
+            name_default_delete_null_default_count += 1
+        }
+    }
+    I name_default_delete_seen_target { return 255 }
+    I !name_default_delete_seen_survivor { return 255 }
+    I name_default_delete_null_default_count < 3 { return 255 }
+    name_default_delete_reopened_result.free_owned_text()
+    name_default_delete_reopened_result.free_owned_text()
+    match name_default_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    # DEFAULT with NOT NULL uses the same stored default metadata for omitted
+    # columns and DEFAULT markers, while explicit NULL remains rejected.
+    id_nn_default_suffix := mut time_micros()
+    id_nn_default_path := mut "embedded_sql_api_roundtrip_id_nn_default_db_{id_nn_default_suffix}"
+    id_nn_default_cfg := mut EmbeddedConfig.default()
+    id_nn_default_cfg = id_nn_default_cfg.with_data_dir(id_nn_default_path.clone())
+    id_nn_default_cfg = id_nn_default_cfg.with_page_size(PAGE_SIZE_8K)
+    id_nn_default_db := mut match EmbeddedDatabase.open(id_nn_default_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    id_nn_default_created := mut match id_nn_default_db.execute("CREATE TABLE people (id INT NOT NULL DEFAULT 7, name TEXT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_created != 0 as u64 { return 255 }
+    match id_nn_default_db.execute("insert into people (id, name) values (NULL, 'bad')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    id_nn_default_insert_name := mut match id_nn_default_db.execute("insert into people (name) values ('hopper')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_insert_name != 1 as u64 { return 255 }
+    id_nn_default_insert_markers := mut match id_nn_default_db.execute("insert into people (id, name) values (DEFAULT, 'hamilton'), (102, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_insert_markers != 2 as u64 { return 255 }
+    id_nn_default_result := mut match id_nn_default_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_result.row_count() != 3 as u64 { return 255 }
+    id_nn_default_rows := mut id_nn_default_result.get_rows()
+    id_nn_default_row0 := mut &id_nn_default_rows[0]
+    id_nn_default_row1 := mut &id_nn_default_rows[1]
+    id_nn_default_row2 := mut &id_nn_default_rows[2]
+    I !expect_cell(id_nn_default_row0, 0, "7") { return 255 }
+    I !expect_cell(id_nn_default_row0, 1, "hopper") { return 255 }
+    I !expect_cell(id_nn_default_row1, 0, "7") { return 255 }
+    I !expect_cell(id_nn_default_row1, 1, "hamilton") { return 255 }
+    I !expect_cell(id_nn_default_row2, 0, "102") { return 255 }
+    I !expect_none_cell(id_nn_default_row2, 1) { return 255 }
+    id_nn_default_result.free_owned_text()
+    id_nn_default_result.free_owned_text()
+    match id_nn_default_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+    id_nn_default_reopen_cfg := mut EmbeddedConfig.default()
+    id_nn_default_reopen_cfg = id_nn_default_reopen_cfg.with_data_dir(id_nn_default_path.clone())
+    id_nn_default_reopen_cfg = id_nn_default_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    id_nn_default_reopened := mut match EmbeddedDatabase.open(id_nn_default_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match id_nn_default_reopened.execute("insert into people (id, name) values (NULL, 'bad')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    id_nn_default_after_reopen := mut match id_nn_default_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_after_reopen != 1 as u64 { return 255 }
+    id_nn_default_reopened_result := mut match id_nn_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_reopened_result.row_count() != 4 as u64 { return 255 }
+    id_nn_default_reopened_rows := mut id_nn_default_reopened_result.get_rows()
+    id_nn_default_reopened_row3 := mut &id_nn_default_reopened_rows[3]
+    I !expect_cell(id_nn_default_reopened_row3, 0, "7") { return 255 }
+    I !expect_none_cell(id_nn_default_reopened_row3, 1) { return 255 }
+    id_nn_default_reopened_result.free_owned_text()
+    id_nn_default_reopened_result.free_owned_text()
+    id_nn_default_updated := mut match id_nn_default_reopened.execute("update people set name = 'id-nn-default-updated' where id = 102") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_updated != 1 as u64 { return 255 }
+    match id_nn_default_reopened.execute("update people set id = 108 where id = 102") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match id_nn_default_reopened.execute("update people set name = name where id = 102") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match id_nn_default_reopened.execute("update people set name = 'missing-where'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    id_nn_default_updated_result := mut match id_nn_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_updated_result.row_count() != 4 as u64 { return 255 }
+    id_nn_default_updated_rows := mut id_nn_default_updated_result.get_rows()
+    id_nn_default_seen_updated := mut false
+    id_nn_default_seen_stale := mut false
+    id_nn_default_null_default_count := mut 0
+    LF ri: 0..id_nn_default_updated_rows.len() {
+        candidate := mut &id_nn_default_updated_rows[ri]
+        I expect_cell(candidate, 0, "102") && expect_cell(candidate, 1, "id-nn-default-updated") {
+            id_nn_default_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "102") && expect_none_cell(candidate, 1) {
+            id_nn_default_seen_stale = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_none_cell(candidate, 1) {
+            id_nn_default_null_default_count += 1
+        }
+    }
+    I !id_nn_default_seen_updated { return 255 }
+    I id_nn_default_seen_stale { return 255 }
+    I id_nn_default_null_default_count < 1 { return 255 }
+    id_nn_default_updated_result.free_owned_text()
+    id_nn_default_updated_result.free_owned_text()
+    match id_nn_default_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    id_nn_default_update_reopen_cfg := mut EmbeddedConfig.default()
+    id_nn_default_update_reopen_cfg = id_nn_default_update_reopen_cfg.with_data_dir(id_nn_default_path.clone())
+    id_nn_default_update_reopen_cfg = id_nn_default_update_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    id_nn_default_update_reopened := mut match EmbeddedDatabase.open(id_nn_default_update_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match id_nn_default_update_reopened.execute("insert into people (id, name) values (NULL, 'bad')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    id_nn_default_update_default := mut match id_nn_default_update_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_update_default != 1 as u64 { return 255 }
+    id_nn_default_update_reopened_result := mut match id_nn_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_update_reopened_result.row_count() != 5 as u64 { return 255 }
+    id_nn_default_update_reopened_rows := mut id_nn_default_update_reopened_result.get_rows()
+    id_nn_default_reopen_seen_updated := mut false
+    id_nn_default_reopen_seen_stale := mut false
+    id_nn_default_reopen_null_default_count := mut 0
+    LF ri: 0..id_nn_default_update_reopened_rows.len() {
+        candidate := mut &id_nn_default_update_reopened_rows[ri]
+        I expect_cell(candidate, 0, "102") && expect_cell(candidate, 1, "id-nn-default-updated") {
+            id_nn_default_reopen_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "102") && expect_none_cell(candidate, 1) {
+            id_nn_default_reopen_seen_stale = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_none_cell(candidate, 1) {
+            id_nn_default_reopen_null_default_count += 1
+        }
+    }
+    I !id_nn_default_reopen_seen_updated { return 255 }
+    I id_nn_default_reopen_seen_stale { return 255 }
+    I id_nn_default_reopen_null_default_count < 2 { return 255 }
+    id_nn_default_update_reopened_result.free_owned_text()
+    id_nn_default_update_reopened_result.free_owned_text()
+    match id_nn_default_update_reopened.execute("delete from people") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match id_nn_default_update_reopened.execute("delete from people where name = 'id-nn-default-updated'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    id_nn_default_deleted := mut match id_nn_default_update_reopened.execute("delete from people where id = 102") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_deleted != 1 as u64 { return 255 }
+    id_nn_default_deleted_result := mut match id_nn_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_deleted_result.row_count() != 4 as u64 { return 255 }
+    id_nn_default_deleted_rows := mut id_nn_default_deleted_result.get_rows()
+    id_nn_default_deleted_seen_target := mut false
+    id_nn_default_deleted_seen_survivor := mut false
+    id_nn_default_deleted_null_default_count := mut 0
+    LF ri: 0..id_nn_default_deleted_rows.len() {
+        candidate := mut &id_nn_default_deleted_rows[ri]
+        I expect_cell(candidate, 0, "102") {
+            id_nn_default_deleted_seen_target = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "hopper") {
+            id_nn_default_deleted_seen_survivor = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_none_cell(candidate, 1) {
+            id_nn_default_deleted_null_default_count += 1
+        }
+    }
+    I id_nn_default_deleted_seen_target { return 255 }
+    I !id_nn_default_deleted_seen_survivor { return 255 }
+    I id_nn_default_deleted_null_default_count < 2 { return 255 }
+    id_nn_default_deleted_result.free_owned_text()
+    id_nn_default_deleted_result.free_owned_text()
+    match id_nn_default_update_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    id_nn_default_delete_reopen_cfg := mut EmbeddedConfig.default()
+    id_nn_default_delete_reopen_cfg = id_nn_default_delete_reopen_cfg.with_data_dir(id_nn_default_path.clone())
+    id_nn_default_delete_reopen_cfg = id_nn_default_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    id_nn_default_delete_reopened := mut match EmbeddedDatabase.open(id_nn_default_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match id_nn_default_delete_reopened.execute("insert into people (id, name) values (NULL, 'bad')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    id_nn_default_delete_default := mut match id_nn_default_delete_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_delete_default != 1 as u64 { return 255 }
+    id_nn_default_delete_reopened_result := mut match id_nn_default_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I id_nn_default_delete_reopened_result.row_count() != 5 as u64 { return 255 }
+    id_nn_default_delete_reopened_rows := mut id_nn_default_delete_reopened_result.get_rows()
+    id_nn_default_delete_seen_target := mut false
+    id_nn_default_delete_seen_survivor := mut false
+    id_nn_default_delete_null_default_count := mut 0
+    LF ri: 0..id_nn_default_delete_reopened_rows.len() {
+        candidate := mut &id_nn_default_delete_reopened_rows[ri]
+        I expect_cell(candidate, 0, "102") {
+            id_nn_default_delete_seen_target = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "hamilton") {
+            id_nn_default_delete_seen_survivor = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_none_cell(candidate, 1) {
+            id_nn_default_delete_null_default_count += 1
+        }
+    }
+    I id_nn_default_delete_seen_target { return 255 }
+    I !id_nn_default_delete_seen_survivor { return 255 }
+    I id_nn_default_delete_null_default_count < 3 { return 255 }
+    id_nn_default_delete_reopened_result.free_owned_text()
+    id_nn_default_delete_reopened_result.free_owned_text()
+    match id_nn_default_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    name_nn_default_suffix := mut time_micros()
+    name_nn_default_path := mut "embedded_sql_api_roundtrip_name_nn_default_db_{name_nn_default_suffix}"
+    name_nn_default_cfg := mut EmbeddedConfig.default()
+    name_nn_default_cfg = name_nn_default_cfg.with_data_dir(name_nn_default_path.clone())
+    name_nn_default_cfg = name_nn_default_cfg.with_page_size(PAGE_SIZE_8K)
+    name_nn_default_db := mut match EmbeddedDatabase.open(name_nn_default_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    name_nn_default_created := mut match name_nn_default_db.execute("CREATE TABLE people (id INT, name TEXT NOT NULL DEFAULT 'anon')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_created != 0 as u64 { return 255 }
+    match name_nn_default_db.execute("insert into people (id, name) values (100, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_nn_default_insert_id := mut match name_nn_default_db.execute("insert into people (id) values (100), (101)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_insert_id != 2 as u64 { return 255 }
+    name_nn_default_insert_markers := mut match name_nn_default_db.execute("insert into people (id, name) values (DEFAULT, 'turing'), (102, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_insert_markers != 2 as u64 { return 255 }
+    name_nn_default_result := mut match name_nn_default_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_result.row_count() != 4 as u64 { return 255 }
+    name_nn_default_rows := mut name_nn_default_result.get_rows()
+    name_nn_default_row0 := mut &name_nn_default_rows[0]
+    name_nn_default_row1 := mut &name_nn_default_rows[1]
+    name_nn_default_row2 := mut &name_nn_default_rows[2]
+    name_nn_default_row3 := mut &name_nn_default_rows[3]
+    I !expect_cell(name_nn_default_row0, 0, "100") { return 255 }
+    I !expect_cell(name_nn_default_row0, 1, "anon") { return 255 }
+    I !expect_cell(name_nn_default_row1, 0, "101") { return 255 }
+    I !expect_cell(name_nn_default_row1, 1, "anon") { return 255 }
+    I !expect_none_cell(name_nn_default_row2, 0) { return 255 }
+    I !expect_cell(name_nn_default_row2, 1, "turing") { return 255 }
+    I !expect_cell(name_nn_default_row3, 0, "102") { return 255 }
+    I !expect_cell(name_nn_default_row3, 1, "anon") { return 255 }
+    name_nn_default_result.free_owned_text()
+    name_nn_default_result.free_owned_text()
+    match name_nn_default_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+    name_nn_default_reopen_cfg := mut EmbeddedConfig.default()
+    name_nn_default_reopen_cfg = name_nn_default_reopen_cfg.with_data_dir(name_nn_default_path.clone())
+    name_nn_default_reopen_cfg = name_nn_default_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    name_nn_default_reopened := mut match EmbeddedDatabase.open(name_nn_default_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match name_nn_default_reopened.execute("insert into people (id, name) values (100, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_nn_default_after_reopen := mut match name_nn_default_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_after_reopen != 1 as u64 { return 255 }
+    name_nn_default_reopened_result := mut match name_nn_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_reopened_result.row_count() != 5 as u64 { return 255 }
+    name_nn_default_reopened_rows := mut name_nn_default_reopened_result.get_rows()
+    name_nn_default_reopened_row4 := mut &name_nn_default_reopened_rows[4]
+    I !expect_none_cell(name_nn_default_reopened_row4, 0) { return 255 }
+    I !expect_cell(name_nn_default_reopened_row4, 1, "anon") { return 255 }
+    name_nn_default_reopened_result.free_owned_text()
+    name_nn_default_reopened_result.free_owned_text()
+    name_nn_default_updated := mut match name_nn_default_reopened.execute("update people set name = 'name-nn-default-updated' where id = 100") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_updated != 1 as u64 { return 255 }
+    match name_nn_default_reopened.execute("update people set id = 108 where id = 100") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match name_nn_default_reopened.execute("update people set name = name where id = 100") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match name_nn_default_reopened.execute("update people set name = 'missing-where'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_nn_default_updated_result := mut match name_nn_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_updated_result.row_count() != 5 as u64 { return 255 }
+    name_nn_default_updated_rows := mut name_nn_default_updated_result.get_rows()
+    name_nn_default_seen_updated := mut false
+    name_nn_default_seen_stale := mut false
+    name_nn_default_null_default_count := mut 0
+    LF ri: 0..name_nn_default_updated_rows.len() {
+        candidate := mut &name_nn_default_updated_rows[ri]
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "name-nn-default-updated") {
+            name_nn_default_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "anon") {
+            name_nn_default_seen_stale = true
+        }
+        I expect_none_cell(candidate, 0) && expect_cell(candidate, 1, "anon") {
+            name_nn_default_null_default_count += 1
+        }
+    }
+    I !name_nn_default_seen_updated { return 255 }
+    I name_nn_default_seen_stale { return 255 }
+    I name_nn_default_null_default_count < 1 { return 255 }
+    name_nn_default_updated_result.free_owned_text()
+    name_nn_default_updated_result.free_owned_text()
+    match name_nn_default_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    name_nn_default_update_reopen_cfg := mut EmbeddedConfig.default()
+    name_nn_default_update_reopen_cfg = name_nn_default_update_reopen_cfg.with_data_dir(name_nn_default_path.clone())
+    name_nn_default_update_reopen_cfg = name_nn_default_update_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    name_nn_default_update_reopened := mut match EmbeddedDatabase.open(name_nn_default_update_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match name_nn_default_update_reopened.execute("insert into people (id, name) values (100, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_nn_default_update_default := mut match name_nn_default_update_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_update_default != 1 as u64 { return 255 }
+    name_nn_default_update_reopened_result := mut match name_nn_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_update_reopened_result.row_count() != 6 as u64 { return 255 }
+    name_nn_default_update_reopened_rows := mut name_nn_default_update_reopened_result.get_rows()
+    name_nn_default_reopen_seen_updated := mut false
+    name_nn_default_reopen_seen_stale := mut false
+    name_nn_default_reopen_null_default_count := mut 0
+    LF ri: 0..name_nn_default_update_reopened_rows.len() {
+        candidate := mut &name_nn_default_update_reopened_rows[ri]
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "name-nn-default-updated") {
+            name_nn_default_reopen_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "100") && expect_cell(candidate, 1, "anon") {
+            name_nn_default_reopen_seen_stale = true
+        }
+        I expect_none_cell(candidate, 0) && expect_cell(candidate, 1, "anon") {
+            name_nn_default_reopen_null_default_count += 1
+        }
+    }
+    I !name_nn_default_reopen_seen_updated { return 255 }
+    I name_nn_default_reopen_seen_stale { return 255 }
+    I name_nn_default_reopen_null_default_count < 2 { return 255 }
+    name_nn_default_update_reopened_result.free_owned_text()
+    name_nn_default_update_reopened_result.free_owned_text()
+    match name_nn_default_update_reopened.execute("delete from people") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match name_nn_default_update_reopened.execute("delete from people where name = 'name-nn-default-updated'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_nn_default_deleted := mut match name_nn_default_update_reopened.execute("delete from people where id = 100") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_deleted != 1 as u64 { return 255 }
+    name_nn_default_deleted_result := mut match name_nn_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_deleted_result.row_count() != 5 as u64 { return 255 }
+    name_nn_default_deleted_rows := mut name_nn_default_deleted_result.get_rows()
+    name_nn_default_deleted_seen_target := mut false
+    name_nn_default_deleted_seen_survivor := mut false
+    name_nn_default_deleted_null_default_count := mut 0
+    LF ri: 0..name_nn_default_deleted_rows.len() {
+        candidate := mut &name_nn_default_deleted_rows[ri]
+        I expect_cell(candidate, 0, "100") {
+            name_nn_default_deleted_seen_target = true
+        }
+        I expect_cell(candidate, 0, "102") && expect_cell(candidate, 1, "anon") {
+            name_nn_default_deleted_seen_survivor = true
+        }
+        I expect_none_cell(candidate, 0) && expect_cell(candidate, 1, "anon") {
+            name_nn_default_deleted_null_default_count += 1
+        }
+    }
+    I name_nn_default_deleted_seen_target { return 255 }
+    I !name_nn_default_deleted_seen_survivor { return 255 }
+    I name_nn_default_deleted_null_default_count < 2 { return 255 }
+    name_nn_default_deleted_result.free_owned_text()
+    name_nn_default_deleted_result.free_owned_text()
+    match name_nn_default_update_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    name_nn_default_delete_reopen_cfg := mut EmbeddedConfig.default()
+    name_nn_default_delete_reopen_cfg = name_nn_default_delete_reopen_cfg.with_data_dir(name_nn_default_path.clone())
+    name_nn_default_delete_reopen_cfg = name_nn_default_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    name_nn_default_delete_reopened := mut match EmbeddedDatabase.open(name_nn_default_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match name_nn_default_delete_reopened.execute("insert into people (id, name) values (100, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    name_nn_default_delete_default := mut match name_nn_default_delete_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_delete_default != 1 as u64 { return 255 }
+    name_nn_default_delete_reopened_result := mut match name_nn_default_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I name_nn_default_delete_reopened_result.row_count() != 6 as u64 { return 255 }
+    name_nn_default_delete_reopened_rows := mut name_nn_default_delete_reopened_result.get_rows()
+    name_nn_default_delete_seen_target := mut false
+    name_nn_default_delete_seen_survivor := mut false
+    name_nn_default_delete_null_default_count := mut 0
+    LF ri: 0..name_nn_default_delete_reopened_rows.len() {
+        candidate := mut &name_nn_default_delete_reopened_rows[ri]
+        I expect_cell(candidate, 0, "100") {
+            name_nn_default_delete_seen_target = true
+        }
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "anon") {
+            name_nn_default_delete_seen_survivor = true
+        }
+        I expect_none_cell(candidate, 0) && expect_cell(candidate, 1, "anon") {
+            name_nn_default_delete_null_default_count += 1
+        }
+    }
+    I name_nn_default_delete_seen_target { return 255 }
+    I !name_nn_default_delete_seen_survivor { return 255 }
+    I name_nn_default_delete_null_default_count < 3 { return 255 }
+    name_nn_default_delete_reopened_result.free_owned_text()
+    name_nn_default_delete_reopened_result.free_owned_text()
+    match name_nn_default_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    both_nn_default_suffix := mut time_micros()
+    both_nn_default_path := mut "embedded_sql_api_roundtrip_both_nn_default_db_{both_nn_default_suffix}"
+    both_nn_default_cfg := mut EmbeddedConfig.default()
+    both_nn_default_cfg = both_nn_default_cfg.with_data_dir(both_nn_default_path.clone())
+    both_nn_default_cfg = both_nn_default_cfg.with_page_size(PAGE_SIZE_8K)
+    both_nn_default_db := mut match EmbeddedDatabase.open(both_nn_default_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    both_nn_default_created := mut match both_nn_default_db.execute("CREATE TABLE people (id INT NOT NULL DEFAULT 7, name TEXT NOT NULL DEFAULT 'anon')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_created != 0 as u64 { return 255 }
+    match both_nn_default_db.execute("insert into people (id, name) values (NULL, 'bad')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_default_db.execute("insert into people (id, name) values (100, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_default_insert_id := mut match both_nn_default_db.execute("insert into people (id) values (101)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_insert_id != 1 as u64 { return 255 }
+    both_nn_default_insert_name := mut match both_nn_default_db.execute("insert into people (name) values ('hopper')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_insert_name != 1 as u64 { return 255 }
+    both_nn_default_insert_markers := mut match both_nn_default_db.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_insert_markers != 1 as u64 { return 255 }
+    both_nn_default_result := mut match both_nn_default_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_result.row_count() != 3 as u64 { return 255 }
+    both_nn_default_rows := mut both_nn_default_result.get_rows()
+    both_nn_default_row0 := mut &both_nn_default_rows[0]
+    both_nn_default_row1 := mut &both_nn_default_rows[1]
+    both_nn_default_row2 := mut &both_nn_default_rows[2]
+    I !expect_cell(both_nn_default_row0, 0, "101") { return 255 }
+    I !expect_cell(both_nn_default_row0, 1, "anon") { return 255 }
+    I !expect_cell(both_nn_default_row1, 0, "7") { return 255 }
+    I !expect_cell(both_nn_default_row1, 1, "hopper") { return 255 }
+    I !expect_cell(both_nn_default_row2, 0, "7") { return 255 }
+    I !expect_cell(both_nn_default_row2, 1, "anon") { return 255 }
+    both_nn_default_result.free_owned_text()
+    both_nn_default_result.free_owned_text()
+    match both_nn_default_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+    both_nn_default_reopen_cfg := mut EmbeddedConfig.default()
+    both_nn_default_reopen_cfg = both_nn_default_reopen_cfg.with_data_dir(both_nn_default_path.clone())
+    both_nn_default_reopen_cfg = both_nn_default_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    both_nn_default_reopened := mut match EmbeddedDatabase.open(both_nn_default_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match both_nn_default_reopened.execute("insert into people (id, name) values (NULL, 'bad')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_default_reopened.execute("insert into people (id, name) values (100, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_default_after_reopen := mut match both_nn_default_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_after_reopen != 1 as u64 { return 255 }
+    both_nn_default_reopened_result := mut match both_nn_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_reopened_result.row_count() != 4 as u64 { return 255 }
+    both_nn_default_reopened_rows := mut both_nn_default_reopened_result.get_rows()
+    both_nn_default_reopened_row3 := mut &both_nn_default_reopened_rows[3]
+    I !expect_cell(both_nn_default_reopened_row3, 0, "7") { return 255 }
+    I !expect_cell(both_nn_default_reopened_row3, 1, "anon") { return 255 }
+    both_nn_default_reopened_result.free_owned_text()
+    both_nn_default_reopened_result.free_owned_text()
+
+    both_nn_default_updated := mut match both_nn_default_reopened.execute("update people set name = 'both-nn-default-updated' where id = 101") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_updated != 1 as u64 { return 255 }
+    match both_nn_default_reopened.execute("update people set id = 108 where id = 101") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_default_reopened.execute("update people set name = name where id = 101") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_default_reopened.execute("update people set name = 'missing-where'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_default_updated_result := mut match both_nn_default_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_updated_result.row_count() != 4 as u64 { return 255 }
+    both_nn_default_updated_rows := mut both_nn_default_updated_result.get_rows()
+    both_nn_default_seen_updated := mut false
+    both_nn_default_seen_stale := mut false
+    both_nn_default_update_default_count := mut 0
+    LF ri: 0..both_nn_default_updated_rows.len() {
+        candidate := mut &both_nn_default_updated_rows[ri]
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "both-nn-default-updated") {
+            both_nn_default_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "anon") {
+            both_nn_default_seen_stale = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "anon") {
+            both_nn_default_update_default_count += 1
+        }
+    }
+    I !both_nn_default_seen_updated { return 255 }
+    I both_nn_default_seen_stale { return 255 }
+    I both_nn_default_update_default_count < 2 { return 255 }
+    both_nn_default_updated_result.free_owned_text()
+    both_nn_default_updated_result.free_owned_text()
+    match both_nn_default_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    both_nn_default_update_reopen_cfg := mut EmbeddedConfig.default()
+    both_nn_default_update_reopen_cfg = both_nn_default_update_reopen_cfg.with_data_dir(both_nn_default_path.clone())
+    both_nn_default_update_reopen_cfg = both_nn_default_update_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    both_nn_default_update_reopened := mut match EmbeddedDatabase.open(both_nn_default_update_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match both_nn_default_update_reopened.execute("insert into people (id, name) values (NULL, 'bad')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_default_update_reopened.execute("insert into people (id, name) values (100, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_default_update_default := mut match both_nn_default_update_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_update_default != 1 as u64 { return 255 }
+    both_nn_default_update_reopened_result := mut match both_nn_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_update_reopened_result.row_count() != 5 as u64 { return 255 }
+    both_nn_default_update_reopened_rows := mut both_nn_default_update_reopened_result.get_rows()
+    both_nn_default_update_seen_updated := mut false
+    both_nn_default_update_seen_stale := mut false
+    both_nn_default_update_reopen_default_count := mut 0
+    LF ri: 0..both_nn_default_update_reopened_rows.len() {
+        candidate := mut &both_nn_default_update_reopened_rows[ri]
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "both-nn-default-updated") {
+            both_nn_default_update_seen_updated = true
+        }
+        I expect_cell(candidate, 0, "101") && expect_cell(candidate, 1, "anon") {
+            both_nn_default_update_seen_stale = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "anon") {
+            both_nn_default_update_reopen_default_count += 1
+        }
+    }
+    I !both_nn_default_update_seen_updated { return 255 }
+    I both_nn_default_update_seen_stale { return 255 }
+    I both_nn_default_update_reopen_default_count < 3 { return 255 }
+    both_nn_default_update_reopened_result.free_owned_text()
+    both_nn_default_update_reopened_result.free_owned_text()
+    match both_nn_default_update_reopened.execute("delete from people") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_default_update_reopened.execute("delete from people where name = 'both-nn-default-updated'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_default_deleted := mut match both_nn_default_update_reopened.execute("delete from people where id = 101") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_deleted != 1 as u64 { return 255 }
+    both_nn_default_deleted_result := mut match both_nn_default_update_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_deleted_result.row_count() != 4 as u64 { return 255 }
+    both_nn_default_deleted_rows := mut both_nn_default_deleted_result.get_rows()
+    both_nn_default_deleted_seen_target := mut false
+    both_nn_default_deleted_seen_survivor := mut false
+    both_nn_default_deleted_default_count := mut 0
+    LF ri: 0..both_nn_default_deleted_rows.len() {
+        candidate := mut &both_nn_default_deleted_rows[ri]
+        I expect_cell(candidate, 0, "101") {
+            both_nn_default_deleted_seen_target = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "hopper") {
+            both_nn_default_deleted_seen_survivor = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "anon") {
+            both_nn_default_deleted_default_count += 1
+        }
+    }
+    I both_nn_default_deleted_seen_target { return 255 }
+    I !both_nn_default_deleted_seen_survivor { return 255 }
+    I both_nn_default_deleted_default_count < 3 { return 255 }
+    both_nn_default_deleted_result.free_owned_text()
+    both_nn_default_deleted_result.free_owned_text()
+    match both_nn_default_update_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    both_nn_default_delete_reopen_cfg := mut EmbeddedConfig.default()
+    both_nn_default_delete_reopen_cfg = both_nn_default_delete_reopen_cfg.with_data_dir(both_nn_default_path.clone())
+    both_nn_default_delete_reopen_cfg = both_nn_default_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    both_nn_default_delete_reopened := mut match EmbeddedDatabase.open(both_nn_default_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match both_nn_default_delete_reopened.execute("insert into people (id, name) values (NULL, 'bad')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_default_delete_reopened.execute("insert into people (id, name) values (100, NULL)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_default_delete_default := mut match both_nn_default_delete_reopened.execute("insert into people (id, name) values (DEFAULT, DEFAULT)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_delete_default != 1 as u64 { return 255 }
+    both_nn_default_delete_reopened_result := mut match both_nn_default_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_default_delete_reopened_result.row_count() != 5 as u64 { return 255 }
+    both_nn_default_delete_reopened_rows := mut both_nn_default_delete_reopened_result.get_rows()
+    both_nn_default_delete_seen_target := mut false
+    both_nn_default_delete_seen_survivor := mut false
+    both_nn_default_delete_default_count := mut 0
+    LF ri: 0..both_nn_default_delete_reopened_rows.len() {
+        candidate := mut &both_nn_default_delete_reopened_rows[ri]
+        I expect_cell(candidate, 0, "101") {
+            both_nn_default_delete_seen_target = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "hopper") {
+            both_nn_default_delete_seen_survivor = true
+        }
+        I expect_cell(candidate, 0, "7") && expect_cell(candidate, 1, "anon") {
+            both_nn_default_delete_default_count += 1
+        }
+    }
+    I both_nn_default_delete_seen_target { return 255 }
+    I !both_nn_default_delete_seen_survivor { return 255 }
+    I both_nn_default_delete_default_count < 4 { return 255 }
+    both_nn_default_delete_reopened_result.free_owned_text()
+    both_nn_default_delete_reopened_result.free_owned_text()
+    match both_nn_default_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    # Combined fixed-column NOT NULL variant is the same promoted boundary.
+    both_nn_suffix := mut time_micros()
+    both_nn_path := mut "embedded_sql_api_roundtrip_both_nn_db_{both_nn_suffix}"
+    both_nn_cfg := mut EmbeddedConfig.default()
+    both_nn_cfg = both_nn_cfg.with_data_dir(both_nn_path.clone())
+    both_nn_cfg = both_nn_cfg.with_page_size(PAGE_SIZE_8K)
+    both_nn_db := mut match EmbeddedDatabase.open(both_nn_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    both_nn_created := mut match both_nn_db.execute("CREATE TABLE people (id INT NOT NULL, name TEXT NOT NULL)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_created != 0 as u64 { return 255 }
+    both_nn_inserted := mut match both_nn_db.execute("insert into people values (20, 'hopper')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_inserted != 1 as u64 { return 255 }
+    match both_nn_db.execute("insert into people (name) values ('missing_id')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_db.execute("insert into people (id) values (21)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_updated := mut match both_nn_db.execute("update people set name = 'hopper-updated' where id = 20") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_updated != 1 as u64 { return 255 }
+    match both_nn_db.execute("update people set id = 22 where id = 20") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_db.execute("update people set name = name where id = 20") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_result := mut match both_nn_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_result.row_count() != 1 as u64 { return 255 }
+    both_nn_rows := mut both_nn_result.get_rows()
+    both_nn_row0 := mut &both_nn_rows[0]
+    I !expect_cell(both_nn_row0, 0, "20") { return 255 }
+    I !expect_cell(both_nn_row0, 1, "hopper-updated") { return 255 }
+    both_nn_result.free_owned_text()
+    both_nn_result.free_owned_text()
+    match both_nn_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    both_nn_reopen_cfg := mut EmbeddedConfig.default()
+    both_nn_reopen_cfg = both_nn_reopen_cfg.with_data_dir(both_nn_path.clone())
+    both_nn_reopen_cfg = both_nn_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    both_nn_reopened := mut match EmbeddedDatabase.open(both_nn_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match both_nn_reopened.execute("insert into people (name) values ('missing_id')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_reopened.execute("insert into people (id) values (21)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_reopened_result := mut match both_nn_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_reopened_result.row_count() != 1 as u64 { return 255 }
+    both_nn_reopened_rows := mut both_nn_reopened_result.get_rows()
+    both_nn_reopened_row0 := mut &both_nn_reopened_rows[0]
+    I !expect_cell(both_nn_reopened_row0, 0, "20") { return 255 }
+    I !expect_cell(both_nn_reopened_row0, 1, "hopper-updated") { return 255 }
+    both_nn_reopened_result.free_owned_text()
+    both_nn_reopened_result.free_owned_text()
+    both_nn_survivor := mut match both_nn_reopened.execute("insert into people values (21, 'grace')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_survivor != 1 as u64 { return 255 }
+    match both_nn_reopened.execute("delete from people") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_reopened.execute("delete from people where name = 'hopper-updated'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_deleted := mut match both_nn_reopened.execute("delete from people where id = 20") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I both_nn_deleted != 1 as u64 { return 255 }
+    both_nn_deleted_result := mut match both_nn_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_deleted_result.row_count() != 1 as u64 { return 255 }
+    both_nn_deleted_rows := mut both_nn_deleted_result.get_rows()
+    both_nn_deleted_row0 := mut &both_nn_deleted_rows[0]
+    I !expect_cell(both_nn_deleted_row0, 0, "21") { return 255 }
+    I !expect_cell(both_nn_deleted_row0, 1, "grace") { return 255 }
+    both_nn_deleted_result.free_owned_text()
+    both_nn_deleted_result.free_owned_text()
+    match both_nn_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    both_nn_delete_reopen_cfg := mut EmbeddedConfig.default()
+    both_nn_delete_reopen_cfg = both_nn_delete_reopen_cfg.with_data_dir(both_nn_path.clone())
+    both_nn_delete_reopen_cfg = both_nn_delete_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    both_nn_delete_reopened := mut match EmbeddedDatabase.open(both_nn_delete_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match both_nn_delete_reopened.execute("insert into people (name) values ('missing_id')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match both_nn_delete_reopened.execute("insert into people (id) values (22)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    both_nn_delete_reopened_result := mut match both_nn_delete_reopened.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I both_nn_delete_reopened_result.row_count() != 1 as u64 { return 255 }
+    both_nn_delete_reopened_rows := mut both_nn_delete_reopened_result.get_rows()
+    both_nn_delete_reopened_row0 := mut &both_nn_delete_reopened_rows[0]
+    I !expect_cell(both_nn_delete_reopened_row0, 0, "21") { return 255 }
+    I !expect_cell(both_nn_delete_reopened_row0, 1, "grace") { return 255 }
+    both_nn_delete_reopened_result.free_owned_text()
+    both_nn_delete_reopened_result.free_owned_text()
+    match both_nn_delete_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    println("VAISDB_EMBEDDED_SQL_API_ROUNDTRIP_OK")
+    return 0
+}

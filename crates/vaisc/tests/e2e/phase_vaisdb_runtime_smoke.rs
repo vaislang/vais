@@ -176,6 +176,21 @@ fn e2e_vaisdb_36_transaction_clog_runtime_smoke() {
     assert_vaisdb_smoke_runs("transaction_clog_smoke.vais", 0);
 }
 
+#[test]
+fn e2e_vaisdb_37_sql_row_text_decode_runtime_smoke() {
+    assert_vaisdb_smoke_runs("sql_row_text_decode_smoke.vais", 0);
+}
+
+#[test]
+fn e2e_vaisdb_38_sql_dml_heap_roundtrip_runtime_smoke() {
+    assert_vaisdb_smoke_runs("sql_dml_heap_roundtrip_smoke.vais", 0);
+}
+
+#[test]
+fn e2e_vaisdb_39_embedded_sql_api_roundtrip_runtime_smoke() {
+    assert_vaisdb_smoke_runs("embedded_sql_api_roundtrip_smoke.vais", 0);
+}
+
 fn assert_vaisdb_smoke_runs(fixture: &str, expected_exit: i32) {
     let _guard = VAISDB_SMOKE_LOCK
         .lock()

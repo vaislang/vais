@@ -1,0 +1,499 @@
+# VaisDB SQL TEXT/VARCHAR/BLOB/VECTOR row decode runtime smoke.
+#
+# Characterization scope (slice 1):
+#   - Builds a schema containing TEXT, VARCHAR, BLOB, and VECTOR columns.
+#   - Writes schema-shaped row bytes, decodes them through Row.decode, and
+#     asserts the text/varchar/blob/vector values are read without crashing.
+#   - Round-trips Row.new([...StringVal/BlobVal/VectorVal...]).encode(&schema)
+#     -> Row.decode and asserts the payloads come back byte-for-byte intact.
+#   - Repeats both paths in a ~200-iteration loop, verifies get_owned()
+#     returns independent owned payload copies, and explicitly frees owned
+#     payloads after all reads for that value are complete.
+#   - Verifies Row.clone_owned_payloads() returns an independent owned
+#     row copy for executor materialization paths.
+#   - Verifies SqlValue.deserialize() marks read-origin StringVal/BlobVal/
+#     VectorVal payloads as owned and the standalone free API is idempotent.
+#   - Exercises automatic SqlValue Drop: standalone SqlValue.deserialize
+#     values with owned StringVal/BlobVal/VectorVal payloads fall out of
+#     scope without any explicit free_owned_payload() call.
+#   - Keeps a literal-origin StringVal alongside decoded values so the
+#     "do not free literals by type" boundary stays explicit in the harness.
+#
+# This smoke certifies TEXT/VARCHAR/BLOB/VECTOR row decode / no-crash and the
+# explicit Row.free_owned_payloads boundary for decoded rows, plus the matching
+# SqlValue.deserialize ownership boundary for standalone serialized values and
+# automatic SqlValue Drop cleanup for standalone owned values.
+
+use sql/row.{Row}
+use sql/types.{SqlType, SqlValue}
+use std/bytebuffer
+
+impl fn __str_eq(a: str, b: str) -> i64
+impl fn load_byte(ptr: i64) -> i64
+impl fn load_i32(ptr: i64) -> i64
+impl fn load_i64(ptr: i64) -> i64
+
+C SQL_VALUE_STRING_OWNED_MASK: i64 = 1
+C SQL_VALUE_BLOB_OWNED_MASK: i64 = 2
+C SQL_VALUE_VECTOR_OWNED_MASK: i64 = 4
+C F32_BITS_1: i64 = 1065353216
+C F32_BITS_2: i64 = 1073741824
+C F32_BITS_3: i64 = 1077936128
+
+fn str_same(a: str, b: str) -> bool {
+    __str_eq(a, b) != 0
+}
+
+fn exercise_sqlvalue_auto_drop() -> i64 {
+    auto_str_buf := mut ByteBuffer.new()
+    auto_str_source := mut SqlValue.StringVal { v: "auto-drop-text" }
+    auto_str_source.serialize(&mut auto_str_buf)
+    auto_str_encoded := mut auto_str_buf.to_vec()
+    auto_str_read_buf := mut ByteBuffer.wrap_readonly(&auto_str_encoded)
+    auto_str_decoded := mut match SqlValue.deserialize(&auto_str_read_buf) {
+        Ok(v) => v,
+        Err(_) => { return 90 },
+    }
+    I (sqlvalue_mask(&auto_str_decoded) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 91 }
+    match auto_str_decoded {
+        SqlValue.StringVal { v } => {
+            I !str_same(v, "auto-drop-text") { return 92 }
+        },
+        _ => { return 93 },
+    }
+
+    auto_blob_buf := mut ByteBuffer.new()
+    auto_blob_vec: Vec<u8> := mut Vec.with_capacity(4)
+    auto_blob_vec.push(16 as u8)
+    auto_blob_vec.push(32 as u8)
+    auto_blob_vec.push(48 as u8)
+    auto_blob_vec.push(64 as u8)
+    auto_blob_source := mut SqlValue.BlobVal { v: auto_blob_vec }
+    auto_blob_source.serialize(&mut auto_blob_buf)
+    auto_blob_encoded := mut auto_blob_buf.to_vec()
+    auto_blob_read_buf := mut ByteBuffer.wrap_readonly(&auto_blob_encoded)
+    auto_blob_decoded := mut match SqlValue.deserialize(&auto_blob_read_buf) {
+        Ok(v) => v,
+        Err(_) => { return 94 },
+    }
+    I (sqlvalue_mask(&auto_blob_decoded) & SQL_VALUE_BLOB_OWNED_MASK) == 0 { return 95 }
+    I !check_blob4_slot(sqlvalue_slot(&auto_blob_decoded)) { return 96 }
+
+    auto_vector_buf := mut ByteBuffer.new()
+    auto_vector_vec: Vec<f32> := mut Vec.with_capacity(3)
+    auto_vector_vec.push(1.0 as f32)
+    auto_vector_vec.push(2.0 as f32)
+    auto_vector_vec.push(3.0 as f32)
+    auto_vector_source := mut SqlValue.VectorVal { v: auto_vector_vec }
+    auto_vector_source.serialize(&mut auto_vector_buf)
+    auto_vector_encoded := mut auto_vector_buf.to_vec()
+    auto_vector_read_buf := mut ByteBuffer.wrap_readonly(&auto_vector_encoded)
+    auto_vector_decoded := mut match SqlValue.deserialize(&auto_vector_read_buf) {
+        Ok(v) => v,
+        Err(_) => { return 97 },
+    }
+    I (sqlvalue_mask(&auto_vector_decoded) & SQL_VALUE_VECTOR_OWNED_MASK) == 0 { return 98 }
+    I !check_vector3_slot(sqlvalue_slot(&auto_vector_decoded)) { return 99 }
+
+    0
+}
+
+fn row_value_ptr(row: &Row, idx: u64) -> i64 {
+    row_ptr := mut (row as i64)
+    vec_data := mut load_i64(row_ptr)
+    vec_es := mut load_i64(row_ptr + 24)
+    vec_data + idx * vec_es
+}
+
+fn row_value_mask(row: &Row, idx: u64) -> i64 {
+    load_i64(row_value_ptr(row, idx) + 16)
+}
+
+fn row_value_slot(row: &Row, idx: u64) -> i64 {
+    load_i64(row_value_ptr(row, idx) + 8)
+}
+
+fn sqlvalue_mask(val: &SqlValue) -> i64 {
+    val_ptr := mut (val as i64)
+    load_i64(val_ptr + 16)
+}
+
+fn sqlvalue_slot(val: &SqlValue) -> i64 {
+    val_ptr := mut (val as i64)
+    load_i64(val_ptr + 8)
+}
+
+fn check_blob4_slot(slot: i64) -> bool {
+    I slot == 0 { return false }
+    data := mut load_i64(slot)
+    len := mut load_i64(slot + 8)
+    I data == 0 || len != 4 { return false }
+    I load_byte(data) != 16 { return false }
+    I load_byte(data + 1) != 32 { return false }
+    I load_byte(data + 2) != 48 { return false }
+    I load_byte(data + 3) != 64 { return false }
+    true
+}
+
+fn check_vector3_slot(slot: i64) -> bool {
+    I slot == 0 { return false }
+    data := mut load_i64(slot)
+    len := mut load_i64(slot + 8)
+    I data == 0 || len != 3 { return false }
+    I load_i32(data) != F32_BITS_1 { return false }
+    I load_i32(data + 4) != F32_BITS_2 { return false }
+    I load_i32(data + 8) != F32_BITS_3 { return false }
+    true
+}
+
+fn main() -> i64 {
+    # Schema: id INT, title TEXT, code VARCHAR(16), bytes BLOB, embedding VECTOR(3).
+    schema := mut [
+        SqlType.Int,
+        SqlType.Text,
+        SqlType.Varchar { max_len: 16 as u32 },
+        SqlType.Blob,
+        SqlType.Vector { dim: 3 as u32 },
+    ]
+
+    # Literal-origin StringVal: a value whose payload comes straight from a
+    # source literal, never from a decode. The "do not free literals by type"
+    # boundary means this must stay readable regardless of decode churn.
+    literal_origin := mut SqlValue.StringVal { v: "literal-origin" }
+    match literal_origin {
+        SqlValue.StringVal { v } => {
+            I !str_same(v, "literal-origin") { return 1 }
+        },
+        _ => { return 2 },
+    }
+
+    # A default-value StringVal stands in for a schema default cell: also
+    # literal-origin, also must never be freed by type.
+    default_cell := mut SqlType.Text.default_value()
+    match default_cell {
+        SqlValue.StringVal { v } => {
+            I !str_same(v, "") { return 3 }
+        },
+        _ => { return 4 },
+    }
+
+    null_schema := mut [
+        SqlType.Int,
+        SqlType.Text,
+    ]
+    null_buf := mut ByteBuffer.new()
+    null_buf.write_u8(2)
+    null_buf.write_i64_le(77)
+    null_encoded := mut null_buf.to_vec()
+    null_decoded := mut match Row.decode(&null_encoded, &null_schema) {
+        Ok(r) => r,
+        Err(_) => { return 100 },
+    }
+    I null_decoded.column_count() != 2 { return 101 }
+    match null_decoded.get(0) {
+        SqlValue.IntVal { v } => {
+            I *v != 77 { return 102 }
+        },
+        _ => { return 103 },
+    }
+    match null_decoded.get(1) {
+        SqlValue.Null => {},
+        _ => { return 104 },
+    }
+    I load_i32(row_value_ptr(&null_decoded, 1)) != 0 { return 105 }
+    null_reencoded := mut null_decoded.encode(&null_schema)
+    I null_reencoded.len() != 9 { return 106 }
+    I null_reencoded[0] != 2 { return 107 }
+    null_decoded.free_owned_payloads()
+    null_decoded.free_owned_payloads()
+
+    iters := mut 200
+    n := mut 0
+    LW n < iters {
+        # Schema-aware row bytes: null bitmap byte 0, then INT/TEXT/VARCHAR/BLOB/VECTOR.
+        buf := mut ByteBuffer.new()
+        buf.write_u8(0)
+        buf.write_i64_le(n)
+        buf.write_str("the-quick-brown-fox")
+        buf.write_str("vc-0123456789")
+        buf.write_i32_le(4 as u32)
+        buf.write_u8(16)
+        buf.write_u8(32)
+        buf.write_u8(48)
+        buf.write_u8(64)
+        buf.write_i32_le(3 as u32)
+        buf.write_i32_le(F32_BITS_1 as u32)
+        buf.write_i32_le(F32_BITS_2 as u32)
+        buf.write_i32_le(F32_BITS_3 as u32)
+
+        encoded := mut buf.to_vec()
+        I encoded.len() <= 0 { return 5 }
+
+        decoded := mut match Row.decode(&encoded, &schema) {
+            Ok(r) => r,
+            Err(_) => { return 6 },
+        }
+
+        I decoded.column_count() != 5 { return 7 }
+        I (row_value_mask(&decoded, 1) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 30 }
+        I (row_value_mask(&decoded, 2) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 31 }
+        I (row_value_mask(&decoded, 3) & SQL_VALUE_BLOB_OWNED_MASK) == 0 { return 52 }
+        I (row_value_mask(&decoded, 4) & SQL_VALUE_VECTOR_OWNED_MASK) == 0 { return 53 }
+
+        # INT cell round-trips its iteration counter.
+        match decoded.get(0) {
+            SqlValue.IntVal { v } => {
+                I *v != n { return 8 }
+            },
+            _ => { return 9 },
+        }
+
+        # TEXT cell round-trips its decoded payload.
+        match decoded.get(1) {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "the-quick-brown-fox") { return 10 }
+            },
+            _ => { return 11 },
+        }
+
+        # VARCHAR cell round-trips its decoded payload.
+        match decoded.get(2) {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "vc-0123456789") { return 12 }
+            },
+            _ => { return 13 },
+        }
+        I !check_blob4_slot(row_value_slot(&decoded, 3)) { return 54 }
+        I !check_vector3_slot(row_value_slot(&decoded, 4)) { return 55 }
+
+        # Common executor paths clone values out of rows. get_owned() must
+        # return independent owned payload copies so later row cleanup cannot
+        # invalidate the returned values.
+        owned_text := mut decoded.get_owned(1)
+        I (sqlvalue_mask(&owned_text) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 36 }
+        match owned_text {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "the-quick-brown-fox") { return 19 }
+            },
+            _ => { return 20 },
+        }
+        owned_blob := mut decoded.get_owned(3)
+        I (sqlvalue_mask(&owned_blob) & SQL_VALUE_BLOB_OWNED_MASK) == 0 { return 56 }
+        I !check_blob4_slot(sqlvalue_slot(&owned_blob)) { return 57 }
+        owned_vector := mut decoded.get_owned(4)
+        I (sqlvalue_mask(&owned_vector) & SQL_VALUE_VECTOR_OWNED_MASK) == 0 { return 58 }
+        I !check_vector3_slot(sqlvalue_slot(&owned_vector)) { return 59 }
+
+        cloned_decoded := mut decoded.clone_owned_payloads()
+        I (row_value_mask(&cloned_decoded, 1) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 46 }
+        I (row_value_mask(&cloned_decoded, 2) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 47 }
+        I (row_value_mask(&cloned_decoded, 3) & SQL_VALUE_BLOB_OWNED_MASK) == 0 { return 60 }
+        I (row_value_mask(&cloned_decoded, 4) & SQL_VALUE_VECTOR_OWNED_MASK) == 0 { return 61 }
+        match cloned_decoded.get(1) {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "the-quick-brown-fox") { return 48 }
+            },
+            _ => { return 49 },
+        }
+        I !check_blob4_slot(row_value_slot(&cloned_decoded, 3)) { return 62 }
+        I !check_vector3_slot(row_value_slot(&cloned_decoded, 4)) { return 63 }
+
+        # Literal-origin values stay readable across decode churn: the decode
+        # boundary must not disturb StringVal payloads of literal origin.
+        match literal_origin {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "literal-origin") { return 14 }
+            },
+            _ => { return 15 },
+        }
+        match default_cell {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "") { return 16 }
+            },
+            _ => { return 17 },
+        }
+
+        # Row.encode -> Row.decode round-trip. Build a Row whose TEXT/VARCHAR
+        # cells are StringVals, encode it via the schema-aware Row.encode path,
+        # then decode the produced bytes back and assert the string payloads
+        # survive intact. This exercises the StringVal enum-payload encode path
+        # (payload slot is a pointer to a heap { i8*, i64 } fat pointer), which
+        # the manual-ByteBuffer path above does not cover.
+        rt_blob: Vec<u8> := mut Vec.with_capacity(4)
+        rt_blob.push(16 as u8)
+        rt_blob.push(32 as u8)
+        rt_blob.push(48 as u8)
+        rt_blob.push(64 as u8)
+        rt_vector: Vec<f32> := mut Vec.with_capacity(3)
+        rt_vector.push(1.0 as f32)
+        rt_vector.push(2.0 as f32)
+        rt_vector.push(3.0 as f32)
+
+        rt_values: Vec<SqlValue> := mut Vec.with_capacity(5)
+        rt_values.push(SqlValue.IntVal { v: n })
+        rt_values.push(SqlValue.StringVal { v: "the-quick-brown-fox" })
+        rt_values.push(SqlValue.StringVal { v: "vc-0123456789" })
+        rt_values.push(SqlValue.BlobVal { v: rt_blob })
+        rt_values.push(SqlValue.VectorVal { v: rt_vector })
+        rt_row := mut Row.new(rt_values)
+        I (row_value_mask(&rt_row, 1) & SQL_VALUE_STRING_OWNED_MASK) != 0 { return 32 }
+        I (row_value_mask(&rt_row, 2) & SQL_VALUE_STRING_OWNED_MASK) != 0 { return 33 }
+        I (row_value_mask(&rt_row, 3) & SQL_VALUE_BLOB_OWNED_MASK) != 0 { return 64 }
+        I (row_value_mask(&rt_row, 4) & SQL_VALUE_VECTOR_OWNED_MASK) != 0 { return 65 }
+
+        rt_owned_text := mut rt_row.get_owned(1)
+        I (sqlvalue_mask(&rt_owned_text) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 37 }
+        match rt_owned_text {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "the-quick-brown-fox") { return 38 }
+            },
+            _ => { return 39 },
+        }
+        rt_owned_blob := mut rt_row.get_owned(3)
+        I (sqlvalue_mask(&rt_owned_blob) & SQL_VALUE_BLOB_OWNED_MASK) == 0 { return 66 }
+        I !check_blob4_slot(sqlvalue_slot(&rt_owned_blob)) { return 67 }
+        rt_owned_vector := mut rt_row.get_owned(4)
+        I (sqlvalue_mask(&rt_owned_vector) & SQL_VALUE_VECTOR_OWNED_MASK) == 0 { return 68 }
+        I !check_vector3_slot(sqlvalue_slot(&rt_owned_vector)) { return 69 }
+
+        rt_encoded := mut rt_row.encode(&schema)
+        I rt_encoded.len() <= 0 { return 21 }
+
+        rt_decoded := mut match Row.decode(&rt_encoded, &schema) {
+            Ok(r) => r,
+            Err(_) => { return 22 },
+        }
+
+        I rt_decoded.column_count() != 5 { return 23 }
+        I (row_value_mask(&rt_decoded, 1) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 34 }
+        I (row_value_mask(&rt_decoded, 2) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 35 }
+        I (row_value_mask(&rt_decoded, 3) & SQL_VALUE_BLOB_OWNED_MASK) == 0 { return 70 }
+        I (row_value_mask(&rt_decoded, 4) & SQL_VALUE_VECTOR_OWNED_MASK) == 0 { return 71 }
+
+        match rt_decoded.get(0) {
+            SqlValue.IntVal { v } => {
+                I *v != n { return 24 }
+            },
+            _ => { return 25 },
+        }
+
+        # TEXT cell survives the encode -> decode round-trip.
+        match rt_decoded.get(1) {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "the-quick-brown-fox") { return 26 }
+            },
+            _ => { return 27 },
+        }
+
+        # VARCHAR cell survives the encode -> decode round-trip.
+        match rt_decoded.get(2) {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "vc-0123456789") { return 28 }
+            },
+            _ => { return 29 },
+        }
+        I !check_blob4_slot(row_value_slot(&rt_decoded, 3)) { return 72 }
+        I !check_vector3_slot(row_value_slot(&rt_decoded, 4)) { return 73 }
+
+        value_buf := mut ByteBuffer.new()
+        value_source := mut SqlValue.StringVal { v: "serialized-text" }
+        value_source.serialize(&mut value_buf)
+        value_encoded := mut value_buf.to_vec()
+        value_read_buf := mut ByteBuffer.wrap_readonly(&value_encoded)
+        value_decoded := mut match SqlValue.deserialize(&value_read_buf) {
+            Ok(v) => v,
+            Err(_) => { return 42 },
+        }
+        I (sqlvalue_mask(&value_decoded) & SQL_VALUE_STRING_OWNED_MASK) == 0 { return 43 }
+        match value_decoded {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "serialized-text") { return 44 }
+            },
+            _ => { return 45 },
+        }
+
+        blob_value_buf := mut ByteBuffer.new()
+        blob_source_vec: Vec<u8> := mut Vec.with_capacity(4)
+        blob_source_vec.push(16 as u8)
+        blob_source_vec.push(32 as u8)
+        blob_source_vec.push(48 as u8)
+        blob_source_vec.push(64 as u8)
+        blob_source := mut SqlValue.BlobVal { v: blob_source_vec }
+        blob_source.serialize(&mut blob_value_buf)
+        blob_value_encoded := mut blob_value_buf.to_vec()
+        blob_value_read_buf := mut ByteBuffer.wrap_readonly(&blob_value_encoded)
+        blob_value_decoded := mut match SqlValue.deserialize(&blob_value_read_buf) {
+            Ok(v) => v,
+            Err(_) => { return 74 },
+        }
+        I (sqlvalue_mask(&blob_value_decoded) & SQL_VALUE_BLOB_OWNED_MASK) == 0 { return 75 }
+        I !check_blob4_slot(sqlvalue_slot(&blob_value_decoded)) { return 76 }
+
+        vector_value_buf := mut ByteBuffer.new()
+        vector_source_vec: Vec<f32> := mut Vec.with_capacity(3)
+        vector_source_vec.push(1.0 as f32)
+        vector_source_vec.push(2.0 as f32)
+        vector_source_vec.push(3.0 as f32)
+        vector_source := mut SqlValue.VectorVal { v: vector_source_vec }
+        vector_source.serialize(&mut vector_value_buf)
+        vector_value_encoded := mut vector_value_buf.to_vec()
+        vector_value_read_buf := mut ByteBuffer.wrap_readonly(&vector_value_encoded)
+        vector_value_decoded := mut match SqlValue.deserialize(&vector_value_read_buf) {
+            Ok(v) => v,
+            Err(_) => { return 77 },
+        }
+        I (sqlvalue_mask(&vector_value_decoded) & SQL_VALUE_VECTOR_OWNED_MASK) == 0 { return 78 }
+        I !check_vector3_slot(sqlvalue_slot(&vector_value_decoded)) { return 79 }
+
+        auto_drop_rc := mut exercise_sqlvalue_auto_drop()
+        I auto_drop_rc != 0 { return auto_drop_rc }
+
+        decoded.free_owned_payloads()
+        decoded.free_owned_payloads()
+        match owned_text {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "the-quick-brown-fox") { return 40 }
+            },
+            _ => { return 41 },
+        }
+        I !check_blob4_slot(sqlvalue_slot(&owned_blob)) { return 80 }
+        I !check_vector3_slot(sqlvalue_slot(&owned_vector)) { return 81 }
+        match cloned_decoded.get(2) {
+            SqlValue.StringVal { v } => {
+                I !str_same(v, "vc-0123456789") { return 50 }
+            },
+            _ => { return 51 },
+        }
+        I !check_blob4_slot(row_value_slot(&cloned_decoded, 3)) { return 82 }
+        I !check_vector3_slot(row_value_slot(&cloned_decoded, 4)) { return 83 }
+        owned_text.free_owned_payload()
+        owned_text.free_owned_payload()
+        owned_blob.free_owned_payload()
+        owned_blob.free_owned_payload()
+        owned_vector.free_owned_payload()
+        owned_vector.free_owned_payload()
+        cloned_decoded.free_owned_payloads()
+        cloned_decoded.free_owned_payloads()
+        rt_owned_text.free_owned_payload()
+        rt_owned_text.free_owned_payload()
+        rt_owned_blob.free_owned_payload()
+        rt_owned_blob.free_owned_payload()
+        rt_owned_vector.free_owned_payload()
+        rt_owned_vector.free_owned_payload()
+        value_decoded.free_owned_payload()
+        value_decoded.free_owned_payload()
+        blob_value_decoded.free_owned_payload()
+        blob_value_decoded.free_owned_payload()
+        vector_value_decoded.free_owned_payload()
+        vector_value_decoded.free_owned_payload()
+        rt_decoded.free_owned_payloads()
+        rt_decoded.free_owned_payloads()
+        rt_row.free_owned_payloads()
+
+        n += 1
+    }
+
+    I n != iters { return 18 }
+
+    return 0
+}

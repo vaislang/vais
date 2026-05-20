@@ -574,6 +574,9 @@ impl CodeGenerator {
                                 )]),
                             },
                         ],
+                        // Generic payloads, not direct `str`; keeps the
+                        // original two-field { i32, { i64 } } layout.
+                        has_owned_mask: false,
                     },
                 );
             }
@@ -601,6 +604,9 @@ impl CodeGenerator {
                                 )]),
                             },
                         ],
+                        // Generic payloads, not direct `str`; keeps the
+                        // original two-field { i32, { i64 } } layout.
+                        has_owned_mask: false,
                     },
                 );
             }

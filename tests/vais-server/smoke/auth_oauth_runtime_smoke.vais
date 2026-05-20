@@ -189,6 +189,23 @@ fn smoke_oauth_exchange_code() -> i64 {
     0
 }
 
+fn expect_oauth_token_error(body: str, code: i64) -> i64 {
+    result := parse_oauth_token_response(body, "fallback")
+    match result {
+        Ok(_) => {
+            println("FAIL oauth token response unexpectedly accepted")
+            code
+        },
+        Err(e) => {
+            I e.message == "" {
+                println("FAIL oauth token response empty error")
+                return code + 1
+            }
+            0
+        },
+    }
+}
+
 fn smoke_oauth_token_response_parse() -> i64 {
     body := "{\"access_token\":\"live-access\",\"token_type\":\"Bearer\",\"expires_in\":7200,\"refresh_token\":\"live-refresh\",\"scope\":\"openid email\"}"
     parsed := parse_oauth_token_response(body, "fallback")
@@ -222,21 +239,79 @@ fn smoke_oauth_token_response_parse() -> i64 {
         },
     }
 
-    missing := parse_oauth_token_response("{\"token_type\":\"Bearer\"}", "fallback")
-    match missing {
-        Ok(_) => {
-            println("FAIL oauth missing access accepted")
+    spaced_head := " { " + "\"ignored\"" + " : {\"ok\":true,\"items\":[1,2,3]}, "
+    spaced_mid := spaced_head + "\"access_token\"" + " : \"space-access\", " + "\"expires_in\"" + " : 3600, "
+    spaced_body := spaced_mid + "\"token_type\"" + " : \"Bearer\" } "
+    spaced := parse_oauth_token_response(spaced_body, "fallback")
+    match spaced {
+        Err(e) => {
+            println("FAIL oauth spaced token json parse rejected")
+            println(e.message)
             return 46
         },
-        Err(e) => {
-            I e.message == "" {
-                println("FAIL oauth missing access empty message")
+        Ok(token) => {
+            I token.access_token != "space-access" {
+                println("FAIL oauth spaced access token")
                 return 47
+            }
+            I token.expires_in != 3600 {
+                println("FAIL oauth spaced expires")
+                return 48
+            }
+            I token.refresh_token != "" {
+                println("FAIL oauth spaced refresh default")
+                return 49
+            }
+            I token.scope != "fallback" {
+                println("FAIL oauth spaced scope default")
+                return 50
             }
         },
     }
 
-    0
+    escaped := parse_oauth_token_response("{\"access_token\":\"live-\\\"access\",\"token_type\":\"Bearer\",\"expires_in\":1}", "fallback")
+    match escaped {
+        Err(e) => {
+            println("FAIL oauth escaped token json parse rejected")
+            println(e.message)
+            return 51
+        },
+        Ok(token) => {
+            I token.access_token != "live-\"access" {
+                println("FAIL oauth escaped access token")
+                println(token.access_token)
+                return 52
+            }
+        },
+    }
+
+    no_expiry := parse_oauth_token_response("{\"access_token\":\"no-expiry\"}", "fallback")
+    match no_expiry {
+        Err(e) => {
+            println("FAIL oauth missing expiry rejected")
+            println(e.message)
+            return 53
+        },
+        Ok(token) => {
+            I token.expires_in != 0 {
+                println("FAIL oauth missing expiry default")
+                return 54
+            }
+            I token.token_type != "Bearer" {
+                println("FAIL oauth missing token type default")
+                return 55
+            }
+        },
+    }
+
+    failures := mut 0
+    failures += expect_oauth_token_error("{\"token_type\":\"Bearer\"}", 60)
+    failures += expect_oauth_token_error("{\"access_token\":\"live\"}x", 62)
+    failures += expect_oauth_token_error("{\"access_token\":\"live\",}", 64)
+    failures += expect_oauth_token_error("{\"access_token\":\"li\\qve\"}", 66)
+    failures += expect_oauth_token_error("{\"access_token\":\"live\",\"expires_in\":01}", 68)
+    failures += expect_oauth_token_error("{\"access_token\":\"live\",\"ok\":truex}", 70)
+    failures
 }
 
 fn main() -> i64 {

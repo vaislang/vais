@@ -311,6 +311,27 @@ fn main() -> i64 {
 }
 
 #[test]
+fn e2e_builtin_box_struct_field_deref_loads_box_slot() {
+    let source = r#"
+struct Pair {
+    a: i64,
+    b: i64,
+}
+
+struct Holder {
+    boxed: Box<Pair>,
+}
+
+fn main() -> i64 {
+    holder := mut Holder { boxed: Box.new(Pair { a: 20, b: 22 }) }
+    pair := mut *holder.boxed
+    pair.a + pair.b
+}
+"#;
+    assert_exit_code(source, 42);
+}
+
+#[test]
 fn e2e_vec_struct_index_assignment_accepts_cloned_value() {
     let source = r#"
 struct Item {

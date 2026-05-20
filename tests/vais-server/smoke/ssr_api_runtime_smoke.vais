@@ -24,6 +24,112 @@ fn smoke_parse_requests() -> i64 {
         return 4
     }
 
+    # Object props are returned as their raw JSON value.
+    obj := parse_render_request("{\"route\":\"/o\",\"props\":{\"n\":1}}")
+    I obj.route != "/o" {
+        println("FAIL ssr parse object route")
+        return 5
+    }
+    I obj.props != "{\"n\":1}" {
+        println("FAIL ssr parse object props")
+        println(obj.props)
+        return 6
+    }
+
+    # Whitespace around top-level object fields is accepted after full validation.
+    spaced_body := " { " + "\"route\"" + " : \"/spaced\", " + "\"props\"" + " : {\"ok\":true} } "
+    spaced := parse_render_request(spaced_body)
+    I spaced.route != "/spaced" {
+        println("FAIL ssr parse spaced route")
+        println(spaced.route)
+        return 7
+    }
+    I spaced.props != "{\"ok\":true}" {
+        println("FAIL ssr parse spaced props")
+        println(spaced.props)
+        return 8
+    }
+
+    # Array props are returned as their raw JSON value.
+    arr := parse_hydrate_request("{\"route\":\"/arr\",\"props\":[1,{\"n\":2}]}")
+    I arr.route != "/arr" {
+        println("FAIL ssr parse array route")
+        println(arr.route)
+        return 9
+    }
+    I arr.props != "[1,{\"n\":2}]" {
+        println("FAIL ssr parse array props")
+        println(arr.props)
+        return 10
+    }
+
+    # Escaped string props are unquoted and unescaped for compatibility.
+    escaped := parse_render_request("{\"route\":\"/esc\",\"props\":\"a\\\"b\"}")
+    I escaped.route != "/esc" {
+        println("FAIL ssr parse escaped route")
+        return 11
+    }
+    I escaped.props != "a\"b" {
+        println("FAIL ssr parse escaped props")
+        println(escaped.props)
+        return 12
+    }
+
+    # Trailing bytes after the top-level object invalidate extraction.
+    trailing := parse_render_request("{\"route\":\"/x\",\"props\":\"p\"}junk")
+    I trailing.route != "" {
+        println("FAIL ssr parse trailing route")
+        return 13
+    }
+    I trailing.props != "" {
+        println("FAIL ssr parse trailing props")
+        return 14
+    }
+
+    # A trailing comma is invalid JSON and must fail extraction.
+    comma := parse_hydrate_request("{\"route\":\"/x\",\"props\":\"p\",}")
+    I comma.route != "" {
+        println("FAIL ssr parse trailing comma route")
+        return 15
+    }
+    I comma.props != "" {
+        println("FAIL ssr parse trailing comma props")
+        return 16
+    }
+
+    # A malformed literal in props invalidates the whole request object.
+    literal := parse_hydrate_request("{\"route\":\"/x\",\"props\":truex}")
+    I literal.route != "" {
+        println("FAIL ssr parse malformed literal route")
+        return 17
+    }
+    I literal.props != "" {
+        println("FAIL ssr parse malformed literal props")
+        return 18
+    }
+
+    # A malformed escape invalidates the whole request object.
+    bad_escape := parse_render_request("{\"route\":\"/\\q\",\"props\":\"p\"}")
+    I bad_escape.route != "" {
+        println("FAIL ssr parse malformed escape route")
+        return 19
+    }
+    I bad_escape.props != "" {
+        println("FAIL ssr parse malformed escape props")
+        return 20
+    }
+
+    # A non-string route value yields an empty route.
+    nonstr := parse_render_request("{\"route\":7,\"props\":\"p\"}")
+    I nonstr.route != "" {
+        println("FAIL ssr parse non-string route")
+        return 21
+    }
+    I nonstr.props != "p" {
+        println("FAIL ssr parse non-string route props")
+        return 22
+    }
+
     0
 }
 

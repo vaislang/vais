@@ -58,14 +58,17 @@ impl fn __sqlite_bind_null(stmt: i64, index: i64) -> i64
 impl fn __sqlite_step(stmt: i64) -> i64
 impl fn __sqlite_column_int(stmt: i64, index: i64) -> i64
 impl fn __sqlite_column_text(stmt: i64, index: i64) -> str
+impl fn __sqlite_free_text(ptr: str) -> i64
 impl fn __sqlite_column_double(stmt: i64, index: i64) -> i64
 impl fn __sqlite_column_type(stmt: i64, index: i64) -> i64
 impl fn __sqlite_column_count(stmt: i64) -> i64
 impl fn __sqlite_column_name(stmt: i64, index: i64) -> str
+impl fn __sqlite_column_name_copy(stmt: i64, index: i64) -> str
 impl fn __sqlite_finalize(stmt: i64) -> i64
 impl fn __sqlite_reset(stmt: i64) -> i64
 impl fn __sqlite_clear_bindings(stmt: i64) -> i64
 impl fn __sqlite_errmsg(handle: i64) -> str
+impl fn __sqlite_errmsg_copy(handle: i64) -> str
 impl fn __sqlite_last_insert_rowid(handle: i64) -> i64
 impl fn __sqlite_changes(handle: i64) -> i64
 
@@ -82,6 +85,86 @@ impl fn __store_ptr(ptr: i64, value: i64) -> i64
 impl fn __store_i64(ptr: i64, value: i64) -> i64
 impl fn __load_ptr(ptr: i64) -> i64
 impl fn __load_i64(ptr: i64) -> i64
+
+# ============================================
+# SqliteText - owned TEXT column value
+# ============================================
+
+# An owned copy of a SQLite text string returned through an explicit copy API.
+#
+# OWNERSHIP: `__sqlite_column_text` always returns a malloc-owned copy (the C
+# runtime copies even the invalid-handle and NULL-text cases), and the metadata
+# copy helpers follow the same free boundary. SqliteText wraps that copy with
+# an explicit release boundary so callers do not leak it.
+#
+#   value : the owned string copy (stable across the owning handle transition)
+#   owned : 1 while `value` still holds a live allocation, 0 after free()
+#
+# Use `column_text_owned()` / `get_text_owned()` to construct one, `as_str()`
+# to read it, and `free()` or the manual `drop()` alias to release it. The
+# release boundary is idempotent — calling it again after the first free is a
+# safe no-op.
+struct SqliteText {
+    value: str,
+    owned: i64
+}
+
+impl SqliteText {
+    # Wrap an already-owned copy returned by __sqlite_column_text.
+    # The caller transfers ownership of `copy` to the new SqliteText.
+    fn from_owned(copy: str) -> SqliteText {
+        SqliteText {
+            value: copy,
+            owned: 1
+        }
+    }
+
+    # Construct an owned empty SqliteText (no live allocation to free).
+    fn empty() -> SqliteText {
+        SqliteText {
+            value: "",
+            owned: 0
+        }
+    }
+
+    # Read the wrapped string. Valid until free() is called.
+    fn as_str(&self) -> str {
+        self.value
+    }
+
+    # Whether the wrapped allocation is still live.
+    fn is_owned(&self) -> i64 {
+        self.owned
+    }
+
+    # Release the owned copy through the explicit C free boundary.
+    # Idempotent: a second call after the first free is a no-op and returns 0.
+    fn free(&self) -> i64 {
+        I self.owned == 1 {
+            rc := __sqlite_free_text(self.value)
+            self.value = ""
+            self.owned = 0
+            rc
+        } else {
+            0
+        }
+    }
+
+    # Manual alias for callers following the std RAII naming pattern.
+    # This type intentionally does not implement the automatic Drop trait:
+    # SqliteText is copyable today, so automatic cleanup could double-free
+    # copied wrappers that still carry owned=1.
+    fn drop(&self) -> i64 {
+        @.free()
+    }
+}
+
+# Free a string returned by the legacy column_text() / get_text() API.
+# Those return malloc-owned copies from __sqlite_column_text; this is the
+# explicit free boundary for callers that do not use the SqliteText wrapper.
+fn free_column_text(value: str) -> i64 {
+    __sqlite_free_text(value)
+}
 
 # ============================================
 # Database
@@ -178,6 +261,17 @@ impl Database {
         } else {
             "Database not open"
         }
+    }
+
+    # Get the last error message as an owned copy.
+    # The returned wrapper remains readable after close(); call .free() or
+    # .drop() when done.
+    fn error_message_owned(&self) -> SqliteText {
+        I self.handle == 0 {
+            return SqliteText::empty()
+        }
+        copy := __sqlite_errmsg_copy(self.handle)
+        SqliteText::from_owned(copy)
     }
 
     # Get the rowid of the last inserted row
@@ -319,12 +413,22 @@ impl Statement {
         __sqlite_column_int(self.handle, index)
     }
 
-    # Get a text column value (0-indexed)
+    # Get a text column value (0-indexed).
+    # OWNERSHIP: the returned `str` is a malloc-owned copy. The caller must
+    # release it with free_column_text(), or prefer column_text_owned() which
+    # returns a SqliteText with an explicit free() boundary.
     fn column_text(&self, index: i64) -> str {
-        I self.is_valid() == 0 {
-            return ""
-        }
         __sqlite_column_text(self.handle, index)
+    }
+
+    # Get a text column value as an owned SqliteText (0-indexed).
+    # The wrapper carries the explicit free boundary — call .free() when done.
+    fn column_text_owned(&self, index: i64) -> SqliteText {
+        I self.is_valid() == 0 {
+            return SqliteText::empty()
+        }
+        copy := __sqlite_column_text(self.handle, index)
+        SqliteText::from_owned(copy)
     }
 
     # Get a double column value as i64 bits (0-indexed)
@@ -345,11 +449,24 @@ impl Statement {
     }
 
     # Get the name of a column (0-indexed)
+    # BORROWED: SQLite owns the returned pointer; keep reads inside the
+    # statement lifetime, or use column_name_owned().
     fn column_name(&self, index: i64) -> str {
         I self.is_valid() == 0 {
             return ""
         }
         __sqlite_column_name(self.handle, index)
+    }
+
+    # Get the name of a column as an owned copy (0-indexed).
+    # The wrapper remains readable after finalize(); call .free() or .drop()
+    # when done.
+    fn column_name_owned(&self, index: i64) -> SqliteText {
+        I self.is_valid() == 0 {
+            return SqliteText::empty()
+        }
+        copy := __sqlite_column_name_copy(self.handle, index)
+        SqliteText::from_owned(copy)
     }
 
     # Get the number of columns in the result set
@@ -434,12 +551,22 @@ impl Row {
         __sqlite_column_int(self.stmt_handle, index)
     }
 
-    # Get a text column value (0-indexed)
+    # Get a text column value (0-indexed).
+    # OWNERSHIP: the returned `str` is a malloc-owned copy. The caller must
+    # release it with free_column_text(), or prefer get_text_owned() which
+    # returns a SqliteText with an explicit free() boundary.
     fn get_text(&self, index: i64) -> str {
-        I self.stmt_handle == 0 {
-            return ""
-        }
         __sqlite_column_text(self.stmt_handle, index)
+    }
+
+    # Get a text column value as an owned SqliteText (0-indexed).
+    # The wrapper carries the explicit free boundary — call .free() when done.
+    fn get_text_owned(&self, index: i64) -> SqliteText {
+        I self.stmt_handle == 0 {
+            return SqliteText::empty()
+        }
+        copy := __sqlite_column_text(self.stmt_handle, index)
+        SqliteText::from_owned(copy)
     }
 
     # Get a double column value as i64 bits (0-indexed)
@@ -459,11 +586,24 @@ impl Row {
     }
 
     # Get the name of a column (0-indexed)
+    # BORROWED: SQLite owns the returned pointer; keep reads inside the
+    # statement lifetime, or use get_name_owned().
     fn get_name(&self, index: i64) -> str {
         I self.stmt_handle == 0 {
             return ""
         }
         __sqlite_column_name(self.stmt_handle, index)
+    }
+
+    # Get the name of a column as an owned copy (0-indexed).
+    # The wrapper remains readable after the owning statement is finalized;
+    # call .free() or .drop() when done.
+    fn get_name_owned(&self, index: i64) -> SqliteText {
+        I self.stmt_handle == 0 {
+            return SqliteText::empty()
+        }
+        copy := __sqlite_column_name_copy(self.stmt_handle, index)
+        SqliteText::from_owned(copy)
     }
 
     # Check if a column is NULL (0-indexed)

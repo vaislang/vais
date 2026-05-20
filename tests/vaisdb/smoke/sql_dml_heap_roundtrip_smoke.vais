@@ -1,0 +1,478 @@
+# VaisDB SQL DML heap round-trip runtime smoke.
+#
+# Characterization scope (slice 1 — same-process SQL storage path):
+#   - Builds the storage stack locally: data file -> PageManager -> BufferPool,
+#     a WAL writer + GroupCommitManager, and a CLOG.
+#   - Initializes a catalog B+Tree root leaf page in the buffer pool, wraps it
+#     in a CatalogManager.
+#   - Creates a simple non-indexed table (id INT DEFAULT 7,
+#     name TEXT DEFAULT "grace") through CatalogManager.create_table.
+#   - Inserts one explicit row and four rows that repeatedly materialize INT/TEXT
+#     defaults through omitted columns and DEFAULT expressions
+#     (execute_insert).
+#   - Marks the inserting transaction COMMITTED in the CLOG.
+#   - Scans the table back through TableScanExecutor and asserts the INT + TEXT
+#     cells round-trip byte-for-byte.
+#
+# This certifies that BufferPool.allocate_page performs a real allocation and
+# that the catalog + DML heap mutation paths copy flushed HeapPage bytes back
+# into the buffer frame, so an inserted row is visible to a later scan within
+# the same process.
+#
+# Asserted by exit code only: 0 = full create/insert/scan round-trip passes,
+# non-zero = first failing step.
+
+use storage/constants
+use storage/error
+use storage/file
+use storage/page/manager
+use storage/page/types
+use storage/page/heap.{HeapPage}
+use storage/buffer/pool
+use storage/btree/tree
+use storage/btree/node
+use storage/wal/writer
+use storage/wal/group_commit
+use storage/txn/clog.{Clog, TxnStatus}
+use storage/txn/snapshot.{TxnSnapshot}
+use sql/types.{SqlType, SqlValue}
+use sql/catalog/schema.{ColumnInfo, TableInfo}
+use sql/catalog/manager.{CatalogManager}
+use sql/parser/ast.{InsertStmt, InsertSource, UpdateStmt, DeleteStmt, Assignment, Expr, BinOp}
+use sql/executor/mod.{ExecContext}
+use sql/executor/dml.{execute_insert, execute_update, execute_delete}
+use sql/executor/scan.{TableScanExecutor}
+
+fn open_clean(path: str) -> Result<File, VaisError> {
+    file := mut File.open(path, "rw+")?;
+    file.truncate(0)?;
+    Ok(file)
+}
+
+fn main() -> i64 {
+    page_size := mut PAGE_SIZE_8K
+
+    # --- Storage stack ---------------------------------------------------
+    data_file := mut match open_clean("sql_dml_heap_roundtrip_data.vdb") {
+        Ok(f) => f,
+        Err(_) => { return 1 },
+    }
+    files: Vec<File> := mut Vec.with_capacity(1)
+    files.push(data_file)
+    manager := mut PageManager.new(files, page_size)
+    pool := mut BufferPool.new(manager, page_size, 16 as u32)
+
+    # --- WAL + group commit ---------------------------------------------
+    writer := mut match WalWriter.new("sql_dml_heap_roundtrip_wal", 4096 as u32) {
+        Ok(w) => w,
+        Err(_) => { return 2 },
+    }
+    match writer.open() {
+        Ok(_) => {},
+        Err(_) => { return 3 },
+    }
+    gcm := mut GroupCommitManager.new(GroupCommitConfig.async_mode(), writer)
+
+    # --- CLOG ------------------------------------------------------------
+    clog := mut Clog.new(page_size as u64, 4 as u32)
+
+    # --- Catalog B+Tree root leaf page ----------------------------------
+    catalog_root := mut match pool.allocate_page(FILE_ID_DATA) {
+        Ok(p) => p,
+        Err(_) => { return 4 },
+    }
+    root_frame := mut match pool.fetch_page(FILE_ID_DATA, catalog_root) {
+        Ok(f) => f,
+        Err(_) => { return 5 },
+    }
+    leaf := mut BTreeLeafNode.new(catalog_root, page_size, true)
+    leaf_bytes := mut leaf.flush()
+    root_data := mut pool.get_page_mut(root_frame)
+    LF i: 0..leaf_bytes.len() {
+        root_data[i] = leaf_bytes[i]
+    }
+    pool.unpin_page(root_frame, true)
+    match pool.write_page(root_frame) {
+        Ok(_) => {},
+        Err(_) => { return 6 },
+    }
+
+    catalog_tree := mut BTree.new(catalog_root, FILE_ID_DATA, page_size)
+    catalog := mut CatalogManager.new(catalog_tree)
+
+    # --- Create a simple non-indexed table ------------------------------
+    columns: Vec<ColumnInfo> := mut Vec.with_capacity(2)
+    id_column := mut ColumnInfo.new(0 as u32, 0 as u16, "id", SqlType.Int)
+    id_column.default_value = Option.Some("7")
+    columns.push(id_column)
+    name_column := mut ColumnInfo.new(0 as u32, 1 as u16, "name", SqlType.Text)
+    name_column.default_value = Option.Some("grace")
+    columns.push(name_column)
+
+    create_txn := mut 1 as u64
+    clog.set_status(create_txn, TxnStatus.InProgress)
+    table_id := mut match catalog.create_table("people", columns, &mut pool, &mut gcm, create_txn) {
+        Ok(id) => id,
+        Err(_) => { return 7 },
+    }
+    clog.set_status(create_txn, TxnStatus.Committed)
+    I table_id < 100 as u32 { return 8 }
+    match catalog.get_table("people") {
+        Some(_) => {},
+        None => { return 80 },
+    }
+    create_cols_probe := mut catalog.get_columns(table_id)
+    I create_cols_probe.len() != 2 as u64 { return 81 }
+
+    # --- Insert one row through the DML executor ------------------------
+    insert_txn := mut 2 as u64
+    clog.set_status(insert_txn, TxnStatus.InProgress)
+
+    insert_snapshot := mut TxnSnapshot.new(insert_txn, Vec.with_capacity(0))
+    insert_snapshot.current_cmd_id = 2 as u32
+
+    insert_columns: Vec<str> := mut Vec.with_capacity(0)
+    row_exprs: Vec<Expr> := mut Vec.with_capacity(2)
+    row_exprs.push(Expr.Literal { value: SqlValue.IntVal { v: 42 } })
+    row_exprs.push(Expr.Literal { value: SqlValue.StringVal { v: "ada" } })
+    rows: Vec<Vec<Expr>> := mut Vec.with_capacity(1)
+    rows.push(row_exprs)
+
+    insert_stmt := mut InsertStmt {
+        table_name: "people",
+        columns: insert_columns,
+        source: InsertSource.Values { rows },
+    }
+
+    insert_ctx := mut ExecContext.new(
+        &mut pool, &insert_snapshot, &clog, &mut gcm, &catalog,
+        insert_txn, 1 as u32,
+    )
+
+    dml_result := mut match execute_insert(&insert_stmt, &insert_ctx) {
+        Ok(r) => r,
+        Err(_) => { return 9 },
+    }
+    I dml_result.rows_affected != 1 as u64 { return dml_result.rows_affected as i64 }
+
+    # Repeated omitted-column TEXT default materialization must not consume or
+    # free the reusable catalog default string.
+    default_name_columns: Vec<str> := mut Vec.with_capacity(1)
+    default_name_columns.push("id")
+    default_name_row_1: Vec<Expr> := mut Vec.with_capacity(1)
+    default_name_row_1.push(Expr.Literal { value: SqlValue.IntVal { v: 100 } })
+    default_name_row_2: Vec<Expr> := mut Vec.with_capacity(1)
+    default_name_row_2.push(Expr.Literal { value: SqlValue.IntVal { v: 101 } })
+    default_name_rows: Vec<Vec<Expr>> := mut Vec.with_capacity(2)
+    default_name_rows.push(default_name_row_1)
+    default_name_rows.push(default_name_row_2)
+    default_name_insert := mut InsertStmt {
+        table_name: "people",
+        columns: default_name_columns,
+        source: InsertSource.Values { rows: default_name_rows },
+    }
+    default_name_result := mut match execute_insert(&default_name_insert, &insert_ctx) {
+        Ok(r) => r,
+        Err(_) => { return 21 },
+    }
+    I default_name_result.rows_affected != 2 as u64 { return 22 }
+
+    # Explicit DEFAULT expressions exercise both INT and TEXT default parsing.
+    explicit_default_columns: Vec<str> := mut Vec.with_capacity(2)
+    explicit_default_columns.push("id")
+    explicit_default_columns.push("name")
+    explicit_default_row_1: Vec<Expr> := mut Vec.with_capacity(2)
+    explicit_default_row_1.push(Expr.Default)
+    explicit_default_row_1.push(Expr.Literal { value: SqlValue.StringVal { v: "turing" } })
+    explicit_default_row_2: Vec<Expr> := mut Vec.with_capacity(2)
+    explicit_default_row_2.push(Expr.Literal { value: SqlValue.IntVal { v: 102 } })
+    explicit_default_row_2.push(Expr.Default)
+    explicit_default_rows: Vec<Vec<Expr>> := mut Vec.with_capacity(2)
+    explicit_default_rows.push(explicit_default_row_1)
+    explicit_default_rows.push(explicit_default_row_2)
+    explicit_default_insert := mut InsertStmt {
+        table_name: "people",
+        columns: explicit_default_columns,
+        source: InsertSource.Values { rows: explicit_default_rows },
+    }
+    explicit_default_result := mut match execute_insert(&explicit_default_insert, &insert_ctx) {
+        Ok(r) => r,
+        Err(_) => { return 23 },
+    }
+    I explicit_default_result.rows_affected != 2 as u64 { return 24 }
+
+    # Mark the inserting transaction committed; the same ExecContext snapshot
+    # also sees its own cmd_id=1 write because current_cmd_id is 2.
+    clog.set_status(insert_txn, TxnStatus.Committed)
+
+    # --- Scan the row back through TableScanExecutor ---------------------
+    table_info := mut TableInfo.new(0 as u32, "missing", 0 as u16, 0 as u32)
+    table_found := mut false
+    match catalog.get_table("people") {
+        Some(info) => {
+            table_info = info.clone()
+            table_found = true
+        },
+        None => {},
+    }
+    I !table_found { return 11 }
+    scan_column_refs := mut catalog.get_columns(table_info.table_id)
+    scan_columns: Vec<ColumnInfo> := mut Vec.with_capacity(scan_column_refs.len())
+    LF c: &scan_column_refs {
+        scan_columns.push((**c).clone())
+    }
+    I scan_columns.len() != 2 as u64 { return 12 }
+
+    probe_frame := mut match insert_ctx.pool.fetch_page(FILE_ID_DATA, table_info.first_page_id) {
+        Ok(f) => f,
+        Err(_) => { return 82 },
+    }
+    probe_data := mut insert_ctx.pool.get_page(probe_frame)
+    probe_heap := mut match HeapPage.from_page_data(probe_data, page_size) {
+        Ok(h) => h,
+        Err(_) => { return 83 },
+    }
+    probe_items := mut probe_heap.item_count()
+    insert_ctx.pool.unpin_page(probe_frame, false)
+    I probe_items != 5 as u16 { return 84 }
+
+    scanner := mut TableScanExecutor.new(table_info.clone(), scan_columns, None)
+    match scanner.open(&insert_ctx) {
+        Ok(_) => {},
+        Err(_) => { return 13 },
+    }
+
+    rows_seen := mut 0
+    seen_explicit := mut 0
+    seen_default_name_100 := mut 0
+    seen_default_name_101 := mut 0
+    seen_default_id := mut 0
+    seen_explicit_default_name := mut 0
+    has_more := mut true
+    LW has_more {
+        next_row := mut match scanner.next(&insert_ctx) {
+            Ok(v) => v,
+            Err(_) => { return 14 },
+        }
+        match next_row {
+            Some(exec_row) => {
+                row := mut exec_row.get_row()
+                I row.column_count() != 2 as u64 { return 15 }
+                matched := mut false
+                match row.get(0) {
+                    SqlValue.IntVal { v } => {
+                        id_value := mut *v
+                        match row.get(1) {
+                            SqlValue.StringVal { v } => {
+                                I id_value == 42 && __str_eq(v, "ada") != 0 {
+                                    seen_explicit += 1
+                                    matched = true
+                                } else I id_value == 100 && __str_eq(v, "grace") != 0 {
+                                    seen_default_name_100 += 1
+                                    matched = true
+                                } else I id_value == 101 && __str_eq(v, "grace") != 0 {
+                                    seen_default_name_101 += 1
+                                    matched = true
+                                } else I id_value == 7 && __str_eq(v, "turing") != 0 {
+                                    seen_default_id += 1
+                                    matched = true
+                                } else I id_value == 102 && __str_eq(v, "grace") != 0 {
+                                    seen_explicit_default_name += 1
+                                    matched = true
+                                }
+                            },
+                            _ => {},
+                        }
+                    },
+                    _ => {},
+                }
+                I !matched { return 16 }
+                rows_seen += 1
+            },
+            None => { has_more = false },
+        }
+    }
+
+    scanner.close()
+
+    I rows_seen != 5 { return 20 }
+    I seen_explicit != 1 { return 17 }
+    I seen_default_name_100 != 1 { return 18 }
+    I seen_default_name_101 != 1 { return 19 }
+    I seen_default_id != 1 { return 25 }
+    I seen_explicit_default_name != 1 { return 26 }
+
+    # --- Internal UPDATE executor: fixed literal assignment + id equality ----
+    update_txn := mut 3 as u64
+    clog.set_status(update_txn, TxnStatus.InProgress)
+
+    update_snapshot := mut TxnSnapshot.new(update_txn, Vec.with_capacity(0))
+    update_snapshot.current_cmd_id = 2 as u32
+    update_ctx := mut ExecContext.new(
+        &mut pool, &update_snapshot, &clog, &mut gcm, &catalog,
+        update_txn, 1 as u32,
+    )
+
+    update_assignments: Vec<Assignment> := mut Vec.with_capacity(1)
+    update_assignments.push(Assignment {
+        column: "name",
+        value: Expr.Literal { value: SqlValue.StringVal { v: "lovelace" } },
+    })
+    update_stmt := mut UpdateStmt {
+        table_name: "people",
+        assignments: update_assignments,
+        where_clause: Option.Some(Expr.BinaryOp {
+            left: Box.new(Expr.ColumnRef { table: Option.None, column: "id" }),
+            op: BinOp.Eq,
+            right: Box.new(Expr.Literal { value: SqlValue.IntVal { v: 42 } }),
+        }),
+    }
+
+    update_result := mut match execute_update(&update_stmt, &update_ctx) {
+        Ok(r) => r,
+        Err(_) => { return 27 },
+    }
+    I update_result.rows_affected != 1 as u64 { return 28 }
+    clog.set_status(update_txn, TxnStatus.Committed)
+
+    post_update_snapshot := mut TxnSnapshot.new(4 as u64, Vec.with_capacity(0))
+    post_update_snapshot.current_cmd_id = 1 as u32
+    post_update_ctx := mut ExecContext.new(
+        &mut pool, &post_update_snapshot, &clog, &mut gcm, &catalog,
+        4 as u64, 1 as u32,
+    )
+
+    post_scanner := mut TableScanExecutor.new(table_info.clone(), scan_columns.clone(), None)
+    match post_scanner.open(&post_update_ctx) {
+        Ok(_) => {},
+        Err(_) => { return 29 },
+    }
+
+    post_rows_seen := mut 0
+    seen_updated := mut 0
+    seen_stale_old := mut 0
+    post_has_more := mut true
+    LW post_has_more {
+        post_next := mut match post_scanner.next(&post_update_ctx) {
+            Ok(v) => v,
+            Err(_) => { return 30 },
+        }
+        match post_next {
+            Some(exec_row) => {
+                row := mut exec_row.get_row()
+                I row.column_count() != 2 as u64 { return 31 }
+                match row.get(0) {
+                    SqlValue.IntVal { v } => {
+                        id_value := mut *v
+                        match row.get(1) {
+                            SqlValue.StringVal { v } => {
+                                I id_value == 42 && __str_eq(v, "lovelace") != 0 {
+                                    seen_updated += 1
+                                } else I id_value == 42 && __str_eq(v, "ada") != 0 {
+                                    seen_stale_old += 1
+                                }
+                            },
+                            _ => {},
+                        }
+                    },
+                    _ => {},
+                }
+                post_rows_seen += 1
+            },
+            None => { post_has_more = false },
+        }
+    }
+    post_scanner.close()
+
+    I post_rows_seen != 5 { return 32 }
+    I seen_updated != 1 { return 33 }
+    I seen_stale_old != 0 { return 34 }
+
+    # --- Internal DELETE executor: fixed id equality filter ----------------
+    delete_txn := mut 5 as u64
+    clog.set_status(delete_txn, TxnStatus.InProgress)
+
+    delete_snapshot := mut TxnSnapshot.new(delete_txn, Vec.with_capacity(0))
+    delete_snapshot.current_cmd_id = 2 as u32
+    delete_ctx := mut ExecContext.new(
+        &mut pool, &delete_snapshot, &clog, &mut gcm, &catalog,
+        delete_txn, 1 as u32,
+    )
+
+    delete_stmt := mut DeleteStmt {
+        table_name: "people",
+        where_clause: Option.Some(Expr.BinaryOp {
+            left: Box.new(Expr.ColumnRef { table: Option.None, column: "id" }),
+            op: BinOp.Eq,
+            right: Box.new(Expr.Literal { value: SqlValue.IntVal { v: 100 } }),
+        }),
+    }
+
+    delete_result := mut match execute_delete(&delete_stmt, &delete_ctx) {
+        Ok(r) => r,
+        Err(_) => { return 35 },
+    }
+    I delete_result.rows_affected != 1 as u64 { return 36 }
+    clog.set_status(delete_txn, TxnStatus.Committed)
+
+    post_delete_snapshot := mut TxnSnapshot.new(6 as u64, Vec.with_capacity(0))
+    post_delete_snapshot.current_cmd_id = 1 as u32
+    post_delete_ctx := mut ExecContext.new(
+        &mut pool, &post_delete_snapshot, &clog, &mut gcm, &catalog,
+        6 as u64, 1 as u32,
+    )
+
+    post_delete_scanner := mut TableScanExecutor.new(table_info.clone(), scan_columns, None)
+    match post_delete_scanner.open(&post_delete_ctx) {
+        Ok(_) => {},
+        Err(_) => { return 37 },
+    }
+
+    post_delete_rows_seen := mut 0
+    seen_deleted_target := mut 0
+    seen_surviving_default := mut 0
+    seen_surviving_update := mut 0
+    post_delete_has_more := mut true
+    LW post_delete_has_more {
+        post_delete_next := mut match post_delete_scanner.next(&post_delete_ctx) {
+            Ok(v) => v,
+            Err(_) => { return 38 },
+        }
+        match post_delete_next {
+            Some(exec_row) => {
+                row := mut exec_row.get_row()
+                I row.column_count() != 2 as u64 { return 39 }
+                match row.get(0) {
+                    SqlValue.IntVal { v } => {
+                        id_value := mut *v
+                        match row.get(1) {
+                            SqlValue.StringVal { v } => {
+                                I id_value == 100 && __str_eq(v, "grace") != 0 {
+                                    seen_deleted_target += 1
+                                } else I id_value == 101 && __str_eq(v, "grace") != 0 {
+                                    seen_surviving_default += 1
+                                } else I id_value == 42 && __str_eq(v, "lovelace") != 0 {
+                                    seen_surviving_update += 1
+                                }
+                            },
+                            _ => {},
+                        }
+                    },
+                    _ => {},
+                }
+                post_delete_rows_seen += 1
+            },
+            None => { post_delete_has_more = false },
+        }
+    }
+    post_delete_scanner.close()
+
+    I post_delete_rows_seen != 4 { return 40 }
+    I seen_deleted_target != 0 { return 41 }
+    I seen_surviving_default != 1 { return 42 }
+    I seen_surviving_update != 1 { return 43 }
+
+    return 0
+}
+
+impl fn __str_eq(a: str, b: str) -> i64

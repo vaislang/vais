@@ -28,7 +28,7 @@ Status: Certified Core frozen for downstream re-entry
 - Backend package tests: `18/18`
 - `std/http_client` runtime smoke: `15/15`
 - TLS runtime smoke: `2/2`
-- VaisDB runtime smoke: `34/34`
+- VaisDB runtime smoke: `37/37`
 - Vais Server runtime smoke: `20/20`
 - Vais Web runtime smoke: `61/77` with credential/network-gated cases skipped
 - Vais Web unit tests: `390/390`
@@ -78,7 +78,7 @@ max_iterations: 20
 iteration: 0
 strategy: Phase 198 Bucket 3/4 deferred 작업을 sub-pattern 단위로 잘게 쪼개서 재도전. Phase 198 교훈: sub-agent는 recon만 reliable, "analyze+fix 동시"는 cutoff. 그래서 Phase 199는 **(1) recon-haiku로 분류 → (2) Opus direct로 sub-pattern별 per-file fix** 구조. vaisdb는 /Users/sswoo/study/projects/vais/lang/packages/vaisdb (외부 git repo) — commit은 그쪽에 수행.
 
-**상태 메모 (2026-05-10)**: 이 section은 현재 active plan이 아니라 과거 backlog 기록입니다. 현재 public baseline은 `PUBLIC_STATUS.md`의 promoted gate 기준이며, VaisDB는 package tests `261/261` 및 runtime smoke `34/34`로 별도 인증되었습니다. 이 section의 `RED`, `pending`, Phase 199~203 계획은 현재 claim source로 사용하지 않습니다.
+**상태 메모 (2026-05-10, count refreshed 2026-05-17)**: 이 section은 현재 active plan이 아니라 과거 backlog 기록입니다. 현재 public baseline은 `PUBLIC_STATUS.md`의 promoted gate 기준이며, VaisDB는 package tests `261/261` 및 runtime smoke `37/37`로 별도 인증되었습니다. 이 section의 `RED`, `pending`, Phase 199~203 계획은 현재 claim source로 사용하지 않습니다.
 
 **사용자 결정 (2026-04-18)**: 전략 A (Full migration). vaisdb를 현재 compiler로 빌드 가능하게 복구. Phase 199~203 연속 로드맵 예상.
 

@@ -85,7 +85,10 @@ impl CodeGenerator {
                         || (actual_box_ty.is_none() && !base_is_box_ptr_local)
                     {
                         box_val
-                    } else if actual_box_ty.as_deref() == Some("ptr") || base_is_box_ptr_local {
+                    } else if actual_box_ty.as_deref() == Some("ptr")
+                        || actual_box_ty.as_deref() == Some("i64*")
+                        || base_is_box_ptr_local
+                    {
                         let loaded = self.next_temp(counter);
                         if box_llvm == "i64" {
                             write_ir!(ir, "  {} = load i64, i64* {}", loaded, box_val);
@@ -654,7 +657,10 @@ impl CodeGenerator {
                     || (actual_ptr_ty.is_none() && !inner_is_box_ptr_local)
                 {
                     ptr_val
-                } else if actual_ptr_ty.as_deref() == Some("ptr") || inner_is_box_ptr_local {
+                } else if actual_ptr_ty.as_deref() == Some("ptr")
+                    || actual_ptr_ty.as_deref() == Some("i64*")
+                    || inner_is_box_ptr_local
+                {
                     let loaded = self.next_temp(counter);
                     if box_llvm == "i64" {
                         write_ir!(ir, "  {} = load i64, i64* {}", loaded, ptr_val);

@@ -934,6 +934,31 @@ fn main() -> i64 {
     );
 }
 
+#[test]
+fn e2e_vais_server_20_ws_protocol_runtime_smoke() {
+    assert_vais_server_smoke_runs("ws_protocol_runtime_smoke.vais", 0);
+}
+
+#[test]
+fn e2e_vais_server_21_rest_api_runtime_smoke() {
+    assert_vais_server_smoke_runs("rest_api_runtime_smoke.vais", 0);
+}
+
+#[test]
+fn e2e_vais_server_22_openapi_runtime_smoke() {
+    assert_vais_server_smoke_runs("openapi_runtime_smoke.vais", 0);
+}
+
+#[test]
+fn e2e_vais_server_23_log_json_runtime_smoke() {
+    assert_vais_server_smoke_runs("log_json_runtime_smoke.vais", 0);
+}
+
+#[test]
+fn e2e_vais_server_24_logger_runtime_smoke() {
+    assert_vais_server_smoke_runs("logger_runtime_smoke.vais", 0);
+}
+
 fn run_vais_server_generated_retry_budget_smoke(
     fixture: &str,
     source: &str,

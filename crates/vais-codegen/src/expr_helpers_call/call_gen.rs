@@ -67,6 +67,28 @@ impl CodeGenerator {
         // For enums with concrete Named fields, the slot is the native struct type.
         let raw_variant_fields = self.get_variant_raw_field_types_by_tag(enum_name, tag);
 
+        // Phase 191 (RFC-002 section 4.2 Option D for enums): masked enums carry a
+        // trailing `i64 __ownership_mask` at field 2. Zero-initialize it so
+        // literal/borrowed `str` payloads leave every bit unset; per-field
+        // ownership transfer below ORs bits in for heap-owned arguments.
+        let enum_has_mask = self
+            .types
+            .enums
+            .get(enum_name)
+            .is_some_and(|ei| ei.has_owned_mask);
+        if enum_has_mask {
+            let mask_ptr = self.next_temp(counter);
+            write_ir!(
+                ir,
+                "  {} = getelementptr %{}, %{}* {}, i32 0, i32 2",
+                mask_ptr,
+                enum_name,
+                enum_name,
+                enum_ptr
+            );
+            write_ir!(ir, "  store i64 0, i64* {}", mask_ptr);
+        }
+
         // Store payload fields
         for (i, (arg_val, arg_expr)) in arg_vals.iter().zip(args.iter()).enumerate() {
             let payload_field_ptr = self.next_temp(counter);
@@ -100,12 +122,16 @@ impl CodeGenerator {
             } = &arg_expr.node
             {
                 let parent_enum = enum_name.clone().or_else(|| {
-                    self.types.enums.iter().find_map(|(candidate, info)| {
-                        info.variants
-                            .iter()
-                            .any(|variant| variant.name == name.node)
-                            .then(|| candidate.clone())
-                    })
+                    if self.types.structs.contains_key(&name.node) {
+                        None
+                    } else {
+                        self.types.enums.iter().find_map(|(candidate, info)| {
+                            info.variants
+                                .iter()
+                                .any(|variant| variant.name == name.node)
+                                .then(|| candidate.clone())
+                        })
+                    }
                 });
                 if let Some(parent) = parent_enum {
                     arg_type = ResolvedType::Named {
@@ -465,6 +491,46 @@ impl CodeGenerator {
                     store_val_str
                 };
                 write_ir!(ir, "  store i64 {}, i64* {}", final_val, payload_field_ptr);
+            }
+
+            // Phase 191 (RFC-002 section 4.2 Option D for enums): ownership transfer
+            // for direct `str` payload fields. When this payload field's
+            // declared type is `Str` and the argument is a tracked heap-owned
+            // string intermediate (present in `string_value_slot`, produced
+            // by concat / read paths), transfer ownership to the enum's
+            // __ownership_mask. Literal/borrowed `str` arguments are not in
+            // `string_value_slot`, so their mask bit stays unset.
+            if enum_has_mask && matches!(raw_variant_fields.get(i), Some(ResolvedType::Str)) {
+                let arg_key = arg_val
+                    .strip_prefix("{ i8*, i64 } ")
+                    .unwrap_or(arg_val)
+                    .trim()
+                    .to_string();
+                if let Some(slot) = self.fn_ctx.string_value_slot.remove(&arg_key) {
+                    // (a) OR (1 << i) into the enum ownership mask (field 2).
+                    let mask_ptr_r = self.next_temp(counter);
+                    write_ir!(
+                        ir,
+                        "  {} = getelementptr %{}, %{}* {}, i32 0, i32 2",
+                        mask_ptr_r,
+                        enum_name,
+                        enum_name,
+                        enum_ptr
+                    );
+                    let old_mask = self.next_temp(counter);
+                    write_ir!(ir, "  {} = load i64, i64* {}", old_mask, mask_ptr_r);
+                    let new_mask = self.next_temp(counter);
+                    write_ir!(ir, "  {} = or i64 {}, {}", new_mask, old_mask, 1u64 << i);
+                    write_ir!(ir, "  store i64 {}, i64* {}", new_mask, mask_ptr_r);
+
+                    // (b) null out the owning alloc slot so string cleanup skips it.
+                    write_ir!(ir, "  store i8* null, i8** {}", slot);
+
+                    // (c) remove the slot from the current scope_str_stack frame.
+                    if let Some(frame) = self.fn_ctx.scope_str_stack.last_mut() {
+                        frame.retain(|s| s != &slot);
+                    }
+                }
             }
         }
 

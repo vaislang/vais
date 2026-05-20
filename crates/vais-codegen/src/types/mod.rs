@@ -142,6 +142,28 @@ impl StructInfo {
 pub(crate) struct EnumInfo {
     pub name: String,
     pub variants: Vec<EnumVariantInfo>,
+    /// True when at least one variant has a direct `str` payload field (in a
+    /// tuple or struct variant). When true, codegen appends a trailing
+    /// `i64 __ownership_mask` field (field index 2) to the LLVM layout so a
+    /// later DB-free step can distinguish heap-owned string payloads from
+    /// literal/borrowed ones (Phase 191, RFC-002 section 4.2 Option D for enums).
+    /// Non-`str` enums keep their original `{ i32, { i64*N } }` layout.
+    pub has_owned_mask: bool,
+}
+
+impl EnumInfo {
+    /// True if any variant carries at least one direct `str` payload field.
+    /// Only direct `str` qualifies; nested containers and generic
+    /// `Option<str>`/`Result<str, E>` are out of scope for this slice.
+    pub fn derive_ownership_mask(variants: &[EnumVariantInfo]) -> bool {
+        variants.iter().any(|v| match &v.fields {
+            EnumVariantFields::Unit => false,
+            EnumVariantFields::Tuple(types) => types.iter().any(|t| matches!(t, ResolvedType::Str)),
+            EnumVariantFields::Struct(fields) => {
+                fields.iter().any(|(_, t)| matches!(t, ResolvedType::Str))
+            }
+        })
+    }
 }
 
 #[derive(Debug, Clone)]

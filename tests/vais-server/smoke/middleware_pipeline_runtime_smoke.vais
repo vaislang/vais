@@ -1,5 +1,10 @@
 use src/core/context
+use src/auth/runtime
+use src/middleware/compress
+use src/middleware/cors
 use src/middleware/pipeline
+use src/middleware/rate_limit
+use src/middleware/recovery
 
 fn smoke_pipeline_registration() -> i64 {
     p := mut Pipeline.new()
@@ -82,11 +87,722 @@ fn smoke_after_reverse_order() -> i64 {
     }
     I final.body != "handler|b|a" {
         println("FAIL after reverse order")
+        println(final.body)
         return 31
     }
     I final.content_type != "text/plain; charset=utf-8" {
         println("FAIL after content type")
         return 32
+    }
+
+    0
+}
+
+fn smoke_after_body_concat_transform() -> i64 {
+    p := mut Pipeline.new()
+    p = p.add("after-a")
+    p = p.add("unknown")
+    p = p.add("after-b")
+
+    ctx := Context.new("GET", "/after-transform")
+    response := ctx.json(202, "{\"ok\":true}")
+    final := p.run_after(ctx, response)
+
+    I final.status != 202 {
+        println("FAIL after transform status")
+        return 40
+    }
+    I final.body != "{\"ok\":true}|b|a" {
+        println("FAIL after transform body")
+        println(final.body)
+        return 41
+    }
+    I final.content_type != "application/json; charset=utf-8" {
+        println("FAIL after transform content type")
+        return 42
+    }
+
+    0
+}
+
+fn smoke_context_set_header_appends_owned_headers() -> i64 {
+    ctx1 := Context.new("GET", "/headers").set_header("X-One", "1")
+    ctx2 := ctx1.set_header("X-Two", "2")
+    expected_headers := "X-One: 1\nX-Two: 2"
+
+    I ctx2.response_headers != expected_headers {
+        println("FAIL context set_header append")
+        println(ctx2.response_headers)
+        return 50
+    }
+
+    response := ctx2.text(200, "headers")
+    I response.headers != expected_headers {
+        println("FAIL context set_header response headers")
+        println(response.headers)
+        return 51
+    }
+
+    0
+}
+
+fn smoke_recovery_after_direct_module() -> i64 {
+    mw := RecoveryMiddleware.default()
+    ctx := Context.new("GET", "/panic")
+    panic_response := Response {
+        status: 200,
+        body: "PANIC:boom",
+        content_type: "text/plain; charset=utf-8",
+        headers: "",
+        redirect_url: "",
+    }
+
+    final := mw.after(ctx, panic_response)
+
+    I final.status != 500 {
+        println("FAIL recovery panic status")
+        return 60
+    }
+    I final.body != "{\"error\": \"Internal Server Error\"}" {
+        println("FAIL recovery panic body")
+        println(final.body)
+        return 61
+    }
+    I final.content_type != "application/json; charset=utf-8" {
+        println("FAIL recovery panic content type")
+        return 62
+    }
+
+    zero_response := Response {
+        status: 0,
+        body: "runtime sentinel",
+        content_type: "text/plain; charset=utf-8",
+        headers: "",
+        redirect_url: "",
+    }
+    zero_final := mw.after(ctx, zero_response)
+    I zero_final.status != 500 {
+        println("FAIL recovery zero status")
+        return 63
+    }
+    I zero_final.body != "{\"error\": \"Internal Server Error\"}" {
+        println("FAIL recovery zero body")
+        return 64
+    }
+
+    ok_response := ctx.text(201, "created")
+    ok_final := mw.after(ctx, ok_response)
+    I ok_final.status != 201 {
+        println("FAIL recovery passthrough status")
+        return 65
+    }
+    I ok_final.body != "created" {
+        println("FAIL recovery passthrough body")
+        return 66
+    }
+
+    0
+}
+
+fn smoke_cors_preflight_direct_module() -> i64 {
+    mw := CorsMiddleware.default()
+    ctx := Context.new("OPTIONS", "/cors").set_state("https://client.example")
+    output := mw.before(ctx)
+
+    I output.is_next() {
+        println("FAIL cors preflight did not short circuit")
+        return 70
+    }
+    I output.response.status != 204 {
+        println("FAIL cors preflight status")
+        return 71
+    }
+    expected_headers := "Access-Control-Allow-Origin: *\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS\nAccess-Control-Allow-Headers: Content-Type, Authorization, Accept\nAccess-Control-Max-Age: 86400"
+    I output.response.headers != expected_headers {
+        println("FAIL cors preflight headers")
+        println(output.response.headers)
+        return 72
+    }
+    I output.response.body != "" {
+        println("FAIL cors preflight body")
+        return 73
+    }
+    I output.response.content_type != "text/plain" {
+        println("FAIL cors preflight content type")
+        return 74
+    }
+
+    0
+}
+
+fn smoke_cors_single_origin_preflight_direct_module() -> i64 {
+    mw := CorsMiddleware.new(CorsConfig.for_origin("https://client.example"))
+    ctx := Context.new("OPTIONS", "/cors").set_state("https://client.example")
+    output := mw.before(ctx)
+
+    I output.is_next() {
+        println("FAIL cors single-origin preflight did not short circuit")
+        return 80
+    }
+    I output.response.status != 204 {
+        println("FAIL cors single-origin preflight status")
+        return 81
+    }
+    expected_headers := "Access-Control-Allow-Origin: https://client.example\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS\nAccess-Control-Allow-Headers: Content-Type, Authorization\nAccess-Control-Allow-Credentials: true\nAccess-Control-Max-Age: 86400"
+    I output.response.headers != expected_headers {
+        println("FAIL cors single-origin preflight headers")
+        println(output.response.headers)
+        return 82
+    }
+    I output.response.body != "" {
+        println("FAIL cors single-origin preflight body")
+        return 83
+    }
+    I output.response.content_type != "text/plain" {
+        println("FAIL cors single-origin preflight content type")
+        return 84
+    }
+
+    0
+}
+
+fn smoke_cors_single_origin_non_matching_preflight_direct_module() -> i64 {
+    mw := CorsMiddleware.new(CorsConfig.for_origin("https://client.example"))
+    base := Context.new("OPTIONS", "/cors-miss").set_header("X-Smoke", "ok")
+    ctx := base.set_state("https://other.example")
+    output := mw.before(ctx)
+
+    I output.is_next() {
+        println("FAIL cors single-origin non-matching preflight did not short circuit")
+        return 90
+    }
+    I output.response.status != 204 {
+        println("FAIL cors single-origin non-matching preflight status")
+        return 91
+    }
+    expected_headers := "X-Smoke: ok\nAccess-Control-Allow-Origin: https://client.example\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS\nAccess-Control-Allow-Headers: Content-Type, Authorization\nAccess-Control-Allow-Credentials: true\nAccess-Control-Max-Age: 86400"
+    I output.response.headers != expected_headers {
+        println("FAIL cors single-origin non-matching preflight headers")
+        println(output.response.headers)
+        return 92
+    }
+    I output.response.body != "" {
+        println("FAIL cors single-origin non-matching preflight body")
+        return 93
+    }
+    I output.response.content_type != "text/plain" {
+        println("FAIL cors single-origin non-matching preflight content type")
+        return 94
+    }
+
+    0
+}
+
+fn smoke_cors_custom_config_preflight_direct_module() -> i64 {
+    cfg := CorsConfig {
+        allowed_origin: "https://custom.example",
+        allowed_methods: "GET, OPTIONS",
+        allowed_headers: "X-Trace, Content-Type",
+        allow_credentials: false,
+        max_age: 123,
+    }
+    mw := CorsMiddleware.new(cfg)
+    base := Context.new("OPTIONS", "/cors-custom").set_header("X-Smoke", "ok")
+    ctx := base.set_state("https://custom.example")
+    output := mw.before(ctx)
+
+    I output.is_next() {
+        println("FAIL cors custom config preflight did not short circuit")
+        return 100
+    }
+    I output.response.status != 204 {
+        println("FAIL cors custom config preflight status")
+        return 101
+    }
+    expected_headers := "X-Smoke: ok\nAccess-Control-Allow-Origin: https://custom.example\nAccess-Control-Allow-Methods: GET, OPTIONS\nAccess-Control-Allow-Headers: X-Trace, Content-Type\nAccess-Control-Max-Age: 123"
+    I output.response.headers != expected_headers {
+        println("FAIL cors custom config preflight headers")
+        println(output.response.headers)
+        return 102
+    }
+    I output.response.body != "" {
+        println("FAIL cors custom config preflight body")
+        return 103
+    }
+    I output.response.content_type != "text/plain" {
+        println("FAIL cors custom config preflight content type")
+        return 104
+    }
+
+    0
+}
+
+fn smoke_cors_default_get_headers_direct_module() -> i64 {
+    mw := CorsMiddleware.default()
+    ctx := Context.new("GET", "/cors").set_state("https://client.example")
+    output := mw.before(ctx)
+
+    I !output.is_next() {
+        println("FAIL cors default get short circuited")
+        return 120
+    }
+    expected_headers := "Access-Control-Allow-Origin: *\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS\nAccess-Control-Allow-Headers: Content-Type, Authorization, Accept"
+    I output.ctx.response_headers != expected_headers {
+        println("FAIL cors default get headers")
+        println(output.ctx.response_headers)
+        return 121
+    }
+
+    response := output.ctx.text(200, "ok")
+    I response.headers != expected_headers {
+        println("FAIL cors default get response headers")
+        println(response.headers)
+        return 122
+    }
+
+    0
+}
+
+fn smoke_cors_default_get_appends_existing_header_direct_module() -> i64 {
+    mw := CorsMiddleware.default()
+    base := Context.new("GET", "/cors-existing").set_header("X-Smoke", "ok")
+    ctx := base.set_state("https://client.example")
+    output := mw.before(ctx)
+
+    I !output.is_next() {
+        println("FAIL cors default get existing header short circuited")
+        return 130
+    }
+    expected_headers := "X-Smoke: ok\nAccess-Control-Allow-Origin: *\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS\nAccess-Control-Allow-Headers: Content-Type, Authorization, Accept"
+    I output.ctx.response_headers != expected_headers {
+        println("FAIL cors default get existing header append")
+        println(output.ctx.response_headers)
+        return 131
+    }
+
+    response := output.ctx.text(200, "ok")
+    I response.headers != expected_headers {
+        println("FAIL cors default get existing response headers")
+        println(response.headers)
+        return 132
+    }
+
+    0
+}
+
+fn smoke_cors_single_origin_get_headers_direct_module() -> i64 {
+    mw := CorsMiddleware.new(CorsConfig.for_origin("https://client.example"))
+    base := Context.new("GET", "/cors-single-get").set_header("X-Smoke", "ok")
+    ctx := base.set_state("https://client.example")
+    output := mw.before(ctx)
+
+    I !output.is_next() {
+        println("FAIL cors single-origin get short circuited")
+        return 140
+    }
+    expected_headers := "X-Smoke: ok\nAccess-Control-Allow-Origin: https://client.example\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS\nAccess-Control-Allow-Headers: Content-Type, Authorization\nAccess-Control-Allow-Credentials: true"
+    I output.ctx.response_headers != expected_headers {
+        println("FAIL cors single-origin get headers")
+        println(output.ctx.response_headers)
+        return 141
+    }
+
+    response := output.ctx.text(200, "ok")
+    I response.headers != expected_headers {
+        println("FAIL cors single-origin get response headers")
+        println(response.headers)
+        return 142
+    }
+
+    0
+}
+
+fn smoke_cors_single_origin_get_non_matching_origin_direct_module() -> i64 {
+    mw := CorsMiddleware.new(CorsConfig.for_origin("https://client.example"))
+    base := Context.new("GET", "/cors-single-get-miss").set_header("X-Smoke", "ok")
+    ctx := base.set_state("https://other.example")
+    output := mw.before(ctx)
+
+    I !output.is_next() {
+        println("FAIL cors single-origin get non-matching short circuited")
+        return 150
+    }
+    expected_headers := "X-Smoke: ok\nAccess-Control-Allow-Origin: https://client.example\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS\nAccess-Control-Allow-Headers: Content-Type, Authorization\nAccess-Control-Allow-Credentials: true"
+    I output.ctx.response_headers != expected_headers {
+        println("FAIL cors single-origin get non-matching headers")
+        println(output.ctx.response_headers)
+        return 151
+    }
+
+    response := output.ctx.text(200, "ok")
+    I response.headers != expected_headers {
+        println("FAIL cors single-origin get non-matching response headers")
+        println(response.headers)
+        return 152
+    }
+
+    0
+}
+
+fn smoke_cors_custom_config_get_direct_module() -> i64 {
+    cfg := CorsConfig {
+        allowed_origin: "https://custom.example",
+        allowed_methods: "GET, OPTIONS",
+        allowed_headers: "X-Trace, Content-Type",
+        allow_credentials: false,
+        max_age: 123,
+    }
+    mw := CorsMiddleware.new(cfg)
+    base := Context.new("GET", "/cors-custom-get").set_header("X-Smoke", "ok")
+    ctx := base.set_state("https://custom.example")
+    output := mw.before(ctx)
+
+    I !output.is_next() {
+        println("FAIL cors custom config get short circuited")
+        return 160
+    }
+    expected_headers := "X-Smoke: ok\nAccess-Control-Allow-Origin: https://custom.example\nAccess-Control-Allow-Methods: GET, OPTIONS\nAccess-Control-Allow-Headers: X-Trace, Content-Type"
+    I output.ctx.response_headers != expected_headers {
+        println("FAIL cors custom config get headers")
+        println(output.ctx.response_headers)
+        return 161
+    }
+
+    response := output.ctx.text(200, "ok")
+    I response.headers != expected_headers {
+        println("FAIL cors custom config get response headers")
+        println(response.headers)
+        return 162
+    }
+
+    0
+}
+
+fn smoke_cors_custom_config_get_non_matching_origin_direct_module() -> i64 {
+    cfg := CorsConfig {
+        allowed_origin: "https://custom.example",
+        allowed_methods: "GET, OPTIONS",
+        allowed_headers: "X-Trace, Content-Type",
+        allow_credentials: false,
+        max_age: 123,
+    }
+    mw := CorsMiddleware.new(cfg)
+    base := Context.new("GET", "/cors-custom-get-miss").set_header("X-Smoke", "ok")
+    ctx := base.set_state("https://other.example")
+    output := mw.before(ctx)
+
+    I !output.is_next() {
+        println("FAIL cors custom config get non-matching short circuited")
+        return 170
+    }
+    expected_headers := "X-Smoke: ok\nAccess-Control-Allow-Origin: https://custom.example\nAccess-Control-Allow-Methods: GET, OPTIONS\nAccess-Control-Allow-Headers: X-Trace, Content-Type"
+    I output.ctx.response_headers != expected_headers {
+        println("FAIL cors custom config get non-matching headers")
+        println(output.ctx.response_headers)
+        return 171
+    }
+
+    response := output.ctx.text(200, "ok")
+    I response.headers != expected_headers {
+        println("FAIL cors custom config get non-matching response headers")
+        println(response.headers)
+        return 172
+    }
+
+    0
+}
+
+fn smoke_cors_custom_config_credentials_direct_module() -> i64 {
+    cfg_preflight_match := CorsConfig {
+        allowed_origin: "https://secure.example",
+        allowed_methods: "GET, POST, OPTIONS",
+        allowed_headers: "X-Trace, Authorization",
+        allow_credentials: true,
+        max_age: 321,
+    }
+    mw_preflight_match := CorsMiddleware.new(cfg_preflight_match)
+    base_preflight_match := Context.new("OPTIONS", "/cors-custom-credentials").set_header("X-Smoke", "ok")
+    ctx_preflight_match := base_preflight_match.set_state("https://secure.example")
+    output_preflight_match := mw_preflight_match.before(ctx_preflight_match)
+
+    I output_preflight_match.is_next() {
+        println("FAIL cors custom credentials preflight did not short circuit")
+        return 180
+    }
+    expected_preflight_headers := "X-Smoke: ok\nAccess-Control-Allow-Origin: https://secure.example\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\nAccess-Control-Allow-Headers: X-Trace, Authorization\nAccess-Control-Allow-Credentials: true\nAccess-Control-Max-Age: 321"
+    I output_preflight_match.response.headers != expected_preflight_headers {
+        println("FAIL cors custom credentials preflight headers")
+        println(output_preflight_match.response.headers)
+        return 181
+    }
+
+    cfg_preflight_miss := CorsConfig {
+        allowed_origin: "https://secure.example",
+        allowed_methods: "GET, POST, OPTIONS",
+        allowed_headers: "X-Trace, Authorization",
+        allow_credentials: true,
+        max_age: 321,
+    }
+    mw_preflight_miss := CorsMiddleware.new(cfg_preflight_miss)
+    base_preflight_miss := Context.new("OPTIONS", "/cors-custom-credentials-miss").set_header("X-Smoke", "ok")
+    ctx_preflight_miss := base_preflight_miss.set_state("https://other.example")
+    output_preflight_miss := mw_preflight_miss.before(ctx_preflight_miss)
+
+    I output_preflight_miss.is_next() {
+        println("FAIL cors custom credentials non-matching preflight did not short circuit")
+        return 182
+    }
+    I output_preflight_miss.response.headers != expected_preflight_headers {
+        println("FAIL cors custom credentials non-matching preflight headers")
+        println(output_preflight_miss.response.headers)
+        return 183
+    }
+
+    cfg_get_match := CorsConfig {
+        allowed_origin: "https://secure.example",
+        allowed_methods: "GET, POST, OPTIONS",
+        allowed_headers: "X-Trace, Authorization",
+        allow_credentials: true,
+        max_age: 321,
+    }
+    mw_get_match := CorsMiddleware.new(cfg_get_match)
+    base_get_match := Context.new("GET", "/cors-custom-credentials-get").set_header("X-Smoke", "ok")
+    ctx_get_match := base_get_match.set_state("https://secure.example")
+    output_get_match := mw_get_match.before(ctx_get_match)
+
+    I !output_get_match.is_next() {
+        println("FAIL cors custom credentials get short circuited")
+        return 184
+    }
+    expected_get_headers := "X-Smoke: ok\nAccess-Control-Allow-Origin: https://secure.example\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\nAccess-Control-Allow-Headers: X-Trace, Authorization\nAccess-Control-Allow-Credentials: true"
+    I output_get_match.ctx.response_headers != expected_get_headers {
+        println("FAIL cors custom credentials get headers")
+        println(output_get_match.ctx.response_headers)
+        return 185
+    }
+    response_get_match := output_get_match.ctx.text(200, "ok")
+    I response_get_match.headers != expected_get_headers {
+        println("FAIL cors custom credentials get response headers")
+        println(response_get_match.headers)
+        return 186
+    }
+
+    cfg_get_miss := CorsConfig {
+        allowed_origin: "https://secure.example",
+        allowed_methods: "GET, POST, OPTIONS",
+        allowed_headers: "X-Trace, Authorization",
+        allow_credentials: true,
+        max_age: 321,
+    }
+    mw_get_miss := CorsMiddleware.new(cfg_get_miss)
+    base_get_miss := Context.new("GET", "/cors-custom-credentials-get-miss").set_header("X-Smoke", "ok")
+    ctx_get_miss := base_get_miss.set_state("https://other.example")
+    output_get_miss := mw_get_miss.before(ctx_get_miss)
+
+    I !output_get_miss.is_next() {
+        println("FAIL cors custom credentials get non-matching short circuited")
+        return 187
+    }
+    I output_get_miss.ctx.response_headers != expected_get_headers {
+        println("FAIL cors custom credentials get non-matching headers")
+        println(output_get_miss.ctx.response_headers)
+        return 188
+    }
+    response_get_miss := output_get_miss.ctx.text(200, "ok")
+    I response_get_miss.headers != expected_get_headers {
+        println("FAIL cors custom credentials get non-matching response headers")
+        println(response_get_miss.headers)
+        return 189
+    }
+
+    0
+}
+
+fn smoke_compress_direct_module() -> i64 {
+    mw := CompressMiddleware.new(CompressConfig.new(4, "gzip"))
+    ctx := Context.new("GET", "/compress").set_state("br, gzip")
+    before := mw.before(ctx)
+
+    I !before.is_next() {
+        println("FAIL compress before short circuited")
+        return 190
+    }
+    I before.ctx.state != "compress=gzip" {
+        println("FAIL compress before state")
+        println(before.ctx.state)
+        return 191
+    }
+
+    response := before.ctx.text(200, "payload")
+    final := mw.after(before.ctx, response)
+    I final.status != 200 {
+        println("FAIL compress after status")
+        return 192
+    }
+    I final.body != "payload" {
+        println("FAIL compress after body")
+        return 193
+    }
+    I final.headers != "Content-Encoding: gzip" {
+        println("FAIL compress after header")
+        println(final.headers)
+        return 194
+    }
+
+    ctx_with_header := before.ctx.set_header("X-Smoke", "ok")
+    response_with_header := ctx_with_header.text(200, "payload")
+    final_with_header := mw.after(ctx_with_header, response_with_header)
+    expected_headers := "X-Smoke: ok\nContent-Encoding: gzip"
+    I final_with_header.headers != expected_headers {
+        println("FAIL compress after appends header")
+        println(final_with_header.headers)
+        return 195
+    }
+
+    small_mw := CompressMiddleware.new(CompressConfig.new(100, "gzip"))
+    small_response := before.ctx.text(200, "short")
+    small_final := small_mw.after(before.ctx, small_response)
+    I small_final.headers != "" {
+        println("FAIL compress small body headers")
+        println(small_final.headers)
+        return 196
+    }
+
+    no_gzip := mw.before(Context.new("GET", "/compress").set_state("br"))
+    I !no_gzip.is_next() {
+        println("FAIL compress no-gzip before")
+        return 197
+    }
+
+    0
+}
+
+fn smoke_rate_limit_store_direct_module() -> i64 {
+    store := mut RateLimitStore.new()
+
+    first := store.check_and_increment("203.0.113.9", 7000000, 1000)
+    I first != 1 {
+        println("FAIL rate-limit store first")
+        return 210
+    }
+
+    second := store.check_and_increment("203.0.113.9", 7000500, 1000)
+    I second != 2 {
+        println("FAIL rate-limit store second")
+        return 211
+    }
+
+    other := store.check_and_increment("203.0.113.10", 7000500, 1000)
+    I other != 1 {
+        println("FAIL rate-limit store other ip")
+        return 212
+    }
+
+    reset := store.check_and_increment("203.0.113.9", 7001501, 1000)
+    I reset != 1 {
+        println("FAIL rate-limit store reset")
+        return 213
+    }
+
+    0
+}
+
+fn smoke_rate_limit_before_direct_module() -> i64 {
+    auth_set_test_time_sec(7000)
+    mw := mut RateLimitMiddleware.new(RateLimitConfig.new(2, 1000))
+
+    first := mw.before(Context.new("GET", "/limited").set_state("198.51.100.7"))
+    I !first.is_next() {
+        println("FAIL rate-limit first short circuited")
+        auth_clear_test_time_sec()
+        return 220
+    }
+    expected_first_headers := "X-RateLimit-Limit: 2\nX-RateLimit-Remaining: 1"
+    I first.ctx.response_headers != expected_first_headers {
+        println("FAIL rate-limit first headers")
+        println(first.ctx.response_headers)
+        auth_clear_test_time_sec()
+        return 221
+    }
+
+    second := mw.before(Context.new("GET", "/limited").set_state("198.51.100.7"))
+    I !second.is_next() {
+        println("FAIL rate-limit second short circuited")
+        auth_clear_test_time_sec()
+        return 222
+    }
+    expected_second_headers := "X-RateLimit-Limit: 2\nX-RateLimit-Remaining: 0"
+    I second.ctx.response_headers != expected_second_headers {
+        println("FAIL rate-limit second headers")
+        println(second.ctx.response_headers)
+        auth_clear_test_time_sec()
+        return 223
+    }
+
+    third := mw.before(Context.new("GET", "/limited").set_state("198.51.100.7"))
+    I third.is_next() {
+        println("FAIL rate-limit third allowed")
+        auth_clear_test_time_sec()
+        return 224
+    }
+    I third.response.status != 429 {
+        println("FAIL rate-limit limited status")
+        auth_clear_test_time_sec()
+        return 225
+    }
+    I third.response.body != "Too Many Requests" {
+        println("FAIL rate-limit limited body")
+        auth_clear_test_time_sec()
+        return 226
+    }
+    expected_limited_headers := "Retry-After: 1\nX-RateLimit-Limit: 2"
+    I third.response.headers != expected_limited_headers {
+        println("FAIL rate-limit limited headers")
+        println(third.response.headers)
+        auth_clear_test_time_sec()
+        return 227
+    }
+
+    auth_set_test_time_sec(7002)
+    reset := mw.before(Context.new("GET", "/limited").set_state("198.51.100.7"))
+    I !reset.is_next() {
+        println("FAIL rate-limit reset short circuited")
+        auth_clear_test_time_sec()
+        return 228
+    }
+    I reset.ctx.response_headers != expected_first_headers {
+        println("FAIL rate-limit reset headers")
+        println(reset.ctx.response_headers)
+        auth_clear_test_time_sec()
+        return 229
+    }
+
+    unknown := mw.before(Context.new("GET", "/limited"))
+    I !unknown.is_next() {
+        println("FAIL rate-limit unknown ip short circuited")
+        auth_clear_test_time_sec()
+        return 230
+    }
+
+    auth_clear_test_time_sec()
+    0
+}
+
+fn smoke_pipeline_before_modified_ctx_carries_forward() -> i64 {
+    p := mut Pipeline.new()
+    p = p.add("unknown")
+
+    ctx := Context.new("GET", "/ctx-propagation").set_header("X-Smoke", "ok")
+    output := p.run_before(ctx)
+
+    I output.short_circuit {
+        println("FAIL pipeline ctx propagation short circuit")
+        return 200
+    }
+    I output.ctx.response_headers != "X-Smoke: ok" {
+        println("FAIL pipeline ctx propagation headers")
+        println(output.ctx.response_headers)
+        return 201
     }
 
     0
@@ -98,6 +814,24 @@ fn main() -> i64 {
     failures += smoke_before_passthrough()
     failures += smoke_before_short_circuit()
     failures += smoke_after_reverse_order()
+    failures += smoke_after_body_concat_transform()
+    failures += smoke_context_set_header_appends_owned_headers()
+    failures += smoke_recovery_after_direct_module()
+    failures += smoke_cors_preflight_direct_module()
+    failures += smoke_cors_single_origin_preflight_direct_module()
+    failures += smoke_cors_single_origin_non_matching_preflight_direct_module()
+    failures += smoke_cors_custom_config_preflight_direct_module()
+    failures += smoke_cors_default_get_headers_direct_module()
+    failures += smoke_cors_default_get_appends_existing_header_direct_module()
+    failures += smoke_cors_single_origin_get_headers_direct_module()
+    failures += smoke_cors_single_origin_get_non_matching_origin_direct_module()
+    failures += smoke_cors_custom_config_get_direct_module()
+    failures += smoke_cors_custom_config_get_non_matching_origin_direct_module()
+    failures += smoke_cors_custom_config_credentials_direct_module()
+    failures += smoke_compress_direct_module()
+    failures += smoke_rate_limit_store_direct_module()
+    failures += smoke_rate_limit_before_direct_module()
+    failures += smoke_pipeline_before_modified_ctx_carries_forward()
 
     I failures > 0 {
         println("VAIS_SERVER_MIDDLEWARE_PIPELINE_RUNTIME_FAIL")

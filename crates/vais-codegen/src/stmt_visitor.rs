@@ -162,35 +162,24 @@ impl StmtVisitor for CodeGenerator {
                 }
             }
 
-            // Step 2: drop Named-type locals in LIFO order.
-            let moved_named_result = self
-                .fn_ctx
-                .expected_expr_types
-                .last()
-                .filter(|ty| matches!(ty, ResolvedType::Named { .. }))
-                .and_then(|_| {
-                    stmts
-                        .iter()
-                        .rev()
-                        .find(|s| {
-                            !matches!(&s.node, Stmt::Break(_) | Stmt::Continue | Stmt::Return(_))
-                        })
-                        .and_then(|s| match &s.node {
-                            Stmt::Expr(expr) => match &expr.node {
-                                Expr::Ident(name)
-                                    if scope_vars.iter().any(|scope_var| scope_var == name)
-                                        && self.fn_ctx.locals.get(name).is_some_and(|local| {
-                                            matches!(local.ty, ResolvedType::Named { .. })
-                                        }) =>
-                                {
-                                    Some(name.clone())
-                                }
-                                _ => None,
-                            },
-                            _ => None,
-                        })
-                });
-            let moved_named_vars: Vec<String> = moved_named_result.into_iter().collect();
+            // Step 2: drop Named-type locals in LIFO order. If the block's
+            // result moves a local Named value out directly (`x`) or through an
+            // enum constructor (`Ok(x)`, `Some(x)`, `Variant(x)`), skip dropping
+            // that local here; the owner of the returned aggregate is now
+            // responsible for its payload. Without the constructor case,
+            // functions like `fn f() -> Result<Owned, E> { Ok(x) }` drop `x`
+            // before returning a shallow copy inside `Ok`.
+            let moved_named_vars = stmts
+                .iter()
+                .rev()
+                .find(|s| !matches!(&s.node, Stmt::Break(_) | Stmt::Continue | Stmt::Return(_)))
+                .and_then(|s| match &s.node {
+                    Stmt::Expr(expr) => {
+                        Some(self.moved_named_scope_vars_from_result_expr(&expr.node, &scope_vars))
+                    }
+                    _ => None,
+                })
+                .unwrap_or_default();
             let drop_ir = self.generate_scope_drop_cleanup_except(&scope_vars, &moved_named_vars);
             if !drop_ir.is_empty() {
                 ir.push_str(&drop_ir);
@@ -206,6 +195,80 @@ impl StmtVisitor for CodeGenerator {
         }
 
         Ok((last_value, ir, terminated))
+    }
+}
+
+impl CodeGenerator {
+    fn push_moved_named_local(&self, out: &mut Vec<String>, name: &str, candidate_vars: &[String]) {
+        if !candidate_vars.iter().any(|candidate| candidate == name) {
+            return;
+        }
+        let Some(local) = self.fn_ctx.locals.get(name) else {
+            return;
+        };
+        if !matches!(local.ty, ResolvedType::Named { .. }) {
+            return;
+        }
+        if !out.iter().any(|existing| existing == name) {
+            out.push(name.to_string());
+        }
+    }
+
+    fn is_tuple_enum_constructor_expr(&self, func: &Expr) -> bool {
+        let Expr::Ident(name) = func else {
+            return false;
+        };
+        let expected = self.fn_ctx.expected_expr_types.last();
+        self.get_tuple_variant_info_with_expected(name, expected)
+            .is_some()
+            || self.get_tuple_variant_info(name).is_some()
+            || matches!(name.as_str(), "Ok" | "Err" | "Some")
+    }
+
+    fn is_struct_enum_constructor_expr(&self, name: &str, enum_name: &Option<String>) -> bool {
+        enum_name.is_some() || self.resolve_enum_struct_variant(name).is_some()
+    }
+
+    fn collect_moved_named_scope_vars_from_expr(
+        &self,
+        expr: &Expr,
+        candidate_vars: &[String],
+        out: &mut Vec<String>,
+    ) {
+        match expr {
+            Expr::Ident(name) => {
+                self.push_moved_named_local(out, name, candidate_vars);
+            }
+            Expr::Call { func, args } if self.is_tuple_enum_constructor_expr(&func.node) => {
+                for arg in args {
+                    if let Expr::Ident(name) = &arg.node {
+                        self.push_moved_named_local(out, name, candidate_vars);
+                    }
+                }
+            }
+            Expr::StructLit {
+                name,
+                fields,
+                enum_name,
+            } if self.is_struct_enum_constructor_expr(&name.node, enum_name) => {
+                for (_, value) in fields {
+                    if let Expr::Ident(value_name) = &value.node {
+                        self.push_moved_named_local(out, value_name, candidate_vars);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn moved_named_scope_vars_from_result_expr(
+        &self,
+        expr: &Expr,
+        candidate_vars: &[String],
+    ) -> Vec<String> {
+        let mut moved = Vec::new();
+        self.collect_moved_named_scope_vars_from_expr(expr, candidate_vars, &mut moved);
+        moved
     }
 }
 
@@ -951,21 +1014,11 @@ impl CodeGenerator {
             let defer_ir = self.generate_defer_cleanup(counter)?;
             ir.push_str(&defer_ir);
 
-            // Call Drop::drop() for droppable locals (reverse order)
-            let moved_return_vars: Vec<String> = if matches!(ret_type, ResolvedType::Named { .. }) {
-                match &expr.node {
-                    Expr::Ident(name)
-                        if self.fn_ctx.locals.get(name).is_some_and(|local| {
-                            matches!(local.ty, ResolvedType::Named { .. })
-                        }) =>
-                    {
-                        vec![name.clone()]
-                    }
-                    _ => Vec::new(),
-                }
-            } else {
-                Vec::new()
-            };
+            // Call Drop::drop() for droppable locals (reverse order), skipping
+            // any local Named values moved into the return expression.
+            let candidate_return_vars: Vec<String> = self.fn_ctx.locals.keys().cloned().collect();
+            let moved_return_vars =
+                self.moved_named_scope_vars_from_result_expr(&expr.node, &candidate_return_vars);
             let drop_ir = self.generate_drop_cleanup_except(&moved_return_vars);
             ir.push_str(&drop_ir);
 

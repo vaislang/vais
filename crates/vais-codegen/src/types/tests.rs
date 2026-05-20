@@ -710,6 +710,7 @@ fn test_generate_enum_type_unit_only() {
                 fields: EnumVariantFields::Unit,
             },
         ],
+        has_owned_mask: false,
     };
     let def = gen.generate_enum_type("Color", &info);
     assert_eq!(def, "%Color = type { i32 }");
@@ -739,6 +740,7 @@ fn test_unit_enum_alignof_matches_generated_i32_tag() {
                     fields: EnumVariantFields::Unit,
                 },
             ],
+            has_owned_mask: false,
         },
     );
 
@@ -769,6 +771,7 @@ fn test_struct_with_unit_enum_uses_llvm_abi_stride() {
                     fields: EnumVariantFields::Unit,
                 },
             ],
+            has_owned_mask: false,
         },
     );
     gen.types.structs.insert(
@@ -870,10 +873,37 @@ fn test_generate_enum_type_with_payload() {
                 fields: EnumVariantFields::Unit,
             },
         ],
+        has_owned_mask: false,
     };
     let def = gen.generate_enum_type("Value", &info);
     assert!(def.contains("i32")); // tag
     assert!(def.contains("Value"));
+}
+
+#[test]
+fn test_generate_enum_type_with_str_payload_mask() {
+    let gen = CodeGenerator::new("test");
+    let variants = vec![
+        EnumVariantInfo {
+            name: "Text".to_string(),
+            _tag: 0,
+            fields: EnumVariantFields::Tuple(vec![ResolvedType::Str]),
+        },
+        EnumVariantInfo {
+            name: "Num".to_string(),
+            _tag: 1,
+            fields: EnumVariantFields::Tuple(vec![ResolvedType::I64]),
+        },
+    ];
+    let info = EnumInfo {
+        name: "Cell".to_string(),
+        has_owned_mask: EnumInfo::derive_ownership_mask(&variants),
+        variants,
+    };
+
+    assert!(info.has_owned_mask);
+    let def = gen.generate_enum_type("Cell", &info);
+    assert_eq!(def, "%Cell = type { i32, { i64 }, i64 }");
 }
 
 // ========== UnionInfo ==========

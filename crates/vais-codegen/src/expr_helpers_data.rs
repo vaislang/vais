@@ -1114,6 +1114,8 @@ impl CodeGenerator {
                     obj_val,
                     field_idx
                 );
+                self.fn_ctx
+                    .record_emitted_type(&field_ptr, &format!("{}*", llvm_ty));
 
                 // For struct-typed fields, return the pointer directly
                 // (the caller or next field access will GEP into it)

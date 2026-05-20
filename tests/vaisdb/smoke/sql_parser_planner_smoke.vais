@@ -41,9 +41,192 @@ fn anchor_parser_link_symbols() -> i64 {
     return 0
 }
 
+fn check_parser_owned_text_cleanup() -> i64 {
+    literal_tokenizer := mut Tokenizer.new("SELECT 'ada' AS label LIMIT 1;")
+    literal_tokens := mut match literal_tokenizer.tokenize_all() {
+        Ok(v) => v,
+        Err(_) => { return 60 },
+    }
+    literal_parser := mut Parser.new(literal_tokens)
+    match literal_parser.expect(TokenKind.Select) {
+        Ok(_) => {},
+        Err(_) => { return 61 },
+    }
+    literal_items := mut match literal_parser.parse_select_list() {
+        Ok(v) => v,
+        Err(_) => { return 62 },
+    }
+    literal_parser.free_owned_token_text()
+    literal_parser.free_owned_token_text()
+    I literal_items.len() != 1 { return 63 }
+
+    literal_item := mut literal_items[0].clone()
+    match literal_item {
+        SelectItem.Expr { expr, alias } => {
+            match expr {
+                Expr.Literal { value } => {
+                    match value {
+                        SqlValue.StringVal { v } => {
+                            I v != "ada" { return 64 }
+                        },
+                        _ => { return 65 },
+                    }
+                },
+                _ => { return 66 },
+            }
+            match alias {
+                Some(a) => {
+                    I a != "label" { return 67 }
+                },
+                None => { return 68 },
+            }
+        },
+        _ => { return 69 },
+    }
+
+    column_tokenizer := mut Tokenizer.new("SELECT name AS alias LIMIT 1;")
+    column_tokens := mut match column_tokenizer.tokenize_all() {
+        Ok(v) => v,
+        Err(_) => { return 70 },
+    }
+    column_parser := mut Parser.new(column_tokens)
+    match column_parser.expect(TokenKind.Select) {
+        Ok(_) => {},
+        Err(_) => { return 71 },
+    }
+    column_items := mut match column_parser.parse_select_list() {
+        Ok(v) => v,
+        Err(_) => { return 72 },
+    }
+    column_parser.free_owned_token_text_payloads()
+    column_parser.free_owned_token_text_payloads()
+    I column_items.len() != 1 { return 73 }
+
+    column_item := mut column_items[0].clone()
+    match column_item {
+        SelectItem.Expr { expr, alias } => {
+            match expr {
+                Expr.ColumnRef { table, column } => {
+                    match table {
+                        Some(_) => { return 74 },
+                        None => {},
+                    }
+                    I column != "name" { return 75 }
+                },
+                _ => { return 76 },
+            }
+            match alias {
+                Some(a) => {
+                    I a != "alias" { return 77 }
+                },
+                None => { return 78 },
+            }
+        },
+        _ => { return 79 },
+    }
+
+    parsed := mut match parse_sql("SELECT 'eve' AS label;") {
+        Ok(v) => v,
+        Err(_) => { return 80 },
+    }
+    I parsed.len() != 1 { return 81 }
+    parsed_stmt := mut parsed[0].clone()
+    match parsed_stmt {
+        Statement.Select { query } => {
+            I query.select_list.len() != 1 { return 82 }
+            parsed_item := mut query.select_list[0].clone()
+            match parsed_item {
+                SelectItem.Expr { expr, alias } => {
+                    match expr {
+                        Expr.Literal { value } => {
+                            match value {
+                                SqlValue.StringVal { v } => {
+                                    I v != "eve" { return 83 }
+                                },
+                                _ => { return 84 },
+                            }
+                        },
+                        _ => { return 85 },
+                    }
+                    match alias {
+                        Some(a) => {
+                            I a != "label" { return 86 }
+                        },
+                        None => { return 87 },
+                    }
+                },
+                _ => { return 88 },
+            }
+        },
+        _ => { return 89 },
+    }
+    parsed_stmt = parsed_stmt.free_parser_owned_text()
+    parsed_stmt = parsed_stmt.free_parser_owned_text()
+    match parsed_stmt {
+        Statement.CommitTxn => {},
+        _ => { return 90 },
+    }
+
+    set_parsed := mut match parse_sql("SELECT name FROM people UNION SELECT title FROM books;") {
+        Ok(v) => v,
+        Err(_) => { return 91 },
+    }
+    I set_parsed.len() != 1 { return 92 }
+    set_stmt := mut set_parsed[0].clone()
+    match set_stmt {
+        Statement.Select { query } => {
+            match query.set_op {
+                Some(_) => {},
+                None => { return 93 },
+            }
+        },
+        _ => { return 94 },
+    }
+    set_stmt = set_stmt.free_parser_owned_text()
+    set_stmt = set_stmt.free_parser_owned_text()
+    match set_stmt {
+        Statement.CommitTxn => {},
+        _ => { return 95 },
+    }
+
+    join_parsed := mut match parse_sql("SELECT name FROM people JOIN pets ON 1 = 1;") {
+        Ok(v) => v,
+        Err(_) => { return 96 },
+    }
+    I join_parsed.len() != 1 { return 97 }
+    join_stmt := mut join_parsed[0].clone()
+    match join_stmt {
+        Statement.Select { query } => {
+            match query.from {
+                Some(refs) => {
+                    I refs.len() != 1 { return 98 }
+                    first_ref := mut refs[0].clone()
+                    match first_ref {
+                        TableRef.Join { .. } => {},
+                        _ => { return 99 },
+                    }
+                },
+                None => { return 100 },
+            }
+        },
+        _ => { return 101 },
+    }
+    join_stmt = join_stmt.free_parser_owned_text()
+    join_stmt = join_stmt.free_parser_owned_text()
+    match join_stmt {
+        Statement.CommitTxn => {},
+        _ => { return 102 },
+    }
+
+    return 0
+}
+
 fn main() -> i64 {
     anchor_code := mut anchor_parser_link_symbols()
     I anchor_code != 0 { return anchor_code }
+
+    cleanup_code := mut check_parser_owned_text_cleanup()
+    I cleanup_code != 0 { return cleanup_code }
 
     tokenizer := mut Tokenizer.new("SELECT 1 + 2 AS total LIMIT 1;")
     I tokenizer.input.len() == 0 { return 50 }

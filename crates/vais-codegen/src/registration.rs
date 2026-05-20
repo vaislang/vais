@@ -269,11 +269,14 @@ impl CodeGenerator {
             self.ident_pool.intern(&v.name);
         }
 
+        let has_owned_mask = EnumInfo::derive_ownership_mask(&variants);
+
         self.types.enums.insert(
             enum_name.clone(),
             EnumInfo {
                 name: enum_name,
                 variants,
+                has_owned_mask,
             },
         );
 

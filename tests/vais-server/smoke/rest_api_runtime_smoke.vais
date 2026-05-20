@@ -1,0 +1,223 @@
+use src/api/rest
+use src/http/header
+
+fn smoke_json_response_helpers() -> i64 {
+    created := json_response("{\"ok\":true}", 201)
+    I created.status.code != 201 {
+        println("FAIL rest json_response status")
+        return 1
+    }
+    I created.status.reason != "Created" {
+        println("FAIL rest json_response reason")
+        return 2
+    }
+    I created.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL rest json_response content type")
+        return 3
+    }
+    I created.body != "{\"ok\":true}" {
+        println("FAIL rest json_response body")
+        println(created.body)
+        return 4
+    }
+
+    err := json_error("Not Found", 404)
+    I err.status.code != 404 {
+        println("FAIL rest json_error status")
+        return 5
+    }
+    I err.body != "{\"error\": \"Not Found\"}" {
+        println("FAIL rest json_error body")
+        println(err.body)
+        return 6
+    }
+
+    escaped_err := json_error("bad \"path\" \\ root", 400)
+    I escaped_err.body != "{\"error\": \"bad \\\"path\\\" \\\\ root\"}" {
+        println("FAIL rest json_error escaped body")
+        println(escaped_err.body)
+        return 7
+    }
+
+    0
+}
+
+fn smoke_paginated_response() -> i64 {
+    response := paginated_response("[{\"id\":1}]", 25, 2, 10)
+    expected := "{\"data\": [{\"id\":1}], \"meta\": {\"page\": 2, \"per_page\": 10, \"total\": 25, \"total_pages\": 3}}"
+
+    I response.status.code != 200 {
+        println("FAIL rest paginated status")
+        return 10
+    }
+    I response.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL rest paginated content type")
+        return 11
+    }
+    I response.body != expected {
+        println("FAIL rest paginated body")
+        println(response.body)
+        return 12
+    }
+
+    0
+}
+
+fn smoke_links() -> i64 {
+    first := Link.new("self", "/items?page=2", "GET")
+    second := Link.new("next", "/items?page=3", "GET")
+    links: Vec<Link> := mut Vec.with_capacity(2)
+    links.push(first)
+    links.push(second)
+
+    expected_links := "[{\"rel\": \"self\", \"href\": \"/items?page=2\", \"method\": \"GET\"}, {\"rel\": \"next\", \"href\": \"/items?page=3\", \"method\": \"GET\"}]"
+    encoded := links_to_json_array(links)
+    I encoded != expected_links {
+        println("FAIL rest links array")
+        println(encoded)
+        return 20
+    }
+
+    escaped_link := Link.new("next \"quoted\"", "/items/\\root?name=\"Ada\"", "GET")
+    escaped_links: Vec<Link> := mut Vec.with_capacity(1)
+    escaped_links.push(escaped_link)
+    escaped_encoded := links_to_json_array(escaped_links)
+    escaped_expected := "[{\"rel\": \"next \\\"quoted\\\"\", \"href\": \"/items/\\\\root?name=\\\"Ada\\\"\", \"method\": \"GET\"}]"
+    I escaped_encoded != escaped_expected {
+        println("FAIL rest escaped links array")
+        println(escaped_encoded)
+        return 37
+    }
+
+    add_first := Link.new("self", "/items?page=2", "GET")
+    add_second := Link.new("next", "/items?page=3", "GET")
+    add_links_vec: Vec<Link> := mut Vec.with_capacity(2)
+    add_links_vec.push(add_first)
+    add_links_vec.push(add_second)
+
+    base := json_response("{\"data\":[]}", 200)
+    linked := add_links(base, add_links_vec)
+    expected_body := "{\"data\":[], \"_links\": " + expected_links + "}"
+    I linked.body != expected_body {
+        println("FAIL rest add_links body")
+        println(linked.body)
+        return 21
+    }
+    I linked.headers.get(CONTENT_TYPE) != "application/json" {
+        println("FAIL rest add_links content type")
+        return 22
+    }
+
+    nested_first := Link.new("self", "/items?page=2", "GET")
+    nested_second := Link.new("next", "/items?page=3", "GET")
+    nested_links: Vec<Link> := mut Vec.with_capacity(2)
+    nested_links.push(nested_first)
+    nested_links.push(nested_second)
+    nested_base := json_response("{\"data\":{\"items\":[1,true,null],\"name\":\"Ada\"}}   ", 200)
+    nested_linked := add_links(nested_base, nested_links)
+    nested_expected := "{\"data\":{\"items\":[1,true,null],\"name\":\"Ada\"}, \"_links\": " + expected_links + "}"
+    I nested_linked.body != nested_expected {
+        println("FAIL rest add_links nested/trailing body")
+        println(nested_linked.body)
+        return 24
+    }
+
+    empty_first := Link.new("self", "/items?page=2", "GET")
+    empty_second := Link.new("next", "/items?page=3", "GET")
+    empty_object_links: Vec<Link> := mut Vec.with_capacity(2)
+    empty_object_links.push(empty_first)
+    empty_object_links.push(empty_second)
+    empty_object := add_links(json_response("{}", 200), empty_object_links)
+    empty_expected := "{\"_links\": " + expected_links + "}"
+    I empty_object.body != empty_expected {
+        println("FAIL rest add_links empty object body")
+        println(empty_object.body)
+        return 25
+    }
+
+    array_links: Vec<Link> := mut Vec.with_capacity(0)
+    array_result := add_links(json_response("[{\"id\":1}]", 200), array_links)
+    I array_result.status.code != 500 {
+        println("FAIL rest add_links array status")
+        return 26
+    }
+    I array_result.body != "{\"error\": \"Invalid JSON object\"}" {
+        println("FAIL rest add_links array body")
+        println(array_result.body)
+        return 27
+    }
+
+    malformed_links: Vec<Link> := mut Vec.with_capacity(0)
+    malformed_result := add_links(json_response("{\"data\":[1,]}", 200), malformed_links)
+    I malformed_result.status.code != 500 {
+        println("FAIL rest add_links malformed status")
+        return 28
+    }
+
+    trailing_links: Vec<Link> := mut Vec.with_capacity(0)
+    trailing_result := add_links(json_response("{\"data\":[]}x", 200), trailing_links)
+    I trailing_result.status.code != 500 {
+        println("FAIL rest add_links trailing status")
+        return 29
+    }
+
+    empty_links: Vec<Link> := mut Vec.with_capacity(0)
+    empty_encoded := links_to_json_array(empty_links)
+    I empty_encoded != "[]" {
+        println("FAIL rest empty links array")
+        return 23
+    }
+
+    0
+}
+
+fn smoke_content_negotiation() -> i64 {
+    I accepts_json("") != 1 {
+        println("FAIL rest accepts empty json")
+        return 30
+    }
+    I accepts_json("text/html, application/json") != 1 {
+        println("FAIL rest accepts explicit json")
+        return 31
+    }
+    I accepts_json("text/plain") != 0 {
+        println("FAIL rest rejects json")
+        return 32
+    }
+    I accepts_text("application/json, text/plain") != 1 {
+        println("FAIL rest accepts text")
+        return 33
+    }
+    I accepts_html("text/html") != 1 {
+        println("FAIL rest accepts html")
+        return 34
+    }
+
+    not_ok := not_acceptable()
+    I not_ok.status.code != 406 {
+        println("FAIL rest not acceptable status")
+        return 35
+    }
+    I not_ok.body != "{\"error\": \"Not Acceptable\"}" {
+        println("FAIL rest not acceptable body")
+        println(not_ok.body)
+        return 36
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    failures := mut 0
+    failures += smoke_json_response_helpers()
+    failures += smoke_paginated_response()
+    failures += smoke_links()
+    failures += smoke_content_negotiation()
+
+    I failures > 0 {
+        println("VAIS_SERVER_REST_API_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_REST_API_RUNTIME_OK")
+    0
+}

@@ -14,6 +14,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+// std/sqlite.vais contains SQL assembly helpers that reference __str_copy_to.
+// Provide a weak sqlite-local definition so sqlite-only builds link, while
+// builds that also link a stronger runtime helper (for example std/http) keep
+// using that implementation without duplicate-symbol failures.
+__attribute__((weak)) long __str_copy_to(long dst, const char* src) {
+    if (dst == 0 || src == NULL) return 0;
+    size_t len = strlen(src);
+    memcpy((void*)dst, src, len);
+    return (long)len;
+}
+
 // ============================================
 // Database Operations
 // ============================================
@@ -143,22 +154,46 @@ long __sqlite_column_int(long stmt_handle, long index) {
     return (long)sqlite3_column_int64(stmt, (int)index);
 }
 
+// Allocate a malloc-owned copy of `src` (or an owned empty string when `src`
+// is NULL). The result is always heap-owned, so every return value is safe to
+// pass to __sqlite_free_text. Returns NULL only on allocation failure.
+static char* sqlite_owned_copy(const char* src) {
+    size_t len = (src != NULL) ? strlen(src) : 0;
+    char* copy = (char*)malloc(len + 1);
+    if (copy == NULL) return NULL;
+    if (len > 0) {
+        memcpy(copy, src, len);
+    }
+    copy[len] = '\0';
+    return copy;
+}
+
 // Get a text value from a column in the current result row.
-// index is 0-based. Returns a pointer to SQLite-managed memory.
-// The string is valid until the next sqlite3_step() or sqlite3_finalize().
-// We make a copy to ensure safety.
+// index is 0-based.
+//
+// OWNERSHIP: the returned pointer is ALWAYS a malloc-owned copy that the
+// caller owns. This holds for every normal return path: an invalid handle and
+// a NULL SQLite text both yield an owned empty string (not a string literal).
+// The caller MUST release it with __sqlite_free_text (Vais: free_column_text
+// for legacy column_text() callers, or prefer the owned SqliteText wrapper).
+// Making the copy also gives the Vais side a pointer stable across the next
+// sqlite3_step()/sqlite3_finalize().
 const char* __sqlite_column_text(long stmt_handle, long index) {
-    if (stmt_handle == 0) return "";
+    if (stmt_handle == 0) return sqlite_owned_copy(NULL);
     sqlite3_stmt* stmt = (sqlite3_stmt*)stmt_handle;
     const unsigned char* text = sqlite3_column_text(stmt, (int)index);
-    if (text == NULL) return "";
+    // sqlite_owned_copy handles the NULL case as an owned empty string.
+    return sqlite_owned_copy((const char*)text);
+}
 
-    // Make a copy so the Vais side has a stable pointer
-    size_t len = strlen((const char*)text);
-    char* copy = (char*)malloc(len + 1);
-    if (copy == NULL) return "";
-    memcpy(copy, text, len + 1);
-    return copy;
+// Free a string previously returned by __sqlite_column_text.
+// Frees non-NULL pointers; a NULL pointer is a no-op. Always returns 0.
+// This is the explicit public free boundary for SQLite TEXT column copies.
+long __sqlite_free_text(const char* ptr) {
+    if (ptr != NULL) {
+        free((void*)ptr);
+    }
+    return 0;
 }
 
 // Get a double value from a column in the current result row.
@@ -199,6 +234,16 @@ const char* __sqlite_column_name(long stmt_handle, long index) {
     return name;
 }
 
+// Get a malloc-owned copy of a column name in the result set.
+// The returned pointer is stable after sqlite3_finalize() and must be released
+// with __sqlite_free_text. Invalid handles and NULL names yield owned "".
+const char* __sqlite_column_name_copy(long stmt_handle, long index) {
+    if (stmt_handle == 0) return sqlite_owned_copy(NULL);
+    sqlite3_stmt* stmt = (sqlite3_stmt*)stmt_handle;
+    const char* name = sqlite3_column_name(stmt, (int)index);
+    return sqlite_owned_copy(name);
+}
+
 // ============================================
 // Statement Lifecycle
 // ============================================
@@ -219,6 +264,13 @@ long __sqlite_reset(long stmt_handle) {
     return (long)sqlite3_reset(stmt);
 }
 
+// Clear all bound parameters from a prepared statement.
+long __sqlite_clear_bindings(long stmt_handle) {
+    if (stmt_handle == 0) return SQLITE_MISUSE;
+    sqlite3_stmt* stmt = (sqlite3_stmt*)stmt_handle;
+    return (long)sqlite3_clear_bindings(stmt);
+}
+
 // ============================================
 // Error & Info
 // ============================================
@@ -229,6 +281,15 @@ const char* __sqlite_errmsg(long handle) {
     if (handle == 0) return "Database handle is NULL";
     sqlite3* db = (sqlite3*)handle;
     return sqlite3_errmsg(db);
+}
+
+// Get a malloc-owned copy of the most recent error message.
+// The returned pointer is stable after sqlite3_close() and must be released
+// with __sqlite_free_text. A NULL handle yields an owned diagnostic string.
+const char* __sqlite_errmsg_copy(long handle) {
+    if (handle == 0) return sqlite_owned_copy("Database handle is NULL");
+    sqlite3* db = (sqlite3*)handle;
+    return sqlite_owned_copy(sqlite3_errmsg(db));
 }
 
 // Get the rowid of the most recently inserted row.

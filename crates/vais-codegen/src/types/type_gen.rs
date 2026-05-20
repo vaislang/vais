@@ -52,11 +52,24 @@ impl CodeGenerator {
         } else {
             // Enum with payload - tag + payload struct of i64 slots
             let payload_types: Vec<&str> = vec!["i64"; max_field_count];
-            format!(
-                "%{} = type {{ i32, {{ {} }} }}",
-                name,
-                payload_types.join(", ")
-            )
+            // Phase 191 (RFC-002 section 4.2 Option D for enums): append a trailing
+            // `i64 __ownership_mask` as field 2 when the enum has a direct
+            // `str` payload field. tag stays field 0, payload struct stays
+            // field 1, so existing raw code is unaffected. Non-`str` enums
+            // keep the original two-field layout.
+            if info.has_owned_mask {
+                format!(
+                    "%{} = type {{ i32, {{ {} }}, i64 }}",
+                    name,
+                    payload_types.join(", ")
+                )
+            } else {
+                format!(
+                    "%{} = type {{ i32, {{ {} }} }}",
+                    name,
+                    payload_types.join(", ")
+                )
+            }
         }
     }
 

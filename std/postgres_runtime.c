@@ -21,6 +21,23 @@
 #include <string.h>
 #include <libpq-fe.h>
 
+// std/postgres.vais contains connection-string and parameter helpers that
+// reference these stdlib helpers. Provide weak postgres-local definitions so
+// postgres-only builds link, while builds that also link a stronger runtime
+// helper (for example std/http) avoid duplicate-symbol failures.
+__attribute__((weak)) long __str_copy_to(long dst, const char* src) {
+    if (dst == 0 || src == NULL) return 0;
+    size_t len = strlen(src);
+    memcpy((void*)dst, src, len);
+    return (long)len;
+}
+
+__attribute__((weak)) long __i64_to_str(long dst, long value) {
+    if (dst == 0) return 0;
+    int written = sprintf((char*)dst, "%ld", value);
+    return (long)written;
+}
+
 // ============================================
 // Connection Management
 // ============================================
@@ -156,6 +173,20 @@ long __pg_nfields(long result) {
     return (long)PQnfields((PGresult*)result);
 }
 
+// Get a field name as a C string.
+// result: PGresult*
+// col: column index (0-based)
+// Returns: pointer owned by PGresult. It must not be freed separately and
+//          becomes invalid after PQclear(result). Returns "" if invalid.
+const char* __pg_fname(long result, long col) {
+    if (result == 0 || col < 0) return "";
+    PGresult* res = (PGresult*)result;
+    if (col >= PQnfields(res)) return "";
+    const char* name = PQfname(res, (int)col);
+    if (name == NULL) return "";
+    return name;
+}
+
 // Get a field value as a C string.
 // result: PGresult*
 // row: row index (0-based)
@@ -168,6 +199,58 @@ const char* __pg_getvalue(long result, long row, long col) {
     const char* val = PQgetvalue((PGresult*)result, (int)row, (int)col);
     if (val == NULL) return "";
     return val;
+}
+
+// Allocate a malloc-owned copy of `src` (or an owned empty string when `src`
+// is NULL). Returns NULL only on allocation failure.
+static char* pg_owned_copy(const char* src) {
+    size_t len = (src != NULL) ? strlen(src) : 0;
+    char* copy = (char*)malloc(len + 1);
+    if (copy == NULL) return NULL;
+    if (len > 0) {
+        memcpy(copy, src, len);
+    }
+    copy[len] = '\0';
+    return copy;
+}
+
+// Get a field name as a malloc-owned C string copy.
+// The returned pointer is stable after PQclear(result) and must be released
+// with __pg_free_text. Invalid handles or out-of-range columns yield owned "".
+const char* __pg_fname_copy(long result, long col) {
+    if (result == 0 || col < 0) return pg_owned_copy(NULL);
+    PGresult* res = (PGresult*)result;
+    if (col >= PQnfields(res)) return pg_owned_copy(NULL);
+    const char* name = PQfname(res, (int)col);
+    return pg_owned_copy(name);
+}
+
+// Get a field value as a malloc-owned C string copy.
+// result: PGresult*
+// row: row index (0-based)
+// col: column index (0-based)
+//
+// OWNERSHIP: the returned pointer is a malloc-owned copy that the caller owns
+// and must release with __pg_free_text. Invalid handles, out-of-range indexes,
+// and SQL NULL values return an owned empty string. The copy remains valid
+// after PQclear(result).
+const char* __pg_getvalue_copy(long result, long row, long col) {
+    if (result == 0) return pg_owned_copy(NULL);
+    PGresult* res = (PGresult*)result;
+    if (row < 0 || col < 0) return pg_owned_copy(NULL);
+    if (row >= PQntuples(res) || col >= PQnfields(res)) return pg_owned_copy(NULL);
+    if (PQgetisnull(res, (int)row, (int)col)) return pg_owned_copy(NULL);
+    const char* val = PQgetvalue(res, (int)row, (int)col);
+    return pg_owned_copy(val);
+}
+
+// Free a string previously returned by __pg_getvalue_copy.
+// Frees non-NULL pointers; a NULL pointer is a no-op. Always returns 0.
+long __pg_free_text(const char* ptr) {
+    if (ptr != NULL) {
+        free((void*)ptr);
+    }
+    return 0;
 }
 
 // Check if a field value is NULL.
@@ -211,6 +294,15 @@ const char* __pg_error_message(long handle) {
     const char* msg = PQerrorMessage((PGconn*)handle);
     if (msg == NULL) return "";
     return msg;
+}
+
+// Get the connection error message as a malloc-owned copy.
+// The returned pointer is stable after PQfinish(conn) and must be released
+// with __pg_free_text. A NULL handle yields an owned "No connection" string.
+const char* __pg_error_message_copy(long handle) {
+    if (handle == 0) return pg_owned_copy("No connection");
+    const char* msg = PQerrorMessage((PGconn*)handle);
+    return pg_owned_copy(msg);
 }
 
 // Get the result status.

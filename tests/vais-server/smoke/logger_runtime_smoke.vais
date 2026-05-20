@@ -1,0 +1,119 @@
+use src/auth/runtime
+use src/core/context
+use src/middleware/logger
+
+fn check_logger_before_carries_start_state() -> i64 {
+    auth_set_test_time_sec(4242)
+
+    logger := LoggerMiddleware.default()
+    ctx := Context.new("GET", "/logger")
+    result := logger.before(ctx)
+
+    I !result.is_next() {
+        println("FAIL logger before did not continue")
+        return 1
+    }
+    I result.ctx.method != "GET" {
+        println("FAIL logger before lost method")
+        return 2
+    }
+    I result.ctx.path != "/logger" {
+        println("FAIL logger before lost path")
+        return 3
+    }
+    I result.ctx.state != "start_ms=4242000" {
+        println("FAIL logger before state")
+        println(result.ctx.state)
+        return 4
+    }
+    I logger_parse_start_ms(result.ctx.state) != 4242000 {
+        println("FAIL logger parse start_ms")
+        return 5
+    }
+
+    0
+}
+
+fn check_logger_parse_rejects_malformed_state() -> i64 {
+    I logger_parse_start_ms("") != 0 {
+        println("FAIL empty logger state")
+        return 10
+    }
+    I logger_parse_start_ms("start=12") != 0 {
+        println("FAIL wrong logger state prefix")
+        return 11
+    }
+    I logger_parse_start_ms("start_ms=12ms") != 0 {
+        println("FAIL malformed logger state suffix")
+        return 12
+    }
+
+    0
+}
+
+fn check_logger_after_preserves_response() -> i64 {
+    auth_set_test_time_sec(5000)
+
+    logger := LoggerMiddleware.json()
+    ctx := Context.new("POST", "/logs/\"quoted\"")
+    before := logger.before(ctx)
+
+    auth_set_test_time_sec(5002)
+    response := before.ctx.json(201, "{\"ok\":true}")
+    after := logger.after(before.ctx, response)
+
+    I after.status != 201 {
+        println("FAIL logger after status")
+        return 20
+    }
+    I after.body != "{\"ok\":true}" {
+        println("FAIL logger after body")
+        return 21
+    }
+    I after.content_type != "application/json; charset=utf-8" {
+        println("FAIL logger after content type")
+        return 22
+    }
+
+    0
+}
+
+fn check_text_logger_after_preserves_response() -> i64 {
+    auth_set_test_time_sec(6000)
+
+    logger := LoggerMiddleware.default()
+    ctx := Context.new("DELETE", "/logs/old")
+    before := logger.before(ctx)
+
+    auth_set_test_time_sec(6001)
+    response := before.ctx.text(204, "")
+    after := logger.after(before.ctx, response)
+
+    I after.status != 204 {
+        println("FAIL text logger after status")
+        return 30
+    }
+    I after.body != "" {
+        println("FAIL text logger after body")
+        return 31
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    failures := mut 0
+    failures += check_logger_before_carries_start_state()
+    failures += check_logger_parse_rejects_malformed_state()
+    failures += check_logger_after_preserves_response()
+    failures += check_text_logger_after_preserves_response()
+
+    auth_clear_test_time_sec()
+
+    I failures > 0 {
+        println("VAIS_SERVER_LOGGER_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_LOGGER_RUNTIME_OK")
+    0
+}

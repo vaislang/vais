@@ -143,3 +143,43 @@ fn main() -> i64 {
         result.stdout, result.stderr
     );
 }
+
+#[test]
+fn e2e_result_struct_payload_prefers_struct_over_same_named_enum_variant() {
+    let source = r#"
+enum ObjectKind {
+    Database,
+    Table,
+}
+
+struct Database {
+    id: i64,
+    page_size: i64,
+    file_count: i64,
+}
+
+fn open_database() -> Result<Database, i64> {
+    Ok(Database { id: 7, page_size: 8192, file_count: 5 })
+}
+
+fn main() -> i64 {
+    db := mut match open_database() {
+        Ok(v) => v,
+        Err(code) => { return code },
+    }
+
+    I db.id != 7 { return 1 }
+    I db.page_size != 8192 { return 2 }
+    I db.file_count != 5 { return 3 }
+    return 0
+}
+"#;
+
+    let result =
+        compile_and_run(source).expect("Result<Database, _> should not pack ObjectKind.Database");
+    assert_eq!(
+        result.exit_code, 0,
+        "stdout:\n{}\nstderr:\n{}",
+        result.stdout, result.stderr
+    );
+}

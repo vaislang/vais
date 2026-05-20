@@ -319,7 +319,14 @@ impl CodeGenerator {
             // { i32, { i64 × N } } — raw = 4 + N*8, padded to next multiple of 8
             let raw = 4 + (max_field_count as i64) * 8;
             // Align to 8-byte boundary
-            (raw + 7) & !7
+            let base = (raw + 7) & !7;
+            // Phase 191: masked str-payload enums carry a trailing i64
+            // __ownership_mask (field 2). Non-str enums keep their size.
+            if enum_info.has_owned_mask {
+                base + 8
+            } else {
+                base
+            }
         }
     }
 

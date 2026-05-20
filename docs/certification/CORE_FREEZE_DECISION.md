@@ -28,7 +28,7 @@ The freeze decision is based on the same-batch gate bundle required by
 | Codegen invariant quarantine | `bash scripts/check-integrity.sh` reports `CODEGEN OK` |
 | Ecosystem compilation surface | `bash scripts/check-integrity.sh` reports `ECOSYSTEM OK: syntax=200/? stages=14/? std=82/82 vaisdb=261/261` |
 | Backend smoke | `bash scripts/check-integrity.sh` reports `BACKEND OK: phase158=18/18` |
-| VaisDB runtime smoke | `bash scripts/check-integrity.sh` reports `VAISDB RUNTIME OK: smoke=34/34` |
+| VaisDB runtime smoke | `bash scripts/check-integrity.sh` reports `VAISDB RUNTIME OK: smoke=37/37` |
 | Whitespace sanity | `git diff --check` is clean in `compiler/` and `lang/` |
 
 ## Frozen Scope

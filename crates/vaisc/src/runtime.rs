@@ -29,6 +29,26 @@ const OPENSSL_NATIVE_FLAGS: &[&str] = &[
     "-lcrypto",
 ];
 
+const POSTGRES_NATIVE_FLAGS: &[&str] = &[
+    "-I/opt/homebrew/opt/libpq/include",
+    "-I/usr/local/opt/libpq/include",
+    "-I/opt/homebrew/opt/postgresql/include",
+    "-I/usr/local/opt/postgresql/include",
+    "-I/opt/homebrew/include/postgresql@14",
+    "-I/usr/local/include/postgresql@14",
+    "-I/opt/homebrew/opt/postgresql@14/include",
+    "-I/usr/local/opt/postgresql@14/include",
+    "-L/opt/homebrew/opt/libpq/lib",
+    "-L/usr/local/opt/libpq/lib",
+    "-L/opt/homebrew/opt/postgresql/lib",
+    "-L/usr/local/opt/postgresql/lib",
+    "-L/opt/homebrew/lib/postgresql@14",
+    "-L/usr/local/lib/postgresql@14",
+    "-L/opt/homebrew/opt/postgresql@14/lib",
+    "-L/usr/local/opt/postgresql@14/lib",
+    "-lpq",
+];
+
 /// Get the C runtime file info for a given module path.
 /// Returns None if the module doesn't have a C runtime dependency.
 pub(crate) fn get_runtime_for_module(module_path: &str) -> Option<RuntimeInfo> {
@@ -96,7 +116,7 @@ pub(crate) fn get_runtime_for_module(module_path: &str) -> Option<RuntimeInfo> {
         "std::postgres" => Some(RuntimeInfo {
             file: "postgres_runtime.c",
             needs_pthread: false,
-            libs: &["-lpq"],
+            libs: POSTGRES_NATIVE_FLAGS,
         }),
         "std::orm" => Some(RuntimeInfo {
             file: "orm_runtime.c",
@@ -438,5 +458,16 @@ mod tests {
             get_runtime_for_module("std::http_client").expect("std::http_client runtime info");
 
         assert_eq!(http_client.libs, tls.libs);
+    }
+
+    #[test]
+    fn postgres_runtime_carries_libpq_compile_and_link_hints() {
+        let info = get_runtime_for_module("std::postgres").expect("std::postgres runtime info");
+
+        assert!(
+            info.libs.iter().any(|flag| flag.contains("postgresql@14")),
+            "std::postgres must pass a Homebrew PostgreSQL include/library hint"
+        );
+        assert!(info.libs.contains(&"-lpq"));
     }
 }

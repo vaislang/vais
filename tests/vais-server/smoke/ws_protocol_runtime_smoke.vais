@@ -1,0 +1,224 @@
+use src/util/json
+use src/ws/protocol
+
+fn expect_json_none(body: str, key: str, code: i64) -> i64 {
+    result := json_get(body, key)
+    match result {
+        Some(_) => {
+            println("FAIL json_get unexpectedly accepted")
+            code
+        },
+        None => 0,
+    }
+}
+
+fn expect_ws_error(body: str, code: i64) -> i64 {
+    result := WsEnvelope.from_json(body)
+    match result {
+        Ok(_) => {
+            println("FAIL ws envelope unexpectedly accepted")
+            code
+        },
+        Err(e) => {
+            I e == "" {
+                println("FAIL ws envelope empty error")
+                return code + 1
+            }
+            0
+        },
+    }
+}
+
+fn smoke_json_get_strict_object() -> i64 {
+    body_head := " { " + "\"id\"" + " : \"abc\", "
+    body_mid := body_head + "\"nested\"" + " : {\"ok\": true, \"items\": [1,2,3]}, "
+    body := body_mid + "\"name\"" + " : \"Ada\" } "
+    name := json_get(body, "name")
+    match name {
+        None => {
+            println("FAIL json_get spaced object missing name")
+            return 1
+        },
+        Some(v) => {
+            I v != "Ada" {
+                println("FAIL json_get spaced object value")
+                return 2
+            }
+        },
+    }
+
+    escaped := json_get("{\"quote\":\"a\\\"b\",\"slash\":\"c\\\\d\"}", "quote")
+    match escaped {
+        None => {
+            println("FAIL json_get escaped quote missing")
+            return 3
+        },
+        Some(v) => {
+            I v != "a\"b" {
+                println("FAIL json_get escaped quote value")
+                return 4
+            }
+        },
+    }
+
+    failures := mut 0
+    failures += expect_json_none("{\"name\":\"Ada\"}x", "name", 10)
+    failures += expect_json_none("{\"name\":\"Ada\",}", "name", 12)
+    failures += expect_json_none("{\"name\":\"A\\q\"}", "name", 14)
+    failures += expect_json_none("{\"name\":01}", "name", 16)
+    failures += expect_json_none("{\"name\":truex}", "name", 18)
+    failures
+}
+
+fn smoke_json_encode_vec_helpers() -> i64 {
+    pairs: Vec<str> := mut Vec.with_capacity(4)
+    pairs.push("id")
+    pairs.push("req-encode")
+    pairs.push("method")
+    pairs.push("chat.send")
+    encoded := json_encode(pairs)
+    I encoded != "{\"id\":\"req-encode\",\"method\":\"chat.send\"}" {
+        println("FAIL json_encode pairs")
+        println(encoded)
+        return 25
+    }
+
+    escaped_pairs: Vec<str> := mut Vec.with_capacity(2)
+    escaped_pairs.push("payload")
+    escaped_pairs.push("{\"text\":\"hi\"}")
+    escaped := json_encode(escaped_pairs)
+    I escaped != "{\"payload\":\"{\\\"text\\\":\\\"hi\\\"}\"}" {
+        println("FAIL json_encode escaped pairs")
+        println(escaped)
+        return 26
+    }
+
+    items: Vec<str> := mut Vec.with_capacity(3)
+    items.push("alpha")
+    items.push("b\"eta")
+    items.push("slash\\value")
+    arr := json_encode_array(items)
+    I arr != "[\"alpha\",\"b\\\"eta\",\"slash\\\\value\"]" {
+        println("FAIL json_encode_array")
+        println(arr)
+        return 27
+    }
+
+    empty_pairs: Vec<str> := mut Vec.with_capacity(0)
+    I json_encode(empty_pairs) != "{}" {
+        println("FAIL json_encode empty")
+        return 28
+    }
+
+    empty_items: Vec<str> := mut Vec.with_capacity(0)
+    I json_encode_array(empty_items) != "[]" {
+        println("FAIL json_encode_array empty")
+        return 29
+    }
+
+    0
+}
+
+fn smoke_ws_envelope_json_parse() -> i64 {
+    body := "{\"id\":\"req-1\",\"msg_type\":\"request\",\"method\":\"chat.send\",\"payload\":\"{\\\"text\\\":\\\"hello\\\"}\",\"error\":\"\"}"
+    decoded_result := WsEnvelope.from_json(body)
+    match decoded_result {
+        Err(e) => {
+            println("FAIL ws envelope parse rejected")
+            println(e)
+            return 30
+        },
+        Ok(decoded) => {
+            I decoded.id != "req-1" {
+                println("FAIL ws envelope id")
+                return 31
+            }
+            I decoded.msg_type != "request" {
+                println("FAIL ws envelope msg_type")
+                return 32
+            }
+            I decoded.method != "chat.send" {
+                println("FAIL ws envelope method")
+                return 33
+            }
+            I decoded.payload != "{\"text\":\"hello\"}" {
+                println("FAIL ws envelope payload")
+                println(decoded.payload)
+                return 34
+            }
+            I decoded.error != "" {
+                println("FAIL ws envelope error")
+                return 35
+            }
+        },
+    }
+
+    spaced_head := " { " + "\"id\"" + " : \"req-2\", " + "\"msg_type\"" + " : \"event\", "
+    spaced_mid := spaced_head + "\"method\"" + " : \"user.joined\", " + "\"payload\"" + " : \"{}\", "
+    spaced := spaced_mid + "\"error\"" + " : \"\" } "
+    spaced_result := WsEnvelope.from_json(spaced)
+    match spaced_result {
+        Err(e) => {
+            println("FAIL ws envelope spaced rejected")
+            println(e)
+            return 36
+        },
+        Ok(decoded) => {
+            I !decoded.is_event() {
+                println("FAIL ws envelope spaced event")
+                return 37
+            }
+        },
+    }
+
+    failures := mut 0
+    failures += expect_ws_error("{\"msg_type\":\"request\",\"method\":\"m\",\"payload\":\"\",\"error\":\"\"}", 40)
+    failures += expect_ws_error("{\"id\":\"1\",\"msg_type\":\"request\",\"method\":\"m\",\"payload\":\"\",\"error\":\"\"}x", 42)
+    failures += expect_ws_error("{\"id\":\"1\",\"msg_type\":\"request\",\"method\":\"m\",\"payload\":\"\\q\",\"error\":\"\"}", 44)
+    failures += expect_ws_error("{\"id\":\"1\",\"msg_type\":\"request\",\"method\":\"m\",\"payload\":\"\",\"error\":\"\",}", 46)
+    failures
+}
+
+fn smoke_ws_envelope_json_serialize() -> i64 {
+    envelope := WsEnvelope.request("req-3", "chat.send", "{\"text\":\"hello\"}")
+    encoded := envelope.to_json()
+    expected := "{\"id\":\"req-3\",\"msg_type\":\"request\",\"method\":\"chat.send\",\"payload\":\"{\\\"text\\\":\\\"hello\\\"}\",\"error\":\"\"}"
+    I encoded != expected {
+        println("FAIL ws envelope to_json")
+        println(encoded)
+        return 60
+    }
+
+    decoded_result := WsEnvelope.from_json(encoded)
+    match decoded_result {
+        Err(e) => {
+            println("FAIL ws envelope to_json roundtrip rejected")
+            println(e)
+            return 61
+        },
+        Ok(decoded) => {
+            I decoded.payload != "{\"text\":\"hello\"}" {
+                println("FAIL ws envelope to_json roundtrip payload")
+                println(decoded.payload)
+                return 62
+            }
+        },
+    }
+
+    0
+}
+
+fn main() -> i64 {
+    failures := mut 0
+    failures += smoke_json_get_strict_object()
+    failures += smoke_json_encode_vec_helpers()
+    failures += smoke_ws_envelope_json_parse()
+    failures += smoke_ws_envelope_json_serialize()
+
+    I failures > 0 {
+        println("VAIS_SERVER_WS_PROTOCOL_RUNTIME_FAIL")
+        return failures
+    }
+    println("VAIS_SERVER_WS_PROTOCOL_RUNTIME_OK")
+    0
+}
