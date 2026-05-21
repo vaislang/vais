@@ -48,8 +48,9 @@
 #     heap page to its pre-INSERT image and reopening through
 #     EmbeddedDatabase.open().
 #   - Promotes the first catalog-derived three-column descriptor metadata
-#     boundary for exact tasks(id INT, title TEXT, status TEXT), without
-#     promoting INSERT/SELECT/recovery/server/web behavior for that shape.
+#     boundary for exact tasks(id INT, title TEXT, status TEXT), plus bounded
+#     full-column-list INSERT, SELECT/filter, and open-time recovery evidence
+#     while keeping server/web behavior unpromoted for that shape.
 #   - Promotes descriptor SELECT * TEXT equality filters for books.title and
 #     authors.name, including reversed literal equality, while keeping people
 #     name filters, descriptor id filters, projections plus filters, qualified
@@ -3777,6 +3778,186 @@ fn main() -> i64 {
     match notes_recovered_repeat.close() {
         Ok(_) => {},
         Err(_) => { println("T167 notes recovery: repeat close failed"); return 255 },
+    }
+
+    tasks_recovery_suffix := mut time_micros()
+    tasks_recovery_path := mut "embedded_sql_api_roundtrip_tasks_recovery_db_{tasks_recovery_suffix}"
+    tasks_recovery_cfg := mut EmbeddedConfig.default()
+    tasks_recovery_cfg = tasks_recovery_cfg.with_data_dir(tasks_recovery_path.clone())
+    tasks_recovery_cfg = tasks_recovery_cfg.with_page_size(PAGE_SIZE_8K)
+    tasks_recovery_db := mut match EmbeddedDatabase.open(tasks_recovery_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T181 tasks recovery: open failed"); return 255 },
+    }
+    match tasks_recovery_db.execute("create table tasks (id int, title text, status text)") {
+        Ok(_) => {},
+        Err(e) => { println("T181 tasks recovery: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    tasks_recovery_page_id := mut 0 as u32
+    match tasks_recovery_db.catalog.get_table("tasks") {
+        Some(info) => {
+            tasks_recovery_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I tasks_recovery_page_id == 0 { println("T181 tasks recovery: missing heap page"); return 255 }
+    tasks_recovery_empty_frame := mut match tasks_recovery_db.pool.fetch_page(FILE_ID_DATA, tasks_recovery_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T181 tasks recovery: fetch empty page failed"); return 255 },
+    }
+    tasks_recovery_empty_page := mut tasks_recovery_db.pool.get_page(tasks_recovery_empty_frame)
+    tasks_recovery_pre_insert_page := mut copy_smoke_page(tasks_recovery_empty_page)
+    tasks_recovery_db.pool.unpin_page(tasks_recovery_empty_frame, false)
+
+    tasks_recovery_start_lsn := mut tasks_recovery_db.gcm.current_lsn()
+    tasks_recovery_inserted_a := mut match tasks_recovery_db.execute("insert into tasks (id, title, status) values (1, 'build', 'open')") {
+        Ok(n) => n,
+        Err(e) => { println("T181 tasks recovery: descriptor-order insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovery_inserted_a != 1 as u64 { println("T181 tasks recovery: descriptor-order insert count"); return 255 }
+    tasks_recovery_inserted_b := mut match tasks_recovery_db.execute("insert into tasks (status, id, title) values ('done', 2, 'ship')") {
+        Ok(n) => n,
+        Err(e) => { println("T181 tasks recovery: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovery_inserted_b != 1 as u64 { println("T181 tasks recovery: reordered insert count"); return 255 }
+    tasks_recovery_before_close := mut match tasks_recovery_db.query("select * from tasks") {
+        Ok(r) => r,
+        Err(e) => { println("T181 tasks recovery: before-close select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovery_before_close.row_count() != 2 as u64 { println("T181 tasks recovery: before-close row count"); return 255 }
+    tasks_recovery_before_close.free_owned_text()
+    tasks_recovery_before_close.free_owned_text()
+    match tasks_recovery_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T181 tasks recovery: close failed"); return 255 },
+    }
+
+    I restore_smoke_data_page(tasks_recovery_path.clone(), tasks_recovery_page_id, tasks_recovery_pre_insert_page) != 0 {
+        println("T181 tasks recovery: restore heap page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(tasks_recovery_path.clone(), tasks_recovery_start_lsn) != 0 {
+        println("T181 tasks recovery: checkpoint reset failed")
+        return 255
+    }
+
+    tasks_recovered_cfg := mut EmbeddedConfig.default()
+    tasks_recovered_cfg = tasks_recovered_cfg.with_data_dir(tasks_recovery_path.clone())
+    tasks_recovered_cfg = tasks_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    tasks_recovered := mut match EmbeddedDatabase.open(tasks_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T181 tasks recovery: reopen recovery failed: {e.message}: {e.hint}"); return 255 },
+    }
+    tasks_recovered_result := mut match tasks_recovered.query("select * from tasks") {
+        Ok(r) => r,
+        Err(e) => { println("T181 tasks recovery: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovered_result.column_count() != 3 as u64 { println("T181 tasks recovery: recovered column count"); return 255 }
+    I tasks_recovered_result.row_count() != 2 as u64 { println("T181 tasks recovery: recovered row count"); return 255 }
+    tasks_recovered_cols := mut tasks_recovered_result.get_columns()
+    I !expect_column(tasks_recovered_cols, 0, "id", "INT") { println("T181 tasks recovery: recovered id column"); return 255 }
+    I !expect_column(tasks_recovered_cols, 1, "title", "TEXT") { println("T181 tasks recovery: recovered title column"); return 255 }
+    I !expect_column(tasks_recovered_cols, 2, "status", "TEXT") { println("T181 tasks recovery: recovered status column"); return 255 }
+    tasks_recovered_rows := mut tasks_recovered_result.get_rows()
+    tasks_recovered_row0 := mut &tasks_recovered_rows[0]
+    tasks_recovered_row1 := mut &tasks_recovered_rows[1]
+    I !expect_cell(tasks_recovered_row0, 0, "1") { println("T181 tasks recovery: recovered row0 id"); return 255 }
+    I !expect_cell(tasks_recovered_row0, 1, "build") { println("T181 tasks recovery: recovered row0 title"); return 255 }
+    I !expect_cell(tasks_recovered_row0, 2, "open") { println("T181 tasks recovery: recovered row0 status"); return 255 }
+    I !expect_cell(tasks_recovered_row1, 0, "2") { println("T181 tasks recovery: recovered row1 id"); return 255 }
+    I !expect_cell(tasks_recovered_row1, 1, "ship") { println("T181 tasks recovery: recovered row1 title"); return 255 }
+    I !expect_cell(tasks_recovered_row1, 2, "done") { println("T181 tasks recovery: recovered row1 status"); return 255 }
+    tasks_recovered_result.free_owned_text()
+    tasks_recovered_result.free_owned_text()
+
+    tasks_recovered_projection := mut match tasks_recovered.query("select id, title, status from tasks") {
+        Ok(r) => r,
+        Err(e) => { println("T181 tasks recovery: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovered_projection.column_count() != 3 as u64 { println("T181 tasks recovery: projection column count"); return 255 }
+    I tasks_recovered_projection.row_count() != 2 as u64 { println("T181 tasks recovery: projection row count"); return 255 }
+    tasks_recovered_projection.free_owned_text()
+    tasks_recovered_projection.free_owned_text()
+
+    tasks_recovered_status_filter := mut match tasks_recovered.query("select * from tasks where status = 'done'") {
+        Ok(r) => r,
+        Err(e) => { println("T181 tasks recovery: recovered status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovered_status_filter.row_count() != 1 as u64 { println("T181 tasks recovery: status filter row count"); return 255 }
+    tasks_recovered_status_filter_rows := mut tasks_recovered_status_filter.get_rows()
+    tasks_recovered_status_filter_row := mut &tasks_recovered_status_filter_rows[0]
+    I !expect_cell(tasks_recovered_status_filter_row, 0, "2") { println("T181 tasks recovery: status filter id"); return 255 }
+    I !expect_cell(tasks_recovered_status_filter_row, 1, "ship") { println("T181 tasks recovery: status filter title"); return 255 }
+    I !expect_cell(tasks_recovered_status_filter_row, 2, "done") { println("T181 tasks recovery: status filter status"); return 255 }
+    tasks_recovered_status_filter.free_owned_text()
+    tasks_recovered_status_filter.free_owned_text()
+
+    tasks_recovered_title_filter := mut match tasks_recovered.query("select * from tasks where title = 'build'") {
+        Ok(r) => r,
+        Err(e) => { println("T181 tasks recovery: recovered title filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovered_title_filter.row_count() != 1 as u64 { println("T181 tasks recovery: title filter row count"); return 255 }
+    tasks_recovered_title_filter_rows := mut tasks_recovered_title_filter.get_rows()
+    tasks_recovered_title_filter_row := mut &tasks_recovered_title_filter_rows[0]
+    I !expect_cell(tasks_recovered_title_filter_row, 0, "1") { println("T181 tasks recovery: title filter id"); return 255 }
+    I !expect_cell(tasks_recovered_title_filter_row, 1, "build") { println("T181 tasks recovery: title filter title"); return 255 }
+    I !expect_cell(tasks_recovered_title_filter_row, 2, "open") { println("T181 tasks recovery: title filter status"); return 255 }
+    tasks_recovered_title_filter.free_owned_text()
+    tasks_recovered_title_filter.free_owned_text()
+
+    tasks_recovered_insert := mut match tasks_recovered.execute("insert into tasks (id, title, status) values (3, 'reopen', 'open')") {
+        Ok(n) => n,
+        Err(e) => { println("T181 tasks recovery: post-recovery insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovered_insert != 1 as u64 { println("T181 tasks recovery: post-recovery insert count"); return 255 }
+    tasks_recovered_after_insert := mut match tasks_recovered.query("select * from tasks") {
+        Ok(r) => r,
+        Err(e) => { println("T181 tasks recovery: after-insert select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovered_after_insert.row_count() != 3 as u64 { println("T181 tasks recovery: after-insert row count"); return 255 }
+    tasks_recovered_after_insert.free_owned_text()
+    tasks_recovered_after_insert.free_owned_text()
+    match tasks_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T181 tasks recovery: recovered close failed"); return 255 },
+    }
+
+    tasks_recovered_repeat_cfg := mut EmbeddedConfig.default()
+    tasks_recovered_repeat_cfg = tasks_recovered_repeat_cfg.with_data_dir(tasks_recovery_path.clone())
+    tasks_recovered_repeat_cfg = tasks_recovered_repeat_cfg.with_page_size(PAGE_SIZE_8K)
+    tasks_recovered_repeat := mut match EmbeddedDatabase.open(tasks_recovered_repeat_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T181 tasks recovery: repeat open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    tasks_recovered_repeat_result := mut match tasks_recovered_repeat.query("select * from tasks") {
+        Ok(r) => r,
+        Err(e) => { println("T181 tasks recovery: repeat select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_recovered_repeat_result.row_count() != 3 as u64 { println("T181 tasks recovery: repeat row count"); return 255 }
+    tasks_recovered_repeat_rows := mut tasks_recovered_repeat_result.get_rows()
+    tasks_recovered_seen_build := mut false
+    tasks_recovered_seen_ship := mut false
+    tasks_recovered_seen_reopen := mut false
+    LF ri: 0..tasks_recovered_repeat_rows.len() {
+        candidate := mut &tasks_recovered_repeat_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "build") && expect_cell(candidate, 2, "open") {
+            tasks_recovered_seen_build = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "ship") && expect_cell(candidate, 2, "done") {
+            tasks_recovered_seen_ship = true
+        }
+        I expect_cell(candidate, 0, "3") && expect_cell(candidate, 1, "reopen") && expect_cell(candidate, 2, "open") {
+            tasks_recovered_seen_reopen = true
+        }
+    }
+    I !tasks_recovered_seen_build { println("T181 tasks recovery: repeat missing build"); return 255 }
+    I !tasks_recovered_seen_ship { println("T181 tasks recovery: repeat missing ship"); return 255 }
+    I !tasks_recovered_seen_reopen { println("T181 tasks recovery: repeat missing reopen"); return 255 }
+    tasks_recovered_repeat_result.free_owned_text()
+    tasks_recovered_repeat_result.free_owned_text()
+    match tasks_recovered_repeat.close() {
+        Ok(_) => {},
+        Err(_) => { println("T181 tasks recovery: repeat close failed"); return 255 },
     }
 
     # --- Promoted PRIMARY KEY subset: people(id INT PRIMARY KEY, name TEXT) ---
