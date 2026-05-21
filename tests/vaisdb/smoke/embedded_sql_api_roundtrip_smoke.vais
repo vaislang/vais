@@ -4304,6 +4304,186 @@ fn main() -> i64 {
         Err(_) => { println("T181 tasks recovery: repeat close failed"); return 255 },
     }
 
+    tickets_recovery_suffix := mut time_micros()
+    tickets_recovery_path := mut "embedded_sql_api_roundtrip_tickets_recovery_db_{tickets_recovery_suffix}"
+    tickets_recovery_cfg := mut EmbeddedConfig.default()
+    tickets_recovery_cfg = tickets_recovery_cfg.with_data_dir(tickets_recovery_path.clone())
+    tickets_recovery_cfg = tickets_recovery_cfg.with_page_size(PAGE_SIZE_8K)
+    tickets_recovery_db := mut match EmbeddedDatabase.open(tickets_recovery_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T201 tickets recovery: open failed"); return 255 },
+    }
+    match tickets_recovery_db.execute("create table tickets (id int, summary text, state text)") {
+        Ok(_) => {},
+        Err(e) => { println("T201 tickets recovery: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    tickets_recovery_page_id := mut 0 as u32
+    match tickets_recovery_db.catalog.get_table("tickets") {
+        Some(info) => {
+            tickets_recovery_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I tickets_recovery_page_id == 0 { println("T201 tickets recovery: missing heap page"); return 255 }
+    tickets_recovery_empty_frame := mut match tickets_recovery_db.pool.fetch_page(FILE_ID_DATA, tickets_recovery_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T201 tickets recovery: fetch empty page failed"); return 255 },
+    }
+    tickets_recovery_empty_page := mut tickets_recovery_db.pool.get_page(tickets_recovery_empty_frame)
+    tickets_recovery_pre_insert_page := mut copy_smoke_page(tickets_recovery_empty_page)
+    tickets_recovery_db.pool.unpin_page(tickets_recovery_empty_frame, false)
+
+    tickets_recovery_start_lsn := mut tickets_recovery_db.gcm.current_lsn()
+    tickets_recovery_inserted_a := mut match tickets_recovery_db.execute("insert into tickets (id, summary, state) values (1, 'draft', 'open')") {
+        Ok(n) => n,
+        Err(e) => { println("T201 tickets recovery: descriptor-order insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovery_inserted_a != 1 as u64 { println("T201 tickets recovery: descriptor-order insert count"); return 255 }
+    tickets_recovery_inserted_b := mut match tickets_recovery_db.execute("insert into tickets (state, id, summary) values ('done', 2, 'ship')") {
+        Ok(n) => n,
+        Err(e) => { println("T201 tickets recovery: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovery_inserted_b != 1 as u64 { println("T201 tickets recovery: reordered insert count"); return 255 }
+    tickets_recovery_before_close := mut match tickets_recovery_db.query("select * from tickets") {
+        Ok(r) => r,
+        Err(e) => { println("T201 tickets recovery: before-close select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovery_before_close.row_count() != 2 as u64 { println("T201 tickets recovery: before-close row count"); return 255 }
+    tickets_recovery_before_close.free_owned_text()
+    tickets_recovery_before_close.free_owned_text()
+    match tickets_recovery_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T201 tickets recovery: close failed"); return 255 },
+    }
+
+    I restore_smoke_data_page(tickets_recovery_path.clone(), tickets_recovery_page_id, tickets_recovery_pre_insert_page) != 0 {
+        println("T201 tickets recovery: restore heap page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(tickets_recovery_path.clone(), tickets_recovery_start_lsn) != 0 {
+        println("T201 tickets recovery: checkpoint reset failed")
+        return 255
+    }
+
+    tickets_recovered_cfg := mut EmbeddedConfig.default()
+    tickets_recovered_cfg = tickets_recovered_cfg.with_data_dir(tickets_recovery_path.clone())
+    tickets_recovered_cfg = tickets_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    tickets_recovered := mut match EmbeddedDatabase.open(tickets_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T201 tickets recovery: reopen recovery failed: {e.message}: {e.hint}"); return 255 },
+    }
+    tickets_recovered_result := mut match tickets_recovered.query("select * from tickets") {
+        Ok(r) => r,
+        Err(e) => { println("T201 tickets recovery: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovered_result.column_count() != 3 as u64 { println("T201 tickets recovery: recovered column count"); return 255 }
+    I tickets_recovered_result.row_count() != 2 as u64 { println("T201 tickets recovery: recovered row count"); return 255 }
+    tickets_recovered_cols := mut tickets_recovered_result.get_columns()
+    I !expect_column(tickets_recovered_cols, 0, "id", "INT") { println("T201 tickets recovery: recovered id column"); return 255 }
+    I !expect_column(tickets_recovered_cols, 1, "summary", "TEXT") { println("T201 tickets recovery: recovered summary column"); return 255 }
+    I !expect_column(tickets_recovered_cols, 2, "state", "TEXT") { println("T201 tickets recovery: recovered state column"); return 255 }
+    tickets_recovered_rows := mut tickets_recovered_result.get_rows()
+    tickets_recovered_row0 := mut &tickets_recovered_rows[0]
+    tickets_recovered_row1 := mut &tickets_recovered_rows[1]
+    I !expect_cell(tickets_recovered_row0, 0, "1") { println("T201 tickets recovery: recovered row0 id"); return 255 }
+    I !expect_cell(tickets_recovered_row0, 1, "draft") { println("T201 tickets recovery: recovered row0 summary"); return 255 }
+    I !expect_cell(tickets_recovered_row0, 2, "open") { println("T201 tickets recovery: recovered row0 state"); return 255 }
+    I !expect_cell(tickets_recovered_row1, 0, "2") { println("T201 tickets recovery: recovered row1 id"); return 255 }
+    I !expect_cell(tickets_recovered_row1, 1, "ship") { println("T201 tickets recovery: recovered row1 summary"); return 255 }
+    I !expect_cell(tickets_recovered_row1, 2, "done") { println("T201 tickets recovery: recovered row1 state"); return 255 }
+    tickets_recovered_result.free_owned_text()
+    tickets_recovered_result.free_owned_text()
+
+    tickets_recovered_projection := mut match tickets_recovered.query("select id, summary, state from tickets") {
+        Ok(r) => r,
+        Err(e) => { println("T201 tickets recovery: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovered_projection.column_count() != 3 as u64 { println("T201 tickets recovery: projection column count"); return 255 }
+    I tickets_recovered_projection.row_count() != 2 as u64 { println("T201 tickets recovery: projection row count"); return 255 }
+    tickets_recovered_projection.free_owned_text()
+    tickets_recovered_projection.free_owned_text()
+
+    tickets_recovered_state_filter := mut match tickets_recovered.query("select * from tickets where state = 'done'") {
+        Ok(r) => r,
+        Err(e) => { println("T201 tickets recovery: recovered state filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovered_state_filter.row_count() != 1 as u64 { println("T201 tickets recovery: state filter row count"); return 255 }
+    tickets_recovered_state_filter_rows := mut tickets_recovered_state_filter.get_rows()
+    tickets_recovered_state_filter_row := mut &tickets_recovered_state_filter_rows[0]
+    I !expect_cell(tickets_recovered_state_filter_row, 0, "2") { println("T201 tickets recovery: state filter id"); return 255 }
+    I !expect_cell(tickets_recovered_state_filter_row, 1, "ship") { println("T201 tickets recovery: state filter summary"); return 255 }
+    I !expect_cell(tickets_recovered_state_filter_row, 2, "done") { println("T201 tickets recovery: state filter state"); return 255 }
+    tickets_recovered_state_filter.free_owned_text()
+    tickets_recovered_state_filter.free_owned_text()
+
+    tickets_recovered_summary_filter := mut match tickets_recovered.query("select * from tickets where summary = 'draft'") {
+        Ok(r) => r,
+        Err(e) => { println("T201 tickets recovery: recovered summary filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovered_summary_filter.row_count() != 1 as u64 { println("T201 tickets recovery: summary filter row count"); return 255 }
+    tickets_recovered_summary_filter_rows := mut tickets_recovered_summary_filter.get_rows()
+    tickets_recovered_summary_filter_row := mut &tickets_recovered_summary_filter_rows[0]
+    I !expect_cell(tickets_recovered_summary_filter_row, 0, "1") { println("T201 tickets recovery: summary filter id"); return 255 }
+    I !expect_cell(tickets_recovered_summary_filter_row, 1, "draft") { println("T201 tickets recovery: summary filter summary"); return 255 }
+    I !expect_cell(tickets_recovered_summary_filter_row, 2, "open") { println("T201 tickets recovery: summary filter state"); return 255 }
+    tickets_recovered_summary_filter.free_owned_text()
+    tickets_recovered_summary_filter.free_owned_text()
+
+    tickets_recovered_insert := mut match tickets_recovered.execute("insert into tickets (id, summary, state) values (3, 'reopen', 'open')") {
+        Ok(n) => n,
+        Err(e) => { println("T201 tickets recovery: post-recovery insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovered_insert != 1 as u64 { println("T201 tickets recovery: post-recovery insert count"); return 255 }
+    tickets_recovered_after_insert := mut match tickets_recovered.query("select * from tickets") {
+        Ok(r) => r,
+        Err(e) => { println("T201 tickets recovery: after-insert select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovered_after_insert.row_count() != 3 as u64 { println("T201 tickets recovery: after-insert row count"); return 255 }
+    tickets_recovered_after_insert.free_owned_text()
+    tickets_recovered_after_insert.free_owned_text()
+    match tickets_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T201 tickets recovery: recovered close failed"); return 255 },
+    }
+
+    tickets_recovered_repeat_cfg := mut EmbeddedConfig.default()
+    tickets_recovered_repeat_cfg = tickets_recovered_repeat_cfg.with_data_dir(tickets_recovery_path.clone())
+    tickets_recovered_repeat_cfg = tickets_recovered_repeat_cfg.with_page_size(PAGE_SIZE_8K)
+    tickets_recovered_repeat := mut match EmbeddedDatabase.open(tickets_recovered_repeat_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T201 tickets recovery: repeat open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    tickets_recovered_repeat_result := mut match tickets_recovered_repeat.query("select * from tickets") {
+        Ok(r) => r,
+        Err(e) => { println("T201 tickets recovery: repeat select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_recovered_repeat_result.row_count() != 3 as u64 { println("T201 tickets recovery: repeat row count"); return 255 }
+    tickets_recovered_repeat_rows := mut tickets_recovered_repeat_result.get_rows()
+    tickets_recovered_seen_draft := mut false
+    tickets_recovered_seen_ship := mut false
+    tickets_recovered_seen_reopen := mut false
+    LF ri: 0..tickets_recovered_repeat_rows.len() {
+        candidate := mut &tickets_recovered_repeat_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "draft") && expect_cell(candidate, 2, "open") {
+            tickets_recovered_seen_draft = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "ship") && expect_cell(candidate, 2, "done") {
+            tickets_recovered_seen_ship = true
+        }
+        I expect_cell(candidate, 0, "3") && expect_cell(candidate, 1, "reopen") && expect_cell(candidate, 2, "open") {
+            tickets_recovered_seen_reopen = true
+        }
+    }
+    I !tickets_recovered_seen_draft { println("T201 tickets recovery: repeat missing draft"); return 255 }
+    I !tickets_recovered_seen_ship { println("T201 tickets recovery: repeat missing ship"); return 255 }
+    I !tickets_recovered_seen_reopen { println("T201 tickets recovery: repeat missing reopen"); return 255 }
+    tickets_recovered_repeat_result.free_owned_text()
+    tickets_recovered_repeat_result.free_owned_text()
+    match tickets_recovered_repeat.close() {
+        Ok(_) => {},
+        Err(_) => { println("T201 tickets recovery: repeat close failed"); return 255 },
+    }
+
     # --- Promoted PRIMARY KEY subset: people(id INT PRIMARY KEY, name TEXT) ---
     #
     # The fixed id primary key is stored in catalog column metadata and creates
