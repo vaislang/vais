@@ -53,8 +53,8 @@
 #     while keeping server/web behavior unpromoted for that shape.
 #   - Promotes the first arbitrary-name/arbitrary-text-column three-column
 #     descriptor metadata boundary for tickets(id INT, summary TEXT, state TEXT)
-#     plus full-column-list INSERT while keeping SELECT/recovery/server/web
-#     behavior unpromoted for that shape.
+#     plus full-column-list INSERT and selected SELECT/filter readback while
+#     keeping recovery/server/web behavior unpromoted for that shape.
 #   - Promotes descriptor SELECT * TEXT equality filters for books.title and
 #     authors.name, including reversed literal equality, while keeping people
 #     name filters, descriptor id filters, projections plus filters, qualified
@@ -3008,13 +3008,154 @@ fn main() -> i64 {
         Ok(_) => { println("T197 tickets: INSERT SELECT unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.query("select * from tickets") {
-        Ok(result) => {
-            unexpected := mut result
-            unexpected.free_owned_text()
-            println("T195 tickets: SELECT unexpectedly accepted")
-            return 255
-        },
+    tickets_select := mut match tickets_db.query("select * from tickets") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_select.column_count() != 3 as u64 { println("T199 tickets: select all column count"); return 255 }
+    I tickets_select.row_count() != 2 as u64 { println("T199 tickets: select all row count"); return 255 }
+    tickets_select_cols := mut tickets_select.get_columns()
+    I !expect_column(tickets_select_cols, 0, "id", "INT") { println("T199 tickets: select id column"); return 255 }
+    I !expect_column(tickets_select_cols, 1, "summary", "TEXT") { println("T199 tickets: select summary column"); return 255 }
+    I !expect_column(tickets_select_cols, 2, "state", "TEXT") { println("T199 tickets: select state column"); return 255 }
+    tickets_select_rows := mut tickets_select.get_rows()
+    tickets_row0 := mut &tickets_select_rows[0]
+    tickets_row1 := mut &tickets_select_rows[1]
+    I !expect_cell(tickets_row0, 0, "1") { println("T199 tickets: row0 id"); return 255 }
+    I !expect_cell(tickets_row0, 1, "draft") { println("T199 tickets: row0 summary"); return 255 }
+    I !expect_cell(tickets_row0, 2, "open") { println("T199 tickets: row0 state"); return 255 }
+    I !expect_cell(tickets_row1, 0, "2") { println("T199 tickets: row1 id"); return 255 }
+    I !expect_cell(tickets_row1, 1, "ship") { println("T199 tickets: row1 summary"); return 255 }
+    I !expect_cell(tickets_row1, 2, "done") { println("T199 tickets: row1 state"); return 255 }
+    tickets_select.free_owned_text()
+    tickets_select.free_owned_text()
+
+    tickets_projection := mut match tickets_db.query("select id, summary, state from tickets") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_projection.column_count() != 3 as u64 { println("T199 tickets: projection column count"); return 255 }
+    I tickets_projection.row_count() != 2 as u64 { println("T199 tickets: projection row count"); return 255 }
+    tickets_projection.free_owned_text()
+    tickets_projection.free_owned_text()
+
+    tickets_id_filter := mut match tickets_db.query("select * from tickets where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_id_filter.row_count() != 1 as u64 { println("T199 tickets: id filter row count"); return 255 }
+    tickets_id_filter_rows := mut tickets_id_filter.get_rows()
+    tickets_id_filter_row := mut &tickets_id_filter_rows[0]
+    I !expect_cell(tickets_id_filter_row, 0, "2") { println("T199 tickets: id filter id"); return 255 }
+    I !expect_cell(tickets_id_filter_row, 1, "ship") { println("T199 tickets: id filter summary"); return 255 }
+    I !expect_cell(tickets_id_filter_row, 2, "done") { println("T199 tickets: id filter state"); return 255 }
+    tickets_id_filter.free_owned_text()
+    tickets_id_filter.free_owned_text()
+
+    tickets_summary_filter := mut match tickets_db.query("select * from tickets where summary = 'draft'") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: summary filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_summary_filter.row_count() != 1 as u64 { println("T199 tickets: summary filter row count"); return 255 }
+    tickets_summary_filter_rows := mut tickets_summary_filter.get_rows()
+    tickets_summary_filter_row := mut &tickets_summary_filter_rows[0]
+    I !expect_cell(tickets_summary_filter_row, 0, "1") { println("T199 tickets: summary filter id"); return 255 }
+    I !expect_cell(tickets_summary_filter_row, 1, "draft") { println("T199 tickets: summary filter summary"); return 255 }
+    I !expect_cell(tickets_summary_filter_row, 2, "open") { println("T199 tickets: summary filter state"); return 255 }
+    tickets_summary_filter.free_owned_text()
+    tickets_summary_filter.free_owned_text()
+
+    tickets_state_filter := mut match tickets_db.query("select * from tickets where state = 'done'") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: state filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_state_filter.row_count() != 1 as u64 { println("T199 tickets: state filter row count"); return 255 }
+    tickets_state_filter_rows := mut tickets_state_filter.get_rows()
+    tickets_state_filter_row := mut &tickets_state_filter_rows[0]
+    I !expect_cell(tickets_state_filter_row, 0, "2") { println("T199 tickets: state filter id"); return 255 }
+    I !expect_cell(tickets_state_filter_row, 1, "ship") { println("T199 tickets: state filter summary"); return 255 }
+    I !expect_cell(tickets_state_filter_row, 2, "done") { println("T199 tickets: state filter state"); return 255 }
+    tickets_state_filter.free_owned_text()
+    tickets_state_filter.free_owned_text()
+
+    tickets_projection_state_filter := mut match tickets_db.query("select id, summary, state from tickets where state = 'done'") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: projection state filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_projection_state_filter.row_count() != 1 as u64 { println("T199 tickets: projection state filter row count"); return 255 }
+    tickets_projection_state_filter.free_owned_text()
+    tickets_projection_state_filter.free_owned_text()
+
+    tickets_reversed_id_filter := mut match tickets_db.query("select * from tickets where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_reversed_id_filter.row_count() != 1 as u64 { println("T199 tickets: reversed id filter row count"); return 255 }
+    tickets_reversed_id_filter.free_owned_text()
+    tickets_reversed_id_filter.free_owned_text()
+
+    tickets_reversed_summary_filter := mut match tickets_db.query("select * from tickets where 'draft' = summary") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: reversed summary filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_reversed_summary_filter.row_count() != 1 as u64 { println("T199 tickets: reversed summary filter row count"); return 255 }
+    tickets_reversed_summary_filter.free_owned_text()
+    tickets_reversed_summary_filter.free_owned_text()
+
+    tickets_reversed_state_filter := mut match tickets_db.query("select * from tickets where 'done' = state") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: reversed state filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_reversed_state_filter.row_count() != 1 as u64 { println("T199 tickets: reversed state filter row count"); return 255 }
+    tickets_reversed_state_filter.free_owned_text()
+    tickets_reversed_state_filter.free_owned_text()
+
+    match tickets_db.query("select summary from tickets") {
+        Ok(_) => { println("T199 tickets: partial projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select state, summary, id from tickets") {
+        Ok(_) => { println("T199 tickets: reversed projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select id as ticket_id, summary, state from tickets") {
+        Ok(_) => { println("T199 tickets: alias projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select tickets.id, tickets.summary, tickets.state from tickets") {
+        Ok(_) => { println("T199 tickets: qualified projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select * from tickets where owner = 'me'") {
+        Ok(_) => { println("T199 tickets: unknown filter column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select * from tickets where state = 2") {
+        Ok(_) => { println("T199 tickets: wrong state literal unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select * from tickets where summary = 2") {
+        Ok(_) => { println("T199 tickets: wrong summary literal unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select * from tickets where id = '2'") {
+        Ok(_) => { println("T199 tickets: wrong id literal unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select * from tickets where state != 'done'") {
+        Ok(_) => { println("T199 tickets: non-equality predicate unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select * from tickets where id = 1 and state = 'open'") {
+        Ok(_) => { println("T199 tickets: boolean predicate unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select id + 1, summary, state from tickets") {
+        Ok(_) => { println("T199 tickets: expression projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select * from tickets join notes on tickets.id = notes.id") {
+        Ok(_) => { println("T199 tickets: join unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match tickets_db.close() {
@@ -3058,13 +3199,22 @@ fn main() -> i64 {
         Ok(_) => { println("T197 tickets: reopen values-only unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_reopened.query("select * from tickets") {
-        Ok(result) => {
-            unexpected := mut result
-            unexpected.free_owned_text()
-            println("T195 tickets: reopen SELECT unexpectedly accepted")
-            return 255
-        },
+    tickets_reopened_select := mut match tickets_reopened.query("select * from tickets") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_reopened_select.row_count() != 3 as u64 { println("T199 tickets: reopen row count"); return 255 }
+    tickets_reopened_select.free_owned_text()
+    tickets_reopened_select.free_owned_text()
+    tickets_reopened_state_filter := mut match tickets_reopened.query("select id, summary, state from tickets where state = 'open'") {
+        Ok(r) => r,
+        Err(e) => { println("T199 tickets: reopen state projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_reopened_state_filter.row_count() != 2 as u64 { println("T199 tickets: reopen state filter row count"); return 255 }
+    tickets_reopened_state_filter.free_owned_text()
+    tickets_reopened_state_filter.free_owned_text()
+    match tickets_reopened.query("select state from tickets") {
+        Ok(_) => { println("T199 tickets: reopen partial projection unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match tickets_reopened.close() {
