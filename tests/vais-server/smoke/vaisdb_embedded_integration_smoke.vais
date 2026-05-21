@@ -1,6 +1,9 @@
 use src/core/app
 use src/core/config
 use src/core/context
+use src/auth/session
+use src/auth/runtime
+use src/util/json.{escape_json_string}
 use server/embedded
 use storage/constants
 use std/vec
@@ -9,8 +12,11 @@ fn check_server_surface() -> i64 {
     app := mut App.new(ServerConfig.default())
     app.get("/db/health", "db_health_handler")
     app.get("/db/books", "db_books_handler")
+    app.get("/db/books/count", "db_books_count_handler")
+    app.get("/db/tables/:table/rows", "db_table_rows_handler")
+    app.post("/db/books", "db_books_post_handler")
 
-    I app.route_count() != 2 {
+    I app.route_count() != 5 {
         println("FAIL app route registration")
         return 1
     }
@@ -82,6 +88,126 @@ fn setup_books_db(db_path: str) -> i64 {
     0
 }
 
+fn setup_books_conflict_db(db_path: str) -> i64 {
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 80 },
+    }
+
+    created := mut match db.execute("create table books (id int, title text)") {
+        Ok(v) => v,
+        Err(_) => { return 81 },
+    }
+    I created != 0 as u64 { return 82 }
+
+    inserted_a := mut match db.execute("insert into books values (1, 'dune')") {
+        Ok(v) => v,
+        Err(_) => { return 83 },
+    }
+    I inserted_a != 1 as u64 { return 84 }
+
+    inserted_b := mut match db.execute("insert into books values (2, 'foundation')") {
+        Ok(v) => v,
+        Err(_) => { return 85 },
+    }
+    I inserted_b != 1 as u64 { return 86 }
+
+    inserted_children_a := mut match db.execute("insert into books values (3, 'children')") {
+        Ok(v) => v,
+        Err(_) => { return 87 },
+    }
+    I inserted_children_a != 1 as u64 { return 88 }
+
+    inserted_children_b := mut match db.execute("insert into books values (4, 'children')") {
+        Ok(v) => v,
+        Err(_) => { return 89 },
+    }
+    I inserted_children_b != 1 as u64 { return 90 }
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 91 },
+    }
+
+    0
+}
+
+fn setup_albums_db(db_path: str) -> i64 {
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 150 },
+    }
+
+    created := mut match db.execute("create table albums (id int, title text)") {
+        Ok(v) => v,
+        Err(_) => { return 151 },
+    }
+    I created != 0 as u64 { return 152 }
+
+    inserted_a := mut match db.execute("insert into albums values (1, 'blue')") {
+        Ok(v) => v,
+        Err(_) => { return 153 },
+    }
+    I inserted_a != 1 as u64 { return 154 }
+
+    inserted_b := mut match db.execute("insert into albums values (2, 'green')") {
+        Ok(v) => v,
+        Err(_) => { return 155 },
+    }
+    I inserted_b != 1 as u64 { return 156 }
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 157 },
+    }
+
+    0
+}
+
+fn setup_notes_db(db_path: str) -> i64 {
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 300 },
+    }
+
+    created := mut match db.execute("create table notes (id int, body text)") {
+        Ok(v) => v,
+        Err(_) => { return 301 },
+    }
+    I created != 0 as u64 { return 302 }
+
+    inserted_a := mut match db.execute("insert into notes values (1, 'memo')") {
+        Ok(v) => v,
+        Err(_) => { return 303 },
+    }
+    I inserted_a != 1 as u64 { return 304 }
+
+    inserted_b := mut match db.execute("insert into notes values (2, 'todo')") {
+        Ok(v) => v,
+        Err(_) => { return 305 },
+    }
+    I inserted_b != 1 as u64 { return 306 }
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 307 },
+    }
+
+    0
+}
+
 fn db_books_handler(db_path: str) -> Response {
     ctx := mut Context.new("GET", "/db/books")
     cfg := mut EmbeddedConfig.default()
@@ -148,6 +274,1556 @@ fn db_books_handler(db_path: str) -> Response {
     ctx.json(200, body)
 }
 
+fn db_books_count_handler(db_path: str) -> Response {
+    ctx := mut Context.new("GET", "/db/books/count")
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_unavailable\"}") },
+    }
+
+    result := mut match db.query("select * from books") {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        },
+    }
+
+    row_total := mut result.row_count()
+
+    result.free_owned_text()
+    result.free_owned_text()
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_close_failed\"}") },
+    }
+
+    I row_total != 2 as u64 {
+        return ctx.json(500, "{\"error\":\"db_unexpected_rows\"}")
+    }
+
+    ctx.json(200, "{\"count\":2}")
+}
+
+fn db_table_identifier_start_valid(c: i64) -> bool {
+    I c >= 65 && c <= 90 { return true }
+    I c >= 97 && c <= 122 { return true }
+    c == 95
+}
+
+fn db_table_identifier_body_valid(c: i64) -> bool {
+    I db_table_identifier_start_valid(c) { return true }
+    c >= 48 && c <= 57
+}
+
+fn db_table_identifier_is_valid(table: str) -> bool {
+    I table.len() == 0 {
+        return false
+    }
+    I !db_table_identifier_start_valid(table.char_at(0)) {
+        return false
+    }
+    idx := mut 1
+    LW idx < table.len() {
+        I !db_table_identifier_body_valid(table.char_at(idx)) {
+            return false
+        }
+        idx += 1
+    }
+    true
+}
+
+fn db_table_rows_path_table(path: str) -> str {
+    I path.len() <= 16 {
+        return ""
+    }
+    I path.substring(0, 11) != "/db/tables/" {
+        return ""
+    }
+    I path.substring(path.len() - 5, path.len()) != "/rows" {
+        return ""
+    }
+    path.substring(11, path.len() - 5)
+}
+
+fn db_table_rows_static_descriptor_rejected(table: str) -> bool {
+    I table == "people" { return true }
+    I table == "books" { return true }
+    I table == "authors" { return true }
+    table == "publishers"
+}
+
+fn db_filter_digit_is_valid(c: i64) -> bool {
+    c >= 48 && c <= 57
+}
+
+fn db_filter_digits_is_valid(value: str) -> bool {
+    I value.len() == 0 {
+        return false
+    }
+    idx := mut 0
+    LW idx < value.len() {
+        I !db_filter_digit_is_valid(value.char_at(idx)) {
+            return false
+        }
+        idx += 1
+    }
+    true
+}
+
+fn db_id_filter_query_value(query: str) -> str {
+    I query.len() <= 3 {
+        return ""
+    }
+    I query.substring(0, 3) != "id=" {
+        return ""
+    }
+    value := mut query.substring(3, query.len())
+    I !db_filter_digits_is_valid(value) {
+        return ""
+    }
+    value
+}
+
+fn db_filter_title_char_is_valid(c: i64) -> bool {
+    I c >= 65 && c <= 90 { return true }
+    I c >= 97 && c <= 122 { return true }
+    I c >= 48 && c <= 57 { return true }
+    c == 32 || c == 45 || c == 95
+}
+
+fn db_filter_title_is_valid(value: str) -> bool {
+    I value.len() == 0 || value.len() > 64 {
+        return false
+    }
+    idx := mut 0
+    LW idx < value.len() {
+        I !db_filter_title_char_is_valid(value.char_at(idx)) {
+            return false
+        }
+        idx += 1
+    }
+    true
+}
+
+fn db_title_filter_query_value(query: str) -> str {
+    I query.len() <= 6 {
+        return ""
+    }
+    I query.substring(0, 6) != "title=" {
+        return ""
+    }
+    value := mut query.substring(6, query.len())
+    I !db_filter_title_is_valid(value) {
+        return ""
+    }
+    value
+}
+
+fn db_body_filter_query_value(query: str) -> str {
+    I query.len() <= 5 {
+        return ""
+    }
+    I query.substring(0, 5) != "body=" {
+        return ""
+    }
+    value := mut query.substring(5, query.len())
+    I !db_filter_title_is_valid(value) {
+        return ""
+    }
+    value
+}
+
+fn db_table_rows_handler(db_path: str, method: str, path: str, body: str) -> Response {
+    ctx := mut Context.new(method, path)
+    table := mut db_table_rows_path_table(path)
+
+    I method != "GET" || body != "" || !db_table_identifier_is_valid(table) {
+        return ctx.json(400, "{\"error\":\"db_invalid_table\"}")
+    }
+    I db_table_rows_static_descriptor_rejected(table) {
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_unavailable\"}") },
+    }
+
+    query := mut "select * from {table}"
+    result := mut match db.query(query) {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(404, "{\"error\":\"db_unsupported_table\"}")
+        },
+    }
+
+    I result.column_count() != 2 as u64 || result.row_count() != 2 as u64 {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+    }
+
+    columns := mut result.get_columns()
+    I columns[0].get_name() != "id" || columns[0].get_type_name() != "INT" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+    second_col := mut columns[1].get_name()
+    I !db_table_identifier_is_valid(second_col) || second_col == "id" || columns[1].get_type_name() != "TEXT" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    rows := mut result.get_rows()
+    escaped_second_col := mut escape_json_string(second_col)
+    response_body := mut append_str("{\"table\":\"", table, "")
+    response_body = append_str(response_body, "\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"", "")
+    response_body = append_str(response_body, escaped_second_col, "")
+    response_body = append_str(response_body, "\",\"type\":\"TEXT\"}],\"rows\":[", "")
+    row_idx := mut 0
+    LW row_idx < rows.len() {
+        row := mut &rows[row_idx]
+        row_id := mut cell_or_empty(row, 0)
+        row_text := mut cell_or_empty(row, 1)
+        I !db_filter_digits_is_valid(row_id) {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        }
+        escaped_text := mut escape_json_string(row_text)
+        I row_idx > 0 {
+            response_body = append_str(response_body, ",", "")
+        }
+        response_body = append_str(response_body, "{\"id\":", "")
+        response_body = append_str(response_body, row_id, "")
+        response_body = append_str(response_body, ",\"", "")
+        response_body = append_str(response_body, escaped_second_col, "")
+        response_body = append_str(response_body, "\":\"", "")
+        response_body = append_str(response_body, escaped_text, "")
+        response_body = append_str(response_body, "\"}", "")
+        row_idx += 1
+    }
+    response_body = append_str(response_body, "]}", "")
+
+    result.free_owned_text()
+    result.free_owned_text()
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_close_failed\"}") },
+    }
+
+    ctx.json(200, response_body)
+}
+
+fn db_table_rows_id_filter_handler(
+    db_path: str,
+    method: str,
+    path: str,
+    query_param: str,
+    body: str,
+) -> Response {
+    ctx := mut Context.new(method, path)
+    table := mut db_table_rows_path_table(path)
+
+    I !db_table_identifier_is_valid(table) {
+        return ctx.json(400, "{\"error\":\"db_invalid_table\"}")
+    }
+
+    id_value := mut db_id_filter_query_value(query_param)
+    I method != "GET" || body != "" || id_value == "" {
+        return ctx.json(400, "{\"error\":\"db_invalid_filter\"}")
+    }
+    I db_table_rows_static_descriptor_rejected(table) {
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_unavailable\"}") },
+    }
+
+    query := mut "select * from {table} where id = {id_value}"
+    result := mut match db.query(query) {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(404, "{\"error\":\"db_unsupported_table\"}")
+        },
+    }
+
+    I result.column_count() != 2 as u64 {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    columns := mut result.get_columns()
+    I columns[0].get_name() != "id" || columns[0].get_type_name() != "INT" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+    I columns[1].get_name() != "title" || columns[1].get_type_name() != "TEXT" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    response_body := mut append_str("{\"table\":\"", table, "")
+    response_body = append_str(response_body, "\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"title\",\"type\":\"TEXT\"}],\"rows\":[", "")
+    rows := mut result.get_rows()
+    row_idx := mut 0
+    LW row_idx < rows.len() {
+        row := mut &rows[row_idx]
+        row_id := mut cell_or_empty(row, 0)
+        row_title := mut cell_or_empty(row, 1)
+        I !db_filter_digits_is_valid(row_id) {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        }
+
+        escaped_title := mut escape_json_string(row_title)
+        I row_idx > 0 {
+            response_body = append_str(response_body, ",", "")
+        }
+        response_body = append_str(response_body, "{\"id\":", "")
+        response_body = append_str(response_body, row_id, "")
+        response_body = append_str(response_body, ",\"title\":\"", "")
+        response_body = append_str(response_body, escaped_title, "")
+        response_body = append_str(response_body, "\"}", "")
+        row_idx += 1
+    }
+    response_body = append_str(response_body, "]}", "")
+
+    result.free_owned_text()
+    result.free_owned_text()
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_close_failed\"}") },
+    }
+
+    ctx.json(200, response_body)
+}
+
+fn db_table_rows_title_filter_handler(
+    db_path: str,
+    method: str,
+    path: str,
+    query_param: str,
+    body: str,
+) -> Response {
+    ctx := mut Context.new(method, path)
+    table := mut db_table_rows_path_table(path)
+
+    I !db_table_identifier_is_valid(table) {
+        return ctx.json(400, "{\"error\":\"db_invalid_table\"}")
+    }
+
+    title_value := mut db_title_filter_query_value(query_param)
+    I method != "GET" || body != "" || title_value == "" {
+        return ctx.json(400, "{\"error\":\"db_invalid_filter\"}")
+    }
+    I db_table_rows_static_descriptor_rejected(table) {
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_unavailable\"}") },
+    }
+
+    query := mut "select * from {table} where title = '{title_value}'"
+    result := mut match db.query(query) {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(404, "{\"error\":\"db_unsupported_table\"}")
+        },
+    }
+
+    I result.column_count() != 2 as u64 {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    columns := mut result.get_columns()
+    I columns[0].get_name() != "id" || columns[0].get_type_name() != "INT" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+    I columns[1].get_name() != "title" || columns[1].get_type_name() != "TEXT" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    response_body := mut append_str("{\"table\":\"", table, "")
+    response_body = append_str(response_body, "\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"title\",\"type\":\"TEXT\"}],\"rows\":[", "")
+    rows := mut result.get_rows()
+    row_idx := mut 0
+    LW row_idx < rows.len() {
+        row := mut &rows[row_idx]
+        row_id := mut cell_or_empty(row, 0)
+        row_title := mut cell_or_empty(row, 1)
+        I !db_filter_digits_is_valid(row_id) {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        }
+
+        escaped_title := mut escape_json_string(row_title)
+        I row_idx > 0 {
+            response_body = append_str(response_body, ",", "")
+        }
+        response_body = append_str(response_body, "{\"id\":", "")
+        response_body = append_str(response_body, row_id, "")
+        response_body = append_str(response_body, ",\"title\":\"", "")
+        response_body = append_str(response_body, escaped_title, "")
+        response_body = append_str(response_body, "\"}", "")
+        row_idx += 1
+    }
+    response_body = append_str(response_body, "]}", "")
+
+    result.free_owned_text()
+    result.free_owned_text()
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_close_failed\"}") },
+    }
+
+    ctx.json(200, response_body)
+}
+
+fn db_table_rows_body_filter_handler(
+    db_path: str,
+    method: str,
+    path: str,
+    query_param: str,
+    body: str,
+) -> Response {
+    ctx := mut Context.new(method, path)
+    table := mut db_table_rows_path_table(path)
+
+    I !db_table_identifier_is_valid(table) {
+        return ctx.json(400, "{\"error\":\"db_invalid_table\"}")
+    }
+
+    body_value := mut db_body_filter_query_value(query_param)
+    I method != "GET" || body != "" || body_value == "" {
+        return ctx.json(400, "{\"error\":\"db_invalid_filter\"}")
+    }
+    I db_table_rows_static_descriptor_rejected(table) {
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_unavailable\"}") },
+    }
+
+    metadata_query := mut "select * from {table}"
+    metadata := mut match db.query(metadata_query) {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(404, "{\"error\":\"db_unsupported_table\"}")
+        },
+    }
+
+    I metadata.column_count() != 2 as u64 {
+        metadata.free_owned_text()
+        metadata.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    metadata_columns := mut metadata.get_columns()
+    I metadata_columns[0].get_name() != "id" || metadata_columns[0].get_type_name() != "INT" {
+        metadata.free_owned_text()
+        metadata.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+    I metadata_columns[1].get_name() != "body" || metadata_columns[1].get_type_name() != "TEXT" {
+        metadata.free_owned_text()
+        metadata.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+    metadata.free_owned_text()
+    metadata.free_owned_text()
+
+    query := mut "select * from {table} where body = '{body_value}'"
+    result := mut match db.query(query) {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        },
+    }
+
+    I result.column_count() != 2 as u64 {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    columns := mut result.get_columns()
+    I columns[0].get_name() != "id" || columns[0].get_type_name() != "INT" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+    I columns[1].get_name() != "body" || columns[1].get_type_name() != "TEXT" {
+        result.free_owned_text()
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+    }
+
+    response_body := mut append_str("{\"table\":\"", table, "")
+    response_body = append_str(response_body, "\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"body\",\"type\":\"TEXT\"}],\"rows\":[", "")
+    rows := mut result.get_rows()
+    row_idx := mut 0
+    LW row_idx < rows.len() {
+        row := mut &rows[row_idx]
+        row_id := mut cell_or_empty(row, 0)
+        row_body := mut cell_or_empty(row, 1)
+        I !db_filter_digits_is_valid(row_id) {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        }
+
+        escaped_body := mut escape_json_string(row_body)
+        I row_idx > 0 {
+            response_body = append_str(response_body, ",", "")
+        }
+        response_body = append_str(response_body, "{\"id\":", "")
+        response_body = append_str(response_body, row_id, "")
+        response_body = append_str(response_body, ",\"body\":\"", "")
+        response_body = append_str(response_body, escaped_body, "")
+        response_body = append_str(response_body, "\"}", "")
+        row_idx += 1
+    }
+    response_body = append_str(response_body, "]}", "")
+
+    result.free_owned_text()
+    result.free_owned_text()
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_close_failed\"}") },
+    }
+
+    ctx.json(200, response_body)
+}
+
+fn db_books_post_handler(db_path: str, method: str, path: str, body: str) -> Response {
+    ctx := mut Context.new(method, path)
+
+    I method != "POST" || path != "/db/books" || body != "{\"id\":3,\"title\":\"children\"}" {
+        return ctx.json(400, "{\"error\":\"db_invalid_request\"}")
+    }
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_unavailable\"}") },
+    }
+
+    existing := mut match db.query("select * from books where title = 'children'") {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        },
+    }
+
+    existing_rows := mut existing.row_count()
+    existing.free_owned_text()
+
+    I existing_rows > 1 as u64 {
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(409, "{\"error\":\"db_conflict\"}")
+    }
+
+    inserted := mut 0 as u64
+    I existing_rows == 0 as u64 {
+        write_count := mut match db.execute("insert into books values (3, 'children')") {
+            Ok(v) => v,
+            Err(_) => {
+                match db.close() {
+                    Ok(_) => {},
+                    Err(_) => {},
+                }
+                return ctx.json(500, "{\"error\":\"db_write_failed\"}")
+            },
+        }
+        I write_count != 1 as u64 {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_write_failed\"}")
+        }
+        inserted = 1 as u64
+    }
+
+    confirmed := mut match db.query("select * from books where title = 'children'") {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        },
+    }
+
+    I confirmed.row_count() != 1 as u64 {
+        confirmed.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(409, "{\"error\":\"db_conflict\"}")
+    }
+
+    rows := mut confirmed.get_rows()
+    row0 := mut &rows[0]
+    I cell_or_empty(row0, 0) != "3" || cell_or_empty(row0, 1) != "children" {
+        confirmed.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return ctx.json(409, "{\"error\":\"db_conflict\"}")
+    }
+
+    confirmed.free_owned_text()
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return ctx.json(500, "{\"error\":\"db_close_failed\"}") },
+    }
+
+    I inserted == 1 as u64 {
+        return ctx.json(200, "{\"inserted\":1,\"id\":3,\"title\":\"children\"}")
+    }
+
+    ctx.json(200, "{\"inserted\":0,\"id\":3,\"title\":\"children\"}")
+}
+
+fn db_books_post_admin_guarded_handler(
+    db_path: str,
+    method: str,
+    path: str,
+    body: str,
+    store: SessionStore,
+    session_id: str,
+) -> Response {
+    ctx := mut Context.new(method, path)
+
+    I store.get(session_id) != session_id {
+        return ctx.json(403, "{\"error\":\"admin_forbidden\"}")
+    }
+    I store.get_data(session_id, "role") != "admin" {
+        return ctx.json(403, "{\"error\":\"admin_forbidden\"}")
+    }
+    I store.get_data(session_id, "capability") != "books.seed" {
+        return ctx.json(403, "{\"error\":\"admin_forbidden\"}")
+    }
+
+    db_books_post_handler(db_path, method, path, body)
+}
+
+fn check_books_count_route(db_path: str) -> i64 {
+    response := mut db_books_count_handler(db_path)
+    I response.status != 200 {
+        println("FAIL db books count response status")
+        return 40
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db books count response content type")
+        return 41
+    }
+    I response.body != "{\"count\":2}" {
+        println("FAIL db books count response body")
+        println(response.body)
+        return 42
+    }
+    0
+}
+
+fn check_books_count_route_missing_catalog(db_path: str) -> i64 {
+    response := mut db_books_count_handler(db_path)
+    I response.status != 500 {
+        println("FAIL db books count missing catalog status")
+        return 45
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db books count missing catalog content type")
+        return 46
+    }
+    I response.body != "{\"error\":\"db_query_failed\"}" {
+        println("FAIL db books count missing catalog body")
+        println(response.body)
+        return 47
+    }
+    0
+}
+
+fn check_table_rows_route(db_path: str) -> i64 {
+    response := mut db_table_rows_handler(db_path, "GET", "/db/tables/albums/rows", "")
+    I response.status != 200 {
+        println("FAIL db table rows response status")
+        return 160
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows response content type")
+        return 161
+    }
+    I response.body != "{\"table\":\"albums\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"title\",\"type\":\"TEXT\"}],\"rows\":[{\"id\":1,\"title\":\"blue\"},{\"id\":2,\"title\":\"green\"}]}" {
+        println("FAIL db table rows response body")
+        println(response.body)
+        return 162
+    }
+    0
+}
+
+fn check_table_rows_dynamic_column_route(db_path: str) -> i64 {
+    response := mut db_table_rows_handler(db_path, "GET", "/db/tables/notes/rows", "")
+    I response.status != 200 {
+        println("FAIL db table rows dynamic column response status")
+        return 310
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows dynamic column response content type")
+        return 311
+    }
+    I response.body != "{\"table\":\"notes\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"body\",\"type\":\"TEXT\"}],\"rows\":[{\"id\":1,\"body\":\"memo\"},{\"id\":2,\"body\":\"todo\"}]}" {
+        println("FAIL db table rows dynamic column response body")
+        println(response.body)
+        return 312
+    }
+    0
+}
+
+fn expect_db_invalid_table_response(response: Response, base_code: i64) -> i64 {
+    I response.status != 400 {
+        println("FAIL db invalid table status")
+        return base_code
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db invalid table content type")
+        return base_code + 1
+    }
+    I response.body != "{\"error\":\"db_invalid_table\"}" {
+        println("FAIL db invalid table body")
+        println(response.body)
+        return base_code + 2
+    }
+    0
+}
+
+fn check_table_rows_invalid_inputs(db_path: str) -> i64 {
+    bad_slash := mut db_table_rows_handler(db_path.clone(), "GET", "/db/tables/al/bums/rows", "")
+    bad_slash_status := mut expect_db_invalid_table_response(bad_slash, 165)
+    I bad_slash_status != 0 {
+        return bad_slash_status
+    }
+
+    bad_dash := mut db_table_rows_handler(db_path.clone(), "GET", "/db/tables/albums-title/rows", "")
+    bad_dash_status := mut expect_db_invalid_table_response(bad_dash, 170)
+    I bad_dash_status != 0 {
+        return bad_dash_status
+    }
+
+    bad_digit := mut db_table_rows_handler(db_path.clone(), "GET", "/db/tables/1albums/rows", "")
+    bad_digit_status := mut expect_db_invalid_table_response(bad_digit, 175)
+    I bad_digit_status != 0 {
+        return bad_digit_status
+    }
+
+    bad_body := mut db_table_rows_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "{\"sql\":\"select * from albums\"}")
+    bad_body_status := mut expect_db_invalid_table_response(bad_body, 180)
+    I bad_body_status != 0 {
+        return bad_body_status
+    }
+
+    bad_method := mut db_table_rows_handler(db_path.clone(), "POST", "/db/tables/albums/rows", "")
+    bad_method_status := mut expect_db_invalid_table_response(bad_method, 185)
+    I bad_method_status != 0 {
+        return bad_method_status
+    }
+
+    0
+}
+
+fn expect_db_unsupported_table_response(response: Response, expected_status: i64, base_code: i64) -> i64 {
+    I response.status != expected_status {
+        println("FAIL db unsupported table status")
+        return base_code
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db unsupported table content type")
+        return base_code + 1
+    }
+    I response.body != "{\"error\":\"db_unsupported_table\"}" {
+        println("FAIL db unsupported table body")
+        println(response.body)
+        return base_code + 2
+    }
+    0
+}
+
+fn check_table_rows_missing_table(db_path: str) -> i64 {
+    response := mut db_table_rows_handler(db_path, "GET", "/db/tables/missing_albums/rows", "")
+    expect_db_unsupported_table_response(response, 404, 190)
+}
+
+fn check_table_rows_static_descriptor_rejected(db_path: str) -> i64 {
+    response := mut db_table_rows_handler(db_path, "GET", "/db/tables/books/rows", "")
+    expect_db_unsupported_table_response(response, 422, 195)
+}
+
+fn check_table_rows_id_filter_route(db_path: str) -> i64 {
+    response := mut db_table_rows_id_filter_handler(db_path, "GET", "/db/tables/albums/rows", "id=2", "")
+    I response.status != 200 {
+        println("FAIL db table rows id filter response status")
+        return 200
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows id filter response content type")
+        return 201
+    }
+    I response.body != "{\"table\":\"albums\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"title\",\"type\":\"TEXT\"}],\"rows\":[{\"id\":2,\"title\":\"green\"}]}" {
+        println("FAIL db table rows id filter response body")
+        println(response.body)
+        return 202
+    }
+    0
+}
+
+fn expect_db_invalid_filter_response(response: Response, base_code: i64) -> i64 {
+    I response.status != 400 {
+        println("FAIL db invalid filter status")
+        return base_code
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db invalid filter content type")
+        return base_code + 1
+    }
+    I response.body != "{\"error\":\"db_invalid_filter\"}" {
+        println("FAIL db invalid filter body")
+        println(response.body)
+        return base_code + 2
+    }
+    0
+}
+
+fn check_table_rows_id_filter_invalid_inputs(db_path: str) -> i64 {
+    missing_id := mut db_table_rows_id_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "", "")
+    missing_status := mut expect_db_invalid_filter_response(missing_id, 205)
+    I missing_status != 0 { return missing_status }
+
+    empty_id := mut db_table_rows_id_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "id=", "")
+    empty_status := mut expect_db_invalid_filter_response(empty_id, 210)
+    I empty_status != 0 { return empty_status }
+
+    nondigit_id := mut db_table_rows_id_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "id=2x", "")
+    nondigit_status := mut expect_db_invalid_filter_response(nondigit_id, 215)
+    I nondigit_status != 0 { return nondigit_status }
+
+    extra_param := mut db_table_rows_id_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "id=2&title=green", "")
+    extra_status := mut expect_db_invalid_filter_response(extra_param, 220)
+    I extra_status != 0 { return extra_status }
+
+    title_param := mut db_table_rows_id_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "title=green", "")
+    title_status := mut expect_db_invalid_filter_response(title_param, 225)
+    I title_status != 0 { return title_status }
+
+    sql_param := mut db_table_rows_id_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "sql=select * from albums", "")
+    sql_status := mut expect_db_invalid_filter_response(sql_param, 230)
+    I sql_status != 0 { return sql_status }
+
+    bad_body := mut db_table_rows_id_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "id=2", "{\"where\":\"id=2\"}")
+    body_status := mut expect_db_invalid_filter_response(bad_body, 235)
+    I body_status != 0 { return body_status }
+
+    bad_method := mut db_table_rows_id_filter_handler(db_path.clone(), "POST", "/db/tables/albums/rows", "id=2", "")
+    method_status := mut expect_db_invalid_filter_response(bad_method, 240)
+    I method_status != 0 { return method_status }
+
+    0
+}
+
+fn check_table_rows_id_filter_missing_table(db_path: str) -> i64 {
+    response := mut db_table_rows_id_filter_handler(db_path, "GET", "/db/tables/missing_albums/rows", "id=2", "")
+    expect_db_unsupported_table_response(response, 404, 245)
+}
+
+fn check_table_rows_id_filter_static_descriptor_rejected(db_path: str) -> i64 {
+    response := mut db_table_rows_id_filter_handler(db_path, "GET", "/db/tables/books/rows", "id=2", "")
+    expect_db_unsupported_table_response(response, 422, 250)
+}
+
+fn check_table_rows_title_filter_route(db_path: str) -> i64 {
+    response := mut db_table_rows_title_filter_handler(db_path, "GET", "/db/tables/albums/rows", "title=green", "")
+    I response.status != 200 {
+        println("FAIL db table rows title filter response status")
+        return 251
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows title filter response content type")
+        return 252
+    }
+    I response.body != "{\"table\":\"albums\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"title\",\"type\":\"TEXT\"}],\"rows\":[{\"id\":2,\"title\":\"green\"}]}" {
+        println("FAIL db table rows title filter response body")
+        println(response.body)
+        return 253
+    }
+
+    missing := mut db_table_rows_title_filter_handler(db_path, "GET", "/db/tables/albums/rows", "title=missing", "")
+    I missing.status != 200 {
+        println("FAIL db table rows title filter no-match status")
+        return 254
+    }
+    I missing.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows title filter no-match content type")
+        return 255
+    }
+    I missing.body != "{\"table\":\"albums\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"title\",\"type\":\"TEXT\"}],\"rows\":[]}" {
+        println("FAIL db table rows title filter no-match body")
+        println(missing.body)
+        return 255
+    }
+    0
+}
+
+fn check_table_rows_title_filter_invalid_inputs(db_path: str) -> i64 {
+    missing_title := mut db_table_rows_title_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "", "")
+    missing_status := mut expect_db_invalid_filter_response(missing_title, 260)
+    I missing_status != 0 { return missing_status }
+
+    empty_title := mut db_table_rows_title_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "title=", "")
+    empty_status := mut expect_db_invalid_filter_response(empty_title, 263)
+    I empty_status != 0 { return empty_status }
+
+    quote_title := mut db_table_rows_title_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "title=gre'en", "")
+    quote_status := mut expect_db_invalid_filter_response(quote_title, 266)
+    I quote_status != 0 { return quote_status }
+
+    percent_title := mut db_table_rows_title_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "title=gre%65n", "")
+    percent_status := mut expect_db_invalid_filter_response(percent_title, 269)
+    I percent_status != 0 { return percent_status }
+
+    extra_param := mut db_table_rows_title_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "title=green&x=1", "")
+    extra_status := mut expect_db_invalid_filter_response(extra_param, 272)
+    I extra_status != 0 { return extra_status }
+
+    mixed_filter := mut db_table_rows_title_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "id=2&title=green", "")
+    mixed_status := mut expect_db_invalid_filter_response(mixed_filter, 275)
+    I mixed_status != 0 { return mixed_status }
+
+    sql_param := mut db_table_rows_title_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "sql=select * from albums", "")
+    sql_status := mut expect_db_invalid_filter_response(sql_param, 278)
+    I sql_status != 0 { return sql_status }
+
+    bad_body := mut db_table_rows_title_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "title=green", "{\"where\":\"title=green\"}")
+    body_status := mut expect_db_invalid_filter_response(bad_body, 281)
+    I body_status != 0 { return body_status }
+
+    bad_method := mut db_table_rows_title_filter_handler(db_path.clone(), "POST", "/db/tables/albums/rows", "title=green", "")
+    method_status := mut expect_db_invalid_filter_response(bad_method, 284)
+    I method_status != 0 { return method_status }
+
+    0
+}
+
+fn check_table_rows_title_filter_missing_table(db_path: str) -> i64 {
+    response := mut db_table_rows_title_filter_handler(db_path, "GET", "/db/tables/missing_albums/rows", "title=green", "")
+    expect_db_unsupported_table_response(response, 404, 287)
+}
+
+fn check_table_rows_title_filter_static_descriptor_rejected(db_path: str) -> i64 {
+    response := mut db_table_rows_title_filter_handler(db_path, "GET", "/db/tables/books/rows", "title=green", "")
+    expect_db_unsupported_table_response(response, 422, 290)
+}
+
+fn check_table_rows_body_filter_route(db_path: str) -> i64 {
+    response := mut db_table_rows_body_filter_handler(db_path, "GET", "/db/tables/notes/rows", "body=todo", "")
+    I response.status != 200 {
+        println("FAIL db table rows body filter response status")
+        return 291
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows body filter response content type")
+        return 292
+    }
+    I response.body != "{\"table\":\"notes\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"body\",\"type\":\"TEXT\"}],\"rows\":[{\"id\":2,\"body\":\"todo\"}]}" {
+        println("FAIL db table rows body filter response body")
+        println(response.body)
+        return 293
+    }
+
+    missing := mut db_table_rows_body_filter_handler(db_path, "GET", "/db/tables/notes/rows", "body=missing", "")
+    I missing.status != 200 {
+        println("FAIL db table rows body filter no-match status")
+        return 294
+    }
+    I missing.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows body filter no-match content type")
+        return 295
+    }
+    I missing.body != "{\"table\":\"notes\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"body\",\"type\":\"TEXT\"}],\"rows\":[]}" {
+        println("FAIL db table rows body filter no-match body")
+        println(missing.body)
+        return 296
+    }
+    0
+}
+
+fn check_table_rows_body_filter_invalid_inputs(db_path: str) -> i64 {
+    missing_body := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "", "")
+    missing_status := mut expect_db_invalid_filter_response(missing_body, 297)
+    I missing_status != 0 { return missing_status }
+
+    empty_body := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "body=", "")
+    empty_status := mut expect_db_invalid_filter_response(empty_body, 300)
+    I empty_status != 0 { return empty_status }
+
+    quote_body := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "body=to'do", "")
+    quote_status := mut expect_db_invalid_filter_response(quote_body, 303)
+    I quote_status != 0 { return quote_status }
+
+    percent_body := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "body=to%64o", "")
+    percent_status := mut expect_db_invalid_filter_response(percent_body, 306)
+    I percent_status != 0 { return percent_status }
+
+    extra_param := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "body=todo&x=1", "")
+    extra_status := mut expect_db_invalid_filter_response(extra_param, 309)
+    I extra_status != 0 { return extra_status }
+
+    mixed_id_filter := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "id=2&body=todo", "")
+    mixed_id_status := mut expect_db_invalid_filter_response(mixed_id_filter, 312)
+    I mixed_id_status != 0 { return mixed_id_status }
+
+    mixed_title_filter := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "title=todo&body=todo", "")
+    mixed_title_status := mut expect_db_invalid_filter_response(mixed_title_filter, 315)
+    I mixed_title_status != 0 { return mixed_title_status }
+
+    sql_param := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "sql=select * from notes", "")
+    sql_status := mut expect_db_invalid_filter_response(sql_param, 318)
+    I sql_status != 0 { return sql_status }
+
+    bad_body := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "body=todo", "{\"where\":\"body=todo\"}")
+    body_status := mut expect_db_invalid_filter_response(bad_body, 321)
+    I body_status != 0 { return body_status }
+
+    bad_method := mut db_table_rows_body_filter_handler(db_path.clone(), "POST", "/db/tables/notes/rows", "body=todo", "")
+    method_status := mut expect_db_invalid_filter_response(bad_method, 324)
+    I method_status != 0 { return method_status }
+
+    0
+}
+
+fn check_table_rows_body_filter_missing_table(db_path: str) -> i64 {
+    response := mut db_table_rows_body_filter_handler(db_path, "GET", "/db/tables/missing_notes/rows", "body=todo", "")
+    expect_db_unsupported_table_response(response, 404, 327)
+}
+
+fn check_table_rows_body_filter_static_descriptor_rejected(db_path: str) -> i64 {
+    response := mut db_table_rows_body_filter_handler(db_path, "GET", "/db/tables/books/rows", "body=todo", "")
+    expect_db_unsupported_table_response(response, 422, 330)
+}
+
+fn check_table_rows_body_filter_non_body_table_rejected(db_path: str) -> i64 {
+    response := mut db_table_rows_body_filter_handler(db_path, "GET", "/db/tables/albums/rows", "body=todo", "")
+    expect_db_unsupported_table_response(response, 422, 333)
+}
+
+fn check_books_post_route(db_path: str) -> i64 {
+    response := mut db_books_post_handler(db_path, "POST", "/db/books", "{\"id\":3,\"title\":\"children\"}")
+    I response.status != 200 {
+        println("FAIL db books post response status")
+        return 50
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db books post response content type")
+        return 51
+    }
+    I response.body != "{\"inserted\":1,\"id\":3,\"title\":\"children\"}" {
+        println("FAIL db books post response body")
+        println(response.body)
+        return 52
+    }
+    0
+}
+
+fn check_books_post_route_repeat(db_path: str) -> i64 {
+    response := mut db_books_post_handler(db_path, "POST", "/db/books", "{\"id\":3,\"title\":\"children\"}")
+    I response.status != 200 {
+        println("FAIL db books post repeat response status")
+        return 55
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db books post repeat response content type")
+        return 56
+    }
+    I response.body != "{\"inserted\":0,\"id\":3,\"title\":\"children\"}" {
+        println("FAIL db books post repeat response body")
+        println(response.body)
+        return 57
+    }
+    0
+}
+
+fn check_books_post_route_invalid_body(db_path: str) -> i64 {
+    response := mut db_books_post_handler(db_path, "POST", "/db/books", "{\"id\":4,\"title\":\"children\"}")
+    I response.status != 400 {
+        println("FAIL db books post invalid body status")
+        return 60
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db books post invalid body content type")
+        return 61
+    }
+    I response.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post invalid body")
+        println(response.body)
+        return 62
+    }
+    0
+}
+
+fn check_books_post_route_invalid_method(db_path: str) -> i64 {
+    response := mut db_books_post_handler(db_path, "GET", "/db/books", "{\"id\":3,\"title\":\"children\"}")
+    I response.status != 400 {
+        println("FAIL db books post invalid method status")
+        return 65
+    }
+    I response.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post invalid method body")
+        println(response.body)
+        return 66
+    }
+    0
+}
+
+fn check_books_post_route_conflict(db_path: str) -> i64 {
+    response := mut db_books_post_handler(db_path, "POST", "/db/books", "{\"id\":3,\"title\":\"children\"}")
+    I response.status != 409 {
+        println("FAIL db books post conflict response status")
+        return 95
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db books post conflict response content type")
+        return 96
+    }
+    I response.body != "{\"error\":\"db_conflict\"}" {
+        println("FAIL db books post conflict response body")
+        println(response.body)
+        return 97
+    }
+
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 98 },
+    }
+    result := mut match db.query("select * from books where title = 'children'") {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return 99
+        },
+    }
+    I result.row_count() != 2 as u64 {
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return 100
+    }
+    rows := mut result.get_rows()
+    seen_id3 := mut false
+    seen_id4 := mut false
+    LF ri: 0..rows.len() {
+        row := mut &rows[ri]
+        I cell_or_empty(row, 0) == "3" && cell_or_empty(row, 1) == "children" {
+            seen_id3 = true
+        }
+        I cell_or_empty(row, 0) == "4" && cell_or_empty(row, 1) == "children" {
+            seen_id4 = true
+        }
+    }
+    result.free_owned_text()
+    result.free_owned_text()
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 101 },
+    }
+    I !seen_id3 || !seen_id4 {
+        return 102
+    }
+
+    0
+}
+
+fn check_books_children_count(db_path: str, expected: u64) -> i64 {
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 110 },
+    }
+    result := mut match db.query("select * from books where title = 'children'") {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return 111
+        },
+    }
+    count := mut result.row_count()
+    result.free_owned_text()
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 112 },
+    }
+    I count != expected {
+        return 113
+    }
+
+    0
+}
+
+fn check_books_post_admin_guarded_allowed(db_path: str) -> i64 {
+    auth_set_test_time_sec(1000)
+    store := mut SessionStore.new()
+    admin := store.create("admin-user", 120)
+    store.set_data(admin.session_id, "role", "admin")
+    store.set_data(admin.session_id, "capability", "books.seed")
+
+    response := mut db_books_post_admin_guarded_handler(
+        db_path,
+        "POST",
+        "/db/books",
+        "{\"id\":3,\"title\":\"children\"}",
+        store,
+        admin.session_id,
+    )
+    I response.status != 200 {
+        println("FAIL guarded post allowed status")
+        return 120
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL guarded post allowed content type")
+        return 121
+    }
+    I response.body != "{\"inserted\":1,\"id\":3,\"title\":\"children\"}" {
+        println("FAIL guarded post allowed body")
+        println(response.body)
+        return 122
+    }
+
+    0
+}
+
+fn check_books_post_admin_guarded_repeat(db_path: str) -> i64 {
+    auth_set_test_time_sec(1000)
+    store := mut SessionStore.new()
+    admin := store.create("admin-repeat", 120)
+    store.set_data(admin.session_id, "role", "admin")
+    store.set_data(admin.session_id, "capability", "books.seed")
+
+    response := mut db_books_post_admin_guarded_handler(
+        db_path,
+        "POST",
+        "/db/books",
+        "{\"id\":3,\"title\":\"children\"}",
+        store,
+        admin.session_id,
+    )
+    I response.status != 200 {
+        println("FAIL guarded post repeat status")
+        return 125
+    }
+    I response.body != "{\"inserted\":0,\"id\":3,\"title\":\"children\"}" {
+        println("FAIL guarded post repeat body")
+        println(response.body)
+        return 126
+    }
+
+    0
+}
+
+fn expect_admin_forbidden(response: Response, code: i64) -> i64 {
+    I response.status != 403 {
+        println("FAIL guarded post denied status")
+        return code
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL guarded post denied content type")
+        return code + 1
+    }
+    I response.body != "{\"error\":\"admin_forbidden\"}" {
+        println("FAIL guarded post denied body")
+        println(response.body)
+        return code + 2
+    }
+    0
+}
+
+fn check_books_post_admin_guarded_denied(db_path: str) -> i64 {
+    auth_set_test_time_sec(1000)
+
+    empty_store := mut SessionStore.new()
+    missing_response := mut db_books_post_admin_guarded_handler(
+        db_path,
+        "POST",
+        "/db/books",
+        "{\"id\":3,\"title\":\"children\"}",
+        empty_store,
+        "missing-session",
+    )
+    missing_status := mut expect_admin_forbidden(missing_response, 130)
+    I missing_status != 0 { return missing_status }
+
+    wrong_store := mut SessionStore.new()
+    wrong := wrong_store.create("wrong-capability", 120)
+    wrong_store.set_data(wrong.session_id, "role", "admin")
+    wrong_store.set_data(wrong.session_id, "capability", "books.read")
+    wrong_response := mut db_books_post_admin_guarded_handler(
+        db_path,
+        "POST",
+        "/db/books",
+        "{\"id\":3,\"title\":\"children\"}",
+        wrong_store,
+        wrong.session_id,
+    )
+    wrong_status := mut expect_admin_forbidden(wrong_response, 135)
+    I wrong_status != 0 { return wrong_status }
+
+    expired_store := mut SessionStore.new()
+    expired := expired_store.create("expired-admin", 1)
+    expired_store.set_data(expired.session_id, "role", "admin")
+    expired_store.set_data(expired.session_id, "capability", "books.seed")
+    auth_set_test_time_sec(1002)
+    expired_response := mut db_books_post_admin_guarded_handler(
+        db_path,
+        "POST",
+        "/db/books",
+        "{\"id\":3,\"title\":\"children\"}",
+        expired_store,
+        expired.session_id,
+    )
+    expired_status := mut expect_admin_forbidden(expired_response, 140)
+    auth_set_test_time_sec(1000)
+    I expired_status != 0 { return expired_status }
+
+    no_write_status := mut check_books_children_count(db_path, 0 as u64)
+    I no_write_status != 0 {
+        println("FAIL guarded denied wrote children row")
+        return no_write_status
+    }
+
+    0
+}
+
+fn check_books_post_persistence(db_path: str) -> i64 {
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 70 },
+    }
+
+    result := mut match db.query("select * from books where title = 'children'") {
+        Ok(r) => r,
+        Err(_) => {
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return 71
+        },
+    }
+
+    I result.row_count() != 1 as u64 {
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return 72
+    }
+
+    rows := mut result.get_rows()
+    row0 := mut &rows[0]
+    I cell_or_empty(row0, 0) != "3" || cell_or_empty(row0, 1) != "children" {
+        result.free_owned_text()
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => {},
+        }
+        return 73
+    }
+
+    result.free_owned_text()
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 74 },
+    }
+
+    0
+}
+
 fn check_books_route(db_path: str) -> i64 {
     response := mut db_books_handler(db_path)
     I response.status != 200 {
@@ -184,13 +1860,88 @@ fn check_books_route_missing_catalog(db_path: str) -> i64 {
     0
 }
 
+fn expect_db_unavailable_response(response: Response, base_code: i64) -> i64 {
+    I response.status != 500 {
+        println("FAIL db unavailable status")
+        return base_code
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db unavailable content type")
+        return base_code + 1
+    }
+    I response.body != "{\"error\":\"db_unavailable\"}" {
+        println("FAIL db unavailable body")
+        println(response.body)
+        return base_code + 2
+    }
+    0
+}
+
+fn check_db_unavailable_routes(db_path: str) -> i64 {
+    list_response := mut db_books_handler(db_path.clone())
+    list_status := mut expect_db_unavailable_response(list_response, 130)
+    I list_status != 0 {
+        return list_status
+    }
+
+    count_response := mut db_books_count_handler(db_path.clone())
+    count_status := mut expect_db_unavailable_response(count_response, 135)
+    I count_status != 0 {
+        return count_status
+    }
+
+    table_response := mut db_table_rows_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "")
+    table_status := mut expect_db_unavailable_response(table_response, 145)
+    I table_status != 0 {
+        return table_status
+    }
+
+    filter_response := mut db_table_rows_id_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "id=2", "")
+    filter_status := mut expect_db_unavailable_response(filter_response, 148)
+    I filter_status != 0 {
+        return filter_status
+    }
+
+    title_filter_response := mut db_table_rows_title_filter_handler(db_path.clone(), "GET", "/db/tables/albums/rows", "title=green", "")
+    title_filter_status := mut expect_db_unavailable_response(title_filter_response, 152)
+    I title_filter_status != 0 {
+        return title_filter_status
+    }
+
+    body_filter_response := mut db_table_rows_body_filter_handler(db_path.clone(), "GET", "/db/tables/notes/rows", "body=todo", "")
+    body_filter_status := mut expect_db_unavailable_response(body_filter_response, 156)
+    I body_filter_status != 0 {
+        return body_filter_status
+    }
+
+    post_response := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\"}")
+    post_status := mut expect_db_unavailable_response(post_response, 140)
+    I post_status != 0 {
+        return post_status
+    }
+
+    0
+}
+
 fn main() -> i64 {
     db_path := mut "server_vaisdb_integration_db"
+    albums_path := mut "server_vaisdb_albums_db"
+    notes_path := mut "server_vaisdb_notes_db"
     missing_catalog_path := mut "server_vaisdb_missing_catalog_db"
+    missing_table_path := mut "server_vaisdb_missing_table_db"
+    conflict_path := mut "server_vaisdb_conflict_db"
+    guarded_path := mut "server_vaisdb_guarded_db"
+    guarded_denied_path := mut "server_vaisdb_guarded_denied_db"
+    unavailable_path := mut "/dev/null/vaisdb_unavailable"
 
     server_status := mut check_server_surface()
     I server_status != 0 {
         return server_status
+    }
+
+    unavailable_status := mut check_db_unavailable_routes(unavailable_path.clone())
+    I unavailable_status != 0 {
+        return unavailable_status
     }
 
     setup_status := mut setup_books_db(db_path.clone())
@@ -206,6 +1957,176 @@ fn main() -> i64 {
     missing_catalog_status := mut check_books_route_missing_catalog(missing_catalog_path.clone())
     I missing_catalog_status != 0 {
         return missing_catalog_status
+    }
+
+    count_route_status := mut check_books_count_route(db_path.clone())
+    I count_route_status != 0 {
+        return count_route_status
+    }
+
+    count_missing_catalog_status := mut check_books_count_route_missing_catalog(missing_catalog_path.clone())
+    I count_missing_catalog_status != 0 {
+        return count_missing_catalog_status
+    }
+
+    albums_setup_status := mut setup_albums_db(albums_path.clone())
+    I albums_setup_status != 0 {
+        return albums_setup_status
+    }
+
+    table_rows_status := mut check_table_rows_route(albums_path.clone())
+    I table_rows_status != 0 {
+        return table_rows_status
+    }
+
+    notes_setup_status := mut setup_notes_db(notes_path.clone())
+    I notes_setup_status != 0 {
+        return notes_setup_status
+    }
+
+    table_rows_dynamic_column_status := mut check_table_rows_dynamic_column_route(notes_path.clone())
+    I table_rows_dynamic_column_status != 0 {
+        return table_rows_dynamic_column_status
+    }
+
+    table_rows_invalid_status := mut check_table_rows_invalid_inputs(albums_path.clone())
+    I table_rows_invalid_status != 0 {
+        return table_rows_invalid_status
+    }
+
+    table_rows_missing_status := mut check_table_rows_missing_table(missing_table_path.clone())
+    I table_rows_missing_status != 0 {
+        return table_rows_missing_status
+    }
+
+    table_rows_static_status := mut check_table_rows_static_descriptor_rejected(db_path.clone())
+    I table_rows_static_status != 0 {
+        return table_rows_static_status
+    }
+
+    table_rows_filter_status := mut check_table_rows_id_filter_route(albums_path.clone())
+    I table_rows_filter_status != 0 {
+        return table_rows_filter_status
+    }
+
+    table_rows_filter_invalid_status := mut check_table_rows_id_filter_invalid_inputs(albums_path.clone())
+    I table_rows_filter_invalid_status != 0 {
+        return table_rows_filter_invalid_status
+    }
+
+    table_rows_filter_missing_status := mut check_table_rows_id_filter_missing_table(missing_table_path.clone())
+    I table_rows_filter_missing_status != 0 {
+        return table_rows_filter_missing_status
+    }
+
+    table_rows_filter_static_status := mut check_table_rows_id_filter_static_descriptor_rejected(db_path.clone())
+    I table_rows_filter_static_status != 0 {
+        return table_rows_filter_static_status
+    }
+
+    table_rows_title_filter_status := mut check_table_rows_title_filter_route(albums_path.clone())
+    I table_rows_title_filter_status != 0 {
+        return table_rows_title_filter_status
+    }
+
+    table_rows_title_filter_invalid_status := mut check_table_rows_title_filter_invalid_inputs(albums_path.clone())
+    I table_rows_title_filter_invalid_status != 0 {
+        return table_rows_title_filter_invalid_status
+    }
+
+    table_rows_title_filter_missing_status := mut check_table_rows_title_filter_missing_table(missing_table_path.clone())
+    I table_rows_title_filter_missing_status != 0 {
+        return table_rows_title_filter_missing_status
+    }
+
+    table_rows_title_filter_static_status := mut check_table_rows_title_filter_static_descriptor_rejected(db_path.clone())
+    I table_rows_title_filter_static_status != 0 {
+        return table_rows_title_filter_static_status
+    }
+
+    table_rows_body_filter_status := mut check_table_rows_body_filter_route(notes_path.clone())
+    I table_rows_body_filter_status != 0 {
+        return table_rows_body_filter_status
+    }
+
+    table_rows_body_filter_invalid_status := mut check_table_rows_body_filter_invalid_inputs(notes_path.clone())
+    I table_rows_body_filter_invalid_status != 0 {
+        return table_rows_body_filter_invalid_status
+    }
+
+    table_rows_body_filter_missing_status := mut check_table_rows_body_filter_missing_table(missing_table_path.clone())
+    I table_rows_body_filter_missing_status != 0 {
+        return table_rows_body_filter_missing_status
+    }
+
+    table_rows_body_filter_static_status := mut check_table_rows_body_filter_static_descriptor_rejected(db_path.clone())
+    I table_rows_body_filter_static_status != 0 {
+        return table_rows_body_filter_static_status
+    }
+
+    table_rows_body_filter_non_body_status := mut check_table_rows_body_filter_non_body_table_rejected(albums_path.clone())
+    I table_rows_body_filter_non_body_status != 0 {
+        return table_rows_body_filter_non_body_status
+    }
+
+    post_status := mut check_books_post_route(db_path.clone())
+    I post_status != 0 {
+        return post_status
+    }
+
+    repeat_post_status := mut check_books_post_route_repeat(db_path.clone())
+    I repeat_post_status != 0 {
+        return repeat_post_status
+    }
+
+    invalid_body_status := mut check_books_post_route_invalid_body(db_path.clone())
+    I invalid_body_status != 0 {
+        return invalid_body_status
+    }
+
+    invalid_method_status := mut check_books_post_route_invalid_method(db_path.clone())
+    I invalid_method_status != 0 {
+        return invalid_method_status
+    }
+
+    conflict_setup_status := mut setup_books_conflict_db(conflict_path.clone())
+    I conflict_setup_status != 0 {
+        return conflict_setup_status
+    }
+
+    conflict_status := mut check_books_post_route_conflict(conflict_path.clone())
+    I conflict_status != 0 {
+        return conflict_status
+    }
+
+    guarded_setup_status := mut setup_books_db(guarded_path.clone())
+    I guarded_setup_status != 0 {
+        return guarded_setup_status
+    }
+
+    guarded_allowed_status := mut check_books_post_admin_guarded_allowed(guarded_path.clone())
+    I guarded_allowed_status != 0 {
+        return guarded_allowed_status
+    }
+
+    guarded_repeat_status := mut check_books_post_admin_guarded_repeat(guarded_path.clone())
+    I guarded_repeat_status != 0 {
+        return guarded_repeat_status
+    }
+
+    guarded_denied_setup_status := mut setup_books_db(guarded_denied_path.clone())
+    I guarded_denied_setup_status != 0 {
+        return guarded_denied_setup_status
+    }
+
+    guarded_denied_status := mut check_books_post_admin_guarded_denied(guarded_denied_path.clone())
+    I guarded_denied_status != 0 {
+        return guarded_denied_status
+    }
+
+    persistence_status := mut check_books_post_persistence(db_path.clone())
+    I persistence_status != 0 {
+        return persistence_status
     }
 
     println("VAIS_SERVER_VAISDB_INTEGRATION_OK")

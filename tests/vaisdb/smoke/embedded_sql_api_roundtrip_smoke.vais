@@ -28,6 +28,32 @@
 #     values-only INSERT, and unfiltered SELECT, including close/reopen
 #     visibility, bounded WAL redo recovery evidence for values-only INSERT,
 #     and negative books filter/join/projection boundaries.
+#   - Promotes authors(id INT, name TEXT) as the second registered descriptor
+#     with exact CREATE/VALUES INSERT/SELECT and close/reopen evidence while
+#     keeping filters, joins, schema browsing, and unregistered SELECT rejected.
+#   - Promotes the first catalog-derived dynamic descriptor CREATE boundary:
+#     exact CREATE TABLE albums(id INT, title TEXT) succeeds without adding
+#     albums to the static registry, duplicate CREATE is rejected before and
+#     after close/reopen, and dynamic full-row INSERT plus descriptor-order
+#     SELECT readback and equality filters are promoted in later sections.
+#   - Promotes authors(id INT, name TEXT) values-only INSERT recovery after
+#     durable schema setup by restoring the authors heap page to its pre-INSERT
+#     image and reopening through EmbeddedDatabase.open().
+#   - Promotes catalog-derived dynamic albums(id INT, title TEXT) values-only
+#     INSERT recovery after durable schema setup by restoring the dynamic table
+#     heap page to its pre-INSERT image and reopening through
+#     EmbeddedDatabase.open().
+#   - Promotes catalog-derived dynamic notes(id INT, body TEXT) full-column-list
+#     INSERT recovery after durable schema setup by restoring the dynamic table
+#     heap page to its pre-INSERT image and reopening through
+#     EmbeddedDatabase.open().
+#   - Promotes the first catalog-derived three-column descriptor metadata
+#     boundary for exact tasks(id INT, title TEXT, status TEXT), without
+#     promoting INSERT/SELECT/recovery/server/web behavior for that shape.
+#   - Promotes descriptor SELECT * TEXT equality filters for books.title and
+#     authors.name, including reversed literal equality, while keeping people
+#     name filters, descriptor id filters, projections plus filters, qualified
+#     refs, joins, and broad predicates rejected.
 #   - Promotes bounded WAL redo recovery evidence for the fixed plain
 #     `update people set name = 'lovelace' where id = 42` path, including
 #     stale tuple hiding and current row visibility through public SELECT after
@@ -36,6 +62,10 @@
 #     `delete from people where id = 7` path, including target hiding,
 #     survivor visibility, and row-count proof through public SELECT after
 #     explicit recovery.
+#   - Promotes automatic recovery-on-open evidence for the fixed primary-key
+#     DELETE path and the fixed non-null secondary UNIQUE DELETE path by
+#     restoring heap plus index pages to pre-DELETE images and reopening
+#     through EmbeddedDatabase.open().
 #
 # This keeps broader SQL planning out of scope; it locks the first SQLite-like
 # in-process SQL API boundary over the already-certified catalog + heap DML
@@ -46,9 +76,11 @@ use server/embedded
 use storage/constants
 use storage/file
 use storage/page/manager
+use storage/page/meta
 use storage/buffer/pool
 use storage/recovery/redo
 use storage/wal/lsn
+use sql/catalog/schema
 use sql/parser/token
 use std/time
 
@@ -73,6 +105,11 @@ fn expect_column(cols: &Vec<EmbeddedColumn>, idx: u64, expected_name: str, expec
     (__str_eq(col.name, expected_name) != 0) && (__str_eq(col.type_name, expected_type) != 0)
 }
 
+fn expect_catalog_column(cols: &Vec<ColumnInfo>, idx: u64, expected_name: str, expected_type: str) -> bool {
+    col := mut &cols[idx]
+    (__str_eq(col.name, expected_name) != 0) && (__str_eq(col.data_type.name(), expected_type) != 0)
+}
+
 fn copy_smoke_page(data: &[u8]) -> Vec<u8> {
     out: Vec<u8> := mut Vec.with_capacity(data.len())
     i := mut 0u64
@@ -83,15 +120,15 @@ fn copy_smoke_page(data: &[u8]) -> Vec<u8> {
     out
 }
 
-fn expect_page_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, pre_mutation_page: Vec<u8>, min_txn_entries: u64, min_records_redone: u64) -> i64 {
+fn restore_smoke_data_page(db_path: str, page_id: u32, page_image: Vec<u8>) -> i64 {
     data_path := mut db_path.clone() + "/" + FILE_NAME_DATA
     page_offset := mut (page_id as u64) * (PAGE_SIZE_8K as u64)
 
-    restore_file := mut match File.open(data_path.clone(), "rw+") {
+    restore_file := mut match File.open(data_path, "rw+") {
         Ok(f) => f,
         Err(_) => { return 224 },
     }
-    match restore_file.write_at(page_offset, &pre_mutation_page[0..pre_mutation_page.len()]) {
+    match restore_file.write_at(page_offset, &page_image[0..page_image.len()]) {
         Ok(_) => {},
         Err(_) => { return 225 },
     }
@@ -100,6 +137,44 @@ fn expect_page_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, pre_muta
         Err(_) => { return 226 },
     }
 
+    0
+}
+
+fn set_smoke_checkpoint_lsn(db_path: str, checkpoint_lsn: u64) -> i64 {
+    meta_path := mut db_path.clone() + "/" + FILE_NAME_META
+    meta_file := mut match File.open(meta_path, "rw+") {
+        Ok(f) => f,
+        Err(_) => { return 224 },
+    }
+    page := mut match meta_file.read_at(0, PAGE_SIZE_8K as u64) {
+        Ok(p) => p,
+        Err(_) => { return 225 },
+    }
+    meta := mut match MetaPageHeader.read_from_page(&page) {
+        Ok(m) => m,
+        Err(_) => { return 226 },
+    }
+    meta.set_checkpoint_lsn(checkpoint_lsn)
+    meta.write_to_page(&page)
+    match meta_file.write_at(0, &page[0..page.len()]) {
+        Ok(_) => {},
+        Err(_) => { return 227 },
+    }
+    match meta_file.fsync() {
+        Ok(_) => {},
+        Err(_) => { return 228 },
+    }
+
+    0
+}
+
+fn expect_page_wal_recovery(db_path: str, page_id: u32, start_lsn: u64, pre_mutation_page: Vec<u8>, min_txn_entries: u64, min_records_redone: u64) -> i64 {
+    restore_code := mut restore_smoke_data_page(db_path.clone(), page_id, pre_mutation_page)
+    I restore_code != 0 {
+        return restore_code
+    }
+
+    data_path := mut db_path.clone() + "/" + FILE_NAME_DATA
     recovery_file := mut match File.open(data_path, "rw+") {
         Ok(f) => f,
         Err(_) => { return 227 },
@@ -1166,7 +1241,7 @@ fn main() -> i64 {
 
     # Non-people table name: CREATE/INSERT/SELECT against a table the fixed
     # shape recognizer does not know must be rejected, not silently accepted.
-    match neg_db.execute("create table accounts (id int, name text)") {
+    match neg_db.execute("create table accounts (id int, name int)") {
         Ok(_) => { return 200 },
         Err(_) => {},
     }
@@ -1266,8 +1341,7 @@ fn main() -> i64 {
     #
     # This is the first schema-driven descriptor slice beyond hard-coded
     # people-table recognition. It accepts only the registered books descriptor
-    # shape and keeps filters, broad projections, joins, and unregistered tables
-    # rejected.
+    # shape and keeps broad projections and joins rejected.
     books_suffix := mut time_micros()
     books_path := mut "embedded_sql_api_roundtrip_books_db_{books_suffix}"
     books_cfg := mut EmbeddedConfig.default()
@@ -1342,11 +1416,63 @@ fn main() -> i64 {
     books_projection.free_owned_text()
     books_projection.free_owned_text()
 
+    books_title_filter := mut match books_db.query("select * from books where title = 'dune'") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I books_title_filter.row_count() != 1 as u64 { return 255 }
+    books_title_filter_rows := mut books_title_filter.get_rows()
+    books_title_filter_row := mut &books_title_filter_rows[0]
+    I !expect_cell(books_title_filter_row, 0, "1") { return 255 }
+    I !expect_cell(books_title_filter_row, 1, "dune") { return 255 }
+    books_title_filter.free_owned_text()
+    books_title_filter.free_owned_text()
+
+    books_title_filter_reversed := mut match books_db.query("select * from books where 'foundation' = title") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I books_title_filter_reversed.row_count() != 1 as u64 { return 255 }
+    books_title_filter_reversed_rows := mut books_title_filter_reversed.get_rows()
+    books_title_filter_reversed_row := mut &books_title_filter_reversed_rows[0]
+    I !expect_cell(books_title_filter_reversed_row, 0, "2") { return 255 }
+    I !expect_cell(books_title_filter_reversed_row, 1, "foundation") { return 255 }
+    books_title_filter_reversed.free_owned_text()
+    books_title_filter_reversed.free_owned_text()
+
+    books_id_filter := mut match books_db.query("select * from books where id = 1") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I books_id_filter.row_count() != 1 as u64 { return 255 }
+    books_id_filter_rows := mut books_id_filter.get_rows()
+    books_id_filter_row := mut &books_id_filter_rows[0]
+    I !expect_cell(books_id_filter_row, 0, "1") { return 255 }
+    I !expect_cell(books_id_filter_row, 1, "dune") { return 255 }
+    books_id_filter.free_owned_text()
+    books_id_filter.free_owned_text()
+
+    books_id_filter_reversed := mut match books_db.query("select * from books where 2 = id") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I books_id_filter_reversed.row_count() != 1 as u64 { return 255 }
+    books_id_filter_reversed_rows := mut books_id_filter_reversed.get_rows()
+    books_id_filter_reversed_row := mut &books_id_filter_reversed_rows[0]
+    I !expect_cell(books_id_filter_reversed_row, 0, "2") { return 255 }
+    I !expect_cell(books_id_filter_reversed_row, 1, "foundation") { return 255 }
+    books_id_filter_reversed.free_owned_text()
+    books_id_filter_reversed.free_owned_text()
+
     match books_db.query("select title from books") {
         Ok(_) => { return 255 },
         Err(_) => {},
     }
-    match books_db.query("select * from books where id = 1") {
+    match books_db.query("select id, title from books where title = 'dune'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match books_db.query("select id, title from books where id = 1") {
         Ok(_) => { return 255 },
         Err(_) => {},
     }
@@ -1358,7 +1484,7 @@ fn main() -> i64 {
         Ok(_) => { return 255 },
         Err(_) => {},
     }
-    match books_db.execute("create table magazines (id int, title text)") {
+    match books_db.execute("create table magazines (id int, name int)") {
         Ok(_) => { return 255 },
         Err(_) => {},
     }
@@ -1400,6 +1526,2257 @@ fn main() -> i64 {
     match books_reopened.close() {
         Ok(_) => {},
         Err(_) => { return 255 },
+    }
+
+    # --- Catalog-derived dynamic descriptor CREATE: albums(id INT, title TEXT) ---
+    #
+    # This proves the first dynamic table-name boundary without adding albums to
+    # the static descriptor registry. It also promotes the first values-only
+    # full-row dynamic INSERT and the first dynamic SELECT readback boundary.
+    albums_suffix := mut time_micros()
+    albums_path := mut "embedded_sql_api_roundtrip_albums_db_{albums_suffix}"
+    albums_cfg := mut EmbeddedConfig.default()
+    albums_cfg = albums_cfg.with_data_dir(albums_path.clone())
+    albums_cfg = albums_cfg.with_page_size(PAGE_SIZE_8K)
+    albums_db := mut match EmbeddedDatabase.open(albums_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 208 },
+    }
+    albums_created := mut match albums_db.execute("create table albums (id int, title text)") {
+        Ok(v) => v,
+        Err(e) => {
+            I __str_eq(e.hint, "dynamic descriptor CREATE currently requires exactly id INT, title TEXT") != 0 { return 209 }
+            I __str_eq(e.hint, "descriptor table columns must match the registered descriptor order and types") != 0 { return 237 }
+            I __str_eq(e.hint, "descriptor table currently certifies nullable registered columns only") != 0 { return 238 }
+            I __str_eq(e.hint, "CREATE TABLE currently certifies registered descriptor tables only beyond people") != 0 { return 239 }
+            I __str_eq(e.code, "VAIS-0609009") != 0 { return 240 }
+            I __str_eq(e.code, "VAIS-0110004") != 0 { return 237 }
+            I __str_eq(e.code, "VAIS-0609003") != 0 { return 238 }
+            return 241
+        },
+    }
+    I albums_created != 0 as u64 { return 210 }
+
+    albums_table_id := mut 0 as u32
+    match albums_db.catalog.get_table("albums") {
+        Some(info) => {
+            albums_table_id = info.table_id
+            I info.column_count != 2 as u16 { return 211 }
+        },
+        None => { return 212 },
+    }
+    albums_col_refs := mut albums_db.catalog.get_columns(albums_table_id)
+    albums_cols: Vec<ColumnInfo> := mut Vec.with_capacity(albums_col_refs.len())
+    LF col_ref: &albums_col_refs {
+        albums_cols.push((**col_ref).clone())
+    }
+    I albums_cols.len() != 2 as u64 { return 213 }
+    I !expect_catalog_column(&albums_cols, 0, "id", "INT") { return 214 }
+    I !expect_catalog_column(&albums_cols, 1, "title", "TEXT") { return 215 }
+
+    match albums_db.execute("create table albums (id int, title text)") {
+        Ok(_) => { return 216 },
+        Err(_) => {},
+    }
+    match albums_db.execute("create table albums (title text, id int)") {
+        Ok(_) => { return 217 },
+        Err(_) => {},
+    }
+    match albums_db.execute("create table albums (id int, name text)") {
+        Ok(_) => { return 218 },
+        Err(_) => {},
+    }
+    match albums_db.execute("create table albums (id int, title text, label text)") {
+        Ok(_) => { return 219 },
+        Err(_) => {},
+    }
+    match albums_db.execute("create table albums (id text, title text)") {
+        Ok(_) => { return 220 },
+        Err(_) => {},
+    }
+    match albums_db.execute("create table albums (id int not null, title text)") {
+        Ok(_) => { return 221 },
+        Err(_) => {},
+    }
+    match albums_db.execute("create table albums (id int default 1, title text)") {
+        Ok(_) => { return 222 },
+        Err(_) => {},
+    }
+    match albums_db.execute("create table albums (id int primary key, title text)") {
+        Ok(_) => { return 223 },
+        Err(_) => {},
+    }
+    albums_inserted := mut match albums_db.execute("insert into albums values (1, 'blue')") {
+        Ok(v) => v,
+        Err(_) => { return 224 },
+    }
+    I albums_inserted != 1 as u64 { return 225 }
+    match albums_db.execute("insert into albums (id) values (2)") {
+        Ok(_) => { return 242 },
+        Err(_) => {},
+    }
+    match albums_db.execute("insert into albums values (2, 'green'), (3, 'red')") {
+        Ok(_) => { return 243 },
+        Err(_) => {},
+    }
+    match albums_db.execute("insert into albums values (NULL, 'bad')") {
+        Ok(_) => { return 244 },
+        Err(_) => {},
+    }
+    match albums_db.execute("insert into albums values (DEFAULT, 'bad')") {
+        Ok(_) => { return 245 },
+        Err(_) => {},
+    }
+    match albums_db.execute("insert into albums values ('bad', 'blue')") {
+        Ok(_) => { return 246 },
+        Err(_) => {},
+    }
+    match albums_db.execute("insert into albums values (4, 5)") {
+        Ok(_) => { return 247 },
+        Err(_) => {},
+    }
+    match albums_db.execute("insert into albums values (6)") {
+        Ok(_) => { return 248 },
+        Err(_) => {},
+    }
+    match albums_db.execute("insert into albums select * from albums") {
+        Ok(_) => { return 249 },
+        Err(_) => {},
+    }
+    match albums_db.execute("insert into mixtapes values (1, 'missing')") {
+        Ok(_) => { return 253 },
+        Err(_) => {},
+    }
+    albums_select := mut match albums_db.query("select * from albums") {
+        Ok(r) => r,
+        Err(_) => { return 250 },
+    }
+    I albums_select.column_count() != 2 as u64 { return 254 }
+    I albums_select.row_count() != 1 as u64 { return 255 }
+    albums_select_cols := mut albums_select.get_columns()
+    I !expect_column(albums_select_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(albums_select_cols, 1, "title", "TEXT") { return 255 }
+    albums_select_rows := mut albums_select.get_rows()
+    albums_select_row0 := mut &albums_select_rows[0]
+    I !expect_cell(albums_select_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_select_row0, 1, "blue") { return 255 }
+    albums_select.free_owned_text()
+    albums_select.free_owned_text()
+
+    albums_projection := mut match albums_db.query("select id, title from albums") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_projection.column_count() != 2 as u64 { return 255 }
+    I albums_projection.row_count() != 1 as u64 { return 255 }
+    albums_projection_cols := mut albums_projection.get_columns()
+    I !expect_column(albums_projection_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(albums_projection_cols, 1, "title", "TEXT") { return 255 }
+    albums_projection_rows := mut albums_projection.get_rows()
+    albums_projection_row0 := mut &albums_projection_rows[0]
+    I !expect_cell(albums_projection_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_projection_row0, 1, "blue") { return 255 }
+    albums_projection.free_owned_text()
+    albums_projection.free_owned_text()
+
+    albums_id_filter := mut match albums_db.query("select * from albums where id = 1") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_id_filter.row_count() != 1 as u64 { return 255 }
+    albums_id_filter_rows := mut albums_id_filter.get_rows()
+    albums_id_filter_row0 := mut &albums_id_filter_rows[0]
+    I !expect_cell(albums_id_filter_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_id_filter_row0, 1, "blue") { return 255 }
+    albums_id_filter.free_owned_text()
+    albums_id_filter.free_owned_text()
+
+    albums_id_filter_reversed := mut match albums_db.query("select * from albums where 1 = id") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_id_filter_reversed.row_count() != 1 as u64 { return 255 }
+    albums_id_filter_reversed_rows := mut albums_id_filter_reversed.get_rows()
+    albums_id_filter_reversed_row0 := mut &albums_id_filter_reversed_rows[0]
+    I !expect_cell(albums_id_filter_reversed_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_id_filter_reversed_row0, 1, "blue") { return 255 }
+    albums_id_filter_reversed.free_owned_text()
+    albums_id_filter_reversed.free_owned_text()
+
+    albums_title_filter := mut match albums_db.query("select * from albums where title = 'blue'") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_title_filter.row_count() != 1 as u64 { return 255 }
+    albums_title_filter_rows := mut albums_title_filter.get_rows()
+    albums_title_filter_row0 := mut &albums_title_filter_rows[0]
+    I !expect_cell(albums_title_filter_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_title_filter_row0, 1, "blue") { return 255 }
+    albums_title_filter.free_owned_text()
+    albums_title_filter.free_owned_text()
+
+    albums_title_filter_reversed := mut match albums_db.query("select * from albums where 'blue' = title") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_title_filter_reversed.row_count() != 1 as u64 { return 255 }
+    albums_title_filter_reversed_rows := mut albums_title_filter_reversed.get_rows()
+    albums_title_filter_reversed_row0 := mut &albums_title_filter_reversed_rows[0]
+    I !expect_cell(albums_title_filter_reversed_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_title_filter_reversed_row0, 1, "blue") { return 255 }
+    albums_title_filter_reversed.free_owned_text()
+    albums_title_filter_reversed.free_owned_text()
+
+    match albums_db.query("select title from albums") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match albums_db.query("select title, id from albums") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    albums_projection_id_filter := mut match albums_db.query("select id, title from albums where id = 1") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_projection_id_filter.row_count() != 1 as u64 { return 255 }
+    albums_projection_id_filter_rows := mut albums_projection_id_filter.get_rows()
+    albums_projection_id_filter_row0 := mut &albums_projection_id_filter_rows[0]
+    I !expect_cell(albums_projection_id_filter_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_projection_id_filter_row0, 1, "blue") { return 255 }
+    albums_projection_id_filter.free_owned_text()
+    albums_projection_id_filter.free_owned_text()
+    albums_projection_title_filter := mut match albums_db.query("select id, title from albums where title = 'blue'") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_projection_title_filter.row_count() != 1 as u64 { return 255 }
+    albums_projection_title_filter_rows := mut albums_projection_title_filter.get_rows()
+    albums_projection_title_filter_row0 := mut &albums_projection_title_filter_rows[0]
+    I !expect_cell(albums_projection_title_filter_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_projection_title_filter_row0, 1, "blue") { return 255 }
+    albums_projection_title_filter.free_owned_text()
+    albums_projection_title_filter.free_owned_text()
+    match albums_db.query("select * from albums where id = '1'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match albums_db.query("select * from albums where title = 1") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match albums_db.query("select * from albums where id > 1") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match albums_db.query("select * from albums where id = 1 and title = 'blue'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match albums_db.query("select albums.id, albums.title from albums") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match albums_db.query("select * from albums as a") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match albums_db.query("select * from albums join people on albums.id = people.id") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match albums_db.query("select * from mixtapes") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match albums_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 251 },
+    }
+
+    albums_reopen_cfg := mut EmbeddedConfig.default()
+    albums_reopen_cfg = albums_reopen_cfg.with_data_dir(albums_path.clone())
+    albums_reopen_cfg = albums_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    albums_reopened := mut match EmbeddedDatabase.open(albums_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 227 },
+    }
+    albums_reopened_table_id := mut 0 as u32
+    match albums_reopened.catalog.get_table("albums") {
+        Some(info) => {
+            albums_reopened_table_id = info.table_id
+            I info.column_count != 2 as u16 { return 228 }
+        },
+        None => { return 229 },
+    }
+    albums_reopened_col_refs := mut albums_reopened.catalog.get_columns(albums_reopened_table_id)
+    albums_reopened_cols: Vec<ColumnInfo> := mut Vec.with_capacity(albums_reopened_col_refs.len())
+    LF col_ref: &albums_reopened_col_refs {
+        albums_reopened_cols.push((**col_ref).clone())
+    }
+    I albums_reopened_cols.len() != 2 as u64 { return 230 }
+    I !expect_catalog_column(&albums_reopened_cols, 0, "id", "INT") { return 231 }
+    I !expect_catalog_column(&albums_reopened_cols, 1, "title", "TEXT") { return 232 }
+    match albums_reopened.execute("create table albums (id int, title text)") {
+        Ok(_) => { return 233 },
+        Err(_) => {},
+    }
+    albums_reopened_inserted := mut match albums_reopened.execute("insert into albums values (2, 'green')") {
+        Ok(v) => v,
+        Err(_) => { return 234 },
+    }
+    I albums_reopened_inserted != 1 as u64 { return 252 }
+    albums_reopened_select := mut match albums_reopened.query("select * from albums") {
+        Ok(r) => r,
+        Err(_) => { return 235 },
+    }
+    I albums_reopened_select.column_count() != 2 as u64 { return 255 }
+    I albums_reopened_select.row_count() != 2 as u64 { return 255 }
+    albums_reopened_select_cols := mut albums_reopened_select.get_columns()
+    I !expect_column(albums_reopened_select_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(albums_reopened_select_cols, 1, "title", "TEXT") { return 255 }
+    albums_reopened_select_rows := mut albums_reopened_select.get_rows()
+    albums_reopened_select_row0 := mut &albums_reopened_select_rows[0]
+    albums_reopened_select_row1 := mut &albums_reopened_select_rows[1]
+    I !expect_cell(albums_reopened_select_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_reopened_select_row0, 1, "blue") { return 255 }
+    I !expect_cell(albums_reopened_select_row1, 0, "2") { return 255 }
+    I !expect_cell(albums_reopened_select_row1, 1, "green") { return 255 }
+    albums_reopened_select.free_owned_text()
+    albums_reopened_select.free_owned_text()
+
+    albums_reopened_projection := mut match albums_reopened.query("select id, title from albums") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_reopened_projection.column_count() != 2 as u64 { return 255 }
+    I albums_reopened_projection.row_count() != 2 as u64 { return 255 }
+    albums_reopened_projection.free_owned_text()
+    albums_reopened_projection.free_owned_text()
+
+    albums_reopened_id_filter := mut match albums_reopened.query("select * from albums where id = 2") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_reopened_id_filter.row_count() != 1 as u64 { return 255 }
+    albums_reopened_id_filter_rows := mut albums_reopened_id_filter.get_rows()
+    albums_reopened_id_filter_row0 := mut &albums_reopened_id_filter_rows[0]
+    I !expect_cell(albums_reopened_id_filter_row0, 0, "2") { return 255 }
+    I !expect_cell(albums_reopened_id_filter_row0, 1, "green") { return 255 }
+    albums_reopened_id_filter.free_owned_text()
+    albums_reopened_id_filter.free_owned_text()
+
+    albums_reopened_id_filter_reversed := mut match albums_reopened.query("select * from albums where 1 = id") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_reopened_id_filter_reversed.row_count() != 1 as u64 { return 255 }
+    albums_reopened_id_filter_reversed_rows := mut albums_reopened_id_filter_reversed.get_rows()
+    albums_reopened_id_filter_reversed_row0 := mut &albums_reopened_id_filter_reversed_rows[0]
+    I !expect_cell(albums_reopened_id_filter_reversed_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_reopened_id_filter_reversed_row0, 1, "blue") { return 255 }
+    albums_reopened_id_filter_reversed.free_owned_text()
+    albums_reopened_id_filter_reversed.free_owned_text()
+
+    albums_reopened_title_filter := mut match albums_reopened.query("select * from albums where title = 'green'") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_reopened_title_filter.row_count() != 1 as u64 { return 255 }
+    albums_reopened_title_filter_rows := mut albums_reopened_title_filter.get_rows()
+    albums_reopened_title_filter_row0 := mut &albums_reopened_title_filter_rows[0]
+    I !expect_cell(albums_reopened_title_filter_row0, 0, "2") { return 255 }
+    I !expect_cell(albums_reopened_title_filter_row0, 1, "green") { return 255 }
+    albums_reopened_title_filter.free_owned_text()
+    albums_reopened_title_filter.free_owned_text()
+
+    albums_reopened_title_filter_reversed := mut match albums_reopened.query("select * from albums where 'blue' = title") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_reopened_title_filter_reversed.row_count() != 1 as u64 { return 255 }
+    albums_reopened_title_filter_reversed_rows := mut albums_reopened_title_filter_reversed.get_rows()
+    albums_reopened_title_filter_reversed_row0 := mut &albums_reopened_title_filter_reversed_rows[0]
+    I !expect_cell(albums_reopened_title_filter_reversed_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_reopened_title_filter_reversed_row0, 1, "blue") { return 255 }
+    albums_reopened_title_filter_reversed.free_owned_text()
+    albums_reopened_title_filter_reversed.free_owned_text()
+    match albums_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 236 },
+    }
+
+    # --- Catalog-derived dynamic descriptor column-list INSERT ---
+    albums_columns_suffix := mut time_micros()
+    albums_columns_path := mut "embedded_sql_api_roundtrip_albums_columns_db_{albums_columns_suffix}"
+    albums_columns_cfg := mut EmbeddedConfig.default()
+    albums_columns_cfg = albums_columns_cfg.with_data_dir(albums_columns_path.clone())
+    albums_columns_cfg = albums_columns_cfg.with_page_size(PAGE_SIZE_8K)
+    albums_columns_db := mut match EmbeddedDatabase.open(albums_columns_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T145 albums columns: open failed"); return 255 },
+    }
+    match albums_columns_db.execute("create table albums (id int, title text)") {
+        Ok(_) => {},
+        Err(_) => { println("T145 albums columns: create failed"); return 255 },
+    }
+    albums_columns_insert_a := mut match albums_columns_db.execute("insert into albums (id, title) values (3, 'violet')") {
+        Ok(v) => v,
+        Err(e) => { println("T145 albums columns: ordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I albums_columns_insert_a != 1 as u64 { println("T145 albums columns: ordered insert count"); return 255 }
+    albums_columns_insert_b := mut match albums_columns_db.execute("insert into albums (title, id) values ('amber', 4)") {
+        Ok(v) => v,
+        Err(e) => { println("T145 albums columns: reversed insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I albums_columns_insert_b != 1 as u64 { println("T145 albums columns: reversed insert count"); return 255 }
+    match albums_columns_db.execute("insert into albums (id) values (5)") {
+        Ok(_) => { println("T145 albums columns: partial id unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (title) values ('bad')") {
+        Ok(_) => { println("T145 albums columns: partial title unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (id, id) values (5, 6)") {
+        Ok(_) => { println("T145 albums columns: duplicate id unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (id, label) values (5, 'bad')") {
+        Ok(_) => { println("T145 albums columns: unknown column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (albums.id, title) values (5, 'bad')") {
+        Ok(_) => { println("T145 albums columns: qualified column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (id, title) values ('bad', 'violet')") {
+        Ok(_) => { println("T145 albums columns: wrong id type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (id, title) values (5, 6)") {
+        Ok(_) => { println("T145 albums columns: wrong title type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (id, title) values (NULL, 'bad')") {
+        Ok(_) => { println("T145 albums columns: null id unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (id, title) values (DEFAULT, 'bad')") {
+        Ok(_) => { println("T145 albums columns: default id unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (id, title) values (5, 'bad'), (6, 'bad')") {
+        Ok(_) => { println("T145 albums columns: multi-row unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.execute("insert into albums (id, title) select id, title from albums") {
+        Ok(_) => { println("T145 albums columns: insert-select unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    albums_columns_select := mut match albums_columns_db.query("select * from albums") {
+        Ok(r) => r,
+        Err(_) => { println("T145 albums columns: select all failed"); return 255 },
+    }
+    I albums_columns_select.column_count() != 2 as u64 { println("T145 albums columns: select column count"); return 255 }
+    I albums_columns_select.row_count() != 2 as u64 { println("T145 albums columns: select row count"); return 255 }
+    albums_columns_select_cols := mut albums_columns_select.get_columns()
+    I !expect_column(albums_columns_select_cols, 0, "id", "INT") { println("T145 albums columns: select id column"); return 255 }
+    I !expect_column(albums_columns_select_cols, 1, "title", "TEXT") { println("T145 albums columns: select title column"); return 255 }
+    albums_columns_select_rows := mut albums_columns_select.get_rows()
+    albums_columns_row0 := mut &albums_columns_select_rows[0]
+    albums_columns_row1 := mut &albums_columns_select_rows[1]
+    I !expect_cell(albums_columns_row0, 0, "3") { println("T145 albums columns: row0 id"); return 255 }
+    I !expect_cell(albums_columns_row0, 1, "violet") { println("T145 albums columns: row0 title"); return 255 }
+    I !expect_cell(albums_columns_row1, 0, "4") { println("T145 albums columns: row1 id"); return 255 }
+    I !expect_cell(albums_columns_row1, 1, "amber") { println("T145 albums columns: row1 title"); return 255 }
+    albums_columns_select.free_owned_text()
+    albums_columns_select.free_owned_text()
+
+    albums_columns_projection := mut match albums_columns_db.query("select id, title from albums") {
+        Ok(r) => r,
+        Err(_) => { println("T145 albums columns: projection failed"); return 255 },
+    }
+    I albums_columns_projection.row_count() != 2 as u64 { println("T145 albums columns: projection row count"); return 255 }
+    albums_columns_projection.free_owned_text()
+    albums_columns_projection.free_owned_text()
+
+    albums_columns_id_filter := mut match albums_columns_db.query("select * from albums where id = 4") {
+        Ok(r) => r,
+        Err(_) => { println("T145 albums columns: id filter failed"); return 255 },
+    }
+    I albums_columns_id_filter.row_count() != 1 as u64 { println("T145 albums columns: id filter row count"); return 255 }
+    albums_columns_id_rows := mut albums_columns_id_filter.get_rows()
+    albums_columns_id_row0 := mut &albums_columns_id_rows[0]
+    I !expect_cell(albums_columns_id_row0, 0, "4") { println("T145 albums columns: id filter id"); return 255 }
+    I !expect_cell(albums_columns_id_row0, 1, "amber") { println("T145 albums columns: id filter title"); return 255 }
+    albums_columns_id_filter.free_owned_text()
+    albums_columns_id_filter.free_owned_text()
+
+    albums_columns_title_filter := mut match albums_columns_db.query("select * from albums where title = 'violet'") {
+        Ok(r) => r,
+        Err(_) => { println("T145 albums columns: title filter failed"); return 255 },
+    }
+    I albums_columns_title_filter.row_count() != 1 as u64 { println("T145 albums columns: title filter row count"); return 255 }
+    albums_columns_title_rows := mut albums_columns_title_filter.get_rows()
+    albums_columns_title_row0 := mut &albums_columns_title_rows[0]
+    I !expect_cell(albums_columns_title_row0, 0, "3") { println("T145 albums columns: title filter id"); return 255 }
+    I !expect_cell(albums_columns_title_row0, 1, "violet") { println("T145 albums columns: title filter title"); return 255 }
+    albums_columns_title_filter.free_owned_text()
+    albums_columns_title_filter.free_owned_text()
+
+    albums_columns_projection_id_filter := mut match albums_columns_db.query("select id, title from albums where id = 4") {
+        Ok(r) => r,
+        Err(_) => { println("T147 albums projection filter: id filter failed"); return 255 },
+    }
+    I albums_columns_projection_id_filter.column_count() != 2 as u64 { println("T147 albums projection filter: id filter column count"); return 255 }
+    I albums_columns_projection_id_filter.row_count() != 1 as u64 { println("T147 albums projection filter: id filter row count"); return 255 }
+    albums_columns_projection_id_cols := mut albums_columns_projection_id_filter.get_columns()
+    I !expect_column(albums_columns_projection_id_cols, 0, "id", "INT") { println("T147 albums projection filter: id filter id column"); return 255 }
+    I !expect_column(albums_columns_projection_id_cols, 1, "title", "TEXT") { println("T147 albums projection filter: id filter title column"); return 255 }
+    albums_columns_projection_id_rows := mut albums_columns_projection_id_filter.get_rows()
+    albums_columns_projection_id_row0 := mut &albums_columns_projection_id_rows[0]
+    I !expect_cell(albums_columns_projection_id_row0, 0, "4") { println("T147 albums projection filter: id filter id"); return 255 }
+    I !expect_cell(albums_columns_projection_id_row0, 1, "amber") { println("T147 albums projection filter: id filter title"); return 255 }
+    albums_columns_projection_id_filter.free_owned_text()
+    albums_columns_projection_id_filter.free_owned_text()
+
+    albums_columns_projection_reversed_id := mut match albums_columns_db.query("select id, title from albums where 3 = id") {
+        Ok(r) => r,
+        Err(_) => { println("T147 albums projection filter: reversed id failed"); return 255 },
+    }
+    I albums_columns_projection_reversed_id.row_count() != 1 as u64 { println("T147 albums projection filter: reversed id row count"); return 255 }
+    albums_columns_projection_reversed_id_rows := mut albums_columns_projection_reversed_id.get_rows()
+    albums_columns_projection_reversed_id_row0 := mut &albums_columns_projection_reversed_id_rows[0]
+    I !expect_cell(albums_columns_projection_reversed_id_row0, 0, "3") { println("T147 albums projection filter: reversed id id"); return 255 }
+    I !expect_cell(albums_columns_projection_reversed_id_row0, 1, "violet") { println("T147 albums projection filter: reversed id title"); return 255 }
+    albums_columns_projection_reversed_id.free_owned_text()
+    albums_columns_projection_reversed_id.free_owned_text()
+
+    albums_columns_projection_title_filter := mut match albums_columns_db.query("select id, title from albums where title = 'amber'") {
+        Ok(r) => r,
+        Err(_) => { println("T147 albums projection filter: title filter failed"); return 255 },
+    }
+    I albums_columns_projection_title_filter.row_count() != 1 as u64 { println("T147 albums projection filter: title filter row count"); return 255 }
+    albums_columns_projection_title_rows := mut albums_columns_projection_title_filter.get_rows()
+    albums_columns_projection_title_row0 := mut &albums_columns_projection_title_rows[0]
+    I !expect_cell(albums_columns_projection_title_row0, 0, "4") { println("T147 albums projection filter: title filter id"); return 255 }
+    I !expect_cell(albums_columns_projection_title_row0, 1, "amber") { println("T147 albums projection filter: title filter title"); return 255 }
+    albums_columns_projection_title_filter.free_owned_text()
+    albums_columns_projection_title_filter.free_owned_text()
+
+    albums_columns_projection_reversed_title := mut match albums_columns_db.query("select id, title from albums where 'violet' = title") {
+        Ok(r) => r,
+        Err(_) => { println("T147 albums projection filter: reversed title failed"); return 255 },
+    }
+    I albums_columns_projection_reversed_title.row_count() != 1 as u64 { println("T147 albums projection filter: reversed title row count"); return 255 }
+    albums_columns_projection_reversed_title_rows := mut albums_columns_projection_reversed_title.get_rows()
+    albums_columns_projection_reversed_title_row0 := mut &albums_columns_projection_reversed_title_rows[0]
+    I !expect_cell(albums_columns_projection_reversed_title_row0, 0, "3") { println("T147 albums projection filter: reversed title id"); return 255 }
+    I !expect_cell(albums_columns_projection_reversed_title_row0, 1, "violet") { println("T147 albums projection filter: reversed title title"); return 255 }
+    albums_columns_projection_reversed_title.free_owned_text()
+    albums_columns_projection_reversed_title.free_owned_text()
+
+    match albums_columns_db.query("select title, id from albums where id = 4") {
+        Ok(_) => { println("T147 albums projection filter: reversed projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.query("select id from albums where id = 4") {
+        Ok(_) => { println("T147 albums projection filter: id-only projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.query("select title from albums where title = 'amber'") {
+        Ok(_) => { println("T147 albums projection filter: title-only projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.query("select albums.id, albums.title from albums where id = 4") {
+        Ok(_) => { println("T147 albums projection filter: qualified projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.query("select id, title from albums a where id = 4") {
+        Ok(_) => { println("T147 albums projection filter: table alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.query("select id, title from albums where id > 3") {
+        Ok(_) => { println("T147 albums projection filter: non-equality unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.query("select id, title from albums where id = 4 and title = 'amber'") {
+        Ok(_) => { println("T147 albums projection filter: boolean predicate unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.query("select id + 1, title from albums where id = 4") {
+        Ok(_) => { println("T147 albums projection filter: expression projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match albums_columns_db.query("select id, title from albums where id = 4 order by id") {
+        Ok(_) => { println("T147 albums projection filter: order by unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+
+    match albums_columns_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T145 albums columns: close failed"); return 255 },
+    }
+
+    albums_columns_reopen_cfg := mut EmbeddedConfig.default()
+    albums_columns_reopen_cfg = albums_columns_reopen_cfg.with_data_dir(albums_columns_path.clone())
+    albums_columns_reopen_cfg = albums_columns_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    albums_columns_reopened := mut match EmbeddedDatabase.open(albums_columns_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T145 albums columns: reopen failed"); return 255 },
+    }
+    albums_columns_reopened_select := mut match albums_columns_reopened.query("select * from albums") {
+        Ok(r) => r,
+        Err(_) => { println("T145 albums columns: reopen select failed"); return 255 },
+    }
+    I albums_columns_reopened_select.row_count() != 2 as u64 { println("T145 albums columns: reopen select row count"); return 255 }
+    albums_columns_reopened_select.free_owned_text()
+    albums_columns_reopened_select.free_owned_text()
+    albums_columns_reopened_filter := mut match albums_columns_reopened.query("select * from albums where title = 'amber'") {
+        Ok(r) => r,
+        Err(_) => { println("T145 albums columns: reopen title filter failed"); return 255 },
+    }
+    I albums_columns_reopened_filter.row_count() != 1 as u64 { println("T145 albums columns: reopen title filter row count"); return 255 }
+    albums_columns_reopened_filter_rows := mut albums_columns_reopened_filter.get_rows()
+    albums_columns_reopened_filter_row0 := mut &albums_columns_reopened_filter_rows[0]
+    I !expect_cell(albums_columns_reopened_filter_row0, 0, "4") { println("T145 albums columns: reopen title filter id"); return 255 }
+    I !expect_cell(albums_columns_reopened_filter_row0, 1, "amber") { println("T145 albums columns: reopen title filter title"); return 255 }
+    albums_columns_reopened_filter.free_owned_text()
+    albums_columns_reopened_filter.free_owned_text()
+    albums_columns_reopened_projection_filter := mut match albums_columns_reopened.query("select id, title from albums where title = 'amber'") {
+        Ok(r) => r,
+        Err(_) => { println("T147 albums projection filter: reopen title filter failed"); return 255 },
+    }
+    I albums_columns_reopened_projection_filter.column_count() != 2 as u64 { println("T147 albums projection filter: reopen column count"); return 255 }
+    I albums_columns_reopened_projection_filter.row_count() != 1 as u64 { println("T147 albums projection filter: reopen row count"); return 255 }
+    albums_columns_reopened_projection_rows := mut albums_columns_reopened_projection_filter.get_rows()
+    albums_columns_reopened_projection_row0 := mut &albums_columns_reopened_projection_rows[0]
+    I !expect_cell(albums_columns_reopened_projection_row0, 0, "4") { println("T147 albums projection filter: reopen id"); return 255 }
+    I !expect_cell(albums_columns_reopened_projection_row0, 1, "amber") { println("T147 albums projection filter: reopen title"); return 255 }
+    albums_columns_reopened_projection_filter.free_owned_text()
+    albums_columns_reopened_projection_filter.free_owned_text()
+    match albums_columns_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T145 albums columns: reopen close failed"); return 255 },
+    }
+
+    # --- Catalog-derived dynamic descriptor non-title TEXT column ---
+    notes_suffix := mut time_micros()
+    notes_path := mut "embedded_sql_api_roundtrip_notes_db_{notes_suffix}"
+    notes_cfg := mut EmbeddedConfig.default()
+    notes_cfg = notes_cfg.with_data_dir(notes_path.clone())
+    notes_cfg = notes_cfg.with_page_size(PAGE_SIZE_8K)
+    notes_db := mut match EmbeddedDatabase.open(notes_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T155 notes: open failed"); return 255 },
+    }
+    match notes_db.execute("create table reversed_notes (body text, id int)") {
+        Ok(_) => { println("T155 notes: reversed column order unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("create table bad_first_notes (key int, body text)") {
+        Ok(_) => { println("T155 notes: wrong first column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("create table bad_second_notes (id int, body int)") {
+        Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("create table extra_notes (id int, body text, tag text)") {
+        Ok(_) => { println("T155 notes: extra column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("create table dup_notes (id int, id text)") {
+        Ok(_) => { println("T155 notes: duplicate id column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("create table default_notes (id int, body text default 'x')") {
+        Ok(_) => { println("T155 notes: default body unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("create table pk_notes (id int primary key, body text)") {
+        Ok(_) => { println("T155 notes: primary key unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    notes_created := mut match notes_db.execute("create table notes (id int, body text)") {
+        Ok(v) => v,
+        Err(e) => { println("T155 notes: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_created != 0 as u64 { println("T155 notes: create affected rows"); return 255 }
+    notes_table_id := mut 0 as u32
+    match notes_db.catalog.get_table("notes") {
+        Some(info) => { notes_table_id = info.table_id },
+        None => { println("T155 notes: catalog missing table"); return 255 },
+    }
+    notes_col_refs := mut notes_db.catalog.get_columns(notes_table_id)
+    notes_cols: Vec<ColumnInfo> := mut Vec.with_capacity(notes_col_refs.len())
+    LF col_ref: &notes_col_refs {
+        notes_cols.push((**col_ref).clone())
+    }
+    I notes_cols.len() != 2 as u64 { println("T155 notes: catalog column count"); return 255 }
+    I !expect_catalog_column(&notes_cols, 0, "id", "INT") { println("T155 notes: catalog id column"); return 255 }
+    I !expect_catalog_column(&notes_cols, 1, "body", "TEXT") { println("T155 notes: catalog body column"); return 255 }
+    match notes_db.execute("create table notes (id int, body text)") {
+        Ok(_) => { println("T155 notes: duplicate create unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    notes_insert_a := mut match notes_db.execute("insert into notes values (1, 'memo')") {
+        Ok(v) => v,
+        Err(e) => { println("T155 notes: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_insert_a != 1 as u64 { println("T155 notes: first insert count"); return 255 }
+    notes_insert_b := mut match notes_db.execute("insert into notes values (2, 'todo')") {
+        Ok(v) => v,
+        Err(e) => { println("T155 notes: second insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_insert_b != 1 as u64 { println("T155 notes: second insert count"); return 255 }
+    notes_insert_columns := mut match notes_db.execute("insert into notes (id, body) values (3, 'later')") {
+        Ok(v) => v,
+        Err(e) => { println("T165 notes: descriptor-order column-list insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_insert_columns != 1 as u64 { println("T165 notes: descriptor-order column-list insert count"); return 255 }
+    notes_insert_columns_reversed := mut match notes_db.execute("insert into notes (body, id) values ('done', 4)") {
+        Ok(v) => v,
+        Err(e) => { println("T165 notes: reversed column-list insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_insert_columns_reversed != 1 as u64 { println("T165 notes: reversed column-list insert count"); return 255 }
+    match notes_db.execute("insert into notes (id) values (5)") {
+        Ok(_) => { println("T165 notes: partial id column-list insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (body) values ('partial')") {
+        Ok(_) => { println("T165 notes: partial body column-list insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (id, id) values (5, 6)") {
+        Ok(_) => { println("T165 notes: duplicate column-list insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (id, title) values (5, 'bad')") {
+        Ok(_) => { println("T165 notes: unknown column-list insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (id, body, body) values (5, 'bad', 'extra')") {
+        Ok(_) => { println("T165 notes: extra column-list insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (id, body) values ('bad', 'later')") {
+        Ok(_) => { println("T165 notes: column-list wrong id type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (id, body) values (5, 6)") {
+        Ok(_) => { println("T165 notes: column-list wrong body type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (id, body) values (NULL, 'bad')") {
+        Ok(_) => { println("T165 notes: column-list NULL unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (id, body) values (DEFAULT, 'bad')") {
+        Ok(_) => { println("T165 notes: column-list DEFAULT unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (id, body) values (5, 'multi'), (6, 'multi')") {
+        Ok(_) => { println("T165 notes: column-list multi-row unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes (id, body) select id, body from notes") {
+        Ok(_) => { println("T165 notes: column-list INSERT SELECT unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes values (3)") {
+        Ok(_) => { println("T155 notes: short row unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes values ('bad', 'memo')") {
+        Ok(_) => { println("T155 notes: wrong id type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes values (3, 4)") {
+        Ok(_) => { println("T155 notes: wrong body type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("insert into notes values (3, 'multi'), (4, 'multi')") {
+        Ok(_) => { println("T155 notes: multi-row insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    notes_select := mut match notes_db.query("select * from notes") {
+        Ok(r) => r,
+        Err(e) => { println("T155 notes: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_select.column_count() != 2 as u64 { println("T155 notes: select all column count"); return 255 }
+    I notes_select.row_count() != 4 as u64 { println("T165 notes: select all row count"); return 255 }
+    notes_select_cols := mut notes_select.get_columns()
+    I !expect_column(notes_select_cols, 0, "id", "INT") { println("T155 notes: select id column"); return 255 }
+    I !expect_column(notes_select_cols, 1, "body", "TEXT") { println("T155 notes: select body column"); return 255 }
+    notes_select_rows := mut notes_select.get_rows()
+    notes_row0 := mut &notes_select_rows[0]
+    notes_row1 := mut &notes_select_rows[1]
+    notes_row2 := mut &notes_select_rows[2]
+    notes_row3 := mut &notes_select_rows[3]
+    I !expect_cell(notes_row0, 0, "1") { println("T155 notes: row0 id"); return 255 }
+    I !expect_cell(notes_row0, 1, "memo") { println("T155 notes: row0 body"); return 255 }
+    I !expect_cell(notes_row1, 0, "2") { println("T155 notes: row1 id"); return 255 }
+    I !expect_cell(notes_row1, 1, "todo") { println("T155 notes: row1 body"); return 255 }
+    I !expect_cell(notes_row2, 0, "3") { println("T165 notes: row2 id"); return 255 }
+    I !expect_cell(notes_row2, 1, "later") { println("T165 notes: row2 body"); return 255 }
+    I !expect_cell(notes_row3, 0, "4") { println("T165 notes: row3 id"); return 255 }
+    I !expect_cell(notes_row3, 1, "done") { println("T165 notes: row3 body"); return 255 }
+    notes_select.free_owned_text()
+    notes_select.free_owned_text()
+
+    notes_projection := mut match notes_db.query("select id, body from notes") {
+        Ok(r) => r,
+        Err(e) => { println("T155 notes: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_projection.column_count() != 2 as u64 { println("T155 notes: projection column count"); return 255 }
+    I notes_projection.row_count() != 4 as u64 { println("T165 notes: projection row count"); return 255 }
+    notes_projection_cols := mut notes_projection.get_columns()
+    I !expect_column(notes_projection_cols, 0, "id", "INT") { println("T155 notes: projection id column"); return 255 }
+    I !expect_column(notes_projection_cols, 1, "body", "TEXT") { println("T155 notes: projection body column"); return 255 }
+    notes_projection.free_owned_text()
+    notes_projection.free_owned_text()
+
+    notes_id_filter := mut match notes_db.query("select * from notes where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T157 notes: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_id_filter.row_count() != 1 as u64 { println("T157 notes: id filter row count"); return 255 }
+    notes_id_filter_rows := mut notes_id_filter.get_rows()
+    notes_id_filter_row := mut &notes_id_filter_rows[0]
+    I !expect_cell(notes_id_filter_row, 0, "1") { println("T157 notes: id filter id"); return 255 }
+    I !expect_cell(notes_id_filter_row, 1, "memo") { println("T157 notes: id filter body"); return 255 }
+    notes_id_filter.free_owned_text()
+    notes_id_filter.free_owned_text()
+
+    notes_id_filter_reversed := mut match notes_db.query("select * from notes where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T157 notes: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_id_filter_reversed.row_count() != 1 as u64 { println("T157 notes: reversed id filter row count"); return 255 }
+    notes_id_filter_reversed_rows := mut notes_id_filter_reversed.get_rows()
+    notes_id_filter_reversed_row := mut &notes_id_filter_reversed_rows[0]
+    I !expect_cell(notes_id_filter_reversed_row, 0, "2") { println("T157 notes: reversed id filter id"); return 255 }
+    I !expect_cell(notes_id_filter_reversed_row, 1, "todo") { println("T157 notes: reversed id filter body"); return 255 }
+    notes_id_filter_reversed.free_owned_text()
+    notes_id_filter_reversed.free_owned_text()
+
+    notes_body_filter := mut match notes_db.query("select * from notes where body = 'memo'") {
+        Ok(r) => r,
+        Err(e) => { println("T157 notes: body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_body_filter.row_count() != 1 as u64 { println("T157 notes: body filter row count"); return 255 }
+    notes_body_filter_rows := mut notes_body_filter.get_rows()
+    notes_body_filter_row := mut &notes_body_filter_rows[0]
+    I !expect_cell(notes_body_filter_row, 0, "1") { println("T157 notes: body filter id"); return 255 }
+    I !expect_cell(notes_body_filter_row, 1, "memo") { println("T157 notes: body filter body"); return 255 }
+    notes_body_filter.free_owned_text()
+    notes_body_filter.free_owned_text()
+
+    notes_body_filter_reversed := mut match notes_db.query("select * from notes where 'todo' = body") {
+        Ok(r) => r,
+        Err(e) => { println("T157 notes: reversed body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_body_filter_reversed.row_count() != 1 as u64 { println("T157 notes: reversed body filter row count"); return 255 }
+    notes_body_filter_reversed_rows := mut notes_body_filter_reversed.get_rows()
+    notes_body_filter_reversed_row := mut &notes_body_filter_reversed_rows[0]
+    I !expect_cell(notes_body_filter_reversed_row, 0, "2") { println("T157 notes: reversed body filter id"); return 255 }
+    I !expect_cell(notes_body_filter_reversed_row, 1, "todo") { println("T157 notes: reversed body filter body"); return 255 }
+    notes_body_filter_reversed.free_owned_text()
+    notes_body_filter_reversed.free_owned_text()
+
+    notes_projection_id_filter := mut match notes_db.query("select id, body from notes where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T157 notes: projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_projection_id_filter.row_count() != 1 as u64 { println("T157 notes: projection id filter row count"); return 255 }
+    notes_projection_id_filter_rows := mut notes_projection_id_filter.get_rows()
+    notes_projection_id_filter_row := mut &notes_projection_id_filter_rows[0]
+    I !expect_cell(notes_projection_id_filter_row, 0, "1") { println("T157 notes: projection id filter id"); return 255 }
+    I !expect_cell(notes_projection_id_filter_row, 1, "memo") { println("T157 notes: projection id filter body"); return 255 }
+    notes_projection_id_filter.free_owned_text()
+    notes_projection_id_filter.free_owned_text()
+
+    notes_projection_body_filter := mut match notes_db.query("select id, body from notes where body = 'todo'") {
+        Ok(r) => r,
+        Err(e) => { println("T157 notes: projection body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_projection_body_filter.row_count() != 1 as u64 { println("T157 notes: projection body filter row count"); return 255 }
+    notes_projection_body_filter_rows := mut notes_projection_body_filter.get_rows()
+    notes_projection_body_filter_row := mut &notes_projection_body_filter_rows[0]
+    I !expect_cell(notes_projection_body_filter_row, 0, "2") { println("T157 notes: projection body filter id"); return 255 }
+    I !expect_cell(notes_projection_body_filter_row, 1, "todo") { println("T157 notes: projection body filter body"); return 255 }
+    notes_projection_body_filter.free_owned_text()
+    notes_projection_body_filter.free_owned_text()
+
+    notes_column_insert_id_filter := mut match notes_db.query("select * from notes where id = 4") {
+        Ok(r) => r,
+        Err(e) => { println("T165 notes: column-list id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_column_insert_id_filter.row_count() != 1 as u64 { println("T165 notes: column-list id filter row count"); return 255 }
+    notes_column_insert_id_rows := mut notes_column_insert_id_filter.get_rows()
+    notes_column_insert_id_row := mut &notes_column_insert_id_rows[0]
+    I !expect_cell(notes_column_insert_id_row, 0, "4") { println("T165 notes: column-list id filter id"); return 255 }
+    I !expect_cell(notes_column_insert_id_row, 1, "done") { println("T165 notes: column-list id filter body"); return 255 }
+    notes_column_insert_id_filter.free_owned_text()
+    notes_column_insert_id_filter.free_owned_text()
+
+    notes_column_insert_body_filter := mut match notes_db.query("select id, body from notes where body = 'later'") {
+        Ok(r) => r,
+        Err(e) => { println("T165 notes: column-list body projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_column_insert_body_filter.row_count() != 1 as u64 { println("T165 notes: column-list body filter row count"); return 255 }
+    notes_column_insert_body_rows := mut notes_column_insert_body_filter.get_rows()
+    notes_column_insert_body_row := mut &notes_column_insert_body_rows[0]
+    I !expect_cell(notes_column_insert_body_row, 0, "3") { println("T165 notes: column-list body filter id"); return 255 }
+    I !expect_cell(notes_column_insert_body_row, 1, "later") { println("T165 notes: column-list body filter body"); return 255 }
+    notes_column_insert_body_filter.free_owned_text()
+    notes_column_insert_body_filter.free_owned_text()
+
+    match notes_db.query("select id, title from notes") {
+        Ok(_) => { println("T155 notes: title projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select body from notes") {
+        Ok(_) => { println("T155 notes: body-only projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select body, id from notes") {
+        Ok(_) => { println("T157 notes: reversed projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select * from notes where title = 'memo'") {
+        Ok(_) => { println("T157 notes: unknown title filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select * from notes where body = 1") {
+        Ok(_) => { println("T157 notes: int body filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select * from notes where id = '1'") {
+        Ok(_) => { println("T157 notes: text id filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select * from notes where body != 'memo'") {
+        Ok(_) => { println("T157 notes: non-equality body filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select * from notes where id = body") {
+        Ok(_) => { println("T157 notes: column-vs-column filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select notes.id, notes.body from notes") {
+        Ok(_) => { println("T155 notes: qualified projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+
+    match notes_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T155 notes: close failed"); return 255 },
+    }
+    notes_reopen_cfg := mut EmbeddedConfig.default()
+    notes_reopen_cfg = notes_reopen_cfg.with_data_dir(notes_path.clone())
+    notes_reopen_cfg = notes_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    notes_reopened := mut match EmbeddedDatabase.open(notes_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T155 notes: reopen failed"); return 255 },
+    }
+    notes_reopened_select := mut match notes_reopened.query("select * from notes") {
+        Ok(r) => r,
+        Err(e) => { println("T155 notes: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_reopened_select.column_count() != 2 as u64 { println("T155 notes: reopen column count"); return 255 }
+    I notes_reopened_select.row_count() != 4 as u64 { println("T165 notes: reopen row count"); return 255 }
+    notes_reopened_cols := mut notes_reopened_select.get_columns()
+    I !expect_column(notes_reopened_cols, 0, "id", "INT") { println("T155 notes: reopen id column"); return 255 }
+    I !expect_column(notes_reopened_cols, 1, "body", "TEXT") { println("T155 notes: reopen body column"); return 255 }
+    notes_reopened_select.free_owned_text()
+    notes_reopened_select.free_owned_text()
+    notes_reopened_projection := mut match notes_reopened.query("select id, body from notes") {
+        Ok(r) => r,
+        Err(e) => { println("T155 notes: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_reopened_projection.row_count() != 4 as u64 { println("T165 notes: reopen projection row count"); return 255 }
+    notes_reopened_projection.free_owned_text()
+    notes_reopened_projection.free_owned_text()
+    notes_reopened_body_filter := mut match notes_reopened.query("select * from notes where body = 'todo'") {
+        Ok(r) => r,
+        Err(e) => { println("T157 notes: reopen body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_reopened_body_filter.row_count() != 1 as u64 { println("T157 notes: reopen body filter row count"); return 255 }
+    notes_reopened_body_filter_rows := mut notes_reopened_body_filter.get_rows()
+    notes_reopened_body_filter_row := mut &notes_reopened_body_filter_rows[0]
+    I !expect_cell(notes_reopened_body_filter_row, 0, "2") { println("T157 notes: reopen body filter id"); return 255 }
+    I !expect_cell(notes_reopened_body_filter_row, 1, "todo") { println("T157 notes: reopen body filter body"); return 255 }
+    notes_reopened_body_filter.free_owned_text()
+    notes_reopened_body_filter.free_owned_text()
+    notes_reopened_projection_filter := mut match notes_reopened.query("select id, body from notes where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T157 notes: reopen projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_reopened_projection_filter.row_count() != 1 as u64 { println("T157 notes: reopen projection filter row count"); return 255 }
+    notes_reopened_projection_filter_rows := mut notes_reopened_projection_filter.get_rows()
+    notes_reopened_projection_filter_row := mut &notes_reopened_projection_filter_rows[0]
+    I !expect_cell(notes_reopened_projection_filter_row, 0, "1") { println("T157 notes: reopen projection filter id"); return 255 }
+    I !expect_cell(notes_reopened_projection_filter_row, 1, "memo") { println("T157 notes: reopen projection filter body"); return 255 }
+    notes_reopened_projection_filter.free_owned_text()
+    notes_reopened_projection_filter.free_owned_text()
+    notes_reopened_column_insert_filter := mut match notes_reopened.query("select * from notes where body = 'done'") {
+        Ok(r) => r,
+        Err(e) => { println("T165 notes: reopen column-list body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_reopened_column_insert_filter.row_count() != 1 as u64 { println("T165 notes: reopen column-list body filter row count"); return 255 }
+    notes_reopened_column_insert_rows := mut notes_reopened_column_insert_filter.get_rows()
+    notes_reopened_column_insert_row := mut &notes_reopened_column_insert_rows[0]
+    I !expect_cell(notes_reopened_column_insert_row, 0, "4") { println("T165 notes: reopen column-list body filter id"); return 255 }
+    I !expect_cell(notes_reopened_column_insert_row, 1, "done") { println("T165 notes: reopen column-list body filter body"); return 255 }
+    notes_reopened_column_insert_filter.free_owned_text()
+    notes_reopened_column_insert_filter.free_owned_text()
+    match notes_reopened.execute("create table notes (id int, body text)") {
+        Ok(_) => { println("T155 notes: reopen duplicate create unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T155 notes: reopen close failed"); return 255 },
+    }
+
+    # --- Catalog-derived dynamic three-column descriptor metadata ---
+    tasks_suffix := mut time_micros()
+    tasks_path := mut "embedded_sql_api_roundtrip_tasks_db_{tasks_suffix}"
+    tasks_cfg := mut EmbeddedConfig.default()
+    tasks_cfg = tasks_cfg.with_data_dir(tasks_path.clone())
+    tasks_cfg = tasks_cfg.with_page_size(PAGE_SIZE_8K)
+    tasks_db := mut match EmbeddedDatabase.open(tasks_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T175 tasks: open failed"); return 255 },
+    }
+    match tasks_db.execute("create table tasks (id int, title text)") {
+        Ok(_) => { println("T175 tasks: two-column variant unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("create table tasks (title text, id int, status text)") {
+        Ok(_) => { println("T175 tasks: wrong order unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("create table tasks (id int, body text, status text)") {
+        Ok(_) => { println("T175 tasks: wrong title column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("create table tasks (id int, title text, state text)") {
+        Ok(_) => { println("T175 tasks: wrong status column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("create table tasks (id int, title text, status int)") {
+        Ok(_) => { println("T175 tasks: wrong status type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("create table tasks (id int, title text, status text, owner text)") {
+        Ok(_) => { println("T175 tasks: extra column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("create table tasks (id int, title text, title text)") {
+        Ok(_) => { println("T175 tasks: duplicate column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("create table tasks (id int, title text, status text default 'open')") {
+        Ok(_) => { println("T175 tasks: default unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("create table tasks (id int, title text not null, status text)") {
+        Ok(_) => { println("T175 tasks: NOT NULL unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("create table tasks (id int primary key, title text, status text)") {
+        Ok(_) => { println("T175 tasks: PRIMARY KEY unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    tasks_created := mut match tasks_db.execute("create table tasks (id int, title text, status text)") {
+        Ok(v) => v,
+        Err(e) => { println("T175 tasks: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_created != 0 as u64 { println("T175 tasks: create affected rows"); return 255 }
+    tasks_table_id := mut 0 as u32
+    match tasks_db.catalog.get_table("tasks") {
+        Some(info) => {
+            tasks_table_id = info.table_id
+            I info.column_count != 3 as u16 { println("T175 tasks: catalog table column count"); return 255 }
+        },
+        None => { println("T175 tasks: catalog missing table"); return 255 },
+    }
+    tasks_col_refs := mut tasks_db.catalog.get_columns(tasks_table_id)
+    tasks_cols: Vec<ColumnInfo> := mut Vec.with_capacity(tasks_col_refs.len())
+    LF col_ref: &tasks_col_refs {
+        tasks_cols.push((**col_ref).clone())
+    }
+    I tasks_cols.len() != 3 as u64 { println("T175 tasks: catalog column count"); return 255 }
+    I !expect_catalog_column(&tasks_cols, 0, "id", "INT") { println("T175 tasks: catalog id column"); return 255 }
+    I !expect_catalog_column(&tasks_cols, 1, "title", "TEXT") { println("T175 tasks: catalog title column"); return 255 }
+    I !expect_catalog_column(&tasks_cols, 2, "status", "TEXT") { println("T175 tasks: catalog status column"); return 255 }
+    match tasks_db.execute("create table tasks (id int, title text, status text)") {
+        Ok(_) => { println("T175 tasks: duplicate create unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    tasks_insert_a := mut match tasks_db.execute("insert into tasks (id, title, status) values (1, 'build', 'open')") {
+        Ok(v) => v,
+        Err(e) => { println("T177 tasks: descriptor-order insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_insert_a != 1 as u64 { println("T177 tasks: descriptor-order insert count"); return 255 }
+    tasks_insert_b := mut match tasks_db.execute("insert into tasks (status, id, title) values ('done', 2, 'ship')") {
+        Ok(v) => v,
+        Err(e) => { println("T177 tasks: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_insert_b != 1 as u64 { println("T177 tasks: reordered insert count"); return 255 }
+    match tasks_db.execute("insert into tasks values (3, 'raw', 'open')") {
+        Ok(_) => { println("T177 tasks: values-only insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title) values (3, 'partial')") {
+        Ok(_) => { println("T177 tasks: partial insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, title) values (3, 'dup', 'dup')") {
+        Ok(_) => { println("T177 tasks: duplicate column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, owner) values (3, 'bad', 'me')") {
+        Ok(_) => { println("T177 tasks: unknown column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, status) values ('bad', 'title', 'open')") {
+        Ok(_) => { println("T177 tasks: wrong id type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, status) values (3, 4, 'open')") {
+        Ok(_) => { println("T177 tasks: wrong title type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, status) values (3, 'title', 4)") {
+        Ok(_) => { println("T177 tasks: wrong status type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, status) values (NULL, 'title', 'open')") {
+        Ok(_) => { println("T177 tasks: NULL unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, status) values (DEFAULT, 'title', 'open')") {
+        Ok(_) => { println("T177 tasks: DEFAULT unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, status) values (3 + 1, 'title', 'open')") {
+        Ok(_) => { println("T177 tasks: expression unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, status) values (3, 'multi', 'open'), (4, 'multi', 'open')") {
+        Ok(_) => { println("T177 tasks: multi-row unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.execute("insert into tasks (id, title, status) select id, title, status from tasks") {
+        Ok(_) => { println("T177 tasks: INSERT SELECT unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    tasks_select := mut match tasks_db.query("select * from tasks") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_select.column_count() != 3 as u64 { println("T179 tasks: select all column count"); return 255 }
+    I tasks_select.row_count() != 2 as u64 { println("T179 tasks: select all row count"); return 255 }
+    tasks_select_cols := mut tasks_select.get_columns()
+    I !expect_column(tasks_select_cols, 0, "id", "INT") { println("T179 tasks: select id column"); return 255 }
+    I !expect_column(tasks_select_cols, 1, "title", "TEXT") { println("T179 tasks: select title column"); return 255 }
+    I !expect_column(tasks_select_cols, 2, "status", "TEXT") { println("T179 tasks: select status column"); return 255 }
+    tasks_select_rows := mut tasks_select.get_rows()
+    tasks_row0 := mut &tasks_select_rows[0]
+    tasks_row1 := mut &tasks_select_rows[1]
+    I !expect_cell(tasks_row0, 0, "1") { println("T179 tasks: row0 id"); return 255 }
+    I !expect_cell(tasks_row0, 1, "build") { println("T179 tasks: row0 title"); return 255 }
+    I !expect_cell(tasks_row0, 2, "open") { println("T179 tasks: row0 status"); return 255 }
+    I !expect_cell(tasks_row1, 0, "2") { println("T179 tasks: row1 id"); return 255 }
+    I !expect_cell(tasks_row1, 1, "ship") { println("T179 tasks: row1 title"); return 255 }
+    I !expect_cell(tasks_row1, 2, "done") { println("T179 tasks: row1 status"); return 255 }
+    tasks_select.free_owned_text()
+    tasks_select.free_owned_text()
+
+    tasks_projection := mut match tasks_db.query("select id, title, status from tasks") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_projection.column_count() != 3 as u64 { println("T179 tasks: projection column count"); return 255 }
+    I tasks_projection.row_count() != 2 as u64 { println("T179 tasks: projection row count"); return 255 }
+    tasks_projection.free_owned_text()
+    tasks_projection.free_owned_text()
+
+    tasks_id_filter := mut match tasks_db.query("select * from tasks where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_id_filter.row_count() != 1 as u64 { println("T179 tasks: id filter row count"); return 255 }
+    tasks_id_filter_rows := mut tasks_id_filter.get_rows()
+    tasks_id_filter_row := mut &tasks_id_filter_rows[0]
+    I !expect_cell(tasks_id_filter_row, 0, "2") { println("T179 tasks: id filter id"); return 255 }
+    I !expect_cell(tasks_id_filter_row, 1, "ship") { println("T179 tasks: id filter title"); return 255 }
+    I !expect_cell(tasks_id_filter_row, 2, "done") { println("T179 tasks: id filter status"); return 255 }
+    tasks_id_filter.free_owned_text()
+    tasks_id_filter.free_owned_text()
+
+    tasks_title_filter := mut match tasks_db.query("select * from tasks where title = 'build'") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: title filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_title_filter.row_count() != 1 as u64 { println("T179 tasks: title filter row count"); return 255 }
+    tasks_title_filter.free_owned_text()
+    tasks_title_filter.free_owned_text()
+
+    tasks_status_filter := mut match tasks_db.query("select * from tasks where status = 'done'") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_status_filter.row_count() != 1 as u64 { println("T179 tasks: status filter row count"); return 255 }
+    tasks_status_filter_rows := mut tasks_status_filter.get_rows()
+    tasks_status_filter_row := mut &tasks_status_filter_rows[0]
+    I !expect_cell(tasks_status_filter_row, 0, "2") { println("T179 tasks: status filter id"); return 255 }
+    I !expect_cell(tasks_status_filter_row, 1, "ship") { println("T179 tasks: status filter title"); return 255 }
+    I !expect_cell(tasks_status_filter_row, 2, "done") { println("T179 tasks: status filter status"); return 255 }
+    tasks_status_filter.free_owned_text()
+    tasks_status_filter.free_owned_text()
+
+    tasks_projection_status_filter := mut match tasks_db.query("select id, title, status from tasks where status = 'done'") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: projection status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_projection_status_filter.row_count() != 1 as u64 { println("T179 tasks: projection status filter row count"); return 255 }
+    tasks_projection_status_filter.free_owned_text()
+    tasks_projection_status_filter.free_owned_text()
+
+    tasks_reversed_id_filter := mut match tasks_db.query("select * from tasks where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_reversed_id_filter.row_count() != 1 as u64 { println("T179 tasks: reversed id filter row count"); return 255 }
+    tasks_reversed_id_filter.free_owned_text()
+    tasks_reversed_id_filter.free_owned_text()
+
+    tasks_reversed_title_filter := mut match tasks_db.query("select * from tasks where 'build' = title") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: reversed title filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_reversed_title_filter.row_count() != 1 as u64 { println("T179 tasks: reversed title filter row count"); return 255 }
+    tasks_reversed_title_filter.free_owned_text()
+    tasks_reversed_title_filter.free_owned_text()
+
+    tasks_reversed_status_filter := mut match tasks_db.query("select * from tasks where 'done' = status") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: reversed status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_reversed_status_filter.row_count() != 1 as u64 { println("T179 tasks: reversed status filter row count"); return 255 }
+    tasks_reversed_status_filter.free_owned_text()
+    tasks_reversed_status_filter.free_owned_text()
+
+    match tasks_db.query("select title from tasks") {
+        Ok(_) => { println("T179 tasks: partial projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.query("select status, title, id from tasks") {
+        Ok(_) => { println("T179 tasks: reversed projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.query("select id as task_id, title, status from tasks") {
+        Ok(_) => { println("T179 tasks: alias projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.query("select tasks.id, tasks.title, tasks.status from tasks") {
+        Ok(_) => { println("T179 tasks: qualified projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.query("select * from tasks where status = 2") {
+        Ok(_) => { println("T179 tasks: wrong status literal unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.query("select * from tasks where id = '2'") {
+        Ok(_) => { println("T179 tasks: wrong id literal unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.query("select * from tasks where status != 'done'") {
+        Ok(_) => { println("T179 tasks: non-equality predicate unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.query("select * from tasks where id = 1 and status = 'open'") {
+        Ok(_) => { println("T179 tasks: boolean predicate unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.query("select id + 1, title, status from tasks") {
+        Ok(_) => { println("T179 tasks: expression projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.query("select * from tasks join notes on tasks.id = notes.id") {
+        Ok(_) => { println("T179 tasks: join unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T175 tasks: close failed"); return 255 },
+    }
+    tasks_reopen_cfg := mut EmbeddedConfig.default()
+    tasks_reopen_cfg = tasks_reopen_cfg.with_data_dir(tasks_path.clone())
+    tasks_reopen_cfg = tasks_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    tasks_reopened := mut match EmbeddedDatabase.open(tasks_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T175 tasks: reopen failed"); return 255 },
+    }
+    tasks_reopened_table_id := mut 0 as u32
+    match tasks_reopened.catalog.get_table("tasks") {
+        Some(info) => {
+            tasks_reopened_table_id = info.table_id
+            I info.column_count != 3 as u16 { println("T175 tasks: reopen table column count"); return 255 }
+        },
+        None => { println("T175 tasks: reopen missing table"); return 255 },
+    }
+    tasks_reopened_col_refs := mut tasks_reopened.catalog.get_columns(tasks_reopened_table_id)
+    tasks_reopened_cols: Vec<ColumnInfo> := mut Vec.with_capacity(tasks_reopened_col_refs.len())
+    LF col_ref: &tasks_reopened_col_refs {
+        tasks_reopened_cols.push((**col_ref).clone())
+    }
+    I tasks_reopened_cols.len() != 3 as u64 { println("T175 tasks: reopen catalog column count"); return 255 }
+    I !expect_catalog_column(&tasks_reopened_cols, 0, "id", "INT") { println("T175 tasks: reopen id column"); return 255 }
+    I !expect_catalog_column(&tasks_reopened_cols, 1, "title", "TEXT") { println("T175 tasks: reopen title column"); return 255 }
+    I !expect_catalog_column(&tasks_reopened_cols, 2, "status", "TEXT") { println("T175 tasks: reopen status column"); return 255 }
+    match tasks_reopened.execute("create table tasks (id int, title text, status text)") {
+        Ok(_) => { println("T175 tasks: reopen duplicate create unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    tasks_reopened_insert := mut match tasks_reopened.execute("insert into tasks (id, title, status) values (3, 'reopen', 'open')") {
+        Ok(v) => v,
+        Err(e) => { println("T177 tasks: reopen insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_reopened_insert != 1 as u64 { println("T177 tasks: reopen insert count"); return 255 }
+    match tasks_reopened.execute("insert into tasks values (4, 'raw', 'open')") {
+        Ok(_) => { println("T177 tasks: reopen values-only unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    tasks_reopened_select := mut match tasks_reopened.query("select * from tasks") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_reopened_select.row_count() != 3 as u64 { println("T179 tasks: reopen row count"); return 255 }
+    tasks_reopened_select.free_owned_text()
+    tasks_reopened_select.free_owned_text()
+    tasks_reopened_status_filter := mut match tasks_reopened.query("select id, title, status from tasks where status = 'open'") {
+        Ok(r) => r,
+        Err(e) => { println("T179 tasks: reopen status projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tasks_reopened_status_filter.row_count() != 2 as u64 { println("T179 tasks: reopen status filter row count"); return 255 }
+    tasks_reopened_status_filter.free_owned_text()
+    tasks_reopened_status_filter.free_owned_text()
+    match tasks_reopened.query("select status from tasks") {
+        Ok(_) => { println("T179 tasks: reopen partial projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tasks_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T175 tasks: reopen close failed"); return 255 },
+    }
+
+    # --- Second registered descriptor: authors(id INT, name TEXT) ---
+    #
+    # This proves the descriptor registry has more than one non-people table
+    # shape without promoting arbitrary table creation, filters, joins, or
+    # schema browsing.
+    authors_suffix := mut time_micros()
+    authors_path := mut "embedded_sql_api_roundtrip_authors_db_{authors_suffix}"
+    authors_cfg := mut EmbeddedConfig.default()
+    authors_cfg = authors_cfg.with_data_dir(authors_path.clone())
+    authors_cfg = authors_cfg.with_page_size(PAGE_SIZE_8K)
+    authors_db := mut match EmbeddedDatabase.open(authors_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 181 },
+    }
+
+    match authors_db.execute("create table authors (id int, title text)") {
+        Ok(_) => { return 182 },
+        Err(_) => {},
+    }
+    match authors_db.execute("create table authors (name text, id int)") {
+        Ok(_) => { return 183 },
+        Err(_) => {},
+    }
+    match authors_db.execute("create table authors (id int primary key, name text)") {
+        Ok(_) => { return 184 },
+        Err(_) => {},
+    }
+    match authors_db.execute("create table magazines (id int, name int)") {
+        Ok(_) => { return 185 },
+        Err(_) => {},
+    }
+
+    authors_created := mut match authors_db.execute("create table authors (id int, name text)") {
+        Ok(n) => n,
+        Err(_) => { return 186 },
+    }
+    I authors_created != 0 as u64 { return 187 }
+    authors_inserted_a := mut match authors_db.execute("insert into authors values (1, 'ursula')") {
+        Ok(n) => n,
+        Err(_) => { return 188 },
+    }
+    I authors_inserted_a != 1 as u64 { return 189 }
+    authors_inserted_b := mut match authors_db.execute("insert into authors values (2, 'octavia')") {
+        Ok(n) => n,
+        Err(_) => { return 190 },
+    }
+    I authors_inserted_b != 1 as u64 { return 191 }
+
+    authors_result := mut match authors_db.query("select * from authors") {
+        Ok(r) => r,
+        Err(_) => { return 192 },
+    }
+    I authors_result.column_count() != 2 as u64 { return 193 }
+    I authors_result.row_count() != 2 as u64 { return 194 }
+    authors_cols := mut authors_result.get_columns()
+    I !expect_column(authors_cols, 0, "id", "INT") { return 195 }
+    I !expect_column(authors_cols, 1, "name", "TEXT") { return 196 }
+    authors_rows := mut authors_result.get_rows()
+    authors_row0 := mut &authors_rows[0]
+    authors_row1 := mut &authors_rows[1]
+    I !expect_cell(authors_row0, 0, "1") { return 197 }
+    I !expect_cell(authors_row0, 1, "ursula") { return 198 }
+    I !expect_cell(authors_row1, 0, "2") { return 199 }
+    I !expect_cell(authors_row1, 1, "octavia") { return 200 }
+    authors_result.free_owned_text()
+    authors_result.free_owned_text()
+
+    authors_projection := mut match authors_db.query("select id, name from authors") {
+        Ok(r) => r,
+        Err(_) => { return 201 },
+    }
+    I authors_projection.column_count() != 2 as u64 { return 202 }
+    I authors_projection.row_count() != 2 as u64 { return 203 }
+    authors_projection_cols := mut authors_projection.get_columns()
+    I !expect_column(authors_projection_cols, 0, "id", "INT") { return 204 }
+    I !expect_column(authors_projection_cols, 1, "name", "TEXT") { return 205 }
+    authors_projection.free_owned_text()
+    authors_projection.free_owned_text()
+
+    authors_name_filter := mut match authors_db.query("select * from authors where name = 'ursula'") {
+        Ok(r) => r,
+        Err(_) => { return 225 },
+    }
+    I authors_name_filter.row_count() != 1 as u64 { return 226 }
+    authors_name_filter_rows := mut authors_name_filter.get_rows()
+    authors_name_filter_row := mut &authors_name_filter_rows[0]
+    I !expect_cell(authors_name_filter_row, 0, "1") { return 227 }
+    I !expect_cell(authors_name_filter_row, 1, "ursula") { return 228 }
+    authors_name_filter.free_owned_text()
+    authors_name_filter.free_owned_text()
+
+    authors_name_filter_reversed := mut match authors_db.query("select * from authors where 'octavia' = name") {
+        Ok(r) => r,
+        Err(_) => { return 229 },
+    }
+    I authors_name_filter_reversed.row_count() != 1 as u64 { return 230 }
+    authors_name_filter_reversed_rows := mut authors_name_filter_reversed.get_rows()
+    authors_name_filter_reversed_row := mut &authors_name_filter_reversed_rows[0]
+    I !expect_cell(authors_name_filter_reversed_row, 0, "2") { return 231 }
+    I !expect_cell(authors_name_filter_reversed_row, 1, "octavia") { return 232 }
+    authors_name_filter_reversed.free_owned_text()
+    authors_name_filter_reversed.free_owned_text()
+
+    authors_id_filter := mut match authors_db.query("select * from authors where id = 1") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I authors_id_filter.row_count() != 1 as u64 { return 255 }
+    authors_id_filter_rows := mut authors_id_filter.get_rows()
+    authors_id_filter_row := mut &authors_id_filter_rows[0]
+    I !expect_cell(authors_id_filter_row, 0, "1") { return 255 }
+    I !expect_cell(authors_id_filter_row, 1, "ursula") { return 255 }
+    authors_id_filter.free_owned_text()
+    authors_id_filter.free_owned_text()
+
+    authors_id_filter_reversed := mut match authors_db.query("select * from authors where 2 = id") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I authors_id_filter_reversed.row_count() != 1 as u64 { return 255 }
+    authors_id_filter_reversed_rows := mut authors_id_filter_reversed.get_rows()
+    authors_id_filter_reversed_row := mut &authors_id_filter_reversed_rows[0]
+    I !expect_cell(authors_id_filter_reversed_row, 0, "2") { return 255 }
+    I !expect_cell(authors_id_filter_reversed_row, 1, "octavia") { return 255 }
+    authors_id_filter_reversed.free_owned_text()
+    authors_id_filter_reversed.free_owned_text()
+
+    match authors_db.query("select name from authors") {
+        Ok(_) => { return 206 },
+        Err(_) => {},
+    }
+    match authors_db.query("select name, id from authors") {
+        Ok(_) => { return 207 },
+        Err(_) => {},
+    }
+    match authors_db.query("select authors.id, authors.name from authors") {
+        Ok(_) => { return 208 },
+        Err(_) => {},
+    }
+    match authors_db.query("select id, name from authors where name = 'ursula'") {
+        Ok(_) => { return 233 },
+        Err(_) => {},
+    }
+    match authors_db.query("select id, name from authors where id = 1") {
+        Ok(_) => { return 209 },
+        Err(_) => {},
+    }
+    match authors_db.query("select * from authors where authors.name = 'ursula'") {
+        Ok(_) => { return 210 },
+        Err(_) => {},
+    }
+    match authors_db.query("select * from authors join books on authors.id = books.id") {
+        Ok(_) => { return 211 },
+        Err(_) => {},
+    }
+    match authors_db.query("select * from magazines") {
+        Ok(_) => { return 212 },
+        Err(_) => {},
+    }
+    match authors_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 213 },
+    }
+
+    authors_reopen_cfg := mut EmbeddedConfig.default()
+    authors_reopen_cfg = authors_reopen_cfg.with_data_dir(authors_path.clone())
+    authors_reopen_cfg = authors_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    authors_reopened := mut match EmbeddedDatabase.open(authors_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 214 },
+    }
+    authors_reopened_result := mut match authors_reopened.query("select * from authors") {
+        Ok(r) => r,
+        Err(_) => { return 215 },
+    }
+    I authors_reopened_result.column_count() != 2 as u64 { return 216 }
+    I authors_reopened_result.row_count() != 2 as u64 { return 217 }
+    authors_reopened_cols := mut authors_reopened_result.get_columns()
+    I !expect_column(authors_reopened_cols, 0, "id", "INT") { return 218 }
+    I !expect_column(authors_reopened_cols, 1, "name", "TEXT") { return 219 }
+    authors_reopened_rows := mut authors_reopened_result.get_rows()
+    authors_reopened_row0 := mut &authors_reopened_rows[0]
+    authors_reopened_row1 := mut &authors_reopened_rows[1]
+    I !expect_cell(authors_reopened_row0, 0, "1") { return 220 }
+    I !expect_cell(authors_reopened_row0, 1, "ursula") { return 221 }
+    I !expect_cell(authors_reopened_row1, 0, "2") { return 222 }
+    I !expect_cell(authors_reopened_row1, 1, "octavia") { return 223 }
+    authors_reopened_result.free_owned_text()
+    authors_reopened_result.free_owned_text()
+    match authors_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 224 },
+    }
+
+    # --- Third registered descriptor: publishers(id INT, label TEXT) ---
+    #
+    # This keeps descriptor generalization static and bounded while proving the
+    # registry is no longer special-cased to books/authors column names.
+    publishers_suffix := mut time_micros()
+    publishers_path := mut "embedded_sql_api_roundtrip_publishers_db_{publishers_suffix}"
+    publishers_cfg := mut EmbeddedConfig.default()
+    publishers_cfg = publishers_cfg.with_data_dir(publishers_path.clone())
+    publishers_cfg = publishers_cfg.with_page_size(PAGE_SIZE_8K)
+    publishers_db := mut match EmbeddedDatabase.open(publishers_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+
+    match publishers_db.execute("create table publishers (id int, name text)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.execute("create table publishers (label text, id int)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.execute("create table publishers (id int, label text, code text)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.execute("create table publishers (id int primary key, label text)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.execute("create table publishers (id int, label text default 'anon')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.execute("create table editions (id int, label int)") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.execute("insert into editions values (1, 'paperback')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select * from editions") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+
+    publishers_created := mut match publishers_db.execute("create table publishers (id int, label text)") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I publishers_created != 0 as u64 { return 255 }
+    publishers_inserted_a := mut match publishers_db.execute("insert into publishers values (1, 'tor')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I publishers_inserted_a != 1 as u64 { return 255 }
+    publishers_inserted_b := mut match publishers_db.execute("insert into publishers values (2, 'vintage')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I publishers_inserted_b != 1 as u64 { return 255 }
+
+    publishers_result := mut match publishers_db.query("select * from publishers") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I publishers_result.column_count() != 2 as u64 { return 255 }
+    I publishers_result.row_count() != 2 as u64 { return 255 }
+    publishers_cols := mut publishers_result.get_columns()
+    I !expect_column(publishers_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(publishers_cols, 1, "label", "TEXT") { return 255 }
+    publishers_rows := mut publishers_result.get_rows()
+    publishers_row0 := mut &publishers_rows[0]
+    publishers_row1 := mut &publishers_rows[1]
+    I !expect_cell(publishers_row0, 0, "1") { return 255 }
+    I !expect_cell(publishers_row0, 1, "tor") { return 255 }
+    I !expect_cell(publishers_row1, 0, "2") { return 255 }
+    I !expect_cell(publishers_row1, 1, "vintage") { return 255 }
+    publishers_result.free_owned_text()
+    publishers_result.free_owned_text()
+
+    publishers_projection := mut match publishers_db.query("select id, label from publishers") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I publishers_projection.column_count() != 2 as u64 { return 255 }
+    I publishers_projection.row_count() != 2 as u64 { return 255 }
+    publishers_projection_cols := mut publishers_projection.get_columns()
+    I !expect_column(publishers_projection_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(publishers_projection_cols, 1, "label", "TEXT") { return 255 }
+    publishers_projection.free_owned_text()
+    publishers_projection.free_owned_text()
+
+    publishers_label_filter := mut match publishers_db.query("select * from publishers where label = 'tor'") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I publishers_label_filter.row_count() != 1 as u64 { return 255 }
+    publishers_label_filter_rows := mut publishers_label_filter.get_rows()
+    publishers_label_filter_row := mut &publishers_label_filter_rows[0]
+    I !expect_cell(publishers_label_filter_row, 0, "1") { return 255 }
+    I !expect_cell(publishers_label_filter_row, 1, "tor") { return 255 }
+    publishers_label_filter.free_owned_text()
+    publishers_label_filter.free_owned_text()
+
+    publishers_label_filter_reversed := mut match publishers_db.query("select * from publishers where 'vintage' = label") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I publishers_label_filter_reversed.row_count() != 1 as u64 { return 255 }
+    publishers_label_filter_reversed_rows := mut publishers_label_filter_reversed.get_rows()
+    publishers_label_filter_reversed_row := mut &publishers_label_filter_reversed_rows[0]
+    I !expect_cell(publishers_label_filter_reversed_row, 0, "2") { return 255 }
+    I !expect_cell(publishers_label_filter_reversed_row, 1, "vintage") { return 255 }
+    publishers_label_filter_reversed.free_owned_text()
+    publishers_label_filter_reversed.free_owned_text()
+
+    publishers_id_filter := mut match publishers_db.query("select * from publishers where id = 1") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I publishers_id_filter.row_count() != 1 as u64 { return 255 }
+    publishers_id_filter_rows := mut publishers_id_filter.get_rows()
+    publishers_id_filter_row := mut &publishers_id_filter_rows[0]
+    I !expect_cell(publishers_id_filter_row, 0, "1") { return 255 }
+    I !expect_cell(publishers_id_filter_row, 1, "tor") { return 255 }
+    publishers_id_filter.free_owned_text()
+    publishers_id_filter.free_owned_text()
+
+    publishers_id_filter_reversed := mut match publishers_db.query("select * from publishers where 2 = id") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I publishers_id_filter_reversed.row_count() != 1 as u64 { return 255 }
+    publishers_id_filter_reversed_rows := mut publishers_id_filter_reversed.get_rows()
+    publishers_id_filter_reversed_row := mut &publishers_id_filter_reversed_rows[0]
+    I !expect_cell(publishers_id_filter_reversed_row, 0, "2") { return 255 }
+    I !expect_cell(publishers_id_filter_reversed_row, 1, "vintage") { return 255 }
+    publishers_id_filter_reversed.free_owned_text()
+    publishers_id_filter_reversed.free_owned_text()
+
+    match publishers_db.query("select label from publishers") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select label, id from publishers") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select publishers.id, publishers.label from publishers") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select id, label from publishers where label = 'tor'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select id, label from publishers where id = 1") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select * from publishers where id = '1'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select * from publishers where '1' = id") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select * from publishers where id = label") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select * from publishers where label = 1") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select * from publishers where publishers.label = 'tor'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select * from publishers where label != 'tor'") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.query("select * from publishers join books on publishers.id = books.id") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match publishers_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    publishers_reopen_cfg := mut EmbeddedConfig.default()
+    publishers_reopen_cfg = publishers_reopen_cfg.with_data_dir(publishers_path.clone())
+    publishers_reopen_cfg = publishers_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    publishers_reopened := mut match EmbeddedDatabase.open(publishers_reopen_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    publishers_reopened_result := mut match publishers_reopened.query("select * from publishers") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I publishers_reopened_result.column_count() != 2 as u64 { return 255 }
+    I publishers_reopened_result.row_count() != 2 as u64 { return 255 }
+    publishers_reopened_cols := mut publishers_reopened_result.get_columns()
+    I !expect_column(publishers_reopened_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(publishers_reopened_cols, 1, "label", "TEXT") { return 255 }
+    publishers_reopened_rows := mut publishers_reopened_result.get_rows()
+    publishers_reopened_row0 := mut &publishers_reopened_rows[0]
+    publishers_reopened_row1 := mut &publishers_reopened_rows[1]
+    I !expect_cell(publishers_reopened_row0, 0, "1") { return 255 }
+    I !expect_cell(publishers_reopened_row0, 1, "tor") { return 255 }
+    I !expect_cell(publishers_reopened_row1, 0, "2") { return 255 }
+    I !expect_cell(publishers_reopened_row1, 1, "vintage") { return 255 }
+    publishers_reopened_result.free_owned_text()
+    publishers_reopened_result.free_owned_text()
+    match publishers_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    authors_recovery_suffix := mut time_micros()
+    authors_recovery_path := mut "embedded_sql_api_roundtrip_authors_recovery_db_{authors_recovery_suffix}"
+    authors_recovery_cfg := mut EmbeddedConfig.default()
+    authors_recovery_cfg = authors_recovery_cfg.with_data_dir(authors_recovery_path.clone())
+    authors_recovery_cfg = authors_recovery_cfg.with_page_size(PAGE_SIZE_8K)
+    authors_recovery_db := mut match EmbeddedDatabase.open(authors_recovery_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match authors_recovery_db.execute("create table authors (id int, name text)") {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+    authors_recovery_page_id := mut 0 as u32
+    match authors_recovery_db.catalog.get_table("authors") {
+        Some(info) => {
+            authors_recovery_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I authors_recovery_page_id == 0 { return 255 }
+    authors_recovery_empty_frame := mut match authors_recovery_db.pool.fetch_page(FILE_ID_DATA, authors_recovery_page_id) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    authors_recovery_empty_page := mut authors_recovery_db.pool.get_page(authors_recovery_empty_frame)
+    authors_recovery_pre_insert_page := mut copy_smoke_page(authors_recovery_empty_page)
+    authors_recovery_db.pool.unpin_page(authors_recovery_empty_frame, false)
+
+    authors_recovery_start_lsn := mut authors_recovery_db.gcm.current_lsn()
+    authors_recovery_inserted_a := mut match authors_recovery_db.execute("insert into authors values (1, 'ursula')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I authors_recovery_inserted_a != 1 as u64 { return 255 }
+    authors_recovery_inserted_b := mut match authors_recovery_db.execute("insert into authors values (2, 'octavia')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I authors_recovery_inserted_b != 1 as u64 { return 255 }
+    authors_recovery_before_close := mut match authors_recovery_db.query("select * from authors") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I authors_recovery_before_close.row_count() != 2 as u64 { return 255 }
+    authors_recovery_before_close.free_owned_text()
+    authors_recovery_before_close.free_owned_text()
+    match authors_recovery_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    I restore_smoke_data_page(authors_recovery_path.clone(), authors_recovery_page_id, authors_recovery_pre_insert_page) != 0 { return 255 }
+    I set_smoke_checkpoint_lsn(authors_recovery_path.clone(), authors_recovery_start_lsn) != 0 { return 255 }
+
+    authors_recovered_cfg := mut EmbeddedConfig.default()
+    authors_recovered_cfg = authors_recovered_cfg.with_data_dir(authors_recovery_path.clone())
+    authors_recovered_cfg = authors_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    authors_recovered := mut match EmbeddedDatabase.open(authors_recovered_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    authors_recovered_result := mut match authors_recovered.query("select * from authors") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I authors_recovered_result.column_count() != 2 as u64 { return 255 }
+    I authors_recovered_result.row_count() != 2 as u64 { return 255 }
+    authors_recovered_cols := mut authors_recovered_result.get_columns()
+    I !expect_column(authors_recovered_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(authors_recovered_cols, 1, "name", "TEXT") { return 255 }
+    authors_recovered_rows := mut authors_recovered_result.get_rows()
+    authors_recovered_row0 := mut &authors_recovered_rows[0]
+    authors_recovered_row1 := mut &authors_recovered_rows[1]
+    I !expect_cell(authors_recovered_row0, 0, "1") { return 255 }
+    I !expect_cell(authors_recovered_row0, 1, "ursula") { return 255 }
+    I !expect_cell(authors_recovered_row1, 0, "2") { return 255 }
+    I !expect_cell(authors_recovered_row1, 1, "octavia") { return 255 }
+    authors_recovered_result.free_owned_text()
+    authors_recovered_result.free_owned_text()
+
+    authors_recovered_projection := mut match authors_recovered.query("select id, name from authors") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I authors_recovered_projection.column_count() != 2 as u64 { return 255 }
+    I authors_recovered_projection.row_count() != 2 as u64 { return 255 }
+    authors_recovered_projection.free_owned_text()
+    authors_recovered_projection.free_owned_text()
+
+    authors_recovered_insert := mut match authors_recovered.execute("insert into authors values (3, 'butler')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I authors_recovered_insert != 1 as u64 { return 255 }
+    authors_recovered_after_insert := mut match authors_recovered.query("select * from authors") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I authors_recovered_after_insert.row_count() != 3 as u64 { return 255 }
+    authors_recovered_after_insert.free_owned_text()
+    authors_recovered_after_insert.free_owned_text()
+    match authors_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    authors_recovered_repeat_cfg := mut EmbeddedConfig.default()
+    authors_recovered_repeat_cfg = authors_recovered_repeat_cfg.with_data_dir(authors_recovery_path.clone())
+    authors_recovered_repeat_cfg = authors_recovered_repeat_cfg.with_page_size(PAGE_SIZE_8K)
+    authors_recovered_repeat := mut match EmbeddedDatabase.open(authors_recovered_repeat_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    authors_recovered_repeat_result := mut match authors_recovered_repeat.query("select * from authors") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I authors_recovered_repeat_result.row_count() != 3 as u64 { return 255 }
+    authors_recovered_repeat_rows := mut authors_recovered_repeat_result.get_rows()
+    authors_recovered_seen_ursula := mut false
+    authors_recovered_seen_octavia := mut false
+    authors_recovered_seen_butler := mut false
+    LF ri: 0..authors_recovered_repeat_rows.len() {
+        candidate := mut &authors_recovered_repeat_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ursula") {
+            authors_recovered_seen_ursula = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "octavia") {
+            authors_recovered_seen_octavia = true
+        }
+        I expect_cell(candidate, 0, "3") && expect_cell(candidate, 1, "butler") {
+            authors_recovered_seen_butler = true
+        }
+    }
+    I !authors_recovered_seen_ursula { return 255 }
+    I !authors_recovered_seen_octavia { return 255 }
+    I !authors_recovered_seen_butler { return 255 }
+    authors_recovered_repeat_result.free_owned_text()
+    authors_recovered_repeat_result.free_owned_text()
+    match authors_recovered_repeat.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    albums_recovery_suffix := mut time_micros()
+    albums_recovery_path := mut "embedded_sql_api_roundtrip_albums_recovery_db_{albums_recovery_suffix}"
+    albums_recovery_cfg := mut EmbeddedConfig.default()
+    albums_recovery_cfg = albums_recovery_cfg.with_data_dir(albums_recovery_path.clone())
+    albums_recovery_cfg = albums_recovery_cfg.with_page_size(PAGE_SIZE_8K)
+    albums_recovery_db := mut match EmbeddedDatabase.open(albums_recovery_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match albums_recovery_db.execute("create table albums (id int, title text)") {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+    albums_recovery_page_id := mut 0 as u32
+    match albums_recovery_db.catalog.get_table("albums") {
+        Some(info) => {
+            albums_recovery_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I albums_recovery_page_id == 0 { return 255 }
+    albums_recovery_empty_frame := mut match albums_recovery_db.pool.fetch_page(FILE_ID_DATA, albums_recovery_page_id) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    albums_recovery_empty_page := mut albums_recovery_db.pool.get_page(albums_recovery_empty_frame)
+    albums_recovery_pre_insert_page := mut copy_smoke_page(albums_recovery_empty_page)
+    albums_recovery_db.pool.unpin_page(albums_recovery_empty_frame, false)
+
+    albums_recovery_start_lsn := mut albums_recovery_db.gcm.current_lsn()
+    albums_recovery_inserted_a := mut match albums_recovery_db.execute("insert into albums values (1, 'blue')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I albums_recovery_inserted_a != 1 as u64 { return 255 }
+    albums_recovery_inserted_b := mut match albums_recovery_db.execute("insert into albums values (2, 'green')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I albums_recovery_inserted_b != 1 as u64 { return 255 }
+    albums_recovery_before_close := mut match albums_recovery_db.query("select * from albums") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_recovery_before_close.row_count() != 2 as u64 { return 255 }
+    albums_recovery_before_close.free_owned_text()
+    albums_recovery_before_close.free_owned_text()
+    match albums_recovery_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    I restore_smoke_data_page(albums_recovery_path.clone(), albums_recovery_page_id, albums_recovery_pre_insert_page) != 0 { return 255 }
+    I set_smoke_checkpoint_lsn(albums_recovery_path.clone(), albums_recovery_start_lsn) != 0 { return 255 }
+
+    albums_recovered_cfg := mut EmbeddedConfig.default()
+    albums_recovered_cfg = albums_recovered_cfg.with_data_dir(albums_recovery_path.clone())
+    albums_recovered_cfg = albums_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    albums_recovered := mut match EmbeddedDatabase.open(albums_recovered_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    albums_recovered_result := mut match albums_recovered.query("select * from albums") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_recovered_result.column_count() != 2 as u64 { return 255 }
+    I albums_recovered_result.row_count() != 2 as u64 { return 255 }
+    albums_recovered_cols := mut albums_recovered_result.get_columns()
+    I !expect_column(albums_recovered_cols, 0, "id", "INT") { return 255 }
+    I !expect_column(albums_recovered_cols, 1, "title", "TEXT") { return 255 }
+    albums_recovered_rows := mut albums_recovered_result.get_rows()
+    albums_recovered_row0 := mut &albums_recovered_rows[0]
+    albums_recovered_row1 := mut &albums_recovered_rows[1]
+    I !expect_cell(albums_recovered_row0, 0, "1") { return 255 }
+    I !expect_cell(albums_recovered_row0, 1, "blue") { return 255 }
+    I !expect_cell(albums_recovered_row1, 0, "2") { return 255 }
+    I !expect_cell(albums_recovered_row1, 1, "green") { return 255 }
+    albums_recovered_result.free_owned_text()
+    albums_recovered_result.free_owned_text()
+
+    albums_recovered_id_filter := mut match albums_recovered.query("select * from albums where id = 2") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_recovered_id_filter.row_count() != 1 as u64 { return 255 }
+    albums_recovered_id_filter_rows := mut albums_recovered_id_filter.get_rows()
+    albums_recovered_id_filter_row0 := mut &albums_recovered_id_filter_rows[0]
+    I !expect_cell(albums_recovered_id_filter_row0, 0, "2") { return 255 }
+    I !expect_cell(albums_recovered_id_filter_row0, 1, "green") { return 255 }
+    albums_recovered_id_filter.free_owned_text()
+    albums_recovered_id_filter.free_owned_text()
+
+    albums_recovered_title_filter := mut match albums_recovered.query("select * from albums where title = 'green'") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_recovered_title_filter.row_count() != 1 as u64 { return 255 }
+    albums_recovered_title_filter_rows := mut albums_recovered_title_filter.get_rows()
+    albums_recovered_title_filter_row0 := mut &albums_recovered_title_filter_rows[0]
+    I !expect_cell(albums_recovered_title_filter_row0, 0, "2") { return 255 }
+    I !expect_cell(albums_recovered_title_filter_row0, 1, "green") { return 255 }
+    albums_recovered_title_filter.free_owned_text()
+    albums_recovered_title_filter.free_owned_text()
+
+    albums_recovered_insert := mut match albums_recovered.execute("insert into albums values (3, 'violet')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I albums_recovered_insert != 1 as u64 { return 255 }
+    albums_recovered_after_insert := mut match albums_recovered.query("select * from albums") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_recovered_after_insert.row_count() != 3 as u64 { return 255 }
+    albums_recovered_after_insert.free_owned_text()
+    albums_recovered_after_insert.free_owned_text()
+    match albums_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    albums_recovered_repeat_cfg := mut EmbeddedConfig.default()
+    albums_recovered_repeat_cfg = albums_recovered_repeat_cfg.with_data_dir(albums_recovery_path.clone())
+    albums_recovered_repeat_cfg = albums_recovered_repeat_cfg.with_page_size(PAGE_SIZE_8K)
+    albums_recovered_repeat := mut match EmbeddedDatabase.open(albums_recovered_repeat_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    albums_recovered_repeat_result := mut match albums_recovered_repeat.query("select * from albums") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I albums_recovered_repeat_result.row_count() != 3 as u64 { return 255 }
+    albums_recovered_repeat_rows := mut albums_recovered_repeat_result.get_rows()
+    albums_recovered_seen_blue := mut false
+    albums_recovered_seen_green := mut false
+    albums_recovered_seen_violet := mut false
+    LF ri: 0..albums_recovered_repeat_rows.len() {
+        candidate := mut &albums_recovered_repeat_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "blue") {
+            albums_recovered_seen_blue = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "green") {
+            albums_recovered_seen_green = true
+        }
+        I expect_cell(candidate, 0, "3") && expect_cell(candidate, 1, "violet") {
+            albums_recovered_seen_violet = true
+        }
+    }
+    I !albums_recovered_seen_blue { return 255 }
+    I !albums_recovered_seen_green { return 255 }
+    I !albums_recovered_seen_violet { return 255 }
+    albums_recovered_repeat_result.free_owned_text()
+    albums_recovered_repeat_result.free_owned_text()
+    match albums_recovered_repeat.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    notes_recovery_suffix := mut time_micros()
+    notes_recovery_path := mut "embedded_sql_api_roundtrip_notes_recovery_db_{notes_recovery_suffix}"
+    notes_recovery_cfg := mut EmbeddedConfig.default()
+    notes_recovery_cfg = notes_recovery_cfg.with_data_dir(notes_recovery_path.clone())
+    notes_recovery_cfg = notes_recovery_cfg.with_page_size(PAGE_SIZE_8K)
+    notes_recovery_db := mut match EmbeddedDatabase.open(notes_recovery_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T167 notes recovery: open failed"); return 255 },
+    }
+    match notes_recovery_db.execute("create table notes (id int, body text)") {
+        Ok(_) => {},
+        Err(e) => { println("T167 notes recovery: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    notes_recovery_page_id := mut 0 as u32
+    match notes_recovery_db.catalog.get_table("notes") {
+        Some(info) => {
+            notes_recovery_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I notes_recovery_page_id == 0 { println("T167 notes recovery: missing heap page"); return 255 }
+    notes_recovery_empty_frame := mut match notes_recovery_db.pool.fetch_page(FILE_ID_DATA, notes_recovery_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T167 notes recovery: fetch empty page failed"); return 255 },
+    }
+    notes_recovery_empty_page := mut notes_recovery_db.pool.get_page(notes_recovery_empty_frame)
+    notes_recovery_pre_insert_page := mut copy_smoke_page(notes_recovery_empty_page)
+    notes_recovery_db.pool.unpin_page(notes_recovery_empty_frame, false)
+
+    notes_recovery_start_lsn := mut notes_recovery_db.gcm.current_lsn()
+    notes_recovery_inserted_a := mut match notes_recovery_db.execute("insert into notes (id, body) values (1, 'memo')") {
+        Ok(n) => n,
+        Err(e) => { println("T167 notes recovery: descriptor-order insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovery_inserted_a != 1 as u64 { println("T167 notes recovery: descriptor-order insert count"); return 255 }
+    notes_recovery_inserted_b := mut match notes_recovery_db.execute("insert into notes (body, id) values ('todo', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T167 notes recovery: reversed insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovery_inserted_b != 1 as u64 { println("T167 notes recovery: reversed insert count"); return 255 }
+    notes_recovery_before_close := mut match notes_recovery_db.query("select * from notes") {
+        Ok(r) => r,
+        Err(e) => { println("T167 notes recovery: before-close select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovery_before_close.row_count() != 2 as u64 { println("T167 notes recovery: before-close row count"); return 255 }
+    notes_recovery_before_close.free_owned_text()
+    notes_recovery_before_close.free_owned_text()
+    match notes_recovery_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T167 notes recovery: close failed"); return 255 },
+    }
+
+    I restore_smoke_data_page(notes_recovery_path.clone(), notes_recovery_page_id, notes_recovery_pre_insert_page) != 0 {
+        println("T167 notes recovery: restore heap page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(notes_recovery_path.clone(), notes_recovery_start_lsn) != 0 {
+        println("T167 notes recovery: checkpoint reset failed")
+        return 255
+    }
+
+    notes_recovered_cfg := mut EmbeddedConfig.default()
+    notes_recovered_cfg = notes_recovered_cfg.with_data_dir(notes_recovery_path.clone())
+    notes_recovered_cfg = notes_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    notes_recovered := mut match EmbeddedDatabase.open(notes_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T167 notes recovery: reopen recovery failed: {e.message}: {e.hint}"); return 255 },
+    }
+    notes_recovered_result := mut match notes_recovered.query("select * from notes") {
+        Ok(r) => r,
+        Err(e) => { println("T167 notes recovery: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_result.column_count() != 2 as u64 { println("T167 notes recovery: recovered column count"); return 255 }
+    I notes_recovered_result.row_count() != 2 as u64 { println("T167 notes recovery: recovered row count"); return 255 }
+    notes_recovered_cols := mut notes_recovered_result.get_columns()
+    I !expect_column(notes_recovered_cols, 0, "id", "INT") { println("T167 notes recovery: recovered id column"); return 255 }
+    I !expect_column(notes_recovered_cols, 1, "body", "TEXT") { println("T167 notes recovery: recovered body column"); return 255 }
+    notes_recovered_rows := mut notes_recovered_result.get_rows()
+    notes_recovered_row0 := mut &notes_recovered_rows[0]
+    notes_recovered_row1 := mut &notes_recovered_rows[1]
+    I !expect_cell(notes_recovered_row0, 0, "1") { println("T167 notes recovery: recovered row0 id"); return 255 }
+    I !expect_cell(notes_recovered_row0, 1, "memo") { println("T167 notes recovery: recovered row0 body"); return 255 }
+    I !expect_cell(notes_recovered_row1, 0, "2") { println("T167 notes recovery: recovered row1 id"); return 255 }
+    I !expect_cell(notes_recovered_row1, 1, "todo") { println("T167 notes recovery: recovered row1 body"); return 255 }
+    notes_recovered_result.free_owned_text()
+    notes_recovered_result.free_owned_text()
+
+    notes_recovered_projection := mut match notes_recovered.query("select id, body from notes") {
+        Ok(r) => r,
+        Err(e) => { println("T167 notes recovery: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_projection.column_count() != 2 as u64 { println("T167 notes recovery: projection column count"); return 255 }
+    I notes_recovered_projection.row_count() != 2 as u64 { println("T167 notes recovery: projection row count"); return 255 }
+    notes_recovered_projection_cols := mut notes_recovered_projection.get_columns()
+    I !expect_column(notes_recovered_projection_cols, 0, "id", "INT") { println("T167 notes recovery: projection id column"); return 255 }
+    I !expect_column(notes_recovered_projection_cols, 1, "body", "TEXT") { println("T167 notes recovery: projection body column"); return 255 }
+    notes_recovered_projection.free_owned_text()
+    notes_recovered_projection.free_owned_text()
+
+    notes_recovered_body_filter := mut match notes_recovered.query("select * from notes where body = 'todo'") {
+        Ok(r) => r,
+        Err(e) => { println("T167 notes recovery: recovered body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_body_filter.row_count() != 1 as u64 { println("T167 notes recovery: body filter row count"); return 255 }
+    notes_recovered_body_filter_rows := mut notes_recovered_body_filter.get_rows()
+    notes_recovered_body_filter_row := mut &notes_recovered_body_filter_rows[0]
+    I !expect_cell(notes_recovered_body_filter_row, 0, "2") { println("T167 notes recovery: body filter id"); return 255 }
+    I !expect_cell(notes_recovered_body_filter_row, 1, "todo") { println("T167 notes recovery: body filter body"); return 255 }
+    notes_recovered_body_filter.free_owned_text()
+    notes_recovered_body_filter.free_owned_text()
+
+    notes_recovered_id_projection_filter := mut match notes_recovered.query("select id, body from notes where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T167 notes recovery: recovered id projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_id_projection_filter.row_count() != 1 as u64 { println("T167 notes recovery: id projection filter row count"); return 255 }
+    notes_recovered_id_projection_filter_rows := mut notes_recovered_id_projection_filter.get_rows()
+    notes_recovered_id_projection_filter_row := mut &notes_recovered_id_projection_filter_rows[0]
+    I !expect_cell(notes_recovered_id_projection_filter_row, 0, "1") { println("T167 notes recovery: id projection filter id"); return 255 }
+    I !expect_cell(notes_recovered_id_projection_filter_row, 1, "memo") { println("T167 notes recovery: id projection filter body"); return 255 }
+    notes_recovered_id_projection_filter.free_owned_text()
+    notes_recovered_id_projection_filter.free_owned_text()
+
+    notes_recovered_insert := mut match notes_recovered.execute("insert into notes (id, body) values (3, 'later')") {
+        Ok(n) => n,
+        Err(e) => { println("T167 notes recovery: post-recovery insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_insert != 1 as u64 { println("T167 notes recovery: post-recovery insert count"); return 255 }
+    notes_recovered_after_insert := mut match notes_recovered.query("select * from notes") {
+        Ok(r) => r,
+        Err(e) => { println("T167 notes recovery: after-insert select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_after_insert.row_count() != 3 as u64 { println("T167 notes recovery: after-insert row count"); return 255 }
+    notes_recovered_after_insert.free_owned_text()
+    notes_recovered_after_insert.free_owned_text()
+    match notes_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T167 notes recovery: recovered close failed"); return 255 },
+    }
+
+    notes_recovered_repeat_cfg := mut EmbeddedConfig.default()
+    notes_recovered_repeat_cfg = notes_recovered_repeat_cfg.with_data_dir(notes_recovery_path.clone())
+    notes_recovered_repeat_cfg = notes_recovered_repeat_cfg.with_page_size(PAGE_SIZE_8K)
+    notes_recovered_repeat := mut match EmbeddedDatabase.open(notes_recovered_repeat_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T167 notes recovery: repeat open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    notes_recovered_repeat_result := mut match notes_recovered_repeat.query("select * from notes") {
+        Ok(r) => r,
+        Err(e) => { println("T167 notes recovery: repeat select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_repeat_result.row_count() != 3 as u64 { println("T167 notes recovery: repeat row count"); return 255 }
+    notes_recovered_repeat_rows := mut notes_recovered_repeat_result.get_rows()
+    notes_recovered_seen_memo := mut false
+    notes_recovered_seen_todo := mut false
+    notes_recovered_seen_later := mut false
+    LF ri: 0..notes_recovered_repeat_rows.len() {
+        candidate := mut &notes_recovered_repeat_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "memo") {
+            notes_recovered_seen_memo = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "todo") {
+            notes_recovered_seen_todo = true
+        }
+        I expect_cell(candidate, 0, "3") && expect_cell(candidate, 1, "later") {
+            notes_recovered_seen_later = true
+        }
+    }
+    I !notes_recovered_seen_memo { println("T167 notes recovery: repeat missing memo"); return 255 }
+    I !notes_recovered_seen_todo { println("T167 notes recovery: repeat missing todo"); return 255 }
+    I !notes_recovered_seen_later { println("T167 notes recovery: repeat missing later"); return 255 }
+    notes_recovered_repeat_result.free_owned_text()
+    notes_recovered_repeat_result.free_owned_text()
+    match notes_recovered_repeat.close() {
+        Ok(_) => {},
+        Err(_) => { println("T167 notes recovery: repeat close failed"); return 255 },
     }
 
     # --- Promoted PRIMARY KEY subset: people(id INT PRIMARY KEY, name TEXT) ---
@@ -1571,6 +3948,302 @@ fn main() -> i64 {
     match pk_reopened.close() {
         Ok(_) => {},
         Err(_) => { return 253 },
+    }
+
+    pk_recovery_suffix := mut time_micros()
+    pk_recovery_path := mut "embedded_sql_api_roundtrip_pk_recovery_db_{pk_recovery_suffix}"
+    pk_recovery_cfg := mut EmbeddedConfig.default()
+    pk_recovery_cfg = pk_recovery_cfg.with_data_dir(pk_recovery_path.clone())
+    pk_recovery_cfg = pk_recovery_cfg.with_page_size(PAGE_SIZE_8K)
+    pk_recovery_db := mut match EmbeddedDatabase.open(pk_recovery_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match pk_recovery_db.execute("create table people (id int primary key, name text)") {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+    pk_recovery_inserted := mut match pk_recovery_db.execute("insert into people values (1, 'ada'), (2, 'grace')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I pk_recovery_inserted != 2 as u64 { return 255 }
+
+    pk_recovery_table_id := mut 0 as u32
+    pk_recovery_heap_page_id := mut 0 as u32
+    match pk_recovery_db.catalog.get_table("people") {
+        Some(info) => {
+            pk_recovery_table_id = info.table_id
+            pk_recovery_heap_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I pk_recovery_table_id == 0 || pk_recovery_heap_page_id == 0 { return 255 }
+    pk_recovery_index_page_id := mut 0 as u32
+    match pk_recovery_db.catalog.get_first_index_for_table(pk_recovery_table_id) {
+        Some(info) => {
+            pk_recovery_index_page_id = info.root_page_id
+        },
+        None => {},
+    }
+    I pk_recovery_index_page_id == 0 { return 255 }
+
+    pk_recovery_heap_frame := mut match pk_recovery_db.pool.fetch_page(FILE_ID_DATA, pk_recovery_heap_page_id) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    pk_recovery_heap_ref := mut pk_recovery_db.pool.get_page(pk_recovery_heap_frame)
+    pk_recovery_heap_pre_delete := mut copy_smoke_page(pk_recovery_heap_ref)
+    pk_recovery_db.pool.unpin_page(pk_recovery_heap_frame, false)
+
+    pk_recovery_index_frame := mut match pk_recovery_db.pool.fetch_page(FILE_ID_DATA, pk_recovery_index_page_id) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    pk_recovery_index_ref := mut pk_recovery_db.pool.get_page(pk_recovery_index_frame)
+    pk_recovery_index_pre_delete := mut copy_smoke_page(pk_recovery_index_ref)
+    pk_recovery_db.pool.unpin_page(pk_recovery_index_frame, false)
+
+    pk_recovery_start_lsn := mut pk_recovery_db.gcm.current_lsn()
+    pk_recovery_deleted := mut match pk_recovery_db.execute("delete from people where id = 1") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I pk_recovery_deleted != 1 as u64 { return 255 }
+    pk_recovery_after_delete := mut match pk_recovery_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I pk_recovery_after_delete.row_count() != 1 as u64 { return 255 }
+    pk_recovery_after_delete.free_owned_text()
+    pk_recovery_after_delete.free_owned_text()
+    match pk_recovery_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    I restore_smoke_data_page(pk_recovery_path.clone(), pk_recovery_heap_page_id, pk_recovery_heap_pre_delete) != 0 { return 255 }
+    I restore_smoke_data_page(pk_recovery_path.clone(), pk_recovery_index_page_id, pk_recovery_index_pre_delete) != 0 { return 255 }
+    I set_smoke_checkpoint_lsn(pk_recovery_path.clone(), pk_recovery_start_lsn) != 0 { return 255 }
+
+    pk_recovered_cfg := mut EmbeddedConfig.default()
+    pk_recovered_cfg = pk_recovered_cfg.with_data_dir(pk_recovery_path.clone())
+    pk_recovered_cfg = pk_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    pk_recovered := mut match EmbeddedDatabase.open(pk_recovered_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    pk_recovered_rows_result := mut match pk_recovered.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I pk_recovered_rows_result.row_count() != 1 as u64 { return 255 }
+    pk_recovered_rows := mut pk_recovered_rows_result.get_rows()
+    pk_recovered_row0 := mut &pk_recovered_rows[0]
+    I !expect_cell(pk_recovered_row0, 0, "2") { return 255 }
+    I !expect_cell(pk_recovered_row0, 1, "grace") { return 255 }
+    pk_recovered_rows_result.free_owned_text()
+    pk_recovered_rows_result.free_owned_text()
+
+    pk_recovered_reinsert := mut match pk_recovered.execute("insert into people values (1, 'reused')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I pk_recovered_reinsert != 1 as u64 { return 255 }
+    match pk_recovered.execute("insert into people values (2, 'duplicate')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    match pk_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    pk_recovered_repeat_cfg := mut EmbeddedConfig.default()
+    pk_recovered_repeat_cfg = pk_recovered_repeat_cfg.with_data_dir(pk_recovery_path.clone())
+    pk_recovered_repeat_cfg = pk_recovered_repeat_cfg.with_page_size(PAGE_SIZE_8K)
+    pk_recovered_repeat := mut match EmbeddedDatabase.open(pk_recovered_repeat_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    pk_recovered_repeat_result := mut match pk_recovered_repeat.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I pk_recovered_repeat_result.row_count() != 2 as u64 { return 255 }
+    pk_recovered_repeat_rows := mut pk_recovered_repeat_result.get_rows()
+    pk_recovered_seen_reused := mut false
+    pk_recovered_seen_grace := mut false
+    LF ri: 0..pk_recovered_repeat_rows.len() {
+        candidate := mut &pk_recovered_repeat_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "reused") {
+            pk_recovered_seen_reused = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") {
+            pk_recovered_seen_grace = true
+        }
+    }
+    I !pk_recovered_seen_reused { return 255 }
+    I !pk_recovered_seen_grace { return 255 }
+    pk_recovered_repeat_result.free_owned_text()
+    pk_recovered_repeat_result.free_owned_text()
+    match pk_recovered_repeat.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    unique_recovery_suffix := mut time_micros()
+    unique_recovery_path := mut "embedded_sql_api_roundtrip_unique_recovery_db_{unique_recovery_suffix}"
+    unique_recovery_cfg := mut EmbeddedConfig.default()
+    unique_recovery_cfg = unique_recovery_cfg.with_data_dir(unique_recovery_path.clone())
+    unique_recovery_cfg = unique_recovery_cfg.with_page_size(PAGE_SIZE_8K)
+    unique_recovery_db := mut match EmbeddedDatabase.open(unique_recovery_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    match unique_recovery_db.execute("create table people (id int, name text not null unique)") {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+    unique_recovery_inserted := mut match unique_recovery_db.execute("insert into people values (1, 'ada'), (2, 'grace')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I unique_recovery_inserted != 2 as u64 { return 255 }
+
+    unique_recovery_table_id := mut 0 as u32
+    unique_recovery_heap_page_id := mut 0 as u32
+    match unique_recovery_db.catalog.get_table("people") {
+        Some(info) => {
+            unique_recovery_table_id = info.table_id
+            unique_recovery_heap_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I unique_recovery_table_id == 0 || unique_recovery_heap_page_id == 0 { return 255 }
+    unique_recovery_index_page_id := mut 0 as u32
+    match unique_recovery_db.catalog.get_first_index_for_table(unique_recovery_table_id) {
+        Some(info) => {
+            I __str_eq(info.name, "people_name_unique") == 0 { return 255 }
+            unique_recovery_index_page_id = info.root_page_id
+        },
+        None => {},
+    }
+    I unique_recovery_index_page_id == 0 { return 255 }
+
+    unique_recovery_heap_frame := mut match unique_recovery_db.pool.fetch_page(FILE_ID_DATA, unique_recovery_heap_page_id) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    unique_recovery_heap_ref := mut unique_recovery_db.pool.get_page(unique_recovery_heap_frame)
+    unique_recovery_heap_pre_delete := mut copy_smoke_page(unique_recovery_heap_ref)
+    unique_recovery_db.pool.unpin_page(unique_recovery_heap_frame, false)
+
+    unique_recovery_index_frame := mut match unique_recovery_db.pool.fetch_page(FILE_ID_DATA, unique_recovery_index_page_id) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    unique_recovery_index_ref := mut unique_recovery_db.pool.get_page(unique_recovery_index_frame)
+    unique_recovery_index_pre_delete := mut copy_smoke_page(unique_recovery_index_ref)
+    unique_recovery_db.pool.unpin_page(unique_recovery_index_frame, false)
+
+    unique_recovery_start_lsn := mut unique_recovery_db.gcm.current_lsn()
+    unique_recovery_deleted := mut match unique_recovery_db.execute("delete from people where id = 1") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I unique_recovery_deleted != 1 as u64 { return 255 }
+    unique_recovery_after_delete := mut match unique_recovery_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I unique_recovery_after_delete.row_count() != 1 as u64 { return 255 }
+    unique_recovery_after_delete_rows := mut unique_recovery_after_delete.get_rows()
+    unique_recovery_after_delete_row0 := mut &unique_recovery_after_delete_rows[0]
+    I !expect_cell(unique_recovery_after_delete_row0, 0, "2") { return 255 }
+    I !expect_cell(unique_recovery_after_delete_row0, 1, "grace") { return 255 }
+    unique_recovery_after_delete.free_owned_text()
+    unique_recovery_after_delete.free_owned_text()
+    match unique_recovery_db.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    I restore_smoke_data_page(unique_recovery_path.clone(), unique_recovery_heap_page_id, unique_recovery_heap_pre_delete) != 0 { return 255 }
+    I restore_smoke_data_page(unique_recovery_path.clone(), unique_recovery_index_page_id, unique_recovery_index_pre_delete) != 0 { return 255 }
+    I set_smoke_checkpoint_lsn(unique_recovery_path.clone(), unique_recovery_start_lsn) != 0 { return 255 }
+
+    unique_recovered_cfg := mut EmbeddedConfig.default()
+    unique_recovered_cfg = unique_recovered_cfg.with_data_dir(unique_recovery_path.clone())
+    unique_recovered_cfg = unique_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    unique_recovered := mut match EmbeddedDatabase.open(unique_recovered_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    unique_recovered_rows_result := mut match unique_recovered.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I unique_recovered_rows_result.row_count() != 1 as u64 { return 255 }
+    unique_recovered_rows := mut unique_recovered_rows_result.get_rows()
+    unique_recovered_row0 := mut &unique_recovered_rows[0]
+    I !expect_cell(unique_recovered_row0, 0, "2") { return 255 }
+    I !expect_cell(unique_recovered_row0, 1, "grace") { return 255 }
+    unique_recovered_rows_result.free_owned_text()
+    unique_recovered_rows_result.free_owned_text()
+
+    unique_recovered_reinsert := mut match unique_recovered.execute("insert into people values (1, 'ada')") {
+        Ok(n) => n,
+        Err(_) => { return 255 },
+    }
+    I unique_recovered_reinsert != 1 as u64 { return 255 }
+    match unique_recovered.execute("insert into people values (3, 'grace')") {
+        Ok(_) => { return 255 },
+        Err(_) => {},
+    }
+    unique_recovered_after_dup := mut match unique_recovered.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I unique_recovered_after_dup.row_count() != 2 as u64 { return 255 }
+    unique_recovered_after_dup.free_owned_text()
+    unique_recovered_after_dup.free_owned_text()
+    match unique_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
+    }
+
+    unique_recovered_repeat_cfg := mut EmbeddedConfig.default()
+    unique_recovered_repeat_cfg = unique_recovered_repeat_cfg.with_data_dir(unique_recovery_path.clone())
+    unique_recovered_repeat_cfg = unique_recovered_repeat_cfg.with_page_size(PAGE_SIZE_8K)
+    unique_recovered_repeat := mut match EmbeddedDatabase.open(unique_recovered_repeat_cfg) {
+        Ok(v) => v,
+        Err(_) => { return 255 },
+    }
+    unique_recovered_repeat_result := mut match unique_recovered_repeat.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I unique_recovered_repeat_result.row_count() != 2 as u64 { return 255 }
+    unique_recovered_repeat_rows := mut unique_recovered_repeat_result.get_rows()
+    unique_recovered_seen_ada := mut false
+    unique_recovered_seen_grace := mut false
+    LF ri: 0..unique_recovered_repeat_rows.len() {
+        candidate := mut &unique_recovered_repeat_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada") {
+            unique_recovered_seen_ada = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") {
+            unique_recovered_seen_grace = true
+        }
+    }
+    I !unique_recovered_seen_ada { return 255 }
+    I !unique_recovered_seen_grace { return 255 }
+    unique_recovered_repeat_result.free_owned_text()
+    unique_recovered_repeat_result.free_owned_text()
+    match unique_recovered_repeat.close() {
+        Ok(_) => {},
+        Err(_) => { return 255 },
     }
 
     # --- Promoted UNIQUE subset: people(id INT, name TEXT [NOT NULL] UNIQUE) ---

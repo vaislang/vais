@@ -125,6 +125,77 @@ fn smoke_session_expiry_and_cleanup() -> i64 {
     0
 }
 
+fn smoke_local_admin_session_boundary() -> i64 {
+    store := mut SessionStore.new()
+    admin := store.create("admin-user", 120)
+
+    store.set_data(admin.session_id, "role", "admin")
+    store.set_data(admin.session_id, "capability", "books.seed")
+
+    I store.get(admin.session_id) != admin.session_id {
+        println("FAIL admin session get live")
+        return 40
+    }
+    full := store.get_session(admin.session_id)
+    I full.user_id != "admin-user" {
+        println("FAIL admin session full user")
+        return 41
+    }
+    I store.get_data(admin.session_id, "role") != "admin" {
+        println("FAIL admin session role data")
+        return 42
+    }
+    I store.get_data(admin.session_id, "capability") != "books.seed" {
+        println("FAIL admin session capability data")
+        return 43
+    }
+
+    fresh := mut SessionStore.new()
+    I fresh.get(admin.session_id) != "" {
+        println("FAIL admin session leaked to fresh store")
+        return 44
+    }
+    I fresh.get_data(admin.session_id, "role") != "" {
+        println("FAIL admin session data leaked to fresh store")
+        return 45
+    }
+
+    store.destroy(admin.session_id)
+    I store.get(admin.session_id) != "" {
+        println("FAIL admin session destroy get")
+        return 46
+    }
+    I store.get_data(admin.session_id, "role") != "" {
+        println("FAIL admin session destroy data")
+        return 47
+    }
+
+    expiring := store.create("expiring-admin", 1)
+    store.set_data(expiring.session_id, "role", "admin")
+    auth_set_test_time_sec(1002)
+    I store.get(expiring.session_id) != "" {
+        println("FAIL admin expired get")
+        return 48
+    }
+    expired_full := store.get_session(expiring.session_id)
+    I expired_full.session_id != "" {
+        println("FAIL admin expired full")
+        return 49
+    }
+    I store.get_data(expiring.session_id, "role") != "" {
+        println("FAIL admin expired data")
+        return 50
+    }
+    store.cleanup()
+    I store.count() != 0 {
+        println("FAIL admin expired cleanup count")
+        return 51
+    }
+    auth_set_test_time_sec(1000)
+
+    0
+}
+
 fn main() -> i64 {
     auth_set_test_time_sec(1000)
 
@@ -132,6 +203,7 @@ fn main() -> i64 {
     failures += smoke_session_create_get_destroy()
     failures += smoke_session_data_bag()
     failures += smoke_session_expiry_and_cleanup()
+    failures += smoke_local_admin_session_boundary()
 
     I failures > 0 {
         println("VAIS_SERVER_AUTH_SESSION_RUNTIME_FAIL")
