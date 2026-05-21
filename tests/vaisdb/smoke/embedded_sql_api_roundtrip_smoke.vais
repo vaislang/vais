@@ -51,6 +51,10 @@
 #     boundary for exact tasks(id INT, title TEXT, status TEXT), plus bounded
 #     full-column-list INSERT, SELECT/filter, and open-time recovery evidence
 #     while keeping server/web behavior unpromoted for that shape.
+#   - Promotes the first arbitrary-name/arbitrary-text-column three-column
+#     descriptor metadata boundary for tickets(id INT, summary TEXT, state TEXT)
+#     while keeping INSERT/SELECT/recovery/server/web behavior unpromoted for
+#     that shape.
 #   - Promotes descriptor SELECT * TEXT equality filters for books.title and
 #     authors.name, including reversed literal equality, while keeping people
 #     name filters, descriptor id filters, projections plus filters, qualified
@@ -2184,8 +2188,8 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match notes_db.execute("create table extra_notes (id int, body text, tag text)") {
-        Ok(_) => { println("T155 notes: extra column unexpectedly accepted"); return 255 },
+    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text)") {
+        Ok(_) => { println("T155 notes: too many columns unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match notes_db.execute("create table dup_notes (id int, id text)") {
@@ -2876,6 +2880,133 @@ fn main() -> i64 {
     match tasks_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T175 tasks: reopen close failed"); return 255 },
+    }
+
+    # --- Catalog-derived arbitrary three-column descriptor metadata ---
+    tickets_suffix := mut time_micros()
+    tickets_path := mut "embedded_sql_api_roundtrip_tickets_db_{tickets_suffix}"
+    tickets_cfg := mut EmbeddedConfig.default()
+    tickets_cfg = tickets_cfg.with_data_dir(tickets_path.clone())
+    tickets_cfg = tickets_cfg.with_page_size(PAGE_SIZE_8K)
+    tickets_db := mut match EmbeddedDatabase.open(tickets_cfg) {
+        Ok(db) => db,
+        Err(_) => { println("T195 tickets: open failed"); return 255 },
+    }
+    match tickets_db.execute("create table ticket_bad_first (ticket_id int, summary text, state text)") {
+        Ok(_) => { println("T195 tickets: wrong first column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("create table ticket_bad_order (summary text, id int, state text)") {
+        Ok(_) => { println("T195 tickets: wrong order unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("create table ticket_bad_dup (id int, summary text, summary text)") {
+        Ok(_) => { println("T195 tickets: duplicate text column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text)") {
+        Ok(_) => { println("T195 tickets: extra column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("create table ticket_bad_type (id int, summary text, state int)") {
+        Ok(_) => { println("T195 tickets: wrong third type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("create table ticket_bad_constraint (id int, summary text not null, state text)") {
+        Ok(_) => { println("T195 tickets: constraint unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("create table books (id int, summary text, state text)") {
+        Ok(_) => { println("T195 tickets: registered descriptor collision unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    tickets_created := mut match tickets_db.execute("create table tickets (id int, summary text, state text)") {
+        Ok(count) => count,
+        Err(e) => { println("T195 tickets: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_created != 0 as u64 { println("T195 tickets: create affected rows"); return 255 }
+    tickets_table_id := mut 0 as u32
+    match tickets_db.catalog.get_table("tickets") {
+        Some(info) => {
+            tickets_table_id = info.table_id
+            I info.column_count != 3 as u16 { println("T195 tickets: catalog table column count"); return 255 }
+        },
+        None => { println("T195 tickets: catalog missing table"); return 255 },
+    }
+    tickets_col_refs := mut tickets_db.catalog.get_columns(tickets_table_id)
+    tickets_cols: Vec<ColumnInfo> := mut Vec.with_capacity(tickets_col_refs.len())
+    LF col_ref: &tickets_col_refs {
+        tickets_cols.push((**col_ref).clone())
+    }
+    I tickets_cols.len() != 3 as u64 { println("T195 tickets: catalog column count"); return 255 }
+    I !expect_catalog_column(&tickets_cols, 0, "id", "INT") { println("T195 tickets: catalog id column"); return 255 }
+    I !expect_catalog_column(&tickets_cols, 1, "summary", "TEXT") { println("T195 tickets: catalog summary column"); return 255 }
+    I !expect_catalog_column(&tickets_cols, 2, "state", "TEXT") { println("T195 tickets: catalog state column"); return 255 }
+    match tickets_db.execute("create table tickets (id int, summary text, state text)") {
+        Ok(_) => { println("T195 tickets: duplicate create unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state) values (1, 'draft', 'open')") {
+        Ok(_) => { println("T195 tickets: INSERT unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.query("select * from tickets") {
+        Ok(result) => {
+            unexpected := mut result
+            unexpected.free_owned_text()
+            println("T195 tickets: SELECT unexpectedly accepted")
+            return 255
+        },
+        Err(_) => {},
+    }
+    match tickets_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T195 tickets: close failed"); return 255 },
+    }
+    tickets_reopen_cfg := mut EmbeddedConfig.default()
+    tickets_reopen_cfg = tickets_reopen_cfg.with_data_dir(tickets_path.clone())
+    tickets_reopen_cfg = tickets_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    tickets_reopened := mut match EmbeddedDatabase.open(tickets_reopen_cfg) {
+        Ok(db) => db,
+        Err(_) => { println("T195 tickets: reopen failed"); return 255 },
+    }
+    tickets_reopened_table_id := mut 0 as u32
+    match tickets_reopened.catalog.get_table("tickets") {
+        Some(info) => {
+            tickets_reopened_table_id = info.table_id
+            I info.column_count != 3 as u16 { println("T195 tickets: reopen table column count"); return 255 }
+        },
+        None => { println("T195 tickets: reopen missing table"); return 255 },
+    }
+    tickets_reopened_col_refs := mut tickets_reopened.catalog.get_columns(tickets_reopened_table_id)
+    tickets_reopened_cols: Vec<ColumnInfo> := mut Vec.with_capacity(tickets_reopened_col_refs.len())
+    LF col_ref: &tickets_reopened_col_refs {
+        tickets_reopened_cols.push((**col_ref).clone())
+    }
+    I tickets_reopened_cols.len() != 3 as u64 { println("T195 tickets: reopen catalog column count"); return 255 }
+    I !expect_catalog_column(&tickets_reopened_cols, 0, "id", "INT") { println("T195 tickets: reopen id column"); return 255 }
+    I !expect_catalog_column(&tickets_reopened_cols, 1, "summary", "TEXT") { println("T195 tickets: reopen summary column"); return 255 }
+    I !expect_catalog_column(&tickets_reopened_cols, 2, "state", "TEXT") { println("T195 tickets: reopen state column"); return 255 }
+    match tickets_reopened.execute("create table tickets (id int, summary text, state text)") {
+        Ok(_) => { println("T195 tickets: reopen duplicate create unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_reopened.execute("insert into tickets (id, summary, state) values (1, 'draft', 'open')") {
+        Ok(_) => { println("T195 tickets: reopen INSERT unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_reopened.query("select * from tickets") {
+        Ok(result) => {
+            unexpected := mut result
+            unexpected.free_owned_text()
+            println("T195 tickets: reopen SELECT unexpectedly accepted")
+            return 255
+        },
+        Err(_) => {},
+    }
+    match tickets_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T195 tickets: reopen close failed"); return 255 },
     }
 
     # --- Second registered descriptor: authors(id INT, name TEXT) ---
