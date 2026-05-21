@@ -53,8 +53,8 @@
 #     while keeping server/web behavior unpromoted for that shape.
 #   - Promotes the first arbitrary-name/arbitrary-text-column three-column
 #     descriptor metadata boundary for tickets(id INT, summary TEXT, state TEXT)
-#     while keeping INSERT/SELECT/recovery/server/web behavior unpromoted for
-#     that shape.
+#     plus full-column-list INSERT while keeping SELECT/recovery/server/web
+#     behavior unpromoted for that shape.
 #   - Promotes descriptor SELECT * TEXT equality filters for books.title and
 #     authors.name, including reversed literal equality, while keeping people
 #     name filters, descriptor id filters, projections plus filters, qualified
@@ -2946,8 +2946,66 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: duplicate create unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.execute("insert into tickets (id, summary, state) values (1, 'draft', 'open')") {
-        Ok(_) => { println("T195 tickets: INSERT unexpectedly accepted"); return 255 },
+    tickets_insert_a := mut match tickets_db.execute("insert into tickets (id, summary, state) values (1, 'draft', 'open')") {
+        Ok(count) => count,
+        Err(e) => { println("T197 tickets: descriptor-order insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_insert_a != 1 as u64 { println("T197 tickets: descriptor-order insert count"); return 255 }
+    tickets_insert_b := mut match tickets_db.execute("insert into tickets (state, id, summary) values ('done', 2, 'ship')") {
+        Ok(count) => count,
+        Err(e) => { println("T197 tickets: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_insert_b != 1 as u64 { println("T197 tickets: reordered insert count"); return 255 }
+    match tickets_db.execute("insert into tickets values (3, 'raw', 'open')") {
+        Ok(_) => { println("T197 tickets: values-only insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary) values (3, 'partial')") {
+        Ok(_) => { println("T197 tickets: partial insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, summary) values (3, 'dup', 'dup')") {
+        Ok(_) => { println("T197 tickets: duplicate column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, owner) values (3, 'bad', 'me')") {
+        Ok(_) => { println("T197 tickets: unknown column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state, owner) values (3, 'bad', 'open', 'me')") {
+        Ok(_) => { println("T197 tickets: extra column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state) values ('bad', 'title', 'open')") {
+        Ok(_) => { println("T197 tickets: wrong id type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state) values (3, 4, 'open')") {
+        Ok(_) => { println("T197 tickets: wrong summary type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state) values (3, 'title', 4)") {
+        Ok(_) => { println("T197 tickets: wrong state type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state) values (NULL, 'title', 'open')") {
+        Ok(_) => { println("T197 tickets: NULL unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state) values (DEFAULT, 'title', 'open')") {
+        Ok(_) => { println("T197 tickets: DEFAULT unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state) values (3 + 1, 'title', 'open')") {
+        Ok(_) => { println("T197 tickets: expression unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state) values (3, 'multi', 'open'), (4, 'multi', 'open')") {
+        Ok(_) => { println("T197 tickets: multi-row unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match tickets_db.execute("insert into tickets (id, summary, state) select id, summary, state from tickets") {
+        Ok(_) => { println("T197 tickets: INSERT SELECT unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match tickets_db.query("select * from tickets") {
@@ -2991,8 +3049,13 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: reopen duplicate create unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_reopened.execute("insert into tickets (id, summary, state) values (1, 'draft', 'open')") {
-        Ok(_) => { println("T195 tickets: reopen INSERT unexpectedly accepted"); return 255 },
+    tickets_reopened_insert := mut match tickets_reopened.execute("insert into tickets (id, summary, state) values (3, 'reopen', 'open')") {
+        Ok(count) => count,
+        Err(e) => { println("T197 tickets: reopen insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I tickets_reopened_insert != 1 as u64 { println("T197 tickets: reopen insert count"); return 255 }
+    match tickets_reopened.execute("insert into tickets values (4, 'raw', 'open')") {
+        Ok(_) => { println("T197 tickets: reopen values-only unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match tickets_reopened.query("select * from tickets") {
