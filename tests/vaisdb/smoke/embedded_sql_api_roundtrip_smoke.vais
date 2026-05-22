@@ -5138,6 +5138,47 @@ fn main() -> i64 {
     journals_projection_id_filter_missing.free_owned_text()
     journals_projection_id_filter_missing.free_owned_text()
 
+    journals_projection_text_filter := mut match journals_db.query("select id, summary from journals where summary = 'draft'") {
+        Ok(r) => r,
+        Err(e) => { println("T277 journals: projection text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_projection_text_filter.column_count() != 2 as u64 { println("T277 journals: projection text filter column count"); return 255 }
+    I journals_projection_text_filter.row_count() != 1 as u64 { println("T277 journals: projection text filter row count"); return 255 }
+    journals_projection_text_filter_cols := mut journals_projection_text_filter.get_columns()
+    I !expect_column(journals_projection_text_filter_cols, 0, "id", "INT") { println("T277 journals: projection text filter id column"); return 255 }
+    I !expect_column(journals_projection_text_filter_cols, 1, "summary", "TEXT") { println("T277 journals: projection text filter summary column"); return 255 }
+    journals_projection_text_filter_rows := mut journals_projection_text_filter.get_rows()
+    journals_projection_text_filter_row := mut &journals_projection_text_filter_rows[0]
+    I !expect_cell(journals_projection_text_filter_row, 0, "1") { println("T277 journals: projection text filter id"); return 255 }
+    I !expect_cell(journals_projection_text_filter_row, 1, "draft") { println("T277 journals: projection text filter summary"); return 255 }
+    journals_projection_text_filter.free_owned_text()
+    journals_projection_text_filter.free_owned_text()
+
+    journals_projection_text_filter_reversed := mut match journals_db.query("select id, summary from journals where 'sent' = summary") {
+        Ok(r) => r,
+        Err(e) => { println("T277 journals: reversed projection text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_projection_text_filter_reversed.column_count() != 2 as u64 { println("T277 journals: reversed projection text filter column count"); return 255 }
+    I journals_projection_text_filter_reversed.row_count() != 1 as u64 { println("T277 journals: reversed projection text filter row count"); return 255 }
+    journals_projection_text_filter_reversed_rows := mut journals_projection_text_filter_reversed.get_rows()
+    journals_projection_text_filter_reversed_row := mut &journals_projection_text_filter_reversed_rows[0]
+    I !expect_cell(journals_projection_text_filter_reversed_row, 0, "2") { println("T277 journals: reversed projection text filter id"); return 255 }
+    I !expect_cell(journals_projection_text_filter_reversed_row, 1, "sent") { println("T277 journals: reversed projection text filter summary"); return 255 }
+    journals_projection_text_filter_reversed.free_owned_text()
+    journals_projection_text_filter_reversed.free_owned_text()
+
+    journals_projection_text_filter_missing := mut match journals_db.query("select id, summary from journals where summary = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T277 journals: missing projection text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_projection_text_filter_missing.column_count() != 2 as u64 { println("T277 journals: missing projection text filter column count"); return 255 }
+    I journals_projection_text_filter_missing.row_count() != 0 as u64 { println("T277 journals: missing projection text filter row count"); return 255 }
+    journals_projection_text_filter_missing_cols := mut journals_projection_text_filter_missing.get_columns()
+    I !expect_column(journals_projection_text_filter_missing_cols, 0, "id", "INT") { println("T277 journals: missing projection text filter id column"); return 255 }
+    I !expect_column(journals_projection_text_filter_missing_cols, 1, "summary", "TEXT") { println("T277 journals: missing projection text filter summary column"); return 255 }
+    journals_projection_text_filter_missing.free_owned_text()
+    journals_projection_text_filter_missing.free_owned_text()
+
     journals_text_filter := mut match journals_db.query("select * from journals where summary = 'draft'") {
         Ok(r) => r,
         Err(e) => { println("T272 journals: text filter failed: {e.message}: {e.hint}"); return 255 },
@@ -5234,6 +5275,17 @@ fn main() -> i64 {
     I !expect_cell(journals_reopened_projection_id_filter_row, 1, "sent") { println("T275 journals: reopen projection id filter summary"); return 255 }
     journals_reopened_projection_id_filter.free_owned_text()
     journals_reopened_projection_id_filter.free_owned_text()
+    journals_reopened_projection_text_filter := mut match journals_reopened.query("select id, summary from journals where summary = 'draft'") {
+        Ok(r) => r,
+        Err(e) => { println("T277 journals: reopen projection text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_reopened_projection_text_filter.row_count() != 1 as u64 { println("T277 journals: reopen projection text filter row count"); return 255 }
+    journals_reopened_projection_text_filter_rows := mut journals_reopened_projection_text_filter.get_rows()
+    journals_reopened_projection_text_filter_row := mut &journals_reopened_projection_text_filter_rows[0]
+    I !expect_cell(journals_reopened_projection_text_filter_row, 0, "1") { println("T277 journals: reopen projection text filter id"); return 255 }
+    I !expect_cell(journals_reopened_projection_text_filter_row, 1, "draft") { println("T277 journals: reopen projection text filter summary"); return 255 }
+    journals_reopened_projection_text_filter.free_owned_text()
+    journals_reopened_projection_text_filter.free_owned_text()
     journals_reopened_text_filter := mut match journals_reopened.query("select * from journals where summary = 'sent'") {
         Ok(r) => r,
         Err(e) => { println("T272 journals: reopen text filter failed: {e.message}: {e.hint}"); return 255 },
@@ -5312,6 +5364,17 @@ fn main() -> i64 {
     I !expect_cell(journals_recovered_projection_id_filter_row, 1, "draft") { println("T275 journals: recovered projection id filter summary"); return 255 }
     journals_recovered_projection_id_filter.free_owned_text()
     journals_recovered_projection_id_filter.free_owned_text()
+    journals_recovered_projection_text_filter := mut match journals_recovered.query("select id, summary from journals where 'sent' = summary") {
+        Ok(r) => r,
+        Err(e) => { println("T277 journals: recovered projection text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_recovered_projection_text_filter.row_count() != 1 as u64 { println("T277 journals: recovered projection text filter row count"); return 255 }
+    journals_recovered_projection_text_filter_rows := mut journals_recovered_projection_text_filter.get_rows()
+    journals_recovered_projection_text_filter_row := mut &journals_recovered_projection_text_filter_rows[0]
+    I !expect_cell(journals_recovered_projection_text_filter_row, 0, "2") { println("T277 journals: recovered projection text filter id"); return 255 }
+    I !expect_cell(journals_recovered_projection_text_filter_row, 1, "sent") { println("T277 journals: recovered projection text filter summary"); return 255 }
+    journals_recovered_projection_text_filter.free_owned_text()
+    journals_recovered_projection_text_filter.free_owned_text()
     journals_recovered_text_filter := mut match journals_recovered.query("select * from journals where 'draft' = summary") {
         Ok(r) => r,
         Err(e) => { println("T272 journals: recovered text filter failed: {e.message}: {e.hint}"); return 255 },
