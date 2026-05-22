@@ -1412,6 +1412,166 @@ fn db_table_rows_status_filter_handler(
         },
     }
 
+    I table == "contacts" {
+        I metadata.column_count() != 4 as u64 {
+            metadata.free_owned_text()
+            metadata.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+
+        metadata_columns := mut metadata.get_columns()
+        I metadata_columns[0].get_name() != "id" || metadata_columns[0].get_type_name() != "INT" {
+            metadata.free_owned_text()
+            metadata.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        I metadata_columns[1].get_name() != "name" || metadata_columns[1].get_type_name() != "TEXT" {
+            metadata.free_owned_text()
+            metadata.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        I metadata_columns[2].get_name() != "email" || metadata_columns[2].get_type_name() != "TEXT" {
+            metadata.free_owned_text()
+            metadata.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        I metadata_columns[3].get_name() != "status" || metadata_columns[3].get_type_name() != "TEXT" {
+            metadata.free_owned_text()
+            metadata.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        metadata.free_owned_text()
+        metadata.free_owned_text()
+
+        query := mut "select * from {table} where status = '{status_value}'"
+        result := mut match db.query(query) {
+            Ok(r) => r,
+            Err(_) => {
+                match db.close() {
+                    Ok(_) => {},
+                    Err(_) => {},
+                }
+                return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+            },
+        }
+
+        I result.column_count() != 4 as u64 {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+
+        columns := mut result.get_columns()
+        I columns[0].get_name() != "id" || columns[0].get_type_name() != "INT" {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        I columns[1].get_name() != "name" || columns[1].get_type_name() != "TEXT" {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        I columns[2].get_name() != "email" || columns[2].get_type_name() != "TEXT" {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        I columns[3].get_name() != "status" || columns[3].get_type_name() != "TEXT" {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+
+        response_body := mut "{\"table\":\"contacts\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"TEXT\"},{\"name\":\"email\",\"type\":\"TEXT\"},{\"name\":\"status\",\"type\":\"TEXT\"}],\"rows\":["
+        rows := mut result.get_rows()
+        row_idx := mut 0
+        LW row_idx < rows.len() {
+            row := mut &rows[row_idx]
+            row_id := mut cell_or_empty(row, 0)
+            row_name := mut cell_or_empty(row, 1)
+            row_email := mut cell_or_empty(row, 2)
+            row_status := mut cell_or_empty(row, 3)
+            I !db_filter_digits_is_valid(row_id) {
+                result.free_owned_text()
+                result.free_owned_text()
+                match db.close() {
+                    Ok(_) => {},
+                    Err(_) => {},
+                }
+                return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+            }
+
+            escaped_name := mut escape_json_string(row_name)
+            escaped_email := mut escape_json_string(row_email)
+            escaped_status := mut escape_json_string(row_status)
+            I row_idx > 0 {
+                response_body = append_str(response_body, ",", "")
+            }
+            response_body = append_str(response_body, "{\"id\":", "")
+            response_body = append_str(response_body, row_id, "")
+            response_body = append_str(response_body, ",\"name\":\"", "")
+            response_body = append_str(response_body, escaped_name, "")
+            response_body = append_str(response_body, "\",\"email\":\"", "")
+            response_body = append_str(response_body, escaped_email, "")
+            response_body = append_str(response_body, "\",\"status\":\"", "")
+            response_body = append_str(response_body, escaped_status, "")
+            response_body = append_str(response_body, "\"}", "")
+            row_idx += 1
+        }
+        response_body = append_str(response_body, "]}", "")
+
+        result.free_owned_text()
+        result.free_owned_text()
+
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => { return ctx.json(500, "{\"error\":\"db_close_failed\"}") },
+        }
+
+        return ctx.json(200, response_body)
+    }
+
     I table != "tasks" || metadata.column_count() != 3 as u64 {
         metadata.free_owned_text()
         metadata.free_owned_text()
@@ -2561,6 +2721,114 @@ fn check_table_rows_state_filter_non_tickets_table_rejected(db_path: str) -> i64
     expect_db_unsupported_table_response(response, 422, 443)
 }
 
+fn check_table_rows_contacts_status_filter_route(db_path: str) -> i64 {
+    response := mut db_table_rows_status_filter_handler(db_path, "GET", "/db/tables/contacts/rows", "status=active", "")
+    I response.status != 200 {
+        println("FAIL db table rows contacts status filter response status")
+        return 446
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows contacts status filter response content type")
+        return 447
+    }
+    I response.body != "{\"table\":\"contacts\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"TEXT\"},{\"name\":\"email\",\"type\":\"TEXT\"},{\"name\":\"status\",\"type\":\"TEXT\"}],\"rows\":[{\"id\":1,\"name\":\"ada\",\"email\":\"ada@example.test\",\"status\":\"active\"}]}" {
+        println("FAIL db table rows contacts status filter response body")
+        println(response.body)
+        return 448
+    }
+
+    missing := mut db_table_rows_status_filter_handler(db_path, "GET", "/db/tables/contacts/rows", "status=missing", "")
+    I missing.status != 200 {
+        println("FAIL db table rows contacts status filter no-match status")
+        return 449
+    }
+    I missing.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows contacts status filter no-match content type")
+        return 450
+    }
+    I missing.body != "{\"table\":\"contacts\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"TEXT\"},{\"name\":\"email\",\"type\":\"TEXT\"},{\"name\":\"status\",\"type\":\"TEXT\"}],\"rows\":[]}" {
+        println("FAIL db table rows contacts status filter no-match body")
+        println(missing.body)
+        return 451
+    }
+    0
+}
+
+fn check_table_rows_contacts_status_filter_invalid_inputs(db_path: str) -> i64 {
+    missing_status_value := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "", "")
+    missing_status := mut expect_db_invalid_filter_response(missing_status_value, 452)
+    I missing_status != 0 { return missing_status }
+
+    empty_status_value := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=", "")
+    empty_status := mut expect_db_invalid_filter_response(empty_status_value, 455)
+    I empty_status != 0 { return empty_status }
+
+    space_status_value := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=in progress", "")
+    space_status := mut expect_db_invalid_filter_response(space_status_value, 458)
+    I space_status != 0 { return space_status }
+
+    quote_status_value := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=act'ive", "")
+    quote_status := mut expect_db_invalid_filter_response(quote_status_value, 461)
+    I quote_status != 0 { return quote_status }
+
+    percent_status_value := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=act%69ve", "")
+    percent_status := mut expect_db_invalid_filter_response(percent_status_value, 464)
+    I percent_status != 0 { return percent_status }
+
+    slash_status_value := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=active/open", "")
+    slash_status := mut expect_db_invalid_filter_response(slash_status_value, 467)
+    I slash_status != 0 { return slash_status }
+
+    extra_param := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=active&x=1", "")
+    extra_status := mut expect_db_invalid_filter_response(extra_param, 470)
+    I extra_status != 0 { return extra_status }
+
+    mixed_id_filter := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "id=1&status=active", "")
+    mixed_id_status := mut expect_db_invalid_filter_response(mixed_id_filter, 473)
+    I mixed_id_status != 0 { return mixed_id_status }
+
+    mixed_name_filter := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "name=ada&status=active", "")
+    mixed_name_status := mut expect_db_invalid_filter_response(mixed_name_filter, 476)
+    I mixed_name_status != 0 { return mixed_name_status }
+
+    mixed_email_filter := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "email=ada@example.test&status=active", "")
+    mixed_email_status := mut expect_db_invalid_filter_response(mixed_email_filter, 479)
+    I mixed_email_status != 0 { return mixed_email_status }
+
+    mixed_state_filter := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "state=active&status=active", "")
+    mixed_state_status := mut expect_db_invalid_filter_response(mixed_state_filter, 482)
+    I mixed_state_status != 0 { return mixed_state_status }
+
+    sql_param := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "sql=select * from contacts", "")
+    sql_status := mut expect_db_invalid_filter_response(sql_param, 485)
+    I sql_status != 0 { return sql_status }
+
+    bad_body := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=active", "{\"where\":\"status=active\"}")
+    body_status := mut expect_db_invalid_filter_response(bad_body, 488)
+    I body_status != 0 { return body_status }
+
+    bad_method := mut db_table_rows_status_filter_handler(db_path.clone(), "POST", "/db/tables/contacts/rows", "status=active", "")
+    method_status := mut expect_db_invalid_filter_response(bad_method, 491)
+    I method_status != 0 { return method_status }
+
+    0
+}
+
+fn check_table_rows_contacts_status_filter_missing_table(db_path: str) -> i64 {
+    response := mut db_table_rows_status_filter_handler(db_path, "GET", "/db/tables/missing_contacts/rows", "status=active", "")
+    expect_db_unsupported_table_response(response, 404, 494)
+}
+
+fn check_table_rows_contacts_status_filter_static_descriptor_rejected(db_path: str) -> i64 {
+    response := mut db_table_rows_status_filter_handler(db_path, "GET", "/db/tables/books/rows", "status=active", "")
+    expect_db_unsupported_table_response(response, 422, 497)
+}
+
+fn check_table_rows_contacts_status_filter_non_contacts_table_rejected(db_path: str) -> i64 {
+    response := mut db_table_rows_status_filter_handler(db_path, "GET", "/db/tables/albums/rows", "status=active", "")
+    expect_db_unsupported_table_response(response, 422, 500)
+}
+
 fn check_books_post_route(db_path: str) -> i64 {
     response := mut db_books_post_handler(db_path, "POST", "/db/books", "{\"id\":3,\"title\":\"children\"}")
     I response.status != 200 {
@@ -3017,6 +3285,11 @@ fn check_db_unavailable_routes(db_path: str) -> i64 {
     I state_filter_status != 0 {
         return state_filter_status
     }
+    contacts_status_filter_response := mut db_table_rows_status_filter_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=active", "")
+    contacts_status_filter_status := mut expect_db_unavailable_response(contacts_status_filter_response, 160)
+    I contacts_status_filter_status != 0 {
+        return contacts_status_filter_status
+    }
 
     post_response := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\"}")
     post_status := mut expect_db_unavailable_response(post_response, 140)
@@ -3259,6 +3532,31 @@ fn main() -> i64 {
     table_rows_state_filter_non_tickets_status := mut check_table_rows_state_filter_non_tickets_table_rejected(albums_path.clone())
     I table_rows_state_filter_non_tickets_status != 0 {
         return table_rows_state_filter_non_tickets_status
+    }
+
+    table_rows_contacts_status_filter_status := mut check_table_rows_contacts_status_filter_route(contacts_path.clone())
+    I table_rows_contacts_status_filter_status != 0 {
+        return table_rows_contacts_status_filter_status
+    }
+
+    table_rows_contacts_status_filter_invalid_status := mut check_table_rows_contacts_status_filter_invalid_inputs(contacts_path.clone())
+    I table_rows_contacts_status_filter_invalid_status != 0 {
+        return table_rows_contacts_status_filter_invalid_status
+    }
+
+    table_rows_contacts_status_filter_missing_status := mut check_table_rows_contacts_status_filter_missing_table(missing_table_path.clone())
+    I table_rows_contacts_status_filter_missing_status != 0 {
+        return table_rows_contacts_status_filter_missing_status
+    }
+
+    table_rows_contacts_status_filter_static_status := mut check_table_rows_contacts_status_filter_static_descriptor_rejected(db_path.clone())
+    I table_rows_contacts_status_filter_static_status != 0 {
+        return table_rows_contacts_status_filter_static_status
+    }
+
+    table_rows_contacts_status_filter_non_contacts_status := mut check_table_rows_contacts_status_filter_non_contacts_table_rejected(albums_path.clone())
+    I table_rows_contacts_status_filter_non_contacts_status != 0 {
+        return table_rows_contacts_status_filter_non_contacts_status
     }
 
     post_status := mut check_books_post_route(db_path.clone())
