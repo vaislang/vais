@@ -2448,13 +2448,45 @@ fn main() -> i64 {
         Ok(r) => r,
         Err(e) => { println("T157 notes: projection id filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I notes_projection_id_filter.column_count() != 2 as u64 { println("T265 notes: projection id filter column count"); return 255 }
     I notes_projection_id_filter.row_count() != 1 as u64 { println("T157 notes: projection id filter row count"); return 255 }
+    notes_projection_id_filter_cols := mut notes_projection_id_filter.get_columns()
+    I !expect_column(notes_projection_id_filter_cols, 0, "id", "INT") { println("T265 notes: projection id filter id column"); return 255 }
+    I !expect_column(notes_projection_id_filter_cols, 1, "body", "TEXT") { println("T265 notes: projection id filter body column"); return 255 }
     notes_projection_id_filter_rows := mut notes_projection_id_filter.get_rows()
     notes_projection_id_filter_row := mut &notes_projection_id_filter_rows[0]
     I !expect_cell(notes_projection_id_filter_row, 0, "1") { println("T157 notes: projection id filter id"); return 255 }
     I !expect_cell(notes_projection_id_filter_row, 1, "memo") { println("T157 notes: projection id filter body"); return 255 }
     notes_projection_id_filter.free_owned_text()
     notes_projection_id_filter.free_owned_text()
+
+    notes_projection_id_filter_reversed := mut match notes_db.query("select id, body from notes where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T265 notes: reversed projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_projection_id_filter_reversed.column_count() != 2 as u64 { println("T265 notes: reversed projection id filter column count"); return 255 }
+    I notes_projection_id_filter_reversed.row_count() != 1 as u64 { println("T265 notes: reversed projection id filter row count"); return 255 }
+    notes_projection_id_filter_reversed_cols := mut notes_projection_id_filter_reversed.get_columns()
+    I !expect_column(notes_projection_id_filter_reversed_cols, 0, "id", "INT") { println("T265 notes: reversed projection id filter id column"); return 255 }
+    I !expect_column(notes_projection_id_filter_reversed_cols, 1, "body", "TEXT") { println("T265 notes: reversed projection id filter body column"); return 255 }
+    notes_projection_id_filter_reversed_rows := mut notes_projection_id_filter_reversed.get_rows()
+    notes_projection_id_filter_reversed_row := mut &notes_projection_id_filter_reversed_rows[0]
+    I !expect_cell(notes_projection_id_filter_reversed_row, 0, "2") { println("T265 notes: reversed projection id filter id"); return 255 }
+    I !expect_cell(notes_projection_id_filter_reversed_row, 1, "todo") { println("T265 notes: reversed projection id filter body"); return 255 }
+    notes_projection_id_filter_reversed.free_owned_text()
+    notes_projection_id_filter_reversed.free_owned_text()
+
+    notes_projection_id_filter_missing := mut match notes_db.query("select id, body from notes where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T265 notes: missing projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_projection_id_filter_missing.column_count() != 2 as u64 { println("T265 notes: missing projection id filter column count"); return 255 }
+    I notes_projection_id_filter_missing.row_count() != 0 as u64 { println("T265 notes: missing projection id filter row count"); return 255 }
+    notes_projection_id_filter_missing_cols := mut notes_projection_id_filter_missing.get_columns()
+    I !expect_column(notes_projection_id_filter_missing_cols, 0, "id", "INT") { println("T265 notes: missing projection id filter id column"); return 255 }
+    I !expect_column(notes_projection_id_filter_missing_cols, 1, "body", "TEXT") { println("T265 notes: missing projection id filter body column"); return 255 }
+    notes_projection_id_filter_missing.free_owned_text()
+    notes_projection_id_filter_missing.free_owned_text()
 
     notes_projection_body_filter := mut match notes_db.query("select id, body from notes where body = 'todo'") {
         Ok(r) => r,
@@ -2651,13 +2683,43 @@ fn main() -> i64 {
         Ok(r) => r,
         Err(e) => { println("T157 notes: reopen projection filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I notes_reopened_projection_filter.column_count() != 2 as u64 { println("T265 notes: reopen projection filter column count"); return 255 }
     I notes_reopened_projection_filter.row_count() != 1 as u64 { println("T157 notes: reopen projection filter row count"); return 255 }
+    notes_reopened_projection_filter_cols := mut notes_reopened_projection_filter.get_columns()
+    I !expect_column(notes_reopened_projection_filter_cols, 0, "id", "INT") { println("T265 notes: reopen projection filter id column"); return 255 }
+    I !expect_column(notes_reopened_projection_filter_cols, 1, "body", "TEXT") { println("T265 notes: reopen projection filter body column"); return 255 }
     notes_reopened_projection_filter_rows := mut notes_reopened_projection_filter.get_rows()
     notes_reopened_projection_filter_row := mut &notes_reopened_projection_filter_rows[0]
     I !expect_cell(notes_reopened_projection_filter_row, 0, "1") { println("T157 notes: reopen projection filter id"); return 255 }
     I !expect_cell(notes_reopened_projection_filter_row, 1, "memo") { println("T157 notes: reopen projection filter body"); return 255 }
     notes_reopened_projection_filter.free_owned_text()
     notes_reopened_projection_filter.free_owned_text()
+    notes_reopened_projection_filter_reversed := mut match notes_reopened.query("select id, body from notes where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T265 notes: reopen reversed projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_reopened_projection_filter_reversed.column_count() != 2 as u64 { println("T265 notes: reopen reversed projection filter column count"); return 255 }
+    I notes_reopened_projection_filter_reversed.row_count() != 1 as u64 { println("T265 notes: reopen reversed projection filter row count"); return 255 }
+    notes_reopened_projection_filter_reversed_cols := mut notes_reopened_projection_filter_reversed.get_columns()
+    I !expect_column(notes_reopened_projection_filter_reversed_cols, 0, "id", "INT") { println("T265 notes: reopen reversed projection filter id column"); return 255 }
+    I !expect_column(notes_reopened_projection_filter_reversed_cols, 1, "body", "TEXT") { println("T265 notes: reopen reversed projection filter body column"); return 255 }
+    notes_reopened_projection_filter_reversed_rows := mut notes_reopened_projection_filter_reversed.get_rows()
+    notes_reopened_projection_filter_reversed_row := mut &notes_reopened_projection_filter_reversed_rows[0]
+    I !expect_cell(notes_reopened_projection_filter_reversed_row, 0, "2") { println("T265 notes: reopen reversed projection filter id"); return 255 }
+    I !expect_cell(notes_reopened_projection_filter_reversed_row, 1, "todo") { println("T265 notes: reopen reversed projection filter body"); return 255 }
+    notes_reopened_projection_filter_reversed.free_owned_text()
+    notes_reopened_projection_filter_reversed.free_owned_text()
+    notes_reopened_projection_filter_missing := mut match notes_reopened.query("select id, body from notes where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T265 notes: reopen missing projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_reopened_projection_filter_missing.column_count() != 2 as u64 { println("T265 notes: reopen missing projection filter column count"); return 255 }
+    I notes_reopened_projection_filter_missing.row_count() != 0 as u64 { println("T265 notes: reopen missing projection filter row count"); return 255 }
+    notes_reopened_projection_filter_missing_cols := mut notes_reopened_projection_filter_missing.get_columns()
+    I !expect_column(notes_reopened_projection_filter_missing_cols, 0, "id", "INT") { println("T265 notes: reopen missing projection filter id column"); return 255 }
+    I !expect_column(notes_reopened_projection_filter_missing_cols, 1, "body", "TEXT") { println("T265 notes: reopen missing projection filter body column"); return 255 }
+    notes_reopened_projection_filter_missing.free_owned_text()
+    notes_reopened_projection_filter_missing.free_owned_text()
     notes_reopened_column_insert_filter := mut match notes_reopened.query("select * from notes where body = 'done'") {
         Ok(r) => r,
         Err(e) => { println("T165 notes: reopen column-list body filter failed: {e.message}: {e.hint}"); return 255 },
@@ -4698,13 +4760,45 @@ fn main() -> i64 {
         Ok(r) => r,
         Err(e) => { println("T167 notes recovery: recovered id projection filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I notes_recovered_id_projection_filter.column_count() != 2 as u64 { println("T265 notes recovery: id projection filter column count"); return 255 }
     I notes_recovered_id_projection_filter.row_count() != 1 as u64 { println("T167 notes recovery: id projection filter row count"); return 255 }
+    notes_recovered_id_projection_filter_cols := mut notes_recovered_id_projection_filter.get_columns()
+    I !expect_column(notes_recovered_id_projection_filter_cols, 0, "id", "INT") { println("T265 notes recovery: id projection filter id column"); return 255 }
+    I !expect_column(notes_recovered_id_projection_filter_cols, 1, "body", "TEXT") { println("T265 notes recovery: id projection filter body column"); return 255 }
     notes_recovered_id_projection_filter_rows := mut notes_recovered_id_projection_filter.get_rows()
     notes_recovered_id_projection_filter_row := mut &notes_recovered_id_projection_filter_rows[0]
     I !expect_cell(notes_recovered_id_projection_filter_row, 0, "1") { println("T167 notes recovery: id projection filter id"); return 255 }
     I !expect_cell(notes_recovered_id_projection_filter_row, 1, "memo") { println("T167 notes recovery: id projection filter body"); return 255 }
     notes_recovered_id_projection_filter.free_owned_text()
     notes_recovered_id_projection_filter.free_owned_text()
+
+    notes_recovered_id_projection_filter_reversed := mut match notes_recovered.query("select id, body from notes where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T265 notes recovery: reversed id projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_id_projection_filter_reversed.column_count() != 2 as u64 { println("T265 notes recovery: reversed id projection filter column count"); return 255 }
+    I notes_recovered_id_projection_filter_reversed.row_count() != 1 as u64 { println("T265 notes recovery: reversed id projection filter row count"); return 255 }
+    notes_recovered_id_projection_filter_reversed_cols := mut notes_recovered_id_projection_filter_reversed.get_columns()
+    I !expect_column(notes_recovered_id_projection_filter_reversed_cols, 0, "id", "INT") { println("T265 notes recovery: reversed id projection filter id column"); return 255 }
+    I !expect_column(notes_recovered_id_projection_filter_reversed_cols, 1, "body", "TEXT") { println("T265 notes recovery: reversed id projection filter body column"); return 255 }
+    notes_recovered_id_projection_filter_reversed_rows := mut notes_recovered_id_projection_filter_reversed.get_rows()
+    notes_recovered_id_projection_filter_reversed_row := mut &notes_recovered_id_projection_filter_reversed_rows[0]
+    I !expect_cell(notes_recovered_id_projection_filter_reversed_row, 0, "2") { println("T265 notes recovery: reversed id projection filter id"); return 255 }
+    I !expect_cell(notes_recovered_id_projection_filter_reversed_row, 1, "todo") { println("T265 notes recovery: reversed id projection filter body"); return 255 }
+    notes_recovered_id_projection_filter_reversed.free_owned_text()
+    notes_recovered_id_projection_filter_reversed.free_owned_text()
+
+    notes_recovered_id_projection_filter_missing := mut match notes_recovered.query("select id, body from notes where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T265 notes recovery: missing id projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_id_projection_filter_missing.column_count() != 2 as u64 { println("T265 notes recovery: missing id projection filter column count"); return 255 }
+    I notes_recovered_id_projection_filter_missing.row_count() != 0 as u64 { println("T265 notes recovery: missing id projection filter row count"); return 255 }
+    notes_recovered_id_projection_filter_missing_cols := mut notes_recovered_id_projection_filter_missing.get_columns()
+    I !expect_column(notes_recovered_id_projection_filter_missing_cols, 0, "id", "INT") { println("T265 notes recovery: missing id projection filter id column"); return 255 }
+    I !expect_column(notes_recovered_id_projection_filter_missing_cols, 1, "body", "TEXT") { println("T265 notes recovery: missing id projection filter body column"); return 255 }
+    notes_recovered_id_projection_filter_missing.free_owned_text()
+    notes_recovered_id_projection_filter_missing.free_owned_text()
 
     notes_recovered_insert := mut match notes_recovered.execute("insert into notes (id, body) values (3, 'later')") {
         Ok(n) => n,
