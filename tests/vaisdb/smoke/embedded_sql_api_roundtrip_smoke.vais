@@ -2496,6 +2496,19 @@ fn main() -> i64 {
     notes_reopened_cols := mut notes_reopened_select.get_columns()
     I !expect_column(notes_reopened_cols, 0, "id", "INT") { println("T155 notes: reopen id column"); return 255 }
     I !expect_column(notes_reopened_cols, 1, "body", "TEXT") { println("T155 notes: reopen body column"); return 255 }
+    notes_reopened_rows := mut notes_reopened_select.get_rows()
+    notes_reopened_row0 := mut &notes_reopened_rows[0]
+    notes_reopened_row1 := mut &notes_reopened_rows[1]
+    notes_reopened_row2 := mut &notes_reopened_rows[2]
+    notes_reopened_row3 := mut &notes_reopened_rows[3]
+    I !expect_cell(notes_reopened_row0, 0, "1") { println("T155 notes: reopen row0 id"); return 255 }
+    I !expect_cell(notes_reopened_row0, 1, "memo") { println("T155 notes: reopen row0 body"); return 255 }
+    I !expect_cell(notes_reopened_row1, 0, "2") { println("T155 notes: reopen row1 id"); return 255 }
+    I !expect_cell(notes_reopened_row1, 1, "todo") { println("T155 notes: reopen row1 body"); return 255 }
+    I !expect_cell(notes_reopened_row2, 0, "3") { println("T165 notes: reopen row2 id"); return 255 }
+    I !expect_cell(notes_reopened_row2, 1, "later") { println("T165 notes: reopen row2 body"); return 255 }
+    I !expect_cell(notes_reopened_row3, 0, "4") { println("T165 notes: reopen row3 id"); return 255 }
+    I !expect_cell(notes_reopened_row3, 1, "done") { println("T165 notes: reopen row3 body"); return 255 }
     notes_reopened_select.free_owned_text()
     notes_reopened_select.free_owned_text()
     notes_reopened_projection := mut match notes_reopened.query("select id, body from notes") {
