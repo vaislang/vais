@@ -236,6 +236,8 @@ fn run_vaisdb_smoke_fixture(fixture: &str) -> Option<std::process::Output> {
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join(".vais-cache"));
     remove_vais_cache_dirs(&compiler_root.join("std"));
     remove_vais_cache_dirs(&vaisdb_src);
+    remove_generated_ll_files(&compiler_root.join("std"));
+    remove_generated_ll_files(&vaisdb_src);
 
     let isolated_dir = isolated_smoke_dir(fixture);
     let isolated_tmp_dir = isolated_dir.join("tmp");
@@ -290,6 +292,8 @@ fn run_vaisdb_smoke_fixture(fixture: &str) -> Option<std::process::Output> {
         .expect("failed to run VaisDB runtime smoke executable");
     let _ = std::fs::remove_file(&exe_path);
     let _ = std::fs::remove_dir_all(&isolated_dir);
+    remove_generated_ll_files(&compiler_root.join("std"));
+    remove_generated_ll_files(&vaisdb_src);
     Some(run)
 }
 
@@ -383,6 +387,23 @@ fn remove_vais_cache_dirs(root: &Path) {
         }
         if path.is_dir() {
             remove_vais_cache_dirs(&path);
+        }
+    }
+}
+
+fn remove_generated_ll_files(root: &Path) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            remove_generated_ll_files(&path);
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) == Some("ll") {
+            let _ = std::fs::remove_file(&path);
         }
     }
 }
