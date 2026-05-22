@@ -3388,6 +3388,22 @@ fn main() -> i64 {
     }
     I contacts_projection.column_count() != 4 as u64 { println("T219 contacts: projection column count"); return 255 }
     I contacts_projection.row_count() != 2 as u64 { println("T219 contacts: projection row count"); return 255 }
+    contacts_projection_cols := mut contacts_projection.get_columns()
+    I !expect_column(contacts_projection_cols, 0, "id", "INT") { println("T219 contacts: projection id column"); return 255 }
+    I !expect_column(contacts_projection_cols, 1, "name", "TEXT") { println("T219 contacts: projection name column"); return 255 }
+    I !expect_column(contacts_projection_cols, 2, "email", "TEXT") { println("T219 contacts: projection email column"); return 255 }
+    I !expect_column(contacts_projection_cols, 3, "status", "TEXT") { println("T219 contacts: projection status column"); return 255 }
+    contacts_projection_rows := mut contacts_projection.get_rows()
+    contacts_projection_row0 := mut &contacts_projection_rows[0]
+    contacts_projection_row1 := mut &contacts_projection_rows[1]
+    I !expect_cell(contacts_projection_row0, 0, "1") { println("T219 contacts: projection row0 id"); return 255 }
+    I !expect_cell(contacts_projection_row0, 1, "ada") { println("T219 contacts: projection row0 name"); return 255 }
+    I !expect_cell(contacts_projection_row0, 2, "ada@example.test") { println("T219 contacts: projection row0 email"); return 255 }
+    I !expect_cell(contacts_projection_row0, 3, "active") { println("T219 contacts: projection row0 status"); return 255 }
+    I !expect_cell(contacts_projection_row1, 0, "2") { println("T219 contacts: projection row1 id"); return 255 }
+    I !expect_cell(contacts_projection_row1, 1, "grace") { println("T219 contacts: projection row1 name"); return 255 }
+    I !expect_cell(contacts_projection_row1, 2, "grace@example.test") { println("T219 contacts: projection row1 email"); return 255 }
+    I !expect_cell(contacts_projection_row1, 3, "inactive") { println("T219 contacts: projection row1 status"); return 255 }
     contacts_projection.free_owned_text()
     contacts_projection.free_owned_text()
 
@@ -5037,6 +5053,33 @@ fn main() -> i64 {
     I !contacts_recovered_seen_katherine { println("T221 contacts recovery: repeat missing katherine"); return 255 }
     contacts_recovered_repeat_result.free_owned_text()
     contacts_recovered_repeat_result.free_owned_text()
+    contacts_recovered_repeat_projection := mut match contacts_recovered_repeat.query("select id, name, email, status from contacts") {
+        Ok(r) => r,
+        Err(e) => { println("T221 contacts recovery: repeat projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovered_repeat_projection.column_count() != 4 as u64 { println("T221 contacts recovery: repeat projection column count"); return 255 }
+    I contacts_recovered_repeat_projection.row_count() != 3 as u64 { println("T221 contacts recovery: repeat projection row count"); return 255 }
+    contacts_recovered_repeat_projection_rows := mut contacts_recovered_repeat_projection.get_rows()
+    contacts_recovered_projection_seen_ada := mut false
+    contacts_recovered_projection_seen_grace := mut false
+    contacts_recovered_projection_seen_katherine := mut false
+    LF ri: 0..contacts_recovered_repeat_projection_rows.len() {
+        candidate := mut &contacts_recovered_repeat_projection_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada") && expect_cell(candidate, 2, "ada@example.test") && expect_cell(candidate, 3, "active") {
+            contacts_recovered_projection_seen_ada = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") && expect_cell(candidate, 2, "grace@example.test") && expect_cell(candidate, 3, "inactive") {
+            contacts_recovered_projection_seen_grace = true
+        }
+        I expect_cell(candidate, 0, "3") && expect_cell(candidate, 1, "katherine") && expect_cell(candidate, 2, "katherine@example.test") && expect_cell(candidate, 3, "active") {
+            contacts_recovered_projection_seen_katherine = true
+        }
+    }
+    I !contacts_recovered_projection_seen_ada { println("T221 contacts recovery: repeat projection missing ada"); return 255 }
+    I !contacts_recovered_projection_seen_grace { println("T221 contacts recovery: repeat projection missing grace"); return 255 }
+    I !contacts_recovered_projection_seen_katherine { println("T221 contacts recovery: repeat projection missing katherine"); return 255 }
+    contacts_recovered_repeat_projection.free_owned_text()
+    contacts_recovered_repeat_projection.free_owned_text()
     match contacts_recovered_repeat.close() {
         Ok(_) => {},
         Err(_) => { println("T221 contacts recovery: repeat close failed"); return 255 },
