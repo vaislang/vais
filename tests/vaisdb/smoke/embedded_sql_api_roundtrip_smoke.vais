@@ -3357,8 +3357,146 @@ fn main() -> i64 {
         Ok(_) => { println("T217 contacts: insert-select unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_db.query("select * from contacts") {
-        Ok(_) => { println("T217 contacts: select unexpectedly accepted"); return 255 },
+    contacts_select := mut match contacts_db.query("select * from contacts") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_select.column_count() != 4 as u64 { println("T219 contacts: select all column count"); return 255 }
+    I contacts_select.row_count() != 2 as u64 { println("T219 contacts: select all row count"); return 255 }
+    contacts_select_cols := mut contacts_select.get_columns()
+    I !expect_column(contacts_select_cols, 0, "id", "INT") { println("T219 contacts: select id column"); return 255 }
+    I !expect_column(contacts_select_cols, 1, "name", "TEXT") { println("T219 contacts: select name column"); return 255 }
+    I !expect_column(contacts_select_cols, 2, "email", "TEXT") { println("T219 contacts: select email column"); return 255 }
+    I !expect_column(contacts_select_cols, 3, "status", "TEXT") { println("T219 contacts: select status column"); return 255 }
+    contacts_select_rows := mut contacts_select.get_rows()
+    contacts_row0 := mut &contacts_select_rows[0]
+    contacts_row1 := mut &contacts_select_rows[1]
+    I !expect_cell(contacts_row0, 0, "1") { println("T219 contacts: row0 id"); return 255 }
+    I !expect_cell(contacts_row0, 1, "ada") { println("T219 contacts: row0 name"); return 255 }
+    I !expect_cell(contacts_row0, 2, "ada@example.test") { println("T219 contacts: row0 email"); return 255 }
+    I !expect_cell(contacts_row0, 3, "active") { println("T219 contacts: row0 status"); return 255 }
+    I !expect_cell(contacts_row1, 0, "2") { println("T219 contacts: row1 id"); return 255 }
+    I !expect_cell(contacts_row1, 1, "grace") { println("T219 contacts: row1 name"); return 255 }
+    I !expect_cell(contacts_row1, 2, "grace@example.test") { println("T219 contacts: row1 email"); return 255 }
+    I !expect_cell(contacts_row1, 3, "inactive") { println("T219 contacts: row1 status"); return 255 }
+    contacts_select.free_owned_text()
+    contacts_select.free_owned_text()
+
+    contacts_projection := mut match contacts_db.query("select id, name, email, status from contacts") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_projection.column_count() != 4 as u64 { println("T219 contacts: projection column count"); return 255 }
+    I contacts_projection.row_count() != 2 as u64 { println("T219 contacts: projection row count"); return 255 }
+    contacts_projection.free_owned_text()
+    contacts_projection.free_owned_text()
+
+    contacts_id_filter := mut match contacts_db.query("select * from contacts where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_id_filter.row_count() != 1 as u64 { println("T219 contacts: id filter row count"); return 255 }
+    contacts_id_filter_rows := mut contacts_id_filter.get_rows()
+    contacts_id_filter_row := mut &contacts_id_filter_rows[0]
+    I !expect_cell(contacts_id_filter_row, 0, "2") { println("T219 contacts: id filter id"); return 255 }
+    I !expect_cell(contacts_id_filter_row, 1, "grace") { println("T219 contacts: id filter name"); return 255 }
+    I !expect_cell(contacts_id_filter_row, 2, "grace@example.test") { println("T219 contacts: id filter email"); return 255 }
+    I !expect_cell(contacts_id_filter_row, 3, "inactive") { println("T219 contacts: id filter status"); return 255 }
+    contacts_id_filter.free_owned_text()
+    contacts_id_filter.free_owned_text()
+
+    contacts_reversed_id_filter := mut match contacts_db.query("select * from contacts where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_reversed_id_filter.row_count() != 1 as u64 { println("T219 contacts: reversed id filter row count"); return 255 }
+    contacts_reversed_id_filter.free_owned_text()
+    contacts_reversed_id_filter.free_owned_text()
+
+    contacts_status_filter := mut match contacts_db.query("select * from contacts where status = 'active'") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_status_filter.row_count() != 1 as u64 { println("T219 contacts: status filter row count"); return 255 }
+    contacts_status_filter_rows := mut contacts_status_filter.get_rows()
+    contacts_status_filter_row := mut &contacts_status_filter_rows[0]
+    I !expect_cell(contacts_status_filter_row, 0, "1") { println("T219 contacts: status filter id"); return 255 }
+    I !expect_cell(contacts_status_filter_row, 1, "ada") { println("T219 contacts: status filter name"); return 255 }
+    I !expect_cell(contacts_status_filter_row, 2, "ada@example.test") { println("T219 contacts: status filter email"); return 255 }
+    I !expect_cell(contacts_status_filter_row, 3, "active") { println("T219 contacts: status filter status"); return 255 }
+    contacts_status_filter.free_owned_text()
+    contacts_status_filter.free_owned_text()
+
+    contacts_reversed_status_filter := mut match contacts_db.query("select * from contacts where 'active' = status") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: reversed status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_reversed_status_filter.row_count() != 1 as u64 { println("T219 contacts: reversed status filter row count"); return 255 }
+    contacts_reversed_status_filter.free_owned_text()
+    contacts_reversed_status_filter.free_owned_text()
+
+    contacts_projection_status_filter := mut match contacts_db.query("select id, name, email, status from contacts where status = 'active'") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: projection status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_projection_status_filter.row_count() != 1 as u64 { println("T219 contacts: projection status filter row count"); return 255 }
+    contacts_projection_status_filter.free_owned_text()
+    contacts_projection_status_filter.free_owned_text()
+
+    match contacts_db.query("select name from contacts") {
+        Ok(_) => { println("T219 contacts: partial projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select status, email, name, id from contacts") {
+        Ok(_) => { println("T219 contacts: reordered projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select id as contact_id, name, email, status from contacts") {
+        Ok(_) => { println("T219 contacts: alias projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select contacts.id, contacts.name, contacts.email, contacts.status from contacts") {
+        Ok(_) => { println("T219 contacts: qualified projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts where contacts.status = 'active'") {
+        Ok(_) => { println("T219 contacts: qualified filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts where owner = 'me'") {
+        Ok(_) => { println("T219 contacts: unknown filter column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts where name = 'ada'") {
+        Ok(_) => { println("T219 contacts: name filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts where email = 'ada@example.test'") {
+        Ok(_) => { println("T219 contacts: email filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts where id = '2'") {
+        Ok(_) => { println("T219 contacts: wrong id literal unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts where status = 2") {
+        Ok(_) => { println("T219 contacts: wrong status literal unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts where status != 'active'") {
+        Ok(_) => { println("T219 contacts: non-equality predicate unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts where id = 1 and status = 'active'") {
+        Ok(_) => { println("T219 contacts: boolean predicate unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select id + 1, name, email, status from contacts") {
+        Ok(_) => { println("T219 contacts: expression projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts join tickets on contacts.id = tickets.id") {
+        Ok(_) => { println("T219 contacts: join unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match contacts_db.close() {
@@ -3403,8 +3541,53 @@ fn main() -> i64 {
         Ok(_) => { println("T217 contacts: reopen values-only insert unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_reopened.query("select * from contacts") {
-        Ok(_) => { println("T217 contacts: reopen select unexpectedly accepted"); return 255 },
+    contacts_reopened_select := mut match contacts_reopened.query("select * from contacts") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_reopened_select.column_count() != 4 as u64 { println("T219 contacts: reopen select column count"); return 255 }
+    I contacts_reopened_select.row_count() != 3 as u64 { println("T219 contacts: reopen select row count"); return 255 }
+    contacts_reopened_select_cols := mut contacts_reopened_select.get_columns()
+    I !expect_column(contacts_reopened_select_cols, 0, "id", "INT") { println("T219 contacts: reopen select id column"); return 255 }
+    I !expect_column(contacts_reopened_select_cols, 1, "name", "TEXT") { println("T219 contacts: reopen select name column"); return 255 }
+    I !expect_column(contacts_reopened_select_cols, 2, "email", "TEXT") { println("T219 contacts: reopen select email column"); return 255 }
+    I !expect_column(contacts_reopened_select_cols, 3, "status", "TEXT") { println("T219 contacts: reopen select status column"); return 255 }
+    contacts_reopened_select_rows := mut contacts_reopened_select.get_rows()
+    contacts_reopened_row0 := mut &contacts_reopened_select_rows[0]
+    contacts_reopened_row1 := mut &contacts_reopened_select_rows[1]
+    contacts_reopened_row2 := mut &contacts_reopened_select_rows[2]
+    I !expect_cell(contacts_reopened_row0, 0, "1") { println("T219 contacts: reopen row0 id"); return 255 }
+    I !expect_cell(contacts_reopened_row0, 1, "ada") { println("T219 contacts: reopen row0 name"); return 255 }
+    I !expect_cell(contacts_reopened_row0, 2, "ada@example.test") { println("T219 contacts: reopen row0 email"); return 255 }
+    I !expect_cell(contacts_reopened_row0, 3, "active") { println("T219 contacts: reopen row0 status"); return 255 }
+    I !expect_cell(contacts_reopened_row1, 0, "2") { println("T219 contacts: reopen row1 id"); return 255 }
+    I !expect_cell(contacts_reopened_row1, 1, "grace") { println("T219 contacts: reopen row1 name"); return 255 }
+    I !expect_cell(contacts_reopened_row1, 2, "grace@example.test") { println("T219 contacts: reopen row1 email"); return 255 }
+    I !expect_cell(contacts_reopened_row1, 3, "inactive") { println("T219 contacts: reopen row1 status"); return 255 }
+    I !expect_cell(contacts_reopened_row2, 0, "3") { println("T219 contacts: reopen row2 id"); return 255 }
+    I !expect_cell(contacts_reopened_row2, 1, "katherine") { println("T219 contacts: reopen row2 name"); return 255 }
+    I !expect_cell(contacts_reopened_row2, 2, "katherine@example.test") { println("T219 contacts: reopen row2 email"); return 255 }
+    I !expect_cell(contacts_reopened_row2, 3, "active") { println("T219 contacts: reopen row2 status"); return 255 }
+    contacts_reopened_select.free_owned_text()
+    contacts_reopened_select.free_owned_text()
+
+    contacts_reopened_status_filter := mut match contacts_reopened.query("select id, name, email, status from contacts where status = 'active'") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: reopen status projection filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_reopened_status_filter.row_count() != 2 as u64 { println("T219 contacts: reopen status filter row count"); return 255 }
+    contacts_reopened_status_filter_rows := mut contacts_reopened_status_filter.get_rows()
+    contacts_reopened_active0 := mut &contacts_reopened_status_filter_rows[0]
+    contacts_reopened_active1 := mut &contacts_reopened_status_filter_rows[1]
+    I !expect_cell(contacts_reopened_active0, 0, "1") { println("T219 contacts: reopen active row0 id"); return 255 }
+    I !expect_cell(contacts_reopened_active0, 1, "ada") { println("T219 contacts: reopen active row0 name"); return 255 }
+    I !expect_cell(contacts_reopened_active1, 0, "3") { println("T219 contacts: reopen active row1 id"); return 255 }
+    I !expect_cell(contacts_reopened_active1, 1, "katherine") { println("T219 contacts: reopen active row1 name"); return 255 }
+    contacts_reopened_status_filter.free_owned_text()
+    contacts_reopened_status_filter.free_owned_text()
+
+    match contacts_reopened.query("select name from contacts") {
+        Ok(_) => { println("T219 contacts: reopen partial projection unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match contacts_reopened.close() {
