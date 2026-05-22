@@ -3287,12 +3287,78 @@ fn main() -> i64 {
         Ok(_) => { println("T215 contacts: duplicate create unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_db.execute("insert into contacts (id, name, email, status) values (1, 'ada', 'ada@example.test', 'active')") {
-        Ok(_) => { println("T215 contacts: insert unexpectedly accepted"); return 255 },
+    contacts_insert_descriptor_order := mut match contacts_db.execute("insert into contacts (id, name, email, status) values (1, 'ada', 'ada@example.test', 'active')") {
+        Ok(count) => count,
+        Err(e) => { println("T217 contacts: descriptor-order insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_insert_descriptor_order != 1 as u64 { println("T217 contacts: descriptor-order insert count"); return 255 }
+    contacts_insert_reordered := mut match contacts_db.execute("insert into contacts (status, email, id, name) values ('inactive', 'grace@example.test', 2, 'grace')") {
+        Ok(count) => count,
+        Err(e) => { println("T217 contacts: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_insert_reordered != 1 as u64 { println("T217 contacts: reordered insert count"); return 255 }
+    match contacts_db.execute("insert into contacts values (3, 'raw', 'raw@example.test', 'active')") {
+        Ok(_) => { println("T217 contacts: values-only insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email) values (3, 'partial', 'partial@example.test')") {
+        Ok(_) => { println("T217 contacts: partial column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, email) values (3, 'dup', 'dup@example.test', 'other@example.test')") {
+        Ok(_) => { println("T217 contacts: duplicate column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, owner) values (3, 'owner', 'owner@example.test', 'ops')") {
+        Ok(_) => { println("T217 contacts: unknown column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status, owner) values (3, 'extra', 'extra@example.test', 'active', 'ops')") {
+        Ok(_) => { println("T217 contacts: extra column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (contacts.id, name, email, status) values (3, 'qualified', 'qualified@example.test', 'active')") {
+        Ok(_) => { println("T217 contacts: qualified column insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) values ('bad', 'type', 'type@example.test', 'active')") {
+        Ok(_) => { println("T217 contacts: wrong id type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) values (3, 4, 'type@example.test', 'active')") {
+        Ok(_) => { println("T217 contacts: wrong name type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) values (3, 'type', 4, 'active')") {
+        Ok(_) => { println("T217 contacts: wrong email type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) values (3, 'type', 'type@example.test', 4)") {
+        Ok(_) => { println("T217 contacts: wrong status type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) values (3, null, 'null@example.test', 'active')") {
+        Ok(_) => { println("T217 contacts: null insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) values (3, default, 'default@example.test', 'active')") {
+        Ok(_) => { println("T217 contacts: default insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) values (3 + 1, 'expr', 'expr@example.test', 'active')") {
+        Ok(_) => { println("T217 contacts: expression insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) values (3, 'multi', 'multi@example.test', 'active'), (4, 'multi2', 'multi2@example.test', 'active')") {
+        Ok(_) => { println("T217 contacts: multi-row insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) select id, name, email, status from contacts") {
+        Ok(_) => { println("T217 contacts: insert-select unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match contacts_db.query("select * from contacts") {
-        Ok(_) => { println("T215 contacts: select unexpectedly accepted"); return 255 },
+        Ok(_) => { println("T217 contacts: select unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match contacts_db.close() {
@@ -3328,12 +3394,17 @@ fn main() -> i64 {
         Ok(_) => { println("T215 contacts: reopen duplicate create unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_reopened.execute("insert into contacts (id, name, email, status) values (2, 'grace', 'grace@example.test', 'active')") {
-        Ok(_) => { println("T215 contacts: reopen insert unexpectedly accepted"); return 255 },
+    contacts_reopened_insert := mut match contacts_reopened.execute("insert into contacts (email, status, id, name) values ('katherine@example.test', 'active', 3, 'katherine')") {
+        Ok(count) => count,
+        Err(e) => { println("T217 contacts: reopen insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_reopened_insert != 1 as u64 { println("T217 contacts: reopen insert count"); return 255 }
+    match contacts_reopened.execute("insert into contacts values (4, 'raw', 'raw@example.test', 'active')") {
+        Ok(_) => { println("T217 contacts: reopen values-only insert unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match contacts_reopened.query("select * from contacts") {
-        Ok(_) => { println("T215 contacts: reopen select unexpectedly accepted"); return 255 },
+        Ok(_) => { println("T217 contacts: reopen select unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match contacts_reopened.close() {
