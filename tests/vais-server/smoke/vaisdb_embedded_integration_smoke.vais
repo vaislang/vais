@@ -280,6 +280,42 @@ fn setup_tickets_db(db_path: str) -> i64 {
     0
 }
 
+fn setup_contacts_db(db_path: str) -> i64 {
+    cfg := mut EmbeddedConfig.default()
+    cfg = cfg.with_data_dir(db_path.clone())
+    cfg = cfg.with_page_size(PAGE_SIZE_8K)
+
+    db := mut match EmbeddedDatabase.open(cfg) {
+        Ok(v) => v,
+        Err(_) => { return 430 },
+    }
+
+    created := mut match db.execute("create table contacts (id int, name text, email text, status text)") {
+        Ok(v) => v,
+        Err(_) => { return 431 },
+    }
+    I created != 0 as u64 { return 432 }
+
+    inserted_a := mut match db.execute("insert into contacts (id, name, email, status) values (1, 'ada', 'ada@example.test', 'active')") {
+        Ok(v) => v,
+        Err(_) => { return 433 },
+    }
+    I inserted_a != 1 as u64 { return 434 }
+
+    inserted_b := mut match db.execute("insert into contacts (status, email, id, name) values ('inactive', 'grace@example.test', 2, 'grace')") {
+        Ok(v) => v,
+        Err(_) => { return 435 },
+    }
+    I inserted_b != 1 as u64 { return 436 }
+
+    match db.close() {
+        Ok(_) => {},
+        Err(_) => { return 437 },
+    }
+
+    0
+}
+
 fn db_books_handler(db_path: str) -> Response {
     ctx := mut Context.new("GET", "/db/books")
     cfg := mut EmbeddedConfig.default()
@@ -754,6 +790,103 @@ fn db_table_rows_query_handler(db_path: str, method: str, path: str, query_param
             response_body = append_str(response_body, escaped_summary, "")
             response_body = append_str(response_body, "\",\"state\":\"", "")
             response_body = append_str(response_body, escaped_state, "")
+            response_body = append_str(response_body, "\"}", "")
+            row_idx += 1
+        }
+        response_body = append_str(response_body, "]}", "")
+
+        result.free_owned_text()
+        result.free_owned_text()
+
+        match db.close() {
+            Ok(_) => {},
+            Err(_) => { return ctx.json(500, "{\"error\":\"db_close_failed\"}") },
+        }
+
+        return ctx.json(200, response_body)
+    }
+
+    I table == "contacts" {
+        I result.column_count() != 4 as u64 || result.row_count() != 2 as u64 {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+        }
+
+        columns := mut result.get_columns()
+        I columns[0].get_name() != "id" || columns[0].get_type_name() != "INT" {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        I columns[1].get_name() != "name" || columns[1].get_type_name() != "TEXT" {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        I columns[2].get_name() != "email" || columns[2].get_type_name() != "TEXT" {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+        I columns[3].get_name() != "status" || columns[3].get_type_name() != "TEXT" {
+            result.free_owned_text()
+            result.free_owned_text()
+            match db.close() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            return ctx.json(422, "{\"error\":\"db_unsupported_table\"}")
+        }
+
+        rows := mut result.get_rows()
+        response_body := mut "{\"table\":\"contacts\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"TEXT\"},{\"name\":\"email\",\"type\":\"TEXT\"},{\"name\":\"status\",\"type\":\"TEXT\"}],\"rows\":["
+        row_idx := mut 0
+        LW row_idx < rows.len() {
+            row := mut &rows[row_idx]
+            row_id := mut cell_or_empty(row, 0)
+            row_name := mut cell_or_empty(row, 1)
+            row_email := mut cell_or_empty(row, 2)
+            row_status := mut cell_or_empty(row, 3)
+            I !db_filter_digits_is_valid(row_id) {
+                result.free_owned_text()
+                result.free_owned_text()
+                match db.close() {
+                    Ok(_) => {},
+                    Err(_) => {},
+                }
+                return ctx.json(500, "{\"error\":\"db_query_failed\"}")
+            }
+            escaped_name := mut escape_json_string(row_name)
+            escaped_email := mut escape_json_string(row_email)
+            escaped_status := mut escape_json_string(row_status)
+            I row_idx > 0 {
+                response_body = append_str(response_body, ",", "")
+            }
+            response_body = append_str(response_body, "{\"id\":", "")
+            response_body = append_str(response_body, row_id, "")
+            response_body = append_str(response_body, ",\"name\":\"", "")
+            response_body = append_str(response_body, escaped_name, "")
+            response_body = append_str(response_body, "\",\"email\":\"", "")
+            response_body = append_str(response_body, escaped_email, "")
+            response_body = append_str(response_body, "\",\"status\":\"", "")
+            response_body = append_str(response_body, escaped_status, "")
             response_body = append_str(response_body, "\"}", "")
             row_idx += 1
         }
@@ -1832,6 +1965,24 @@ fn check_table_rows_tickets_route(db_path: str) -> i64 {
     0
 }
 
+fn check_table_rows_contacts_route(db_path: str) -> i64 {
+    response := mut db_table_rows_handler(db_path, "GET", "/db/tables/contacts/rows", "")
+    I response.status != 200 {
+        println("FAIL db table rows contacts response status")
+        return 430
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows contacts response content type")
+        return 431
+    }
+    I response.body != "{\"table\":\"contacts\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"name\",\"type\":\"TEXT\"},{\"name\":\"email\",\"type\":\"TEXT\"},{\"name\":\"status\",\"type\":\"TEXT\"}],\"rows\":[{\"id\":1,\"name\":\"ada\",\"email\":\"ada@example.test\",\"status\":\"active\"},{\"id\":2,\"name\":\"grace\",\"email\":\"grace@example.test\",\"status\":\"inactive\"}]}" {
+        println("FAIL db table rows contacts response body")
+        println(response.body)
+        return 432
+    }
+    0
+}
+
 fn expect_db_invalid_table_response(response: Response, base_code: i64) -> i64 {
     I response.status != 400 {
         println("FAIL db invalid table status")
@@ -1894,6 +2045,18 @@ fn check_table_rows_unfiltered_query_rejected(db_path: str) -> i64 {
     sql_status := mut expect_db_invalid_filter_response(sql_query, 396)
     I sql_status != 0 {
         return sql_status
+    }
+
+    contacts_status_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=active", "")
+    contacts_status := mut expect_db_invalid_filter_response(contacts_status_query, 399)
+    I contacts_status != 0 {
+        return contacts_status
+    }
+
+    contacts_email_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "email=ada@example.test", "")
+    contacts_email := mut expect_db_invalid_filter_response(contacts_email_query, 402)
+    I contacts_email != 0 {
+        return contacts_email
     }
 
     0
@@ -2870,6 +3033,7 @@ fn main() -> i64 {
     notes_path := mut "server_vaisdb_notes_db"
     tasks_path := mut "server_vaisdb_tasks_db"
     tickets_path := mut "server_vaisdb_tickets_db"
+    contacts_path := mut "server_vaisdb_contacts_db"
     missing_catalog_path := mut "server_vaisdb_missing_catalog_db"
     missing_table_path := mut "server_vaisdb_missing_table_db"
     conflict_path := mut "server_vaisdb_conflict_db"
@@ -2952,12 +3116,22 @@ fn main() -> i64 {
         return table_rows_tickets_status
     }
 
+    contacts_setup_status := mut setup_contacts_db(contacts_path.clone())
+    I contacts_setup_status != 0 {
+        return contacts_setup_status
+    }
+
+    table_rows_contacts_status := mut check_table_rows_contacts_route(contacts_path.clone())
+    I table_rows_contacts_status != 0 {
+        return table_rows_contacts_status
+    }
+
     table_rows_invalid_status := mut check_table_rows_invalid_inputs(albums_path.clone())
     I table_rows_invalid_status != 0 {
         return table_rows_invalid_status
     }
 
-    table_rows_unfiltered_query_status := mut check_table_rows_unfiltered_query_rejected(tickets_path.clone())
+    table_rows_unfiltered_query_status := mut check_table_rows_unfiltered_query_rejected(contacts_path.clone())
     I table_rows_unfiltered_query_status != 0 {
         return table_rows_unfiltered_query_status
     }
