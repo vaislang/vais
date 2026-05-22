@@ -2340,6 +2340,19 @@ fn main() -> i64 {
     notes_projection_cols := mut notes_projection.get_columns()
     I !expect_column(notes_projection_cols, 0, "id", "INT") { println("T155 notes: projection id column"); return 255 }
     I !expect_column(notes_projection_cols, 1, "body", "TEXT") { println("T155 notes: projection body column"); return 255 }
+    notes_projection_rows := mut notes_projection.get_rows()
+    notes_projection_row0 := mut &notes_projection_rows[0]
+    notes_projection_row1 := mut &notes_projection_rows[1]
+    notes_projection_row2 := mut &notes_projection_rows[2]
+    notes_projection_row3 := mut &notes_projection_rows[3]
+    I !expect_cell(notes_projection_row0, 0, "1") { println("T155 notes: projection row0 id"); return 255 }
+    I !expect_cell(notes_projection_row0, 1, "memo") { println("T155 notes: projection row0 body"); return 255 }
+    I !expect_cell(notes_projection_row1, 0, "2") { println("T155 notes: projection row1 id"); return 255 }
+    I !expect_cell(notes_projection_row1, 1, "todo") { println("T155 notes: projection row1 body"); return 255 }
+    I !expect_cell(notes_projection_row2, 0, "3") { println("T165 notes: projection row2 id"); return 255 }
+    I !expect_cell(notes_projection_row2, 1, "later") { println("T165 notes: projection row2 body"); return 255 }
+    I !expect_cell(notes_projection_row3, 0, "4") { println("T165 notes: projection row3 id"); return 255 }
+    I !expect_cell(notes_projection_row3, 1, "done") { println("T165 notes: projection row3 body"); return 255 }
     notes_projection.free_owned_text()
     notes_projection.free_owned_text()
 
@@ -2516,6 +2529,19 @@ fn main() -> i64 {
         Err(e) => { println("T155 notes: reopen projection failed: {e.message}: {e.hint}"); return 255 },
     }
     I notes_reopened_projection.row_count() != 4 as u64 { println("T165 notes: reopen projection row count"); return 255 }
+    notes_reopened_projection_rows := mut notes_reopened_projection.get_rows()
+    notes_reopened_projection_row0 := mut &notes_reopened_projection_rows[0]
+    notes_reopened_projection_row1 := mut &notes_reopened_projection_rows[1]
+    notes_reopened_projection_row2 := mut &notes_reopened_projection_rows[2]
+    notes_reopened_projection_row3 := mut &notes_reopened_projection_rows[3]
+    I !expect_cell(notes_reopened_projection_row0, 0, "1") { println("T155 notes: reopen projection row0 id"); return 255 }
+    I !expect_cell(notes_reopened_projection_row0, 1, "memo") { println("T155 notes: reopen projection row0 body"); return 255 }
+    I !expect_cell(notes_reopened_projection_row1, 0, "2") { println("T155 notes: reopen projection row1 id"); return 255 }
+    I !expect_cell(notes_reopened_projection_row1, 1, "todo") { println("T155 notes: reopen projection row1 body"); return 255 }
+    I !expect_cell(notes_reopened_projection_row2, 0, "3") { println("T165 notes: reopen projection row2 id"); return 255 }
+    I !expect_cell(notes_reopened_projection_row2, 1, "later") { println("T165 notes: reopen projection row2 body"); return 255 }
+    I !expect_cell(notes_reopened_projection_row3, 0, "4") { println("T165 notes: reopen projection row3 id"); return 255 }
+    I !expect_cell(notes_reopened_projection_row3, 1, "done") { println("T165 notes: reopen projection row3 body"); return 255 }
     notes_reopened_projection.free_owned_text()
     notes_reopened_projection.free_owned_text()
     notes_reopened_body_filter := mut match notes_reopened.query("select * from notes where body = 'todo'") {
@@ -4492,6 +4518,13 @@ fn main() -> i64 {
     notes_recovered_projection_cols := mut notes_recovered_projection.get_columns()
     I !expect_column(notes_recovered_projection_cols, 0, "id", "INT") { println("T167 notes recovery: projection id column"); return 255 }
     I !expect_column(notes_recovered_projection_cols, 1, "body", "TEXT") { println("T167 notes recovery: projection body column"); return 255 }
+    notes_recovered_projection_rows := mut notes_recovered_projection.get_rows()
+    notes_recovered_projection_row0 := mut &notes_recovered_projection_rows[0]
+    notes_recovered_projection_row1 := mut &notes_recovered_projection_rows[1]
+    I !expect_cell(notes_recovered_projection_row0, 0, "1") { println("T167 notes recovery: projection row0 id"); return 255 }
+    I !expect_cell(notes_recovered_projection_row0, 1, "memo") { println("T167 notes recovery: projection row0 body"); return 255 }
+    I !expect_cell(notes_recovered_projection_row1, 0, "2") { println("T167 notes recovery: projection row1 id"); return 255 }
+    I !expect_cell(notes_recovered_projection_row1, 1, "todo") { println("T167 notes recovery: projection row1 body"); return 255 }
     notes_recovered_projection.free_owned_text()
     notes_recovered_projection.free_owned_text()
 
