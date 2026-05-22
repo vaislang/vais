@@ -2188,7 +2188,7 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text)") {
+    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text)") {
         Ok(_) => { println("T155 notes: too many columns unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -2904,7 +2904,7 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text)") {
+    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text)") {
         Ok(_) => { println("T195 tickets: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3220,6 +3220,125 @@ fn main() -> i64 {
     match tickets_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T195 tickets: reopen close failed"); return 255 },
+    }
+
+    # --- Catalog-derived variable-column descriptor metadata ---
+    contacts_suffix := mut time_micros()
+    contacts_path := mut "embedded_sql_api_roundtrip_contacts_db_{contacts_suffix}"
+    contacts_cfg := mut EmbeddedConfig.default()
+    contacts_cfg = contacts_cfg.with_data_dir(contacts_path.clone())
+    contacts_cfg = contacts_cfg.with_page_size(PAGE_SIZE_8K)
+    contacts_db := mut match EmbeddedDatabase.open(contacts_cfg) {
+        Ok(db) => db,
+        Err(_) => { println("T215 contacts: open failed"); return 255 },
+    }
+    match contacts_db.execute("create table contacts_bad_first (contact_id int, name text, email text, status text)") {
+        Ok(_) => { println("T215 contacts: wrong first column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_order (name text, id int, email text, status text)") {
+        Ok(_) => { println("T215 contacts: wrong order unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_dup (id int, name text, email text, email text)") {
+        Ok(_) => { println("T215 contacts: duplicate text column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text)") {
+        Ok(_) => { println("T215 contacts: extra column unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_type (id int, name text, email text, status int)") {
+        Ok(_) => { println("T215 contacts: wrong fourth type unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_constraint (id int, name text, email text not null, status text)") {
+        Ok(_) => { println("T215 contacts: constraint unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table books (id int, name text, email text, status text)") {
+        Ok(_) => { println("T215 contacts: registered descriptor collision unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    contacts_created := mut match contacts_db.execute("create table contacts (id int, name text, email text, status text)") {
+        Ok(count) => count,
+        Err(e) => { println("T215 contacts: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_created != 0 as u64 { println("T215 contacts: create affected rows"); return 255 }
+    contacts_table_id := mut 0 as u32
+    match contacts_db.catalog.get_table("contacts") {
+        Some(info) => {
+            contacts_table_id = info.table_id
+            I info.column_count != 4 as u16 { println("T215 contacts: catalog table column count"); return 255 }
+        },
+        None => { println("T215 contacts: catalog missing table"); return 255 },
+    }
+    contacts_col_refs := mut contacts_db.catalog.get_columns(contacts_table_id)
+    contacts_cols: Vec<ColumnInfo> := mut Vec.with_capacity(contacts_col_refs.len())
+    LF col_ref: &contacts_col_refs {
+        contacts_cols.push((**col_ref).clone())
+    }
+    I contacts_cols.len() != 4 as u64 { println("T215 contacts: catalog column count"); return 255 }
+    I !expect_catalog_column(&contacts_cols, 0, "id", "INT") { println("T215 contacts: catalog id column"); return 255 }
+    I !expect_catalog_column(&contacts_cols, 1, "name", "TEXT") { println("T215 contacts: catalog name column"); return 255 }
+    I !expect_catalog_column(&contacts_cols, 2, "email", "TEXT") { println("T215 contacts: catalog email column"); return 255 }
+    I !expect_catalog_column(&contacts_cols, 3, "status", "TEXT") { println("T215 contacts: catalog status column"); return 255 }
+    match contacts_db.execute("create table contacts (id int, name text, email text, status text)") {
+        Ok(_) => { println("T215 contacts: duplicate create unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("insert into contacts (id, name, email, status) values (1, 'ada', 'ada@example.test', 'active')") {
+        Ok(_) => { println("T215 contacts: insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.query("select * from contacts") {
+        Ok(_) => { println("T215 contacts: select unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T215 contacts: close failed"); return 255 },
+    }
+    contacts_reopen_cfg := mut EmbeddedConfig.default()
+    contacts_reopen_cfg = contacts_reopen_cfg.with_data_dir(contacts_path.clone())
+    contacts_reopen_cfg = contacts_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    contacts_reopened := mut match EmbeddedDatabase.open(contacts_reopen_cfg) {
+        Ok(db) => db,
+        Err(_) => { println("T215 contacts: reopen failed"); return 255 },
+    }
+    contacts_reopened_table_id := mut 0 as u32
+    match contacts_reopened.catalog.get_table("contacts") {
+        Some(info) => {
+            contacts_reopened_table_id = info.table_id
+            I info.column_count != 4 as u16 { println("T215 contacts: reopen table column count"); return 255 }
+        },
+        None => { println("T215 contacts: reopen missing table"); return 255 },
+    }
+    contacts_reopened_col_refs := mut contacts_reopened.catalog.get_columns(contacts_reopened_table_id)
+    contacts_reopened_cols: Vec<ColumnInfo> := mut Vec.with_capacity(contacts_reopened_col_refs.len())
+    LF col_ref: &contacts_reopened_col_refs {
+        contacts_reopened_cols.push((**col_ref).clone())
+    }
+    I contacts_reopened_cols.len() != 4 as u64 { println("T215 contacts: reopen catalog column count"); return 255 }
+    I !expect_catalog_column(&contacts_reopened_cols, 0, "id", "INT") { println("T215 contacts: reopen id column"); return 255 }
+    I !expect_catalog_column(&contacts_reopened_cols, 1, "name", "TEXT") { println("T215 contacts: reopen name column"); return 255 }
+    I !expect_catalog_column(&contacts_reopened_cols, 2, "email", "TEXT") { println("T215 contacts: reopen email column"); return 255 }
+    I !expect_catalog_column(&contacts_reopened_cols, 3, "status", "TEXT") { println("T215 contacts: reopen status column"); return 255 }
+    match contacts_reopened.execute("create table contacts (id int, name text, email text, status text)") {
+        Ok(_) => { println("T215 contacts: reopen duplicate create unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_reopened.execute("insert into contacts (id, name, email, status) values (2, 'grace', 'grace@example.test', 'active')") {
+        Ok(_) => { println("T215 contacts: reopen insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_reopened.query("select * from contacts") {
+        Ok(_) => { println("T215 contacts: reopen select unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T215 contacts: reopen close failed"); return 255 },
     }
 
     # --- Second registered descriptor: authors(id INT, name TEXT) ---
