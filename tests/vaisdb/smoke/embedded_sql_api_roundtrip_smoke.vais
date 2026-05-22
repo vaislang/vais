@@ -5391,6 +5391,140 @@ fn main() -> i64 {
         Err(_) => { println("T270 journals: recovered close failed"); return 255 },
     }
 
+    events_suffix := mut time_micros()
+    events_path := mut "embedded_sql_api_roundtrip_events_db_{events_suffix}"
+    events_cfg := mut EmbeddedConfig.default()
+    events_cfg = events_cfg.with_data_dir(events_path.clone())
+    events_cfg = events_cfg.with_page_size(PAGE_SIZE_8K)
+    events_db := mut match EmbeddedDatabase.open(events_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T280 events: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    events_created := mut match events_db.execute("create table events (id int, title text, state text)") {
+        Ok(n) => n,
+        Err(e) => { println("T280 events: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_created != 0 as u64 { println("T280 events: create affected rows"); return 255 }
+    events_table_id := mut 0 as u32
+    events_page_id := mut 0 as u32
+    match events_db.catalog.get_table("events") {
+        Some(info) => {
+            events_table_id = info.table_id
+            events_page_id = info.first_page_id
+        },
+        None => { println("T280 events: catalog missing table"); return 255 },
+    }
+    events_col_refs := mut events_db.catalog.get_columns(events_table_id)
+    events_cols: Vec<ColumnInfo> := mut Vec.with_capacity(events_col_refs.len())
+    LF col_ref: &events_col_refs {
+        events_cols.push((**col_ref).clone())
+    }
+    I events_cols.len() != 3 as u64 { println("T280 events: catalog column count"); return 255 }
+    I !expect_catalog_column(&events_cols, 0, "id", "INT") { println("T280 events: catalog id column"); return 255 }
+    I !expect_catalog_column(&events_cols, 1, "title", "TEXT") { println("T280 events: catalog title column"); return 255 }
+    I !expect_catalog_column(&events_cols, 2, "state", "TEXT") { println("T280 events: catalog state column"); return 255 }
+    events_empty_frame := mut match events_db.pool.fetch_page(FILE_ID_DATA, events_page_id) {
+        Ok(f) => f,
+        Err(_) => { println("T280 events: fetch empty page failed"); return 255 },
+    }
+    events_empty_page := mut events_db.pool.get_page(events_empty_frame)
+    events_pre_insert_page := mut copy_smoke_page(events_empty_page)
+    events_db.pool.unpin_page(events_empty_frame, false)
+    events_recovery_start_lsn := mut events_db.gcm.current_lsn()
+    events_insert_a := mut match events_db.execute("insert into events (id, title, state) values (1, 'launch', 'open')") {
+        Ok(n) => n,
+        Err(e) => { println("T280 events: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_insert_a != 1 as u64 { println("T280 events: first insert count"); return 255 }
+    events_insert_b := mut match events_db.execute("insert into events (id, title, state) values (2, 'ship', 'done')") {
+        Ok(n) => n,
+        Err(e) => { println("T280 events: second insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_insert_b != 1 as u64 { println("T280 events: second insert count"); return 255 }
+    events_select := mut match events_db.query("select * from events") {
+        Ok(r) => r,
+        Err(e) => { println("T280 events: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_select.column_count() != 3 as u64 { println("T280 events: select column count"); return 255 }
+    I events_select.row_count() != 2 as u64 { println("T280 events: select row count"); return 255 }
+    events_select_cols := mut events_select.get_columns()
+    I !expect_column(events_select_cols, 0, "id", "INT") { println("T280 events: select id column"); return 255 }
+    I !expect_column(events_select_cols, 1, "title", "TEXT") { println("T280 events: select title column"); return 255 }
+    I !expect_column(events_select_cols, 2, "state", "TEXT") { println("T280 events: select state column"); return 255 }
+    events_select_rows := mut events_select.get_rows()
+    events_select_row0 := mut &events_select_rows[0]
+    events_select_row1 := mut &events_select_rows[1]
+    I !expect_cell(events_select_row0, 0, "1") { println("T280 events: select row0 id"); return 255 }
+    I !expect_cell(events_select_row0, 1, "launch") { println("T280 events: select row0 title"); return 255 }
+    I !expect_cell(events_select_row0, 2, "open") { println("T280 events: select row0 state"); return 255 }
+    I !expect_cell(events_select_row1, 0, "2") { println("T280 events: select row1 id"); return 255 }
+    I !expect_cell(events_select_row1, 1, "ship") { println("T280 events: select row1 title"); return 255 }
+    I !expect_cell(events_select_row1, 2, "done") { println("T280 events: select row1 state"); return 255 }
+    events_select.free_owned_text()
+    events_select.free_owned_text()
+    match events_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T280 events: close failed"); return 255 },
+    }
+
+    events_reopen_cfg := mut EmbeddedConfig.default()
+    events_reopen_cfg = events_reopen_cfg.with_data_dir(events_path.clone())
+    events_reopen_cfg = events_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    events_reopened := mut match EmbeddedDatabase.open(events_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T280 events: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    events_reopened_select := mut match events_reopened.query("select * from events") {
+        Ok(r) => r,
+        Err(e) => { println("T280 events: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_reopened_select.column_count() != 3 as u64 { println("T280 events: reopen column count"); return 255 }
+    I events_reopened_select.row_count() != 2 as u64 { println("T280 events: reopen row count"); return 255 }
+    events_reopened_rows := mut events_reopened_select.get_rows()
+    events_reopened_row1 := mut &events_reopened_rows[1]
+    I !expect_cell(events_reopened_row1, 0, "2") { println("T280 events: reopen row1 id"); return 255 }
+    I !expect_cell(events_reopened_row1, 1, "ship") { println("T280 events: reopen row1 title"); return 255 }
+    I !expect_cell(events_reopened_row1, 2, "done") { println("T280 events: reopen row1 state"); return 255 }
+    events_reopened_select.free_owned_text()
+    events_reopened_select.free_owned_text()
+    match events_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T280 events: reopen close failed"); return 255 },
+    }
+
+    I restore_smoke_data_page(events_path.clone(), events_page_id, events_pre_insert_page) != 0 {
+        println("T280 events: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(events_path.clone(), events_recovery_start_lsn) != 0 {
+        println("T280 events: checkpoint rewind failed")
+        return 255
+    }
+    events_recovered_cfg := mut EmbeddedConfig.default()
+    events_recovered_cfg = events_recovered_cfg.with_data_dir(events_path.clone())
+    events_recovered_cfg = events_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    events_recovered := mut match EmbeddedDatabase.open(events_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T280 events: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    events_recovered_select := mut match events_recovered.query("select * from events") {
+        Ok(r) => r,
+        Err(e) => { println("T280 events: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_recovered_select.column_count() != 3 as u64 { println("T280 events: recovered column count"); return 255 }
+    I events_recovered_select.row_count() != 2 as u64 { println("T280 events: recovered row count"); return 255 }
+    events_recovered_rows := mut events_recovered_select.get_rows()
+    events_recovered_row0 := mut &events_recovered_rows[0]
+    I !expect_cell(events_recovered_row0, 0, "1") { println("T280 events: recovered row0 id"); return 255 }
+    I !expect_cell(events_recovered_row0, 1, "launch") { println("T280 events: recovered row0 title"); return 255 }
+    I !expect_cell(events_recovered_row0, 2, "open") { println("T280 events: recovered row0 state"); return 255 }
+    events_recovered_select.free_owned_text()
+    events_recovered_select.free_owned_text()
+    match events_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T280 events: recovered close failed"); return 255 },
+    }
+
     tasks_recovery_suffix := mut time_micros()
     tasks_recovery_path := mut "embedded_sql_api_roundtrip_tasks_recovery_db_{tasks_recovery_suffix}"
     tasks_recovery_cfg := mut EmbeddedConfig.default()
