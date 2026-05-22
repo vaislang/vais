@@ -2404,7 +2404,11 @@ fn main() -> i64 {
         Ok(r) => r,
         Err(e) => { println("T157 notes: body filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I notes_body_filter.column_count() != 2 as u64 { println("T261 notes: body filter column count"); return 255 }
     I notes_body_filter.row_count() != 1 as u64 { println("T157 notes: body filter row count"); return 255 }
+    notes_body_filter_cols := mut notes_body_filter.get_columns()
+    I !expect_column(notes_body_filter_cols, 0, "id", "INT") { println("T261 notes: body filter id column"); return 255 }
+    I !expect_column(notes_body_filter_cols, 1, "body", "TEXT") { println("T261 notes: body filter body column"); return 255 }
     notes_body_filter_rows := mut notes_body_filter.get_rows()
     notes_body_filter_row := mut &notes_body_filter_rows[0]
     I !expect_cell(notes_body_filter_row, 0, "1") { println("T157 notes: body filter id"); return 255 }
@@ -2416,13 +2420,29 @@ fn main() -> i64 {
         Ok(r) => r,
         Err(e) => { println("T157 notes: reversed body filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I notes_body_filter_reversed.column_count() != 2 as u64 { println("T261 notes: reversed body filter column count"); return 255 }
     I notes_body_filter_reversed.row_count() != 1 as u64 { println("T157 notes: reversed body filter row count"); return 255 }
+    notes_body_filter_reversed_cols := mut notes_body_filter_reversed.get_columns()
+    I !expect_column(notes_body_filter_reversed_cols, 0, "id", "INT") { println("T261 notes: reversed body filter id column"); return 255 }
+    I !expect_column(notes_body_filter_reversed_cols, 1, "body", "TEXT") { println("T261 notes: reversed body filter body column"); return 255 }
     notes_body_filter_reversed_rows := mut notes_body_filter_reversed.get_rows()
     notes_body_filter_reversed_row := mut &notes_body_filter_reversed_rows[0]
     I !expect_cell(notes_body_filter_reversed_row, 0, "2") { println("T157 notes: reversed body filter id"); return 255 }
     I !expect_cell(notes_body_filter_reversed_row, 1, "todo") { println("T157 notes: reversed body filter body"); return 255 }
     notes_body_filter_reversed.free_owned_text()
     notes_body_filter_reversed.free_owned_text()
+
+    notes_body_filter_missing := mut match notes_db.query("select * from notes where body = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T261 notes: missing body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_body_filter_missing.column_count() != 2 as u64 { println("T261 notes: missing body filter column count"); return 255 }
+    I notes_body_filter_missing.row_count() != 0 as u64 { println("T261 notes: missing body filter row count"); return 255 }
+    notes_body_filter_missing_cols := mut notes_body_filter_missing.get_columns()
+    I !expect_column(notes_body_filter_missing_cols, 0, "id", "INT") { println("T261 notes: missing body filter id column"); return 255 }
+    I !expect_column(notes_body_filter_missing_cols, 1, "body", "TEXT") { println("T261 notes: missing body filter body column"); return 255 }
+    notes_body_filter_missing.free_owned_text()
+    notes_body_filter_missing.free_owned_text()
 
     notes_projection_id_filter := mut match notes_db.query("select id, body from notes where id = 1") {
         Ok(r) => r,
@@ -2594,13 +2614,39 @@ fn main() -> i64 {
         Ok(r) => r,
         Err(e) => { println("T157 notes: reopen body filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I notes_reopened_body_filter.column_count() != 2 as u64 { println("T261 notes: reopen body filter column count"); return 255 }
     I notes_reopened_body_filter.row_count() != 1 as u64 { println("T157 notes: reopen body filter row count"); return 255 }
+    notes_reopened_body_filter_cols := mut notes_reopened_body_filter.get_columns()
+    I !expect_column(notes_reopened_body_filter_cols, 0, "id", "INT") { println("T261 notes: reopen body filter id column"); return 255 }
+    I !expect_column(notes_reopened_body_filter_cols, 1, "body", "TEXT") { println("T261 notes: reopen body filter body column"); return 255 }
     notes_reopened_body_filter_rows := mut notes_reopened_body_filter.get_rows()
     notes_reopened_body_filter_row := mut &notes_reopened_body_filter_rows[0]
     I !expect_cell(notes_reopened_body_filter_row, 0, "2") { println("T157 notes: reopen body filter id"); return 255 }
     I !expect_cell(notes_reopened_body_filter_row, 1, "todo") { println("T157 notes: reopen body filter body"); return 255 }
     notes_reopened_body_filter.free_owned_text()
     notes_reopened_body_filter.free_owned_text()
+    notes_reopened_body_filter_reversed := mut match notes_reopened.query("select * from notes where 'memo' = body") {
+        Ok(r) => r,
+        Err(e) => { println("T261 notes: reopen reversed body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_reopened_body_filter_reversed.row_count() != 1 as u64 { println("T261 notes: reopen reversed body filter row count"); return 255 }
+    notes_reopened_body_filter_reversed_rows := mut notes_reopened_body_filter_reversed.get_rows()
+    notes_reopened_body_filter_reversed_row := mut &notes_reopened_body_filter_reversed_rows[0]
+    I !expect_cell(notes_reopened_body_filter_reversed_row, 0, "1") { println("T261 notes: reopen reversed body filter id"); return 255 }
+    I !expect_cell(notes_reopened_body_filter_reversed_row, 1, "memo") { println("T261 notes: reopen reversed body filter body"); return 255 }
+    notes_reopened_body_filter_reversed.free_owned_text()
+    notes_reopened_body_filter_reversed.free_owned_text()
+    notes_reopened_body_filter_missing := mut match notes_reopened.query("select * from notes where body = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T261 notes: reopen missing body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_reopened_body_filter_missing.column_count() != 2 as u64 { println("T261 notes: reopen missing body filter column count"); return 255 }
+    I notes_reopened_body_filter_missing.row_count() != 0 as u64 { println("T261 notes: reopen missing body filter row count"); return 255 }
+    notes_reopened_body_filter_missing_cols := mut notes_reopened_body_filter_missing.get_columns()
+    I !expect_column(notes_reopened_body_filter_missing_cols, 0, "id", "INT") { println("T261 notes: reopen missing body filter id column"); return 255 }
+    I !expect_column(notes_reopened_body_filter_missing_cols, 1, "body", "TEXT") { println("T261 notes: reopen missing body filter body column"); return 255 }
+    notes_reopened_body_filter_missing.free_owned_text()
+    notes_reopened_body_filter_missing.free_owned_text()
     notes_reopened_projection_filter := mut match notes_reopened.query("select id, body from notes where id = 1") {
         Ok(r) => r,
         Err(e) => { println("T157 notes: reopen projection filter failed: {e.message}: {e.hint}"); return 255 },
@@ -4615,13 +4661,38 @@ fn main() -> i64 {
         Ok(r) => r,
         Err(e) => { println("T167 notes recovery: recovered body filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I notes_recovered_body_filter.column_count() != 2 as u64 { println("T261 notes recovery: body filter column count"); return 255 }
     I notes_recovered_body_filter.row_count() != 1 as u64 { println("T167 notes recovery: body filter row count"); return 255 }
+    notes_recovered_body_filter_cols := mut notes_recovered_body_filter.get_columns()
+    I !expect_column(notes_recovered_body_filter_cols, 0, "id", "INT") { println("T261 notes recovery: body filter id column"); return 255 }
+    I !expect_column(notes_recovered_body_filter_cols, 1, "body", "TEXT") { println("T261 notes recovery: body filter body column"); return 255 }
     notes_recovered_body_filter_rows := mut notes_recovered_body_filter.get_rows()
     notes_recovered_body_filter_row := mut &notes_recovered_body_filter_rows[0]
     I !expect_cell(notes_recovered_body_filter_row, 0, "2") { println("T167 notes recovery: body filter id"); return 255 }
     I !expect_cell(notes_recovered_body_filter_row, 1, "todo") { println("T167 notes recovery: body filter body"); return 255 }
     notes_recovered_body_filter.free_owned_text()
     notes_recovered_body_filter.free_owned_text()
+
+    notes_recovered_body_filter_reversed := mut match notes_recovered.query("select * from notes where 'memo' = body") {
+        Ok(r) => r,
+        Err(e) => { println("T261 notes recovery: recovered reversed body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_body_filter_reversed.row_count() != 1 as u64 { println("T261 notes recovery: reversed body filter row count"); return 255 }
+    notes_recovered_body_filter_reversed_rows := mut notes_recovered_body_filter_reversed.get_rows()
+    notes_recovered_body_filter_reversed_row := mut &notes_recovered_body_filter_reversed_rows[0]
+    I !expect_cell(notes_recovered_body_filter_reversed_row, 0, "1") { println("T261 notes recovery: reversed body filter id"); return 255 }
+    I !expect_cell(notes_recovered_body_filter_reversed_row, 1, "memo") { println("T261 notes recovery: reversed body filter body"); return 255 }
+    notes_recovered_body_filter_reversed.free_owned_text()
+    notes_recovered_body_filter_reversed.free_owned_text()
+
+    notes_recovered_body_filter_missing := mut match notes_recovered.query("select * from notes where body = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T261 notes recovery: recovered missing body filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I notes_recovered_body_filter_missing.column_count() != 2 as u64 { println("T261 notes recovery: missing body filter column count"); return 255 }
+    I notes_recovered_body_filter_missing.row_count() != 0 as u64 { println("T261 notes recovery: missing body filter row count"); return 255 }
+    notes_recovered_body_filter_missing.free_owned_text()
+    notes_recovered_body_filter_missing.free_owned_text()
 
     notes_recovered_id_projection_filter := mut match notes_recovered.query("select id, body from notes where id = 1") {
         Ok(r) => r,
