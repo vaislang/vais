@@ -5039,6 +5039,101 @@ fn main() -> i64 {
     I !expect_cell(journals_select_row1, 1, "sent") { println("T270 journals: select row1 summary"); return 255 }
     journals_select.free_owned_text()
     journals_select.free_owned_text()
+
+    journals_projection := mut match journals_db.query("select id, summary from journals") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_projection.column_count() != 2 as u64 { println("T272 journals: projection column count"); return 255 }
+    I journals_projection.row_count() != 2 as u64 { println("T272 journals: projection row count"); return 255 }
+    journals_projection_cols := mut journals_projection.get_columns()
+    I !expect_column(journals_projection_cols, 0, "id", "INT") { println("T272 journals: projection id column"); return 255 }
+    I !expect_column(journals_projection_cols, 1, "summary", "TEXT") { println("T272 journals: projection summary column"); return 255 }
+    journals_projection_rows := mut journals_projection.get_rows()
+    journals_projection_row0 := mut &journals_projection_rows[0]
+    journals_projection_row1 := mut &journals_projection_rows[1]
+    I !expect_cell(journals_projection_row0, 0, "1") { println("T272 journals: projection row0 id"); return 255 }
+    I !expect_cell(journals_projection_row0, 1, "draft") { println("T272 journals: projection row0 summary"); return 255 }
+    I !expect_cell(journals_projection_row1, 0, "2") { println("T272 journals: projection row1 id"); return 255 }
+    I !expect_cell(journals_projection_row1, 1, "sent") { println("T272 journals: projection row1 summary"); return 255 }
+    journals_projection.free_owned_text()
+    journals_projection.free_owned_text()
+
+    journals_id_filter := mut match journals_db.query("select * from journals where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_id_filter.column_count() != 2 as u64 { println("T272 journals: id filter column count"); return 255 }
+    I journals_id_filter.row_count() != 1 as u64 { println("T272 journals: id filter row count"); return 255 }
+    journals_id_filter_cols := mut journals_id_filter.get_columns()
+    I !expect_column(journals_id_filter_cols, 0, "id", "INT") { println("T272 journals: id filter id column"); return 255 }
+    I !expect_column(journals_id_filter_cols, 1, "summary", "TEXT") { println("T272 journals: id filter summary column"); return 255 }
+    journals_id_filter_rows := mut journals_id_filter.get_rows()
+    journals_id_filter_row := mut &journals_id_filter_rows[0]
+    I !expect_cell(journals_id_filter_row, 0, "1") { println("T272 journals: id filter id"); return 255 }
+    I !expect_cell(journals_id_filter_row, 1, "draft") { println("T272 journals: id filter summary"); return 255 }
+    journals_id_filter.free_owned_text()
+    journals_id_filter.free_owned_text()
+
+    journals_id_filter_reversed := mut match journals_db.query("select * from journals where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_id_filter_reversed.column_count() != 2 as u64 { println("T272 journals: reversed id filter column count"); return 255 }
+    I journals_id_filter_reversed.row_count() != 1 as u64 { println("T272 journals: reversed id filter row count"); return 255 }
+    journals_id_filter_reversed_rows := mut journals_id_filter_reversed.get_rows()
+    journals_id_filter_reversed_row := mut &journals_id_filter_reversed_rows[0]
+    I !expect_cell(journals_id_filter_reversed_row, 0, "2") { println("T272 journals: reversed id filter id"); return 255 }
+    I !expect_cell(journals_id_filter_reversed_row, 1, "sent") { println("T272 journals: reversed id filter summary"); return 255 }
+    journals_id_filter_reversed.free_owned_text()
+    journals_id_filter_reversed.free_owned_text()
+
+    journals_id_filter_missing := mut match journals_db.query("select * from journals where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_id_filter_missing.column_count() != 2 as u64 { println("T272 journals: missing id filter column count"); return 255 }
+    I journals_id_filter_missing.row_count() != 0 as u64 { println("T272 journals: missing id filter row count"); return 255 }
+    journals_id_filter_missing.free_owned_text()
+    journals_id_filter_missing.free_owned_text()
+
+    journals_text_filter := mut match journals_db.query("select * from journals where summary = 'draft'") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_text_filter.column_count() != 2 as u64 { println("T272 journals: text filter column count"); return 255 }
+    I journals_text_filter.row_count() != 1 as u64 { println("T272 journals: text filter row count"); return 255 }
+    journals_text_filter_cols := mut journals_text_filter.get_columns()
+    I !expect_column(journals_text_filter_cols, 0, "id", "INT") { println("T272 journals: text filter id column"); return 255 }
+    I !expect_column(journals_text_filter_cols, 1, "summary", "TEXT") { println("T272 journals: text filter summary column"); return 255 }
+    journals_text_filter_rows := mut journals_text_filter.get_rows()
+    journals_text_filter_row := mut &journals_text_filter_rows[0]
+    I !expect_cell(journals_text_filter_row, 0, "1") { println("T272 journals: text filter id"); return 255 }
+    I !expect_cell(journals_text_filter_row, 1, "draft") { println("T272 journals: text filter summary"); return 255 }
+    journals_text_filter.free_owned_text()
+    journals_text_filter.free_owned_text()
+
+    journals_text_filter_reversed := mut match journals_db.query("select * from journals where 'sent' = summary") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: reversed text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_text_filter_reversed.column_count() != 2 as u64 { println("T272 journals: reversed text filter column count"); return 255 }
+    I journals_text_filter_reversed.row_count() != 1 as u64 { println("T272 journals: reversed text filter row count"); return 255 }
+    journals_text_filter_reversed_rows := mut journals_text_filter_reversed.get_rows()
+    journals_text_filter_reversed_row := mut &journals_text_filter_reversed_rows[0]
+    I !expect_cell(journals_text_filter_reversed_row, 0, "2") { println("T272 journals: reversed text filter id"); return 255 }
+    I !expect_cell(journals_text_filter_reversed_row, 1, "sent") { println("T272 journals: reversed text filter summary"); return 255 }
+    journals_text_filter_reversed.free_owned_text()
+    journals_text_filter_reversed.free_owned_text()
+
+    journals_text_filter_missing := mut match journals_db.query("select * from journals where summary = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: missing text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_text_filter_missing.column_count() != 2 as u64 { println("T272 journals: missing text filter column count"); return 255 }
+    I journals_text_filter_missing.row_count() != 0 as u64 { println("T272 journals: missing text filter row count"); return 255 }
+    journals_text_filter_missing.free_owned_text()
+    journals_text_filter_missing.free_owned_text()
     match journals_db.close() {
         Ok(_) => {},
         Err(_) => { println("T270 journals: close failed"); return 255 },
@@ -5069,6 +5164,35 @@ fn main() -> i64 {
     I !expect_cell(journals_reopened_row1, 1, "sent") { println("T270 journals: reopen row1 summary"); return 255 }
     journals_reopened_select.free_owned_text()
     journals_reopened_select.free_owned_text()
+    journals_reopened_projection := mut match journals_reopened.query("select id, summary from journals") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_reopened_projection.row_count() != 2 as u64 { println("T272 journals: reopen projection row count"); return 255 }
+    journals_reopened_projection.free_owned_text()
+    journals_reopened_projection.free_owned_text()
+    journals_reopened_id_filter := mut match journals_reopened.query("select * from journals where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: reopen id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_reopened_id_filter.row_count() != 1 as u64 { println("T272 journals: reopen id filter row count"); return 255 }
+    journals_reopened_id_filter_rows := mut journals_reopened_id_filter.get_rows()
+    journals_reopened_id_filter_row := mut &journals_reopened_id_filter_rows[0]
+    I !expect_cell(journals_reopened_id_filter_row, 0, "1") { println("T272 journals: reopen id filter id"); return 255 }
+    I !expect_cell(journals_reopened_id_filter_row, 1, "draft") { println("T272 journals: reopen id filter summary"); return 255 }
+    journals_reopened_id_filter.free_owned_text()
+    journals_reopened_id_filter.free_owned_text()
+    journals_reopened_text_filter := mut match journals_reopened.query("select * from journals where summary = 'sent'") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: reopen text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_reopened_text_filter.row_count() != 1 as u64 { println("T272 journals: reopen text filter row count"); return 255 }
+    journals_reopened_text_filter_rows := mut journals_reopened_text_filter.get_rows()
+    journals_reopened_text_filter_row := mut &journals_reopened_text_filter_rows[0]
+    I !expect_cell(journals_reopened_text_filter_row, 0, "2") { println("T272 journals: reopen text filter id"); return 255 }
+    I !expect_cell(journals_reopened_text_filter_row, 1, "sent") { println("T272 journals: reopen text filter summary"); return 255 }
+    journals_reopened_text_filter.free_owned_text()
+    journals_reopened_text_filter.free_owned_text()
     match journals_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T270 journals: reopen close failed"); return 255 },
@@ -5107,6 +5231,35 @@ fn main() -> i64 {
     I !expect_cell(journals_recovered_row1, 1, "sent") { println("T270 journals: recovered row1 summary"); return 255 }
     journals_recovered_select.free_owned_text()
     journals_recovered_select.free_owned_text()
+    journals_recovered_projection := mut match journals_recovered.query("select id, summary from journals") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_recovered_projection.row_count() != 2 as u64 { println("T272 journals: recovered projection row count"); return 255 }
+    journals_recovered_projection.free_owned_text()
+    journals_recovered_projection.free_owned_text()
+    journals_recovered_id_filter := mut match journals_recovered.query("select * from journals where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_recovered_id_filter.row_count() != 1 as u64 { println("T272 journals: recovered id filter row count"); return 255 }
+    journals_recovered_id_filter_rows := mut journals_recovered_id_filter.get_rows()
+    journals_recovered_id_filter_row := mut &journals_recovered_id_filter_rows[0]
+    I !expect_cell(journals_recovered_id_filter_row, 0, "2") { println("T272 journals: recovered id filter id"); return 255 }
+    I !expect_cell(journals_recovered_id_filter_row, 1, "sent") { println("T272 journals: recovered id filter summary"); return 255 }
+    journals_recovered_id_filter.free_owned_text()
+    journals_recovered_id_filter.free_owned_text()
+    journals_recovered_text_filter := mut match journals_recovered.query("select * from journals where 'draft' = summary") {
+        Ok(r) => r,
+        Err(e) => { println("T272 journals: recovered text filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_recovered_text_filter.row_count() != 1 as u64 { println("T272 journals: recovered text filter row count"); return 255 }
+    journals_recovered_text_filter_rows := mut journals_recovered_text_filter.get_rows()
+    journals_recovered_text_filter_row := mut &journals_recovered_text_filter_rows[0]
+    I !expect_cell(journals_recovered_text_filter_row, 0, "1") { println("T272 journals: recovered text filter id"); return 255 }
+    I !expect_cell(journals_recovered_text_filter_row, 1, "draft") { println("T272 journals: recovered text filter summary"); return 255 }
+    journals_recovered_text_filter.free_owned_text()
+    journals_recovered_text_filter.free_owned_text()
     match journals_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T270 journals: recovered close failed"); return 255 },
