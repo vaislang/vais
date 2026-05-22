@@ -4857,6 +4857,191 @@ fn main() -> i64 {
         Err(_) => { println("T201 tickets recovery: repeat close failed"); return 255 },
     }
 
+    contacts_recovery_suffix := mut time_micros()
+    contacts_recovery_path := mut "embedded_sql_api_roundtrip_contacts_recovery_db_{contacts_recovery_suffix}"
+    contacts_recovery_cfg := mut EmbeddedConfig.default()
+    contacts_recovery_cfg = contacts_recovery_cfg.with_data_dir(contacts_recovery_path.clone())
+    contacts_recovery_cfg = contacts_recovery_cfg.with_page_size(PAGE_SIZE_8K)
+    contacts_recovery_db := mut match EmbeddedDatabase.open(contacts_recovery_cfg) {
+        Ok(v) => v,
+        Err(_) => { println("T221 contacts recovery: open failed"); return 255 },
+    }
+    match contacts_recovery_db.execute("create table contacts (id int, name text, email text, status text)") {
+        Ok(_) => {},
+        Err(e) => { println("T221 contacts recovery: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    contacts_recovery_page_id := mut 0 as u32
+    match contacts_recovery_db.catalog.get_table("contacts") {
+        Some(info) => {
+            contacts_recovery_page_id = info.first_page_id
+        },
+        None => {},
+    }
+    I contacts_recovery_page_id == 0 { println("T221 contacts recovery: missing heap page"); return 255 }
+    contacts_recovery_empty_frame := mut match contacts_recovery_db.pool.fetch_page(FILE_ID_DATA, contacts_recovery_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T221 contacts recovery: fetch empty page failed"); return 255 },
+    }
+    contacts_recovery_empty_page := mut contacts_recovery_db.pool.get_page(contacts_recovery_empty_frame)
+    contacts_recovery_pre_insert_page := mut copy_smoke_page(contacts_recovery_empty_page)
+    contacts_recovery_db.pool.unpin_page(contacts_recovery_empty_frame, false)
+
+    contacts_recovery_start_lsn := mut contacts_recovery_db.gcm.current_lsn()
+    contacts_recovery_inserted_a := mut match contacts_recovery_db.execute("insert into contacts (id, name, email, status) values (1, 'ada', 'ada@example.test', 'active')") {
+        Ok(n) => n,
+        Err(e) => { println("T221 contacts recovery: descriptor-order insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovery_inserted_a != 1 as u64 { println("T221 contacts recovery: descriptor-order insert count"); return 255 }
+    contacts_recovery_inserted_b := mut match contacts_recovery_db.execute("insert into contacts (status, email, id, name) values ('inactive', 'grace@example.test', 2, 'grace')") {
+        Ok(n) => n,
+        Err(e) => { println("T221 contacts recovery: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovery_inserted_b != 1 as u64 { println("T221 contacts recovery: reordered insert count"); return 255 }
+    contacts_recovery_before_close := mut match contacts_recovery_db.query("select * from contacts") {
+        Ok(r) => r,
+        Err(e) => { println("T221 contacts recovery: before-close select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovery_before_close.row_count() != 2 as u64 { println("T221 contacts recovery: before-close row count"); return 255 }
+    contacts_recovery_before_close.free_owned_text()
+    contacts_recovery_before_close.free_owned_text()
+    match contacts_recovery_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T221 contacts recovery: close failed"); return 255 },
+    }
+
+    I restore_smoke_data_page(contacts_recovery_path.clone(), contacts_recovery_page_id, contacts_recovery_pre_insert_page) != 0 {
+        println("T221 contacts recovery: restore heap page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(contacts_recovery_path.clone(), contacts_recovery_start_lsn) != 0 {
+        println("T221 contacts recovery: checkpoint reset failed")
+        return 255
+    }
+
+    contacts_recovered_cfg := mut EmbeddedConfig.default()
+    contacts_recovered_cfg = contacts_recovered_cfg.with_data_dir(contacts_recovery_path.clone())
+    contacts_recovered_cfg = contacts_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    contacts_recovered := mut match EmbeddedDatabase.open(contacts_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T221 contacts recovery: reopen recovery failed: {e.message}: {e.hint}"); return 255 },
+    }
+    contacts_recovered_result := mut match contacts_recovered.query("select * from contacts") {
+        Ok(r) => r,
+        Err(e) => { println("T221 contacts recovery: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovered_result.column_count() != 4 as u64 { println("T221 contacts recovery: recovered column count"); return 255 }
+    I contacts_recovered_result.row_count() != 2 as u64 { println("T221 contacts recovery: recovered row count"); return 255 }
+    contacts_recovered_cols := mut contacts_recovered_result.get_columns()
+    I !expect_column(contacts_recovered_cols, 0, "id", "INT") { println("T221 contacts recovery: recovered id column"); return 255 }
+    I !expect_column(contacts_recovered_cols, 1, "name", "TEXT") { println("T221 contacts recovery: recovered name column"); return 255 }
+    I !expect_column(contacts_recovered_cols, 2, "email", "TEXT") { println("T221 contacts recovery: recovered email column"); return 255 }
+    I !expect_column(contacts_recovered_cols, 3, "status", "TEXT") { println("T221 contacts recovery: recovered status column"); return 255 }
+    contacts_recovered_rows := mut contacts_recovered_result.get_rows()
+    contacts_recovered_row0 := mut &contacts_recovered_rows[0]
+    contacts_recovered_row1 := mut &contacts_recovered_rows[1]
+    I !expect_cell(contacts_recovered_row0, 0, "1") { println("T221 contacts recovery: recovered row0 id"); return 255 }
+    I !expect_cell(contacts_recovered_row0, 1, "ada") { println("T221 contacts recovery: recovered row0 name"); return 255 }
+    I !expect_cell(contacts_recovered_row0, 2, "ada@example.test") { println("T221 contacts recovery: recovered row0 email"); return 255 }
+    I !expect_cell(contacts_recovered_row0, 3, "active") { println("T221 contacts recovery: recovered row0 status"); return 255 }
+    I !expect_cell(contacts_recovered_row1, 0, "2") { println("T221 contacts recovery: recovered row1 id"); return 255 }
+    I !expect_cell(contacts_recovered_row1, 1, "grace") { println("T221 contacts recovery: recovered row1 name"); return 255 }
+    I !expect_cell(contacts_recovered_row1, 2, "grace@example.test") { println("T221 contacts recovery: recovered row1 email"); return 255 }
+    I !expect_cell(contacts_recovered_row1, 3, "inactive") { println("T221 contacts recovery: recovered row1 status"); return 255 }
+    contacts_recovered_result.free_owned_text()
+    contacts_recovered_result.free_owned_text()
+
+    contacts_recovered_projection := mut match contacts_recovered.query("select id, name, email, status from contacts") {
+        Ok(r) => r,
+        Err(e) => { println("T221 contacts recovery: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovered_projection.column_count() != 4 as u64 { println("T221 contacts recovery: projection column count"); return 255 }
+    I contacts_recovered_projection.row_count() != 2 as u64 { println("T221 contacts recovery: projection row count"); return 255 }
+    contacts_recovered_projection.free_owned_text()
+    contacts_recovered_projection.free_owned_text()
+
+    contacts_recovered_status_filter := mut match contacts_recovered.query("select * from contacts where status = 'active'") {
+        Ok(r) => r,
+        Err(e) => { println("T221 contacts recovery: recovered status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovered_status_filter.row_count() != 1 as u64 { println("T221 contacts recovery: status filter row count"); return 255 }
+    contacts_recovered_status_filter_rows := mut contacts_recovered_status_filter.get_rows()
+    contacts_recovered_status_filter_row := mut &contacts_recovered_status_filter_rows[0]
+    I !expect_cell(contacts_recovered_status_filter_row, 0, "1") { println("T221 contacts recovery: status filter id"); return 255 }
+    I !expect_cell(contacts_recovered_status_filter_row, 1, "ada") { println("T221 contacts recovery: status filter name"); return 255 }
+    I !expect_cell(contacts_recovered_status_filter_row, 2, "ada@example.test") { println("T221 contacts recovery: status filter email"); return 255 }
+    I !expect_cell(contacts_recovered_status_filter_row, 3, "active") { println("T221 contacts recovery: status filter status"); return 255 }
+    contacts_recovered_status_filter.free_owned_text()
+    contacts_recovered_status_filter.free_owned_text()
+
+    contacts_recovered_id_filter := mut match contacts_recovered.query("select * from contacts where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T221 contacts recovery: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovered_id_filter.row_count() != 1 as u64 { println("T221 contacts recovery: id filter row count"); return 255 }
+    contacts_recovered_id_filter_rows := mut contacts_recovered_id_filter.get_rows()
+    contacts_recovered_id_filter_row := mut &contacts_recovered_id_filter_rows[0]
+    I !expect_cell(contacts_recovered_id_filter_row, 0, "2") { println("T221 contacts recovery: id filter id"); return 255 }
+    I !expect_cell(contacts_recovered_id_filter_row, 1, "grace") { println("T221 contacts recovery: id filter name"); return 255 }
+    I !expect_cell(contacts_recovered_id_filter_row, 2, "grace@example.test") { println("T221 contacts recovery: id filter email"); return 255 }
+    I !expect_cell(contacts_recovered_id_filter_row, 3, "inactive") { println("T221 contacts recovery: id filter status"); return 255 }
+    contacts_recovered_id_filter.free_owned_text()
+    contacts_recovered_id_filter.free_owned_text()
+
+    contacts_recovered_insert := mut match contacts_recovered.execute("insert into contacts (email, status, id, name) values ('katherine@example.test', 'active', 3, 'katherine')") {
+        Ok(n) => n,
+        Err(e) => { println("T221 contacts recovery: post-recovery insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovered_insert != 1 as u64 { println("T221 contacts recovery: post-recovery insert count"); return 255 }
+    contacts_recovered_after_insert := mut match contacts_recovered.query("select * from contacts") {
+        Ok(r) => r,
+        Err(e) => { println("T221 contacts recovery: after-insert select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovered_after_insert.row_count() != 3 as u64 { println("T221 contacts recovery: after-insert row count"); return 255 }
+    contacts_recovered_after_insert.free_owned_text()
+    contacts_recovered_after_insert.free_owned_text()
+    match contacts_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T221 contacts recovery: recovered close failed"); return 255 },
+    }
+
+    contacts_recovered_repeat_cfg := mut EmbeddedConfig.default()
+    contacts_recovered_repeat_cfg = contacts_recovered_repeat_cfg.with_data_dir(contacts_recovery_path.clone())
+    contacts_recovered_repeat_cfg = contacts_recovered_repeat_cfg.with_page_size(PAGE_SIZE_8K)
+    contacts_recovered_repeat := mut match EmbeddedDatabase.open(contacts_recovered_repeat_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T221 contacts recovery: repeat open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    contacts_recovered_repeat_result := mut match contacts_recovered_repeat.query("select * from contacts") {
+        Ok(r) => r,
+        Err(e) => { println("T221 contacts recovery: repeat select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovered_repeat_result.row_count() != 3 as u64 { println("T221 contacts recovery: repeat row count"); return 255 }
+    contacts_recovered_repeat_rows := mut contacts_recovered_repeat_result.get_rows()
+    contacts_recovered_seen_ada := mut false
+    contacts_recovered_seen_grace := mut false
+    contacts_recovered_seen_katherine := mut false
+    LF ri: 0..contacts_recovered_repeat_rows.len() {
+        candidate := mut &contacts_recovered_repeat_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada") && expect_cell(candidate, 2, "ada@example.test") && expect_cell(candidate, 3, "active") {
+            contacts_recovered_seen_ada = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") && expect_cell(candidate, 2, "grace@example.test") && expect_cell(candidate, 3, "inactive") {
+            contacts_recovered_seen_grace = true
+        }
+        I expect_cell(candidate, 0, "3") && expect_cell(candidate, 1, "katherine") && expect_cell(candidate, 2, "katherine@example.test") && expect_cell(candidate, 3, "active") {
+            contacts_recovered_seen_katherine = true
+        }
+    }
+    I !contacts_recovered_seen_ada { println("T221 contacts recovery: repeat missing ada"); return 255 }
+    I !contacts_recovered_seen_grace { println("T221 contacts recovery: repeat missing grace"); return 255 }
+    I !contacts_recovered_seen_katherine { println("T221 contacts recovery: repeat missing katherine"); return 255 }
+    contacts_recovered_repeat_result.free_owned_text()
+    contacts_recovered_repeat_result.free_owned_text()
+    match contacts_recovered_repeat.close() {
+        Ok(_) => {},
+        Err(_) => { println("T221 contacts recovery: repeat close failed"); return 255 },
+    }
+
     # --- Promoted PRIMARY KEY subset: people(id INT PRIMARY KEY, name TEXT) ---
     #
     # The fixed id primary key is stored in catalog column metadata and creates
