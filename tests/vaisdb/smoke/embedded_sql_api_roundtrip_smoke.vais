@@ -3459,7 +3459,13 @@ fn main() -> i64 {
         Ok(r) => r,
         Err(e) => { println("T219 contacts: status filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I contacts_status_filter.column_count() != 4 as u64 { println("T219 contacts: status filter column count"); return 255 }
     I contacts_status_filter.row_count() != 1 as u64 { println("T219 contacts: status filter row count"); return 255 }
+    contacts_status_filter_cols := mut contacts_status_filter.get_columns()
+    I !expect_column(contacts_status_filter_cols, 0, "id", "INT") { println("T219 contacts: status filter id column"); return 255 }
+    I !expect_column(contacts_status_filter_cols, 1, "name", "TEXT") { println("T219 contacts: status filter name column"); return 255 }
+    I !expect_column(contacts_status_filter_cols, 2, "email", "TEXT") { println("T219 contacts: status filter email column"); return 255 }
+    I !expect_column(contacts_status_filter_cols, 3, "status", "TEXT") { println("T219 contacts: status filter status column"); return 255 }
     contacts_status_filter_rows := mut contacts_status_filter.get_rows()
     contacts_status_filter_row := mut &contacts_status_filter_rows[0]
     I !expect_cell(contacts_status_filter_row, 0, "1") { println("T219 contacts: status filter id"); return 255 }
@@ -3473,9 +3479,25 @@ fn main() -> i64 {
         Ok(r) => r,
         Err(e) => { println("T219 contacts: reversed status filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I contacts_reversed_status_filter.column_count() != 4 as u64 { println("T219 contacts: reversed status filter column count"); return 255 }
     I contacts_reversed_status_filter.row_count() != 1 as u64 { println("T219 contacts: reversed status filter row count"); return 255 }
+    contacts_reversed_status_filter_rows := mut contacts_reversed_status_filter.get_rows()
+    contacts_reversed_status_filter_row := mut &contacts_reversed_status_filter_rows[0]
+    I !expect_cell(contacts_reversed_status_filter_row, 0, "1") { println("T219 contacts: reversed status filter id"); return 255 }
+    I !expect_cell(contacts_reversed_status_filter_row, 1, "ada") { println("T219 contacts: reversed status filter name"); return 255 }
+    I !expect_cell(contacts_reversed_status_filter_row, 2, "ada@example.test") { println("T219 contacts: reversed status filter email"); return 255 }
+    I !expect_cell(contacts_reversed_status_filter_row, 3, "active") { println("T219 contacts: reversed status filter status"); return 255 }
     contacts_reversed_status_filter.free_owned_text()
     contacts_reversed_status_filter.free_owned_text()
+
+    contacts_missing_status_filter := mut match contacts_db.query("select * from contacts where status = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T219 contacts: missing status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_missing_status_filter.column_count() != 4 as u64 { println("T219 contacts: missing status filter column count"); return 255 }
+    I contacts_missing_status_filter.row_count() != 0 as u64 { println("T219 contacts: missing status filter row count"); return 255 }
+    contacts_missing_status_filter.free_owned_text()
+    contacts_missing_status_filter.free_owned_text()
 
     contacts_projection_status_filter := mut match contacts_db.query("select id, name, email, status from contacts where status = 'active'") {
         Ok(r) => r,
@@ -5014,6 +5036,15 @@ fn main() -> i64 {
     I !expect_cell(contacts_recovered_status_filter_row, 3, "active") { println("T221 contacts recovery: status filter status"); return 255 }
     contacts_recovered_status_filter.free_owned_text()
     contacts_recovered_status_filter.free_owned_text()
+
+    contacts_recovered_missing_status_filter := mut match contacts_recovered.query("select * from contacts where status = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T221 contacts recovery: missing status filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I contacts_recovered_missing_status_filter.column_count() != 4 as u64 { println("T221 contacts recovery: missing status column count"); return 255 }
+    I contacts_recovered_missing_status_filter.row_count() != 0 as u64 { println("T221 contacts recovery: missing status row count"); return 255 }
+    contacts_recovered_missing_status_filter.free_owned_text()
+    contacts_recovered_missing_status_filter.free_owned_text()
 
     contacts_recovered_id_filter := mut match contacts_recovered.query("select * from contacts where id = 2") {
         Ok(r) => r,
