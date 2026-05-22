@@ -4972,6 +4972,146 @@ fn main() -> i64 {
         Err(_) => { println("T167 notes recovery: repeat close failed"); return 255 },
     }
 
+    journals_suffix := mut time_micros()
+    journals_path := mut "embedded_sql_api_roundtrip_journals_db_{journals_suffix}"
+    journals_cfg := mut EmbeddedConfig.default()
+    journals_cfg = journals_cfg.with_data_dir(journals_path.clone())
+    journals_cfg = journals_cfg.with_page_size(PAGE_SIZE_8K)
+    journals_db := mut match EmbeddedDatabase.open(journals_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T270 journals: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    journals_created := mut match journals_db.execute("create table journals (id int, summary text)") {
+        Ok(n) => n,
+        Err(e) => { println("T270 journals: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_created != 0 as u64 { println("T270 journals: create affected rows"); return 255 }
+    journals_table_id := mut 0 as u32
+    journals_page_id := mut 0 as u32
+    match journals_db.catalog.get_table("journals") {
+        Some(info) => {
+            journals_table_id = info.table_id
+            journals_page_id = info.first_page_id
+        },
+        None => { println("T270 journals: catalog missing table"); return 255 },
+    }
+    journals_col_refs := mut journals_db.catalog.get_columns(journals_table_id)
+    journals_cols: Vec<ColumnInfo> := mut Vec.with_capacity(journals_col_refs.len())
+    LF col_ref: &journals_col_refs {
+        journals_cols.push((**col_ref).clone())
+    }
+    I journals_cols.len() != 2 as u64 { println("T270 journals: catalog column count"); return 255 }
+    I !expect_catalog_column(&journals_cols, 0, "id", "INT") { println("T270 journals: catalog id column"); return 255 }
+    I !expect_catalog_column(&journals_cols, 1, "summary", "TEXT") { println("T270 journals: catalog summary column"); return 255 }
+    journals_empty_frame := mut match journals_db.pool.fetch_page(FILE_ID_DATA, journals_page_id) {
+        Ok(f) => f,
+        Err(_) => { println("T270 journals: fetch empty page failed"); return 255 },
+    }
+    journals_empty_page := mut journals_db.pool.get_page(journals_empty_frame)
+    journals_pre_insert_page := mut copy_smoke_page(journals_empty_page)
+    journals_db.pool.unpin_page(journals_empty_frame, false)
+    journals_recovery_start_lsn := mut journals_db.gcm.current_lsn()
+    journals_insert_a := mut match journals_db.execute("insert into journals values (1, 'draft')") {
+        Ok(n) => n,
+        Err(e) => { println("T270 journals: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_insert_a != 1 as u64 { println("T270 journals: first insert count"); return 255 }
+    journals_insert_b := mut match journals_db.execute("insert into journals values (2, 'sent')") {
+        Ok(n) => n,
+        Err(e) => { println("T270 journals: second insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_insert_b != 1 as u64 { println("T270 journals: second insert count"); return 255 }
+    journals_select := mut match journals_db.query("select * from journals") {
+        Ok(r) => r,
+        Err(e) => { println("T270 journals: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_select.column_count() != 2 as u64 { println("T270 journals: select column count"); return 255 }
+    I journals_select.row_count() != 2 as u64 { println("T270 journals: select row count"); return 255 }
+    journals_select_cols := mut journals_select.get_columns()
+    I !expect_column(journals_select_cols, 0, "id", "INT") { println("T270 journals: select id column"); return 255 }
+    I !expect_column(journals_select_cols, 1, "summary", "TEXT") { println("T270 journals: select summary column"); return 255 }
+    journals_select_rows := mut journals_select.get_rows()
+    journals_select_row0 := mut &journals_select_rows[0]
+    journals_select_row1 := mut &journals_select_rows[1]
+    I !expect_cell(journals_select_row0, 0, "1") { println("T270 journals: select row0 id"); return 255 }
+    I !expect_cell(journals_select_row0, 1, "draft") { println("T270 journals: select row0 summary"); return 255 }
+    I !expect_cell(journals_select_row1, 0, "2") { println("T270 journals: select row1 id"); return 255 }
+    I !expect_cell(journals_select_row1, 1, "sent") { println("T270 journals: select row1 summary"); return 255 }
+    journals_select.free_owned_text()
+    journals_select.free_owned_text()
+    match journals_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T270 journals: close failed"); return 255 },
+    }
+
+    journals_reopen_cfg := mut EmbeddedConfig.default()
+    journals_reopen_cfg = journals_reopen_cfg.with_data_dir(journals_path.clone())
+    journals_reopen_cfg = journals_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    journals_reopened := mut match EmbeddedDatabase.open(journals_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T270 journals: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    journals_reopened_select := mut match journals_reopened.query("select * from journals") {
+        Ok(r) => r,
+        Err(e) => { println("T270 journals: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_reopened_select.column_count() != 2 as u64 { println("T270 journals: reopen column count"); return 255 }
+    I journals_reopened_select.row_count() != 2 as u64 { println("T270 journals: reopen row count"); return 255 }
+    journals_reopened_cols := mut journals_reopened_select.get_columns()
+    I !expect_column(journals_reopened_cols, 0, "id", "INT") { println("T270 journals: reopen id column"); return 255 }
+    I !expect_column(journals_reopened_cols, 1, "summary", "TEXT") { println("T270 journals: reopen summary column"); return 255 }
+    journals_reopened_rows := mut journals_reopened_select.get_rows()
+    journals_reopened_row0 := mut &journals_reopened_rows[0]
+    journals_reopened_row1 := mut &journals_reopened_rows[1]
+    I !expect_cell(journals_reopened_row0, 0, "1") { println("T270 journals: reopen row0 id"); return 255 }
+    I !expect_cell(journals_reopened_row0, 1, "draft") { println("T270 journals: reopen row0 summary"); return 255 }
+    I !expect_cell(journals_reopened_row1, 0, "2") { println("T270 journals: reopen row1 id"); return 255 }
+    I !expect_cell(journals_reopened_row1, 1, "sent") { println("T270 journals: reopen row1 summary"); return 255 }
+    journals_reopened_select.free_owned_text()
+    journals_reopened_select.free_owned_text()
+    match journals_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T270 journals: reopen close failed"); return 255 },
+    }
+
+    I restore_smoke_data_page(journals_path.clone(), journals_page_id, journals_pre_insert_page) != 0 {
+        println("T270 journals: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(journals_path.clone(), journals_recovery_start_lsn) != 0 {
+        println("T270 journals: checkpoint rewind failed")
+        return 255
+    }
+    journals_recovered_cfg := mut EmbeddedConfig.default()
+    journals_recovered_cfg = journals_recovered_cfg.with_data_dir(journals_path.clone())
+    journals_recovered_cfg = journals_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    journals_recovered := mut match EmbeddedDatabase.open(journals_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T270 journals: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    journals_recovered_select := mut match journals_recovered.query("select * from journals") {
+        Ok(r) => r,
+        Err(e) => { println("T270 journals: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I journals_recovered_select.column_count() != 2 as u64 { println("T270 journals: recovered column count"); return 255 }
+    I journals_recovered_select.row_count() != 2 as u64 { println("T270 journals: recovered row count"); return 255 }
+    journals_recovered_cols := mut journals_recovered_select.get_columns()
+    I !expect_column(journals_recovered_cols, 0, "id", "INT") { println("T270 journals: recovered id column"); return 255 }
+    I !expect_column(journals_recovered_cols, 1, "summary", "TEXT") { println("T270 journals: recovered summary column"); return 255 }
+    journals_recovered_rows := mut journals_recovered_select.get_rows()
+    journals_recovered_row0 := mut &journals_recovered_rows[0]
+    journals_recovered_row1 := mut &journals_recovered_rows[1]
+    I !expect_cell(journals_recovered_row0, 0, "1") { println("T270 journals: recovered row0 id"); return 255 }
+    I !expect_cell(journals_recovered_row0, 1, "draft") { println("T270 journals: recovered row0 summary"); return 255 }
+    I !expect_cell(journals_recovered_row1, 0, "2") { println("T270 journals: recovered row1 id"); return 255 }
+    I !expect_cell(journals_recovered_row1, 1, "sent") { println("T270 journals: recovered row1 summary"); return 255 }
+    journals_recovered_select.free_owned_text()
+    journals_recovered_select.free_owned_text()
+    match journals_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T270 journals: recovered close failed"); return 255 },
+    }
+
     tasks_recovery_suffix := mut time_micros()
     tasks_recovery_path := mut "embedded_sql_api_roundtrip_tasks_recovery_db_{tasks_recovery_suffix}"
     tasks_recovery_cfg := mut EmbeddedConfig.default()
