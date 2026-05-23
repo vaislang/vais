@@ -7387,16 +7387,109 @@ fn main() -> i64 {
     I !expect_cell(warehouse_select_row1, 7, "rack-b") { println("T330 warehouse: row1 shelf"); return 255 }
     warehouse_select.free_owned_text()
     warehouse_select.free_owned_text()
-    match warehouse_db.query("select id, title, state, kind, tag, holder, zone, shelf from warehouse") {
-        Ok(_) => { println("T330 warehouse: projection unexpectedly accepted"); return 255 },
+
+    warehouse_projection := mut match warehouse_db.query("select id, title, state, kind, tag, holder, zone, shelf from warehouse") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_projection.column_count() != 8 as u64 { println("T332 warehouse: projection column count"); return 255 }
+    I warehouse_projection.row_count() != 2 as u64 { println("T332 warehouse: projection row count"); return 255 }
+    warehouse_projection_rows := mut warehouse_projection.get_rows()
+    warehouse_projection_row1 := mut &warehouse_projection_rows[1]
+    I !expect_cell(warehouse_projection_row1, 0, "2") { println("T332 warehouse: projection row1 id"); return 255 }
+    I !expect_cell(warehouse_projection_row1, 7, "rack-b") { println("T332 warehouse: projection row1 shelf"); return 255 }
+    warehouse_projection.free_owned_text()
+    warehouse_projection.free_owned_text()
+
+    warehouse_id_filter := mut match warehouse_db.query("select * from warehouse where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_id_filter.column_count() != 8 as u64 { println("T332 warehouse: id filter column count"); return 255 }
+    I warehouse_id_filter.row_count() != 1 as u64 { println("T332 warehouse: id filter row count"); return 255 }
+    warehouse_id_filter_rows := mut warehouse_id_filter.get_rows()
+    warehouse_id_filter_row := mut &warehouse_id_filter_rows[0]
+    I !expect_cell(warehouse_id_filter_row, 0, "1") { println("T332 warehouse: id filter id"); return 255 }
+    I !expect_cell(warehouse_id_filter_row, 7, "rack-a") { println("T332 warehouse: id filter shelf"); return 255 }
+    warehouse_id_filter.free_owned_text()
+    warehouse_id_filter.free_owned_text()
+
+    warehouse_reversed_id_filter := mut match warehouse_db.query("select * from warehouse where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_reversed_id_filter.row_count() != 1 as u64 { println("T332 warehouse: reversed id filter row count"); return 255 }
+    warehouse_reversed_id_rows := mut warehouse_reversed_id_filter.get_rows()
+    warehouse_reversed_id_row := mut &warehouse_reversed_id_rows[0]
+    I !expect_cell(warehouse_reversed_id_row, 7, "rack-b") { println("T332 warehouse: reversed id shelf"); return 255 }
+    warehouse_reversed_id_filter.free_owned_text()
+    warehouse_reversed_id_filter.free_owned_text()
+
+    warehouse_missing_id_filter := mut match warehouse_db.query("select * from warehouse where id = 42") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_missing_id_filter.column_count() != 8 as u64 { println("T332 warehouse: missing id column count"); return 255 }
+    I warehouse_missing_id_filter.row_count() != 0 as u64 { println("T332 warehouse: missing id row count"); return 255 }
+    warehouse_missing_id_filter.free_owned_text()
+    warehouse_missing_id_filter.free_owned_text()
+
+    warehouse_shelf_filter := mut match warehouse_db.query("select * from warehouse where shelf = 'rack-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: shelf filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_shelf_filter.column_count() != 8 as u64 { println("T332 warehouse: shelf filter column count"); return 255 }
+    I warehouse_shelf_filter.row_count() != 1 as u64 { println("T332 warehouse: shelf filter row count"); return 255 }
+    warehouse_shelf_filter_rows := mut warehouse_shelf_filter.get_rows()
+    warehouse_shelf_filter_row := mut &warehouse_shelf_filter_rows[0]
+    I !expect_cell(warehouse_shelf_filter_row, 0, "1") { println("T332 warehouse: shelf filter id"); return 255 }
+    I !expect_cell(warehouse_shelf_filter_row, 7, "rack-a") { println("T332 warehouse: shelf filter shelf"); return 255 }
+    warehouse_shelf_filter.free_owned_text()
+    warehouse_shelf_filter.free_owned_text()
+
+    warehouse_reversed_shelf_filter := mut match warehouse_db.query("select * from warehouse where 'rack-b' = shelf") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: reversed shelf filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_reversed_shelf_filter.row_count() != 1 as u64 { println("T332 warehouse: reversed shelf row count"); return 255 }
+    warehouse_reversed_shelf_rows := mut warehouse_reversed_shelf_filter.get_rows()
+    warehouse_reversed_shelf_row := mut &warehouse_reversed_shelf_rows[0]
+    I !expect_cell(warehouse_reversed_shelf_row, 0, "2") { println("T332 warehouse: reversed shelf id"); return 255 }
+    I !expect_cell(warehouse_reversed_shelf_row, 7, "rack-b") { println("T332 warehouse: reversed shelf shelf"); return 255 }
+    warehouse_reversed_shelf_filter.free_owned_text()
+    warehouse_reversed_shelf_filter.free_owned_text()
+
+    warehouse_missing_shelf_filter := mut match warehouse_db.query("select * from warehouse where shelf = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: missing shelf filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_missing_shelf_filter.column_count() != 8 as u64 { println("T332 warehouse: missing shelf column count"); return 255 }
+    I warehouse_missing_shelf_filter.row_count() != 0 as u64 { println("T332 warehouse: missing shelf row count"); return 255 }
+    warehouse_missing_shelf_filter.free_owned_text()
+    warehouse_missing_shelf_filter.free_owned_text()
+
+    match warehouse_db.query("select id, title, state, kind, tag, holder, zone, shelf from warehouse where id = 1") {
+        Ok(_) => { println("T332 warehouse: projection id filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match warehouse_db.query("select * from warehouse where id = 1") {
-        Ok(_) => { println("T330 warehouse: filter unexpectedly accepted"); return 255 },
+    match warehouse_db.query("select * from warehouse where zone = 'north'") {
+        Ok(_) => { println("T332 warehouse: zone filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match warehouse_db.query("select shelf from warehouse") {
+        Ok(_) => { println("T332 warehouse: partial projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match warehouse_db.query("select shelf, zone, holder, tag, kind, state, title, id from warehouse") {
+        Ok(_) => { println("T332 warehouse: reordered projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match warehouse_db.query("select warehouse.id, warehouse.title, warehouse.state, warehouse.kind, warehouse.tag, warehouse.holder, warehouse.zone, warehouse.shelf from warehouse") {
+        Ok(_) => { println("T332 warehouse: qualified projection unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match warehouse_db.query("select * from warehouse as w") {
-        Ok(_) => { println("T330 warehouse: alias unexpectedly accepted"); return 255 },
+        Ok(_) => { println("T332 warehouse: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match warehouse_db.close() {
@@ -7418,6 +7511,20 @@ fn main() -> i64 {
     I warehouse_reopened_select.row_count() != 2 as u64 { println("T330 warehouse: reopen row count"); return 255 }
     warehouse_reopened_select.free_owned_text()
     warehouse_reopened_select.free_owned_text()
+    warehouse_reopened_projection := mut match warehouse_reopened.query("select id, title, state, kind, tag, holder, zone, shelf from warehouse") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_reopened_projection.row_count() != 2 as u64 { println("T332 warehouse: reopen projection row count"); return 255 }
+    warehouse_reopened_projection.free_owned_text()
+    warehouse_reopened_projection.free_owned_text()
+    warehouse_reopened_shelf_filter := mut match warehouse_reopened.query("select * from warehouse where shelf = 'rack-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: reopen shelf filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_reopened_shelf_filter.row_count() != 1 as u64 { println("T332 warehouse: reopen shelf filter row count"); return 255 }
+    warehouse_reopened_shelf_filter.free_owned_text()
+    warehouse_reopened_shelf_filter.free_owned_text()
     match warehouse_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T330 warehouse: reopen close failed"); return 255 },
@@ -7450,6 +7557,20 @@ fn main() -> i64 {
     I !expect_cell(warehouse_recovered_row1, 7, "rack-b") { println("T330 warehouse: recovered row1 shelf"); return 255 }
     warehouse_recovered_select.free_owned_text()
     warehouse_recovered_select.free_owned_text()
+    warehouse_recovered_projection := mut match warehouse_recovered.query("select id, title, state, kind, tag, holder, zone, shelf from warehouse") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_recovered_projection.row_count() != 2 as u64 { println("T332 warehouse: recovered projection row count"); return 255 }
+    warehouse_recovered_projection.free_owned_text()
+    warehouse_recovered_projection.free_owned_text()
+    warehouse_recovered_id_filter := mut match warehouse_recovered.query("select * from warehouse where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T332 warehouse: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_recovered_id_filter.row_count() != 1 as u64 { println("T332 warehouse: recovered id filter row count"); return 255 }
+    warehouse_recovered_id_filter.free_owned_text()
+    warehouse_recovered_id_filter.free_owned_text()
     match warehouse_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T330 warehouse: recovered close failed"); return 255 },
