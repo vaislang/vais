@@ -6372,10 +6372,58 @@ fn main() -> i64 {
     entries_tag_filter_missing.free_owned_text()
     entries_tag_filter_missing.free_owned_text()
 
-    match entries_db.query("select id, title, state, kind, tag from entries where tag = 'blue'") {
-        Ok(_) => { println("T302 entries: projection tag filter unexpectedly accepted"); return 255 },
-        Err(_) => {},
+    entries_projection_tag_filter := mut match entries_db.query("select id, title, state, kind, tag from entries where tag = 'blue'") {
+        Ok(r) => r,
+        Err(e) => { println("T307 entries: projection tag filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I entries_projection_tag_filter.column_count() != 5 as u64 { println("T307 entries: projection tag filter column count"); return 255 }
+    I entries_projection_tag_filter.row_count() != 1 as u64 { println("T307 entries: projection tag filter row count"); return 255 }
+    entries_projection_tag_filter_cols := mut entries_projection_tag_filter.get_columns()
+    I !expect_column(entries_projection_tag_filter_cols, 0, "id", "INT") { println("T307 entries: projection tag filter id column"); return 255 }
+    I !expect_column(entries_projection_tag_filter_cols, 1, "title", "TEXT") { println("T307 entries: projection tag filter title column"); return 255 }
+    I !expect_column(entries_projection_tag_filter_cols, 2, "state", "TEXT") { println("T307 entries: projection tag filter state column"); return 255 }
+    I !expect_column(entries_projection_tag_filter_cols, 3, "kind", "TEXT") { println("T307 entries: projection tag filter kind column"); return 255 }
+    I !expect_column(entries_projection_tag_filter_cols, 4, "tag", "TEXT") { println("T307 entries: projection tag filter tag column"); return 255 }
+    entries_projection_tag_filter_rows := mut entries_projection_tag_filter.get_rows()
+    entries_projection_tag_filter_row := mut &entries_projection_tag_filter_rows[0]
+    I !expect_cell(entries_projection_tag_filter_row, 0, "1") { println("T307 entries: projection tag filter id"); return 255 }
+    I !expect_cell(entries_projection_tag_filter_row, 1, "alpha") { println("T307 entries: projection tag filter title"); return 255 }
+    I !expect_cell(entries_projection_tag_filter_row, 2, "open") { println("T307 entries: projection tag filter state"); return 255 }
+    I !expect_cell(entries_projection_tag_filter_row, 3, "ops") { println("T307 entries: projection tag filter kind"); return 255 }
+    I !expect_cell(entries_projection_tag_filter_row, 4, "blue") { println("T307 entries: projection tag filter tag"); return 255 }
+    entries_projection_tag_filter.free_owned_text()
+    entries_projection_tag_filter.free_owned_text()
+
+    entries_projection_reversed_tag := mut match entries_db.query("select id, title, state, kind, tag from entries where 'green' = tag") {
+        Ok(r) => r,
+        Err(e) => { println("T307 entries: reversed projection tag filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_projection_reversed_tag.column_count() != 5 as u64 { println("T307 entries: reversed projection tag filter column count"); return 255 }
+    I entries_projection_reversed_tag.row_count() != 1 as u64 { println("T307 entries: reversed projection tag filter row count"); return 255 }
+    entries_projection_reversed_tag_rows := mut entries_projection_reversed_tag.get_rows()
+    entries_projection_reversed_tag_row := mut &entries_projection_reversed_tag_rows[0]
+    I !expect_cell(entries_projection_reversed_tag_row, 0, "2") { println("T307 entries: reversed projection tag filter id"); return 255 }
+    I !expect_cell(entries_projection_reversed_tag_row, 1, "beta") { println("T307 entries: reversed projection tag filter title"); return 255 }
+    I !expect_cell(entries_projection_reversed_tag_row, 2, "closed") { println("T307 entries: reversed projection tag filter state"); return 255 }
+    I !expect_cell(entries_projection_reversed_tag_row, 3, "release") { println("T307 entries: reversed projection tag filter kind"); return 255 }
+    I !expect_cell(entries_projection_reversed_tag_row, 4, "green") { println("T307 entries: reversed projection tag filter tag"); return 255 }
+    entries_projection_reversed_tag.free_owned_text()
+    entries_projection_reversed_tag.free_owned_text()
+
+    entries_projection_missing_tag := mut match entries_db.query("select id, title, state, kind, tag from entries where tag = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T307 entries: missing projection tag filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_projection_missing_tag.column_count() != 5 as u64 { println("T307 entries: missing projection tag filter column count"); return 255 }
+    I entries_projection_missing_tag.row_count() != 0 as u64 { println("T307 entries: missing projection tag filter row count"); return 255 }
+    entries_projection_missing_tag_cols := mut entries_projection_missing_tag.get_columns()
+    I !expect_column(entries_projection_missing_tag_cols, 0, "id", "INT") { println("T307 entries: missing projection tag filter id column"); return 255 }
+    I !expect_column(entries_projection_missing_tag_cols, 1, "title", "TEXT") { println("T307 entries: missing projection tag filter title column"); return 255 }
+    I !expect_column(entries_projection_missing_tag_cols, 2, "state", "TEXT") { println("T307 entries: missing projection tag filter state column"); return 255 }
+    I !expect_column(entries_projection_missing_tag_cols, 3, "kind", "TEXT") { println("T307 entries: missing projection tag filter kind column"); return 255 }
+    I !expect_column(entries_projection_missing_tag_cols, 4, "tag", "TEXT") { println("T307 entries: missing projection tag filter tag column"); return 255 }
+    entries_projection_missing_tag.free_owned_text()
+    entries_projection_missing_tag.free_owned_text()
     match entries_db.query("select * from entries where kind = 'ops'") {
         Ok(_) => { println("T302 entries: non-selected text filter unexpectedly accepted"); return 255 },
         Err(_) => {},
@@ -6422,6 +6470,17 @@ fn main() -> i64 {
     I !expect_cell(entries_reopened_projection_id_row, 4, "green") { println("T305 entries: reopen projection id filter tag"); return 255 }
     entries_reopened_projection_id_filter.free_owned_text()
     entries_reopened_projection_id_filter.free_owned_text()
+    entries_reopened_projection_tag_filter := mut match entries_reopened.query("select id, title, state, kind, tag from entries where tag = 'green'") {
+        Ok(r) => r,
+        Err(e) => { println("T307 entries: reopen projection tag filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_reopened_projection_tag_filter.row_count() != 1 as u64 { println("T307 entries: reopen projection tag filter row count"); return 255 }
+    entries_reopened_projection_tag_rows := mut entries_reopened_projection_tag_filter.get_rows()
+    entries_reopened_projection_tag_row := mut &entries_reopened_projection_tag_rows[0]
+    I !expect_cell(entries_reopened_projection_tag_row, 0, "2") { println("T307 entries: reopen projection tag filter id"); return 255 }
+    I !expect_cell(entries_reopened_projection_tag_row, 4, "green") { println("T307 entries: reopen projection tag filter tag"); return 255 }
+    entries_reopened_projection_tag_filter.free_owned_text()
+    entries_reopened_projection_tag_filter.free_owned_text()
     entries_reopened_tag_filter := mut match entries_reopened.query("select * from entries where tag = 'green'") {
         Ok(r) => r,
         Err(e) => { println("T302 entries: reopen tag filter failed: {e.message}: {e.hint}"); return 255 },
@@ -6487,6 +6546,17 @@ fn main() -> i64 {
     I !expect_cell(entries_recovered_projection_id_row, 4, "blue") { println("T305 entries: recovered projection id filter tag"); return 255 }
     entries_recovered_projection_id_filter.free_owned_text()
     entries_recovered_projection_id_filter.free_owned_text()
+    entries_recovered_projection_tag_filter := mut match entries_recovered.query("select id, title, state, kind, tag from entries where tag = 'blue'") {
+        Ok(r) => r,
+        Err(e) => { println("T307 entries: recovered projection tag filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_recovered_projection_tag_filter.row_count() != 1 as u64 { println("T307 entries: recovered projection tag filter row count"); return 255 }
+    entries_recovered_projection_tag_rows := mut entries_recovered_projection_tag_filter.get_rows()
+    entries_recovered_projection_tag_row := mut &entries_recovered_projection_tag_rows[0]
+    I !expect_cell(entries_recovered_projection_tag_row, 0, "1") { println("T307 entries: recovered projection tag filter id"); return 255 }
+    I !expect_cell(entries_recovered_projection_tag_row, 4, "blue") { println("T307 entries: recovered projection tag filter tag"); return 255 }
+    entries_recovered_projection_tag_filter.free_owned_text()
+    entries_recovered_projection_tag_filter.free_owned_text()
     entries_recovered_tag_filter := mut match entries_recovered.query("select * from entries where tag = 'blue'") {
         Ok(r) => r,
         Err(e) => { println("T302 entries: recovered tag filter failed: {e.message}: {e.hint}"); return 255 },
