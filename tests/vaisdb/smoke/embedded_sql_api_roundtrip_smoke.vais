@@ -7101,8 +7101,45 @@ fn main() -> i64 {
     inventory_zone_filter_missing.free_owned_text()
     inventory_zone_filter_missing.free_owned_text()
 
-    match inventory_db.query("select id, title, state, kind, tag, holder, zone from inventory where id = 1") {
-        Ok(_) => { println("T322 inventory: projection id filter unexpectedly accepted"); return 255 },
+    inventory_projection_id_filter := mut match inventory_db.query("select id, title, state, kind, tag, holder, zone from inventory where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T325 inventory: projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_projection_id_filter.column_count() != 7 as u64 { println("T325 inventory: projection id filter column count"); return 255 }
+    I inventory_projection_id_filter.row_count() != 1 as u64 { println("T325 inventory: projection id filter row count"); return 255 }
+    inventory_projection_id_filter_cols := mut inventory_projection_id_filter.get_columns()
+    I !expect_column(inventory_projection_id_filter_cols, 0, "id", "INT") { println("T325 inventory: projection id filter id column"); return 255 }
+    I !expect_column(inventory_projection_id_filter_cols, 6, "zone", "TEXT") { println("T325 inventory: projection id filter zone column"); return 255 }
+    inventory_projection_id_filter_rows := mut inventory_projection_id_filter.get_rows()
+    inventory_projection_id_filter_row := mut &inventory_projection_id_filter_rows[0]
+    I !expect_cell(inventory_projection_id_filter_row, 0, "1") { println("T325 inventory: projection id filter id"); return 255 }
+    I !expect_cell(inventory_projection_id_filter_row, 6, "north") { println("T325 inventory: projection id filter zone"); return 255 }
+    inventory_projection_id_filter.free_owned_text()
+    inventory_projection_id_filter.free_owned_text()
+
+    inventory_projection_id_filter_reversed := mut match inventory_db.query("select id, title, state, kind, tag, holder, zone from inventory where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T325 inventory: reversed projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_projection_id_filter_reversed.row_count() != 1 as u64 { println("T325 inventory: reversed projection id filter row count"); return 255 }
+    inventory_projection_id_filter_reversed_rows := mut inventory_projection_id_filter_reversed.get_rows()
+    inventory_projection_id_filter_reversed_row := mut &inventory_projection_id_filter_reversed_rows[0]
+    I !expect_cell(inventory_projection_id_filter_reversed_row, 0, "2") { println("T325 inventory: reversed projection id filter id"); return 255 }
+    I !expect_cell(inventory_projection_id_filter_reversed_row, 6, "south") { println("T325 inventory: reversed projection id filter zone"); return 255 }
+    inventory_projection_id_filter_reversed.free_owned_text()
+    inventory_projection_id_filter_reversed.free_owned_text()
+
+    inventory_projection_id_filter_missing := mut match inventory_db.query("select id, title, state, kind, tag, holder, zone from inventory where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T325 inventory: missing projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_projection_id_filter_missing.column_count() != 7 as u64 { println("T325 inventory: missing projection id filter column count"); return 255 }
+    I inventory_projection_id_filter_missing.row_count() != 0 as u64 { println("T325 inventory: missing projection id filter row count"); return 255 }
+    inventory_projection_id_filter_missing.free_owned_text()
+    inventory_projection_id_filter_missing.free_owned_text()
+
+    match inventory_db.query("select id, title, state, kind, tag, holder, zone from inventory where zone = 'north'") {
+        Ok(_) => { println("T325 inventory: projection zone filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match inventory_db.query("select * from inventory where holder = 'team-a'") {
@@ -7139,6 +7176,13 @@ fn main() -> i64 {
     I inventory_reopened_projection.row_count() != 2 as u64 { println("T322 inventory: reopen projection row count"); return 255 }
     inventory_reopened_projection.free_owned_text()
     inventory_reopened_projection.free_owned_text()
+    inventory_reopened_projection_id_filter := mut match inventory_reopened.query("select id, title, state, kind, tag, holder, zone from inventory where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T325 inventory: reopen projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_reopened_projection_id_filter.row_count() != 1 as u64 { println("T325 inventory: reopen projection id filter row count"); return 255 }
+    inventory_reopened_projection_id_filter.free_owned_text()
+    inventory_reopened_projection_id_filter.free_owned_text()
     inventory_reopened_id_filter := mut match inventory_reopened.query("select * from inventory where id = 2") {
         Ok(r) => r,
         Err(e) => { println("T322 inventory: reopen id filter failed: {e.message}: {e.hint}"); return 255 },
@@ -7192,6 +7236,13 @@ fn main() -> i64 {
     I inventory_recovered_projection.row_count() != 2 as u64 { println("T322 inventory: recovered projection row count"); return 255 }
     inventory_recovered_projection.free_owned_text()
     inventory_recovered_projection.free_owned_text()
+    inventory_recovered_projection_id_filter := mut match inventory_recovered.query("select id, title, state, kind, tag, holder, zone from inventory where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T325 inventory: recovered projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_recovered_projection_id_filter.row_count() != 1 as u64 { println("T325 inventory: recovered projection id filter row count"); return 255 }
+    inventory_recovered_projection_id_filter.free_owned_text()
+    inventory_recovered_projection_id_filter.free_owned_text()
     inventory_recovered_id_filter := mut match inventory_recovered.query("select * from inventory where id = 1") {
         Ok(r) => r,
         Err(e) => { println("T322 inventory: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
