@@ -6704,6 +6704,43 @@ fn main() -> i64 {
     assets_id_filter_missing.free_owned_text()
     assets_id_filter_missing.free_owned_text()
 
+    assets_projection_id_filter := mut match assets_db.query("select id, title, state, kind, tag, holder from assets where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T315 assets: projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I assets_projection_id_filter.column_count() != 6 as u64 { println("T315 assets: projection id filter column count"); return 255 }
+    I assets_projection_id_filter.row_count() != 1 as u64 { println("T315 assets: projection id filter row count"); return 255 }
+    assets_projection_id_filter_cols := mut assets_projection_id_filter.get_columns()
+    I !expect_column(assets_projection_id_filter_cols, 0, "id", "INT") { println("T315 assets: projection id filter id column"); return 255 }
+    I !expect_column(assets_projection_id_filter_cols, 5, "holder", "TEXT") { println("T315 assets: projection id filter holder column"); return 255 }
+    assets_projection_id_filter_rows := mut assets_projection_id_filter.get_rows()
+    assets_projection_id_filter_row := mut &assets_projection_id_filter_rows[0]
+    I !expect_cell(assets_projection_id_filter_row, 0, "1") { println("T315 assets: projection id filter id"); return 255 }
+    I !expect_cell(assets_projection_id_filter_row, 5, "team-a") { println("T315 assets: projection id filter holder"); return 255 }
+    assets_projection_id_filter.free_owned_text()
+    assets_projection_id_filter.free_owned_text()
+
+    assets_projection_id_filter_reversed := mut match assets_db.query("select id, title, state, kind, tag, holder from assets where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T315 assets: reversed projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I assets_projection_id_filter_reversed.row_count() != 1 as u64 { println("T315 assets: reversed projection id filter row count"); return 255 }
+    assets_projection_id_filter_reversed_rows := mut assets_projection_id_filter_reversed.get_rows()
+    assets_projection_id_filter_reversed_row := mut &assets_projection_id_filter_reversed_rows[0]
+    I !expect_cell(assets_projection_id_filter_reversed_row, 0, "2") { println("T315 assets: reversed projection id filter id"); return 255 }
+    I !expect_cell(assets_projection_id_filter_reversed_row, 5, "team-b") { println("T315 assets: reversed projection id filter holder"); return 255 }
+    assets_projection_id_filter_reversed.free_owned_text()
+    assets_projection_id_filter_reversed.free_owned_text()
+
+    assets_projection_id_filter_missing := mut match assets_db.query("select id, title, state, kind, tag, holder from assets where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T315 assets: missing projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I assets_projection_id_filter_missing.column_count() != 6 as u64 { println("T315 assets: missing projection id filter column count"); return 255 }
+    I assets_projection_id_filter_missing.row_count() != 0 as u64 { println("T315 assets: missing projection id filter row count"); return 255 }
+    assets_projection_id_filter_missing.free_owned_text()
+    assets_projection_id_filter_missing.free_owned_text()
+
     assets_holder_filter := mut match assets_db.query("select * from assets where holder = 'team-a'") {
         Ok(r) => r,
         Err(e) => { println("T312 assets: holder filter failed: {e.message}: {e.hint}"); return 255 },
@@ -6776,6 +6813,13 @@ fn main() -> i64 {
     I assets_reopened_projection.row_count() != 2 as u64 { println("T312 assets: reopen projection row count"); return 255 }
     assets_reopened_projection.free_owned_text()
     assets_reopened_projection.free_owned_text()
+    assets_reopened_projection_id_filter := mut match assets_reopened.query("select id, title, state, kind, tag, holder from assets where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T315 assets: reopen projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I assets_reopened_projection_id_filter.row_count() != 1 as u64 { println("T315 assets: reopen projection id filter row count"); return 255 }
+    assets_reopened_projection_id_filter.free_owned_text()
+    assets_reopened_projection_id_filter.free_owned_text()
     assets_reopened_holder_filter := mut match assets_reopened.query("select * from assets where holder = 'team-b'") {
         Ok(r) => r,
         Err(e) => { println("T312 assets: reopen holder filter failed: {e.message}: {e.hint}"); return 255 },
@@ -6822,6 +6866,13 @@ fn main() -> i64 {
     I assets_recovered_projection.row_count() != 2 as u64 { println("T312 assets: recovered projection row count"); return 255 }
     assets_recovered_projection.free_owned_text()
     assets_recovered_projection.free_owned_text()
+    assets_recovered_projection_id_filter := mut match assets_recovered.query("select id, title, state, kind, tag, holder from assets where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T315 assets: recovered projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I assets_recovered_projection_id_filter.row_count() != 1 as u64 { println("T315 assets: recovered projection id filter row count"); return 255 }
+    assets_recovered_projection_id_filter.free_owned_text()
+    assets_recovered_projection_id_filter.free_owned_text()
     assets_recovered_holder_filter := mut match assets_recovered.query("select * from assets where holder = 'team-a'") {
         Ok(r) => r,
         Err(e) => { println("T312 assets: recovered holder filter failed: {e.message}: {e.hint}"); return 255 },
