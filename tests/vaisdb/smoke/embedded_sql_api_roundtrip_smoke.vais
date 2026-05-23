@@ -71,6 +71,8 @@
 #     DELETE path and the fixed non-null secondary UNIQUE DELETE path by
 #     restoring heap plus index pages to pre-DELETE images and reopening
 #     through EmbeddedDatabase.open().
+#   - Pins the helperization boundary by keeping nine-column dynamic descriptor
+#     CREATE rejected while the already certified 2-8 column shapes stay green.
 #
 # This keeps broader SQL planning out of scope; it locks the first SQLite-like
 # in-process SQL API boundary over the already-certified catalog + heap DML
@@ -2188,7 +2190,7 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text, extra4 text)") {
+    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text)") {
         Ok(_) => { println("T155 notes: too many columns unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3170,7 +3172,7 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text, extra4 text)") {
+    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text)") {
         Ok(_) => { println("T195 tickets: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3510,7 +3512,7 @@ fn main() -> i64 {
         Ok(_) => { println("T215 contacts: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text, extra4 text)") {
+    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text)") {
         Ok(_) => { println("T215 contacts: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -7492,6 +7494,10 @@ fn main() -> i64 {
         Ok(_) => { println("T332 warehouse: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
+    match warehouse_db.execute("create table overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text)") {
+        Ok(_) => { println("T352 warehouse: twelve-column descriptor unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
     match warehouse_db.close() {
         Ok(_) => {},
         Err(_) => { println("T330 warehouse: close failed"); return 255 },
@@ -7574,6 +7580,890 @@ fn main() -> i64 {
     match warehouse_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T330 warehouse: recovered close failed"); return 255 },
+    }
+
+    storage_suffix := mut time_micros()
+    storage_path := mut "embedded_sql_api_roundtrip_storage_db_{storage_suffix}"
+    storage_cfg := mut EmbeddedConfig.default()
+    storage_cfg = storage_cfg.with_data_dir(storage_path.clone())
+    storage_cfg = storage_cfg.with_page_size(PAGE_SIZE_8K)
+    storage_db := mut match EmbeddedDatabase.open(storage_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T337 storage: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    storage_created := mut match storage_db.execute("create table storage (id int, title text, state text, kind text, tag text, holder text, zone text, shelf text, bin text)") {
+        Ok(n) => n,
+        Err(e) => { println("T337 storage: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_created != 0 as u64 { println("T337 storage: create affected rows"); return 255 }
+    storage_table_id := mut 0 as u32
+    storage_page_id := mut 0 as u32
+    match storage_db.catalog.get_table("storage") {
+        Some(info) => {
+            storage_table_id = info.table_id
+            storage_page_id = info.first_page_id
+            I info.column_count != 9 as u16 { println("T337 storage: table column count"); return 255 }
+        },
+        None => { println("T337 storage: catalog missing table"); return 255 },
+    }
+    storage_col_refs := mut storage_db.catalog.get_columns(storage_table_id)
+    storage_cols: Vec<ColumnInfo> := mut Vec.with_capacity(storage_col_refs.len())
+    LF col_ref: &storage_col_refs {
+        storage_cols.push((**col_ref).clone())
+    }
+    I storage_cols.len() != 9 as u64 { println("T337 storage: catalog column count"); return 255 }
+    I !expect_catalog_column(&storage_cols, 0, "id", "INT") { println("T337 storage: catalog id column"); return 255 }
+    I !expect_catalog_column(&storage_cols, 1, "title", "TEXT") { println("T337 storage: catalog title column"); return 255 }
+    I !expect_catalog_column(&storage_cols, 2, "state", "TEXT") { println("T337 storage: catalog state column"); return 255 }
+    I !expect_catalog_column(&storage_cols, 3, "kind", "TEXT") { println("T337 storage: catalog kind column"); return 255 }
+    I !expect_catalog_column(&storage_cols, 4, "tag", "TEXT") { println("T337 storage: catalog tag column"); return 255 }
+    I !expect_catalog_column(&storage_cols, 5, "holder", "TEXT") { println("T337 storage: catalog holder column"); return 255 }
+    I !expect_catalog_column(&storage_cols, 6, "zone", "TEXT") { println("T337 storage: catalog zone column"); return 255 }
+    I !expect_catalog_column(&storage_cols, 7, "shelf", "TEXT") { println("T337 storage: catalog shelf column"); return 255 }
+    I !expect_catalog_column(&storage_cols, 8, "bin", "TEXT") { println("T337 storage: catalog bin column"); return 255 }
+    storage_empty_frame := mut match storage_db.pool.fetch_page(FILE_ID_DATA, storage_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T337 storage: fetch empty page failed"); return 255 },
+    }
+    storage_empty_page := mut storage_db.pool.get_page(storage_empty_frame)
+    storage_pre_insert_page := mut copy_smoke_page(storage_empty_page)
+    storage_db.pool.unpin_page(storage_empty_frame, false)
+    storage_recovery_start_lsn := mut storage_db.gcm.current_lsn()
+    storage_insert_a := mut match storage_db.execute("insert into storage (id, title, state, kind, tag, holder, zone, shelf, bin) values (1, 'alpha', 'open', 'ops', 'blue', 'team-a', 'north', 'rack-a', 'bin-a')") {
+        Ok(n) => n,
+        Err(e) => { println("T337 storage: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_insert_a != 1 as u64 { println("T337 storage: first insert count"); return 255 }
+    storage_insert_b := mut match storage_db.execute("insert into storage (bin, shelf, zone, holder, tag, kind, state, title, id) values ('bin-b', 'rack-b', 'south', 'team-b', 'green', 'release', 'closed', 'beta', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T337 storage: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_insert_b != 1 as u64 { println("T337 storage: reordered insert count"); return 255 }
+    storage_select := mut match storage_db.query("select * from storage") {
+        Ok(r) => r,
+        Err(e) => { println("T337 storage: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_select.column_count() != 9 as u64 { println("T337 storage: select column count"); return 255 }
+    I storage_select.row_count() != 2 as u64 { println("T337 storage: select row count"); return 255 }
+    storage_select_cols := mut storage_select.get_columns()
+    I !expect_column(storage_select_cols, 0, "id", "INT") { println("T337 storage: select id column"); return 255 }
+    I !expect_column(storage_select_cols, 8, "bin", "TEXT") { println("T337 storage: select bin column"); return 255 }
+    storage_select_rows := mut storage_select.get_rows()
+    storage_select_row0 := mut &storage_select_rows[0]
+    storage_select_row1 := mut &storage_select_rows[1]
+    I !expect_cell(storage_select_row0, 0, "1") { println("T337 storage: row0 id"); return 255 }
+    I !expect_cell(storage_select_row0, 8, "bin-a") { println("T337 storage: row0 bin"); return 255 }
+    I !expect_cell(storage_select_row1, 0, "2") { println("T337 storage: row1 id"); return 255 }
+    I !expect_cell(storage_select_row1, 8, "bin-b") { println("T337 storage: row1 bin"); return 255 }
+    storage_select.free_owned_text()
+    storage_select.free_owned_text()
+    storage_projection := mut match storage_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin from storage") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_projection.column_count() != 9 as u64 { println("T339 storage: projection column count"); return 255 }
+    I storage_projection.row_count() != 2 as u64 { println("T339 storage: projection row count"); return 255 }
+    storage_projection_rows := mut storage_projection.get_rows()
+    storage_projection_row1 := mut &storage_projection_rows[1]
+    I !expect_cell(storage_projection_row1, 0, "2") { println("T339 storage: projection row1 id"); return 255 }
+    I !expect_cell(storage_projection_row1, 8, "bin-b") { println("T339 storage: projection row1 bin"); return 255 }
+    storage_projection.free_owned_text()
+    storage_projection.free_owned_text()
+    storage_id_filter := mut match storage_db.query("select * from storage where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_id_filter.column_count() != 9 as u64 { println("T339 storage: id filter column count"); return 255 }
+    I storage_id_filter.row_count() != 1 as u64 { println("T339 storage: id filter row count"); return 255 }
+    storage_id_filter_rows := mut storage_id_filter.get_rows()
+    storage_id_filter_row := mut &storage_id_filter_rows[0]
+    I !expect_cell(storage_id_filter_row, 0, "1") { println("T339 storage: id filter id"); return 255 }
+    I !expect_cell(storage_id_filter_row, 8, "bin-a") { println("T339 storage: id filter bin"); return 255 }
+    storage_id_filter.free_owned_text()
+    storage_id_filter.free_owned_text()
+    storage_reversed_id_filter := mut match storage_db.query("select * from storage where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_reversed_id_filter.row_count() != 1 as u64 { println("T339 storage: reversed id filter row count"); return 255 }
+    storage_reversed_id_rows := mut storage_reversed_id_filter.get_rows()
+    storage_reversed_id_row := mut &storage_reversed_id_rows[0]
+    I !expect_cell(storage_reversed_id_row, 8, "bin-b") { println("T339 storage: reversed id bin"); return 255 }
+    storage_reversed_id_filter.free_owned_text()
+    storage_reversed_id_filter.free_owned_text()
+    storage_missing_id_filter := mut match storage_db.query("select * from storage where id = 42") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_missing_id_filter.column_count() != 9 as u64 { println("T339 storage: missing id column count"); return 255 }
+    I storage_missing_id_filter.row_count() != 0 as u64 { println("T339 storage: missing id row count"); return 255 }
+    storage_missing_id_filter.free_owned_text()
+    storage_missing_id_filter.free_owned_text()
+    storage_bin_filter := mut match storage_db.query("select * from storage where bin = 'bin-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: bin filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_bin_filter.column_count() != 9 as u64 { println("T339 storage: bin filter column count"); return 255 }
+    I storage_bin_filter.row_count() != 1 as u64 { println("T339 storage: bin filter row count"); return 255 }
+    storage_bin_filter_rows := mut storage_bin_filter.get_rows()
+    storage_bin_filter_row := mut &storage_bin_filter_rows[0]
+    I !expect_cell(storage_bin_filter_row, 0, "1") { println("T339 storage: bin filter id"); return 255 }
+    I !expect_cell(storage_bin_filter_row, 8, "bin-a") { println("T339 storage: bin filter bin"); return 255 }
+    storage_bin_filter.free_owned_text()
+    storage_bin_filter.free_owned_text()
+    storage_reversed_bin_filter := mut match storage_db.query("select * from storage where 'bin-b' = bin") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: reversed bin filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_reversed_bin_filter.row_count() != 1 as u64 { println("T339 storage: reversed bin row count"); return 255 }
+    storage_reversed_bin_rows := mut storage_reversed_bin_filter.get_rows()
+    storage_reversed_bin_row := mut &storage_reversed_bin_rows[0]
+    I !expect_cell(storage_reversed_bin_row, 0, "2") { println("T339 storage: reversed bin id"); return 255 }
+    I !expect_cell(storage_reversed_bin_row, 8, "bin-b") { println("T339 storage: reversed bin bin"); return 255 }
+    storage_reversed_bin_filter.free_owned_text()
+    storage_reversed_bin_filter.free_owned_text()
+    storage_missing_bin_filter := mut match storage_db.query("select * from storage where bin = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: missing bin filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_missing_bin_filter.column_count() != 9 as u64 { println("T339 storage: missing bin column count"); return 255 }
+    I storage_missing_bin_filter.row_count() != 0 as u64 { println("T339 storage: missing bin row count"); return 255 }
+    storage_missing_bin_filter.free_owned_text()
+    storage_missing_bin_filter.free_owned_text()
+    match storage_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin from storage where id = 1") {
+        Ok(_) => { println("T339 storage: projection id filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match storage_db.query("select * from storage where zone = 'north'") {
+        Ok(_) => { println("T339 storage: earlier text filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match storage_db.query("select bin from storage") {
+        Ok(_) => { println("T339 storage: partial projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match storage_db.query("select bin, shelf, zone, holder, tag, kind, state, title, id from storage") {
+        Ok(_) => { println("T339 storage: reordered projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match storage_db.query("select storage.id, storage.title, storage.state, storage.kind, storage.tag, storage.holder, storage.zone, storage.shelf, storage.bin from storage") {
+        Ok(_) => { println("T339 storage: qualified projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match storage_db.query("select * from storage as s") {
+        Ok(_) => { println("T339 storage: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match storage_db.execute("create table storage_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text)") {
+        Ok(_) => { println("T352 storage: twelve-column descriptor unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match storage_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T337 storage: close failed"); return 255 },
+    }
+    storage_reopen_cfg := mut EmbeddedConfig.default()
+    storage_reopen_cfg = storage_reopen_cfg.with_data_dir(storage_path.clone())
+    storage_reopen_cfg = storage_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    storage_reopened := mut match EmbeddedDatabase.open(storage_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T337 storage: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    storage_reopened_select := mut match storage_reopened.query("select * from storage") {
+        Ok(r) => r,
+        Err(e) => { println("T337 storage: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_reopened_select.column_count() != 9 as u64 { println("T337 storage: reopen column count"); return 255 }
+    I storage_reopened_select.row_count() != 2 as u64 { println("T337 storage: reopen row count"); return 255 }
+    storage_reopened_rows := mut storage_reopened_select.get_rows()
+    storage_reopened_row1 := mut &storage_reopened_rows[1]
+    I !expect_cell(storage_reopened_row1, 8, "bin-b") { println("T337 storage: reopen row1 bin"); return 255 }
+    storage_reopened_select.free_owned_text()
+    storage_reopened_select.free_owned_text()
+    storage_reopened_projection := mut match storage_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin from storage") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_reopened_projection.row_count() != 2 as u64 { println("T339 storage: reopen projection row count"); return 255 }
+    storage_reopened_projection.free_owned_text()
+    storage_reopened_projection.free_owned_text()
+    storage_reopened_bin_filter := mut match storage_reopened.query("select * from storage where bin = 'bin-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: reopen bin filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_reopened_bin_filter.row_count() != 1 as u64 { println("T339 storage: reopen bin filter row count"); return 255 }
+    storage_reopened_bin_filter.free_owned_text()
+    storage_reopened_bin_filter.free_owned_text()
+    match storage_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T337 storage: reopen close failed"); return 255 },
+    }
+    I restore_smoke_data_page(storage_path.clone(), storage_page_id, storage_pre_insert_page) != 0 {
+        println("T337 storage: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(storage_path.clone(), storage_recovery_start_lsn) != 0 {
+        println("T337 storage: checkpoint rewind failed")
+        return 255
+    }
+    storage_recovered_cfg := mut EmbeddedConfig.default()
+    storage_recovered_cfg = storage_recovered_cfg.with_data_dir(storage_path.clone())
+    storage_recovered_cfg = storage_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    storage_recovered := mut match EmbeddedDatabase.open(storage_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T337 storage: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    storage_recovered_select := mut match storage_recovered.query("select * from storage") {
+        Ok(r) => r,
+        Err(e) => { println("T337 storage: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_recovered_select.column_count() != 9 as u64 { println("T337 storage: recovered column count"); return 255 }
+    I storage_recovered_select.row_count() != 2 as u64 { println("T337 storage: recovered row count"); return 255 }
+    storage_recovered_rows := mut storage_recovered_select.get_rows()
+    storage_recovered_row0 := mut &storage_recovered_rows[0]
+    storage_recovered_row1 := mut &storage_recovered_rows[1]
+    I !expect_cell(storage_recovered_row0, 8, "bin-a") { println("T337 storage: recovered row0 bin"); return 255 }
+    I !expect_cell(storage_recovered_row1, 8, "bin-b") { println("T337 storage: recovered row1 bin"); return 255 }
+    storage_recovered_select.free_owned_text()
+    storage_recovered_select.free_owned_text()
+    storage_recovered_projection := mut match storage_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin from storage") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_recovered_projection.row_count() != 2 as u64 { println("T339 storage: recovered projection row count"); return 255 }
+    storage_recovered_projection.free_owned_text()
+    storage_recovered_projection.free_owned_text()
+    storage_recovered_id_filter := mut match storage_recovered.query("select * from storage where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T339 storage: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I storage_recovered_id_filter.row_count() != 1 as u64 { println("T339 storage: recovered id filter row count"); return 255 }
+    storage_recovered_id_filter.free_owned_text()
+    storage_recovered_id_filter.free_owned_text()
+    match storage_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T337 storage: recovered close failed"); return 255 },
+    }
+
+    shipments_suffix := mut time_micros()
+    shipments_path := mut "embedded_sql_api_roundtrip_shipments_db_{shipments_suffix}"
+    shipments_cfg := mut EmbeddedConfig.default()
+    shipments_cfg = shipments_cfg.with_data_dir(shipments_path.clone())
+    shipments_cfg = shipments_cfg.with_page_size(PAGE_SIZE_8K)
+    shipments_db := mut match EmbeddedDatabase.open(shipments_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T342 shipments: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    shipments_created := mut match shipments_db.execute("create table shipments (id int, title text, state text, kind text, tag text, holder text, zone text, shelf text, bin text, batch text)") {
+        Ok(n) => n,
+        Err(e) => { println("T342 shipments: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_created != 0 as u64 { println("T342 shipments: create affected rows"); return 255 }
+    shipments_table_id := mut 0 as u32
+    shipments_page_id := mut 0 as u32
+    match shipments_db.catalog.get_table("shipments") {
+        Some(info) => {
+            shipments_table_id = info.table_id
+            shipments_page_id = info.first_page_id
+            I info.column_count != 10 as u16 { println("T342 shipments: table column count"); return 255 }
+        },
+        None => { println("T342 shipments: catalog missing table"); return 255 },
+    }
+    shipments_col_refs := mut shipments_db.catalog.get_columns(shipments_table_id)
+    shipments_cols: Vec<ColumnInfo> := mut Vec.with_capacity(shipments_col_refs.len())
+    LF col_ref: &shipments_col_refs {
+        shipments_cols.push((**col_ref).clone())
+    }
+    I shipments_cols.len() != 10 as u64 { println("T342 shipments: catalog column count"); return 255 }
+    I !expect_catalog_column(&shipments_cols, 0, "id", "INT") { println("T342 shipments: catalog id column"); return 255 }
+    I !expect_catalog_column(&shipments_cols, 9, "batch", "TEXT") { println("T342 shipments: catalog batch column"); return 255 }
+    shipments_empty_frame := mut match shipments_db.pool.fetch_page(FILE_ID_DATA, shipments_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T342 shipments: fetch empty page failed"); return 255 },
+    }
+    shipments_empty_page := mut shipments_db.pool.get_page(shipments_empty_frame)
+    shipments_pre_insert_page := mut copy_smoke_page(shipments_empty_page)
+    shipments_db.pool.unpin_page(shipments_empty_frame, false)
+    shipments_recovery_start_lsn := mut shipments_db.gcm.current_lsn()
+    shipments_insert_a := mut match shipments_db.execute("insert into shipments (id, title, state, kind, tag, holder, zone, shelf, bin, batch) values (1, 'alpha', 'open', 'ops', 'blue', 'team-a', 'north', 'rack-a', 'bin-a', 'batch-a')") {
+        Ok(n) => n,
+        Err(e) => { println("T342 shipments: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_insert_a != 1 as u64 { println("T342 shipments: first insert count"); return 255 }
+    shipments_insert_b := mut match shipments_db.execute("insert into shipments (batch, bin, shelf, zone, holder, tag, kind, state, title, id) values ('batch-b', 'bin-b', 'rack-b', 'south', 'team-b', 'green', 'release', 'closed', 'beta', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T342 shipments: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_insert_b != 1 as u64 { println("T342 shipments: reordered insert count"); return 255 }
+    shipments_select := mut match shipments_db.query("select * from shipments") {
+        Ok(r) => r,
+        Err(e) => { println("T342 shipments: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_select.column_count() != 10 as u64 { println("T342 shipments: select column count"); return 255 }
+    I shipments_select.row_count() != 2 as u64 { println("T342 shipments: select row count"); return 255 }
+    shipments_select_cols := mut shipments_select.get_columns()
+    I !expect_column(shipments_select_cols, 0, "id", "INT") { println("T342 shipments: select id column"); return 255 }
+    I !expect_column(shipments_select_cols, 9, "batch", "TEXT") { println("T342 shipments: select batch column"); return 255 }
+    shipments_select_rows := mut shipments_select.get_rows()
+    shipments_select_row0 := mut &shipments_select_rows[0]
+    shipments_select_row1 := mut &shipments_select_rows[1]
+    I !expect_cell(shipments_select_row0, 0, "1") { println("T342 shipments: row0 id"); return 255 }
+    I !expect_cell(shipments_select_row0, 9, "batch-a") { println("T342 shipments: row0 batch"); return 255 }
+    I !expect_cell(shipments_select_row1, 0, "2") { println("T342 shipments: row1 id"); return 255 }
+    I !expect_cell(shipments_select_row1, 9, "batch-b") { println("T342 shipments: row1 batch"); return 255 }
+    shipments_select.free_owned_text()
+    shipments_select.free_owned_text()
+    shipments_projection := mut match shipments_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_projection.column_count() != 10 as u64 { println("T344 shipments: projection column count"); return 255 }
+    I shipments_projection.row_count() != 2 as u64 { println("T344 shipments: projection row count"); return 255 }
+    shipments_projection_cols := mut shipments_projection.get_columns()
+    I !expect_column(shipments_projection_cols, 0, "id", "INT") { println("T344 shipments: projection id column"); return 255 }
+    I !expect_column(shipments_projection_cols, 9, "batch", "TEXT") { println("T344 shipments: projection batch column"); return 255 }
+    shipments_projection_rows := mut shipments_projection.get_rows()
+    shipments_projection_row0 := mut &shipments_projection_rows[0]
+    shipments_projection_row1 := mut &shipments_projection_rows[1]
+    I !expect_cell(shipments_projection_row0, 0, "1") { println("T344 shipments: projection row0 id"); return 255 }
+    I !expect_cell(shipments_projection_row0, 9, "batch-a") { println("T344 shipments: projection row0 batch"); return 255 }
+    I !expect_cell(shipments_projection_row1, 0, "2") { println("T344 shipments: projection row1 id"); return 255 }
+    I !expect_cell(shipments_projection_row1, 9, "batch-b") { println("T344 shipments: projection row1 batch"); return 255 }
+    shipments_projection.free_owned_text()
+    shipments_projection.free_owned_text()
+    shipments_id_filter := mut match shipments_db.query("select * from shipments where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_id_filter.column_count() != 10 as u64 { println("T344 shipments: id filter column count"); return 255 }
+    I shipments_id_filter.row_count() != 1 as u64 { println("T344 shipments: id filter row count"); return 255 }
+    shipments_id_filter_rows := mut shipments_id_filter.get_rows()
+    shipments_id_filter_row0 := mut &shipments_id_filter_rows[0]
+    I !expect_cell(shipments_id_filter_row0, 0, "1") { println("T344 shipments: id filter id"); return 255 }
+    I !expect_cell(shipments_id_filter_row0, 9, "batch-a") { println("T344 shipments: id filter batch"); return 255 }
+    shipments_id_filter.free_owned_text()
+    shipments_id_filter.free_owned_text()
+    shipments_reversed_id_filter := mut match shipments_db.query("select * from shipments where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_reversed_id_filter.row_count() != 1 as u64 { println("T344 shipments: reversed id filter row count"); return 255 }
+    shipments_reversed_id_rows := mut shipments_reversed_id_filter.get_rows()
+    shipments_reversed_id_row0 := mut &shipments_reversed_id_rows[0]
+    I !expect_cell(shipments_reversed_id_row0, 0, "2") { println("T344 shipments: reversed id filter id"); return 255 }
+    I !expect_cell(shipments_reversed_id_row0, 9, "batch-b") { println("T344 shipments: reversed id filter batch"); return 255 }
+    shipments_reversed_id_filter.free_owned_text()
+    shipments_reversed_id_filter.free_owned_text()
+    shipments_missing_id_filter := mut match shipments_db.query("select * from shipments where id = 42") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_missing_id_filter.column_count() != 10 as u64 { println("T344 shipments: missing id filter column count"); return 255 }
+    I shipments_missing_id_filter.row_count() != 0 as u64 { println("T344 shipments: missing id filter row count"); return 255 }
+    shipments_missing_id_filter.free_owned_text()
+    shipments_missing_id_filter.free_owned_text()
+    shipments_batch_filter := mut match shipments_db.query("select * from shipments where batch = 'batch-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: batch filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_batch_filter.column_count() != 10 as u64 { println("T344 shipments: batch filter column count"); return 255 }
+    I shipments_batch_filter.row_count() != 1 as u64 { println("T344 shipments: batch filter row count"); return 255 }
+    shipments_batch_filter_rows := mut shipments_batch_filter.get_rows()
+    shipments_batch_filter_row0 := mut &shipments_batch_filter_rows[0]
+    I !expect_cell(shipments_batch_filter_row0, 0, "1") { println("T344 shipments: batch filter id"); return 255 }
+    I !expect_cell(shipments_batch_filter_row0, 9, "batch-a") { println("T344 shipments: batch filter batch"); return 255 }
+    shipments_batch_filter.free_owned_text()
+    shipments_batch_filter.free_owned_text()
+    shipments_reversed_batch_filter := mut match shipments_db.query("select * from shipments where 'batch-b' = batch") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: reversed batch filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_reversed_batch_filter.row_count() != 1 as u64 { println("T344 shipments: reversed batch filter row count"); return 255 }
+    shipments_reversed_batch_rows := mut shipments_reversed_batch_filter.get_rows()
+    shipments_reversed_batch_row0 := mut &shipments_reversed_batch_rows[0]
+    I !expect_cell(shipments_reversed_batch_row0, 0, "2") { println("T344 shipments: reversed batch filter id"); return 255 }
+    I !expect_cell(shipments_reversed_batch_row0, 9, "batch-b") { println("T344 shipments: reversed batch filter batch"); return 255 }
+    shipments_reversed_batch_filter.free_owned_text()
+    shipments_reversed_batch_filter.free_owned_text()
+    shipments_missing_batch_filter := mut match shipments_db.query("select * from shipments where batch = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: missing batch filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_missing_batch_filter.column_count() != 10 as u64 { println("T344 shipments: missing batch filter column count"); return 255 }
+    I shipments_missing_batch_filter.row_count() != 0 as u64 { println("T344 shipments: missing batch filter row count"); return 255 }
+    shipments_missing_batch_filter.free_owned_text()
+    shipments_missing_batch_filter.free_owned_text()
+    shipments_projection_id_filter := mut match shipments_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T347 shipments: projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_projection_id_filter.column_count() != 10 as u64 { println("T347 shipments: projection id filter column count"); return 255 }
+    I shipments_projection_id_filter.row_count() != 1 as u64 { println("T347 shipments: projection id filter row count"); return 255 }
+    shipments_projection_id_filter_rows := mut shipments_projection_id_filter.get_rows()
+    shipments_projection_id_filter_row0 := mut &shipments_projection_id_filter_rows[0]
+    I !expect_cell(shipments_projection_id_filter_row0, 0, "1") { println("T347 shipments: projection id filter id"); return 255 }
+    I !expect_cell(shipments_projection_id_filter_row0, 9, "batch-a") { println("T347 shipments: projection id filter batch"); return 255 }
+    shipments_projection_id_filter.free_owned_text()
+    shipments_projection_id_filter.free_owned_text()
+    shipments_projection_reversed_id_filter := mut match shipments_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T347 shipments: projection reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_projection_reversed_id_filter.row_count() != 1 as u64 { println("T347 shipments: projection reversed id filter row count"); return 255 }
+    shipments_projection_reversed_id_rows := mut shipments_projection_reversed_id_filter.get_rows()
+    shipments_projection_reversed_id_row0 := mut &shipments_projection_reversed_id_rows[0]
+    I !expect_cell(shipments_projection_reversed_id_row0, 0, "2") { println("T347 shipments: projection reversed id filter id"); return 255 }
+    I !expect_cell(shipments_projection_reversed_id_row0, 9, "batch-b") { println("T347 shipments: projection reversed id filter batch"); return 255 }
+    shipments_projection_reversed_id_filter.free_owned_text()
+    shipments_projection_reversed_id_filter.free_owned_text()
+    shipments_projection_missing_id_filter := mut match shipments_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where id = 42") {
+        Ok(r) => r,
+        Err(e) => { println("T347 shipments: projection missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_projection_missing_id_filter.column_count() != 10 as u64 { println("T347 shipments: projection missing id filter column count"); return 255 }
+    I shipments_projection_missing_id_filter.row_count() != 0 as u64 { println("T347 shipments: projection missing id filter row count"); return 255 }
+    shipments_projection_missing_id_filter.free_owned_text()
+    shipments_projection_missing_id_filter.free_owned_text()
+    shipments_projection_batch_filter := mut match shipments_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where batch = 'batch-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T349 shipments: projection batch filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_projection_batch_filter.column_count() != 10 as u64 { println("T349 shipments: projection batch filter column count"); return 255 }
+    I shipments_projection_batch_filter.row_count() != 1 as u64 { println("T349 shipments: projection batch filter row count"); return 255 }
+    shipments_projection_batch_filter_rows := mut shipments_projection_batch_filter.get_rows()
+    shipments_projection_batch_filter_row0 := mut &shipments_projection_batch_filter_rows[0]
+    I !expect_cell(shipments_projection_batch_filter_row0, 0, "1") { println("T349 shipments: projection batch filter id"); return 255 }
+    I !expect_cell(shipments_projection_batch_filter_row0, 9, "batch-a") { println("T349 shipments: projection batch filter batch"); return 255 }
+    shipments_projection_batch_filter.free_owned_text()
+    shipments_projection_batch_filter.free_owned_text()
+    shipments_projection_reversed_batch_filter := mut match shipments_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where 'batch-b' = batch") {
+        Ok(r) => r,
+        Err(e) => { println("T349 shipments: projection reversed batch filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_projection_reversed_batch_filter.row_count() != 1 as u64 { println("T349 shipments: projection reversed batch filter row count"); return 255 }
+    shipments_projection_reversed_batch_rows := mut shipments_projection_reversed_batch_filter.get_rows()
+    shipments_projection_reversed_batch_row0 := mut &shipments_projection_reversed_batch_rows[0]
+    I !expect_cell(shipments_projection_reversed_batch_row0, 0, "2") { println("T349 shipments: projection reversed batch filter id"); return 255 }
+    I !expect_cell(shipments_projection_reversed_batch_row0, 9, "batch-b") { println("T349 shipments: projection reversed batch filter batch"); return 255 }
+    shipments_projection_reversed_batch_filter.free_owned_text()
+    shipments_projection_reversed_batch_filter.free_owned_text()
+    shipments_projection_missing_batch_filter := mut match shipments_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where batch = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T349 shipments: projection missing batch filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_projection_missing_batch_filter.column_count() != 10 as u64 { println("T349 shipments: projection missing batch filter column count"); return 255 }
+    I shipments_projection_missing_batch_filter.row_count() != 0 as u64 { println("T349 shipments: projection missing batch filter row count"); return 255 }
+    shipments_projection_missing_batch_filter.free_owned_text()
+    shipments_projection_missing_batch_filter.free_owned_text()
+    match shipments_db.query("select * from shipments where bin = 'bin-a'") {
+        Ok(_) => { println("T344 shipments: earlier text filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match shipments_db.query("select batch from shipments") {
+        Ok(_) => { println("T344 shipments: partial projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match shipments_db.query("select batch, bin, shelf, zone, holder, tag, kind, state, title, id from shipments") {
+        Ok(_) => { println("T344 shipments: reordered projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match shipments_db.query("select shipments.id, shipments.title, shipments.state, shipments.kind, shipments.tag, shipments.holder, shipments.zone, shipments.shelf, shipments.bin, shipments.batch from shipments") {
+        Ok(_) => { println("T344 shipments: qualified projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match shipments_db.query("select * from shipments as s") {
+        Ok(_) => { println("T344 shipments: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match shipments_db.execute("create table shipments_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text)") {
+        Ok(_) => { println("T352 shipments: twelve-column descriptor unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match shipments_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T342 shipments: close failed"); return 255 },
+    }
+    shipments_reopen_cfg := mut EmbeddedConfig.default()
+    shipments_reopen_cfg = shipments_reopen_cfg.with_data_dir(shipments_path.clone())
+    shipments_reopen_cfg = shipments_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    shipments_reopened := mut match EmbeddedDatabase.open(shipments_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T342 shipments: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    shipments_reopened_select := mut match shipments_reopened.query("select * from shipments") {
+        Ok(r) => r,
+        Err(e) => { println("T342 shipments: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_reopened_select.column_count() != 10 as u64 { println("T342 shipments: reopen column count"); return 255 }
+    I shipments_reopened_select.row_count() != 2 as u64 { println("T342 shipments: reopen row count"); return 255 }
+    shipments_reopened_rows := mut shipments_reopened_select.get_rows()
+    shipments_reopened_row1 := mut &shipments_reopened_rows[1]
+    I !expect_cell(shipments_reopened_row1, 9, "batch-b") { println("T342 shipments: reopen row1 batch"); return 255 }
+    shipments_reopened_select.free_owned_text()
+    shipments_reopened_select.free_owned_text()
+    shipments_reopened_projection := mut match shipments_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_reopened_projection.row_count() != 2 as u64 { println("T344 shipments: reopen projection row count"); return 255 }
+    shipments_reopened_projection.free_owned_text()
+    shipments_reopened_projection.free_owned_text()
+    shipments_reopened_batch_filter := mut match shipments_reopened.query("select * from shipments where batch = 'batch-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: reopen batch filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_reopened_batch_filter.row_count() != 1 as u64 { println("T344 shipments: reopen batch filter row count"); return 255 }
+    shipments_reopened_batch_filter.free_owned_text()
+    shipments_reopened_batch_filter.free_owned_text()
+    shipments_reopened_projection_id_filter := mut match shipments_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T347 shipments: reopen projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_reopened_projection_id_filter.row_count() != 1 as u64 { println("T347 shipments: reopen projection id filter row count"); return 255 }
+    shipments_reopened_projection_id_filter.free_owned_text()
+    shipments_reopened_projection_id_filter.free_owned_text()
+    shipments_reopened_projection_batch_filter := mut match shipments_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where batch = 'batch-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T349 shipments: reopen projection batch filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_reopened_projection_batch_filter.row_count() != 1 as u64 { println("T349 shipments: reopen projection batch filter row count"); return 255 }
+    shipments_reopened_projection_batch_filter.free_owned_text()
+    shipments_reopened_projection_batch_filter.free_owned_text()
+    match shipments_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T342 shipments: reopen close failed"); return 255 },
+    }
+    I restore_smoke_data_page(shipments_path.clone(), shipments_page_id, shipments_pre_insert_page) != 0 {
+        println("T342 shipments: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(shipments_path.clone(), shipments_recovery_start_lsn) != 0 {
+        println("T342 shipments: checkpoint rewind failed")
+        return 255
+    }
+    shipments_recovered_cfg := mut EmbeddedConfig.default()
+    shipments_recovered_cfg = shipments_recovered_cfg.with_data_dir(shipments_path.clone())
+    shipments_recovered_cfg = shipments_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    shipments_recovered := mut match EmbeddedDatabase.open(shipments_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T342 shipments: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    shipments_recovered_select := mut match shipments_recovered.query("select * from shipments") {
+        Ok(r) => r,
+        Err(e) => { println("T342 shipments: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_recovered_select.column_count() != 10 as u64 { println("T342 shipments: recovered column count"); return 255 }
+    I shipments_recovered_select.row_count() != 2 as u64 { println("T342 shipments: recovered row count"); return 255 }
+    shipments_recovered_rows := mut shipments_recovered_select.get_rows()
+    shipments_recovered_row0 := mut &shipments_recovered_rows[0]
+    shipments_recovered_row1 := mut &shipments_recovered_rows[1]
+    I !expect_cell(shipments_recovered_row0, 9, "batch-a") { println("T342 shipments: recovered row0 batch"); return 255 }
+    I !expect_cell(shipments_recovered_row1, 9, "batch-b") { println("T342 shipments: recovered row1 batch"); return 255 }
+    shipments_recovered_select.free_owned_text()
+    shipments_recovered_select.free_owned_text()
+    shipments_recovered_projection := mut match shipments_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_recovered_projection.row_count() != 2 as u64 { println("T344 shipments: recovered projection row count"); return 255 }
+    shipments_recovered_projection.free_owned_text()
+    shipments_recovered_projection.free_owned_text()
+    shipments_recovered_id_filter := mut match shipments_recovered.query("select * from shipments where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T344 shipments: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_recovered_id_filter.row_count() != 1 as u64 { println("T344 shipments: recovered id filter row count"); return 255 }
+    shipments_recovered_id_filter.free_owned_text()
+    shipments_recovered_id_filter.free_owned_text()
+    shipments_recovered_projection_id_filter := mut match shipments_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T347 shipments: recovered projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_recovered_projection_id_filter.row_count() != 1 as u64 { println("T347 shipments: recovered projection id filter row count"); return 255 }
+    shipments_recovered_projection_id_filter.free_owned_text()
+    shipments_recovered_projection_id_filter.free_owned_text()
+    shipments_recovered_projection_batch_filter := mut match shipments_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch from shipments where batch = 'batch-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T349 shipments: recovered projection batch filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I shipments_recovered_projection_batch_filter.row_count() != 1 as u64 { println("T349 shipments: recovered projection batch filter row count"); return 255 }
+    shipments_recovered_projection_batch_filter.free_owned_text()
+    shipments_recovered_projection_batch_filter.free_owned_text()
+    match shipments_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T342 shipments: recovered close failed"); return 255 },
+    }
+
+    deliveries_suffix := mut time_micros()
+    deliveries_path := mut "embedded_sql_api_roundtrip_deliveries_db_{deliveries_suffix}"
+    deliveries_cfg := mut EmbeddedConfig.default()
+    deliveries_cfg = deliveries_cfg.with_data_dir(deliveries_path.clone())
+    deliveries_cfg = deliveries_cfg.with_page_size(PAGE_SIZE_8K)
+    deliveries_db := mut match EmbeddedDatabase.open(deliveries_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T352 deliveries: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    deliveries_created := mut match deliveries_db.execute("create table deliveries (id int, title text, state text, kind text, tag text, holder text, zone text, shelf text, bin text, batch text, lane text)") {
+        Ok(n) => n,
+        Err(e) => { println("T352 deliveries: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_created != 0 as u64 { println("T352 deliveries: create affected rows"); return 255 }
+    deliveries_table_id := mut 0 as u32
+    deliveries_page_id := mut 0 as u32
+    match deliveries_db.catalog.get_table("deliveries") {
+        Some(info) => {
+            deliveries_table_id = info.table_id
+            deliveries_page_id = info.first_page_id
+            I info.column_count != 11 as u16 { println("T352 deliveries: table column count"); return 255 }
+        },
+        None => { println("T352 deliveries: catalog missing table"); return 255 },
+    }
+    deliveries_col_refs := mut deliveries_db.catalog.get_columns(deliveries_table_id)
+    deliveries_cols: Vec<ColumnInfo> := mut Vec.with_capacity(deliveries_col_refs.len())
+    LF col_ref: &deliveries_col_refs {
+        deliveries_cols.push((**col_ref).clone())
+    }
+    I deliveries_cols.len() != 11 as u64 { println("T352 deliveries: catalog column count"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 0, "id", "INT") { println("T352 deliveries: catalog id column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 1, "title", "TEXT") { println("T352 deliveries: catalog title column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 2, "state", "TEXT") { println("T352 deliveries: catalog state column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 3, "kind", "TEXT") { println("T352 deliveries: catalog kind column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 4, "tag", "TEXT") { println("T352 deliveries: catalog tag column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 5, "holder", "TEXT") { println("T352 deliveries: catalog holder column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 6, "zone", "TEXT") { println("T352 deliveries: catalog zone column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 7, "shelf", "TEXT") { println("T352 deliveries: catalog shelf column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 8, "bin", "TEXT") { println("T352 deliveries: catalog bin column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 9, "batch", "TEXT") { println("T352 deliveries: catalog batch column"); return 255 }
+    I !expect_catalog_column(&deliveries_cols, 10, "lane", "TEXT") { println("T352 deliveries: catalog lane column"); return 255 }
+    deliveries_empty_frame := mut match deliveries_db.pool.fetch_page(FILE_ID_DATA, deliveries_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T352 deliveries: fetch empty page failed"); return 255 },
+    }
+    deliveries_empty_page := mut deliveries_db.pool.get_page(deliveries_empty_frame)
+    deliveries_pre_insert_page := mut copy_smoke_page(deliveries_empty_page)
+    deliveries_db.pool.unpin_page(deliveries_empty_frame, false)
+    deliveries_recovery_start_lsn := mut deliveries_db.gcm.current_lsn()
+    deliveries_insert_a := mut match deliveries_db.execute("insert into deliveries (id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane) values (1, 'alpha', 'open', 'ops', 'blue', 'team-a', 'north', 'rack-a', 'bin-a', 'batch-a', 'lane-a')") {
+        Ok(n) => n,
+        Err(e) => { println("T352 deliveries: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_insert_a != 1 as u64 { println("T352 deliveries: first insert count"); return 255 }
+    deliveries_insert_b := mut match deliveries_db.execute("insert into deliveries (lane, batch, bin, shelf, zone, holder, tag, kind, state, title, id) values ('lane-b', 'batch-b', 'bin-b', 'rack-b', 'south', 'team-b', 'green', 'release', 'closed', 'beta', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T352 deliveries: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_insert_b != 1 as u64 { println("T352 deliveries: reordered insert count"); return 255 }
+    deliveries_select := mut match deliveries_db.query("select * from deliveries") {
+        Ok(r) => r,
+        Err(e) => { println("T352 deliveries: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_select.column_count() != 11 as u64 { println("T352 deliveries: select column count"); return 255 }
+    I deliveries_select.row_count() != 2 as u64 { println("T352 deliveries: select row count"); return 255 }
+    deliveries_select_cols := mut deliveries_select.get_columns()
+    I !expect_column(deliveries_select_cols, 0, "id", "INT") { println("T352 deliveries: select id column"); return 255 }
+    I !expect_column(deliveries_select_cols, 10, "lane", "TEXT") { println("T352 deliveries: select lane column"); return 255 }
+    deliveries_select_rows := mut deliveries_select.get_rows()
+    deliveries_select_row0 := mut &deliveries_select_rows[0]
+    deliveries_select_row1 := mut &deliveries_select_rows[1]
+    I !expect_cell(deliveries_select_row0, 0, "1") { println("T352 deliveries: row0 id"); return 255 }
+    I !expect_cell(deliveries_select_row0, 10, "lane-a") { println("T352 deliveries: row0 lane"); return 255 }
+    I !expect_cell(deliveries_select_row1, 0, "2") { println("T352 deliveries: row1 id"); return 255 }
+    I !expect_cell(deliveries_select_row1, 10, "lane-b") { println("T352 deliveries: row1 lane"); return 255 }
+    deliveries_select.free_owned_text()
+    deliveries_select.free_owned_text()
+    deliveries_projection := mut match deliveries_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_projection.column_count() != 11 as u64 { println("T354 deliveries: projection column count"); return 255 }
+    I deliveries_projection.row_count() != 2 as u64 { println("T354 deliveries: projection row count"); return 255 }
+    deliveries_projection_cols := mut deliveries_projection.get_columns()
+    I !expect_column(deliveries_projection_cols, 0, "id", "INT") { println("T354 deliveries: projection id column"); return 255 }
+    I !expect_column(deliveries_projection_cols, 10, "lane", "TEXT") { println("T354 deliveries: projection lane column"); return 255 }
+    deliveries_projection_rows := mut deliveries_projection.get_rows()
+    deliveries_projection_row0 := mut &deliveries_projection_rows[0]
+    deliveries_projection_row1 := mut &deliveries_projection_rows[1]
+    I !expect_cell(deliveries_projection_row0, 0, "1") { println("T354 deliveries: projection row0 id"); return 255 }
+    I !expect_cell(deliveries_projection_row0, 10, "lane-a") { println("T354 deliveries: projection row0 lane"); return 255 }
+    I !expect_cell(deliveries_projection_row1, 0, "2") { println("T354 deliveries: projection row1 id"); return 255 }
+    I !expect_cell(deliveries_projection_row1, 10, "lane-b") { println("T354 deliveries: projection row1 lane"); return 255 }
+    deliveries_projection.free_owned_text()
+    deliveries_projection.free_owned_text()
+    deliveries_id_filter := mut match deliveries_db.query("select * from deliveries where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_id_filter.column_count() != 11 as u64 { println("T354 deliveries: id filter column count"); return 255 }
+    I deliveries_id_filter.row_count() != 1 as u64 { println("T354 deliveries: id filter row count"); return 255 }
+    deliveries_id_filter_rows := mut deliveries_id_filter.get_rows()
+    deliveries_id_filter_row0 := mut &deliveries_id_filter_rows[0]
+    I !expect_cell(deliveries_id_filter_row0, 0, "1") { println("T354 deliveries: id filter id"); return 255 }
+    I !expect_cell(deliveries_id_filter_row0, 10, "lane-a") { println("T354 deliveries: id filter lane"); return 255 }
+    deliveries_id_filter.free_owned_text()
+    deliveries_id_filter.free_owned_text()
+    deliveries_reversed_id_filter := mut match deliveries_db.query("select * from deliveries where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_reversed_id_filter.row_count() != 1 as u64 { println("T354 deliveries: reversed id filter row count"); return 255 }
+    deliveries_reversed_id_rows := mut deliveries_reversed_id_filter.get_rows()
+    deliveries_reversed_id_row0 := mut &deliveries_reversed_id_rows[0]
+    I !expect_cell(deliveries_reversed_id_row0, 0, "2") { println("T354 deliveries: reversed id filter id"); return 255 }
+    I !expect_cell(deliveries_reversed_id_row0, 10, "lane-b") { println("T354 deliveries: reversed id filter lane"); return 255 }
+    deliveries_reversed_id_filter.free_owned_text()
+    deliveries_reversed_id_filter.free_owned_text()
+    deliveries_missing_id_filter := mut match deliveries_db.query("select * from deliveries where id = 42") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_missing_id_filter.column_count() != 11 as u64 { println("T354 deliveries: missing id filter column count"); return 255 }
+    I deliveries_missing_id_filter.row_count() != 0 as u64 { println("T354 deliveries: missing id filter row count"); return 255 }
+    deliveries_missing_id_filter.free_owned_text()
+    deliveries_missing_id_filter.free_owned_text()
+    deliveries_lane_filter := mut match deliveries_db.query("select * from deliveries where lane = 'lane-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: lane filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_lane_filter.column_count() != 11 as u64 { println("T354 deliveries: lane filter column count"); return 255 }
+    I deliveries_lane_filter.row_count() != 1 as u64 { println("T354 deliveries: lane filter row count"); return 255 }
+    deliveries_lane_filter_rows := mut deliveries_lane_filter.get_rows()
+    deliveries_lane_filter_row0 := mut &deliveries_lane_filter_rows[0]
+    I !expect_cell(deliveries_lane_filter_row0, 0, "1") { println("T354 deliveries: lane filter id"); return 255 }
+    I !expect_cell(deliveries_lane_filter_row0, 10, "lane-a") { println("T354 deliveries: lane filter lane"); return 255 }
+    deliveries_lane_filter.free_owned_text()
+    deliveries_lane_filter.free_owned_text()
+    deliveries_reversed_lane_filter := mut match deliveries_db.query("select * from deliveries where 'lane-b' = lane") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: reversed lane filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_reversed_lane_filter.row_count() != 1 as u64 { println("T354 deliveries: reversed lane filter row count"); return 255 }
+    deliveries_reversed_lane_rows := mut deliveries_reversed_lane_filter.get_rows()
+    deliveries_reversed_lane_row0 := mut &deliveries_reversed_lane_rows[0]
+    I !expect_cell(deliveries_reversed_lane_row0, 0, "2") { println("T354 deliveries: reversed lane filter id"); return 255 }
+    I !expect_cell(deliveries_reversed_lane_row0, 10, "lane-b") { println("T354 deliveries: reversed lane filter lane"); return 255 }
+    deliveries_reversed_lane_filter.free_owned_text()
+    deliveries_reversed_lane_filter.free_owned_text()
+    deliveries_missing_lane_filter := mut match deliveries_db.query("select * from deliveries where lane = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: missing lane filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_missing_lane_filter.column_count() != 11 as u64 { println("T354 deliveries: missing lane filter column count"); return 255 }
+    I deliveries_missing_lane_filter.row_count() != 0 as u64 { println("T354 deliveries: missing lane filter row count"); return 255 }
+    deliveries_missing_lane_filter.free_owned_text()
+    deliveries_missing_lane_filter.free_owned_text()
+    match deliveries_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where id = 1") {
+        Ok(_) => { println("T354 deliveries: projection id filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match deliveries_db.query("select * from deliveries where batch = 'batch-a'") {
+        Ok(_) => { println("T354 deliveries: earlier text filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match deliveries_db.query("select lane from deliveries") {
+        Ok(_) => { println("T354 deliveries: partial projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match deliveries_db.query("select lane, batch, bin, shelf, zone, holder, tag, kind, state, title, id from deliveries") {
+        Ok(_) => { println("T354 deliveries: reordered projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match deliveries_db.query("select deliveries.id, deliveries.title, deliveries.state, deliveries.kind, deliveries.tag, deliveries.holder, deliveries.zone, deliveries.shelf, deliveries.bin, deliveries.batch, deliveries.lane from deliveries") {
+        Ok(_) => { println("T354 deliveries: qualified projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match deliveries_db.query("select * from deliveries as d") {
+        Ok(_) => { println("T354 deliveries: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match deliveries_db.execute("create table deliveries_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text)") {
+        Ok(_) => { println("T352 deliveries: twelve-column descriptor unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match deliveries_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T352 deliveries: close failed"); return 255 },
+    }
+    deliveries_reopen_cfg := mut EmbeddedConfig.default()
+    deliveries_reopen_cfg = deliveries_reopen_cfg.with_data_dir(deliveries_path.clone())
+    deliveries_reopen_cfg = deliveries_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    deliveries_reopened := mut match EmbeddedDatabase.open(deliveries_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T352 deliveries: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    deliveries_reopened_select := mut match deliveries_reopened.query("select * from deliveries") {
+        Ok(r) => r,
+        Err(e) => { println("T352 deliveries: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_reopened_select.column_count() != 11 as u64 { println("T352 deliveries: reopen column count"); return 255 }
+    I deliveries_reopened_select.row_count() != 2 as u64 { println("T352 deliveries: reopen row count"); return 255 }
+    deliveries_reopened_rows := mut deliveries_reopened_select.get_rows()
+    deliveries_reopened_row1 := mut &deliveries_reopened_rows[1]
+    I !expect_cell(deliveries_reopened_row1, 10, "lane-b") { println("T352 deliveries: reopen row1 lane"); return 255 }
+    deliveries_reopened_select.free_owned_text()
+    deliveries_reopened_select.free_owned_text()
+    deliveries_reopened_projection := mut match deliveries_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_reopened_projection.row_count() != 2 as u64 { println("T354 deliveries: reopen projection row count"); return 255 }
+    deliveries_reopened_projection.free_owned_text()
+    deliveries_reopened_projection.free_owned_text()
+    deliveries_reopened_lane_filter := mut match deliveries_reopened.query("select * from deliveries where lane = 'lane-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: reopen lane filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_reopened_lane_filter.row_count() != 1 as u64 { println("T354 deliveries: reopen lane filter row count"); return 255 }
+    deliveries_reopened_lane_filter.free_owned_text()
+    deliveries_reopened_lane_filter.free_owned_text()
+    match deliveries_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T352 deliveries: reopen close failed"); return 255 },
+    }
+    I restore_smoke_data_page(deliveries_path.clone(), deliveries_page_id, deliveries_pre_insert_page) != 0 {
+        println("T352 deliveries: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(deliveries_path.clone(), deliveries_recovery_start_lsn) != 0 {
+        println("T352 deliveries: checkpoint rewind failed")
+        return 255
+    }
+    deliveries_recovered_cfg := mut EmbeddedConfig.default()
+    deliveries_recovered_cfg = deliveries_recovered_cfg.with_data_dir(deliveries_path.clone())
+    deliveries_recovered_cfg = deliveries_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    deliveries_recovered := mut match EmbeddedDatabase.open(deliveries_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T352 deliveries: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    deliveries_recovered_select := mut match deliveries_recovered.query("select * from deliveries") {
+        Ok(r) => r,
+        Err(e) => { println("T352 deliveries: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_recovered_select.column_count() != 11 as u64 { println("T352 deliveries: recovered column count"); return 255 }
+    I deliveries_recovered_select.row_count() != 2 as u64 { println("T352 deliveries: recovered row count"); return 255 }
+    deliveries_recovered_rows := mut deliveries_recovered_select.get_rows()
+    deliveries_recovered_row0 := mut &deliveries_recovered_rows[0]
+    deliveries_recovered_row1 := mut &deliveries_recovered_rows[1]
+    I !expect_cell(deliveries_recovered_row0, 10, "lane-a") { println("T352 deliveries: recovered row0 lane"); return 255 }
+    I !expect_cell(deliveries_recovered_row1, 10, "lane-b") { println("T352 deliveries: recovered row1 lane"); return 255 }
+    deliveries_recovered_select.free_owned_text()
+    deliveries_recovered_select.free_owned_text()
+    deliveries_recovered_projection := mut match deliveries_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_recovered_projection.row_count() != 2 as u64 { println("T354 deliveries: recovered projection row count"); return 255 }
+    deliveries_recovered_projection.free_owned_text()
+    deliveries_recovered_projection.free_owned_text()
+    deliveries_recovered_id_filter := mut match deliveries_recovered.query("select * from deliveries where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T354 deliveries: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_recovered_id_filter.row_count() != 1 as u64 { println("T354 deliveries: recovered id filter row count"); return 255 }
+    deliveries_recovered_id_filter.free_owned_text()
+    deliveries_recovered_id_filter.free_owned_text()
+    match deliveries_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T352 deliveries: recovered close failed"); return 255 },
     }
 
     tasks_recovery_suffix := mut time_micros()
