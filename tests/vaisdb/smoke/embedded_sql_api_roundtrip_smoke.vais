@@ -2188,7 +2188,7 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text)") {
+    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text)") {
         Ok(_) => { println("T155 notes: too many columns unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3170,7 +3170,7 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text)") {
+    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text)") {
         Ok(_) => { println("T195 tickets: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3510,7 +3510,7 @@ fn main() -> i64 {
         Ok(_) => { println("T215 contacts: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text)") {
+    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text)") {
         Ok(_) => { println("T215 contacts: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -6927,6 +6927,162 @@ fn main() -> i64 {
     match assets_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T310 assets: recovered close failed"); return 255 },
+    }
+
+    inventory_suffix := mut time_micros()
+    inventory_path := mut "embedded_sql_api_roundtrip_inventory_db_{inventory_suffix}"
+    inventory_cfg := mut EmbeddedConfig.default()
+    inventory_cfg = inventory_cfg.with_data_dir(inventory_path.clone())
+    inventory_cfg = inventory_cfg.with_page_size(PAGE_SIZE_8K)
+    inventory_db := mut match EmbeddedDatabase.open(inventory_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T320 inventory: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    inventory_created := mut match inventory_db.execute("create table inventory (id int, title text, state text, kind text, tag text, holder text, zone text)") {
+        Ok(n) => n,
+        Err(e) => { println("T320 inventory: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_created != 0 as u64 { println("T320 inventory: create affected rows"); return 255 }
+    inventory_table_id := mut 0 as u32
+    inventory_page_id := mut 0 as u32
+    match inventory_db.catalog.get_table("inventory") {
+        Some(info) => {
+            inventory_table_id = info.table_id
+            inventory_page_id = info.first_page_id
+            I info.column_count != 7 as u16 { println("T320 inventory: table column count"); return 255 }
+        },
+        None => { println("T320 inventory: catalog missing table"); return 255 },
+    }
+    inventory_col_refs := mut inventory_db.catalog.get_columns(inventory_table_id)
+    inventory_cols: Vec<ColumnInfo> := mut Vec.with_capacity(inventory_col_refs.len())
+    LF col_ref: &inventory_col_refs {
+        inventory_cols.push((**col_ref).clone())
+    }
+    I inventory_cols.len() != 7 as u64 { println("T320 inventory: catalog column count"); return 255 }
+    I !expect_catalog_column(&inventory_cols, 0, "id", "INT") { println("T320 inventory: catalog id column"); return 255 }
+    I !expect_catalog_column(&inventory_cols, 1, "title", "TEXT") { println("T320 inventory: catalog title column"); return 255 }
+    I !expect_catalog_column(&inventory_cols, 2, "state", "TEXT") { println("T320 inventory: catalog state column"); return 255 }
+    I !expect_catalog_column(&inventory_cols, 3, "kind", "TEXT") { println("T320 inventory: catalog kind column"); return 255 }
+    I !expect_catalog_column(&inventory_cols, 4, "tag", "TEXT") { println("T320 inventory: catalog tag column"); return 255 }
+    I !expect_catalog_column(&inventory_cols, 5, "holder", "TEXT") { println("T320 inventory: catalog holder column"); return 255 }
+    I !expect_catalog_column(&inventory_cols, 6, "zone", "TEXT") { println("T320 inventory: catalog zone column"); return 255 }
+    inventory_empty_frame := mut match inventory_db.pool.fetch_page(FILE_ID_DATA, inventory_page_id) {
+        Ok(f) => f,
+        Err(_) => { println("T320 inventory: fetch empty page failed"); return 255 },
+    }
+    inventory_empty_page := mut inventory_db.pool.get_page(inventory_empty_frame)
+    inventory_pre_insert_page := mut copy_smoke_page(inventory_empty_page)
+    inventory_db.pool.unpin_page(inventory_empty_frame, false)
+    inventory_recovery_start_lsn := mut inventory_db.gcm.current_lsn()
+    inventory_insert_a := mut match inventory_db.execute("insert into inventory (id, title, state, kind, tag, holder, zone) values (1, 'alpha', 'open', 'ops', 'blue', 'team-a', 'north')") {
+        Ok(n) => n,
+        Err(e) => { println("T320 inventory: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_insert_a != 1 as u64 { println("T320 inventory: first insert count"); return 255 }
+    inventory_insert_b := mut match inventory_db.execute("insert into inventory (zone, holder, tag, kind, state, title, id) values ('south', 'team-b', 'green', 'release', 'closed', 'beta', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T320 inventory: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_insert_b != 1 as u64 { println("T320 inventory: reordered insert count"); return 255 }
+    inventory_select := mut match inventory_db.query("select * from inventory") {
+        Ok(r) => r,
+        Err(e) => { println("T320 inventory: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_select.column_count() != 7 as u64 { println("T320 inventory: select column count"); return 255 }
+    I inventory_select.row_count() != 2 as u64 { println("T320 inventory: select row count"); return 255 }
+    inventory_select_cols := mut inventory_select.get_columns()
+    I !expect_column(inventory_select_cols, 0, "id", "INT") { println("T320 inventory: select id column"); return 255 }
+    I !expect_column(inventory_select_cols, 1, "title", "TEXT") { println("T320 inventory: select title column"); return 255 }
+    I !expect_column(inventory_select_cols, 2, "state", "TEXT") { println("T320 inventory: select state column"); return 255 }
+    I !expect_column(inventory_select_cols, 3, "kind", "TEXT") { println("T320 inventory: select kind column"); return 255 }
+    I !expect_column(inventory_select_cols, 4, "tag", "TEXT") { println("T320 inventory: select tag column"); return 255 }
+    I !expect_column(inventory_select_cols, 5, "holder", "TEXT") { println("T320 inventory: select holder column"); return 255 }
+    I !expect_column(inventory_select_cols, 6, "zone", "TEXT") { println("T320 inventory: select zone column"); return 255 }
+    inventory_select_rows := mut inventory_select.get_rows()
+    inventory_select_row0 := mut &inventory_select_rows[0]
+    inventory_select_row1 := mut &inventory_select_rows[1]
+    I !expect_cell(inventory_select_row0, 0, "1") { println("T320 inventory: row0 id"); return 255 }
+    I !expect_cell(inventory_select_row0, 1, "alpha") { println("T320 inventory: row0 title"); return 255 }
+    I !expect_cell(inventory_select_row0, 2, "open") { println("T320 inventory: row0 state"); return 255 }
+    I !expect_cell(inventory_select_row0, 3, "ops") { println("T320 inventory: row0 kind"); return 255 }
+    I !expect_cell(inventory_select_row0, 4, "blue") { println("T320 inventory: row0 tag"); return 255 }
+    I !expect_cell(inventory_select_row0, 5, "team-a") { println("T320 inventory: row0 holder"); return 255 }
+    I !expect_cell(inventory_select_row0, 6, "north") { println("T320 inventory: row0 zone"); return 255 }
+    I !expect_cell(inventory_select_row1, 0, "2") { println("T320 inventory: row1 id"); return 255 }
+    I !expect_cell(inventory_select_row1, 1, "beta") { println("T320 inventory: row1 title"); return 255 }
+    I !expect_cell(inventory_select_row1, 2, "closed") { println("T320 inventory: row1 state"); return 255 }
+    I !expect_cell(inventory_select_row1, 3, "release") { println("T320 inventory: row1 kind"); return 255 }
+    I !expect_cell(inventory_select_row1, 4, "green") { println("T320 inventory: row1 tag"); return 255 }
+    I !expect_cell(inventory_select_row1, 5, "team-b") { println("T320 inventory: row1 holder"); return 255 }
+    I !expect_cell(inventory_select_row1, 6, "south") { println("T320 inventory: row1 zone"); return 255 }
+    inventory_select.free_owned_text()
+    inventory_select.free_owned_text()
+    match inventory_db.query("select id, title, state, kind, tag, holder, zone from inventory") {
+        Ok(_) => { println("T320 inventory: projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match inventory_db.query("select * from inventory where id = 1") {
+        Ok(_) => { println("T320 inventory: filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match inventory_db.query("select * from inventory as i") {
+        Ok(_) => { println("T320 inventory: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match inventory_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T320 inventory: close failed"); return 255 },
+    }
+    inventory_reopen_cfg := mut EmbeddedConfig.default()
+    inventory_reopen_cfg = inventory_reopen_cfg.with_data_dir(inventory_path.clone())
+    inventory_reopen_cfg = inventory_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    inventory_reopened := mut match EmbeddedDatabase.open(inventory_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T320 inventory: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    inventory_reopened_select := mut match inventory_reopened.query("select * from inventory") {
+        Ok(r) => r,
+        Err(e) => { println("T320 inventory: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_reopened_select.column_count() != 7 as u64 { println("T320 inventory: reopen column count"); return 255 }
+    I inventory_reopened_select.row_count() != 2 as u64 { println("T320 inventory: reopen row count"); return 255 }
+    inventory_reopened_select.free_owned_text()
+    inventory_reopened_select.free_owned_text()
+    match inventory_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T320 inventory: reopen close failed"); return 255 },
+    }
+    I restore_smoke_data_page(inventory_path.clone(), inventory_page_id, inventory_pre_insert_page) != 0 {
+        println("T320 inventory: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(inventory_path.clone(), inventory_recovery_start_lsn) != 0 {
+        println("T320 inventory: checkpoint rewind failed")
+        return 255
+    }
+    inventory_recovered_cfg := mut EmbeddedConfig.default()
+    inventory_recovered_cfg = inventory_recovered_cfg.with_data_dir(inventory_path.clone())
+    inventory_recovered_cfg = inventory_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    inventory_recovered := mut match EmbeddedDatabase.open(inventory_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T320 inventory: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    inventory_recovered_select := mut match inventory_recovered.query("select * from inventory") {
+        Ok(r) => r,
+        Err(e) => { println("T320 inventory: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_recovered_select.column_count() != 7 as u64 { println("T320 inventory: recovered column count"); return 255 }
+    I inventory_recovered_select.row_count() != 2 as u64 { println("T320 inventory: recovered row count"); return 255 }
+    inventory_recovered_rows := mut inventory_recovered_select.get_rows()
+    inventory_recovered_row0 := mut &inventory_recovered_rows[0]
+    inventory_recovered_row1 := mut &inventory_recovered_rows[1]
+    I !expect_cell(inventory_recovered_row0, 6, "north") { println("T320 inventory: recovered row0 zone"); return 255 }
+    I !expect_cell(inventory_recovered_row1, 6, "south") { println("T320 inventory: recovered row1 zone"); return 255 }
+    inventory_recovered_select.free_owned_text()
+    inventory_recovered_select.free_owned_text()
+    match inventory_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T320 inventory: recovered close failed"); return 255 },
     }
 
     tasks_recovery_suffix := mut time_micros()
