@@ -5976,6 +5976,49 @@ fn main() -> i64 {
     records_kind_filter_missing.free_owned_text()
     records_kind_filter_missing.free_owned_text()
 
+    records_projection_kind_filter := mut match records_db.query("select id, title, state, kind from records where kind = 'ops'") {
+        Ok(r) => r,
+        Err(e) => { println("T297 records: projection kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_projection_kind_filter.column_count() != 4 as u64 { println("T297 records: projection kind filter column count"); return 255 }
+    I records_projection_kind_filter.row_count() != 1 as u64 { println("T297 records: projection kind filter row count"); return 255 }
+    records_projection_kind_filter_cols := mut records_projection_kind_filter.get_columns()
+    I !expect_column(records_projection_kind_filter_cols, 0, "id", "INT") { println("T297 records: projection kind filter id column"); return 255 }
+    I !expect_column(records_projection_kind_filter_cols, 1, "title", "TEXT") { println("T297 records: projection kind filter title column"); return 255 }
+    I !expect_column(records_projection_kind_filter_cols, 2, "state", "TEXT") { println("T297 records: projection kind filter state column"); return 255 }
+    I !expect_column(records_projection_kind_filter_cols, 3, "kind", "TEXT") { println("T297 records: projection kind filter kind column"); return 255 }
+    records_projection_kind_filter_rows := mut records_projection_kind_filter.get_rows()
+    records_projection_kind_filter_row := mut &records_projection_kind_filter_rows[0]
+    I !expect_cell(records_projection_kind_filter_row, 0, "1") { println("T297 records: projection kind filter id"); return 255 }
+    I !expect_cell(records_projection_kind_filter_row, 1, "launch") { println("T297 records: projection kind filter title"); return 255 }
+    I !expect_cell(records_projection_kind_filter_row, 2, "open") { println("T297 records: projection kind filter state"); return 255 }
+    I !expect_cell(records_projection_kind_filter_row, 3, "ops") { println("T297 records: projection kind filter kind"); return 255 }
+    records_projection_kind_filter.free_owned_text()
+    records_projection_kind_filter.free_owned_text()
+
+    records_projection_kind_filter_reversed := mut match records_db.query("select id, title, state, kind from records where 'release' = kind") {
+        Ok(r) => r,
+        Err(e) => { println("T297 records: reversed projection kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_projection_kind_filter_reversed.row_count() != 1 as u64 { println("T297 records: reversed projection kind filter row count"); return 255 }
+    records_projection_kind_filter_reversed_rows := mut records_projection_kind_filter_reversed.get_rows()
+    records_projection_kind_filter_reversed_row := mut &records_projection_kind_filter_reversed_rows[0]
+    I !expect_cell(records_projection_kind_filter_reversed_row, 0, "2") { println("T297 records: reversed projection kind filter id"); return 255 }
+    I !expect_cell(records_projection_kind_filter_reversed_row, 1, "ship") { println("T297 records: reversed projection kind filter title"); return 255 }
+    I !expect_cell(records_projection_kind_filter_reversed_row, 2, "done") { println("T297 records: reversed projection kind filter state"); return 255 }
+    I !expect_cell(records_projection_kind_filter_reversed_row, 3, "release") { println("T297 records: reversed projection kind filter kind"); return 255 }
+    records_projection_kind_filter_reversed.free_owned_text()
+    records_projection_kind_filter_reversed.free_owned_text()
+
+    records_projection_kind_filter_missing := mut match records_db.query("select id, title, state, kind from records where kind = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T297 records: missing projection kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_projection_kind_filter_missing.column_count() != 4 as u64 { println("T297 records: missing projection kind filter column count"); return 255 }
+    I records_projection_kind_filter_missing.row_count() != 0 as u64 { println("T297 records: missing projection kind filter row count"); return 255 }
+    records_projection_kind_filter_missing.free_owned_text()
+    records_projection_kind_filter_missing.free_owned_text()
+
     match records_db.query("select * from records where state = 'open'") {
         Ok(_) => { println("T290 records: filter unexpectedly accepted"); return 255 },
         Err(_) => {},
@@ -5984,8 +6027,12 @@ fn main() -> i64 {
         Ok(_) => { println("T292 records: first text filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match records_db.query("select id, title, state, kind from records where kind = 'ops'") {
-        Ok(_) => { println("T292 records: projection filter unexpectedly accepted"); return 255 },
+    match records_db.query("select id, title, state, kind from records where state = 'open'") {
+        Ok(_) => { println("T297 records: projection state filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match records_db.query("select id, title, state, kind from records where title = 'launch'") {
+        Ok(_) => { println("T297 records: projection title filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match records_db.query("select * from records as r") {
@@ -6033,6 +6080,13 @@ fn main() -> i64 {
     I records_reopened_projection_id_filter.row_count() != 1 as u64 { println("T295 records: reopen projection id filter row count"); return 255 }
     records_reopened_projection_id_filter.free_owned_text()
     records_reopened_projection_id_filter.free_owned_text()
+    records_reopened_projection_kind_filter := mut match records_reopened.query("select id, title, state, kind from records where kind = 'release'") {
+        Ok(r) => r,
+        Err(e) => { println("T297 records: reopen projection kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_reopened_projection_kind_filter.row_count() != 1 as u64 { println("T297 records: reopen projection kind filter row count"); return 255 }
+    records_reopened_projection_kind_filter.free_owned_text()
+    records_reopened_projection_kind_filter.free_owned_text()
     match records_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T290 records: reopen close failed"); return 255 },
@@ -6089,6 +6143,13 @@ fn main() -> i64 {
     I records_recovered_projection_id_filter.row_count() != 1 as u64 { println("T295 records: recovered projection id filter row count"); return 255 }
     records_recovered_projection_id_filter.free_owned_text()
     records_recovered_projection_id_filter.free_owned_text()
+    records_recovered_projection_kind_filter := mut match records_recovered.query("select id, title, state, kind from records where kind = 'ops'") {
+        Ok(r) => r,
+        Err(e) => { println("T297 records: recovered projection kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_recovered_projection_kind_filter.row_count() != 1 as u64 { println("T297 records: recovered projection kind filter row count"); return 255 }
+    records_recovered_projection_kind_filter.free_owned_text()
+    records_recovered_projection_kind_filter.free_owned_text()
     match records_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T290 records: recovered close failed"); return 255 },
