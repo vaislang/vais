@@ -5840,12 +5840,109 @@ fn main() -> i64 {
     records_select.free_owned_text()
     records_select.free_owned_text()
 
-    match records_db.query("select id, title, state, kind from records") {
-        Ok(_) => { println("T290 records: projection unexpectedly accepted"); return 255 },
-        Err(_) => {},
+    records_projection := mut match records_db.query("select id, title, state, kind from records") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: projection failed: {e.message}: {e.hint}"); return 255 },
     }
+    I records_projection.column_count() != 4 as u64 { println("T292 records: projection column count"); return 255 }
+    I records_projection.row_count() != 2 as u64 { println("T292 records: projection row count"); return 255 }
+    records_projection_cols := mut records_projection.get_columns()
+    I !expect_column(records_projection_cols, 0, "id", "INT") { println("T292 records: projection id column"); return 255 }
+    I !expect_column(records_projection_cols, 1, "title", "TEXT") { println("T292 records: projection title column"); return 255 }
+    I !expect_column(records_projection_cols, 2, "state", "TEXT") { println("T292 records: projection state column"); return 255 }
+    I !expect_column(records_projection_cols, 3, "kind", "TEXT") { println("T292 records: projection kind column"); return 255 }
+    records_projection_rows := mut records_projection.get_rows()
+    records_projection_row0 := mut &records_projection_rows[0]
+    records_projection_row1 := mut &records_projection_rows[1]
+    I !expect_cell(records_projection_row0, 0, "1") { println("T292 records: projection row0 id"); return 255 }
+    I !expect_cell(records_projection_row0, 1, "launch") { println("T292 records: projection row0 title"); return 255 }
+    I !expect_cell(records_projection_row0, 2, "open") { println("T292 records: projection row0 state"); return 255 }
+    I !expect_cell(records_projection_row0, 3, "ops") { println("T292 records: projection row0 kind"); return 255 }
+    I !expect_cell(records_projection_row1, 0, "2") { println("T292 records: projection row1 id"); return 255 }
+    I !expect_cell(records_projection_row1, 1, "ship") { println("T292 records: projection row1 title"); return 255 }
+    I !expect_cell(records_projection_row1, 2, "done") { println("T292 records: projection row1 state"); return 255 }
+    I !expect_cell(records_projection_row1, 3, "release") { println("T292 records: projection row1 kind"); return 255 }
+    records_projection.free_owned_text()
+    records_projection.free_owned_text()
+
+    records_id_filter := mut match records_db.query("select * from records where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_id_filter.column_count() != 4 as u64 { println("T292 records: id filter column count"); return 255 }
+    I records_id_filter.row_count() != 1 as u64 { println("T292 records: id filter row count"); return 255 }
+    records_id_filter_rows := mut records_id_filter.get_rows()
+    records_id_filter_row := mut &records_id_filter_rows[0]
+    I !expect_cell(records_id_filter_row, 0, "1") { println("T292 records: id filter id"); return 255 }
+    I !expect_cell(records_id_filter_row, 3, "ops") { println("T292 records: id filter kind"); return 255 }
+    records_id_filter.free_owned_text()
+    records_id_filter.free_owned_text()
+
+    records_id_filter_reversed := mut match records_db.query("select * from records where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_id_filter_reversed.row_count() != 1 as u64 { println("T292 records: reversed id filter row count"); return 255 }
+    records_id_filter_reversed_rows := mut records_id_filter_reversed.get_rows()
+    records_id_filter_reversed_row := mut &records_id_filter_reversed_rows[0]
+    I !expect_cell(records_id_filter_reversed_row, 0, "2") { println("T292 records: reversed id filter id"); return 255 }
+    I !expect_cell(records_id_filter_reversed_row, 3, "release") { println("T292 records: reversed id filter kind"); return 255 }
+    records_id_filter_reversed.free_owned_text()
+    records_id_filter_reversed.free_owned_text()
+
+    records_id_filter_missing := mut match records_db.query("select * from records where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_id_filter_missing.column_count() != 4 as u64 { println("T292 records: missing id filter column count"); return 255 }
+    I records_id_filter_missing.row_count() != 0 as u64 { println("T292 records: missing id filter row count"); return 255 }
+    records_id_filter_missing.free_owned_text()
+    records_id_filter_missing.free_owned_text()
+
+    records_kind_filter := mut match records_db.query("select * from records where kind = 'ops'") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_kind_filter.column_count() != 4 as u64 { println("T292 records: kind filter column count"); return 255 }
+    I records_kind_filter.row_count() != 1 as u64 { println("T292 records: kind filter row count"); return 255 }
+    records_kind_filter_rows := mut records_kind_filter.get_rows()
+    records_kind_filter_row := mut &records_kind_filter_rows[0]
+    I !expect_cell(records_kind_filter_row, 0, "1") { println("T292 records: kind filter id"); return 255 }
+    I !expect_cell(records_kind_filter_row, 3, "ops") { println("T292 records: kind filter kind"); return 255 }
+    records_kind_filter.free_owned_text()
+    records_kind_filter.free_owned_text()
+
+    records_kind_filter_reversed := mut match records_db.query("select * from records where 'release' = kind") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: reversed kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_kind_filter_reversed.row_count() != 1 as u64 { println("T292 records: reversed kind filter row count"); return 255 }
+    records_kind_filter_reversed_rows := mut records_kind_filter_reversed.get_rows()
+    records_kind_filter_reversed_row := mut &records_kind_filter_reversed_rows[0]
+    I !expect_cell(records_kind_filter_reversed_row, 0, "2") { println("T292 records: reversed kind filter id"); return 255 }
+    I !expect_cell(records_kind_filter_reversed_row, 3, "release") { println("T292 records: reversed kind filter kind"); return 255 }
+    records_kind_filter_reversed.free_owned_text()
+    records_kind_filter_reversed.free_owned_text()
+
+    records_kind_filter_missing := mut match records_db.query("select * from records where kind = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: missing kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_kind_filter_missing.column_count() != 4 as u64 { println("T292 records: missing kind filter column count"); return 255 }
+    I records_kind_filter_missing.row_count() != 0 as u64 { println("T292 records: missing kind filter row count"); return 255 }
+    records_kind_filter_missing.free_owned_text()
+    records_kind_filter_missing.free_owned_text()
+
     match records_db.query("select * from records where state = 'open'") {
         Ok(_) => { println("T290 records: filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match records_db.query("select * from records where title = 'launch'") {
+        Ok(_) => { println("T292 records: first text filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match records_db.query("select id, title, state, kind from records where kind = 'ops'") {
+        Ok(_) => { println("T292 records: projection filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match records_db.query("select * from records as r") {
@@ -5872,6 +5969,20 @@ fn main() -> i64 {
     I records_reopened_select.row_count() != 2 as u64 { println("T290 records: reopen row count"); return 255 }
     records_reopened_select.free_owned_text()
     records_reopened_select.free_owned_text()
+    records_reopened_projection := mut match records_reopened.query("select id, title, state, kind from records") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_reopened_projection.row_count() != 2 as u64 { println("T292 records: reopen projection row count"); return 255 }
+    records_reopened_projection.free_owned_text()
+    records_reopened_projection.free_owned_text()
+    records_reopened_kind_filter := mut match records_reopened.query("select * from records where kind = 'release'") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: reopen kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_reopened_kind_filter.row_count() != 1 as u64 { println("T292 records: reopen kind filter row count"); return 255 }
+    records_reopened_kind_filter.free_owned_text()
+    records_reopened_kind_filter.free_owned_text()
     match records_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T290 records: reopen close failed"); return 255 },
@@ -5900,6 +6011,27 @@ fn main() -> i64 {
     I records_recovered_select.row_count() != 2 as u64 { println("T290 records: recovered row count"); return 255 }
     records_recovered_select.free_owned_text()
     records_recovered_select.free_owned_text()
+    records_recovered_projection := mut match records_recovered.query("select id, title, state, kind from records") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_recovered_projection.row_count() != 2 as u64 { println("T292 records: recovered projection row count"); return 255 }
+    records_recovered_projection.free_owned_text()
+    records_recovered_projection.free_owned_text()
+    records_recovered_id_filter := mut match records_recovered.query("select * from records where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_recovered_id_filter.row_count() != 1 as u64 { println("T292 records: recovered id filter row count"); return 255 }
+    records_recovered_id_filter.free_owned_text()
+    records_recovered_id_filter.free_owned_text()
+    records_recovered_kind_filter := mut match records_recovered.query("select * from records where kind = 'ops'") {
+        Ok(r) => r,
+        Err(e) => { println("T292 records: recovered kind filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_recovered_kind_filter.row_count() != 1 as u64 { println("T292 records: recovered kind filter row count"); return 255 }
+    records_recovered_kind_filter.free_owned_text()
+    records_recovered_kind_filter.free_owned_text()
     match records_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T290 records: recovered close failed"); return 255 },
