@@ -2190,7 +2190,7 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text)") {
+    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text)") {
         Ok(_) => { println("T155 notes: too many columns unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3172,7 +3172,7 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text)") {
+    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text)") {
         Ok(_) => { println("T195 tickets: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3512,7 +3512,7 @@ fn main() -> i64 {
         Ok(_) => { println("T215 contacts: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text)") {
+    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text)") {
         Ok(_) => { println("T215 contacts: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -7494,8 +7494,8 @@ fn main() -> i64 {
         Ok(_) => { println("T332 warehouse: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match warehouse_db.execute("create table overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text)") {
-        Ok(_) => { println("T352 warehouse: twelve-column descriptor unexpectedly accepted"); return 255 },
+    match warehouse_db.execute("create table overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
+        Ok(_) => { println("T362 warehouse: thirteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match warehouse_db.close() {
@@ -7754,8 +7754,8 @@ fn main() -> i64 {
         Ok(_) => { println("T339 storage: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match storage_db.execute("create table storage_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text)") {
-        Ok(_) => { println("T352 storage: twelve-column descriptor unexpectedly accepted"); return 255 },
+    match storage_db.execute("create table storage_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
+        Ok(_) => { println("T362 storage: thirteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match storage_db.close() {
@@ -8075,8 +8075,8 @@ fn main() -> i64 {
         Ok(_) => { println("T344 shipments: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match shipments_db.execute("create table shipments_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text)") {
-        Ok(_) => { println("T352 shipments: twelve-column descriptor unexpectedly accepted"); return 255 },
+    match shipments_db.execute("create table shipments_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
+        Ok(_) => { println("T362 shipments: thirteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match shipments_db.close() {
@@ -8351,10 +8351,82 @@ fn main() -> i64 {
     I deliveries_missing_lane_filter.row_count() != 0 as u64 { println("T354 deliveries: missing lane filter row count"); return 255 }
     deliveries_missing_lane_filter.free_owned_text()
     deliveries_missing_lane_filter.free_owned_text()
-    match deliveries_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where id = 1") {
-        Ok(_) => { println("T354 deliveries: projection id filter unexpectedly accepted"); return 255 },
-        Err(_) => {},
+    deliveries_projection_id_filter := mut match deliveries_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T357 deliveries: projection id filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I deliveries_projection_id_filter.column_count() != 11 as u64 { println("T357 deliveries: projection id filter column count"); return 255 }
+    I deliveries_projection_id_filter.row_count() != 1 as u64 { println("T357 deliveries: projection id filter row count"); return 255 }
+    deliveries_projection_id_cols := mut deliveries_projection_id_filter.get_columns()
+    I !expect_column(deliveries_projection_id_cols, 0, "id", "INT") { println("T357 deliveries: projection id filter id column"); return 255 }
+    I !expect_column(deliveries_projection_id_cols, 10, "lane", "TEXT") { println("T357 deliveries: projection id filter lane column"); return 255 }
+    deliveries_projection_id_rows := mut deliveries_projection_id_filter.get_rows()
+    deliveries_projection_id_row0 := mut &deliveries_projection_id_rows[0]
+    I !expect_cell(deliveries_projection_id_row0, 0, "1") { println("T357 deliveries: projection id filter id"); return 255 }
+    I !expect_cell(deliveries_projection_id_row0, 10, "lane-a") { println("T357 deliveries: projection id filter lane"); return 255 }
+    deliveries_projection_id_filter.free_owned_text()
+    deliveries_projection_id_filter.free_owned_text()
+    deliveries_projection_reversed_id_filter := mut match deliveries_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T357 deliveries: reversed projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_projection_reversed_id_filter.column_count() != 11 as u64 { println("T357 deliveries: reversed projection id filter column count"); return 255 }
+    I deliveries_projection_reversed_id_filter.row_count() != 1 as u64 { println("T357 deliveries: reversed projection id filter row count"); return 255 }
+    deliveries_projection_reversed_id_rows := mut deliveries_projection_reversed_id_filter.get_rows()
+    deliveries_projection_reversed_id_row0 := mut &deliveries_projection_reversed_id_rows[0]
+    I !expect_cell(deliveries_projection_reversed_id_row0, 0, "2") { println("T357 deliveries: reversed projection id filter id"); return 255 }
+    I !expect_cell(deliveries_projection_reversed_id_row0, 10, "lane-b") { println("T357 deliveries: reversed projection id filter lane"); return 255 }
+    deliveries_projection_reversed_id_filter.free_owned_text()
+    deliveries_projection_reversed_id_filter.free_owned_text()
+    deliveries_projection_missing_id_filter := mut match deliveries_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where id = 42") {
+        Ok(r) => r,
+        Err(e) => { println("T357 deliveries: missing projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_projection_missing_id_filter.column_count() != 11 as u64 { println("T357 deliveries: missing projection id filter column count"); return 255 }
+    I deliveries_projection_missing_id_filter.row_count() != 0 as u64 { println("T357 deliveries: missing projection id filter row count"); return 255 }
+    deliveries_projection_missing_id_cols := mut deliveries_projection_missing_id_filter.get_columns()
+    I !expect_column(deliveries_projection_missing_id_cols, 0, "id", "INT") { println("T357 deliveries: missing projection id filter id column"); return 255 }
+    I !expect_column(deliveries_projection_missing_id_cols, 10, "lane", "TEXT") { println("T357 deliveries: missing projection id filter lane column"); return 255 }
+    deliveries_projection_missing_id_filter.free_owned_text()
+    deliveries_projection_missing_id_filter.free_owned_text()
+    deliveries_projection_lane_filter := mut match deliveries_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where lane = 'lane-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T359 deliveries: projection lane filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_projection_lane_filter.column_count() != 11 as u64 { println("T359 deliveries: projection lane filter column count"); return 255 }
+    I deliveries_projection_lane_filter.row_count() != 1 as u64 { println("T359 deliveries: projection lane filter row count"); return 255 }
+    deliveries_projection_lane_cols := mut deliveries_projection_lane_filter.get_columns()
+    I !expect_column(deliveries_projection_lane_cols, 0, "id", "INT") { println("T359 deliveries: projection lane filter id column"); return 255 }
+    I !expect_column(deliveries_projection_lane_cols, 10, "lane", "TEXT") { println("T359 deliveries: projection lane filter lane column"); return 255 }
+    deliveries_projection_lane_rows := mut deliveries_projection_lane_filter.get_rows()
+    deliveries_projection_lane_row0 := mut &deliveries_projection_lane_rows[0]
+    I !expect_cell(deliveries_projection_lane_row0, 0, "1") { println("T359 deliveries: projection lane filter id"); return 255 }
+    I !expect_cell(deliveries_projection_lane_row0, 10, "lane-a") { println("T359 deliveries: projection lane filter lane"); return 255 }
+    deliveries_projection_lane_filter.free_owned_text()
+    deliveries_projection_lane_filter.free_owned_text()
+    deliveries_projection_reversed_lane_filter := mut match deliveries_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where 'lane-b' = lane") {
+        Ok(r) => r,
+        Err(e) => { println("T359 deliveries: reversed projection lane filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_projection_reversed_lane_filter.column_count() != 11 as u64 { println("T359 deliveries: reversed projection lane filter column count"); return 255 }
+    I deliveries_projection_reversed_lane_filter.row_count() != 1 as u64 { println("T359 deliveries: reversed projection lane filter row count"); return 255 }
+    deliveries_projection_reversed_lane_rows := mut deliveries_projection_reversed_lane_filter.get_rows()
+    deliveries_projection_reversed_lane_row0 := mut &deliveries_projection_reversed_lane_rows[0]
+    I !expect_cell(deliveries_projection_reversed_lane_row0, 0, "2") { println("T359 deliveries: reversed projection lane filter id"); return 255 }
+    I !expect_cell(deliveries_projection_reversed_lane_row0, 10, "lane-b") { println("T359 deliveries: reversed projection lane filter lane"); return 255 }
+    deliveries_projection_reversed_lane_filter.free_owned_text()
+    deliveries_projection_reversed_lane_filter.free_owned_text()
+    deliveries_projection_missing_lane_filter := mut match deliveries_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where lane = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T359 deliveries: missing projection lane filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_projection_missing_lane_filter.column_count() != 11 as u64 { println("T359 deliveries: missing projection lane filter column count"); return 255 }
+    I deliveries_projection_missing_lane_filter.row_count() != 0 as u64 { println("T359 deliveries: missing projection lane filter row count"); return 255 }
+    deliveries_projection_missing_lane_cols := mut deliveries_projection_missing_lane_filter.get_columns()
+    I !expect_column(deliveries_projection_missing_lane_cols, 0, "id", "INT") { println("T359 deliveries: missing projection lane filter id column"); return 255 }
+    I !expect_column(deliveries_projection_missing_lane_cols, 10, "lane", "TEXT") { println("T359 deliveries: missing projection lane filter lane column"); return 255 }
+    deliveries_projection_missing_lane_filter.free_owned_text()
+    deliveries_projection_missing_lane_filter.free_owned_text()
     match deliveries_db.query("select * from deliveries where batch = 'batch-a'") {
         Ok(_) => { println("T354 deliveries: earlier text filter unexpectedly accepted"); return 255 },
         Err(_) => {},
@@ -8375,8 +8447,8 @@ fn main() -> i64 {
         Ok(_) => { println("T354 deliveries: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match deliveries_db.execute("create table deliveries_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text)") {
-        Ok(_) => { println("T352 deliveries: twelve-column descriptor unexpectedly accepted"); return 255 },
+    match deliveries_db.execute("create table deliveries_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
+        Ok(_) => { println("T362 deliveries: thirteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match deliveries_db.close() {
@@ -8408,6 +8480,28 @@ fn main() -> i64 {
     I deliveries_reopened_projection.row_count() != 2 as u64 { println("T354 deliveries: reopen projection row count"); return 255 }
     deliveries_reopened_projection.free_owned_text()
     deliveries_reopened_projection.free_owned_text()
+    deliveries_reopened_projection_id_filter := mut match deliveries_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T357 deliveries: reopen projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_reopened_projection_id_filter.row_count() != 1 as u64 { println("T357 deliveries: reopen projection id filter row count"); return 255 }
+    deliveries_reopened_projection_id_rows := mut deliveries_reopened_projection_id_filter.get_rows()
+    deliveries_reopened_projection_id_row0 := mut &deliveries_reopened_projection_id_rows[0]
+    I !expect_cell(deliveries_reopened_projection_id_row0, 0, "2") { println("T357 deliveries: reopen projection id filter id"); return 255 }
+    I !expect_cell(deliveries_reopened_projection_id_row0, 10, "lane-b") { println("T357 deliveries: reopen projection id filter lane"); return 255 }
+    deliveries_reopened_projection_id_filter.free_owned_text()
+    deliveries_reopened_projection_id_filter.free_owned_text()
+    deliveries_reopened_projection_lane_filter := mut match deliveries_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where lane = 'lane-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T359 deliveries: reopen projection lane filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_reopened_projection_lane_filter.row_count() != 1 as u64 { println("T359 deliveries: reopen projection lane filter row count"); return 255 }
+    deliveries_reopened_projection_lane_rows := mut deliveries_reopened_projection_lane_filter.get_rows()
+    deliveries_reopened_projection_lane_row0 := mut &deliveries_reopened_projection_lane_rows[0]
+    I !expect_cell(deliveries_reopened_projection_lane_row0, 0, "2") { println("T359 deliveries: reopen projection lane filter id"); return 255 }
+    I !expect_cell(deliveries_reopened_projection_lane_row0, 10, "lane-b") { println("T359 deliveries: reopen projection lane filter lane"); return 255 }
+    deliveries_reopened_projection_lane_filter.free_owned_text()
+    deliveries_reopened_projection_lane_filter.free_owned_text()
     deliveries_reopened_lane_filter := mut match deliveries_reopened.query("select * from deliveries where lane = 'lane-b'") {
         Ok(r) => r,
         Err(e) => { println("T354 deliveries: reopen lane filter failed: {e.message}: {e.hint}"); return 255 },
@@ -8454,6 +8548,28 @@ fn main() -> i64 {
     I deliveries_recovered_projection.row_count() != 2 as u64 { println("T354 deliveries: recovered projection row count"); return 255 }
     deliveries_recovered_projection.free_owned_text()
     deliveries_recovered_projection.free_owned_text()
+    deliveries_recovered_projection_id_filter := mut match deliveries_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T357 deliveries: recovered projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_recovered_projection_id_filter.row_count() != 1 as u64 { println("T357 deliveries: recovered projection id filter row count"); return 255 }
+    deliveries_recovered_projection_id_rows := mut deliveries_recovered_projection_id_filter.get_rows()
+    deliveries_recovered_projection_id_row0 := mut &deliveries_recovered_projection_id_rows[0]
+    I !expect_cell(deliveries_recovered_projection_id_row0, 0, "1") { println("T357 deliveries: recovered projection id filter id"); return 255 }
+    I !expect_cell(deliveries_recovered_projection_id_row0, 10, "lane-a") { println("T357 deliveries: recovered projection id filter lane"); return 255 }
+    deliveries_recovered_projection_id_filter.free_owned_text()
+    deliveries_recovered_projection_id_filter.free_owned_text()
+    deliveries_recovered_projection_lane_filter := mut match deliveries_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane from deliveries where lane = 'lane-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T359 deliveries: recovered projection lane filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I deliveries_recovered_projection_lane_filter.row_count() != 1 as u64 { println("T359 deliveries: recovered projection lane filter row count"); return 255 }
+    deliveries_recovered_projection_lane_rows := mut deliveries_recovered_projection_lane_filter.get_rows()
+    deliveries_recovered_projection_lane_row0 := mut &deliveries_recovered_projection_lane_rows[0]
+    I !expect_cell(deliveries_recovered_projection_lane_row0, 0, "1") { println("T359 deliveries: recovered projection lane filter id"); return 255 }
+    I !expect_cell(deliveries_recovered_projection_lane_row0, 10, "lane-a") { println("T359 deliveries: recovered projection lane filter lane"); return 255 }
+    deliveries_recovered_projection_lane_filter.free_owned_text()
+    deliveries_recovered_projection_lane_filter.free_owned_text()
     deliveries_recovered_id_filter := mut match deliveries_recovered.query("select * from deliveries where id = 1") {
         Ok(r) => r,
         Err(e) => { println("T354 deliveries: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
@@ -8464,6 +8580,274 @@ fn main() -> i64 {
     match deliveries_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T352 deliveries: recovered close failed"); return 255 },
+    }
+
+    manifests_suffix := mut time_micros()
+    manifests_path := mut "embedded_sql_api_roundtrip_manifests_db_{manifests_suffix}"
+    manifests_cfg := mut EmbeddedConfig.default()
+    manifests_cfg = manifests_cfg.with_data_dir(manifests_path.clone())
+    manifests_cfg = manifests_cfg.with_page_size(PAGE_SIZE_8K)
+    manifests_db := mut match EmbeddedDatabase.open(manifests_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T362 manifests: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    manifests_created := mut match manifests_db.execute("create table manifests (id int, title text, state text, kind text, tag text, holder text, zone text, shelf text, bin text, batch text, lane text, route text)") {
+        Ok(n) => n,
+        Err(e) => { println("T362 manifests: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_created != 0 as u64 { println("T362 manifests: create affected rows"); return 255 }
+    manifests_table_id := mut 0 as u32
+    manifests_page_id := mut 0 as u32
+    match manifests_db.catalog.get_table("manifests") {
+        Some(info) => {
+            manifests_table_id = info.table_id
+            manifests_page_id = info.first_page_id
+            I info.column_count != 12 as u16 { println("T362 manifests: table column count"); return 255 }
+        },
+        None => { println("T362 manifests: catalog missing table"); return 255 },
+    }
+    manifests_col_refs := mut manifests_db.catalog.get_columns(manifests_table_id)
+    manifests_cols: Vec<ColumnInfo> := mut Vec.with_capacity(manifests_col_refs.len())
+    LF col_ref: &manifests_col_refs {
+        manifests_cols.push((**col_ref).clone())
+    }
+    I manifests_cols.len() != 12 as u64 { println("T362 manifests: catalog column count"); return 255 }
+    I !expect_catalog_column(&manifests_cols, 0, "id", "INT") { println("T362 manifests: catalog id column"); return 255 }
+    I !expect_catalog_column(&manifests_cols, 11, "route", "TEXT") { println("T362 manifests: catalog route column"); return 255 }
+    manifests_empty_frame := mut match manifests_db.pool.fetch_page(FILE_ID_DATA, manifests_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T362 manifests: fetch empty page failed"); return 255 },
+    }
+    manifests_empty_page := mut manifests_db.pool.get_page(manifests_empty_frame)
+    manifests_pre_insert_page := mut copy_smoke_page(manifests_empty_page)
+    manifests_db.pool.unpin_page(manifests_empty_frame, false)
+    manifests_recovery_start_lsn := mut manifests_db.gcm.current_lsn()
+    manifests_insert_a := mut match manifests_db.execute("insert into manifests (id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route) values (1, 'alpha', 'open', 'ops', 'blue', 'team-a', 'north', 'rack-a', 'bin-a', 'batch-a', 'lane-a', 'route-a')") {
+        Ok(n) => n,
+        Err(e) => { println("T362 manifests: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_insert_a != 1 as u64 { println("T362 manifests: first insert count"); return 255 }
+    manifests_insert_b := mut match manifests_db.execute("insert into manifests (route, lane, batch, bin, shelf, zone, holder, tag, kind, state, title, id) values ('route-b', 'lane-b', 'batch-b', 'bin-b', 'rack-b', 'south', 'team-b', 'green', 'release', 'closed', 'beta', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T362 manifests: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_insert_b != 1 as u64 { println("T362 manifests: reordered insert count"); return 255 }
+    manifests_select := mut match manifests_db.query("select * from manifests") {
+        Ok(r) => r,
+        Err(e) => { println("T362 manifests: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_select.column_count() != 12 as u64 { println("T362 manifests: select column count"); return 255 }
+    I manifests_select.row_count() != 2 as u64 { println("T362 manifests: select row count"); return 255 }
+    manifests_select_cols := mut manifests_select.get_columns()
+    I !expect_column(manifests_select_cols, 0, "id", "INT") { println("T362 manifests: select id column"); return 255 }
+    I !expect_column(manifests_select_cols, 11, "route", "TEXT") { println("T362 manifests: select route column"); return 255 }
+    manifests_select_rows := mut manifests_select.get_rows()
+    manifests_select_row0 := mut &manifests_select_rows[0]
+    manifests_select_row1 := mut &manifests_select_rows[1]
+    I !expect_cell(manifests_select_row0, 0, "1") { println("T362 manifests: row0 id"); return 255 }
+    I !expect_cell(manifests_select_row0, 11, "route-a") { println("T362 manifests: row0 route"); return 255 }
+    I !expect_cell(manifests_select_row1, 0, "2") { println("T362 manifests: row1 id"); return 255 }
+    I !expect_cell(manifests_select_row1, 11, "route-b") { println("T362 manifests: row1 route"); return 255 }
+    manifests_select.free_owned_text()
+    manifests_select.free_owned_text()
+    manifests_projection := mut match manifests_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_projection.column_count() != 12 as u64 { println("T364 manifests: projection column count"); return 255 }
+    I manifests_projection.row_count() != 2 as u64 { println("T364 manifests: projection row count"); return 255 }
+    manifests_projection_cols := mut manifests_projection.get_columns()
+    I !expect_column(manifests_projection_cols, 0, "id", "INT") { println("T364 manifests: projection id column"); return 255 }
+    I !expect_column(manifests_projection_cols, 11, "route", "TEXT") { println("T364 manifests: projection route column"); return 255 }
+    manifests_projection_rows := mut manifests_projection.get_rows()
+    manifests_projection_row0 := mut &manifests_projection_rows[0]
+    manifests_projection_row1 := mut &manifests_projection_rows[1]
+    I !expect_cell(manifests_projection_row0, 0, "1") { println("T364 manifests: projection row0 id"); return 255 }
+    I !expect_cell(manifests_projection_row1, 11, "route-b") { println("T364 manifests: projection row1 route"); return 255 }
+    manifests_projection.free_owned_text()
+    manifests_projection.free_owned_text()
+    manifests_id_filter := mut match manifests_db.query("select * from manifests where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_id_filter.column_count() != 12 as u64 { println("T364 manifests: id filter column count"); return 255 }
+    I manifests_id_filter.row_count() != 1 as u64 { println("T364 manifests: id filter row count"); return 255 }
+    manifests_id_filter_rows := mut manifests_id_filter.get_rows()
+    manifests_id_filter_row0 := mut &manifests_id_filter_rows[0]
+    I !expect_cell(manifests_id_filter_row0, 0, "1") { println("T364 manifests: id filter id"); return 255 }
+    I !expect_cell(manifests_id_filter_row0, 11, "route-a") { println("T364 manifests: id filter route"); return 255 }
+    manifests_id_filter.free_owned_text()
+    manifests_id_filter.free_owned_text()
+    manifests_id_filter_reversed := mut match manifests_db.query("select * from manifests where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_id_filter_reversed.row_count() != 1 as u64 { println("T364 manifests: reversed id filter row count"); return 255 }
+    manifests_id_filter_reversed_rows := mut manifests_id_filter_reversed.get_rows()
+    manifests_id_filter_reversed_row0 := mut &manifests_id_filter_reversed_rows[0]
+    I !expect_cell(manifests_id_filter_reversed_row0, 0, "2") { println("T364 manifests: reversed id filter id"); return 255 }
+    manifests_id_filter_reversed.free_owned_text()
+    manifests_id_filter_reversed.free_owned_text()
+    manifests_id_filter_missing := mut match manifests_db.query("select * from manifests where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_id_filter_missing.column_count() != 12 as u64 { println("T364 manifests: missing id filter column count"); return 255 }
+    I manifests_id_filter_missing.row_count() != 0 as u64 { println("T364 manifests: missing id filter row count"); return 255 }
+    manifests_id_filter_missing.free_owned_text()
+    manifests_id_filter_missing.free_owned_text()
+    manifests_route_filter := mut match manifests_db.query("select * from manifests where route = 'route-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_route_filter.column_count() != 12 as u64 { println("T364 manifests: route filter column count"); return 255 }
+    I manifests_route_filter.row_count() != 1 as u64 { println("T364 manifests: route filter row count"); return 255 }
+    manifests_route_filter_rows := mut manifests_route_filter.get_rows()
+    manifests_route_filter_row0 := mut &manifests_route_filter_rows[0]
+    I !expect_cell(manifests_route_filter_row0, 0, "1") { println("T364 manifests: route filter id"); return 255 }
+    I !expect_cell(manifests_route_filter_row0, 11, "route-a") { println("T364 manifests: route filter route"); return 255 }
+    manifests_route_filter.free_owned_text()
+    manifests_route_filter.free_owned_text()
+    manifests_route_filter_reversed := mut match manifests_db.query("select * from manifests where 'route-b' = route") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: reversed route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_route_filter_reversed.row_count() != 1 as u64 { println("T364 manifests: reversed route filter row count"); return 255 }
+    manifests_route_filter_reversed_rows := mut manifests_route_filter_reversed.get_rows()
+    manifests_route_filter_reversed_row0 := mut &manifests_route_filter_reversed_rows[0]
+    I !expect_cell(manifests_route_filter_reversed_row0, 0, "2") { println("T364 manifests: reversed route filter id"); return 255 }
+    manifests_route_filter_reversed.free_owned_text()
+    manifests_route_filter_reversed.free_owned_text()
+    manifests_route_filter_missing := mut match manifests_db.query("select * from manifests where route = 'missing-route'") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: missing route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_route_filter_missing.column_count() != 12 as u64 { println("T364 manifests: missing route filter column count"); return 255 }
+    I manifests_route_filter_missing.row_count() != 0 as u64 { println("T364 manifests: missing route filter row count"); return 255 }
+    manifests_route_filter_missing.free_owned_text()
+    manifests_route_filter_missing.free_owned_text()
+    match manifests_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests where id = 1") {
+        Ok(_) => { println("T364 manifests: projection id filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match manifests_db.query("select * from manifests where lane = 'lane-a'") {
+        Ok(_) => { println("T364 manifests: earlier text filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match manifests_db.query("select manifests.* from manifests") {
+        Ok(_) => { println("T362 manifests: qualified star unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match manifests_db.query("select * from manifests as m") {
+        Ok(_) => { println("T362 manifests: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match manifests_db.execute("create table manifests_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
+        Ok(_) => { println("T362 manifests: thirteen-column descriptor unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match manifests_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T362 manifests: close failed"); return 255 },
+    }
+    manifests_reopen_cfg := mut EmbeddedConfig.default()
+    manifests_reopen_cfg = manifests_reopen_cfg.with_data_dir(manifests_path.clone())
+    manifests_reopen_cfg = manifests_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    manifests_reopened := mut match EmbeddedDatabase.open(manifests_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T362 manifests: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    manifests_reopened_select := mut match manifests_reopened.query("select * from manifests") {
+        Ok(r) => r,
+        Err(e) => { println("T362 manifests: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_reopened_select.column_count() != 12 as u64 { println("T362 manifests: reopen column count"); return 255 }
+    I manifests_reopened_select.row_count() != 2 as u64 { println("T362 manifests: reopen row count"); return 255 }
+    manifests_reopened_rows := mut manifests_reopened_select.get_rows()
+    manifests_reopened_row1 := mut &manifests_reopened_rows[1]
+    I !expect_cell(manifests_reopened_row1, 11, "route-b") { println("T362 manifests: reopen row1 route"); return 255 }
+    manifests_reopened_select.free_owned_text()
+    manifests_reopened_select.free_owned_text()
+    manifests_reopened_projection := mut match manifests_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_reopened_projection.row_count() != 2 as u64 { println("T364 manifests: reopen projection row count"); return 255 }
+    manifests_reopened_projection.free_owned_text()
+    manifests_reopened_projection.free_owned_text()
+    manifests_reopened_id_filter := mut match manifests_reopened.query("select * from manifests where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: reopen id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_reopened_id_filter.row_count() != 1 as u64 { println("T364 manifests: reopen id filter row count"); return 255 }
+    manifests_reopened_id_filter.free_owned_text()
+    manifests_reopened_id_filter.free_owned_text()
+    manifests_reopened_route_filter := mut match manifests_reopened.query("select * from manifests where route = 'route-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: reopen route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_reopened_route_filter.row_count() != 1 as u64 { println("T364 manifests: reopen route filter row count"); return 255 }
+    manifests_reopened_route_filter.free_owned_text()
+    manifests_reopened_route_filter.free_owned_text()
+    match manifests_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T362 manifests: reopen close failed"); return 255 },
+    }
+    I restore_smoke_data_page(manifests_path.clone(), manifests_page_id, manifests_pre_insert_page) != 0 {
+        println("T362 manifests: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(manifests_path.clone(), manifests_recovery_start_lsn) != 0 {
+        println("T362 manifests: checkpoint rewind failed")
+        return 255
+    }
+    manifests_recovered_cfg := mut EmbeddedConfig.default()
+    manifests_recovered_cfg = manifests_recovered_cfg.with_data_dir(manifests_path.clone())
+    manifests_recovered_cfg = manifests_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    manifests_recovered := mut match EmbeddedDatabase.open(manifests_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T362 manifests: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    manifests_recovered_select := mut match manifests_recovered.query("select * from manifests") {
+        Ok(r) => r,
+        Err(e) => { println("T362 manifests: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_recovered_select.column_count() != 12 as u64 { println("T362 manifests: recovered column count"); return 255 }
+    I manifests_recovered_select.row_count() != 2 as u64 { println("T362 manifests: recovered row count"); return 255 }
+    manifests_recovered_rows := mut manifests_recovered_select.get_rows()
+    manifests_recovered_row0 := mut &manifests_recovered_rows[0]
+    manifests_recovered_row1 := mut &manifests_recovered_rows[1]
+    I !expect_cell(manifests_recovered_row0, 11, "route-a") { println("T362 manifests: recovered row0 route"); return 255 }
+    I !expect_cell(manifests_recovered_row1, 11, "route-b") { println("T362 manifests: recovered row1 route"); return 255 }
+    manifests_recovered_select.free_owned_text()
+    manifests_recovered_select.free_owned_text()
+    manifests_recovered_projection := mut match manifests_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_recovered_projection.row_count() != 2 as u64 { println("T364 manifests: recovered projection row count"); return 255 }
+    manifests_recovered_projection.free_owned_text()
+    manifests_recovered_projection.free_owned_text()
+    manifests_recovered_id_filter := mut match manifests_recovered.query("select * from manifests where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_recovered_id_filter.row_count() != 1 as u64 { println("T364 manifests: recovered id filter row count"); return 255 }
+    manifests_recovered_id_rows := mut manifests_recovered_id_filter.get_rows()
+    manifests_recovered_id_row0 := mut &manifests_recovered_id_rows[0]
+    I !expect_cell(manifests_recovered_id_row0, 11, "route-b") { println("T364 manifests: recovered id filter route"); return 255 }
+    manifests_recovered_id_filter.free_owned_text()
+    manifests_recovered_id_filter.free_owned_text()
+    manifests_recovered_route_filter := mut match manifests_recovered.query("select * from manifests where route = 'route-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T364 manifests: recovered route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_recovered_route_filter.row_count() != 1 as u64 { println("T364 manifests: recovered route filter row count"); return 255 }
+    manifests_recovered_route_filter.free_owned_text()
+    manifests_recovered_route_filter.free_owned_text()
+    match manifests_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T362 manifests: recovered close failed"); return 255 },
     }
 
     tasks_recovery_suffix := mut time_micros()
