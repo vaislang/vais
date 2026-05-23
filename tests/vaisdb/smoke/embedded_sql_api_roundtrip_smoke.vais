@@ -6236,12 +6236,95 @@ fn main() -> i64 {
     entries_select.free_owned_text()
     entries_select.free_owned_text()
 
-    match entries_db.query("select id, title, state, kind, tag from entries") {
-        Ok(_) => { println("T300 entries: projection unexpectedly accepted"); return 255 },
+    entries_projection := mut match entries_db.query("select id, title, state, kind, tag from entries") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_projection.column_count() != 5 as u64 { println("T302 entries: projection column count"); return 255 }
+    I entries_projection.row_count() != 2 as u64 { println("T302 entries: projection row count"); return 255 }
+    entries_projection_cols := mut entries_projection.get_columns()
+    I !expect_column(entries_projection_cols, 0, "id", "INT") { println("T302 entries: projection id column"); return 255 }
+    I !expect_column(entries_projection_cols, 1, "title", "TEXT") { println("T302 entries: projection title column"); return 255 }
+    I !expect_column(entries_projection_cols, 2, "state", "TEXT") { println("T302 entries: projection state column"); return 255 }
+    I !expect_column(entries_projection_cols, 3, "kind", "TEXT") { println("T302 entries: projection kind column"); return 255 }
+    I !expect_column(entries_projection_cols, 4, "tag", "TEXT") { println("T302 entries: projection tag column"); return 255 }
+    entries_projection.free_owned_text()
+    entries_projection.free_owned_text()
+
+    entries_id_filter := mut match entries_db.query("select * from entries where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_id_filter.column_count() != 5 as u64 { println("T302 entries: id filter column count"); return 255 }
+    I entries_id_filter.row_count() != 1 as u64 { println("T302 entries: id filter row count"); return 255 }
+    entries_id_filter_rows := mut entries_id_filter.get_rows()
+    entries_id_filter_row := mut &entries_id_filter_rows[0]
+    I !expect_cell(entries_id_filter_row, 0, "1") { println("T302 entries: id filter id"); return 255 }
+    I !expect_cell(entries_id_filter_row, 4, "blue") { println("T302 entries: id filter tag"); return 255 }
+    entries_id_filter.free_owned_text()
+    entries_id_filter.free_owned_text()
+
+    entries_id_filter_reversed := mut match entries_db.query("select * from entries where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_id_filter_reversed.row_count() != 1 as u64 { println("T302 entries: reversed id filter row count"); return 255 }
+    entries_id_filter_reversed_rows := mut entries_id_filter_reversed.get_rows()
+    entries_id_filter_reversed_row := mut &entries_id_filter_reversed_rows[0]
+    I !expect_cell(entries_id_filter_reversed_row, 0, "2") { println("T302 entries: reversed id filter id"); return 255 }
+    I !expect_cell(entries_id_filter_reversed_row, 4, "green") { println("T302 entries: reversed id filter tag"); return 255 }
+    entries_id_filter_reversed.free_owned_text()
+    entries_id_filter_reversed.free_owned_text()
+
+    entries_id_filter_missing := mut match entries_db.query("select * from entries where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_id_filter_missing.column_count() != 5 as u64 { println("T302 entries: missing id filter column count"); return 255 }
+    I entries_id_filter_missing.row_count() != 0 as u64 { println("T302 entries: missing id filter row count"); return 255 }
+    entries_id_filter_missing.free_owned_text()
+    entries_id_filter_missing.free_owned_text()
+
+    entries_tag_filter := mut match entries_db.query("select * from entries where tag = 'blue'") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: tag filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_tag_filter.column_count() != 5 as u64 { println("T302 entries: tag filter column count"); return 255 }
+    I entries_tag_filter.row_count() != 1 as u64 { println("T302 entries: tag filter row count"); return 255 }
+    entries_tag_filter_rows := mut entries_tag_filter.get_rows()
+    entries_tag_filter_row := mut &entries_tag_filter_rows[0]
+    I !expect_cell(entries_tag_filter_row, 0, "1") { println("T302 entries: tag filter id"); return 255 }
+    I !expect_cell(entries_tag_filter_row, 4, "blue") { println("T302 entries: tag filter tag"); return 255 }
+    entries_tag_filter.free_owned_text()
+    entries_tag_filter.free_owned_text()
+
+    entries_tag_filter_reversed := mut match entries_db.query("select * from entries where 'green' = tag") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: reversed tag filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_tag_filter_reversed.row_count() != 1 as u64 { println("T302 entries: reversed tag filter row count"); return 255 }
+    entries_tag_filter_reversed_rows := mut entries_tag_filter_reversed.get_rows()
+    entries_tag_filter_reversed_row := mut &entries_tag_filter_reversed_rows[0]
+    I !expect_cell(entries_tag_filter_reversed_row, 0, "2") { println("T302 entries: reversed tag filter id"); return 255 }
+    I !expect_cell(entries_tag_filter_reversed_row, 4, "green") { println("T302 entries: reversed tag filter tag"); return 255 }
+    entries_tag_filter_reversed.free_owned_text()
+    entries_tag_filter_reversed.free_owned_text()
+
+    entries_tag_filter_missing := mut match entries_db.query("select * from entries where tag = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: missing tag filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_tag_filter_missing.column_count() != 5 as u64 { println("T302 entries: missing tag filter column count"); return 255 }
+    I entries_tag_filter_missing.row_count() != 0 as u64 { println("T302 entries: missing tag filter row count"); return 255 }
+    entries_tag_filter_missing.free_owned_text()
+    entries_tag_filter_missing.free_owned_text()
+
+    match entries_db.query("select id, title, state, kind, tag from entries where tag = 'blue'") {
+        Ok(_) => { println("T302 entries: projection tag filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match entries_db.query("select * from entries where tag = 'blue'") {
-        Ok(_) => { println("T300 entries: filter unexpectedly accepted"); return 255 },
+    match entries_db.query("select * from entries where kind = 'ops'") {
+        Ok(_) => { println("T302 entries: non-selected text filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match entries_db.query("select * from entries as e") {
@@ -6268,6 +6351,20 @@ fn main() -> i64 {
     I entries_reopened_select.row_count() != 2 as u64 { println("T300 entries: reopen row count"); return 255 }
     entries_reopened_select.free_owned_text()
     entries_reopened_select.free_owned_text()
+    entries_reopened_projection := mut match entries_reopened.query("select id, title, state, kind, tag from entries") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_reopened_projection.row_count() != 2 as u64 { println("T302 entries: reopen projection row count"); return 255 }
+    entries_reopened_projection.free_owned_text()
+    entries_reopened_projection.free_owned_text()
+    entries_reopened_tag_filter := mut match entries_reopened.query("select * from entries where tag = 'green'") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: reopen tag filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_reopened_tag_filter.row_count() != 1 as u64 { println("T302 entries: reopen tag filter row count"); return 255 }
+    entries_reopened_tag_filter.free_owned_text()
+    entries_reopened_tag_filter.free_owned_text()
     match entries_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T300 entries: reopen close failed"); return 255 },
@@ -6301,6 +6398,27 @@ fn main() -> i64 {
     I !expect_cell(entries_recovered_row1, 4, "green") { println("T300 entries: recovered row1 tag"); return 255 }
     entries_recovered_select.free_owned_text()
     entries_recovered_select.free_owned_text()
+    entries_recovered_projection := mut match entries_recovered.query("select id, title, state, kind, tag from entries") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_recovered_projection.row_count() != 2 as u64 { println("T302 entries: recovered projection row count"); return 255 }
+    entries_recovered_projection.free_owned_text()
+    entries_recovered_projection.free_owned_text()
+    entries_recovered_id_filter := mut match entries_recovered.query("select * from entries where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_recovered_id_filter.row_count() != 1 as u64 { println("T302 entries: recovered id filter row count"); return 255 }
+    entries_recovered_id_filter.free_owned_text()
+    entries_recovered_id_filter.free_owned_text()
+    entries_recovered_tag_filter := mut match entries_recovered.query("select * from entries where tag = 'blue'") {
+        Ok(r) => r,
+        Err(e) => { println("T302 entries: recovered tag filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_recovered_tag_filter.row_count() != 1 as u64 { println("T302 entries: recovered tag filter row count"); return 255 }
+    entries_recovered_tag_filter.free_owned_text()
+    entries_recovered_tag_filter.free_owned_text()
     match entries_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T300 entries: recovered close failed"); return 255 },
