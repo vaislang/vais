@@ -5520,6 +5520,51 @@ fn main() -> i64 {
     events_id_filter_missing.free_owned_text()
     events_id_filter_missing.free_owned_text()
 
+    events_projection_id_filter := mut match events_db.query("select id, title, state from events where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T285 events: projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_projection_id_filter.column_count() != 3 as u64 { println("T285 events: projection id filter column count"); return 255 }
+    I events_projection_id_filter.row_count() != 1 as u64 { println("T285 events: projection id filter row count"); return 255 }
+    events_projection_id_filter_cols := mut events_projection_id_filter.get_columns()
+    I !expect_column(events_projection_id_filter_cols, 0, "id", "INT") { println("T285 events: projection id filter id column"); return 255 }
+    I !expect_column(events_projection_id_filter_cols, 1, "title", "TEXT") { println("T285 events: projection id filter title column"); return 255 }
+    I !expect_column(events_projection_id_filter_cols, 2, "state", "TEXT") { println("T285 events: projection id filter state column"); return 255 }
+    events_projection_id_filter_rows := mut events_projection_id_filter.get_rows()
+    events_projection_id_filter_row := mut &events_projection_id_filter_rows[0]
+    I !expect_cell(events_projection_id_filter_row, 0, "1") { println("T285 events: projection id filter id"); return 255 }
+    I !expect_cell(events_projection_id_filter_row, 1, "launch") { println("T285 events: projection id filter title"); return 255 }
+    I !expect_cell(events_projection_id_filter_row, 2, "open") { println("T285 events: projection id filter state"); return 255 }
+    events_projection_id_filter.free_owned_text()
+    events_projection_id_filter.free_owned_text()
+
+    events_projection_id_filter_reversed := mut match events_db.query("select id, title, state from events where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T285 events: reversed projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_projection_id_filter_reversed.column_count() != 3 as u64 { println("T285 events: reversed projection id filter column count"); return 255 }
+    I events_projection_id_filter_reversed.row_count() != 1 as u64 { println("T285 events: reversed projection id filter row count"); return 255 }
+    events_projection_id_filter_reversed_rows := mut events_projection_id_filter_reversed.get_rows()
+    events_projection_id_filter_reversed_row := mut &events_projection_id_filter_reversed_rows[0]
+    I !expect_cell(events_projection_id_filter_reversed_row, 0, "2") { println("T285 events: reversed projection id filter id"); return 255 }
+    I !expect_cell(events_projection_id_filter_reversed_row, 1, "ship") { println("T285 events: reversed projection id filter title"); return 255 }
+    I !expect_cell(events_projection_id_filter_reversed_row, 2, "done") { println("T285 events: reversed projection id filter state"); return 255 }
+    events_projection_id_filter_reversed.free_owned_text()
+    events_projection_id_filter_reversed.free_owned_text()
+
+    events_projection_id_filter_missing := mut match events_db.query("select id, title, state from events where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T285 events: missing projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_projection_id_filter_missing.column_count() != 3 as u64 { println("T285 events: missing projection id filter column count"); return 255 }
+    I events_projection_id_filter_missing.row_count() != 0 as u64 { println("T285 events: missing projection id filter row count"); return 255 }
+    events_projection_id_filter_missing_cols := mut events_projection_id_filter_missing.get_columns()
+    I !expect_column(events_projection_id_filter_missing_cols, 0, "id", "INT") { println("T285 events: missing projection id column"); return 255 }
+    I !expect_column(events_projection_id_filter_missing_cols, 1, "title", "TEXT") { println("T285 events: missing projection title column"); return 255 }
+    I !expect_column(events_projection_id_filter_missing_cols, 2, "state", "TEXT") { println("T285 events: missing projection state column"); return 255 }
+    events_projection_id_filter_missing.free_owned_text()
+    events_projection_id_filter_missing.free_owned_text()
+
     events_state_filter := mut match events_db.query("select * from events where state = 'open'") {
         Ok(r) => r,
         Err(e) => { println("T282 events: state filter failed: {e.message}: {e.hint}"); return 255 },
@@ -5593,6 +5638,13 @@ fn main() -> i64 {
     I events_reopened_state_filter.row_count() != 1 as u64 { println("T282 events: reopen state filter row count"); return 255 }
     events_reopened_state_filter.free_owned_text()
     events_reopened_state_filter.free_owned_text()
+    events_reopened_projection_id_filter := mut match events_reopened.query("select id, title, state from events where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T285 events: reopen projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_reopened_projection_id_filter.row_count() != 1 as u64 { println("T285 events: reopen projection id filter row count"); return 255 }
+    events_reopened_projection_id_filter.free_owned_text()
+    events_reopened_projection_id_filter.free_owned_text()
     match events_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T280 events: reopen close failed"); return 255 },
@@ -5640,6 +5692,13 @@ fn main() -> i64 {
     I events_recovered_id_filter.row_count() != 1 as u64 { println("T282 events: recovered id filter row count"); return 255 }
     events_recovered_id_filter.free_owned_text()
     events_recovered_id_filter.free_owned_text()
+    events_recovered_projection_id_filter := mut match events_recovered.query("select id, title, state from events where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T285 events: recovered projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_recovered_projection_id_filter.row_count() != 1 as u64 { println("T285 events: recovered projection id filter row count"); return 255 }
+    events_recovered_projection_id_filter.free_owned_text()
+    events_recovered_projection_id_filter.free_owned_text()
     match events_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T280 events: recovered close failed"); return 255 },
