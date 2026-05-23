@@ -5462,6 +5462,98 @@ fn main() -> i64 {
     I !expect_cell(events_select_row1, 2, "done") { println("T280 events: select row1 state"); return 255 }
     events_select.free_owned_text()
     events_select.free_owned_text()
+
+    events_projection := mut match events_db.query("select id, title, state from events") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_projection.column_count() != 3 as u64 { println("T282 events: projection column count"); return 255 }
+    I events_projection.row_count() != 2 as u64 { println("T282 events: projection row count"); return 255 }
+    events_projection_cols := mut events_projection.get_columns()
+    I !expect_column(events_projection_cols, 0, "id", "INT") { println("T282 events: projection id column"); return 255 }
+    I !expect_column(events_projection_cols, 1, "title", "TEXT") { println("T282 events: projection title column"); return 255 }
+    I !expect_column(events_projection_cols, 2, "state", "TEXT") { println("T282 events: projection state column"); return 255 }
+    events_projection_rows := mut events_projection.get_rows()
+    events_projection_row0 := mut &events_projection_rows[0]
+    events_projection_row1 := mut &events_projection_rows[1]
+    I !expect_cell(events_projection_row0, 0, "1") { println("T282 events: projection row0 id"); return 255 }
+    I !expect_cell(events_projection_row0, 1, "launch") { println("T282 events: projection row0 title"); return 255 }
+    I !expect_cell(events_projection_row0, 2, "open") { println("T282 events: projection row0 state"); return 255 }
+    I !expect_cell(events_projection_row1, 0, "2") { println("T282 events: projection row1 id"); return 255 }
+    I !expect_cell(events_projection_row1, 1, "ship") { println("T282 events: projection row1 title"); return 255 }
+    I !expect_cell(events_projection_row1, 2, "done") { println("T282 events: projection row1 state"); return 255 }
+    events_projection.free_owned_text()
+    events_projection.free_owned_text()
+
+    events_id_filter := mut match events_db.query("select * from events where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_id_filter.column_count() != 3 as u64 { println("T282 events: id filter column count"); return 255 }
+    I events_id_filter.row_count() != 1 as u64 { println("T282 events: id filter row count"); return 255 }
+    events_id_filter_rows := mut events_id_filter.get_rows()
+    events_id_filter_row := mut &events_id_filter_rows[0]
+    I !expect_cell(events_id_filter_row, 0, "1") { println("T282 events: id filter id"); return 255 }
+    I !expect_cell(events_id_filter_row, 1, "launch") { println("T282 events: id filter title"); return 255 }
+    I !expect_cell(events_id_filter_row, 2, "open") { println("T282 events: id filter state"); return 255 }
+    events_id_filter.free_owned_text()
+    events_id_filter.free_owned_text()
+
+    events_id_filter_reversed := mut match events_db.query("select * from events where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_id_filter_reversed.row_count() != 1 as u64 { println("T282 events: reversed id filter row count"); return 255 }
+    events_id_filter_reversed_rows := mut events_id_filter_reversed.get_rows()
+    events_id_filter_reversed_row := mut &events_id_filter_reversed_rows[0]
+    I !expect_cell(events_id_filter_reversed_row, 0, "2") { println("T282 events: reversed id filter id"); return 255 }
+    I !expect_cell(events_id_filter_reversed_row, 2, "done") { println("T282 events: reversed id filter state"); return 255 }
+    events_id_filter_reversed.free_owned_text()
+    events_id_filter_reversed.free_owned_text()
+
+    events_id_filter_missing := mut match events_db.query("select * from events where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_id_filter_missing.column_count() != 3 as u64 { println("T282 events: missing id filter column count"); return 255 }
+    I events_id_filter_missing.row_count() != 0 as u64 { println("T282 events: missing id filter row count"); return 255 }
+    events_id_filter_missing.free_owned_text()
+    events_id_filter_missing.free_owned_text()
+
+    events_state_filter := mut match events_db.query("select * from events where state = 'open'") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: state filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_state_filter.column_count() != 3 as u64 { println("T282 events: state filter column count"); return 255 }
+    I events_state_filter.row_count() != 1 as u64 { println("T282 events: state filter row count"); return 255 }
+    events_state_filter_rows := mut events_state_filter.get_rows()
+    events_state_filter_row := mut &events_state_filter_rows[0]
+    I !expect_cell(events_state_filter_row, 0, "1") { println("T282 events: state filter id"); return 255 }
+    I !expect_cell(events_state_filter_row, 1, "launch") { println("T282 events: state filter title"); return 255 }
+    I !expect_cell(events_state_filter_row, 2, "open") { println("T282 events: state filter state"); return 255 }
+    events_state_filter.free_owned_text()
+    events_state_filter.free_owned_text()
+
+    events_state_filter_reversed := mut match events_db.query("select * from events where 'done' = state") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: reversed state filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_state_filter_reversed.row_count() != 1 as u64 { println("T282 events: reversed state filter row count"); return 255 }
+    events_state_filter_reversed_rows := mut events_state_filter_reversed.get_rows()
+    events_state_filter_reversed_row := mut &events_state_filter_reversed_rows[0]
+    I !expect_cell(events_state_filter_reversed_row, 0, "2") { println("T282 events: reversed state filter id"); return 255 }
+    I !expect_cell(events_state_filter_reversed_row, 2, "done") { println("T282 events: reversed state filter state"); return 255 }
+    events_state_filter_reversed.free_owned_text()
+    events_state_filter_reversed.free_owned_text()
+
+    events_state_filter_missing := mut match events_db.query("select * from events where state = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: missing state filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_state_filter_missing.column_count() != 3 as u64 { println("T282 events: missing state filter column count"); return 255 }
+    I events_state_filter_missing.row_count() != 0 as u64 { println("T282 events: missing state filter row count"); return 255 }
+    events_state_filter_missing.free_owned_text()
+    events_state_filter_missing.free_owned_text()
     match events_db.close() {
         Ok(_) => {},
         Err(_) => { println("T280 events: close failed"); return 255 },
@@ -5487,6 +5579,20 @@ fn main() -> i64 {
     I !expect_cell(events_reopened_row1, 2, "done") { println("T280 events: reopen row1 state"); return 255 }
     events_reopened_select.free_owned_text()
     events_reopened_select.free_owned_text()
+    events_reopened_projection := mut match events_reopened.query("select id, title, state from events") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_reopened_projection.row_count() != 2 as u64 { println("T282 events: reopen projection row count"); return 255 }
+    events_reopened_projection.free_owned_text()
+    events_reopened_projection.free_owned_text()
+    events_reopened_state_filter := mut match events_reopened.query("select * from events where state = 'done'") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: reopen state filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_reopened_state_filter.row_count() != 1 as u64 { println("T282 events: reopen state filter row count"); return 255 }
+    events_reopened_state_filter.free_owned_text()
+    events_reopened_state_filter.free_owned_text()
     match events_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T280 events: reopen close failed"); return 255 },
@@ -5520,6 +5626,20 @@ fn main() -> i64 {
     I !expect_cell(events_recovered_row0, 2, "open") { println("T280 events: recovered row0 state"); return 255 }
     events_recovered_select.free_owned_text()
     events_recovered_select.free_owned_text()
+    events_recovered_projection := mut match events_recovered.query("select id, title, state from events") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_recovered_projection.row_count() != 2 as u64 { println("T282 events: recovered projection row count"); return 255 }
+    events_recovered_projection.free_owned_text()
+    events_recovered_projection.free_owned_text()
+    events_recovered_id_filter := mut match events_recovered.query("select * from events where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T282 events: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I events_recovered_id_filter.row_count() != 1 as u64 { println("T282 events: recovered id filter row count"); return 255 }
+    events_recovered_id_filter.free_owned_text()
+    events_recovered_id_filter.free_owned_text()
     match events_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T280 events: recovered close failed"); return 255 },
