@@ -2188,7 +2188,7 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text)") {
+    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text)") {
         Ok(_) => { println("T155 notes: too many columns unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3170,7 +3170,7 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text)") {
+    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text)") {
         Ok(_) => { println("T195 tickets: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3510,7 +3510,7 @@ fn main() -> i64 {
         Ok(_) => { println("T215 contacts: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text)") {
+    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text)") {
         Ok(_) => { println("T215 contacts: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -6153,6 +6153,157 @@ fn main() -> i64 {
     match records_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T290 records: recovered close failed"); return 255 },
+    }
+
+    entries_suffix := mut time_micros()
+    entries_path := mut "embedded_sql_api_roundtrip_entries_db_{entries_suffix}"
+    entries_cfg := mut EmbeddedConfig.default()
+    entries_cfg = entries_cfg.with_data_dir(entries_path.clone())
+    entries_cfg = entries_cfg.with_page_size(PAGE_SIZE_8K)
+    entries_db := mut match EmbeddedDatabase.open(entries_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T300 entries: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    entries_created := mut match entries_db.execute("create table entries (id int, title text, state text, kind text, tag text)") {
+        Ok(n) => n,
+        Err(e) => { println("T300 entries: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_created != 0 as u64 { println("T300 entries: create affected rows"); return 255 }
+    entries_table_id := mut 0 as u32
+    entries_page_id := mut 0 as u32
+    match entries_db.catalog.get_table("entries") {
+        Some(info) => {
+            entries_table_id = info.table_id
+            entries_page_id = info.first_page_id
+            I info.column_count != 5 as u16 { println("T300 entries: table column count"); return 255 }
+        },
+        None => { println("T300 entries: catalog missing table"); return 255 },
+    }
+    entries_col_refs := mut entries_db.catalog.get_columns(entries_table_id)
+    entries_cols: Vec<ColumnInfo> := mut Vec.with_capacity(entries_col_refs.len())
+    LF col_ref: &entries_col_refs {
+        entries_cols.push((**col_ref).clone())
+    }
+    I entries_cols.len() != 5 as u64 { println("T300 entries: catalog column count"); return 255 }
+    I !expect_catalog_column(&entries_cols, 0, "id", "INT") { println("T300 entries: catalog id column"); return 255 }
+    I !expect_catalog_column(&entries_cols, 1, "title", "TEXT") { println("T300 entries: catalog title column"); return 255 }
+    I !expect_catalog_column(&entries_cols, 2, "state", "TEXT") { println("T300 entries: catalog state column"); return 255 }
+    I !expect_catalog_column(&entries_cols, 3, "kind", "TEXT") { println("T300 entries: catalog kind column"); return 255 }
+    I !expect_catalog_column(&entries_cols, 4, "tag", "TEXT") { println("T300 entries: catalog tag column"); return 255 }
+    entries_empty_frame := mut match entries_db.pool.fetch_page(FILE_ID_DATA, entries_page_id) {
+        Ok(f) => f,
+        Err(_) => { println("T300 entries: fetch empty page failed"); return 255 },
+    }
+    entries_empty_page := mut entries_db.pool.get_page(entries_empty_frame)
+    entries_pre_insert_page := mut copy_smoke_page(entries_empty_page)
+    entries_db.pool.unpin_page(entries_empty_frame, false)
+    entries_recovery_start_lsn := mut entries_db.gcm.current_lsn()
+    entries_insert_a := mut match entries_db.execute("insert into entries (id, title, state, kind, tag) values (1, 'alpha', 'open', 'ops', 'blue')") {
+        Ok(n) => n,
+        Err(e) => { println("T300 entries: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_insert_a != 1 as u64 { println("T300 entries: first insert count"); return 255 }
+    entries_insert_b := mut match entries_db.execute("insert into entries (tag, kind, state, title, id) values ('green', 'release', 'closed', 'beta', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T300 entries: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_insert_b != 1 as u64 { println("T300 entries: reordered insert count"); return 255 }
+    entries_select := mut match entries_db.query("select * from entries") {
+        Ok(r) => r,
+        Err(e) => { println("T300 entries: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_select.column_count() != 5 as u64 { println("T300 entries: select column count"); return 255 }
+    I entries_select.row_count() != 2 as u64 { println("T300 entries: select row count"); return 255 }
+    entries_select_cols := mut entries_select.get_columns()
+    I !expect_column(entries_select_cols, 0, "id", "INT") { println("T300 entries: select id column"); return 255 }
+    I !expect_column(entries_select_cols, 1, "title", "TEXT") { println("T300 entries: select title column"); return 255 }
+    I !expect_column(entries_select_cols, 2, "state", "TEXT") { println("T300 entries: select state column"); return 255 }
+    I !expect_column(entries_select_cols, 3, "kind", "TEXT") { println("T300 entries: select kind column"); return 255 }
+    I !expect_column(entries_select_cols, 4, "tag", "TEXT") { println("T300 entries: select tag column"); return 255 }
+    entries_select_rows := mut entries_select.get_rows()
+    entries_select_row0 := mut &entries_select_rows[0]
+    entries_select_row1 := mut &entries_select_rows[1]
+    I !expect_cell(entries_select_row0, 0, "1") { println("T300 entries: row0 id"); return 255 }
+    I !expect_cell(entries_select_row0, 1, "alpha") { println("T300 entries: row0 title"); return 255 }
+    I !expect_cell(entries_select_row0, 2, "open") { println("T300 entries: row0 state"); return 255 }
+    I !expect_cell(entries_select_row0, 3, "ops") { println("T300 entries: row0 kind"); return 255 }
+    I !expect_cell(entries_select_row0, 4, "blue") { println("T300 entries: row0 tag"); return 255 }
+    I !expect_cell(entries_select_row1, 0, "2") { println("T300 entries: row1 id"); return 255 }
+    I !expect_cell(entries_select_row1, 1, "beta") { println("T300 entries: row1 title"); return 255 }
+    I !expect_cell(entries_select_row1, 2, "closed") { println("T300 entries: row1 state"); return 255 }
+    I !expect_cell(entries_select_row1, 3, "release") { println("T300 entries: row1 kind"); return 255 }
+    I !expect_cell(entries_select_row1, 4, "green") { println("T300 entries: row1 tag"); return 255 }
+    entries_select.free_owned_text()
+    entries_select.free_owned_text()
+
+    match entries_db.query("select id, title, state, kind, tag from entries") {
+        Ok(_) => { println("T300 entries: projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match entries_db.query("select * from entries where tag = 'blue'") {
+        Ok(_) => { println("T300 entries: filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match entries_db.query("select * from entries as e") {
+        Ok(_) => { println("T300 entries: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match entries_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T300 entries: close failed"); return 255 },
+    }
+
+    entries_reopen_cfg := mut EmbeddedConfig.default()
+    entries_reopen_cfg = entries_reopen_cfg.with_data_dir(entries_path.clone())
+    entries_reopen_cfg = entries_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    entries_reopened := mut match EmbeddedDatabase.open(entries_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T300 entries: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    entries_reopened_select := mut match entries_reopened.query("select * from entries") {
+        Ok(r) => r,
+        Err(e) => { println("T300 entries: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_reopened_select.column_count() != 5 as u64 { println("T300 entries: reopen column count"); return 255 }
+    I entries_reopened_select.row_count() != 2 as u64 { println("T300 entries: reopen row count"); return 255 }
+    entries_reopened_select.free_owned_text()
+    entries_reopened_select.free_owned_text()
+    match entries_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T300 entries: reopen close failed"); return 255 },
+    }
+
+    I restore_smoke_data_page(entries_path.clone(), entries_page_id, entries_pre_insert_page) != 0 {
+        println("T300 entries: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(entries_path.clone(), entries_recovery_start_lsn) != 0 {
+        println("T300 entries: checkpoint rewind failed")
+        return 255
+    }
+    entries_recovered_cfg := mut EmbeddedConfig.default()
+    entries_recovered_cfg = entries_recovered_cfg.with_data_dir(entries_path.clone())
+    entries_recovered_cfg = entries_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    entries_recovered := mut match EmbeddedDatabase.open(entries_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T300 entries: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    entries_recovered_select := mut match entries_recovered.query("select * from entries") {
+        Ok(r) => r,
+        Err(e) => { println("T300 entries: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I entries_recovered_select.column_count() != 5 as u64 { println("T300 entries: recovered column count"); return 255 }
+    I entries_recovered_select.row_count() != 2 as u64 { println("T300 entries: recovered row count"); return 255 }
+    entries_recovered_rows := mut entries_recovered_select.get_rows()
+    entries_recovered_row0 := mut &entries_recovered_rows[0]
+    entries_recovered_row1 := mut &entries_recovered_rows[1]
+    I !expect_cell(entries_recovered_row0, 4, "blue") { println("T300 entries: recovered row0 tag"); return 255 }
+    I !expect_cell(entries_recovered_row1, 4, "green") { println("T300 entries: recovered row1 tag"); return 255 }
+    entries_recovered_select.free_owned_text()
+    entries_recovered_select.free_owned_text()
+    match entries_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T300 entries: recovered close failed"); return 255 },
     }
 
     tasks_recovery_suffix := mut time_micros()
