@@ -2188,7 +2188,7 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text)") {
+    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text, extra4 text)") {
         Ok(_) => { println("T155 notes: too many columns unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3170,7 +3170,7 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text)") {
+    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text, extra4 text)") {
         Ok(_) => { println("T195 tickets: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3510,7 +3510,7 @@ fn main() -> i64 {
         Ok(_) => { println("T215 contacts: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text)") {
+    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text, extra4 text)") {
         Ok(_) => { println("T215 contacts: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -7311,6 +7311,148 @@ fn main() -> i64 {
     match inventory_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T320 inventory: recovered close failed"); return 255 },
+    }
+
+    warehouse_suffix := mut time_micros()
+    warehouse_path := mut "embedded_sql_api_roundtrip_warehouse_db_{warehouse_suffix}"
+    warehouse_cfg := mut EmbeddedConfig.default()
+    warehouse_cfg = warehouse_cfg.with_data_dir(warehouse_path.clone())
+    warehouse_cfg = warehouse_cfg.with_page_size(PAGE_SIZE_8K)
+    warehouse_db := mut match EmbeddedDatabase.open(warehouse_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T330 warehouse: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    warehouse_created := mut match warehouse_db.execute("create table warehouse (id int, title text, state text, kind text, tag text, holder text, zone text, shelf text)") {
+        Ok(n) => n,
+        Err(e) => { println("T330 warehouse: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_created != 0 as u64 { println("T330 warehouse: create affected rows"); return 255 }
+    warehouse_table_id := mut 0 as u32
+    warehouse_page_id := mut 0 as u32
+    match warehouse_db.catalog.get_table("warehouse") {
+        Some(info) => {
+            warehouse_table_id = info.table_id
+            warehouse_page_id = info.first_page_id
+            I info.column_count != 8 as u16 { println("T330 warehouse: table column count"); return 255 }
+        },
+        None => { println("T330 warehouse: catalog missing table"); return 255 },
+    }
+    warehouse_col_refs := mut warehouse_db.catalog.get_columns(warehouse_table_id)
+    warehouse_cols: Vec<ColumnInfo> := mut Vec.with_capacity(warehouse_col_refs.len())
+    LF col_ref: &warehouse_col_refs {
+        warehouse_cols.push((**col_ref).clone())
+    }
+    I warehouse_cols.len() != 8 as u64 { println("T330 warehouse: catalog column count"); return 255 }
+    I !expect_catalog_column(&warehouse_cols, 0, "id", "INT") { println("T330 warehouse: catalog id column"); return 255 }
+    I !expect_catalog_column(&warehouse_cols, 1, "title", "TEXT") { println("T330 warehouse: catalog title column"); return 255 }
+    I !expect_catalog_column(&warehouse_cols, 2, "state", "TEXT") { println("T330 warehouse: catalog state column"); return 255 }
+    I !expect_catalog_column(&warehouse_cols, 3, "kind", "TEXT") { println("T330 warehouse: catalog kind column"); return 255 }
+    I !expect_catalog_column(&warehouse_cols, 4, "tag", "TEXT") { println("T330 warehouse: catalog tag column"); return 255 }
+    I !expect_catalog_column(&warehouse_cols, 5, "holder", "TEXT") { println("T330 warehouse: catalog holder column"); return 255 }
+    I !expect_catalog_column(&warehouse_cols, 6, "zone", "TEXT") { println("T330 warehouse: catalog zone column"); return 255 }
+    I !expect_catalog_column(&warehouse_cols, 7, "shelf", "TEXT") { println("T330 warehouse: catalog shelf column"); return 255 }
+    warehouse_empty_frame := mut match warehouse_db.pool.fetch_page(FILE_ID_DATA, warehouse_page_id) {
+        Ok(f) => f,
+        Err(_) => { println("T330 warehouse: fetch empty page failed"); return 255 },
+    }
+    warehouse_empty_page := mut warehouse_db.pool.get_page(warehouse_empty_frame)
+    warehouse_pre_insert_page := mut copy_smoke_page(warehouse_empty_page)
+    warehouse_db.pool.unpin_page(warehouse_empty_frame, false)
+    warehouse_recovery_start_lsn := mut warehouse_db.gcm.current_lsn()
+    warehouse_insert_a := mut match warehouse_db.execute("insert into warehouse (id, title, state, kind, tag, holder, zone, shelf) values (1, 'alpha', 'open', 'ops', 'blue', 'team-a', 'north', 'rack-a')") {
+        Ok(n) => n,
+        Err(e) => { println("T330 warehouse: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_insert_a != 1 as u64 { println("T330 warehouse: first insert count"); return 255 }
+    warehouse_insert_b := mut match warehouse_db.execute("insert into warehouse (shelf, zone, holder, tag, kind, state, title, id) values ('rack-b', 'south', 'team-b', 'green', 'release', 'closed', 'beta', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T330 warehouse: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_insert_b != 1 as u64 { println("T330 warehouse: reordered insert count"); return 255 }
+    warehouse_select := mut match warehouse_db.query("select * from warehouse") {
+        Ok(r) => r,
+        Err(e) => { println("T330 warehouse: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_select.column_count() != 8 as u64 { println("T330 warehouse: select column count"); return 255 }
+    I warehouse_select.row_count() != 2 as u64 { println("T330 warehouse: select row count"); return 255 }
+    warehouse_select_cols := mut warehouse_select.get_columns()
+    I !expect_column(warehouse_select_cols, 0, "id", "INT") { println("T330 warehouse: select id column"); return 255 }
+    I !expect_column(warehouse_select_cols, 7, "shelf", "TEXT") { println("T330 warehouse: select shelf column"); return 255 }
+    warehouse_select_rows := mut warehouse_select.get_rows()
+    warehouse_select_row0 := mut &warehouse_select_rows[0]
+    warehouse_select_row1 := mut &warehouse_select_rows[1]
+    I !expect_cell(warehouse_select_row0, 0, "1") { println("T330 warehouse: row0 id"); return 255 }
+    I !expect_cell(warehouse_select_row0, 7, "rack-a") { println("T330 warehouse: row0 shelf"); return 255 }
+    I !expect_cell(warehouse_select_row1, 0, "2") { println("T330 warehouse: row1 id"); return 255 }
+    I !expect_cell(warehouse_select_row1, 7, "rack-b") { println("T330 warehouse: row1 shelf"); return 255 }
+    warehouse_select.free_owned_text()
+    warehouse_select.free_owned_text()
+    match warehouse_db.query("select id, title, state, kind, tag, holder, zone, shelf from warehouse") {
+        Ok(_) => { println("T330 warehouse: projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match warehouse_db.query("select * from warehouse where id = 1") {
+        Ok(_) => { println("T330 warehouse: filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match warehouse_db.query("select * from warehouse as w") {
+        Ok(_) => { println("T330 warehouse: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match warehouse_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T330 warehouse: close failed"); return 255 },
+    }
+    warehouse_reopen_cfg := mut EmbeddedConfig.default()
+    warehouse_reopen_cfg = warehouse_reopen_cfg.with_data_dir(warehouse_path.clone())
+    warehouse_reopen_cfg = warehouse_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    warehouse_reopened := mut match EmbeddedDatabase.open(warehouse_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T330 warehouse: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    warehouse_reopened_select := mut match warehouse_reopened.query("select * from warehouse") {
+        Ok(r) => r,
+        Err(e) => { println("T330 warehouse: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_reopened_select.column_count() != 8 as u64 { println("T330 warehouse: reopen column count"); return 255 }
+    I warehouse_reopened_select.row_count() != 2 as u64 { println("T330 warehouse: reopen row count"); return 255 }
+    warehouse_reopened_select.free_owned_text()
+    warehouse_reopened_select.free_owned_text()
+    match warehouse_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T330 warehouse: reopen close failed"); return 255 },
+    }
+    I restore_smoke_data_page(warehouse_path.clone(), warehouse_page_id, warehouse_pre_insert_page) != 0 {
+        println("T330 warehouse: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(warehouse_path.clone(), warehouse_recovery_start_lsn) != 0 {
+        println("T330 warehouse: checkpoint rewind failed")
+        return 255
+    }
+    warehouse_recovered_cfg := mut EmbeddedConfig.default()
+    warehouse_recovered_cfg = warehouse_recovered_cfg.with_data_dir(warehouse_path.clone())
+    warehouse_recovered_cfg = warehouse_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    warehouse_recovered := mut match EmbeddedDatabase.open(warehouse_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T330 warehouse: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    warehouse_recovered_select := mut match warehouse_recovered.query("select * from warehouse") {
+        Ok(r) => r,
+        Err(e) => { println("T330 warehouse: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I warehouse_recovered_select.column_count() != 8 as u64 { println("T330 warehouse: recovered column count"); return 255 }
+    I warehouse_recovered_select.row_count() != 2 as u64 { println("T330 warehouse: recovered row count"); return 255 }
+    warehouse_recovered_rows := mut warehouse_recovered_select.get_rows()
+    warehouse_recovered_row0 := mut &warehouse_recovered_rows[0]
+    warehouse_recovered_row1 := mut &warehouse_recovered_rows[1]
+    I !expect_cell(warehouse_recovered_row0, 7, "rack-a") { println("T330 warehouse: recovered row0 shelf"); return 255 }
+    I !expect_cell(warehouse_recovered_row1, 7, "rack-b") { println("T330 warehouse: recovered row1 shelf"); return 255 }
+    warehouse_recovered_select.free_owned_text()
+    warehouse_recovered_select.free_owned_text()
+    match warehouse_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T330 warehouse: recovered close failed"); return 255 },
     }
 
     tasks_recovery_suffix := mut time_micros()
