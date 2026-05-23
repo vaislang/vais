@@ -5763,6 +5763,148 @@ fn main() -> i64 {
         Err(_) => { println("T280 events: recovered close failed"); return 255 },
     }
 
+    records_suffix := mut time_micros()
+    records_path := mut "embedded_sql_api_roundtrip_records_db_{records_suffix}"
+    records_cfg := mut EmbeddedConfig.default()
+    records_cfg = records_cfg.with_data_dir(records_path.clone())
+    records_cfg = records_cfg.with_page_size(PAGE_SIZE_8K)
+    records_db := mut match EmbeddedDatabase.open(records_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T290 records: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    records_created := mut match records_db.execute("create table records (id int, title text, state text, kind text)") {
+        Ok(n) => n,
+        Err(e) => { println("T290 records: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_created != 0 as u64 { println("T290 records: create affected rows"); return 255 }
+    records_table_id := mut 0 as u32
+    records_page_id := mut 0 as u32
+    match records_db.catalog.get_table("records") {
+        Some(info) => {
+            records_table_id = info.table_id
+            records_page_id = info.first_page_id
+            I info.column_count != 4 as u16 { println("T290 records: table column count"); return 255 }
+        },
+        None => { println("T290 records: catalog missing table"); return 255 },
+    }
+    records_col_refs := mut records_db.catalog.get_columns(records_table_id)
+    records_cols: Vec<ColumnInfo> := mut Vec.with_capacity(records_col_refs.len())
+    LF col_ref: &records_col_refs {
+        records_cols.push((**col_ref).clone())
+    }
+    I records_cols.len() != 4 as u64 { println("T290 records: catalog column count"); return 255 }
+    I !expect_catalog_column(&records_cols, 0, "id", "INT") { println("T290 records: catalog id column"); return 255 }
+    I !expect_catalog_column(&records_cols, 1, "title", "TEXT") { println("T290 records: catalog title column"); return 255 }
+    I !expect_catalog_column(&records_cols, 2, "state", "TEXT") { println("T290 records: catalog state column"); return 255 }
+    I !expect_catalog_column(&records_cols, 3, "kind", "TEXT") { println("T290 records: catalog kind column"); return 255 }
+    records_empty_frame := mut match records_db.pool.fetch_page(FILE_ID_DATA, records_page_id) {
+        Ok(f) => f,
+        Err(_) => { println("T290 records: fetch empty page failed"); return 255 },
+    }
+    records_empty_page := mut records_db.pool.get_page(records_empty_frame)
+    records_pre_insert_page := mut copy_smoke_page(records_empty_page)
+    records_db.pool.unpin_page(records_empty_frame, false)
+    records_recovery_start_lsn := mut records_db.gcm.current_lsn()
+    records_insert_a := mut match records_db.execute("insert into records (id, title, state, kind) values (1, 'launch', 'open', 'ops')") {
+        Ok(n) => n,
+        Err(e) => { println("T290 records: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_insert_a != 1 as u64 { println("T290 records: first insert count"); return 255 }
+    records_insert_b := mut match records_db.execute("insert into records (kind, state, title, id) values ('release', 'done', 'ship', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T290 records: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_insert_b != 1 as u64 { println("T290 records: reordered insert count"); return 255 }
+    records_select := mut match records_db.query("select * from records") {
+        Ok(r) => r,
+        Err(e) => { println("T290 records: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_select.column_count() != 4 as u64 { println("T290 records: select column count"); return 255 }
+    I records_select.row_count() != 2 as u64 { println("T290 records: select row count"); return 255 }
+    records_select_cols := mut records_select.get_columns()
+    I !expect_column(records_select_cols, 0, "id", "INT") { println("T290 records: select id column"); return 255 }
+    I !expect_column(records_select_cols, 1, "title", "TEXT") { println("T290 records: select title column"); return 255 }
+    I !expect_column(records_select_cols, 2, "state", "TEXT") { println("T290 records: select state column"); return 255 }
+    I !expect_column(records_select_cols, 3, "kind", "TEXT") { println("T290 records: select kind column"); return 255 }
+    records_select_rows := mut records_select.get_rows()
+    records_select_row0 := mut &records_select_rows[0]
+    records_select_row1 := mut &records_select_rows[1]
+    I !expect_cell(records_select_row0, 0, "1") { println("T290 records: row0 id"); return 255 }
+    I !expect_cell(records_select_row0, 1, "launch") { println("T290 records: row0 title"); return 255 }
+    I !expect_cell(records_select_row0, 2, "open") { println("T290 records: row0 state"); return 255 }
+    I !expect_cell(records_select_row0, 3, "ops") { println("T290 records: row0 kind"); return 255 }
+    I !expect_cell(records_select_row1, 0, "2") { println("T290 records: row1 id"); return 255 }
+    I !expect_cell(records_select_row1, 1, "ship") { println("T290 records: row1 title"); return 255 }
+    I !expect_cell(records_select_row1, 2, "done") { println("T290 records: row1 state"); return 255 }
+    I !expect_cell(records_select_row1, 3, "release") { println("T290 records: row1 kind"); return 255 }
+    records_select.free_owned_text()
+    records_select.free_owned_text()
+
+    match records_db.query("select id, title, state, kind from records") {
+        Ok(_) => { println("T290 records: projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match records_db.query("select * from records where state = 'open'") {
+        Ok(_) => { println("T290 records: filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match records_db.query("select * from records as r") {
+        Ok(_) => { println("T290 records: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match records_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T290 records: close failed"); return 255 },
+    }
+
+    records_reopen_cfg := mut EmbeddedConfig.default()
+    records_reopen_cfg = records_reopen_cfg.with_data_dir(records_path.clone())
+    records_reopen_cfg = records_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    records_reopened := mut match EmbeddedDatabase.open(records_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T290 records: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    records_reopened_select := mut match records_reopened.query("select * from records") {
+        Ok(r) => r,
+        Err(e) => { println("T290 records: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_reopened_select.column_count() != 4 as u64 { println("T290 records: reopen column count"); return 255 }
+    I records_reopened_select.row_count() != 2 as u64 { println("T290 records: reopen row count"); return 255 }
+    records_reopened_select.free_owned_text()
+    records_reopened_select.free_owned_text()
+    match records_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T290 records: reopen close failed"); return 255 },
+    }
+
+    I restore_smoke_data_page(records_path.clone(), records_page_id, records_pre_insert_page) != 0 {
+        println("T290 records: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(records_path.clone(), records_recovery_start_lsn) != 0 {
+        println("T290 records: checkpoint rewind failed")
+        return 255
+    }
+    records_recovered_cfg := mut EmbeddedConfig.default()
+    records_recovered_cfg = records_recovered_cfg.with_data_dir(records_path.clone())
+    records_recovered_cfg = records_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    records_recovered := mut match EmbeddedDatabase.open(records_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T290 records: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    records_recovered_select := mut match records_recovered.query("select * from records") {
+        Ok(r) => r,
+        Err(e) => { println("T290 records: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I records_recovered_select.column_count() != 4 as u64 { println("T290 records: recovered column count"); return 255 }
+    I records_recovered_select.row_count() != 2 as u64 { println("T290 records: recovered row count"); return 255 }
+    records_recovered_select.free_owned_text()
+    records_recovered_select.free_owned_text()
+    match records_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T290 records: recovered close failed"); return 255 },
+    }
+
     tasks_recovery_suffix := mut time_micros()
     tasks_recovery_path := mut "embedded_sql_api_roundtrip_tasks_recovery_db_{tasks_recovery_suffix}"
     tasks_recovery_cfg := mut EmbeddedConfig.default()
