@@ -7017,12 +7017,96 @@ fn main() -> i64 {
     I !expect_cell(inventory_select_row1, 6, "south") { println("T320 inventory: row1 zone"); return 255 }
     inventory_select.free_owned_text()
     inventory_select.free_owned_text()
-    match inventory_db.query("select id, title, state, kind, tag, holder, zone from inventory") {
-        Ok(_) => { println("T320 inventory: projection unexpectedly accepted"); return 255 },
+
+    inventory_projection := mut match inventory_db.query("select id, title, state, kind, tag, holder, zone from inventory") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_projection.column_count() != 7 as u64 { println("T322 inventory: projection column count"); return 255 }
+    I inventory_projection.row_count() != 2 as u64 { println("T322 inventory: projection row count"); return 255 }
+    inventory_projection_cols := mut inventory_projection.get_columns()
+    I !expect_column(inventory_projection_cols, 0, "id", "INT") { println("T322 inventory: projection id column"); return 255 }
+    I !expect_column(inventory_projection_cols, 6, "zone", "TEXT") { println("T322 inventory: projection zone column"); return 255 }
+    inventory_projection_rows := mut inventory_projection.get_rows()
+    inventory_projection_row1 := mut &inventory_projection_rows[1]
+    I !expect_cell(inventory_projection_row1, 6, "south") { println("T322 inventory: projection row1 zone"); return 255 }
+    inventory_projection.free_owned_text()
+    inventory_projection.free_owned_text()
+
+    inventory_id_filter := mut match inventory_db.query("select * from inventory where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_id_filter.column_count() != 7 as u64 { println("T322 inventory: id filter column count"); return 255 }
+    I inventory_id_filter.row_count() != 1 as u64 { println("T322 inventory: id filter row count"); return 255 }
+    inventory_id_filter_rows := mut inventory_id_filter.get_rows()
+    inventory_id_filter_row := mut &inventory_id_filter_rows[0]
+    I !expect_cell(inventory_id_filter_row, 0, "1") { println("T322 inventory: id filter id"); return 255 }
+    I !expect_cell(inventory_id_filter_row, 6, "north") { println("T322 inventory: id filter zone"); return 255 }
+    inventory_id_filter.free_owned_text()
+    inventory_id_filter.free_owned_text()
+
+    inventory_id_filter_reversed := mut match inventory_db.query("select * from inventory where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_id_filter_reversed.row_count() != 1 as u64 { println("T322 inventory: reversed id filter row count"); return 255 }
+    inventory_id_filter_reversed_rows := mut inventory_id_filter_reversed.get_rows()
+    inventory_id_filter_reversed_row := mut &inventory_id_filter_reversed_rows[0]
+    I !expect_cell(inventory_id_filter_reversed_row, 0, "2") { println("T322 inventory: reversed id filter id"); return 255 }
+    I !expect_cell(inventory_id_filter_reversed_row, 6, "south") { println("T322 inventory: reversed id filter zone"); return 255 }
+    inventory_id_filter_reversed.free_owned_text()
+    inventory_id_filter_reversed.free_owned_text()
+
+    inventory_id_filter_missing := mut match inventory_db.query("select * from inventory where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_id_filter_missing.column_count() != 7 as u64 { println("T322 inventory: missing id filter column count"); return 255 }
+    I inventory_id_filter_missing.row_count() != 0 as u64 { println("T322 inventory: missing id filter row count"); return 255 }
+    inventory_id_filter_missing.free_owned_text()
+    inventory_id_filter_missing.free_owned_text()
+
+    inventory_zone_filter := mut match inventory_db.query("select * from inventory where zone = 'north'") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: zone filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_zone_filter.column_count() != 7 as u64 { println("T322 inventory: zone filter column count"); return 255 }
+    I inventory_zone_filter.row_count() != 1 as u64 { println("T322 inventory: zone filter row count"); return 255 }
+    inventory_zone_filter_rows := mut inventory_zone_filter.get_rows()
+    inventory_zone_filter_row := mut &inventory_zone_filter_rows[0]
+    I !expect_cell(inventory_zone_filter_row, 0, "1") { println("T322 inventory: zone filter id"); return 255 }
+    I !expect_cell(inventory_zone_filter_row, 6, "north") { println("T322 inventory: zone filter zone"); return 255 }
+    inventory_zone_filter.free_owned_text()
+    inventory_zone_filter.free_owned_text()
+
+    inventory_zone_filter_reversed := mut match inventory_db.query("select * from inventory where 'south' = zone") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: reversed zone filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_zone_filter_reversed.row_count() != 1 as u64 { println("T322 inventory: reversed zone filter row count"); return 255 }
+    inventory_zone_filter_reversed_rows := mut inventory_zone_filter_reversed.get_rows()
+    inventory_zone_filter_reversed_row := mut &inventory_zone_filter_reversed_rows[0]
+    I !expect_cell(inventory_zone_filter_reversed_row, 0, "2") { println("T322 inventory: reversed zone filter id"); return 255 }
+    I !expect_cell(inventory_zone_filter_reversed_row, 6, "south") { println("T322 inventory: reversed zone filter zone"); return 255 }
+    inventory_zone_filter_reversed.free_owned_text()
+    inventory_zone_filter_reversed.free_owned_text()
+
+    inventory_zone_filter_missing := mut match inventory_db.query("select * from inventory where zone = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: missing zone filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_zone_filter_missing.column_count() != 7 as u64 { println("T322 inventory: missing zone filter column count"); return 255 }
+    I inventory_zone_filter_missing.row_count() != 0 as u64 { println("T322 inventory: missing zone filter row count"); return 255 }
+    inventory_zone_filter_missing.free_owned_text()
+    inventory_zone_filter_missing.free_owned_text()
+
+    match inventory_db.query("select id, title, state, kind, tag, holder, zone from inventory where id = 1") {
+        Ok(_) => { println("T322 inventory: projection id filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match inventory_db.query("select * from inventory where id = 1") {
-        Ok(_) => { println("T320 inventory: filter unexpectedly accepted"); return 255 },
+    match inventory_db.query("select * from inventory where holder = 'team-a'") {
+        Ok(_) => { println("T322 inventory: non-selected text filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match inventory_db.query("select * from inventory as i") {
@@ -7048,6 +7132,27 @@ fn main() -> i64 {
     I inventory_reopened_select.row_count() != 2 as u64 { println("T320 inventory: reopen row count"); return 255 }
     inventory_reopened_select.free_owned_text()
     inventory_reopened_select.free_owned_text()
+    inventory_reopened_projection := mut match inventory_reopened.query("select id, title, state, kind, tag, holder, zone from inventory") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_reopened_projection.row_count() != 2 as u64 { println("T322 inventory: reopen projection row count"); return 255 }
+    inventory_reopened_projection.free_owned_text()
+    inventory_reopened_projection.free_owned_text()
+    inventory_reopened_id_filter := mut match inventory_reopened.query("select * from inventory where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: reopen id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_reopened_id_filter.row_count() != 1 as u64 { println("T322 inventory: reopen id filter row count"); return 255 }
+    inventory_reopened_id_filter.free_owned_text()
+    inventory_reopened_id_filter.free_owned_text()
+    inventory_reopened_zone_filter := mut match inventory_reopened.query("select * from inventory where zone = 'south'") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: reopen zone filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_reopened_zone_filter.row_count() != 1 as u64 { println("T322 inventory: reopen zone filter row count"); return 255 }
+    inventory_reopened_zone_filter.free_owned_text()
+    inventory_reopened_zone_filter.free_owned_text()
     match inventory_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T320 inventory: reopen close failed"); return 255 },
@@ -7080,6 +7185,27 @@ fn main() -> i64 {
     I !expect_cell(inventory_recovered_row1, 6, "south") { println("T320 inventory: recovered row1 zone"); return 255 }
     inventory_recovered_select.free_owned_text()
     inventory_recovered_select.free_owned_text()
+    inventory_recovered_projection := mut match inventory_recovered.query("select id, title, state, kind, tag, holder, zone from inventory") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_recovered_projection.row_count() != 2 as u64 { println("T322 inventory: recovered projection row count"); return 255 }
+    inventory_recovered_projection.free_owned_text()
+    inventory_recovered_projection.free_owned_text()
+    inventory_recovered_id_filter := mut match inventory_recovered.query("select * from inventory where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_recovered_id_filter.row_count() != 1 as u64 { println("T322 inventory: recovered id filter row count"); return 255 }
+    inventory_recovered_id_filter.free_owned_text()
+    inventory_recovered_id_filter.free_owned_text()
+    inventory_recovered_zone_filter := mut match inventory_recovered.query("select * from inventory where zone = 'north'") {
+        Ok(r) => r,
+        Err(e) => { println("T322 inventory: recovered zone filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I inventory_recovered_zone_filter.row_count() != 1 as u64 { println("T322 inventory: recovered zone filter row count"); return 255 }
+    inventory_recovered_zone_filter.free_owned_text()
+    inventory_recovered_zone_filter.free_owned_text()
     match inventory_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T320 inventory: recovered close failed"); return 255 },
