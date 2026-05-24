@@ -1385,12 +1385,13 @@ fn db_table_rows_id_filter_handler(
     ctx.json(200, response_body)
 }
 
-fn db_table_rows_dock_filter_handler(
+fn db_table_rows_stations_filter_handler(
     db_path: str,
     method: str,
     path: str,
     query_param: str,
     body: str,
+    filter_kind: str,
 ) -> Response {
     ctx := mut Context.new(method, path)
     table := mut db_table_rows_path_table(path)
@@ -1399,8 +1400,14 @@ fn db_table_rows_dock_filter_handler(
         return ctx.json(400, "{\"error\":\"db_invalid_table\"}")
     }
 
-    dock_value := mut db_dock_filter_query_value(query_param)
-    I method != "GET" || body != "" || dock_value == "" {
+    filter_value := mut ""
+    I filter_kind == "dock" {
+        filter_value = db_dock_filter_query_value(query_param)
+    }
+    I filter_kind == "id" {
+        filter_value = db_id_filter_query_value(query_param)
+    }
+    I method != "GET" || body != "" || filter_value == "" {
         return ctx.json(400, "{\"error\":\"db_invalid_filter\"}")
     }
     I table != "stations" {
@@ -1416,7 +1423,13 @@ fn db_table_rows_dock_filter_handler(
         Err(_) => { return ctx.json(500, "{\"error\":\"db_unavailable\"}") },
     }
 
-    query := mut "select * from stations where dock = '{dock_value}'"
+    query := mut ""
+    I filter_kind == "dock" {
+        query = "select * from stations where dock = '{filter_value}'"
+    }
+    I filter_kind == "id" {
+        query = "select * from stations where id = {filter_value}"
+    }
     result := mut match db.query(query) {
         Ok(r) => r,
         Err(_) => {
@@ -1665,6 +1678,26 @@ fn db_table_rows_dock_filter_handler(
     }
 
     ctx.json(200, response_body)
+}
+
+fn db_table_rows_dock_filter_handler(
+    db_path: str,
+    method: str,
+    path: str,
+    query_param: str,
+    body: str,
+) -> Response {
+    db_table_rows_stations_filter_handler(db_path, method, path, query_param, body, "dock")
+}
+
+fn db_table_rows_stations_id_filter_handler(
+    db_path: str,
+    method: str,
+    path: str,
+    query_param: str,
+    body: str,
+) -> Response {
+    db_table_rows_stations_filter_handler(db_path, method, path, query_param, body, "id")
 }
 
 fn db_table_rows_title_filter_handler(
@@ -2731,6 +2764,122 @@ fn check_table_rows_stations_route(db_path: str) -> i64 {
         return 462
     }
     0
+}
+
+fn check_table_rows_stations_id_filter_route(db_path: str) -> i64 {
+    response := mut db_table_rows_stations_id_filter_handler(db_path, "GET", "/db/tables/stations/rows", "id=1", "")
+    I response.status != 200 {
+        println("FAIL db table rows stations id filter response status")
+        return 520
+    }
+    I response.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows stations id filter response content type")
+        return 521
+    }
+    I response.body != "{\"table\":\"stations\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"title\",\"type\":\"TEXT\"},{\"name\":\"state\",\"type\":\"TEXT\"},{\"name\":\"kind\",\"type\":\"TEXT\"},{\"name\":\"tag\",\"type\":\"TEXT\"},{\"name\":\"holder\",\"type\":\"TEXT\"},{\"name\":\"zone\",\"type\":\"TEXT\"},{\"name\":\"shelf\",\"type\":\"TEXT\"},{\"name\":\"bin\",\"type\":\"TEXT\"},{\"name\":\"batch\",\"type\":\"TEXT\"},{\"name\":\"lane\",\"type\":\"TEXT\"},{\"name\":\"route\",\"type\":\"TEXT\"},{\"name\":\"stop\",\"type\":\"TEXT\"},{\"name\":\"gate\",\"type\":\"TEXT\"},{\"name\":\"dock\",\"type\":\"TEXT\"}],\"rows\":[{\"id\":1,\"title\":\"title-a\",\"state\":\"state-a\",\"kind\":\"kind-a\",\"tag\":\"tag-a\",\"holder\":\"holder-a\",\"zone\":\"zone-a\",\"shelf\":\"shelf-a\",\"bin\":\"bin-a\",\"batch\":\"batch-a\",\"lane\":\"lane-a\",\"route\":\"route-a\",\"stop\":\"stop-a\",\"gate\":\"gate-a\",\"dock\":\"dock-a\"}]}" {
+        println("FAIL db table rows stations id filter response body")
+        println(response.body)
+        return 522
+    }
+
+    second := mut db_table_rows_stations_id_filter_handler(db_path, "GET", "/db/tables/stations/rows", "id=2", "")
+    I second.status != 200 {
+        println("FAIL db table rows stations id filter second response status")
+        return 523
+    }
+    I second.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows stations id filter second response content type")
+        return 524
+    }
+    I second.body != "{\"table\":\"stations\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"title\",\"type\":\"TEXT\"},{\"name\":\"state\",\"type\":\"TEXT\"},{\"name\":\"kind\",\"type\":\"TEXT\"},{\"name\":\"tag\",\"type\":\"TEXT\"},{\"name\":\"holder\",\"type\":\"TEXT\"},{\"name\":\"zone\",\"type\":\"TEXT\"},{\"name\":\"shelf\",\"type\":\"TEXT\"},{\"name\":\"bin\",\"type\":\"TEXT\"},{\"name\":\"batch\",\"type\":\"TEXT\"},{\"name\":\"lane\",\"type\":\"TEXT\"},{\"name\":\"route\",\"type\":\"TEXT\"},{\"name\":\"stop\",\"type\":\"TEXT\"},{\"name\":\"gate\",\"type\":\"TEXT\"},{\"name\":\"dock\",\"type\":\"TEXT\"}],\"rows\":[{\"id\":2,\"title\":\"title-b\",\"state\":\"state-b\",\"kind\":\"kind-b\",\"tag\":\"tag-b\",\"holder\":\"holder-b\",\"zone\":\"zone-b\",\"shelf\":\"shelf-b\",\"bin\":\"bin-b\",\"batch\":\"batch-b\",\"lane\":\"lane-b\",\"route\":\"route-b\",\"stop\":\"stop-b\",\"gate\":\"gate-b\",\"dock\":\"dock-b\"}]}" {
+        println("FAIL db table rows stations id filter second response body")
+        println(second.body)
+        return 525
+    }
+
+    missing := mut db_table_rows_stations_id_filter_handler(db_path, "GET", "/db/tables/stations/rows", "id=999", "")
+    I missing.status != 200 {
+        println("FAIL db table rows stations id filter no-match status")
+        return 526
+    }
+    I missing.content_type != "application/json; charset=utf-8" {
+        println("FAIL db table rows stations id filter no-match content type")
+        return 527
+    }
+    I missing.body != "{\"table\":\"stations\",\"columns\":[{\"name\":\"id\",\"type\":\"INT\"},{\"name\":\"title\",\"type\":\"TEXT\"},{\"name\":\"state\",\"type\":\"TEXT\"},{\"name\":\"kind\",\"type\":\"TEXT\"},{\"name\":\"tag\",\"type\":\"TEXT\"},{\"name\":\"holder\",\"type\":\"TEXT\"},{\"name\":\"zone\",\"type\":\"TEXT\"},{\"name\":\"shelf\",\"type\":\"TEXT\"},{\"name\":\"bin\",\"type\":\"TEXT\"},{\"name\":\"batch\",\"type\":\"TEXT\"},{\"name\":\"lane\",\"type\":\"TEXT\"},{\"name\":\"route\",\"type\":\"TEXT\"},{\"name\":\"stop\",\"type\":\"TEXT\"},{\"name\":\"gate\",\"type\":\"TEXT\"},{\"name\":\"dock\",\"type\":\"TEXT\"}],\"rows\":[]}" {
+        println("FAIL db table rows stations id filter no-match body")
+        println(missing.body)
+        return 528
+    }
+
+    0
+}
+
+fn check_table_rows_stations_id_filter_invalid_inputs(db_path: str) -> i64 {
+    missing_id := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "", "")
+    missing_status := mut expect_db_invalid_filter_response(missing_id, 530)
+    I missing_status != 0 { return missing_status }
+
+    empty_id := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "id=", "")
+    empty_status := mut expect_db_invalid_filter_response(empty_id, 533)
+    I empty_status != 0 { return empty_status }
+
+    nondigit_id := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "id=1x", "")
+    nondigit_status := mut expect_db_invalid_filter_response(nondigit_id, 536)
+    I nondigit_status != 0 { return nondigit_status }
+
+    negative_id := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "id=-1", "")
+    negative_status := mut expect_db_invalid_filter_response(negative_id, 539)
+    I negative_status != 0 { return negative_status }
+
+    decimal_id := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "id=1.5", "")
+    decimal_status := mut expect_db_invalid_filter_response(decimal_id, 542)
+    I decimal_status != 0 { return decimal_status }
+
+    extra_param := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "id=1&dock=dock-a", "")
+    extra_status := mut expect_db_invalid_filter_response(extra_param, 545)
+    I extra_status != 0 { return extra_status }
+
+    dock_param := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "dock=dock-a", "")
+    dock_status := mut expect_db_invalid_filter_response(dock_param, 548)
+    I dock_status != 0 { return dock_status }
+
+    title_param := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "title=title-a", "")
+    title_status := mut expect_db_invalid_filter_response(title_param, 551)
+    I title_status != 0 { return title_status }
+
+    status_param := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "status=state-a", "")
+    status_param_status := mut expect_db_invalid_filter_response(status_param, 554)
+    I status_param_status != 0 { return status_param_status }
+
+    sql_param := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "sql=select * from stations", "")
+    sql_status := mut expect_db_invalid_filter_response(sql_param, 557)
+    I sql_status != 0 { return sql_status }
+
+    bad_body := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "GET", "/db/tables/stations/rows", "id=1", "{\"where\":\"id=1\"}")
+    body_status := mut expect_db_invalid_filter_response(bad_body, 560)
+    I body_status != 0 { return body_status }
+
+    bad_method := mut db_table_rows_stations_id_filter_handler(db_path.clone(), "POST", "/db/tables/stations/rows", "id=1", "")
+    method_status := mut expect_db_invalid_filter_response(bad_method, 563)
+    I method_status != 0 { return method_status }
+
+    0
+}
+
+fn check_table_rows_stations_id_filter_missing_table(db_path: str) -> i64 {
+    response := mut db_table_rows_stations_id_filter_handler(db_path, "GET", "/db/tables/stations/rows", "id=1", "")
+    expect_db_unsupported_table_response(response, 404, 566)
+}
+
+fn check_table_rows_stations_id_filter_static_descriptor_rejected(db_path: str) -> i64 {
+    response := mut db_table_rows_stations_id_filter_handler(db_path, "GET", "/db/tables/books/rows", "id=1", "")
+    expect_db_unsupported_table_response(response, 422, 569)
+}
+
+fn check_table_rows_stations_id_filter_non_stations_table_rejected(db_path: str) -> i64 {
+    response := mut db_table_rows_stations_id_filter_handler(db_path, "GET", "/db/tables/contacts/rows", "id=1", "")
+    expect_db_unsupported_table_response(response, 422, 572)
 }
 
 fn check_table_rows_dock_filter_route(db_path: str) -> i64 {
@@ -4101,6 +4250,31 @@ fn main() -> i64 {
     table_rows_stations_status := mut check_table_rows_stations_route(stations_path.clone())
     I table_rows_stations_status != 0 {
         return table_rows_stations_status
+    }
+
+    table_rows_stations_id_filter_status := mut check_table_rows_stations_id_filter_route(stations_path.clone())
+    I table_rows_stations_id_filter_status != 0 {
+        return table_rows_stations_id_filter_status
+    }
+
+    table_rows_stations_id_filter_invalid_status := mut check_table_rows_stations_id_filter_invalid_inputs(stations_path.clone())
+    I table_rows_stations_id_filter_invalid_status != 0 {
+        return table_rows_stations_id_filter_invalid_status
+    }
+
+    table_rows_stations_id_filter_missing_status := mut check_table_rows_stations_id_filter_missing_table(missing_table_path.clone())
+    I table_rows_stations_id_filter_missing_status != 0 {
+        return table_rows_stations_id_filter_missing_status
+    }
+
+    table_rows_stations_id_filter_static_status := mut check_table_rows_stations_id_filter_static_descriptor_rejected(db_path.clone())
+    I table_rows_stations_id_filter_static_status != 0 {
+        return table_rows_stations_id_filter_static_status
+    }
+
+    table_rows_stations_id_filter_non_stations_status := mut check_table_rows_stations_id_filter_non_stations_table_rejected(contacts_path.clone())
+    I table_rows_stations_id_filter_non_stations_status != 0 {
+        return table_rows_stations_id_filter_non_stations_status
     }
 
     table_rows_dock_filter_status := mut check_table_rows_dock_filter_route(stations_path.clone())
