@@ -9454,10 +9454,37 @@ fn main() -> i64 {
     I !expect_column(waypoints_projection_id_filter_missing_cols, 13, "gate", "TEXT") { println("T387 waypoints: missing projection id filter gate column"); return 255 }
     waypoints_projection_id_filter_missing.free_owned_text()
     waypoints_projection_id_filter_missing.free_owned_text()
-    match waypoints_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate from waypoints where gate = 'gate-a'") {
-        Ok(_) => { println("T387 waypoints: projection gate filter unexpectedly accepted"); return 255 },
-        Err(_) => {},
+    waypoints_projection_gate_filter := mut match waypoints_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate from waypoints where gate = 'gate-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T389 waypoints: projection gate filter failed: {e.message}: {e.hint}"); return 255 },
     }
+    I waypoints_projection_gate_filter.column_count() != 14 as u64 { println("T389 waypoints: projection gate filter column count"); return 255 }
+    I waypoints_projection_gate_filter.row_count() != 1 as u64 { println("T389 waypoints: projection gate filter row count"); return 255 }
+    waypoints_projection_gate_rows := mut waypoints_projection_gate_filter.get_rows()
+    waypoints_projection_gate_row0 := mut &waypoints_projection_gate_rows[0]
+    I !expect_cell(waypoints_projection_gate_row0, 0, "1") { println("T389 waypoints: projection gate filter id"); return 255 }
+    I !expect_cell(waypoints_projection_gate_row0, 13, "gate-a") { println("T389 waypoints: projection gate filter gate"); return 255 }
+    waypoints_projection_gate_filter.free_owned_text()
+    waypoints_projection_gate_filter.free_owned_text()
+    waypoints_projection_gate_filter_reversed := mut match waypoints_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate from waypoints where 'gate-b' = gate") {
+        Ok(r) => r,
+        Err(e) => { println("T389 waypoints: reversed projection gate filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_projection_gate_filter_reversed.row_count() != 1 as u64 { println("T389 waypoints: reversed projection gate filter row count"); return 255 }
+    waypoints_projection_gate_reversed_rows := mut waypoints_projection_gate_filter_reversed.get_rows()
+    waypoints_projection_gate_reversed_row0 := mut &waypoints_projection_gate_reversed_rows[0]
+    I !expect_cell(waypoints_projection_gate_reversed_row0, 0, "2") { println("T389 waypoints: reversed projection gate filter id"); return 255 }
+    I !expect_cell(waypoints_projection_gate_reversed_row0, 13, "gate-b") { println("T389 waypoints: reversed projection gate filter gate"); return 255 }
+    waypoints_projection_gate_filter_reversed.free_owned_text()
+    waypoints_projection_gate_filter_reversed.free_owned_text()
+    waypoints_projection_gate_filter_missing := mut match waypoints_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate from waypoints where gate = 'missing-gate'") {
+        Ok(r) => r,
+        Err(e) => { println("T389 waypoints: missing projection gate filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_projection_gate_filter_missing.column_count() != 14 as u64 { println("T389 waypoints: missing projection gate filter column count"); return 255 }
+    I waypoints_projection_gate_filter_missing.row_count() != 0 as u64 { println("T389 waypoints: missing projection gate filter row count"); return 255 }
+    waypoints_projection_gate_filter_missing.free_owned_text()
+    waypoints_projection_gate_filter_missing.free_owned_text()
     match waypoints_db.query("select * from waypoints where stop = 'stop-a'") {
         Ok(_) => { println("T384 waypoints: earlier text filter unexpectedly accepted"); return 255 },
         Err(_) => {},
@@ -9527,6 +9554,16 @@ fn main() -> i64 {
     I waypoints_reopened_gate_filter.row_count() != 1 as u64 { println("T384 waypoints: reopen gate filter row count"); return 255 }
     waypoints_reopened_gate_filter.free_owned_text()
     waypoints_reopened_gate_filter.free_owned_text()
+    waypoints_reopened_projection_gate_filter := mut match waypoints_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate from waypoints where gate = 'gate-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T389 waypoints: reopen projection gate filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_reopened_projection_gate_filter.row_count() != 1 as u64 { println("T389 waypoints: reopen projection gate filter row count"); return 255 }
+    waypoints_reopened_projection_gate_rows := mut waypoints_reopened_projection_gate_filter.get_rows()
+    waypoints_reopened_projection_gate_row0 := mut &waypoints_reopened_projection_gate_rows[0]
+    I !expect_cell(waypoints_reopened_projection_gate_row0, 13, "gate-b") { println("T389 waypoints: reopen projection gate filter gate"); return 255 }
+    waypoints_reopened_projection_gate_filter.free_owned_text()
+    waypoints_reopened_projection_gate_filter.free_owned_text()
     match waypoints_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T382 waypoints: reopen close failed"); return 255 },
@@ -9590,6 +9627,16 @@ fn main() -> i64 {
     I waypoints_recovered_gate_filter.row_count() != 1 as u64 { println("T384 waypoints: recovered gate filter row count"); return 255 }
     waypoints_recovered_gate_filter.free_owned_text()
     waypoints_recovered_gate_filter.free_owned_text()
+    waypoints_recovered_projection_gate_filter := mut match waypoints_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate from waypoints where gate = 'gate-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T389 waypoints: recovered projection gate filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_recovered_projection_gate_filter.row_count() != 1 as u64 { println("T389 waypoints: recovered projection gate filter row count"); return 255 }
+    waypoints_recovered_projection_gate_rows := mut waypoints_recovered_projection_gate_filter.get_rows()
+    waypoints_recovered_projection_gate_row0 := mut &waypoints_recovered_projection_gate_rows[0]
+    I !expect_cell(waypoints_recovered_projection_gate_row0, 13, "gate-a") { println("T389 waypoints: recovered projection gate filter gate"); return 255 }
+    waypoints_recovered_projection_gate_filter.free_owned_text()
+    waypoints_recovered_projection_gate_filter.free_owned_text()
     match waypoints_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T382 waypoints: recovered close failed"); return 255 },
