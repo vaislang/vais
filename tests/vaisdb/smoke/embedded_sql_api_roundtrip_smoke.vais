@@ -9863,6 +9863,26 @@ fn main() -> i64 {
         Ok(_) => { println("T392 stations: qualified star unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
+    match stations_db.query("select stations.id, stations.title, stations.state, stations.kind, stations.tag, stations.holder, stations.zone, stations.shelf, stations.bin, stations.batch, stations.lane, stations.route, stations.stop, stations.gate, stations.dock from stations") {
+        Ok(_) => { println("T404 stations: qualified projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match stations_db.query("select * from stations where stations.id = 1") {
+        Ok(_) => { println("T404 stations: qualified select-all id filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match stations_db.query("select * from stations where stations.dock = 'dock-a'") {
+        Ok(_) => { println("T404 stations: qualified select-all dock filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match stations_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate, dock from stations where stations.id = 1") {
+        Ok(_) => { println("T404 stations: qualified projection id filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match stations_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate, dock from stations where stations.dock = 'dock-a'") {
+        Ok(_) => { println("T404 stations: qualified projection dock filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
     match stations_db.query("select * from stations as s") {
         Ok(_) => { println("T392 stations: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
