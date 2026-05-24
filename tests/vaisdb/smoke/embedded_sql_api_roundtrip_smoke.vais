@@ -9994,6 +9994,17 @@ fn main() -> i64 {
     I stations_recovered_id_filter.row_count() != 1 as u64 { println("T394 stations: recovered id filter row count"); return 255 }
     stations_recovered_id_filter.free_owned_text()
     stations_recovered_id_filter.free_owned_text()
+    stations_recovered_id_filter_missing := mut match stations_recovered.query("select * from stations where id = 999") {
+        Ok(r) => r,
+        Err(e) => { println("T419 stations: recovered missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I stations_recovered_id_filter_missing.column_count() != 15 as u64 { println("T419 stations: recovered missing id filter column count"); return 255 }
+    I stations_recovered_id_filter_missing.row_count() != 0 as u64 { println("T419 stations: recovered missing id filter row count"); return 255 }
+    stations_recovered_id_filter_missing_cols := mut stations_recovered_id_filter_missing.get_columns()
+    I !expect_column(stations_recovered_id_filter_missing_cols, 0, "id", "INT") { println("T419 stations: recovered missing id filter id column"); return 255 }
+    I !expect_column(stations_recovered_id_filter_missing_cols, 14, "dock", "TEXT") { println("T419 stations: recovered missing id filter dock column"); return 255 }
+    stations_recovered_id_filter_missing.free_owned_text()
+    stations_recovered_id_filter_missing.free_owned_text()
     stations_recovered_projection_id_filter := mut match stations_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate, dock from stations where id = 2") {
         Ok(r) => r,
         Err(e) => { println("T397 stations: recovered projection id filter failed: {e.message}: {e.hint}"); return 255 },
@@ -10001,6 +10012,17 @@ fn main() -> i64 {
     I stations_recovered_projection_id_filter.row_count() != 1 as u64 { println("T397 stations: recovered projection id filter row count"); return 255 }
     stations_recovered_projection_id_filter.free_owned_text()
     stations_recovered_projection_id_filter.free_owned_text()
+    stations_recovered_projection_id_filter_missing := mut match stations_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate, dock from stations where id = 999") {
+        Ok(r) => r,
+        Err(e) => { println("T419 stations: recovered missing projection id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I stations_recovered_projection_id_filter_missing.column_count() != 15 as u64 { println("T419 stations: recovered missing projection id filter column count"); return 255 }
+    I stations_recovered_projection_id_filter_missing.row_count() != 0 as u64 { println("T419 stations: recovered missing projection id filter row count"); return 255 }
+    stations_recovered_projection_id_filter_missing_cols := mut stations_recovered_projection_id_filter_missing.get_columns()
+    I !expect_column(stations_recovered_projection_id_filter_missing_cols, 0, "id", "INT") { println("T419 stations: recovered missing projection id filter id column"); return 255 }
+    I !expect_column(stations_recovered_projection_id_filter_missing_cols, 14, "dock", "TEXT") { println("T419 stations: recovered missing projection id filter dock column"); return 255 }
+    stations_recovered_projection_id_filter_missing.free_owned_text()
+    stations_recovered_projection_id_filter_missing.free_owned_text()
     stations_recovered_dock_filter := mut match stations_recovered.query("select * from stations where dock = 'dock-a'") {
         Ok(r) => r,
         Err(e) => { println("T394 stations: recovered dock filter failed: {e.message}: {e.hint}"); return 255 },
@@ -10008,6 +10030,17 @@ fn main() -> i64 {
     I stations_recovered_dock_filter.row_count() != 1 as u64 { println("T394 stations: recovered dock filter row count"); return 255 }
     stations_recovered_dock_filter.free_owned_text()
     stations_recovered_dock_filter.free_owned_text()
+    stations_recovered_dock_filter_missing := mut match stations_recovered.query("select * from stations where dock = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T419 stations: recovered missing dock filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I stations_recovered_dock_filter_missing.column_count() != 15 as u64 { println("T419 stations: recovered missing dock filter column count"); return 255 }
+    I stations_recovered_dock_filter_missing.row_count() != 0 as u64 { println("T419 stations: recovered missing dock filter row count"); return 255 }
+    stations_recovered_dock_filter_missing_cols := mut stations_recovered_dock_filter_missing.get_columns()
+    I !expect_column(stations_recovered_dock_filter_missing_cols, 0, "id", "INT") { println("T419 stations: recovered missing dock filter id column"); return 255 }
+    I !expect_column(stations_recovered_dock_filter_missing_cols, 14, "dock", "TEXT") { println("T419 stations: recovered missing dock filter dock column"); return 255 }
+    stations_recovered_dock_filter_missing.free_owned_text()
+    stations_recovered_dock_filter_missing.free_owned_text()
     stations_recovered_projection_dock_filter := mut match stations_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate, dock from stations where dock = 'dock-a'") {
         Ok(r) => r,
         Err(e) => { println("T399 stations: recovered projection dock filter failed: {e.message}: {e.hint}"); return 255 },
@@ -10015,6 +10048,17 @@ fn main() -> i64 {
     I stations_recovered_projection_dock_filter.row_count() != 1 as u64 { println("T399 stations: recovered projection dock filter row count"); return 255 }
     stations_recovered_projection_dock_filter.free_owned_text()
     stations_recovered_projection_dock_filter.free_owned_text()
+    stations_recovered_projection_dock_filter_missing := mut match stations_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate, dock from stations where dock = 'missing'") {
+        Ok(r) => r,
+        Err(e) => { println("T419 stations: recovered missing projection dock filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I stations_recovered_projection_dock_filter_missing.column_count() != 15 as u64 { println("T419 stations: recovered missing projection dock filter column count"); return 255 }
+    I stations_recovered_projection_dock_filter_missing.row_count() != 0 as u64 { println("T419 stations: recovered missing projection dock filter row count"); return 255 }
+    stations_recovered_projection_dock_filter_missing_cols := mut stations_recovered_projection_dock_filter_missing.get_columns()
+    I !expect_column(stations_recovered_projection_dock_filter_missing_cols, 0, "id", "INT") { println("T419 stations: recovered missing projection dock filter id column"); return 255 }
+    I !expect_column(stations_recovered_projection_dock_filter_missing_cols, 14, "dock", "TEXT") { println("T419 stations: recovered missing projection dock filter dock column"); return 255 }
+    stations_recovered_projection_dock_filter_missing.free_owned_text()
+    stations_recovered_projection_dock_filter_missing.free_owned_text()
     match stations_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T392 stations: recovered close failed"); return 255 },
