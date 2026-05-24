@@ -2190,7 +2190,7 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text)") {
+    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text, extra9 text)") {
         Ok(_) => { println("T155 notes: too many columns unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3172,7 +3172,7 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text)") {
+    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text, extra9 text)") {
         Ok(_) => { println("T195 tickets: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3512,7 +3512,7 @@ fn main() -> i64 {
         Ok(_) => { println("T215 contacts: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text)") {
+    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text, extra9 text)") {
         Ok(_) => { println("T215 contacts: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -7494,8 +7494,8 @@ fn main() -> i64 {
         Ok(_) => { println("T332 warehouse: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match warehouse_db.execute("create table overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
-        Ok(_) => { println("T362 warehouse: thirteen-column descriptor unexpectedly accepted"); return 255 },
+    match warehouse_db.execute("create table overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
+        Ok(_) => { println("T372 warehouse: fourteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match warehouse_db.close() {
@@ -7754,8 +7754,8 @@ fn main() -> i64 {
         Ok(_) => { println("T339 storage: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match storage_db.execute("create table storage_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
-        Ok(_) => { println("T362 storage: thirteen-column descriptor unexpectedly accepted"); return 255 },
+    match storage_db.execute("create table storage_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
+        Ok(_) => { println("T372 storage: fourteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match storage_db.close() {
@@ -8075,8 +8075,8 @@ fn main() -> i64 {
         Ok(_) => { println("T344 shipments: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match shipments_db.execute("create table shipments_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
-        Ok(_) => { println("T362 shipments: thirteen-column descriptor unexpectedly accepted"); return 255 },
+    match shipments_db.execute("create table shipments_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
+        Ok(_) => { println("T372 shipments: fourteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match shipments_db.close() {
@@ -8447,8 +8447,8 @@ fn main() -> i64 {
         Ok(_) => { println("T354 deliveries: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match deliveries_db.execute("create table deliveries_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
-        Ok(_) => { println("T362 deliveries: thirteen-column descriptor unexpectedly accepted"); return 255 },
+    match deliveries_db.execute("create table deliveries_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
+        Ok(_) => { println("T372 deliveries: fourteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match deliveries_db.close() {
@@ -8802,8 +8802,8 @@ fn main() -> i64 {
         Ok(_) => { println("T362 manifests: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match manifests_db.execute("create table manifests_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text)") {
-        Ok(_) => { println("T362 manifests: thirteen-column descriptor unexpectedly accepted"); return 255 },
+    match manifests_db.execute("create table manifests_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
+        Ok(_) => { println("T372 manifests: fourteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match manifests_db.close() {
@@ -8939,6 +8939,157 @@ fn main() -> i64 {
     match manifests_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T362 manifests: recovered close failed"); return 255 },
+    }
+
+    routes_suffix := mut time_micros()
+    routes_path := mut "embedded_sql_api_roundtrip_routes_db_{routes_suffix}"
+    routes_cfg := mut EmbeddedConfig.default()
+    routes_cfg = routes_cfg.with_data_dir(routes_path.clone())
+    routes_cfg = routes_cfg.with_page_size(PAGE_SIZE_8K)
+    routes_db := mut match EmbeddedDatabase.open(routes_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T372 routes: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    routes_created := mut match routes_db.execute("create table routes (id int, title text, state text, kind text, tag text, holder text, zone text, shelf text, bin text, batch text, lane text, route text, stop text)") {
+        Ok(n) => n,
+        Err(e) => { println("T372 routes: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_created != 0 as u64 { println("T372 routes: create affected rows"); return 255 }
+    routes_table_id := mut 0 as u32
+    routes_page_id := mut 0 as u32
+    match routes_db.catalog.get_table("routes") {
+        Some(info) => {
+            routes_table_id = info.table_id
+            routes_page_id = info.first_page_id
+            I info.column_count != 13 as u16 { println("T372 routes: table column count"); return 255 }
+        },
+        None => { println("T372 routes: catalog missing table"); return 255 },
+    }
+    routes_col_refs := mut routes_db.catalog.get_columns(routes_table_id)
+    routes_cols: Vec<ColumnInfo> := mut Vec.with_capacity(routes_col_refs.len())
+    LF col_ref: &routes_col_refs {
+        routes_cols.push((**col_ref).clone())
+    }
+    I routes_cols.len() != 13 as u64 { println("T372 routes: catalog column count"); return 255 }
+    I !expect_catalog_column(&routes_cols, 0, "id", "INT") { println("T372 routes: catalog id column"); return 255 }
+    I !expect_catalog_column(&routes_cols, 12, "stop", "TEXT") { println("T372 routes: catalog stop column"); return 255 }
+    routes_empty_frame := mut match routes_db.pool.fetch_page(FILE_ID_DATA, routes_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T372 routes: fetch empty page failed"); return 255 },
+    }
+    routes_empty_page := mut routes_db.pool.get_page(routes_empty_frame)
+    routes_pre_insert_page := mut copy_smoke_page(routes_empty_page)
+    routes_db.pool.unpin_page(routes_empty_frame, false)
+    routes_recovery_start_lsn := mut routes_db.gcm.current_lsn()
+    routes_insert_a := mut match routes_db.execute("insert into routes (id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop) values (1, 'alpha', 'open', 'ops', 'blue', 'team-a', 'north', 'rack-a', 'bin-a', 'batch-a', 'lane-a', 'route-a', 'stop-a')") {
+        Ok(n) => n,
+        Err(e) => { println("T372 routes: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_insert_a != 1 as u64 { println("T372 routes: first insert count"); return 255 }
+    routes_insert_b := mut match routes_db.execute("insert into routes (stop, route, lane, batch, bin, shelf, zone, holder, tag, kind, state, title, id) values ('stop-b', 'route-b', 'lane-b', 'batch-b', 'bin-b', 'rack-b', 'south', 'team-b', 'green', 'release', 'closed', 'beta', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T372 routes: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_insert_b != 1 as u64 { println("T372 routes: reordered insert count"); return 255 }
+    routes_select := mut match routes_db.query("select * from routes") {
+        Ok(r) => r,
+        Err(e) => { println("T372 routes: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_select.column_count() != 13 as u64 { println("T372 routes: select column count"); return 255 }
+    I routes_select.row_count() != 2 as u64 { println("T372 routes: select row count"); return 255 }
+    routes_select_cols := mut routes_select.get_columns()
+    I !expect_column(routes_select_cols, 0, "id", "INT") { println("T372 routes: select id column"); return 255 }
+    I !expect_column(routes_select_cols, 12, "stop", "TEXT") { println("T372 routes: select stop column"); return 255 }
+    routes_select_rows := mut routes_select.get_rows()
+    routes_select_row0 := mut &routes_select_rows[0]
+    routes_select_row1 := mut &routes_select_rows[1]
+    I !expect_cell(routes_select_row0, 0, "1") { println("T372 routes: row0 id"); return 255 }
+    I !expect_cell(routes_select_row0, 12, "stop-a") { println("T372 routes: row0 stop"); return 255 }
+    I !expect_cell(routes_select_row1, 0, "2") { println("T372 routes: row1 id"); return 255 }
+    I !expect_cell(routes_select_row1, 12, "stop-b") { println("T372 routes: row1 stop"); return 255 }
+    routes_select.free_owned_text()
+    routes_select.free_owned_text()
+    match routes_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop from routes") {
+        Ok(_) => { println("T372 routes: projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match routes_db.query("select * from routes where id = 1") {
+        Ok(_) => { println("T372 routes: id filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match routes_db.query("select * from routes where stop = 'stop-a'") {
+        Ok(_) => { println("T372 routes: stop filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match routes_db.query("select routes.* from routes") {
+        Ok(_) => { println("T372 routes: qualified star unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match routes_db.query("select * from routes as r") {
+        Ok(_) => { println("T372 routes: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match routes_db.execute("create table routes_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
+        Ok(_) => { println("T372 routes: fourteen-column descriptor unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match routes_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T372 routes: close failed"); return 255 },
+    }
+    routes_reopen_cfg := mut EmbeddedConfig.default()
+    routes_reopen_cfg = routes_reopen_cfg.with_data_dir(routes_path.clone())
+    routes_reopen_cfg = routes_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    routes_reopened := mut match EmbeddedDatabase.open(routes_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T372 routes: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    routes_reopened_select := mut match routes_reopened.query("select * from routes") {
+        Ok(r) => r,
+        Err(e) => { println("T372 routes: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_reopened_select.column_count() != 13 as u64 { println("T372 routes: reopen column count"); return 255 }
+    I routes_reopened_select.row_count() != 2 as u64 { println("T372 routes: reopen row count"); return 255 }
+    routes_reopened_rows := mut routes_reopened_select.get_rows()
+    routes_reopened_row1 := mut &routes_reopened_rows[1]
+    I !expect_cell(routes_reopened_row1, 12, "stop-b") { println("T372 routes: reopen row1 stop"); return 255 }
+    routes_reopened_select.free_owned_text()
+    routes_reopened_select.free_owned_text()
+    match routes_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T372 routes: reopen close failed"); return 255 },
+    }
+    I restore_smoke_data_page(routes_path.clone(), routes_page_id, routes_pre_insert_page) != 0 {
+        println("T372 routes: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(routes_path.clone(), routes_recovery_start_lsn) != 0 {
+        println("T372 routes: checkpoint rewind failed")
+        return 255
+    }
+    routes_recovered_cfg := mut EmbeddedConfig.default()
+    routes_recovered_cfg = routes_recovered_cfg.with_data_dir(routes_path.clone())
+    routes_recovered_cfg = routes_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    routes_recovered := mut match EmbeddedDatabase.open(routes_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T372 routes: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    routes_recovered_select := mut match routes_recovered.query("select * from routes") {
+        Ok(r) => r,
+        Err(e) => { println("T372 routes: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_recovered_select.column_count() != 13 as u64 { println("T372 routes: recovered column count"); return 255 }
+    I routes_recovered_select.row_count() != 2 as u64 { println("T372 routes: recovered row count"); return 255 }
+    routes_recovered_rows := mut routes_recovered_select.get_rows()
+    routes_recovered_row0 := mut &routes_recovered_rows[0]
+    routes_recovered_row1 := mut &routes_recovered_rows[1]
+    I !expect_cell(routes_recovered_row0, 12, "stop-a") { println("T372 routes: recovered row0 stop"); return 255 }
+    I !expect_cell(routes_recovered_row1, 12, "stop-b") { println("T372 routes: recovered row1 stop"); return 255 }
+    routes_recovered_select.free_owned_text()
+    routes_recovered_select.free_owned_text()
+    match routes_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T372 routes: recovered close failed"); return 255 },
     }
 
     tasks_recovery_suffix := mut time_micros()
