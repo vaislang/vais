@@ -2190,7 +2190,7 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: wrong second column type unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text, extra9 text)") {
+    match notes_db.execute("create table extra_notes (id int, body text, tag text, owner text, scope text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text, extra9 text, extra10 text)") {
         Ok(_) => { println("T155 notes: too many columns unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3172,7 +3172,7 @@ fn main() -> i64 {
         Ok(_) => { println("T195 tickets: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text, extra9 text)") {
+    match tickets_db.execute("create table ticket_bad_extra (id int, summary text, state text, owner text, tag text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text, extra9 text, extra10 text)") {
         Ok(_) => { println("T195 tickets: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -3512,7 +3512,7 @@ fn main() -> i64 {
         Ok(_) => { println("T215 contacts: duplicate text column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text, extra9 text)") {
+    match contacts_db.execute("create table contacts_bad_extra (id int, name text, email text, status text, owner text, extra text, extra2 text, extra3 text, extra4 text, extra5 text, extra6 text, extra7 text, extra8 text, extra9 text, extra10 text)") {
         Ok(_) => { println("T215 contacts: extra column unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
@@ -7494,8 +7494,8 @@ fn main() -> i64 {
         Ok(_) => { println("T332 warehouse: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match warehouse_db.execute("create table overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
-        Ok(_) => { println("T372 warehouse: fourteen-column descriptor unexpectedly accepted"); return 255 },
+    match warehouse_db.execute("create table overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text, c14 text)") {
+        Ok(_) => { println("T382 warehouse: fifteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match warehouse_db.close() {
@@ -7754,8 +7754,8 @@ fn main() -> i64 {
         Ok(_) => { println("T339 storage: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match storage_db.execute("create table storage_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
-        Ok(_) => { println("T372 storage: fourteen-column descriptor unexpectedly accepted"); return 255 },
+    match storage_db.execute("create table storage_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text, c14 text)") {
+        Ok(_) => { println("T382 storage: fifteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match storage_db.close() {
@@ -8075,8 +8075,8 @@ fn main() -> i64 {
         Ok(_) => { println("T344 shipments: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match shipments_db.execute("create table shipments_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
-        Ok(_) => { println("T372 shipments: fourteen-column descriptor unexpectedly accepted"); return 255 },
+    match shipments_db.execute("create table shipments_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text, c14 text)") {
+        Ok(_) => { println("T382 shipments: fifteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match shipments_db.close() {
@@ -8447,8 +8447,8 @@ fn main() -> i64 {
         Ok(_) => { println("T354 deliveries: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match deliveries_db.execute("create table deliveries_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
-        Ok(_) => { println("T372 deliveries: fourteen-column descriptor unexpectedly accepted"); return 255 },
+    match deliveries_db.execute("create table deliveries_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text, c14 text)") {
+        Ok(_) => { println("T382 deliveries: fifteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match deliveries_db.close() {
@@ -8802,8 +8802,8 @@ fn main() -> i64 {
         Ok(_) => { println("T362 manifests: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match manifests_db.execute("create table manifests_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
-        Ok(_) => { println("T372 manifests: fourteen-column descriptor unexpectedly accepted"); return 255 },
+    match manifests_db.execute("create table manifests_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text, c14 text)") {
+        Ok(_) => { println("T382 manifests: fifteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match manifests_db.close() {
@@ -9152,8 +9152,8 @@ fn main() -> i64 {
         Ok(_) => { println("T372 routes: alias unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match routes_db.execute("create table routes_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text)") {
-        Ok(_) => { println("T372 routes: fourteen-column descriptor unexpectedly accepted"); return 255 },
+    match routes_db.execute("create table routes_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text, c14 text)") {
+        Ok(_) => { println("T382 routes: fifteen-column descriptor unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match routes_db.close() {
@@ -9292,6 +9292,153 @@ fn main() -> i64 {
     match routes_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T372 routes: recovered close failed"); return 255 },
+    }
+
+    waypoints_suffix := mut time_micros()
+    waypoints_path := mut "embedded_sql_api_roundtrip_waypoints_db_{waypoints_suffix}"
+    waypoints_cfg := mut EmbeddedConfig.default()
+    waypoints_cfg = waypoints_cfg.with_data_dir(waypoints_path.clone())
+    waypoints_cfg = waypoints_cfg.with_page_size(PAGE_SIZE_8K)
+    waypoints_db := mut match EmbeddedDatabase.open(waypoints_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T382 waypoints: open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    waypoints_created := mut match waypoints_db.execute("create table waypoints (id int, title text, state text, kind text, tag text, holder text, zone text, shelf text, bin text, batch text, lane text, route text, stop text, gate text)") {
+        Ok(n) => n,
+        Err(e) => { println("T382 waypoints: create failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_created != 0 as u64 { println("T382 waypoints: create affected rows"); return 255 }
+    waypoints_table_id := mut 0 as u32
+    waypoints_page_id := mut 0 as u32
+    match waypoints_db.catalog.get_table("waypoints") {
+        Some(info) => {
+            waypoints_table_id = info.table_id
+            waypoints_page_id = info.first_page_id
+            I info.column_count != 14 as u16 { println("T382 waypoints: table column count"); return 255 }
+        },
+        None => { println("T382 waypoints: catalog missing table"); return 255 },
+    }
+    waypoints_col_refs := mut waypoints_db.catalog.get_columns(waypoints_table_id)
+    waypoints_cols: Vec<ColumnInfo> := mut Vec.with_capacity(waypoints_col_refs.len())
+    LF col_ref: &waypoints_col_refs {
+        waypoints_cols.push((**col_ref).clone())
+    }
+    I waypoints_cols.len() != 14 as u64 { println("T382 waypoints: catalog column count"); return 255 }
+    I !expect_catalog_column(&waypoints_cols, 0, "id", "INT") { println("T382 waypoints: catalog id column"); return 255 }
+    I !expect_catalog_column(&waypoints_cols, 13, "gate", "TEXT") { println("T382 waypoints: catalog gate column"); return 255 }
+    waypoints_empty_frame := mut match waypoints_db.pool.fetch_page(FILE_ID_DATA, waypoints_page_id) {
+        Ok(v) => v,
+        Err(_) => { println("T382 waypoints: fetch empty page failed"); return 255 },
+    }
+    waypoints_empty_page := mut waypoints_db.pool.get_page(waypoints_empty_frame)
+    waypoints_pre_insert_page := mut copy_smoke_page(waypoints_empty_page)
+    waypoints_db.pool.unpin_page(waypoints_empty_frame, false)
+    waypoints_recovery_start_lsn := mut waypoints_db.gcm.current_lsn()
+    waypoints_insert_a := mut match waypoints_db.execute("insert into waypoints (id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate) values (1, 'title-a', 'state-a', 'kind-a', 'tag-a', 'holder-a', 'zone-a', 'shelf-a', 'bin-a', 'batch-a', 'lane-a', 'route-a', 'stop-a', 'gate-a')") {
+        Ok(n) => n,
+        Err(e) => { println("T382 waypoints: first insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_insert_a != 1 as u64 { println("T382 waypoints: first insert count"); return 255 }
+    waypoints_insert_b := mut match waypoints_db.execute("insert into waypoints (gate, stop, route, lane, batch, bin, shelf, zone, holder, tag, kind, state, title, id) values ('gate-b', 'stop-b', 'route-b', 'lane-b', 'batch-b', 'bin-b', 'shelf-b', 'zone-b', 'holder-b', 'tag-b', 'kind-b', 'state-b', 'title-b', 2)") {
+        Ok(n) => n,
+        Err(e) => { println("T382 waypoints: reordered insert failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_insert_b != 1 as u64 { println("T382 waypoints: reordered insert count"); return 255 }
+    waypoints_select := mut match waypoints_db.query("select * from waypoints") {
+        Ok(r) => r,
+        Err(e) => { println("T382 waypoints: select all failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_select.column_count() != 14 as u64 { println("T382 waypoints: select column count"); return 255 }
+    I waypoints_select.row_count() != 2 as u64 { println("T382 waypoints: select row count"); return 255 }
+    waypoints_select_cols := mut waypoints_select.get_columns()
+    I !expect_column(waypoints_select_cols, 0, "id", "INT") { println("T382 waypoints: select id column"); return 255 }
+    I !expect_column(waypoints_select_cols, 13, "gate", "TEXT") { println("T382 waypoints: select gate column"); return 255 }
+    waypoints_select_rows := mut waypoints_select.get_rows()
+    waypoints_select_row0 := mut &waypoints_select_rows[0]
+    waypoints_select_row1 := mut &waypoints_select_rows[1]
+    I !expect_cell(waypoints_select_row0, 0, "1") { println("T382 waypoints: row0 id"); return 255 }
+    I !expect_cell(waypoints_select_row0, 13, "gate-a") { println("T382 waypoints: row0 gate"); return 255 }
+    I !expect_cell(waypoints_select_row1, 0, "2") { println("T382 waypoints: row1 id"); return 255 }
+    I !expect_cell(waypoints_select_row1, 13, "gate-b") { println("T382 waypoints: row1 gate"); return 255 }
+    waypoints_select.free_owned_text()
+    waypoints_select.free_owned_text()
+    match waypoints_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop, gate from waypoints") {
+        Ok(_) => { println("T382 waypoints: projection unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match waypoints_db.query("select * from waypoints where id = 1") {
+        Ok(_) => { println("T382 waypoints: filter unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match waypoints_db.query("select waypoints.* from waypoints") {
+        Ok(_) => { println("T382 waypoints: qualified star unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match waypoints_db.query("select * from waypoints as w") {
+        Ok(_) => { println("T382 waypoints: alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match waypoints_db.execute("create table waypoints_overflow (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 text, c14 text)") {
+        Ok(_) => { println("T382 waypoints: fifteen-column descriptor unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match waypoints_db.close() {
+        Ok(_) => {},
+        Err(_) => { println("T382 waypoints: close failed"); return 255 },
+    }
+    waypoints_reopen_cfg := mut EmbeddedConfig.default()
+    waypoints_reopen_cfg = waypoints_reopen_cfg.with_data_dir(waypoints_path.clone())
+    waypoints_reopen_cfg = waypoints_reopen_cfg.with_page_size(PAGE_SIZE_8K)
+    waypoints_reopened := mut match EmbeddedDatabase.open(waypoints_reopen_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T382 waypoints: reopen failed: {e.message}: {e.hint}"); return 255 },
+    }
+    waypoints_reopened_select := mut match waypoints_reopened.query("select * from waypoints") {
+        Ok(r) => r,
+        Err(e) => { println("T382 waypoints: reopen select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_reopened_select.column_count() != 14 as u64 { println("T382 waypoints: reopen column count"); return 255 }
+    I waypoints_reopened_select.row_count() != 2 as u64 { println("T382 waypoints: reopen row count"); return 255 }
+    waypoints_reopened_rows := mut waypoints_reopened_select.get_rows()
+    waypoints_reopened_row1 := mut &waypoints_reopened_rows[1]
+    I !expect_cell(waypoints_reopened_row1, 13, "gate-b") { println("T382 waypoints: reopen row1 gate"); return 255 }
+    waypoints_reopened_select.free_owned_text()
+    waypoints_reopened_select.free_owned_text()
+    match waypoints_reopened.close() {
+        Ok(_) => {},
+        Err(_) => { println("T382 waypoints: reopen close failed"); return 255 },
+    }
+    I restore_smoke_data_page(waypoints_path.clone(), waypoints_page_id, waypoints_pre_insert_page) != 0 {
+        println("T382 waypoints: restore page failed")
+        return 255
+    }
+    I set_smoke_checkpoint_lsn(waypoints_path.clone(), waypoints_recovery_start_lsn) != 0 {
+        println("T382 waypoints: checkpoint rewind failed")
+        return 255
+    }
+    waypoints_recovered_cfg := mut EmbeddedConfig.default()
+    waypoints_recovered_cfg = waypoints_recovered_cfg.with_data_dir(waypoints_path.clone())
+    waypoints_recovered_cfg = waypoints_recovered_cfg.with_page_size(PAGE_SIZE_8K)
+    waypoints_recovered := mut match EmbeddedDatabase.open(waypoints_recovered_cfg) {
+        Ok(v) => v,
+        Err(e) => { println("T382 waypoints: recovered open failed: {e.message}: {e.hint}"); return 255 },
+    }
+    waypoints_recovered_select := mut match waypoints_recovered.query("select * from waypoints") {
+        Ok(r) => r,
+        Err(e) => { println("T382 waypoints: recovered select failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I waypoints_recovered_select.column_count() != 14 as u64 { println("T382 waypoints: recovered column count"); return 255 }
+    I waypoints_recovered_select.row_count() != 2 as u64 { println("T382 waypoints: recovered row count"); return 255 }
+    waypoints_recovered_rows := mut waypoints_recovered_select.get_rows()
+    waypoints_recovered_row0 := mut &waypoints_recovered_rows[0]
+    waypoints_recovered_row1 := mut &waypoints_recovered_rows[1]
+    I !expect_cell(waypoints_recovered_row0, 13, "gate-a") { println("T382 waypoints: recovered row0 gate"); return 255 }
+    I !expect_cell(waypoints_recovered_row1, 13, "gate-b") { println("T382 waypoints: recovered row1 gate"); return 255 }
+    waypoints_recovered_select.free_owned_text()
+    waypoints_recovered_select.free_owned_text()
+    match waypoints_recovered.close() {
+        Ok(_) => {},
+        Err(_) => { println("T382 waypoints: recovered close failed"); return 255 },
     }
 
     tasks_recovery_suffix := mut time_micros()
