@@ -9009,16 +9009,83 @@ fn main() -> i64 {
     I !expect_cell(routes_select_row1, 12, "stop-b") { println("T372 routes: row1 stop"); return 255 }
     routes_select.free_owned_text()
     routes_select.free_owned_text()
-    match routes_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop from routes") {
-        Ok(_) => { println("T372 routes: projection unexpectedly accepted"); return 255 },
+    routes_projection := mut match routes_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop from routes") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_projection.column_count() != 13 as u64 { println("T374 routes: projection column count"); return 255 }
+    I routes_projection.row_count() != 2 as u64 { println("T374 routes: projection row count"); return 255 }
+    routes_projection_rows := mut routes_projection.get_rows()
+    routes_projection_row1 := mut &routes_projection_rows[1]
+    I !expect_cell(routes_projection_row1, 12, "stop-b") { println("T374 routes: projection row1 stop"); return 255 }
+    routes_projection.free_owned_text()
+    routes_projection.free_owned_text()
+    routes_id_filter := mut match routes_db.query("select * from routes where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_id_filter.column_count() != 13 as u64 { println("T374 routes: id filter column count"); return 255 }
+    I routes_id_filter.row_count() != 1 as u64 { println("T374 routes: id filter row count"); return 255 }
+    routes_id_filter_rows := mut routes_id_filter.get_rows()
+    routes_id_filter_row0 := mut &routes_id_filter_rows[0]
+    I !expect_cell(routes_id_filter_row0, 0, "1") { println("T374 routes: id filter id"); return 255 }
+    I !expect_cell(routes_id_filter_row0, 12, "stop-a") { println("T374 routes: id filter stop"); return 255 }
+    routes_id_filter.free_owned_text()
+    routes_id_filter.free_owned_text()
+    routes_id_filter_reversed := mut match routes_db.query("select * from routes where 2 = id") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: reversed id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_id_filter_reversed.row_count() != 1 as u64 { println("T374 routes: reversed id filter row count"); return 255 }
+    routes_id_filter_reversed_rows := mut routes_id_filter_reversed.get_rows()
+    routes_id_filter_reversed_row0 := mut &routes_id_filter_reversed_rows[0]
+    I !expect_cell(routes_id_filter_reversed_row0, 0, "2") { println("T374 routes: reversed id filter id"); return 255 }
+    routes_id_filter_reversed.free_owned_text()
+    routes_id_filter_reversed.free_owned_text()
+    routes_id_filter_missing := mut match routes_db.query("select * from routes where id = 404") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: missing id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_id_filter_missing.column_count() != 13 as u64 { println("T374 routes: missing id filter column count"); return 255 }
+    I routes_id_filter_missing.row_count() != 0 as u64 { println("T374 routes: missing id filter row count"); return 255 }
+    routes_id_filter_missing.free_owned_text()
+    routes_id_filter_missing.free_owned_text()
+    routes_stop_filter := mut match routes_db.query("select * from routes where stop = 'stop-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: stop filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_stop_filter.column_count() != 13 as u64 { println("T374 routes: stop filter column count"); return 255 }
+    I routes_stop_filter.row_count() != 1 as u64 { println("T374 routes: stop filter row count"); return 255 }
+    routes_stop_filter_rows := mut routes_stop_filter.get_rows()
+    routes_stop_filter_row0 := mut &routes_stop_filter_rows[0]
+    I !expect_cell(routes_stop_filter_row0, 0, "1") { println("T374 routes: stop filter id"); return 255 }
+    I !expect_cell(routes_stop_filter_row0, 12, "stop-a") { println("T374 routes: stop filter stop"); return 255 }
+    routes_stop_filter.free_owned_text()
+    routes_stop_filter.free_owned_text()
+    routes_stop_filter_reversed := mut match routes_db.query("select * from routes where 'stop-b' = stop") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: reversed stop filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_stop_filter_reversed.row_count() != 1 as u64 { println("T374 routes: reversed stop filter row count"); return 255 }
+    routes_stop_filter_reversed_rows := mut routes_stop_filter_reversed.get_rows()
+    routes_stop_filter_reversed_row0 := mut &routes_stop_filter_reversed_rows[0]
+    I !expect_cell(routes_stop_filter_reversed_row0, 0, "2") { println("T374 routes: reversed stop filter id"); return 255 }
+    routes_stop_filter_reversed.free_owned_text()
+    routes_stop_filter_reversed.free_owned_text()
+    routes_stop_filter_missing := mut match routes_db.query("select * from routes where stop = 'missing-stop'") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: missing stop filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_stop_filter_missing.column_count() != 13 as u64 { println("T374 routes: missing stop filter column count"); return 255 }
+    I routes_stop_filter_missing.row_count() != 0 as u64 { println("T374 routes: missing stop filter row count"); return 255 }
+    routes_stop_filter_missing.free_owned_text()
+    routes_stop_filter_missing.free_owned_text()
+    match routes_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop from routes where id = 1") {
+        Ok(_) => { println("T374 routes: projection id filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
-    match routes_db.query("select * from routes where id = 1") {
-        Ok(_) => { println("T372 routes: id filter unexpectedly accepted"); return 255 },
-        Err(_) => {},
-    }
-    match routes_db.query("select * from routes where stop = 'stop-a'") {
-        Ok(_) => { println("T372 routes: stop filter unexpectedly accepted"); return 255 },
+    match routes_db.query("select * from routes where route = 'route-a'") {
+        Ok(_) => { println("T374 routes: earlier text filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match routes_db.query("select routes.* from routes") {
@@ -9055,6 +9122,27 @@ fn main() -> i64 {
     I !expect_cell(routes_reopened_row1, 12, "stop-b") { println("T372 routes: reopen row1 stop"); return 255 }
     routes_reopened_select.free_owned_text()
     routes_reopened_select.free_owned_text()
+    routes_reopened_projection := mut match routes_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop from routes") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: reopen projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_reopened_projection.row_count() != 2 as u64 { println("T374 routes: reopen projection row count"); return 255 }
+    routes_reopened_projection.free_owned_text()
+    routes_reopened_projection.free_owned_text()
+    routes_reopened_id_filter := mut match routes_reopened.query("select * from routes where id = 1") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: reopen id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_reopened_id_filter.row_count() != 1 as u64 { println("T374 routes: reopen id filter row count"); return 255 }
+    routes_reopened_id_filter.free_owned_text()
+    routes_reopened_id_filter.free_owned_text()
+    routes_reopened_stop_filter := mut match routes_reopened.query("select * from routes where stop = 'stop-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: reopen stop filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_reopened_stop_filter.row_count() != 1 as u64 { println("T374 routes: reopen stop filter row count"); return 255 }
+    routes_reopened_stop_filter.free_owned_text()
+    routes_reopened_stop_filter.free_owned_text()
     match routes_reopened.close() {
         Ok(_) => {},
         Err(_) => { println("T372 routes: reopen close failed"); return 255 },
@@ -9087,6 +9175,30 @@ fn main() -> i64 {
     I !expect_cell(routes_recovered_row1, 12, "stop-b") { println("T372 routes: recovered row1 stop"); return 255 }
     routes_recovered_select.free_owned_text()
     routes_recovered_select.free_owned_text()
+    routes_recovered_projection := mut match routes_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route, stop from routes") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: recovered projection failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_recovered_projection.row_count() != 2 as u64 { println("T374 routes: recovered projection row count"); return 255 }
+    routes_recovered_projection.free_owned_text()
+    routes_recovered_projection.free_owned_text()
+    routes_recovered_id_filter := mut match routes_recovered.query("select * from routes where id = 2") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_recovered_id_filter.row_count() != 1 as u64 { println("T374 routes: recovered id filter row count"); return 255 }
+    routes_recovered_id_rows := mut routes_recovered_id_filter.get_rows()
+    routes_recovered_id_row0 := mut &routes_recovered_id_rows[0]
+    I !expect_cell(routes_recovered_id_row0, 12, "stop-b") { println("T374 routes: recovered id filter stop"); return 255 }
+    routes_recovered_id_filter.free_owned_text()
+    routes_recovered_id_filter.free_owned_text()
+    routes_recovered_stop_filter := mut match routes_recovered.query("select * from routes where stop = 'stop-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T374 routes: recovered stop filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I routes_recovered_stop_filter.row_count() != 1 as u64 { println("T374 routes: recovered stop filter row count"); return 255 }
+    routes_recovered_stop_filter.free_owned_text()
+    routes_recovered_stop_filter.free_owned_text()
     match routes_recovered.close() {
         Ok(_) => {},
         Err(_) => { println("T372 routes: recovered close failed"); return 255 },
