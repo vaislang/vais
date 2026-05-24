@@ -8756,8 +8756,38 @@ fn main() -> i64 {
     I manifests_projection_id_filter_missing.row_count() != 0 as u64 { println("T367 manifests: missing projection id filter row count"); return 255 }
     manifests_projection_id_filter_missing.free_owned_text()
     manifests_projection_id_filter_missing.free_owned_text()
-    match manifests_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests where route = 'route-a'") {
-        Ok(_) => { println("T367 manifests: projection route filter unexpectedly accepted"); return 255 },
+    manifests_projection_route_filter := mut match manifests_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests where route = 'route-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T369 manifests: projection route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_projection_route_filter.column_count() != 12 as u64 { println("T369 manifests: projection route filter column count"); return 255 }
+    I manifests_projection_route_filter.row_count() != 1 as u64 { println("T369 manifests: projection route filter row count"); return 255 }
+    manifests_projection_route_rows := mut manifests_projection_route_filter.get_rows()
+    manifests_projection_route_row0 := mut &manifests_projection_route_rows[0]
+    I !expect_cell(manifests_projection_route_row0, 0, "1") { println("T369 manifests: projection route filter id"); return 255 }
+    I !expect_cell(manifests_projection_route_row0, 11, "route-a") { println("T369 manifests: projection route filter route"); return 255 }
+    manifests_projection_route_filter.free_owned_text()
+    manifests_projection_route_filter.free_owned_text()
+    manifests_projection_route_filter_reversed := mut match manifests_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests where 'route-b' = route") {
+        Ok(r) => r,
+        Err(e) => { println("T369 manifests: reversed projection route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_projection_route_filter_reversed.row_count() != 1 as u64 { println("T369 manifests: reversed projection route filter row count"); return 255 }
+    manifests_projection_route_reversed_rows := mut manifests_projection_route_filter_reversed.get_rows()
+    manifests_projection_route_reversed_row0 := mut &manifests_projection_route_reversed_rows[0]
+    I !expect_cell(manifests_projection_route_reversed_row0, 0, "2") { println("T369 manifests: reversed projection route filter id"); return 255 }
+    manifests_projection_route_filter_reversed.free_owned_text()
+    manifests_projection_route_filter_reversed.free_owned_text()
+    manifests_projection_route_filter_missing := mut match manifests_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests where route = 'missing-route'") {
+        Ok(r) => r,
+        Err(e) => { println("T369 manifests: missing projection route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_projection_route_filter_missing.column_count() != 12 as u64 { println("T369 manifests: missing projection route filter column count"); return 255 }
+    I manifests_projection_route_filter_missing.row_count() != 0 as u64 { println("T369 manifests: missing projection route filter row count"); return 255 }
+    manifests_projection_route_filter_missing.free_owned_text()
+    manifests_projection_route_filter_missing.free_owned_text()
+    match manifests_db.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests where lane = 'lane-a'") {
+        Ok(_) => { println("T369 manifests: earlier projection text filter unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     match manifests_db.query("select * from manifests where lane = 'lane-a'") {
@@ -8819,6 +8849,13 @@ fn main() -> i64 {
     I manifests_reopened_projection_id_filter.row_count() != 1 as u64 { println("T367 manifests: reopen projection id filter row count"); return 255 }
     manifests_reopened_projection_id_filter.free_owned_text()
     manifests_reopened_projection_id_filter.free_owned_text()
+    manifests_reopened_projection_route_filter := mut match manifests_reopened.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests where route = 'route-b'") {
+        Ok(r) => r,
+        Err(e) => { println("T369 manifests: reopen projection route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_reopened_projection_route_filter.row_count() != 1 as u64 { println("T369 manifests: reopen projection route filter row count"); return 255 }
+    manifests_reopened_projection_route_filter.free_owned_text()
+    manifests_reopened_projection_route_filter.free_owned_text()
     manifests_reopened_route_filter := mut match manifests_reopened.query("select * from manifests where route = 'route-b'") {
         Ok(r) => r,
         Err(e) => { println("T364 manifests: reopen route filter failed: {e.message}: {e.hint}"); return 255 },
@@ -8875,6 +8912,13 @@ fn main() -> i64 {
     I !expect_cell(manifests_recovered_projection_id_row0, 11, "route-b") { println("T367 manifests: recovered projection id filter route"); return 255 }
     manifests_recovered_projection_id_filter.free_owned_text()
     manifests_recovered_projection_id_filter.free_owned_text()
+    manifests_recovered_projection_route_filter := mut match manifests_recovered.query("select id, title, state, kind, tag, holder, zone, shelf, bin, batch, lane, route from manifests where route = 'route-a'") {
+        Ok(r) => r,
+        Err(e) => { println("T369 manifests: recovered projection route filter failed: {e.message}: {e.hint}"); return 255 },
+    }
+    I manifests_recovered_projection_route_filter.row_count() != 1 as u64 { println("T369 manifests: recovered projection route filter row count"); return 255 }
+    manifests_recovered_projection_route_filter.free_owned_text()
+    manifests_recovered_projection_route_filter.free_owned_text()
     manifests_recovered_id_filter := mut match manifests_recovered.query("select * from manifests where id = 2") {
         Ok(r) => r,
         Err(e) => { println("T364 manifests: recovered id filter failed: {e.message}: {e.hint}"); return 255 },
