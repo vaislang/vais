@@ -3109,6 +3109,24 @@ fn check_table_rows_unfiltered_query_rejected(db_path: str) -> i64 {
         return where_status
     }
 
+    timeout_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "timeout_ms=1", "")
+    timeout_status := mut expect_db_invalid_filter_response(timeout_query, 655)
+    I timeout_status != 0 {
+        return timeout_status
+    }
+
+    cancel_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "cancel=1", "")
+    cancel_status := mut expect_db_invalid_filter_response(cancel_query, 660)
+    I cancel_status != 0 {
+        return cancel_status
+    }
+
+    backpressure_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "backpressure=drop", "")
+    backpressure_status := mut expect_db_invalid_filter_response(backpressure_query, 665)
+    I backpressure_status != 0 {
+        return backpressure_status
+    }
+
     contacts_status_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=active", "")
     contacts_status := mut expect_db_invalid_filter_response(contacts_status_query, 399)
     I contacts_status != 0 {
@@ -3809,6 +3827,28 @@ fn check_books_post_route_invalid_body(db_path: str) -> i64 {
         println("FAIL db books post extra field body")
         println(extra_field.body)
         return 661
+    }
+
+    timeout_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"timeout_ms\":1}")
+    I timeout_field.status != 400 {
+        println("FAIL db books post timeout field status")
+        return 680
+    }
+    I timeout_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post timeout field body")
+        println(timeout_field.body)
+        return 681
+    }
+
+    cancel_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"cancel\":true}")
+    I cancel_field.status != 400 {
+        println("FAIL db books post cancel field status")
+        return 685
+    }
+    I cancel_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post cancel field body")
+        println(cancel_field.body)
+        return 686
     }
 
     array_body := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "[{\"id\":3,\"title\":\"children\"}]")
