@@ -32,7 +32,7 @@ frozen Core bundle without widening Core v0 itself:
   evidence as green. T-530 refreshed AI/public docs gates as green. Remaining
   T-532 classified regression scripts without promoting old known-baseline
   diagnostics into W1 closure gates. Remaining W1-E blockers are residual
-  nonclaim review, final evidence rollup, and checkpoint/next-queue selection.
+  final evidence rollup and checkpoint/next-queue selection.
 
 These W1 certifications are usable where their named docs and gates say so,
 but they do not retroactively add constructs to the frozen Core v0 manifest.
@@ -152,6 +152,32 @@ T-532 audited compiler package regression scripts on 2026-05-25:
 
 Broader DB/server/web regression ownership remains assigned to W2, W3, and W4
 respectively.
+
+## T-533 W1-E Residual Nonclaim Review
+
+T-533 reviewed residual W1 nonclaims on 2026-05-25. The remaining boundaries do
+not block W1 closure because they are explicitly assigned outside W1:
+
+- Core v0 remains frozen and unwidened. W1 certifications are adjacent
+  product-level language/compiler evidence, not new Core manifest entries.
+- A2-01 through A2-05 remain certified only inside their formal predicates.
+  A2-06 affine remains Controlled, and new A2/A4 promotions require later
+  explicit tasks.
+- Resource cleanup remains explicit for Token, parser AST, EmbeddedResult,
+  handles, pages, and locks. Automatic Token/AST/EmbeddedResult Drop, broad
+  RAII/destructor lowering, cleanup-on-`?`, and ownership transfer on early
+  return remain nonclaims.
+- Diagnostic claims remain limited to selected `vaisc check`, `build`, and
+  pre-execution `run` envelopes. Panic hooks, crash reports, LLVM/linker/clang
+  text, timeout wording, editor/LSP behavior, release/deployment commands, and
+  production observability remain nonclaims.
+- W1 does not widen DB, server, web/admin, release, deployment, or production
+  behavior. Broad SQL compatibility, planner/executor generalization,
+  transaction/concurrency/recovery breadth, server production APIs, auth/security
+  hardening, web/admin production UX, packaging, release ops, and external
+  acceptance remain assigned to W2 through W6.
+
+No residual nonclaim requires more W1 implementation work.
 
 ## Verified Gates
 
