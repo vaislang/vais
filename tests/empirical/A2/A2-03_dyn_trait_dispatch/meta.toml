@@ -39,8 +39,8 @@ If exit ≠ 49, regression. Two specific drift signatures:
 
 [negative]
 probe = "probe_neg.vais"
-expected_behavior = "build succeeds (TC currently silent), runtime crashes (SIGSEGV / non-zero exit). Once TC-level rejection lands as a follow-up silent-surface fix, tighten to check_fails."
-description = "i64 passed where dyn Greet expected. The type checker currently accepts this silently (separate surface, not in #18 scope), but runtime crashes because the bare i64 has no vtable. The negative probe asserts the runtime defense."
+expected_behavior = "vaisc check exits non-zero with error[E001], reporting expected dyn Greet and found i64; build/run are not reached."
+description = "i64 passed where dyn Greet expected. W1-C/T-508 rejects this at type-check time before codegen can emit a missing-vtable runtime crash."
 
 [w1c_selection]
 selected_by = "T-507"
@@ -50,9 +50,9 @@ t508_expected_code = "E001"
 nonclaims = "No broad dyn cast semantics, explicit as-dyn syntax, ownership/lifetime widening, runtime crash recovery, or DB/server/web behavior is promoted by this fixture selection."
 
 [verification]
-verified_date = "2026-05-05"
+verified_date = "2026-05-25"
 verifier_command = "bash run.sh"
-verifier_expected_stdout_substring = "A2-03 OK: multi-impl dyn dispatch exits 49 on inkwell + text-IR"
+verifier_expected_stdout_substring = "A2-03 OK: multi-impl dyn dispatch exits 49 on inkwell + text-IR; negative i64-as-dyn rejects at check with error[E001]."
 
 [baseline_uses]
 # Real-world dyn Trait call sites this fixture protects (subset; vaisdb

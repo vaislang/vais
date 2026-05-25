@@ -240,9 +240,9 @@ Expected: `vaisc check` exits 0; binary runs; exit code = 49
 ### Negative fixture
 
 `probe_neg.vais`: passes a value that is not actually a trait
-implementer (i64 cast as `&dyn Trait`). At runtime the vtable lookup
-crashes (SIGSEGV / exit ≠ 0). Type-checker-level rejection of
-i64-as-dyn is a separate silent surface (follow-up).
+implementer (i64 where `dyn Greet` is expected). `vaisc check` exits
+non-zero with `error[E001]` and reports expected `dyn Greet`, found
+`i64`. Build/run are not reached.
 
 ### Promotion gate
 
@@ -445,6 +445,25 @@ Nonclaims: this selection does not promote broad dyn cast syntax, explicit
 `as dyn` conversions, ownership/lifetime widening, runtime crash recovery, DB,
 server, web, release, deployment, or production behavior. T-508 owns the
 compiler behavior change and fixture tightening.
+
+## T-508 W1-C invalid dyn diagnostic implementation
+
+T-508 (2026-05-25) tightens `ResolvedType::DynTrait` unification: a concrete
+value unifies with `dyn Trait` only when it is generic/inferred, already a
+matching dyn trait, or implements the required trait. This converts the selected
+A2-03 negative case from a runtime crash to a type-check diagnostic.
+
+Evidence:
+
+- `cargo test -p vais-types --test dyn_trait_tests -- --nocapture` PASS: 10/10.
+- `bash scripts/check-empirical.sh A2` PASS: 5/5.
+- `target/release/vaisc check tests/empirical/A2/A2-03_dyn_trait_dispatch/probe_neg.vais`
+  emits `error[E001]` with expected `dyn Greet`, found `i64`.
+
+Positive A2-03 multi-impl dyn dispatch remains unchanged and still exits 49 on
+both inkwell and text-IR backends. No broad dyn cast syntax, explicit `as dyn`
+conversion, ownership/lifetime widening, runtime crash recovery, DB, server,
+web, release, deployment, or production behavior is promoted.
 
 ## T-494 docs/certification sync
 

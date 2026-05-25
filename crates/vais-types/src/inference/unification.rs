@@ -758,8 +758,41 @@ impl TypeChecker {
                     })
                 }
             }
-            // DynTrait: dyn Trait accepts any concrete type that implements the trait
-            (ResolvedType::DynTrait { .. }, _) | (_, ResolvedType::DynTrait { .. }) => Ok(()),
+            // DynTrait: dyn Trait accepts only concrete values that implement the trait.
+            // Before W1-C/T-508 this arm accepted every type, which let
+            // i64-as-dyn pass `vaisc check` and crash when codegen attempted
+            // to call through a missing vtable.
+            (
+                ResolvedType::DynTrait {
+                    trait_name,
+                    generics: _,
+                },
+                concrete,
+            )
+            | (
+                concrete,
+                ResolvedType::DynTrait {
+                    trait_name,
+                    generics: _,
+                },
+            ) => {
+                let concrete = self.apply_substitutions(concrete);
+                match &concrete {
+                    ResolvedType::Generic(_) | ResolvedType::Var(_) | ResolvedType::Unknown => {
+                        Ok(())
+                    }
+                    ResolvedType::DynTrait {
+                        trait_name: concrete_trait,
+                        ..
+                    } if concrete_trait == trait_name => Ok(()),
+                    _ if self.type_implements_trait(&concrete, trait_name) => Ok(()),
+                    _ => Err(TypeError::Mismatch {
+                        expected: expected.to_string(),
+                        found: found.to_string(),
+                        span: None,
+                    }),
+                }
+            }
             // ImplTrait / HigherKinded were removed in ROADMAP #18.
             // A4-03: default-strict rejection of &T ↔ T implicit deref.
             //

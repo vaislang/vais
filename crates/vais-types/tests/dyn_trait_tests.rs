@@ -114,6 +114,47 @@ fn test_trait_impl() {
 }
 
 #[test]
+fn test_dyn_trait_accepts_implementer_arg() {
+    let source = r#"
+        trait Greet {
+            fn greet(self) -> i64
+        }
+
+        struct Person { age: i64 }
+
+        impl Person: Greet {
+            fn greet(self) -> i64 = self.age
+        }
+
+        fn use_dyn(g: dyn Greet) -> i64 = g.greet()
+        fn main() -> i64 {
+            p := Person { age: 25 }
+            use_dyn(p)
+        }
+    "#;
+    assert!(
+        check_module(source).is_ok(),
+        "dyn Trait should accept concrete implementers"
+    );
+}
+
+#[test]
+fn test_dyn_trait_rejects_non_implementer_arg() {
+    let source = r#"
+        trait Greet {
+            fn greet(self) -> i64
+        }
+
+        fn use_dyn(g: dyn Greet) -> i64 = g.greet()
+        fn main() -> i64 = use_dyn(123)
+    "#;
+    let err = check_module(source).expect_err("i64 must not satisfy dyn Greet");
+    assert!(err.contains("Mismatch"), "unexpected error: {err}");
+    assert!(err.contains("dyn Greet"), "unexpected error: {err}");
+    assert!(err.contains("i64"), "unexpected error: {err}");
+}
+
+#[test]
 fn test_box_dyn_method_dispatch() {
     // Phase 6.27c.5: method call on Box<dyn Trait> must resolve to trait method.
     // Previously `find_trait_method` only peeled Ref/RefMut; Box<dyn T> was opaque.

@@ -13,8 +13,9 @@
 #                     - text-IR backend (VAIS_SINGLE_MODULE=1)
 #                   Both must produce exit 49.
 #   probe_neg.vais  passes an i64 literal where dyn Greet expected.
-#                   Build emits, runtime crashes (TC silent surface
-#                   tracked separately).
+#                   `vaisc check` must reject with a stable E001 diagnostic
+#                   before build/run; this prevents the historical runtime
+#                   crash from a missing vtable.
 
 set -euo pipefail
 
@@ -68,26 +69,27 @@ if [[ "$POS_EXIT_TEXTIR" != "49" ]]; then
 fi
 
 # ── Negative probe ────────────────────────────────────────────────────────
-# NOTE (2026-05-05): the type checker currently accepts i64 → dyn Greet
-# silently (separate silent surface, not in #18 scope). build succeeds
-# but runtime SIGSEGV (the bare i64 has no vtable). The negative probe
-# verifies the *runtime defense*: build emits, run crashes (not "returns
-# a wrong value silently"). Once the type-check-level rejection lands
-# (separate task), tighten this to assertion_kind=check_fails.
+# W1-C/T-508: the type checker must reject i64 → dyn Greet before build/run.
+# This replaces the historical runtime-crash guard with a product-readable
+# diagnostic guard.
 cp "$DIR/probe_neg.vais" "$WORK/probe_neg.vais"
 
-# Build must succeed (current TC limitation; tracked separately).
-( cd "$WORK" && "$VAISC" build probe_neg.vais -o probe_neg >/dev/null 2>&1 ) \
-  || { echo "FIXTURE_BROKEN: A2-03 negative probe failed to build (TC may have tightened — switch to check_fails assertion)"; exit 2; }
-
-NEG_RUN_EXIT=0
-"$WORK/probe_neg" >/dev/null 2>&1 || NEG_RUN_EXIT=$?
-# Expect non-zero (crash / SIGSEGV / wrong runtime). 0 means silent
-# corruption regression: the bare-i64 dispatch returned a value as if
-# the dyn call succeeded.
-if [[ "$NEG_RUN_EXIT" == "0" ]]; then
-  echo "DRIFT: A2-03 negative probe ran cleanly with exit 0 — silent corruption regression (bare i64 should not satisfy dyn Greet at runtime)." >&2
+NEG_CHECK_OUT="$WORK/probe_neg.check.out"
+if "$VAISC" check "$WORK/probe_neg.vais" >"$NEG_CHECK_OUT" 2>&1; then
+  echo "DRIFT: A2-03 negative probe type-checked; bare i64 must not satisfy dyn Greet." >&2
   exit 1
 fi
 
-echo "A2-03 OK: multi-impl dyn dispatch exits 49 on inkwell + text-IR; negative i64-as-dyn crashes at runtime (exit=${NEG_RUN_EXIT}, not 0)."
+if ! grep -q 'error\[E001\]' "$NEG_CHECK_OUT"; then
+  echo "DRIFT: A2-03 negative diagnostic missing error[E001]." >&2
+  cat "$NEG_CHECK_OUT" >&2
+  exit 1
+fi
+
+if ! grep -q 'expected dyn Greet' "$NEG_CHECK_OUT" || ! grep -q 'found i64' "$NEG_CHECK_OUT"; then
+  echo "DRIFT: A2-03 negative diagnostic must mention expected dyn Greet and found i64." >&2
+  cat "$NEG_CHECK_OUT" >&2
+  exit 1
+fi
+
+echo "A2-03 OK: multi-impl dyn dispatch exits 49 on inkwell + text-IR; negative i64-as-dyn rejects at check with error[E001]."

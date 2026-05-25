@@ -1,9 +1,7 @@
 # A2-03 negative probe — bare i64 cannot satisfy `dyn Greet`.
 #
-# T-507 W1-C selection: this is the exact tightening target for T-508.
-# Current evidence still accepts the source and crashes after build; T-508 must
-# change this to a `vaisc check` rejection with stable type diagnostic output
-# for expected `dyn Greet`, found `i64`.
+# T-508 W1-C: this must reject at `vaisc check` with stable type diagnostic
+# output for expected `dyn Greet`, found `i64`.
 
 trait Greet {
     fn greet(self) -> i64
