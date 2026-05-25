@@ -2,7 +2,7 @@
 
 # Vais LLM Language Card
 
-Last reviewed: 2026-05-16
+Last reviewed: 2026-05-25
 
 This is the short, AI-facing contract for writing Vais code. It is generated
 from `docs/ai/feature-registry.json`; update that registry and regenerate this file when the
@@ -163,6 +163,37 @@ Avoid:
 - Implicit ref-to-value unification
 - Implicit typed pointer to raw address conversion
 - Treating slices as plain pointers without length
+
+### Rejected and controlled surface boundary
+
+Feature id: `rejected-controlled-surfaces`
+
+Status: non-claim
+
+A4, Rejected, and Controlled inventories are not supported coding surfaces unless the language spec or A2 subset docs name a narrower certified subset.
+
+AI instructions:
+
+- Treat docs/certification/EXCLUDED_FEATURES.md as the source for A4, Controlled, Rejected, and Untested boundaries.
+- Use the explicit certified subset from docs/LANGUAGE_SPEC.md or docs/certification/A2_SUBSETS.md before writing code near a controlled coercion.
+- When a rejected surface fails with E001 or P001, change the source code instead of adding runtime fallback or assuming legacy opt-out environment flags.
+- Treat affine and linear annotations as type-carrier syntax only; do not claim move-only or use-count enforcement.
+
+Use:
+
+- `I n != 0 { value } else { fallback }`
+- `x: i64 = fallible()? inside a matching Result or Option function`
+- `explicit *r when a value is needed from a reference`
+- `manual cleanup helpers for Token, Statement, and EmbeddedResult payloads`
+
+Avoid:
+
+- Integer truthy conditions such as I n { ... }
+- Implicit Box&lt;T&gt; to T, &amp;T to T, Vec&lt;T&gt; to unrelated references, pointer to integer, or pointer to slice coercions
+- Struct literals with missing fields
+- ? in a function that does not return matching Result or Option
+- Returned or stored closures that capture local variables
+- Linear or affine annotations as ownership enforcement
 
 ### Playground mode contract
 

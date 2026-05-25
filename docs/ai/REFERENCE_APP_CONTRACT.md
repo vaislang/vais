@@ -2,7 +2,7 @@
 
 # Vais Reference App Contract
 
-Last reviewed: 2026-05-16
+Last reviewed: 2026-05-25
 
 The reference app is the end-to-end validation target for AI-written Vais code.
 It should be small enough for a new AI agent to understand from official docs,

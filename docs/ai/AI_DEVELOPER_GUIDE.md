@@ -2,7 +2,7 @@
 
 # Vais AI Developer Guide
 
-Last reviewed: 2026-05-16
+Last reviewed: 2026-05-25
 
 This guide is for AI agents that do not already know Vais. The expected workflow
 is documentation-first, compile-second, and claim-last.
@@ -33,6 +33,7 @@ node scripts/check-ai-docs-sync.mjs
 - `generic-enum-layout`: Option&lt;T&gt; and Result&lt;T, E&gt; use the canonical erased runtime enum layout with an i32 tag and payload storage. Status: certified core.
 - `result-option-flow`: Result&lt;T, E&gt;, Option&lt;T&gt;, match, the try operator, and unwrap-style lowering are explicit language surfaces. Status: certified core.
 - `references-pointers-slices`: References, raw pointers, and slices are distinct type surfaces with explicit conversions and explicit dereference expectations. Status: certified core.
+- `rejected-controlled-surfaces`: A4, Rejected, and Controlled inventories are not supported coding surfaces unless the language spec or A2 subset docs name a narrower certified subset. Status: non-claim.
 - `playground-mode-contract`: The playground exposes named modes. Server-WASM is API compiled, Browser-JS is a smoke path, and preview mode is not certified compilation. Status: evidence scoped.
 - `ecosystem-evidence-boundary`: DB, server, and web behavior is public only where named gates cover it. Do not describe the ecosystem as product-complete. Status: evidence scoped.
 - `verification-first-development`: AI-written Vais code must be checked against the compiler and named gates instead of relying on model memory. Status: certified core.
