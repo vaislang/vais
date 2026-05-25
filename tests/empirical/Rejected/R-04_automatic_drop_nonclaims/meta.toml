@@ -1,0 +1,44 @@
+[entry]
+id = "Rejected-04"
+classification = "Rejected / nonclaim source-audit fixture"
+surface = "Token, parser AST Statement, and EmbeddedResult automatic Drop"
+site = "lang/packages/vaisdb/src/sql/parser/token.vais; lang/packages/vaisdb/src/sql/parser/ast.vais; lang/packages/vaisdb/src/server/embedded.vais"
+master_plan_version = 308
+
+[v1_evidence]
+probe_summary = "Source audit verifies manual cleanup helpers exist and no Token/Statement/EmbeddedResult Drop impl is present."
+expected_per_design = "Automatic Drop remains unpromoted; DB code uses explicit cleanup APIs."
+actual_observed = "manual helpers present; Drop impl absent"
+verified_date = "2026-05-25"
+
+[v2_evidence]
+status = "nonclaim_guard"
+notes = """
+This is a W1-B nonclaim fixture. It does not promote behavior and does not
+compile a .vais program. It guards against accidental introduction of
+automatic Token/AST/EmbeddedResult Drop before a dedicated ownership/destructor
+design, fixtures, and same-class audit land.
+"""
+
+[migration]
+post_promotion_expected = "Replace this nonclaim guard with positive/negative runtime fixtures for any promoted Drop surface."
+post_promotion_action = "Update EXCLUDED_FEATURES.md and W1-B roadmap with the exact promoted surface and rollback trigger."
+
+[assertion_kind]
+kind = "source_audit_nonclaim"
+required_source_patterns = [
+  "Token.free_owned_text",
+  "free_token_vec_owned_text",
+  "Statement.free_parser_owned_text",
+  "EmbeddedResult.free_owned_text",
+]
+forbidden_source_patterns = [
+  "impl Token: Drop",
+  "impl Statement: Drop",
+  "impl EmbeddedResult: Drop",
+]
+rationale = """
+The W1-B decision keeps Token/AST/EmbeddedResult cleanup explicit. A new Drop
+impl would change the product contract and must be treated as fixture drift
+until promoted deliberately.
+"""
