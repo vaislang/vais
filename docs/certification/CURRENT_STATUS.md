@@ -26,15 +26,14 @@ frozen Core bundle without widening Core v0 itself:
   nonclaims.
 - W1-D: language docs, living examples, generated AI-facing docs, and
   certification docs are synchronized with W1-A/B/C.
-- W1-E: aggregate/package regression checkpoint is in progress. T-527 refreshed
+- W1-E: aggregate/package regression checkpoint is complete. T-527 refreshed
   Core and aggregate integrity evidence as green, T-528 refreshed empirical
   A1/A2/A4 evidence as green, and T-529 refreshed package/codegen consumer
   evidence as green. T-530 refreshed AI/public docs gates as green, T-531
   refreshed gate metadata evidence as green, T-532 classified regression
   scripts without promoting old known-baseline diagnostics into W1 closure
-  gates, T-533 reviewed residual nonclaims, and T-534 recorded the final
-  aggregate evidence bundle. Remaining W1-E blocker is checkpoint/next-queue
-  selection.
+  gates, T-533 reviewed residual nonclaims, T-534 recorded the final aggregate
+  evidence bundle, and T-535 checkpointed W1 as complete.
 
 These W1 certifications are usable where their named docs and gates say so,
 but they do not retroactively add constructs to the frozen Core v0 manifest.
@@ -205,6 +204,13 @@ Skipped or non-W1 gates are intentional: live cloud deployment credential tests,
 release/tag/publish/upload/push/deploy actions, production rollout, production
 acceptance, broad DB/server/web behavior, and external acceptance remain outside
 W1-E.
+
+## T-535 W1-E Checkpoint And W2-A Selection
+
+T-535 checkpoints W1 language/compiler product hardening as complete on
+2026-05-25. W1-A through W1-E are complete without widening Core v0, DB/server/
+web behavior, release, deployment, production rollout, or external acceptance.
+The next whole-product queue is W2-A catalog/schema generalization.
 
 ## Verified Gates
 
