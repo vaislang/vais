@@ -32,6 +32,30 @@ frozen Core bundle without widening Core v0 itself:
 These W1 certifications are usable where their named docs and gates say so,
 but they do not retroactively add constructs to the frozen Core v0 manifest.
 
+## T-524 W1-D Aggregate Docs Validation Evidence
+
+T-524 reran the W1-D documentation/certification validation bundle on
+2026-05-25:
+
+- `bash scripts/core-certify.sh` PASS: `CORE_CERTIFICATION pass=16 fail=0
+  total=16`, 5 core certification tests passed, and `CORE CERTIFICATION OK`.
+- `bash scripts/check-empirical.sh A2` PASS: 5 pass / 0 drift / 0 broken /
+  0 skipped.
+- `bash scripts/check-w1-doc-drift.sh` PASS:
+  `W1 DOC DRIFT OK: focused W1 language/certification docs are current`.
+- `python3 -m json.tool docs/ai/feature-registry.json`, `node
+  scripts/check-ai-docs-sync.mjs`, and `bash scripts/check-ai-reference-app.sh`
+  PASS.
+- Root plan/gate checks PASS: `check-plan-consistency.sh` and
+  `check-gate-manifest.sh`.
+- Root/compiler/lang diff whitespace checks PASS.
+
+Residual blockers before W1 completion are intentionally outside this Core
+status: T-525 must checkpoint W1-D and select W1-E, and W1-E must refresh
+aggregate/package regression evidence. No release, deployment, production,
+DB/server/web widening, or Core-v0 manifest widening is performed by this
+evidence refresh.
+
 ## Verified Gates
 
 | Gate | Evidence |
