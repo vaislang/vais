@@ -1,6 +1,6 @@
 # Database Integration
 
-Status: T-603 W3-B server security docs synced.
+Status: T-613 W3-C lifecycle/concurrency docs synced.
 
 `vais-server` currently documents a bounded local VaisDB API surface. It is not
 a raw SQL service, not a PostgreSQL/SQLite wire-protocol bridge, and not a
@@ -86,6 +86,27 @@ Current selected error names include:
 - `db_conflict`
 - `admin_forbidden` for the local guarded seed wrapper
 
+## Local Lifecycle And Concurrency Boundary
+
+Promoted DB route evidence uses a route-local `EmbeddedDatabase` handle for one
+request/helper invocation.
+
+- Routes open from the configured local path, run the selected query or write,
+  materialize response-owned values, free owned result text where applicable,
+  and close before returning.
+- There is no promoted process-global DB handle, connection pool, TCP remote DB
+  lifecycle, or persistent server-wide DB connection.
+- Failed request-time opens return `500` with `{"error":"db_unavailable"}` for
+  selected executable local routes.
+- Executable timeout/cancellation/backpressure inputs are rejected as invalid
+  route shapes: `timeout_ms=1`, `cancel=1`, and `backpressure=drop` on the
+  unfiltered table-row route return `db_invalid_filter`; extra `timeout_ms` or
+  `cancel` fields on fixed `POST /db/books` return `db_invalid_request`.
+- SSR timeout/retry, rate-limit middleware, shutdown coordination, and
+  WebSocket lifecycle smokes are non-DB primitives. They are not DB statement
+  timeout, DB cancellation, DB backpressure, or production DB concurrency
+  evidence.
+
 ## Local Auth/Guard Boundary
 
 The only documented DB-route guard is the local fixed seed wrapper around
@@ -115,11 +136,13 @@ DB route policy, CSRF protection, production RBAC, or deployed admin security.
 - Alternate `POST /db/books` bodies, extra fields, arrays, or arbitrary values.
 - `DbConnection.execute(sql)` as a certified bridge to `EmbeddedDatabase`.
 - `QueryBuilder` as a public server DB API surface.
-- TCP remote DB mode, connection pooling, production credentials, deployment,
-  production auth/session/RBAC, JWT bearer-token DB route policy, cookies,
-  CSRF, secret management, rate-limit or CORS attachment to DB routes, audit
-  policy, health readiness, observability, backup, recovery, or production
-  acceptance.
+- TCP remote DB mode, connection pooling, concurrent DB serving, DB
+  queue/admission/backpressure policy, statement/open/close timeout,
+  caller-driven cancellation, production capacity/SLO behavior, startup
+  readiness, shutdown drain, production credentials, deployment, production
+  auth/session/RBAC, JWT bearer-token DB route policy, cookies, CSRF, secret
+  management, rate-limit or CORS attachment to DB routes, audit policy, health
+  readiness, observability, backup, recovery, or production acceptance.
 
 ## Evidence
 
