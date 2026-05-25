@@ -2595,6 +2595,34 @@ fn main() -> i64 {
         Ok(_) => { println("T155 notes: qualified projection unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
+    match notes_db.query("select n.id, n.body from notes n") {
+        Ok(_) => { println("T552 notes: table alias unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select id, body from notes order by id") {
+        Ok(_) => { println("T552 notes: order by unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select id, body from notes limit 1") {
+        Ok(_) => { println("T552 notes: limit unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select id, body from notes where id = 1 order by id") {
+        Ok(_) => { println("T552 notes: filtered order by unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.query("select * from notes join notes as other on notes.id = other.id") {
+        Ok(_) => { println("T552 notes: join unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("update notes set body = 'changed' where id = 1") {
+        Ok(_) => { println("T552 notes: descriptor update unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match notes_db.execute("delete from notes where id = 1") {
+        Ok(_) => { println("T552 notes: descriptor delete unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
 
     match notes_db.close() {
         Ok(_) => {},
