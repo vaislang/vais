@@ -3501,6 +3501,34 @@ fn main() -> i64 {
         Ok(db) => db,
         Err(_) => { println("T215 contacts: open failed"); return 255 },
     }
+    match contacts_db.execute("create table Contacts (id int, name text, email text, status text)") {
+        Ok(_) => { println("T541 contacts: uppercase table name unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table 1contacts (id int, name text, email text, status text)") {
+        Ok(_) => { println("T541 contacts: digit-start table name unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_short (id int)") {
+        Ok(_) => { println("T541 contacts: short descriptor unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_col (id int, Name text, email text, status text)") {
+        Ok(_) => { println("T541 contacts: uppercase column name unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_text_id (id int, id text, email text, status text)") {
+        Ok(_) => { println("T541 contacts: text column named id unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_default (id int, name text default 'anon', email text, status text)") {
+        Ok(_) => { println("T541 contacts: dynamic DEFAULT unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create table contacts_bad_pk (id int primary key, name text, email text, status text)") {
+        Ok(_) => { println("T541 contacts: dynamic primary key unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
     match contacts_db.execute("create table contacts_bad_first (contact_id int, name text, email text, status text)") {
         Ok(_) => { println("T215 contacts: wrong first column unexpectedly accepted"); return 255 },
         Err(_) => {},
