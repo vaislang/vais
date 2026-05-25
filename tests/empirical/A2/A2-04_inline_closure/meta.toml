@@ -13,8 +13,8 @@ description = "F apply(f: |i64| -> i64, x: i64) { f(x) }; main calls apply(|n| n
 
 [negative]
 probe = "probe_neg.vais"
-expected_behavior = "exit ≠ 42 (currently silent corruption; see F-18 finding)"
-description = "make_adder(5) returns a closure capturing x=5; main calls add5(37) expecting 42 but getting wrong runtime value (observed 245). Type checker accepts; codegen produces a binary that runs to a wrong answer."
+expected_behavior = "check_fails with E001 + escape closure + A4-15"
+description = "make_adder(5) returns a closure capturing x=5; main calls add5(37). This escape form is outside the A2-04 inline-only predicate and is hard-blocked by the A4-15 type-checker detector."
 
 [f_18_finding]
 note = """
@@ -32,8 +32,8 @@ inventory expansion (e.g. A4-12 Escape-closure capture loss).
 [assertion_kind]
 kind_positive = "exact_exit"
 expected_exit_positive = 42
-kind_negative = "exit_not"
-forbidden_set_negative = [42]
+kind_negative = "check_fails"
+required_stderr_patterns_negative = ["E001", "escape closure", "A4-15"]
 
 [migration]
-post_tighten = "When the closure escape-analysis check tightens, migrate negative probe to check_fails."
+post_tighten = "DONE 2026-05-25 in T-489: negative probe now expects check_fails via A4-15."

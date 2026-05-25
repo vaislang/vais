@@ -10,11 +10,9 @@
 #
 # Two-probe runner:
 #   probe_pos.vais  inline closure literal — must compile + run + exit 42.
-#   probe_neg.vais  closure ESCAPES (returned from make_adder). Currently
-#                    type-checks AND builds AND runs but produces a wrong
-#                    runtime value (245 instead of 42). This is a new
-#                    silent surface — STEP7_FINDINGS F-18 candidate.
-#                    Runner asserts exit ≠ 42 (exit_not form).
+#   probe_neg.vais  closure ESCAPES (returned from make_adder). This is outside
+#                    the A2-04 predicate and is now hard-blocked by the A4-15
+#                    type-checker detector with E001 + escape closure + A4-15.
 
 set -euo pipefail
 
@@ -41,32 +39,23 @@ if [[ "$POS_EXIT" != "42" ]]; then
     exit 1
 fi
 
-# ── Negative probe — escaping closure produces wrong runtime ──────────────
+# ── Negative probe — escaping closure rejects at type check ───────────────
 cp "$DIR/probe_neg.vais" "$WORK/probe_neg.vais"
-"$VAISC" check "$WORK/probe_neg.vais" >/dev/null 2>&1 || {
-    # GOOD news — type checker now rejects escape. Migrate fixture per
-    # STEP7_FINDINGS F-18.
-    echo "DRIFT: A2-04 negative now rejected at vaisc check — escape" >&2
-    echo "  closures may have gained a stable diagnostic (good news;" >&2
-    echo "  migrate fixture to check_fails)." >&2
-    exit 1
-}
-( cd "$WORK" && "$VAISC" probe_neg.vais >/dev/null 2>&1 ) || {
-    echo "DRIFT: A2-04 negative now fails at codegen — closures escape" >&2
-    echo "  may have gained late-stage rejection (also good news;" >&2
-    echo "  migrate fixture)." >&2
-    exit 1
-}
-[[ -x "$WORK/probe_neg" ]] || { echo "FIXTURE_BROKEN: vaisc did not produce probe_neg" >&2; exit 2; }
-
-NEG_EXIT=0
-"$WORK/probe_neg" || NEG_EXIT=$?
-# Forbidden: 42 — the value the well-typed escaping closure would return.
-if [[ "$NEG_EXIT" == "42" ]]; then
-    echo "DRIFT: A2-04 negative exit landed on 42 — escape closure may have" >&2
-    echo "  been fixed, or runtime collided coincidentally with the correct" >&2
-    echo "  value. Investigate." >&2
+CHECK_OUTPUT="$( "$VAISC" check "$WORK/probe_neg.vais" 2>&1 || true )"
+CHECK_EXIT=0
+"$VAISC" check "$WORK/probe_neg.vais" >/dev/null 2>&1 && CHECK_EXIT=0 || CHECK_EXIT=$?
+if [[ "$CHECK_EXIT" == "0" ]]; then
+    echo "DRIFT: A2-04 negative now type-checks — escape closure detector may have regressed." >&2
     exit 1
 fi
 
-echo "A2-04 OK: positive inline closure exits 42; negative escape closure exits ${NEG_EXIT} ≠ 42 (silent corruption — F-18 candidate)."
+REQUIRED=("E001" "escape closure" "A4-15")
+for pat in "${REQUIRED[@]}"; do
+    if ! grep -qF "$pat" <<< "$CHECK_OUTPUT"; then
+        echo "DRIFT: A2-04 negative rejected but stderr lacks '$pat':" >&2
+        echo "$CHECK_OUTPUT" >&2
+        exit 1
+    fi
+done
+
+echo "A2-04 OK: positive inline closure exits 42; negative escape closure rejects at vaisc check with E001 + A4-15."

@@ -289,6 +289,21 @@ iff ALL of the following hold:
 The escape form (predicate clause 3 violated) is A4-15 (escape
 closure capture loss), hard-blocked at TC layer in master-plan v39.
 
+### T-489 evidence refresh
+
+T-489 (2026-05-25) refreshed A2-04 closure evidence:
+
+- `compiler/tests/empirical/A2/A2-04_inline_closure/run.sh` now expects the
+  negative escape-closure probe to fail at `vaisc check` with `E001`,
+  `escape closure`, and `A4-15`.
+- `bash scripts/check-empirical.sh A2` PASS: 5 pass / 0 drift / 0 broken /
+  0 skipped.
+- `bash scripts/check-empirical.sh A4` PASS: 14 pass / 0 drift / 0 broken /
+  0 skipped.
+
+A2-04 remains LANDED for inline-only closures. Escaping closures remain
+rejected by the A4-15 type-checker detector and are not promoted.
+
 ### Positive fixture
 
 `compiler/tests/empirical/A2/A2-04_inline_closure/probe_pos.vais`:
