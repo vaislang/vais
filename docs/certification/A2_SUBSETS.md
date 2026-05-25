@@ -425,6 +425,27 @@ T-493 (2026-05-25) reviewed negative A2 diagnostics:
 
 The A2 fixture gate remains green. No A2 semantics were widened.
 
+## T-507 W1-C invalid dyn diagnostic fixture selection
+
+T-507 (2026-05-25) selects the existing
+`compiler/tests/empirical/A2/A2-03_dyn_trait_dispatch/probe_neg.vais` as the
+exact W1-C tightening target for T-508.
+
+Selected expected behavior for T-508:
+
+- `vaisc check probe_neg.vais` exits non-zero before build or run.
+- Output contains a stable type diagnostic header, currently selected as
+  `error[E001]`.
+- The diagnostic reports the essential mismatch: expected `dyn Greet`, found
+  `i64`.
+- The positive A2-03 probe remains unchanged: multi-impl dyn dispatch must still
+  exit 49 on both inkwell and text-IR backends.
+
+Nonclaims: this selection does not promote broad dyn cast syntax, explicit
+`as dyn` conversions, ownership/lifetime widening, runtime crash recovery, DB,
+server, web, release, deployment, or production behavior. T-508 owns the
+compiler behavior change and fixture tightening.
+
 ## T-494 docs/certification sync
 
 T-494 (2026-05-25) syncs W1-A claims across roadmap and certification docs:

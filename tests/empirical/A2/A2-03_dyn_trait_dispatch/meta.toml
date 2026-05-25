@@ -42,6 +42,13 @@ probe = "probe_neg.vais"
 expected_behavior = "build succeeds (TC currently silent), runtime crashes (SIGSEGV / non-zero exit). Once TC-level rejection lands as a follow-up silent-surface fix, tighten to check_fails."
 description = "i64 passed where dyn Greet expected. The type checker currently accepts this silently (separate surface, not in #18 scope), but runtime crashes because the bare i64 has no vtable. The negative probe asserts the runtime defense."
 
+[w1c_selection]
+selected_by = "T-507"
+selected_date = "2026-05-25"
+t508_target_behavior = "vaisc check probe_neg.vais exits non-zero before build/run, emits a stable type diagnostic header, and reports expected dyn Greet versus found i64."
+t508_expected_code = "E001"
+nonclaims = "No broad dyn cast semantics, explicit as-dyn syntax, ownership/lifetime widening, runtime crash recovery, or DB/server/web behavior is promoted by this fixture selection."
+
 [verification]
 verified_date = "2026-05-05"
 verifier_command = "bash run.sh"
