@@ -1,6 +1,6 @@
 # Database Integration
 
-Status: T-624 W3-D migration/fault/observability docs synced.
+Status: T-634 W3-E config/deployment/docs synced.
 
 `vais-server` currently documents a bounded local VaisDB API surface. It is not
 a raw SQL service, not a PostgreSQL/SQLite wire-protocol bridge, and not a
@@ -133,6 +133,31 @@ request IDs, JSON log formatting, and logger middleware response preservation.
 This is not DB readiness, metrics, tracing, audit logging, retention,
 redaction, tamper evidence, alerting, or a production observability SLO.
 
+## Configuration, Deployment, And Docs Boundary
+
+`ServerConfig.default()`, explicit in-process `ServerConfig` construction,
+`addr()`, and exact `is_prod()` string behavior are local helper evidence only.
+The current selected proof covers the default values, address formatting, and
+`is_prod()` being true only for exact `prod`.
+
+Unsupported W3-E controls are invalid request shapes, not hidden capabilities:
+
+- `/db/config`, `/db/env`, `/db/deploy`, `/db/release`, `/db/publish`, and
+  `/db/docs` return `db_invalid_table` through the current table-row helper
+  surface.
+- `config=prod`, `env=prod`, `database_url=file.db`, `deploy=1`, `release=1`,
+  `publish=1`, `tls=1`, and `docs=1` return `db_invalid_filter` on selected
+  table-row routes.
+- Extra fixed `POST /db/books` fields such as `config`, `env`, `database_url`,
+  `deploy`, `release`, `publish`, and `tls` return `db_invalid_request`.
+
+This is not environment-variable loading, `.env` support, YAML/TOML/JSON server
+config loading, CLI config flags, config precedence, server-wide
+`DATABASE_URL`, config validation/fail-fast behavior, socket binding proof,
+TLS/proxy/DNS behavior, selected deployment manifests, production config
+profiles, release publishing, remote deployment, rollback, backup/restore, or
+migration runbook evidence.
+
 ## Local Auth/Guard Boundary
 
 The only documented DB-route guard is the local fixed seed wrapper around
@@ -169,6 +194,12 @@ DB route policy, CSRF protection, production RBAC, or deployed admin security.
   auth/session/RBAC, JWT bearer-token DB route policy, cookies, CSRF, secret
   management, rate-limit or CORS attachment to DB routes, audit policy, health
   readiness, observability, backup, recovery, or production acceptance.
+- Environment-variable loading, `.env`, YAML/TOML/JSON server config files,
+  CLI config flags, config precedence, server-wide `DATABASE_URL`, config
+  validation/fail-fast behavior, socket binding proof, TLS/proxy/DNS behavior,
+  selected deployment manifests, production config profiles, release
+  publishing, remote deployment, rollback, backup/restore, or migration
+  runbooks.
 - Server-managed migrations, schema-version routes, upgrade/rollback/
   downgrade orchestration, migration recovery, corrupt DB repair, metrics
   export, traces, audit retention, redaction, tamper evidence, backup/restore,

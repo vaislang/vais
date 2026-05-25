@@ -218,17 +218,26 @@ fn main() -> i64 {
 
 ## ServerConfig
 
-`ServerConfig.default()` uses default settings. For fine-grained configuration, construct `ServerConfig` directly.
+`ServerConfig.default()` is a local in-process helper: port `8080`, host
+`0.0.0.0`, env `dev`, max connections `1000`, read/write timeout `5000`, and
+log level `info`. For local examples, construct `ServerConfig` directly.
 
 ```vais
 config := ServerConfig {
-    host:         "0.0.0.0",
-    port:         8080,
-    max_body_size: 1048576,   # 1 MB
-    timeout_ms:   30000,
+    port:             8080,
+    host:             "0.0.0.0",
+    env:              "dev",
+    max_connections:  1000,
+    read_timeout_ms:  5000,
+    write_timeout_ms: 5000,
+    log_level:        "info",
 }
 app := mut App.new(config)
 ```
+
+This is not environment-variable loading, config-file loading, CLI precedence,
+socket binding proof, TLS/proxy/DNS behavior, or a production deployment
+contract.
 
 ---
 
