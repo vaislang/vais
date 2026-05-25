@@ -29,9 +29,10 @@ frozen Core bundle without widening Core v0 itself:
 - W1-E: aggregate/package regression checkpoint is in progress. T-527 refreshed
   Core and aggregate integrity evidence as green, T-528 refreshed empirical
   A1/A2/A4 evidence as green, and T-529 refreshed package/codegen consumer
-  evidence as green. Remaining W1-E blockers are AI/public docs gates, gate
-  metadata/threshold refresh, regression-script classification, residual
-  nonclaim review, final evidence rollup, and checkpoint/next-queue selection.
+  evidence as green. T-530 refreshed AI/public docs gates as green. Remaining
+  W1-E blockers are gate metadata/threshold refresh, regression-script
+  classification, residual nonclaim review, final evidence rollup, and
+  checkpoint/next-queue selection.
 
 These W1 certifications are usable where their named docs and gates say so,
 but they do not retroactively add constructs to the frozen Core v0 manifest.
@@ -98,6 +99,22 @@ T-529 refreshed package/codegen consumer evidence on 2026-05-25:
 This refresh proves existing external package consumers still compile through
 the W1 language/compiler boundary. It does not promote DB/server/web behavior
 or widen package runtime claims.
+
+## T-530 W1-E AI Public Docs Gate Refresh
+
+T-530 refreshed AI/public documentation gates on 2026-05-25:
+
+- `node scripts/check-ai-docs-sync.mjs` PASS: AI docs sync guard passed.
+- `bash scripts/check-ai-reference-app.sh` PASS: AI docs sync guard passed and
+  AI reference app gate passed.
+- `node scripts/check-public-claims.mjs` PASS: public claim guard passed.
+- Root `bash scripts/check-w1-doc-drift.sh` PASS:
+  `W1 DOC DRIFT OK: focused W1 language/certification docs are current`.
+- Root plan consistency and root/compiler/lang diff whitespace checks passed.
+
+No public claim change was required. This refresh keeps AI-facing language docs,
+reference-app claims, and public claim evidence aligned with the current W1
+language/compiler boundary.
 
 ## Verified Gates
 
