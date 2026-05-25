@@ -253,6 +253,21 @@ records the inkwell + text-IR wiring (commits 27585530..ce54b903 +
 70655014..daa795e2). LESSONS L-007 (HashMap iteration determinism)
 is the empirical finding from this promotion.
 
+### T-488 evidence refresh
+
+T-488 (2026-05-25) refreshed A2-03 dyn/trait object evidence:
+
+- `bash tests/empirical/A2/A2-03_dyn_trait_dispatch/run.sh` PASS:
+  multi-impl dyn dispatch exits 49 on inkwell and text-IR.
+- The negative i64-as-dyn path crashes at runtime with exit 139, not silent
+  success.
+- `bash scripts/check-empirical.sh A2` returned non-zero only because
+  `A2-04_inline_closure` drifted to an earlier `vaisc check` rejection. That
+  closure fixture migration is assigned to T-489.
+
+A2-03 remains LANDED. This refresh does not widen dyn/trait object dispatch
+semantics.
+
 ---
 
 ## A2-04 — Closures (no escape, inline-only)
