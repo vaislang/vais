@@ -1,6 +1,6 @@
 # Database Integration
 
-Status: T-593 W3-A server API docs synced.
+Status: T-603 W3-B server security docs synced.
 
 `vais-server` currently documents a bounded local VaisDB API surface. It is not
 a raw SQL service, not a PostgreSQL/SQLite wire-protocol bridge, and not a
@@ -86,6 +86,23 @@ Current selected error names include:
 - `db_conflict`
 - `admin_forbidden` for the local guarded seed wrapper
 
+## Local Auth/Guard Boundary
+
+The only documented DB-route guard is the local fixed seed wrapper around
+exact-body `POST /db/books`.
+
+- It uses a process-local `SessionStore` and an explicit same-store
+  `session_id`.
+- It requires fixed data-bag values `role=admin` and
+  `capability=books.seed`.
+- Missing/unknown session, missing role, wrong role, wrong capability, expired
+  session, and bearer-like `Bearer <session_id>` aliases return `403` with
+  `{"error":"admin_forbidden"}`.
+- Denied attempts do not write the `children` row.
+
+This is local evidence only. It is not browser login, cookie auth, bearer-token
+DB route policy, CSRF protection, production RBAC, or deployed admin security.
+
 ## Not Supported
 
 - Raw SQL endpoints such as `/db/sql`, `/db/query`, `/db/execute`, or `sql=`.
@@ -99,8 +116,10 @@ Current selected error names include:
 - `DbConnection.execute(sql)` as a certified bridge to `EmbeddedDatabase`.
 - `QueryBuilder` as a public server DB API surface.
 - TCP remote DB mode, connection pooling, production credentials, deployment,
-  production auth/session/RBAC, rate limits, CORS/CSRF, audit policy, health
-  readiness, observability, backup, recovery, or production acceptance.
+  production auth/session/RBAC, JWT bearer-token DB route policy, cookies,
+  CSRF, secret management, rate-limit or CORS attachment to DB routes, audit
+  policy, health readiness, observability, backup, recovery, or production
+  acceptance.
 
 ## Evidence
 
