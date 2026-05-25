@@ -1,9 +1,8 @@
 # LIVING_SPEC/01_keywords/linear_affine_annotation.vais
 # Key concept: `linear`/`affine` value annotation on `:=` binding.
-# A.2 실측 (2026-04-21): Parse ✓ / TC ✓ / Codegen ✓ / Run ✓ (exit OK).
-# 주의: borrow checker use-count 강제는 미완 — LANGUAGE_SPEC §"Linear and
-# Affine Types (Experimental)" 참고. 현재 annotation 은 type-carrier 로만 전달
-# 되고 "must-use / at-most-once" 제약은 런타임에서 검사하지 않음.
+# W1-D boundary: this is Controlled wrapper-erasure/type-carrier syntax only.
+# It does not certify use-count enforcement, move-only semantics, ownership
+# proof, automatic cleanup, or DB resource release.
 
 fn test_regular() -> i64 {
     x := 42

@@ -1,11 +1,9 @@
 # LIVING_SPEC/01_keywords/comptime_function_body.vais
-# Key concept: `comptime { ... }` as function-body expression — integer
-# arithmetic, conditional. A.2 실측 (2026-04-21): Parse ✓ / TC ✓ /
-# Codegen ✓ / Run ✓.
-#
-# 한정: `const N: i64 = comptime { ... }` const-initializer 형태는 아직
-# parse error (Phase B.3 에서 해결 예정). 이 파일은 function-body 형태
-# 만 실증.
+# Key concept: `comptime { ... }` as function-body expression for integer
+# arithmetic and conditionals.
+# W1-D boundary: top-level const comptime has its own example in
+# `comptime_const_init.vais`; complex compile-time effects/macros are not
+# claimed here.
 
 fn _const_thirtytwo() -> i64 = comptime { 4 * 8 }
 fn _const_sum() -> i64 = comptime { 10 + 20 }

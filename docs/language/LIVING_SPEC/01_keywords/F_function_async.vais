@@ -1,6 +1,9 @@
 # LIVING_SPEC/01_keywords/F_function_async.vais
 # Key concept: A F name() -> T { ... } 비동기 함수 선언.
 # 호출 시 .await 또는 Y 후위 연산자로 대기.
+# W1-D boundary: this file is a `vaisc check` syntax reference only. Async
+# runtime/state-machine semantics remain excluded by EXCLUDED_FEATURES and are
+# not DB/server/web product behavior.
 
 A fn compute(x: i64) -> i64 {
     x * 2

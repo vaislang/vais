@@ -1,5 +1,8 @@
 # LIVING_SPEC/02_patterns/deref_auto.vais
-# Key concept: 메서드/필드 접근 시 참조 자동 해제 (auto-deref).
+# Key concept: field access through a reference.
+# W1-D boundary: this example is not implicit `&T -> T` value coercion. A4-03
+# keeps broad auto-deref value coercion rejected; use `*r` when a value is
+# required from a reference.
 
 struct Point { x: i64, y: i64 }
 

@@ -1,6 +1,9 @@
 # LIVING_SPEC/02_patterns/phase2_10_result_te_rewrap.vais
 # Key concept: Phase 2.10 TC reproducer — Result<T,E>의 `Ok(f.field)` /
 # `Err(e)` 재포장이 TC 레벨에서 통과함.
+# W1-D boundary: this is a TC-only reproducer, not a public runtime/codegen
+# recommendation. Prefer direct extraction unless a later gate promotes this
+# rewrap codegen path.
 #
 # Status:
 #   - TC(`vaisc check`): ✓ 통과
