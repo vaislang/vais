@@ -3069,6 +3069,48 @@ fn check_table_rows_invalid_inputs(db_path: str) -> i64 {
         return bad_delete_status
     }
 
+    migrations_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/migrations", "")
+    migrations_path_status := mut expect_db_invalid_table_response(migrations_path, 670)
+    I migrations_path_status != 0 {
+        return migrations_path_status
+    }
+
+    schema_version_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/schema-version", "")
+    schema_version_path_status := mut expect_db_invalid_table_response(schema_version_path, 675)
+    I schema_version_path_status != 0 {
+        return schema_version_path_status
+    }
+
+    recovery_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/recovery", "")
+    recovery_path_status := mut expect_db_invalid_table_response(recovery_path, 680)
+    I recovery_path_status != 0 {
+        return recovery_path_status
+    }
+
+    ready_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/ready", "")
+    ready_path_status := mut expect_db_invalid_table_response(ready_path, 685)
+    I ready_path_status != 0 {
+        return ready_path_status
+    }
+
+    metrics_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/metrics", "")
+    metrics_path_status := mut expect_db_invalid_table_response(metrics_path, 690)
+    I metrics_path_status != 0 {
+        return metrics_path_status
+    }
+
+    trace_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/traces", "")
+    trace_path_status := mut expect_db_invalid_table_response(trace_path, 695)
+    I trace_path_status != 0 {
+        return trace_path_status
+    }
+
+    audit_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/audit", "")
+    audit_path_status := mut expect_db_invalid_table_response(audit_path, 700)
+    I audit_path_status != 0 {
+        return audit_path_status
+    }
+
     0
 }
 
@@ -3125,6 +3167,54 @@ fn check_table_rows_unfiltered_query_rejected(db_path: str) -> i64 {
     backpressure_status := mut expect_db_invalid_filter_response(backpressure_query, 665)
     I backpressure_status != 0 {
         return backpressure_status
+    }
+
+    migration_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "migration=apply", "")
+    migration_status := mut expect_db_invalid_filter_response(migration_query, 670)
+    I migration_status != 0 {
+        return migration_status
+    }
+
+    schema_version_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "schema_version=1", "")
+    schema_version_status := mut expect_db_invalid_filter_response(schema_version_query, 675)
+    I schema_version_status != 0 {
+        return schema_version_status
+    }
+
+    recovery_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "recover=1", "")
+    recovery_status := mut expect_db_invalid_filter_response(recovery_query, 680)
+    I recovery_status != 0 {
+        return recovery_status
+    }
+
+    corrupt_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "corrupt=simulate", "")
+    corrupt_status := mut expect_db_invalid_filter_response(corrupt_query, 685)
+    I corrupt_status != 0 {
+        return corrupt_status
+    }
+
+    ready_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "ready=1", "")
+    ready_status := mut expect_db_invalid_filter_response(ready_query, 690)
+    I ready_status != 0 {
+        return ready_status
+    }
+
+    metrics_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "metrics=1", "")
+    metrics_status := mut expect_db_invalid_filter_response(metrics_query, 695)
+    I metrics_status != 0 {
+        return metrics_status
+    }
+
+    trace_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "trace=1", "")
+    trace_status := mut expect_db_invalid_filter_response(trace_query, 700)
+    I trace_status != 0 {
+        return trace_status
+    }
+
+    audit_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "audit=1", "")
+    audit_status := mut expect_db_invalid_filter_response(audit_query, 705)
+    I audit_status != 0 {
+        return audit_status
     }
 
     contacts_status_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=active", "")
@@ -3849,6 +3939,61 @@ fn check_books_post_route_invalid_body(db_path: str) -> i64 {
         println("FAIL db books post cancel field body")
         println(cancel_field.body)
         return 686
+    }
+
+    migration_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"migration\":\"apply\"}")
+    I migration_field.status != 400 {
+        println("FAIL db books post migration field status")
+        return 690
+    }
+    I migration_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post migration field body")
+        println(migration_field.body)
+        return 691
+    }
+
+    schema_version_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"schema_version\":1}")
+    I schema_version_field.status != 400 {
+        println("FAIL db books post schema version field status")
+        return 695
+    }
+    I schema_version_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post schema version field body")
+        println(schema_version_field.body)
+        return 696
+    }
+
+    recovery_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"recover\":true}")
+    I recovery_field.status != 400 {
+        println("FAIL db books post recovery field status")
+        return 700
+    }
+    I recovery_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post recovery field body")
+        println(recovery_field.body)
+        return 701
+    }
+
+    trace_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"trace_id\":\"abc\"}")
+    I trace_field.status != 400 {
+        println("FAIL db books post trace field status")
+        return 705
+    }
+    I trace_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post trace field body")
+        println(trace_field.body)
+        return 706
+    }
+
+    audit_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"audit\":true}")
+    I audit_field.status != 400 {
+        println("FAIL db books post audit field status")
+        return 710
+    }
+    I audit_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post audit field body")
+        println(audit_field.body)
+        return 711
     }
 
     array_body := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "[{\"id\":3,\"title\":\"children\"}]")
