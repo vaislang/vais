@@ -22,6 +22,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPILER_ROOT="$(cd "$DIR/../../../.." && pwd)"
 VAISC="${VAISC:-${COMPILER_ROOT}/target/release/vaisc}"
+VAISC_FLAGS=(--no-update-check --timeout 0)
 
 if [[ ! -x "$VAISC" ]]; then
   echo "FIXTURE_BROKEN: vaisc not found at $VAISC" >&2
@@ -34,12 +35,12 @@ trap 'rm -rf "$WORK"' EXIT
 # ── Positive probe — inkwell backend (default) ────────────────────────────
 cp "$DIR/probe_pos.vais" "$WORK/probe_pos.vais"
 
-if ! "$VAISC" check "$WORK/probe_pos.vais" >/dev/null 2>&1; then
+if ! "$VAISC" "${VAISC_FLAGS[@]}" check "$WORK/probe_pos.vais" >/dev/null 2>&1; then
   echo "DRIFT: A2-03 positive probe no longer type-checks." >&2
   exit 1
 fi
 
-( cd "$WORK" && "$VAISC" build probe_pos.vais -o probe_pos_inkwell >/dev/null 2>&1 )
+( cd "$WORK" && "$VAISC" "${VAISC_FLAGS[@]}" build probe_pos.vais -o probe_pos_inkwell >/dev/null 2>&1 )
 if [[ ! -x "$WORK/probe_pos_inkwell" ]]; then
   echo "FIXTURE_BROKEN: vaisc did not produce probe_pos_inkwell binary" >&2
   exit 2
@@ -55,7 +56,7 @@ fi
 # ── Positive probe — text-IR backend ──────────────────────────────────────
 # VAIS_SINGLE_MODULE=1 forces the text-IR codegen path. Verifies
 # DEFERRED #19 (sorted_method_names + dispatch wiring) didn't drift.
-( cd "$WORK" && VAIS_SINGLE_MODULE=1 "$VAISC" build probe_pos.vais -o probe_pos_textir >/dev/null 2>&1 )
+( cd "$WORK" && VAIS_SINGLE_MODULE=1 "$VAISC" "${VAISC_FLAGS[@]}" build probe_pos.vais -o probe_pos_textir >/dev/null 2>&1 )
 if [[ ! -x "$WORK/probe_pos_textir" ]]; then
   echo "FIXTURE_BROKEN: vaisc did not produce probe_pos_textir binary (text-IR backend)" >&2
   exit 2
@@ -75,19 +76,25 @@ fi
 cp "$DIR/probe_neg.vais" "$WORK/probe_neg.vais"
 
 NEG_CHECK_OUT="$WORK/probe_neg.check.out"
-if "$VAISC" check "$WORK/probe_neg.vais" >"$NEG_CHECK_OUT" 2>&1; then
+if "$VAISC" "${VAISC_FLAGS[@]}" check "$WORK/probe_neg.vais" >"$NEG_CHECK_OUT" 2>&1; then
   echo "DRIFT: A2-03 negative probe type-checked; bare i64 must not satisfy dyn Greet." >&2
   exit 1
 fi
 
-if ! grep -q 'error\[E001\]' "$NEG_CHECK_OUT"; then
-  echo "DRIFT: A2-03 negative diagnostic missing error[E001]." >&2
+if ! grep -q 'error: error\[E001\] Type mismatch' "$NEG_CHECK_OUT"; then
+  echo "DRIFT: A2-03 negative diagnostic missing top-level error[E001] envelope." >&2
   cat "$NEG_CHECK_OUT" >&2
   exit 1
 fi
 
 if ! grep -q 'expected dyn Greet' "$NEG_CHECK_OUT" || ! grep -q 'found i64' "$NEG_CHECK_OUT"; then
   echo "DRIFT: A2-03 negative diagnostic must mention expected dyn Greet and found i64." >&2
+  cat "$NEG_CHECK_OUT" >&2
+  exit 1
+fi
+
+if grep -q 'No errors found' "$NEG_CHECK_OUT"; then
+  echo "DRIFT: A2-03 negative diagnostic reported check success text." >&2
   cat "$NEG_CHECK_OUT" >&2
   exit 1
 fi

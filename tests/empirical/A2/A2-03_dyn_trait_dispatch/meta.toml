@@ -54,6 +54,12 @@ verified_date = "2026-05-25"
 verifier_command = "bash run.sh"
 verifier_expected_stdout_substring = "A2-03 OK: multi-impl dyn dispatch exits 49 on inkwell + text-IR; negative i64-as-dyn rejects at check with error[E001]."
 
+[w1c_cli_smoke]
+selected_by = "T-513"
+selected_date = "2026-05-25"
+command_envelope = "run.sh invokes vaisc with --no-update-check --timeout 0 and requires the negative check path to print top-level error: error[E001] Type mismatch, expected dyn Greet, found i64, with no check-success text."
+nonclaims = "This smoke does not broaden dyn semantics, build/run crash recovery, CLI prose, color/localization, timeout behavior, registry/release/deployment commands, or production diagnostics."
+
 [baseline_uses]
 # Real-world dyn Trait call sites this fixture protects (subset; vaisdb
 # uses 39 dyn sites total per STEP7_FINDINGS F-23, all single-impl-per-
