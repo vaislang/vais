@@ -437,6 +437,22 @@ T-494 (2026-05-25) syncs W1-A claims across roadmap and certification docs:
 
 No compiler behavior is changed by this sync.
 
+## T-496 W1-B ownership/drop/runtime audit note
+
+T-496 (2026-05-25) starts W1-B without adding a new A2 entry:
+
+- A2-01 and A2-02 `?` Result/Option flow remain available only inside their
+  formal predicates.
+- A2-06 affine remains Controlled because wrapper erasure has no use-count
+  enforcement and no negative A2 predicate.
+- W1-B must not treat `?`, affine/linear wrappers, or automatic Drop as proof
+  of cleanup on early return.
+- DB-required cleanup evidence must stay explicit and idempotent until a later
+  Step 16/I-5 memory-protocol task promotes stronger ownership/destructor
+  semantics.
+
+No A2 semantics are widened by this audit.
+
 ---
 
 ## How to add a new A2 entry
