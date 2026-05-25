@@ -27,11 +27,11 @@ frozen Core bundle without widening Core v0 itself:
 - W1-D: language docs, living examples, generated AI-facing docs, and
   certification docs are synchronized with W1-A/B/C.
 - W1-E: aggregate/package regression checkpoint is in progress. T-527 refreshed
-  Core and aggregate integrity evidence as green. Remaining W1-E blockers are
-  empirical A1/A2/A4 refresh, package/codegen consumer evidence, AI/public docs
-  gates, gate metadata/threshold refresh, regression-script classification,
-  residual nonclaim review, final evidence rollup, and checkpoint/next-queue
-  selection.
+  Core and aggregate integrity evidence as green, T-528 refreshed empirical
+  A1/A2/A4 evidence as green, and T-529 refreshed package/codegen consumer
+  evidence as green. Remaining W1-E blockers are AI/public docs gates, gate
+  metadata/threshold refresh, regression-script classification, residual
+  nonclaim review, final evidence rollup, and checkpoint/next-queue selection.
 
 These W1 certifications are usable where their named docs and gates say so,
 but they do not retroactively add constructs to the frozen Core v0 manifest.
@@ -82,6 +82,22 @@ T-527 refreshed the W1-E Core/integrity evidence on 2026-05-25:
 
 No failures required classification as compiler regression, product/API drift,
 unsupported non-Core feature, or deterministic environment blocker.
+
+## T-529 W1-E Package Codegen Smoke Refresh
+
+T-529 refreshed package/codegen consumer evidence on 2026-05-25:
+
+- `cargo test -p vaisc --test integrity -- test_vaisdb_files_codegen_ok
+  --nocapture` PASS: `INTEGRITY vaisdb_files pass=261 fail=0 total=261`.
+- `cargo test -p vaisc --test integrity -- test_std_files_codegen_ok
+  --nocapture` PASS: `INTEGRITY std_files pass=82 fail=0 total=82`.
+- `cargo test -p vaisc --test e2e --release phase_package_full_build_smoke --
+  --nocapture --test-threads=1` PASS: vais-server and vaisdb package
+  full-build smokes both passed, 2/2.
+
+This refresh proves existing external package consumers still compile through
+the W1 language/compiler boundary. It does not promote DB/server/web behavior
+or widen package runtime claims.
 
 ## Verified Gates
 
