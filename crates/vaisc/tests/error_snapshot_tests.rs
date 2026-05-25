@@ -178,3 +178,22 @@ fn main() -> i64 = 0
 "#;
     assert_error_snapshot("return_type_mismatch", source);
 }
+
+#[test]
+fn snapshot_integer_truthy_condition_rejected() {
+    // A4-06 rejected surface: conditions must be bool, not integer truthy.
+    let source = "fn main() -> i64 = I 42 { 1 } else { 0 }";
+    assert_error_snapshot("integer_truthy_condition_rejected", source);
+}
+
+#[test]
+fn snapshot_escape_closure_rejected() {
+    // A4-15 rejected surface: closures that capture locals cannot escape.
+    let source = r#"
+fn make_adder(x: i64) -> |i64| -> i64 {
+    |n| n + x
+}
+fn main() -> i64 = 0
+"#;
+    assert_error_snapshot("escape_closure_rejected", source);
+}

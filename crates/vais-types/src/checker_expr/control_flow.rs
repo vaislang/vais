@@ -201,7 +201,7 @@ impl TypeChecker {
                     && (strict_a4_06 || !cond_type.is_integer())
                     && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
                 {
-                    self.unify(&cond_type, &ResolvedType::Bool)
+                    self.unify(&ResolvedType::Bool, &cond_type)
                         .map_err(|e| e.with_span(cond.span))?;
                 }
 
@@ -256,7 +256,7 @@ impl TypeChecker {
                     && (strict_a4_06 || !cond_type.is_integer())
                     && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
                 {
-                    if let Err(e) = self.unify(&cond_type, &ResolvedType::Bool) {
+                    if let Err(e) = self.unify(&ResolvedType::Bool, &cond_type) {
                         return Some(Err(e));
                     }
                 }
@@ -288,7 +288,7 @@ impl TypeChecker {
                     && (strict_a4_06 || !cond_type.is_integer())
                     && !matches!(cond_type, ResolvedType::Var(_) | ResolvedType::Unknown)
                 {
-                    if let Err(e) = self.unify(&cond_type, &ResolvedType::Bool) {
+                    if let Err(e) = self.unify(&ResolvedType::Bool, &cond_type) {
                         return Some(Err(e));
                     }
                 }
