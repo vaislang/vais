@@ -29,10 +29,12 @@ frozen Core bundle without widening Core v0 itself:
 - W1-E: aggregate/package regression checkpoint is in progress. T-527 refreshed
   Core and aggregate integrity evidence as green, T-528 refreshed empirical
   A1/A2/A4 evidence as green, and T-529 refreshed package/codegen consumer
-  evidence as green. T-530 refreshed AI/public docs gates as green. Remaining
-  T-532 classified regression scripts without promoting old known-baseline
-  diagnostics into W1 closure gates. Remaining W1-E blockers are residual
-  final evidence rollup and checkpoint/next-queue selection.
+  evidence as green. T-530 refreshed AI/public docs gates as green, T-531
+  refreshed gate metadata evidence as green, T-532 classified regression
+  scripts without promoting old known-baseline diagnostics into W1 closure
+  gates, T-533 reviewed residual nonclaims, and T-534 recorded the final
+  aggregate evidence bundle. Remaining W1-E blocker is checkpoint/next-queue
+  selection.
 
 These W1 certifications are usable where their named docs and gates say so,
 but they do not retroactively add constructs to the frozen Core v0 manifest.
@@ -178,6 +180,31 @@ not block W1 closure because they are explicitly assigned outside W1:
   acceptance remain assigned to W2 through W6.
 
 No residual nonclaim requires more W1 implementation work.
+
+## T-534 W1-E Final Aggregate Evidence Bundle
+
+T-534 recorded the final W1-E evidence bundle on 2026-05-25:
+
+- Core/integrity: `core-certify.sh` passed with
+  `CORE_CERTIFICATION pass=16 fail=0 total=16` and `CORE CERTIFICATION OK`;
+  T-527 also passed the aggregate `check-integrity.sh` gate with final
+  `INTEGRITY OK`.
+- Empirical language surfaces: A1 `3/3`, A2 `5/5`, and A4 `14/14` passed with
+  no drift, broken, or skipped fixtures.
+- Package/codegen consumers: std codegen `82/82`, vaisdb codegen `261/261`,
+  and package full-build smoke `2/2` passed.
+- AI/public docs: AI docs sync, AI reference app, public claim guard, and W1
+  doc drift checks passed.
+- Gate metadata: gate manifest `17` gates, threshold monotonic `8`
+  non-decreasing thresholds, plan consistency `16` matched baseline locks, and
+  root/compiler/lang diff checks passed.
+- Regression script classification and residual nonclaim review are recorded in
+  T-532 and T-533.
+
+Skipped or non-W1 gates are intentional: live cloud deployment credential tests,
+release/tag/publish/upload/push/deploy actions, production rollout, production
+acceptance, broad DB/server/web behavior, and external acceptance remain outside
+W1-E.
 
 ## Verified Gates
 
