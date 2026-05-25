@@ -367,6 +367,19 @@ several places (sort comparators, callback registration). The
 fixture codifies the bounded subset (named functions, no closures)
 that codegen already lowers correctly via direct call.
 
+### T-490 evidence refresh
+
+T-490 (2026-05-25) refreshed A2-05 function pointer evidence:
+
+- `bash tests/empirical/A2/A2-05_fn_pointer_param/run.sh` PASS:
+  positive multi-impl fn-pointer dispatch exits 50; negative i64-as-fn-pointer
+  rejects at `vaisc check`.
+- `bash scripts/check-empirical.sh A2` PASS: 5 pass / 0 drift / 0 broken /
+  0 skipped.
+
+A2-05 remains LANDED. This refresh does not widen function pointer syntax or
+dispatch semantics.
+
 ---
 
 ## How to add a new A2 entry
