@@ -407,6 +407,24 @@ EMPIRICAL FIXTURES: 5 pass / 0 drift / 0 broken / 0 skipped (total 5)
 
 No blocker was found. No A2 semantics were widened.
 
+## T-493 negative diagnostic readability
+
+T-493 (2026-05-25) reviewed negative A2 diagnostics:
+
+- A2-01 single-file `?`: acceptable `E001` type mismatch diagnostic.
+- A2-02 cross-module `?`: `probe_neg_main.vais` was corrected to use
+  `return x + 1`, so the fixture now exposes the intended `E001` `?` type
+  mismatch rather than a body/syntax error.
+- A2-03 dyn/trait object: the negative i64-as-dyn path still passes
+  `vaisc check` and crashes at runtime; W1-C must add a product-readable
+  rejection or diagnostic for invalid dyn trait construction/cast.
+- A2-04 closure: escape closure diagnostic explicitly mentions `escape
+  closure`, capture count, corruption risk, and A4-15.
+- A2-05 function pointer: acceptable `E001` expected `fn(i64)->i64`, found
+  `i64` diagnostic.
+
+The A2 fixture gate remains green. No A2 semantics were widened.
+
 ---
 
 ## How to add a new A2 entry
