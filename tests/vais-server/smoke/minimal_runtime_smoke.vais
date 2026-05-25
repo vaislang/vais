@@ -16,12 +16,64 @@ fn smoke_config_app() -> i64 {
         println("FAIL config default host")
         return 1
     }
+    I config.env != "dev" {
+        println("FAIL config default env")
+        return 1
+    }
+    I config.max_connections != 1000 {
+        println("FAIL config default max connections")
+        return 1
+    }
+    I config.read_timeout_ms != 5000 {
+        println("FAIL config default read timeout")
+        return 1
+    }
+    I config.write_timeout_ms != 5000 {
+        println("FAIL config default write timeout")
+        return 1
+    }
+    I config.log_level != "info" {
+        println("FAIL config default log level")
+        return 1
+    }
     I config.addr() != "0.0.0.0:8080" {
         println("FAIL config addr")
         return 1
     }
     I config.is_prod() {
         println("FAIL dev config should not be prod")
+        return 1
+    }
+
+    prod_config := ServerConfig {
+        port: 9090,
+        host: "127.0.0.1",
+        env: "prod",
+        max_connections: 10,
+        read_timeout_ms: 100,
+        write_timeout_ms: 200,
+        log_level: "debug",
+    }
+    I prod_config.addr() != "127.0.0.1:9090" {
+        println("FAIL prod config addr")
+        return 1
+    }
+    I !prod_config.is_prod() {
+        println("FAIL prod config should be prod")
+        return 1
+    }
+
+    production_config := ServerConfig {
+        port: 9091,
+        host: "127.0.0.1",
+        env: "production",
+        max_connections: 10,
+        read_timeout_ms: 100,
+        write_timeout_ms: 200,
+        log_level: "debug",
+    }
+    I production_config.is_prod() {
+        println("FAIL production string should not be prod")
         return 1
     }
 
