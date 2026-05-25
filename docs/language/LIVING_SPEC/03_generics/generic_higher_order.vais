@@ -1,13 +1,15 @@
 # LIVING_SPEC/03_generics/generic_higher_order.vais
-# Key concept: 함수 타입 파라미터 — `f: (T) -> U` 형식.
-# Phase 1.15: `(T1, T2) -> R` 또는 `|T1, T2| -> R` 둘 다 지원.
+# Key concept: bounded higher-order call via A2-05 function-pointer parameter.
+# W1-D boundary: named-function arguments with Core-typed signatures are
+# certified. This example does not claim stored function values, broad
+# closure-to-fn-pointer coercion, or arbitrary higher-order runtime behavior.
 
-fn apply<T>(val: T, f: (T) -> i64) -> i64 {
+fn apply(f: fn(i64) -> i64, val: i64) -> i64 {
     f(val)
 }
 
 fn double(x: i64) -> i64 { x * 2 }
 
 fn main() -> i64 {
-    apply(5, double)  # 10
+    apply(double, 5)  # 10
 }

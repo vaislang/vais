@@ -1,6 +1,9 @@
 # LIVING_SPEC/01_keywords/dyn_trait_param.vais
 # Key concept: `dyn Trait` trait-object function parameter.
-# A.2 실측 (2026-04-21): Parse ✓ / TC ✓ / Codegen ✓ / Run ✓ (exit=25).
+# W1-D/A2-03 boundary: declared trait + visible impl + `dyn Trait`
+# parameter dispatch is certified. A concrete non-implementer now rejects at
+# `vaisc check` with E001; broad dyn casts and lifetime/ownership widening are
+# not claimed by this example.
 
 trait Shape {
     fn area(self: Self) -> i64

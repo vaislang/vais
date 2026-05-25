@@ -30,6 +30,31 @@ because the current `affine` annotation has no use-count enforcement
 not fit the A2 shape. If Step 16 (I-5 memory protocol) later adds
 enforcement, affine can graduate Controlled → A2 at that time.
 
+## W1-D Current Documentation Boundary (2026-05-25)
+
+The current A2 documentation claim is deliberately bounded:
+
+- A2-01 and A2-02 certify `?` only for Core-typed `Result<T, E>` or
+  `Option<T>` receivers whose enclosing function returns the matching
+  `Result<U, E>` or `Option<U>` shape. The certification covers value/error
+  propagation, not destructor cleanup, ownership transfer, lock/result/page
+  release, broad generic error conversion, or production error handling.
+- A2-03 certifies dyn/trait object dispatch only for declared traits with
+  visible impls and dyn boundaries such as `dyn Trait`, `&dyn Trait`,
+  `&mut dyn Trait`, or `Box<dyn Trait>`. Concrete non-implementers reject at
+  `vaisc check` with `error[E001]`.
+- A2-04 certifies inline/no-escape closures, including synchronous argument
+  passing. Returned, stored, or otherwise escaping closures remain rejected by
+  A4-15 and are not A2 behavior.
+- A2-05 certifies bounded function-pointer parameters with Core-typed
+  signatures and named-function arguments. It does not promote broad stored
+  function values, closure-to-fn-pointer coercions outside the fixture shape,
+  or arbitrary higher-order runtime behavior.
+
+Historical notes below preserve the state observed when each task ran. When a
+historical line mentions pre-T508 dyn crashes or pre-T491 generated inventory
+drift, the current boundary above and the later T-508/T-514 notes supersede it.
+
 ### T-486 status drift audit
 
 T-486 (2026-05-25) reconciles W1-A kickoff state:
@@ -37,8 +62,9 @@ T-486 (2026-05-25) reconciles W1-A kickoff state:
 - This file says A2-01 through A2-05 are LANDED.
 - Master Plan Step 9 says A2-01/02/03/04/05 are LANDED and A2-06 affine is
   Controlled.
-- Generated `EXCLUDED_FEATURES.md` still renders the Phase A2 list as "Active
-  promotion candidates" because it reads `master-plan.toml` `phase.A2.candidates`.
+- At T-486 time, generated `EXCLUDED_FEATURES.md` still rendered the Phase A2
+  list as active promotion candidates. T-491/T-514 later aligned the generated
+  inventory so it now renders A2-01 through A2-05 as landed certified subsets.
 - Therefore W1-A is an evidence-refresh and inventory-alignment queue, not a
   new semantic promotion queue.
 
@@ -213,11 +239,15 @@ the following hold:
 
 1. The trait `Trait` is declared and at least one `impl Trait for S`
    block exists for some struct `S`.
-2. The receiver expression has type `&dyn Trait` or `&mut dyn Trait`
-   or `Box<dyn Trait>`.
-3. The dispatch site is a method call on the receiver (e.g.
-   `g.method()` where `g: &dyn Trait`).
-4. The trait method is one of those declared in the trait
+2. A function parameter or receiver is typed as `dyn Trait`, `&dyn Trait`,
+   `&mut dyn Trait`, or `Box<dyn Trait>`.
+3. A value passed to that boundary is either already a matching dyn trait
+   value, is generic/inferred at the call boundary, or has a concrete type with
+   a visible `impl Trait` block for the required trait. A concrete value that
+   does not implement the trait must be rejected at `vaisc check`.
+4. The dispatch site is a method call on the dyn receiver (for example
+   `g.method()` where `g: dyn Trait`).
+5. The trait method is one of those declared in the trait
    declaration; method name resolves via vtable indirection.
 
 The compiler emits a vtable for each `Trait`, with one entry per
@@ -228,14 +258,13 @@ inkwell) use the same sorted-method ordering.
 ### Positive fixture
 
 `compiler/tests/empirical/A2/A2-03_dyn_trait_dispatch/probe_pos.vais`:
-defines `trait Greeter` + two impls (`Hello.greet → 42`,
-`World.greet → 7`), then dispatches via `&dyn Greeter` parameter.
-Calling `greet()` on a `World` value via the dyn parameter must
-return 7 (correct vtable indirection), not 42 (the first-registered
-impl bug F-23 fixed in v17).
+defines `trait Greet` + two impls (`H.greet → 42`, `Wd.greet → 7`), then
+dispatches via a `dyn Greet` parameter. Calling `greet()` through each dyn
+parameter must return the concrete receiver's implementation (correct vtable
+indirection), not the first-registered impl bug F-23 fixed in v17.
 
 Expected: `vaisc check` exits 0; binary runs; exit code = 49
-(`Hello.greet() + World.greet() = 42 + 7`).
+(`H.greet() + Wd.greet() = 42 + 7`).
 
 ### Negative fixture
 
@@ -259,8 +288,9 @@ T-488 (2026-05-25) refreshed A2-03 dyn/trait object evidence:
 
 - `bash tests/empirical/A2/A2-03_dyn_trait_dispatch/run.sh` PASS:
   multi-impl dyn dispatch exits 49 on inkwell and text-IR.
-- The negative i64-as-dyn path crashes at runtime with exit 139, not silent
-  success.
+- At T-488 time, the negative i64-as-dyn path still passed `vaisc check` and
+  crashed at runtime with exit 139. T-508 later replaced that with the current
+  check-time `error[E001]` rejection recorded below.
 - `bash scripts/check-empirical.sh A2` returned non-zero only because
   `A2-04_inline_closure` drifted to an earlier `vaisc check` rejection. That
   closure fixture migration is assigned to T-489.
@@ -415,9 +445,10 @@ T-493 (2026-05-25) reviewed negative A2 diagnostics:
 - A2-02 cross-module `?`: `probe_neg_main.vais` was corrected to use
   `return x + 1`, so the fixture now exposes the intended `E001` `?` type
   mismatch rather than a body/syntax error.
-- A2-03 dyn/trait object: the negative i64-as-dyn path still passes
-  `vaisc check` and crashes at runtime; W1-C must add a product-readable
-  rejection or diagnostic for invalid dyn trait construction/cast.
+- A2-03 dyn/trait object: at T-493 time, the negative i64-as-dyn path still
+  passed `vaisc check` and crashed at runtime. T-508 later converted this case
+  to current check-time `error[E001]` rejection with expected `dyn Greet`,
+  found `i64`.
 - A2-04 closure: escape closure diagnostic explicitly mentions `escape
   closure`, capture count, corruption risk, and A4-15.
 - A2-05 function pointer: acceptable `E001` expected `fn(i64)->i64`, found

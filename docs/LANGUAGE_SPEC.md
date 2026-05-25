@@ -303,17 +303,55 @@ fn describe(n: i64) -> str {
 ## Error Handling
 
 `Result<T, E>` and `Option<T>` are explicit enum types. The try operator `?`
-propagates the error/empty branch. The unwrap operator `!` extracts the payload
-or panics.
+is currently certified only for the A2-01 and A2-02 subsets: the receiver must
+be a Core-typed `Result<T, E>` or `Option<T>`, and the enclosing function must
+return the matching `Result<U, E>` or `Option<U>` shape. Within that boundary,
+`?` propagates the error/empty branch. The unwrap operator `!` extracts the
+payload or panics.
 
 ```vais
 fn parse_and_double(s: str) -> Result<i64, str> {
-    n := parse_i64(s)?;
+    n: i64 = parse_i64(s)?
     Ok(n * 2)
 }
 
 fn get_or_zero(opt: Option<i64>) -> i64 = opt!
 ```
+
+The certified `?` boundary is value/error propagation only. It does not imply
+destructor cleanup, lock/page/result cleanup, ownership transfer, broad generic
+error conversion, or production error-handling behavior.
+
+## Function Values And Closures
+
+Function-pointer parameters are certified only for the A2-05 bounded subset:
+the parameter has a Core-typed signature such as `fn(i64) -> i64`, the argument
+is a named function with the matching signature, and the value is invoked
+synchronously.
+
+```vais
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
+    f(x)
+}
+
+fn double(x: i64) -> i64 { x * 2 }
+```
+
+Closures are certified only for the A2-04 inline/no-escape subset. A closure may
+be constructed and invoked at the same call boundary, or passed to a function
+that invokes it synchronously without storing it. Returned, stored, or otherwise
+escaping closures are rejected by the A4-15 detector and are not part of the
+current certified language contract.
+
+```vais
+fn apply_inline(f: |i64| -> i64, x: i64) -> i64 {
+    f(x)
+}
+```
+
+Stored function values, broad closure-to-function-pointer coercions, escaping
+captures, and destructor or ownership behavior around captured values are not
+promoted by these subsets.
 
 ## Generics
 
@@ -346,6 +384,31 @@ impl Counter: Printable {
     }
 }
 ```
+
+Dyn/trait-object dispatch is certified only for the A2-03 narrow subset:
+declared traits with visible impls may be passed through boundaries such as
+`dyn Trait`, `&dyn Trait`, `&mut dyn Trait`, or `Box<dyn Trait>`, and method
+calls dispatch through the dyn receiver. Concrete values that do not implement
+the required trait reject at `vaisc check` with `error[E001]`.
+
+```vais
+trait Greet {
+    fn greet(self: Self) -> i64
+}
+
+struct H {}
+
+impl H: Greet {
+    fn greet(self: Self) -> i64 { 42 }
+}
+
+fn call_greet(g: dyn Greet) -> i64 {
+    g.greet()
+}
+```
+
+This does not promote broad dyn cast syntax, lifetime or ownership widening, or
+runtime recovery for invalid trait-object construction.
 
 ## References And Lifetimes
 

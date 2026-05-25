@@ -1,9 +1,9 @@
 # LIVING_SPEC/01_keywords/move_closure_capture.vais
-# Key concept: `move |x| ...` closure with moved capture. A.2 실측
-# (2026-04-21): Parse ✓ / TC ✓ / Codegen ✓ / Run ✓.
+# Key concept: inline/no-escape closure capture in the A2-04 subset.
 #
-# 한정: 완전한 drop-on-move 추적은 Phase 4.23 SCOPED. 현재는 capture +
-# invoke 경로만 검증.
+# Boundary: capture + synchronous invoke is certified. Returning, storing, or
+# otherwise escaping closures are rejected by A4-15. This example does not
+# claim automatic Drop, cleanup-on-move, or broad ownership behavior.
 
 fn main() -> i64 {
     add_one := |x: i64| x + 1
