@@ -425,6 +425,18 @@ T-493 (2026-05-25) reviewed negative A2 diagnostics:
 
 The A2 fixture gate remains green. No A2 semantics were widened.
 
+## T-494 docs/certification sync
+
+T-494 (2026-05-25) syncs W1-A claims across roadmap and certification docs:
+
+- A2-01 through A2-05 remain landed certified subsets.
+- A2-06 affine remains Controlled.
+- Generated EXCLUDED_FEATURES renders A2 as certified subsets.
+- A2 empirical fixtures remain green.
+- A2-03 invalid i64-as-dyn diagnostic readability is tracked as W1-C follow-up.
+
+No compiler behavior is changed by this sync.
+
 ---
 
 ## How to add a new A2 entry
