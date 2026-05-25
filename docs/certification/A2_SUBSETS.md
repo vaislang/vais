@@ -55,6 +55,14 @@ Historical notes below preserve the state observed when each task ran. When a
 historical line mentions pre-T508 dyn crashes or pre-T491 generated inventory
 drift, the current boundary above and the later T-508/T-514 notes supersede it.
 
+## W1-E Empirical Refresh (2026-05-25)
+
+T-528 refreshed the empirical language-surface gates for the W1-E aggregate
+checkpoint. `bash scripts/check-empirical.sh A2` passed with 5 pass / 0 drift /
+0 broken / 0 skipped. The same checkpoint also kept A1 at 3/3 and A4 at 14/14
+in their respective empirical groups. No A2 subset was promoted, demoted, or
+widened by this refresh.
+
 ### T-486 status drift audit
 
 T-486 (2026-05-25) reconciles W1-A kickoff state:
