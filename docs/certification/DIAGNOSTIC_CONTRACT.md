@@ -53,6 +53,45 @@ the exact focused gate that proves the behavior. If a failure can only be seen
 as a panic, LLVM verifier error, linker failure, or unstructured runtime crash,
 it must be fixed or explicitly carried as a blocker before W1-C can close.
 
+### T-511 Runtime Crash-To-Diagnostic Boundary Audit
+
+T-511 audits the current crash-like language/compiler surfaces and keeps W1-C
+bounded to failures that already have focused evidence.
+
+Promoted or deterministic W1-C surfaces:
+
+- A2-03 invalid i64-as-`dyn Greet` now fails during `vaisc check` with
+  `error[E001]` before build or run. The focused gate is
+  `bash scripts/check-empirical.sh A2`, and the direct negative command reports
+  expected `dyn Greet`, found `i64`.
+- A4-06 integer truthy and A4-15 escape closure remain rejected at
+  `vaisc check`; `crates/vaisc/tests/error_snapshot_tests.rs` pins the current
+  diagnostic snapshots for those rejected surfaces.
+- A4-08 Vec-to-reference permissiveness and A4-09 lifetime-ref erasure are
+  historical runtime/linker failures in their metadata, but their current
+  empirical runners reject at `vaisc check` with `E001`. W1-C may cite that
+  current check-fails behavior; it does not promote the historical runtime
+  crash or linker forms as acceptable user diagnostics.
+- Parser and type diagnostic formatters are covered by focused unit tests that
+  require stable `error[CODE]` headers and source filenames.
+
+Deferred or nonclaim surfaces:
+
+- Program exits, user program panics, assertions, unwraps, and dependent-check
+  failures reached through `vaisc run` remain user-program behavior unless the
+  compiler/build setup fails before execution.
+- Panic-hook output, optional compiler crash-report files, Rust backtraces,
+  LLVM verifier failures, clang/linker diagnostics, process timeout text, and
+  shell-specific stderr ordering are not stable W1-C diagnostics.
+- Historical empirical metadata may preserve older runtime-crash or build-fail
+  provenance for A4 surfaces; W1-C only claims the current focused runner
+  behavior named above.
+- Runtime recovery, production crash handling, deployment observability, editor
+  diagnostics, and package registry behavior remain outside this contract.
+
+T-512 owns the next boundary: the user-facing `vaisc check`, `vaisc build`,
+and `vaisc run` command envelopes and exit classes.
+
 ## Current Gate
 
 `crates/vaisc/tests/core_certification.rs` enforces the contract through
