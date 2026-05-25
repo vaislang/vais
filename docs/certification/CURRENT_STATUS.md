@@ -24,10 +24,14 @@ frozen Core bundle without widening Core v0 itself:
   evidence. Panic hooks, crash reports, linker/clang text, timeout wording,
   editor/LSP, release, deployment, and production observability remain
   nonclaims.
-- W1-D: documentation sync is in progress. Remaining W1-D blockers are the
-  focused documentation drift grep gate, aggregate docs validation evidence,
-  and W1-D checkpoint. W1-E aggregate/package regression evidence remains
-  required before W1 is complete.
+- W1-D: language docs, living examples, generated AI-facing docs, and
+  certification docs are synchronized with W1-A/B/C.
+- W1-E: aggregate/package regression checkpoint is in progress. T-527 refreshed
+  Core and aggregate integrity evidence as green. Remaining W1-E blockers are
+  empirical A1/A2/A4 refresh, package/codegen consumer evidence, AI/public docs
+  gates, gate metadata/threshold refresh, regression-script classification,
+  residual nonclaim review, final evidence rollup, and checkpoint/next-queue
+  selection.
 
 These W1 certifications are usable where their named docs and gates say so,
 but they do not retroactively add constructs to the frozen Core v0 manifest.
@@ -50,11 +54,34 @@ T-524 reran the W1-D documentation/certification validation bundle on
   `check-gate-manifest.sh`.
 - Root/compiler/lang diff whitespace checks PASS.
 
-Residual blockers before W1 completion are intentionally outside this Core
-status: T-525 must checkpoint W1-D and select W1-E, and W1-E must refresh
-aggregate/package regression evidence. No release, deployment, production,
-DB/server/web widening, or Core-v0 manifest widening is performed by this
-evidence refresh.
+Residual blockers before W1 completion were intentionally outside the T-524
+Core status: T-525 still had to checkpoint W1-D and select W1-E, and W1-E still
+had to refresh aggregate/package regression evidence. No release, deployment,
+production, DB/server/web widening, or Core-v0 manifest widening was performed
+by this evidence refresh.
+
+## T-527 W1-E Core Integrity Gate Refresh
+
+T-527 refreshed the W1-E Core/integrity evidence on 2026-05-25:
+
+- `bash scripts/core-certify.sh` PASS: `CORE_CERTIFICATION pass=16 fail=0
+  total=16`, 5 core certification tests passed, and `CORE CERTIFICATION OK`.
+- `bash scripts/check-integrity.sh` PASS: final status `INTEGRITY OK`.
+- Integrity summary: Core `16/16`, MIR strict gate OK, codegen invariant gate
+  OK, unsafe audit OK, ecosystem `syntax=200/?`, `stages=14/?`, `std=82/82`,
+  `vaisdb=261/261`, backend `phase158=18/18`, std/http_client `15/15`, std/tls
+  `2/2`, std/sqlite `3/3`, std/postgres `1/1`, package full-build smoke `2/2`,
+  VaisDB runtime `37/37`, vais-server runtime `25/25`, vais-web runtime
+  `61/77`, vais-web unit `390/390`, vais-web packages `3355/3355`, vais-web
+  full build `24/24`, cross-package schema `15/15`, and multi-domain product
+  `9/9`.
+- The vais-web runtime gate stayed in its default skip-mode for live cloud
+  deployment tests without credentials. That remains outside W1-E because
+  release, deployment, live cloud credentials, and production acceptance are
+  explicit nonclaims for this checkpoint.
+
+No failures required classification as compiler regression, product/API drift,
+unsupported non-Core feature, or deterministic environment blocker.
 
 ## Verified Gates
 
