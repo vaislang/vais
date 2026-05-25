@@ -1,509 +1,110 @@
 # Database Integration
 
-vais-server integrates natively with vaisdb. `QueryBuilder` sends queries directly over the vaisdb wire protocol without an ORM translation layer.
+Status: T-593 W3-A server API docs synced.
 
-```
-Handler (vais-server)
-    ↓  QueryBuilder.build() → SQL / VECTOR_SEARCH / GRAPH_TRAVERSE / FULLTEXT_MATCH
-    ↓  DbConnection.execute(sql)
-vaisdb (Vector + Graph + SQL + Full-text)
-```
+`vais-server` currently documents a bounded local VaisDB API surface. It is not
+a raw SQL service, not a PostgreSQL/SQLite wire-protocol bridge, and not a
+production connection-pool or remote database platform.
 
----
+## Current Local DB API
 
-## DbConnection — Database Connection
+The current server DB API is the unprefixed `v0` local route surface proven by
+`compiler/tests/vais-server/smoke/vaisdb_embedded_integration_smoke.vais`.
 
-### Embedded Mode (File-based)
+Supported route families:
 
-```vais
-use db/connection
-
-config := DbConfig.embedded("./data/myapp.vaisdb")
-match DbConnection.connect(config) {
-    Ok(conn) => {
-        println("Connected: {conn.to_string()}")
-    },
-    Err(e) => {
-        println("Connection failed: {e.message}")
-        return 1
-    },
-}
-```
-
-### TCP Mode (Remote Server)
-
-```vais
-config := DbConfig.tcp("127.0.0.1", 7300)
-match DbConnection.connect(config) {
-    Ok(conn) => { /* ... */ },
-    Err(e)   => { /* ... */ },
-}
+```http
+GET /db/books
+GET /db/books/count
+POST /db/books
+GET /db/tables/{table}/rows
+GET /db/tables/{table}/rows?id=<INT>
+GET /db/tables/{table}/rows?title=<SAFE_TITLE>
+GET /db/tables/{table}/rows?body=<SAFE_BODY>
+GET /db/tables/tasks/rows?status=<SAFE_STATUS>
+GET /db/tables/tickets/rows?state=<SAFE_STATE>
+GET /db/tables/contacts/rows
+GET /db/tables/contacts/rows?status=<SAFE_STATUS>
+GET /db/tables/stations/rows
+GET /db/tables/stations/rows?dock=<SAFE_DOCK>
+GET /db/tables/stations/rows?id=<INT>
 ```
 
-### DbConfig Fields
+`POST /db/books` accepts only this exact compact body:
 
-| Factory Method | Mode | Required Parameters |
-|---------------|------|---------------------|
-| `DbConfig.embedded(path)` | `DbMode.Embedded` | `db_path` |
-| `DbConfig.tcp(host, port)` | `DbMode.Tcp` | `host`, `port` |
-
-The default timeout is 5000ms.
-
-### Executing Queries
-
-```vais
-sql := "SELECT id, name FROM users WHERE id = 1"
-match conn.execute(sql) {
-    Ok(result) => {
-        println("Row count: {result.row_count()}")
-        I i = 0; i < result.row_count(); i = i + 1 {
-            row := result.rows.get(i)
-            println("  {row.get()}")
-        }
-    },
-    Err(e) => {
-        println("Query failed: {e.message}")
-    },
-}
+```json
+{"id":3,"title":"children"}
 ```
 
-`QueryResult` struct:
+It returns either:
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `rows` | `Vec<Row>` | List of result rows |
-| `affected_rows` | `i64` | Number of rows affected by INSERT/UPDATE/DELETE |
-| `columns` | `Vec<str>` | List of column names |
-
----
-
-## ConnectionPool — Connection Pool
-
-In production, use `ConnectionPool` instead of opening a new connection for every request.
-
-### Creating a Pool
-
-```vais
-use db/connection
-use db/pool
-
-db_config   := DbConfig.embedded("./data/myapp.vaisdb")
-pool_config := PoolConfig.default()   # min=2, max=10, idle_timeout=30s
-
-match ConnectionPool.new(db_config, pool_config) {
-    Ok(mut pool) => {
-        # Use the pool
-        stats := pool.stats()
-        println("{stats.to_string()}")
-    },
-    Err(e) => {
-        println("Pool creation failed: {e.message}")
-        return 1
-    },
-}
+```json
+{"inserted":1,"id":3,"title":"children"}
 ```
 
-### Acquiring and Releasing Connections
+or:
 
-```vais
-match pool.acquire() {
-    Ok(conn) => {
-        # Execute query
-        match conn.execute("SELECT 1") {
-            Ok(_)  => { println("Health check passed") },
-            Err(e) => { println("Error: {e.message}") },
-        }
-        # Connection must be released when done
-        pool.release(conn)
-    },
-    Err(e) => {
-        println("Pool exhausted: {e.message}")
-    },
-}
+```json
+{"inserted":0,"id":3,"title":"children"}
 ```
 
-### PoolConfig Parameters
+Table-row routes return a fixed envelope:
 
-```vais
-pool_config := PoolConfig.new(
-    2,      # min_connections — connections opened at startup
-    20,     # max_connections — maximum number of connections
-    60000,  # idle_timeout_ms — idle connection timeout (ms)
-)
+```json
+{"table":"albums","columns":[{"name":"id","type":"INT"},{"name":"title","type":"TEXT"}],"rows":[{"id":1,"title":"blue"},{"id":2,"title":"green"}]}
 ```
 
-### PoolStats
+The positive table/schema matrix is limited to the W3-A evidenced shapes:
 
-```vais
-stats := pool.stats()
-# PoolStats { active=3, idle=7, total=10 }
-println(stats.to_string())
+| Table | Columns | Filters |
+|---|---|---|
+| `albums` | `id INT`, `title TEXT` | `id`, `title` |
+| `notes` | `id INT`, `body TEXT` | `body` |
+| `tasks` | `id INT`, `title TEXT`, `status TEXT` | `status` |
+| `tickets` | `id INT`, `summary TEXT`, `state TEXT` | `state` |
+| `contacts` | `id INT`, `name TEXT`, `email TEXT`, `status TEXT` | `status` |
+| `stations` | `id INT` plus fourteen selected `TEXT` columns ending in `dock TEXT` | `id`, `dock` |
+
+## Error Envelopes
+
+Errors use this shape:
+
+```json
+{"error":"db_invalid_filter"}
 ```
 
-| Field | Meaning |
-|-------|---------|
-| `active` | Connections currently in use |
-| `idle` | Connections waiting in the pool |
-| `total` | active + idle |
-
-### Health Check
-
-```vais
-pool.health_check()   # sends SELECT 1 ping to idle connections and replaces dead ones
-```
-
----
-
-## QueryBuilder — Query Builder
-
-`QueryBuilder` supports SQL, vector search, graph traversal, and full-text search through a single fluent API.
-
-### SELECT
-
-```vais
-use db/query
-
-sql := QueryBuilder.new()
-    .select("users")
-    .column("id")
-    .column("name")
-    .column("email")
-    .where_clause("active = 1")
-    .order_by("created_at", SortDirection.Desc)
-    .limit(50)
-    .build()
-# SELECT id, name, email FROM users WHERE active = 1 ORDER BY created_at DESC LIMIT 50
-```
-
-If no columns are specified, `*` is used.
-
-```vais
-sql := QueryBuilder.new()
-    .select("products")
-    .where_clause("price < 10000")
-    .build()
-# SELECT * FROM products WHERE price < 10000
-```
-
-### Combining Multiple WHERE Conditions
-
-Multiple calls to `.where_clause()` are combined with AND.
-
-```vais
-sql := QueryBuilder.new()
-    .select("orders")
-    .column("id")
-    .column("total")
-    .where_clause("status = 'shipped'")
-    .where_clause("total > 50000")
-    .build()
-# SELECT id, total FROM orders WHERE status = 'shipped' AND total > 50000
-```
-
-### JOIN
-
-```vais
-sql := QueryBuilder.new()
-    .select("posts")
-    .column("posts.id")
-    .column("posts.title")
-    .column("users.name")
-    .join("users", "posts.user_id = users.id")
-    .where_clause("posts.published = 1")
-    .build()
-# SELECT posts.id, posts.title, users.name FROM posts
-#   JOIN users ON posts.user_id = users.id WHERE posts.published = 1
-```
-
-### INSERT
-
-```vais
-fields := Vec.new()
-fields.push("name")
-fields.push("email")
-fields.push("created_at")
-
-sql := QueryBuilder.new()
-    .insert("users", fields)
-    .build()
-# INSERT INTO users (name, email, created_at) VALUES (?, ?, ?)
-```
-
-### UPDATE
-
-```vais
-fields := Vec.new()
-fields.push("name")
-fields.push("email")
-
-sql := QueryBuilder.new()
-    .update("users", fields)
-    .where_clause("id = 42")
-    .build()
-# UPDATE users SET name = ?, email = ? WHERE id = 42
-```
-
-### DELETE
-
-```vais
-sql := QueryBuilder.new()
-    .delete("users")
-    .where_clause("id = 42")
-    .build()
-# DELETE FROM users WHERE id = 42
-```
-
-### Transactions
-
-```vais
-begin_sql  := QueryBuilder.new().begin_transaction().build()  # "BEGIN"
-commit_sql := QueryBuilder.new().commit().build()             # "COMMIT"
-rb_sql     := QueryBuilder.new().rollback().build()           # "ROLLBACK"
-
-match conn.execute(begin_sql) {
-    Ok(_)  => {},
-    Err(e) => { return Err(e) },
-}
-# ... execute DML queries ...
-match conn.execute(commit_sql) {
-    Ok(_)  => { println("Transaction committed") },
-    Err(e) => {
-        conn.execute(rb_sql)
-        println("Commit failed, rolled back: {e.message}")
-    },
-}
-```
-
----
-
-## vaisdb Hybrid Queries
-
-### Vector Search (VECTOR_SEARCH)
-
-```vais
-# Find top-10 similar documents using an embedding vector
-query_vec := "[0.12, 0.87, 0.34, 0.56]"
-
-sql := QueryBuilder.new()
-    .select("documents")
-    .column("id")
-    .column("title")
-    .column("content")
-    .vector_search("embeddings", query_vec, 10)
-    .build()
-# SELECT id, title, content FROM documents
-#   WHERE VECTOR_SEARCH(embeddings, [0.12, 0.87, 0.34, 0.56], 10)
-```
-
-### Graph Traversal (GRAPH_TRAVERSE)
-
-```vais
-# Traverse from node "user-42" in the outbound direction up to depth 3
-sql := QueryBuilder.new()
-    .column("id")
-    .column("label")
-    .graph_traverse("user-42", 3, "outbound")
-    .build()
-# SELECT id, label FROM GRAPH_TRAVERSE('user-42', 3, 'outbound')
-```
-
-Direction options: `"outbound"`, `"inbound"`, `"any"`
-
-### Full-Text Search (FULLTEXT_MATCH)
-
-```vais
-sql := QueryBuilder.new()
-    .select("articles")
-    .column("id")
-    .column("title")
-    .column("body")
-    .fulltext_match("body", "vais-server routing")
-    .limit(20)
-    .build()
-# SELECT id, title, body FROM articles
-#   WHERE FULLTEXT_MATCH(body, 'vais-server routing') LIMIT 20
-```
-
----
-
-## Migrations (Migrator)
-
-`Migrator` manages version-based schema migrations. Internally, it tracks applied migrations using the `__vaisdb_migrations` table.
-
-### Defining and Running Migrations
-
-```vais
-use db/connection
-use db/migrate
-
-fn run_migrations(conn: DbConnection) -> Result<i64, VaisDbError> {
-    migrator_result := Migrator.new(conn)
-    match migrator_result {
-        Err(e) => { return Err(e) },
-        Ok(mut migrator) => {
-            # Version 1 — create users table
-            m1 := Migration.new(
-                1,
-                "create_users",
-                "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL)",
-                "DROP TABLE IF EXISTS users"
-            )
-            migrator.add_migration(m1)
-
-            # Version 2 — create posts table
-            m2 := Migration.new(
-                2,
-                "create_posts",
-                "CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, title TEXT NOT NULL, body TEXT, published INTEGER DEFAULT 0)",
-                "DROP TABLE IF EXISTS posts"
-            )
-            migrator.add_migration(m2)
-
-            # Version 3 — add index on posts
-            m3 := Migration.new(
-                3,
-                "add_posts_user_index",
-                "CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id)",
-                "DROP INDEX IF EXISTS idx_posts_user_id"
-            )
-            migrator.add_migration(m3)
-
-            # Run pending migrations in order
-            migrator.run_up()
-        },
-    }
-}
-```
-
-### Rollback
-
-```vais
-# Roll back to version 1 (versions 2 and 3 are run in reverse order)
-match migrator.run_down(1) {
-    Ok(count) => { println("{count} migration(s) rolled back") },
-    Err(e)    => { println("Rollback failed: {e.message}") },
-}
-```
-
-### Migration Structure
-
-```vais
-m := Migration.new(
-    version,   # i64 — monotonically increasing version number
-    name,      # str — migration name (snake_case recommended)
-    up_sql,    # str — SQL to apply
-    down_sql,  # str — SQL to roll back
-)
-```
-
----
-
-## Full Integration Example
-
-The following shows the complete flow: connecting to the database and running migrations at server startup, then querying data with QueryBuilder inside a handler.
-
-```vais
-use core/app
-use core/config
-use core/context
-use db/connection
-use db/migrate
-use db/query
-use src/util/json
-
-C PORT:    u16 = 8080
-C DB_PATH: str = "./data/app.vaisdb"
-
-fn handle_get_user(ctx: Context) -> Response {
-    id := ctx.path_params
-
-    sql := QueryBuilder.new()
-        .select("users")
-        .column("id")
-        .column("name")
-        .column("email")
-        .where_clause("id = " + id)
-        .build()
-
-    # In a real implementation, query the DB with conn.execute(sql)
-    println("  [db] {sql}")
-
-    pairs := Vec.new()
-    pairs.push("id")
-    pairs.push(id)
-    pairs.push("name")
-    pairs.push("Alice")
-    ctx.json(200, json_encode(pairs))
-}
-
-fn main() -> i64 {
-    # 1. Connect to DB
-    db_config := DbConfig.embedded(DB_PATH)
-    db := match DbConnection.connect(db_config) {
-        Err(e) => {
-            println("DB connection failed: {e.message}")
-            return 1
-        },
-        Ok(conn) => { conn },
-    }
-
-    # 2. Run migrations
-    match Migrator.new(db) {
-        Err(e) => {
-            println("Migrator init failed: {e.message}")
-            return 1
-        },
-        Ok(mut migrator) => {
-            m1 := Migration.new(
-                1, "create_users",
-                "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL)",
-                "DROP TABLE IF EXISTS users"
-            )
-            migrator.add_migration(m1)
-            match migrator.run_up() {
-                Ok(count) => { println("{count} migration(s) applied") },
-                Err(e)    => { println("Migration failed: {e.message}") return 1 },
-            }
-        },
-    }
-
-    # 3. Configure HTTP server
-    config := ServerConfig.default()
-    app    := mut App.new(config)
-
-    app.use("logger")
-    app.use("cors")
-    app.get("/users/:id", "handle_get_user")
-
-    println("Server starting: :{PORT}")
-    match app.listen(":{PORT}") {
-        Ok(_) => {},
-        Err(e) => { println("Server error: {e.message}") return 1 },
-    }
-    0
-}
-```
-
----
-
-## QueryKind Reference
-
-| `QueryKind` | Builder Method | Example Output |
-|-------------|---------------|----------------|
-| `Standard` (SELECT) | `.select(table)` | `SELECT ... FROM ...` |
-| `Standard` (INSERT) | `.insert(table, fields)` | `INSERT INTO ... VALUES (...)` |
-| `Standard` (UPDATE) | `.update(table, fields)` | `UPDATE ... SET ...` |
-| `Standard` (DELETE) | `.delete(table)` | `DELETE FROM ...` |
-| `VectorSearch` | `.vector_search(col, vec, k)` | `... WHERE VECTOR_SEARCH(...)` |
-| `GraphTraverse` | `.graph_traverse(start, depth, dir)` | `... FROM GRAPH_TRAVERSE(...)` |
-| `FulltextMatch` | `.fulltext_match(col, query)` | `... WHERE FULLTEXT_MATCH(...)` |
-| `BeginTransaction` | `.begin_transaction()` | `BEGIN` |
-| `Commit` | `.commit()` | `COMMIT` |
-| `Rollback` | `.rollback()` | `ROLLBACK` |
-
----
-
-## Next Steps
-
-- [vaisdb Documentation](../vaisdb/README.md) — Full features and schema design of the vaisdb database engine
-- [Routing Guide](./routing.md) — Patterns for returning QueryBuilder results as JSON responses from handlers
+Current selected error names include:
+
+- `db_invalid_table`
+- `db_invalid_filter`
+- `db_invalid_request`
+- `db_unsupported_table`
+- `db_unavailable`
+- `db_query_failed`
+- `db_close_failed`
+- `db_write_failed`
+- `db_conflict`
+- `admin_forbidden` for the local guarded seed wrapper
+
+## Not Supported
+
+- Raw SQL endpoints such as `/db/sql`, `/db/query`, `/db/execute`, or `sql=`.
+- `/api/v1` or `/v1` aliases, required version headers, or content negotiation.
+- Arbitrary table/schema/admin APIs, table listing, DDL routes, migrations, or
+  catalog browsing.
+- Projection, sorting, ordering, limit, offset, `where=`, or arbitrary
+  `filter=` controls.
+- Generic writes such as `POST`, `PUT`, `PATCH`, or `DELETE` on table routes.
+- Alternate `POST /db/books` bodies, extra fields, arrays, or arbitrary values.
+- `DbConnection.execute(sql)` as a certified bridge to `EmbeddedDatabase`.
+- `QueryBuilder` as a public server DB API surface.
+- TCP remote DB mode, connection pooling, production credentials, deployment,
+  production auth/session/RBAC, rate limits, CORS/CSRF, audit policy, health
+  readiness, observability, backup, recovery, or production acceptance.
+
+## Evidence
+
+- `compiler/tests/vais-server/smoke/vaisdb_embedded_integration_smoke.vais`
+- `docs/design/server-vaisdb-bounded-api-contract.md`
+- `docs/design/vais-completion-roadmap.md`
+- `docs/public-alpha/supported-subset.md`
