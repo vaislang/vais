@@ -30,6 +30,27 @@ because the current `affine` annotation has no use-count enforcement
 not fit the A2 shape. If Step 16 (I-5 memory protocol) later adds
 enforcement, affine can graduate Controlled → A2 at that time.
 
+### T-486 status drift audit
+
+T-486 (2026-05-25) reconciles W1-A kickoff state:
+
+- This file says A2-01 through A2-05 are LANDED.
+- Master Plan Step 9 says A2-01/02/03/04/05 are LANDED and A2-06 affine is
+  Controlled.
+- Generated `EXCLUDED_FEATURES.md` still renders the Phase A2 list as "Active
+  promotion candidates" because it reads `master-plan.toml` `phase.A2.candidates`.
+- Therefore W1-A is an evidence-refresh and inventory-alignment queue, not a
+  new semantic promotion queue.
+
+Next actions:
+
+1. Refresh evidence for `?`, dyn/trait objects, closures, and function pointer
+   types.
+2. Align master-plan/generated inventory wording so landed A2 subsets are not
+   presented as unassigned active candidates.
+3. Keep compiler behavior unchanged unless a refreshed fixture finds a real
+   blocker.
+
 ---
 
 ## A2-01 — `?` operator on Result/Option (Core-typed, single-module)
