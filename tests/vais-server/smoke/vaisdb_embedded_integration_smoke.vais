@@ -3111,6 +3111,42 @@ fn check_table_rows_invalid_inputs(db_path: str) -> i64 {
         return audit_path_status
     }
 
+    config_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/config", "")
+    config_path_status := mut expect_db_invalid_table_response(config_path, 715)
+    I config_path_status != 0 {
+        return config_path_status
+    }
+
+    env_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/env", "")
+    env_path_status := mut expect_db_invalid_table_response(env_path, 720)
+    I env_path_status != 0 {
+        return env_path_status
+    }
+
+    deploy_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/deploy", "")
+    deploy_path_status := mut expect_db_invalid_table_response(deploy_path, 725)
+    I deploy_path_status != 0 {
+        return deploy_path_status
+    }
+
+    release_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/release", "")
+    release_path_status := mut expect_db_invalid_table_response(release_path, 730)
+    I release_path_status != 0 {
+        return release_path_status
+    }
+
+    publish_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/publish", "")
+    publish_path_status := mut expect_db_invalid_table_response(publish_path, 735)
+    I publish_path_status != 0 {
+        return publish_path_status
+    }
+
+    docs_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/docs", "")
+    docs_path_status := mut expect_db_invalid_table_response(docs_path, 740)
+    I docs_path_status != 0 {
+        return docs_path_status
+    }
+
     0
 }
 
@@ -3215,6 +3251,54 @@ fn check_table_rows_unfiltered_query_rejected(db_path: str) -> i64 {
     audit_status := mut expect_db_invalid_filter_response(audit_query, 705)
     I audit_status != 0 {
         return audit_status
+    }
+
+    config_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "config=prod", "")
+    config_status := mut expect_db_invalid_filter_response(config_query, 710)
+    I config_status != 0 {
+        return config_status
+    }
+
+    env_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "env=prod", "")
+    env_status := mut expect_db_invalid_filter_response(env_query, 715)
+    I env_status != 0 {
+        return env_status
+    }
+
+    database_url_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "database_url=file.db", "")
+    database_url_status := mut expect_db_invalid_filter_response(database_url_query, 720)
+    I database_url_status != 0 {
+        return database_url_status
+    }
+
+    deploy_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "deploy=1", "")
+    deploy_status := mut expect_db_invalid_filter_response(deploy_query, 725)
+    I deploy_status != 0 {
+        return deploy_status
+    }
+
+    release_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "release=1", "")
+    release_status := mut expect_db_invalid_filter_response(release_query, 730)
+    I release_status != 0 {
+        return release_status
+    }
+
+    publish_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "publish=1", "")
+    publish_status := mut expect_db_invalid_filter_response(publish_query, 735)
+    I publish_status != 0 {
+        return publish_status
+    }
+
+    tls_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "tls=1", "")
+    tls_status := mut expect_db_invalid_filter_response(tls_query, 740)
+    I tls_status != 0 {
+        return tls_status
+    }
+
+    docs_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "docs=1", "")
+    docs_status := mut expect_db_invalid_filter_response(docs_query, 745)
+    I docs_status != 0 {
+        return docs_status
     }
 
     contacts_status_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=active", "")
@@ -3994,6 +4078,83 @@ fn check_books_post_route_invalid_body(db_path: str) -> i64 {
         println("FAIL db books post audit field body")
         println(audit_field.body)
         return 711
+    }
+
+    config_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"config\":\"prod\"}")
+    I config_field.status != 400 {
+        println("FAIL db books post config field status")
+        return 715
+    }
+    I config_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post config field body")
+        println(config_field.body)
+        return 716
+    }
+
+    env_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"env\":\"prod\"}")
+    I env_field.status != 400 {
+        println("FAIL db books post env field status")
+        return 720
+    }
+    I env_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post env field body")
+        println(env_field.body)
+        return 721
+    }
+
+    database_url_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"database_url\":\"file.db\"}")
+    I database_url_field.status != 400 {
+        println("FAIL db books post database url field status")
+        return 725
+    }
+    I database_url_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post database url field body")
+        println(database_url_field.body)
+        return 726
+    }
+
+    deploy_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"deploy\":true}")
+    I deploy_field.status != 400 {
+        println("FAIL db books post deploy field status")
+        return 730
+    }
+    I deploy_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post deploy field body")
+        println(deploy_field.body)
+        return 731
+    }
+
+    release_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"release\":true}")
+    I release_field.status != 400 {
+        println("FAIL db books post release field status")
+        return 735
+    }
+    I release_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post release field body")
+        println(release_field.body)
+        return 736
+    }
+
+    publish_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"publish\":true}")
+    I publish_field.status != 400 {
+        println("FAIL db books post publish field status")
+        return 740
+    }
+    I publish_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post publish field body")
+        println(publish_field.body)
+        return 741
+    }
+
+    tls_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"tls\":true}")
+    I tls_field.status != 400 {
+        println("FAIL db books post tls field status")
+        return 745
+    }
+    I tls_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post tls field body")
+        println(tls_field.body)
+        return 746
     }
 
     array_body := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "[{\"id\":3,\"title\":\"children\"}]")
