@@ -380,6 +380,17 @@ T-490 (2026-05-25) refreshed A2-05 function pointer evidence:
 A2-05 remains LANDED. This refresh does not widen function pointer syntax or
 dispatch semantics.
 
+## T-491 inventory wording alignment
+
+T-491 (2026-05-25) aligns generated inventory wording:
+
+- `master-plan.toml` Phase A2 identifies A2-01 through A2-05 as landed
+  certified subsets and A2-06 affine as Controlled.
+- Generated `EXCLUDED_FEATURES.md` now renders Phase A2 as "A2 certified
+  subsets" instead of active promotion candidates.
+- New A2 candidates require a later explicit roadmap revision with formal
+  predicates and fixtures.
+
 ---
 
 ## How to add a new A2 entry
