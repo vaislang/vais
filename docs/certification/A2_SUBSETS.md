@@ -187,6 +187,21 @@ A2-02 is promoted because vaisdb depends on this exact pattern
 the cross-module shape so future imports/resolver work cannot
 silently regress this surface.
 
+### T-487 evidence refresh
+
+T-487 (2026-05-25) refreshed the `?` operator A2 evidence:
+
+- `bash tests/empirical/A2/A2-01_q_operator_core/run.sh` PASS:
+  positive exits 43; negative is rejected at `vaisc check`.
+- `bash tests/empirical/A2/A2-02_q_operator_cross_module/run.sh` PASS:
+  positive cross-module `?` exits 43; negative is rejected at `vaisc check`.
+- `bash scripts/check-empirical.sh A2` returned non-zero only because
+  `A2-04_inline_closure` drifted: its negative fixture is now rejected at
+  `vaisc check` and should migrate to `check_fails` in the closure refresh
+  slice.
+
+A2-01 and A2-02 remain LANDED. This refresh does not widen `?` semantics.
+
 ---
 
 ## A2-03 — `dyn` / trait object dispatch (narrow subset, multi-impl)
