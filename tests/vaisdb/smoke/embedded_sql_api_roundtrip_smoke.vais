@@ -71,6 +71,10 @@
 #     DELETE path and the fixed non-null secondary UNIQUE DELETE path by
 #     restoring heap plus index pages to pre-DELETE images and reopening
 #     through EmbeddedDatabase.open().
+#   - Promotes the W2-D implicit single-statement transaction visibility slice:
+#     successful public mutations are visible through same-handle and
+#     already-promoted reopen reads, while a post-start primary-key duplicate
+#     INSERT failure leaves no partially visible row.
 #   - Pins the helperization boundary by keeping sixteen-column dynamic
 #     descriptor CREATE rejected while the already certified 2-15 column
 #     shapes stay green.
@@ -10786,6 +10790,27 @@ fn main() -> i64 {
         Ok(_) => { return 235 },
         Err(_) => {},
     }
+    pk_after_failed_dup := mut match pk_db.query("select * from people") {
+        Ok(r) => r,
+        Err(_) => { return 255 },
+    }
+    I pk_after_failed_dup.row_count() != 2 as u64 { return 255 }
+    pk_after_failed_dup_rows := mut pk_after_failed_dup.get_rows()
+    pk_after_failed_dup_seen_ada := mut false
+    pk_after_failed_dup_seen_grace := mut false
+    LF ri: 0..pk_after_failed_dup_rows.len() {
+        candidate := mut &pk_after_failed_dup_rows[ri]
+        I expect_cell(candidate, 0, "1") && expect_cell(candidate, 1, "ada") {
+            pk_after_failed_dup_seen_ada = true
+        }
+        I expect_cell(candidate, 0, "2") && expect_cell(candidate, 1, "grace") {
+            pk_after_failed_dup_seen_grace = true
+        }
+    }
+    I !pk_after_failed_dup_seen_ada { return 255 }
+    I !pk_after_failed_dup_seen_grace { return 255 }
+    pk_after_failed_dup.free_owned_text()
+    pk_after_failed_dup.free_owned_text()
     match pk_db.execute("insert into people (name, id) values ('missing', NULL)") {
         Ok(_) => { return 236 },
         Err(_) => {},
