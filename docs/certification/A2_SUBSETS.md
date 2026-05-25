@@ -391,6 +391,22 @@ T-491 (2026-05-25) aligns generated inventory wording:
 - New A2 candidates require a later explicit roadmap revision with formal
   predicates and fixtures.
 
+## T-492 empirical gate refresh
+
+T-492 (2026-05-25) reran the aligned A2 empirical gate:
+
+```text
+PASS  A2-01_q_operator_core
+PASS  A2-02_q_operator_cross_module
+PASS  A2-03_dyn_trait_dispatch
+PASS  A2-04_inline_closure
+PASS  A2-05_fn_pointer_param
+
+EMPIRICAL FIXTURES: 5 pass / 0 drift / 0 broken / 0 skipped (total 5)
+```
+
+No blocker was found. No A2 semantics were widened.
+
 ---
 
 ## How to add a new A2 entry
