@@ -119,13 +119,14 @@ AI instructions:
 
 - Use Result&lt;T, E&gt; for recoverable failures and Option&lt;T&gt; for absence.
 - Use match when all handled variants must be visible to the reader.
-- Use ? only where the surrounding function result type matches the propagated error shape.
-- Terminate statement-form ? bindings with ; before the next statement so the parser cannot read them as ternary expressions.
+- Use ? only inside the A2-01/A2-02 Core-typed Result or Option predicates.
+- Use typed statement bindings such as x: i64 = fallible()? for try propagation.
+- Do not use ? as cleanup, ownership transfer, or resource-release proof.
 
 Use:
 
 - `fn checked_div(a: i64, b: i64) -> Result<i64, str>`
-- `value := fallible()?;`
+- `value: i64 = fallible()?`
 - `return Err("message")`
 - `Ok(value)`
 - `None`
@@ -136,6 +137,37 @@ Avoid:
 - Throw/catch syntax
 - Null values
 - Implicit failure returns
+- ? in functions that do not return matching Result or Option
+- Relying on ? to free DB/runtime resources
+
+### A2 certified subset boundaries
+
+Feature id: `a2-certified-subsets`
+
+Status: certified core
+
+The try operator, dyn dispatch, inline closures, and function-pointer parameters are certified only inside the predicates in A2_SUBSETS.md.
+
+AI instructions:
+
+- Use ? only for Core-typed Result/Option value and error propagation in matching return functions.
+- Use dyn dispatch only for declared traits with visible impls; invalid non-implementers are source errors.
+- Use closures only as inline or synchronously invoked no-escape values.
+- Use function-pointer parameters only with named functions and Core-typed signatures.
+
+Use:
+
+- `x: i64 = fallible()?`
+- `fn call(g: dyn Greet) -> i64 { g.greet() }`
+- `apply(|n| n + 1, 41)`
+- `fn apply(f: fn(i64) -> i64, x: i64) -> i64`
+
+Avoid:
+
+- Using ? to clean up resources or transfer ownership
+- as dyn casts or passing values without a visible impl
+- Returning or storing closures that capture local variables
+- Stored function values or closure-to-fn-pointer coercions
 
 ### References, raw pointers, and slices
 
@@ -150,6 +182,7 @@ AI instructions:
 - Use &amp;T and &amp;mut T for references, *T for typed raw pointers, and &amp;[T] or &amp;mut [T] for slices.
 - Use explicit dereference when a value is required from a reference.
 - Do not rely on automatic reference-to-value coercion.
+- Treat field access through a reference as different from implicit &amp;T to T value conversion.
 
 Use:
 
@@ -163,6 +196,35 @@ Avoid:
 - Implicit ref-to-value unification
 - Implicit typed pointer to raw address conversion
 - Treating slices as plain pointers without length
+
+### Explicit resource cleanup
+
+Feature id: `explicit-resource-cleanup`
+
+Status: evidence scoped
+
+DB/runtime cleanup is explicit and manual unless a named gate promotes a narrower Drop behavior.
+
+AI instructions:
+
+- Call the explicit free, close, unpin, or unlock helper on success and error paths.
+- Use EmbeddedResult.free_owned_text() for owned DB query result text.
+- Use Statement.free_parser_owned_text() and token cleanup helpers for parser-owned text.
+- Do not rely on automatic Drop, RAII, affine/linear annotations, or ? to release resources.
+
+Use:
+
+- `result.free_owned_text()`
+- `Statement.free_parser_owned_text()`
+- `free_token_vec_owned_text(tokens)`
+- `cleanup before return Err(e)`
+
+Avoid:
+
+- Automatic Token, Statement, or EmbeddedResult Drop
+- Broad Result cleanup on return or ? early return
+- Using affine or linear annotations as ownership enforcement
+- Leaving cleanup to panic hooks or runtime recovery
 
 ### Rejected and controlled surface boundary
 
@@ -247,6 +309,35 @@ Avoid:
 - Product-complete v1.0
 - Single full ecosystem runtime aggregate main gate unless PUBLIC_STATUS.md says it exists
 - Unscoped production-readiness claims
+
+### Diagnostic and CLI boundary
+
+Feature id: `diagnostic-cli-boundary`
+
+Status: evidence scoped
+
+Only selected compiler-facing check, build, and pre-execution run failures have stable W1-C diagnostic envelopes.
+
+AI instructions:
+
+- Use --no-update-check and --timeout 0 for deterministic local diagnostic checks.
+- Treat error[E001] type mismatches as source errors to fix, not warnings.
+- Use focused empirical or vaisc tests before claiming a diagnostic envelope.
+- Keep DB runtime Err envelopes separate from compiler diagnostics.
+
+Use:
+
+- `vaisc --no-update-check --timeout 0 check file.vais`
+- `error[E001]`
+- `bash scripts/check-empirical.sh A2`
+- `cargo test -p vaisc --test error_message_tests`
+
+Avoid:
+
+- Panic hook output as a stable diagnostic
+- Crash-report files as user-facing behavior
+- LLVM verifier, clang, or linker text as stable product errors
+- Timeout wording, shell stderr ordering, or production observability claims
 
 ### Verification-first development
 

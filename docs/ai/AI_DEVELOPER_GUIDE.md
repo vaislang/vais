@@ -32,10 +32,13 @@ node scripts/check-ai-docs-sync.mjs
 - `strict-type-boundaries`: Numeric adaptation is allowed in numeric contexts, but bool, str, structural types, and typed pointers do not silently become i64. Status: certified core.
 - `generic-enum-layout`: Option&lt;T&gt; and Result&lt;T, E&gt; use the canonical erased runtime enum layout with an i32 tag and payload storage. Status: certified core.
 - `result-option-flow`: Result&lt;T, E&gt;, Option&lt;T&gt;, match, the try operator, and unwrap-style lowering are explicit language surfaces. Status: certified core.
+- `a2-certified-subsets`: The try operator, dyn dispatch, inline closures, and function-pointer parameters are certified only inside the predicates in A2_SUBSETS.md. Status: certified core.
 - `references-pointers-slices`: References, raw pointers, and slices are distinct type surfaces with explicit conversions and explicit dereference expectations. Status: certified core.
+- `explicit-resource-cleanup`: DB/runtime cleanup is explicit and manual unless a named gate promotes a narrower Drop behavior. Status: evidence scoped.
 - `rejected-controlled-surfaces`: A4, Rejected, and Controlled inventories are not supported coding surfaces unless the language spec or A2 subset docs name a narrower certified subset. Status: non-claim.
 - `playground-mode-contract`: The playground exposes named modes. Server-WASM is API compiled, Browser-JS is a smoke path, and preview mode is not certified compilation. Status: evidence scoped.
 - `ecosystem-evidence-boundary`: DB, server, and web behavior is public only where named gates cover it. Do not describe the ecosystem as product-complete. Status: evidence scoped.
+- `diagnostic-cli-boundary`: Only selected compiler-facing check, build, and pre-execution run failures have stable W1-C diagnostic envelopes. Status: evidence scoped.
 - `verification-first-development`: AI-written Vais code must be checked against the compiler and named gates instead of relying on model memory. Status: certified core.
 
 ## Failure Handling
