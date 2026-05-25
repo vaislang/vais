@@ -4055,6 +4055,51 @@ fn check_books_post_admin_guarded_denied(db_path: str) -> i64 {
     wrong_status := mut expect_admin_forbidden(wrong_response, 135)
     I wrong_status != 0 { return wrong_status }
 
+    missing_role_store := mut SessionStore.new()
+    missing_role := missing_role_store.create("missing-role", 120)
+    missing_role_store.set_data(missing_role.session_id, "capability", "books.seed")
+    missing_role_response := mut db_books_post_admin_guarded_handler(
+        db_path,
+        "POST",
+        "/db/books",
+        "{\"id\":3,\"title\":\"children\"}",
+        missing_role_store,
+        missing_role.session_id,
+    )
+    missing_role_status := mut expect_admin_forbidden(missing_role_response, 145)
+    I missing_role_status != 0 { return missing_role_status }
+
+    wrong_role_store := mut SessionStore.new()
+    wrong_role := wrong_role_store.create("wrong-role", 120)
+    wrong_role_store.set_data(wrong_role.session_id, "role", "viewer")
+    wrong_role_store.set_data(wrong_role.session_id, "capability", "books.seed")
+    wrong_role_response := mut db_books_post_admin_guarded_handler(
+        db_path,
+        "POST",
+        "/db/books",
+        "{\"id\":3,\"title\":\"children\"}",
+        wrong_role_store,
+        wrong_role.session_id,
+    )
+    wrong_role_status := mut expect_admin_forbidden(wrong_role_response, 150)
+    I wrong_role_status != 0 { return wrong_role_status }
+
+    bearer_store := mut SessionStore.new()
+    bearer := bearer_store.create("bearer-alias", 120)
+    bearer_store.set_data(bearer.session_id, "role", "admin")
+    bearer_store.set_data(bearer.session_id, "capability", "books.seed")
+    bearer_like_session_id := "Bearer " + bearer.session_id
+    bearer_response := mut db_books_post_admin_guarded_handler(
+        db_path,
+        "POST",
+        "/db/books",
+        "{\"id\":3,\"title\":\"children\"}",
+        bearer_store,
+        bearer_like_session_id,
+    )
+    bearer_status := mut expect_admin_forbidden(bearer_response, 155)
+    I bearer_status != 0 { return bearer_status }
+
     expired_store := mut SessionStore.new()
     expired := expired_store.create("expired-admin", 1)
     expired_store.set_data(expired.session_id, "role", "admin")
