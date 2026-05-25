@@ -11,6 +11,48 @@ fixtures listed in `tests/core/manifest.tsv`. Broader CLI presentation,
 localization, recovery notes, and ecosystem diagnostics remain outside this
 contract until they are promoted by fixtures.
 
+## W1-C Diagnostic And CLI Readiness Contract
+
+Status: T-506 selected W1-C as a bounded diagnostic/CLI readiness queue.
+
+W1-C extends the diagnostic contract only where current source already exposes
+a stable compiler-facing boundary or where a focused fixture can prove one. The
+queue does not promote broad localization, editor/LSP behavior, package
+registry behavior, release behavior, or production crash recovery.
+
+Promoted or eligible W1-C surfaces:
+
+- `vaisc check` parse and type failures that flow through
+  `error_formatter::format_parse_error()` or
+  `error_formatter::format_type_error()` and print a stable `error[CODE]`
+  header before exiting nonzero.
+- `vaisc build` type and codegen failures that flow through
+  `format_type_error()`, `format_codegen_error()`, or
+  `format_spanned_codegen_error()` before the top-level CLI exits nonzero.
+- Explicit unsupported-backend or unsupported-mode CLI failures that are
+  deterministic, bounded to one command path, and covered by focused evidence.
+- The A2-03 invalid dyn trait construction/cast follow-up selected by T-507:
+  the promoted target is a product-readable rejection before LLVM/runtime crash,
+  not broader dyn trait semantic widening.
+
+W1-C nonclaims:
+
+- Program runtime exits from `vaisc run` remain user-program behavior, not
+  compiler diagnostics, unless the failure occurs during compiler/build setup.
+- Panic hook output and optional crash-report files remain internal compiler
+  error handling, not stable user diagnostics.
+- Timeout text, color styling, localized prose, help wording, shell-specific
+  stderr ordering, editor/LSP diagnostics, package registry commands, release
+  publishing, deployment, and production observability remain outside W1-C.
+- No rejected feature becomes supported merely because its diagnostic wording is
+  refreshed.
+
+W1-C acceptance rule: every promoted diagnostic/CLI slice must name the command
+path, expected exit class, stable diagnostic code or bounded error string, and
+the exact focused gate that proves the behavior. If a failure can only be seen
+as a panic, LLVM verifier error, linker failure, or unstructured runtime crash,
+it must be fixed or explicitly carried as a blocker before W1-C can close.
+
 ## Current Gate
 
 `crates/vaisc/tests/core_certification.rs` enforces the contract through
