@@ -207,6 +207,33 @@ mod tests {
         assert_eq!(context.filename(), "unicode_파일.vais");
     }
 
+    #[test]
+    fn test_format_type_error_includes_stable_header() {
+        let err = TypeError::Mismatch {
+            expected: "i64".to_string(),
+            found: "str".to_string(),
+            span: Some(Span::new(17, 20)),
+        };
+        let source = "fn main() -> i64 = \"x\"";
+        let path = PathBuf::from("test.vais");
+        let output = format_type_error(&err, source, &path);
+
+        assert!(output.contains("error[E001]"));
+        assert!(output.contains("test.vais"));
+        assert!(output.contains("test.vais:1:18"));
+    }
+
+    #[test]
+    fn test_format_parse_error_includes_stable_header() {
+        let source = "fn main( { }";
+        let err = vais_parser::parse(source).expect_err("source must fail to parse");
+        let path = PathBuf::from("parse_error.vais");
+        let output = format_parse_error(&err, source, &path);
+
+        assert!(output.contains("error[P"));
+        assert!(output.contains("parse_error.vais"));
+    }
+
     // ========== Codegen error formatting ==========
 
     #[test]
