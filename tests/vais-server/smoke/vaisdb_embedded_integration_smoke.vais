@@ -3027,6 +3027,48 @@ fn check_table_rows_invalid_inputs(db_path: str) -> i64 {
         return bad_method_status
     }
 
+    raw_sql_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/sql", "")
+    raw_sql_path_status := mut expect_db_invalid_table_response(raw_sql_path, 600)
+    I raw_sql_path_status != 0 {
+        return raw_sql_path_status
+    }
+
+    raw_query_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/query", "")
+    raw_query_path_status := mut expect_db_invalid_table_response(raw_query_path, 605)
+    I raw_query_path_status != 0 {
+        return raw_query_path_status
+    }
+
+    raw_execute_path := mut db_table_rows_handler(db_path.clone(), "GET", "/db/execute", "")
+    raw_execute_path_status := mut expect_db_invalid_table_response(raw_execute_path, 610)
+    I raw_execute_path_status != 0 {
+        return raw_execute_path_status
+    }
+
+    version_alias := mut db_table_rows_handler(db_path.clone(), "GET", "/api/v1/db/tables/albums/rows", "")
+    version_alias_status := mut expect_db_invalid_table_response(version_alias, 615)
+    I version_alias_status != 0 {
+        return version_alias_status
+    }
+
+    bad_put := mut db_table_rows_handler(db_path.clone(), "PUT", "/db/tables/albums/rows", "")
+    bad_put_status := mut expect_db_invalid_table_response(bad_put, 620)
+    I bad_put_status != 0 {
+        return bad_put_status
+    }
+
+    bad_patch := mut db_table_rows_handler(db_path.clone(), "PATCH", "/db/tables/albums/rows", "")
+    bad_patch_status := mut expect_db_invalid_table_response(bad_patch, 625)
+    I bad_patch_status != 0 {
+        return bad_patch_status
+    }
+
+    bad_delete := mut db_table_rows_handler(db_path.clone(), "DELETE", "/db/tables/albums/rows", "")
+    bad_delete_status := mut expect_db_invalid_table_response(bad_delete, 630)
+    I bad_delete_status != 0 {
+        return bad_delete_status
+    }
+
     0
 }
 
@@ -3041,6 +3083,30 @@ fn check_table_rows_unfiltered_query_rejected(db_path: str) -> i64 {
     sql_status := mut expect_db_invalid_filter_response(sql_query, 396)
     I sql_status != 0 {
         return sql_status
+    }
+
+    columns_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "columns=id", "")
+    columns_status := mut expect_db_invalid_filter_response(columns_query, 635)
+    I columns_status != 0 {
+        return columns_status
+    }
+
+    sort_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "sort=state", "")
+    sort_status := mut expect_db_invalid_filter_response(sort_query, 640)
+    I sort_status != 0 {
+        return sort_status
+    }
+
+    limit_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "limit=1", "")
+    limit_status := mut expect_db_invalid_filter_response(limit_query, 645)
+    I limit_status != 0 {
+        return limit_status
+    }
+
+    where_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/tickets/rows", "where=state=done", "")
+    where_status := mut expect_db_invalid_filter_response(where_query, 650)
+    I where_status != 0 {
+        return where_status
     }
 
     contacts_status_query := mut db_table_rows_query_handler(db_path.clone(), "GET", "/db/tables/contacts/rows", "status=active", "")
@@ -3722,6 +3788,51 @@ fn check_books_post_route_invalid_body(db_path: str) -> i64 {
         println(response.body)
         return 62
     }
+
+    spaced := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{ \"id\":3, \"title\":\"children\" }")
+    I spaced.status != 400 {
+        println("FAIL db books post spaced body status")
+        return 655
+    }
+    I spaced.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post spaced body")
+        println(spaced.body)
+        return 656
+    }
+
+    extra_field := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "{\"id\":3,\"title\":\"children\",\"sql\":\"select\"}")
+    I extra_field.status != 400 {
+        println("FAIL db books post extra field status")
+        return 660
+    }
+    I extra_field.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post extra field body")
+        println(extra_field.body)
+        return 661
+    }
+
+    array_body := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "[{\"id\":3,\"title\":\"children\"}]")
+    I array_body.status != 400 {
+        println("FAIL db books post array body status")
+        return 665
+    }
+    I array_body.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post array body")
+        println(array_body.body)
+        return 666
+    }
+
+    empty_body := mut db_books_post_handler(db_path.clone(), "POST", "/db/books", "")
+    I empty_body.status != 400 {
+        println("FAIL db books post empty body status")
+        return 670
+    }
+    I empty_body.body != "{\"error\":\"db_invalid_request\"}" {
+        println("FAIL db books post empty body")
+        println(empty_body.body)
+        return 671
+    }
+
     0
 }
 
