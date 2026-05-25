@@ -427,12 +427,48 @@ fn main() -> i64 {
         Ok(_) => { return 217 },
         Err(_) => {},
     }
+    match db.execute("create table _vaisdb_migrations (version int, name text, applied_at int, status text)") {
+        Ok(_) => { println("T562: migration tracking table shape unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
 
     created := mut match db.execute("create table people (id int, name text)") {
         Ok(n) => n,
         Err(_) => { return 2 },
     }
     I created != 0 as u64 { return 3 }
+    match db.execute("create index people_name_idx on people (name)") {
+        Ok(_) => { println("T562: public CREATE INDEX unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match db.execute("create unique index people_name_unique_public on people (name)") {
+        Ok(_) => { println("T562: public CREATE UNIQUE INDEX unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match db.execute("drop index people_name_idx") {
+        Ok(_) => { println("T562: public DROP INDEX unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match db.execute("alter table people add column age int") {
+        Ok(_) => { println("T562: ALTER TABLE ADD COLUMN unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match db.execute("alter table people rename column name to full_name") {
+        Ok(_) => { println("T562: ALTER TABLE RENAME COLUMN unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match db.execute("alter table people drop column name") {
+        Ok(_) => { println("T562: ALTER TABLE DROP COLUMN unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match db.execute("alter table people alter column name type text") {
+        Ok(_) => { println("T562: ALTER TABLE ALTER COLUMN unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match db.execute("insert into _vaisdb_migrations (version, name, applied_at, status) values (1, 'init', 0, 'APPLIED')") {
+        Ok(_) => { println("T562: public migration tracking insert unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
 
     inserted := mut match db.execute("INSERT INTO people VALUES (42, 'ada');") {
         Ok(n) => n,
@@ -3610,6 +3646,14 @@ fn main() -> i64 {
     I !expect_catalog_column(&contacts_cols, 3, "status", "TEXT") { println("T215 contacts: catalog status column"); return 255 }
     match contacts_db.execute("create table contacts (id int, name text, email text, status text)") {
         Ok(_) => { println("T215 contacts: duplicate create unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("create index contacts_status_idx on contacts (status)") {
+        Ok(_) => { println("T562 contacts: public descriptor CREATE INDEX unexpectedly accepted"); return 255 },
+        Err(_) => {},
+    }
+    match contacts_db.execute("alter table contacts add column owner text") {
+        Ok(_) => { println("T562 contacts: public descriptor ALTER TABLE unexpectedly accepted"); return 255 },
         Err(_) => {},
     }
     contacts_insert_descriptor_order := mut match contacts_db.execute("insert into contacts (id, name, email, status) values (1, 'ada', 'ada@example.test', 'active')") {
