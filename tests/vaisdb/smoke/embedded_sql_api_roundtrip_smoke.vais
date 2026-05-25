@@ -71,8 +71,9 @@
 #     DELETE path and the fixed non-null secondary UNIQUE DELETE path by
 #     restoring heap plus index pages to pre-DELETE images and reopening
 #     through EmbeddedDatabase.open().
-#   - Pins the helperization boundary by keeping nine-column dynamic descriptor
-#     CREATE rejected while the already certified 2-8 column shapes stay green.
+#   - Pins the helperization boundary by keeping sixteen-column dynamic
+#     descriptor CREATE rejected while the already certified 2-15 column
+#     shapes stay green.
 #
 # This keeps broader SQL planning out of scope; it locks the first SQLite-like
 # in-process SQL API boundary over the already-certified catalog + heap DML
