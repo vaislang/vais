@@ -122,6 +122,22 @@ Nonclaims:
 - Nonzero exits from a successfully built user program remain user-program
   behavior, not a compiler diagnostic contract.
 
+### T-514 Docs/Help/Certification Sync
+
+T-514 syncs W1-C documentation and generated certification inventory claims.
+
+- `EXCLUDED_FEATURES.md` and the generated Master Plan section now display
+  current A4 status/evidence beside historical discovery classes. This keeps
+  A4-08 and A4-09 readable as current check-time `E001` rejections while
+  preserving their original late-codegen/linker provenance.
+- CLI help flags exist for `--no-update-check`, `--timeout`, and
+  `--report-crash`, but help prose is not a stable diagnostic contract.
+- The W1-C promoted command paths remain only the focused `check`, `build`, and
+  pre-execution `run` envelopes named above plus the A2-03 empirical smoke.
+- Package registry, release/publish, deploy, editor/LSP, production
+  observability, panic/crash-report, timeout, and linker/clang output remain
+  nonclaims unless a later focused fixture promotes them.
+
 ## Current Gate
 
 `crates/vaisc/tests/core_certification.rs` enforces the contract through
