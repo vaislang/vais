@@ -1,6 +1,6 @@
 # Database Integration
 
-Status: T-613 W3-C lifecycle/concurrency docs synced.
+Status: T-624 W3-D migration/fault/observability docs synced.
 
 `vais-server` currently documents a bounded local VaisDB API surface. It is not
 a raw SQL service, not a PostgreSQL/SQLite wire-protocol bridge, and not a
@@ -107,6 +107,32 @@ request/helper invocation.
   timeout, DB cancellation, DB backpressure, or production DB concurrency
   evidence.
 
+## Migration, Fault, Health, And Observability Boundary
+
+`vais-server` does not currently promote server-managed migrations,
+schema-version routes, upgrade orchestration, rollback/downgrade behavior, or
+migration recovery.
+
+Selected executable fault evidence is limited to:
+
+- `db_unavailable` for selected request-time DB open failures;
+- `db_query_failed` for selected query failures after successful open, such as
+  missing expected catalog state;
+- invalid W3-D controls rejected before feature behavior can be inferred:
+  `/db/migrations`, `/db/schema-version`, `/db/recovery`, `/db/ready`,
+  `/db/metrics`, `/db/traces`, and `/db/audit` return `db_invalid_table`
+  through the current table-row helper surface;
+- `migration=apply`, `schema_version=1`, `recover=1`, `corrupt=simulate`,
+  `ready=1`, `metrics=1`, `trace=1`, and `audit=1` return
+  `db_invalid_filter` on selected table-row routes;
+- extra fixed `POST /db/books` fields such as `migration`, `schema_version`,
+  `recover`, `trace_id`, and `audit` return `db_invalid_request`.
+
+Health and logging evidence is local and primitive: simple health JSON,
+request IDs, JSON log formatting, and logger middleware response preservation.
+This is not DB readiness, metrics, tracing, audit logging, retention,
+redaction, tamper evidence, alerting, or a production observability SLO.
+
 ## Local Auth/Guard Boundary
 
 The only documented DB-route guard is the local fixed seed wrapper around
@@ -143,6 +169,10 @@ DB route policy, CSRF protection, production RBAC, or deployed admin security.
   auth/session/RBAC, JWT bearer-token DB route policy, cookies, CSRF, secret
   management, rate-limit or CORS attachment to DB routes, audit policy, health
   readiness, observability, backup, recovery, or production acceptance.
+- Server-managed migrations, schema-version routes, upgrade/rollback/
+  downgrade orchestration, migration recovery, corrupt DB repair, metrics
+  export, traces, audit retention, redaction, tamper evidence, backup/restore,
+  recovery runbooks, or production observability SLOs.
 
 ## Evidence
 
