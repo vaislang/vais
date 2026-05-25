@@ -8,6 +8,34 @@ Release-channel binaries may lag behind the current certified source baseline.
 For certification-sensitive work, build from source and run the gates listed in
 [`../PUBLIC_STATUS.md`](../PUBLIC_STATUS.md).
 
+## Current No-Release Install Boundary
+
+The current W5-B evidence is local and temporary only. From a clean checkout of
+the root repository plus nested `compiler` and `lang` repositories, the selected
+install/unpack proof is:
+
+```bash
+cd /Users/sswoo/study/projects/vais
+W5B_REQUIRE_CLEAN=1 node scripts/check-w5b-local-install-unpack-smoke.mjs
+```
+
+Expected marker:
+
+```text
+W5B_LOCAL_INSTALL_UNPACK_SMOKE_OK
+```
+
+This smoke builds and temp-installs local `vaisc`, then builds, packs, installs,
+and imports the local `@vaisx/db` package from temporary directories. Those
+temporary outputs are not release artifacts.
+
+Homebrew, pre-built binaries, `compiler/install.sh`, `compiler/install.ps1`,
+GitHub Release downloads, Docker images, crates.io `cargo install`, npm
+registry install, and Vais registry install are release-channel surfaces and
+are not current W5-B evidence. This guide also does not claim upgrade,
+rollback, backup/restore, migration, production deploy, or operator acceptance
+behavior.
+
 ### Homebrew (macOS / Linux)
 
 ```bash
