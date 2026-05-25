@@ -69,7 +69,24 @@ The required stage names are the stages from `compiler/docs/COMPILER_STAGES.md`:
 | `str` | Core-minimal | Run | String construction and passing only. Complex mutation is Deferred. |
 | `Vec<T>` | Core-minimal | Codegen | Creation, push, indexing only for certified element types. |
 | `Option<T>` | Core-minimal | Codegen | `Some` / `None` and match over certified `T`. |
-| `Result<T,E>` | Core-minimal | Codegen | Basic construction and match; `?` is Deferred until separately certified. |
+| `Result<T,E>` | Core-minimal | Codegen | Basic construction and match in Core v0. Product-level A2-01/A2-02 now certify bounded `?` propagation in `A2_SUBSETS.md`, but that does not widen this frozen Core v0 manifest unless Core fixtures are added here. |
+
+## Relationship To W1 A2 Certified Subsets
+
+W1-A through W1-C added product-level language/compiler certifications adjacent
+to Core v0:
+
+- A2-01/A2-02: bounded Core-typed `Result`/`Option` `?` propagation.
+- A2-03: narrow dyn/trait dispatch with visible impls and invalid non-impl
+  rejection.
+- A2-04: inline/no-escape closures.
+- A2-05: bounded named-function pointer parameters.
+
+Those subsets are documented and gated in `A2_SUBSETS.md`. They may be cited by
+product language docs and DB-required profiles, but they are not automatically
+part of the frozen Core v0 fixture manifest. Moving any of them into Core v0
+requires the promotion rule below and an explicit `core-certify.sh` fixture
+change.
 
 ## Core Std Modules
 

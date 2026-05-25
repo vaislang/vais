@@ -1,6 +1,6 @@
 # Current Compiler Certification Status
 
-Date: 2026-05-20
+Date: 2026-05-25
 
 ## Verdict
 
@@ -9,6 +9,28 @@ certified Vais Core compiler is frozen for downstream re-entry under
 `CORE_FREEZE_DECISION.md`. This is not a claim that the whole Vais language,
 every advanced feature, or every ecosystem package is finished. It means the
 current Core contract and promoted smoke gates pass with the evidence below.
+
+W1 language/compiler product hardening has added certification adjacent to the
+frozen Core bundle without widening Core v0 itself:
+
+- W1-A: A2-01 through A2-05 are landed certified subsets in
+  `A2_SUBSETS.md`; A2-06 affine remains Controlled.
+- W1-B: DB-required ownership/drop/runtime boundaries require explicit
+  borrowed-vs-owned text/result contracts and manual cleanup. Automatic
+  Token/AST/EmbeddedResult Drop, broad RAII, cleanup-on-`?`, and affine
+  use-count enforcement remain nonclaims.
+- W1-C: selected diagnostic/CLI envelopes are pinned for `vaisc check`,
+  `build`, and pre-execution `run` failures plus focused rejected-surface
+  evidence. Panic hooks, crash reports, linker/clang text, timeout wording,
+  editor/LSP, release, deployment, and production observability remain
+  nonclaims.
+- W1-D: documentation sync is in progress. Remaining W1-D blockers are the
+  focused documentation drift grep gate, aggregate docs validation evidence,
+  and W1-D checkpoint. W1-E aggregate/package regression evidence remains
+  required before W1 is complete.
+
+These W1 certifications are usable where their named docs and gates say so,
+but they do not retroactively add constructs to the frozen Core v0 manifest.
 
 ## Verified Gates
 

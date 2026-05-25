@@ -14,6 +14,14 @@ crate, or product package is complete. It means the Core contract defined by
 `CORE_FREEZE_CRITERIA.md` has met its required gate bundle and should no longer
 be changed to satisfy downstream product drift.
 
+2026-05-25 W1-D sync note: W1-A through W1-C added adjacent product-level
+language/compiler certifications, including A2 certified subsets, DB-required
+manual cleanup boundaries, and selected diagnostic/CLI envelopes. Those
+certifications do not widen the frozen Core v0 manifest unless the Core
+promotion rule is followed and `core-certify.sh` fixtures are added. Remaining
+W1-D documentation drift/aggregate evidence and W1-E aggregate/package
+regression evidence are outside this Core freeze decision.
+
 ## Evidence
 
 The freeze decision is based on the same-batch gate bundle required by
