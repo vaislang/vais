@@ -9,6 +9,39 @@ use vais_parser::parse;
 use vais_types::TypeChecker;
 use vais_types::TypeError;
 
+fn vaisc_bin() -> std::path::PathBuf {
+    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_vaisc") {
+        return path.into();
+    }
+
+    let mut path = std::env::current_exe().expect("current test executable path");
+    path.pop();
+    if path.file_name().is_some_and(|name| name == "deps") {
+        path.pop();
+    }
+    path.push(format!("vaisc{}", std::env::consts::EXE_SUFFIX));
+    assert!(
+        path.exists(),
+        "failed to locate vaisc binary at {}",
+        path.display()
+    );
+    path
+}
+
+fn write_cli_fixture(dir: &tempfile::TempDir, name: &str, source: &str) -> std::path::PathBuf {
+    let path = dir.path().join(name);
+    std::fs::write(&path, source).expect("write cli fixture");
+    path
+}
+
+fn run_vaisc(args: &[&str]) -> std::process::Output {
+    std::process::Command::new(vaisc_bin())
+        .args(["--no-update-check", "--timeout", "0"])
+        .args(args)
+        .output()
+        .expect("run vaisc")
+}
+
 /// Type-check source code, returning the error string if type checking fails
 fn type_check_error(source: &str) -> String {
     let _tokens = tokenize(source).expect("Lexer should succeed");
@@ -75,6 +108,87 @@ fn parse_error(source: &str) -> String {
         Err(e) => format!("{}", e),
         Ok(_) => panic!("Expected parse error, but parsing succeeded"),
     }
+}
+
+// ==================== CLI Failure Envelopes ====================
+
+#[test]
+fn cli_check_type_error_uses_stable_failure_envelope() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = write_cli_fixture(&dir, "check_type_error.vais", r#"fn main() -> i64 = "bad""#);
+    let input_str = input.to_str().expect("utf-8 path");
+
+    let output = run_vaisc(&["check", input_str]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert_eq!(output.status.code(), Some(1), "stderr={}", stderr);
+    assert!(
+        stderr.contains("error: error[E001] Type mismatch"),
+        "stderr={}",
+        stderr
+    );
+    assert!(stderr.contains("expected i64, found str"), "stderr={}", stderr);
+    assert!(
+        !stdout.contains("No errors found"),
+        "stdout should not report success: {}",
+        stdout
+    );
+}
+
+#[test]
+fn cli_build_type_error_uses_stable_failure_envelope() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = write_cli_fixture(&dir, "build_type_error.vais", r#"fn main() -> i64 = "bad""#);
+    let input_str = input.to_str().expect("utf-8 path");
+
+    let output = run_vaisc(&["build", input_str]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(1), "stderr={}", stderr);
+    assert!(stderr.contains("error[E001] Type mismatch"), "stderr={}", stderr);
+    assert!(stderr.contains("expected i64, found str"), "stderr={}", stderr);
+    assert!(
+        stderr.contains("error: 1 type error(s) found"),
+        "stderr={}",
+        stderr
+    );
+}
+
+#[test]
+fn cli_run_pre_execution_type_error_uses_stable_failure_envelope() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = write_cli_fixture(&dir, "run_type_error.vais", r#"fn main() -> i64 = "bad""#);
+    let input_str = input.to_str().expect("utf-8 path");
+
+    let output = run_vaisc(&["run", input_str]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(1), "stderr={}", stderr);
+    assert!(stderr.contains("error[E001] Type mismatch"), "stderr={}", stderr);
+    assert!(stderr.contains("expected i64, found str"), "stderr={}", stderr);
+    assert!(
+        stderr.contains("error: 1 type error(s) found"),
+        "stderr={}",
+        stderr
+    );
+}
+
+#[test]
+fn cli_run_user_program_exit_is_propagated_without_compiler_error() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = write_cli_fixture(&dir, "run_exit.vais", "fn main() -> i64 = 7");
+    let input_str = input.to_str().expect("utf-8 path");
+
+    let output = run_vaisc(&["run", input_str]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(7), "stderr={}", stderr);
+    assert!(
+        !stderr.contains("error:"),
+        "user program exit should not be wrapped as compiler error: {}",
+        stderr
+    );
 }
 
 // ==================== Type Mismatch Suggestions ====================

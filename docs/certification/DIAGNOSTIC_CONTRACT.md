@@ -92,6 +92,36 @@ Deferred or nonclaim surfaces:
 T-512 owns the next boundary: the user-facing `vaisc check`, `vaisc build`,
 and `vaisc run` command envelopes and exit classes.
 
+### T-512 CLI Check/Build/Run Failure Envelopes
+
+T-512 pins selected CLI envelopes through
+`crates/vaisc/tests/error_message_tests.rs`.
+
+Promoted envelopes:
+
+- `vaisc --no-update-check --timeout 0 check <invalid.vais>` exits 1 for a
+  type error, writes a top-level `error: error[E001] Type mismatch` envelope to
+  stderr, reports the expected/found types, and does not print the check
+  success message.
+- `vaisc --no-update-check --timeout 0 build <invalid.vais>` exits 1 for a
+  type error, writes an `error[E001] Type mismatch` diagnostic to stderr, and
+  ends with the bounded summary `error: 1 type error(s) found`.
+- `vaisc --no-update-check --timeout 0 run <invalid.vais>` uses the same
+  pre-execution compiler/build failure envelope as `build`: exit 1, stable
+  `error[E001]` diagnostic, and bounded type-error summary.
+- `vaisc --no-update-check --timeout 0 run <valid-program.vais>` propagates a
+  nonzero user program exit code without wrapping it as a compiler diagnostic.
+  The focused smoke uses exit 7 and asserts stderr does not contain `error:`.
+
+Nonclaims:
+
+- The tests do not promote full CLI prose, color/style, stdout ordering,
+  localized text, timeout wording, JIT fallback wording, linker/clang wording,
+  package registry commands, release/publish commands, deployment behavior, or
+  production observability.
+- Nonzero exits from a successfully built user program remain user-program
+  behavior, not a compiler diagnostic contract.
+
 ## Current Gate
 
 `crates/vaisc/tests/core_certification.rs` enforces the contract through
