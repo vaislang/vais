@@ -43,10 +43,31 @@ The canonical CI entry point. It:
 10. Compares those pass counts against baseline thresholds. If either
    is below the threshold, exits 1 with a `REGRESSION:` message.
 
-The final output is split by gate: `CORE`, `MIR`, `CODEGEN`,
-`ECOSYSTEM`, `BACKEND`, `VAISDB RUNTIME`, and `SERVER RUNTIME`.
+The final output is split by gate: `CORE`, `MIR`, `CODEGEN`, `UNSAFE AUDIT`,
+`ECOSYSTEM`, `BACKEND`, std runtime smokes, `VAISDB RUNTIME`,
+`SERVER RUNTIME`, vais-web runtime/unit/package/build gates,
+cross-package/product gates, and package full-build smoke.
 Core/MIR/codegen failures must be fixed before using downstream package counts
 as a progress signal.
+
+## W1-E Regression Script Classification
+
+T-532 classifies the regression scripts for W1 closure:
+
+| Script | W1-E classification |
+|---|---|
+| `check-integrity.sh` | Canonical W1 aggregate regression gate. |
+| `core-certify.sh` | Core certification gate used by W1-E. |
+| `check-empirical.sh` | W1 language-surface evidence gate for A1/A2/A4 and rejected/nonclaim fixtures. |
+| `check-ai-docs-sync.mjs`, `check-ai-reference-app.sh`, `check-public-claims.mjs` | W1 AI/public docs evidence gates. |
+| `vaisdb-regression.sh` | Historical same-class diagnostic with known clang-error baselines; not a W1 closure gate. Current W1 package/codegen evidence is `test_vaisdb_files_codegen_ok` plus runtime/package smokes. Broader DB regression ownership belongs to W2. |
+| `vais-server-regression.sh` | Historical same-class diagnostic with known baselines; not a W1 closure gate. Production server regression ownership belongs to W3. |
+| `vais-web-regression.sh` | Historical vais-web workspace diagnostic; not a W1 closure gate. Current W1 evidence comes through `check-integrity.sh`; production web/admin regression ownership belongs to W4. |
+
+For T-532, these scripts were syntax-checked with `bash -n`. The historical
+regression scripts were not promoted into the W1 closure bundle because they
+encode old known-failure baselines and product-domain follow-up work rather
+than current language/compiler certification.
 
 ### Exit codes
 
@@ -60,13 +81,27 @@ as a progress signal.
 The thresholds can be overridden via environment variables:
 
 ```bash
-INTEGRITY_STD_MIN=82 INTEGRITY_VAISDB_MIN=219 ./scripts/check-integrity.sh
+INTEGRITY_STD_MIN=82 INTEGRITY_VAISDB_MIN=261 ./scripts/check-integrity.sh
 ```
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `INTEGRITY_STD_MIN` | `82` | Minimum std_files pass count |
-| `INTEGRITY_VAISDB_MIN` | `219` | Minimum vaisdb_files pass count |
+| `INTEGRITY_VAISDB_MIN` | `261` | Minimum vaisdb_files pass count |
+| `INTEGRITY_HTTP_CLIENT_RUNTIME_MIN` | `15` | Minimum std/http_client runtime smoke pass count |
+| `INTEGRITY_TLS_RUNTIME_MIN` | `2` | Minimum std/tls runtime smoke pass count |
+| `INTEGRITY_SQLITE_RUNTIME_MIN` | `3` | Minimum std/sqlite runtime smoke pass count |
+| `INTEGRITY_POSTGRES_RUNTIME_MIN` | `1` | Minimum std/postgres runtime smoke pass count |
+| `INTEGRITY_VAISDB_RUNTIME_MIN` | `37` | Minimum VaisDB runtime smoke pass count |
+| `INTEGRITY_SERVER_RUNTIME_MIN` | `25` | Minimum vais-server runtime smoke pass count |
+| `INTEGRITY_WEB_RUNTIME_MIN` | `61` | Minimum vais-web runtime smoke pass count in skip-mode |
+| `INTEGRITY_WEB_UNIT_MIN` | `390` | Minimum vais-web unit test pass count |
+| `INTEGRITY_WEB_PACKAGES_MIN` | `3296` | Minimum vais-web non-kit package test pass count |
+| `INTEGRITY_WEB_FULL_BUILD_MIN` | `24` | Minimum vais-web full-build package count |
+| `INTEGRITY_BACKEND_PHASE158_MIN` | `18` | Minimum backend phase158 smoke pass count |
+| `INTEGRITY_CROSS_PACKAGE_SCHEMA_MIN` | `15` | Minimum cross-package schema gate count |
+| `INTEGRITY_MULTI_DOMAIN_PRODUCT_MIN` | `9` | Minimum multi-domain product gate count |
+| `INTEGRITY_PKG_FULL_BUILD_MIN` | `2` | Minimum package full-build smoke count |
 
 To deliberately trigger a regression failure (for testing the gate itself):
 

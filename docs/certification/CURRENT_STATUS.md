@@ -30,8 +30,9 @@ frozen Core bundle without widening Core v0 itself:
   Core and aggregate integrity evidence as green, T-528 refreshed empirical
   A1/A2/A4 evidence as green, and T-529 refreshed package/codegen consumer
   evidence as green. T-530 refreshed AI/public docs gates as green. Remaining
-  W1-E blockers are regression-script classification, residual nonclaim review,
-  final evidence rollup, and checkpoint/next-queue selection.
+  T-532 classified regression scripts without promoting old known-baseline
+  diagnostics into W1 closure gates. Remaining W1-E blockers are residual
+  nonclaim review, final evidence rollup, and checkpoint/next-queue selection.
 
 These W1 certifications are usable where their named docs and gates say so,
 but they do not retroactively add constructs to the frozen Core v0 manifest.
@@ -131,6 +132,26 @@ T-531 refreshed gate metadata evidence on 2026-05-25:
 
 No gate count, threshold, or generated gate table change was required by this
 refresh.
+
+## T-532 W1-E Regression Script Classification
+
+T-532 audited compiler package regression scripts on 2026-05-25:
+
+- `bash -n compiler/scripts/vaisdb-regression.sh`,
+  `bash -n compiler/scripts/vais-server-regression.sh`,
+  `bash -n compiler/scripts/vais-web-regression.sh`, and
+  `bash -n scripts/verify-alpha-corridor.sh` passed.
+- `check-integrity.sh`, `core-certify.sh`, `check-empirical.sh`, AI docs, AI
+  reference app, public claims, W1 doc drift, plan, manifest, threshold, and
+  diff checks are W1-E evidence gates.
+- `vaisdb-regression.sh`, `vais-server-regression.sh`, and
+  `vais-web-regression.sh` remain historical same-class/product diagnostics
+  with known baselines. They are not promoted into the W1 closure bundle because
+  current W1 language/compiler closure is covered by aggregate integrity,
+  empirical, package/codegen, AI/public docs, and gate metadata evidence.
+
+Broader DB/server/web regression ownership remains assigned to W2, W3, and W4
+respectively.
 
 ## Verified Gates
 
