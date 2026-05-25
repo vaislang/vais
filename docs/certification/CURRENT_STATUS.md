@@ -30,9 +30,8 @@ frozen Core bundle without widening Core v0 itself:
   Core and aggregate integrity evidence as green, T-528 refreshed empirical
   A1/A2/A4 evidence as green, and T-529 refreshed package/codegen consumer
   evidence as green. T-530 refreshed AI/public docs gates as green. Remaining
-  W1-E blockers are gate metadata/threshold refresh, regression-script
-  classification, residual nonclaim review, final evidence rollup, and
-  checkpoint/next-queue selection.
+  W1-E blockers are regression-script classification, residual nonclaim review,
+  final evidence rollup, and checkpoint/next-queue selection.
 
 These W1 certifications are usable where their named docs and gates say so,
 but they do not retroactively add constructs to the frozen Core v0 manifest.
@@ -115,6 +114,23 @@ T-530 refreshed AI/public documentation gates on 2026-05-25:
 No public claim change was required. This refresh keeps AI-facing language docs,
 reference-app claims, and public claim evidence aligned with the current W1
 language/compiler boundary.
+
+## T-531 W1-E Gate Manifest And Threshold Refresh
+
+T-531 refreshed gate metadata evidence on 2026-05-25:
+
+- Root `bash scripts/check-gate-manifest.sh` PASS:
+  `GATE MANIFEST OK: 17 gates (16 linked to master-plan baseline_lock); 17
+  cross-checked; M4 enforced`.
+- Root `bash scripts/check-threshold-monotonic.sh` PASS:
+  `THRESHOLD MONOTONIC OK: 8 thresholds non-decreasing`.
+- Root `bash scripts/check-plan-consistency.sh` PASS: meta v312, A4 12,
+  Controlled 10, protocol 8 steps, linear 45.50-78.25 months, effective 38-62
+  months, and 16 matched baseline_lock thresholds.
+- Root/compiler/lang diff whitespace checks passed.
+
+No gate count, threshold, or generated gate table change was required by this
+refresh.
 
 ## Verified Gates
 
