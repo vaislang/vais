@@ -453,6 +453,37 @@ T-496 (2026-05-25) starts W1-B without adding a new A2 entry:
 
 No A2 semantics are widened by this audit.
 
+## T-500 W1-B Result/Option runtime-flow checkpoint
+
+T-500 (2026-05-25) checkpoints the Result/Option flow boundary for W1-B:
+
+- A2-01 and A2-02 remain the only certified `?` Result/Option flow W1-B may
+  rely on.
+- The receiver must be Core-typed `Result<T, E>` or `Option<T>`, and the
+  enclosing function must return the matching `Result<U, E>` or `Option<U>`.
+- The certified behavior is value/error propagation only:
+  `Ok(v)?`/`Some(v)?` continue with `v`; `Err(e)?`/`None?` return early.
+- `?` does not imply destructor cleanup, lock/page/result cleanup,
+  Token/parser AST cleanup, `EmbeddedResult.free_owned_text()`, ownership
+  transfer, or affine enforcement.
+- DB code that must release a lock/page/result/token/AST payload before an
+  error return must keep explicit `match`/cleanup paths instead of relying on
+  `?`.
+
+Validation:
+
+```text
+bash scripts/check-empirical.sh A2
+PASS  A2-01_q_operator_core
+PASS  A2-02_q_operator_cross_module
+PASS  A2-03_dyn_trait_dispatch
+PASS  A2-04_inline_closure
+PASS  A2-05_fn_pointer_param
+EMPIRICAL FIXTURES: 5 pass / 0 drift / 0 broken / 0 skipped (total 5)
+```
+
+No Result/Option or A2 semantics are widened by this checkpoint.
+
 ---
 
 ## How to add a new A2 entry
