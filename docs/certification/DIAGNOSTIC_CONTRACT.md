@@ -138,6 +138,28 @@ T-514 syncs W1-C documentation and generated certification inventory claims.
   observability, panic/crash-report, timeout, and linker/clang output remain
   nonclaims unless a later focused fixture promotes them.
 
+### T-519 DB-Required Language Profile Sync
+
+T-519 connects this diagnostic contract to the DB-required language profile
+without promoting new DB behavior.
+
+- DB-facing compiler failures may cite only the selected W1-C envelopes:
+  `vaisc check` type failures with top-level `error: error[E001]`,
+  `vaisc build`/pre-execution `run` type failures with `error[E001]` plus the
+  bounded type-error summary, and the focused A2/A4 rejected-surface evidence
+  named in this document.
+- DB runtime errors are separate product contracts. Bounded `Err` envelopes such
+  as `db_unavailable`, `db_query_failed`, unsupported SQL shape errors, and
+  handle/result cleanup errors are not promoted into broad compiler diagnostic
+  behavior by W1-C.
+- DB code must not rely on panic hooks, crash-report files, Rust backtraces,
+  LLVM verifier output, clang/linker text, timeout wording, production
+  observability, or shell-specific stderr ordering as stable diagnostics.
+
+The DB-required language profile is therefore allowed to depend on stable
+compiler-facing rejection for invalid source and selected CLI envelopes, while
+keeping DB/server/web runtime fault schemas evidence-scoped.
+
 ## Current Gate
 
 `crates/vaisc/tests/core_certification.rs` enforces the contract through
