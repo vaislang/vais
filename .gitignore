@@ -1,8 +1,8 @@
 # Rust
 /target/
 fuzz/target/
+/fuzz/Cargo.lock
 **/*.rs.bk
-Cargo.lock
 
 # IDE
 .idea/
