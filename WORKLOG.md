@@ -458,3 +458,14 @@
 - 검증: fixpoint-full e2e **21 PASS**, 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
 - **통합 컴파일러가 0~4 param 함수+zero-param+중첩 호출 인자를 codegen.** 실제 nl 소스 향 한 조각.
   다음 FP12b: 문자열/putchar/s[i](IR 텍스트 emit용), 이후 부트스트랩=months급.
+
+## 2026-06-06 (/loop iter 42: FP12b — putchar codegen, 생성 프로그램이 출력 emit)
+- FP12 두번째 조각: 통합 컴파일러에 **putchar codegen** — 생성 프로그램이 출력을 emit(nl 컴파일러 자신의
+  핵심 작업: IR 텍스트를 putchar로 출력).
+- `putchar(<식>)` 문장 → `declare i32 @putchar(i32)`(모듈 top) + `trunc i64→i32` + `call i32 @putchar`.
+  is_putchar 헬퍼(7바이트 이름 체크), gen_stmts ident 분기 최상단에 추가. 호출 인자는 식(gen_expr).
+- **실측**: show()→'HI', **stars(5)→'*****'(루프 putchar = 실제 emit 패턴!)**, putchar(65+k)='C'(계산된 char).
+  전체 회귀0(fac=120, add3=6 등). e2e 23 PASS(stdout 출력 assert 2개 포함, check_out 헬퍼 re.sub 이스케이프 수정).
+- 검증: fixpoint-full e2e **23 PASS**, 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
+- **생성 프로그램이 putchar로 출력 emit 가능** = nl 컴파일러가 IR 텍스트 생성하는 방식. 실제 소스 향 핵심 조각.
+  다음 FP12c: 문자열 리터럴/s[i]/s.len()(토큰화/이름비교용), 이후 부트스트랩=months급.

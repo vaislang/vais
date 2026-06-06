@@ -89,5 +89,25 @@ if grep -q "define i64 @sum_to(i64 %a0)" "$tmp/out.ll" && grep -q "store i64 %a0
   echo "  PASS emits function(param-alloca) + loop + call (functions-with-imperative-bodies codegen)";
 else echo "  FAIL did not emit function+imperative codegen"; cat "$tmp/out.ll"; fail=1; fi
 
+# --- FP12b: putchar — generated program emits output ---
+check_out() {
+  local prog="$1" want="$2" tmp; tmp="$(mktemp -d)"
+  PROG="$prog" python3 - "$SRC" "$tmp/c.nl" <<'PYEOF'
+import os, re, sys
+src = open(sys.argv[1]).read()
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+open(sys.argv[2], "w").write(src)
+PYEOF
+  python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
+  ( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 || { echo "  FAIL '$prog': compiler build"; fail=1; return; }
+  "$tmp/c" > "$tmp/out.ll"
+  clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null || { echo "  FAIL '$prog': IR invalid"; fail=1; return; }
+  local got; got="$("$tmp/bin")"
+  if [ "$got" = "$want" ]; then echo "  PASS '$prog' -> stdout [$got]";
+  else echo "  FAIL '$prog': stdout got [$got] want [$want]"; fail=1; fi
+}
+check_out "fn show() {{ putchar(72); putchar(73); return 0 }}; return show();" "HI"
+check_out "fn stars(n) {{ let mut i = 0; while i < n {{ putchar(42); i = i + 1 }}; return 0 }}; return stars(5);" "*****"
+
 [ "$fail" -eq 0 ] && echo "RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail

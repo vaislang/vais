@@ -268,4 +268,7 @@ nl-check+std시작 PRELUDE+게이트3종) **충족**. FIXPOINT 큐는 그 너머
       파싱, emit_fn이 `define @f(i64 %a0, i64 %a1, ...)` + 각 param alloca/store, 호출이 N개 인자(arg_comma_end로
       분리) 전달. **add3(1,2,3)=6, answer()=42(zero-param), s4(...)=100(4-param), 중첩인자 add(dbl(3),dbl(4))=14**.
       전체 회귀0(1-param/재귀/struct/List). e2e 21 PASS. 값-정확성 43/43.
-- [ ] **FP12b** 문자열 리터럴/`putchar`/`s[i]` codegen (실제 소스가 IR 텍스트 emit에 사용). 그 후 부트스트랩 = months급.
+- [x] **FP12b** putchar codegen — 생성 프로그램이 **출력 emit**(nl 컴파일러 자신의 핵심 작업). `putchar(<식>)`
+      문장을 `declare i32 @putchar(i32)` + `trunc i64→i32` + `call @putchar`로. 루프 putchar = 실제 IR-emit 패턴.
+      **show()→'HI', stars(5)→'*****'(루프), putchar(65+k)='C'**. 전체 회귀0. e2e 23 PASS(출력 assert 포함). 값-정확성 43/43.
+- [ ] **FP12c** 문자열 리터럴/`s[i]`/`s.len()` codegen (실제 소스가 토큰화/이름비교에 사용). 그 후 부트스트랩 = months급.

@@ -60,6 +60,18 @@ fn kw2(src: Str, a: Int, alen: Int, w0: Int, w1: Int) -> Int {
     if src[a + 1] != w1 { return 0 }
     return 1
 }
+# Is src[a..a+alen] the builtin name "putchar" (p u t c h a r)?
+fn is_putchar(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 7 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 117 { return 0 }
+    if src[a + 2] != 116 { return 0 }
+    if src[a + 3] != 99 { return 0 }
+    if src[a + 4] != 104 { return 0 }
+    if src[a + 5] != 97 { return 0 }
+    if src[a + 6] != 114 { return 0 }
+    return 1
+}
 fn kw3(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int) -> Int {
     if alen != 3 { return 0 }
     if src[a] != w0 { return 0 }
@@ -957,7 +969,29 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
         } else if t.kind == 1 {
             let nx = toks[i + 1]
             let asti = sty_of(slots, src, t.nstart, t.nlen)
-            if nx.kind == 27 {
+            if is_putchar(src, t.nstart, t.nlen) == 1 {
+                # putchar(<expr>) ; -> trunc to i32 + call @putchar
+                let argstop = paren_end(toks, i + 2)
+                let e = gen_expr(toks, slots, fns, defs, src, i + 2, argstop, counter)
+                counter = e.next
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = trunc i64 ")
+                emit_op(e)
+                emit_str(" to i32")
+                putchar(10)
+                let tc = counter
+                counter = counter + 1
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = call i32 @putchar(i32 %t")
+                pint(tc)
+                emit_str(")")
+                putchar(10)
+                counter = counter + 1
+                let stop = find_semi(toks, argstop, end)
+                i = stop + 1
+            } else if nx.kind == 27 {
               if asti >= 0 {
                 # struct field write: p . field = expr ;
                 let fld = toks[i + 2]
@@ -1424,6 +1458,10 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
 fn compile(src: Str) -> Int {
     let toks = tokenize(src)
     let n = toks.len()
+    # declare the C putchar so generated code can emit output (the nl compiler's
+    # own job is emitting IR text via putchar).
+    emit_str("declare i32 @putchar(i32)")
+    putchar(10)
     let fns = build_fns(&toks, n)
     let defs = build_defs(&toks, n)
     # emit each user function
@@ -1445,7 +1483,9 @@ fn compile(src: Str) -> Int {
 }
 
 fn main() -> Int {
-    # FP12: multi-param + zero-param functions (toward real nl source).
-    # add3(a,b,c)=a+b+c; answer()=42; return add3(1,2,3) + answer() = 6 + 42 = 48.
-    return compile("fn add3(a, b, c) {{ return a + b + c }}; fn answer() {{ return 42 }}; return add3(1, 2, 3) + answer();")
+    # FP12b: putchar — generated program EMITS output (the nl compiler's own job).
+    # show() prints 'H'(72) 'I'(73) newline; returns 0. emit() loops printing
+    # '*'(42) n times. Then return a value. (Output goes to the generated binary's
+    # stdout; the compiler's own exit is 0.)
+    return compile("fn show() {{ putchar(72); putchar(73); putchar(10); return 0 }}; return show();")
 }
