@@ -566,3 +566,17 @@
 - 검증: 값-정확성 **49/49 회귀0**. 교훈: **cold-start 주장은 신선 서브에이전트로 주기적 재측정**(이전
   측정은 과거 코퍼스)/맥락격리가 핵심(컨텍스트파일만, 프로젝트지식 차단)/cold-start 산출물이 곧 새 검증예제
   (이중 레버: 명제입증 + 코퍼스+1).
+
+## 2026-06-06 (/loop iter 49: P4 nl-check 카탈로그 강화 [Rust-ism 6→13종, 실측 기반])
+- P4 에러인프라(nl-check)를 **실측으로 강화**: 어떤 Rust직관 실수가 nl-check를 빠져나가는지 17종 probe →
+  7종 MISS 발견 → 각각 트랜스파일+빌드로 **진짜 nl서 실패함(E002/P001)** 확인 후 규칙 추가(오탐 방지: 코퍼스가
+  보여주는 valid form 기준). 카탈로그 6→13종.
+- 신규 7규칙: `vec![..]`→`[..]` / `Vec<T>`→`List<T>` / **i8..i128·u8..u128·f32·f64·usize·isize**→Int/UInt/F
+  (capitalized) / `.to_string()`→`Str(x)` / `.unwrap()`·`.expect()`→match or `?` / `if let`→match /
+  `elsif`·`elif`→`else if`. 각 `help:`+수정코드.
+- **오탐 0 검증**(P4 핵심): 전 49 예제 + 17 self-host 모듈 nl-check clean 유지. 특히 식별자 부분문자열
+  가드(`pi32`/`vector`는 i32/Vec 규칙 비발화 — `(?<![A-Za-z0-9_])..(?![A-Za-z0-9_])` 경계). `else if`도 비발화.
+- 단위테스트 +15(7 true-positive + 8 clean-guard incl. 식별자substr/else if). nl-check unit **11→26 PASS**.
+- 검증: nl-check 26/26, 값-정확성 49/49, 회귀 0. docstring에 카탈로그 명시. 교훈: **에러규칙은 추측말고
+  실측으로**(17 probe→7 진짜 MISS, 각 빌드로 실패확인)/오탐 방지는 식별자 경계 가드 필수(i32 substr 함정)/
+  코퍼스가 "valid form" 권위(규칙이 코퍼스 깨면 그 규칙이 틀림).

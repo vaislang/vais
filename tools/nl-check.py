@@ -20,6 +20,19 @@ Format per issue:
       help: <fix> -> `<corrected code>`
 
 Scope: line-based lint (prototype). Skips string literals and comments.
+
+Catalog (Rust/other-language intuition -> the single nl form):
+  &&/||/!         -> and / or / not
+  x as Type       -> Type(x)
+  Path::x         -> Path.x       (dot, not ::)
+  Type<..>::new() -> a literal ([] / [1,2,3] / {})
+  vec![..]        -> [..]
+  Vec<T>          -> List<T>
+  i8..i128/u8..u128/f32/f64/usize/isize -> Int / Int8..Int128 / UInt8.. / F32 / F64
+  x.to_string()   -> Str(x)
+  .unwrap()/.expect() -> match the Option/Result, or `?`
+  if let          -> match
+  elsif/elif      -> else if
 """
 import re
 import sys
@@ -62,6 +75,37 @@ RULES = [
     (re.compile(r"\b\w+<[^>]*>::new\b"),
      "no turbofish constructor; use a literal `[]` / `[1, 2, 3]` or `{}`",
      lambda m, ln: "... use a literal instead of `Type<..>::new()`"),
+    # --- list/macro spellings ---
+    (re.compile(r"\bvec!\s*\["),
+     "list literals are just `[1, 2, 3]`, not `vec![...]`",
+     lambda m, ln: re.sub(r"\bvec!\s*\[", "[", ln, count=1)),
+    # --- collection TYPE name (nl uses List<T>, not Vec<T>) ---
+    (re.compile(r"\bVec\s*<"),
+     "the list type is `List<T>`, not `Vec<T>`",
+     lambda m, ln: re.sub(r"\bVec(\s*<)", r"List\1", ln, count=1)),
+    # --- Rust scalar type names (nl uses Int/UInt8.. / F32 / F64, capitalized) ---
+    (re.compile(r"(?<![A-Za-z0-9_])(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|usize|isize)(?![A-Za-z0-9_])"),
+     "nl scalar types are capitalized: `Int` / `Int8..Int128` / `UInt8..UInt128` / `F32` / `F64`",
+     lambda m, ln: f"... use the nl type name (e.g. Int) instead of `{m.group(1)}`"),
+    # --- conversion via .to_string() (nl uses Str(x)) ---
+    (re.compile(r"\.to_string\s*\("),
+     "string conversion is `Str(x)`, not `x.to_string()`",
+     lambda m, ln: "... use Str(expr) instead of `.to_string()`"),
+    # --- Option/Result unwrap (nl uses match or `?`) ---
+    (re.compile(r"\.unwrap\s*\("),
+     "no `.unwrap()`; use a `match` arm (Some(v)/None) or `?` to propagate",
+     lambda m, ln: "... match the Option/Result or use `?` instead of `.unwrap()`"),
+    (re.compile(r"\.expect\s*\("),
+     "no `.expect()`; use a `match` arm (Some(v)/None) or `?` to propagate",
+     lambda m, ln: "... match the Option/Result or use `?` instead of `.expect()`"),
+    # --- `if let` (nl uses match) ---
+    (re.compile(r"\bif\s+let\b"),
+     "no `if let`; use a `match` (e.g. `match opt { Some(v) => ..., None => ... }`)",
+     lambda m, ln: "... rewrite as a match on the Option/Result"),
+    # --- `elsif`/`elif` typo (nl uses `else if`) ---
+    (re.compile(r"\b(elsif|elif)\b"),
+     "the keyword is `else if` (two words), not `elsif`/`elif`",
+     lambda m, ln: re.sub(r"\b(elsif|elif)\b", "else if", ln, count=1)),
     (re.compile(r"=>\s*return\b"),
      None,  # allowed in nl (P6) — informational only, not an error
      None),
