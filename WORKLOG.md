@@ -827,3 +827,11 @@
 - 검증: 값-정확성 88/88, 트랜스파일러 unit 51/51, self-host OK, 회귀0. README 인덱스 e58→e59 + 카운트 70/70.
   교훈: **튜플 구조분해도 흔한데 미매핑이었음**(map_let이 스칼라만)/targeted probe가 또 nl측 갭 노출(break/continue
   iter66, 튜플 iter67 — idiom probe가 cold-start 못 잡는 문법 갭 연속 발견)/Vais 동작확인 후 forgiving 매핑.
+
+## 2026-06-07 (/loop iter 68: digit-sum cold-start 첫시도 성공 — 4연속 클린)
+- 방법 번갈아(이번 cold-start). **자릿수 합 cold-start 첫시도 성공**: 신선 서브에이전트가 `%10`/`/10` 추출 루프 +
+  accumulator로 digit_sum(12345)=15 깔끔히(Rust-ism 0). e60로 승격(코퍼스 첫 자릿수추출 패턴).
+- **4연속 cold-start 첫시도 성공**(word-count/inventory/collatz/digit-sum) — 코퍼스 다도메인 성숙 견고. cold-start로는
+  최근 갭 안 나옴(실전과제갭은 String 이후 소진된 듯; 문법갭은 targeted probe가 잡음).
+- 값정확성 88→89. 검증: 89/89, 회귀0. README 인덱스 e59→e60 + 카운트 71/71. 교훈: cold-start 실전과제갭 소진 단계
+  (4연속 클린)→문법갭은 targeted probe가 주력/자릿수추출은 흔한데 코퍼스 첫등장.
