@@ -44,3 +44,11 @@
 - ROADMAP: P0~P5 전부 [x], 완료 배너 + L3 escalation 명시.
 - **P0~P5 핵심 인프라 완료.** 3 게이트 green (값 25/25, 트랜스파일러 19/19, nl-check 11/11).
 - **다음 = L3(자체 컴파일러)** — 컴파일러 작성언어/백엔드/에러전략은 사용자 결정 필요 → /loop escalate.
+
+## 2026-06-06 (/loop iter 7: L3 self-host 착수 — lexer 첫 모듈)
+- 사용자 결정: L3 컴파일러를 **nl 자체(self-host)**로. 부트스트랩=현재 트랜스파일러가 시드.
+- L3.0: 부트스트랩 가능성 검증 — nl 렉서 조각(s[i]/while/and/비교)이 트랜스파일+실행 OK (digit 3 카운트).
+- L3.1: compiler/self/lexer.nl — nl로 쓴 lexer 첫 모듈 (is_digit/alpha/space + 단어/숫자 스캔).
+  검증: "fn add a b"=4단어, "x1 y22 z333"=3숫자 → 43. **nl로 컴파일러 코드 작성·실행 입증.**
+- test.sh 확장: compiler/self/*.nl도 값-정확성 게이트에 편입. 전체 26/26 green.
+- ROADMAP: L3 self-host 큐 (L3.0~L3.5) 추가.

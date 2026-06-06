@@ -40,9 +40,12 @@ run_one() {
 
 pass=0; fail=0; skip=0
 if [ $# -ge 1 ]; then
-    files=("$HERE/examples/$1.nl")
+    # allow a basename from either examples/ or compiler/self/
+    if [ -f "$HERE/examples/$1.nl" ]; then files=("$HERE/examples/$1.nl");
+    else files=("$HERE/compiler/self/$1.nl"); fi
 else
-    files=("$HERE"/examples/*.nl)
+    # value-correctness corpus = examples/ + self-host modules (compiler/self/)
+    files=("$HERE"/examples/*.nl "$HERE"/compiler/self/*.nl)
 fi
 for f in "${files[@]}"; do
     [ -f "$f" ] || continue

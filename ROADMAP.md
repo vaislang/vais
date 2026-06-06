@@ -69,6 +69,22 @@ AI-written nl 25/25 컴파일+실행, self-correction 1라운드 수렴 실측.
 **시작 시 사용자 결정 필요**: 컴파일러 작성 언어(Rust/self-host/기타), 백엔드 전략, 에러 day-1.
 → 이건 추측 금지. 인프라(P0~P5) 완료 후 사용자에게 escalate.
 
+## L3 진입 — self-host (사용자 결정: nl 자체로, 2026-06-06)
+
+부트스트랩 경로: nl 컴파일러 소스(.nl) → [트랜스파일러=시드] → Vais → vaisc → gen1.
+nl 컴파일러 코드는 트랜스파일러 지원 부분집합으로만 작성 (검증: while/if/and/s[i]/struct/enum/Vec).
+
+### L3 큐
+- [x] **L3.0** 부트스트랩 가능성 검증 (nl 렉서 조각 트랜스파일+실행 OK).
+- [x] **L3.1** lexer 시작 (compiler/self/lexer.nl): 문자분류(is_digit/alpha/space) + 단어/숫자 스캔.
+      값-정확성 게이트 편입 (test.sh가 compiler/self/*.nl도 검증). 26/26 green.
+- [ ] **L3.2** lexer 확장: 실제 토큰 emit (종류+위치). 키워드/식별자/숫자/기호/문자열 인식.
+- [ ] **L3.3** parser 시작: 토큰 → AST (작은 부분집합 fn/let/return/표현식).
+- [ ] **L3.4** codegen 시작: AST → Vais 텍스트 lowering (재활용) 또는 직접 IR.
+- [ ] **L3.5** fixpoint: gen1이 자기 nl 소스 처리.
+
+각 단계 값-정확성 게이트 green + 커밋. Vec/문자열 연산이 트랜스파일러/Vais 한계에 부딪히면 TRACKED.
+
 ## 진행 규칙 (/loop)
 1. 큐 맨 위 미완료 task 실행 → 값-정확성/러너 green 확인 → 커밋 → 체크.
 2. 막히면 TRACKED로 옮기고 다음 task.
