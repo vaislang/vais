@@ -59,6 +59,14 @@ check "fn cnt(n) {{ let xs = list(); let mut i = 0; while i < n {{ xs.push(i); i
 # function using BOTH an array and a List
 check "fn mix(n) {{ let a = [100, 200]; let xs = list(); xs.push(a[0]); xs.push(a[1]); xs.push(n); return xs[0] + xs[2] }}; return mix(5);" 105
 
+# --- full integration: functions + imperative + arrays + Lists + STRUCTS ---
+# struct (Token-like) built in a function, fields summed
+check "struct Tok {{ kind, start, len }}; fn dist(n) {{ let t = Tok {{ kind: 1, start: n, len: 3 }}; return t.kind + t.start + t.len }}; return dist(5);" 9
+# struct field write in a function
+check "struct P {{ x, y }}; fn f(n) {{ let p = P {{ x: n, y: 0 }}; p.y = n * 2; return p.x + p.y }}; return f(4);" 12
+# struct AND List together in one function
+check "struct P {{ a, b }}; fn g(n) {{ let p = P {{ a: 10, b: 20 }}; let xs = list(); xs.push(p.a); xs.push(p.b); xs.push(n); return xs[0] + xs[2] }}; return g(5);" 15
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'

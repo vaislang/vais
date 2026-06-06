@@ -257,4 +257,12 @@ nl-check+std시작 PRELUDE+게이트3종) **충족**. FIXPOINT 큐는 그 너머
       `lst[식]`/`lst[식]=식` codegen, 슬롯수집기에 list() 감지(rhs_is_list, 2슬롯 할당). 토큰 . 추가.
       **함수가 List 빌드+소비(push 루프+xs.len 합산) build(5)=100**(컴파일러 tokenizer 패턴!), 함수안 배열+List
       혼합 mix=105. 회귀0(sumarr=60, fac=120). e2e 13 PASS. 값-정확성 43/43.
-- [ ] **FP11c** fixpoint_full에 struct 통합 (남은 데이터구조). 그 후 실제 nl 소스 입력 = months급 스케일.
+- [x] **FP11c** fixpoint_full에 **struct 통합** — 🎯 **전체 통합 완료**: 함수+가변변수+while+if+배열+동적List+
+      **struct**가 한 컴파일러 합성. StructDef 테이블(build_defs ≤6필드), Slot에 sty, defs 시그니처 threading,
+      슬롯수집기 struct-decl skip+struct-var 감지(alloca [N x i64]), gen_factor/gen_stmts에 struct 리터럴/필드
+      read/write를 **`.` 모호성을 slot kind로 분기**(sty>=0=struct field, List=`.len`/`.push`)로 추가. **함수 안
+      struct Tok{{kind,start,len}}=9**(컴파일러 Token 형태!), 필드 write f=12, **struct+List 한 함수 g=15**.
+      전체 회귀0(build=100, sumarr=60, fac=120). e2e 16 PASS. 값-정확성 43/43. **fixpoint_full = nl 컴파일러가
+      쓰는 전체 구문(함수+제어흐름+배열+List+struct)을 합성하는 통합 컴파일러.**
+- [ ] **FP12** 실제 nl 컴파일러 소스(수천 줄)를 입력 — months급 스케일(통합 컴파일러에 zero-param/문자열/
+      다중param/중첩 등 추가 + 부트스트랩). codegen 능력+통합은 완비, 남은 것은 규모.

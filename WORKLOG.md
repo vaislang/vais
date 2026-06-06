@@ -432,3 +432,16 @@
 - 남은 것: (a) struct를 full에 통합(intricate, `.` 분기) (b) 실제 nl 컴파일러 소스 입력=months급. 둘 다
   잘-범위화된 자율 /loop 스텝보다 큰 단일집중 작업.
 - 게이트 전부 green(값정확성43 트랜스파일러24 nl-check11). 회귀 0.
+
+## 2026-06-06 (/loop iter 40: FP11c — fixpoint_full에 struct 통합 = 전체 통합 완료)
+- fixpoint_full에 **struct 통합** → 🎯 **전체 통합 완료**: 함수+가변변수+while+if+배열+동적List+struct 합성.
+- StructDef 테이블(build_defs, ≤6필드 위치+count), Slot에 sty(struct-type 인덱스/-1), defs 시그니처 threading
+  (gen_* 5개 + emit_fn/gen_top/collectors 일괄), 슬롯수집기에 struct-decl skip(skip_struct_def)+struct-var 감지
+  (rhs_struct_type→alloca [N x i64], sty 설정), gen_factor에 struct 필드 read, gen_stmts에 struct 리터럴+필드 write.
+  **핵심: `.` 모호성을 slot kind로 분기** — sty>=0이면 struct field(p.x), 아니면 List(.len/.push). 토큰 struct=26.
+  체크포인트별 빌드+검증(Slot확장→threading→헬퍼→슬롯감지→codegen 순, 각 단계 회귀0).
+- **실측**: **함수 안 struct Tok{{kind,start,len}}=9**(컴파일러 Token 형태!), 필드 write f=12, **struct+List 한 함수 g=15**.
+  전체 회귀0(build=100, sumarr=60, fac=120).
+- 검증: fixpoint-full e2e **16 PASS**(struct 3 추가), 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
+- **🎯 fixpoint_full = nl 컴파일러가 쓰는 전체 구문(함수+제어흐름+배열+List+struct)을 합성하는 통합 컴파일러.**
+  codegen 능력+통합 완비. 남은 것=실제 nl 소스(수천 줄) 입력=규모 작업(months급).
