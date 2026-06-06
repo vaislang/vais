@@ -793,3 +793,12 @@
 - 검증: 값-정확성 84/84, 회귀0. README 인덱스 e53→e55 + 카운트 66/66. 교훈: **batch-probe는 다중문장 부정확**
   (heredoc/cold-start가 신뢰 측정)/cold-start 갭은 task-specific(String은 string-param task서만, struct task선 무갭)/
   `_` 와일드카드 미커버였음(흔한데 빠진 것)/매 도메인 cold-start가 커버리지+신뢰 동시 제공.
+
+## 2026-06-07 (/loop iter 65: Collatz cold-start 첫시도 성공 + 도메인 cold-start 성숙 확인)
+- recursion+분기 도메인 cold-start. **Collatz 스텝 카운터 첫시도 성공**: 신선 서브에이전트가 2-arg 재귀 +
+  modulo + 짝/홀 guard chain으로 collatz(6,0)=8 깔끔히(Rust-ism 0). e56로 승격(코퍼스 첫 iterated-function/짝홀 분기).
+- **3연속 cold-start 첫시도 성공**(word-count[String수정후]/inventory/collatz) = 코퍼스가 "다양한 도메인 첫시도
+  성공" 성숙 도달. String갭(iter63)이 주요 잔존 rough edge였던 것으로 보임 — 이후 도메인들은 무갭.
+- **신규 검증 예제**: e56 Collatz(8). 값-정확성 84→85.
+- 검증: 값-정확성 85/85, 회귀0. README 인덱스 e55→e56 + 카운트 67/67. 교훈: **코퍼스 "다도메인 첫시도" 성숙**
+  (3연속 클린 성공)/recursion+분기는 흔한데 코퍼스 첫 등장(Collatz)/cold-start가 도메인별 커버리지 계속 추가.
