@@ -205,6 +205,16 @@ def map_if(line: str) -> str:
     return outside_strings(line, rewrite)
 
 
+def map_loop_keywords(line: str) -> str:
+    # Loop control: nl `break`/`continue` -> Vais `B`/`C` (verified to work as
+    # user statements inside a loop body). Whole-word, NOT inside strings.
+    def rewrite(p: str) -> str:
+        p = re.sub(r"\bbreak\b", "B", p)
+        p = re.sub(r"\bcontinue\b", "C", p)
+        return p
+    return outside_strings(line, rewrite)
+
+
 def map_bitnot(line: str) -> str:
     # `bitnot(x)` -> `(~x)`  (only the simple single-arg form). NOT inside strings
     # (code-as-data: a string containing "bitnot(x)" must stay verbatim).
@@ -326,6 +336,7 @@ def transpile_line(line: str) -> str:
     out = map_field_pub(out)
     out = map_let(out)
     out = map_if(out)
+    out = map_loop_keywords(out)
     out = map_bitnot(out)
     out = map_bitwise2(out)
     out = map_arm_return(out)

@@ -85,6 +85,11 @@ CASES = [
     ("Int in string kept", 'let s = "type is Int"', ['"type is Int"'], ["i64", "as i64"]),
     ("List in string kept", 'let s = "a List here"', ['"a List here"'], ["Vec"]),
     ("String type -> str", "fn f(s: String) -> Int {", ["str"], ["String"]),
+    # loop control: break -> B, continue -> C (whole-word, not in strings)
+    ("break -> B", "    if i == 3 { break }", ["{ B }"], ["break"]),
+    ("continue -> C", "    if i == 3 { continue }", ["{ C }"], ["continue"]),
+    ("break in string kept", 'let s = "break here"', ['"break here"'], ["B here"]),
+    ("breaker ident kept", "let breaker = 5", ["breaker"], [" B er", "Cer"]),
     # code-as-data: collection methods / enum-qualifier / arm-return inside a
     # string must stay verbatim (these directly affect the self-host compiler,
     # which embeds nl programs as compile("...") strings).

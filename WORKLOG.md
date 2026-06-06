@@ -802,3 +802,16 @@
 - **신규 검증 예제**: e56 Collatz(8). 값-정확성 84→85.
 - 검증: 값-정확성 85/85, 회귀0. README 인덱스 e55→e56 + 카운트 67/67. 교훈: **코퍼스 "다도메인 첫시도" 성숙**
   (3연속 클린 성공)/recursion+분기는 흔한데 코퍼스 첫 등장(Collatz)/cold-start가 도메인별 커버리지 계속 추가.
+
+## 2026-06-07 (/loop iter 66: nl측 갭 발견·수정 — break/continue 루프제어 매핑)
+- Rust-idiom-heavy heredoc probe로 **nl측 갭 발견**: `break`/`continue`가 트랜스파일러서 verbatim 통과→Vais E002
+  (Vais 루프제어는 `B`/`C`). chain-after-call/bool-expr-return/shadow는 PASS(견고성 확인).
+- **수정: map_loop_keywords 신설** — `break`→`B`, `continue`→`C`(whole-word, outside_strings). Vais `B`/`C`가
+  user 루프 본문서 동작 실측(run 3/3 확인). map_if(루프구조) 뒤 배치.
+- **오탐0**: 문자열 "press break to continue" verbatim, 식별자 `breaker` 비변환(word-boundary). 전 49예제+self-host
+  e2e green(self-host 무손상).
+- **신규 검증 예제 2종**: e57 break(루프조기종료, 3) / e58 continue(반복건너뜀, 4). 코퍼스 첫 루프제어. 값정확성 85→87.
+- 트랜스파일러 unit +4(46→50: break/continue 매핑 + 문자열safety + 식별자가드). PRELUDE 루프제어 섹션 추가.
+- 검증: 값-정확성 87/87, 트랜스파일러 unit 50/50, 회귀0. README 인덱스 e56→e58 + 카운트 69/69. 교훈:
+  **흔한 제어키워드(break/continue)가 미매핑이었음**(while 루프는 많았으나 user break/continue 없었어서 잠복)/
+  Rust-idiom probe가 cold-start와 다른 갭 노출(continue는 cold-start 과제선 안 나왔음)/Vais B/C 동작확인 후 forgiving 매핑.
