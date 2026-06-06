@@ -843,3 +843,13 @@
   다중값 반환(minmax→{lo,hi}, 12, 튜플의 named 대안). 값정확성 89→91.
 - 검증: 값-정확성 91/91, 회귀0. README 인덱스 e60→e62 + 카운트 73/73. 교훈: targeted probe 갭 없으면 견고성확인+
   커버리지(computed-index/struct-multi-return 미커버였음)/expect 오산은 빌드가 정답(arr a[1]+a[2]=50).
+
+## 2026-06-07 (/loop iter 70: 깊은조합 probe — 제네릭struct/enum-struct payload + 클로저반환 Vais갭)
+- 깊은조합 probe(heredoc). **제네릭 struct `Box<T>` 동작**(코퍼스 첫) + **enum 페이로드가 struct `Has(Pt)` 동작**
+  (비재귀라 OK) + **loop+break+누적 동작**. **캡처 클로저 반환 Vais갭 발견**: `fn adder(n)->fn(Int)->Int{return |x|
+  x+n}` E001(n 캡처를 bare fn-ptr로 반환 — env 없음; 하드코딩 Vais도 실패). **클로저 인자(e49)는 OK, 반환만 막힘**
+  (클로저 ABI 클래스, Vais memory bare-fn-ptr 노트와 일치). 9번째 Vais갭 TRACKED.
+- **신규 검증 예제 3종**: e63 제네릭struct Box<T>(7) / e64 enum-struct payload Has(Pt)(5) / e65 loop+break+누적(10).
+  값정확성 91→94.
+- 검증: 값-정확성 94/94, 회귀0. README 인덱스 e62→e65 + 카운트 76/76. 교훈: 제네릭struct/enum-struct 동작(능력 넓음)/
+  **클로저 인자 OK vs 반환 막힘**(env 캡처 반환경계 Vais ABI 한계)/깊은조합이 잔존 Vais갭 노출(nl측은 견고).
