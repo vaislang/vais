@@ -361,3 +361,17 @@
 - 검증: array e2e **7 PASS**(+배열 codegen 증명), 값-정확성 **40/40**, 트랜스파일러 24/24. 회귀 0.
 - **nl이 배열(루프 read/write 포함) 프로그램을 네이티브 IR로 codegen.** List 자료구조 codegen의 기반.
 - 다음 FP10e: struct/동적 List(push/len) codegen — months급 큰 조각. (대형 함수-병합 FP10f도 추적.)
+
+## 2026-06-06 (/loop iter 34: FP10f — 함수+명령형본문 통합 [self-compile 직결 캡스톤])
+- **compiler/self/fixpoint_full.nl**: 함수(FP7)와 명령형(FP10)을 통합 — nl 컴파일러 자신의 함수 형태
+  (`fn name(p) {{ let mut...; while...; if...; return }}`)를 진짜 LLVM IR로 codegen.
+- **메커니즘**: 각 함수=`define i64 @name(i64 %p_in)`, param→alloca %v0 복사(이후 균일 load/store),
+  body locals alloca(슬롯 1+), 명령형 본문은 gen_stmts(let/assign/while/if/return) 재사용, 호출=`call i64 @name`.
+  gen_factor/term/expr/fold/stmts 시그니처에 **&List<Fn> threading**(스크립트로 정의+호출부 일괄). build_fns
+  (중첩 brace depth 추적) + per-function slot scope(emit_fn) + gen_top(top-level만, skip_fn_def로 fn 건너뜀).
+  skip_factor/gen_term이 call(name(...)) 토큰을 paren_end로 스킵.
+- **실측**: 루프함수 sum_to(6)=15, 루프 fact(6)=120, 함수 안 if clamp(250/7), **재귀 fac(5)=120(early-return base)**,
+  **cross-call quad(5)=20**(가변 local + 두 함수). 생성 IR이 define @name(%p_in)+param-alloca+loop+call 포함.
+- 검증: full e2e **7 PASS**, 값-정확성 **41/41**, 트랜스파일러 24/24. 회귀 0.
+- **🎯 nl 컴파일러가 자신이 쓰인 함수 형태(함수+param+가변locals+while+if+재귀+호출)를 네이티브 IR로 codegen.**
+  진짜 self-compile의 핵심 통합 달성. 남은 것=struct/동적 List(FP10e, months급).
