@@ -227,3 +227,16 @@
 - 검증: fixpoint2 e2e **9/9**, 값-정확성 **33/33**, 트랜스파일러 24/24, fixpoint/CX 회귀 0.
 - **nl이 멀티문자 변수명을 가진 프로그램을 컴파일.** List<Token> 아키텍처가 단일자 한계 돌파(Vais &Vec 수정 기반).
 - 다음 FP3: 함수 정의(멀티문자 함수명+호출)를 List 파이프라인으로.
+
+## 2026-06-06 (/loop iter 23: FP3 — 멀티문자 함수 정의+호출)
+- **compiler/self/fixpoint3.nl**: fixpoint2(멀티문자 변수) + 함수테이블. `fn name(p[, q]) {{ return e }}`
+  멀티문자 함수명 + 호출.
+- **메커니즘**: build_fns가 토큰 스캔해 List<Fn>{name범위, param1/2 범위, body 토큰범위[bstart,bend)} 구축.
+  eval_factor서 ident 다음 '('이면 호출 → find_fn(name_eq) → 새 callee vars(param=arg push) → body 토큰범위 eval.
+  평가기가 &List<Token>+&List<Fn>+&List<Var> **3중 borrow 재귀**(Vais &Vec 수정으로 가능, 사전 검증함).
+  skip_factor/arg_end가 호출의 괄호 깊이 추적(중첩 호출 인자 경계).
+- **실측**: square(5)=25, add(10,20)=30, 중첩 add(square(base),base)=12, 플래그십 add(sq(width),sq(height))=41,
+  cross-call add2(y)=inc(inc(y))=12 / g(b)=f(b)+b=15.
+- 검증: fixpoint3 e2e **7/7**, 값-정확성 **34/34**, 트랜스파일러 24/24, fixpoint/fixpoint2 회귀 0.
+- **nl이 멀티문자 함수명+중첩호출 프로그램을 컴파일.** 플래그십(square/add/width/height)이 진짜 이름으로 동작.
+- 다음 FP3b: 함수 본문 조건식 → 멀티문자 재귀(진짜 fib/fact).
