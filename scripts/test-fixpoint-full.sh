@@ -99,6 +99,14 @@ check "fn cnt() {{ let s = \`yellow\`; let mut i = 0; let mut c = 0; while i < s
 # a string scan) -- the unified compiler codegens a complete tokenizer in the subset.
 check "fn ntok() {{ let s = \`ab cd ef\`; let mut i = 0; let mut n = 0; let mut inw = 0; while i < s.len() {{ if s[i] == 32 {{ inw = 0 }} else {{ if inw == 0 {{ n = n + 1 }}; inw = 1 }}; i = i + 1 }}; return n }}; return ntok();" 3
 
+# THE PARSER CORE: byte-by-byte string equality (the name_eq shape -- compare two
+# byte ranges). "let" == "let" -> 1; "let" != "mut" -> 0.
+check "fn eq() {{ let a = \`let\`; let b = \`let\`; let mut i = 0; let mut ok = 1; while i < a.len() {{ if a[i] == b[i] {{ ok = ok }} else {{ ok = 0 }}; i = i + 1 }}; return ok }}; return eq();" 1
+check "fn ne() {{ let a = \`let\`; let b = \`mut\`; let mut i = 0; let mut ok = 1; while i < a.len() {{ if a[i] == b[i] {{ ok = ok }} else {{ ok = 0 }}; i = i + 1 }}; return ok }}; return ne();" 0
+# KEYWORD RECOGNITION: length check + per-byte compare (the kw3/kw5 pattern the
+# real lexer uses to classify identifiers as keywords). Recognizes "let" -> 7.
+check "fn kw() {{ let s = \`let\`; if s.len() == 3 {{ if s[0] == 108 {{ if s[1] == 101 {{ if s[2] == 116 {{ return 7 }} }} }} }}; return 0 }}; return kw();" 7
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'
