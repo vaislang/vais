@@ -327,3 +327,15 @@
 - 검증: imperative e2e **6/6**(+alloca/store/load emit 증명), 값-정확성 **39/39**, 트랜스파일러 24/24. 회귀 0.
 - **nl이 가변변수 명령형 프로그램을 alloca 기반 IR로 codegen.** 루프(FP10b)의 기반.
 - 다음 FP10b: while 루프 codegen(loop/body/done 블록 + 조건 br + back-edge).
+
+## 2026-06-06 (/loop iter 31: FP10b — while 루프 codegen [반복 명령형])
+- fixpoint_imperative.nl에 **while 루프 codegen** 추가. `while <식> <비교> <식> {{ <문장들> }}`를
+  loop<N>/body<N>/done<N> 블록 + 조건 icmp+조건br + back-edge(br label %loop<N>)로 emit.
+- **gen_stmts 추출+재귀**: compile의 인라인 문장루프를 gen_stmts(start,end,counter)→counter로 추출, 루프 본문도
+  같은 함수로 재귀 처리. match_brace로 중첩 `{}` 매칭. label은 temp 번호 기반 고유(순차 루프도 충돌 0).
+  비교 < > == (slt/sgt/eq). 토큰 while=22, {=11, }=12, 비교 18/19/20 추가(==는 = 2개 lookahead).
+- **실측**: sum(1..5)=15, **5!=120(루프 factorial)**, countdown(10), 0회실행(조건 false→s유지), 두 순차루프(10).
+  생성 IR이 loop1: + br label %loop1(back-edge) + icmp slt 포함.
+- 검증: imperative e2e **13/13**(+루프 제어흐름 emit 증명), 값-정확성 **39/39**, 트랜스파일러 24/24. 회귀 0.
+- **nl이 반복 명령형 프로그램(가변변수+while)을 네이티브 IR로 codegen.** nl 컴파일러 자신이 쓰인 구문에 근접.
+- 다음 FP10c: if 문(제어흐름) codegen. 이후 List/method/struct(대규모).

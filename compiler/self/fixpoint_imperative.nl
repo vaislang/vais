@@ -46,6 +46,15 @@ fn kw3(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int) -> Int {
     if src[a + 2] != w2 { return 0 }
     return 1
 }
+fn kw5(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int, w3: Int, w4: Int) -> Int {
+    if alen != 5 { return 0 }
+    if src[a] != w0 { return 0 }
+    if src[a + 1] != w1 { return 0 }
+    if src[a + 2] != w2 { return 0 }
+    if src[a + 3] != w3 { return 0 }
+    if src[a + 4] != w4 { return 0 }
+    return 1
+}
 fn kw6(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int, w3: Int, w4: Int, w5: Int) -> Int {
     if alen != 6 { return 0 }
     if src[a] != w0 { return 0 }
@@ -89,13 +98,29 @@ fn tokenize(src: Str) -> List<Token> {
                 toks.push(Token { kind: 8, value: 0, nstart: start, nlen: len })
             } else if kw3(src, start, len, 109, 117, 116) == 1 {
                 toks.push(Token { kind: 21, value: 0, nstart: start, nlen: len })
+            } else if kw5(src, start, len, 119, 104, 105, 108, 101) == 1 {
+                toks.push(Token { kind: 22, value: 0, nstart: start, nlen: len })   # while
             } else {
                 toks.push(Token { kind: 1, value: 0, nstart: start, nlen: len })
             }
         } else if c == 43 { toks.push(Token { kind: 2, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 42 { toks.push(Token { kind: 3, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 45 { toks.push(Token { kind: 4, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
-        else if c == 61 { toks.push(Token { kind: 5, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 60 { toks.push(Token { kind: 18, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 62 { toks.push(Token { kind: 19, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 61 {
+            if i + 1 < n {
+                if src[i + 1] == 61 {
+                    toks.push(Token { kind: 20, value: 0, nstart: 0, nlen: 0 }); i = i + 2
+                } else {
+                    toks.push(Token { kind: 5, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+                }
+            } else {
+                toks.push(Token { kind: 5, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+            }
+        }
+        else if c == 123 { toks.push(Token { kind: 11, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 125 { toks.push(Token { kind: 12, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 59 { toks.push(Token { kind: 6, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else { i = i + 1 }
     }
@@ -255,26 +280,43 @@ fn collect_slots(toks: &List<Token>, n: Int, src: Str) -> List<Slot> {
     return slots
 }
 
-fn compile(src: Str) -> Int {
-    let toks = tokenize(src)
-    let n = toks.len()
-    emit_str("define i64 @main() {")
-    putchar(10)
-    let slots = collect_slots(&toks, n, src)
-    let mut counter = 1
-    let mut i = 0
-    while i < n {
+# Find the matching '}' for the '{' at index `op` (handles nesting). Returns its
+# index. `op` must be the '{' token index.
+fn match_brace(toks: &List<Token>, op: Int, n: Int) -> Int {
+    let mut j = op + 1
+    let mut depth = 1
+    let mut go = true
+    while go {
+        if j >= n { go = false }
+        else {
+            let t = toks[j]
+            if t.kind == 11 { depth = depth + 1; j = j + 1 }
+            else if t.kind == 12 {
+                depth = depth - 1
+                if depth == 0 { go = false } else { j = j + 1 }
+            }
+            else { j = j + 1 }
+        }
+    }
+    return j
+}
+
+# Generate code for the statements in token range [i, end). Returns the next free
+# SSA temp. Handles `let`, assignment, `return`, and `while` (recursing for the
+# loop body). Labels reuse temp numbers to stay unique.
+fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, src: Str, i0: Int, end: Int, counter0: Int) -> Int {
+    let mut i = i0
+    let mut counter = counter0
+    while i < end {
         let t = toks[i]
         if t.kind == 7 {
-            # let [mut] <name> = <expr> ;
             let nx = toks[i + 1]
             let mut npos = i + 1
             if nx.kind == 21 { npos = i + 2 }
             let name = toks[npos]
-            let slot = find_slot(&slots, src, name.nstart, name.nlen)
-            # '=' is at npos+1, expr from npos+2
-            let stop = find_semi(toks, npos + 2, n)
-            let e = gen_expr(&toks, &slots, src, npos + 2, stop, counter)
+            let slot = find_slot(slots, src, name.nstart, name.nlen)
+            let stop = find_semi(toks, npos + 2, end)
+            let e = gen_expr(toks, slots, src, npos + 2, stop, counter)
             emit_str("  store i64 ")
             emit_op(e)
             emit_str(", i64* %v")
@@ -283,12 +325,11 @@ fn compile(src: Str) -> Int {
             counter = e.next
             i = stop + 1
         } else if t.kind == 1 {
-            # assignment `<name> = <expr> ;` (ident followed by '=')
             let nx = toks[i + 1]
             if nx.kind == 5 {
-                let slot = find_slot(&slots, src, t.nstart, t.nlen)
-                let stop = find_semi(toks, i + 2, n)
-                let e = gen_expr(&toks, &slots, src, i + 2, stop, counter)
+                let slot = find_slot(slots, src, t.nstart, t.nlen)
+                let stop = find_semi(toks, i + 2, end)
+                let e = gen_expr(toks, slots, src, i + 2, stop, counter)
                 emit_str("  store i64 ")
                 emit_op(e)
                 emit_str(", i64* %v")
@@ -300,24 +341,109 @@ fn compile(src: Str) -> Int {
                 i = i + 1
             }
         } else if t.kind == 8 {
-            let stop = find_semi(toks, i + 1, n)
-            let e = gen_expr(&toks, &slots, src, i + 1, stop, counter)
+            let stop = find_semi(toks, i + 1, end)
+            let e = gen_expr(toks, slots, src, i + 1, stop, counter)
             emit_str("  ret i64 ")
             emit_op(e)
             putchar(10)
             counter = e.next
             i = stop + 1
+        } else if t.kind == 22 {
+            # while <lhs> <cmp> <rhs> { <body> }
+            # find '{' after the condition
+            let mut bopen = i + 1
+            let mut g1 = true
+            while g1 {
+                if bopen >= end { g1 = false }
+                else {
+                    let bt = toks[bopen]
+                    if bt.kind == 11 { g1 = false } else { bopen = bopen + 1 }
+                }
+            }
+            let bclose = match_brace(toks, bopen, end)
+            # condition is [i+1, bopen); find comparison operator
+            let cstart = i + 1
+            let cend = bopen
+            let mut oppos = cend
+            let mut pred_lt = 0
+            let mut pred_gt = 0
+            let mut pred_eq = 0
+            let mut q = cstart
+            let mut g2 = true
+            while g2 {
+                if q >= cend { g2 = false }
+                else {
+                    let qt = toks[q]
+                    if qt.kind == 18 { oppos = q; pred_lt = 1; g2 = false }
+                    else if qt.kind == 19 { oppos = q; pred_gt = 1; g2 = false }
+                    else if qt.kind == 20 { oppos = q; pred_eq = 1; g2 = false }
+                    else { q = q + 1 }
+                }
+            }
+            # label numbers from current counter; reserve 3 (loop/body/done)
+            let lbl = counter
+            counter = counter + 1
+            emit_str("  br label %loop")
+            pint(lbl)
+            putchar(10)
+            emit_str("loop")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
+            let lhs = gen_expr(toks, slots, src, cstart, oppos, counter)
+            let rhs = gen_expr(toks, slots, src, oppos + 1, cend, lhs.next)
+            let cnum = rhs.next
+            emit_str("  %t")
+            pint(cnum)
+            emit_str(" = icmp ")
+            if pred_lt == 1 { emit_str("slt") } else if pred_gt == 1 { emit_str("sgt") } else { emit_str("eq") }
+            emit_str(" i64 ")
+            emit_op(lhs)
+            emit_str(", ")
+            emit_op(rhs)
+            putchar(10)
+            emit_str("  br i1 %t")
+            pint(cnum)
+            emit_str(", label %body")
+            pint(lbl)
+            emit_str(", label %done")
+            pint(lbl)
+            putchar(10)
+            emit_str("body")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
+            # body statements are [bopen+1, bclose)
+            counter = gen_stmts(toks, slots, src, bopen + 1, bclose, cnum + 1)
+            emit_str("  br label %loop")
+            pint(lbl)
+            putchar(10)
+            emit_str("done")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
+            i = bclose + 1
         } else {
             i = i + 1
         }
     }
+    return counter
+}
+
+fn compile(src: Str) -> Int {
+    let toks = tokenize(src)
+    let n = toks.len()
+    emit_str("define i64 @main() {")
+    putchar(10)
+    let slots = collect_slots(&toks, n, src)
+    let last = gen_stmts(&toks, &slots, src, 0, n, 1)
     emit_str("}")
     putchar(10)
     return 0
 }
 
 fn main() -> Int {
-    # Imperative: mutable variable reassigned, then returned.
-    # let mut s = 10; s = s + 5; s = s * 2; return s -> 30.
-    return compile("let mut s = 10; s = s + 5; s = s * 2; return s;")
+    # Imperative WITH a loop: sum 1..5 = 15.
+    # let mut s = 0; let mut i = 1; while i < 6 { s = s + i; i = i + 1 } return s
+    return compile("let mut s = 0; let mut i = 1; while i < 6 {{ s = s + i; i = i + 1 }}; return s;")
 }
