@@ -603,3 +603,15 @@
 - 검증: nl-check 34/34, 값-정확성 49/49, 회귀0. 교훈: **P4 명제 실측=신선 서브에이전트 자기수정 라운드 카운트**
   (1라운드 수렴)/cold-start가 typical 과제엔 첫시도 성공(코퍼스 강함)/nl-check 미flag도 코퍼스가 보완(이중 안전망)/
   서브에이전트 자가수정이 새 규칙 후보 노출(`+=`)/`;`는 flag 금지(정상 구분자, 실측이 추측 정정).
+
+## 2026-06-07 (/loop iter 51: P9 코퍼스 미커버 영역 +6 [enum/Result/Option/struct 조합])
+- codegen 능력완비 후 비차단 인프라 계속 — P9 코퍼스를 **미커버 영역**으로 확장. 후보를 트랜스파일+빌드로
+  먼저 검증 후 동작하는 것만 채택(코퍼스=valid-form 권위).
+- **신규 검증 예제 6종**: e21 Result Ok/Err match(7) / e22 enum 디스패치 match-in-helper(12, 작은 인터프리터
+  패턴) / e23 Option 흐름 lookup→match→합산(15) / e24 struct 필드가 enum + match(1, 모델링 shape) /
+  e25 for+if 필터합산(12, `.filter()` Vais갭 대안 수동필터) / e26 함수합성 파이프라인 dec(dbl(inc(9)))=19.
+- 이전 코퍼스는 Option(e08/e16)/enum payload(e02)는 있었으나 **Result match / enum 디스패치 / Option 다중흐름 /
+  struct+enum 조합 / for-필터 / 함수합성**은 미커버였음. AI가 자주 쓰는 조합 패턴 보강.
+- 검증: 값-정확성 **49→55 PASS 회귀0**, nl-check 6 신규 clean. README 인덱스 e20→e26 + 카운트 37/37(러너55/55).
+  교훈: 후보는 빌드선검증(expect 오산 2건 — pipeline 19, 빌드가 정답 알려줌)/미커버는 "있는 것의 변주"가 아니라
+  "조합/흐름"에 있음(Result match, struct+enum)/`.filter()` Vais갭은 for+if 수동필터가 코퍼스 권장 대안.

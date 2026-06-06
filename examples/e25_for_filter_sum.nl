@@ -1,0 +1,13 @@
+# expect: 12
+# Filter-by-hand: iterate a list, conditionally accumulate (even numbers).
+# (nl's .filter() is currently a Vais backend gap, so this is the idiom to use.)
+fn main() -> Int {
+    let xs = [1, 2, 3, 4, 5, 6]
+    let mut total = 0
+    for x in xs {
+        if x % 2 == 0 {
+            total = total + x
+        }
+    }
+    return total
+}
