@@ -44,6 +44,15 @@ check "let mut s = 7; let mut i = 10; while i < 5 {{ s = s + 1 }}; return s;" 7
 # two sequential loops (unique labels)
 check "let mut a = 0; let mut i = 0; while i < 3 {{ a = a + 2; i = i + 1 }}; let mut j = 0; while j < 4 {{ a = a + 1; j = j + 1 }}; return a;" 10
 
+# --- FP10c: if/else statements (control flow) ---
+check "let mut s = 0; if 5 > 3 {{ s = 10 }} else {{ s = 20 }}; return s;" 10
+check "let mut s = 0; if 2 > 3 {{ s = 10 }} else {{ s = 20 }}; return s;" 20
+# no else
+check "let mut s = 5; if 1 < 2 {{ s = 99 }}; return s;" 99
+check "let mut s = 5; if 9 < 2 {{ s = 99 }}; return s;" 5
+# if inside a loop: count 1..10 values > 5
+check "let mut c = 0; let mut i = 1; while i < 11 {{ if i > 5 {{ c = c + 1 }}; i = i + 1 }}; return c;" 5
+
 # Sanity: mutation genuinely uses alloca/store/load.
 tmp="$(mktemp -d)"
 PROG="let mut s = 1; s = s + 1; return s;" python3 - "$SRC" "$tmp/c.nl" <<'PY'
@@ -74,5 +83,5 @@ if grep -q "loop1:" "$tmp/out.ll" && grep -q "br label %loop1" "$tmp/out.ll" && 
   echo "  PASS emits loop label + back-edge + icmp (real loop codegen)";
 else echo "  FAIL did not emit loop control flow"; cat "$tmp/out.ll"; fail=1; fi
 
-[ "$fail" -eq 0 ] && echo "RESULT: fixpoint imperative codegen (mutable vars + while loops) end-to-end OK" || echo "RESULT: FAILURES"
+[ "$fail" -eq 0 ] && echo "RESULT: fixpoint imperative codegen (mutable vars + while + if) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail

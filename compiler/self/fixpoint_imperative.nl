@@ -39,11 +39,25 @@ fn is_space(c: Int) -> Bool {
     if c == 10 { return true }
     return false
 }
+fn kw2(src: Str, a: Int, alen: Int, w0: Int, w1: Int) -> Int {
+    if alen != 2 { return 0 }
+    if src[a] != w0 { return 0 }
+    if src[a + 1] != w1 { return 0 }
+    return 1
+}
 fn kw3(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int) -> Int {
     if alen != 3 { return 0 }
     if src[a] != w0 { return 0 }
     if src[a + 1] != w1 { return 0 }
     if src[a + 2] != w2 { return 0 }
+    return 1
+}
+fn kw4(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int, w3: Int) -> Int {
+    if alen != 4 { return 0 }
+    if src[a] != w0 { return 0 }
+    if src[a + 1] != w1 { return 0 }
+    if src[a + 2] != w2 { return 0 }
+    if src[a + 3] != w3 { return 0 }
     return 1
 }
 fn kw5(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int, w3: Int, w4: Int) -> Int {
@@ -100,6 +114,10 @@ fn tokenize(src: Str) -> List<Token> {
                 toks.push(Token { kind: 21, value: 0, nstart: start, nlen: len })
             } else if kw5(src, start, len, 119, 104, 105, 108, 101) == 1 {
                 toks.push(Token { kind: 22, value: 0, nstart: start, nlen: len })   # while
+            } else if kw2(src, start, len, 105, 102) == 1 {
+                toks.push(Token { kind: 15, value: 0, nstart: start, nlen: len })   # if
+            } else if kw4(src, start, len, 101, 108, 115, 101) == 1 {
+                toks.push(Token { kind: 17, value: 0, nstart: start, nlen: len })   # else
             } else {
                 toks.push(Token { kind: 1, value: 0, nstart: start, nlen: len })
             }
@@ -281,7 +299,7 @@ fn collect_slots(toks: &List<Token>, n: Int, src: Str) -> List<Slot> {
 }
 
 # Find the matching '}' for the '{' at index `op` (handles nesting). Returns its
-# index. `op` must be the '{' token index.
+# index. `op` must be the open-brace token index.
 fn match_brace(toks: &List<Token>, op: Int, n: Int) -> Int {
     let mut j = op + 1
     let mut depth = 1
@@ -350,7 +368,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, src: Str, i0: Int, end: Int
             i = stop + 1
         } else if t.kind == 22 {
             # while <lhs> <cmp> <rhs> { <body> }
-            # find '{' after the condition
+            # find the open-brace after the condition
             let mut bopen = i + 1
             let mut g1 = true
             while g1 {
@@ -423,6 +441,106 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, src: Str, i0: Int, end: Int
             emit_str(":")
             putchar(10)
             i = bclose + 1
+        } else if t.kind == 15 {
+            # if <lhs> <cmp> <rhs> { <then> } [else { <else> }]  (statement form)
+            let mut bopen = i + 1
+            let mut g1 = true
+            while g1 {
+                if bopen >= end { g1 = false }
+                else {
+                    let bt = toks[bopen]
+                    if bt.kind == 11 { g1 = false } else { bopen = bopen + 1 }
+                }
+            }
+            let bclose = match_brace(toks, bopen, end)
+            # condition [i+1, bopen)
+            let cstart = i + 1
+            let cend = bopen
+            let mut oppos = cend
+            let mut pred_lt = 0
+            let mut pred_gt = 0
+            let mut pred_eq = 0
+            let mut q = cstart
+            let mut g2 = true
+            while g2 {
+                if q >= cend { g2 = false }
+                else {
+                    let qt = toks[q]
+                    if qt.kind == 18 { oppos = q; pred_lt = 1; g2 = false }
+                    else if qt.kind == 19 { oppos = q; pred_gt = 1; g2 = false }
+                    else if qt.kind == 20 { oppos = q; pred_eq = 1; g2 = false }
+                    else { q = q + 1 }
+                }
+            }
+            # is there an `else { ... }` after the then-block?
+            let mut has_else = 0
+            let mut eopen = bclose
+            let mut eclose = bclose
+            let after_then = bclose + 1
+            if after_then < end {
+                let et = toks[after_then]
+                if et.kind == 17 {
+                    has_else = 1
+                    # find the open-brace after else
+                    let mut eo = after_then + 1
+                    let mut g3 = true
+                    while g3 {
+                        if eo >= end { g3 = false }
+                        else {
+                            let ot = toks[eo]
+                            if ot.kind == 11 { g3 = false } else { eo = eo + 1 }
+                        }
+                    }
+                    eopen = eo
+                    eclose = match_brace(toks, eo, end)
+                }
+            }
+            let lbl = counter
+            counter = counter + 1
+            let lhs = gen_expr(toks, slots, src, cstart, oppos, counter)
+            let rhs = gen_expr(toks, slots, src, oppos + 1, cend, lhs.next)
+            let cnum = rhs.next
+            emit_str("  %t")
+            pint(cnum)
+            emit_str(" = icmp ")
+            if pred_lt == 1 { emit_str("slt") } else if pred_gt == 1 { emit_str("sgt") } else { emit_str("eq") }
+            emit_str(" i64 ")
+            emit_op(lhs)
+            emit_str(", ")
+            emit_op(rhs)
+            putchar(10)
+            emit_str("  br i1 %t")
+            pint(cnum)
+            emit_str(", label %ithen")
+            pint(lbl)
+            emit_str(", label %ielse")
+            pint(lbl)
+            putchar(10)
+            # then block
+            emit_str("ithen")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
+            counter = gen_stmts(toks, slots, src, bopen + 1, bclose, cnum + 1)
+            emit_str("  br label %imerge")
+            pint(lbl)
+            putchar(10)
+            # else block (empty if no else)
+            emit_str("ielse")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
+            if has_else == 1 {
+                counter = gen_stmts(toks, slots, src, eopen + 1, eclose, counter)
+            }
+            emit_str("  br label %imerge")
+            pint(lbl)
+            putchar(10)
+            emit_str("imerge")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
+            if has_else == 1 { i = eclose + 1 } else { i = bclose + 1 }
         } else {
             i = i + 1
         }
@@ -443,7 +561,6 @@ fn compile(src: Str) -> Int {
 }
 
 fn main() -> Int {
-    # Imperative WITH a loop: sum 1..5 = 15.
-    # let mut s = 0; let mut i = 1; while i < 6 { s = s + i; i = i + 1 } return s
-    return compile("let mut s = 0; let mut i = 1; while i < 6 {{ s = s + i; i = i + 1 }}; return s;")
+    # Imperative if-statement codegen (control flow). Returns 10 (since 5 > 3).
+    return compile("let mut s = 0; if 5 > 3 {{ s = 10 }} else {{ s = 20 }}; return s;")
 }

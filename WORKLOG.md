@@ -339,3 +339,14 @@
 - 검증: imperative e2e **13/13**(+루프 제어흐름 emit 증명), 값-정확성 **39/39**, 트랜스파일러 24/24. 회귀 0.
 - **nl이 반복 명령형 프로그램(가변변수+while)을 네이티브 IR로 codegen.** nl 컴파일러 자신이 쓰인 구문에 근접.
 - 다음 FP10c: if 문(제어흐름) codegen. 이후 List/method/struct(대규모).
+
+## 2026-06-06 (/loop iter 32: FP10c — if/else 문 codegen [명령형 3종 완성])
+- fixpoint_imperative.nl에 **if/else 문 codegen**(값 아닌 제어흐름). `if <식> <비교> <식> {{ <문장> }}
+  [else {{ <문장> }}]`를 icmp+조건br + ithen<N>/ielse<N>/imerge<N> 블록으로 emit. else 옵션 감지(없으면 빈
+  else→merge). gen_stmts 재귀(분기도 문장열), match_brace 중첩 처리. 토큰 if=15/else=17 추가, kw2/kw4 추가.
+- **실측**: true/false 분기(10/20), else 없음(99/유지5), **루프 안 if**(1..10 중 >5 카운트=5).
+- **트랜스파일러 한계 재확인+우회**: 코드 주석의 lone `{`가 for/while 블록확장 brace-counting을 깨 stray `}`
+  생성(P001) → 주석을 brace-free 문구로(`'{'`→`open-brace`). (라인기반 트랜스파일러의 알려진 클래스.)
+- 검증: imperative e2e **17 PASS**(FP10a 가변+FP10b while+FP10c if), 값-정확성 **39/39**, 트랜스파일러 24/24. 회귀 0.
+- **명령형 3종(가변변수+while+if) 완성.** nl 컴파일러가 자신이 쓰인 제어구조(가변/루프/조건)를 네이티브 IR로 codegen.
+- 다음 FP10d: List/method/struct codegen(대규모 months급) — 진짜 self-compile 향.
