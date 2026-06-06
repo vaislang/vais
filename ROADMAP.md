@@ -72,6 +72,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**(codegen 능력 완비).
 ---
 
 ## TRACKED 추가 (Vais 버그)
+- **Vais `impl Trait for Type` 미지원**: `impl Area for Sq { ... }`가 P001(`for`서). **`impl Type { ... }`
+  (inherent 메서드)는 OK**(e09/e43 동작) → nl 구조체 메서드는 정상, trait 기반 다형성만 막힘. Vais 파서 확장
+  필요. nl측은 `impl Type` 형태로 충분(트랜스파일 정상). 2026-06-07 실측.
 - **Vais Vec 성장(push/map/filter) codegen 버그**: 리터럴 Vec에 `.push(x)`는 무음 miscompile(`@Vec_push`
   undefined, len 오염 → garbage 134), `.map()`은 `@Vec_push` undefined로 빌드실패, `.filter()`는 E001
   (task_7cfebeba). **read-only(len/index/fold/sum)는 OK**. 리스트 변형/구축은 `for`-루프 누적(e25/e27) 권장.

@@ -1,8 +1,8 @@
 # nl 예제 코퍼스 (P9 인프라)
 
 **검증된 nl 예제.** P9(예제 코퍼스 = 최강 레버, cold-start 1/5→5/5)의 핵심 인프라.
-모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 53/53 PASS; 러너 전체는
-self-host codegen 모듈 포함 71/71).
+모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 56/56 PASS; 러너 전체는
+self-host codegen 모듈 포함 74/74).
 
 > 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
 > AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
@@ -68,6 +68,9 @@ self-host codegen 모듈 포함 71/71).
 | e40 | Option을 struct 필드로 + match | 7 |
 | e41 | 재귀로 struct accumulator 전달 | 6 |
 | e42 | while로 함수 반복 적용 | 8 |
+| e43 | 제네릭 함수 identity<T> | 5 |
+| e44 | 문자열 길이 s.len() | 5 |
+| e45 | 문자열 동등성 a == b | 1 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
 - **Vec 성장 `.push()`/`.map()`/`.filter()`** — Vais 백엔드 버그(`@Vec_push` 무음 miscompile/undefined).
@@ -76,6 +79,8 @@ self-host codegen 모듈 포함 71/71).
   `@HashMap_new`) + `get_opt` Option ptr/i64 불일치. Vais repo `tests/empirical/codegen_bugs/B-01,B-02`에
   repro 존재. nl 트랜스파일이 아니라 Vais codegen 문제 → Vais repo 수정 필요. PRELUDE 🔶.
 - 중첩 `match` (arm 안에 `=> match {...}`) — 라인-재작성기 P001(트랜스파일러 한계). 함수분리로 우회 가능.
+- **`impl Trait for Type`** (trait 기반 다형성) — Vais 미지원(P001). **`impl Type { ... }`(inherent 메서드)는
+  OK**(e09/e43) → 구조체 메서드는 정상, trait 디스패치만 막힘. ROADMAP TRACKED.
 - **중첩 리스트 `[[..]]`** (`List<List<Int>>`) — **Vais 백엔드 버그**(C003 nested Vec). 트랜스파일러는 올바른
   `Vec<Vec<i64>>` 타입 생성하나 Vais가 codegen 못 함. ROADMAP TRACKED.
 - **리스트 리터럴을 함수 인자로 직접 전달** (`f([1,2,3])`) — Vais 코어션 갭(E001). **우회: 변수에 바인딩 후

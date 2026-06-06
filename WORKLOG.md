@@ -719,3 +719,14 @@
 - 검증: 값-정확성 71/71, 회귀0. README 인덱스 e38→e42 + 카운트 53/53. 교훈: **성숙단계엔 갭탐색>양산**(깊은 조합이
   미커버 영역 노출, 갭 없으면 견고성 확인+커버리지)/`?` 실패경로처럼 "같은 기능의 반대 경로"가 미커버 흔함/
   heredoc probe가 다중fn 정확측정(printf-array artifact 회피 재확인).
+
+## 2026-06-07 (/loop iter 59: hard-edge 탐색 — 제네릭/문자열ops 동작확인 + trait dispatch Vais갭)
+- hard-edge(제네릭/trait/문자열ops) heredoc probe로 갭탐색. **제네릭 함수 `identity<T>` 동작**(나 자신도 처음
+  확인) + **문자열 `.len()`/`==` 동작**. 발견: **`impl Trait for Type` Vais 미지원**(P001 `for`서; 하드코딩 Vais도
+  실패). **`impl Type {}`(inherent)는 OK**(e09 동작 방식, e43 신규도) → nl 구조체 메서드 정상, **trait 다형성만 막힘**.
+- **신규 검증 예제 3종**: e43 제네릭함수 identity<T>(5) / e44 문자열 길이 s.len()(5) / e45 문자열 동등성 a==b(1).
+  코퍼스 첫 제네릭+문자열ops. 값-정확성 71→74.
+- 추적: **Vais impl Trait for Type 미지원** TRACKED(근본=Vais 파서; nl은 impl Type로 충분). README 미커버 + ROADMAP.
+- 검증: 값-정확성 74/74, 회귀0. README 인덱스 e42→e45 + 카운트 56/56. 교훈: **hard-edge 탐색이 능력 경계 확인**
+  (제네릭/문자열 ops는 동작=좋은 발견, trait dispatch만 Vais갭)/inherent impl vs trait impl 구분(전자 OK 후자 막힘)/
+  "안 될 것 같은" 것도 실측(제네릭 동작은 예상보다 좋음)/nl측 우회 존재(impl Type)면 Vais갭이라도 기능 가용.
