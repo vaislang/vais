@@ -171,6 +171,12 @@ def _list_binding(indent, name, ty, rhs):
 
 
 def map_let(line: str) -> str:
+    # `let (a, b) = expr` -> `(a, b) := expr`  (tuple destructuring -- Vais binds
+    # tuple patterns with `:=` and no `let`).
+    mt = re.match(r"^(\s*)let\s+(\([^)]*\))\s*=\s*(.*)$", line)
+    if mt:
+        indent, pat, rhs = mt.groups()
+        return f"{indent}{pat} := {rhs}"
     # `let mut x = expr`  -> `x := mut expr`   (list literals: typed Vec binding)
     # `let x = expr`      -> `x := expr`
     m = re.match(r"^(\s*)let\s+mut\s+([A-Za-z_][A-Za-z0-9_]*)\s*(:\s*[^=]+?)?\s*=\s*(.*)$", line)

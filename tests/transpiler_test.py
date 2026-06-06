@@ -90,6 +90,8 @@ CASES = [
     ("continue -> C", "    if i == 3 { continue }", ["{ C }"], ["continue"]),
     ("break in string kept", 'let s = "break here"', ['"break here"'], ["B here"]),
     ("breaker ident kept", "let breaker = 5", ["breaker"], [" B er", "Cer"]),
+    # tuple destructuring: let (a, b) = expr -> (a, b) := expr
+    ("tuple destructure", "    let (a, b) = pair()", ["(a, b) := pair()"], ["let "]),
     # code-as-data: collection methods / enum-qualifier / arm-return inside a
     # string must stay verbatim (these directly affect the self-host compiler,
     # which embeds nl programs as compile("...") strings).

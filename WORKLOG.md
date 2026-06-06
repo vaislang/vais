@@ -815,3 +815,15 @@
 - 검증: 값-정확성 87/87, 트랜스파일러 unit 50/50, 회귀0. README 인덱스 e56→e58 + 카운트 69/69. 교훈:
   **흔한 제어키워드(break/continue)가 미매핑이었음**(while 루프는 많았으나 user break/continue 없었어서 잠복)/
   Rust-idiom probe가 cold-start와 다른 갭 노출(continue는 cold-start 과제선 안 나왔음)/Vais B/C 동작확인 후 forgiving 매핑.
+
+## 2026-06-07 (/loop iter 67: nl측 갭 발견·수정 — 튜플 구조분해)
+- targeted idiom probe(heredoc) 계속. const/while-and/neg-literal/divmod PASS(견고성), **튜플 반환+구조분해 갭 발견**:
+  `let (a, b) = pair()`가 트랜스파일러서 `let (a, b) = ` verbatim→Vais E002(Vais는 `(a, b) := `, let 없이).
+  Vais 튜플 동작 실측((a,b):=pair() run=7).
+- **수정: map_let에 튜플 패턴 케이스 추가** — `let (a, b) = expr`→`(a, b) := expr`(스칼라 케이스 前). 튜플 타입
+  `-> (Int, Int)`는 map_types가 이미 처리(괄호 안 Int→i64).
+- **신규 검증 예제**: e59 튜플 반환+구조분해(7)=코퍼스 첫 튜플. 값정확성 87→88.
+- 트랜스파일러 unit +1(50→51). PRELUDE 튜플행 추가.
+- 검증: 값-정확성 88/88, 트랜스파일러 unit 51/51, self-host OK, 회귀0. README 인덱스 e58→e59 + 카운트 70/70.
+  교훈: **튜플 구조분해도 흔한데 미매핑이었음**(map_let이 스칼라만)/targeted probe가 또 nl측 갭 노출(break/continue
+  iter66, 튜플 iter67 — idiom probe가 cold-start 못 잡는 문법 갭 연속 발견)/Vais 동작확인 후 forgiving 매핑.
