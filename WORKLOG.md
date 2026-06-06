@@ -316,3 +316,14 @@
   → codegen 캡스톤(FP8 재귀) 도달로 자율 증분 아크 자연 완료점. 남은 것(FP9 대형 리팩터/완전 self-compile)은
   증분-고비용 또는 months급 → 사용자 보고/방향 확인이 적절.
 - 게이트 전부 green(값정확성38 트랜스파일러24 nl-check11, 9 e2e 스위트). 회귀 0.
+
+## 2026-06-06 (/loop iter 30: FP10a — 가변변수 codegen [완전 self-compile 도전 시작])
+- 사용자 결정 "완전 self-compile 본격 도전". 목표=nl이 자기 컴파일러 구문(가변변수/while/List/method/&)을 컴파일.
+  점진 확장 시작 — 명령형 codegen.
+- **compiler/self/fixpoint_imperative.nl**: `let mut`/assignment/return을 **alloca/store/load** IR로 codegen.
+  SSA-operand 모델(fixpoint_codegen*)로 불가능했던 **변이** 가능. collect_slots 1패스로 변수마다 alloca 슬롯 할당,
+  변수 참조=load→temp, 대입=store. List<Slot>{name범위, slot번호}.
+- **실측**: `let mut s=10; s=s+5; s=s*2; return s`→`alloca/store/load` IR→런타임 30. 다중변수(a,b 상호)/누적(acc).
+- 검증: imperative e2e **6/6**(+alloca/store/load emit 증명), 값-정확성 **39/39**, 트랜스파일러 24/24. 회귀 0.
+- **nl이 가변변수 명령형 프로그램을 alloca 기반 IR로 codegen.** 루프(FP10b)의 기반.
+- 다음 FP10b: while 루프 codegen(loop/body/done 블록 + 조건 br + back-edge).
