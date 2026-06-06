@@ -48,5 +48,17 @@ check 'fn d(x) {{ return x * 2 }}; fn q(a) {{ return d(a) + d(a) }}; return q(5)
 # three fns
 check 'fn d(x) {{ return x + 1 }}; fn e(a) {{ return a + 2 }}; fn f(b) {{ return b + 3 }}; return d(0) + e(0) + f(0)' 6
 
-[ "$fail" -eq 0 ] && echo "RESULT: CX5 (function defs + calls) end-to-end OK" || echo "RESULT: FAILURES"
+# --- CX6: conditionals in bodies + recursion ---
+# non-recursive conditional in a function body
+check 'fn d(x) {{ return if x > 0 then x * 2 else 0 }}; return d(7)' 14
+# factorial (single recursion)
+check 'fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return f(5)' 120
+# fibonacci (tree recursion)
+check 'fn f(n) {{ return if n < 2 then n else f(n - 1) + f(n - 2) }}; return f(10)' 55
+# sum 1..n (recursion with addition)
+check 'fn s(n) {{ return if n < 1 then 0 else n + s(n - 1) }}; return s(10)' 55
+# recursive fn + a helper, combined
+check 'fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; fn d(x) {{ return x + 1 }}; return f(4) + d(5)' 30
+
+[ "$fail" -eq 0 ] && echo "RESULT: CX5+CX6 (function defs, calls, recursion) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail

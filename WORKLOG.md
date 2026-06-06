@@ -128,3 +128,16 @@
   트랜스파일러 단위 22/22, compiler e2e(vars+if) green. 회귀 0.
 - **nl 컴파일러가 사용자 정의 함수+호출이 있는 프로그램을 컴파일.** (산술→변수→조건→함수)
 - 다음 CX6: 함수 본문 조건식 → 재귀 함수(struct 기반 이미 준비됨, 본문에 if 평가 추가).
+
+## 2026-06-06 (/loop iter 15: CX6 재귀 함수 — 조건식 본문)
+- **CX6** cx5_compiler.nl에 `if <식> <비교> <식> then <식> else <식>`를 완전 표현식으로 추가
+  (eval_value 진입점, find_kw4로 then/else 경계, 조건/분기는 eval_expr 재귀). 본문/return을
+  eval_value 경유로 라우팅 → 함수 본문에 조건식 → **분기 내 재귀 호출**이 동작.
+- **재귀 함수 실측**: factorial(5)=120, factorial(6)=720(208 mod256), **fibonacci(10)=55(트리 재귀)**,
+  sum(1..10)=55, 비재귀 조건식 본문, 재귀+헬퍼 혼합. struct-Env+Defs 설계가 재귀를 move-safe하게 함
+  (CX5의 핵심 통찰이 재귀에서 결실).
+- 검증: CX5+CX6 e2e **11/11**(scripts/test-cx5.sh), 값-정확성 **30/30**(cx5_compiler.nl=재귀 factorial),
+  트랜스파일러 22/22, compiler e2e green. 회귀 0.
+- **nl 컴파일러가 재귀 함수(factorial/fibonacci/sum) 프로그램을 컴파일.**
+  self-host 표현력: 산술→변수→조건→함수정의→호출→중첩호출→**재귀**. 인터프리터 핵심 달성.
+- 다음 CX7: 다중 인자 / 지역 변수(현재 단일 param).

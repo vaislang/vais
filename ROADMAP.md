@@ -111,7 +111,11 @@ compiler.nl을 점진 확장. 각 단계 값-정확성(생성 IR 실행) 검증 
       **트랜스파일러 버그 수정**: Vais가 모든 문자열 리터럴의 `{ }`를 보간으로 처리 → 코드-as-데이터
       불가. nl `{{`/`}}` → Vais `\{`/`\}`(보간 회피 literal brace)로 변경(map_brace_escapes).
       e2e 6/6(중첩호출 포함). 값-정확성 30/30.
-- [ ] **CX6** 함수 본문에 조건식 → **재귀 함수**(factorial/fib, base-case). Env+Defs struct 기반 준비됨.
+- [x] **CX6** 함수 본문 조건식 → **재귀 함수**. `if <식> <비교> <식> then <식> else <식>`를 완전
+      표현식으로(eval_value, 분기는 eval_expr 재귀 → 분기 내 재귀호출 동작). factorial(5)=120,
+      **fibonacci(10)=55**(트리 재귀), sum(1..10)=55 실측. struct-Env가 재귀를 move-safe하게.
+      e2e 11/11(CX5 6 + CX6 5). 값-정확성 30/30.
+- [ ] **CX7** 다중 인자 함수 / 지역 변수 (현재 단일 param). self-host 본격 확장.
 - ...최종: nl이 자기 일부 소스 컴파일 (fixpoint 근접).
 
 전략: 단일파일/인덱스로 Vais 버그(Vec-재귀전달/&&단락) 회피 유지. 큰 관문(CX5+)서 막히면

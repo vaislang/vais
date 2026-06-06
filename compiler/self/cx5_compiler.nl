@@ -158,7 +158,7 @@ fn eval_factor(src: Str, p0: Int, end: Int, env: Env, defs: Defs) -> Cur {
                     let bs = def_bs(defs, idx)
                     let be = def_be(defs, idx)
                     let callee = eset(zero_env(), param, argc.val)
-                    let body = eval_expr(src, bs, be, callee, defs)
+                    let body = eval_value(src, bs, be, callee, defs)
                     r = body.val
                 }
                 return Cur { val: r, pos: np }
@@ -209,6 +209,77 @@ fn eval_expr(src: Str, p0: Int, end: Int, env: Env, defs: Defs) -> Cur {
         } else { go = false }
     }
     return cur
+}
+
+# --- CX6: conditionals as a full expression (enables recursion) ---
+# Find a 4-letter keyword (w0..w3) in src[p..end); returns index or end.
+fn find_kw4(src: Str, p: Int, end: Int, w0: Int, w1: Int, w2: Int, w3: Int) -> Int {
+    let mut q = p
+    let mut go = true
+    while go {
+        if q + 4 > end { q = end; go = false }
+        else if src[q] == w0 {
+            if src[q + 1] == w1 {
+                if src[q + 2] == w2 {
+                    if src[q + 3] == w3 { go = false } else { q = q + 1 }
+                } else { q = q + 1 }
+            } else { q = q + 1 }
+        } else { q = q + 1 }
+    }
+    return q
+}
+fn starts_if(src: Str, p: Int, end: Int) -> Bool {
+    if p + 2 > end { return false }
+    if src[p] == 105 {
+        if src[p + 1] == 102 { return true }
+    }
+    return false
+}
+
+# Evaluate src[start..end) which may be `if <e> <cmp> <e> then <e> else <e>`
+# (cmp: > < ==), otherwise a plain arithmetic/call expression. The branches and
+# condition sides recurse through eval_expr, so recursive function calls in
+# branches work (with the struct-Env, recursion is move-safe).
+fn eval_value(src: Str, start: Int, end: Int, env: Env, defs: Defs) -> Cur {
+    let p = skip_sp(src, start, end)
+    if starts_if(src, p, end) {
+        let then_pos = find_kw4(src, p + 2, end, 116, 104, 101, 110)        # then
+        let else_pos = find_kw4(src, then_pos + 4, end, 101, 108, 115, 101)  # else
+        let cstart = p + 2
+        let cend = then_pos
+        let mut oppos = cend
+        let mut op = 0
+        let mut qq = cstart
+        let mut g = true
+        while g {
+            if qq >= cend { g = false }
+            else if src[qq] == 62 { oppos = qq; op = 62; g = false }
+            else if src[qq] == 60 { oppos = qq; op = 60; g = false }
+            else if src[qq] == 61 { oppos = qq; op = 61; g = false }
+            else { qq = qq + 1 }
+        }
+        let mut rstart = oppos + 1
+        if op == 61 {
+            if rstart < cend {
+                if src[rstart] == 61 { rstart = rstart + 1 }
+            }
+        }
+        let lhs = eval_expr(src, cstart, oppos, env, defs)
+        let rhs = eval_expr(src, rstart, cend, env, defs)
+        let mut cond = 0
+        if op == 62 {
+            if lhs.val > rhs.val { cond = 1 }
+        } else if op == 60 {
+            if lhs.val < rhs.val { cond = 1 }
+        } else {
+            if lhs.val == rhs.val { cond = 1 }
+        }
+        if cond == 1 {
+            return eval_value(src, then_pos + 4, else_pos, env, defs)
+        }
+        return eval_value(src, else_pos + 4, end, env, defs)
+    }
+    return eval_expr(src, start, end, env, defs)
 }
 
 fn empty_defs() -> Defs {
@@ -315,7 +386,7 @@ fn run_program(src: Str) -> Int {
                 }
             } else if first == 114 {
                 # "return <expr>"
-                let r = eval_expr(src, p + 6, j, zero_env(), defs)
+                let r = eval_value(src, p + 6, j, zero_env(), defs)
                 result = r.val
                 i = j + 1
             } else {
@@ -336,9 +407,9 @@ fn emit_ir(value: Int) -> Int {
 }
 
 fn main() -> Int {
-    # Program: define d(x)=x*2 and s(a)=a*a, then return d(21)+s(5) = 42+25 = 67.
-    # Literal braces in the embedded program are written `{{`/`}}` (nl escape ->
-    # Vais `\{`/`\}`), since Vais interpolates `{ }` in every string literal.
-    let value = run_program("fn d(x) {{ return x * 2 }}; fn s(a) {{ return a * a }}; return d(21) + s(5)")
+    # CX6: a RECURSIVE function — factorial. fact(n) = if n < 2 then 1 else
+    # n * fact(n-1); fact(5) = 120. Recursion is move-safe because Env+Defs are
+    # structs (Vec recursion would hit E022). Literal braces: `{{`/`}}` -> `\{`/`\}`.
+    let value = run_program("fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return f(5)")
     return emit_ir(value)
 }
