@@ -65,6 +65,9 @@ AI-written nl 25/25 컴파일+실행, self-correction 1라운드 수렴 실측.
 ---
 
 ## TRACKED 추가 (Vais 버그)
+- **Vais HashMap codegen 버그** (Map<K,V> 막힘): `HashMap.new()` 모노모픽화 누락(C002/E004 undefined
+  `@HashMap_new`) + `get_opt` Option ptr/i64 불일치. Vais repo `tests/empirical/codegen_bugs/B-01,B-02`에
+  repro. nl Map 예제/PRELUDE ✅ 승격 막힘. `.filter()`와 동일 클래스(Vais repo 수정 필요). 2026-06-06 실측 확인.
 - ✅ **Vais &Vec borrow 재귀 — 해결**(2026-06-06, compiler 214c97cf): `&Vec<T>`가 슬라이스 fat-ptr로
   잘못 codegen되던 버그 근본 수정 → 이제 주소 전달. **nl이 `&List<T>` borrow로 Vec 재귀 가능**
   (e15_list_recursion 실측 10). fixpoint(AST 순회)의 핵심 기반 확보. by-value=E022 move는 여전(설계상

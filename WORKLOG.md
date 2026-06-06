@@ -546,8 +546,10 @@
   sum of squares 1..=4)=30, e19 문자열 보간 출력(`print("{name} {n}")`)=0. 검증 코퍼스 26→30, 러너 44→48.
 - **corpus README 갱신**(stale 수정): "21/21"→"30/30(러너 48/48)", 인덱스 e10→e19 추가, 미커버 정정
   (while/print는 이제 커버됨 → 제거; Map/중첩match가 진짜 갭).
-- **추적**: Map<K,V> 실측 시도 → `Map()` 생성자가 `HashMap()`로 사상되나 E002(Vais HashMap 생성자 불일치)
-  + `.get()` Option<&V> 시맨틱 미사상. transpiler 갭, PRELUDE 🔶 유지. 별도 task(months 아님, 중간규모).
-  중첩 match(arm 안 `=> match{}`)=P001 라인재작성기 한계, 함수분리로 우회.
+- **추적(정정)**: Map<K,V> 실측 → 처음 transpiler 갭으로 추정했으나 **Vais 백엔드 버그로 판명**. Vais측
+  직접 probe(`HashMap.new()` 정식문법 포함)도 C002/E004 `@HashMap_new` 모노모픽화 누락 + get_opt Option
+  ptr/i64 불일치. Vais repo `tests/empirical/codegen_bugs/B-01,B-02`에 repro 존재 = **알려진 Vais codegen 버그**.
+  `.filter()`와 동일 클래스(nl 아닌 Vais repo 수정). README/PRELUDE 🔶→🔴 정정. 중첩 match=P001 트랜스파일러 한계.
 - 검증: 값-정확성 **48/48 회귀0**, nl-check 4 신규 clean. 교훈: std는 백엔드=Vais인 동안 사상명세가 정답
-  (nl-native std는 L3後)/Map은 중간규모 갭(능력완비와 무관한 transpiler 사상)/P9는 scale-blocked 아닌 즉시 레버.
+  (nl-native std는 L3後)/**추정("transpiler 갭")을 실측으로 검증 — 실제는 Vais 백엔드 버그**(B-01/B-02 repro
+  존재)/P9 예제는 scale-blocked 아닌 즉시 레버.

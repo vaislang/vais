@@ -42,10 +42,12 @@ self-host codegen 모듈 포함 48/48).
 | e18 | while 누적기 (가변 acc + 카운터) | 30 |
 | e19 | 문자열 보간 출력 `print("{x}")` | 0 |
 
-## 미커버 (트랜스파일러/Vais 한계 — ROADMAP TRACKED)
+## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
 - `.filter()` — Vais 백엔드 버그 (task_7cfebeba).
-- `Map<K,V>` (HashMap) — `Map()` 생성자 + `.get()` Option 시맨틱 미사상(transpiler 갭, PRELUDE 🔶). 별도 task.
-- 중첩 `match` (arm 안에 `=> match {...}`) — 라인-재작성기 P001. 일반 중첩은 함수분리로 우회 가능.
+- `Map<K,V>` (HashMap) — **Vais 백엔드 버그**: `HashMap.new()` 모노모픽화 누락(C002/E004 undefined
+  `@HashMap_new`) + `get_opt` Option ptr/i64 불일치. Vais repo `tests/empirical/codegen_bugs/B-01,B-02`에
+  repro 존재. nl 트랜스파일이 아니라 Vais codegen 문제 → Vais repo 수정 필요. PRELUDE 🔶.
+- 중첩 `match` (arm 안에 `=> match {...}`) — 라인-재작성기 P001(트랜스파일러 한계). 함수분리로 우회 가능.
 
 ## 규약
 - 첫 줄 `# expect: N` = main이 반환할 exit code (mod 256).
