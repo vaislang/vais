@@ -291,3 +291,17 @@
 - 검증: codegen3 e2e **7/7**(+"define+call emit" 증명), 값-정확성 **37/37**, 트랜스파일러 24/24. 회귀 0.
 - **nl이 함수 정의+호출을 진짜 다중-함수 LLVM IR로 codegen.** 컴파일러 codegen의 핵심(함수) 달성.
 - 다음 FP8: 조건/분기 codegen(br/phi) → 재귀 함수 codegen.
+
+## 2026-06-06 (/loop iter 28: FP8 — 재귀 함수 codegen [icmp/br/phi] = codegen 캡스톤)
+- **compiler/self/fixpoint_codegen4.nl**: 조건/분기를 제어흐름 IR로 codegen → **재귀 함수를 네이티브 코드로 생성**.
+- **메커니즘**: 본문 `return if <식> <비교> <식> then <식> else <식>`를 icmp(slt/sgt/eq) + 조건 br +
+  labeled blocks(then<N>/else<N>/merge<N>) + phi로 emit. gen_body가 if 감지(토큰 15), find_kind로 then/else/비교
+  경계, 분기 각각 gen_body 재귀 codegen. **분기 내 재귀 call은 그 블록(else)에만 emit** → 재귀 정확.
+  label/temp 번호 통합 threading.
+- **실측**: factorial(5)=120, **fib(10)=55(멀티문자 트리재귀)**, sumto(10)=55, clamp(>), iszero(==).
+  생성 IR이 icmp slt + phi i64 + `call @factorial` 포함 — 진짜 제어흐름 codegen.
+- 검증: codegen4 e2e **8/8**(+제어흐름 emit 증명), 값-정확성 **38/38**, 트랜스파일러 24/24. 회귀 0.
+- **🎯 CODEGEN 트랙 완성**: nl 컴파일러가 산술→변수→함수→재귀(제어흐름)를 진짜 LLVM IR로 생성.
+  컴파일러 codegen의 핵심 전부 달성. fixpoint_codegen~4 (산술/변수/함수/재귀).
+- 정직한 한계: 완전 self-compile=전체 nl 문법(struct/while/Vec/method/&)+codegen 재구현=수천줄. 현재는
+  산술/함수 부분집합의 완전한 컴파일러(파싱+제어흐름+함수+재귀 codegen).
