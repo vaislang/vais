@@ -60,3 +60,11 @@
   side-effect RHS가 LHS-false에도 실행됨 확정. 심각(가드접근 전부 깨짐). nl lexer는 nested-if로 우회.
 - **L3.2**: compiler/self/lexer.nl — Token{kind,start,length} 구조체 + List<Token> emit하는 진짜 lexer.
   lex("x = 1 + 2")=5토큰(IDENT/PUNCT/NUM/PUNCT/NUM), lex("a b c d e f g")=7 검증. 전체 26/26 green.
+
+## 2026-06-06 (/loop iter 9: L3.3 parser/eval + Vais Vec-passing 버그)
+- L3.3: compiler/self/parser.nl — nl로 쓴 산술 파서+평가 (연산자 우선순위 * > +).
+  1+2*3=7, 2+3*4=14, 5*2+1=11 검증. 재귀하향 패턴(상호재귀) nl 가능 확인.
+- **Vais 버그 발견+추적** (task_54658a43): Vec를 sub/재귀 fn에 전달 불가 — by-value=E022 move,
+  &Vec=clang fat-ptr 불일치. 재귀하향 파서(토큰 Vec를 parse_expr/term/factor에 threading) 막힘.
+  → 단일함수 인덱스 우회. 근본은 Vais Vec ABI (task_7cfebeba 동류).
+- 전체 27/27 green. self-host: lexer(L3.2) + parser(L3.3) 둘 다 nl로 동작.

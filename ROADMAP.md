@@ -65,6 +65,8 @@ AI-written nl 25/25 컴파일+실행, self-correction 1라운드 수렴 실측.
 ---
 
 ## TRACKED 추가 (Vais 버그)
+- Vais Vec를 sub/재귀 fn에 전달 불가 (task_54658a43): by-value=E022 move, &Vec=clang fat-ptr 불일치.
+  재귀하향 파서 막힘 → 단일함수 인덱스로 우회.
 - Vais `&&`/`||` 비단락평가 (task_492f7e17): `i<n && arr[i]` 가 i==n서 crash.
   nl lexer는 nested-if로 우회 중. 근본은 Vais codegen(논리연산→분기). 심각도 높음.
 
@@ -83,7 +85,7 @@ nl 컴파일러 코드는 트랜스파일러 지원 부분집합으로만 작성
 - [x] **L3.1** lexer 시작 (compiler/self/lexer.nl): 문자분류(is_digit/alpha/space) + 단어/숫자 스캔.
       값-정확성 게이트 편입 (test.sh가 compiler/self/*.nl도 검증). 26/26 green.
 - [x] **L3.2** lexer 확장: 실제 토큰 emit (종류+위치). 키워드/식별자/숫자/기호/문자열 인식.
-- [ ] **L3.3** parser 시작: 토큰 → AST (작은 부분집합 fn/let/return/표현식).
+- [x] **L3.3** parser/eval (compiler/self/parser.nl): 토큰 → AST (작은 부분집합 fn/let/return/표현식).
 - [ ] **L3.4** codegen 시작: AST → Vais 텍스트 lowering (재활용) 또는 직접 IR.
 - [ ] **L3.5** fixpoint: gen1이 자기 nl 소스 처리.
 

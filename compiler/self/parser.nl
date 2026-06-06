@@ -1,0 +1,46 @@
+# expect: 7
+# nl self-host compiler — L3.3 parser/evaluator (written in nl).
+#
+# Parses+evaluates arithmetic with operator precedence (* before +), proving
+# recursive-descent-equivalent parsing works in nl. Bootstrap: this .nl ->
+# seed transpiler -> Vais -> vaisc -> gen1.
+#
+# Token encoding (Int list): 0..9 = number, -1 = '+', -2 = '*'.
+# (The L3.2 lexer classifies these; later we connect lexer -> parser on real
+#  byte tokens. Here the parser logic is the focus.)
+#
+# IMPLEMENTATION NOTE (Vais limit, tracked): passing a List into recursive parse
+# sub-functions hits Vais E022 (use-after-move) by-value, and `&List` recursion
+# hits a clang fat-ptr/ptr mismatch. So this parser is single-pass over the token
+# list owned by one function (no List passed to sub-fns). A real recursive-descent
+# parser awaits the L3 self-codegen (own backend) or a Vais fix.
+
+# Evaluate `term (+ term)*` where each term is `factor (* factor)*`, in one pass.
+# Operator precedence: accumulate the current term by multiplication; on '+',
+# commit the term to the running total and start a new term.
+fn eval_expr(toks: List<Int>) -> Int {
+    let n = toks.len()
+    if n == 0 { return 0 }
+    let mut total = 0
+    let mut term = toks[0]
+    let mut i = 1
+    while i < n {
+        let op = toks[i]
+        let rhs = toks[i + 1]
+        if op == 0 - 2 {
+            term = term * rhs
+        } else {
+            total = total + term
+            term = rhs
+        }
+        i = i + 2
+    }
+    total = total + term
+    return total
+}
+
+fn main() -> Int {
+    # 1 + 2 * 3  ->  [1, +, 2, *, 3]  ->  1 + (2*3) = 7
+    let toks: List<Int> = [1, 0 - 1, 2, 0 - 2, 3]
+    return eval_expr(toks)
+}
