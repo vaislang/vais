@@ -33,6 +33,7 @@ Catalog (Rust/other-language intuition -> the single nl form):
   .unwrap()/.expect() -> match the Option/Result, or `?`
   if let          -> match
   elsif/elif      -> else if
+  x += 1 (+=/-=/*=//=)  -> x = x + 1  (no compound assignment in nl)
 """
 import re
 import sys
@@ -109,6 +110,12 @@ RULES = [
     (re.compile(r"\b(elsif|elif)\b"),
      "the keyword is `else if` (two words), not `elsif`/`elif`",
      lambda m, ln: re.sub(r"\b(elsif|elif)\b", "else if", ln, count=1)),
+    # --- compound assignment (nl has none; write it out: `x = x + e`). Match
+    # `+= -= *= /= %=` but NOT comparison/equality (== <= >= != ) — the operator
+    # char is preceded by + - * / % and followed by `=` not part of `==`. ---
+    (re.compile(r"[+\-*/%]=(?!=)"),
+     "no compound assignment in nl; write it out, e.g. `x = x + 1` (not `x += 1`)",
+     lambda m, ln: "... expand to `x = x <op> e` (nl has no `+=`/`-=`/`*=`/`/=`)"),
     (re.compile(r"=>\s*return\b"),
      None,  # allowed in nl (P6) — informational only, not an error
      None),
