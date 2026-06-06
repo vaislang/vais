@@ -251,3 +251,18 @@
 - **nl fixpoint 컴파일러가 멀티문자 재귀 함수(factorial/fib) 프로그램을 컴파일.** cx5_compiler(단일자,
   string-rescan)를 모든 면에서 능가: List<Token> 파이프라인 + 멀티문자 변수/함수 + 재귀 + 조건 + precedence/좌결합.
 - 남은 것: FP5(전체 nl 문법 파싱 + 실제 codegen 확장) = 진짜 self-compile, 큰 단계.
+
+## 2026-06-06 (/loop iter 25: FP5 — 진짜 codegen + Vais % 버그 수정)
+- **목표 전환**: 인터프리터(값 미리계산→`ret <const>`)에서 **진짜 codegen**(런타임 계산 IR emit)으로.
+- **Vais % 버그 발견·수정(근본, compiler e711dac1)**: codegen 빌드 중 발견 — 문자열 보간이 printf로
+  lowering되는데 **literal `%`가 `%%`로 이스케이프 안 됨** → printf가 `%tN`을 format specifier로 소비
+  (`puts("  %t1 = mul {a}")` → `  = mul 2`, `%t1 ` 손실). LLVM IR(`%` 가득)을 nl로 emit 불가케 함.
+  print_format.rs에서 literal `%`→`%%` push. check-integrity OK 회귀0. 가드 phase257(3 stdout assert).
+  (격리 핵심: e2 `%t1 = x {a}`→`= x 2` 최소재현, &Vec<struct>+보간+% prefix 조합서 발현.)
+- **compiler/self/fixpoint_codegen.nl**: gen_factor/term/expr가 Op{kind(0lit/1temp),val,next} 반환,
+  emit_binop 4분기(operand literal/temp 조합)로 `%tN = op i64 a, b` emit. 좌결합 fold.
+  `12+3*4` → `%t1=mul 3,4; %t2=add 12,%t1; ret %t2` → 런타임 24.
+- 검증: codegen e2e **10/10**(+"mul i64 emit" 검증=상수폴딩 아닌 진짜 codegen 증명), 값-정확성 **35/35**,
+  트랜스파일러 24/24. 회귀 0.
+- **nl이 런타임 계산 LLVM IR을 생성.** 컴파일러의 codegen 절반 달성(인터프리터→진짜 코드생성 질적 도약).
+- Vais 수정 2건 누적(214c97cf &Vec, e711dac1 %). 다음 FP6: 변수/함수 codegen(alloca/store/define).
