@@ -350,3 +350,14 @@
 - 검증: imperative e2e **17 PASS**(FP10a 가변+FP10b while+FP10c if), 값-정확성 **39/39**, 트랜스파일러 24/24. 회귀 0.
 - **명령형 3종(가변변수+while+if) 완성.** nl 컴파일러가 자신이 쓰인 제어구조(가변/루프/조건)를 네이티브 IR로 codegen.
 - 다음 FP10d: List/method/struct codegen(대규모 months급) — 진짜 self-compile 향.
+
+## 2026-06-06 (/loop iter 33: FP10d — 배열 codegen [데이터구조 시작])
+- 사용자 "완전 self-compile" 진행 중. 대형 함수-병합 대신 **배열 codegen**부터(자족적, List 기반).
+- **compiler/self/fixpoint_array.nl**: 고정크기 정수 배열 codegen. `let a = [v0,v1,..]`→`alloca [N x i64]`+
+  요소별 GEP store, `a[식]`→GEP+load(**런타임 인덱스**), `a[식] = 식`→GEP+store. Slot에 is_arr/alen,
+  collect_slots가 배열 길이(콤마+1) 계산. 토큰 [=23 ]=24 ,=25 추가. expr_end가 비교/=/]/}/;에서 정지.
+- **실측**: a[1]+a[2]=50, a[0]=100 대입, 런타임 a[i]=25, **루프 배열합산=100**, **루프 배열쓰기 a[i]=i*10→30**,
+  5원소 합=15. 생성 IR이 alloca [N x i64] + getelementptr 포함.
+- 검증: array e2e **7 PASS**(+배열 codegen 증명), 값-정확성 **40/40**, 트랜스파일러 24/24. 회귀 0.
+- **nl이 배열(루프 read/write 포함) 프로그램을 네이티브 IR로 codegen.** List 자료구조 codegen의 기반.
+- 다음 FP10e: struct/동적 List(push/len) codegen — months급 큰 조각. (대형 함수-병합 FP10f도 추적.)
