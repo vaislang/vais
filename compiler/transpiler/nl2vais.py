@@ -175,8 +175,33 @@ def map_if(line: str) -> str:
 
 
 def map_bitnot(line: str) -> str:
-    # `bitnot(x)` -> `(~x)`  (only the simple single-arg form)
-    return re.sub(r"\bbitnot\(([^()]*)\)", r"(~\1)", line)
+    # `bitnot(x)` -> `(~x)`  (only the simple single-arg form). NOT inside strings
+    # (code-as-data: a string containing "bitnot(x)" must stay verbatim).
+    return outside_strings(line, lambda p: re.sub(r"\bbitnot\(([^()]*)\)", r"(~\1)", p))
+
+
+# Binary bitwise prelude functions -> Vais operators (all verified to work).
+# `bitand(a,b)` -> `(a & b)`, etc. Only the simple two-arg form (args without
+# nested parens); complex args should bind to a variable first.
+_BITWISE2 = {
+    "bitand": "&",
+    "bitor": "|",
+    "bitxor": "^",
+    "shl": "<<",
+    "shr": ">>",
+}
+
+
+def map_bitwise2(line: str) -> str:
+    def rewrite(p: str) -> str:
+        for fn, op in _BITWISE2.items():
+            p = re.sub(
+                r"\b" + fn + r"\(([^(),]*),([^(),]*)\)",
+                lambda m, _op=op: f"({m.group(1).strip()} {_op} {m.group(2).strip()})",
+                p,
+            )
+        return p
+    return outside_strings(line, rewrite)
 
 
 def map_brace_escapes(line: str) -> str:
@@ -262,6 +287,7 @@ def transpile_line(line: str) -> str:
     out = map_let(out)
     out = map_if(out)
     out = map_bitnot(out)
+    out = map_bitwise2(out)
     out = map_arm_return(out)
     out = map_enum_qualified(out)
     out = map_words(out)

@@ -647,3 +647,17 @@
 - 검증: 값-정확성 59/59, 회귀0. 교훈: **PRELUDE ✅ 표기도 실측으로 검증**(push/map 실제론 깨짐)/무음 miscompile은
   빌드OK라 더 위험(런타임 값까지 확인 필수)/**같은 기능도 트랙마다 구현 다름**(codegen=고정버퍼 OK vs transpiler=Vais
   Vec 깨짐)/read vs 성장 구분이 갭 경계/expect 오산은 빌드가 정답(closure_fold 20).
+
+## 2026-06-07 (/loop iter 54: nl측 수정 — bitwise 2-인자 매핑 + map_bitnot 문자열버그 + P9 +3)
+- **드디어 nl측 수정 가능한 갭 발견**(이전 iter들은 대부분 Vais 갭). PRELUDE가 `bitand/bitor/bitxor/shl/shr`
+  약속하나 트랜스파일러는 `bitnot`만 매핑 → `bitor(4,2)` E002. **Vais `|`/`&`/`^`/`<<`/`>>` 전부 동작 실측**
+  (4|2=6 등) = 순수 트랜스파일러 갭(nl측 fixable).
+- **수정: `map_bitwise2` 신설** — `bitand(a,b)`→`(a & b)` 등 5종 2-인자 매핑. **+ `map_bitnot` 문자열버그
+  근본수정**(발견: `map_bitnot`이 `outside_strings` 안 써서 `"call bitnot(x)"` 문자열을 `"call (~x)"`로 오염 —
+  pre-existing latent 버그, 같은 code-as-data 클래스). 둘 다 `outside_strings`로 감쌈 → 문자열 verbatim.
+- **신규 검증 예제 3종**: e31 bitwise(bitor 체인=7) / e32 중첩 struct 필드변이(o.inner.v=7) / e33 guard 체인(2).
+  값-정확성 59→62. PRELUDE bitwise ✅ + 상태열 추가. README 인덱스 e30→e33.
+- 트랜스파일러 unit +8(26→34: 5 bitwise매핑 + bitnot + 2 문자열safety guard). 값-정확성 62/62, 회귀0.
+- 교훈: **nl측 vs Vais측 구분이 작업 방향 결정**(Vais `|` 동작확인 → 트랜스파일러 수정이 정답)/PRELUDE 약속을
+  실측(bitor 미매핑)/**기존 map_bitnot도 문자열버그 보유**(새 기능 추가가 기존 잠복버그 노출 — outside_strings
+  미적용)/모든 문자열-건드리는 매핑은 outside_strings 필수(code-as-data 불변).

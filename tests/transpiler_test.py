@@ -65,6 +65,16 @@ CASES = [
     # (Vais Vec is move-by-value, so collections recurse by reference).
     ("ref List param", "fn f(v: &List<Int>) -> Int {", ["&Vec<i64>"], ["List<"]),
     ("ref arg preserved", "    return f(&v)", ["f(&v)"], []),
+    # binary bitwise prelude fns -> Vais operators (all verified to run)
+    ("bitor -> |", "let a = bitor(4, 2)", ["(4 | 2)"], ["bitor("]),
+    ("bitand -> &", "let a = bitand(6, 3)", ["(6 & 3)"], ["bitand("]),
+    ("bitxor -> ^", "let a = bitxor(6, 2)", ["(6 ^ 2)"], ["bitxor("]),
+    ("shl -> <<", "let a = shl(1, 3)", ["(1 << 3)"], ["shl("]),
+    ("shr -> >>", "let a = shr(16, 2)", ["(16 >> 2)"], ["shr("]),
+    ("bitnot -> ~", "let a = bitnot(5)", ["(~5)"], ["bitnot("]),
+    # code-as-data: bitwise fn names inside a string must stay verbatim
+    ("bitor in string kept", 'let s = "use bitor(a,b)"', ['"use bitor(a,b)"'], ["(a | b)"]),
+    ("bitnot in string kept", 'let s = "call bitnot(x)"', ['"call bitnot(x)"'], ["(~x)"]),
 ]
 
 

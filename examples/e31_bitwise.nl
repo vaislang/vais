@@ -1,0 +1,8 @@
+# expect: 7
+# Bitwise operations via word-functions (nl avoids symbol operators for clarity).
+# bitor(4, 2) = 6, then bitor(6, 1) = 7. Also: bitand/bitxor/shl/shr, bitnot(x).
+fn main() -> Int {
+    let a = bitor(4, 2)
+    let b = bitor(a, 1)
+    return b
+}
