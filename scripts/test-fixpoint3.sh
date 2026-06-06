@@ -46,5 +46,18 @@ check "fn square(x) {{ return x * x }}; fn add(a, b) {{ return a + b }}; let wid
 check "fn inc(x) {{ return x + 1 }}; fn add2(y) {{ return inc(inc(y)) }}; return add2(10);" 12
 check "fn f(a) {{ return a + a }}; fn g(b) {{ return f(b) + b }}; return g(5);" 15
 
-[ "$fail" -eq 0 ] && echo "RESULT: fixpoint3 compiler (multi-char functions + calls) end-to-end OK" || echo "RESULT: FAILURES"
+# --- FP3b: conditionals in bodies -> multi-char recursion ---
+# non-recursive conditional body
+check "fn clamp(x) {{ return if x > 100 then 100 else x }}; return clamp(7);" 7
+check "fn clamp(x) {{ return if x > 100 then 100 else x }}; return clamp(250);" 100
+# multi-char recursive factorial
+check "fn factorial(n) {{ return if n < 2 then 1 else n * factorial(n - 1) }}; return factorial(5);" 120
+# multi-char tree recursion (fibonacci)
+check "fn fib(n) {{ return if n < 2 then n else fib(n - 1) + fib(n - 2) }}; return fib(10);" 55
+# recursive sum
+check "fn sumto(n) {{ return if n < 1 then 0 else n + sumto(n - 1) }}; return sumto(10);" 55
+# recursion + variable + cross-function
+check "fn fact(n) {{ return if n < 2 then 1 else n * fact(n - 1) }}; fn add(a, b) {{ return a + b }}; let base = 4; return add(fact(base), base);" 28
+
+[ "$fail" -eq 0 ] && echo "RESULT: fixpoint3 (multi-char functions, calls, recursion) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail

@@ -240,3 +240,14 @@
 - 검증: fixpoint3 e2e **7/7**, 값-정확성 **34/34**, 트랜스파일러 24/24, fixpoint/fixpoint2 회귀 0.
 - **nl이 멀티문자 함수명+중첩호출 프로그램을 컴파일.** 플래그십(square/add/width/height)이 진짜 이름으로 동작.
 - 다음 FP3b: 함수 본문 조건식 → 멀티문자 재귀(진짜 fib/fact).
+
+## 2026-06-06 (/loop iter 24: FP3b — 멀티문자 재귀 함수 [조건식 본문])
+- fixpoint3에 if/then/else 추가 → **멀티문자 재귀 함수** 완성. 토큰 if(15)/then(16)/else(17) +
+  비교 <(18)/>(19)/==(20, `=`2개를 lookahead로 구분). eval_value 신설(find_kind로 then/else 경계,
+  조건/분기는 eval_value/eval_expr 재귀). body eval + top-level return을 eval_value 경유.
+- **실측**: factorial(5)=120, **fib(10)=55(멀티문자 트리재귀)**, sumto(10)=55, clamp(조건식 본문),
+  재귀+변수+cross-fn add(fact(4),base)=28.
+- 검증: fixpoint3 e2e **13/13**, 값-정확성 **34/34**, 트랜스파일러 24/24, fixpoint2 회귀 0.
+- **nl fixpoint 컴파일러가 멀티문자 재귀 함수(factorial/fib) 프로그램을 컴파일.** cx5_compiler(단일자,
+  string-rescan)를 모든 면에서 능가: List<Token> 파이프라인 + 멀티문자 변수/함수 + 재귀 + 조건 + precedence/좌결합.
+- 남은 것: FP5(전체 nl 문법 파싱 + 실제 codegen 확장) = 진짜 self-compile, 큰 단계.

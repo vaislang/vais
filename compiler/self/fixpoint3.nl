@@ -87,6 +87,12 @@ fn tokenize(src: Str) -> List<Token> {
                 toks.push(Token { kind: 8, value: 0, nstart: start, nlen: len })
             } else if word_is(src, start, len, 102, 110, 0, 0, 0, 0, 2) == 1 {
                 toks.push(Token { kind: 13, value: 0, nstart: start, nlen: len })
+            } else if word_is(src, start, len, 105, 102, 0, 0, 0, 0, 2) == 1 {
+                toks.push(Token { kind: 15, value: 0, nstart: start, nlen: len })   # if
+            } else if word_is(src, start, len, 116, 104, 101, 110, 0, 0, 4) == 1 {
+                toks.push(Token { kind: 16, value: 0, nstart: start, nlen: len })   # then
+            } else if word_is(src, start, len, 101, 108, 115, 101, 0, 0, 4) == 1 {
+                toks.push(Token { kind: 17, value: 0, nstart: start, nlen: len })   # else
             } else {
                 toks.push(Token { kind: 1, value: 0, nstart: start, nlen: len })
             }
@@ -97,7 +103,20 @@ fn tokenize(src: Str) -> List<Token> {
         } else if c == 45 {
             toks.push(Token { kind: 4, value: 0, nstart: 0, nlen: 0 }); i = i + 1
         } else if c == 61 {
-            toks.push(Token { kind: 5, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+            # `==` (comparison, kind 20) vs `=` (assignment, kind 5)
+            if i + 1 < n {
+                if src[i + 1] == 61 {
+                    toks.push(Token { kind: 20, value: 0, nstart: 0, nlen: 0 }); i = i + 2
+                } else {
+                    toks.push(Token { kind: 5, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+                }
+            } else {
+                toks.push(Token { kind: 5, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+            }
+        } else if c == 60 {
+            toks.push(Token { kind: 18, value: 0, nstart: 0, nlen: 0 }); i = i + 1   # <
+        } else if c == 62 {
+            toks.push(Token { kind: 19, value: 0, nstart: 0, nlen: 0 }); i = i + 1   # >
         } else if c == 59 {
             toks.push(Token { kind: 6, value: 0, nstart: 0, nlen: 0 }); i = i + 1
         } else if c == 40 {
@@ -233,7 +252,7 @@ fn eval_call(toks: &List<Token>, fns: &List<Fn>, vars: &List<Var>, src: Str, i: 
         callee.push(Var { nstart: f.p2s, nlen: f.p2l, value: arg2 })
     }
     # body is `return <expr>` within [bstart, bend): expr starts at bstart+1.
-    return eval_expr(toks, fns, &callee, src, f.bstart + 1, f.bend)
+    return eval_value(toks, fns, &callee, src, f.bstart + 1, f.bend)
 }
 
 # Find the end of an argument expression: index of the matching ',' or ')'
@@ -333,6 +352,46 @@ fn eval_fold(toks: &List<Token>, fns: &List<Fn>, vars: &List<Var>, src: Str, i: 
     return acc
 }
 
+# Find the index of the first token of `kind` in [i, stop), or stop.
+fn find_kind(toks: &List<Token>, i: Int, stop: Int, kind: Int) -> Int {
+    if i >= stop { return stop }
+    let t = toks[i]
+    if t.kind == kind { return i }
+    return find_kind(toks, i + 1, stop, kind)
+}
+
+# Evaluate a value: either `if <e> <cmp> <e> then <e> else <e>` (cmp: < > ==)
+# or a plain arithmetic expression. Used for function bodies and `return`.
+# FP3b: enables multi-char recursion (a body can branch on a base case).
+fn eval_value(toks: &List<Token>, fns: &List<Fn>, vars: &List<Var>, src: Str, i: Int, stop: Int) -> Int {
+    let t = toks[i]
+    if t.kind == 15 {
+        # if: condition is [i+1, then), branches split at then/else.
+        let then_pos = find_kind(toks, i + 1, stop, 16)
+        let else_pos = find_kind(toks, then_pos + 1, stop, 17)
+        # comparison operator within [i+1, then_pos)
+        let cmp_lt = find_kind(toks, i + 1, then_pos, 18)
+        let cmp_gt = find_kind(toks, i + 1, then_pos, 19)
+        let cmp_eq = find_kind(toks, i + 1, then_pos, 20)
+        let mut oppos = then_pos
+        let mut op = 0
+        if cmp_lt < then_pos { oppos = cmp_lt; op = 18 }
+        else if cmp_gt < then_pos { oppos = cmp_gt; op = 19 }
+        else if cmp_eq < then_pos { oppos = cmp_eq; op = 20 }
+        let lhs = eval_expr(toks, fns, vars, src, i + 1, oppos)
+        let rhs = eval_expr(toks, fns, vars, src, oppos + 1, then_pos)
+        let mut cond = 0
+        if op == 18 { if lhs < rhs { cond = 1 } }
+        else if op == 19 { if lhs > rhs { cond = 1 } }
+        else { if lhs == rhs { cond = 1 } }
+        if cond == 1 {
+            return eval_value(toks, fns, vars, src, then_pos + 1, else_pos)
+        }
+        return eval_value(toks, fns, vars, src, else_pos + 1, stop)
+    }
+    return eval_expr(toks, fns, vars, src, i, stop)
+}
+
 fn find_semi(toks: &List<Token>, i: Int, n: Int) -> Int {
     if i >= n { return n }
     let t = toks[i]
@@ -377,7 +436,7 @@ fn run_program(src: Str) -> Int {
             i = stop + 1
         } else if t.kind == 8 {
             let stop = find_semi(toks, i + 1, n)
-            result = eval_expr(&toks, &fns, &vars, src, i + 1, stop)
+            result = eval_value(&toks, &fns, &vars, src, i + 1, stop)
             i = stop + 1
         } else {
             i = i + 1
@@ -387,8 +446,8 @@ fn run_program(src: Str) -> Int {
 }
 
 fn main() -> Int {
-    # Multi-char function names! fib + square + add, like the flagship.
-    #   fib(10)=55, square(3)=9, add(55,9)=64; let base=3; add(fib(10), square(base))+base = 67
-    let value = run_program("fn fib(n) {{ return n }}; fn square(x) {{ return x * x }}; fn add(a, b) {{ return a + b }}; let base = 3; return add(square(base), base);")
+    # FP3b: a multi-char RECURSIVE function. factorial(n) = if n < 2 then 1
+    # else n * factorial(n - 1); factorial(5) = 120. Real name + recursion.
+    let value = run_program("fn factorial(n) {{ return if n < 2 then 1 else n * factorial(n - 1) }}; return factorial(5);")
     return emit_ir(value)
 }
