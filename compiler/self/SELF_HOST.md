@@ -106,6 +106,7 @@ the emitted IR with clang and checking the runtime value).
 | `fixpoint_full.nl` (FP10f) | **functions with imperative bodies** (the compiler's own function shape) | `test-fixpoint-full.sh` |
 | `fixpoint_struct.nl` (FP10e) | structs/records (Token/Op/Fn/Slot shape) | `test-fixpoint-struct.sh` |
 | `fixpoint_list.nl` (FP10g) | dynamic `List` (push/len/index — List<Token>/List<Fn> shape) | `test-fixpoint-list.sh` |
+| `fixpoint_str.nl` (FP12c) | **string literals + `s[i]` byte load + `s.len()`** (the source-tokenization primitive) | `test-fixpoint-str.sh` |
 
 Example — `fixpoint_list.nl` compiling a build-then-consume loop (the exact
 pattern the tokenizer/evaluator use):
@@ -116,10 +117,42 @@ let mut s = 0; let mut j = 0; while j < xs.len { s = s + xs[j]; j = j + 1 };
 return s;   // -> 100, via alloca [64 x i64] buffer + length counter + GEP
 ```
 
+Example — `fixpoint_str.nl` compiling the source-tokenization primitive (a
+string literal indexed byte by byte, plus its length):
+
+```
+let s = "ABC"; return s[1] + s.len();   // -> 69  ('B'=66 + len 3)
+```
+
+emits
+
+```llvm
+@.s0 = private constant [4 x i8] c"ABC\00"
+define i64 @main() {
+  %v0 = alloca i8*
+  %g0 = getelementptr [4 x i8], [4 x i8]* @.s0, i64 0, i64 0
+  store i8* %g0, i8** %v0
+  %t1 = load i8*, i8** %v0
+  %t2 = getelementptr i8, i8* %t1, i64 1   ; s[1]
+  %t3 = load i8, i8* %t2
+  %t4 = zext i8 %t3 to i64                  ; 'B' = 66
+  %t5 = add i64 %t4, 3                      ; + s.len()
+  ret i64 %t5
+}
+```
+
+Combined with `while` + assignment, this scans a source string byte by byte —
+the exact inner loop of `fixpoint.nl`'s own tokenizer (`while i < src.len() { c =
+src[i]; ... }`). String handling is what lets the compiler read its *own source
+text*, so this is the construct that crosses from "compiles a subset" toward
+"could read nl source": a compiler that codegens string indexing + length can, in
+principle, tokenize the very source it is written in.
+
 ### What "complete codegen coverage" means — and the honest remaining gap
 
 These modules prove the nl language can express, and the nl compiler can codegen,
-**each** construct the compiler is made of. The remaining gap to a *literal*
+**each** construct the compiler is made of — now including the string indexing +
+length that source tokenization is built on. The remaining gap to a *literal*
 self-compilation fixpoint is **integration + scale**, not a missing capability:
 unify the per-construct code generators into one compiler and feed it the actual
 multi-thousand-line nl compiler source (with its full mix of these constructs in

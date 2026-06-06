@@ -469,3 +469,23 @@
 - 검증: fixpoint-full e2e **23 PASS**, 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
 - **생성 프로그램이 putchar로 출력 emit 가능** = nl 컴파일러가 IR 텍스트 생성하는 방식. 실제 소스 향 핵심 조각.
   다음 FP12c: 문자열 리터럴/s[i]/s.len()(토큰화/이름비교용), 이후 부트스트랩=months급.
+
+## 2026-06-06 (/loop iter 43: FP12c — 문자열 codegen [소스 토큰화 프리미티브])
+- FP12 세번째 조각, **소스-토큰화 프리미티브**: 문자열 리터럴 + 바이트 인덱싱 + 길이를 real LLVM IR로.
+  nl 컴파일러가 **자기 소스 텍스트**를 읽는 데 필요한 바로 그 능력(`while i < src.len() { c = src[i]; ... }`).
+- 신규 `compiler/self/fixpoint_str.nl` (독립 모듈, 의도적 string-focused):
+  ① **2-pass**: pass1 `collect`가 문자열 리터럴마다 `@.sN = private constant [len+1 x i8] c"..\00"` 전역 emit
+     + 변수 슬롯 수집(kind 1=string i8*, kind 0=scalar i64). pass2 `gen_stmts`가 본문 codegen.
+  ② `let s = "lit"` → 전역 + `alloca i8*` + 전역 element-0 포인터를 i8*에 store(`emit_allocas`).
+  ③ `s[i]` → `load i8*` + `getelementptr i8` + `load i8` + `zext i8→i64`(gen_factor `.`/`[` 분기).
+  ④ `s.len()` → 컴파일타임 길이 리터럴(slen_of 슬롯 조회). `while`+대입은 imperative서 재사용.
+  ⑤ 임베드 프로그램은 따옴표 충돌 회피 위해 **backtick(96)을 문자열 구분자**로 사용(tokenize 96 분기).
+- **버그 1건 근본수정**: `skip_factor`의 `.len()` 토큰 폭 off-by-one — `ident . len ( )` = 5토큰인데 `i+4`
+  반환 → 다중 `.len()` 체인(`a.len()+b.len()`)의 두번째가 누락(IR에 add 1개만). `i+5`로 수정 → 통과.
+- **실측**: `s[1]+s.len()`=69, ABC 바이트합 스캔=198, 2-string len 독립추적(`a.len()+b.len()`)=181,
+  `"return".len()`=6, `"tokenize"`[0]+[7]=217, 2-string 스캔+인덱스=183. IR을 clang으로 빌드+런타임 검증.
+  (exit code 8bit 절단 확인: 진짜값 382가 126으로 → 테스트값 ≤255 유지.)
+- 검증: fixpoint-str e2e **7 PASS**, 값-정확성 aggregate **44/44**(+1, 자동발견), 6 fixpoint e2e 전부 green,
+  nl-check 전 모듈 clean. 회귀 0.
+- **문자열 인덱싱+길이 codegen 가능** = 컴파일러가 자기 소스를 토큰화할 수 있는 구문 임계점 통과.
+  남은 갭 = 통합+규모(months급 부트스트랩), 능력 부족 아님.
