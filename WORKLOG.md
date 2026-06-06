@@ -741,3 +741,16 @@
 - 검증: 값-정확성 78/78, 회귀0. README 인덱스 e45→e49 + 카운트 60/60. 교훈: **능력 경계가 예상보다 넓음**
   (제네릭+struct/클로저인자/char/string-index 전부 동작)/harness artifact 재확인(char_lit는 멀쩡, heredoc로 측정)/
   성숙단계 hard-edge 탐색이 "동작하는 고급기능"을 코퍼스에 추가(이중 가치: 견고성 실증 + AI 학습 커버리지).
+
+## 2026-06-07 (/loop iter 61: 종합 예제(식 평가기) + 재귀 enum Vais갭 발견)
+- 성숙 plateau → **여러 구문 종합 실전형 예제**(인터프리터 코어). expr_eval/ast_eval(비재귀 enum) 둘 다 동작 →
+  **e50 식 평가기**(enum Node{Lit/Add/Mul} + match 디스패치, prod=Mul(3,4)→Add(prod,2)=14) 승격. 코퍼스 첫 인터프리터.
+- **🚨 재귀 enum Vais갭 발견**: 진짜 재귀 AST(`enum Expr { Add(Expr, Expr) }`=자기참조) 시도 → **무음 miscompile**
+  (1-level `Mul(Lit(3),Lit(4))`도 0/139 garbage). 트랜스파일러는 올바른 Vais 생성(`enum Expr{Add(Expr,Expr)}`)
+  하나 Vais가 재귀 ADT payload 추출 못 함. **비재귀 enum(2-payload)은 OK**. **이것이 self-host codegen 트랙이
+  AST를 재귀enum 대신 struct+인덱스로 인코딩한 근본 이유** — 이제 명시적으로 확인·문서화. 재귀 ADT는 실전
+  인터프리터/파서 핵심 → 중요 Vais 갭(8번째). TRACKED.
+- **신규 검증 예제**: e50 식 평가기(14). 값-정확성 78→79. ROADMAP TRACKED + README 미커버 + PRELUDE 무관.
+- 검증: 값-정확성 79/79, 회귀0. README 인덱스 e49→e50 + 카운트 61/61. 교훈: **종합 예제가 구문 interplay 검증**
+  (단일기능 아닌 인터프리터 코어)/**재귀 ADT Vais갭이 self-host struct+인덱스 설계의 근본 이유 확인**(설계가 이미
+  이 갭을 우회하고 있었음)/비재귀 enum은 OK라 인터프리터 코어는 flat 인코딩으로 표현가능(e50).

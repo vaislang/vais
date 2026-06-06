@@ -72,6 +72,11 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**(codegen 능력 완비).
 ---
 
 ## TRACKED 추가 (Vais 버그)
+- **Vais 재귀(자기참조) enum codegen 버그**: `enum Expr { Lit(Int), Add(Expr, Expr), ... }`(enum이 자신을
+  payload로) 무음 miscompile — 1-level `Mul(Lit(3),Lit(4))`도 0/garbage 139 반환. 트랜스파일러는 올바른
+  Vais(`enum Expr { Add(Expr,Expr) }`) 생성하나 Vais가 재귀 ADT payload 추출 못 함. **비재귀 enum(2-payload Int)은
+  OK**(e50). **이것이 nl self-host codegen 트랙이 AST를 재귀enum 대신 struct+인덱스로 인코딩하는 근본 이유.**
+  재귀 ADT는 실전 인터프리터/파서의 핵심 → 중요 갭. Vais 코어 작업 필요. 2026-06-07 실측.
 - **Vais `impl Trait for Type` 미지원**: `impl Area for Sq { ... }`가 P001(`for`서). **`impl Type { ... }`
   (inherent 메서드)는 OK**(e09/e43 동작) → nl 구조체 메서드는 정상, trait 기반 다형성만 막힘. Vais 파서 확장
   필요. nl측은 `impl Type` 형태로 충분(트랜스파일 정상). 2026-06-07 실측.

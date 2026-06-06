@@ -1,8 +1,8 @@
 # nl 예제 코퍼스 (P9 인프라)
 
 **검증된 nl 예제.** P9(예제 코퍼스 = 최강 레버, cold-start 1/5→5/5)의 핵심 인프라.
-모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 60/60 PASS; 러너 전체는
-self-host codegen 모듈 포함 78/78).
+모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 61/61 PASS; 러너 전체는
+self-host codegen 모듈 포함 79/79).
 
 > 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
 > AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
@@ -75,6 +75,7 @@ self-host codegen 모듈 포함 78/78).
 | e47 | char 리터럴 + 비교 ('A') | 1 |
 | e48 | 문자열 바이트 인덱싱 s[0] | 104 |
 | e49 | 클로저를 함수 인자로 (일급함수) | 12 |
+| e50 | 식 평가기 (enum Node + match 디스패치) | 14 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
 - **Vec 성장 `.push()`/`.map()`/`.filter()`** — Vais 백엔드 버그(`@Vec_push` 무음 miscompile/undefined).
@@ -85,6 +86,8 @@ self-host codegen 모듈 포함 78/78).
 - 중첩 `match` (arm 안에 `=> match {...}`) — 라인-재작성기 P001(트랜스파일러 한계). 함수분리로 우회 가능.
 - **`impl Trait for Type`** (trait 기반 다형성) — Vais 미지원(P001). **`impl Type { ... }`(inherent 메서드)는
   OK**(e09/e43) → 구조체 메서드는 정상, trait 디스패치만 막힘. ROADMAP TRACKED.
+- **재귀(자기참조) enum** (`enum Expr { Add(Expr, Expr) }`) — Vais 무음 miscompile. **비재귀 enum은 OK**(e50) →
+  실전 AST는 struct+인덱스 인코딩으로(self-host codegen 트랙 방식). ROADMAP TRACKED.
 - **중첩 리스트 `[[..]]`** (`List<List<Int>>`) — **Vais 백엔드 버그**(C003 nested Vec). 트랜스파일러는 올바른
   `Vec<Vec<i64>>` 타입 생성하나 Vais가 codegen 못 함. ROADMAP TRACKED.
 - **리스트 리터럴을 함수 인자로 직접 전달** (`f([1,2,3])`) — Vais 코어션 갭(E001). **우회: 변수에 바인딩 후
