@@ -30,3 +30,10 @@
 - false positive 0 (예제 36 전부 clean). 단위테스트 tests/nl_check_test.py 11/11.
 - 3개 게이트 green: 값-정확성 24/24 + 트랜스파일러 19/19 + nl-check 11/11.
 - E2(cold-start self-correction 측정)는 신선한 에이전트 필요 → 다음 iter.
+
+## 2026-06-06 (/loop iter 5: P3-E2 self-correction 측정 + P4 std 시작)
+- E2: 버그 nl(`&&`/`Color::`/`as Int`) + nl-check help: 에러를 신선한 AI에게 → **1라운드에 3/3 수정**
+  (and/Color.Small/Int(n)), 수정본 nl-check clean. **P4(자동수정 에러)=AI 1라운드 수렴 입증.**
+- S1: std/PRELUDE.md — nl 표면 API → Vais 매핑 명세 (print/컬렉션/타입/Option·Result/연산자, 상태표).
+- S2: nl `print(EXPR)` → Vais `puts(EXPR)` (보간 지원). e14_print: stdout "the answer is 42" + exit 0 PASS.
+- 코퍼스 24→25. 3 게이트 green (값-정확성 25/25, 트랜스파일러 19/19, nl-check 11/11).

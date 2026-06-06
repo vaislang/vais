@@ -95,6 +95,13 @@ def map_bitnot(line: str) -> str:
     return re.sub(r"\bbitnot\(([^()]*)\)", r"(~\1)", line)
 
 
+def map_print(line: str) -> str:
+    # nl `print(EXPR)` -> Vais `puts(EXPR)`. Vais's `puts` writes a line to
+    # stdout and supports string interpolation ("{x}"), so nl's print maps
+    # directly. (nl prelude exposes `print`; backend = Vais puts builtin.)
+    return re.sub(r"\bprint\(", "puts(", line)
+
+
 def map_collection_methods(line: str) -> str:
     # nl collection ops are methods. Vais std/vec has map/filter/fold but no
     # `sum`. Express sum via fold (verified: fold(0, |a,x| a+x) works).
@@ -148,6 +155,7 @@ def transpile_line(line: str) -> str:
         return stripped
     out = stripped
     out = map_collection_methods(out)
+    out = map_print(out)
     out = map_field_pub(out)
     out = map_let(out)
     out = map_if(out)
