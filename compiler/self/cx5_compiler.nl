@@ -180,8 +180,7 @@ fn eval_factor(src: Str, p0: Int, end: Int, env: Env, defs: Defs) -> Cur {
                     if has2 == 1 {
                         callee = eset(callee, p2, arg2val)
                     }
-                    let body = eval_value(src, bs, be, callee, defs)
-                    r = body.val
+                    r = eval_body(src, bs, be, callee, defs)
                 }
                 return Cur { val: r, pos: np }
             }
@@ -304,6 +303,56 @@ fn eval_value(src: Str, start: Int, end: Int, env: Env, defs: Defs) -> Cur {
     return eval_expr(src, start, end, env, defs)
 }
 
+# --- CX8: a function body = `let <v> = <e>; ... return <e>` (local variables) ---
+# Processes ';'-separated statements: each `let <v> = <expr>` updates the local
+# env; the final `return <expr>` (or a bare expr) yields the value. The env is a
+# struct, so threading updates through a loop AND through recursive calls inside
+# expressions is move-safe. Returns the result value.
+fn eval_body(src: Str, start: Int, end: Int, env0: Env, defs: Defs) -> Int {
+    let mut env = env0
+    let mut result = 0
+    let mut i = start
+    while i < end {
+        let p = skip_sp(src, i, end)
+        # statement end = ';' or end
+        let mut j = p
+        let mut g = true
+        while g {
+            if j >= end { g = false }
+            else if src[j] == 59 { g = false }
+            else { j = j + 1 }
+        }
+        if p < j {
+            let first = src[p]
+            if first == 108 {
+                # "let <v> = <expr>"
+                let q = skip_sp(src, p + 3, end)
+                let vname = src[q]
+                # find '='
+                let mut e = q
+                let mut g2 = true
+                while g2 {
+                    if e >= j { g2 = false }
+                    else if src[e] == 61 { g2 = false }
+                    else { e = e + 1 }
+                }
+                let rhs = eval_value(src, e + 1, j, env, defs)
+                env = eset(env, vname, rhs.val)
+            } else if first == 114 {
+                # "return <expr>"
+                let r = eval_value(src, p + 6, j, env, defs)
+                result = r.val
+            } else {
+                # bare expression (allow a body that is just `<expr>`)
+                let r = eval_value(src, p, j, env, defs)
+                result = r.val
+            }
+        }
+        i = j + 1
+    }
+    return result
+}
+
 fn empty_defs() -> Defs {
     return Defs {
         n0name: 0, n0param: 0, n0param2: 0, n0bs: 0, n0be: 0,
@@ -356,6 +405,7 @@ fn stmt_end(src: Str, p: Int, n: Int) -> Int {
 fn run_program(src: Str) -> Int {
     let n = src.len()
     let mut defs = empty_defs()
+    let mut tenv = zero_env()   # top-level variable env
     let mut result = 0
     let mut i = 0
     while i < n {
@@ -394,11 +444,10 @@ fn run_program(src: Str) -> Int {
                     else if src[br] == 123 { g2 = false }
                     else { br = br + 1 }
                 }
-                # inside braces: skip to after "return"
-                let inner = skip_sp(src, br + 1, n)
-                # assume "return" keyword (6 chars); body starts after it
-                let bs = inner + 6
-                # body end = '}' (search to end of statement region or n)
+                # body = everything inside the braces (eval_body parses the
+                # `let ...; return ...` statements itself). bs = just after '{'.
+                let bs = br + 1
+                # body end = '}' (search to end of source).
                 let mut be = bs
                 let mut g3 = true
                 while g3 {
@@ -415,9 +464,23 @@ fn run_program(src: Str) -> Int {
                 if after < n {
                     if src[after] == 59 { i = after + 1 }
                 }
+            } else if first == 108 {
+                # top-level "let <v> = <expr>" (variables usable in later stmts)
+                let q = skip_sp(src, p + 3, n)
+                let vname = src[q]
+                let mut e = q
+                let mut gl = true
+                while gl {
+                    if e >= j { gl = false }
+                    else if src[e] == 61 { gl = false }
+                    else { e = e + 1 }
+                }
+                let rhs = eval_value(src, e + 1, j, tenv, defs)
+                tenv = eset(tenv, vname, rhs.val)
+                i = j + 1
             } else if first == 114 {
-                # "return <expr>"
-                let r = eval_value(src, p + 6, j, zero_env(), defs)
+                # "return <expr>" (evaluated under the top-level env)
+                let r = eval_value(src, p + 6, j, tenv, defs)
                 result = r.val
                 i = j + 1
             } else {
@@ -438,9 +501,9 @@ fn emit_ir(value: Int) -> Int {
 }
 
 fn main() -> Int {
-    # CX7: a TWO-ARGUMENT function. add(a, b) = a + b; combined with a recursive
-    # fn: pow-like sum. Here: add(3, 4) + f(5) where f is factorial -> 7 + 120 = 127.
-    # Demonstrates multi-arg parsing/binding alongside recursion. Braces: `{{`/`}}`.
-    let value = run_program("fn a(a, b) {{ return a + b }}; fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return a(3, 4) + f(5)")
+    # CX8: a function body with a LOCAL VARIABLE (let). g(x) computes c = x + 1
+    # then returns c * c; g(4) = (4+1)^2 = 25. Combined with a recursive fn:
+    # g(4) + f(5) = 25 + 120 = 145. (Local uses slot `c`; Env slots: a-f,n,x.)
+    let value = run_program("fn g(x) {{ let c = x + 1; return c * c }}; fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return g(4) + f(5)")
     return emit_ir(value)
 }

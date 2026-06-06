@@ -74,5 +74,21 @@ check 'fn m(a, b) {{ return a + b }}; return m(1 + 2, 3 * 4)' 15
 # 2-arg + recursive fn together
 check 'fn a(a, b) {{ return a + b }}; fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return a(3, 4) + f(5)' 127
 
-[ "$fail" -eq 0 ] && echo "RESULT: CX5-CX7 (defs, calls, recursion, 2-arg) end-to-end OK" || echo "RESULT: FAILURES"
+# --- CX8: local variables (let) in bodies + top-level ---
+# single local in a body
+check 'fn g(x) {{ let c = x + 1; return c * c }}; return g(4)' 25
+# two locals, second depends on first
+check 'fn g(x) {{ let a = x + 1; let b = a * 2; return b }}; return g(4)' 10
+# local in a 2-arg fn
+check 'fn m(a, b) {{ let c = a + b; return c * c }}; return m(2, 3)' 25
+# local passed to a recursive call
+check 'fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; fn g(x) {{ let c = x - 1; return f(c) }}; return g(6)' 120
+# bare-expression body (no return keyword)
+check 'fn d(x) {{ x * 3 }}; return d(5)' 15
+# top-level variables (cx5_compiler is a superset of the CX1-3 compiler)
+check 'let a = 7; let b = 4; return a + b' 11
+# top-level var + fn, var used as arg and in final expr
+check 'let a = 3; fn d(x) {{ return x * 2 }}; return d(a) + a' 9
+
+[ "$fail" -eq 0 ] && echo "RESULT: CX5-CX8 (defs, calls, recursion, 2-arg, locals) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail

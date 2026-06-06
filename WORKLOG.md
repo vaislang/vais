@@ -151,3 +151,16 @@
 - 검증: CX5-7 e2e **18/18**(scripts/test-cx5.sh), 값-정확성 **30/30**, 트랜스파일러 22/22, compiler e2e green. 회귀 0.
 - **nl 컴파일러가 다중 인자 함수(2-인자 재귀 포함) 프로그램을 컴파일.**
 - 다음 CX8: 함수 본문 지역 변수(let) — 본문을 단일 return식에서 ;-문장열로 확장.
+
+## 2026-06-06 (/loop iter 17: CX8 지역 변수 (let))
+- **CX8** cx5_compiler.nl에 함수 본문 지역변수. `eval_body(src,bs,be,env,defs)` 신설: ;-문장열을
+  순회하며 `let <v> = <e>`→env=eset(env,v,평가값), `return <e>`/bare-expr→결과값. env는 struct라
+  루프 갱신+재귀호출 양쪽 move-safe.
+- def-parser 수정: 본문 범위 bs를 "return 다음"(inner+6)에서 **`{` 직후(br+1)**로 — eval_body가
+  return/let을 자체 파싱하므로 본문 전체가 범위. 단일 return 본문도 eval_body가 처리(회귀 0).
+- run_program도 **top-level let**(tenv) 지원 → cx5_compiler가 CX1-3 compiler.nl 상위집합.
+- 실측: 의존 지역변수(let b = a*2), 2-arg+local, **local→재귀호출 인자**(g(6):c=5,f(5)=120),
+  bare-expr 본문(d(x)=x*3), **top-level var→fn인자**(let a=3; d(a)+a=9).
+- 검증: CX5-8 e2e **25/25**(scripts/test-cx5.sh), 값-정확성 **30/30**, 트랜스파일러 22/22, compiler e2e green. 회귀 0.
+- **nl 컴파일러가 지역변수+다중인자+재귀 함수 프로그램을 컴파일.** 인터프리터 표현력 거의 완비.
+- 다음 CX9: Env/Defs 슬롯 확장(기계적) — 더 많은 변수/함수 동시 사용.
