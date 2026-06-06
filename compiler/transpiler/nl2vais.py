@@ -258,17 +258,18 @@ def map_print(line: str) -> str:
 def map_collection_methods(line: str) -> str:
     # nl collection ops are methods. Vais std/vec has map/filter/fold but no
     # `sum`. Express sum via fold (verified: fold(0, |a,x| a+x) works).
-    # `.sum()` -> `.fold(0, |__a, __x| __a + __x)`
-    line = re.sub(r"\.sum\(\)", r".fold(0, |__a, __x| __a + __x)", line)
-    # Vais `filter` wants `fn(T)->i64`, but nl predicates are Bool. Wrap a
-    # boolean filter body into i64: `.filter(|x| COND)` ->
-    # `.filter(|x| I (COND) { 1 } else { 0 })`. (Backend limit: Vais filter
-    # predicate returns i64, not bool.)
-    def filt(m):
-        var, cond = m.group(1), m.group(2)
-        return f".filter(|{var}| I ({cond}) {{ 1 }} else {{ 0 }})"
-    line = re.sub(r"\.filter\(\|([A-Za-z_][A-Za-z0-9_]*)\|\s*([^)]+)\)", filt, line)
-    return line
+    # All rewrites are outside strings (a string containing ".sum()" stays as-is).
+    def rewrite(p: str) -> str:
+        # `.sum()` -> `.fold(0, |__a, __x| __a + __x)`
+        p = re.sub(r"\.sum\(\)", r".fold(0, |__a, __x| __a + __x)", p)
+        # Vais `filter` wants `fn(T)->i64`, but nl predicates are Bool. Wrap a
+        # boolean filter body into i64: `.filter(|x| COND)` ->
+        # `.filter(|x| I (COND) { 1 } else { 0 })`. (Backend limit.)
+        def filt(m):
+            var, cond = m.group(1), m.group(2)
+            return f".filter(|{var}| I ({cond}) {{ 1 }} else {{ 0 }})"
+        return re.sub(r"\.filter\(\|([A-Za-z_][A-Za-z0-9_]*)\|\s*([^)]+)\)", filt, p)
+    return outside_strings(line, rewrite)
 
 
 def map_field_pub(line: str) -> str:
@@ -283,7 +284,13 @@ def map_arm_return(line: str) -> str:
     # nl allows `Pattern => return expr` (design P6), but the Vais backend
     # rejects a bare `return` as a match-arm body (Vais trap 6). Wrap it:
     # `Pattern => return expr,`  ->  `Pattern => { return expr },`
-    # Handle optional trailing comma.
+    # Handle optional trailing comma. Skip if there's no `=> return` OUTSIDE a
+    # string (code-as-data: an embedded program string must stay verbatim).
+    if '"' in line:
+        # blank string literals, then check if `=> return` survives in code
+        blanked = re.sub(r'"(?:[^"\\]|\\.)*"', lambda mm: " " * len(mm.group(0)), line)
+        if not re.search(r"=>\s*return\b", blanked):
+            return line
     m = re.match(r"^(\s*)(.+?)=>\s*return\s+(.+?)(,?)\s*$", line)
     if m:
         indent, pat, expr, comma = m.groups()
@@ -297,7 +304,9 @@ def map_enum_qualified(line: str) -> str:
     # uppercase (a variant) AND it is not a method call (no '(' immediately after
     # in a `.method(` sense — variants like Some(x) keep their args).
     # We only strip the `EnumName.` prefix before an uppercase Variant.
-    return re.sub(r"\b[A-Z][A-Za-z0-9_]*\.([A-Z][A-Za-z0-9_]*)", r"\1", line)
+    # NOT inside strings (code-as-data: a string "Color.Red" stays verbatim).
+    return outside_strings(
+        line, lambda p: re.sub(r"\b[A-Z][A-Za-z0-9_]*\.([A-Z][A-Za-z0-9_]*)", r"\1", p))
 
 
 def transpile_line(line: str) -> str:

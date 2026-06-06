@@ -677,3 +677,19 @@
 - 교훈: **PRELUDE 감사가 spec↔구현 불일치 노출**(spec은 `x as i64` 맞았으나 구현이 `i64(x)`)/test-helper artifact
   를 실측 재확인(Option/Result는 멀쩡)/**또 다른 문자열버그**(map_types) — 새 매핑 추가 패턴이 기존 outside_strings
   누락을 연쇄 노출(map_bitnot→map_types)/숫자변환 call형은 nl P4(모호성0)의 핵심(`as` 금지하니 call형 동작 필수).
+
+## 2026-06-07 (/loop iter 56: code-as-data 일괄 감사 — 문자열버그 3종 근본수정)
+- map_bitnot/map_types 문자열버그가 **연쇄 패턴**임을 인지 → **전 map_ 함수 outside_strings 감사**(선제적,
+  다음 기능이 노출하기 전에). re.sub/replace 하나 outside_strings 없는 함수 식별 → 실측으로 문자열 오염 3종 확인.
+- **문자열버그 3종 근본수정**(전부 code-as-data 위반, **self-host 컴파일러 직접 영향** — `compile("...")` 임베드):
+  ① **map_collection_methods**: 문자열 `"call v.sum() x"`→`"call v.fold(...)"` 오염 → outside_strings 래핑.
+  ② **map_enum_qualified**: 문자열 `"Color.Red dot"`→`"Red dot"` 오염 → outside_strings 래핑.
+  ③ **map_arm_return**: 문자열 `"P => return x"`→`"P => { return x" }`(구조파괴!) → string-blank 후 `=> return`이
+     code에 있을 때만 변환. (outside_strings는 fn을 non-string에 적용하나 arm_return은 전체줄 재구성이라
+     blank-then-check 방식 사용.)
+- 실측 확인: 3 문자열 전부 verbatim 유지 + **real 변환 전부 동작**(c1 arm-wrap, c2 .sum→fold, e22 enum-strip,
+  mixed arm run=5). **self-host e2e(fixpoint-full/str)도 green**(임베드 nl 문자열 무손상 확인 — 가장 중요).
+- 트랜스파일러 unit +4(41→45: 3 문자열safety + 1 real-arm-wrap 회귀가드). 값-정확성 63/63, 회귀0.
+- 교훈: **잠복버그가 패턴이면 일괄 감사**(map_bitnot→map_types→3종 더, 연쇄 노출 대신 선제 sweep)/code-as-data는
+  self-host(compile 임베드)에 치명적 — self-host e2e가 핵심 가드/전체줄 재구성 함수(arm_return)는 outside_strings
+  대신 blank-then-check/**모든 텍스트-건드리는 매핑은 문자열 안전성 검증 필수**(이제 전 map_ 함수 감사 완료).

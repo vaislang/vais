@@ -84,6 +84,14 @@ CASES = [
     # code-as-data: type names inside a string must stay verbatim
     ("Int in string kept", 'let s = "type is Int"', ['"type is Int"'], ["i64", "as i64"]),
     ("List in string kept", 'let s = "a List here"', ['"a List here"'], ["Vec"]),
+    # code-as-data: collection methods / enum-qualifier / arm-return inside a
+    # string must stay verbatim (these directly affect the self-host compiler,
+    # which embeds nl programs as compile("...") strings).
+    (".sum in string kept", 'let s = "call v.sum() x"', ['"call v.sum() x"'], ["fold"]),
+    ("enum dot in string kept", 'let s = "Color.Red dot"', ['"Color.Red dot"'], ['"Red dot"']),
+    ("arm return in string kept", 'let s = "P => return x"', ['"P => return x"'], ["{ return"]),
+    # real arm-return STILL wraps (regression guard for the string fix)
+    ("real arm return wraps", "Some(v) => return v,", ["=> { return v }"], []),
 ]
 
 
