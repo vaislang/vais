@@ -779,3 +779,17 @@
 - 검증: 값-정확성 82/82, nl-check unit 34→37, 트랜스파일러 unit 45→46, 회귀0. PRELUDE String행 추가. 교훈:
   **cold-start가 실전과제로 nl측 갭 노출**(String — 흔한 Rust직관, 이전 probe들은 안 건드림)/forgiving map + 안내
   규칙 조합(동작시키되 canonical 가르침)/cold-start는 코퍼스 검증뿐 아니라 갭 발견 도구(이중 가치 재확인).
+
+## 2026-06-07 (/loop iter 64: cold-start 재측정(재고도메인 성공) + match 와일드카드 + batch-probe 신뢰성 교훈)
+- 실전 cold-start 계속. **batch-probe(printf-array)로 Rust-ism 일괄 테스트 시도 → 다수 false 실패**(mut-assign/
+  for-range/match-wildcard/len-var "fail"로 보였으나 heredoc 재측정 시 전부 동작=6/3/2/2). **printf '%s\n'의 `;`-구분
+  다중문장 artifact 재확인** — batch-probe는 다중문장 부정확, heredoc/실제 cold-start만 신뢰. 진짜 확인된 Rust-ism은
+  단일토큰만(println!/usize/Vec::new — 전부 nl-check flag됨 ✓).
+- **재고도메인 cold-start 첫시도 성공**: 신선 서브에이전트가 struct Item{price,qty} + subtotal 메서드 + 3인스턴스
+  집계=42 깔끔히(Rust-ism 0 — String갭은 string-param 한정 task-specific이었음). e54로 승격(코퍼스 첫 다중인스턴스
+  struct 집계).
+- **신규 검증 예제 2종**: e54 재고합계(cold-start, 42) / e55 match 와일드카드 `_`(기본분기, 코퍼스 미커버였음, 2).
+  값-정확성 82→84.
+- 검증: 값-정확성 84/84, 회귀0. README 인덱스 e53→e55 + 카운트 66/66. 교훈: **batch-probe는 다중문장 부정확**
+  (heredoc/cold-start가 신뢰 측정)/cold-start 갭은 task-specific(String은 string-param task서만, struct task선 무갭)/
+  `_` 와일드카드 미커버였음(흔한데 빠진 것)/매 도메인 cold-start가 커버리지+신뢰 동시 제공.
