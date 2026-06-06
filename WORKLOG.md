@@ -85,3 +85,13 @@
 - 전체 29/29 green + 트랜스파일러 19/19 + nl-check 11/11 + codegen IR + compiler e2e 6/6.
 - **★self-host 마일스톤: nl로 쓴 컴파일러가 소스텍스트를 실행가능 IR로 변환★** (lex+parse+codegen 통합).
 - L3 큐(L3.0~L3.5) 완료. 완료정의(L3+인프라) 도달 → 사용자 escalate.
+
+## 2026-06-06 (/loop iter 12: CX1-3 컴파일러 확장 — 변수/문장/return)
+- 사용자 우선순위: nl 컴파일러 확장(산술→전체 nl). ROADMAP에 CX 큐 추가.
+- compiler.nl 확장: run_program(소스) — ';'구분 문장 시퀀스 처리.
+  CX1 변수: `let <단일자> = <식>` 바인딩 + 참조 (26-슬롯 심볼테이블, index=letter-'a' — string-map Vais한계 회피).
+  CX2 여러 문장: ';' 분리. CX3 return 문.
+  eval_arith가 숫자+변수 혼합 식 평가 (우선순위 *>+, 좌결합, 멀티자릿수).
+- 검증(소스→nl컴파일러→IR→실행): 'let a=2;let b=3;return a+b*4'=14, 'let a=5;let b=a*2;return b+1'=11,
+  'let x=10;return x-3'=7, 'return 6*7'=42 등 7식. test-compiler.sh 갱신.
+- 전체 29/29 + 컴파일러 e2e 7/7 green. **nl 컴파일러가 변수 있는 프로그램을 컴파일.**

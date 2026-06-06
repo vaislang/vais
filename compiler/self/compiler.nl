@@ -1,54 +1,76 @@
 # expect: 0
-# nl self-host compiler — L3.5 integrated mini compiler (written in nl).
+# nl self-host compiler — CX1: arithmetic + variables (written in nl).
 #
-# End-to-end: a SOURCE STRING of arithmetic ("1+2*3") -> lex bytes -> evaluate
-# with precedence (* before +) -> emit LLVM IR that returns the value.
-# This wires the three stages (lex / parse-eval / codegen) into one nl program.
+# Input "language": a program string of statements separated by ';':
+#   let <var> = <arith> ;   (bind a single-letter variable a..z)
+#   return <arith>          (final value)
+# <arith> is + - * / over numbers AND variables (single letters a..z).
+# Pipeline: source string -> evaluate (with a 26-slot symbol table) -> emit IR.
 #
-# Bootstrap: this .nl -> seed transpiler -> Vais -> vaisc -> gen1. gen1 is an
-# nl-written compiler that turns arithmetic source text into runnable IR.
-#
-# Single-pass over the source string (no token Vec passed to sub-fns — avoids the
-# Vais Vec-recursion limit task_54658a43, and the && short-circuit limit
-# task_492f7e17 via nested guards). A full AST/recursive parser awaits L3's own
-# backend or those Vais fixes.
+# Bootstrap: this .nl -> seed transpiler -> Vais -> vaisc -> gen1.
+# Single-pass / index based (avoids Vais Vec-recursion limit task_54658a43 and
+# && short-circuit limit task_492f7e17 via nested guards). Variable storage uses
+# a fixed 26-int table keyed by (letter - 'a') to avoid string-map Vais limits.
 
 fn is_digit(c: Int) -> Bool {
     return c >= 48 and c <= 57
 }
+fn is_lower(c: Int) -> Bool {
+    return c >= 97 and c <= 122
+}
+fn is_space(c: Int) -> Bool {
+    if c == 32 { return true }
+    if c == 9 { return true }
+    if c == 10 { return true }
+    return false
+}
 
-# Lex+evaluate an arithmetic source string directly (digits and + - * /).
-# Returns the computed value. Handles * / before + - by accumulating a term.
-fn compile_eval(src: Str) -> Int {
-    let n = src.len()
-    let mut total = 0       # running sum (committed terms)
-    let mut term = 0        # current term (being multiplied)
-    let mut cur = 0         # current number being read
-    let mut have = false    # have we read a digit for `cur`?
-    let mut pending = 43    # pending additive op for `term` -> total: 43='+', 45='-'
-    let mut termop = 42     # pending multiplicative op for `cur` -> term: 42='*', 47='/'
+# Evaluate one arithmetic expression from src[start..end) using the symbol
+# table `vars` (26 ints, index = letter-'a'). Returns the value.
+# Handles * / before + - (term accumulation), left-assoc, multi-digit, vars.
+fn eval_arith(src: Str, start: Int, end: Int, vars: List<Int>) -> Int {
+    let mut total = 0
+    let mut term = 0
     let mut term_started = false
-    let mut i = 0
-    while i < n {
+    let mut pending = 43      # '+' or '-' applying term -> total
+    let mut termop = 42       # '*' or '/' applying operand -> term
+    let mut i = start
+    while i < end {
         let c = src[i]
-        if is_digit(c) {
-            cur = cur * 10 + (c - 48)
-            have = true
-        } else {
-            # c is an operator: fold `cur` into `term` using termop
-            if term_started {
-                if termop == 42 {
-                    term = term * cur
+        if is_space(c) {
+            i = i + 1
+        } else if is_digit(c) {
+            # read a number
+            let mut num = 0
+            let mut go = true
+            while go {
+                if i >= end {
+                    go = false
+                } else if is_digit(src[i]) {
+                    num = num * 10 + (src[i] - 48)
+                    i = i + 1
                 } else {
-                    term = term / cur
+                    go = false
                 }
+            }
+            if term_started {
+                if termop == 42 { term = term * num } else { term = term / num }
             } else {
-                term = cur
+                term = num
                 term_started = true
             }
-            cur = 0
-            have = false
-            # if this operator is + or -, commit term into total and reset
+        } else if is_lower(c) {
+            # variable reference (single letter)
+            let v = vars[c - 97]
+            i = i + 1
+            if term_started {
+                if termop == 42 { term = term * v } else { term = term / v }
+            } else {
+                term = v
+                term_started = true
+            }
+        } else {
+            # operator
             if c == 43 {
                 if pending == 43 { total = total + term } else { total = total - term }
                 pending = 43
@@ -58,19 +80,9 @@ fn compile_eval(src: Str) -> Int {
                 pending = 45
                 term_started = false
             } else {
-                # * or / : just set termop for the next number
                 termop = c
             }
-        }
-        i = i + 1
-    }
-    # fold last number + last term
-    if have {
-        if term_started {
-            if termop == 42 { term = term * cur } else { term = term / cur }
-        } else {
-            term = cur
-            term_started = true
+            i = i + 1
         }
     }
     if term_started {
@@ -79,7 +91,79 @@ fn compile_eval(src: Str) -> Int {
     return total
 }
 
-# Emit LLVM IR for a program that returns `value`.
+# Run a program: a ';'-separated list of `let x = expr` and a final `return expr`.
+fn run_program(src: Str) -> Int {
+    let n = src.len()
+    # symbol table: 26 slots
+    let mut vars: List<Int> = []
+    let mut k = 0
+    while k < 26 {
+        vars.push(0)
+        k = k + 1
+    }
+    let mut result = 0
+    let mut i = 0
+    while i < n {
+        # find end of this statement (';' or end)
+        let stmt_start = i
+        let mut j = i
+        let mut go = true
+        while go {
+            if j >= n {
+                go = false
+            } else if src[j] == 59 {
+                go = false
+            } else {
+                j = j + 1
+            }
+        }
+        # stmt is src[stmt_start..j). Determine kind by first non-space token.
+        # find 'l' (let) or 'r' (return)
+        let mut p = stmt_start
+        let mut sgo = true
+        while sgo {
+            if p >= j {
+                sgo = false
+            } else if is_space(src[p]) {
+                p = p + 1
+            } else {
+                sgo = false
+            }
+        }
+        if p < j {
+            let first = src[p]
+            if first == 108 {
+                # "let <var> = <expr>": find var letter and '='
+                # skip "let"
+                let mut q = p + 3
+                # skip spaces
+                let mut g2 = true
+                while g2 {
+                    if q >= j { g2 = false }
+                    else if is_space(src[q]) { q = q + 1 }
+                    else { g2 = false }
+                }
+                let var_letter = src[q]   # single letter
+                # find '=' after var
+                let mut e = q
+                let mut g3 = true
+                while g3 {
+                    if e >= j { g3 = false }
+                    else if src[e] == 61 { g3 = false }
+                    else { e = e + 1 }
+                }
+                let val = eval_arith(src, e + 1, j, vars)
+                vars[var_letter - 97] = val
+            } else if first == 114 {
+                # "return <expr>": eval after "return"
+                result = eval_arith(src, p + 6, j, vars)
+            }
+        }
+        i = j + 1
+    }
+    return result
+}
+
 fn emit_ir(value: Int) -> Int {
     print("define i64 @main() {")
     print("  ret i64 {value}")
@@ -88,7 +172,7 @@ fn emit_ir(value: Int) -> Int {
 }
 
 fn main() -> Int {
-    # Compile the source "1+2*3" -> evaluate -> emit IR (value 7).
-    let value = compile_eval("1+2*3")
+    # Program: a=2, b=3, return a + b * 4  ->  2 + 3*4 = 14
+    let value = run_program("let a = 2; let b = 3; return a + b * 4")
     return emit_ir(value)
 }
