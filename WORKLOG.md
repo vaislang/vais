@@ -37,3 +37,10 @@
 - S1: std/PRELUDE.md — nl 표면 API → Vais 매핑 명세 (print/컬렉션/타입/Option·Result/연산자, 상태표).
 - S2: nl `print(EXPR)` → Vais `puts(EXPR)` (보간 지원). e14_print: stdout "the answer is 42" + exit 0 PASS.
 - 코퍼스 24→25. 3 게이트 green (값-정확성 25/25, 트랜스파일러 19/19, nl-check 11/11).
+
+## 2026-06-06 (/loop iter 6: P5 — 레퍼런스 문서 → P0~P5 인프라 완료)
+- D1: docs/reference/LANGUAGE.md — 사용자/AI용 nl 레퍼런스 (함수/변수/타입/조건/반복/enum/struct/
+  컬렉션/클로저/Option·Result/출력/연산자 + 흔한실수표 + 빌드/검증). 모든 예제 검증됨.
+- ROADMAP: P0~P5 전부 [x], 완료 배너 + L3 escalation 명시.
+- **P0~P5 핵심 인프라 완료.** 3 게이트 green (값 25/25, 트랜스파일러 19/19, nl-check 11/11).
+- **다음 = L3(자체 컴파일러)** — 컴파일러 작성언어/백엔드/에러전략은 사용자 결정 필요 → /loop escalate.
