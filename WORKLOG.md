@@ -515,3 +515,14 @@
   값-정확성 aggregate **44/44**, 6 fixpoint e2e 전부 0 fail, nl-check clean. **회귀 0.**
 - **통합 완료**: 단일 컴파일러가 nl 컴파일러를 구성하는 전 코어구문을 codegen + 토크나이저 shape 포함.
   남은 갭 = **순수 규모**(실제 수천줄 컴파일러 소스를 먹이는 months급), 능력 부족 아님.
+
+## 2026-06-06 (/loop iter 45: FP12e — 동작하는 토크나이저 실증 [렉서 inner loop])
+- iter 44에서 통합된 string + 기존 if/while/state-var가 **함께** 동작함을 실증 = **완전한 토크나이저**.
+  (FP12c 독립모듈서 실패했던 "yellow count"는 그 모듈에 if codegen이 없어서였음 — fixpoint_full엔 있음.)
+- 실증 4종(전부 PASS): ① `cnt()` "yellow"의 'l' 개수=2(문자열인덱싱+비교+조건 in 스캔루프)
+  ② `digits()` "a1b2c3" 숫자개수=3(**중첩 if**로 문자클래스 `ch>47 && ch<58` 판정 = 렉서 숫자토큰 인식)
+  ③ `spaces()` 공백개수=2(토큰경계/whitespace skip shape)
+  ④ **🎯 `ntok()` "ab cd ef" 토큰런 개수=3** — if/else + 중첩if + in-word 플래그 상태머신 over 문자열스캔
+     = **실제 렉서의 동작 그 자체**. 단일 컴파일러가 서브셋 내에서 완전한 토크나이저를 codegen.
+- e2e: fixpoint-full **30→32 PASS**(+cnt +ntok 가드), 값-정확성 44/44, 회귀 0.
+- **"자기 토크나이저 shape를 codegen할 수 있나?"의 답 = YES**, 동작하는 토큰카운터로 실증. 남은 갭=순수 규모.

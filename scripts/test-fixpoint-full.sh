@@ -91,6 +91,13 @@ check "struct C {{ n }}; fn run() {{ let s = \`hello\`; let mut i = 0; let c = C
 # THE TOKENIZER CORE: a function scans a string byte by byte into a List
 # (exactly the shape fixpoint.nl's own tokenizer takes), returns count + first byte
 check "fn tok() {{ let s = \`Hi\`; let xs = list(); let mut i = 0; while i < s.len() {{ xs.push(s[i]); i = i + 1 }}; return xs.len + xs[0] }}; return tok();" 74
+# THE LEXER INNER LOOP: if-on-byte inside a while-over-string. Counts 'l'(108)
+# in "yellow" -> 2 (string indexing + comparison + conditional in a scan loop).
+check "fn cnt() {{ let s = \`yellow\`; let mut i = 0; let mut c = 0; while i < s.len() {{ if s[i] == 108 {{ c = c + 1 }}; i = i + 1 }}; return c }}; return cnt();" 2
+# A WORKING TOKENIZER: count whitespace-separated token runs in "ab cd ef" -> 3.
+# This is the real lexer state machine (if/else + nested if + an in-word flag over
+# a string scan) -- the unified compiler codegens a complete tokenizer in the subset.
+check "fn ntok() {{ let s = \`ab cd ef\`; let mut i = 0; let mut n = 0; let mut inw = 0; while i < s.len() {{ if s[i] == 32 {{ inw = 0 }} else {{ if inw == 0 {{ n = n + 1 }}; inw = 1 }}; i = i + 1 }}; return n }}; return ntok();" 3
 
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
