@@ -386,3 +386,15 @@
 - 검증: struct e2e **6 PASS**, 값-정확성 **42/42**, 트랜스파일러 24/24. 회귀 0.
 - **🎯 struct=nl 컴파일러 자신의 레코드(Token/Op/Fn/Slot) 형태를 codegen.** self-compile의 거의 마지막 조각.
 - 다음 FP10g: 동적 List(push/len) codegen — 힙/가변버퍼, months급 최후 조각.
+
+## 2026-06-06 (/loop iter 36: FP10g — 동적 List codegen [데이터구조 완비])
+- **compiler/self/fixpoint_list.nl**: 동적 List codegen — self-compile 데이터구조의 최후 조각.
+  List=고정용량 버퍼(alloca [64 x i64]) + 길이 카운터(alloca i64). `let lst = list()`(2슬롯, len=0 초기화),
+  `lst.push(식)`(load len→GEP buf[len]→store→len++), `lst.len`(load 카운터), `lst[식]`(GEP+load),
+  `lst[식]=식`(GEP+store). Slot에 kind(0 scalar/1 list). 토큰 [=23 ]=24 (=9 )=10 .=27 push.
+- **실측**: push 3개+len+xs[1]=23, **push 루프(i*10) + xs.len 루프 합산=100**(컴파일러 tokenizer가 List<Token>
+  빌드하고 evaluator가 소비하는 정확한 패턴!), len 추적=2, 원소 대입 xs[0]=50→56.
+- 검증: list e2e **5 PASS**, 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
+- **🎯🎯 codegen 데이터구조 완비**: 배열+struct(레코드)+동적 List(push/len). nl 컴파일러가 자신이 쓰는 모든
+  핵심 구문(산술/변수/함수/재귀/가변/while/if/함수+명령형본문/배열/struct/List)을 네이티브 IR로 생성.
+  진짜 self-compile의 codegen 토대 완성. 남은 것=전체 통합 단일 컴파일러+실제 nl 소스 입력=통합/스케일(months급).
