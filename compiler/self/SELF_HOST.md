@@ -103,7 +103,7 @@ the emitted IR with clang and checking the runtime value).
 | `fixpoint_codegen4.nl` (FP8) | + recursion (`icmp`/`br`/`phi`) | `test-fixpoint-codegen4.sh` |
 | `fixpoint_imperative.nl` (FP10a-c) | mutable vars (alloca), `while`, `if/else` | `test-fixpoint-imperative.sh` |
 | `fixpoint_array.nl` (FP10d) | fixed arrays (`alloca [N x i64]` + GEP) | `test-fixpoint-array.sh` |
-| `fixpoint_full.nl` (FP10f) | **functions with imperative bodies** (the compiler's own function shape) | `test-fixpoint-full.sh` |
+| `fixpoint_full.nl` (FP10f–FP12d) | **the unified compiler**: functions (0-4 params, recursion, nested calls) + mutable vars + while + if/else + arrays + Lists + structs + **strings** (`s[i]`/`s.len()`) + putchar — every core construct in one program | `test-fixpoint-full.sh` |
 | `fixpoint_struct.nl` (FP10e) | structs/records (Token/Op/Fn/Slot shape) | `test-fixpoint-struct.sh` |
 | `fixpoint_list.nl` (FP10g) | dynamic `List` (push/len/index — List<Token>/List<Fn> shape) | `test-fixpoint-list.sh` |
 | `fixpoint_str.nl` (FP12c) | **string literals + `s[i]` byte load + `s.len()`** (the source-tokenization primitive) | `test-fixpoint-str.sh` |
@@ -151,10 +151,20 @@ principle, tokenize the very source it is written in.
 ### What "complete codegen coverage" means — and the honest remaining gap
 
 These modules prove the nl language can express, and the nl compiler can codegen,
-**each** construct the compiler is made of — now including the string indexing +
-length that source tokenization is built on. The remaining gap to a *literal*
-self-compilation fixpoint is **integration + scale**, not a missing capability:
-unify the per-construct code generators into one compiler and feed it the actual
-multi-thousand-line nl compiler source (with its full mix of these constructs in
-one program). That is a months-scale engineering effort. What exists today is a
-verified code generator for every core construct, demonstrated end to end.
+**each** construct the compiler is made of — including the string indexing +
+length that source tokenization is built on. As of FP12d the per-construct code
+generators are **unified into one compiler** (`fixpoint_full.nl`): a single
+program now codegens functions + mutable vars + while + if/else + arrays + Lists
++ structs + strings + putchar together, both at top level and inside function
+bodies. The unified compiler can codegen its *own tokenizer's shape* — a function
+that scans a string byte by byte into a `List` (verified e2e: `fn tok() { let s =
+"..."; let xs = list(); while i < s.len() { xs.push(s[i]); i = i + 1 }; ... }`).
+
+The remaining gap to a *literal* self-compilation fixpoint is **scale**, not a
+missing capability: feed `fixpoint_full.nl` the actual multi-thousand-line nl
+compiler source (with its full mix of these constructs in one program) and have
+the emitted IR reproduce it. That is a months-scale engineering effort — the
+compiler source uses these same constructs but in far greater volume and with
+deeper nesting than the e2e probes. What exists today is a verified, unified code
+generator for every core construct, demonstrated end to end, that contains the
+tokenizer's exact shape.

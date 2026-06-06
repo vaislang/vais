@@ -115,6 +115,19 @@ fn tokenize(src: Str) -> List<Token> {
         let c = src[i]
         if is_space(c) {
             i = i + 1
+        } else if c == 96 {
+            # string literal delimited by backtick (96); kind 28 carries the
+            # content source range (nstart/nlen) and length (value).
+            let sstart = i + 1
+            let mut j = sstart
+            let mut sgo = true
+            while sgo {
+                if j >= n { sgo = false }
+                else if src[j] == 96 { sgo = false }
+                else { j = j + 1 }
+            }
+            toks.push(Token { kind: 28, value: j - sstart, nstart: sstart, nlen: j - sstart })
+            i = j + 1
         } else if is_digit(c) {
             let mut v = 0
             let mut go = true
@@ -205,6 +218,35 @@ fn pint(x: Int) -> Int {
     putchar(48 + (x - (x / 10) * 10))
     return 0
 }
+# Copy a source substring verbatim (string-literal content into a global init).
+fn emit_bytes(src: Str, start: Int, len: Int) -> Int {
+    let mut k = 0
+    while k < len {
+        putchar(src[start + k])
+        k = k + 1
+    }
+    return 0
+}
+# Module pre-pass: emit a `@.s<nstart> = [len+1 x i8] c"..\00"` global for every
+# string-literal token, keyed by the literal's source nstart (unique per literal).
+fn emit_str_globals(toks: &List<Token>, src: Str, n: Int) -> Int {
+    let mut i = 0
+    while i < n {
+        let t = toks[i]
+        if t.kind == 28 {
+            emit_str("@.s")
+            pint(t.nstart)
+            emit_str(" = private constant [")
+            pint(t.value + 1)
+            emit_str(" x i8] c\"")
+            emit_bytes(src, t.nstart, t.nlen)
+            emit_str("\\00\"")
+            putchar(10)
+        }
+        i = i + 1
+    }
+    return 0
+}
 
 # Look up a variable's alloca slot number by name; -1 if absent.
 fn find_slot(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
@@ -223,6 +265,29 @@ fn arrlen_of(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
     while i < m {
         let s = slots[i]
         if name_eq(src, s.nstart, s.nlen, qs, ql) == 1 { return s.alen }
+        i = i + 1
+    }
+    return 0
+}
+# is_arr discriminator: 0=scalar, 1=array, 2=List, 3=string. -1 if absent.
+fn isarr_of(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
+    let m = slots.len()
+    let mut i = 0
+    while i < m {
+        let s = slots[i]
+        if name_eq(src, s.nstart, s.nlen, qs, ql) == 1 { return s.is_arr }
+        i = i + 1
+    }
+    return 0 - 1
+}
+# For a string var (is_arr=3): the global key (the literal's source nstart),
+# stored in the slot's sty field. The string global is named @.s<key>.
+fn strkey_of(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
+    let m = slots.len()
+    let mut i = 0
+    while i < m {
+        let s = slots[i]
+        if name_eq(src, s.nstart, s.nlen, qs, ql) == 1 { return s.sty }
         i = i + 1
     }
     return 0
@@ -517,8 +582,16 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
         }
         if nx.kind == 27 {
             # `name . X` — disambiguate by the variable's kind:
-            #   struct (sty>=0) -> field read (GEP field-index + load)
-            #   List           -> `.len` (load the length counter)
+            #   string (is_arr=3) -> `.len()` (compile-time length literal)
+            #   struct (sty>=0)   -> field read (GEP field-index + load)
+            #   List              -> `.len` (load the length counter)
+            # NOTE: string check FIRST — a string slot stores the global key in
+            # sty, which would otherwise be misread as a struct index.
+            let karr = isarr_of(slots, src, t.nstart, t.nlen)
+            if karr == 3 {
+                let slen = arrlen_of(slots, src, t.nstart, t.nlen)
+                return Op { kind: 0, val: slen, next: counter }
+            }
             let sti = sty_of(slots, src, t.nstart, t.nlen)
             if sti >= 0 {
                 let fld = toks[i + 2]
@@ -554,6 +627,41 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             return Op { kind: 1, val: counter, next: counter + 1 }
         }
         if nx.kind == 23 {
+            # string byte index: s[<expr>] -> load i8* base, GEP i8, load i8, zext
+            let karr = isarr_of(slots, src, t.nstart, t.nlen)
+            if karr == 3 {
+                let sslot = find_slot(slots, src, t.nstart, t.nlen)
+                let sbend = bracket_end(toks, i + 2)
+                let sidx = gen_expr(toks, slots, fns, defs, src, i + 2, sbend, counter)
+                let basec = sidx.next
+                emit_str("  %t")
+                pint(basec)
+                emit_str(" = load i8*, i8** %v")
+                pint(sslot)
+                putchar(10)
+                let sgepc = basec + 1
+                emit_str("  %t")
+                pint(sgepc)
+                emit_str(" = getelementptr i8, i8* %t")
+                pint(basec)
+                emit_str(", i64 ")
+                emit_op(sidx)
+                putchar(10)
+                let sldc = sgepc + 1
+                emit_str("  %t")
+                pint(sldc)
+                emit_str(" = load i8, i8* %t")
+                pint(sgepc)
+                putchar(10)
+                let szc = sldc + 1
+                emit_str("  %t")
+                pint(szc)
+                emit_str(" = zext i8 %t")
+                pint(sldc)
+                emit_str(" to i64")
+                putchar(10)
+                return Op { kind: 1, val: szc, next: szc + 1 }
+            }
             # array/list index read: name [ <expr> ] -> GEP + load
             let slot = find_slot(slots, src, t.nstart, t.nlen)
             let alen = arrlen_of(slots, src, t.nstart, t.nlen)
@@ -683,6 +791,12 @@ fn skip_factor(toks: &List<Token>, i: Int) -> Int {
             return bracket_end(toks, i + 2) + 1
         }
         if nx.kind == 27 {
+            # name . field  = 3 tokens (struct field / List .len without parens).
+            # name . len ( ) = 5 tokens (string .len() — skip the empty parens).
+            let after = toks[i + 3]
+            if after.kind == 9 {
+                return paren_end(toks, i + 4) + 1
+            }
             return i + 3
         }
     }
@@ -822,6 +936,29 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>,
                 pint(next_slot + 1)
                 putchar(10)
                 next_slot = next_slot + 2
+            } else if rhs.kind == 28 {
+                # string var: is_arr=3, alen=length, sty=global key (literal nstart).
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: rhs.value , sty: rhs.nstart })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca i8*")
+                putchar(10)
+                emit_str("  %g")
+                pint(next_slot)
+                emit_str(" = getelementptr [")
+                pint(rhs.value + 1)
+                emit_str(" x i8], [")
+                pint(rhs.value + 1)
+                emit_str(" x i8]* @.s")
+                pint(rhs.nstart)
+                emit_str(", i64 0, i64 0")
+                putchar(10)
+                emit_str("  store i8* %g")
+                pint(next_slot)
+                emit_str(", i8** %v")
+                pint(next_slot)
+                putchar(10)
+                next_slot = next_slot + 1
             } else if rhs.kind == 23 {
                 let alen = count_arr_elems(toks, npos + 3)
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 1, alen: alen , sty: 0 - 1 })
@@ -954,6 +1091,11 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     q = estop + 1
                 }
                 let stop = find_semi(toks, bend, end)
+                i = stop + 1
+            } else if rhs.kind == 28 {
+                # let s = `lit`;  — string global + i8* alloca + ptr-store already
+                # emitted in the slot collector; nothing to do here.
+                let stop = find_semi(toks, npos + 2, end)
                 i = stop + 1
             } else {
                 let stop = find_semi(toks, npos + 2, end)
@@ -1354,6 +1496,30 @@ fn collect_top_slots(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: In
                 pint(next_slot + 1)
                 putchar(10)
                 next_slot = next_slot + 2
+            } else if rhs.kind == 28 {
+                # string var: is_arr=3, alen=length, sty=global key (literal nstart).
+                # alloca i8* + GEP the @.s<key> global's element 0 + store the ptr.
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: rhs.value , sty: rhs.nstart })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca i8*")
+                putchar(10)
+                emit_str("  %g")
+                pint(next_slot)
+                emit_str(" = getelementptr [")
+                pint(rhs.value + 1)
+                emit_str(" x i8], [")
+                pint(rhs.value + 1)
+                emit_str(" x i8]* @.s")
+                pint(rhs.nstart)
+                emit_str(", i64 0, i64 0")
+                putchar(10)
+                emit_str("  store i8* %g")
+                pint(next_slot)
+                emit_str(", i8** %v")
+                pint(next_slot)
+                putchar(10)
+                next_slot = next_slot + 1
             } else if rhs.kind == 23 {
                 let alen = count_arr_elems(toks, npos + 3)
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 1, alen: alen , sty: 0 - 1 })
@@ -1462,6 +1628,8 @@ fn compile(src: Str) -> Int {
     # own job is emitting IR text via putchar).
     emit_str("declare i32 @putchar(i32)")
     putchar(10)
+    # module-level string-literal globals (one per literal, keyed by source pos)
+    emit_str_globals(&toks, src, n)
     let fns = build_fns(&toks, n)
     let defs = build_defs(&toks, n)
     # emit each user function
@@ -1483,9 +1651,10 @@ fn compile(src: Str) -> Int {
 }
 
 fn main() -> Int {
-    # FP12b: putchar — generated program EMITS output (the nl compiler's own job).
-    # show() prints 'H'(72) 'I'(73) newline; returns 0. emit() loops printing
-    # '*'(42) n times. Then return a value. (Output goes to the generated binary's
-    # stdout; the compiler's own exit is 0.)
-    return compile("fn show() {{ putchar(72); putchar(73); putchar(10); return 0 }}; return show();")
+    # FP12d: the unified compiler now codegens STRINGS alongside everything else.
+    # This demo program is the tokenizer core — a function that scans a string
+    # literal byte by byte into a List (exactly the shape this compiler's own
+    # tokenizer takes) — proving fixpoint_full can codegen its own source's shape.
+    # tok() returns xs.len + xs[0] = 2 + 'H'(72) = 74. (Backtick delimits strings.)
+    return compile("fn tok() {{ let s = `Hi`; let xs = list(); let mut i = 0; while i < s.len() {{ xs.push(s[i]); i = i + 1 }}; return xs.len + xs[0] }}; return tok();")
 }

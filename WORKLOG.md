@@ -489,3 +489,29 @@
   nl-check 전 모듈 clean. 회귀 0.
 - **문자열 인덱싱+길이 codegen 가능** = 컴파일러가 자기 소스를 토큰화할 수 있는 구문 임계점 통과.
   남은 갭 = 통합+규모(months급 부트스트랩), 능력 부족 아님.
+
+## 2026-06-06 (/loop iter 44: FP12d — 문자열을 통합 컴파일러 fixpoint_full에 병합 [전 구문 단일화])
+- FP12c의 독립 문자열 codegen을 **통합 컴파일러 `fixpoint_full.nl`에 병합** → 단일 프로그램이 함수/가변/
+  while/if-else/배열/List/struct/**문자열**/putchar를 **모두 함께** codegen(top-level + 함수본문 양쪽).
+- 6-stage 체크포인트(각 단계 빌드+기존 e2e 회귀확인):
+  ① tokenize에 backtick(96)→kind 28 strlit 분기 추가(content range nstart/nlen + 길이 value).
+  ② 접근자 신설: `isarr_of`(is_arr 판별 0=scalar 1=array 2=List **3=string**), `strkey_of`(전역키).
+     **Slot 필드 재활용**(구조체 불변): string은 `alen`=길이, `sty`=리터럴 nstart=전역키 `@.s<nstart>`.
+  ③ `compile()`에 모듈 pre-pass `emit_str_globals` — 전 토큰 스캔, strlit마다 `@.s<nstart>` 전역 emit
+     (함수 내부 문자열도 모듈톱 전역 필요 → nstart 키로 충돌없이 전역화). `emit_bytes` 헬퍼 추가.
+  ④ slot 수집기 **2곳**(`collect_top_slots`=top, `add_local_slots`=함수본문)에 `rhs.kind==28` 분기 —
+     `alloca i8*` + 전역 element-0 GEP + ptr store. (`collect_slots_range`는 dead/legacy 확인.)
+  ⑤ `gen_factor`: `.` 분기 최상단에 string 우선체크(`isarr_of==3`→`s.len()`=길이리터럴; sty가 전역키라
+     struct로 오인되므로 **순서가 핵심**), `[` 분기 최상단에 string byte-load(load i8*+GEP i8+load i8+zext).
+  ⑥ `skip_factor` `.` 분기: `name.field`(3토큰, List `.len`/struct) vs `name.len()`(5토큰, 문자열) —
+     `(` 뒤따르면 paren까지 skip(off-by-one 회피, FP12c 동일클래스).
+- **버그 1건 근본수정**: `gen_stmts` let 핸들러가 string RHS를 scalar로 falthrough → `store i64 0`을 i8*
+  alloca에 잘못 emit(포인터 0 오염, 증상 모든 string-arith=139 고정값). `rhs.kind==28` skip 추가(init은
+  slot수집기가 이미 함=List/배열과 동일 패턴) → 해결.
+- **실측**: top-level `s[1]+s.len()`=69, 스캔합=198, 2-string=181; **함수내부** `fn f(){let s=...}`=69,
+  `fn count()` 스캔=5; **🎯 토큰화 코어** `fn tok(){ let s=`Hi`; let xs=list(); while i<s.len(){xs.push(s[i])...} }`
+  =74(=len 2+'H'72) — fixpoint.nl 자신의 토크나이저와 **정확히 같은 shape**(문자열 바이트스캔→List push).
+- 검증: fixpoint-full e2e **23→30 PASS**(+6 string +1 string-IR sanity, backtick은 bash `\`` 이스케이프),
+  값-정확성 aggregate **44/44**, 6 fixpoint e2e 전부 0 fail, nl-check clean. **회귀 0.**
+- **통합 완료**: 단일 컴파일러가 nl 컴파일러를 구성하는 전 코어구문을 codegen + 토크나이저 shape 포함.
+  남은 갭 = **순수 규모**(실제 수천줄 컴파일러 소스를 먹이는 months급), 능력 부족 아님.

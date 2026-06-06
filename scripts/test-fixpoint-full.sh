@@ -74,6 +74,24 @@ check "fn one() {{ return 1 }}; return one() + one() + one();" 3
 check "fn s4(a, b, c, d) {{ return a + b + c + d }}; return s4(10, 20, 30, 40);" 100
 check "fn dbl(x) {{ return x * 2 }}; fn add(a, b) {{ return a + b }}; return add(dbl(3), dbl(4));" 14
 
+# --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
+# primitive). Strings use backtick as the delimiter (escaped \` for bash). A
+# string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +
+# zext; s.len() is the compile-time length. ---
+# top-level: byte index + length
+check "let s = \`ABC\`; return s[1] + s.len();" 69
+# top-level scan summing bytes (tokenizer scan shape): 'A'+'B'+'C' = 198
+check "let s = \`ABC\`; let mut i = 0; let mut acc = 0; while i < s.len() {{ acc = acc + s[i]; i = i + 1 }}; return acc;" 198
+# two strings, independent length tracking: 'X'88+'Z'90+2+1 = 181
+check "let a = \`XY\`; let b = \`Z\`; return a[0] + b[0] + a.len() + b.len();" 181
+# string INSIDE a function body
+check "fn f() {{ let s = \`ABC\`; return s[1] + s.len() }}; return f();" 69
+# string + struct in one function: scan length into a struct field
+check "struct C {{ n }}; fn run() {{ let s = \`hello\`; let mut i = 0; let c = C {{ n: 0 }}; while i < s.len() {{ i = i + 1 }}; c.n = i; return c.n }}; return run();" 5
+# THE TOKENIZER CORE: a function scans a string byte by byte into a List
+# (exactly the shape fixpoint.nl's own tokenizer takes), returns count + first byte
+check "fn tok() {{ let s = \`Hi\`; let xs = list(); let mut i = 0; while i < s.len() {{ xs.push(s[i]); i = i + 1 }}; return xs.len + xs[0] }}; return tok();" 74
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'
@@ -108,6 +126,22 @@ PYEOF
 }
 check_out "fn show() {{ putchar(72); putchar(73); return 0 }}; return show();" "HI"
 check_out "fn stars(n) {{ let mut i = 0; while i < n {{ putchar(42); i = i + 1 }}; return 0 }}; return stars(5);" "*****"
+
+# Sanity: a string program emits a module-level string global + i8* alloca +
+# byte load (GEP i8 / load i8 / zext) — string codegen integrated, not scalar.
+tmp="$(mktemp -d)"
+PROG="let s = \`Hi\`; return s[0];" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+import os, re, sys
+src = open(sys.argv[1]).read()
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+open(sys.argv[2], "w").write(src)
+PY
+python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
+( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
+"$tmp/c" > "$tmp/out.ll"
+if grep -q 'private constant \[' "$tmp/out.ll" && grep -q 'alloca i8\*' "$tmp/out.ll" && grep -q 'getelementptr i8, i8\*' "$tmp/out.ll" && grep -q 'zext i8' "$tmp/out.ll"; then
+  echo "  PASS emits string global + i8* alloca + byte load [string codegen integrated]";
+else echo "  FAIL did not emit integrated string codegen"; cat "$tmp/out.ll"; fail=1; fi
 
 [ "$fail" -eq 0 ] && echo "RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail
