@@ -66,9 +66,19 @@ AI-written nl 25/25 컴파일+실행, self-correction 1라운드 수렴 실측.
 
 ## TRACKED 추가 (Vais 버그)
 - Vais Vec를 sub/재귀 fn에 전달 불가 (task_54658a43): by-value=E022 move, &Vec=clang fat-ptr 불일치.
-  재귀하향 파서 막힘 → 단일함수 인덱스로 우회.
+  재귀하향 파서 막힘 → 단일함수 인덱스로 우회. CX5-9는 struct-Env/Defs로 우회(재귀 안전 실측).
 - Vais `&&`/`||` 비단락평가 (task_492f7e17): `i<n && arr[i]` 가 i==n서 crash.
   nl lexer는 nested-if로 우회 중. 근본은 Vais codegen(논리연산→분기). 심각도 높음.
+- Vais 전역 Vec 리터럴 codegen: `G v: Vec<i64> = [..]` → clang "integer constant must have integer type".
+  CX5 재귀 fn-테이블 시도 시 발견 → struct Defs로 대체.
+
+## TRACKED (nl 인터프리터 한계 — 근본은 위 Vais Vec-recursion)
+- **멀티문자 식별자 미지원**: 현 Env=26 단일바이트 슬롯(변수명 1글자=슬롯). `fib`/`sq` 같은 다중자
+  이름은 name(문자열)→slot 매핑 필요 → 문자열-키 심볼테이블 = Vec/map 재귀전달 = Vais E022 재충돌.
+  CX1-9 전부 단일자 이름이 honest scope. 멀티문자는 심볼테이블 재설계(이름 인터닝 등) = 큰 단계.
+- **진짜 self-compile fixpoint**: 현 cx5_compiler는 산술/함수/재귀 프로그램을 *값으로 평가*하는
+  인터프리터. nl이 자기 컴파일러 소스를 컴파일(fixpoint)하려면 전체 nl 문법 파싱 + 실제 codegen
+  필요 = L3 엔드게임. 백엔드 전략(자체 codegen vs Vais 수정) **사용자 결정** 필요.
 
 ## L3 진입 (인프라 다진 후 — 별도 큰 단계)
 자체 컴파일러: lexer → parser → typecheck → (Vais IR lowering 또는 자체 codegen).

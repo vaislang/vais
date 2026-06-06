@@ -100,5 +100,10 @@ check 'fn p(a) {{ return a + 1 }}; fn q(b) {{ return b + 2 }}; fn u(c) {{ return
 # high-letter top-level vars
 check 'let t = 5; let w = 6; return t * w' 30
 
-[ "$fail" -eq 0 ] && echo "RESULT: CX5-CX9 (defs, calls, recursion, 2-arg, locals, a-z) end-to-end OK" || echo "RESULT: FAILURES"
+# --- Flagship: every feature in one program ---
+# recursion (f=fib) + local (s's t) + 2-arg (a) + top-level var (b) + nested
+# calls as args. f(10)=55, s(3)=9, a(55,9)=64, +b(3) = 67.
+check 'fn f(n) {{ return if n < 2 then n else f(n - 1) + f(n - 2) }}; fn s(x) {{ let t = x * x; return t }}; fn a(p, q) {{ return p + q }}; let b = 3; return a(f(10), s(b)) + b' 67
+
+[ "$fail" -eq 0 ] && echo "RESULT: CX5-CX9 + flagship (full self-host interpreter) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail
