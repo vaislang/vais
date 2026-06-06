@@ -707,3 +707,15 @@
 - 검증: 값-정확성 67/67, 회귀0. README 인덱스 e34→e38 + 카운트 49/49. 교훈: **수정+예제가 cold-start 복합 레버**
   (bitwise 트랜스파일러수정 없었으면 e35 cold-start 실패)/cold-start는 강건화 후 더 넓은 구문 첫시도 가능/
   probe는 heredoc(다중fn 한줄 artifact 회피)/cold-start 산출물=새 검증예제(이중 레버 지속).
+
+## 2026-06-07 (/loop iter 58: P9 +4 깊은 조합 — `?` 실패경로 / 재귀-struct accumulator)
+- nl-side 인프라 성숙(코퍼스49/트랜스파일러 강건/P4 완비) → 유사예제 양산(수확체감) 대신 **깊은 조합/에러흐름으로
+  갭 탐색**(heredoc probe, 더 높은 가치). 4 후보 전부 동작(nl-side 갭 없음=트랜스파일러 견고) + 미커버 영역 보강.
+- **신규 검증 예제 4종**: e39 **`?` 에러 전파 실패경로**(check(-5)=Err(99)→`?` 단락→Err arm=0; 코퍼스 첫 `?`
+  실패경로) / e40 Option을 struct 필드로+match(7) / e41 **재귀로 struct accumulator 전달**(sum+count 누적,
+  build(3)=6; 재귀가 struct 반환+전달) / e42 while로 함수 반복적용(1→2→4→8). 값-정확성 67→71.
+- 이전 코퍼스는 `?` 성공경로(d3run)만, Option/Result 단순매치만 있었음 → **`?` 실패 단락 + 재귀+struct + Option
+  in struct**는 미커버. 실제 에러처리/누적 패턴 보강.
+- 검증: 값-정확성 71/71, 회귀0. README 인덱스 e38→e42 + 카운트 53/53. 교훈: **성숙단계엔 갭탐색>양산**(깊은 조합이
+  미커버 영역 노출, 갭 없으면 견고성 확인+커버리지)/`?` 실패경로처럼 "같은 기능의 반대 경로"가 미커버 흔함/
+  heredoc probe가 다중fn 정확측정(printf-array artifact 회피 재확인).

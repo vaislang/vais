@@ -1,8 +1,8 @@
 # nl 예제 코퍼스 (P9 인프라)
 
 **검증된 nl 예제.** P9(예제 코퍼스 = 최강 레버, cold-start 1/5→5/5)의 핵심 인프라.
-모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 49/49 PASS; 러너 전체는
-self-host codegen 모듈 포함 67/67).
+모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 53/53 PASS; 러너 전체는
+self-host codegen 모듈 포함 71/71).
 
 > 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
 > AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
@@ -64,6 +64,10 @@ self-host codegen 모듈 포함 67/67).
 | e36 | bool 반환 함수 → if 조건 | 1 |
 | e37 | 다중필드 struct 계산 (area=w*h) | 50 |
 | e38 | 음수 (0 - n) + 산술 | 5 |
+| e39 | `?` 에러 전파 (실패 경로) | 0 |
+| e40 | Option을 struct 필드로 + match | 7 |
+| e41 | 재귀로 struct accumulator 전달 | 6 |
+| e42 | while로 함수 반복 적용 | 8 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
 - **Vec 성장 `.push()`/`.map()`/`.filter()`** — Vais 백엔드 버그(`@Vec_push` 무음 miscompile/undefined).
