@@ -25,5 +25,14 @@ check "let a = 2; let b = 3; return a + b * 4" 14
 check "let x = 10; return x - 3" 7
 check "let a = 5; let b = a * 2; return b + 1" 11
 check "let n = 100; return n" 100
-[ "$fail" -eq 0 ] && echo "RESULT: self-host compiler (vars) end-to-end OK" || echo "RESULT: FAILURES"
+# CX4: conditionals (if <arith> <cmp> <arith> then <arith> else <arith>)
+check "return if 7 > 4 then 11 else 99" 11
+check "return if 2 > 4 then 11 else 99" 99
+check "return if 3 < 5 then 100 else 200" 100
+check "return if 5 == 5 then 7 else 8" 7
+check "return if 5 == 6 then 7 else 8" 8
+check "let a = 7; let b = 4; return if a > b then a + b else a - b" 11
+check "let a = 2; let b = 4; return if a > b then a + b else b - a" 2
+check "let x = 3; return if x < 5 then x * 2 else x" 6
+[ "$fail" -eq 0 ] && echo "RESULT: self-host compiler (vars+if) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail

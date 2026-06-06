@@ -44,19 +44,28 @@ def map_types(line: str) -> str:
     return re.sub(r"\b[A-Za-z_][A-Za-z0-9_]*\b", repl, line)
 
 
-def map_words(line: str) -> str:
-    # Logic words -> operators. Whole-word, but NOT inside strings.
-    # Simple approach: split on string literals and only rewrite outside them.
+def outside_strings(line: str, fn) -> str:
+    """Apply `fn` to the parts of `line` that are NOT inside double-quoted string
+    literals. String contents are left verbatim. This protects code-as-data: an
+    nl source string like run_program("return if x ...") must keep `if` intact
+    (the keyword-rewrite would otherwise corrupt the embedded program text)."""
     parts = re.split(r'("(?:[^"\\]|\\.)*")', line)
     out = []
     for i, p in enumerate(parts):
         if i % 2 == 1:  # string literal — leave as-is
             out.append(p)
         else:
-            for k, v in WORD_MAP.items():
-                p = re.sub(rf"\b{k}\b", v, p)
-            out.append(p)
+            out.append(fn(p))
     return "".join(out)
+
+
+def map_words(line: str) -> str:
+    # Logic words -> operators. Whole-word, but NOT inside strings.
+    def rewrite(p: str) -> str:
+        for k, v in WORD_MAP.items():
+            p = re.sub(rf"\b{k}\b", v, p)
+        return p
+    return outside_strings(line, rewrite)
 
 
 def _list_binding(indent, name, ty, rhs):
@@ -114,9 +123,12 @@ def map_if(line: str) -> str:
     # `if cond {`        -> `I cond {`
     # `} else if cond {` -> `} else I cond {`
     # `} else {`         -> stays
-    line = re.sub(r"\belse\s+if\b", "else I", line)
-    line = re.sub(r"(^|\}\s*|\s)if\b", lambda m: m.group(0).replace("if", "I"), line)
-    return line
+    # NOT inside string literals (embedded program text must keep `if` intact).
+    def rewrite(p: str) -> str:
+        p = re.sub(r"\belse\s+if\b", "else I", p)
+        p = re.sub(r"(^|\}\s*|\s)if\b", lambda m: m.group(0).replace("if", "I"), p)
+        return p
+    return outside_strings(line, rewrite)
 
 
 def map_bitnot(line: str) -> str:

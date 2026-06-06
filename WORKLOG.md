@@ -95,3 +95,18 @@
 - 검증(소스→nl컴파일러→IR→실행): 'let a=2;let b=3;return a+b*4'=14, 'let a=5;let b=a*2;return b+1'=11,
   'let x=10;return x-3'=7, 'return 6*7'=42 등 7식. test-compiler.sh 갱신.
 - 전체 29/29 + 컴파일러 e2e 7/7 green. **nl 컴파일러가 변수 있는 프로그램을 컴파일.**
+
+## 2026-06-06 (/loop iter 13: CX4 조건식 if + 트랜스파일러 문자열-보호 버그 수정)
+- **CX4** compiler.nl에 `if <식> <비교> <식> then <식> else <식>` 지원 (비교 `> < ==`).
+  조건/then/else 모두 변수+산술 식 가능. eval_value 신설 (skip_spaces/starts_if/find_kw4 헬퍼).
+- **Vais Vec-move 우회 (task_54658a43)**: 한 함수에서 `vars`(Vec)를 straight-line 2회 함수호출에
+  넘기면 E022(flow-insensitive move). 실측: 루프 반복 호출은 OK. → 4 부분식(cond-lhs/rhs/then/else)의
+  [start,end) 범위를 배열에 모아 **단일 루프**로 평가, `vars`를 정확히 1곳에서만 소비.
+  비조건식도 같은 경로(범위 1개)로 통일해 두 번째 straight-line 사용 제거.
+- **트랜스파일러 버그 수정 (근본)**: map_if/map_words가 **문자열 리터럴 내부**의 `if`/`and`까지
+  재작성 → 임베디드 프로그램 텍스트 오염(compiler.nl의 테스트 입력 `"return if..."` → `"return I..."`,
+  'I'=73≠'i'=105 → starts_if 실패 → 조건식 무시 → 오값). `outside_strings(line, fn)` 헬퍼 신설
+  (문자열 리터럴 분리 후 비문자열부에만 적용), map_if/map_words 둘 다 적용.
+- 검증: 컴파일러 e2e **15/15** (CX4 if 8케이스: >/</== + true/false분기 + 변수조합),
+  트랜스파일러 단위 **22/22** (문자열-보호 3케이스 추가), 값-정확성 **29/29**. 회귀 0.
+- **nl 컴파일러가 조건분기 있는 프로그램을 컴파일.** (산술→변수→문장→return→조건)

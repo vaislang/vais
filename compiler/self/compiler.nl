@@ -91,6 +91,122 @@ fn eval_arith(src: Str, start: Int, end: Int, vars: List<Int>) -> Int {
     return total
 }
 
+fn is_space2(c: Int) -> Bool {
+    if c == 32 { return true }
+    if c == 9 { return true }
+    if c == 10 { return true }
+    return false
+}
+
+fn skip_spaces(src: Str, p: Int, end: Int) -> Int {
+    let mut q = p
+    let mut go = true
+    while go {
+        if q >= end { go = false }
+        else if is_space2(src[q]) { q = q + 1 }
+        else { go = false }
+    }
+    return q
+}
+
+fn starts_if(src: Str, p: Int, end: Int) -> Bool {
+    if p + 2 > end { return false }
+    if src[p] == 105 {
+        if src[p + 1] == 102 { return true }
+    }
+    return false
+}
+
+# Find 4-letter keyword (w0..w3) start in src[p..end); returns index or end.
+fn find_kw4(src: Str, p: Int, end: Int, w0: Int, w1: Int, w2: Int, w3: Int) -> Int {
+    let mut q = p
+    let mut go = true
+    while go {
+        if q + 4 > end { q = end; go = false }
+        else if src[q] == w0 {
+            if src[q + 1] == w1 {
+                if src[q + 2] == w2 {
+                    if src[q + 3] == w3 { go = false } else { q = q + 1 }
+                } else { q = q + 1 }
+            } else { q = q + 1 }
+        } else { q = q + 1 }
+    }
+    return q
+}
+
+# Evaluate an expression that may be a conditional (CX4):
+#   if <arith> <cmp> <arith> then <arith> else <arith>   (cmp: > < ==)
+# otherwise a plain <arith>. To avoid the Vais Vec-move limit (task_54658a43,
+# two straight-line calls passing `vars` move it), all sub-expression evals go
+# through a single LOOP over their [start,end) ranges (loop-passing `vars` is OK).
+fn eval_value(src: Str, start: Int, end: Int, vars: List<Int>) -> Int {
+    let p = skip_spaces(src, start, end)
+    let is_if = starts_if(src, p, end)
+    # Build the list of [start,end) sub-expression ranges to evaluate.
+    # Non-conditional: a single range (the whole expr).
+    # Conditional `if L<cmp>R then T else E`: four ranges (L, R, T, E).
+    # CRITICAL: `vars` is consumed in EXACTLY ONE place — the single loop below —
+    # to avoid the Vais flow-insensitive Vec-move error (task_54658a43).
+    let mut starts: List<Int> = []
+    let mut ends: List<Int> = []
+    let mut op = 0
+    if is_if {
+        let then_pos = find_kw4(src, p + 2, end, 116, 104, 101, 110)        # "then"
+        let else_pos = find_kw4(src, then_pos + 4, end, 101, 108, 115, 101)  # "else"
+        let cstart = p + 2
+        let cend = then_pos
+        let mut oppos = cend
+        let mut qq = cstart
+        let mut g = true
+        while g {
+            if qq >= cend { g = false }
+            else if src[qq] == 62 { oppos = qq; op = 62; g = false }
+            else if src[qq] == 60 { oppos = qq; op = 60; g = false }
+            else if src[qq] == 61 { oppos = qq; op = 61; g = false }
+            else { qq = qq + 1 }
+        }
+        let mut rstart = oppos + 1
+        if op == 61 {
+            if rstart < cend {
+                if src[rstart] == 61 { rstart = rstart + 1 }
+            }
+        }
+        starts.push(cstart)
+        ends.push(oppos)
+        starts.push(rstart)
+        ends.push(cend)
+        starts.push(then_pos + 4)
+        ends.push(else_pos)
+        starts.push(else_pos + 4)
+        ends.push(end)
+    } else {
+        starts.push(start)
+        ends.push(end)
+    }
+    let count = starts.len()
+    let mut vals: List<Int> = []
+    let mut k = 0
+    while k < count {
+        vals.push(eval_arith(src, starts[k], ends[k], vars))
+        k = k + 1
+    }
+    if is_if {
+        let lhs = vals[0]
+        let rhs = vals[1]
+        let mut cond = 0
+        if op == 62 {
+            if lhs > rhs { cond = 1 }
+        } else if op == 60 {
+            if lhs < rhs { cond = 1 }
+        } else {
+            if lhs == rhs { cond = 1 }
+        }
+        if cond == 1 { return vals[2] }
+        return vals[3]
+    }
+    return vals[0]
+}
+
 # Run a program: a ';'-separated list of `let x = expr` and a final `return expr`.
 fn run_program(src: Str) -> Int {
     let n = src.len()
@@ -152,11 +268,11 @@ fn run_program(src: Str) -> Int {
                     else if src[e] == 61 { g3 = false }
                     else { e = e + 1 }
                 }
-                let val = eval_arith(src, e + 1, j, vars)
+                let val = eval_value(src, e + 1, j, vars)
                 vars[var_letter - 97] = val
             } else if first == 114 {
-                # "return <expr>": eval after "return"
-                result = eval_arith(src, p + 6, j, vars)
+                # "return <expr>": eval after "return" (may be an if-expr)
+                result = eval_value(src, p + 6, j, vars)
             }
         }
         i = j + 1
@@ -172,7 +288,8 @@ fn emit_ir(value: Int) -> Int {
 }
 
 fn main() -> Int {
-    # Program: a=2, b=3, return a + b * 4  ->  2 + 3*4 = 14
-    let value = run_program("let a = 2; let b = 3; return a + b * 4")
+    # CX4: conditional with variables in the condition AND the branches.
+    # a=7, b=4 -> a > b is true -> return a + b = 11
+    let value = run_program("let a = 7; let b = 4; return if a > b then a + b else a - b")
     return emit_ir(value)
 }

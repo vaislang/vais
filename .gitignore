@@ -3,3 +3,7 @@
 *.warn
 .vais-cache/
 a.out
+
+# Python bytecode
+__pycache__/
+*.pyc

@@ -48,6 +48,13 @@ CASES = [
     ("field pub strip", "    pub name: Str,", ["name: str"], ["pub name"]),
     ("string interp kept", 'let s = "hi {name}"', ['"hi {name}"'], []),
     ("? kept", "let r = f()?", ["r := f()?"], ["let "]),
+    # String literals are code-as-data: keyword/word rewrites must NOT touch them.
+    # (Regression: `if`/`and` inside an embedded program string got corrupted to
+    #  `I`/`&&`, breaking the self-host compiler's test inputs.)
+    ("if in string kept", 'let p = run("return if a > b then a else b")',
+     ['"return if a > b then a else b"'], ["return I "]),
+    ("and in string kept", 'let p = run("x and y")', ['"x and y"'], ['"x && y"']),
+    ("if in code still mapped", "    if a > b {", ["I a > b {"], []),
 ]
 
 
