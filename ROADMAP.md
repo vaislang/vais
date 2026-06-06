@@ -65,6 +65,10 @@ AI-written nl 25/25 컴파일+실행, self-correction 1라운드 수렴 실측.
 ---
 
 ## TRACKED 추가 (Vais 버그)
+- **Vais Vec 성장(push/map/filter) codegen 버그**: 리터럴 Vec에 `.push(x)`는 무음 miscompile(`@Vec_push`
+  undefined, len 오염 → garbage 134), `.map()`은 `@Vec_push` undefined로 빌드실패, `.filter()`는 E001
+  (task_7cfebeba). **read-only(len/index/fold/sum)는 OK**. 리스트 변형/구축은 `for`-루프 누적(e25/e27) 권장.
+  nl self-host codegen 트랙은 Vais Vec 안 쓰고 고정버퍼로 우회. PRELUDE push/map 🔴 정정. 2026-06-07 실측.
 - **Vais 중첩 Vec codegen 버그**: `Vec<Vec<i64>>` 리터럴/인덱싱이 C003 Type error(하드코딩 Vais도 실패).
   nl 트랜스파일러는 올바른 `Vec<Vec<i64>>` 타입 생성하나(nested 추론 수정 685ba63 다음 커밋) Vais가 codegen
   못 함. nl 중첩 리스트 `[[..]]` 막힘. Vais repo 작업 필요. 2026-06-07 실측.

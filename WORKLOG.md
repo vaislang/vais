@@ -632,3 +632,18 @@
 - 검증: 값-정확성 57/57, 트랜스파일러 unit 26/26, nl-check 34/34, 회귀0. 교훈: **harder 후보가 백엔드 갭을
   노출**(중첩Vec, 리터럴인자)/실측으로 nl측(트랜스파일러 추론 수정) vs Vais측(codegen) 정확 구분/타입추론 수정은
   Vais가 못 고쳐도 정당(미래대비+회귀0)/우회 패턴(bound-var)을 코퍼스 예제로 문서화(e27).
+
+## 2026-06-07 (/loop iter 53: P9 +2(e29/e30) + Vec 성장(push/map) Vais갭 발견·PRELUDE 정정)
+- 코퍼스 확장 중 **closure+`.map()` 후보가 중대 Vais 갭 노출** → 실측·격리·PRELUDE 정정.
+- **🚨 발견: Vais Vec 성장(push/map) 무음 miscompile/빌드실패**. `.map()`은 `@Vec_push` undefined 빌드실패,
+  리터럴 Vec `.push(x)`는 **무음 miscompile**(빌드OK but len 오염, garbage 134). delimit: **read-only
+  len/index/fold/sum은 OK**(10,20,30→len3/index40/fold60 확인), **성장(push/map)만 깨짐**. PRELUDE가 push/map을
+  ✅로 잘못표기 → **🔴 정정**(B-02 `@HashMap_new`와 동일 monomorphization 클래스). `.filter()`는 기존 TRACKED.
+- **핵심 통찰**: nl self-host **codegen 트랙**(fixpoint_list.nl)은 List push가 동작 — Vais Vec 안 쓰고 **고정버퍼
+  (`alloca [64 x i64]`+수동 length)로 직접 구현**해 이 갭을 우회하기 때문. **transpiler 트랙**(코퍼스)만 Vais Vec
+  성장에 막힘. 두 트랙의 List 구현이 다름을 명확히. 리스트 변형은 `for`-루프 누적(e25/e27)이 코퍼스 권장.
+- **신규 검증 예제 2종**: e29 GCD(2-인자 재귀+modulo, gcd(48,18)=6) / e30 enum payload match(`Circle(r)=>r*3`, 42).
+  값-정확성 57→59. README 인덱스 e28→e30 + 미커버에 Vec성장 갭, PRELUDE push/map 🔴, ROADMAP TRACKED 추가.
+- 검증: 값-정확성 59/59, 회귀0. 교훈: **PRELUDE ✅ 표기도 실측으로 검증**(push/map 실제론 깨짐)/무음 miscompile은
+  빌드OK라 더 위험(런타임 값까지 확인 필수)/**같은 기능도 트랙마다 구현 다름**(codegen=고정버퍼 OK vs transpiler=Vais
+  Vec 깨짐)/read vs 성장 구분이 갭 경계/expect 오산은 빌드가 정답(closure_fold 20).
