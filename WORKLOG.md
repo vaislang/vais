@@ -835,3 +835,11 @@
   최근 갭 안 나옴(실전과제갭은 String 이후 소진된 듯; 문법갭은 targeted probe가 잡음).
 - 값정확성 88→89. 검증: 89/89, 회귀0. README 인덱스 e59→e60 + 카운트 71/71. 교훈: cold-start 실전과제갭 소진 단계
   (4연속 클린)→문법갭은 targeted probe가 주력/자릿수추출은 흔한데 코퍼스 첫등장.
+
+## 2026-06-07 (/loop iter 69: targeted probe round2 — 견고성 확인 + 커버리지 +2)
+- targeted idiom probe round2(heredoc). not-expr/struct-multi/range-check/unit-fn PASS, arr-in-expr는 내 expect
+  오산(a[1]+a[2]=50인데 30 적음 — 빌드가 정답). **nl측 갭 없음**(트랜스파일러 견고 재확인).
+- **신규 검증 예제 2종**(커버리지): e61 배열 계산인덱스 a[i]+a[i+1](50, 코퍼스 첫 computed-index 산술) / e62 struct로
+  다중값 반환(minmax→{lo,hi}, 12, 튜플의 named 대안). 값정확성 89→91.
+- 검증: 값-정확성 91/91, 회귀0. README 인덱스 e60→e62 + 카운트 73/73. 교훈: targeted probe 갭 없으면 견고성확인+
+  커버리지(computed-index/struct-multi-return 미커버였음)/expect 오산은 빌드가 정답(arr a[1]+a[2]=50).
