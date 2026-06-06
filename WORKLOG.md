@@ -14,3 +14,10 @@
 - C2: examples/README.md — 문법 커버리지 인덱스 (21개 예제, 미커버 항목 명시).
 - 코퍼스 11→21 (2배). **전체 21/21 PASS, 회귀 0.**
 - P9 인프라 강화: AI cold-start 학습용 검증 예제 집합.
+
+## 2026-06-06 (/loop iter 3: P2 — 트랜스파일러 견고화)
+- T1: while 루프 → Vais `L { I !(cond) { B } ... }`. e11_while PASS.
+- T2: exclusive range `..` → `I i >= hi { B }` (inclusive `..=`와 분리). e12 PASS.
+- T3: tests/transpiler_test.py — 입력 nl→기대 Vais 출력 단위테스트 19/19 (트랜스파일러 회귀 방지).
+- T4: nested for 견고성 — e13_nested_for PASS (중첩 idx 카운터 충돌 없음).
+- 값-정확성 23/23 + 트랜스파일러 단위 19/19 둘 다 green. 트랜스파일러 미지원 구문 0.

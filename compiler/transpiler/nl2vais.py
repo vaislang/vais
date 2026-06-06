@@ -160,37 +160,40 @@ def transpile_line(line: str) -> str:
 
 
 UNSUPPORTED = [
-    (re.compile(r"\bwhile\b"), "while-loops not yet transpiled"),
-    # Note: for-loops, Result `?`, string interpolation, .sum()/.map()/.filter()/
-    # .fold(), and list literals ARE supported (Vais accepts ? and "{..}" directly).
+    # for-loops (incl. exclusive range), while-loops, Result `?`, string
+    # interpolation, .sum()/.map()/.filter()/.fold(), and list literals ARE
+    # supported. (Nothing currently flagged; kept for future gaps.)
 ]
 
 _for_ctr = [0]
 
 
 def expand_for_loops(src: str) -> str:
-    """Pre-pass over raw nl source: rewrite `for` blocks into Vais loop form.
+    """Pre-pass over raw nl source: rewrite `for`/`while` blocks into Vais loops.
 
-    `for i in A..=B {  BODY  }`  ->
-        i := mut A
-        L { I i > B { B } BODY  i = i + 1 }
-    `for x in LIST {  BODY  }`   ->
-        __idxN := mut 0
-        L { I __idxN >= LIST.len() as Int { B } x := LIST[__idxN]  BODY  __idxN = __idxN + 1 }
+    `for i in A..=B { BODY }`  (inclusive) ->
+        i := mut A;  L { I i > B { B }  BODY  i = i + 1 }
+    `for i in A..B { BODY }`   (exclusive) ->
+        i := mut A;  L { I i >= B { B }  BODY  i = i + 1 }
+    `for x in LIST { BODY }`   ->
+        __idxN := mut 0;  L { I __idxN >= LIST.len() as Int { B } x := LIST[__idxN]  BODY  __idxN += 1 }
+    `while COND { BODY }`      ->
+        L { I !(COND) { B }  BODY }
 
-    Brace-tracked so the increment lands at the matching close. Handles nesting
-    by processing the outermost `for` and recursing on the remainder. Range form
-    only supports `..=` (inclusive) in this prototype.
+    Brace-tracked so the increment lands at the matching close. Nesting handled
+    by recursing on each loop body.
     """
     lines = src.splitlines()
     out = []
     i = 0
     while i < len(lines):
         line = lines[i]
-        m_range = re.match(r"^(\s*)for\s+([A-Za-z_]\w*)\s+in\s+(.+?)\.\.=\s*(.+?)\s*\{\s*$", line)
+        # `..=` (inclusive) must be tried before `..` (exclusive).
+        m_rangei = re.match(r"^(\s*)for\s+([A-Za-z_]\w*)\s+in\s+(.+?)\.\.=\s*(.+?)\s*\{\s*$", line)
+        m_rangee = re.match(r"^(\s*)for\s+([A-Za-z_]\w*)\s+in\s+(.+?)\.\.\s*(.+?)\s*\{\s*$", line)
         m_iter = re.match(r"^(\s*)for\s+([A-Za-z_]\w*)\s+in\s+([A-Za-z_]\w*)\s*\{\s*$", line)
-        if m_range or m_iter:
-            # Find matching close brace by depth from this line's opening `{`.
+        m_while = re.match(r"^(\s*)while\s+(.+?)\s*\{\s*$", line)
+        if m_rangei or m_rangee or m_iter or m_while:
             depth = line.count("{") - line.count("}")
             body = []
             j = i + 1
@@ -200,17 +203,18 @@ def expand_for_loops(src: str) -> str:
                     break
                 body.append(lines[j])
                 j += 1
-            # body[] is the loop body; lines[j] is the closing `}` line.
             inner = expand_for_loops("\n".join(body)).splitlines()
-            if m_range:
-                indent, var, lo, hi = m_range.groups()
+            if m_rangei or m_rangee:
+                m = m_rangei or m_rangee
+                indent, var, lo, hi = m.groups()
+                cmp = ">" if m_rangei else ">="
                 out.append(f"{indent}{var} := mut {lo}")
                 out.append(f"{indent}L {{")
-                out.append(f"{indent}    I {var} > {hi} {{ B }}")
+                out.append(f"{indent}    I {var} {cmp} {hi} {{ B }}")
                 out.extend(inner)
                 out.append(f"{indent}    {var} = {var} + 1")
                 out.append(f"{indent}}}")
-            else:
+            elif m_iter:
                 indent, var, coll = m_iter.groups()
                 _for_ctr[0] += 1
                 idx = f"__idx{_for_ctr[0]}"
@@ -220,6 +224,12 @@ def expand_for_loops(src: str) -> str:
                 out.append(f"{indent}    {var} := {coll}[{idx}]")
                 out.extend(inner)
                 out.append(f"{indent}    {idx} = {idx} + 1")
+                out.append(f"{indent}}}")
+            else:  # while
+                indent, cond = m_while.groups()
+                out.append(f"{indent}L {{")
+                out.append(f"{indent}    I !({cond}) {{ B }}")
+                out.extend(inner)
                 out.append(f"{indent}}}")
             i = j + 1
         else:
