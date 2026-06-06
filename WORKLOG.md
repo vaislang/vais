@@ -68,3 +68,11 @@
   &Vec=clang fat-ptr 불일치. 재귀하향 파서(토큰 Vec를 parse_expr/term/factor에 threading) 막힘.
   → 단일함수 인덱스 우회. 근본은 Vais Vec ABI (task_7cfebeba 동류).
 - 전체 27/27 green. self-host: lexer(L3.2) + parser(L3.3) 둘 다 nl로 동작.
+
+## 2026-06-06 (/loop iter 10: L3.4 codegen — nl이 IR 생성)
+- L3.4: compiler/self/codegen.nl — nl로 쓴 codegen. 산술식 평가 → LLVM IR 텍스트 출력.
+  emit_ir(7) → "define i64 @main() { ret i64 7 }" → clang 빌드+실행 → exit 7. ★self-host codegen 동작★
+- **트랜스파일러 버그 수정**: nl `{{`/`}}`(리터럴 brace 이스케이프)를 Vais puts가 언이스케이프 안 함
+  → map_brace_escapes 추가 (문자열 리터럴 내 {{→{, }}→}). IR의 `{` `}` 정상 출력.
+- scripts/test-codegen.sh: codegen이 생성한 IR이 valid+정확한지 전용 검증 (러너는 exit만, 이건 IR값).
+- 전체 27→28 green + codegen IR 검증 PASS. **lexer+parser+codegen 3단계 모두 nl로 동작.**

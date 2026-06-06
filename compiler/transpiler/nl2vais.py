@@ -124,6 +124,21 @@ def map_bitnot(line: str) -> str:
     return re.sub(r"\bbitnot\(([^()]*)\)", r"(~\1)", line)
 
 
+def map_brace_escapes(line: str) -> str:
+    # In nl strings, `{{`/`}}` mean a literal brace (standard escape). Vais's
+    # interpolating puts does NOT unescape `{{` (it prints `{{`), but it DOES
+    # print a lone `{`/`}` literally. So unescape `{{`->`{` and `}}`->`}` inside
+    # string literals only (needed for code-generating nl, e.g. emitting LLVM IR
+    # like `define i64 @main() {`). Leave real interpolations `{expr}` untouched.
+    parts = re.split(r'("(?:[^"\\]|\\.)*")', line)
+    out = []
+    for i, p in enumerate(parts):
+        if i % 2 == 1:  # string literal
+            p = p.replace("{{", "{").replace("}}", "}")
+        out.append(p)
+    return "".join(out)
+
+
 def map_print(line: str) -> str:
     # nl `print(EXPR)` -> Vais `puts(EXPR)`. Vais's `puts` writes a line to
     # stdout and supports string interpolation ("{x}"), so nl's print maps
@@ -185,6 +200,7 @@ def transpile_line(line: str) -> str:
     out = stripped
     out = map_collection_methods(out)
     out = map_print(out)
+    out = map_brace_escapes(out)
     out = map_field_pub(out)
     out = map_let(out)
     out = map_if(out)

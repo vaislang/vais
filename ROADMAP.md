@@ -86,7 +86,7 @@ nl 컴파일러 코드는 트랜스파일러 지원 부분집합으로만 작성
       값-정확성 게이트 편입 (test.sh가 compiler/self/*.nl도 검증). 26/26 green.
 - [x] **L3.2** lexer 확장: 실제 토큰 emit (종류+위치). 키워드/식별자/숫자/기호/문자열 인식.
 - [x] **L3.3** parser/eval (compiler/self/parser.nl): 토큰 → AST (작은 부분집합 fn/let/return/표현식).
-- [ ] **L3.4** codegen 시작: AST → Vais 텍스트 lowering (재활용) 또는 직접 IR.
+- [x] **L3.4** codegen (compiler/self/codegen.nl): AST → Vais 텍스트 lowering (재활용) 또는 직접 IR.
 - [ ] **L3.5** fixpoint: gen1이 자기 nl 소스 처리.
 
 각 단계 값-정확성 게이트 green + 커밋. Vec/문자열 연산이 트랜스파일러/Vais 한계에 부딪히면 TRACKED.
