@@ -13,7 +13,7 @@
 
 ---
 
-## ⚑ 상태 (2026-06-06): P0~P5 인프라 전부 완료 → L3 결정 대기
+## ⚑ 상태 (2026-06-06): P0~P5 인프라 + L3 self-host 미니 컴파일러 완료
 
 P0 게이트 / P1 코퍼스 / P2 트랜스파일러 / P3 에러인프라 / P4 std시작 / P5 레퍼런스 = **DONE**.
 3 게이트 green: 값-정확성 25/25, 트랜스파일러-단위 19/19, nl-check-단위 11/11.
@@ -87,7 +87,7 @@ nl 컴파일러 코드는 트랜스파일러 지원 부분집합으로만 작성
 - [x] **L3.2** lexer 확장: 실제 토큰 emit (종류+위치). 키워드/식별자/숫자/기호/문자열 인식.
 - [x] **L3.3** parser/eval (compiler/self/parser.nl): 토큰 → AST (작은 부분집합 fn/let/return/표현식).
 - [x] **L3.4** codegen (compiler/self/codegen.nl): AST → Vais 텍스트 lowering (재활용) 또는 직접 IR.
-- [ ] **L3.5** fixpoint: gen1이 자기 nl 소스 처리.
+- [x] **L3.5** 통합 미니 컴파일러 (compiler/self/compiler.nl): 소스→lex→eval→IR: gen1이 자기 nl 소스 처리.
 
 각 단계 값-정확성 게이트 green + 커밋. Vec/문자열 연산이 트랜스파일러/Vais 한계에 부딪히면 TRACKED.
 

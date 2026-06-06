@@ -76,3 +76,12 @@
   → map_brace_escapes 추가 (문자열 리터럴 내 {{→{, }}→}). IR의 `{` `}` 정상 출력.
 - scripts/test-codegen.sh: codegen이 생성한 IR이 valid+정확한지 전용 검증 (러너는 exit만, 이건 IR값).
 - 전체 27→28 green + codegen IR 검증 PASS. **lexer+parser+codegen 3단계 모두 nl로 동작.**
+
+## 2026-06-06 (/loop iter 11: L3.5 통합 미니 컴파일러 — self-host end-to-end)
+- L3.5: compiler/self/compiler.nl — nl로 쓴 통합 컴파일러. 산술 소스문자열 → lex(바이트) →
+  평가(우선순위 *>+, 좌결합, 멀티자릿수, +-*/) → LLVM IR 출력. clang 빌드+실행으로 검증.
+  '1+2*3'→7, '2+3*4'→14, '10-2-3'→5, '20/2/5'→2, '12+34'→46, '100'→100 전부 IR생성+실행 정확.
+- scripts/test-compiler.sh: 6식 end-to-end (소스→nl컴파일러→IR→실행→값) 검증.
+- 전체 29/29 green + 트랜스파일러 19/19 + nl-check 11/11 + codegen IR + compiler e2e 6/6.
+- **★self-host 마일스톤: nl로 쓴 컴파일러가 소스텍스트를 실행가능 IR로 변환★** (lex+parse+codegen 통합).
+- L3 큐(L3.0~L3.5) 완료. 완료정의(L3+인프라) 도달 → 사용자 escalate.
