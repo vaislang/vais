@@ -147,6 +147,7 @@ fn tokenize(src: Str) -> List<Token> {
         else if c == 91 { toks.push(Token { kind: 23, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 93 { toks.push(Token { kind: 24, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 44 { toks.push(Token { kind: 25, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 46 { toks.push(Token { kind: 27, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 59 { toks.push(Token { kind: 6, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else { i = i + 1 }
     }
@@ -313,8 +314,18 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, src: Str, 
             putchar(10)
             return Op { kind: 1, val: dest, next: dest + 1 }
         }
+        if nx.kind == 27 {
+            # list length: lst.len -> load the length counter at %v<slot+1>
+            let slot = find_slot(slots, src, t.nstart, t.nlen)
+            emit_str("  %t")
+            pint(counter)
+            emit_str(" = load i64, i64* %v")
+            pint(slot + 1)
+            putchar(10)
+            return Op { kind: 1, val: counter, next: counter + 1 }
+        }
         if nx.kind == 23 {
-            # array index read: name [ <expr> ] -> GEP + load
+            # array/list index read: name [ <expr> ] -> GEP + load
             let slot = find_slot(slots, src, t.nstart, t.nlen)
             let alen = arrlen_of(slots, src, t.nstart, t.nlen)
             let bend = bracket_end(toks, i + 2)
@@ -420,6 +431,9 @@ fn skip_factor(toks: &List<Token>, i: Int) -> Int {
         if nx.kind == 23 {
             return bracket_end(toks, i + 2) + 1
         }
+        if nx.kind == 27 {
+            return i + 3
+        }
     }
     return i + 1
 }
@@ -495,6 +509,18 @@ fn count_arr_elems(toks: &List<Token>, astart: Int) -> Int {
     return commas + 1
 }
 
+# Is the RHS at npos+2 a `list()` constructor? (ident 'list' then '(').
+fn rhs_is_list(toks: &List<Token>, src: Str, npos: Int) -> Int {
+    let rhs = toks[npos + 2]
+    if rhs.kind == 1 {
+        if kw4(src, rhs.nstart, rhs.nlen, 108, 105, 115, 116) == 1 {
+            let after = toks[npos + 3]
+            if after.kind == 9 { return 1 }
+        }
+    }
+    return 0
+}
+
 fn add_local_slots(base: List<Slot>, toks: &List<Token>, src: Str, start: Int, end: Int, slot0: Int) -> List<Slot> {
     let mut slots = base
     let mut next_slot = slot0
@@ -507,7 +533,22 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, src: Str, start: Int, e
             if nx.kind == 21 { npos = i + 2 }
             let name = toks[npos]
             let rhs = toks[npos + 2]
-            if rhs.kind == 23 {
+            if rhs_is_list(toks, src, npos) == 1 {
+                # List: buffer at %v<slot> [64 x i64], length at %v<slot+1>=0
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca [64 x i64]")
+                putchar(10)
+                emit_str("  %v")
+                pint(next_slot + 1)
+                emit_str(" = alloca i64")
+                putchar(10)
+                emit_str("  store i64 0, i64* %v")
+                pint(next_slot + 1)
+                putchar(10)
+                next_slot = next_slot + 2
+            } else if rhs.kind == 23 {
                 let alen = count_arr_elems(toks, npos + 3)
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 1, alen: alen })
                 emit_str("  %v")
@@ -516,14 +557,15 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, src: Str, start: Int, e
                 pint(alen)
                 emit_str(" x i64]")
                 putchar(10)
+                next_slot = next_slot + 1
             } else {
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 0, alen: 0 })
                 emit_str("  %v")
                 pint(next_slot)
                 emit_str(" = alloca i64")
                 putchar(10)
+                next_slot = next_slot + 1
             }
-            next_slot = next_slot + 1
         }
         i = i + 1
     }
@@ -566,7 +608,11 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, src: Str, i
             let name = toks[npos]
             let slot = find_slot(slots, src, name.nstart, name.nlen)
             let rhs = toks[npos + 2]
-            if rhs.kind == 23 {
+            if rhs_is_list(toks, src, npos) == 1 {
+                # let lst = list();  — alloca/len already emitted in collect; skip
+                let stop = find_semi(toks, npos + 2, end)
+                i = stop + 1
+            } else if rhs.kind == 23 {
                 # array literal: store each element via GEP
                 let alen = arrlen_of(slots, src, name.nstart, name.nlen)
                 let bend = bracket_end(toks, npos + 3)
@@ -611,7 +657,50 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, src: Str, i
             }
         } else if t.kind == 1 {
             let nx = toks[i + 1]
-            if nx.kind == 23 {
+            if nx.kind == 27 {
+                # list push: lst.push(expr) ;  — store at buf[len]; len = len + 1
+                let slot = find_slot(slots, src, t.nstart, t.nlen)
+                # method name at i+2, '(' at i+3, arg from i+4
+                let argstop = paren_end(toks, i + 4)
+                let e = gen_expr(toks, slots, fns, src, i + 4, argstop, counter)
+                counter = e.next
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = load i64, i64* %v")
+                pint(slot + 1)
+                putchar(10)
+                let lenc = counter
+                counter = counter + 1
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
+                pint(slot)
+                emit_str(", i64 0, i64 %t")
+                pint(lenc)
+                putchar(10)
+                let gepc = counter
+                counter = counter + 1
+                emit_str("  store i64 ")
+                emit_op(e)
+                emit_str(", i64* %t")
+                pint(gepc)
+                putchar(10)
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = add i64 %t")
+                pint(lenc)
+                emit_str(", 1")
+                putchar(10)
+                let incc = counter
+                counter = counter + 1
+                emit_str("  store i64 %t")
+                pint(incc)
+                emit_str(", i64* %v")
+                pint(slot + 1)
+                putchar(10)
+                let stop = find_semi(toks, argstop, end)
+                i = stop + 1
+            } else if nx.kind == 23 {
                 # array element write: name [ idx ] = expr ;
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
                 let alen = arrlen_of(slots, src, t.nstart, t.nlen)
@@ -874,7 +963,21 @@ fn collect_top_slots(toks: &List<Token>, src: Str, n: Int) -> List<Slot> {
             if nx.kind == 21 { npos = i + 2 }
             let name = toks[npos]
             let rhs = toks[npos + 2]
-            if rhs.kind == 23 {
+            if rhs_is_list(toks, src, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca [64 x i64]")
+                putchar(10)
+                emit_str("  %v")
+                pint(next_slot + 1)
+                emit_str(" = alloca i64")
+                putchar(10)
+                emit_str("  store i64 0, i64* %v")
+                pint(next_slot + 1)
+                putchar(10)
+                next_slot = next_slot + 2
+            } else if rhs.kind == 23 {
                 let alen = count_arr_elems(toks, npos + 3)
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 1, alen: alen })
                 emit_str("  %v")
@@ -883,14 +986,15 @@ fn collect_top_slots(toks: &List<Token>, src: Str, n: Int) -> List<Slot> {
                 pint(alen)
                 emit_str(" x i64]")
                 putchar(10)
+                next_slot = next_slot + 1
             } else {
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 0, alen: 0 })
                 emit_str("  %v")
                 pint(next_slot)
                 emit_str(" = alloca i64")
                 putchar(10)
+                next_slot = next_slot + 1
             }
-            next_slot = next_slot + 1
             i = i + 1
         } else {
             i = i + 1
@@ -972,8 +1076,9 @@ fn compile(src: Str) -> Int {
 }
 
 fn main() -> Int {
-    # INTEGRATION: a function whose imperative body uses an ARRAY + loop. sumarr(n)
-    # builds a local array, loops summing its first n elements; sumarr(3) = 60.
-    # Proves functions + imperative bodies + arrays compose in one compiler.
-    return compile("fn sumarr(n) {{ let a = [10, 20, 30]; let mut s = 0; let mut i = 0; while i < n {{ s = s + a[i]; i = i + 1 }}; return s }}; return sumarr(3);")
+    # INTEGRATION: a function whose imperative body builds a dynamic LIST, then
+    # consumes it (push in a loop, sum over xs.len) — the exact build-then-consume
+    # pattern the nl compiler's tokenizer/evaluator use on List<Token>.
+    # build(5): push 0,10,20,30,40; sum = 100. Proves functions + imperative + List.
+    return compile("fn build(n) {{ let xs = list(); let mut i = 0; while i < n {{ xs.push(i * 10); i = i + 1 }}; let mut s = 0; let mut j = 0; while j < xs.len {{ s = s + xs[j]; j = j + 1 }}; return s }}; return build(5);")
 }

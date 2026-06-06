@@ -252,4 +252,9 @@ nl-check+std시작 PRELUDE+게이트3종) **충족**. FIXPOINT 큐는 그 너머
       Slot에 is_arr/alen 추가, 배열 토큰/codegen(리터럴 store, 인덱스 read/write)을 함수-스코프 슬롯에
       통합, collect/add_local_slots/gen_factor/gen_stmts/skip_factor 일괄. **함수 안 배열+루프 sumarr(3)=60,
       배열 쓰기 build=15, 배열+if pick=9**, 기존 재귀/명령형 회귀0. e2e 10 PASS. 값-정확성 43/43.
-- [ ] **FP11b** fixpoint_full에 struct + 동적 List 통합 (다음). 그 후 실제 nl 소스 입력 = months급 스케일.
+- [x] **FP11b** fixpoint_full에 **동적 List 통합** — 함수+가변변수+while+if+배열+**List**가 한 컴파일러 합성.
+      List=is_arr=2(버퍼 [64 x i64] @slot + 길이 @slot+1, 2슬롯). `let lst=list()`/`lst.push(식)`/`lst.len`/
+      `lst[식]`/`lst[식]=식` codegen, 슬롯수집기에 list() 감지(rhs_is_list, 2슬롯 할당). 토큰 . 추가.
+      **함수가 List 빌드+소비(push 루프+xs.len 합산) build(5)=100**(컴파일러 tokenizer 패턴!), 함수안 배열+List
+      혼합 mix=105. 회귀0(sumarr=60, fac=120). e2e 13 PASS. 값-정확성 43/43.
+- [ ] **FP11c** fixpoint_full에 struct 통합 (남은 데이터구조). 그 후 실제 nl 소스 입력 = months급 스케일.

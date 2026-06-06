@@ -408,3 +408,15 @@
   회귀: 함수+명령형(sum_to=15)/재귀(fac=120) 그대로.
 - 검증: fixpoint-full e2e **10 PASS**(통합 3 추가), 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
 - **함수 + 가변변수 + while + if + 배열이 한 컴파일러에서 합성.** 통합의 첫 증거. 다음 FP11b: struct+List 통합.
+
+## 2026-06-06 (/loop iter 38: FP11b — fixpoint_full에 동적 List 통합)
+- fixpoint_full(함수+명령형+배열)에 **동적 List 통합** — 더 깊은 통합 마일스톤.
+- List=is_arr=2(버퍼 [64 x i64] @slot + 길이 @slot+1, **2슬롯** 소비). rhs_is_list 헬퍼로 `let lst=list()` 감지,
+  슬롯수집기(add_local_slots/collect_top_slots)가 2슬롯 할당+len=0 초기화. gen_factor에 `lst.len`(load slot+1)
+  +`lst[식]`(기존 배열 인덱스 재사용, alen=64), gen_stmts에 list() skip + `lst.push(식)`(load len→GEP buf[len]→
+  store→len++) + `lst[식]=식`(기존 배열 쓰기). skip_factor에 `.` 3토큰 스킵. 토큰 .=27 추가.
+- **실측**: **함수가 List 빌드+소비(push 루프+xs.len 합산) build(5)=100**(nl 컴파일러 tokenizer가 List<Token>
+  빌드/소비하는 정확한 패턴!), List len cnt(7)=7, **함수안 배열+List 혼합 mix=105**. 회귀0(sumarr=60, fac=120).
+- 검증: fixpoint-full e2e **13 PASS**(List 통합 3 추가), 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
+- **함수+가변변수+while+if+배열+동적List가 한 컴파일러에서 합성.** nl 컴파일러 자신의 코드 구조와 일치.
+  다음 FP11c: struct 통합(마지막 데이터구조), 이후 실제 nl 소스 입력=months급.

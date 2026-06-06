@@ -51,6 +51,14 @@ check "fn build(n) {{ let a = [0, 0, 0]; let mut i = 0; while i < n {{ a[i] = i 
 # function with an array and an if/else
 check "fn pick(k) {{ let a = [7, 8, 9]; let mut r = 0; if k > 1 {{ r = a[2] }} else {{ r = a[0] }}; return r }}; return pick(5);" 9
 
+# --- integration: functions + imperative bodies + dynamic LISTS ---
+# function builds a List in a loop then consumes it (the tokenizer pattern)
+check "fn build(n) {{ let xs = list(); let mut i = 0; while i < n {{ xs.push(i * 10); i = i + 1 }}; let mut s = 0; let mut j = 0; while j < xs.len {{ s = s + xs[j]; j = j + 1 }}; return s }}; return build(5);" 100
+# List length tracking in a function
+check "fn cnt(n) {{ let xs = list(); let mut i = 0; while i < n {{ xs.push(i); i = i + 1 }}; return xs.len }}; return cnt(7);" 7
+# function using BOTH an array and a List
+check "fn mix(n) {{ let a = [100, 200]; let xs = list(); xs.push(a[0]); xs.push(a[1]); xs.push(n); return xs[0] + xs[2] }}; return mix(5);" 105
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'
