@@ -553,3 +553,16 @@
 - 검증: 값-정확성 **48/48 회귀0**, nl-check 4 신규 clean. 교훈: std는 백엔드=Vais인 동안 사상명세가 정답
   (nl-native std는 L3後)/**추정("transpiler 갭")을 실측으로 검증 — 실제는 Vais 백엔드 버그**(B-01/B-02 repro
   존재)/P9 예제는 scale-blocked 아닌 즉시 레버.
+
+## 2026-06-06 (/loop iter 48: P9 cold-start 재입증 [신선한 서브에이전트 실측] + e20 승격)
+- P9 명제("예제 코퍼스가 cold-start를 가능케 함, 1/5→5/5")를 **맥락 없는 진짜 AI로 재입증**(설계원칙:
+  검증=신선한 서브에이전트 cold-start). 방법: nl을 처음 보는 general-purpose 서브에이전트에게 **코퍼스
+  README + 검증예제 9개만**(/tmp/nl_coldstart_context.txt, 172줄, Vais지식/프로젝트맥락 0) 주고 **코퍼스에
+  없는 새 과제**(재귀 삼각수 tri(n)=n+tri(n-1)) 작성 지시.
+- **결과: 첫 시도 성공**. 서브에이전트가 e03(factorial) 패턴에서 시그니처/`if`가드/재귀를 정확 추론 →
+  `fn tri(n:Int)->Int { if n<=0 {return 0}; return n+tri(n-1) }`. nl-check clean, 트랜스파일+빌드+실행=**28 정확**.
+- 결과를 **e20_triangular로 승격**(검증 코퍼스 30→31, 러너 48→49). e03(factorial, `<2` 가드)과 다른
+  recurrence + `<=0` 가드 스타일 보강. README에 cold-start 재확인 노트 추가.
+- 검증: 값-정확성 **49/49 회귀0**. 교훈: **cold-start 주장은 신선 서브에이전트로 주기적 재측정**(이전
+  측정은 과거 코퍼스)/맥락격리가 핵심(컨텍스트파일만, 프로젝트지식 차단)/cold-start 산출물이 곧 새 검증예제
+  (이중 레버: 명제입증 + 코퍼스+1).

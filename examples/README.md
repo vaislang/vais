@@ -6,6 +6,10 @@ self-host codegen 모듈 포함 48/48).
 
 > 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
 > AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
+>
+> **재확인 (2026-06-06)**: nl을 처음 보는 신선한 서브에이전트에게 이 코퍼스만 주고 코퍼스에 없는
+> 새 과제(재귀 삼각수)를 시켰더니 **첫 시도에 컴파일+실행 성공**(값 28 정확). 결과를 e20으로 승격.
+> 맥락 없는 진짜 AI로 P9 명제(예제가 cold-start를 가능케 함) 재입증.
 
 ## 문법 커버리지 인덱스
 
@@ -41,6 +45,7 @@ self-host codegen 모듈 포함 48/48).
 | e17 | struct 반환 → 필드 접근 | 12 |
 | e18 | while 누적기 (가변 acc + 카운터) | 30 |
 | e19 | 문자열 보간 출력 `print("{x}")` | 0 |
+| e20 | 재귀 삼각수 (cold-start AI 작성) | 28 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
 - `.filter()` — Vais 백엔드 버그 (task_7cfebeba).
