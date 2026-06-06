@@ -65,8 +65,13 @@ AI-written nl 25/25 컴파일+실행, self-correction 1라운드 수렴 실측.
 ---
 
 ## TRACKED 추가 (Vais 버그)
-- Vais Vec를 sub/재귀 fn에 전달 불가 (task_54658a43): by-value=E022 move, &Vec=clang fat-ptr 불일치.
-  재귀하향 파서 막힘 → 단일함수 인덱스로 우회. CX5-9는 struct-Env/Defs로 우회(재귀 안전 실측).
+- ✅ **Vais &Vec borrow 재귀 — 해결**(2026-06-06, compiler 214c97cf): `&Vec<T>`가 슬라이스 fat-ptr로
+  잘못 codegen되던 버그 근본 수정 → 이제 주소 전달. **nl이 `&List<T>` borrow로 Vec 재귀 가능**
+  (e15_list_recursion 실측 10). fixpoint(AST 순회)의 핵심 기반 확보. by-value=E022 move는 여전(설계상
+  move 시맨틱이 정상 — borrow가 정답). task_54658a43의 &Vec 측면 closed; by-value move는 의도된 동작.
+- Vais `&&`/`||` 비단락평가 (task_492f7e17): `i<n && arr[i]` 가 i==n서 crash.
+  nl lexer는 nested-if로 우회 중. 근본은 Vais codegen(논리연산→분기). 심각도 높음.
+- Vais 전역 Vec 리터럴 codegen: `G v: Vec<i64> = [..]` → clang "integer constant must have integer type".
 - Vais `&&`/`||` 비단락평가 (task_492f7e17): `i<n && arr[i]` 가 i==n서 crash.
   nl lexer는 nested-if로 우회 중. 근본은 Vais codegen(논리연산→분기). 심각도 높음.
 - Vais 전역 Vec 리터럴 codegen: `G v: Vec<i64> = [..]` → clang "integer constant must have integer type".

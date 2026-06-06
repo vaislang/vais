@@ -186,3 +186,17 @@
   + PRELUDE std시작 + 게이트3종(값정확성30 / 트랜스파일러22 / nl-check11) + CX e2e30.
 - **남은 프론티어 = 사용자 결정 필요한 큰 단계**: (a) 멀티문자 식별자(심볼테이블 재설계) (b) 진짜
   fixpoint(전체 nl 문법 파싱+실제 codegen=L3 엔드게임, 백엔드 전략 결정). /loop escalate 지점.
+
+## 2026-06-06 (/loop iter 20: Vais &Vec borrow 버그 근본 수정 → nl Vec 재귀 가능 [fixpoint 기반])
+- 사용자 결정: "진짜 fixpoint 도전". 경로 추적 → AST 순회에 Vec borrow 재귀 필수 → Vais `&Vec` codegen 버그 발견.
+- **근본 원인**: `&v`(Vec 지역변수, 배열리터럴 초기화 → array_length 설정됨)가 **항상** 슬라이스 fat-ptr
+  `{i8*,i64}`로 codegen → 호출 대상이 `&Vec<T>`(=`%Vec*`)일 때 clang "{ptr,i64} but expected ptr". Vec를
+  참조로 못 넘김 → Vec 재귀(인터프리터/트리워커) 불가. (Vais Vec=move-by-value라 borrow가 정답인데 막힘.)
+- **수정**(compiler 214c97cf): call-arg codegen이 expected param 타입을 expected_expr_types에 push(&expr arg
+  한정), generate_ref_expr이 대상이 `&Vec<...>`이면 슬라이스 path 억제하고 주소 전달. `&Vec→&[T]` coercion은
+  보존(대상이 슬라이스면 guard 미발동). ref_deref.rs + generate_expr_call.rs.
+- **검증**: &Vec 2회(30)+&Vec 재귀(10)+&Vec→&[T](10) 실측, check-integrity.sh INTEGRITY OK(baseline 대비 회귀
+  0), phase166/190/255 Vec codegen e2e green. 가드 phase256(text-IR harness Vec alloca 불가→ignore+build검증).
+- **nl 결실**: nl이 `&List<Int>` borrow로 Vec 재귀 가능(transpiler가 &List→&Vec 매핑). e15_list_recursion
+  예제 추가(sum_from 재귀 10). 코퍼스 31/31, 트랜스파일러 24/24. **fixpoint(AST 순회)의 핵심 기반 확보.**
+- 다음: fixpoint 본격 — nl 토큰리스트/AST를 List로 표현하고 재귀 평가 → 전체 nl 문법 파싱 + codegen.

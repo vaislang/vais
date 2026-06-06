@@ -55,6 +55,10 @@ CASES = [
      ['"return if a > b then a else b"'], ["return I "]),
     ("and in string kept", 'let p = run("x and y")', ['"x and y"'], ['"x && y"']),
     ("if in code still mapped", "    if a > b {", ["I a > b {"], []),
+    # &List<T> -> &Vec<T> (borrow preserved); enables recursion over a list
+    # (Vais Vec is move-by-value, so collections recurse by reference).
+    ("ref List param", "fn f(v: &List<Int>) -> Int {", ["&Vec<i64>"], ["List<"]),
+    ("ref arg preserved", "    return f(&v)", ["f(&v)"], []),
 ]
 
 
