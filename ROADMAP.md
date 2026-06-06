@@ -246,3 +246,10 @@ nl-check+std시작 PRELUDE+게이트3종) **충족**. FIXPOINT 큐는 그 너머
 2. 막히면 TRACKED로 옮기고 다음 task.
 3. P0~P5 다 끝나면 L3 결정을 사용자에게 escalate (추측으로 L3 시작 안 함).
 4. WORKLOG.md에 각 iteration 기록.
+
+## 통합 (사용자 결정: 구문별 codegen을 하나로, 2026-06-06)
+- [x] **FP11a** fixpoint_full에 배열 통합 — **함수+명령형본문+배열**이 한 컴파일러에서 합성.
+      Slot에 is_arr/alen 추가, 배열 토큰/codegen(리터럴 store, 인덱스 read/write)을 함수-스코프 슬롯에
+      통합, collect/add_local_slots/gen_factor/gen_stmts/skip_factor 일괄. **함수 안 배열+루프 sumarr(3)=60,
+      배열 쓰기 build=15, 배열+if pick=9**, 기존 재귀/명령형 회귀0. e2e 10 PASS. 값-정확성 43/43.
+- [ ] **FP11b** fixpoint_full에 struct + 동적 List 통합 (다음). 그 후 실제 nl 소스 입력 = months급 스케일.

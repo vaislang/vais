@@ -398,3 +398,13 @@
 - **🎯🎯 codegen 데이터구조 완비**: 배열+struct(레코드)+동적 List(push/len). nl 컴파일러가 자신이 쓰는 모든
   핵심 구문(산술/변수/함수/재귀/가변/while/if/함수+명령형본문/배열/struct/List)을 네이티브 IR로 생성.
   진짜 self-compile의 codegen 토대 완성. 남은 것=전체 통합 단일 컴파일러+실제 nl 소스 입력=통합/스케일(months급).
+
+## 2026-06-06 (/loop iter 37: FP11a — 통합 시작, 함수+명령형+배열 한 컴파일러)
+- 사용자 결정 "통합 계속". fixpoint_full(함수+명령형본문)에 **배열 통합** — 첫 통합 마일스톤.
+- Slot에 is_arr/alen 추가(4 site 갱신), 배열 토큰 [=23 ]=24 ,=25, bracket_end/arrlen_of/count_arr_elems/
+  arr_elem_end 헬퍼, gen_factor에 배열 인덱스 read(GEP+load), gen_stmts에 배열 리터럴 store + 인덱스 write,
+  skip_factor에 배열 스킵, collect_top_slots/add_local_slots에 배열 길이 감지. 함수-스코프 슬롯에 통합.
+- **실측**: **함수 안 배열+루프 합 sumarr(3)=60**, 배열 쓰기 build(a[i]=i*5)=15, 배열+if pick=9.
+  회귀: 함수+명령형(sum_to=15)/재귀(fac=120) 그대로.
+- 검증: fixpoint-full e2e **10 PASS**(통합 3 추가), 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
+- **함수 + 가변변수 + while + if + 배열이 한 컴파일러에서 합성.** 통합의 첫 증거. 다음 FP11b: struct+List 통합.
