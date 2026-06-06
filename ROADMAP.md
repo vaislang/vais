@@ -16,11 +16,18 @@
 ## ⚑ 상태 (2026-06-06): P0~P5 인프라 + L3 self-host 미니 컴파일러 완료
 
 P0 게이트 / P1 코퍼스 / P2 트랜스파일러 / P3 에러인프라 / P4 std시작 / P5 레퍼런스 = **DONE**.
-3 게이트 green: 값-정확성 25/25, 트랜스파일러-단위 19/19, nl-check-단위 11/11.
-AI-written nl 25/25 컴파일+실행, self-correction 1라운드 수렴 실측.
+L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**(codegen 능력 완비).
 
-**다음 = L3 (자체 컴파일러)** — 아래 'L3 진입' 참조. **사용자 결정 필요**(추측 금지):
-컴파일러 작성 언어 / 백엔드 전략 / 에러 day-1. /loop는 여기서 사용자에게 escalate.
+**현재(2026-06-07) 게이트 상태** (이번 세션서 크게 성장):
+- 값-정확성 **71/71** (예제코퍼스 53 검증 e16~e42 + self-host codegen 모듈).
+- 트랜스파일러-단위 **45/45**, nl-check-단위 **34/34** (Rust-ism 14규칙).
+- self-host e2e **77 PASS** (fixpoint-full 35 + str 7 + list 5 + struct 6 + array 7 + imperative 17).
+- cold-start: 신선 서브에이전트 다회 첫시도 성공 + 자기수정 1라운드 수렴 실측.
+
+**완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족**. 남은 것:
+1. **실제 소스 부트스트랩**(months급, TRACKED) — 능력 완비, 순수 규모 문제.
+2. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님, /loop 계속.
+3. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
 
 ---
 
