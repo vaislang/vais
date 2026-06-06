@@ -213,3 +213,17 @@
 - 검증: fixpoint e2e **10/10**(test-fixpoint.sh), 값-정확성 **32/32**(fixpoint.nl 편입), 트랜스파일러 24/24. 회귀 0.
 - **nl이 진짜 토크나이저→List<Token>→재귀평가 파이프라인으로 산술 컴파일.** cx5의 string-rescan 졸업.
 - 다음 FP2: 변수/함수를 List 파이프라인으로 재구현 → FP4 멀티문자 식별자(토큰이 name 보유).
+
+## 2026-06-06 (/loop iter 22: FP2+FP4 — 멀티문자 식별자 [추적 한계 해소])
+- **compiler/self/fixpoint2.nl** 신설: List<Token> 파이프라인으로 **멀티문자 식별자** 지원 → 이전에
+  TRACKED했던 "Env=26 단일바이트슬롯" 한계 근본 해소.
+- **메커니즘**: Token이 식별자 이름을 소스범위(nstart,nlen)로 보유. 심볼테이블=List<Var>{nstart,nlen,value},
+  조회는 name_eq(소스 바이트 비교, 길이 먼저 체크→접두사공유 foo/food 구분). keyword(let/return) vs ident는
+  word_is로 토큰화 시 구분. eval은 &List<Token>+&List<Var> 재귀(precedence/좌결합 fixpoint.nl과 동일).
+- **프리미티브 단계검증**: 멀티문자 토큰화(3토큰)/name_eq(foo==foo,foo!=bar)/List<Var>조회(30)/성장+조회(50)
+  → 통합 fixpoint2.nl.
+- **실측**: `let total=10; let count=total*4; return total+count`=50, width*height=20, base→doubled→result=30,
+  foo(1)/food(100) 구분, n-5-3=12(좌결합). 진짜 변수명 동작.
+- 검증: fixpoint2 e2e **9/9**, 값-정확성 **33/33**, 트랜스파일러 24/24, fixpoint/CX 회귀 0.
+- **nl이 멀티문자 변수명을 가진 프로그램을 컴파일.** List<Token> 아키텍처가 단일자 한계 돌파(Vais &Vec 수정 기반).
+- 다음 FP3: 함수 정의(멀티문자 함수명+호출)를 List 파이프라인으로.

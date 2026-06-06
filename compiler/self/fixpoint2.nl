@@ -1,0 +1,226 @@
+# expect: 0
+# nl self-host — fixpoint compiler v2: MULTI-CHAR identifiers via List<Token>.
+#
+# Builds on fixpoint.nl (List<Token> pipeline) and resolves the single-letter
+# limitation: tokens carry an identifier's NAME as a source range (nstart, nlen),
+# and the symbol table is a List<Var> looked up by comparing source bytes
+# (name_eq). This is possible because the Vais `&Vec` borrow-recursion fix
+# (compiler 214c97cf) lets a `&List<Token>` / `&List<Var>` thread through
+# recursive evaluation.
+#
+# Grammar: a ';'-separated sequence of
+#   let <name> = <expr>
+#   return <expr>
+# where <expr> is arithmetic (+ - *, * tighter, left-assoc) over multi-digit
+# integers and multi-char variable names.
+
+# Token kinds: 0=number(value), 1=ident(nstart,nlen), 2='+', 3='*', 4='-',
+#              5='=', 6=';', 7='let', 8='return'.
+struct Token { kind: Int, value: Int, nstart: Int, nlen: Int }
+struct Var { nstart: Int, nlen: Int, value: Int }
+
+fn is_digit(c: Int) -> Bool { return c >= 48 and c <= 57 }
+fn is_alpha(c: Int) -> Bool {
+    if c >= 97 and c <= 122 { return true }
+    if c >= 65 and c <= 90 { return true }
+    if c == 95 { return true }
+    return false
+}
+fn is_alnum(c: Int) -> Bool {
+    if is_alpha(c) { return true }
+    if is_digit(c) { return true }
+    return false
+}
+fn is_space(c: Int) -> Bool {
+    if c == 32 { return true }
+    if c == 9 { return true }
+    if c == 10 { return true }
+    return false
+}
+
+# Compare src[a..a+alen] with a literal keyword given as up to 6 byte codes
+# (unused trailing bytes are 0). Returns 1 if equal.
+fn word_is(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int, w3: Int, w4: Int, w5: Int, wlen: Int) -> Int {
+    if alen != wlen { return 0 }
+    if alen >= 1 { if src[a] != w0 { return 0 } }
+    if alen >= 2 { if src[a + 1] != w1 { return 0 } }
+    if alen >= 3 { if src[a + 2] != w2 { return 0 } }
+    if alen >= 4 { if src[a + 3] != w3 { return 0 } }
+    if alen >= 5 { if src[a + 4] != w4 { return 0 } }
+    if alen >= 6 { if src[a + 5] != w5 { return 0 } }
+    return 1
+}
+
+# Tokenize the source into a List<Token>.
+fn tokenize(src: Str) -> List<Token> {
+    let mut toks: List<Token> = []
+    let n = src.len()
+    let mut i = 0
+    while i < n {
+        let c = src[i]
+        if is_space(c) {
+            i = i + 1
+        } else if is_digit(c) {
+            let mut v = 0
+            let mut go = true
+            while go {
+                if i >= n { go = false }
+                else if is_digit(src[i]) { v = v * 10 + (src[i] - 48); i = i + 1 }
+                else { go = false }
+            }
+            toks.push(Token { kind: 0, value: v, nstart: 0, nlen: 0 })
+        } else if is_alpha(c) {
+            let start = i
+            let mut go = true
+            while go {
+                if i >= n { go = false }
+                else if is_alnum(src[i]) { i = i + 1 }
+                else { go = false }
+            }
+            let len = i - start
+            # keyword or identifier? let=108,101,116 ; return=114,101,116,117,114,110
+            if word_is(src, start, len, 108, 101, 116, 0, 0, 0, 3) == 1 {
+                toks.push(Token { kind: 7, value: 0, nstart: start, nlen: len })
+            } else if word_is(src, start, len, 114, 101, 116, 117, 114, 110, 6) == 1 {
+                toks.push(Token { kind: 8, value: 0, nstart: start, nlen: len })
+            } else {
+                toks.push(Token { kind: 1, value: 0, nstart: start, nlen: len })
+            }
+        } else if c == 43 {
+            toks.push(Token { kind: 2, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+        } else if c == 42 {
+            toks.push(Token { kind: 3, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+        } else if c == 45 {
+            toks.push(Token { kind: 4, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+        } else if c == 61 {
+            toks.push(Token { kind: 5, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+        } else if c == 59 {
+            toks.push(Token { kind: 6, value: 0, nstart: 0, nlen: 0 }); i = i + 1
+        } else {
+            i = i + 1
+        }
+    }
+    return toks
+}
+
+# --- symbol table (List<Var>, keyed by source name range) ---
+fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) -> Int {
+    if alen != blen { return 0 }
+    let mut k = 0
+    while k < alen {
+        if src[a + k] == src[b + k] { k = k + 1 } else { return 0 }
+    }
+    return 1
+}
+fn lookup(vars: &List<Var>, src: Str, qs: Int, ql: Int) -> Int {
+    let m = vars.len()
+    let mut i = 0
+    while i < m {
+        let v = vars[i]
+        if name_eq(src, v.nstart, v.nlen, qs, ql) == 1 { return v.value }
+        i = i + 1
+    }
+    return 0
+}
+
+# --- expression evaluator over the token list (precedence, left-assoc) ---
+# A factor is a number or an identifier (looked up). Returns its value.
+fn eval_factor(toks: &List<Token>, i: Int, src: Str, vars: &List<Var>) -> Int {
+    let t = toks[i]
+    if t.kind == 0 { return t.value }
+    if t.kind == 1 { return lookup(vars, src, t.nstart, t.nlen) }
+    return 0
+}
+
+# Evaluate a term `factor (* factor)*` starting at i with first factor in acc.
+fn eval_term(toks: &List<Token>, i: Int, n: Int, src: Str, vars: &List<Var>, acc: Int) -> Int {
+    if i >= n { return acc }
+    let t = toks[i]
+    if t.kind == 3 {
+        let rhs = eval_factor(toks, i + 1, src, vars)
+        return eval_term(toks, i + 2, n, src, vars, acc * rhs)
+    }
+    return acc
+}
+fn skip_term(toks: &List<Token>, i: Int, n: Int) -> Int {
+    if i >= n { return n }
+    let t = toks[i]
+    if t.kind == 3 { return skip_term(toks, i + 2, n) }
+    return i
+}
+
+# Evaluate an expression `term ((+|-) term)*` from token i to end-marker `stop`
+# (stop = index of ';' or n). Left-associative fold.
+fn eval_expr(toks: &List<Token>, i: Int, stop: Int, src: Str, vars: &List<Var>) -> Int {
+    let first = eval_factor(toks, i, src, vars)
+    let acc = eval_term(toks, i + 1, stop, src, vars, first)
+    let after = skip_term(toks, i + 1, stop)
+    return eval_fold(toks, after, stop, src, vars, acc)
+}
+fn eval_fold(toks: &List<Token>, i: Int, stop: Int, src: Str, vars: &List<Var>, acc: Int) -> Int {
+    if i >= stop { return acc }
+    let op = toks[i]
+    if op.kind == 2 {
+        let rf = eval_factor(toks, i + 1, src, vars)
+        let term = eval_term(toks, i + 2, stop, src, vars, rf)
+        let after = skip_term(toks, i + 2, stop)
+        return eval_fold(toks, after, stop, src, vars, acc + term)
+    }
+    if op.kind == 4 {
+        let rf = eval_factor(toks, i + 1, src, vars)
+        let term = eval_term(toks, i + 2, stop, src, vars, rf)
+        let after = skip_term(toks, i + 2, stop)
+        return eval_fold(toks, after, stop, src, vars, acc - term)
+    }
+    return acc
+}
+
+# Find the index of the next ';' from i (or n).
+fn find_semi(toks: &List<Token>, i: Int, n: Int) -> Int {
+    if i >= n { return n }
+    let t = toks[i]
+    if t.kind == 6 { return i }
+    return find_semi(toks, i + 1, n)
+}
+
+fn emit_ir(value: Int) -> Int {
+    print("define i64 @main() {")
+    print("  ret i64 {value}")
+    print("}")
+    return 0
+}
+
+# Run the program: process statements, threading the symbol table.
+fn run_program(src: Str) -> Int {
+    let toks = tokenize(src)
+    let n = toks.len()
+    let mut vars: List<Var> = []
+    let mut result = 0
+    let mut i = 0
+    while i < n {
+        let t = toks[i]
+        if t.kind == 7 {
+            # let <name> = <expr> ;   -> name at i+1, '=' at i+2, expr from i+3
+            let name = toks[i + 1]
+            let stop = find_semi(toks, i + 3, n)
+            let val = eval_expr(&toks, i + 3, stop, src, &vars)
+            vars.push(Var { nstart: name.nstart, nlen: name.nlen, value: val })
+            i = stop + 1
+        } else if t.kind == 8 {
+            # return <expr> ;
+            let stop = find_semi(toks, i + 1, n)
+            result = eval_expr(&toks, i + 1, stop, src, &vars)
+            i = stop + 1
+        } else {
+            i = i + 1
+        }
+    }
+    return result
+}
+
+fn main() -> Int {
+    # Multi-char identifiers! let total = 10; let count = total * 4; return total + count
+    #   total=10, count=40, return 50.
+    let value = run_program("let total = 10; let count = total * 4; return total + count;")
+    return emit_ir(value)
+}
