@@ -137,16 +137,18 @@ def map_bitnot(line: str) -> str:
 
 
 def map_brace_escapes(line: str) -> str:
-    # In nl strings, `{{`/`}}` mean a literal brace (standard escape). Vais's
-    # interpolating puts does NOT unescape `{{` (it prints `{{`), but it DOES
-    # print a lone `{`/`}` literally. So unescape `{{`->`{` and `}}`->`}` inside
-    # string literals only (needed for code-generating nl, e.g. emitting LLVM IR
-    # like `define i64 @main() {`). Leave real interpolations `{expr}` untouched.
+    # In nl strings, `{{`/`}}` mean a literal brace (standard escape); `{expr}` is
+    # interpolation. Vais ALSO interpolates `{...}` in EVERY string literal (not
+    # just printed ones) — so a `{ }` pair in any passed string would be parsed as
+    # interpolation and fail. Vais's escape for a literal brace is `\{` / `\}`
+    # (works in print AND in passed strings, e.g. embedding code-as-data like
+    # `fn f(x) \{ return x \}`). So translate nl `{{`->`\{` and `}}`->`\}` inside
+    # string literals only. Real interpolations `{expr}` are left untouched.
     parts = re.split(r'("(?:[^"\\]|\\.)*")', line)
     out = []
     for i, p in enumerate(parts):
         if i % 2 == 1:  # string literal
-            p = p.replace("{{", "{").replace("}}", "}")
+            p = p.replace("{{", "\\{").replace("}}", "\\}")
         out.append(p)
     return "".join(out)
 

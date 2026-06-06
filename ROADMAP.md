@@ -103,7 +103,15 @@ compiler.nl을 점진 확장. 각 단계 값-정확성(생성 IR 실행) 검증 
       문자열 리터럴 안의 `if`/`and` 등 키워드가 코드처럼 재작성돼 임베디드 프로그램
       텍스트 오염(`return if`→`return I`) → `outside_strings` 헬퍼로 map_if/map_words
       문자열 보호. e2e 15/15, 트랜스파일러 단위 22/22.
-- [ ] **CX5** 함수 정의 다중 fn (self-host 큰 관문).
+- [x] **CX5** 함수 정의 다중 fn (self-host 큰 관문). `fn <f>(<p>) {{ return <식> }}` 정의 +
+      호출 `<f>(<인자식>)`, 다중 fn + **중첩 호출**(한 본문이 다른 fn 호출). compiler/self/cx5_compiler.nl.
+      **핵심 설계(Vais Vec-move 우회)**: 평가 환경 `Env`(8슬롯)와 함수 테이블 `Defs`(3슬롯)를
+      **고정필드 struct**로 → 재귀 평가에서 E022 없이 전달(struct는 재귀-복사 안전, Vec는 move 실패 실측).
+      소스는 불변 Str. 산술식 평가기는 상호재귀(eval_factor↔term↔expr, Cur struct 반환).
+      **트랜스파일러 버그 수정**: Vais가 모든 문자열 리터럴의 `{ }`를 보간으로 처리 → 코드-as-데이터
+      불가. nl `{{`/`}}` → Vais `\{`/`\}`(보간 회피 literal brace)로 변경(map_brace_escapes).
+      e2e 6/6(중첩호출 포함). 값-정확성 30/30.
+- [ ] **CX6** 함수 본문에 조건식 → **재귀 함수**(factorial/fib, base-case). Env+Defs struct 기반 준비됨.
 - ...최종: nl이 자기 일부 소스 컴파일 (fixpoint 근접).
 
 전략: 단일파일/인덱스로 Vais 버그(Vec-재귀전달/&&단락) 회피 유지. 큰 관문(CX5+)서 막히면

@@ -110,3 +110,21 @@
 - 검증: 컴파일러 e2e **15/15** (CX4 if 8케이스: >/</== + true/false분기 + 변수조합),
   트랜스파일러 단위 **22/22** (문자열-보호 3케이스 추가), 값-정확성 **29/29**. 회귀 0.
 - **nl 컴파일러가 조건분기 있는 프로그램을 컴파일.** (산술→변수→문장→return→조건)
+
+## 2026-06-06 (/loop iter 14: CX5 함수 정의+호출 — self-host 큰 관문 통과)
+- **CX5** compiler/self/cx5_compiler.nl: `fn <f>(<p>) {{ return <식> }}` 정의 파싱 + 호출
+  `<f>(<인자식>)` 디스패치. 다중 fn(최대 3) + **중첩 호출**(본문이 다른 fn 호출).
+- **Vais Vec-move 한계(task_54658a43) 근본 우회**: 측정으로 발견 — Vec를 재귀/연속 함수호출에
+  전달하면 E022(flow-insensitive move)지만 **struct는 재귀 전달 OK**(값-복사). 또 루프 반복 호출도 OK.
+  → 평가 환경 `Env`(8슬롯 a~f,n,x)와 함수 테이블 `Defs`(3슬롯×4필드)를 **고정필드 struct**로 설계.
+  산술식 평가기 상호재귀(eval_factor↔eval_term↔eval_expr, 위치+값을 `Cur` struct로 반환).
+  호출 시 인자 평가 → param 바인딩한 fresh Env → 본문 범위 재귀 평가.
+- **트랜스파일러 버그 수정(근본)**: Vais가 **모든** 문자열 리터럴의 `{ }` 쌍을 보간으로 처리
+  (`"a { b } c"`→`b` 보간 시도 E002, 코드를 문자열로 임베드 불가). Vais 이스케이프 `\{`/`\}`는
+  print+passed 양쪽 literal brace(런타임 1바이트 123/125)임을 실측 → map_brace_escapes를
+  nl `{{`/`}}`→Vais `\{`/`\}`로 변경(기존 collapse `{{`→`{`는 lone brace만 우연히 동작).
+  lone `{`/`}`와 `{value}` 보간은 그대로 → emit_ir(compiler.nl/codegen.nl) 무영향.
+- 검증: CX5 e2e **6/6**(scripts/test-cx5.sh: 단일/다중/중첩호출/산술결합), 값-정확성 **30/30**,
+  트랜스파일러 단위 22/22, compiler e2e(vars+if) green. 회귀 0.
+- **nl 컴파일러가 사용자 정의 함수+호출이 있는 프로그램을 컴파일.** (산술→변수→조건→함수)
+- 다음 CX6: 함수 본문 조건식 → 재귀 함수(struct 기반 이미 준비됨, 본문에 if 평가 추가).
