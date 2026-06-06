@@ -266,3 +266,14 @@
   트랜스파일러 24/24. 회귀 0.
 - **nl이 런타임 계산 LLVM IR을 생성.** 컴파일러의 codegen 절반 달성(인터프리터→진짜 코드생성 질적 도약).
 - Vais 수정 2건 누적(214c97cf &Vec, e711dac1 %). 다음 FP6: 변수/함수 codegen(alloca/store/define).
+
+## 2026-06-06 (/loop iter 26: FP6 — 변수 codegen)
+- **compiler/self/fixpoint_codegen2.nl**: fixpoint_codegen(산술 런타임 IR) + 멀티문자 변수(fixpoint2).
+  `let <name> = <expr>; ... return <expr>`를 런타임 계산 IR로 codegen.
+- **SSA 변수 모델**: 변수 = 그 식이 만든 operand(literal/temp) 매핑 → 불변 바인딩은 alloca 불필요.
+  심볼테이블 List<SymOp>{nstart,nlen,kind,val}, gen_factor가 ident를 name_eq로 조회해 operand 반환.
+- **실측**: `let x=5; let y=x*2; return y+1` → `%t1=mul 5,2; %t2=add %t1,1; ret %t2` → 런타임 11.
+  멀티문자/의존체인(base→d→r=30)/변수재사용(z*z=36).
+- 검증: codegen2 e2e **8/8**, 값-정확성 **36/36**, 트랜스파일러 24/24. 회귀 0.
+- **nl이 변수 있는 프로그램을 런타임 계산 IR로 codegen.** codegen이 산술→변수로 확장.
+- 다음 FP7: 함수 codegen(define/call IR).
