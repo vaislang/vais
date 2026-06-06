@@ -88,3 +88,40 @@ That IR runs to 120.
 - Upstream: two Vais compiler bugs were root-fixed to enable this work
   (`&Vec` borrow recursion, literal-`%` escaping), both gate-verified
   (`check-integrity.sh INTEGRITY OK`, zero regression).
+
+## Codegen track — complete construct coverage (2026-06-06)
+
+The code generators below collectively cover **every core construct the nl
+compiler itself is written in**. Each emits real LLVM IR (verified by compiling
+the emitted IR with clang and checking the runtime value).
+
+| Module | Constructs codegen'd | Verify |
+|--------|---------------------|--------|
+| `fixpoint_codegen.nl` (FP5) | arithmetic (mul/add/sub, SSA temps) | `test-fixpoint-codegen.sh` |
+| `fixpoint_codegen2.nl` (FP6) | + variables (SSA operands) | `test-fixpoint-codegen2.sh` |
+| `fixpoint_codegen3.nl` (FP7) | + functions (`define`/`call`) | `test-fixpoint-codegen3.sh` |
+| `fixpoint_codegen4.nl` (FP8) | + recursion (`icmp`/`br`/`phi`) | `test-fixpoint-codegen4.sh` |
+| `fixpoint_imperative.nl` (FP10a-c) | mutable vars (alloca), `while`, `if/else` | `test-fixpoint-imperative.sh` |
+| `fixpoint_array.nl` (FP10d) | fixed arrays (`alloca [N x i64]` + GEP) | `test-fixpoint-array.sh` |
+| `fixpoint_full.nl` (FP10f) | **functions with imperative bodies** (the compiler's own function shape) | `test-fixpoint-full.sh` |
+| `fixpoint_struct.nl` (FP10e) | structs/records (Token/Op/Fn/Slot shape) | `test-fixpoint-struct.sh` |
+| `fixpoint_list.nl` (FP10g) | dynamic `List` (push/len/index — List<Token>/List<Fn> shape) | `test-fixpoint-list.sh` |
+
+Example — `fixpoint_list.nl` compiling a build-then-consume loop (the exact
+pattern the tokenizer/evaluator use):
+
+```
+let xs = list(); let mut i = 0; while i < 5 { xs.push(i * 10); i = i + 1 };
+let mut s = 0; let mut j = 0; while j < xs.len { s = s + xs[j]; j = j + 1 };
+return s;   // -> 100, via alloca [64 x i64] buffer + length counter + GEP
+```
+
+### What "complete codegen coverage" means — and the honest remaining gap
+
+These modules prove the nl language can express, and the nl compiler can codegen,
+**each** construct the compiler is made of. The remaining gap to a *literal*
+self-compilation fixpoint is **integration + scale**, not a missing capability:
+unify the per-construct code generators into one compiler and feed it the actual
+multi-thousand-line nl compiler source (with its full mix of these constructs in
+one program). That is a months-scale engineering effort. What exists today is a
+verified code generator for every core construct, demonstrated end to end.
