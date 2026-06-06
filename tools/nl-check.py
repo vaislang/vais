@@ -29,7 +29,7 @@ Catalog (Rust/other-language intuition -> the single nl form):
   vec![..]        -> [..]
   Vec<T>          -> List<T>
   i8..i128/u8..u128/f32/f64/usize/isize -> Int / Int8..Int128 / UInt8.. / F32 / F64
-  x.to_string()   -> Str(x)
+  x.to_string()   -> (no nl method; surface string conversion is a TRACKED Vais gap)
   .unwrap()/.expect() -> match the Option/Result, or `?`
   if let          -> match
   elsif/elif      -> else if
@@ -87,10 +87,13 @@ RULES = [
     (re.compile(r"(?<![A-Za-z0-9_])(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|usize|isize)(?![A-Za-z0-9_])"),
      "nl scalar types are capitalized: `Int` / `Int8..Int128` / `UInt8..UInt128` / `F32` / `F64`",
      lambda m, ln: f"... use the nl type name (e.g. Int) instead of `{m.group(1)}`"),
-    # --- conversion via .to_string() (nl uses Str(x)) ---
+    # --- .to_string() is a Rust-ism; nl has no `.to_string()` method. (Surface
+    # int->string conversion is currently a Vais backend gap — TRACKED — so we
+    # flag the Rust spelling without promising a working replacement.) ---
     (re.compile(r"\.to_string\s*\("),
-     "string conversion is `Str(x)`, not `x.to_string()`",
-     lambda m, ln: "... use Str(expr) instead of `.to_string()`"),
+     "no `.to_string()` method in nl (Rust-ism); string conversion is not yet "
+     "available in the surface (Vais backend gap, TRACKED)",
+     lambda m, ln: "... avoid `.to_string()`; surface string conversion is TRACKED (Vais gap)"),
     # --- Option/Result unwrap (nl uses match or `?`) ---
     (re.compile(r"\.unwrap\s*\("),
      "no `.unwrap()`; use a `match` arm (Some(v)/None) or `?` to propagate",

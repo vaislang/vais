@@ -580,3 +580,10 @@
 - 검증: nl-check 26/26, 값-정확성 49/49, 회귀 0. docstring에 카탈로그 명시. 교훈: **에러규칙은 추측말고
   실측으로**(17 probe→7 진짜 MISS, 각 빌드로 실패확인)/오탐 방지는 식별자 경계 가드 필수(i32 substr 함정)/
   코퍼스가 "valid form" 권위(규칙이 코퍼스 깨면 그 규칙이 틀림).
+- **자기수정 루프 실증 중 발견·정정**: rusty draft(Vec/i32/vec!/&&/.to_string())에 nl-check가 5개 다 help:로
+  잡음 ✅. 그러나 fix 적용 후 빌드하니 **`.to_string()`→`Str(x)` 조언이 깨진 코드 생성**(transpiler가 `str(x)`
+  emit→P001; Vais 표면 int→string 변환 부재 실측: str()/to_string()/method 전부 실패). **정정: nl-check가
+  `Str(x)` 작동 약속하면 안 됨**(또 다른 "두 길" — 깨진 길). `.to_string()` 규칙을 "nl엔 .to_string() 없음 +
+  표면변환은 TRACKED Vais갭"으로 변경(대체 약속 제거). ROADMAP TRACKED에 Vais int→string 부재 추가.
+  **핵심 교훈: 에러인프라의 조언은 반드시 동작하는 fix여야**(자기수정 루프를 끝까지 빌드검증 — 조언이 깨진
+  코드 만들면 그 조언이 P1-P3 모호성 위반). nl-check 26/26 유지(여전히 flag, help만 정직화).
