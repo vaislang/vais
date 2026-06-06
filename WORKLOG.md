@@ -615,3 +615,20 @@
 - 검증: 값-정확성 **49→55 PASS 회귀0**, nl-check 6 신규 clean. README 인덱스 e20→e26 + 카운트 37/37(러너55/55).
   교훈: 후보는 빌드선검증(expect 오산 2건 — pipeline 19, 빌드가 정답 알려줌)/미커버는 "있는 것의 변주"가 아니라
   "조합/흐름"에 있음(Result match, struct+enum)/`.filter()` Vais갭은 for+if 수동필터가 코퍼스 권장 대안.
+
+## 2026-06-07 (/loop iter 52: P9 +2(e27/e28) + 트랜스파일러 중첩리스트 추론 수정 + Vais갭 2종 추적)
+- 코퍼스 확장 중 harder 후보로 **Vais 백엔드 갭 2종 발견·격리·추적**(실측 우선).
+- **트랜스파일러 중첩리스트 타입추론 수정**: `[[1,2],[3,4]]`가 `Vec<i64>`로 잘못 추론(E001 "expected i64 found
+  [i64]")되던 것을 **재귀 추론으로 `Vec<Vec<i64>>`** 생성. `_vec_elem_from_annotation`(List<List<Int>> 보존),
+  `_split_top_commas`(depth-0 분할), `_infer_vec_elem`(첫원소 `[`면 재귀) 신설. 트랜스파일러 unit +2(24→26).
+- **단, 런타임은 Vais 백엔드 버그로 막힘**(타입수정 후 빌드는 되나 값 garbage 139/192 → 하드코딩 Vais도 C003
+  Type error 확인). **Vais 중첩 Vec codegen 버그 = TRACKED**(nl 아닌 Vais). 트랜스파일러 수정은 정당(Vais가
+  고치면 즉시 동작) + 회귀0.
+- **격리 발견 2: 리스트-리터럴 직접 인자 갭**: `maxof([3,9,2,7])` E001이나 `let v=[..]; maxof(v)` OK. Vais
+  코어션 갭(literal→Vec param). 기존 d4b도 bound-var라 통과했던 것. TRACKED + 코퍼스는 bound-var 권장.
+- **신규 검증 예제 2종**(동작 확인): e27 List param max(bound-var 전달, 9) / e28 struct 함수적 갱신(rebuild+
+  재대입, 8). 값-정확성 55→57. README 인덱스 e26→e28 + 미커버에 중첩리스트/리터럴직접인자 갭 명기 + ROADMAP
+  TRACKED 2종 추가.
+- 검증: 값-정확성 57/57, 트랜스파일러 unit 26/26, nl-check 34/34, 회귀0. 교훈: **harder 후보가 백엔드 갭을
+  노출**(중첩Vec, 리터럴인자)/실측으로 nl측(트랜스파일러 추론 수정) vs Vais측(codegen) 정확 구분/타입추론 수정은
+  Vais가 못 고쳐도 정당(미래대비+회귀0)/우회 패턴(bound-var)을 코퍼스 예제로 문서화(e27).

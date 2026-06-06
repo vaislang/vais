@@ -1,0 +1,16 @@
+# expect: 8
+# Update a struct by rebuilding it (functional update) and reassigning.
+# (nl structs are values; `bump` returns a fresh Counter, applied repeatedly.)
+struct Counter { n: Int }
+
+fn bump(c: Counter) -> Counter {
+    return Counter { n: c.n + 1 }
+}
+
+fn main() -> Int {
+    let mut c = Counter { n: 5 }
+    c = bump(c)
+    c = bump(c)
+    c = bump(c)
+    return c.n
+}

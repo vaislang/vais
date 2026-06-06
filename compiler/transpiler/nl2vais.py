@@ -68,6 +68,52 @@ def map_words(line: str) -> str:
     return outside_strings(line, rewrite)
 
 
+def _vec_elem_from_annotation(ty):
+    """Extract the element type from a `: List<T>` / `: Vec<T>` annotation,
+    preserving NESTING: `List<List<Int>>` -> Vec element `Vec<Int>`. Returns the
+    nl element-type string (map_types later maps Int->i64 etc.), or None."""
+    if not ty:
+        return None
+    m = re.search(r"(?:List|Vec)\s*<(.*)>\s*$", ty.strip())
+    if not m:
+        return None
+    inner = m.group(1).strip()
+    # if the element is itself a List/Vec, recurse so nesting is preserved
+    if re.match(r"^(?:List|Vec)\s*<", inner):
+        sub = _vec_elem_from_annotation(inner)
+        return f"Vec<{sub}>" if sub else inner
+    return inner
+
+
+def _split_top_commas(s):
+    """Split a comma list at bracket-depth 0 (so `[1,2],[3,4]` -> two items)."""
+    out, depth, cur = [], 0, ""
+    for ch in s:
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        out.append(cur)
+    return out
+
+
+def _infer_vec_elem(rhs_inner):
+    """Infer the Vec element type from a non-empty list literal's contents
+    (the text between the outer brackets). Handles NESTED lists recursively:
+    `[1,2],[3,4]` -> `Vec<Int>`; `1.0,2.0` -> `F64`; `1,2,3` -> `Int`."""
+    first = _split_top_commas(rhs_inner)[0].strip()
+    if first.startswith("["):
+        sub = _infer_vec_elem(first[1:-1])
+        return f"Vec<{sub}>"
+    return "F64" if re.match(r"^-?\d+\.\d+", first) else "Int"
+
+
 def _list_binding(indent, name, ty, rhs):
     """Render a Vais binding when the RHS is a list literal `[..]` (possibly with
     a `: List<T>`/`: Vec<T>` annotation). Returns the Vais line, or None if rhs
@@ -75,24 +121,21 @@ def _list_binding(indent, name, ty, rhs):
       - empty `[]` -> `name: Vec<T> = Vec::new()` (literal `[]` CRASHES for
         Vec<struct>; Vec::new() is safe). Element type from annotation (required).
       - non-empty `[1,2,3]` -> `name: Vec<T> = [1,2,3]` (literal works).
-        T from annotation if present, else inferred from first element (Int/F64).
+        T from annotation if present, else inferred from first element.
+      - NESTED `[[1,2],[3,4]]` -> `name: Vec<Vec<Int>> = ...` (element type is
+        inferred/annotation-derived recursively so the nesting is preserved).
     """
     r = rhs.rstrip()
     if not (r.startswith("[") and r.endswith("]")):
         return None
-    # element type: prefer annotation `: List<T>` / `: Vec<T>`
-    elem = None
-    if ty:
-        mt = re.search(r"<\s*([A-Za-z_]\w*)\s*>", ty)
-        if mt:
-            elem = mt.group(1)  # map_types later turns Int->i64, List stays etc.
+    # element type: prefer annotation `: List<T>` / `: Vec<T>` (nesting-aware)
+    elem = _vec_elem_from_annotation(ty)
     if r == "[]":
         if elem is None:
             elem = "Int"  # last resort; better: require annotation
         return f"{indent}{name}: Vec<{elem}> = Vec::new()"
     if elem is None:
-        first = r[1:-1].split(",")[0].strip()
-        elem = "F64" if re.match(r"^-?\d+\.\d+", first) else "Int"
+        elem = _infer_vec_elem(r[1:-1])
     return f"{indent}{name}: Vec<{elem}> = {rhs}"
 
 

@@ -43,6 +43,12 @@ CASES = [
     ("enum dot strip", "Color.Red => 1,", ["Red => 1"], ["Color.Red"]),
     ("arm return wrap", "Some(v) => return v,", ["=> { return v }"], []),
     ("list literal type", "let v = [1, 2, 3]", ["Vec<i64> = [1, 2, 3]"], []),
+    # nested list literals infer the element type recursively so nesting is kept
+    # (Vais can't yet codegen nested Vec -- TRACKED -- but the typing must be
+    #  correct: Vec<Vec<i64>>, not the wrong flat Vec<i64>).
+    ("nested list infer", "let rows = [[1, 2], [3, 4]]", ["Vec<Vec<i64>>"], []),
+    ("nested list annotated", "let rows: List<List<Int>> = [[1, 2]]",
+     ["Vec<Vec<i64>>"], ["List<"]),
     (".sum -> fold", "let s = v.sum()", [".fold(0,"], [".sum()"]),
     ("List type -> Vec", "fn f(x: List<Int>) -> Int {", ["Vec<i64>"], ["List<"]),
     ("field pub strip", "    pub name: Str,", ["name: str"], ["pub name"]),

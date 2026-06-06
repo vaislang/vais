@@ -65,6 +65,11 @@ AI-written nl 25/25 컴파일+실행, self-correction 1라운드 수렴 실측.
 ---
 
 ## TRACKED 추가 (Vais 버그)
+- **Vais 중첩 Vec codegen 버그**: `Vec<Vec<i64>>` 리터럴/인덱싱이 C003 Type error(하드코딩 Vais도 실패).
+  nl 트랜스파일러는 올바른 `Vec<Vec<i64>>` 타입 생성하나(nested 추론 수정 685ba63 다음 커밋) Vais가 codegen
+  못 함. nl 중첩 리스트 `[[..]]` 막힘. Vais repo 작업 필요. 2026-06-07 실측.
+- **Vais 리스트-리터럴 직접 인자 코어션 갭**: `f([1,2,3])`(리터럴을 Vec 파라미터에 직접) E001 Type mismatch.
+  바인딩 후 전달(`let v=[..]; f(v)`)은 OK. nl 코퍼스는 bound-var 패턴 권장(e27). Vais 코어션 수정 필요. 2026-06-07 실측.
 - **Vais 표면 int→string 변환 부재**: `str(42)` P001(str=타입키워드, 호출불가), `to_string(42)` E002,
   `(42).to_string()` C002. 내부 `__i64_to_str`(FFI impl)만 존재. nl `Str(x)` 변환콜이 `str(x)`로 사상돼 실패.
   → nl-check가 `.to_string()`을 flag하되 대체 약속 안 함(정직). 표면 변환은 Vais 백엔드 작업 필요. 2026-06-06 실측.
