@@ -15,10 +15,12 @@
 # Up to 3 user functions (Defs has 3 slots).
 
 struct Env { a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, n: Int, x: Int }
+# Each fn slot: name letter, up to TWO param letters (param2=0 if single-arg),
+# body range [bs,be). CX7 supports 1- or 2-argument functions.
 struct Defs {
-    n0name: Int, n0param: Int, n0bs: Int, n0be: Int,
-    n1name: Int, n1param: Int, n1bs: Int, n1be: Int,
-    n2name: Int, n2param: Int, n2bs: Int, n2be: Int,
+    n0name: Int, n0param: Int, n0param2: Int, n0bs: Int, n0be: Int,
+    n1name: Int, n1param: Int, n1param2: Int, n1bs: Int, n1be: Int,
+    n2name: Int, n2param: Int, n2param2: Int, n2bs: Int, n2be: Int,
     count: Int
 }
 
@@ -79,6 +81,12 @@ fn def_param(d: Defs, i: Int) -> Int {
     if i == 0 { return d.n0param }
     if i == 1 { return d.n1param }
     if i == 2 { return d.n2param }
+    return 0
+}
+fn def_param2(d: Defs, i: Int) -> Int {
+    if i == 0 { return d.n0param2 }
+    if i == 1 { return d.n1param2 }
+    if i == 2 { return d.n2param2 }
     return 0
 }
 fn def_bs(d: Defs, i: Int) -> Int {
@@ -142,22 +150,36 @@ fn eval_factor(src: Str, p0: Int, end: Int, env: Env, defs: Defs) -> Cur {
         let after = skip_sp(src, p + 1, end)
         if after < end {
             if src[after] == 40 {
-                # call: c is fn name, evaluate arg expr inside (...)
-                let argc = eval_expr(src, after + 1, end, env, defs)
-                # argc.pos should be at ')'
-                let close = skip_sp(src, argc.pos, end)
-                let mut np = close
+                # call `c(arg1)` or `c(arg1, arg2)`. Evaluate first arg.
+                let arg1 = eval_expr(src, after + 1, end, env, defs)
+                # after arg1: either ',' (2nd arg follows) or ')'.
+                let mut ap = skip_sp(src, arg1.pos, end)
+                let mut arg2val = 0
+                let mut has2 = 0
+                if ap < end {
+                    if src[ap] == 44 {
+                        let arg2 = eval_expr(src, ap + 1, end, env, defs)
+                        arg2val = arg2.val
+                        has2 = 1
+                        ap = skip_sp(src, arg2.pos, end)
+                    }
+                }
+                let mut np = ap
                 if np < end {
                     if src[np] == 41 { np = np + 1 }
                 }
-                # dispatch
+                # dispatch: bind param<-arg1 (and param2<-arg2 if present).
                 let idx = find_def(defs, c)
                 let mut r = 0
                 if idx >= 0 {
                     let param = def_param(defs, idx)
+                    let p2 = def_param2(defs, idx)
                     let bs = def_bs(defs, idx)
                     let be = def_be(defs, idx)
-                    let callee = eset(zero_env(), param, argc.val)
+                    let mut callee = eset(zero_env(), param, arg1.val)
+                    if has2 == 1 {
+                        callee = eset(callee, p2, arg2val)
+                    }
                     let body = eval_value(src, bs, be, callee, defs)
                     r = body.val
                 }
@@ -284,34 +306,34 @@ fn eval_value(src: Str, start: Int, end: Int, env: Env, defs: Defs) -> Cur {
 
 fn empty_defs() -> Defs {
     return Defs {
-        n0name: 0, n0param: 0, n0bs: 0, n0be: 0,
-        n1name: 0, n1param: 0, n1bs: 0, n1be: 0,
-        n2name: 0, n2param: 0, n2bs: 0, n2be: 0,
+        n0name: 0, n0param: 0, n0param2: 0, n0bs: 0, n0be: 0,
+        n1name: 0, n1param: 0, n1param2: 0, n1bs: 0, n1be: 0,
+        n2name: 0, n2param: 0, n2param2: 0, n2bs: 0, n2be: 0,
         count: 0
     }
 }
-# Append a def into the next free slot (by current count). Returns new Defs.
-fn def_add(d: Defs, name: Int, param: Int, bs: Int, be: Int) -> Defs {
+# Append a def into the next free slot (by current count). param2=0 if single-arg.
+fn def_add(d: Defs, name: Int, param: Int, param2: Int, bs: Int, be: Int) -> Defs {
     if d.count == 0 {
         return Defs {
-            n0name: name, n0param: param, n0bs: bs, n0be: be,
-            n1name: d.n1name, n1param: d.n1param, n1bs: d.n1bs, n1be: d.n1be,
-            n2name: d.n2name, n2param: d.n2param, n2bs: d.n2bs, n2be: d.n2be,
+            n0name: name, n0param: param, n0param2: param2, n0bs: bs, n0be: be,
+            n1name: d.n1name, n1param: d.n1param, n1param2: d.n1param2, n1bs: d.n1bs, n1be: d.n1be,
+            n2name: d.n2name, n2param: d.n2param, n2param2: d.n2param2, n2bs: d.n2bs, n2be: d.n2be,
             count: 1
         }
     }
     if d.count == 1 {
         return Defs {
-            n0name: d.n0name, n0param: d.n0param, n0bs: d.n0bs, n0be: d.n0be,
-            n1name: name, n1param: param, n1bs: bs, n1be: be,
-            n2name: d.n2name, n2param: d.n2param, n2bs: d.n2bs, n2be: d.n2be,
+            n0name: d.n0name, n0param: d.n0param, n0param2: d.n0param2, n0bs: d.n0bs, n0be: d.n0be,
+            n1name: name, n1param: param, n1param2: param2, n1bs: bs, n1be: be,
+            n2name: d.n2name, n2param: d.n2param, n2param2: d.n2param2, n2bs: d.n2bs, n2be: d.n2be,
             count: 2
         }
     }
     return Defs {
-        n0name: d.n0name, n0param: d.n0param, n0bs: d.n0bs, n0be: d.n0be,
-        n1name: d.n1name, n1param: d.n1param, n1bs: d.n1bs, n1be: d.n1be,
-        n2name: name, n2param: param, n2bs: bs, n2be: be,
+        n0name: d.n0name, n0param: d.n0param, n0param2: d.n0param2, n0bs: d.n0bs, n0be: d.n0be,
+        n1name: d.n1name, n1param: d.n1param, n1param2: d.n1param2, n1bs: d.n1bs, n1be: d.n1be,
+        n2name: name, n2param: param, n2param2: param2, n2bs: bs, n2be: be,
         count: 3
     }
 }
@@ -355,6 +377,15 @@ fn run_program(src: Str) -> Int {
                 }
                 let pstart = skip_sp(src, op + 1, n)
                 let pname = src[pstart]
+                # optional 2nd param after a comma: `(a, b)`
+                let mut pname2 = 0
+                let acomma = skip_sp(src, pstart + 1, n)
+                if acomma < j {
+                    if src[acomma] == 44 {
+                        let p2start = skip_sp(src, acomma + 1, n)
+                        pname2 = src[p2start]
+                    }
+                }
                 # find '{'
                 let mut br = pstart
                 let mut g2 = true
@@ -375,7 +406,7 @@ fn run_program(src: Str) -> Int {
                     else if src[be] == 125 { g3 = false }
                     else { be = be + 1 }
                 }
-                defs = def_add(defs, fname, pname, bs, be)
+                defs = def_add(defs, fname, pname, pname2, bs, be)
                 # advance past the '}' for this def (stmt_end stopped at ';' which
                 # is after '}', but body may contain none; jump to be+1)
                 i = be + 1
@@ -407,9 +438,9 @@ fn emit_ir(value: Int) -> Int {
 }
 
 fn main() -> Int {
-    # CX6: a RECURSIVE function — factorial. fact(n) = if n < 2 then 1 else
-    # n * fact(n-1); fact(5) = 120. Recursion is move-safe because Env+Defs are
-    # structs (Vec recursion would hit E022). Literal braces: `{{`/`}}` -> `\{`/`\}`.
-    let value = run_program("fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return f(5)")
+    # CX7: a TWO-ARGUMENT function. add(a, b) = a + b; combined with a recursive
+    # fn: pow-like sum. Here: add(3, 4) + f(5) where f is factorial -> 7 + 120 = 127.
+    # Demonstrates multi-arg parsing/binding alongside recursion. Braces: `{{`/`}}`.
+    let value = run_program("fn a(a, b) {{ return a + b }}; fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return a(3, 4) + f(5)")
     return emit_ir(value)
 }

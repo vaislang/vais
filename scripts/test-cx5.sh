@@ -60,5 +60,19 @@ check 'fn s(n) {{ return if n < 1 then 0 else n + s(n - 1) }}; return s(10)' 55
 # recursive fn + a helper, combined
 check 'fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; fn d(x) {{ return x + 1 }}; return f(4) + d(5)' 30
 
-[ "$fail" -eq 0 ] && echo "RESULT: CX5+CX6 (function defs, calls, recursion) end-to-end OK" || echo "RESULT: FAILURES"
+# --- CX7: two-argument functions ---
+# basic 2-arg
+check 'fn m(a, b) {{ return a + b }}; return m(10, 20)' 30
+check 'fn m(a, b) {{ return a * b }}; return m(6, 7)' 42
+# 2-arg recursive: power
+check 'fn p(b, e) {{ return if e < 1 then 1 else b * p(b, e - 1) }}; return p(3, 4)' 81
+# 2-arg using both params in a condition: max
+check 'fn x(a, b) {{ return if a > b then a else b }}; return x(17, 9)' 17
+check 'fn x(a, b) {{ return if a > b then a else b }}; return x(4, 12)' 12
+# arg expressions
+check 'fn m(a, b) {{ return a + b }}; return m(1 + 2, 3 * 4)' 15
+# 2-arg + recursive fn together
+check 'fn a(a, b) {{ return a + b }}; fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return a(3, 4) + f(5)' 127
+
+[ "$fail" -eq 0 ] && echo "RESULT: CX5-CX7 (defs, calls, recursion, 2-arg) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail

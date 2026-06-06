@@ -115,7 +115,10 @@ compiler.nl을 점진 확장. 각 단계 값-정확성(생성 IR 실행) 검증 
       표현식으로(eval_value, 분기는 eval_expr 재귀 → 분기 내 재귀호출 동작). factorial(5)=120,
       **fibonacci(10)=55**(트리 재귀), sum(1..10)=55 실측. struct-Env가 재귀를 move-safe하게.
       e2e 11/11(CX5 6 + CX6 5). 값-정확성 30/30.
-- [ ] **CX7** 다중 인자 함수 / 지역 변수 (현재 단일 param). self-host 본격 확장.
+- [x] **CX7** 다중 인자 함수 (1~2 param). `fn m(a, b) {{ return a + b }}` 정의/호출, 콤마 파싱
+      (정의 param-list + 호출 arg-list), Defs에 param2 추가, 호출 시 양 param 바인딩. 2-인자 재귀
+      (power p(b,e)=3^4=81), max(a,b), 인자식 m(1+2,3*4)=15 실측. e2e 18/18. 값-정확성 30/30.
+- [ ] **CX8** 함수 본문 지역 변수 (let; 본문이 단일 return식 → ;-문장열). 중간 복잡도.
 - ...최종: nl이 자기 일부 소스 컴파일 (fixpoint 근접).
 
 전략: 단일파일/인덱스로 Vais 버그(Vec-재귀전달/&&단락) 회피 유지. 큰 관문(CX5+)서 막히면

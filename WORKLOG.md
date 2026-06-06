@@ -141,3 +141,13 @@
 - **nl 컴파일러가 재귀 함수(factorial/fibonacci/sum) 프로그램을 컴파일.**
   self-host 표현력: 산술→변수→조건→함수정의→호출→중첩호출→**재귀**. 인터프리터 핵심 달성.
 - 다음 CX7: 다중 인자 / 지역 변수(현재 단일 param).
+
+## 2026-06-06 (/loop iter 16: CX7 다중 인자 함수)
+- **CX7** cx5_compiler.nl을 1~2 인자 함수로 확장. Defs에 param2 필드 추가(슬롯당 name+param+param2+bs+be),
+  def-parser가 param-list 콤마 파싱(`(a, b)`), 호출부가 arg-list 콤마 파싱(`m(3, 4)`) 후 양 param 바인딩
+  (eset 2회). 단일 인자는 param2=0/has2=0으로 하위호환.
+- **실측**: m(a,b)=a+b/a*b, **2-인자 재귀 power** p(b,e)=if e<1 then 1 else b*p(b,e-1) → 3^4=81/2^8=256,
+  max(a,b) (양 param 조건), 인자식 m(1+2,3*4)=15, 2-인자+재귀 혼합 a(3,4)+f(5)=127.
+- 검증: CX5-7 e2e **18/18**(scripts/test-cx5.sh), 값-정확성 **30/30**, 트랜스파일러 22/22, compiler e2e green. 회귀 0.
+- **nl 컴파일러가 다중 인자 함수(2-인자 재귀 포함) 프로그램을 컴파일.**
+- 다음 CX8: 함수 본문 지역 변수(let) — 본문을 단일 return식에서 ;-문장열로 확장.
