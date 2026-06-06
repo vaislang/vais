@@ -21,3 +21,12 @@
 - T3: tests/transpiler_test.py — 입력 nl→기대 Vais 출력 단위테스트 19/19 (트랜스파일러 회귀 방지).
 - T4: nested for 견고성 — e13_nested_for PASS (중첩 idx 카운터 충돌 없음).
 - 값-정확성 23/23 + 트랜스파일러 단위 19/19 둘 다 green. 트랜스파일러 미지원 구문 0.
+
+## 2026-06-06 (/loop iter 4: P3 — 에러 인프라 nl-check)
+- E1: tools/nl-check.py — nl 소스에서 Rust직관 실수를 `help:`+수정코드로 잡음 (P4 핵심).
+  잡는 것: `&&`→and, `||`→or, `!`→not, `as Type`→Type(x), `::`→`.`, turbofish→리터럴.
+  안 잡는 것: 정상 nl(and/Color.Red/Int()/=> return) + 문자열·주석 내 패턴.
+- 핵심: 트랜스파일러가 Rust식(`&&`,`as`)을 통과시켜 '두 길'을 열던 것을 nl-check가 차단 → 모호성0 강제.
+- false positive 0 (예제 36 전부 clean). 단위테스트 tests/nl_check_test.py 11/11.
+- 3개 게이트 green: 값-정확성 24/24 + 트랜스파일러 19/19 + nl-check 11/11.
+- E2(cold-start self-correction 측정)는 신선한 에이전트 필요 → 다음 iter.
