@@ -59,24 +59,53 @@ def map_words(line: str) -> str:
     return "".join(out)
 
 
+def _list_binding(indent, name, ty, rhs):
+    """Render a Vais binding when the RHS is a list literal `[..]` (possibly with
+    a `: List<T>`/`: Vec<T>` annotation). Returns the Vais line, or None if rhs
+    is not a list literal. Rules (verified against Vais):
+      - empty `[]` -> `name: Vec<T> = Vec::new()` (literal `[]` CRASHES for
+        Vec<struct>; Vec::new() is safe). Element type from annotation (required).
+      - non-empty `[1,2,3]` -> `name: Vec<T> = [1,2,3]` (literal works).
+        T from annotation if present, else inferred from first element (Int/F64).
+    """
+    r = rhs.rstrip()
+    if not (r.startswith("[") and r.endswith("]")):
+        return None
+    # element type: prefer annotation `: List<T>` / `: Vec<T>`
+    elem = None
+    if ty:
+        mt = re.search(r"<\s*([A-Za-z_]\w*)\s*>", ty)
+        if mt:
+            elem = mt.group(1)  # map_types later turns Int->i64, List stays etc.
+    if r == "[]":
+        if elem is None:
+            elem = "Int"  # last resort; better: require annotation
+        return f"{indent}{name}: Vec<{elem}> = Vec::new()"
+    if elem is None:
+        first = r[1:-1].split(",")[0].strip()
+        elem = "F64" if re.match(r"^-?\d+\.\d+", first) else "Int"
+    return f"{indent}{name}: Vec<{elem}> = {rhs}"
+
+
 def map_let(line: str) -> str:
-    # `let mut x = expr`  -> `x := mut expr`
+    # `let mut x = expr`  -> `x := mut expr`   (list literals: typed Vec binding)
     # `let x = expr`      -> `x := expr`
-    m = re.match(r"^(\s*)let\s+mut\s+([A-Za-z_][A-Za-z0-9_]*)\s*(:\s*[^=]+)?=\s*(.*)$", line)
+    m = re.match(r"^(\s*)let\s+mut\s+([A-Za-z_][A-Za-z0-9_]*)\s*(:\s*[^=]+?)?\s*=\s*(.*)$", line)
     if m:
         indent, name, ty, rhs = m.groups()
+        lb = _list_binding(indent, name, ty, rhs)
+        if lb is not None:
+            # Vec is push-mutable in Vais without `mut` on the binding, so a
+            # typed Vec binding needs no `mut` keyword (mut on a typed collection
+            # binding isn't Vais syntax). The push works regardless.
+            return lb
         return f"{indent}{name} := mut {rhs}"
-    m = re.match(r"^(\s*)let\s+([A-Za-z_][A-Za-z0-9_]*)\s*(:\s*[^=]+)?=\s*(.*)$", line)
+    m = re.match(r"^(\s*)let\s+([A-Za-z_][A-Za-z0-9_]*)\s*(:\s*[^=]+?)?\s*=\s*(.*)$", line)
     if m:
         indent, name, ty, rhs = m.groups()
-        rhs_stripped = rhs.rstrip()
-        # List literal on RHS: Vais needs an explicit Vec<T> type annotation.
-        # `let v = [10, 20, 30]` -> `v: Vec<i64> = [10, 20, 30]`. We infer the
-        # element type from the first int/float literal (prototype: Int/F64).
-        if rhs_stripped.startswith("[") and rhs_stripped.endswith("]") and rhs_stripped != "[]":
-            first = rhs_stripped[1:-1].split(",")[0].strip()
-            elem = "f64" if re.match(r"^-?\d+\.\d+", first) else "i64"
-            return f"{indent}{name}: Vec<{elem}> = {rhs}"
+        lb = _list_binding(indent, name, ty, rhs)
+        if lb is not None:
+            return lb
         return f"{indent}{name} := {rhs}"
     return line
 

@@ -52,3 +52,11 @@
   검증: "fn add a b"=4단어, "x1 y22 z333"=3숫자 → 43. **nl로 컴파일러 코드 작성·실행 입증.**
 - test.sh 확장: compiler/self/*.nl도 값-정확성 게이트에 편입. 전체 26/26 green.
 - ROADMAP: L3 self-host 큐 (L3.0~L3.5) 추가.
+
+## 2026-06-06 (/loop iter 8: L3.2 lexer 실제 토큰 emit + 버그 2건)
+- **트랜스파일러 버그 수정**: `let mut x: List<T> = []`가 타입 유실 → E004. _list_binding 재작성:
+  빈 []→`Vec::new()`(리터럴 []는 Vec<struct>서 crash), 비어있지않음→리터럴, 타입주석 보존. Vec<Token> 동작.
+- **Vais 버그 발견+추적**: `&&`/`||` **비단락평가** (task_492f7e17) — `i<n && arr[i]`가 i==n서 crash(exit134).
+  side-effect RHS가 LHS-false에도 실행됨 확정. 심각(가드접근 전부 깨짐). nl lexer는 nested-if로 우회.
+- **L3.2**: compiler/self/lexer.nl — Token{kind,start,length} 구조체 + List<Token> emit하는 진짜 lexer.
+  lex("x = 1 + 2")=5토큰(IDENT/PUNCT/NUM/PUNCT/NUM), lex("a b c d e f g")=7 검증. 전체 26/26 green.

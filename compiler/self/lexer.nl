@@ -1,20 +1,20 @@
-# expect: 43
-# nl self-host compiler — L3.1 lexer (written in nl).
+# expect: 5
+# nl self-host compiler — L3.2 lexer (written in nl): emits real tokens.
 #
-# Bootstrap path: this .nl source is transpiled to Vais by the seed transpiler,
-# compiled by vaisc, producing gen1. Eventually gen1 lexes nl directly.
+# Bootstrap: this .nl source -> seed transpiler -> Vais -> vaisc -> gen1.
+# Eventually gen1 lexes nl directly. Uses only the transpiler-supported subset.
 #
-# This first version scans a source string and classifies bytes into token
-# categories, returning a small encoded count so the value-correctness gate can
-# verify the scan logic (exit code). It uses only the transpiler-supported subset
-# (while / if / and / s[i] / comparisons) — no Vec yet (added in a later step to
-# avoid the Vais filter/Vec-specialization issues while bootstrapping).
+# Token kinds (small starter set):
+#   1 = IDENT   (alpha run: letters/_/digits after first)
+#   2 = NUMBER  (digit run)
+#   3 = PUNCT   (single non-space, non-alnum byte: + - ( ) { } etc.)
+# (whitespace is skipped, not tokenized.)
 #
-# Token categories (byte-class based, prototype):
-#   digit   0-9        (48..57)
-#   alpha   a-z A-Z _  (65..90, 97..122, 95)
-#   space   ' ' \t \n  (32, 9, 10)
-#   punct   everything else printable
+# A Token is { kind, start, len }: kind + slice [start, start+len) into the src.
+# This first emitting version returns the TOKEN COUNT so the value-correctness
+# gate verifies the scan (exit code); later steps will consume kind/start/len.
+
+struct Token { kind: Int, start: Int, length: Int }
 
 fn is_digit(c: Int) -> Bool {
     return c >= 48 and c <= 57
@@ -27,6 +27,12 @@ fn is_alpha(c: Int) -> Bool {
     return false
 }
 
+fn is_alnum(c: Int) -> Bool {
+    if is_alpha(c) { return true }
+    if is_digit(c) { return true }
+    return false
+}
+
 fn is_space(c: Int) -> Bool {
     if c == 32 { return true }
     if c == 9 { return true }
@@ -34,50 +40,55 @@ fn is_space(c: Int) -> Bool {
     return false
 }
 
-# Count how many maximal "word" tokens (runs of alpha) are in the source.
-# This is the core lexer loop: scan, skip non-words, count word starts.
-fn count_words(src: Str) -> Int {
-    let mut count = 0
+# Tokenize src into a list of Tokens.
+fn lex(src: Str) -> List<Token> {
+    let mut toks: List<Token> = []
+    let n = src.len()
     let mut i = 0
-    let mut in_word = 0
-    while i < src.len() {
+    while i < n {
         let c = src[i]
-        if is_alpha(c) {
-            if in_word == 0 {
-                count = count + 1
+        if is_space(c) {
+            i = i + 1
+        } else if is_alpha(c) {
+            let start = i
+            # NOTE: Vais && does not short-circuit yet (task_492f7e17), so a
+            # combined `i < n and is_alnum(src[i])` would read src[i] at i==n and
+            # crash. Use a nested guard instead until that backend bug is fixed.
+            let mut go = true
+            while go {
+                if i >= n {
+                    go = false
+                } else if is_alnum(src[i]) {
+                    i = i + 1
+                } else {
+                    go = false
+                }
             }
-            in_word = 1
-        } else {
-            in_word = 0
-        }
-        i = i + 1
-    }
-    return count
-}
-
-fn count_numbers(src: Str) -> Int {
-    let mut count = 0
-    let mut i = 0
-    let mut in_num = 0
-    while i < src.len() {
-        let c = src[i]
-        if is_digit(c) {
-            if in_num == 0 {
-                count = count + 1
+            toks.push(Token { kind: 1, start: start, length: i - start })
+        } else if is_digit(c) {
+            let start = i
+            let mut go = true
+            while go {
+                if i >= n {
+                    go = false
+                } else if is_digit(src[i]) {
+                    i = i + 1
+                } else {
+                    go = false
+                }
             }
-            in_num = 1
+            toks.push(Token { kind: 2, start: start, length: i - start })
         } else {
-            in_num = 0
+            toks.push(Token { kind: 3, start: i, length: 1 })
+            i = i + 1
         }
-        i = i + 1
     }
-    return count
+    return toks
 }
 
 fn main() -> Int {
-    # Source to lex: "fn add a b" has 4 words; "x1 y22 z333" has 3 numbers.
-    let words = count_words("fn add a b")
-    let nums = count_numbers("x1 y22 z333")
-    # Encode both into one exit code to verify both: words*10 + nums = 43.
-    return words * 10 + nums
+    # "fn add(a, b)" -> IDENT(fn) IDENT(add) PUNCT(() IDENT(a) PUNCT(,) IDENT(b) PUNCT())
+    # Wait: count tokens of "x = 1 + 2": IDENT(x) PUNCT(=) NUMBER(1) PUNCT(+) NUMBER(2) = 5
+    let toks = lex("x = 1 + 2")
+    return toks.len()
 }
