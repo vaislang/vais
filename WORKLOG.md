@@ -375,3 +375,14 @@
 - 검증: full e2e **7 PASS**, 값-정확성 **41/41**, 트랜스파일러 24/24. 회귀 0.
 - **🎯 nl 컴파일러가 자신이 쓰인 함수 형태(함수+param+가변locals+while+if+재귀+호출)를 네이티브 IR로 codegen.**
   진짜 self-compile의 핵심 통합 달성. 남은 것=struct/동적 List(FP10e, months급).
+
+## 2026-06-06 (/loop iter 35: FP10e — struct codegen [레코드])
+- **compiler/self/fixpoint_struct.nl**: struct codegen. struct=고정 [N x i64], 필드명→인덱스(배열 GEP 재사용).
+  `struct Name {{ f0,f1,.. }}` 선언(build_defs, StructDef에 ≤6 필드 위치+count) + `Name {{ f: v,.. }}` 리터럴
+  (필드별 GEP store) + `p.field` read(field_index→GEP+load) + `p.field = 식` write. Slot에 ty 필드(struct-type
+  인덱스 또는 -1 scalar). 토큰 struct=26 .=27 추가. 필드 `:`는 토크나이저가 drop(값이 필드명 바로 뒤).
+- **실측**: p.x+p.y=7, 필드대입 p.x=100→104, **3필드 Tok{{kind,start,len}}=9**(컴파일러의 Token 형태!),
+  b.w*b.h=20(area), 식 필드값 P{{a:2+3,b:4*5}}=25.
+- 검증: struct e2e **6 PASS**, 값-정확성 **42/42**, 트랜스파일러 24/24. 회귀 0.
+- **🎯 struct=nl 컴파일러 자신의 레코드(Token/Op/Fn/Slot) 형태를 codegen.** self-compile의 거의 마지막 조각.
+- 다음 FP10g: 동적 List(push/len) codegen — 힙/가변버퍼, months급 최후 조각.
