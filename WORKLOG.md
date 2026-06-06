@@ -277,3 +277,17 @@
 - 검증: codegen2 e2e **8/8**, 값-정확성 **36/36**, 트랜스파일러 24/24. 회귀 0.
 - **nl이 변수 있는 프로그램을 런타임 계산 IR로 codegen.** codegen이 산술→변수로 확장.
 - 다음 FP7: 함수 codegen(define/call IR).
+
+## 2026-06-06 (/loop iter 27: FP7 — 함수 codegen [define/call])
+- **compiler/self/fixpoint_codegen3.nl**: 함수를 진짜 LLVM IR로 codegen. `fn name(p) {{ return e }}` →
+  `define i64 @name(i64 %p) {{ ... }}`, 호출 → `call i64 @name(i64 arg)`. 멀티문자 이름을 LLVM 식별자로
+  emit(emit_name=putchar 바이트별 소스출력). Op에 named(kind 2=%<param>) 추가, print_int_inline/emit_str로
+  IR 수동 조립(% 출력 위해 putchar(37) 사용).
+- **실측**: `fn double(x){{return x*2}}; return double(21)` →
+  `define i64 @double(i64 %x){{%t1=mul %x,2; ret %t1}} define i64 @main(){{%t1=call @double(21); ret %t1}}` → 런타임 42.
+  param 산술본문(x*3-1)/인자식(double(10+11))/호출결과 산술(double(20)+2).
+- **트랜스파일러 한계 회피**: 인라인 let/while(`{ let x=..; ... }` 한 줄)는 라인기반 트랜스파일러가 미인식
+  (E002 'let' undefined) → 멀티라인으로 분리.
+- 검증: codegen3 e2e **7/7**(+"define+call emit" 증명), 값-정확성 **37/37**, 트랜스파일러 24/24. 회귀 0.
+- **nl이 함수 정의+호출을 진짜 다중-함수 LLVM IR로 codegen.** 컴파일러 codegen의 핵심(함수) 달성.
+- 다음 FP8: 조건/분기 codegen(br/phi) → 재귀 함수 codegen.
