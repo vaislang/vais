@@ -766,3 +766,16 @@
 - 검증: 값-정확성 81/81, 회귀0. README 인덱스 e50→e52 + 카운트 63/63. 교훈: **Vais갭의 우회패턴을 코퍼스로 시연**
   (갭 추적만이 아니라 "그럼 어떻게 쓰나"를 AI에게 제공)/struct+인덱스 간접참조가 재귀ADT 대체(self-host 검증된 패턴)/
   성숙단계엔 "막힌 것의 올바른 우회"가 양산보다 높은 가치(AI가 갭 만났을 때 idiom 제공).
+
+## 2026-06-07 (/loop iter 63: 복잡 cold-start 재측정 → nl측 수정(String→Str) + 단어세기 e53)
+- 풍부해진 코퍼스(64, 우회패턴 포함)로 **복잡 cold-start 재측정** — 신선 서브에이전트에게 **단어 세기**(문자열
+  스캔+상태머신=실제 토크나이저) 지시. **알고리즘 완벽 작성**(s[i]/s.len() from e44/e48 + in-word 플래그 from e52)
+  BUT `s: String`(Rust직관) 써서 E001(String≠str literal). **cold-start가 nl측 갭 노출**.
+- **nl측 수정 2건**: ① **트랜스파일러 TYPE_MAP `String`→`str`**(Rust직관 String을 동작하는 str로, 무음 E001 방지)
+  ② **nl-check 규칙 `String`→`Str`**(정식 nl 타입명 안내). 둘 다: String은 이제 **동작(forgiving) + 안내(canonical Str)**.
+  오탐0(식별자 myStringVar 비발화). Vais는 String/str 별타입이라 혼용시 E001이었음.
+- **신규 검증 예제**: e53 단어세기(토크나이저 코어, cold-start 산출 with Str, 4). 값-정확성 81→82. **가장 어려운
+  cold-start 성공**(문자열 스캔+상태머신 종합).
+- 검증: 값-정확성 82/82, nl-check unit 34→37, 트랜스파일러 unit 45→46, 회귀0. PRELUDE String행 추가. 교훈:
+  **cold-start가 실전과제로 nl측 갭 노출**(String — 흔한 Rust직관, 이전 probe들은 안 건드림)/forgiving map + 안내
+  규칙 조합(동작시키되 canonical 가르침)/cold-start는 코퍼스 검증뿐 아니라 갭 발견 도구(이중 가치 재확인).

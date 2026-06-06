@@ -84,6 +84,7 @@ CASES = [
     # code-as-data: type names inside a string must stay verbatim
     ("Int in string kept", 'let s = "type is Int"', ['"type is Int"'], ["i64", "as i64"]),
     ("List in string kept", 'let s = "a List here"', ['"a List here"'], ["Vec"]),
+    ("String type -> str", "fn f(s: String) -> Int {", ["str"], ["String"]),
     # code-as-data: collection methods / enum-qualifier / arm-return inside a
     # string must stay verbatim (these directly affect the self-host compiler,
     # which embeds nl programs as compile("...") strings).

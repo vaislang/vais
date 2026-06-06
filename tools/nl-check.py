@@ -110,6 +110,10 @@ RULES = [
     (re.compile(r"\b(elsif|elif)\b"),
      "the keyword is `else if` (two words), not `elsif`/`elif`",
      lambda m, ln: re.sub(r"\b(elsif|elif)\b", "else if", ln, count=1)),
+    # --- `String` type (Rust-ism) -> nl's type name is `Str` ---
+    (re.compile(r"\bString\b"),
+     "the string type is `Str`, not `String`",
+     lambda m, ln: re.sub(r"\bString\b", "Str", ln, count=1)),
     # --- compound assignment (nl has none; write it out: `x = x + e`). Match
     # `+= -= *= /= %=` but NOT comparison/equality (== <= >= != ) — the operator
     # char is preceded by + - * / % and followed by `=` not part of `==`. ---

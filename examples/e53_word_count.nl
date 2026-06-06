@@ -1,0 +1,25 @@
+# expect: 4
+# Count whitespace-separated words: a word is a maximal run of non-space bytes.
+# Combines string scanning (s[i] / s.len()) with an in-word-flag state machine --
+# the core of a tokenizer. (Written by a cold-start AI from the corpus; the type
+# is Str, not String -- nl-check steers `String` -> `Str`.)
+fn word_count(s: Str) -> Int {
+    let n = s.len()
+    let mut i = 0
+    let mut count = 0
+    let mut inword = 0
+    while i < n {
+        if s[i] == 32 {
+            inword = 0
+        } else {
+            if inword == 0 { count = count + 1 }
+            inword = 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+fn main() -> Int {
+    return word_count("ab cd ef gh")
+}

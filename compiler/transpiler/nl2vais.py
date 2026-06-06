@@ -25,6 +25,10 @@ TYPE_MAP = {
     "Int128": "i128",
     "UInt8": "u8", "UInt16": "u16", "UInt32": "u32", "UInt64": "u64", "UInt128": "u128",
     "F32": "f32", "F64": "f64", "Bool": "bool", "Str": "str", "Char": "char",
+    # `String` is a common Rust-habit spelling of the string type; map it to the
+    # working Vais `str` so it doesn't silently mismatch a `str` literal (E001).
+    # (nl-check still flags `String` -> the canonical nl name is `Str`.)
+    "String": "str",
     # Collection type names: nl List/Map -> Vais Vec/HashMap.
     "List": "Vec", "Map": "HashMap",
 }
