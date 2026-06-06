@@ -200,3 +200,16 @@
 - **nl 결실**: nl이 `&List<Int>` borrow로 Vec 재귀 가능(transpiler가 &List→&Vec 매핑). e15_list_recursion
   예제 추가(sum_from 재귀 10). 코퍼스 31/31, 트랜스파일러 24/24. **fixpoint(AST 순회)의 핵심 기반 확보.**
 - 다음: fixpoint 본격 — nl 토큰리스트/AST를 List로 표현하고 재귀 평가 → 전체 nl 문법 파싱 + codegen.
+
+## 2026-06-06 (/loop iter 21: FP1 — List<Token> 토크나이저 파이프라인 [fixpoint 시작])
+- 사용자 결정 "진짜 fixpoint" 본격 착수. **compiler/self/fixpoint.nl** 신설: cx5_compiler(단일-문자열-스캔)와
+  달리 진짜 파이프라인 — source → tokenize → **List<Token>** → 재귀 평가(&List borrow) → LLVM IR.
+- **List<Token> 토크나이저**: Token{kind,value} struct. 멀티자릿수 숫자(digit run→value), 공백 skip,
+  +/-/* 토큰. tokenize(src)→List<Token> 반환.
+- **재귀 평가기**(&List<Token> borrow): eval_term(*-fold, precedence) + eval_expr/eval_expr_fold.
+  처음 우결합 버그(10-2-3=11) → **left-fold로 좌결합 수정**(eval_expr_fold가 acc에 op 적용하며 재귀).
+- Vais &Vec borrow 재귀 수정(214c97cf)이 List<Token> 재귀 소비를 가능케 함 — fixpoint 핵심 기반.
+- **실측**: 12+3*4=24, 2+3*4-1=13(precedence), 10-2-3=5/100-50-25-10=15(좌결합), 멀티자릿수 100.
+- 검증: fixpoint e2e **10/10**(test-fixpoint.sh), 값-정확성 **32/32**(fixpoint.nl 편입), 트랜스파일러 24/24. 회귀 0.
+- **nl이 진짜 토크나이저→List<Token>→재귀평가 파이프라인으로 산술 컴파일.** cx5의 string-rescan 졸업.
+- 다음 FP2: 변수/함수를 List 파이프라인으로 재구현 → FP4 멀티문자 식별자(토큰이 name 보유).

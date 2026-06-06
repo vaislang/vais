@@ -140,13 +140,23 @@ compiler.nl을 점진 확장. 각 단계 값-정확성(생성 IR 실행) 검증 
 - [x] **CX9** Env 슬롯 a-z 26개로 확장. **eset 압축 핵심**: rebuild-all(676줄) 대신 `let mut e = env;
       if ch==.. {{ e.X = v }}` 26 one-line(struct in-place mutation + 재귀 안전 실측). 변수 t/r/s/z/w,
       3개 distinct fn, high-letter top-level var 실측. e2e 29/29. 값-정확성 30/30.
-- ...최종: nl이 자기 일부 소스 컴파일 (fixpoint 근접). 현 인터프리터=값 평가; 진짜 fixpoint는
-      전체 nl 문법 파싱+실제 codegen 필요(L3 엔드게임, 큰 단계 — 사용자 escalate 대상).
+- ...최종: nl이 자기 일부 소스 컴파일 (fixpoint 근접).
+
+## FIXPOINT 큐 (사용자 결정: 진짜 fixpoint 도전, 2026-06-06)
+List 기반 파이프라인: source → tokenize → **List<Token>** → 재귀 평가/codegen → IR.
+cx5_compiler(단일-문자열-스캔)와 달리 진짜 토크나이저+AST 단계. Vais &Vec borrow 재귀
+수정(compiler 214c97cf)으로 List 재귀 가능해져 시작.
+- [x] **FP1** List<Token> 토크나이저 + 재귀 평가 (compiler/self/fixpoint.nl). 멀티자릿수/공백/
+      precedence(*>+,-)/**좌결합**(left-fold eval_expr_fold). source→List<Token>→&List 재귀 eval→IR.
+      e2e 10/10(test-fixpoint.sh). 값-정확성 32/32.
+- [ ] **FP2** 변수/함수 정의를 List<Token> 파이프라인으로 (cx5_compiler 기능을 List 기반 재구현).
+- [ ] **FP3** 실제 AST 노드(List 기반) + 재귀 파서 (현재는 토큰 직접 평가).
+- [ ] **FP4** 멀티문자 식별자 (이제 List 토큰화로 가능 — 토큰이 name 문자열 보유).
+- [ ] **FP5** nl→실제 codegen 확장 (산술 너머). fixpoint 근접.
 
 ## 완료 정의 충족 상태 (2026-06-06)
 P0~P5 + L3(self-host 미니컴파일러) + CX1~CX9 = **DONE**. ROADMAP 완료정의(L3+코퍼스37+에러인프라
-nl-check+std시작 PRELUDE+게이트3종) **충족**. 이후는 (a) 인터프리터 표현력 추가 확장 또는
-(b) 진짜 fixpoint(전체 문법+codegen)=사용자 결정 필요한 큰 단계.
+nl-check+std시작 PRELUDE+게이트3종) **충족**. FIXPOINT 큐는 그 너머 "진짜 self-compile"로 진행 중.
 
 전략: 단일파일/인덱스로 Vais 버그(Vec-재귀전달/&&단락) 회피 유지. 큰 관문(CX5+)서 막히면
 자체 codegen 또는 Vais 수정 필요성 사용자 escalate.

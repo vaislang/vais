@@ -1,0 +1,136 @@
+# expect: 0
+# nl self-host — fixpoint compiler (List-based pipeline).
+#
+# Unlike cx5_compiler.nl (which re-scans the source string on every eval), this
+# compiler runs a real pipeline: source -> tokenize -> List<Token> -> recursive
+# evaluation over the borrowed token list -> LLVM IR. The List<Token> stage is
+# possible because the Vais `&Vec` borrow-recursion codegen bug was fixed
+# (compiler 214c97cf): a `&List<Token>` can now be threaded through recursive
+# functions without the move/fat-pointer errors.
+#
+# This is the architecture that scales toward a true self-compilation fixpoint.
+# Current grammar: arithmetic `+ - *` over multi-digit non-negative integers,
+# with `*` binding tighter than `+`/`-`, left-associative.
+
+# Token kinds: 0=number(value), 1='+', 2='*', 3='-'.
+struct Token { kind: Int, value: Int }
+
+fn is_digit(c: Int) -> Bool { return c >= 48 and c <= 57 }
+fn is_space(c: Int) -> Bool {
+    if c == 32 { return true }
+    if c == 9 { return true }
+    return false
+}
+
+# Lex a source string into a List<Token> (multi-digit numbers supported).
+fn tokenize(src: Str) -> List<Token> {
+    let mut toks: List<Token> = []
+    let n = src.len()
+    let mut i = 0
+    while i < n {
+        let c = src[i]
+        if is_space(c) {
+            i = i + 1
+        } else if is_digit(c) {
+            # consume a digit run into one number token
+            let mut v = 0
+            let mut go = true
+            while go {
+                if i >= n {
+                    go = false
+                } else if is_digit(src[i]) {
+                    v = v * 10 + (src[i] - 48)
+                    i = i + 1
+                } else {
+                    go = false
+                }
+            }
+            toks.push(Token { kind: 0, value: v })
+        } else if c == 43 {
+            toks.push(Token { kind: 1, value: 0 })
+            i = i + 1
+        } else if c == 42 {
+            toks.push(Token { kind: 2, value: 0 })
+            i = i + 1
+        } else if c == 45 {
+            toks.push(Token { kind: 3, value: 0 })
+            i = i + 1
+        } else {
+            i = i + 1
+        }
+    }
+    return toks
+}
+
+# Evaluate a term `factor (* factor)*` starting at token i with the first factor
+# already in `acc`. Returns the term value; the caller continues from the next
+# non-`*` token. (Recurses by &borrow over the token list.)
+fn eval_term(toks: &List<Token>, i: Int, n: Int, acc: Int) -> Int {
+    if i >= n { return acc }
+    let t = toks[i]
+    if t.kind == 2 {
+        let rhs = toks[i + 1]
+        return eval_term(toks, i + 2, n, acc * rhs.value)
+    }
+    return acc
+}
+
+# Skip past a term (factors joined by '*') to the index of the next +/- (or n).
+fn skip_term(toks: &List<Token>, i: Int, n: Int) -> Int {
+    if i >= n { return n }
+    let t = toks[i]
+    if t.kind == 2 {
+        return skip_term(toks, i + 2, n)
+    }
+    return i
+}
+
+# Evaluate an expression `term ((+|-) term)*` LEFT-associatively. We fold from
+# the left: evaluate the first term into `acc`, then for each following (op,
+# term) apply the op to `acc`. `acc_pending` carries the running value and the
+# pending operator (0=add at start). Recurses by &borrow over the token list.
+fn eval_expr(toks: &List<Token>, i: Int, n: Int) -> Int {
+    if i >= n { return 0 }
+    let first = toks[i]
+    let acc = eval_term(toks, i + 1, n, first.value)
+    let after = skip_term(toks, i + 1, n)
+    return eval_expr_fold(toks, after, n, acc)
+}
+
+# Continue a left-fold: at token `i` we expect an operator (+|-) followed by a
+# term. Apply it to `acc` and recurse, so operators associate left-to-right.
+fn eval_expr_fold(toks: &List<Token>, i: Int, n: Int, acc: Int) -> Int {
+    if i >= n { return acc }
+    let op = toks[i]
+    if op.kind == 1 {
+        let rhs_start = i + 1
+        let rhs_first = toks[rhs_start]
+        let term = eval_term(toks, rhs_start + 1, n, rhs_first.value)
+        let after = skip_term(toks, rhs_start + 1, n)
+        return eval_expr_fold(toks, after, n, acc + term)
+    }
+    if op.kind == 3 {
+        let rhs_start = i + 1
+        let rhs_first = toks[rhs_start]
+        let term = eval_term(toks, rhs_start + 1, n, rhs_first.value)
+        let after = skip_term(toks, rhs_start + 1, n)
+        return eval_expr_fold(toks, after, n, acc - term)
+    }
+    return acc
+}
+
+fn emit_ir(value: Int) -> Int {
+    print("define i64 @main() {")
+    print("  ret i64 {value}")
+    print("}")
+    return 0
+}
+
+fn main() -> Int {
+    # Pipeline: source string -> List<Token> -> recursive eval -> IR.
+    # "12 + 3 * 4" = 12 + 12 = 24.
+    let toks = tokenize("12 + 3 * 4")
+    let n = toks.len()
+    let value = eval_expr(&toks, 0, n)
+    return emit_ir(value)
+}
