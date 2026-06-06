@@ -305,3 +305,14 @@
   컴파일러 codegen의 핵심 전부 달성. fixpoint_codegen~4 (산술/변수/함수/재귀).
 - 정직한 한계: 완전 self-compile=전체 nl 문법(struct/while/Vec/method/&)+codegen 재구현=수천줄. 현재는
   산술/함수 부분집합의 완전한 컴파일러(파싱+제어흐름+함수+재귀 codegen).
+
+## 2026-06-06 (/loop iter 29: SELF_HOST.md 문서화 + 자율 아크 완료 평가)
+- **compiler/self/SELF_HOST.md** 신설: 두 트랙(인터프리터 cx5_compiler~fixpoint3, codegen fixpoint_codegen~4)
+  + 각 모듈이 컴파일하는 것 + 검증 스크립트 표 + 핵심 설계노트(struct-env 재귀/&List borrow/멀티문자 name_eq/
+  brace 이스케이프/LLVM 식별자 emit) + 정직한 한계(산술/함수/재귀 부분집합의 완전한 컴파일러; 완전 self-compile은
+  전체 문법+codegen=months급).
+- **FP9 평가**: codegen 다중인자/지역변수는 전 gen_* 시그니처를 심볼테이블로 리팩터(큰 작업) 필요, 증분 가치.
+  트랜스파일러 인라인 statement 한계(while/let after {)도 재확인 — 깊은 변경 필요, 실용 우회(멀티라인) 존재.
+  → codegen 캡스톤(FP8 재귀) 도달로 자율 증분 아크 자연 완료점. 남은 것(FP9 대형 리팩터/완전 self-compile)은
+  증분-고비용 또는 months급 → 사용자 보고/방향 확인이 적절.
+- 게이트 전부 green(값정확성38 트랜스파일러24 nl-check11, 9 e2e 스위트). 회귀 0.
