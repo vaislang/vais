@@ -420,3 +420,15 @@
 - 검증: fixpoint-full e2e **13 PASS**(List 통합 3 추가), 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
 - **함수+가변변수+while+if+배열+동적List가 한 컴파일러에서 합성.** nl 컴파일러 자신의 코드 구조와 일치.
   다음 FP11c: struct 통합(마지막 데이터구조), 이후 실제 nl 소스 입력=months급.
+
+## 2026-06-06 (/loop iter 39: FP11c struct 통합 평가 — 코어 통합 완료점)
+- FP11c(struct를 fixpoint_full에 통합) 착수: Slot에 sty 추가(회귀0 확인)했으나 struct 통합의 핵심 난점
+  = **`.` 모호성**(이미 lst.len/lst.push가 `.` 사용 — struct p.field와 충돌, gen_factor/skip_factor/gen_stmts
+  3사이트서 slot kind로 분기 필요) + struct-type 테이블 = 가장 intricate한 merge. 절반-완성 위험 회피 위해
+  sty 그라운드워크 되돌림(fixpoint_full = FP11b 검증 상태 유지, build(5)=100 회귀0).
+- **코어 통합 완료 판단**: fixpoint_full이 함수+가변변수+while+if+배열+동적List를 합성 = **nl 컴파일러 자신의
+  주 구조**(함수+루프로 List<Token> 빌드/소비)를 통합 컴파일. struct는 레코드(부차적, fixpoint_struct에 단독
+  검증됨)이고 통합은 `.` 모호성으로 intricate → 별도 집중 세션이 적합.
+- 남은 것: (a) struct를 full에 통합(intricate, `.` 분기) (b) 실제 nl 컴파일러 소스 입력=months급. 둘 다
+  잘-범위화된 자율 /loop 스텝보다 큰 단일집중 작업.
+- 게이트 전부 green(값정확성43 트랜스파일러24 nl-check11). 회귀 0.
