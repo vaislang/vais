@@ -537,3 +537,17 @@
 - **결론: 통합 컴파일러가 토크나이저(iter45) + 파서 키워드인식(iter46) 둘 다 codegen** = 실제 컴파일러의
   가장 어려운 문자열-의존 두 부분 완비. 남은 갭은 **순수 규모(코드 양)**, 능력 아님. 능력 측면 self-host 핵심
   구문 전부 실증 완료. 다음 방향: 실제 소스 부트스트랩(months급) 또는 핵심 인프라(예제코퍼스/에러/std).
+
+## 2026-06-06 (/loop iter 47: P9 코퍼스 확장 + README 갱신 [능력완비 후 인프라 전환])
+- codegen 능력 완비(FP12f) + 실제소스 부트스트랩=months급 TRACKED → **scale-blocked 아닌 핵심 인프라**로 전환.
+  std는 PRELUDE.md가 Vais 사상 명세(자체구현은 L3後)=적정수준 완료 판단 → **P9 예제코퍼스**(nl 최강레버)에 집중.
+- **신규 검증 예제 4종**(AI가 자주 틀리는 패턴, 전부 트랜스파일+빌드+값검증): e16 Option match+payload 바인딩
+  (`Some(v)=>return v`)=42, e17 struct 반환→필드접근(`make(4).x+.y`)=12, e18 while 누적기(가변 acc+카운터,
+  sum of squares 1..=4)=30, e19 문자열 보간 출력(`print("{name} {n}")`)=0. 검증 코퍼스 26→30, 러너 44→48.
+- **corpus README 갱신**(stale 수정): "21/21"→"30/30(러너 48/48)", 인덱스 e10→e19 추가, 미커버 정정
+  (while/print는 이제 커버됨 → 제거; Map/중첩match가 진짜 갭).
+- **추적**: Map<K,V> 실측 시도 → `Map()` 생성자가 `HashMap()`로 사상되나 E002(Vais HashMap 생성자 불일치)
+  + `.get()` Option<&V> 시맨틱 미사상. transpiler 갭, PRELUDE 🔶 유지. 별도 task(months 아님, 중간규모).
+  중첩 match(arm 안 `=> match{}`)=P001 라인재작성기 한계, 함수분리로 우회.
+- 검증: 값-정확성 **48/48 회귀0**, nl-check 4 신규 clean. 교훈: std는 백엔드=Vais인 동안 사상명세가 정답
+  (nl-native std는 L3後)/Map은 중간규모 갭(능력완비와 무관한 transpiler 사상)/P9는 scale-blocked 아닌 즉시 레버.

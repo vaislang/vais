@@ -1,7 +1,8 @@
 # nl 예제 코퍼스 (P9 인프라)
 
 **검증된 nl 예제.** P9(예제 코퍼스 = 최강 레버, cold-start 1/5→5/5)의 핵심 인프라.
-모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 21/21 PASS).
+모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 30/30 PASS; 러너 전체는
+self-host codegen 모듈 포함 48/48).
 
 > 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
 > AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
@@ -31,11 +32,20 @@
 | e08 | Option + arm-return | 8 |
 | e09 | struct 메서드 체인 | 25 |
 | e10 | bool 논리 (and/or/not) | 1 |
+| e11 | while 루프 | 10 |
+| e12 | exclusive range `..` | 10 |
+| e13 | 중첩 for | 9 |
+| e14 | print (출력) | 0 |
+| e15 | List 재귀 (`&List<T>` borrow) | 10 |
+| e16 | Option match + payload 바인딩 | 42 |
+| e17 | struct 반환 → 필드 접근 | 12 |
+| e18 | while 누적기 (가변 acc + 카운터) | 30 |
+| e19 | 문자열 보간 출력 `print("{x}")` | 0 |
 
 ## 미커버 (트랜스파일러/Vais 한계 — ROADMAP TRACKED)
-- `.filter()` — Vais 백엔드 버그 (task_7cfebeba)
-- while 루프 — 트랜스파일러 미구현 (ROADMAP T1)
-- 문자열 보간 출력 — std print 필요 (ROADMAP S2)
+- `.filter()` — Vais 백엔드 버그 (task_7cfebeba).
+- `Map<K,V>` (HashMap) — `Map()` 생성자 + `.get()` Option 시맨틱 미사상(transpiler 갭, PRELUDE 🔶). 별도 task.
+- 중첩 `match` (arm 안에 `=> match {...}`) — 라인-재작성기 P001. 일반 중첩은 함수분리로 우회 가능.
 
 ## 규약
 - 첫 줄 `# expect: N` = main이 반환할 exit code (mod 256).

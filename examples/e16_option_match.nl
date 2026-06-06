@@ -1,0 +1,14 @@
+# expect: 42
+# Option match with payload binding — bind the inner value in the Some arm.
+# (AI commonly forgets the binding or writes `if let`; in nl it's a match arm.)
+fn find(x: Int) -> Option<Int> {
+    if x > 0 { return Some(x * 2) }
+    return None
+}
+
+fn main() -> Int {
+    match find(21) {
+        Some(v) => return v,
+        None => return 0,
+    }
+}
