@@ -730,3 +730,14 @@
 - 검증: 값-정확성 74/74, 회귀0. README 인덱스 e42→e45 + 카운트 56/56. 교훈: **hard-edge 탐색이 능력 경계 확인**
   (제네릭/문자열 ops는 동작=좋은 발견, trait dispatch만 Vais갭)/inherent impl vs trait impl 구분(전자 OK 후자 막힘)/
   "안 될 것 같은" 것도 실측(제네릭 동작은 예상보다 좋음)/nl측 우회 존재(impl Type)면 Vais갭이라도 기능 가용.
+
+## 2026-06-07 (/loop iter 60: hard-edge round2 — 제네릭+struct/char/문자열인덱스/클로저인자 전부 동작)
+- hard-edge round2 heredoc probe. **4종 전부 동작**(능력 경계가 예상보다 넓음): ① **제네릭 함수+struct 조합**
+  (`apply<T>(Pair{})`) ② **char 리터럴+비교**(`'A'=='A'`; 이전 char_lit 실패는 harness artifact였음 — 실제 동작)
+  ③ **문자열 바이트 인덱싱 `s[0]`**(='h'104, 트랜스파일 surface서) ④ **클로저를 함수 인자로**(`apply_fn(|n| n*2, 6)`
+  =12, 일급함수). nl측 갭 없음=트랜스파일러+Vais 견고.
+- **신규 검증 예제 4종**: e46 제네릭+struct / e47 char ops / e48 문자열인덱스 / e49 클로저인자. 코퍼스 첫 char/
+  string-index/closure-as-arg/generic+struct. 값-정확성 74→78.
+- 검증: 값-정확성 78/78, 회귀0. README 인덱스 e45→e49 + 카운트 60/60. 교훈: **능력 경계가 예상보다 넓음**
+  (제네릭+struct/클로저인자/char/string-index 전부 동작)/harness artifact 재확인(char_lit는 멀쩡, heredoc로 측정)/
+  성숙단계 hard-edge 탐색이 "동작하는 고급기능"을 코퍼스에 추가(이중 가치: 견고성 실증 + AI 학습 커버리지).
