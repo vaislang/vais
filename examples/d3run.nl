@@ -1,3 +1,4 @@
+# expect: 6
 fn safe_div(a: Int, b: Int) -> Result<Int, Str> {
     if b == 0 {
         return Err("divide by zero")

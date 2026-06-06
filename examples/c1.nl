@@ -1,3 +1,4 @@
+# expect: 2
 enum Color { Red, Green, Blue }
 fn color_number(c: Color) -> Int {
     match c {

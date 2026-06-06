@@ -1,3 +1,4 @@
+# expect: 7
 fn add_bonus(n: Int) -> Int {
     let bonus = 3
     let f = |x| x + bonus

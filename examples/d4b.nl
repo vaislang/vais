@@ -1,3 +1,4 @@
+# expect: 9
 fn largest(items: List<Int>) -> Int {
     let mut max = items[0]
     for x in items {

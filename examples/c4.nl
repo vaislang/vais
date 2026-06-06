@@ -1,3 +1,4 @@
+# expect: 42
 struct Box {
     value: Int,
 }

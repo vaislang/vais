@@ -1,3 +1,4 @@
+# expect: 42
 pub struct User {
     pub name: Str,
     id: Int,
