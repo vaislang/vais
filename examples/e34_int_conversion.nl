@@ -1,0 +1,7 @@
+# expect: 5
+# Numeric conversion is a call: Int(x) (NOT `x as Int`). Truncates a float.
+# (nl maps Int(x) -> the working Vais `(x as i64)`; F64(x), UInt8(x), ... too.)
+fn main() -> Int {
+    let f: F64 = 5.9
+    return Int(f)
+}

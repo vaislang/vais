@@ -661,3 +661,19 @@
 - 교훈: **nl측 vs Vais측 구분이 작업 방향 결정**(Vais `|` 동작확인 → 트랜스파일러 수정이 정답)/PRELUDE 약속을
   실측(bitor 미매핑)/**기존 map_bitnot도 문자열버그 보유**(새 기능 추가가 기존 잠복버그 노출 — outside_strings
   미적용)/모든 문자열-건드리는 매핑은 outside_strings 필수(code-as-data 불변).
+
+## 2026-06-07 (/loop iter 55: PRELUDE ✅ 감사 — Int(x) 변환 nl측 수정 + map_types 문자열버그)
+- **PRELUDE 남은 ✅ 실측 감사**(push/map/bitor가 다 틀렸으므로): print 보간/Option/Result/`?`는 **실측 OK 확인**
+  (초기 P001들은 내 test-helper의 multi-fn-한줄 artifact였음 — 제대로 된 파일로 재측정시 통과). **Int(x) 변환은
+  실제 깨짐 발견**: `Int(f)`가 `i64(f)`로 사상→Vais P001("found I64, expected expression"). PRELUDE는 `x as i64`
+  약속했으나 트랜스파일러가 spec 미구현(map_types가 `Int`→`i64` 단어매핑만).
+- **수정: `map_conversions` 신설** — `Int(x)`→`(x as i64)`, F64/UInt8.. 등 13 숫자타입 call형을 `as`형으로
+  (map_types 前 실행, outside_strings). Vais `as` 변환 7종 전부 동작 실측. **Some/Ok/struct 생성자는 비변환**
+  (_CONV_TYPES에 없음). **+ map_types 문자열버그 근본수정**(또 발견: `"type is Int and List"`→`"type is i64
+  and Vec"` 오염, outside_strings 미적용 — map_bitnot과 동일 클래스 잠복버그). 보간 `{x}`는 Vais가 처리하므로
+  outside_strings 무해(e19 `lang=nl n=3` 유지 확인).
+- **신규 검증 예제**: e34 Int(x) 변환(F64 5.9→Int 5). 값-정확성 62→63. PRELUDE Int(x) 매핑 정밀화. README 인덱스 e34.
+- 트랜스파일러 unit +7(34→41: 3 변환매핑 + 생성자/타입 비변환 + 2 문자열safety). 값-정확성 63/63, 회귀0.
+- 교훈: **PRELUDE 감사가 spec↔구현 불일치 노출**(spec은 `x as i64` 맞았으나 구현이 `i64(x)`)/test-helper artifact
+  를 실측 재확인(Option/Result는 멀쩡)/**또 다른 문자열버그**(map_types) — 새 매핑 추가 패턴이 기존 outside_strings
+  누락을 연쇄 노출(map_bitnot→map_types)/숫자변환 call형은 nl P4(모호성0)의 핵심(`as` 금지하니 call형 동작 필수).

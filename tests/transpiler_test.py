@@ -75,6 +75,15 @@ CASES = [
     # code-as-data: bitwise fn names inside a string must stay verbatim
     ("bitor in string kept", 'let s = "use bitor(a,b)"', ['"use bitor(a,b)"'], ["(a | b)"]),
     ("bitnot in string kept", 'let s = "call bitnot(x)"', ['"call bitnot(x)"'], ["(~x)"]),
+    # numeric conversion: NumType(x) -> (x as vais), NOT i64(x); constructors safe
+    ("Int(x) -> as i64", "let a = Int(f)", ["(f as i64)"], ["i64(f)"]),
+    ("F64(x) -> as f64", "let a = F64(n)", ["(n as f64)"], ["f64(n)"]),
+    ("UInt8(x) -> as u8", "let a = UInt8(n)", ["(n as u8)"], ["u8(n)"]),
+    ("Some not converted", "let o = Some(9)", ["Some(9)"], ["as i64"]),
+    ("Int as type kept", "fn f(a: Int) -> Int {", ["i64"], ["as i64"]),
+    # code-as-data: type names inside a string must stay verbatim
+    ("Int in string kept", 'let s = "type is Int"', ['"type is Int"'], ["i64", "as i64"]),
+    ("List in string kept", 'let s = "a List here"', ['"a List here"'], ["Vec"]),
 ]
 
 

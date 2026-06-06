@@ -37,11 +37,38 @@ WORD_MAP = {
 }
 
 
+# Numeric scalar conversions: nl writes `Int(x)` / `F64(x)` (P4: conversion is a
+# call, not `x as Int`). Vais's working form is `(x as i64)`. Map the call form to
+# the `as` form BEFORE map_types (which would otherwise produce the invalid
+# `i64(x)`). Only the numeric scalar types -- NOT Str/Bool/Char (different
+# handling) and NOT Some/Ok/struct constructors.
+_CONV_TYPES = {
+    "Int": "i64", "Int8": "i8", "Int16": "i16", "Int32": "i32", "Int64": "i64",
+    "Int128": "i128",
+    "UInt8": "u8", "UInt16": "u16", "UInt32": "u32", "UInt64": "u64", "UInt128": "u128",
+    "F32": "f32", "F64": "f64",
+}
+
+
+def map_conversions(line: str) -> str:
+    def rewrite(p: str) -> str:
+        for nm, vt in _CONV_TYPES.items():
+            # NumType(<expr without nested parens>) -> (<expr> as vais_type)
+            p = re.sub(
+                r"\b" + nm + r"\(([^()]*)\)",
+                lambda m, _vt=vt: f"({m.group(1).strip()} as {_vt})",
+                p,
+            )
+        return p
+    return outside_strings(line, rewrite)
+
+
 def map_types(line: str) -> str:
-    # Replace nl type names with Vais types, whole-word only.
+    # Replace nl type names with Vais types, whole-word only. NOT inside strings
+    # (code-as-data: a string containing "Int"/"List" must stay verbatim).
     def repl(m):
         return TYPE_MAP.get(m.group(0), m.group(0))
-    return re.sub(r"\b[A-Za-z_][A-Za-z0-9_]*\b", repl, line)
+    return outside_strings(line, lambda p: re.sub(r"\b[A-Za-z_][A-Za-z0-9_]*\b", repl, p))
 
 
 def outside_strings(line: str, fn) -> str:
@@ -291,6 +318,7 @@ def transpile_line(line: str) -> str:
     out = map_arm_return(out)
     out = map_enum_qualified(out)
     out = map_words(out)
+    out = map_conversions(out)  # NumType(x) -> (x as vais) BEFORE map_types
     out = map_types(out)
     return out
 
