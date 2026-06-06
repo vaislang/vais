@@ -445,3 +445,16 @@
 - 검증: fixpoint-full e2e **16 PASS**(struct 3 추가), 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
 - **🎯 fixpoint_full = nl 컴파일러가 쓰는 전체 구문(함수+제어흐름+배열+List+struct)을 합성하는 통합 컴파일러.**
   codegen 능력+통합 완비. 남은 것=실제 nl 소스(수천 줄) 입력=규모 작업(months급).
+
+## 2026-06-06 (/loop iter 41: FP12a — 다중/zero param 함수, 실제 소스 향)
+- 사용자 "이어서". FP12(실제 nl 소스 규모) 첫 조각: 통합 컴파일러에 **다중/zero param 함수** 추가.
+- Fn struct에 param 리스트(p0s/p0l~p3s/p3l + npar), build_fns가 `(`~`)` 사이 param-list 파싱(콤마구분 0~4),
+  emit_fn이 `define @f(i64 %a0, i64 %a1, ...)` + 각 param을 alloca/store(%aN→%v<slot>), body locals는 npar부터.
+  gen_factor 호출이 arg_comma_end로 인자 분리해 N개(0~4) 전달(중첩 호출 인자 = depth 추적). 토큰 그대로.
+- **트랜스파일러 한계 재확인**: 새 코드 주석의 lone brace(`'{'` 등 6곳)가 for/while 블록확장 깨 P001 → brace-free
+  문구로 수정. (라인기반 트랜스파일러 알려진 클래스, 반복 패턴.)
+- **실측**: add3(1,2,3)=6, answer()=42(zero-param), add(3,4)=7, s4(...)=100(4-param), one×3=3, **중첩인자
+  add(dbl(3),dbl(4))=14**. 전체 회귀0(sum_to=15, fac=120, dist=9, build/sumarr/g 등). sanity grep %p_in→%a0 갱신.
+- 검증: fixpoint-full e2e **21 PASS**, 값-정확성 **43/43**, 트랜스파일러 24/24. 회귀 0.
+- **통합 컴파일러가 0~4 param 함수+zero-param+중첩 호출 인자를 codegen.** 실제 nl 소스 향 한 조각.
+  다음 FP12b: 문자열/putchar/s[i](IR 텍스트 emit용), 이후 부트스트랩=months급.

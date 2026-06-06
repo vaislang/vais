@@ -67,6 +67,13 @@ check "struct P {{ x, y }}; fn f(n) {{ let p = P {{ x: n, y: 0 }}; p.y = n * 2; 
 # struct AND List together in one function
 check "struct P {{ a, b }}; fn g(n) {{ let p = P {{ a: 10, b: 20 }}; let xs = list(); xs.push(p.a); xs.push(p.b); xs.push(n); return xs[0] + xs[2] }}; return g(5);" 15
 
+# --- FP12: multi-param (0..4) + zero-param functions + nested call args ---
+check "fn add3(a, b, c) {{ return a + b + c }}; fn answer() {{ return 42 }}; return add3(1, 2, 3) + answer();" 48
+check "fn add(a, b) {{ return a + b }}; return add(3, 4);" 7
+check "fn one() {{ return 1 }}; return one() + one() + one();" 3
+check "fn s4(a, b, c, d) {{ return a + b + c + d }}; return s4(10, 20, 30, 40);" 100
+check "fn dbl(x) {{ return x * 2 }}; fn add(a, b) {{ return a + b }}; return add(dbl(3), dbl(4));" 14
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'
@@ -78,7 +85,7 @@ PY
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
 ( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
-if grep -q "define i64 @sum_to(i64 %p_in)" "$tmp/out.ll" && grep -q "store i64 %p_in" "$tmp/out.ll" && grep -q "br label %loop" "$tmp/out.ll" && grep -q "call i64 @sum_to" "$tmp/out.ll"; then
+if grep -q "define i64 @sum_to(i64 %a0)" "$tmp/out.ll" && grep -q "store i64 %a0" "$tmp/out.ll" && grep -q "br label %loop" "$tmp/out.ll" && grep -q "call i64 @sum_to" "$tmp/out.ll"; then
   echo "  PASS emits function(param-alloca) + loop + call (functions-with-imperative-bodies codegen)";
 else echo "  FAIL did not emit function+imperative codegen"; cat "$tmp/out.ll"; fail=1; fi
 

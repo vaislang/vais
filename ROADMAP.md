@@ -264,5 +264,8 @@ nl-check+std시작 PRELUDE+게이트3종) **충족**. FIXPOINT 큐는 그 너머
       struct Tok{{kind,start,len}}=9**(컴파일러 Token 형태!), 필드 write f=12, **struct+List 한 함수 g=15**.
       전체 회귀0(build=100, sumarr=60, fac=120). e2e 16 PASS. 값-정확성 43/43. **fixpoint_full = nl 컴파일러가
       쓰는 전체 구문(함수+제어흐름+배열+List+struct)을 합성하는 통합 컴파일러.**
-- [ ] **FP12** 실제 nl 컴파일러 소스(수천 줄)를 입력 — months급 스케일(통합 컴파일러에 zero-param/문자열/
-      다중param/중첩 등 추가 + 부트스트랩). codegen 능력+통합은 완비, 남은 것은 규모.
+- [x] **FP12a** 다중/zero param 함수 (fixpoint_full). Fn에 param 리스트(p0~p3, npar), build_fns가 param-list
+      파싱, emit_fn이 `define @f(i64 %a0, i64 %a1, ...)` + 각 param alloca/store, 호출이 N개 인자(arg_comma_end로
+      분리) 전달. **add3(1,2,3)=6, answer()=42(zero-param), s4(...)=100(4-param), 중첩인자 add(dbl(3),dbl(4))=14**.
+      전체 회귀0(1-param/재귀/struct/List). e2e 21 PASS. 값-정확성 43/43.
+- [ ] **FP12b** 문자열 리터럴/`putchar`/`s[i]` codegen (실제 소스가 IR 텍스트 emit에 사용). 그 후 부트스트랩 = months급.

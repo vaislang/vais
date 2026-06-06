@@ -20,7 +20,14 @@ struct Op { kind: Int, val: Int, next: Int }
 # A declared variable: source name range -> it lives at alloca %v<slot>.
 struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: Int }
 # A function: name range, param range, body token range [bstart, bend).
-struct Fn { nstart: Int, nlen: Int, ps: Int, pl: Int, bstart: Int, bend: Int }
+# A function: name range, up to 4 params (p0s/p0l..p3s/p3l), param count `npar`,
+# and the body token range [bstart, bend).
+struct Fn {
+    nstart: Int, nlen: Int,
+    p0s: Int, p0l: Int, p1s: Int, p1l: Int, p2s: Int, p2l: Int, p3s: Int, p3l: Int,
+    npar: Int,
+    bstart: Int, bend: Int
+}
 # A struct type: name range + up to 6 field name ranges + field count.
 struct StructDef {
     nstart: Int, nlen: Int,
@@ -267,9 +274,39 @@ fn build_fns(toks: &List<Token>, n: Int) -> List<Fn> {
         let t = toks[i]
         if t.kind == 13 {
             let nt = toks[i + 1]
-            # i+2 '(', i+3 param, i+4 ')', i+5 '{', body from i+6
-            let p = toks[i + 3]
-            let bstart = i + 6
+            # i+2 open-paren; params (idents, comma-separated) until close-paren; then body.
+            let mut p0s = 0
+            let mut p0l = 0
+            let mut p1s = 0
+            let mut p1l = 0
+            let mut p2s = 0
+            let mut p2l = 0
+            let mut p3s = 0
+            let mut p3l = 0
+            let mut npar = 0
+            let mut q = i + 3
+            let mut gp = true
+            while gp {
+                let qt = toks[q]
+                if qt.kind == 10 { gp = false }
+                else if qt.kind == 1 {
+                    if npar == 0 { p0s = qt.nstart; p0l = qt.nlen }
+                    else if npar == 1 { p1s = qt.nstart; p1l = qt.nlen }
+                    else if npar == 2 { p2s = qt.nstart; p2l = qt.nlen }
+                    else { p3s = qt.nstart; p3l = qt.nlen }
+                    npar = npar + 1
+                    q = q + 1
+                }
+                else { q = q + 1 }
+            }
+            # q is close-paren; find the open-brace after it
+            let mut bo = q + 1
+            let mut gb = true
+            while gb {
+                let bt = toks[bo]
+                if bt.kind == 11 { gb = false } else { bo = bo + 1 }
+            }
+            let bstart = bo + 1
             let mut be = bstart
             let mut depth = 1
             let mut go = true
@@ -286,7 +323,12 @@ fn build_fns(toks: &List<Token>, n: Int) -> List<Fn> {
                     else { be = be + 1 }
                 }
             }
-            fns.push(Fn { nstart: nt.nstart, nlen: nt.nlen, ps: p.nstart, pl: p.nlen, bstart: bstart, bend: be })
+            fns.push(Fn {
+                nstart: nt.nstart, nlen: nt.nlen,
+                p0s: p0s, p0l: p0l, p1s: p1s, p1l: p1l, p2s: p2s, p2l: p2l, p3s: p3s, p3l: p3l,
+                npar: npar,
+                bstart: bstart, bend: be
+            })
             i = be + 1
         } else {
             i = i + 1
@@ -296,7 +338,7 @@ fn build_fns(toks: &List<Token>, n: Int) -> List<Fn> {
 }
 
 # Skip a `struct Name { ... }` declaration at `i` (the `struct` token); returns
-# index past the closing '}'.
+# index past the closing brace.
 fn skip_struct_def(toks: &List<Token>, i: Int, n: Int) -> Int {
     let mut b = i + 1
     let mut g1 = true
@@ -410,16 +452,53 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
     if t.kind == 1 {
         let nx = toks[i + 1]
         if nx.kind == 9 {
-            # call: name ( <argexpr> ) — arg ends at the matching ')'
-            let argstop = paren_end(toks, i + 2)
-            let arg = gen_expr(toks, slots, fns, defs, src, i + 2, argstop, counter)
-            let dest = arg.next
+            # call: name ( arg0 [, arg1 [, arg2 [, arg3]]] ) — 0..4 args.
+            let close = paren_end(toks, i + 2)
+            # evaluate each argument (between commas at depth 0), capturing its op.
+            let mut nargs = 0
+            let mut a0k = 0
+            let mut a0v = 0
+            let mut a1k = 0
+            let mut a1v = 0
+            let mut a2k = 0
+            let mut a2v = 0
+            let mut a3k = 0
+            let mut a3v = 0
+            let mut cc = counter
+            let mut q = i + 2
+            let mut ga = true
+            while ga {
+                if q >= close { ga = false }
+                else {
+                    let astop = arg_comma_end(toks, q, close)
+                    let e = gen_expr(toks, slots, fns, defs, src, q, astop, cc)
+                    cc = e.next
+                    if nargs == 0 { a0k = e.kind; a0v = e.val }
+                    else if nargs == 1 { a1k = e.kind; a1v = e.val }
+                    else if nargs == 2 { a2k = e.kind; a2v = e.val }
+                    else { a3k = e.kind; a3v = e.val }
+                    nargs = nargs + 1
+                    q = astop + 1
+                }
+            }
+            let dest = cc
             emit_str("  %t")
             pint(dest)
             emit_str(" = call i64 @")
             emit_name(src, t.nstart, t.nlen)
-            emit_str("(i64 ")
-            emit_op(arg)
+            emit_str("(")
+            let mut ai = 0
+            while ai < nargs {
+                if ai > 0 { emit_str(", ") }
+                emit_str("i64 ")
+                let mut ak = a0k
+                let mut av = a0v
+                if ai == 1 { ak = a1k; av = a1v }
+                else if ai == 2 { ak = a2k; av = a2v }
+                else if ai == 3 { ak = a3k; av = a3v }
+                emit_op(Op { kind: ak, val: av, next: 0 })
+                ai = ai + 1
+            }
             emit_str(")")
             putchar(10)
             return Op { kind: 1, val: dest, next: dest + 1 }
@@ -554,6 +633,28 @@ fn paren_end(toks: &List<Token>, op2: Int) -> Int {
             if depth == 0 { go = false } else { depth = depth - 1; j = j + 1 }
         }
         else { j = j + 1 }
+    }
+    return j
+}
+# Find the end of a call argument: next ',' or ')' at paren-depth 0 (so nested
+# calls' commas/parens are skipped). `close` bounds the scan (the call's ')').
+fn arg_comma_end(toks: &List<Token>, i: Int, close: Int) -> Int {
+    let mut j = i
+    let mut depth = 0
+    let mut go = true
+    while go {
+        if j >= close { go = false }
+        else {
+            let t = toks[j]
+            if t.kind == 9 { depth = depth + 1; j = j + 1 }
+            else if t.kind == 10 {
+                if depth == 0 { go = false } else { depth = depth - 1; j = j + 1 }
+            }
+            else if t.kind == 25 {
+                if depth == 0 { go = false } else { j = j + 1 }
+            }
+            else { j = j + 1 }
+        }
     }
     return j
 }
@@ -772,7 +873,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             let lsti = rhs_struct_type(toks, defs, src, npos)
             if lsti >= 0 {
                 # struct literal: Name { f: v, ... } -> store each field via GEP.
-                # '{' at npos+3; fields from npos+4; field `:` dropped by lexer so
+                # open-brace at npos+3; fields from npos+4; field colon dropped by lexer so
                 # value follows the field name directly.
                 let nf = struct_nfields(defs, lsti)
                 let bopen = npos + 3
@@ -1161,9 +1262,9 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
     return counter
 }
 
-# Skip a fn definition starting at `i` (the `fn` token); returns index past '}'.
+# Skip a fn definition starting at `i` (the `fn` token); returns index past close-brace.
 fn skip_fn_def(toks: &List<Token>, i: Int, n: Int) -> Int {
-    # find the body '{'
+    # find the body open-brace
     let mut b = i + 1
     let mut g1 = true
     while g1 {
@@ -1280,17 +1381,40 @@ fn gen_top(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, slots: &L
 fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, f: Fn) -> Int {
     emit_str("define i64 @")
     emit_name(src, f.nstart, f.nlen)
-    emit_str("(i64 %p_in) {")
+    emit_str("(")
+    # incoming SSA params: %a0, %a1, ...
+    let mut pi = 0
+    while pi < f.npar {
+        if pi > 0 { emit_str(", ") }
+        emit_str("i64 %a")
+        pint(pi)
+        pi = pi + 1
+    }
+    emit_str(") {")
     putchar(10)
-    # param -> alloca %v0
-    emit_str("  %v0 = alloca i64")
-    putchar(10)
-    emit_str("  store i64 %p_in, i64* %v0")
-    putchar(10)
-    # param slot + body local slots
+    # each param -> its own alloca slot %v0..%v<npar-1>, store %aN into it
     let mut slots: List<Slot> = []
-    slots.push(Slot { nstart: f.ps, nlen: f.pl, slot: 0, is_arr: 0, alen: 0 , sty: 0 - 1 })
-    let allslots = add_local_slots(slots, toks, defs, src, f.bstart, f.bend, 1)
+    let mut s2 = 0
+    while s2 < f.npar {
+        let mut pns = f.p0s
+        let mut pnl = f.p0l
+        if s2 == 1 { pns = f.p1s; pnl = f.p1l }
+        else if s2 == 2 { pns = f.p2s; pnl = f.p2l }
+        else if s2 == 3 { pns = f.p3s; pnl = f.p3l }
+        slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 0, alen: 0 , sty: 0 - 1 })
+        emit_str("  %v")
+        pint(s2)
+        emit_str(" = alloca i64")
+        putchar(10)
+        emit_str("  store i64 %a")
+        pint(s2)
+        emit_str(", i64* %v")
+        pint(s2)
+        putchar(10)
+        s2 = s2 + 1
+    }
+    # body locals start at slot npar
+    let allslots = add_local_slots(slots, toks, defs, src, f.bstart, f.bend, f.npar)
     let last = gen_stmts(toks, &allslots, fns, defs, src, f.bstart, f.bend, 1)
     emit_str("}")
     putchar(10)
@@ -1321,9 +1445,7 @@ fn compile(src: Str) -> Int {
 }
 
 fn main() -> Int {
-    # FULL INTEGRATION: struct + function + field access. A Token-like record built
-    # in a function and its fields summed. dist(n): t = Tok{kind:1,start:n,len:3};
-    # return t.kind + t.start + t.len; dist(5) = 1 + 5 + 3 = 9.
-    # Proves struct codegen composes with functions in the unified compiler.
-    return compile("struct Tok {{ kind, start, len }}; fn dist(n) {{ let t = Tok {{ kind: 1, start: n, len: 3 }}; return t.kind + t.start + t.len }}; return dist(5);")
+    # FP12: multi-param + zero-param functions (toward real nl source).
+    # add3(a,b,c)=a+b+c; answer()=42; return add3(1,2,3) + answer() = 6 + 42 = 48.
+    return compile("fn add3(a, b, c) {{ return a + b + c }}; fn answer() {{ return 42 }}; return add3(1, 2, 3) + answer();")
 }
