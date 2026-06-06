@@ -14,7 +14,7 @@
 # recursion is clean — measured). Source is an immutable Str (passes fine).
 # Up to 3 user functions (Defs has 3 slots).
 
-struct Env { a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, n: Int, x: Int }
+struct Env { a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int, i: Int, j: Int, k: Int, l: Int, m: Int, n: Int, o: Int, p: Int, q: Int, r: Int, s: Int, t: Int, u: Int, v: Int, w: Int, x: Int, y: Int, z: Int }
 # Each fn slot: name letter, up to TWO param letters (param2=0 if single-arg),
 # body range [bs,be). CX7 supports 1- or 2-argument functions.
 struct Defs {
@@ -51,23 +51,62 @@ fn eget(env: Env, ch: Int) -> Int {
     if ch == 100 { return env.d }
     if ch == 101 { return env.e }
     if ch == 102 { return env.f }
+    if ch == 103 { return env.g }
+    if ch == 104 { return env.h }
+    if ch == 105 { return env.i }
+    if ch == 106 { return env.j }
+    if ch == 107 { return env.k }
+    if ch == 108 { return env.l }
+    if ch == 109 { return env.m }
     if ch == 110 { return env.n }
+    if ch == 111 { return env.o }
+    if ch == 112 { return env.p }
+    if ch == 113 { return env.q }
+    if ch == 114 { return env.r }
+    if ch == 115 { return env.s }
+    if ch == 116 { return env.t }
+    if ch == 117 { return env.u }
+    if ch == 118 { return env.v }
+    if ch == 119 { return env.w }
     if ch == 120 { return env.x }
+    if ch == 121 { return env.y }
+    if ch == 122 { return env.z }
     return 0
 }
+
 fn eset(env: Env, ch: Int, v: Int) -> Env {
-    if ch == 97 { return Env { a: v, b: env.b, c: env.c, d: env.d, e: env.e, f: env.f, n: env.n, x: env.x } }
-    if ch == 98 { return Env { a: env.a, b: v, c: env.c, d: env.d, e: env.e, f: env.f, n: env.n, x: env.x } }
-    if ch == 99 { return Env { a: env.a, b: env.b, c: v, d: env.d, e: env.e, f: env.f, n: env.n, x: env.x } }
-    if ch == 100 { return Env { a: env.a, b: env.b, c: env.c, d: v, e: env.e, f: env.f, n: env.n, x: env.x } }
-    if ch == 101 { return Env { a: env.a, b: env.b, c: env.c, d: env.d, e: v, f: env.f, n: env.n, x: env.x } }
-    if ch == 102 { return Env { a: env.a, b: env.b, c: env.c, d: env.d, e: env.e, f: v, n: env.n, x: env.x } }
-    if ch == 110 { return Env { a: env.a, b: env.b, c: env.c, d: env.d, e: env.e, f: env.f, n: v, x: env.x } }
-    if ch == 120 { return Env { a: env.a, b: env.b, c: env.c, d: env.d, e: env.e, f: env.f, n: env.n, x: v } }
-    return env
+    let mut e = env
+    if ch == 97 { e.a = v }
+    if ch == 98 { e.b = v }
+    if ch == 99 { e.c = v }
+    if ch == 100 { e.d = v }
+    if ch == 101 { e.e = v }
+    if ch == 102 { e.f = v }
+    if ch == 103 { e.g = v }
+    if ch == 104 { e.h = v }
+    if ch == 105 { e.i = v }
+    if ch == 106 { e.j = v }
+    if ch == 107 { e.k = v }
+    if ch == 108 { e.l = v }
+    if ch == 109 { e.m = v }
+    if ch == 110 { e.n = v }
+    if ch == 111 { e.o = v }
+    if ch == 112 { e.p = v }
+    if ch == 113 { e.q = v }
+    if ch == 114 { e.r = v }
+    if ch == 115 { e.s = v }
+    if ch == 116 { e.t = v }
+    if ch == 117 { e.u = v }
+    if ch == 118 { e.v = v }
+    if ch == 119 { e.w = v }
+    if ch == 120 { e.x = v }
+    if ch == 121 { e.y = v }
+    if ch == 122 { e.z = v }
+    return e
 }
+
 fn zero_env() -> Env {
-    return Env { a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, n: 0, x: 0 }
+    return Env { a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, g: 0, h: 0, i: 0, j: 0, k: 0, l: 0, m: 0, n: 0, o: 0, p: 0, q: 0, r: 0, s: 0, t: 0, u: 0, v: 0, w: 0, x: 0, y: 0, z: 0 }
 }
 
 # --- Defs lookup: given a fn-name letter, return its slot index (0..2) or -1 ---
@@ -501,9 +540,9 @@ fn emit_ir(value: Int) -> Int {
 }
 
 fn main() -> Int {
-    # CX8: a function body with a LOCAL VARIABLE (let). g(x) computes c = x + 1
-    # then returns c * c; g(4) = (4+1)^2 = 25. Combined with a recursive fn:
-    # g(4) + f(5) = 25 + 120 = 145. (Local uses slot `c`; Env slots: a-f,n,x.)
-    let value = run_program("fn g(x) {{ let c = x + 1; return c * c }}; fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return g(4) + f(5)")
+    # CX9: full a-z variable slots. Locals `t`, `r` (outside the old 8-slot set)
+    # plus a recursive fn. g(s): t = s*s; r = t+1; return r. g(4)=17; +f(5)=120
+    # -> 137. Proves the 26-slot Env supports arbitrary single-letter variables.
+    let value = run_program("fn g(s) {{ let t = s * s; let r = t + 1; return r }}; fn f(n) {{ return if n < 2 then 1 else n * f(n - 1) }}; return g(4) + f(5)")
     return emit_ir(value)
 }

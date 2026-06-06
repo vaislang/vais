@@ -90,5 +90,15 @@ check 'let a = 7; let b = 4; return a + b' 11
 # top-level var + fn, var used as arg and in final expr
 check 'let a = 3; fn d(x) {{ return x * 2 }}; return d(a) + a' 9
 
-[ "$fail" -eq 0 ] && echo "RESULT: CX5-CX8 (defs, calls, recursion, 2-arg, locals) end-to-end OK" || echo "RESULT: FAILURES"
+# --- CX9: full a-z variable slots ---
+# locals t, r, s (outside the old 8-slot set)
+check 'fn g(s) {{ let t = s * s; let r = t + 1; return r }}; return g(4)' 17
+# param z, local w
+check 'fn h(z) {{ let w = z + z; return w }}; return h(9)' 18
+# three distinctly-named fns
+check 'fn p(a) {{ return a + 1 }}; fn q(b) {{ return b + 2 }}; fn u(c) {{ return c + 3 }}; return p(10) + q(20) + u(30)' 66
+# high-letter top-level vars
+check 'let t = 5; let w = 6; return t * w' 30
+
+[ "$fail" -eq 0 ] && echo "RESULT: CX5-CX9 (defs, calls, recursion, 2-arg, locals, a-z) end-to-end OK" || echo "RESULT: FAILURES"
 exit $fail

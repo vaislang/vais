@@ -164,3 +164,14 @@
 - 검증: CX5-8 e2e **25/25**(scripts/test-cx5.sh), 값-정확성 **30/30**, 트랜스파일러 22/22, compiler e2e green. 회귀 0.
 - **nl 컴파일러가 지역변수+다중인자+재귀 함수 프로그램을 컴파일.** 인터프리터 표현력 거의 완비.
 - 다음 CX9: Env/Defs 슬롯 확장(기계적) — 더 많은 변수/함수 동시 사용.
+
+## 2026-06-06 (/loop iter 18: CX9 26-슬롯 Env (a-z 변수))
+- **CX9** Env를 8슬롯(a-f,n,x)→**26슬롯(a-z)**로 확장. 임의 단일자 변수/param/local 지원.
+- **eset 압축 핵심 발견**: 26슬롯을 rebuild-all 방식이면 26분기×26필드=676줄(비현실적). 실측으로
+  **struct in-place 필드 변경(`let mut e = env; if ch==.. {{ e.X = v }}`)이 재귀에서 안전**함을 확인
+  → eset 26 one-line 분기로 압축. eget도 26분기(단순). 코드 생성으로 손오류 방지.
+- Vais Vec-recursion 재확인: 여전히 E022(Vec)/clang fat-ptr(&Vec) — struct 우회 계속 필요.
+- 실측: 변수 t/r/s/z/w(구 8슬롯 밖), 3개 distinct fn(p/q/u), high-letter top-level var.
+- 검증: CX5-9 e2e **29/29**, 값-정확성 **30/30**, 트랜스파일러 22/22, compiler e2e green. 회귀 0.
+- **완료정의 충족**: P0-5 + L3 + CX1-9 done. 코퍼스37 + nl-check + PRELUDE + 게이트3종.
+  이후는 인터프리터 확장 또는 진짜 fixpoint(전체문법+codegen=큰 단계, 사용자 escalate).

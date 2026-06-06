@@ -122,8 +122,16 @@ compiler.nl을 점진 확장. 각 단계 값-정확성(생성 IR 실행) 검증 
       let→env eset, return/bare-expr→값). def-parser bs를 `{` 직후로(eval_body가 return 파싱). run_program도
       top-level let 지원(tenv) → cx5_compiler가 CX1-3 compiler 상위집합. 실측: 의존 지역변수, 2-arg+local,
       local→재귀호출인자, bare-expr 본문, top-level var→fn인자. e2e 25/25. 값-정확성 30/30.
-- [ ] **CX9** Env/Defs 슬롯 확장(현 8/3) + 더 많은 변수/함수. 기계적.
-- ...최종: nl이 자기 일부 소스 컴파일 (fixpoint 근접).
+- [x] **CX9** Env 슬롯 a-z 26개로 확장. **eset 압축 핵심**: rebuild-all(676줄) 대신 `let mut e = env;
+      if ch==.. {{ e.X = v }}` 26 one-line(struct in-place mutation + 재귀 안전 실측). 변수 t/r/s/z/w,
+      3개 distinct fn, high-letter top-level var 실측. e2e 29/29. 값-정확성 30/30.
+- ...최종: nl이 자기 일부 소스 컴파일 (fixpoint 근접). 현 인터프리터=값 평가; 진짜 fixpoint는
+      전체 nl 문법 파싱+실제 codegen 필요(L3 엔드게임, 큰 단계 — 사용자 escalate 대상).
+
+## 완료 정의 충족 상태 (2026-06-06)
+P0~P5 + L3(self-host 미니컴파일러) + CX1~CX9 = **DONE**. ROADMAP 완료정의(L3+코퍼스37+에러인프라
+nl-check+std시작 PRELUDE+게이트3종) **충족**. 이후는 (a) 인터프리터 표현력 추가 확장 또는
+(b) 진짜 fixpoint(전체 문법+codegen)=사용자 결정 필요한 큰 단계.
 
 전략: 단일파일/인덱스로 Vais 버그(Vec-재귀전달/&&단락) 회피 유지. 큰 관문(CX5+)서 막히면
 자체 codegen 또는 Vais 수정 필요성 사용자 escalate.
