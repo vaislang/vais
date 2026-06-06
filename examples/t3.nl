@@ -1,0 +1,8 @@
+fn main() -> Int {
+    let x = bitnot(0)
+    if x < 0 {
+        return x + 6
+    } else {
+        return 0
+    }
+}

@@ -1,0 +1,6 @@
+*.vais
+*.ll
+*.warn
+.vais-cache/
+a.out
+/tmp/
