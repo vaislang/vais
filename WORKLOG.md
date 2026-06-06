@@ -693,3 +693,17 @@
 - 교훈: **잠복버그가 패턴이면 일괄 감사**(map_bitnot→map_types→3종 더, 연쇄 노출 대신 선제 sweep)/code-as-data는
   self-host(compile 임베드)에 치명적 — self-host e2e가 핵심 가드/전체줄 재구성 함수(arm_return)는 outside_strings
   대신 blank-then-check/**모든 텍스트-건드리는 매핑은 문자열 안전성 검증 필수**(이제 전 map_ 함수 감사 완료).
+
+## 2026-06-07 (/loop iter 57: cold-start 재측정(강건화 후) + P9 +4)
+- 트랜스파일러 강건화(iter54-56) 후 **cold-start 재측정** — 신선 general-purpose 서브에이전트(nl 처음, 코퍼스만,
+  213줄 컨텍스트)에게 **강건화된 영역 조합 과제**(enum Op 디스패치 + bitwise calc) 작성 지시.
+- **🎯 cold-start 첫시도 성공**: 서브에이전트가 e22(enum 디스패치) + e31(bitwise 워드함수)에서 정확 추론 →
+  `match op { Op.And => return bitand(a,b) }` → 빌드+실행=2(6&3). **iter54 bitwise 수정 + e31 예제가 복합 작동**
+  (수정+예제가 함께 cold-start 가능케 함). e35로 승격.
+- **신규 검증 예제 4종**: e35 계산기 enum+bitwise 디스패치(cold-start, 2) / e36 bool 반환함수→if조건(1) /
+  e37 다중필드 struct 계산(area=50) / e38 음수 `0-n`(5). 값-정확성 63→67.
+- **harness 교훈 재확인**: probe helper의 `printf '%s\n' "$@"` 다중-fn 한줄화 artifact(P001 오탐) → heredoc으로
+  실측해야 정확(bool_fn/negatives 등 멀쩡한데 artifact로 fail 보임). 이전 iter에서도 동일 함정.
+- 검증: 값-정확성 67/67, 회귀0. README 인덱스 e34→e38 + 카운트 49/49. 교훈: **수정+예제가 cold-start 복합 레버**
+  (bitwise 트랜스파일러수정 없었으면 e35 cold-start 실패)/cold-start는 강건화 후 더 넓은 구문 첫시도 가능/
+  probe는 heredoc(다중fn 한줄 artifact 회피)/cold-start 산출물=새 검증예제(이중 레버 지속).
