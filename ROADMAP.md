@@ -344,6 +344,14 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
 - **🎯 #1 부트스트랩 갭: 문자열 파라미터(`fn f(s: Str)`) — 대부분 해결**(FP12l). fixpoint_full이 이제 **string-as-parameter 지원**: param 타입주석(`:` kind16 tokenize + build_fns p0ty..p3ty), Str-param=i8* slot(is_arr=3), 문자열리터럴 arg를 i8* 포인터로 전달(Op kind2), `s[i]` byte-load. 실측 s[0]=65, name_eq shape(`s[a]==s[b]`)=1, s[i]+s[i+1]. **완전 해결**(FP12m): `s.len()` on param도 runtime strlen(NUL까지 walk)로 동작 → 함수가 source를 `s: Str`로 받아 `while i < s.len()`로 스캔 가능 = **self-host 토크나이저 시그니처(`fn tokenize(src: Str)`) 동작**. 실측: param-strlen=5, count-digits-param=3, **실제 토크나이저 ntok(s:Str) on param=3**. #1 부트스트랩 갭 닫힘.
 
 - **🎯 #2 부트스트랩 갭: List 파라미터/반환(`fn f(toks: &List<Token>)`)** — fixpoint_full이 **List-as-parameter/return 미지원**. 현재 List=스택 `[64 x i64]` 버퍼+별도 length라 i64 calling convention으로 못 넘김(param이 i64 오타입, `return xs`가 List 안 넘김, 호출이 단일 i64 전달). **self-host 소스 `&List<Token>` param 177곳 사용**(`fn eval_term(toks: &List<Token>,..)`, `fn eval_expr(toks: &List<Token>,..)` 등 = parser/evaluator 코어, 문자열 param 176과 동급 최다). **핵심 통찰: self-host는 `&List`(by-reference)** = List 버퍼 **포인터** 전달이 자연스러운 해법(복사 아님). **해결경로(dedicated, 문자열보다 큼=아키텍처)**: ①embedded 문법 `&List<T>`/`List<T>` param 타입주석 ②List-param=버퍼 포인터(i64* 또는 전용) slot, 호출 시 버퍼 주소 전달, `xs[i]`/`xs.len`이 포인터 경유 ③`return xs`=List 반환(포인터/구조). String param(FP12l/m)과 같은 패턴이나 2-slot+by-ref라 더 복잡. **#1 다음 최대 갭, parser/eval 부트스트랩 직결.**
+  - **Stage 1 완료(FP12n, a6e28fa)**: `List<T>` param 타입주석 파싱(build_fns, pty=2, `List<...>` 전체 skip).
+  - **검증된 codegen 스킴(clang 실증, run=60)**: List param = **`i64* bufptr` + `i64 len` (2 args)**. callee는
+    `getelementptr i64, i64* %buf, i64 <idx>` + load로 인덱스, `xs.len`=len arg. caller는 버퍼 base GEP
+    (`getelementptr [N x i64],.., i64 0, i64 0`) + length 전달. is_arr=4(List-by-ptr) slot.
+  - **남은 Stage 2(codegen, interlocking)**: emit_fn 시그니처(List param=`i64* %aN, i64 %a<N+1>`=2 arg position)
+    + 슬롯(ptr+len) + call-site(버퍼ptr+len 2 arg emit) + gen_factor `[`/`.len` 포인터경로. **핵심 난점: List param이
+    2 arg 위치 소비→`%aN` 번호 재매핑**(현 1:1 param↔arg 깨짐). dedicated 집중 필요(아키텍처, half-merge 위험).
+    fixpoint_full List push는 read-only `&List`엔 불필요(self-host는 &List=읽기).
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

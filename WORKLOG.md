@@ -989,3 +989,15 @@
 - 이번 iter는 경계 정밀식별+#2 갭 문서화(아키텍처 변경이라 turn 끝 rushed 회피, dedicated 추적). 교훈: **#2 갭=List param
   (177곳, parser/eval 직결)**/string param 다음 최대 갭/self-host `&List` by-ref가 포인터전달 해법 시사/string param 성공이
   토크나이저 body 가능케 함(다음은 parser가 toks List 받는 부분). e2e fixpoint-full 67(회귀0), 값정확성 96/96.
+
+## 2026-06-07 (/loop iter 82: #2 갭 Stage 1 — List param 타입파싱 + codegen 스킴 검증)
+- **#2 갭(List 파라미터) dedicated 시작. Stage 1(FP12n): `List<T>` param 타입주석 파싱**(build_fns `:` 브랜치 확장:
+  `List` 인식→pty=2, `List<...>` 전체를 닫는 `>`까지 skip해 element type(Token)이 param으로 오집계 안 되게; `&`는
+  tokenizer가 이미 drop). parse-only, e2e 67 유지 회귀0. 커밋 a6e28fa.
+- **codegen 스킴 clang 실증(run=60)**: List param = **`i64* bufptr` + `i64 len` (2 args)**. callee `getelementptr i64,
+  i64* %buf, i64 <idx>`+load 인덱스 / `xs.len`=len arg. caller 버퍼 base GEP + length 전달. → 설계 de-risk.
+- **남은 Stage 2(codegen)**: emit_fn 시그니처(List=2 arg 위치) + 슬롯(ptr+len, is_arr=4) + call-site(2 arg emit) +
+  gen_factor 포인터경로. **핵심 난점: List param이 2 arg 위치 소비→`%aN` 번호 재매핑**(현 1:1 깨짐)=interlocking
+  변경. turn 끝 rushed half-merge 위험 → dedicated 집중 다음 회차. 막히면 추적.
+- 교훈: **아키텍처 변경은 스킴 먼저 격리검증**(clang으로 i64*-param+GEP run=60 확인 후 구현=설계확신)/Stage 분리
+  (파싱 먼저 커밋, codegen 다음)/2-wide param이 arg 번호 재매핑 유발=interlocking이라 dedicated 필요. e2e 67, 값정확성 96/96.
