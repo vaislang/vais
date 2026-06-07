@@ -862,3 +862,17 @@
   (2-인자 재귀 지수, power(3,4)=81). array-sum-for는 fr2/e25 중복이라 skip. 값정확성 94→96.
 - 검증: 값-정확성 96/96, 회귀0. README 인덱스 e65→e67 + 카운트 78/78. 교훈: **세션 누적 트랜스파일러 변경의 전체
   회귀 스위프가 안전판정**(self-host e2e가 code-as-data 핵심 가드)/distinct 재귀shape(트리/지수)는 linear factorial과 별개 커버리지.
+
+## 2026-06-07 (/loop iter 72: 🎯 self-host 컴파일러 능력 추가 — 비교를 값으로(return a==b))
+- 부트스트랩 경계 정밀 매핑(실제 소스 fragment를 fixpoint_full.compile()에 먹임). **fixpoint_full이 처리하는 것**:
+  else-if/중첩호출 산술/배열param인덱스/struct+List+while+if 종합 fn 전부 OK. **미처리 발견**: ①`return a == b`
+  (비교를 값으로 — 비교연산자를 if/while 조건서만 처리, expression position선 드롭=LHS만 반환) ②for루프 ③`(...)` 그룹화.
+- **🎯 nl self-host 컴파일러 능력 추가 — 비교-as-value**: gen_fold에 `<`(18)/`>`(19)/`==`(20) arm 추가
+  (icmp + zext i1→i64). 비교는 +/-보다 낮은 precedence라 RHS는 full additive(gen_expr). if/while 조건은 LHS/RHS를
+  oppos서 분리해 sub-range 전달하므로 충돌 없음(조건 핸들러 무영향 확인).
+- 실측: `a==b`=1/0, `a<b`=1, `n>5`=1 전부 동작. if/while 조건/재귀 회귀0(while-cond=10, fac(5)=120).
+- e2e: fixpoint-full **35→39 PASS**(+4 비교-as-value), 값-정확성 aggregate 96/96, 회귀0.
+- **추적(self-host 컴파일러 잔존)**: `(...)` 그룹화 미지원(gen_factor가 `(`를 call로만 — `(a<b)+(b<c)` 실패),
+  for루프 codegen 미구현(while만). 둘 다 fixpoint_full 능력확장 후보(부트스트랩 향). 교훈: **실제 소스 fragment로
+  부트스트랩 경계 정밀 매핑**(months 통째보다 구체적 갭 식별)/비교-as-value는 self-host 소스가 쓰는 핵심(능력 추가 정당)/
+  precedence 낮은 비교는 gen_fold 최종단계/조건핸들러는 sub-range라 충돌없음.

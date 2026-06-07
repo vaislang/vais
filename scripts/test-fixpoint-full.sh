@@ -74,6 +74,16 @@ check "fn one() {{ return 1 }}; return one() + one() + one();" 3
 check "fn s4(a, b, c, d) {{ return a + b + c + d }}; return s4(10, 20, 30, 40);" 100
 check "fn dbl(x) {{ return x * 2 }}; fn add(a, b) {{ return a + b }}; return add(dbl(3), dbl(4));" 14
 
+# --- FP12g: comparison as a VALUE (return a == b / a < b / a > b) -> icmp + zext
+# i1->i64. Previously the compiler dropped the comparison (returned just the LHS);
+# now it produces 1/0. (The self-host's own source returns boolean comparisons.) ---
+check "fn eq(a, b) {{ return a == b }}; return eq(3, 3);" 1
+check "fn eq(a, b) {{ return a == b }}; return eq(3, 4);" 0
+check "fn lt(a, b) {{ return a < b }}; return lt(3, 4);" 1
+check "fn gt(n) {{ return n > 5 }}; return gt(8);" 1
+# (Note: parenthesized comparison combined with arithmetic, e.g. (a<b)+(b<c), is
+# not yet supported -- gen_factor doesn't parse '(' grouping. Tracked below.)
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +

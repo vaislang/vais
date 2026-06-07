@@ -819,6 +819,30 @@ fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
         let nacc = Op { kind: 1, val: dest, next: dest + 1 }
         return gen_fold(toks, slots, fns, defs, src, skip_term(toks, skip_factor(toks, i + 1), stop), stop, nacc)
     }
+    # comparison as a value: `<` (18) / `>` (19) / `==` (20) -> icmp + zext i1->i64.
+    # Lower precedence than +/-, so the RHS is a full additive expression
+    # (gen_expr from the operand). The boolean result is widened to i64 (1/0).
+    if op.kind == 18 or op.kind == 19 or op.kind == 20 {
+        let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, stop, acc.next)
+        let cnum = rhs.next
+        emit_str("  %t")
+        pint(cnum)
+        emit_str(" = icmp ")
+        if op.kind == 18 { emit_str("slt") } else if op.kind == 19 { emit_str("sgt") } else { emit_str("eq") }
+        emit_str(" i64 ")
+        emit_op(acc)
+        emit_str(", ")
+        emit_op(rhs)
+        putchar(10)
+        let zc = cnum + 1
+        emit_str("  %t")
+        pint(zc)
+        emit_str(" = zext i1 %t")
+        pint(cnum)
+        emit_str(" to i64")
+        putchar(10)
+        return Op { kind: 1, val: zc, next: zc + 1 }
+    }
     return acc
 }
 
