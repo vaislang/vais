@@ -275,6 +275,20 @@ check "let n: Int = 42; return n;" 42
 # the real self-host shape: typed-list tokenizer (toks: List<Token> = [] then push)
 check "struct Token {{ kind, value }}; fn tokenize(s: Str) {{ let mut toks: List<Token> = []; let mut i = 0; while i < s.len() {{ let c = s[i]; if c >= 48 and c <= 57 {{ toks.push(Token {{ kind: 1, value: c - 48 }}) }}; i = i + 1 }}; let mut sum = 0; let mut j = 0; while j < toks.len {{ sum = sum + toks[j].value; j = j + 1 }}; return sum }}; return tokenize(\`1a2a3\`);" 6
 
+# --- FP12v: boolean literals `true`/`false` -- real self-host loop-flag pattern ---
+# fixpoint.nl uses `let mut go = true; ... go = false` for digit-run / scan loops.
+# true/false are tokenized as identifiers (kind 1); gen_factor treats them as the
+# integer constants 1/0 (nl bools are i64) instead of looking them up as variables.
+# bool flag controlling a while loop (the `while go { ...; go = false }` pattern)
+check "fn run() {{ let mut go = true; let mut v = 0; while go {{ v = v + 1; if v >= 5 {{ go = false }} }}; return v }}; return run();" 5
+# true as an if condition
+check "fn run() {{ let b = true; if b {{ return 42 }}; return 0 }}; return run();" 42
+# false as an if condition
+check "fn run() {{ let b = false; if b {{ return 0 }}; return 42 }}; return run();" 42
+# the real self-host digit-run tokenize: nested `while go` consuming a multi-digit
+# number into one token (v = v*10 + (d-48)), with `go` a bool loop flag
+check "struct Token {{ kind, value }}; fn tokenize(src: Str, out: List<Token>) {{ let n = src.len(); let mut i = 0; while i < n {{ let c = src[i]; if c >= 48 and c <= 57 {{ let mut v = 0; let mut go = true; while go {{ if i >= n {{ go = false }} else {{ let d = src[i]; if d >= 48 and d <= 57 {{ v = v * 10 + (d - 48); i = i + 1 }} else {{ go = false }} }} }}; out.push(Token {{ kind: 0, value: v }}) }} else {{ i = i + 1 }} }}; return 0 }}; fn run() {{ let toks = list(); tokenize(\`12a34\`, toks); return toks[0].value + toks[1].value }}; return run();" 46
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'

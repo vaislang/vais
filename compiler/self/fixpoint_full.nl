@@ -639,6 +639,13 @@ fn sync_list_len(lslot: Int, lenidx: Int, bufsz: Int, counter: Int) -> Int {
 fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, counter: Int) -> Op {
     let t = toks[i]
     if t.kind == 0 { return Op { kind: 0, val: t.value, next: counter } }
+    # boolean literals `true`/`false` are tokenized as identifiers (kind 1); treat
+    # them as the integer constants 1/0 (Vais/nl bools are i64). Used by the common
+    # self-host `let mut go = true; ... go = false` loop-flag pattern.
+    if t.kind == 1 {
+        if kw4(src, t.nstart, t.nlen, 116, 114, 117, 101) == 1 { return Op { kind: 0, val: 1, next: counter } }
+        if kw5(src, t.nstart, t.nlen, 102, 97, 108, 115, 101) == 1 { return Op { kind: 0, val: 0, next: counter } }
+    }
     if t.kind == 28 {
         # string literal as a value (e.g. a call argument): GEP the @.s<nstart>
         # global to an i8* temp. Op kind 2 = i8* pointer.
