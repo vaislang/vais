@@ -341,7 +341,8 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   `and`/`or`(`if a and b`) **해결**(FP12k, 조건 전체를 gen_expr로 값평가 후 `icmp ne 0` 분기; self-host 26곳=is_alpha/is_digit).
   표현식/제어흐름 codegen은 사실상 완비(함수/재귀/가변/while/if/else/배열/List/struct/문자열-local/비교/`>=<=`/
   `and or`-value/compound 조건/그룹화). **단, 2026-06-07 경계매핑서 #1 부트스트랩 갭 발견(아래).**
-- **🎯 #1 부트스트랩 갭: 문자열 파라미터(`fn f(s: Str)`)** — fixpoint_full이 **string-as-parameter 미지원**.
+- **🎯 #1 부트스트랩 갭: 문자열 파라미터(`fn f(s: Str)`) — 대부분 해결**(FP12l). fixpoint_full이 이제 **string-as-parameter 지원**: param 타입주석(`:` kind16 tokenize + build_fns p0ty..p3ty), Str-param=i8* slot(is_arr=3), 문자열리터럴 arg를 i8* 포인터로 전달(Op kind2), `s[i]` byte-load. 실측 s[0]=65, name_eq shape(`s[a]==s[b]`)=1, s[i]+s[i+1]. **잔존 sub-갭: `s.len()` on param**(param은 컴파일타임 길이 0이라 runtime strlen 필요 — tokenizer 주루프 `while i < src.len()`용; name_eq류는 명시 length 전달이라 OK). 다음 단계.
+- (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
   (`fn tokenize(src: Str)`, `fn name_eq(src: Str,..)` 등) = 가장 많이 쓰는 패턴, bootstrap-critical. 로컬 문자열

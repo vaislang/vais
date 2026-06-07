@@ -25,6 +25,7 @@ struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: In
 struct Fn {
     nstart: Int, nlen: Int,
     p0s: Int, p0l: Int, p1s: Int, p1l: Int, p2s: Int, p2l: Int, p3s: Int, p3l: Int,
+    p0ty: Int, p1ty: Int, p2ty: Int, p3ty: Int,
     npar: Int,
     bstart: Int, bend: Int
 }
@@ -206,6 +207,7 @@ fn tokenize(src: Str) -> List<Token> {
         else if c == 44 { toks.push(Token { kind: 25, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 46 { toks.push(Token { kind: 27, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 59 { toks.push(Token { kind: 6, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 58 { toks.push(Token { kind: 16, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else { i = i + 1 }
     }
     return toks
@@ -360,7 +362,7 @@ fn find_fn(fns: &List<Fn>, src: Str, qs: Int, ql: Int) -> Int {
 }
 
 # Build the function table by scanning for `fn name ( param ) { ... }`.
-fn build_fns(toks: &List<Token>, n: Int) -> List<Fn> {
+fn build_fns(toks: &List<Token>, src: Str, n: Int) -> List<Fn> {
     let mut fns: List<Fn> = []
     let mut i = 0
     while i < n {
@@ -376,12 +378,27 @@ fn build_fns(toks: &List<Token>, n: Int) -> List<Fn> {
             let mut p2l = 0
             let mut p3s = 0
             let mut p3l = 0
+            let mut p0ty = 0
+            let mut p1ty = 0
+            let mut p2ty = 0
+            let mut p3ty = 0
             let mut npar = 0
             let mut q = i + 3
             let mut gp = true
             while gp {
                 let qt = toks[q]
                 if qt.kind == 10 { gp = false }
+                else if qt.kind == 16 {
+                    # `:` -> the next token is the type of the most recent param.
+                    # Str (kind 1 ident "Str") sets type 1; anything else stays 0.
+                    let tyt = toks[q + 1]
+                    let isstr = kw3(src, tyt.nstart, tyt.nlen, 83, 116, 114)
+                    if npar == 1 { p0ty = isstr }
+                    else if npar == 2 { p1ty = isstr }
+                    else if npar == 3 { p2ty = isstr }
+                    else { p3ty = isstr }
+                    q = q + 2
+                }
                 else if qt.kind == 1 {
                     if npar == 0 { p0s = qt.nstart; p0l = qt.nlen }
                     else if npar == 1 { p1s = qt.nstart; p1l = qt.nlen }
@@ -419,6 +436,7 @@ fn build_fns(toks: &List<Token>, n: Int) -> List<Fn> {
             fns.push(Fn {
                 nstart: nt.nstart, nlen: nt.nlen,
                 p0s: p0s, p0l: p0l, p1s: p1s, p1l: p1l, p2s: p2s, p2l: p2l, p3s: p3s, p3l: p3l,
+                p0ty: p0ty, p1ty: p1ty, p2ty: p2ty, p3ty: p3ty,
                 npar: npar,
                 bstart: bstart, bend: be
             })
@@ -531,7 +549,8 @@ fn sty_of(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
     return 0 - 1
 }
 
-# Print an operand inline.
+# Print an operand inline. kind 0 = literal int; kind 1 = i64 temp; kind 2 = i8*
+# temp (string pointer) -- both temps print as %t<val>.
 fn emit_op(o: Op) -> Int {
     if o.kind == 0 { pint(o.val) }
     else { putchar(37); putchar(116); pint(o.val) }
@@ -542,6 +561,21 @@ fn emit_op(o: Op) -> Int {
 fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, counter: Int) -> Op {
     let t = toks[i]
     if t.kind == 0 { return Op { kind: 0, val: t.value, next: counter } }
+    if t.kind == 28 {
+        # string literal as a value (e.g. a call argument): GEP the @.s<nstart>
+        # global to an i8* temp. Op kind 2 = i8* pointer.
+        emit_str("  %t")
+        pint(counter)
+        emit_str(" = getelementptr [")
+        pint(t.value + 1)
+        emit_str(" x i8], [")
+        pint(t.value + 1)
+        emit_str(" x i8]* @.s")
+        pint(t.nstart)
+        emit_str(", i64 0, i64 0")
+        putchar(10)
+        return Op { kind: 2, val: counter, next: counter + 1 }
+    }
     if t.kind == 9 {
         # parenthesized group: `( <expr> )` -> evaluate the inner expression.
         let close = paren_end(toks, i + 1)
@@ -588,12 +622,13 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let mut ai = 0
             while ai < nargs {
                 if ai > 0 { emit_str(", ") }
-                emit_str("i64 ")
                 let mut ak = a0k
                 let mut av = a0v
                 if ai == 1 { ak = a1k; av = a1v }
                 else if ai == 2 { ak = a2k; av = a2v }
                 else if ai == 3 { ak = a3k; av = a3v }
+                # kind 2 = i8* (string pointer); else i64.
+                if ak == 2 { emit_str("i8* ") } else { emit_str("i64 ") }
                 emit_op(Op { kind: ak, val: av, next: 0 })
                 ai = ai + 1
             }
@@ -1117,8 +1152,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             let lsti = rhs_struct_type(toks, defs, src, npos)
             if lsti >= 0 {
                 # struct literal: Name { f: v, ... } -> store each field via GEP.
-                # open-brace at npos+3; fields from npos+4; field colon dropped by lexer so
-                # value follows the field name directly.
+                # open-brace at npos+3; fields from npos+4. Field is `name : value`
+                # (the `:` is tokenized as kind 16); value starts after name + `:`.
                 let nf = struct_nfields(defs, lsti)
                 let bopen = npos + 3
                 let bclose = match_brace(toks, bopen, end)
@@ -1126,7 +1161,9 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 while q < bclose {
                     let fld = toks[q]
                     let fi = field_index(defs, lsti, src, fld.nstart, fld.nlen)
-                    let vstart = q + 1
+                    let mut vstart = q + 1
+                    let colt = toks[q + 1]
+                    if colt.kind == 16 { vstart = q + 2 }
                     let vstop = arr_elem_end(toks, vstart, bclose)
                     let e = gen_expr(toks, slots, fns, defs, src, vstart, vstop, counter)
                     counter = e.next
@@ -1640,35 +1677,52 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
     emit_str("define i64 @")
     emit_name(src, f.nstart, f.nlen)
     emit_str("(")
-    # incoming SSA params: %a0, %a1, ...
+    # incoming SSA params: %a0, %a1, ...  (Str params are i8*, others i64)
     let mut pi = 0
     while pi < f.npar {
         if pi > 0 { emit_str(", ") }
-        emit_str("i64 %a")
+        let mut pty = f.p0ty
+        if pi == 1 { pty = f.p1ty } else if pi == 2 { pty = f.p2ty } else if pi == 3 { pty = f.p3ty }
+        if pty == 1 { emit_str("i8* %a") } else { emit_str("i64 %a") }
         pint(pi)
         pi = pi + 1
     }
     emit_str(") {")
     putchar(10)
-    # each param -> its own alloca slot %v0..%v<npar-1>, store %aN into it
+    # each param -> its own alloca slot %v0..%v<npar-1>, store %aN into it.
+    # Str params: is_arr=3 string slot, `alloca i8*` + store i8*.
     let mut slots: List<Slot> = []
     let mut s2 = 0
     while s2 < f.npar {
         let mut pns = f.p0s
         let mut pnl = f.p0l
-        if s2 == 1 { pns = f.p1s; pnl = f.p1l }
-        else if s2 == 2 { pns = f.p2s; pnl = f.p2l }
-        else if s2 == 3 { pns = f.p3s; pnl = f.p3l }
-        slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 0, alen: 0 , sty: 0 - 1 })
-        emit_str("  %v")
-        pint(s2)
-        emit_str(" = alloca i64")
-        putchar(10)
-        emit_str("  store i64 %a")
-        pint(s2)
-        emit_str(", i64* %v")
-        pint(s2)
-        putchar(10)
+        let mut pty = f.p0ty
+        if s2 == 1 { pns = f.p1s; pnl = f.p1l; pty = f.p1ty }
+        else if s2 == 2 { pns = f.p2s; pnl = f.p2l; pty = f.p2ty }
+        else if s2 == 3 { pns = f.p3s; pnl = f.p3l; pty = f.p3ty }
+        if pty == 1 {
+            slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 3, alen: 0 , sty: 0 - 1 })
+            emit_str("  %v")
+            pint(s2)
+            emit_str(" = alloca i8*")
+            putchar(10)
+            emit_str("  store i8* %a")
+            pint(s2)
+            emit_str(", i8** %v")
+            pint(s2)
+            putchar(10)
+        } else {
+            slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 0, alen: 0 , sty: 0 - 1 })
+            emit_str("  %v")
+            pint(s2)
+            emit_str(" = alloca i64")
+            putchar(10)
+            emit_str("  store i64 %a")
+            pint(s2)
+            emit_str(", i64* %v")
+            pint(s2)
+            putchar(10)
+        }
         s2 = s2 + 1
     }
     # body locals start at slot npar
@@ -1688,7 +1742,7 @@ fn compile(src: Str) -> Int {
     putchar(10)
     # module-level string-literal globals (one per literal, keyed by source pos)
     emit_str_globals(&toks, src, n)
-    let fns = build_fns(&toks, n)
+    let fns = build_fns(&toks, src, n)
     let defs = build_defs(&toks, n)
     # emit each user function
     let m = fns.len()

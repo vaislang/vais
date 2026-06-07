@@ -949,3 +949,17 @@
   정확 식별**(string param 176곳, self-tokenization 직전 최대 갭)/로컬 vs param 문자열 구분이 진단핵심/
   param-typing은 시그니처 타입주석 필요(무타입선 string 추론 불가). self-host codegen은 표현식/제어흐름은 완비,
   string-param이 다음 큰 관문.
+
+## 2026-06-07 (/loop iter 79: 🎯🎯 #1 부트스트랩 갭 대부분 해결 — 문자열 파라미터 (FP12l))
+- **#1 부트스트랩 갭(문자열 파라미터, self-host 176곳) dedicated 다단계 구현**: ①tokenize `:`→kind16
+  (struct 리터럴 `name: val`이 `:` 토큰 가정 안해 4 fail→struct field vstart가 `:` skip하게 수정) ②Fn struct에
+  p0ty..p3ty 타입필드, build_fns가 `:` 후 타입ident 파싱(`Str`→1, src 인자 threading) ③emit_fn이 Str-param을
+  `i8* %aN` 시그니처 + is_arr=3 slot + `alloca i8*`/store ④gen_factor strlit-as-value(Op kind2=i8* ptr, 전역 GEP)
+  ⑤call-arg가 kind2면 `i8*` 타입 emit. 격리후통합, 단계별 빌드+e2e.
+- 실측: **string param 동작** s[0]=65/s[1]=66, **name_eq shape** `s[a]==s[b]`=1, s[i]+s[i+1]=131. **잔존 sub-갭:
+  `s.len()` on param**(param 컴파일타임 길이 0→runtime strlen 필요; tokenizer 주루프용, name_eq류는 명시 length라 OK).
+- 회귀0(int param/재귀/struct 리터럴 전부 유지 — `:` 토큰화가 struct깬 것 즉시 수정). e2e fixpoint-full **60→64 PASS**,
+  aggregate 96/96. SELF_HOST.md FP12l, ROADMAP #1 갭 대부분해결 표시.
+- 교훈: **#1 갭 dedicated 다단계가 정답**(5단계 격리후통합)/새 토큰(`:`)이 기존 구문(struct 리터럴) 깰 수 있음→
+  즉시 회귀확인+수정/Op kind 확장(2=i8*ptr)으로 타입드 인자/param-typing은 시그니처 타입주석 기반. **self-host
+  최다 패턴(176곳 Str param) 동작=self-tokenization 큰 진전**. 다음=`s.len()` on param(runtime strlen).

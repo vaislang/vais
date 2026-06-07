@@ -125,6 +125,17 @@ check "fn f(n) {{ let mut s = 0; let mut i = 0; while i < n and s < 100 {{ s = s
 # its own lexer's core. ---
 check "fn is_digit(c) {{ return c >= 48 and c <= 57 }}; fn is_alpha(c) {{ return c >= 97 and c <= 122 }}; fn is_space(c) {{ return c == 32 }}; fn classify(c) {{ if is_digit(c) {{ return 1 }}; if is_alpha(c) {{ return 2 }}; if is_space(c) {{ return 3 }}; return 0 }}; return classify(53) + classify(104) * 10 + classify(32) * 50;" 171
 
+# --- FP12l: STRING PARAMETERS (`fn f(s: Str)`) -- the #1 bootstrap pattern (the
+# self-host source uses Str params 176x). Param typed i8*, string-literal arg
+# passed as a pointer, s[i] byte-load. (s.len() on a param needs runtime length;
+# tracked separately -- these pass an explicit index or length.) ---
+check "fn f(s: Str) {{ return s[0] }}; return f(\`A\`);" 65
+check "fn f(s: Str) {{ return s[1] }}; return f(\`AB\`);" 66
+# name_eq shape: compare two bytes of a string parameter
+check "fn name_eq(s: Str, a: Int, b: Int) {{ return s[a] == s[b] }}; return name_eq(\`abca\`, 0, 3);" 1
+# string param + int params + byte arithmetic
+check "fn f(s: Str, i: Int) {{ return s[i] + s[i + 1] }}; return f(\`AB\`, 0);" 131
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +
