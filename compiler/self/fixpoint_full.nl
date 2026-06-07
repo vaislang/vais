@@ -1522,6 +1522,28 @@ fn rhs_struct_type(toks: &List<Token>, defs: &List<StructDef>, src: Str, npos: I
     }
     return 0 - 1
 }
+# If the RHS is `<listvar>[<expr>]` where <listvar> is a List-of-structs (slot
+# is_arr 2 (local) or 4 (param) with sty>=0), returns the element struct-type
+# index, else -1. This lets `let t = toks[i]` bind a whole Token struct to a
+# local (copying its fields) so `t.kind` / `t.value` work -- the core eval
+# pattern `let t = toks[i]; if t.kind == 2 { ... }`.
+fn rhs_los_elem_sty(toks: &List<Token>, slots: &List<Slot>, src: Str, npos: Int) -> Int {
+    let vp = rhs_pos(toks, npos)
+    let rhs = toks[vp]
+    if rhs.kind == 1 {
+        let after = toks[vp + 1]
+        if after.kind == 23 {
+            let karr = isarr_of(slots, src, rhs.nstart, rhs.nlen)
+            if karr == 2 {
+                return sty_of(slots, src, rhs.nstart, rhs.nlen)
+            }
+            if karr == 4 {
+                return sty_of(slots, src, rhs.nstart, rhs.nlen)
+            }
+        }
+    }
+    return 0 - 1
+}
 # Element struct-type from a let's type annotation `name : List<Type> = ...`,
 # given `npos` = the name token. Returns the struct-type index, or -1 (no
 # annotation, or a non-struct element like List<Int>). This is the authoritative
@@ -1723,6 +1745,20 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>,
                 emit_str(" x i64]")
                 putchar(10)
                 next_slot = next_slot + 1
+            } else if rhs_los_elem_sty(toks, &slots, src, npos) >= 0 {
+                # `let t = toks[i]` binding a List-of-structs element: t is a struct
+                # local (alloca [nf x i64], sty=elem type). The field copy is emitted
+                # in gen_stmts; here we just reserve the slot.
+                let est = rhs_los_elem_sty(toks, &slots, src, npos)
+                let nf = struct_nfields(defs, est)
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 0, alen: 0 , sty: est })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca [")
+                pint(nf)
+                emit_str(" x i64]")
+                putchar(10)
+                next_slot = next_slot + 1
             } else if rhs_is_list(toks, src, npos) == 1 {
                 # List: buffer at %v<slot>, length at %v<slot+1>=0.
                 # Element type: a `: List<Type>` annotation is authoritative (covers
@@ -1885,8 +1921,107 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             # RHS value position handles typed lets `name : Type = rhs`.
             let vp = rhs_pos(toks, npos)
             let rhs = toks[vp]
+            let los_est = rhs_los_elem_sty(toks, slots, src, npos)
             let lsti = rhs_struct_type(toks, defs, src, npos)
-            if lsti >= 0 {
+            if los_est >= 0 {
+                # `let t = toks[idx]` -> copy the struct element into t's [nf x i64]
+                # local: for each field k, t[k] = buf[idx*nf + k]. `vp` is the list
+                # var token; `[` at vp+1, index expr from vp+2.
+                let lvar = toks[vp]
+                let lnf = struct_nfields(defs, los_est)
+                let lkarr = isarr_of(slots, src, lvar.nstart, lvar.nlen)
+                let lsrcslot = find_slot(slots, src, lvar.nstart, lvar.nlen)
+                let libend = bracket_end(toks, vp + 2)
+                let lidx = gen_expr(toks, slots, fns, defs, src, vp + 2, libend, counter)
+                counter = lidx.next
+                # base = idx * nf  (element offset into the i64 buffer)
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = mul i64 ")
+                emit_op(lidx)
+                emit_str(", ")
+                pint(lnf)
+                putchar(10)
+                let lbase = counter
+                counter = counter + 1
+                # for a param list (is_arr=4) load the buffer pointer once
+                let mut lbufptr = 0
+                if lkarr == 4 {
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = load i64*, i64** %v")
+                    pint(lsrcslot)
+                    putchar(10)
+                    lbufptr = counter
+                    counter = counter + 1
+                }
+                let lbufsz = 64 * lnf + 1
+                let mut fk = 0
+                while fk < lnf {
+                    # source elem ptr = buf + (base + fk)
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = add i64 %t")
+                    pint(lbase)
+                    emit_str(", ")
+                    pint(fk)
+                    putchar(10)
+                    let foff = counter
+                    counter = counter + 1
+                    if lkarr == 4 {
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = getelementptr i64, i64* %t")
+                        pint(lbufptr)
+                        emit_str(", i64 %t")
+                        pint(foff)
+                        putchar(10)
+                    } else {
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = getelementptr [")
+                        pint(lbufsz)
+                        emit_str(" x i64], [")
+                        pint(lbufsz)
+                        emit_str(" x i64]* %v")
+                        pint(lsrcslot)
+                        emit_str(", i64 0, i64 %t")
+                        pint(foff)
+                        putchar(10)
+                    }
+                    let fsrc = counter
+                    counter = counter + 1
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = load i64, i64* %t")
+                    pint(fsrc)
+                    putchar(10)
+                    let fval = counter
+                    counter = counter + 1
+                    # dest = t[fk]  (t is a [nf x i64] struct local at %v<slot>)
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = getelementptr [")
+                    pint(lnf)
+                    emit_str(" x i64], [")
+                    pint(lnf)
+                    emit_str(" x i64]* %v")
+                    pint(slot)
+                    emit_str(", i64 0, i64 ")
+                    pint(fk)
+                    putchar(10)
+                    let fdst = counter
+                    counter = counter + 1
+                    emit_str("  store i64 %t")
+                    pint(fval)
+                    emit_str(", i64* %t")
+                    pint(fdst)
+                    putchar(10)
+                    fk = fk + 1
+                }
+                let stop = find_semi(toks, libend + 1, end)
+                i = stop + 1
+            } else if lsti >= 0 {
                 # struct literal: Name { f: v, ... } -> store each field via GEP.
                 # `vp` is the struct-name token; the open-brace is at vp+1. Field is
                 # `name : value` (the `:` is tokenized as kind 16).
