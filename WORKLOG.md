@@ -1038,3 +1038,16 @@
   **#1/#2/#3 부트스트랩 3대 갭 전부 해결**(string param 176곳/List param 177곳/8param). **self-host 코어 함수 시그니처
   (tokenize/name_eq/kw3/gen_stmts/gen_expr) 전부 fixpoint_full로 컴파일.** 다음=실제 self-host 함수 여러개 조합(tokenize+
   name_eq+kw3 통합 미니렉서) 먹여 다음 경계, 또는 List 반환(out-param).
+
+## 2026-06-07 (/loop iter 86: 다함수 미니렉서 동작 + #4 갭 식별 — List 반환)
+- 3대 갭 해결 후 **다함수 실제 self-host 미니렉서 동작 확인**: is_d/is_a/kw_let 헬퍼 + `lex(s: Str)` 스캔이
+  string param 위에서 keyword 카운트=2. **tokenize→consume 파이프라인 동작**: build List<token> 로컬(string 스캔)
+  +SEPARATE consumer에 List-param 전달=4. self-host tokenize→parse shape 컴파일.
+- **#4 갭 식별: List 반환**(`fn tokenize(src) -> List<Token>`). list-return invalid-IR(스택버퍼 escape). **self-host
+  28 함수가 List 반환**(tokenize/lex/build_fns/build_defs=토크나이저/파서 주출력). **검증된 스킴(clang run=43):
+  return-as-out-param**(hidden i64* out arg, callee가 out에 원소+len@[63] write, 호출자 버퍼할당+읽음). **회피 NOW:
+  tokenize-pipeline 동작하므로 out-param 재작성으로 우회 가능**(직접 List-return은 편의).
+- 경계 정밀식별+#4 문서화(검증된 스킴). 해결경로=List-param과 같은 패턴(build_fns ret타입 감지+emit_fn out-arg+
+  return-copy+call 버퍼할당). dedicated. e2e 74 회귀0, 값정확성 96/96. 교훈: **3대 갭 해결 후 다함수 미니렉서/
+  파이프라인 동작**(능력 통합 실증)/#4 List-return은 우회(out-param) 존재=비-blocking, 직접반환은 편의/검증된 스킴
+  먼저. **부트스트랩: #1/#2/#3 해결, #4 List-return 식별(우회존재).**

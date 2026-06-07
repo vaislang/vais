@@ -370,6 +370,14 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
     call-arg a0-a7, gen_factor 8 args). mechanical 확장 ~10 site 무회귀. 실측: s8(8param)=36, **REAL self-host
     `name_eq`(5param)=1/0, `kw3`(6param)=1** 동작. **#1/#2/#3 = 부트스트랩 3대 갭 전부 해결**(string param/List param/8param).
     self-host 코어 함수 시그니처(tokenize/name_eq/kw3/gen_stmts/gen_expr) 전부 fixpoint_full로 컴파일.
+- **🎯 #4 부트스트랩 갭: List 반환(`fn tokenize(src) -> List<Token>`)** — fixpoint_full이 **List-return 미지원**
+  (`return xs` 스택버퍼 escape 못함). **self-host 28 함수가 List 반환**(tokenize/lex/build_fns/build_defs 등=토크나이저/
+  파서 주출력). **검증된 스킴(clang run=43)**: return-as-out-param — `-> List` 함수에 hidden `i64* out` 첫 arg 추가,
+  callee가 out 버퍼에 원소+len@[63] write, 호출자가 `[64 x i64]` 버퍼 할당+base 전달+이후 자기 버퍼서 읽음.
+  **회피 가능(NOW)**: tokenize-pipeline(build List 로컬+consumer에 List-param 전달)은 이미 동작 → 자기 함수를
+  `fn tokenize(out: List<Int>)`(out-param)로 재작성하면 우회. 직접 List-return은 편의(능력은 out-param으로 존재).
+  **해결경로(dedicated, List-param과 같은 패턴)**: build_fns가 `-> List` ret타입 감지, emit_fn hidden out-arg,
+  return-xs를 out-copy로, call-site 버퍼할당+바인딩. mechanical+아키텍처 혼합. **부트스트랩 4번째 갭(28곳, 우회존재).**
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
