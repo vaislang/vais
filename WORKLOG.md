@@ -975,3 +975,17 @@
   컴파일타임 길이 모름)/로컬 vs param을 alen>0로 분기(로컬=컴파일타임, param=runtime)/**#1 부트스트랩 갭 닫힘**
   =함수가 source string param 받아 스캔 가능=self-tokenization 핵심 도달. **이번 turn FP12l+m으로 self-host
   최다 패턴(Str param 176곳) 완전 동작.** 다음=실제 self-host 토크나이저 함수 1개를 통째로 fixpoint_full에 먹여보기.
+
+## 2026-06-07 (/loop iter 81: 🎯 #2 부트스트랩 갭 식별 — List 파라미터/반환 (`fn f(toks: &List<Token>)`))
+- 실제 토크나이저 body shape 경계매핑: **string param → List<Token> 빌드 동작**(tokenize-to-list=4, struct-token-build=67,
+  classify-tokenize 멀티클래스+helper dispatch=5 — FP12l/m string param이 토크나이저 body 가능케 함). 다음 경계 발견:
+  **List-as-parameter/return 실패**(list-as-param=0; `fn sum_list(xs)` List param이 i64 오타입, `fn build()` `return xs`가
+  List 안넘김, 호출 단일 i64 전달).
+- **#2 부트스트랩 갭 확정**: List 파라미터/반환. **self-host 소스 `&List<Token>` param 177곳**(eval_term/eval_expr 등
+  parser/eval 코어, string param 176과 동급 최다). 아키텍처적으로 string보다 큼(List=스택 [64 x i64] 버퍼+length라
+  i64 convention 못넘김). **핵심: self-host는 `&List`(by-ref)** → 버퍼 **포인터** 전달이 자연 해법(복사 아님).
+- **해결경로(dedicated)**: ①`&List<T>`/`List<T>` param 타입주석 tokenize/parse ②List-param=버퍼 포인터 slot+호출 주소전달+
+  `xs[i]`/`xs.len` 포인터경유 ③`return xs` List 반환. String param(FP12l/m)과 같은 패턴이나 2-slot+by-ref.
+- 이번 iter는 경계 정밀식별+#2 갭 문서화(아키텍처 변경이라 turn 끝 rushed 회피, dedicated 추적). 교훈: **#2 갭=List param
+  (177곳, parser/eval 직결)**/string param 다음 최대 갭/self-host `&List` by-ref가 포인터전달 해법 시사/string param 성공이
+  토크나이저 body 가능케 함(다음은 parser가 toks List 받는 부분). e2e fixpoint-full 67(회귀0), 값정확성 96/96.
