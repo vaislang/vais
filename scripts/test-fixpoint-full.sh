@@ -243,6 +243,18 @@ check "struct Tok {{ kind, val }}; fn fill(out: List<Tok>) {{ out.push(Tok {{ ki
 # out-param List<Token> -> caller consumes by field (digit-token value sum)
 check "struct Token {{ kind, value }}; fn tok(s: Str, out: List<Token>) {{ let mut i = 0; while i < s.len() {{ let c = s[i]; if c >= 48 and c <= 57 {{ out.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ out.push(Token {{ kind: 0, value: 0 }}) }}; i = i + 1 }}; return 0 }}; fn run() {{ let toks = list(); tok(\`a1b2\`, toks); let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; return run();" 3
 
+# --- FP12t: the full tokenize->eval pipeline (List<Token> SHARED across functions) ---
+# The self-host shape: tokenize fills a List<Token> out-param, then a SEPARATE
+# consumer function takes that List<Token> as a param and dispatches on
+# toks[i].kind. The consumer is read-only (no push), so its element type must be
+# inferred from its OWN `List<Token>` param annotation, not a body push-scan.
+# tokenize -> eval(toks: List<Token>): sum the numeric tokens (dispatch on kind)
+check "struct Token {{ kind, value }}; fn tokenize(s: Str, out: List<Token>) {{ let mut i = 0; while i < s.len() {{ let c = s[i]; if c >= 48 and c <= 57 {{ out.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ out.push(Token {{ kind: 2, value: 0 }}) }}; i = i + 1 }}; return 0 }}; fn eval(toks: List<Token>) {{ let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; fn run() {{ let toks = list(); tokenize(\`1+2+3\`, toks); return eval(toks) }}; return run();" 6
+# a mini calculator: eval walks tokens, dispatches on kind, accumulates
+check "struct Token {{ kind, value }}; fn tokenize(s: Str, out: List<Token>) {{ let mut i = 0; while i < s.len() {{ let c = s[i]; if c >= 48 and c <= 57 {{ out.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ out.push(Token {{ kind: 2, value: 0 }}) }}; i = i + 1 }}; return 0 }}; fn eval(toks: List<Token>) {{ let mut acc = 0; let mut j = 0; while j < toks.len {{ let k = toks[j].kind; if k == 1 {{ acc = acc + toks[j].value }} else {{ acc = acc + 0 }}; j = j + 1 }}; return acc }}; fn run() {{ let toks = list(); tokenize(\`2+3+4\`, toks); return eval(toks) }}; return run();" 9
+# TWO separate consumers over the same tokenize-filled List<Token> (multi-pass)
+check "struct Token {{ kind, value }}; fn tokenize(s: Str, out: List<Token>) {{ let mut i = 0; while i < s.len() {{ let c = s[i]; if c >= 48 and c <= 57 {{ out.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ out.push(Token {{ kind: 2, value: 0 }}) }}; i = i + 1 }}; return 0 }}; fn count_nums(toks: List<Token>) {{ let mut n = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ n = n + 1 }}; j = j + 1 }}; return n }}; fn sum_nums(toks: List<Token>) {{ let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; fn run() {{ let toks = list(); tokenize(\`5+6\`, toks); return count_nums(toks) * 100 + sum_nums(toks) }}; return run();" 211
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'

@@ -2605,10 +2605,14 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         } else if pty == 2 {
             # List param: is_arr=4 (List-by-pointer). The buffer pointer (i64*) is
             # stored in an i64** alloca. For a scalar List, xs[i] = GEP i64 and
-            # xs.len = load buf[63]. For a List-of-structs param (the slot's sty is
-            # the element struct type, re-derived from the body's `out.push(Type{})`),
-            # the stride is nfields and the length lives at buf[64*nf].
-            let pest = list_elem_sty(toks, defs, src, f.bstart, f.bend, pns, pnl)
+            # xs.len = load buf[63]. For a List-of-structs param the slot's sty is
+            # the element struct type and stride = nfields, length at buf[64*nf].
+            # The element type comes from the param's OWN `List<Type>` annotation
+            # (authoritative: works whether the body pushes or only reads it -- a
+            # read-only consumer like `eval(toks: List<Token>)` has no push to scan).
+            # Fall back to a body push-scan if the annotation lacks a struct type.
+            let mut pest = param_list_elem_sty(toks, defs, src, n, f.nstart, f.nlen, s2)
+            if pest < 0 { pest = list_elem_sty(toks, defs, src, f.bstart, f.bend, pns, pnl) }
             slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 4, alen: 0 , sty: pest })
             emit_str("  %v")
             pint(s2)
