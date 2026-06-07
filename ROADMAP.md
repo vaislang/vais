@@ -476,6 +476,13 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   컴파일된 단일 프로그램으로 실행 = 실제 소스 부트스트랩 arc의 목표 달성.** e2e 109→112(+3 통합 파이프라인 가드), 값정확성 96/96, 회귀0.
   남은 fixpoint.nl 갭(편의/비-blocking)=`-> List` 직접반환(#4 우회존재)/`for`(1곳)/print interp(3곳). TRACKED 2버그(task chip): deep
   nested else-if 빈 merge / multi-term `.len`+`[i].field` 식.
+- **🎯🎯 `!=` 연산자 — name_eq + fixpoint2.nl 심볼테이블 unblock**(FP12z, 2026-06-07, commit a6c4882). 다음 큰 모듈 fixpoint2.nl
+  (산술식+multi-char 변수, `List<Var>` 심볼테이블)로 확장 → lookup이 모든 이름에 -1 반환. IR 격리: **`!=`가 토크나이저에 완전 누락**
+  (`!`(33) skip, 뒤 `=`가 assignment) → `src[a+k] != src[b+k]`가 `icmp ne ..., 0`로 lowering(RHS `src[b+k]` 드롭). name_eq(소스바이트
+  동등=심볼테이블 키)와 그것이 쓰는 lookup 무음파손. **fix: 토크나이저 `!`+`=`→not-equal 토큰(kind33), bare `!`은 skip 유지; gen_fold
+  비교 arm에 kind33 추가→`icmp ne`.** 실측: `!=` value/조건, name_eq(foo==foo→1, foo!=bar→0), **실제 fixpoint2.nl 심볼테이블
+  (`List<Var>` name_eq lookup: "foo"→10, "bar"→20)**. e2e 112→115(+3 FP12z 가드), 값정확성 96/96, 회귀0. 교훈: 다음 모듈로 확장이 누락
+  연산자(`!=`) 노출/`!=` 누락은 무음파손(RHS 드롭→`!=0`). **= fixpoint2.nl(다음 self-host tier: 산술+변수) 핵심 심볼테이블 동작.**
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

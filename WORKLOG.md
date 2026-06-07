@@ -1,5 +1,16 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12z — `!=` 연산자, name_eq + fixpoint2.nl 심볼테이블 unblock)
+- 다음 큰 모듈 fixpoint2.nl(산술식+multi-char 변수, `List<Var>` 심볼테이블)로 확장 → lookup이 모든 이름에 -1(255) 반환.
+- IR 격리: **`!=`가 토크나이저에 완전 누락** — `!`(33) skip되고 뒤 `=`가 assignment(kind5)로 처리 → `src[a+k] != src[b+k]`가
+  `icmp ne ..., 0`로 lowering(RHS `src[b+k]` 통째 드롭). name_eq(소스바이트 동등=심볼테이블 키비교)와 lookup 무음파손.
+- **fix: 토크나이저 `!`+`=`→not-equal 토큰(kind 33)**(bare `!`은 skip 유지), **gen_fold 비교 arm에 kind33 추가→`icmp ne`**.
+- 실측: `!=` value/조건, name_eq(foo==foo→1, foo!=bar→0), **🎯 실제 fixpoint2.nl 심볼테이블(`List<Var>` name_eq lookup: "foo"→10, "bar"→20)**.
+  e2e fixpoint-full **112→115**(+3 가드), 값정확성 96/96, 회귀0. commit a6c4882.
+- 교훈: 다음 모듈로 확장이 누락 연산자(`!=`) 노출/**`!=` 누락은 무음파손**(RHS 드롭→`!=0`, 컴파일은 됨)/IR 격리로 RHS-드롭 규명.
+- **= fixpoint2.nl(다음 self-host tier: 산술+변수) 핵심 심볼테이블 동작.** FP12g~z(18 능력추가). 남은 fixpoint.nl 갭=`-> List` 직접반환/for/print/TRACKED 2건.
+  다음=fixpoint2.nl 더 큰 조각(eval_factor가 lookup 호출=변수 평가) or `-> List` dedicated or for/print.
+
 ## 2026-06-07 (/loop: FP12y — 🎯🎯🎯🎯 완전한 self-host tokenize+eval 파이프라인 end-to-end)
 - **마일스톤(신규 능력 아님)**: fixpoint.nl의 tokenize+eval 컴파일러를 **단일 통합 프로그램**으로 fixpoint_full에 먹임.
   `run(src: Str)`가 식 문자열→`List<Token>` 토큰화(out-param)→evaluator로 평가(List<Token> 재귀)→값 반환.
