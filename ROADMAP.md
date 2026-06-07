@@ -468,6 +468,14 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   완전한 self-host 컴파일러의 핵심 동작.** 교훈: 실제 eval 먹이기가 `let t=toks[i]` 바인딩 갭 노출(직접접근과 별개)/owned slots는 `&` 전달
   필수(E022). 남은 fixpoint.nl 갭=`-> List` 직접반환(#4 우회)/`for`(1곳)/print interp(3곳)+emit_ir(putchar 이미 동작). collect_top_slots
   미적용(top-level `let t=toks[i]` self-host 미사용, defer).
+- **🎯🎯🎯🎯 완전한 self-host tokenize+eval 파이프라인 end-to-end 실행**(FP12y, 2026-06-07, commit c78dd2e). **마일스톤(신규 능력 아님)**:
+  fixpoint.nl의 tokenize+eval 컴파일러를 **단일 통합 프로그램**으로 fixpoint_full에 먹임 — `run(src: Str)`가 식 문자열을 `List<Token>`으로
+  토큰화(out-param)→evaluator로 평가(List<Token> 재귀)→값 반환. FP12u(typed let)+FP12v(bool)+FP12w(tokenize)+FP12x(evaluator)가
+  깨끗이 조합됨(신규 갭 0=능력이 이미 갖춰짐). 실측 end-to-end(source→tokenize→eval→value): `2+3*4`=14(precedence), `10 - 2 * 3`=4
+  (좌결합+precedence+공백), `7 + 8 + 9`=24(좌-fold). **= 가장 작은 완전한 self-host 컴파일러(산술식 언어 토큰화+평가)가 fixpoint_full로
+  컴파일된 단일 프로그램으로 실행 = 실제 소스 부트스트랩 arc의 목표 달성.** e2e 109→112(+3 통합 파이프라인 가드), 값정확성 96/96, 회귀0.
+  남은 fixpoint.nl 갭(편의/비-blocking)=`-> List` 직접반환(#4 우회존재)/`for`(1곳)/print interp(3곳). TRACKED 2버그(task chip): deep
+  nested else-if 빈 merge / multi-term `.len`+`[i].field` 식.
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
