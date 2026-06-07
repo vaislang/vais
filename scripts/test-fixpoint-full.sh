@@ -227,6 +227,22 @@ check "struct Tok {{ kind, val }}; fn run() {{ let toks = list(); let mut i = 0;
 # the actual 4-field self-host Token struct
 check "struct Token {{ kind, value, nstart, nlen }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 5, value: 100, nstart: 2, nlen: 3 }}); toks.push(Token {{ kind: 7, value: 50, nstart: 0, nlen: 1 }}); return toks[0].value + toks[1].value + toks[0].nlen }}; return run();" 153
 
+# --- FP12s: List-of-structs PARAMETER (the full self-host tokenizer shape) ---
+# A List<struct> passed by-pointer to a function that pushes structs into it
+# (out-param) and a caller that consumes them by field. The buffer carries its
+# length at index 64*nf (past the strided data, avoiding the buf[63] collision),
+# and the caller infers the local List's element type from the callee's
+# `List<Struct>` param annotation (the push happens in the callee, not the caller).
+# callee fills an empty out-param List<struct>, caller reads length
+check "struct Tok {{ kind, val }}; fn fill(out: List<Tok>) {{ out.push(Tok {{ kind: 1, val: 10 }}); out.push(Tok {{ kind: 2, val: 20 }}); return 0 }}; fn run() {{ let toks = list(); fill(toks); return toks.len }}; return run();" 2
+# caller reads struct fields the callee pushed
+check "struct Tok {{ kind, val }}; fn fill(out: List<Tok>) {{ out.push(Tok {{ kind: 1, val: 10 }}); out.push(Tok {{ kind: 2, val: 20 }}); return 0 }}; fn run() {{ let toks = list(); fill(toks); return toks[0].val + toks[1].val + toks[0].kind }}; return run();" 31
+# callee reads its own List<struct> param element field
+check "struct Tok {{ kind, val }}; fn fill(out: List<Tok>) {{ out.push(Tok {{ kind: 5, val: 100 }}); return out[0].val }}; fn run() {{ let toks = list(); return fill(toks) }}; return run();" 100
+# THE full self-host tokenizer shape: scan string -> push Token{{kind,value}} into
+# out-param List<Token> -> caller consumes by field (digit-token value sum)
+check "struct Token {{ kind, value }}; fn tok(s: Str, out: List<Token>) {{ let mut i = 0; while i < s.len() {{ let c = s[i]; if c >= 48 and c <= 57 {{ out.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ out.push(Token {{ kind: 0, value: 0 }}) }}; i = i + 1 }}; return 0 }}; fn run() {{ let toks = list(); tok(\`a1b2\`, toks); let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; return run();" 3
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'

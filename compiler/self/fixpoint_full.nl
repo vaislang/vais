@@ -603,14 +603,23 @@ fn emit_op(o: Op) -> Int {
 # After a call that passed List-local slot `lslot` by pointer, copy the length the
 # callee wrote into buf[63] back into the local's length slot (%v<lslot+1>), so the
 # caller's xs.len / further passes see pushes. No-op if lslot < 0. Returns counter.
-fn sync_list_len(lslot: Int, counter: Int) -> Int {
+# lslot = the local List buffer slot, or -1 for none. lenidx = the index where
+# the callee stored the updated length (63 for scalar Lists, 64*nf for
+# List-of-structs), and bufsz = the buffer's array size ([bufsz x i64]). These
+# must match the local List's allocation so the GEP type is well-typed.
+fn sync_list_len(lslot: Int, lenidx: Int, bufsz: Int, counter: Int) -> Int {
     if lslot < 0 { return counter }
     let lp = counter
     emit_str("  %t")
     pint(lp)
-    emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
+    emit_str(" = getelementptr [")
+    pint(bufsz)
+    emit_str(" x i64], [")
+    pint(bufsz)
+    emit_str(" x i64]* %v")
     pint(lslot)
-    emit_str(", i64 0, i64 63")
+    emit_str(", i64 0, i64 ")
+    pint(lenidx)
     putchar(10)
     let lv = lp + 1
     emit_str("  %t")
@@ -673,12 +682,21 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let mut a6v = 0
             let mut a7k = 0
             let mut a7v = 0
-            # slots of List-local args passed by pointer, to sync length (%v<slot+1>
-            # = buf[63]) AFTER the call (the callee may have pushed). -1 = none.
+            # slots of List-local args passed by pointer, to sync length AFTER the
+            # call (the callee may have pushed). -1 = none. li/lb carry the length
+            # index + buffer array-size per arg (scalar: 63/64; struct: 64*nf/64*nf+1).
             let mut ls0 = 0 - 1
             let mut ls1 = 0 - 1
             let mut ls2 = 0 - 1
             let mut ls3 = 0 - 1
+            let mut li0 = 63
+            let mut li1 = 63
+            let mut li2 = 63
+            let mut li3 = 63
+            let mut lb0 = 64
+            let mut lb1 = 64
+            let mut lb2 = 64
+            let mut lb3 = 64
             let mut cc = counter
             let mut q = i + 2
             let mut ga = true
@@ -699,7 +717,18 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                             let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
                             if aarr == 2 {
                                 let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
-                                # load length (%v<slot+1>) and store to buf[63]
+                                # length index + buffer size depend on element kind:
+                                #   scalar List  -> length at [63], buffer [64 x i64]
+                                #   List<struct> -> length at [64*nf], buffer [64*nf+1]
+                                let alsty = sty_of(slots, src, argt.nstart, argt.nlen)
+                                let mut alenidx = 63
+                                let mut albufsz = 64
+                                if alsty >= 0 {
+                                    let anf = struct_nfields(defs, alsty)
+                                    alenidx = 64 * anf
+                                    albufsz = 64 * anf + 1
+                                }
+                                # load length (%v<slot+1>) and store to buf[lenidx]
                                 let lc = cc
                                 emit_str("  %t")
                                 pint(lc)
@@ -709,9 +738,14 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                                 let l63 = lc + 1
                                 emit_str("  %t")
                                 pint(l63)
-                                emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
+                                emit_str(" = getelementptr [")
+                                pint(albufsz)
+                                emit_str(" x i64], [")
+                                pint(albufsz)
+                                emit_str(" x i64]* %v")
                                 pint(lslot)
-                                emit_str(", i64 0, i64 63")
+                                emit_str(", i64 0, i64 ")
+                                pint(alenidx)
                                 putchar(10)
                                 emit_str("  store i64 %t")
                                 pint(lc)
@@ -722,18 +756,22 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                                 let bc = l63 + 1
                                 emit_str("  %t")
                                 pint(bc)
-                                emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
+                                emit_str(" = getelementptr [")
+                                pint(albufsz)
+                                emit_str(" x i64], [")
+                                pint(albufsz)
+                                emit_str(" x i64]* %v")
                                 pint(lslot)
                                 emit_str(", i64 0, i64 0")
                                 putchar(10)
                                 ekind = 3
                                 eval2 = bc
                                 cc = bc + 1
-                                # record this slot to sync its length after the call
-                                if nargs == 0 { ls0 = lslot }
-                                else if nargs == 1 { ls1 = lslot }
-                                else if nargs == 2 { ls2 = lslot }
-                                else if nargs == 3 { ls3 = lslot }
+                                # record this slot + its lenidx/bufsz to sync after the call
+                                if nargs == 0 { ls0 = lslot; li0 = alenidx; lb0 = albufsz }
+                                else if nargs == 1 { ls1 = lslot; li1 = alenidx; lb1 = albufsz }
+                                else if nargs == 2 { ls2 = lslot; li2 = alenidx; lb2 = albufsz }
+                                else if nargs == 3 { ls3 = lslot; li3 = alenidx; lb3 = albufsz }
                                 handled = 1
                             }
                         }
@@ -784,10 +822,10 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             # sync the length of any List-local args from buf[63] (the callee may
             # have pushed into them via the out-param). %v<slot+1> = load buf[63].
             let mut rc = dest + 1
-            rc = sync_list_len(ls0, rc)
-            rc = sync_list_len(ls1, rc)
-            rc = sync_list_len(ls2, rc)
-            rc = sync_list_len(ls3, rc)
+            rc = sync_list_len(ls0, li0, lb0, rc)
+            rc = sync_list_len(ls1, li1, lb1, rc)
+            rc = sync_list_len(ls2, li2, lb2, rc)
+            rc = sync_list_len(ls3, li3, lb3, rc)
             return Op { kind: 1, val: dest, next: rc }
         }
         if nx.kind == 27 {
@@ -895,8 +933,13 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 return Op { kind: 1, val: resc, next: resc + 1 }
             }
             if karr == 4 {
-                # List PARAMETER `.len`: load buffer ptr, GEP to [63], load length.
+                # List PARAMETER `.len`: load buffer ptr, GEP to the length slot,
+                # load length. Scalar List: length at [63]. List-of-structs (sty>=0):
+                # length at [64*nf] (past the strided data region).
                 let pslot = find_slot(slots, src, t.nstart, t.nlen)
+                let plsty = sty_of(slots, src, t.nstart, t.nlen)
+                let mut plenidx2 = 63
+                if plsty >= 0 { plenidx2 = 64 * struct_nfields(defs, plsty) }
                 let bp = counter
                 emit_str("  %t")
                 pint(bp)
@@ -908,7 +951,8 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 pint(lp)
                 emit_str(" = getelementptr i64, i64* %t")
                 pint(bp)
-                emit_str(", i64 63")
+                emit_str(", i64 ")
+                pint(plenidx2)
                 putchar(10)
                 let lv = lp + 1
                 emit_str("  %t")
@@ -989,7 +1033,58 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 return Op { kind: 1, val: szc, next: szc + 1 }
             }
             if karr == 4 {
-                # List PARAMETER index: load buffer ptr, GEP i64, load i64.
+                let p4sty = sty_of(slots, src, t.nstart, t.nlen)
+                if p4sty >= 0 {
+                    # List-of-structs PARAMETER element field: out[<expr>].field ->
+                    # load bufptr, load buf[idx*nf + field_index] (stride nf).
+                    let p4bend = bracket_end(toks, i + 2)
+                    let p4dot = toks[p4bend + 1]
+                    if p4dot.kind == 27 {
+                        let p4fld = toks[p4bend + 2]
+                        let p4slot = find_slot(slots, src, t.nstart, t.nlen)
+                        let p4nf = struct_nfields(defs, p4sty)
+                        let p4fi = field_index(defs, p4sty, src, p4fld.nstart, p4fld.nlen)
+                        let p4idx = gen_expr(toks, slots, fns, defs, src, i + 2, p4bend, counter)
+                        let p4base = p4idx.next
+                        emit_str("  %t")
+                        pint(p4base)
+                        emit_str(" = load i64*, i64** %v")
+                        pint(p4slot)
+                        putchar(10)
+                        let p4mul = p4base + 1
+                        emit_str("  %t")
+                        pint(p4mul)
+                        emit_str(" = mul i64 ")
+                        emit_op(p4idx)
+                        emit_str(", ")
+                        pint(p4nf)
+                        putchar(10)
+                        let p4off = p4mul + 1
+                        emit_str("  %t")
+                        pint(p4off)
+                        emit_str(" = add i64 %t")
+                        pint(p4mul)
+                        emit_str(", ")
+                        pint(p4fi)
+                        putchar(10)
+                        let p4gep = p4off + 1
+                        emit_str("  %t")
+                        pint(p4gep)
+                        emit_str(" = getelementptr i64, i64* %t")
+                        pint(p4base)
+                        emit_str(", i64 %t")
+                        pint(p4off)
+                        putchar(10)
+                        let p4ld = p4gep + 1
+                        emit_str("  %t")
+                        pint(p4ld)
+                        emit_str(" = load i64, i64* %t")
+                        pint(p4gep)
+                        putchar(10)
+                        return Op { kind: 1, val: p4ld, next: p4ld + 1 }
+                    }
+                }
+                # List PARAMETER index (scalar): load buffer ptr, GEP i64, load i64.
                 let pslot = find_slot(slots, src, t.nstart, t.nlen)
                 let pbend = bracket_end(toks, i + 2)
                 let pidx = gen_expr(toks, slots, fns, defs, src, i + 2, pbend, counter)
@@ -1026,7 +1121,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     let fld = toks[lbend + 2]
                     let lslot = find_slot(slots, src, t.nstart, t.nlen)
                     let nf = struct_nfields(defs, lsty2)
-                    let lbuf = 64 * nf
+                    let lbuf = 64 * nf + 1
                     let fi = field_index(defs, lsty2, src, fld.nstart, fld.nlen)
                     let lidx = gen_expr(toks, slots, fns, defs, src, i + 2, lbend, counter)
                     let mulc = lidx.next
@@ -1383,14 +1478,14 @@ fn rhs_struct_type(toks: &List<Token>, defs: &List<StructDef>, src: Str, npos: I
     return 0 - 1
 }
 # Element struct-type of `let name = list()` by scanning [start,end) for the
-# first `name . push ( Type {`. Returns the struct-type index, or -1 if the
-# List holds scalars (no struct push found). This lets a List<Token> allocate
-# a contiguous [64*nfields x i64] buffer with element stride = nfields.
+# first struct push `name . push ( Type ...`. Returns the struct-type index, or
+# -1 if the List holds scalars (no struct push found). This lets a List<Token>
+# allocate a contiguous [64*nfields x i64] buffer with element stride = nfields.
 fn list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, start: Int, end: Int, nstart: Int, nlen: Int) -> Int {
     let mut i = start
     while i < end {
         let t = toks[i]
-        # match:  name(1) .(27) push(1) ((9) Type(1) {(11)
+        # match the token run:  name . push ( Type  followed by an open-brace.
         if t.kind == 1 {
             if name_eq(src, t.nstart, t.nlen, nstart, nlen) == 1 {
                 let d = toks[i + 1]
@@ -1417,8 +1512,126 @@ fn list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, start: In
     }
     return 0 - 1
 }
+# Element struct-type of the param at position `argpos` of `fn <callee>`, if that
+# param is annotated `List<Struct>`. Scans the callee's signature in the token
+# stream (params separated by commas at paren depth 1). Returns -1 otherwise.
+# This lets a caller infer a local List's element type from the callee it is
+# passed to (the push happens in the callee body, not the caller's).
+fn param_list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int, cns: Int, cnl: Int, argpos: Int) -> Int {
+    let mut i = 0
+    while i < n {
+        let t = toks[i]
+        # find `fn <callee> (`
+        if t.kind == 13 {
+            let nm = toks[i + 1]
+            if nm.kind == 1 {
+                if name_eq(src, nm.nstart, nm.nlen, cns, cnl) == 1 {
+                    # params start after '(' at i+2. Walk to the argpos-th param's
+                    # type annotation. A param is `name` or `name : Type`.
+                    let mut q = i + 3
+                    let mut pos = 0
+                    let mut go = true
+                    while go {
+                        let qt = toks[q]
+                        if qt.kind == 10 { go = false }
+                        else if qt.kind == 1 {
+                            # this is a param name. Is it the one we want?
+                            if pos == argpos {
+                                # check for `: List < Type >`
+                                let c1 = toks[q + 1]
+                                if c1.kind == 16 {
+                                    let ty = toks[q + 2]
+                                    let islist = kw4(src, ty.nstart, ty.nlen, 76, 105, 115, 116)
+                                    if islist == 1 {
+                                        # element type is the ident after '<' (q+4)
+                                        let et = toks[q + 4]
+                                        if et.kind == 1 {
+                                            return struct_index_by_name(defs, src, et.nstart, et.nlen)
+                                        }
+                                    }
+                                }
+                                go = false
+                            } else {
+                                # skip this param's type if annotated, then expect a comma
+                                let c1 = toks[q + 1]
+                                if c1.kind == 16 {
+                                    let ty = toks[q + 2]
+                                    let islist = kw4(src, ty.nstart, ty.nlen, 76, 105, 115, 116)
+                                    if islist == 1 {
+                                        # advance past List<...> to the closing '>'
+                                        let mut tq = q + 3
+                                        let mut tg = true
+                                        while tg {
+                                            let tt = toks[tq]
+                                            if tt.kind == 19 { tg = false } else { tq = tq + 1 }
+                                        }
+                                        q = tq
+                                    } else {
+                                        q = q + 2
+                                    }
+                                }
+                                pos = pos + 1
+                            }
+                            q = q + 1
+                        }
+                        else { q = q + 1 }
+                    }
+                    return 0 - 1
+                }
+            }
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+# Element struct-type of `let name = list()` inferred from a call site: scan
+# [start,end) for a call `f( ... name ... )` where `name` is a direct single-ident
+# argument, then read f's matching param's `List<Struct>` annotation. Returns -1
+# if no such call. `n` bounds the whole token stream (for the callee lookup).
+fn call_arg_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, start: Int, end: Int, nstart: Int, nlen: Int, n: Int) -> Int {
+    let mut i = start
+    while i < end {
+        let t = toks[i]
+        # a call: ident '(' ...
+        if t.kind == 1 {
+            let nx = toks[i + 1]
+            if nx.kind == 9 {
+                # walk args, tracking position; match `name` as a single-ident arg.
+                let mut q = i + 2
+                let mut pos = 0
+                let mut go = true
+                while go {
+                    let qt = toks[q]
+                    if qt.kind == 10 { go = false }
+                    else if qt.kind == 25 { pos = pos + 1; q = q + 1 }
+                    else {
+                        # is this arg exactly `name` (single ident followed by , or ))?
+                        if qt.kind == 1 {
+                            let after = toks[q + 1]
+                            if after.kind == 10 {
+                                if name_eq(src, qt.nstart, qt.nlen, nstart, nlen) == 1 {
+                                    let r = param_list_elem_sty(toks, defs, src, n, t.nstart, t.nlen, pos)
+                                    if r >= 0 { return r }
+                                }
+                            }
+                            if after.kind == 25 {
+                                if name_eq(src, qt.nstart, qt.nlen, nstart, nlen) == 1 {
+                                    let r = param_list_elem_sty(toks, defs, src, n, t.nstart, t.nlen, pos)
+                                    if r >= 0 { return r }
+                                }
+                            }
+                        }
+                        q = q + 1
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
 
-fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>, src: Str, start: Int, end: Int, slot0: Int) -> List<Slot> {
+fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>, src: Str, start: Int, end: Int, slot0: Int, n: Int) -> List<Slot> {
     let mut slots = base
     let mut next_slot = slot0
     let mut i = start
@@ -1448,9 +1661,16 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>,
                 # the buffer is [64*nfields x i64] and the slot's sty carries the
                 # element struct-type index (stride = nfields). Otherwise scalar
                 # [64 x i64] with sty=-1.
-                let lest = list_elem_sty(toks, defs, src, npos + 3, end, name.nstart, name.nlen)
+                let mut lest = list_elem_sty(toks, defs, src, npos + 3, end, name.nstart, name.nlen)
+                # If no local push reveals the element type, the List may be filled
+                # by a callee it is passed to (out-param). Infer from that call site.
+                if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, npos + 3, end, name.nstart, name.nlen, n) }
                 let mut lbuf = 64
-                if lest >= 0 { lbuf = 64 * struct_nfields(defs, lest) }
+                # struct-element Lists: [64*nf + 1 x i64] -- the +1 reserves a length
+                # header at index 64*nf so the buffer can be passed by-pointer as a
+                # List-of-structs param (length stored there, past the data region;
+                # avoids the buf[63] collision that stride>1 would otherwise hit).
+                if lest >= 0 { lbuf = 64 * struct_nfields(defs, lest) + 1 }
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: lest })
                 emit_str("  %v")
                 pint(next_slot)
@@ -1707,8 +1927,110 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 counter = counter + 1
                 i = stop + 1
               } else if isarr_of(slots, src, t.nstart, t.nlen) == 4 {
-                # push to a List PARAMETER (is_arr=4, buffer pointer): load ptr,
-                # len from ptr[63], store v at ptr[len], len+1 back to ptr[63].
+               let ppsty = sty_of(slots, src, t.nstart, t.nlen)
+               if ppsty >= 0 {
+                # push to a List-of-structs PARAMETER (is_arr=4, sty>=0): buffer
+                # pointer with stride nf; length lives at ptr[64*nf]. Load len, store
+                # each field at ptr[len*nf + fi], len+1 -> ptr[64*nf].
+                let psslot = find_slot(slots, src, t.nstart, t.nlen)
+                let pnf = struct_nfields(defs, ppsty)
+                let plenidx = 64 * pnf
+                let psargstop = paren_end(toks, i + 4)
+                # load buffer ptr
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = load i64*, i64** %v")
+                pint(psslot)
+                putchar(10)
+                let psbp = counter
+                counter = counter + 1
+                # length pointer = ptr + 64*nf, load len
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = getelementptr i64, i64* %t")
+                pint(psbp)
+                emit_str(", i64 ")
+                pint(plenidx)
+                putchar(10)
+                let pslenp = counter
+                counter = counter + 1
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = load i64, i64* %t")
+                pint(pslenp)
+                putchar(10)
+                let pslen = counter
+                counter = counter + 1
+                # base = len*nf
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = mul i64 %t")
+                pint(pslen)
+                emit_str(", ")
+                pint(pnf)
+                putchar(10)
+                let psbase = counter
+                counter = counter + 1
+                # iterate struct-literal fields. token layout: name . push ( Type
+                # then the open-brace at i+5 starts the struct literal.
+                let psbopen = i + 5
+                let psbclose = match_brace(toks, psbopen, end)
+                let mut psq = psbopen + 1
+                while psq < psbclose {
+                    let psfld = toks[psq]
+                    let psfi = field_index(defs, ppsty, src, psfld.nstart, psfld.nlen)
+                    let mut psvstart = psq + 1
+                    let pscolt = toks[psq + 1]
+                    if pscolt.kind == 16 { psvstart = psq + 2 }
+                    let psvstop = arr_elem_end(toks, psvstart, psbclose)
+                    let pse = gen_expr(toks, slots, fns, defs, src, psvstart, psvstop, counter)
+                    counter = pse.next
+                    # offset = base + fi
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = add i64 %t")
+                    pint(psbase)
+                    emit_str(", ")
+                    pint(psfi)
+                    putchar(10)
+                    let psoff = counter
+                    counter = counter + 1
+                    # element ptr = bufptr + offset
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = getelementptr i64, i64* %t")
+                    pint(psbp)
+                    emit_str(", i64 %t")
+                    pint(psoff)
+                    putchar(10)
+                    let psep = counter
+                    counter = counter + 1
+                    emit_str("  store i64 ")
+                    emit_op(pse)
+                    emit_str(", i64* %t")
+                    pint(psep)
+                    putchar(10)
+                    psq = psvstop + 1
+                }
+                # len = len + 1 -> ptr[64*nf]
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = add i64 %t")
+                pint(pslen)
+                emit_str(", 1")
+                putchar(10)
+                let psinc = counter
+                counter = counter + 1
+                emit_str("  store i64 %t")
+                pint(psinc)
+                emit_str(", i64* %t")
+                pint(pslenp)
+                putchar(10)
+                let psstop = find_semi(toks, psargstop, end)
+                i = psstop + 1
+               } else {
+                # push a SCALAR to a List PARAMETER (is_arr=4, buffer pointer): load
+                # ptr, len from ptr[63], store v at ptr[len], len+1 back to ptr[63].
                 let pslot = find_slot(slots, src, t.nstart, t.nlen)
                 let pargstop = paren_end(toks, i + 4)
                 let pe = gen_expr(toks, slots, fns, defs, src, i + 4, pargstop, counter)
@@ -1760,6 +2082,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 counter = pinc + 1
                 let pstop = find_semi(toks, pargstop, end)
                 i = pstop + 1
+               }
               } else {
                 # list push: lst.push(expr) ;
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
@@ -1768,9 +2091,10 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let argstop = paren_end(toks, i + 4)
                 if lsty >= 0 {
                     # List-of-structs push: arg is `Type { f: v, ... }`. Store each
-                    # field at buf[len*nf + field_index]; buffer is [64*nf x i64].
+                    # field at buf[len*nf + field_index]; buffer is [64*nf+1 x i64]
+                    # (the +1 length-header slot is unused for local push).
                     let nf = struct_nfields(defs, lsty)
-                    let lbuf = 64 * nf
+                    let lbuf = 64 * nf + 1
                     # load len, compute base = len*nf
                     emit_str("  %t")
                     pint(counter)
@@ -1788,8 +2112,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     putchar(10)
                     let basec = counter
                     counter = counter + 1
-                    # iterate the struct-literal fields. Tokens: name . push ( Type {
-                    #   i   i+1 i+2  i+3 i+4  i+5  -> open-brace is at i+5.
+                    # iterate the struct-literal fields. token layout: name . push
+                    # ( Type then open-brace at i+5 (i=name, so i+5 is the brace).
                     let bopen = i + 5
                     let bclose = match_brace(toks, bopen, end)
                     let mut q = bopen + 1
@@ -2130,11 +2454,13 @@ fn collect_top_slots(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: In
                 putchar(10)
                 next_slot = next_slot + 1
             } else if rhs_is_list(toks, src, npos) == 1 {
-                # List buffer: struct-element Lists get [64*nfields x i64] with
+                # List buffer: struct-element Lists get [64*nf+1 x i64] (the +1 is a
+                # length header at index 64*nf for by-pointer param passing) with
                 # sty = element struct type (stride = nfields); scalar Lists [64 x i64].
-                let lest = list_elem_sty(toks, defs, src, npos + 3, n, name.nstart, name.nlen)
+                let mut lest = list_elem_sty(toks, defs, src, npos + 3, n, name.nstart, name.nlen)
+                if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, npos + 3, n, name.nstart, name.nlen, n) }
                 let mut lbuf = 64
-                if lest >= 0 { lbuf = 64 * struct_nfields(defs, lest) }
+                if lest >= 0 { lbuf = 64 * struct_nfields(defs, lest) + 1 }
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: lest })
                 emit_str("  %v")
                 pint(next_slot)
@@ -2232,7 +2558,7 @@ fn gen_top(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, slots: &L
 
 # Emit one user function: `define i64 @name(i64 %p_in) { <body> }`. The param is
 # copied to alloca %v0; body locals occupy slots 1+. Body = [bstart, bend).
-fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, f: Fn) -> Int {
+fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, f: Fn, n: Int) -> Int {
     emit_str("define i64 @")
     emit_name(src, f.nstart, f.nlen)
     emit_str("(")
@@ -2278,8 +2604,12 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
             putchar(10)
         } else if pty == 2 {
             # List param: is_arr=4 (List-by-pointer). The buffer pointer (i64*) is
-            # stored in an i64** alloca; xs[i] = GEP i64, xs.len = load buf[63].
-            slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 4, alen: 0 , sty: 0 - 1 })
+            # stored in an i64** alloca. For a scalar List, xs[i] = GEP i64 and
+            # xs.len = load buf[63]. For a List-of-structs param (the slot's sty is
+            # the element struct type, re-derived from the body's `out.push(Type{})`),
+            # the stride is nfields and the length lives at buf[64*nf].
+            let pest = list_elem_sty(toks, defs, src, f.bstart, f.bend, pns, pnl)
+            slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 4, alen: 0 , sty: pest })
             emit_str("  %v")
             pint(s2)
             emit_str(" = alloca i64*")
@@ -2304,7 +2634,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         s2 = s2 + 1
     }
     # body locals start at slot npar
-    let allslots = add_local_slots(slots, toks, defs, src, f.bstart, f.bend, f.npar)
+    let allslots = add_local_slots(slots, toks, defs, src, f.bstart, f.bend, f.npar, n)
     let last = gen_stmts(toks, &allslots, fns, defs, src, f.bstart, f.bend, 1)
     emit_str("}")
     putchar(10)
@@ -2327,7 +2657,7 @@ fn compile(src: Str) -> Int {
     let mut fi = 0
     while fi < m {
         let f = fns[fi]
-        emit_fn(&toks, &fns, &defs, src, f)
+        emit_fn(&toks, &fns, &defs, src, f, n)
         fi = fi + 1
     }
     # emit @main from top-level statements (skip fn defs)
