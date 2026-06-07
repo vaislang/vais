@@ -1,5 +1,25 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12r — List-of-structs, 부트스트랩 갭 #5 로컬 해결)
+- 경계매핑: 다함수 통합 미니컴파일러(tokenize digits→eval sum, List를 함수간 전달)는 동작(=10).
+  더 어려운 모양 probe → **List-of-structs**(`toks.push(Tok{...})` 통째 struct push)서 invalid-IR 경계 발견.
+- self-host grep: tokenize가 `toks.push(Token{kind,value,nstart,nlen})`로 **4-필드 Token을 List에 통째 push**
+  ~30곳, parser가 `toks[i].kind`로 소비 = 진짜 `List<Token>` 모양 → **bootstrap-critical 갭 #5**.
+- clang 스킴 격리검증(2건): ①연속 struct 버퍼 stride=필드수(run=21) ②dynamic-index field read(run=60).
+- **구현(FP12r)**: struct-원소 List=`[64*nf x i64]` 버퍼, slot.sty=원소 struct-type.
+  - `list_elem_sty()`: list() 시점 첫 `name.push(Type{...})` 스캔으로 원소타입 추론.
+  - slot 할당(add_local_slots+collect_top_slots), push(각 필드 `buf[len*nf+fi]`), index+field(`buf[i*nf+fi]`).
+  - **버그2 근본수정**: ①라우팅 — struct-필드-쓰기가 List-of-structs를 가로챔(asti>=0) → is_arr=0(scalar struct)
+    한정, List(is_arr=2)는 push로 fall-through. ②skip_factor — `name[idx].field`(6토큰)를 1 factor로 확장
+    안 해 뒤 `+` 피연산자 누락 → bracket_end 뒤 `.`면 +2 토큰.
+- 검증: push/len=1, multi-term field-read=21, dynamic build→consume=6, 4-필드 Token=153, **40-원소 스케일=139**
+  (별도 length alloca라 buf[63] 충돌 없음). e2e fixpoint-full **79→83**(+4 가드), 값정확성 **96/96**, 회귀0.
+- commit ae107ac. **로컬 List-of-structs = parser/eval 부트스트랩 직결 핵심 능력 완비.**
+- **#5b TRACKED**(다음 1순위): List-of-structs PARAMETER(`fn tok(s:Str, out:List<Token>)`)=실제 토크나이저 full
+  shape. clang 스킴 검증완료(run=23, i64* 버퍼+struct stride). 원소타입은 emit_fn서 list_elem_sty 재사용(struct
+  필드 추가 불필요). **남은 설계 = length-slot 충돌**(scalar param은 len@buf[63]이나 stride>1이면 원소31 슬롯과 충돌
+  31*2+1=63) → len을 buf[64*nf]로 이동+sync/push/read 통일 필요. dedicated iter 대상.
+
 ## 2026-06-06 (/loop iter 1: P0 — 값-정확성 게이트)
 - 폴더 구조를 언어 전체로 보강 (std/ tools/ docs/reference/ tests/).
 - ROADMAP.md 신설 (단일 진실원, P0~P5 우선순위 + L3 진입 + TRACKED).

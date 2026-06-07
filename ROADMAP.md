@@ -388,6 +388,28 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
     동기화(callee 푸시 반영) → 채운 List를 다음 함수에 다시 넘길 수 있음. **🎯🎯 FULL tokenize→consume 파이프라인
     2-함수 동작**: `tokenize(src: Str, out: List<Int>)` List 채움 → `count_digits(toks: List<Int>)` 스캔=3.
     sync_list_len 헬퍼(call 후 %v<slot+1>=buf[63]). e2e 77→79. **부트스트랩 List 의미론 전부 동작**(읽기/쓰기/길이전파).
+- **🎯 #5 부트스트랩 갭: List-of-structs(`List<Token>` 원소가 통째 struct) — 로컬 해결**(FP12r, 2026-06-07,
+  commit ae107ac). self-host 소스가 `toks.push(Token { kind, value, nstart, nlen })`로 **4-필드 Token struct를
+  List에 통째 push**(tokenize 내 ~30곳, parser가 `toks[i].kind`로 소비) = 진짜 `List<Token>` 모양. 이전엔 List 원소가
+  i64 1개라 struct push가 invalid-IR. **해결**: struct-원소 List는 연속 `[64*nfields x i64]` 버퍼(원소 stride=필드수),
+  slot의 `sty`에 원소 struct-type 저장. ①`list_elem_sty()` = `list()` 시점에 첫 `name.push(Type{...})` 스캔으로 원소
+  타입 추론(원소 타입은 나중에 나타남) ②slot 할당(add_local_slots+collect_top_slots): struct-원소 List=`[64*nf x i64]`
+  ③push(gen_stmts): 각 필드를 `buf[len*nf + field_index]` 저장 후 len++ ④index+field(gen_factor): `toks[i].field`=
+  `buf[i*nf + field_index]` load ⑤라우팅: struct-필드-쓰기(`p.field=e`)는 scalar struct(is_arr=0)만, List-of-structs
+  (is_arr=2,sty>=0)는 push로 fall-through ⑥skip_factor: `name[idx].field`=1 factor(6토큰)로 확장(뒤 binop `+` 파싱).
+  clang 스킴(연속 stride + dynamic-index field) 격리검증 후 구현. 실측: push/len, multi-term field-read 식, dynamic
+  build→consume 루프(tokenize→eval 모양), 실제 4-필드 Token struct, **40-원소 스케일**(별도 length alloca라 buf[63]
+  충돌 없음). e2e 79→83, 값정확성 96/96, 회귀0. **로컬 List-of-structs=parser/eval 부트스트랩 직결 핵심 능력.**
+- **🎯 #5b 부트스트랩 갭: List-of-structs PARAMETER(`fn tok(s: Str, out: List<Token>)`) — TRACKED**(2026-06-07
+  경계매핑서 식별). 실제 self-host 토크나이저 시그니처는 `out: List<Token>`(struct-원소 List를 by-pointer 전달)+
+  본문서 `out.push(Token{...})`+소비측 `toks[j].field`. 현재 List-param(is_arr=4)은 **scalar 원소만** 지원(struct push
+  invalid-IR). **clang 스킴 검증완료**(run=23): i64* 버퍼, struct stride로 `buf[len*nf+k]` push/`buf[i*nf+fi]` read,
+  포인터 경유. **원소 타입 추론은 struct 필드 추가 불필요** — `emit_fn`서 param 이름으로 `list_elem_sty()`를 본문
+  범위에 재사용(로컬과 동일 메커니즘). **남은 설계 subtlety = length-slot 충돌**: scalar List-param은 length를
+  `buf[63]`에 두나, stride>1이면 index 63이 원소 31의 데이터 슬롯과 충돌(`31*2+1=63`). → length를 데이터 영역 뒤
+  (`buf[64*nf]`, 버퍼 `[64*nf+1 x i64]`)로 옮기고 sync_list_len/param-push/read를 stride-aware length 위치로
+  통일 필요(다중 사이트). 로컬 #5(별도 length alloca)는 충돌 없음 — param by-pointer convention만 해당. **다음 dedicated
+  iter 1순위**(실제 토크나이저 full shape 직결, 스킴 검증완료, 사이트 명확). 우회: 로컬 List<struct> 빌드 후 소비는 동작.
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
