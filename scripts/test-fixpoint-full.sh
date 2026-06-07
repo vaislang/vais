@@ -372,6 +372,19 @@ check "$FP12BB_C fn run() {{ return run_program(\`let a = 4; let b = 6; return a
 # let x = 2; let y = x + 1; return x + y * 4  -> 14 (y references x; precedence)
 check "$FP12BB_C fn run() {{ return run_program(\`let x = 2; let y = x + 1; return x + y * 4;\`) }}; return run();" 14
 
+# --- FP12cc: functions + recursion (fixpoint3.nl, the 3rd tier) ---
+# fixpoint3.nl adds multi-char function definitions/calls with recursion: a
+# List<Fn> function table looked up by find_fn, and eval_call which binds the
+# arguments into a FRESH per-call List<Var> scope and recursively evaluates the
+# body (so a function can call itself). Verified: the function table + call
+# dispatch + fresh-scope binding + recursion-with-fresh-scope.
+# find_fn: locate a function in the List<Fn> table by name
+check "struct Fn {{ nstart, nlen, p1s, p1l, bstart, bend }}; fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn find_fn(fns: List<Fn>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = fns.len; while i < m {{ let f = fns[i]; if name_eq(src, f.nstart, f.nlen, qs, ql) == 1 {{ return i }}; i = i + 1 }}; return 0 - 1 }}; fn run() {{ let fns = list(); fns.push(Fn {{ nstart: 0, nlen: 6, p1s: 0, p1l: 0, bstart: 0, bend: 0 }}); fns.push(Fn {{ nstart: 7, nlen: 6, p1s: 0, p1l: 0, bstart: 0, bend: 0 }}); let src = \`double triple\`; return find_fn(fns, src, 7, 6) }}; return run();" 1
+# eval_call: look up the fn, bind the arg into a fresh callee scope, eval via lookup
+check "struct Fn {{ nstart, nlen, p1s, p1l, bstart, bend }}; struct Var {{ nstart, nlen, value }}; fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn lookup(vars: List<Var>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = vars.len; while i < m {{ let v = vars[i]; if name_eq(src, v.nstart, v.nlen, qs, ql) == 1 {{ return v.value }}; i = i + 1 }}; return 0 }}; fn find_fn(fns: List<Fn>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = fns.len; while i < m {{ let f = fns[i]; if name_eq(src, f.nstart, f.nlen, qs, ql) == 1 {{ return i }}; i = i + 1 }}; return 0 - 1 }}; fn eval_call(fns: List<Fn>, src: Str, qs: Int, ql: Int, arg: Int) {{ let idx = find_fn(fns, src, qs, ql); if idx < 0 {{ return 0 }}; let f = fns[idx]; let callee = list(); callee.push(Var {{ nstart: f.p1s, nlen: f.p1l, value: arg }}); return lookup(callee, src, f.p1s, f.p1l) * 2 }}; fn run() {{ let fns = list(); fns.push(Fn {{ nstart: 0, nlen: 6, p1s: 7, p1l: 1, bstart: 0, bend: 0 }}); let src = \`double x\`; return eval_call(fns, src, 0, 6, 5) }}; return run();" 10
+# recursive eval with a fresh List<Var> scope per call -- factorial(5) = 120
+check "struct Var {{ nstart, nlen, value }}; fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn lookup(vars: List<Var>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = vars.len; while i < m {{ let v = vars[i]; if name_eq(src, v.nstart, v.nlen, qs, ql) == 1 {{ return v.value }}; i = i + 1 }}; return 0 }}; fn eval_fac(src: Str, ns: Int, nl: Int, n: Int) {{ let scope = list(); scope.push(Var {{ nstart: ns, nlen: nl, value: n }}); let v = lookup(scope, src, ns, nl); if v <= 1 {{ return 1 }}; return v * eval_fac(src, ns, nl, v - 1) }}; fn run() {{ let src = \`n\`; return eval_fac(src, 0, 1, 5) }}; return run();" 120
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'
