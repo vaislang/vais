@@ -81,8 +81,14 @@ check "fn eq(a, b) {{ return a == b }}; return eq(3, 3);" 1
 check "fn eq(a, b) {{ return a == b }}; return eq(3, 4);" 0
 check "fn lt(a, b) {{ return a < b }}; return lt(3, 4);" 1
 check "fn gt(n) {{ return n > 5 }}; return gt(8);" 1
-# (Note: parenthesized comparison combined with arithmetic, e.g. (a<b)+(b<c), is
-# not yet supported -- gen_factor doesn't parse '(' grouping. Tracked below.)
+
+# --- FP12h: parenthesized grouping in expressions -- gen_factor parses `( <expr> )`
+# (overrides precedence, nests, and combines with comparison-as-value). ---
+check "fn f() {{ return (2 + 3) * 4 }}; return f();" 20
+check "fn f(n) {{ return (n + 1) * (n + 2) }}; return f(3);" 20
+check "fn f() {{ return ((1 + 2) * 3) }}; return f();" 9
+# grouped comparisons combined with arithmetic: (a<b) + (b<c) = 1 + 1 = 2
+check "fn f(a, b, c) {{ return (a < b) + (b < c) }}; return f(1, 2, 3);" 2
 
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A

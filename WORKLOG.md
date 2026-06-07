@@ -876,3 +876,13 @@
   for루프 codegen 미구현(while만). 둘 다 fixpoint_full 능력확장 후보(부트스트랩 향). 교훈: **실제 소스 fragment로
   부트스트랩 경계 정밀 매핑**(months 통째보다 구체적 갭 식별)/비교-as-value는 self-host 소스가 쓰는 핵심(능력 추가 정당)/
   precedence 낮은 비교는 gen_fold 최종단계/조건핸들러는 sub-range라 충돌없음.
+
+## 2026-06-07 (/loop iter 73: 🎯 self-host 컴파일러 능력 추가 — `(...)` 그룹화)
+- iter72 비교-as-value가 노출한 `(...)` 그룹화 갭 수정. **gen_factor에 `(` (kind9) 케이스 추가**: `( <expr> )`를
+  paren_end로 닫고 내부를 gen_expr 재귀. **skip_factor에도 `(` 케이스**(paren_end+1로 스킵). call `name(`은 ident
+  분기서 먼저 처리되므로 무영향.
+- 실측: **`(a<b)+(b<c)`=2**(이전 실패), `(2+3)*4`=20(precedence override), `(n+1)*(n+2)`=20, `((1+2)*3)`=9(중첩),
+  call 무영향(sq 18), bare precedence 유지(2+3*4=14). e2e fixpoint-full **39→43 PASS**(+4 그룹화), aggregate 96/96, 회귀0.
+- SELF_HOST.md FP12h, ROADMAP 그룹화 해결 표시(남은 codegen 갭=for 정도). 교훈: **iter72가 노출한 갭을 iter73서
+  해결**(능력추가 연쇄 — 비교-as-value→그룹화 자연스레)/`(`는 gen_factor/skip_factor 양쪽 필요/call은 ident분기 우선이라 무충돌/
+  그룹화로 precedence override+중첩+비교조합 전부 가능. **self-host 컴파일러 codegen 거의 완전**(남은 주요갭=for, 그외 부트스트랩=규모).

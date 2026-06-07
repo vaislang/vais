@@ -526,6 +526,11 @@ fn emit_op(o: Op) -> Int {
 fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, counter: Int) -> Op {
     let t = toks[i]
     if t.kind == 0 { return Op { kind: 0, val: t.value, next: counter } }
+    if t.kind == 9 {
+        # parenthesized group: `( <expr> )` -> evaluate the inner expression.
+        let close = paren_end(toks, i + 1)
+        return gen_expr(toks, slots, fns, defs, src, i + 1, close, counter)
+    }
     if t.kind == 1 {
         let nx = toks[i + 1]
         if nx.kind == 9 {
@@ -782,6 +787,10 @@ fn arg_comma_end(toks: &List<Token>, i: Int, close: Int) -> Int {
 # array index = name '[' ... ']'.
 fn skip_factor(toks: &List<Token>, i: Int) -> Int {
     let t = toks[i]
+    if t.kind == 9 {
+        # parenthesized group `( ... )` -> skip to just past the matching ')'.
+        return paren_end(toks, i + 1) + 1
+    }
     if t.kind == 1 {
         let nx = toks[i + 1]
         if nx.kind == 9 {
