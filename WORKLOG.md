@@ -1,5 +1,20 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12u — 실제 소스 부트스트랩 착수 + 첫 갭 해결: typed let)
+- **사용자 결정**: 실제 소스 부트스트랩 본격 착수(능력 다지기 loop 대신).
+- **recon**: self-host 모듈 측정 → fixpoint.nl=136줄=가장 작은 완전한 컴파일러=첫 타깃. fixpoint.nl을 fixpoint_full에
+  먹이는 첫 경계 매핑: **`&List` borrow + 재귀 + `&xs` call-site는 이미 동작**(갭 아님, 격리확인=fragment 추정과 다름)/
+  진짜 첫 블로커 = **typed let `let mut toks: List<Token> = []`**(`let x: Int = 42`조차 %v-1 — 타입주석이 RHS 위치 어긋나게 함).
+- **fix = rhs_pos() 헬퍼**: name 뒤 `: Type` 주석(List<...>는 `>`까지) 건너뛰고 RHS 위치 반환. 3 let 핸들러
+  (add_local_slots/gen_stmts/collect_top_slots) 전부 적용+다운스트림 npos+2/+3→vp. 추가: rhs_is_list가 `[]`(kind23+24)
+  빈 리스트 인식/let_anno_elem_sty=`: List<Type>` 주석서 원소타입(빈 리스트 authoritative)/rhs_struct_type도 rhs_pos.
+- 실측: typed scalar/mut/empty-list-of-structs/list()-of-structs/struct-lit/scalar-list/top-level + **실제 self-host
+  shape(typed-list 토크나이저 `let mut toks:List<Token>=[]`+push+consume)=6**. e2e fixpoint-full **90→97**(+7 가드),
+  값정확성 96/96, 회귀0. commit 569cb51.
+- 교훈: **recon이 실제 갭 정밀식별**(`&List`는 이미 OK, typed-let이 진짜 첫 블로커)/typed-let은 RHS 위치 단일근(rhs_pos)으로
+  3 핸들러 일괄. **남은 fixpoint.nl 갭=`-> List` 직접반환(#4, out-param 우회)/`for`(1곳)/print interp.** 다음=다음 갭 dedicated 또는
+  fixpoint.nl 더 먹이기.
+
 ## 2026-06-07 (/loop: FP12t — full tokenize→eval 파이프라인, List<Token> 함수간 공유)
 - **🎯🎯 완전한 self-host tokenize→parse/eval shape 컴파일**: tokenize가 `List<Token>` out-param 채움 →
   **별도 consumer 함수**가 그 `List<Token>`을 param으로 받아 `toks[i].kind`로 디스패치. 여러 consumer가 한 List 공유.

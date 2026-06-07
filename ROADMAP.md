@@ -424,6 +424,17 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   원소타입 읽음**(param_list_elem_sty를 자기 함수+param 위치에; push하든 읽든 authoritative), push-scan은 fallback(List<Int> 등).
   실측: tokenize→eval sum=6, mini calc 디스패치=9, **2 consumer(count_nums+sum_nums) 한 List 공유=211**. e2e 87→90, 값정확성
   96/96, 회귀0. 교훈: **read-only param은 push-scan 불가→param 주석이 authoritative**(consumer 함수가 self-host 핵심 패턴).
+- **🎯🎯 실제 소스 부트스트랩 착수 + 첫 갭 해결: typed let**(FP12u, 2026-06-07, commit 569cb51). 사용자 결정=실제 소스
+  부트스트랩 본격 착수. **recon**: self-host 모듈 측정(fixpoint.nl=136줄=가장 작은 완전한 컴파일러=첫 타깃). fixpoint.nl을
+  fixpoint_full에 먹이는 첫 경계 매핑 → **`&List` borrow+재귀+`&xs` call-site는 이미 동작**(갭 아님, 격리확인)/진짜 첫 블로커=
+  **typed let `let mut toks: List<Token> = []`**(타입 주석이 RHS 위치 어긋나게 함→`let x: Int = 42`조차 %v-1). **fix=rhs_pos()
+  헬퍼**(name 뒤 `: Type` 주석 건너뛰고 RHS 위치 반환, `List<...>`는 `>`까지) 3 let 핸들러(add_local_slots/gen_stmts/
+  collect_top_slots) 전부 적용+다운스트림 npos+2/+3→vp. 추가: rhs_is_list가 `[]` 빈 리스트 리터럴(kind23+24) 인식/
+  let_anno_elem_sty=`: List<Type>` 주석서 원소타입(빈 리스트 authoritative, push-scan→call-site fallback)/rhs_struct_type도
+  rhs_pos 사용. 실측: typed scalar/mut/empty-list-of-structs/list()-of-structs/struct-lit/scalar-list/top-level + **실제
+  self-host shape(typed-list 토크나이저 `let mut toks:List<Token>=[]`+push+consume)=6**. e2e 90→97, 값정확성 96/96, 회귀0.
+  교훈: **recon이 실제 갭 정밀식별**(`&List`는 이미 OK=fragment 추정과 다름, typed-let이 진짜 첫 블로커)/typed-let은 RHS
+  위치 단일근(rhs_pos)으로 3 핸들러 일괄. **남은 fixpoint.nl 갭=`-> List` 직접반환(#4, out-param 우회존재)/`for`(1곳)/print interp.**
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
