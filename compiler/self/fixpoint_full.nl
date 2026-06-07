@@ -1455,24 +1455,83 @@ fn count_arr_elems(toks: &List<Token>, astart: Int) -> Int {
     return commas + 1
 }
 
-# Is the RHS at npos+2 a `list()` constructor? (ident 'list' then '(').
+# Position of a let's RHS value (the token just after `=`), given `npos` = the
+# name token index. Handles an optional type annotation `name : Type = rhs`
+# (including `List<...>`, which spans to the closing `>`). Without an annotation
+# `name = rhs`, the RHS is at npos+2 (npos+1 is `=`). With `name : Type = rhs`,
+# we skip the `:` + Type tokens to land just past `=`.
+fn rhs_pos(toks: &List<Token>, npos: Int) -> Int {
+    let c1 = toks[npos + 1]
+    if c1.kind == 16 {
+        # `:` annotation. The type is `List<...>` (spans to '>') or a single ident.
+        let ty = toks[npos + 2]
+        let mut q = npos + 3
+        if ty.kind == 1 {
+            let after = toks[npos + 3]
+            if after.kind == 18 {
+                # `<...>` generic args: advance to the matching '>' (kind 19).
+                let mut tq = npos + 4
+                let mut tg = true
+                while tg {
+                    let tt = toks[tq]
+                    if tt.kind == 19 { tg = false } else { tq = tq + 1 }
+                }
+                q = tq + 1
+            }
+        }
+        # q now points at `=`; the RHS is the next token.
+        return q + 1
+    }
+    # no annotation: npos+1 is `=`, RHS at npos+2.
+    return npos + 2
+}
+# Is the RHS a `list()` constructor (ident 'list' then '(') OR an empty list
+# literal `[]`? Both create an empty List. Handles typed lets (`name: Type = rhs`).
 fn rhs_is_list(toks: &List<Token>, src: Str, npos: Int) -> Int {
-    let rhs = toks[npos + 2]
+    let vp = rhs_pos(toks, npos)
+    let rhs = toks[vp]
     if rhs.kind == 1 {
         if kw4(src, rhs.nstart, rhs.nlen, 108, 105, 115, 116) == 1 {
-            let after = toks[npos + 3]
+            let after = toks[vp + 1]
             if after.kind == 9 { return 1 }
         }
+    }
+    # empty list literal: `[` immediately followed by `]` (kind 23 then 24).
+    if rhs.kind == 23 {
+        let after = toks[vp + 1]
+        if after.kind == 24 { return 1 }
     }
     return 0
 }
 # If `let name = Name { ... }`, returns the struct-type index of Name, else -1.
 fn rhs_struct_type(toks: &List<Token>, defs: &List<StructDef>, src: Str, npos: Int) -> Int {
-    let rhs = toks[npos + 2]
+    let vp = rhs_pos(toks, npos)
+    let rhs = toks[vp]
     if rhs.kind == 1 {
-        let after = toks[npos + 3]
+        let after = toks[vp + 1]
         if after.kind == 11 {
             return struct_index_by_name(defs, src, rhs.nstart, rhs.nlen)
+        }
+    }
+    return 0 - 1
+}
+# Element struct-type from a let's type annotation `name : List<Type> = ...`,
+# given `npos` = the name token. Returns the struct-type index, or -1 (no
+# annotation, or a non-struct element like List<Int>). This is the authoritative
+# element type for `let toks: List<Token> = []` where no push reveals it.
+fn let_anno_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, npos: Int) -> Int {
+    let c1 = toks[npos + 1]
+    if c1.kind == 16 {
+        let ty = toks[npos + 2]
+        let islist = kw4(src, ty.nstart, ty.nlen, 76, 105, 115, 116)
+        if islist == 1 {
+            let lt = toks[npos + 3]
+            if lt.kind == 18 {
+                let et = toks[npos + 4]
+                if et.kind == 1 {
+                    return struct_index_by_name(defs, src, et.nstart, et.nlen)
+                }
+            }
         }
     }
     return 0 - 1
@@ -1642,7 +1701,9 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>,
             let mut npos = i + 1
             if nx.kind == 21 { npos = i + 2 }
             let name = toks[npos]
-            let rhs = toks[npos + 2]
+            # RHS value position handles typed lets `name : Type = rhs`.
+            let vp = rhs_pos(toks, npos)
+            let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
             if sti >= 0 {
                 # struct var: alloca [nfields x i64], sty = type index
@@ -1657,14 +1718,12 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>,
                 next_slot = next_slot + 1
             } else if rhs_is_list(toks, src, npos) == 1 {
                 # List: buffer at %v<slot>, length at %v<slot+1>=0.
-                # If the List holds structs (first push is `name.push(Type{...})`),
-                # the buffer is [64*nfields x i64] and the slot's sty carries the
-                # element struct-type index (stride = nfields). Otherwise scalar
-                # [64 x i64] with sty=-1.
-                let mut lest = list_elem_sty(toks, defs, src, npos + 3, end, name.nstart, name.nlen)
-                # If no local push reveals the element type, the List may be filled
-                # by a callee it is passed to (out-param). Infer from that call site.
-                if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, npos + 3, end, name.nstart, name.nlen, n) }
+                # Element type: a `: List<Type>` annotation is authoritative (covers
+                # `let toks: List<Token> = []` where no push reveals it); else scan
+                # the body for the first push; else infer from a callee (out-param).
+                let mut lest = let_anno_elem_sty(toks, defs, src, npos)
+                if lest < 0 { lest = list_elem_sty(toks, defs, src, vp, end, name.nstart, name.nlen) }
+                if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, vp, end, name.nstart, name.nlen, n) }
                 let mut lbuf = 64
                 # struct-element Lists: [64*nf + 1 x i64] -- the +1 reserves a length
                 # header at index 64*nf so the buffer can be passed by-pointer as a
@@ -1710,7 +1769,7 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>,
                 putchar(10)
                 next_slot = next_slot + 1
             } else if rhs.kind == 23 {
-                let alen = count_arr_elems(toks, npos + 3)
+                let alen = count_arr_elems(toks, vp + 1)
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 1, alen: alen , sty: 0 - 1 })
                 emit_str("  %v")
                 pint(next_slot)
@@ -1768,14 +1827,16 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             if nx.kind == 21 { npos = i + 2 }
             let name = toks[npos]
             let slot = find_slot(slots, src, name.nstart, name.nlen)
-            let rhs = toks[npos + 2]
+            # RHS value position handles typed lets `name : Type = rhs`.
+            let vp = rhs_pos(toks, npos)
+            let rhs = toks[vp]
             let lsti = rhs_struct_type(toks, defs, src, npos)
             if lsti >= 0 {
                 # struct literal: Name { f: v, ... } -> store each field via GEP.
-                # open-brace at npos+3; fields from npos+4. Field is `name : value`
-                # (the `:` is tokenized as kind 16); value starts after name + `:`.
+                # `vp` is the struct-name token; the open-brace is at vp+1. Field is
+                # `name : value` (the `:` is tokenized as kind 16).
                 let nf = struct_nfields(defs, lsti)
-                let bopen = npos + 3
+                let bopen = vp + 1
                 let bclose = match_brace(toks, bopen, end)
                 let mut q = bopen + 1
                 while q < bclose {
@@ -1809,14 +1870,14 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let stop = find_semi(toks, bclose, end)
                 i = stop + 1
             } else if rhs_is_list(toks, src, npos) == 1 {
-                # let lst = list();  — alloca/len already emitted in collect; skip
-                let stop = find_semi(toks, npos + 2, end)
+                # let lst = list() / [];  — alloca/len already emitted in collect; skip
+                let stop = find_semi(toks, vp, end)
                 i = stop + 1
             } else if rhs.kind == 23 {
-                # array literal: store each element via GEP
+                # array literal: store each element via GEP. `vp` is the `[`.
                 let alen = arrlen_of(slots, src, name.nstart, name.nlen)
-                let bend = bracket_end(toks, npos + 3)
-                let mut q = npos + 3
+                let bend = bracket_end(toks, vp + 1)
+                let mut q = vp + 1
                 let mut idx = 0
                 while q < bend {
                     let estop = arr_elem_end(toks, q, bend)
@@ -1847,11 +1908,11 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             } else if rhs.kind == 28 {
                 # let s = `lit`;  — string global + i8* alloca + ptr-store already
                 # emitted in the slot collector; nothing to do here.
-                let stop = find_semi(toks, npos + 2, end)
+                let stop = find_semi(toks, vp, end)
                 i = stop + 1
             } else {
-                let stop = find_semi(toks, npos + 2, end)
-                let e = gen_expr(toks, slots, fns, defs, src, npos + 2, stop, counter)
+                let stop = find_semi(toks, vp, end)
+                let e = gen_expr(toks, slots, fns, defs, src, vp, stop, counter)
                 emit_str("  store i64 ")
                 emit_op(e)
                 emit_str(", i64* %v")
@@ -2441,7 +2502,9 @@ fn collect_top_slots(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: In
             let mut npos = i + 1
             if nx.kind == 21 { npos = i + 2 }
             let name = toks[npos]
-            let rhs = toks[npos + 2]
+            # RHS value position handles typed lets `name : Type = rhs`.
+            let vp = rhs_pos(toks, npos)
+            let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
             if sti >= 0 {
                 let nf = struct_nfields(defs, sti)
@@ -2457,8 +2520,10 @@ fn collect_top_slots(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: In
                 # List buffer: struct-element Lists get [64*nf+1 x i64] (the +1 is a
                 # length header at index 64*nf for by-pointer param passing) with
                 # sty = element struct type (stride = nfields); scalar Lists [64 x i64].
-                let mut lest = list_elem_sty(toks, defs, src, npos + 3, n, name.nstart, name.nlen)
-                if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, npos + 3, n, name.nstart, name.nlen, n) }
+                # Element type: `: List<Type>` annotation first, else push-scan, else callee.
+                let mut lest = let_anno_elem_sty(toks, defs, src, npos)
+                if lest < 0 { lest = list_elem_sty(toks, defs, src, vp, n, name.nstart, name.nlen) }
+                if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, vp, n, name.nstart, name.nlen, n) }
                 let mut lbuf = 64
                 if lest >= 0 { lbuf = 64 * struct_nfields(defs, lest) + 1 }
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: lest })
@@ -2501,7 +2566,7 @@ fn collect_top_slots(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: In
                 putchar(10)
                 next_slot = next_slot + 1
             } else if rhs.kind == 23 {
-                let alen = count_arr_elems(toks, npos + 3)
+                let alen = count_arr_elems(toks, vp + 1)
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 1, alen: alen , sty: 0 - 1 })
                 emit_str("  %v")
                 pint(next_slot)

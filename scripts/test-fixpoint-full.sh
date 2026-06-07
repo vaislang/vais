@@ -255,6 +255,26 @@ check "struct Token {{ kind, value }}; fn tokenize(s: Str, out: List<Token>) {{ 
 # TWO separate consumers over the same tokenize-filled List<Token> (multi-pass)
 check "struct Token {{ kind, value }}; fn tokenize(s: Str, out: List<Token>) {{ let mut i = 0; while i < s.len() {{ let c = s[i]; if c >= 48 and c <= 57 {{ out.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ out.push(Token {{ kind: 2, value: 0 }}) }}; i = i + 1 }}; return 0 }}; fn count_nums(toks: List<Token>) {{ let mut n = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ n = n + 1 }}; j = j + 1 }}; return n }}; fn sum_nums(toks: List<Token>) {{ let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; fn run() {{ let toks = list(); tokenize(\`5+6\`, toks); return count_nums(toks) * 100 + sum_nums(toks) }}; return run();" 211
 
+# --- FP12u: typed let bindings (`let name: Type = rhs`) -- real self-host source ---
+# Actual self-host source uses typed lets like `let mut toks: List<Token> = []`.
+# The let parser must skip the `: Type` annotation (incl. `List<...>`) to find the
+# RHS. An empty list literal `[]` is recognized as a List; element type comes from
+# the annotation. (Untyped `let name = rhs` keeps working.)
+# typed scalar let
+check "fn run() {{ let x: Int = 42; return x }}; return run();" 42
+# typed mutable scalar let
+check "fn run() {{ let mut x: Int = 40; x = x + 2; return x }}; return run();" 42
+# typed empty-list-literal of structs (the `let mut toks: List<Token> = []` shape)
+check "struct Tok {{ kind, val }}; fn run() {{ let mut xs: List<Tok> = []; xs.push(Tok {{ kind: 0, val: 42 }}); return xs[0].val }}; return run();" 42
+# typed list() of structs + typed struct-literal let
+check "struct P {{ x, y }}; fn run() {{ let p: P = P {{ x: 40, y: 2 }}; return p.x + p.y }}; return run();" 42
+# typed empty-list of scalars
+check "fn run() {{ let xs: List<Int> = []; xs.push(20); xs.push(22); return xs[0] + xs[1] }}; return run();" 42
+# top-level typed let
+check "let n: Int = 42; return n;" 42
+# the real self-host shape: typed-list tokenizer (toks: List<Token> = [] then push)
+check "struct Token {{ kind, value }}; fn tokenize(s: Str) {{ let mut toks: List<Token> = []; let mut i = 0; while i < s.len() {{ let c = s[i]; if c >= 48 and c <= 57 {{ toks.push(Token {{ kind: 1, value: c - 48 }}) }}; i = i + 1 }}; let mut sum = 0; let mut j = 0; while j < toks.len {{ sum = sum + toks[j].value; j = j + 1 }}; return sum }}; return tokenize(\`1a2a3\`);" 6
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'
