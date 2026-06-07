@@ -1,5 +1,18 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12x — 🎯🎯🎯 실제 fixpoint.nl evaluator 통째 컴파일 (let t=toks[i] LOS-원소 바인딩))
+- fixpoint.nl 재귀 evaluator(eval_term/eval_expr/eval_expr_fold/skip_term, `List<Token>` param 재귀) 먹였더니 invalid IR(%v-N).
+- IR 격리: **`let t = toks[i]`가 List-of-structs 원소를 local에 바인딩** 후 `t.kind`/`t.value` 필드읽기 — let-핸들러가 `toks[i]`를
+  scalar RHS로 취급→`t`가 i64 1슬롯, `op.kind`가 인접(틀린)슬롯 읽음. 핵심 eval패턴 `let t=toks[i]; if t.kind==2`. 직접 `toks[i].kind`는 이미 OK.
+- **fix: rhs_los_elem_sty()**(RHS가 `<listvar>[expr]`+listvar가 LOS면 원소타입)+slot 할당이 struct local([nf x i64], sty=원소타입)+
+  gen_stmts가 원소복사(필드k: `t[k]=buf[idx*nf+k]`, param이면 버퍼ptr 먼저 load)+add_local_slots서 `&slots` 전달(owned라 by-value면 E022 move).
+- 실측: local/param LOS-원소 바인딩+필드, **🎯 실제 fixpoint.nl evaluator(`2 + 3 * 4`=14 precedence, `10 - 2 * 3`=4 좌결합+precedence)**.
+  e2e fixpoint-full **105→109**(+4 가드), 값정확성 96/96, 회귀0. commit d5c40ce.
+- 교훈: 실제 eval 먹이기가 `let t=toks[i]` 바인딩 갭 노출(직접접근과 별개 경계)/owned slots는 `&` 전달 필수(E022)/IR 격리로 슬롯 오정렬 규명.
+- **🎯🎯🎯 fixpoint.nl tokenize+evaluator 양쪽 완전 컴파일+실행 = 가장 작은 완전한 self-host 컴파일러의 핵심 동작.** FP12g~x(17 능력추가).
+  남은 fixpoint.nl 갭=`-> List` 직접반환(#4 우회)/`for`(1곳)/print interp(3곳)/emit_ir(putchar 이미 동작). 다음=fixpoint.nl 전체(tokenize+eval+
+  emit_ir+main) 통합 먹이기 or 남은 갭 or TRACKED 2버그.
+
 ## 2026-06-07 (/loop: FP12w — 🎯 실제 fixpoint.nl 토크나이저 통째 컴파일 (else-if 체인 in-loop))
 - fixpoint.nl 실제 tokenize(out-param 형: 4 token kinds, is_space/is_digit 헬퍼콜, 6-way `if/else if.../else` 디스패치)
   먹였더니 오답(count 7 vs 5, garbage 값).

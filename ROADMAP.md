@@ -457,6 +457,17 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   **🎯 실제 fixpoint.nl tokenize 완전 컴파일+실행.** TRACKED(pre-existing, 별개, 비-blocking): ①3+레벨 nested else-if 모든 branch가
   return시 빈 trailing merge block(invalid IR) ②`.len`+`[i].field` 혼합 multi-term 식(`toks.len*100+toks[0].value+...`) 오계산.
   남은 fixpoint.nl 갭=`-> List` 직접반환(#4 우회존재)/`for`(1곳)/print interp(3곳).
+- **🎯🎯🎯 실제 fixpoint.nl evaluator 통째 컴파일+실행 — `let t = toks[i]` LOS-원소 바인딩 해결**(FP12x, 2026-06-07, commit d5c40ce).
+  fixpoint.nl 재귀 evaluator(eval_term/eval_expr/eval_expr_fold/skip_term, `List<Token>` param 재귀) 먹였더니 invalid IR(%v-N).
+  IR 격리: **`let t = toks[i]`가 List-of-structs 원소를 local에 바인딩** 후 `t.kind`/`t.value` 필드읽기 — let-핸들러가 `toks[i]`를
+  scalar RHS로 취급→`t`가 i64 1슬롯, 필드접근이 인접(틀린)슬롯 읽음. 핵심 eval패턴 `let t=toks[i]; if t.kind==2`. 직접 `toks[i].kind`는
+  이미 OK. **fix: rhs_los_elem_sty()**(RHS가 `<listvar>[expr]`이고 listvar가 LOS면 원소타입 반환)+slot 할당이 struct local([nf x i64],
+  sty=원소타입)+gen_stmts가 원소복사(필드k: `t[k]=buf[idx*nf+k]`, param이면 버퍼ptr 먼저 load)+add_local_slots서 `&slots` 전달(owned라
+  by-value면 E022 move). 실측: local/param LOS-원소 바인딩+필드, **실제 fixpoint.nl evaluator(`2 + 3 * 4`=14 precedence, `10 - 2 * 3`=4
+  좌결합+precedence)**. e2e 105→109, 값정확성 96/96, 회귀0. **🎯🎯🎯 fixpoint.nl tokenize+evaluator 양쪽 완전 컴파일+실행=가장 작은
+  완전한 self-host 컴파일러의 핵심 동작.** 교훈: 실제 eval 먹이기가 `let t=toks[i]` 바인딩 갭 노출(직접접근과 별개)/owned slots는 `&` 전달
+  필수(E022). 남은 fixpoint.nl 갭=`-> List` 직접반환(#4 우회)/`for`(1곳)/print interp(3곳)+emit_ir(putchar 이미 동작). collect_top_slots
+  미적용(top-level `let t=toks[i]` self-host 미사용, defer).
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
