@@ -400,16 +400,22 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   clang 스킴(연속 stride + dynamic-index field) 격리검증 후 구현. 실측: push/len, multi-term field-read 식, dynamic
   build→consume 루프(tokenize→eval 모양), 실제 4-필드 Token struct, **40-원소 스케일**(별도 length alloca라 buf[63]
   충돌 없음). e2e 79→83, 값정확성 96/96, 회귀0. **로컬 List-of-structs=parser/eval 부트스트랩 직결 핵심 능력.**
-- **🎯 #5b 부트스트랩 갭: List-of-structs PARAMETER(`fn tok(s: Str, out: List<Token>)`) — TRACKED**(2026-06-07
-  경계매핑서 식별). 실제 self-host 토크나이저 시그니처는 `out: List<Token>`(struct-원소 List를 by-pointer 전달)+
-  본문서 `out.push(Token{...})`+소비측 `toks[j].field`. 현재 List-param(is_arr=4)은 **scalar 원소만** 지원(struct push
-  invalid-IR). **clang 스킴 검증완료**(run=23): i64* 버퍼, struct stride로 `buf[len*nf+k]` push/`buf[i*nf+fi]` read,
-  포인터 경유. **원소 타입 추론은 struct 필드 추가 불필요** — `emit_fn`서 param 이름으로 `list_elem_sty()`를 본문
-  범위에 재사용(로컬과 동일 메커니즘). **남은 설계 subtlety = length-slot 충돌**: scalar List-param은 length를
-  `buf[63]`에 두나, stride>1이면 index 63이 원소 31의 데이터 슬롯과 충돌(`31*2+1=63`). → length를 데이터 영역 뒤
-  (`buf[64*nf]`, 버퍼 `[64*nf+1 x i64]`)로 옮기고 sync_list_len/param-push/read를 stride-aware length 위치로
-  통일 필요(다중 사이트). 로컬 #5(별도 length alloca)는 충돌 없음 — param by-pointer convention만 해당. **다음 dedicated
-  iter 1순위**(실제 토크나이저 full shape 직결, 스킴 검증완료, 사이트 명확). 우회: 로컬 List<struct> 빌드 후 소비는 동작.
+- **🎯🎯 #5b 부트스트랩 갭: List-of-structs PARAMETER — 해결**(FP12s, 2026-06-07, commit cb81aaa).
+  **실제 self-host 토크나이저 full shape 컴파일**: `fn tok(s: Str, out: List<Token>)`가 string 스캔→Token struct를
+  by-pointer out-param List에 push, 호출자가 `toks[j].kind`/`toks[j].value`로 소비(=self-host `tokenize(src) -> List<Token>`을
+  out-param으로 재작성한 모양, List-return 우회). **length-slot 재설계**(buf[63]↔struct-stride 충돌 제거): struct-원소
+  List 버퍼=`[64*nf+1 x i64]`, length를 데이터 영역 뒤 header slot `buf[64*nf]`에 저장(scalar List는 무변경=`[64 x i64]`,
+  buf[63]); 4 버퍼 사이트(로컬 push GEP/로컬 index GEP/양 slot 할당자) 전부 `64*nf+1`로 타입 일치. clang 검증 run=179
+  (40원소 param). **callee(is_arr=4,sty>=0)**: emit_fn이 list_elem_sty로 param 원소타입 추론(본문 `out.push(Type{})`),
+  push=`ptr[len*nf+fi]`/index=`ptr[i*nf+fi]`/`.len`=`ptr[64*nf]`(stride-aware). **caller cross-function 추론**: 호출자
+  본문에 push 없어 원소타입 불가시 → **call_arg_elem_sty+param_list_elem_sty**가 호출되는 callee의 `List<Struct>` param
+  주석에서 추론(arg 위치를 callee param에 매칭), 양 slot 할당자서 fallback. pre-call write+sync_list_len도 stride-aware
+  (length index+buffer size를 List-arg별 thread: scalar 63/64, struct 64*nf/64*nf+1). **트랜스파일러 근본수정**:
+  expand_for_loops(line기반)가 while/for 본문 끝 찾을 때 brace를 세는데 **`#` 주석 안 brace도 셈** → 루프 본문 내
+  주석에 unbalanced `{`(예 "... Type {")가 있으면 `}` 하나 더 소비→stray brace emit. 해당 주석들서 unbalanced brace 제거.
+  실측: empty-fill-len=2, caller-reads-fields=31, callee-reads-own=100, **full tokenizer(out-param List<Token>)=3**.
+  e2e 83→87, 값정확성 96/96, 회귀0. 교훈: clang 스킴 검증 먼저(run=179)/length를 데이터 뒤로(충돌제거)/caller cross-function
+  추론은 callee param 주석서(struct 필드 추가 회피)/**트랜스파일러 brace-count가 주석 brace 포함=루프 본문 주석 brace 금지**.
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

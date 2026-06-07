@@ -1,5 +1,24 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12s — List-of-structs PARAMETER, #5b 해결 = 실제 토크나이저 full shape)
+- **🎯🎯 #5b 해결**: 실제 self-host 토크나이저 full shape 컴파일 — `fn tok(s: Str, out: List<Token>)`가
+  string 스캔→Token struct를 by-pointer out-param List에 push, 호출자가 `toks[j].kind`/`toks[j].value` 소비
+  (=self-host `tokenize(src) -> List<Token>`을 out-param으로 재작성, List-return 우회 패턴).
+- **length-slot 재설계**(clang 검증 run=179, 40원소): struct-원소 List=`[64*nf+1 x i64]`, length를 데이터 뒤
+  header `buf[64*nf]`에 저장(scalar 무변경 buf[63]). 4 버퍼 사이트 전부 `64*nf+1` 타입일치.
+- **callee(is_arr=4,sty>=0)**: emit_fn이 list_elem_sty로 param 원소타입 추론, push=`ptr[len*nf+fi]`/
+  index=`ptr[i*nf+fi]`/`.len`=`ptr[64*nf]`.
+- **caller cross-function 추론**: 호출자 본문에 push 없어 원소타입 불가시 → call_arg_elem_sty+param_list_elem_sty가
+  callee의 `List<Struct>` param 주석서 추론(arg 위치 매칭). pre-call write+sync_list_len stride-aware化.
+- **🎯 트랜스파일러 근본수정**: expand_for_loops(line기반)가 while/for 본문끝 brace-count시 **`#` 주석 brace도 셈**
+  → 루프 본문 주석에 unbalanced `{`("... Type {") 있으면 `}` 더 소비→stray brace→빌드깨짐. 주석서 brace 제거.
+- 실측: empty-fill-len=2, caller-reads-fields=31, callee-reads-own=100, **full tokenizer=3**.
+  e2e fixpoint-full **83→87**(+4 가드), 값정확성 96/96, 회귀0. commit cb81aaa.
+- 교훈: clang 스킴 먼저(run=179)/length를 데이터 뒤로(stride 충돌제거)/caller 추론은 callee param 주석서(struct
+  필드 추가 회피)/**트랜스파일러 brace-count가 주석 포함=루프 본문 주석 brace 금지**(진단: q.vais depth -1+main 뒤 stray }).
+- **🎯🎯🎯 부트스트랩 갭 #1~#5b 전부 해결 = self-host 토크나이저 full shape(string param→List<Token> out 채움→field 소비) 컴파일.**
+  FP12g~s(12 능력추가). 다음=더 큰 self-host 통합(tokenize+parse가 List<Token> 공유) 또는 실제 소스 부트스트랩.
+
 ## 2026-06-07 (/loop: FP12r — List-of-structs, 부트스트랩 갭 #5 로컬 해결)
 - 경계매핑: 다함수 통합 미니컴파일러(tokenize digits→eval sum, List를 함수간 전달)는 동작(=10).
   더 어려운 모양 probe → **List-of-structs**(`toks.push(Tok{...})` 통째 struct push)서 invalid-IR 경계 발견.
