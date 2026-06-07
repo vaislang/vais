@@ -1364,29 +1364,11 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 }
             }
             let bclose = match_brace(toks, bopen, end)
-            # condition is [i+1, bopen); find comparison operator
+            # condition is [i+1, bopen). Evaluate the WHOLE condition as a value
+            # (gen_expr handles comparisons, `and`/`or`, grouping), then branch on
+            # nonzero. This supports compound conditions like `c >= 48 and c <= 57`.
             let cstart = i + 1
             let cend = bopen
-            let mut oppos = cend
-            let mut pred_lt = 0
-            let mut pred_gt = 0
-            let mut pred_eq = 0
-            let mut pred_le = 0
-            let mut pred_ge = 0
-            let mut q = cstart
-            let mut g2 = true
-            while g2 {
-                if q >= cend { g2 = false }
-                else {
-                    let qt = toks[q]
-                    if qt.kind == 18 { oppos = q; pred_lt = 1; g2 = false }
-                    else if qt.kind == 19 { oppos = q; pred_gt = 1; g2 = false }
-                    else if qt.kind == 20 { oppos = q; pred_eq = 1; g2 = false }
-                    else if qt.kind == 29 { oppos = q; pred_le = 1; g2 = false }
-                    else if qt.kind == 30 { oppos = q; pred_ge = 1; g2 = false }
-                    else { q = q + 1 }
-                }
-            }
             # label numbers from current counter; reserve 3 (loop/body/done)
             let lbl = counter
             counter = counter + 1
@@ -1397,17 +1379,13 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             pint(lbl)
             emit_str(":")
             putchar(10)
-            let lhs = gen_expr(toks, slots, fns, defs, src, cstart, oppos, counter)
-            let rhs = gen_expr(toks, slots, fns, defs, src, oppos + 1, cend, lhs.next)
-            let cnum = rhs.next
+            let cond = gen_expr(toks, slots, fns, defs, src, cstart, cend, counter)
+            let cnum = cond.next
             emit_str("  %t")
             pint(cnum)
-            emit_str(" = icmp ")
-            if pred_lt == 1 { emit_str("slt") } else if pred_gt == 1 { emit_str("sgt") } else if pred_le == 1 { emit_str("sle") } else if pred_ge == 1 { emit_str("sge") } else { emit_str("eq") }
-            emit_str(" i64 ")
-            emit_op(lhs)
-            emit_str(", ")
-            emit_op(rhs)
+            emit_str(" = icmp ne i64 ")
+            emit_op(cond)
+            emit_str(", 0")
             putchar(10)
             emit_str("  br i1 %t")
             pint(cnum)
@@ -1442,29 +1420,10 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 }
             }
             let bclose = match_brace(toks, bopen, end)
-            # condition [i+1, bopen)
+            # condition [i+1, bopen) -- evaluated as a whole value (supports
+            # comparisons, `and`/`or`, grouping), then branched on nonzero.
             let cstart = i + 1
             let cend = bopen
-            let mut oppos = cend
-            let mut pred_lt = 0
-            let mut pred_gt = 0
-            let mut pred_eq = 0
-            let mut pred_le = 0
-            let mut pred_ge = 0
-            let mut q = cstart
-            let mut g2 = true
-            while g2 {
-                if q >= cend { g2 = false }
-                else {
-                    let qt = toks[q]
-                    if qt.kind == 18 { oppos = q; pred_lt = 1; g2 = false }
-                    else if qt.kind == 19 { oppos = q; pred_gt = 1; g2 = false }
-                    else if qt.kind == 20 { oppos = q; pred_eq = 1; g2 = false }
-                    else if qt.kind == 29 { oppos = q; pred_le = 1; g2 = false }
-                    else if qt.kind == 30 { oppos = q; pred_ge = 1; g2 = false }
-                    else { q = q + 1 }
-                }
-            }
             # is there an `else { ... }` after the then-block?
             let mut has_else = 0
             let mut eopen = bclose
@@ -1490,17 +1449,13 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             }
             let lbl = counter
             counter = counter + 1
-            let lhs = gen_expr(toks, slots, fns, defs, src, cstart, oppos, counter)
-            let rhs = gen_expr(toks, slots, fns, defs, src, oppos + 1, cend, lhs.next)
-            let cnum = rhs.next
+            let cond = gen_expr(toks, slots, fns, defs, src, cstart, cend, counter)
+            let cnum = cond.next
             emit_str("  %t")
             pint(cnum)
-            emit_str(" = icmp ")
-            if pred_lt == 1 { emit_str("slt") } else if pred_gt == 1 { emit_str("sgt") } else if pred_le == 1 { emit_str("sle") } else if pred_ge == 1 { emit_str("sge") } else { emit_str("eq") }
-            emit_str(" i64 ")
-            emit_op(lhs)
-            emit_str(", ")
-            emit_op(rhs)
+            emit_str(" = icmp ne i64 ")
+            emit_op(cond)
+            emit_str(", 0")
             putchar(10)
             emit_str("  br i1 %t")
             pint(cnum)

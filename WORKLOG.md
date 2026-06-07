@@ -909,3 +909,14 @@
   **결론: self-host 소스 codegen 구문 거의 완비, 부트스트랩에 충분.** 교훈: **precedence는 RHS 바운딩이 핵심**
   (next_logical로 비교<and/or 보장)/0-1 피연산자엔 bitwise and/or가 logical과 동등/**4연속 bootstrap-relevant 추가**
   (비교-value/그룹화/`>=<=`/`and or`)로 is_digit류 완성 — 경계매핑이 실제 갭을 정확히 식별·해결.
+
+## 2026-06-07 (/loop iter 76: 🎯 self-host 능력 추가 — compound 조건 (is_alpha/is_digit 완성))
+- 경계매핑: self-host 소스가 **compound 조건 26곳 사용**(is_alpha `if c >= 97 and c <= 122`) — bootstrap-critical.
+  기존 if/while 조건핸들러는 단일비교만 split. **수정: 조건 전체를 gen_expr로 값평가 후 `icmp ne 0` 분기**
+  (gen_expr가 비교/`and or`/그룹화 처리하므로 compound 자동지원 + 핸들러 단순화). while+if 양쪽 리팩토링.
+- 실측: **is_alpha if-and**(c>=97 and c<=122) 동작, if-or, **while compound**(i<n and s<100)=50. **헤비 회귀0**
+  (재귀120/while-simple10/if-simple100/if-else9 — 핵심 조건로직 리팩토링했으나 전부 유지). e2e fixpoint-full **55→59**, aggregate 96/96.
+- SELF_HOST.md FP12k, ROADMAP: compound조건 해결, for만 비-critical 잔존. **결론: self-host 소스 codegen 구문
+  사실상 완비, 부트스트랩 충분.** 교훈: **조건 전체를 값평가(gen_expr)+`icmp ne 0`가 compound 자동지원+단순화**
+  (단일비교 split보다 일반적)/리팩토링은 헤비 회귀로 안전판정/self-host grep 26곳=compound critical(for 0건과 대조).
+  **5연속 bootstrap-relevant 추가**(비교-value/그룹화/`>=<=`/`and or`/compound조건)로 is_alpha/is_digit류 완성.

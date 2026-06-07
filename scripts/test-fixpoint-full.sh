@@ -110,6 +110,14 @@ check "fn f(a) {{ return a < 0 or a > 100 }}; return f(50);" 0
 check "fn f(a, b, c) {{ return a < b and b < c }}; return f(1, 2, 3);" 1
 check "fn f(a, b, c) {{ return a < b and b < c }}; return f(1, 5, 3);" 0
 
+# --- FP12k: compound conditions in if/while (the condition is evaluated as a
+# whole value, then branched on nonzero). The is_alpha shape `if c >= 97 and
+# c <= 122`. ---
+check "fn is_a(c) {{ if c >= 97 and c <= 122 {{ return 1 }}; return 0 }}; return is_a(100);" 1
+check "fn is_a(c) {{ if c >= 97 and c <= 122 {{ return 1 }}; return 0 }}; return is_a(50);" 0
+check "fn f(x) {{ if x < 0 or x > 100 {{ return 1 }}; return 0 }}; return f(150);" 1
+check "fn f(n) {{ let mut s = 0; let mut i = 0; while i < n and s < 100 {{ s = s + 10; i = i + 1 }}; return s }}; return f(5);" 50
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +
