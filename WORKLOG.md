@@ -1,5 +1,17 @@
 # nl WORKLOG
 
+## 2026-06-08 (/loop: FP12cc — 함수+재귀, fixpoint3.nl 3번째 tier)
+- fixpoint3.nl tier(multi-char 함수정의/호출+재귀)로 확장. fixpoint_full이 핵심 메커니즘 codegen.
+- 격리 probe(컴파일러 변경 0): find_fn(`List<Fn>` 이름룩업→index 1), **eval_call**(함수 룩업+인자를 fresh per-call
+  `List<Var>` scope 바인딩+body lookup 평가, double(5)=10), **재귀**(함수 body가 자기 호출, 매 호출 fresh scope:
+  sum(5)=15, **factorial(5)=120**).
+- **= fixpoint_full이 3개 self-host tier(①산술 ②산술+변수 ③함수+재귀) 아키텍처 전부 codegen 가능 확증.** `List<Fn>`+`List<Var>`
+  테이블+fresh-scope 바인딩+재귀 전부 기존 기능 조합=신규 능력 0.
+- e2e fixpoint-full **120→123**(+3 가드), 값정확성 96/96, 회귀0. commit f890a43.
+- 교훈: 3 tier 모두 동일 빌딩블록(List-of-structs 테이블+name_eq lookup+재귀+fresh scope)으로 조합=능력완비. FP12g~cc.
+  남은 fixpoint.nl 갭=`-> List` 직접반환/for/print/TRACKED 2건. 다음=fixpoint3 run_program 전체통합(source→fn정의+호출→값) or
+  `-> List` dedicated or for/print or TRACKED 버그.
+
 ## 2026-06-07 (/loop: FP12bb — 🎯🎯🎯🎯 완전한 산술+변수 컴파일러 end-to-end)
 - **마일스톤(신규 능력 0)**: fixpoint2.nl 전체를 단일 통합 프로그램으로 먹임 — `run_program(src)`가 multi-let 프로그램 토큰화
   (kw_let/kw_return 키워드인식+ident+num+`+ * = ;`)→`let` 바인딩으로 `List<Var>` 심볼테이블 빌드(변수가 이전 변수 참조 가능)

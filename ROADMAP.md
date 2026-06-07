@@ -495,6 +495,12 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   실측 end-to-end(source→value): `let x = 5; return x + 3` =8, `let a = 4; let b = 6; return a * b` =24, **`let x = 2; let y = x + 1;
   return x + y * 4` =14**(y가 x 참조+precedence). **= 두 번째 self-host tier 완성: multi-char 변수 있는 언어의 가장 작은 완전한 self-host
   컴파일러 end-to-end.** FP12z(심볼테이블)+FP12aa(변수평가)+키워드토큰화 조합=신규 능력 0. e2e 117→120(+3 가드), 값정확성 96/96, 회귀0.
+- **🎯🎯🎯 함수+재귀 (fixpoint3.nl, 3번째 tier)**(FP12cc, 2026-06-08, commit f890a43). fixpoint3.nl tier(multi-char 함수정의/호출+재귀)
+  확장. fixpoint_full이 핵심 메커니즘 codegen: `List<Fn>` 함수테이블 find_fn 룩업; **eval_call이 인자를 fresh per-call `List<Var>`
+  scope에 바인딩**하고 body를 lookup으로 평가; **재귀**(함수 body가 자기 호출, 매 호출 fresh scope). 실측: find_fn(이름→index 1),
+  eval_call(fresh scope, double(5)=10), **재귀 fresh-scope eval(factorial(5)=120, sum(5)=15)**. **= fixpoint_full이 3개 self-host tier
+  (산술/산술+변수/함수+재귀) 아키텍처 전부 codegen 가능 확증.** `List<Fn>`+`List<Var>` 테이블+fresh-scope 바인딩+재귀 전부 기존 기능 조합
+  =신규 능력 0. e2e 120→123(+3 가드), 값정확성 96/96, 회귀0.
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
