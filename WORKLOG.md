@@ -933,3 +933,19 @@
 - 교훈: **경계매핑이 갭 대신 통합 검증 산출**(최근 5 추가가 real lexer fragment 동작시킴=능력 충분 확증)/
   "65 vs 321"는 또 8-bit 절단(값≤255 유지 재확인)/격리로 메커니즘 분리 검증 후 통합이 진단순서. **self-host
   컴파일러가 자기 lexer의 완전한 4-함수 fragment를 codegen** = 부트스트랩 codegen 능력 실증 진전.
+
+## 2026-06-07 (/loop iter 78: 🎯 #1 부트스트랩 갭 발견 — 문자열 파라미터 (`fn f(s: Str)`))
+- parser/eval-shape fragment 경계매핑. token-scan-count/while-acc-struct OK, **count_digits(s) 실패**(0 vs 3).
+  격리: scan-inline-cmp/call-with-s[i]/if-call-s[i]/loop-call-simple-bool 전부 0 → 공통인자 = **string-as-PARAMETER**.
+  확인: 로컬문자열 `let s=...`은 OK(local-string-index=49), **param 문자열 `fn f(s)` 실패**(param-string-index=0).
+  IR: `@f(i64 %a0)`(param i64 오타입), 문자열리터럴 arg가 `f(i64 0)`(0 전달!), `s[i]`가 array-GEP(오타입).
+- **#1 부트스트랩 갭 확정**: fixpoint_full이 string-as-parameter 미지원. **self-host 소스 `Str` param 176곳 사용**
+  (fn tokenize(src: Str)/name_eq(src: Str,..)/is_putchar — 최다 패턴) = bootstrap-critical. 로컬문자열만 동작.
+  근본: compile() 입력이 무타입 param(`fn f(s)`)이라 시그니처로 string 판별 불가.
+- **해결 경로(dedicated 권장, 큰 작업)**: ①embedded 문법에 param 타입주석(`fn f(s: Str)`) — tokenize `:`+타입,
+  build_fns 파싱 ②Str-param=i8* slot + 호출 arg 문자열-포인터 전달 + `s[i]` byte-load. param-typing 인프라.
+- 이번 iter는 **경계 정밀식별+문서화**(ROADMAP #1 갭). 큰 다부분 변경은 turn 끝에 rushed half-merge 위험 →
+  dedicated 진행으로 추적(막히면 추적 원칙, 단 명확한 계획과 함께). 교훈: **경계매핑이 #1 bootstrap-critical 갭
+  정확 식별**(string param 176곳, self-tokenization 직전 최대 갭)/로컬 vs param 문자열 구분이 진단핵심/
+  param-typing은 시그니처 타입주석 필요(무타입선 string 추론 불가). self-host codegen은 표현식/제어흐름은 완비,
+  string-param이 다음 큰 관문.

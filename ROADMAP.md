@@ -339,5 +339,13 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   ⑤ `and`/`or`를 값으로 **해결**(FP12j, kind31/32, precedence comparison보다 낮게=next_logical로 RHS 바운드,
   `and`→`and i64`/`or`→`or i64`; **완전한 is_digit `c>=48 and c<=57` 동작**). ⑥ if/while 조건의 compound
   `and`/`or`(`if a and b`) **해결**(FP12k, 조건 전체를 gen_expr로 값평가 후 `icmp ne 0` 분기; self-host 26곳=is_alpha/is_digit).
-  **결론: self-host 소스가 쓰는 codegen 구문 사실상 완비**(함수/재귀/가변/while/if/else/배열/List/struct/문자열/비교/
-  `>=<=`/`and or`-value/**compound 조건**/그룹화). `for`만 비-critical 잔존(self-host 미사용 0건). **codegen 능력=부트스트랩 충분.**
+  표현식/제어흐름 codegen은 사실상 완비(함수/재귀/가변/while/if/else/배열/List/struct/문자열-local/비교/`>=<=`/
+  `and or`-value/compound 조건/그룹화). **단, 2026-06-07 경계매핑서 #1 부트스트랩 갭 발견(아래).**
+- **🎯 #1 부트스트랩 갭: 문자열 파라미터(`fn f(s: Str)`)** — fixpoint_full이 **string-as-parameter 미지원**.
+  현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
+  문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
+  (`fn tokenize(src: Str)`, `fn name_eq(src: Str,..)` 등) = 가장 많이 쓰는 패턴, bootstrap-critical. 로컬 문자열
+  (`let s = "..."`)은 동작(FP12c), param만 막힘. **해결 경로**: ①embedded 문법에 param 타입주석(`fn f(s: Str)`)
+  추가(tokenize `:`+타입, build_fns 파싱) ②Str-param을 i8* slot+호출 arg 문자열-포인터 전달+`s[i]` byte-load.
+  큰 작업(param-typing 인프라) → dedicated 진행 권장. **이게 self-tokenization 직전 최대 갭.**
+- `for` 루프: self-host 미사용(0건) → 비-critical, general-nl용 TRACKED.
