@@ -332,7 +332,9 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
 - **실제 nl 컴파일러 소스 부트스트랩**: fixpoint_full이 전 코어구문 + 토크나이저/파서 shape를 codegen하나,
   실제 컴파일러 소스는 수천 줄(깊은 중첩 + 대량 함수). 통합본에 그대로 먹여 emit IR이 재현하려면 months급
   엔지니어링. **능력/통합은 완비**(FP12g까지 실증) — 순수 코드량 문제. /loop는 여기서 인프라 다지기로 전환.
-- **fixpoint_full 잔존 codegen 능력 갭**(부트스트랩 향 확장 후보, 2026-06-07 경계매핑서 식별):
-  ① 비교-as-value **해결**(FP12g, `return a==b`→icmp+zext). ② `(...)` 그룹화 **해결**(FP12h, gen_factor가
-  `( <expr> )` 파싱, 중첩/precedence/비교조합). ③ `for` 루프 codegen 미구현(while만 — 실제 소스는 while로
-  우회 가능). 남은 주요 codegen 갭은 for 정도이고, 그 외는 부트스트랩=순수 규모.
+- **fixpoint_full 잔존 codegen 능력 갭**(부트스트랩 향 확장, 2026-06-07 경계매핑서 식별):
+  ① 비교-as-value **해결**(FP12g). ② `(...)` 그룹화 **해결**(FP12h). ③ `>=`/`<=` 2-char 비교 **해결**(FP12i,
+  단일토큰 kind29/30, sge/sle, value+조건 양쪽; is_digit `c>=48 and c<=57` shape). ④ `for` 루프 미구현 —
+  **단, self-host 소스는 for 미사용(while만, 실측 0건)** → 부트스트랩 비-critical, general-nl용으로만 TRACKED.
+  ⑤ `and`/`or`를 값으로(`return c>=48 and c<=57`) — self-host 소스 사용(is_digit), 미검증. 다음 후보.
+  **결론: self-host 소스가 쓰는 codegen 구문 거의 완비**(비교/그룹화/`>=<=`/while/struct/List/문자열), for는 비-critical.

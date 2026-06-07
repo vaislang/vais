@@ -170,8 +170,20 @@ fn tokenize(src: Str) -> List<Token> {
         else if c == 45 { toks.push(Token { kind: 4, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 40 { toks.push(Token { kind: 9, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 41 { toks.push(Token { kind: 10, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
-        else if c == 60 { toks.push(Token { kind: 18, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
-        else if c == 62 { toks.push(Token { kind: 19, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 60 {
+            # `<` (18) or `<=` (29)
+            if i + 1 < n {
+                if src[i + 1] == 61 { toks.push(Token { kind: 29, value: 0, nstart: 0, nlen: 0 }); i = i + 2 }
+                else { toks.push(Token { kind: 18, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+            } else { toks.push(Token { kind: 18, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        }
+        else if c == 62 {
+            # `>` (19) or `>=` (30)
+            if i + 1 < n {
+                if src[i + 1] == 61 { toks.push(Token { kind: 30, value: 0, nstart: 0, nlen: 0 }); i = i + 2 }
+                else { toks.push(Token { kind: 19, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+            } else { toks.push(Token { kind: 19, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        }
         else if c == 61 {
             if i + 1 < n {
                 if src[i + 1] == 61 {
@@ -831,13 +843,13 @@ fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
     # comparison as a value: `<` (18) / `>` (19) / `==` (20) -> icmp + zext i1->i64.
     # Lower precedence than +/-, so the RHS is a full additive expression
     # (gen_expr from the operand). The boolean result is widened to i64 (1/0).
-    if op.kind == 18 or op.kind == 19 or op.kind == 20 {
+    if op.kind == 18 or op.kind == 19 or op.kind == 20 or op.kind == 29 or op.kind == 30 {
         let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, stop, acc.next)
         let cnum = rhs.next
         emit_str("  %t")
         pint(cnum)
         emit_str(" = icmp ")
-        if op.kind == 18 { emit_str("slt") } else if op.kind == 19 { emit_str("sgt") } else { emit_str("eq") }
+        if op.kind == 18 { emit_str("slt") } else if op.kind == 19 { emit_str("sgt") } else if op.kind == 29 { emit_str("sle") } else if op.kind == 30 { emit_str("sge") } else { emit_str("eq") }
         emit_str(" i64 ")
         emit_op(acc)
         emit_str(", ")
@@ -1309,6 +1321,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             let mut pred_lt = 0
             let mut pred_gt = 0
             let mut pred_eq = 0
+            let mut pred_le = 0
+            let mut pred_ge = 0
             let mut q = cstart
             let mut g2 = true
             while g2 {
@@ -1318,6 +1332,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     if qt.kind == 18 { oppos = q; pred_lt = 1; g2 = false }
                     else if qt.kind == 19 { oppos = q; pred_gt = 1; g2 = false }
                     else if qt.kind == 20 { oppos = q; pred_eq = 1; g2 = false }
+                    else if qt.kind == 29 { oppos = q; pred_le = 1; g2 = false }
+                    else if qt.kind == 30 { oppos = q; pred_ge = 1; g2 = false }
                     else { q = q + 1 }
                 }
             }
@@ -1337,7 +1353,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             emit_str("  %t")
             pint(cnum)
             emit_str(" = icmp ")
-            if pred_lt == 1 { emit_str("slt") } else if pred_gt == 1 { emit_str("sgt") } else { emit_str("eq") }
+            if pred_lt == 1 { emit_str("slt") } else if pred_gt == 1 { emit_str("sgt") } else if pred_le == 1 { emit_str("sle") } else if pred_ge == 1 { emit_str("sge") } else { emit_str("eq") }
             emit_str(" i64 ")
             emit_op(lhs)
             emit_str(", ")
@@ -1383,6 +1399,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             let mut pred_lt = 0
             let mut pred_gt = 0
             let mut pred_eq = 0
+            let mut pred_le = 0
+            let mut pred_ge = 0
             let mut q = cstart
             let mut g2 = true
             while g2 {
@@ -1392,6 +1410,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     if qt.kind == 18 { oppos = q; pred_lt = 1; g2 = false }
                     else if qt.kind == 19 { oppos = q; pred_gt = 1; g2 = false }
                     else if qt.kind == 20 { oppos = q; pred_eq = 1; g2 = false }
+                    else if qt.kind == 29 { oppos = q; pred_le = 1; g2 = false }
+                    else if qt.kind == 30 { oppos = q; pred_ge = 1; g2 = false }
                     else { q = q + 1 }
                 }
             }
@@ -1426,7 +1446,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             emit_str("  %t")
             pint(cnum)
             emit_str(" = icmp ")
-            if pred_lt == 1 { emit_str("slt") } else if pred_gt == 1 { emit_str("sgt") } else { emit_str("eq") }
+            if pred_lt == 1 { emit_str("slt") } else if pred_gt == 1 { emit_str("sgt") } else if pred_le == 1 { emit_str("sle") } else if pred_ge == 1 { emit_str("sge") } else { emit_str("eq") }
             emit_str(" i64 ")
             emit_op(lhs)
             emit_str(", ")

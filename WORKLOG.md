@@ -886,3 +886,14 @@
 - SELF_HOST.md FP12h, ROADMAP 그룹화 해결 표시(남은 codegen 갭=for 정도). 교훈: **iter72가 노출한 갭을 iter73서
   해결**(능력추가 연쇄 — 비교-as-value→그룹화 자연스레)/`(`는 gen_factor/skip_factor 양쪽 필요/call은 ident분기 우선이라 무충돌/
   그룹화로 precedence override+중첩+비교조합 전부 가능. **self-host 컴파일러 codegen 거의 완전**(남은 주요갭=for, 그외 부트스트랩=규모).
+
+## 2026-06-07 (/loop iter 74: 🎯 self-host 능력 추가 — `>=`/`<=` (is_digit 부트스트랩 패턴))
+- self-host 소스가 쓰는 비교(is_digit `c >= 48 and c <= 57`)가 fixpoint_full서 깨짐 발견(`>=` 우연동작, `<=` 오답).
+  근본: `>=`/`<=`를 단일 토큰으로 인식 안 함(`>` `=` 분리). **수정: tokenize `<=`→kind29, `>=`→kind30**(다음 char `=`
+  체크) + gen_fold 비교-as-value arm + while/if 조건핸들러 양쪽에 sle/sge 추가(pred_le/pred_ge).
+- 실측: `a>=b`/`a<=b` value 1/0 정확, **is_digit if-패턴** is_d(53)=1/is_d(99)=0, `while i<=n` 합산=15. 회귀0
+  (`<`/`>`/`==`/재귀 유지). e2e fixpoint-full **43→48 PASS**(+5), aggregate 96/96.
+- SELF_HOST.md FP12i, ROADMAP: `>=<=` 해결 + **for는 self-host 소스 미사용(while만, 0건) → 부트스트랩 비-critical**
+  결론. 남은 후보: `and`/`or`를 값으로(is_digit `and` — 미검증). 교훈: **경계매핑이 bootstrap-critical 갭 식별**
+  (is_digit `>=<=`=실제 self-host 소스 패턴, for는 비-critical 판명)/2-char 연산자는 tokenize+gen_fold+조건핸들러 3곳/
+  self-host 소스 grep으로 critical vs nicety 구분(for 0건=비critical). **self-host 소스 codegen 구문 거의 완비.**
