@@ -435,6 +435,16 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   self-host shape(typed-list 토크나이저 `let mut toks:List<Token>=[]`+push+consume)=6**. e2e 90→97, 값정확성 96/96, 회귀0.
   교훈: **recon이 실제 갭 정밀식별**(`&List`는 이미 OK=fragment 추정과 다름, typed-let이 진짜 첫 블로커)/typed-let은 RHS
   위치 단일근(rhs_pos)으로 3 핸들러 일괄. **남은 fixpoint.nl 갭=`-> List` 직접반환(#4, out-param 우회존재)/`for`(1곳)/print interp.**
+- **🎯🎯 boolean 리터럴 true/false 해결 — 실제 digit-run 토크나이저 동작**(FP12v, 2026-06-07, commit 3f3fe76).
+  fixpoint.nl의 실제 multi-digit tokenize 로직(nested `while go {{ ...; go = false }}`로 digit run을 한 토큰에 `v=v*10+(d-48)`
+  누적)을 fixpoint_full에 먹였더니 %v-1. 격리: **`true`/`false`가 식별자(kind1)로 토큰화→gen_factor가 변수로딩으로 fall-through**
+  →`let mut go = true`가 `load %v-1`(슬롯없음), `go = false` 동일. (`while go` bare-var 조건 자체는 이미 OK였음=초기 의심 틀림,
+  digit-run probe가 매번 `while go`+`let mut go = true` 동반해 혼동.) **fix: gen_factor가 `true`/`false`를 정수 상수 1/0으로 인식**
+  (nl bool=i64), 변수로딩 전. `let mut go=true`+`go=false` 양쪽 커버(assignment RHS도 gen_expr→gen_factor). 실측: bool-flag
+  while, true/false-in-if, **실제 self-host digit-run 토크나이저(nested `while go` multi-digit 누적, `12a34`→토큰 12+34=46)**.
+  building block(digit-run i/v advance, else-if +/digit 분기) 독립확인. e2e 97→101, 값정확성 96/96, 회귀0. 교훈: **실제 self-host
+  로직 먹이기가 진짜 갭 노출**(true/false 리터럴=digit-run/scan 루프 필수)/초기 의심(while bare-var)은 격리로 정정(probe 동반변수 혼동).
+  **남은 fixpoint.nl 갭=`-> List` 직접반환(#4 우회존재)/`for`(1곳)/print interp(3곳).**
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

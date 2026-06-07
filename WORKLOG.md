@@ -1,5 +1,19 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12v — boolean 리터럴 true/false, 실제 digit-run 토크나이저 동작)
+- 다음 갭 probe: `-> List` 직접반환 clang 스킴 검증완료(run=42, caller-allocated buffer+callee hidden out-ptr)이나
+  구현이 큰 dedicated(local aliasing 등)라 우회 존재로 보류 → 대신 **fixpoint.nl 실제 tokenize 로직 통째 먹이기**로
+  다음 경계 탐색.
+- **실제 multi-digit tokenize**(nested `while go {{ ...; go = false }}`로 digit run을 `v=v*10+(d-48)` 한 토큰 누적)
+  → %v-1. 격리: **`true`/`false`가 식별자(kind1)로 토큰화→gen_factor 변수로딩 fall-through**→`let mut go=true`가
+  `load %v-1`. (`while go` bare-var는 이미 OK=초기 의심 틀림, probe가 매번 `let mut go=true` 동반해 혼동.)
+- **fix: gen_factor가 `true`/`false`를 정수 1/0으로 인식**(nl bool=i64), 변수로딩 전. let+assignment 양쪽 커버.
+- 실측: bool-flag while=5, true/false-in-if=42, **실제 digit-run 토크나이저(`12a34`→토큰 12+34)=46**.
+  building block(digit-run i/v advance, else-if 분기) 독립확인. e2e fixpoint-full **97→101**(+4 가드),
+  값정확성 96/96, 회귀0. commit 3f3fe76.
+- 교훈: **실제 self-host 로직 먹이기가 진짜 갭 노출**(true/false=digit-run/scan 루프 필수)/초기 의심은 격리로 정정.
+  **남은 fixpoint.nl 갭=`-> List` 직접반환(#4 우회존재, 스킴검증완료)/`for`(1곳)/print interp(3곳).** FP12g~v(15 능력추가).
+
 ## 2026-06-07 (/loop: FP12u — 실제 소스 부트스트랩 착수 + 첫 갭 해결: typed let)
 - **사용자 결정**: 실제 소스 부트스트랩 본격 착수(능력 다지기 loop 대신).
 - **recon**: self-host 모듈 측정 → fixpoint.nl=136줄=가장 작은 완전한 컴파일러=첫 타깃. fixpoint.nl을 fixpoint_full에
