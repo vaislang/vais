@@ -13,20 +13,28 @@
 
 ---
 
-## ⚑ 상태 (2026-06-06): P0~P5 인프라 + L3 self-host 미니 컴파일러 완료
+## ⚑ 상태 (2026-06-08): 🎯🎯🎯🎯🎯 실제 소스 부트스트랩 — 세 self-host tier 전부 end-to-end
 
 P0 게이트 / P1 코퍼스 / P2 트랜스파일러 / P3 에러인프라 / P4 std시작 / P5 레퍼런스 = **DONE**.
-L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**(codegen 능력 완비).
+L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 
-**현재(2026-06-07) 게이트 상태** (이번 세션서 크게 성장):
-- 값-정확성 **71/71** (예제코퍼스 53 검증 e16~e42 + self-host codegen 모듈).
-- 트랜스파일러-단위 **45/45**, nl-check-단위 **34/34** (Rust-ism 14규칙).
-- self-host e2e **77 PASS** (fixpoint-full 35 + str 7 + list 5 + struct 6 + array 7 + imperative 17).
-- cold-start: 신선 서브에이전트 다회 첫시도 성공 + 자기수정 1라운드 수렴 실측.
+**🎯 실제 소스 부트스트랩 arc 정점(2026-06-08, FP12g~ee, 41커밋)**: fixpoint_full(통합 nl-self-host 컴파일러)이
+**세 self-host 언어 tier를 전부 source string→value로 end-to-end 컴파일**:
+- **①산술식**(fixpoint.nl): tokenize+eval, `2 + 3 * 4`=14 (FP12y)
+- **②산술+변수**(fixpoint2.nl): 심볼테이블+변수평가, `let x = 2; let y = x + 1; return x + y * 4`=14 (FP12bb)
+- **③재귀 함수언어**(fixpoint3.nl): 함수테이블+fresh-scope+if-expr+재귀, `fn fac(n) {{ return if n <= 1 then 1 else n * fac(n - 1) }} return fac(5)`=120 (FP12ee)
+부트스트랩 갭 #1~#5b(string/List param, List-of-structs 로컬+param, typed let, bool, `!=`, let-bind-LOS, else-if-in-loop 등 20 능력추가) 전부 해결.
 
-**완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족**. 남은 것:
-1. **실제 소스 부트스트랩**(months급, TRACKED) — 능력 완비, 순수 규모 문제.
-2. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님, /loop 계속.
+**현재 게이트 상태**:
+- self-host e2e **fixpoint-full 129 PASS / 0 FAIL** (이 세션 90→129).
+- 값-정확성 aggregate **96/96** (예제코퍼스 + self-host codegen 모듈).
+- 트랜스파일러-단위/nl-check-단위 유지.
+
+**완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
+1. **fixpoint.nl 편의갭**(비-blocking): `-> List` 직접반환(#4, out-param 우회존재, clang스킴 run=42 검증) / for(1곳) / print interp(3곳).
+2. **TRACKED 컴파일러 버그**(task chip, 실전 영향없음): 3+레벨 nested else-if 빈 merge block / `.len`+`[i].field` 혼합 multi-term식.
+3. **실제 수천줄 소스 통째 부트스트랩**(months급, TRACKED) — 능력 완비, 순수 규모 문제(개별 tier는 fragment+통합으로 전부 동작 확증).
+4. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
 3. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
 
 ---
