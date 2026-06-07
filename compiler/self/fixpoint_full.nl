@@ -389,15 +389,33 @@ fn build_fns(toks: &List<Token>, src: Str, n: Int) -> List<Fn> {
                 let qt = toks[q]
                 if qt.kind == 10 { gp = false }
                 else if qt.kind == 16 {
-                    # `:` -> the next token is the type of the most recent param.
-                    # Str (kind 1 ident "Str") sets type 1; anything else stays 0.
+                    # `:` -> the type of the most recent param follows. Types:
+                    #   Str         -> 1  (string param, i8*)
+                    #   List<...>   -> 2  (List param, buffer pointer; `&` already
+                    #                      dropped by the tokenizer)
+                    #   else        -> 0  (int)
                     let tyt = toks[q + 1]
                     let isstr = kw3(src, tyt.nstart, tyt.nlen, 83, 116, 114)
-                    if npar == 1 { p0ty = isstr }
-                    else if npar == 2 { p1ty = isstr }
-                    else if npar == 3 { p2ty = isstr }
-                    else { p3ty = isstr }
-                    q = q + 2
+                    let islist = kw4(src, tyt.nstart, tyt.nlen, 76, 105, 115, 116)
+                    let mut pty = isstr
+                    if islist == 1 { pty = 2 }
+                    if npar == 1 { p0ty = pty }
+                    else if npar == 2 { p1ty = pty }
+                    else if npar == 3 { p2ty = pty }
+                    else { p3ty = pty }
+                    # advance past the type. List<...> spans to the closing `>`
+                    # (kind 19); a plain type is a single ident.
+                    if islist == 1 {
+                        let mut tq = q + 2
+                        let mut tg = true
+                        while tg {
+                            let tt = toks[tq]
+                            if tt.kind == 19 { tg = false } else { tq = tq + 1 }
+                        }
+                        q = tq + 1
+                    } else {
+                        q = q + 2
+                    }
                 }
                 else if qt.kind == 1 {
                     if npar == 0 { p0s = qt.nstart; p0l = qt.nlen }
