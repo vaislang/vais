@@ -1819,6 +1819,54 @@ fn match_brace(toks: &List<Token>, op: Int, n: Int) -> Int {
     }
     return j
 }
+# Index just past a complete `if [cond] { } [else if [cond] { }]* [else { }]`
+# statement, given `ifpos` = the `if` token. Walks the whole else-if chain so the
+# else-region of an outer `if` covers a nested `else if ... else ...` entirely
+# (not just the first inner then-block). Returns the index after the last `}`.
+fn if_stmt_end(toks: &List<Token>, ifpos: Int, n: Int) -> Int {
+    # skip the condition to the then-block's `{`
+    let mut bo = ifpos + 1
+    let mut g1 = true
+    while g1 {
+        if bo >= n { g1 = false }
+        else {
+            let bt = toks[bo]
+            if bt.kind == 11 { g1 = false } else { bo = bo + 1 }
+        }
+    }
+    let mut cur = match_brace(toks, bo, n) + 1
+    # consume any number of `else { }` / `else if [cond] { }` clauses
+    let mut go = true
+    while go {
+        if cur >= n { go = false }
+        else {
+            let et = toks[cur]
+            if et.kind == 17 {
+                let nxt = toks[cur + 1]
+                if nxt.kind == 15 {
+                    # `else if` -> recurse over the nested if-chain and stop (the
+                    # recursion consumes the rest of the chain).
+                    cur = if_stmt_end(toks, cur + 1, n)
+                    go = false
+                } else {
+                    # plain `else { }` -> skip to its `{`, match, and stop.
+                    let mut eo = cur + 1
+                    let mut g2 = true
+                    while g2 {
+                        if eo >= n { g2 = false }
+                        else {
+                            let ot = toks[eo]
+                            if ot.kind == 11 { g2 = false } else { eo = eo + 1 }
+                        }
+                    }
+                    cur = match_brace(toks, eo, n) + 1
+                    go = false
+                }
+            } else { go = false }
+        }
+    }
+    return cur
+}
 
 # Generate code for the statements in token range [i, end). Returns the next free
 # SSA temp. Handles `let`, assignment, `return`, and `while` (recursing for the
@@ -2405,27 +2453,41 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             # comparisons, `and`/`or`, grouping), then branched on nonzero.
             let cstart = i + 1
             let cend = bopen
-            # is there an `else { ... }` after the then-block?
+            # is there an `else { ... }` or `else if ...` after the then-block?
             let mut has_else = 0
-            let mut eopen = bclose
-            let mut eclose = bclose
+            let mut else_if = 0
+            let mut ebody_start = bclose
+            let mut ebody_end = bclose
+            let mut resume = bclose + 1
             let after_then = bclose + 1
             if after_then < end {
                 let et = toks[after_then]
                 if et.kind == 17 {
                     has_else = 1
-                    # find the open-brace after else
-                    let mut eo = after_then + 1
-                    let mut g3 = true
-                    while g3 {
-                        if eo >= end { g3 = false }
-                        else {
-                            let ot = toks[eo]
-                            if ot.kind == 11 { g3 = false } else { eo = eo + 1 }
+                    let nxt = toks[after_then + 1]
+                    if nxt.kind == 15 {
+                        # `else if ...` -> the else body is the entire nested if
+                        # statement (a statement gen_stmts handles recursively).
+                        else_if = 1
+                        let chainend = if_stmt_end(toks, after_then + 1, end)
+                        ebody_start = after_then + 1
+                        ebody_end = chainend
+                        resume = chainend
+                    } else {
+                        # plain `else { ... }` -> body is the brace interior.
+                        let mut eo = after_then + 1
+                        let mut g3 = true
+                        while g3 {
+                            if eo >= end { g3 = false }
+                            else {
+                                let ot = toks[eo]
+                                if ot.kind == 11 { g3 = false } else { eo = eo + 1 }
+                            }
                         }
+                        ebody_start = eo + 1
+                        ebody_end = match_brace(toks, eo, end)
+                        resume = ebody_end + 1
                     }
-                    eopen = eo
-                    eclose = match_brace(toks, eo, end)
                 }
             }
             let lbl = counter
@@ -2460,7 +2522,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             emit_str(":")
             putchar(10)
             if has_else == 1 {
-                counter = gen_stmts(toks, slots, fns, defs, src, eopen + 1, eclose, counter)
+                counter = gen_stmts(toks, slots, fns, defs, src, ebody_start, ebody_end, counter)
             }
             emit_str("  br label %imerge")
             pint(lbl)
@@ -2469,7 +2531,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             pint(lbl)
             emit_str(":")
             putchar(10)
-            if has_else == 1 { i = eclose + 1 } else { i = bclose + 1 }
+            if has_else == 1 { i = resume } else { i = bclose + 1 }
         } else {
             i = i + 1
         }

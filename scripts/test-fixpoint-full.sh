@@ -289,6 +289,23 @@ check "fn run() {{ let b = false; if b {{ return 0 }}; return 42 }}; return run(
 # number into one token (v = v*10 + (d-48)), with `go` a bool loop flag
 check "struct Token {{ kind, value }}; fn tokenize(src: Str, out: List<Token>) {{ let n = src.len(); let mut i = 0; while i < n {{ let c = src[i]; if c >= 48 and c <= 57 {{ let mut v = 0; let mut go = true; while go {{ if i >= n {{ go = false }} else {{ let d = src[i]; if d >= 48 and d <= 57 {{ v = v * 10 + (d - 48); i = i + 1 }} else {{ go = false }} }} }}; out.push(Token {{ kind: 0, value: v }}) }} else {{ i = i + 1 }} }}; return 0 }}; fn run() {{ let toks = list(); tokenize(\`12a34\`, toks); return toks[0].value + toks[1].value }}; return run();" 46
 
+# --- FP12w: `else if` chains inside a loop body -- real self-host tokenize ---
+# An `if A {} else if B {} else {}` chain inside a `while` body was mis-lowered:
+# the else-region only covered the first inner then-block, hoisting the final
+# `else` to run unconditionally (loop ran once). Fix: if_stmt_end() walks the
+# whole else-if chain so the outer else-region spans it; the `else if` body is
+# emitted as the nested if statement.
+# 3-way else-if chain in a loop (the dispatch shape)
+check "fn run() {{ let mut i = 0; let mut v = 0; let mut go = true; while go {{ if i >= 3 {{ go = false }} else if i >= 0 {{ v = v + 1; i = i + 1 }} else {{ go = false }} }}; return v }}; return run();" 3
+# else-if with a function-call condition in a loop
+check "fn pos(x: Int) {{ if x >= 0 {{ return 1 }}; return 0 }}; fn run() {{ let mut i = 0; let mut v = 0; let mut go = true; while go {{ if i >= 3 {{ go = false }} else if pos(i) == 1 {{ v = v + 1; i = i + 1 }} else {{ go = false }} }}; return v }}; return run();" 3
+# THE real self-host tokenizer: 4 token kinds (digit-run/+/*/-), else-if chain,
+# is_space/is_digit helper calls -- fixpoint.nl's tokenize, out-param form.
+# token count (5: num12, +, num3, *, num4)
+check "fn is_space(c: Int) {{ if c == 32 {{ return 1 }}; return 0 }}; fn is_digit(c: Int) {{ if c >= 48 and c <= 57 {{ return 1 }}; return 0 }}; struct Token {{ kind, value }}; fn tokenize(src: Str, out: List<Token>) {{ let n = src.len(); let mut i = 0; while i < n {{ let c = src[i]; if is_space(c) == 1 {{ i = i + 1 }} else if is_digit(c) == 1 {{ let mut v = 0; let mut go = true; while go {{ if i >= n {{ go = false }} else if is_digit(src[i]) == 1 {{ v = v * 10 + (src[i] - 48); i = i + 1 }} else {{ go = false }} }}; out.push(Token {{ kind: 0, value: v }}) }} else if c == 43 {{ out.push(Token {{ kind: 1, value: 0 }}); i = i + 1 }} else if c == 42 {{ out.push(Token {{ kind: 2, value: 0 }}); i = i + 1 }} else if c == 45 {{ out.push(Token {{ kind: 3, value: 0 }}); i = i + 1 }} else {{ i = i + 1 }} }}; return 0 }}; fn run() {{ let toks = list(); tokenize(\`12 + 3 * 4\`, toks); return toks.len }}; return run();" 5
+# token values: toks[0].value(12) + toks[2].value(3) + toks[4].value(4) = 19
+check "fn is_space(c: Int) {{ if c == 32 {{ return 1 }}; return 0 }}; fn is_digit(c: Int) {{ if c >= 48 and c <= 57 {{ return 1 }}; return 0 }}; struct Token {{ kind, value }}; fn tokenize(src: Str, out: List<Token>) {{ let n = src.len(); let mut i = 0; while i < n {{ let c = src[i]; if is_space(c) == 1 {{ i = i + 1 }} else if is_digit(c) == 1 {{ let mut v = 0; let mut go = true; while go {{ if i >= n {{ go = false }} else if is_digit(src[i]) == 1 {{ v = v * 10 + (src[i] - 48); i = i + 1 }} else {{ go = false }} }}; out.push(Token {{ kind: 0, value: v }}) }} else if c == 43 {{ out.push(Token {{ kind: 1, value: 0 }}); i = i + 1 }} else if c == 42 {{ out.push(Token {{ kind: 2, value: 0 }}); i = i + 1 }} else if c == 45 {{ out.push(Token {{ kind: 3, value: 0 }}); i = i + 1 }} else {{ i = i + 1 }} }}; return 0 }}; fn run() {{ let toks = list(); tokenize(\`12 + 3 * 4\`, toks); return toks[0].value + toks[2].value + toks[4].value }}; return run();" 19
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'
