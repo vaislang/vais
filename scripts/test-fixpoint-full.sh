@@ -335,6 +335,18 @@ check "$FP12Y_PIPE fn main2() {{ return run(\`10 - 2 * 3\`) }}; return main2();"
 # 7 + 8 + 9 = 24 (left-fold over a longer expression)
 check "$FP12Y_PIPE fn main2() {{ return run(\`7 + 8 + 9\`) }}; return main2();" 24
 
+# --- FP12z: `!=` operator + name_eq + List<Var> symbol table (fixpoint2.nl) ---
+# `!=` was entirely missing from the tokenizer (`!` was skipped, `=` became an
+# assignment), so `src[a+k] != src[b+k]` lowered to `... != 0` (RHS dropped).
+# This broke name_eq (source-byte comparison) and the symbol-table lookup it
+# powers -- the core of fixpoint2.nl (arithmetic + multi-char variables).
+# != as a value / condition
+check "fn run() {{ let a = 5; let b = 3; let r = a != b; if a != 5 {{ return 0 }}; return r * 42 }}; return run();" 42
+# name_eq: compares two source-byte ranges (the symbol-table key check)
+check "fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn run() {{ let src = \`foo bar foo\`; return name_eq(src, 0, 3, 8, 3) * 10 + name_eq(src, 0, 3, 4, 3) }}; return run();" 10
+# THE fixpoint2.nl symbol table: List<Var> looked up by name_eq on source bytes
+check "struct Var {{ nstart, nlen, value }}; fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn lookup(vars: List<Var>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = vars.len; while i < m {{ let v = vars[i]; if name_eq(src, v.nstart, v.nlen, qs, ql) == 1 {{ return v.value }}; i = i + 1 }}; return 0 - 1 }}; fn run() {{ let vars = list(); vars.push(Var {{ nstart: 0, nlen: 3, value: 10 }}); vars.push(Var {{ nstart: 4, nlen: 3, value: 20 }}); let src = \`foo bar foo\`; return lookup(vars, src, 8, 3) + lookup(vars, src, 4, 3) }}; return run();" 30
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'

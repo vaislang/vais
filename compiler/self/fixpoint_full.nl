@@ -210,6 +210,13 @@ fn tokenize(src: Str) -> List<Token> {
         else if c == 46 { toks.push(Token { kind: 27, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 59 { toks.push(Token { kind: 6, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 58 { toks.push(Token { kind: 16, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 33 {
+            # `!` — only `!=` (not-equal, kind 33) is supported; bare `!` is skipped.
+            if i + 1 < n {
+                if src[i + 1] == 61 { toks.push(Token { kind: 33, value: 0, nstart: 0, nlen: 0 }); i = i + 2 }
+                else { i = i + 1 }
+            } else { i = i + 1 }
+        }
         else { i = i + 1 }
     }
     return toks
@@ -1360,16 +1367,17 @@ fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
     # comparison as a value: `<` (18) / `>` (19) / `==` (20) -> icmp + zext i1->i64.
     # Lower precedence than +/-, so the RHS is a full additive expression
     # (gen_expr from the operand). The boolean result is widened to i64 (1/0).
-    if op.kind == 18 or op.kind == 19 or op.kind == 20 or op.kind == 29 or op.kind == 30 {
+    if op.kind == 18 or op.kind == 19 or op.kind == 20 or op.kind == 29 or op.kind == 30 or op.kind == 33 {
         # RHS is the additive expr up to the next `and`/`or` (so logicals stay
         # lower-precedence): `c >= 48 and c <= 57` parses as `(c>=48) and (c<=57)`.
+        # kind 33 = `!=` (not-equal); the others are < > == <= >=.
         let rstop = next_logical(toks, i + 1, stop)
         let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, rstop, acc.next)
         let cnum = rhs.next
         emit_str("  %t")
         pint(cnum)
         emit_str(" = icmp ")
-        if op.kind == 18 { emit_str("slt") } else if op.kind == 19 { emit_str("sgt") } else if op.kind == 29 { emit_str("sle") } else if op.kind == 30 { emit_str("sge") } else { emit_str("eq") }
+        if op.kind == 18 { emit_str("slt") } else if op.kind == 19 { emit_str("sgt") } else if op.kind == 29 { emit_str("sle") } else if op.kind == 30 { emit_str("sge") } else if op.kind == 33 { emit_str("ne") } else { emit_str("eq") }
         emit_str(" i64 ")
         emit_op(acc)
         emit_str(", ")
