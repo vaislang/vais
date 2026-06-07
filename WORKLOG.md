@@ -1,5 +1,23 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12w — 🎯 실제 fixpoint.nl 토크나이저 통째 컴파일 (else-if 체인 in-loop))
+- fixpoint.nl 실제 tokenize(out-param 형: 4 token kinds, is_space/is_digit 헬퍼콜, 6-way `if/else if.../else` 디스패치)
+  먹였더니 오답(count 7 vs 5, garbage 값).
+- IR 격리: **`if A {{}} else if B {{}} else {{}}` 체인이 while 본문서 오lowering** — if-핸들러가 `else if`를 plain `else`로
+  취급→`{{` 스캔이 inner then-block에 착지→else-region이 그 블록만 덮음→마지막 `else`(`go=false`) 무조건 실행(루프 1회).
+  HEAD서 3-way도 깨짐(111 기대에 65)=회귀 아닌 잠복버그(내 fix가 net 개선).
+- **fix: if_stmt_end() 헬퍼**(완전한 `if [cond] {{}} [else if {{}}]* [else {{}}]` 체인 끝 인덱스, `else if` 재귀)+
+  if-핸들러가 `else if`면 else-body를 nested if statement로 gen_stmts 재귀(ebody_start/end/resume 추적).
+- 실측: 3-way else-if in-loop(65→3), else-if call-cond, **🎯 실제 fixpoint.nl 토크나이저**(`12 + 3 * 4`→5토큰 값12+3+4=19,
+  `99*100`→199, 단일`5`→kind0 value5, `1 + 2 - 3 * 4`→7토큰). e2e fixpoint-full **101→105**(+4 가드), 값정확성 96/96, 회귀0.
+  commit efb1e94.
+- 교훈: **실제 self-host 함수 통째가 진짜 마일스톤**(tokenize 완전동작=fragment 아님)/IR 격리로 else-region 오착지 규명/
+  pre-existing 버그도 fix가 net 개선.
+- **TRACKED(pre-existing, 별개, 비-blocking)**: ①3+레벨 nested else-if 모든 branch가 return시 빈 trailing merge block(invalid IR)
+  ②`.len`+`[i].field` 혼합 multi-term 식(`toks.len*100+toks[0].value+...`) 오계산. 둘 다 실제 tokenize엔 영향 없음.
+- **🎯🎯🎯 실제 fixpoint.nl tokenize 함수 완전 컴파일+실행 = 부트스트랩 핵심 진전.** FP12g~w(16 능력추가). 남은 fixpoint.nl 갭=
+  `-> List` 직접반환(#4 우회)/for(1곳)/print interp(3곳)/위 TRACKED 2건. 다음=eval_term/expr 먹이기 or TRACKED 버그 or 남은 갭.
+
 ## 2026-06-07 (/loop: FP12v — boolean 리터럴 true/false, 실제 digit-run 토크나이저 동작)
 - 다음 갭 probe: `-> List` 직접반환 clang 스킴 검증완료(run=42, caller-allocated buffer+callee hidden out-ptr)이나
   구현이 큰 dedicated(local aliasing 등)라 우회 존재로 보류 → 대신 **fixpoint.nl 실제 tokenize 로직 통째 먹이기**로

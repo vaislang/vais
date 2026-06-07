@@ -445,6 +445,18 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   building block(digit-run i/v advance, else-if +/digit 분기) 독립확인. e2e 97→101, 값정확성 96/96, 회귀0. 교훈: **실제 self-host
   로직 먹이기가 진짜 갭 노출**(true/false 리터럴=digit-run/scan 루프 필수)/초기 의심(while bare-var)은 격리로 정정(probe 동반변수 혼동).
   **남은 fixpoint.nl 갭=`-> List` 직접반환(#4 우회존재)/`for`(1곳)/print interp(3곳).**
+- **🎯🎯🎯 실제 fixpoint.nl 토크나이저 통째 컴파일 — else-if 체인 in-loop 해결**(FP12w, 2026-06-07, commit efb1e94).
+  fixpoint.nl 실제 tokenize(out-param 형: 4 token kinds, is_space/is_digit 헬퍼콜, 6-way `if/else if.../else` 디스패치)를
+  먹였더니 오답. IR 격리: **`if A {{}} else if B {{}} else {{}}` 체인이 while 본문서 오lowering** — if-핸들러가 `else if`를
+  plain `else {{...}}`로 취급→다음 `{{` 스캔이 inner then-block 브레이스에 착지→else-region이 그 블록만 덮음→마지막 `else`가
+  무조건 실행(루프 1회). HEAD서 3-way도 깨짐(111 기대에 65)=회귀 아닌 잠복버그. **fix: if_stmt_end() 헬퍼**(완전한
+  `if [cond] {{}} [else if {{}}]* [else {{}}]` 체인 끝 인덱스, `else if` 재귀)+if-핸들러가 `else if`면 else-body를 nested if
+  statement로 gen_stmts 재귀. 실측: 3-way else-if in-loop(65→3), else-if call-cond, **실제 fixpoint.nl 토크나이저(`12+3*4`→5토큰
+  값12+3+4=19, `99*100`→199, `5`→kind0 value5, `1+2-3*4`→7토큰)**. e2e 101→105, 값정확성 96/96, 회귀0. 교훈: **실제 self-host
+  함수 통째가 진짜 마일스톤**(tokenize 완전동작=fragment 아님)/IR 격리로 else-region 오착지 규명/pre-existing 버그도 fix가 net개선.
+  **🎯 실제 fixpoint.nl tokenize 완전 컴파일+실행.** TRACKED(pre-existing, 별개, 비-blocking): ①3+레벨 nested else-if 모든 branch가
+  return시 빈 trailing merge block(invalid IR) ②`.len`+`[i].field` 혼합 multi-term 식(`toks.len*100+toks[0].value+...`) 오계산.
+  남은 fixpoint.nl 갭=`-> List` 직접반환(#4 우회존재)/`for`(1곳)/print interp(3곳).
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
