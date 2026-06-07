@@ -1,5 +1,17 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12bb — 🎯🎯🎯🎯 완전한 산술+변수 컴파일러 end-to-end)
+- **마일스톤(신규 능력 0)**: fixpoint2.nl 전체를 단일 통합 프로그램으로 먹임 — `run_program(src)`가 multi-let 프로그램 토큰화
+  (kw_let/kw_return 키워드인식+ident+num+`+ * = ;`)→`let` 바인딩으로 `List<Var>` 심볼테이블 빌드(변수가 이전 변수 참조 가능)
+  →precedence로 평가→`return`값.
+- 실측 end-to-end(source string→value): **`let x = 5; return x + 3`=8, `let a = 4; let b = 6; return a * b`=24,
+  `let x = 2; let y = x + 1; return x + y * 4`=14**(y가 x 참조+precedence).
+- FP12z(심볼테이블)+FP12aa(변수평가)+키워드토큰화 조합=**신규 컴파일러 능력 0**. e2e fixpoint-full **117→120**(+3 가드),
+  값정확성 96/96, 회귀0. commit 185e75e.
+- **🎯🎯🎯🎯 두 번째 self-host tier 완성: multi-char 변수 있는 언어의 가장 작은 완전한 self-host 컴파일러 end-to-end.**
+  FP12g~bb. 남은 fixpoint.nl 갭=`-> List` 직접반환/for/print/TRACKED 2건. 다음=fixpoint3(multi-char 함수+재귀=3번째 tier) or
+  `-> List` dedicated or for/print or TRACKED 버그.
+
 ## 2026-06-07 (/loop: FP12aa — 변수 평가, eval_factor가 ident를 lookup으로 해석)
 - **마일스톤(신규 능력 0)**: fixpoint2.nl 변수-해석 evaluator를 fixpoint_full에 먹임 — eval_factor가 num은 t.value,
   ident면 `lookup(vars,...)`; `vars: List<Var>` 심볼테이블이 전 재귀체인(eval_expr→eval_fold→eval_term→eval_factor→lookup) 관통.

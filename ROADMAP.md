@@ -489,6 +489,12 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   실측(변수 피연산자+precedence): `x + 3`(x=5)=8, `a * b`(a=4,b=6)=24, `x + y * 4`(x=2,y=3)=14. 컴파일러 변경 0 — 초기 probe 실패는
   test의 eval_expr off-by-one(실제 fixpoint2.nl은 eval_term i+1, eval_fold 피연산자 i+2)뿐, faithful 인덱싱이면 깨끗이 조합. deep
   `List<Var>` param 관통+ident-token 해석 동작 확인. e2e 115→117(+2 가드), 값정확성 96/96, 회귀0. **= fixpoint2.nl 산술+변수 핵심 동작.**
+- **🎯🎯🎯🎯 완전한 산술+변수 컴파일러 end-to-end**(FP12bb, 2026-06-07, commit 185e75e). **마일스톤(신규 능력 0)**:
+  fixpoint2.nl 전체를 **단일 통합 프로그램**으로 먹임 — `run_program(src)`가 multi-let 프로그램 토큰화(kw_let/kw_return 키워드인식
+  +ident+num+`+ * = ;`)→`let` 바인딩으로 `List<Var>` 심볼테이블 빌드(변수가 이전 변수 참조 가능)→precedence로 평가→`return`값.
+  실측 end-to-end(source→value): `let x = 5; return x + 3` =8, `let a = 4; let b = 6; return a * b` =24, **`let x = 2; let y = x + 1;
+  return x + y * 4` =14**(y가 x 참조+precedence). **= 두 번째 self-host tier 완성: multi-char 변수 있는 언어의 가장 작은 완전한 self-host
+  컴파일러 end-to-end.** FP12z(심볼테이블)+FP12aa(변수평가)+키워드토큰화 조합=신규 능력 0. e2e 117→120(+3 가드), 값정확성 96/96, 회귀0.
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
