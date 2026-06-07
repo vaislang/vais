@@ -510,6 +510,15 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   프로그램 source→value end-to-end.** FP12cc(List<Fn>/eval_call/fresh scope)+키워드토큰화 조합=신규 능력 0. e2e 123→126(+3 가드),
   값정확성 96/96, 회귀0. **다음 경계(tracked)**: run_program 재귀는 함수 body에 `if cond then a else b` **식**(expression) 필요
   (FP12cc 재귀 probe는 native nl 재귀 사용; source-level `fac(n) = if n<=1 then 1 else n*fac(n-1)`는 if-expr 평가기 필요=별개 갭).
+- **🎯🎯🎯🎯🎯 재귀 함수언어 end-to-end — if-expression 평가기 + 재귀**(FP12ee, 2026-06-08, commit c6b9288). **가장 깊은 self-host
+  통합**: source-level **재귀** 함수언어를 fixpoint_full이 단일 프로그램으로 컴파일. 함수 body=`return if <cond> then <a> else <b>`;
+  eval_value가 **if-expression 평가**(then/else 찾기→조건을 비교연산자로 split→양변 평가→branch 선택); eval_call이 fresh per-call
+  `List<Var>` scope로 body 재귀(재귀 호출이 else 분기에 위치). 실측 end-to-end(source→value): **`fn fac(n) {{ return if n <= 1 then 1
+  else n * fac(n - 1) }} return fac(5)`=120**, `fac(4)`=24, `fn sum(n) {{ return if n <= 0 then 0 else n + sum(n - 1) }} return sum(10)`=55.
+  **= 3번째 tier WITH 재귀 완성: 조건+재귀 호출 있는 함수언어=모든 self-host evaluator의 핵심 모양.** FP12dd(함수테이블+eval_call+fresh
+  scope)+if-expr 평가기(if/then/else 토큰화+branch 선택)+call-arg/factor skipping(call 피연산자 처리) 조합. e2e 126→129(+3 가드),
+  값정확성 96/96, 회귀0. 교훈: if-expr 평가기가 source-level 재귀 가능케(재귀=else 분기); 모든 빌딩블록(List<Fn>/List<Var>/fresh scope/
+  재귀/if-expr/산술)이 조합돼 재귀 함수언어 완성. **세 self-host tier(산술/산술+변수/함수언어+재귀) 전부 source→value end-to-end.**
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

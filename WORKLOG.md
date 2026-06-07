@@ -1,5 +1,18 @@
 # nl WORKLOG
 
+## 2026-06-08 (/loop: FP12ee — 🎯🎯🎯🎯🎯 재귀 함수언어 end-to-end (if-expr + 재귀))
+- **가장 깊은 self-host 통합**: source-level **재귀** 함수언어를 fixpoint_full이 단일 프로그램으로 컴파일.
+- fixpoint3.nl eval_value grep: 함수 body=`return if <cond> then <a> else <b>`; eval_value가 if-expr 평가
+  (find_kind로 then/else 위치→조건을 비교연산자로 split→양변 eval_expr→branch 선택); eval_call이 fresh scope로 body 재귀.
+- if-expr 평가기 추가 + call-arg/factor skipping(arg_end/skip_factor가 call 피연산자 처리)으로 재귀 가능(재귀 호출=else 분기).
+- 실측 end-to-end(source string→value): **`fn fac(n) {{ return if n <= 1 then 1 else n * fac(n - 1) }} return fac(5)`=120**,
+  `fac(4)`=24, **`fn sum(n) {{ return if n <= 0 then 0 else n + sum(n - 1) }} return sum(10)`=55**.
+- e2e fixpoint-full **126→129**(+3 가드), 값정확성 96/96, 회귀0. commit c6b9288.
+- 교훈: if-expr 평가기가 source-level 재귀 가능케(재귀=else 분기)/모든 빌딩블록(List<Fn>/List<Var>/fresh scope/재귀/if-expr/산술)
+  조합돼 재귀 함수언어 완성/heredoc backtick 충돌은 python으로 프로그램 빌드해 회피.
+- **🎯🎯🎯🎯🎯 세 self-host tier(①산술 ②산술+변수 ③함수언어+재귀) 전부 source→value end-to-end.** FP12g~ee.
+  남은 fixpoint.nl 갭=`-> List` 직접반환/for/print/TRACKED 2건. 다음=`-> List` dedicated or for/print or TRACKED 버그 or 인프라 정리.
+
 ## 2026-06-08 (/loop: FP12dd — 🎯🎯🎯🎯 완전한 함수언어 컴파일러 end-to-end = 3 tier 전부 완성)
 - **마일스톤(신규 능력 0)**: fixpoint3.nl 함수언어 컴파일러를 단일 통합 프로그램으로 먹임 — `run_program(src)`가 함수언어 프로그램
   토큰화(fn/return 키워드+ident+num+`+ * ( ) {{ }} ;`)→`fn` 정의 스캔으로 `List<Fn>` 함수테이블 빌드(build_fns)→top-level
