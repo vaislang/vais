@@ -920,3 +920,16 @@
   사실상 완비, 부트스트랩 충분.** 교훈: **조건 전체를 값평가(gen_expr)+`icmp ne 0`가 compound 자동지원+단순화**
   (단일비교 split보다 일반적)/리팩토링은 헤비 회귀로 안전판정/self-host grep 26곳=compound critical(for 0건과 대조).
   **5연속 bootstrap-relevant 추가**(비교-value/그룹화/`>=<=`/`and or`/compound조건)로 is_alpha/is_digit류 완성.
+
+## 2026-06-07 (/loop iter 77: 🎯 self-host 통합 검증 — 완전한 4-함수 lexer fragment 컴파일)
+- 더 큰 self-host 소스 fragment(실제 lexer shape: is_digit/is_alpha/is_space + classify 디스패처)를
+  fixpoint_full.compile()에 먹임. 초기 "65 vs 321" → **8-bit exit 절단 확인**(321&0xFF=65, 버그아님; IR은 정확 321).
+  값≤255로 재측정: **완전한 4-함수 lexer fragment = 171 정확**(classify(53)=1/classify(104)=2/classify(32)=3 →
+  1+20+150). FP12g-k 추가가 실제 lexer 코드 컴파일 가능케 함을 통합검증.
+- 격리로 모든 메커니즘 확인: direct bool-helper, bool-helper arith, if-call-bool, two-helper-dispatch,
+  classify-alpha, multi-call arith(call-mul-add). **새 갭 없음** — 최근 추가가 real lexer 코드를 동작시킴.
+- **신규 e2e 가드**: 4-함수 lexer-classify 통합(171) — self-host 컴파일러가 자기 lexer 코어 codegen 증명.
+  e2e fixpoint-full **59→60 PASS**, aggregate 96/96.
+- 교훈: **경계매핑이 갭 대신 통합 검증 산출**(최근 5 추가가 real lexer fragment 동작시킴=능력 충분 확증)/
+  "65 vs 321"는 또 8-bit 절단(값≤255 유지 재확인)/격리로 메커니즘 분리 검증 후 통합이 진단순서. **self-host
+  컴파일러가 자기 lexer의 완전한 4-함수 fragment를 codegen** = 부트스트랩 codegen 능력 실증 진전.

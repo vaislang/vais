@@ -118,6 +118,13 @@ check "fn is_a(c) {{ if c >= 97 and c <= 122 {{ return 1 }}; return 0 }}; return
 check "fn f(x) {{ if x < 0 or x > 100 {{ return 1 }}; return 0 }}; return f(150);" 1
 check "fn f(n) {{ let mut s = 0; let mut i = 0; while i < n and s < 100 {{ s = s + 10; i = i + 1 }}; return s }}; return f(5);" 50
 
+# --- INTEGRATION: a complete 4-function lexer fragment (the real self-host lexer
+# shape) -- is_digit/is_alpha/is_space (compound conditions) + a classify
+# dispatcher (helper-call dispatch). classify(53)=1, classify(104)=2,
+# classify(32)=3 -> 1 + 2*10 + 3*50 = 171. Proves the self-host compiler codegens
+# its own lexer's core. ---
+check "fn is_digit(c) {{ return c >= 48 and c <= 57 }}; fn is_alpha(c) {{ return c >= 97 and c <= 122 }}; fn is_space(c) {{ return c == 32 }}; fn classify(c) {{ if is_digit(c) {{ return 1 }}; if is_alpha(c) {{ return 2 }}; if is_space(c) {{ return 3 }}; return 0 }}; return classify(53) + classify(104) * 10 + classify(32) * 50;" 171
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +
