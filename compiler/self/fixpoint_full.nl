@@ -600,6 +600,32 @@ fn emit_op(o: Op) -> Int {
     return 0
 }
 
+# After a call that passed List-local slot `lslot` by pointer, copy the length the
+# callee wrote into buf[63] back into the local's length slot (%v<lslot+1>), so the
+# caller's xs.len / further passes see pushes. No-op if lslot < 0. Returns counter.
+fn sync_list_len(lslot: Int, counter: Int) -> Int {
+    if lslot < 0 { return counter }
+    let lp = counter
+    emit_str("  %t")
+    pint(lp)
+    emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
+    pint(lslot)
+    emit_str(", i64 0, i64 63")
+    putchar(10)
+    let lv = lp + 1
+    emit_str("  %t")
+    pint(lv)
+    emit_str(" = load i64, i64* %t")
+    pint(lp)
+    putchar(10)
+    emit_str("  store i64 %t")
+    pint(lv)
+    emit_str(", i64* %v")
+    pint(lslot + 1)
+    putchar(10)
+    return lv + 1
+}
+
 # A factor: number, or a variable (emit a load from its alloca -> a temp).
 fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, counter: Int) -> Op {
     let t = toks[i]
@@ -647,6 +673,12 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let mut a6v = 0
             let mut a7k = 0
             let mut a7v = 0
+            # slots of List-local args passed by pointer, to sync length (%v<slot+1>
+            # = buf[63]) AFTER the call (the callee may have pushed). -1 = none.
+            let mut ls0 = 0 - 1
+            let mut ls1 = 0 - 1
+            let mut ls2 = 0 - 1
+            let mut ls3 = 0 - 1
             let mut cc = counter
             let mut q = i + 2
             let mut ga = true
@@ -697,6 +729,11 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                                 ekind = 3
                                 eval2 = bc
                                 cc = bc + 1
+                                # record this slot to sync its length after the call
+                                if nargs == 0 { ls0 = lslot }
+                                else if nargs == 1 { ls1 = lslot }
+                                else if nargs == 2 { ls2 = lslot }
+                                else if nargs == 3 { ls3 = lslot }
                                 handled = 1
                             }
                         }
@@ -744,7 +781,14 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             }
             emit_str(")")
             putchar(10)
-            return Op { kind: 1, val: dest, next: dest + 1 }
+            # sync the length of any List-local args from buf[63] (the callee may
+            # have pushed into them via the out-param). %v<slot+1> = load buf[63].
+            let mut rc = dest + 1
+            rc = sync_list_len(ls0, rc)
+            rc = sync_list_len(ls1, rc)
+            rc = sync_list_len(ls2, rc)
+            rc = sync_list_len(ls3, rc)
+            return Op { kind: 1, val: dest, next: rc }
         }
         if nx.kind == 27 {
             # `name . X` — disambiguate by the variable's kind:

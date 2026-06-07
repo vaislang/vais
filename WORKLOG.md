@@ -1063,3 +1063,15 @@
   우회**(push-to-param+bare-call-stmt 2갭이 진짜 막던 것)/List param은 읽기만이 아니라 push도 필요/bare call stmt가
   drop되던 잠복버그(let/return 위치만 emit). **🎯🎯🎯 부트스트랩 양대 패턴(읽기 List param + 쓰기 out-param) 완전 동작
   = self-host tokenize 완전한 shape(src param→out List 채움) 컴파일.** 다음=실제 self-host tokenize 함수 통째 또는 eval.
+
+## 2026-06-07 (/loop iter 88: 🎯🎯 out-param 파이프라인 완성 — List 길이전파 + tokenize→consume)
+- 통합 미니컴파일러 경계: tokenize(out)→classify(List-param) 파이프라인이 0(실패). 근본: **List 길이전파 누락**
+  (로컬 List len=`%v<slot+1>` vs param len=buf[63] 불일치; out-param 호출 후 호출자 `.len`이 stale, 다음 함수 전달 시
+  stale len을 buf[63]에 덮어씀→0). **수정: sync_list_len 헬퍼**(call 후 호출자 `%v<slot+1>`=load buf[63]; List-arg
+  슬롯 ls0-ls3 추적+call 후 동기화).
+- 실측: **caller-len-after-fill=3**(out-param 후 호출자 len 반영), **🎯🎯 tokenize→consume 파이프라인 2-함수=3**
+  (tokenize List 채움→count_digits 스캔). 회귀0(list-param-read=2, out-param-elements=6). e2e fixpoint-full **77→79**,
+  aggregate 96/96. SELF_HOST.md FP12q, ROADMAP out-param 파이프라인 완성.
+- 교훈: **List 길이 2-convention(로컬 slot vs param buf[63]) 동기화 필요**(out-param 후 sync)/통합 파이프라인이
+  길이전파 갭 노출(단일 함수선 안 보임). **🎯🎯🎯 부트스트랩 List 의미론 전부 동작**(읽기 List param/쓰기 out-param/
+  길이전파)=self-host tokenize→parse 파이프라인(함수간 List 전달) 완전 컴파일. 다음=실제 self-host 다함수 통째 또는 eval.

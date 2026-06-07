@@ -173,6 +173,13 @@ check "fn fill(out: List<Int>, n: Int) {{ let mut i = 0; while i < n {{ out.push
 # THE OUT-PARAM TOKENIZER: scan a string param, fill the out List, caller reads tokens
 check "fn tokenize(src: Str, out: List<Int>) {{ let mut i = 0; while i < src.len() {{ if src[i] == 32 {{ i = i + 1 }} else {{ out.push(src[i]); i = i + 1 }} }}; return 0 }}; fn run() {{ let toks = list(); tokenize(\`ab cd\`, toks); return toks[0] + toks[3] }}; return run();" 197
 
+# --- FP12q: List length-sync after out-param calls + the FULL tokenize->consume
+# pipeline across two functions. After an out-param fill, the caller's xs.len
+# reflects the pushes (synced from buf[63]), so the filled List can be passed on. ---
+check "fn fill(out: List<Int>, n: Int) {{ let mut i = 0; while i < n {{ out.push(i + 1); i = i + 1 }}; return 0 }}; fn run() {{ let xs = list(); fill(xs, 3); return xs.len }}; return run();" 3
+# THE PIPELINE: tokenize(out-param) fills a List, then count_digits(List-param) scans it
+check "fn is_d(c) {{ return c >= 48 and c <= 57 }}; fn tokenize(src: Str, out: List<Int>) {{ let mut i = 0; while i < src.len() {{ if src[i] == 32 {{ i = i + 1 }} else {{ out.push(src[i]); i = i + 1 }} }}; return 0 }}; fn count_digits(toks: List<Int>) {{ let mut j = 0; let mut n = 0; while j < toks.len {{ if is_d(toks[j]) {{ n = n + 1 }}; j = j + 1 }}; return n }}; fn run() {{ let toks = list(); tokenize(\`a1 b2 c3\`, toks); return count_digits(toks) }}; return run();" 3
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +
