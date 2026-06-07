@@ -853,3 +853,12 @@
   값정확성 91→94.
 - 검증: 값-정확성 94/94, 회귀0. README 인덱스 e62→e65 + 카운트 76/76. 교훈: 제네릭struct/enum-struct 동작(능력 넓음)/
   **클로저 인자 OK vs 반환 막힘**(env 캡처 반환경계 Vais ABI 한계)/깊은조합이 잔존 Vais갭 노출(nl측은 견고).
+
+## 2026-06-07 (/loop iter 71: 전체 회귀 스위프 검증 + 재귀 예제 +2)
+- **전체 회귀 스위프**: 세션의 트랜스파일러 변경(break/continue/튜플/String/숫자변환/문자열안전 5종)이 전 테스트
+  표면서 회귀0 확인. 값-정확성 94/94, 트랜스파일러 unit 51/51, nl-check unit 37/37, **self-host e2e 77 PASS 0 fail**
+  (code-as-data 불변 유지 — self-host가 nl 문자열 임베드하므로 핵심). 트랜스파일러 하드닝이 완전히 회귀-클린 검증.
+- **신규 검증 예제 2종**(distinct 재귀): e66 피보나치(트리 재귀, fib(7)=13; e03 factorial은 linear) / e67 거듭제곱
+  (2-인자 재귀 지수, power(3,4)=81). array-sum-for는 fr2/e25 중복이라 skip. 값정확성 94→96.
+- 검증: 값-정확성 96/96, 회귀0. README 인덱스 e65→e67 + 카운트 78/78. 교훈: **세션 누적 트랜스파일러 변경의 전체
+  회귀 스위프가 안전판정**(self-host e2e가 code-as-data 핵심 가드)/distinct 재귀shape(트리/지수)는 linear factorial과 별개 커버리지.
