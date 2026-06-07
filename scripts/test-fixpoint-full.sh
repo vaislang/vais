@@ -136,6 +136,14 @@ check "fn name_eq(s: Str, a: Int, b: Int) {{ return s[a] == s[b] }}; return name
 # string param + int params + byte arithmetic
 check "fn f(s: Str, i: Int) {{ return s[i] + s[i + 1] }}; return f(\`AB\`, 0);" 131
 
+# --- FP12m: s.len() on a string PARAMETER (runtime strlen -- walk to NUL). This
+# completes string params: a function can now take the source as `s: Str` and
+# scan it with `while i < s.len()`. The actual self-host tokenizer signature. ---
+check "fn slen(s: Str) {{ return s.len() }}; return slen(\`hello\`);" 5
+check "fn cd(s: Str) {{ let mut i = 0; let mut n = 0; while i < s.len() {{ if s[i] >= 48 and s[i] <= 57 {{ n = n + 1 }}; i = i + 1 }}; return n }}; return cd(\`a1b2c3\`);" 3
+# a REAL tokenizer over a string PARAMETER: count whitespace-separated tokens
+check "fn ntok(s: Str) {{ let mut i = 0; let mut n = 0; let mut inw = 0; while i < s.len() {{ if s[i] == 32 {{ inw = 0 }} else {{ if inw == 0 {{ n = n + 1 }}; inw = 1 }}; i = i + 1 }}; return n }}; return ntok(\`ab cd ef\`);" 3
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +

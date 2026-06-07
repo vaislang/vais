@@ -646,7 +646,99 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let karr = isarr_of(slots, src, t.nstart, t.nlen)
             if karr == 3 {
                 let slen = arrlen_of(slots, src, t.nstart, t.nlen)
-                return Op { kind: 0, val: slen, next: counter }
+                if slen > 0 {
+                    # local string literal: compile-time length.
+                    return Op { kind: 0, val: slen, next: counter }
+                }
+                # string PARAMETER (length unknown): runtime strlen -- walk bytes
+                # from the i8* base until the NUL terminator, counting.
+                let sslot = find_slot(slots, src, t.nstart, t.nlen)
+                let basec = counter
+                emit_str("  %t")
+                pint(basec)
+                emit_str(" = load i8*, i8** %v")
+                pint(sslot)
+                putchar(10)
+                # length counter alloca (reuse an SSA-numbered name via %slN)
+                let lenslot = basec + 1
+                emit_str("  %sl")
+                pint(lenslot)
+                emit_str(" = alloca i64")
+                putchar(10)
+                emit_str("  store i64 0, i64* %sl")
+                pint(lenslot)
+                putchar(10)
+                emit_str("  br label %slL")
+                pint(lenslot)
+                putchar(10)
+                emit_str("slL")
+                pint(lenslot)
+                emit_str(":")
+                putchar(10)
+                let ic = lenslot + 1
+                emit_str("  %t")
+                pint(ic)
+                emit_str(" = load i64, i64* %sl")
+                pint(lenslot)
+                putchar(10)
+                let gepc = ic + 1
+                emit_str("  %t")
+                pint(gepc)
+                emit_str(" = getelementptr i8, i8* %t")
+                pint(basec)
+                emit_str(", i64 %t")
+                pint(ic)
+                putchar(10)
+                let bc = gepc + 1
+                emit_str("  %t")
+                pint(bc)
+                emit_str(" = load i8, i8* %t")
+                pint(gepc)
+                putchar(10)
+                let cc2 = bc + 1
+                emit_str("  %t")
+                pint(cc2)
+                emit_str(" = icmp eq i8 %t")
+                pint(bc)
+                emit_str(", 0")
+                putchar(10)
+                emit_str("  br i1 %t")
+                pint(cc2)
+                emit_str(", label %slD")
+                pint(lenslot)
+                emit_str(", label %slB")
+                pint(lenslot)
+                putchar(10)
+                emit_str("slB")
+                pint(lenslot)
+                emit_str(":")
+                putchar(10)
+                let nc = cc2 + 1
+                emit_str("  %t")
+                pint(nc)
+                emit_str(" = add i64 %t")
+                pint(ic)
+                emit_str(", 1")
+                putchar(10)
+                emit_str("  store i64 %t")
+                pint(nc)
+                emit_str(", i64* %sl")
+                pint(lenslot)
+                putchar(10)
+                emit_str("  br label %slL")
+                pint(lenslot)
+                putchar(10)
+                emit_str("slD")
+                pint(lenslot)
+                emit_str(":")
+                putchar(10)
+                let resc = nc + 1
+                emit_str("  %t")
+                pint(resc)
+                emit_str(" = load i64, i64* %sl")
+                pint(lenslot)
+                putchar(10)
+                return Op { kind: 1, val: resc, next: resc + 1 }
             }
             let sti = sty_of(slots, src, t.nstart, t.nlen)
             if sti >= 0 {

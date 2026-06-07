@@ -963,3 +963,15 @@
 - 교훈: **#1 갭 dedicated 다단계가 정답**(5단계 격리후통합)/새 토큰(`:`)이 기존 구문(struct 리터럴) 깰 수 있음→
   즉시 회귀확인+수정/Op kind 확장(2=i8*ptr)으로 타입드 인자/param-typing은 시그니처 타입주석 기반. **self-host
   최다 패턴(176곳 Str param) 동작=self-tokenization 큰 진전**. 다음=`s.len()` on param(runtime strlen).
+
+## 2026-06-07 (/loop iter 80: 🎯🎯🎯 #1 부트스트랩 갭 완전 해결 — s.len() on param (runtime strlen))
+- FP12l 잔존 sub-갭(`s.len()` on string param) 해결. **string `.len()` codegen에 runtime strlen 분기**: slen>0면
+  컴파일타임(로컬 리터럴), slen==0(param)이면 **runtime strlen 루프 emit**(i8* base 로드 → NUL까지 walk +count,
+  %slN alloca+labeled loop). 
+- 실측: **param-strlen=5/2, count-digits-param(while i<s.len())=3, 🎯🎯 실제 토크나이저 ntok(s: Str) on param=3**
+  (source를 string param으로 받아 스캔 — self-host 토크나이저 `fn tokenize(src: Str)` 시그니처 동작!). 로컬 string
+  .len() 컴파일타임 유지(회귀0). e2e fixpoint-full **64→67 PASS**, aggregate 96/96.
+- SELF_HOST.md FP12m, ROADMAP #1 갭 **완전 해결** 표시. 교훈: **string param .len()=runtime strlen**(param은
+  컴파일타임 길이 모름)/로컬 vs param을 alen>0로 분기(로컬=컴파일타임, param=runtime)/**#1 부트스트랩 갭 닫힘**
+  =함수가 source string param 받아 스캔 가능=self-tokenization 핵심 도달. **이번 turn FP12l+m으로 self-host
+  최다 패턴(Str param 176곳) 완전 동작.** 다음=실제 self-host 토크나이저 함수 1개를 통째로 fixpoint_full에 먹여보기.
