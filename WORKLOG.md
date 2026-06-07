@@ -1,5 +1,19 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12t — full tokenize→eval 파이프라인, List<Token> 함수간 공유)
+- **🎯🎯 완전한 self-host tokenize→parse/eval shape 컴파일**: tokenize가 `List<Token>` out-param 채움 →
+  **별도 consumer 함수**가 그 `List<Token>`을 param으로 받아 `toks[i].kind`로 디스패치. 여러 consumer가 한 List 공유.
+- 경계 probe: 2-함수 파이프라인(tokenize→eval) = 139(garbage) 발견.
+- **근본수정 = read-only List-of-structs param 추론**: `eval(toks: List<Token>)`는 읽기만(push 없음) →
+  emit_fn이 본문 push-scan(list_elem_sty)으로 원소타입 못 찾아 scalar 처리(`.len`=buf[63], stride 1)→garbage.
+  수정: **emit_fn이 param 자신의 `List<Type>` 주석에서 원소타입 읽음**(param_list_elem_sty를 자기 함수+param 위치;
+  push하든 읽든 authoritative), push-scan은 fallback(List<Int>).
+- 실측: tokenize→eval sum=6, mini calc 디스패치=9, **2 consumer(count_nums+sum_nums) 한 List 공유=211**.
+  e2e fixpoint-full **87→90**(+3 가드), 값정확성 96/96, 회귀0. commit ff72f0e.
+- 교훈: read-only param은 push-scan 불가→**param 주석이 authoritative**(consumer 함수=self-host 핵심 패턴, parser가
+  toks 받는 모양). **🎯 self-host tokenize→parse 파이프라인 전체(tokenize out-param→consumer가 List<Token> param 디스패치) 완전 컴파일.**
+  FP12g~t(13 능력추가). 다음=더 큰 통합(parser가 toks 소비하며 struct AST 빌드) 또는 실제 소스 부트스트랩.
+
 ## 2026-06-07 (/loop: FP12s — List-of-structs PARAMETER, #5b 해결 = 실제 토크나이저 full shape)
 - **🎯🎯 #5b 해결**: 실제 self-host 토크나이저 full shape 컴파일 — `fn tok(s: Str, out: List<Token>)`가
   string 스캔→Token struct를 by-pointer out-param List에 push, 호출자가 `toks[j].kind`/`toks[j].value` 소비

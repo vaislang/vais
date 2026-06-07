@@ -416,6 +416,14 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   실측: empty-fill-len=2, caller-reads-fields=31, callee-reads-own=100, **full tokenizer(out-param List<Token>)=3**.
   e2e 83→87, 값정확성 96/96, 회귀0. 교훈: clang 스킴 검증 먼저(run=179)/length를 데이터 뒤로(충돌제거)/caller cross-function
   추론은 callee param 주석서(struct 필드 추가 회피)/**트랜스파일러 brace-count가 주석 brace 포함=루프 본문 주석 brace 금지**.
+- **🎯🎯 full tokenize→eval 파이프라인 — List<Token> 함수간 공유**(FP12t, 2026-06-07, commit ff72f0e).
+  **완전한 self-host tokenize→parse/eval shape 컴파일**: tokenize가 `List<Token>` out-param 채움 → **별도 consumer 함수**가
+  그 `List<Token>`을 param으로 받아 `toks[i].kind`로 디스패치. 여러 consumer가 한 List 공유(multi-pass). **근본수정=read-only
+  List-of-structs param 추론**: `eval(toks: List<Token>)`는 읽기만(push 없음) → emit_fn이 본문 push-scan(list_elem_sty)으로
+  원소타입 못 찾아 scalar로 처리(`.len`=buf[63], stride 1)→garbage. **수정: emit_fn이 param 자신의 `List<Type>` 주석에서
+  원소타입 읽음**(param_list_elem_sty를 자기 함수+param 위치에; push하든 읽든 authoritative), push-scan은 fallback(List<Int> 등).
+  실측: tokenize→eval sum=6, mini calc 디스패치=9, **2 consumer(count_nums+sum_nums) 한 List 공유=211**. e2e 87→90, 값정확성
+  96/96, 회귀0. 교훈: **read-only param은 push-scan 불가→param 주석이 authoritative**(consumer 함수가 self-host 핵심 패턴).
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
