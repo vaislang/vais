@@ -897,3 +897,15 @@
   결론. 남은 후보: `and`/`or`를 값으로(is_digit `and` — 미검증). 교훈: **경계매핑이 bootstrap-critical 갭 식별**
   (is_digit `>=<=`=실제 self-host 소스 패턴, for는 비-critical 판명)/2-char 연산자는 tokenize+gen_fold+조건핸들러 3곳/
   self-host 소스 grep으로 critical vs nicety 구분(for 0건=비critical). **self-host 소스 codegen 구문 거의 완비.**
+
+## 2026-06-07 (/loop iter 75: 🎯 self-host 능력 추가 — `and`/`or`를 값으로 (완전한 is_digit))
+- is_digit 마지막 갭: `c >= 48 and c <= 57`서 `and`/`or` 미인식(식별자로 falthrough, 비교 한쪽만 반환). **수정**:
+  tokenize `and`→kind31/`or`→kind32(kw3/kw2), gen_fold에 logical arm(`and`→`and i64`/`or`→`or i64`; 피연산자가
+  0/1이라 bitwise로 정확). **precedence 핵심**: 처음 `c >= (48 and c<=57)` 오associativity 버그 → **next_logical
+  헬퍼로 비교 RHS를 다음 `and`/`or`서 바운드**(`(c>=48) and (c<=57)`), comparison/and-or arm 모두 rstop서 계속 fold.
+- 실측: **완전한 is_digit** is_d(53)=1/is_d(99)=0/경계48,57=1, or-chain(a<0 or a>100), and-chain ordered/unordered.
+  회귀0(재귀120/그룹화20). e2e fixpoint-full **48→55 PASS**(+7), aggregate 96/96.
+- SELF_HOST.md FP12j, ROADMAP: and/or-value 해결, 남은건 for+compound-condition(둘 다 우회가능=while/중첩if).
+  **결론: self-host 소스 codegen 구문 거의 완비, 부트스트랩에 충분.** 교훈: **precedence는 RHS 바운딩이 핵심**
+  (next_logical로 비교<and/or 보장)/0-1 피연산자엔 bitwise and/or가 logical과 동등/**4연속 bootstrap-relevant 추가**
+  (비교-value/그룹화/`>=<=`/`and or`)로 is_digit류 완성 — 경계매핑이 실제 갭을 정확히 식별·해결.

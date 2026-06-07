@@ -99,6 +99,17 @@ check "fn is_d(c) {{ if c >= 48 {{ if c <= 57 {{ return 1 }} }}; return 0 }}; re
 check "fn is_d(c) {{ if c >= 48 {{ if c <= 57 {{ return 1 }} }}; return 0 }}; return is_d(99);" 0
 check "fn f(n) {{ let mut s = 0; let mut i = 1; while i <= n {{ s = s + i; i = i + 1 }}; return s }}; return f(5);" 15
 
+# --- FP12j: `and`/`or` as values with correct precedence (lower than comparison).
+# The complete is_digit shape: `return c >= 48 and c <= 57`. ---
+check "fn is_d(c) {{ return c >= 48 and c <= 57 }}; return is_d(53);" 1
+check "fn is_d(c) {{ return c >= 48 and c <= 57 }}; return is_d(99);" 0
+check "fn is_d(c) {{ return c >= 48 and c <= 57 }}; return is_d(48);" 1
+check "fn f(a) {{ return a < 0 or a > 100 }}; return f(150);" 1
+check "fn f(a) {{ return a < 0 or a > 100 }}; return f(50);" 0
+# and-chain ordered/unordered
+check "fn f(a, b, c) {{ return a < b and b < c }}; return f(1, 2, 3);" 1
+check "fn f(a, b, c) {{ return a < b and b < c }}; return f(1, 5, 3);" 0
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +

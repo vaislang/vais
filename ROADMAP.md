@@ -336,5 +336,8 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   ① 비교-as-value **해결**(FP12g). ② `(...)` 그룹화 **해결**(FP12h). ③ `>=`/`<=` 2-char 비교 **해결**(FP12i,
   단일토큰 kind29/30, sge/sle, value+조건 양쪽; is_digit `c>=48 and c<=57` shape). ④ `for` 루프 미구현 —
   **단, self-host 소스는 for 미사용(while만, 실측 0건)** → 부트스트랩 비-critical, general-nl용으로만 TRACKED.
-  ⑤ `and`/`or`를 값으로(`return c>=48 and c<=57`) — self-host 소스 사용(is_digit), 미검증. 다음 후보.
-  **결론: self-host 소스가 쓰는 codegen 구문 거의 완비**(비교/그룹화/`>=<=`/while/struct/List/문자열), for는 비-critical.
+  ⑤ `and`/`or`를 값으로 **해결**(FP12j, kind31/32, precedence comparison보다 낮게=next_logical로 RHS 바운드,
+  `and`→`and i64`/`or`→`or i64`; **완전한 is_digit `c>=48 and c<=57` 동작**). ⑥ if/while 조건의 compound
+  `and`/`or`(`if a and b`)는 조건핸들러가 단일비교만 — value형은 됨, 조건형 compound는 미지원(우회: 중첩 if). 다음 후보.
+  **결론: self-host 소스가 쓰는 codegen 구문 거의 완비**(비교/그룹화/`>=<=`/`and`/`or`-value/while/struct/List/문자열).
+  for + compound-condition만 남고, 둘 다 우회 가능(while/중첩if). codegen 능력은 self-host 부트스트랩에 충분.

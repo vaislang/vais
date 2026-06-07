@@ -103,7 +103,7 @@ the emitted IR with clang and checking the runtime value).
 | `fixpoint_codegen4.nl` (FP8) | + recursion (`icmp`/`br`/`phi`) | `test-fixpoint-codegen4.sh` |
 | `fixpoint_imperative.nl` (FP10a-c) | mutable vars (alloca), `while`, `if/else` | `test-fixpoint-imperative.sh` |
 | `fixpoint_array.nl` (FP10d) | fixed arrays (`alloca [N x i64]` + GEP) | `test-fixpoint-array.sh` |
-| `fixpoint_full.nl` (FP10f–FP12i) | **the unified compiler**: functions (0-4 params, recursion, nested calls) + mutable vars + while + if/else + arrays + Lists + structs + **strings** (`s[i]`/`s.len()`) + putchar + **comparison-as-value** (`return a == b`) + **`(...)` grouping** + **`>=`/`<=`** (the is_digit shape) — every core construct in one program | `test-fixpoint-full.sh` |
+| `fixpoint_full.nl` (FP10f–FP12j) | **the unified compiler**: functions (0-4 params, recursion, nested calls) + mutable vars + while + if/else + arrays + Lists + structs + **strings** (`s[i]`/`s.len()`) + putchar + **comparison-as-value** + **`(...)` grouping** + **`>=`/`<=`** + **`and`/`or` as values** (the full is_digit shape `c >= 48 and c <= 57`) — every core construct in one program | `test-fixpoint-full.sh` |
 | `fixpoint_struct.nl` (FP10e) | structs/records (Token/Op/Fn/Slot shape) | `test-fixpoint-struct.sh` |
 | `fixpoint_list.nl` (FP10g) | dynamic `List` (push/len/index — List<Token>/List<Fn> shape) | `test-fixpoint-list.sh` |
 | `fixpoint_str.nl` (FP12c) | **string literals + `s[i]` byte load + `s.len()`** (the source-tokenization primitive) | `test-fixpoint-str.sh` |

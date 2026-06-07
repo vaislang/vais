@@ -154,6 +154,10 @@ fn tokenize(src: Str) -> List<Token> {
                 toks.push(Token { kind: 21, value: 0, nstart: start, nlen: len })
             } else if kw5(src, start, len, 119, 104, 105, 108, 101) == 1 {
                 toks.push(Token { kind: 22, value: 0, nstart: start, nlen: len })   # while
+            } else if kw3(src, start, len, 97, 110, 100) == 1 {
+                toks.push(Token { kind: 31, value: 0, nstart: start, nlen: len })   # and
+            } else if kw2(src, start, len, 111, 114) == 1 {
+                toks.push(Token { kind: 32, value: 0, nstart: start, nlen: len })   # or
             } else if kw2(src, start, len, 105, 102) == 1 {
                 toks.push(Token { kind: 15, value: 0, nstart: start, nlen: len })   # if
             } else if kw4(src, start, len, 101, 108, 115, 101) == 1 {
@@ -823,6 +827,26 @@ fn skip_factor(toks: &List<Token>, i: Int) -> Int {
     }
     return i + 1
 }
+# Find the next `and`(31)/`or`(32) at paren-depth 0 in [i, stop); returns stop if
+# none. Used to bound a comparison's RHS so `and`/`or` stay lower-precedence.
+fn next_logical(toks: &List<Token>, i: Int, stop: Int) -> Int {
+    let mut j = i
+    let mut depth = 0
+    let mut go = true
+    while go {
+        if j >= stop { go = false }
+        else {
+            let t = toks[j]
+            if t.kind == 9 { depth = depth + 1; j = j + 1 }
+            else if t.kind == 10 { depth = depth - 1; j = j + 1 }
+            else if depth == 0 {
+                if t.kind == 31 { go = false } else if t.kind == 32 { go = false } else { j = j + 1 }
+            }
+            else { j = j + 1 }
+        }
+    }
+    return j
+}
 fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, stop: Int, acc: Op) -> Op {
     if i >= stop { return acc }
     let op = toks[i]
@@ -844,7 +868,10 @@ fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
     # Lower precedence than +/-, so the RHS is a full additive expression
     # (gen_expr from the operand). The boolean result is widened to i64 (1/0).
     if op.kind == 18 or op.kind == 19 or op.kind == 20 or op.kind == 29 or op.kind == 30 {
-        let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, stop, acc.next)
+        # RHS is the additive expr up to the next `and`/`or` (so logicals stay
+        # lower-precedence): `c >= 48 and c <= 57` parses as `(c>=48) and (c<=57)`.
+        let rstop = next_logical(toks, i + 1, stop)
+        let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, rstop, acc.next)
         let cnum = rhs.next
         emit_str("  %t")
         pint(cnum)
@@ -862,7 +889,30 @@ fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
         pint(cnum)
         emit_str(" to i64")
         putchar(10)
-        return Op { kind: 1, val: zc, next: zc + 1 }
+        let cacc = Op { kind: 1, val: zc, next: zc + 1 }
+        # continue folding from rstop so a following `and`/`or` is applied.
+        return gen_fold(toks, slots, fns, defs, src, rstop, stop, cacc)
+    }
+    # logical `and` (31) / `or` (32) as a value. Operands are 0/1 (from
+    # comparisons), so bitwise `and i64`/`or i64` yields the correct boolean.
+    # Lowest precedence -> RHS is a full expression (gen_expr).
+    if op.kind == 31 or op.kind == 32 {
+        # RHS is the next comparison/additive expr up to the following `and`/`or`
+        # (left-associative): `a and b and c` -> `((a and b) and c)`.
+        let rstop = next_logical(toks, i + 1, stop)
+        let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, rstop, acc.next)
+        let dest = rhs.next
+        emit_str("  %t")
+        pint(dest)
+        emit_str(" = ")
+        if op.kind == 31 { emit_str("and") } else { emit_str("or") }
+        emit_str(" i64 ")
+        emit_op(acc)
+        emit_str(", ")
+        emit_op(rhs)
+        putchar(10)
+        let nacc = Op { kind: 1, val: dest, next: dest + 1 }
+        return gen_fold(toks, slots, fns, defs, src, rstop, stop, nacc)
     }
     return acc
 }
