@@ -501,6 +501,15 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   eval_call(fresh scope, double(5)=10), **재귀 fresh-scope eval(factorial(5)=120, sum(5)=15)**. **= fixpoint_full이 3개 self-host tier
   (산술/산술+변수/함수+재귀) 아키텍처 전부 codegen 가능 확증.** `List<Fn>`+`List<Var>` 테이블+fresh-scope 바인딩+재귀 전부 기존 기능 조합
   =신규 능력 0. e2e 120→123(+3 가드), 값정확성 96/96, 회귀0.
+- **🎯🎯🎯🎯 완전한 함수언어 컴파일러 end-to-end (3번째 tier) = 3 tier 전부 end-to-end**(FP12dd, 2026-06-08, commit 21c9483).
+  **마일스톤(신규 능력 0)**: fixpoint3.nl 함수언어 컴파일러를 **단일 통합 프로그램**으로 먹임 — `run_program(src)`가 함수언어 프로그램
+  토큰화(fn/return 키워드+ident+num+`+ * ( ) {{ }} ;`)→`fn` 정의 스캔으로 `List<Fn>` 함수테이블 빌드(build_fns)→top-level
+  `return <call>;` 찾아 eval_call(인자를 fresh callee `List<Var>` scope 바인딩+body 평가). 실측 end-to-end(source→value):
+  `fn double(x) {{ return x * 2 }} return double(21)`=42, `fn sq(x) {{ return x * x }} return sq(7)`=49, **2-fn 테이블 두번째 호출
+  `triple(14)`=42**(build_fns 다중 스캔+find_fn 디스패치). **= 🎯🎯🎯🎯 세 self-host tier(①산술 ②산술+변수 ③함수) 전부 단일 통합
+  프로그램 source→value end-to-end.** FP12cc(List<Fn>/eval_call/fresh scope)+키워드토큰화 조합=신규 능력 0. e2e 123→126(+3 가드),
+  값정확성 96/96, 회귀0. **다음 경계(tracked)**: run_program 재귀는 함수 body에 `if cond then a else b` **식**(expression) 필요
+  (FP12cc 재귀 probe는 native nl 재귀 사용; source-level `fac(n) = if n<=1 then 1 else n*fac(n-1)`는 if-expr 평가기 필요=별개 갭).
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

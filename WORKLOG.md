@@ -1,5 +1,18 @@
 # nl WORKLOG
 
+## 2026-06-08 (/loop: FP12dd — 🎯🎯🎯🎯 완전한 함수언어 컴파일러 end-to-end = 3 tier 전부 완성)
+- **마일스톤(신규 능력 0)**: fixpoint3.nl 함수언어 컴파일러를 단일 통합 프로그램으로 먹임 — `run_program(src)`가 함수언어 프로그램
+  토큰화(fn/return 키워드+ident+num+`+ * ( ) {{ }} ;`)→`fn` 정의 스캔으로 `List<Fn>` 함수테이블 빌드(build_fns)→top-level
+  `return <call>;` 찾아 eval_call(인자를 fresh callee `List<Var>` scope 바인딩+body 평가).
+- 실측 end-to-end(source string→value): **`fn double(x) {{ return x * 2 }} return double(21)`=42, `fn sq(x) {{ return x * x }} return sq(7)`=49,
+  2-fn 테이블 두번째호출 `triple(14)`=42**(build_fns 다중스캔+find_fn 디스패치).
+- FP12cc(List<Fn>/eval_call/fresh scope)+키워드토큰화 조합=신규 능력 0. e2e fixpoint-full **123→126**(+3 가드), 값정확성 96/96, 회귀0.
+  commit 21c9483.
+- **🎯🎯🎯🎯 세 self-host tier(①산술 ②산술+변수 ③함수) 전부 단일 통합 프로그램 source→value end-to-end.** FP12g~dd.
+- **다음 경계(tracked)**: run_program 재귀는 함수 body에 `if cond then a else b` **식**(expression) 필요(FP12cc 재귀 probe는 native nl
+  재귀였음; source-level `fac(n) = if n<=1 then 1 else n*fac(n-1)`는 if-expr 평가기=별개 갭). 다음=if-expr in eval(재귀 함수언어) or
+  `-> List` dedicated or for/print or TRACKED 버그.
+
 ## 2026-06-08 (/loop: FP12cc — 함수+재귀, fixpoint3.nl 3번째 tier)
 - fixpoint3.nl tier(multi-char 함수정의/호출+재귀)로 확장. fixpoint_full이 핵심 메커니즘 codegen.
 - 격리 probe(컴파일러 변경 0): find_fn(`List<Fn>` 이름룩업→index 1), **eval_call**(함수 룩업+인자를 fresh per-call
