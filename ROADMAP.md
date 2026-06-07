@@ -360,6 +360,12 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   - **잔존 sub-갭: List 반환(`fn build() -> List`)** — `return xs`가 List 안 넘김(스택버퍼 escape). self-host는
     tokenize가 List 반환(`fn tokenize(src) -> List<Token>`)하나, 회피: 호출자가 List 만들어 &로 넘기고 callee가 채움
     (out-param 패턴). List-param(읽기)은 done, List-return(쓰기)은 다음. **#2 갭 읽기측 완료.**
+- **🎯 #3 부트스트랩 갭: >4 파라미터** — fixpoint_full이 **최대 4 param(p0-p3)**만 지원, 5번째+ 깨짐(타입 wrap-around,
+  alloca/store 누락). **self-host 코어 함수는 최대 8 param**(`fn gen_stmts(toks,slots,fns,defs,src,i0,end,counter0)`,
+  gen_expr/gen_fold/gen_term 모두 8; name_eq 5, kw3 6). string/List param 빌딩블록은 있으나 4-param 한계가 차단.
+  **해결경로(mechanical, 4→8 확장)**: Fn struct p0-p7+ty(8), build_fns 파람루프 8-way, emit_fn 시그니처/슬롯루프 8-way,
+  call-arg a0-a7 저장+emit 8-way, gen_factor 호출 8 args. 새 아키텍처 아님(슬롯 배수)=mechanical이나 ~10 site 광범위.
+  dedicated 집중(half-done 상태 회피). **양대 갭(string/List param) 다음 차단요소, self-host 코어 직결.**
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

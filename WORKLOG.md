@@ -1015,3 +1015,14 @@
 - 교훈: **스킴 단순화가 interlocking 회피 핵심**(1 i64* arg+len@buf[63]→2-wide 재매핑 불필요)/로컬 표현 무변경+call서만
   buf[63] write=회귀안전/검증된 스킴(clang run=60→30) 구현이 5단계 무회귀 통과. **#2 갭 읽기측 완료=self-host parser/eval
   코어 시그니처(177곳 &List param) 동작.** 다음=List 반환(out-param 또는 직접) 또는 더 큰 self-host fragment.
+
+## 2026-06-07 (/loop iter 84: 🎯 #3 부트스트랩 갭 식별 — >4 파라미터 (self-host 코어 8 param))
+- 양대 갭(string/List param) 후 실제 self-host 함수 먹임: name_eq(s,a,alen,b,blen)=5param, kw3(s,a,alen,w0,w1,w2)=6param
+  → **invalid-IR**. 격리 확인: **5번째+ param 깨짐**(5-param IR서 %a4가 i8* 오타입=p0 타입 wrap-around, 5th alloca/store
+  누락). **#3 갭 확정: >4 파라미터.** self-host 코어 `gen_stmts/gen_expr/gen_fold/gen_term` 모두 **8 param**, name_eq 5/kw3 6
+  = string/List 빌딩블록 있어도 4-param 한계가 차단.
+- **해결경로(mechanical 4→8 확장)**: Fn struct p0-p7+ty, build_fns 파람루프, emit_fn 시그니처/슬롯루프, call-arg a0-a7,
+  gen_factor 호출 — 8-way로. 새 아키텍처 아님(슬롯 배수)이나 ~10 site 광범위 → dedicated(half-done 회피).
+- 이번 iter 경계 정밀식별+#3 문서화. e2e 70(회귀0), 값정확성 96/96. 교훈: **양대 갭 해결 후 실제 self-host 함수가
+  다음 갭(8 param) 노출**(building block 있어도 용량 한계)/#3는 mechanical(아키텍처 아님)이나 광범위=dedicated.
+  **부트스트랩 경로: #1 string param✅ #2 List param✅(읽기) #3 >4 param(다음) — self-host 코어 함수 직결.**
