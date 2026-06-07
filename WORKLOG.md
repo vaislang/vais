@@ -1,5 +1,16 @@
 # nl WORKLOG
 
+## 2026-06-07 (/loop: FP12aa — 변수 평가, eval_factor가 ident를 lookup으로 해석)
+- **마일스톤(신규 능력 0)**: fixpoint2.nl 변수-해석 evaluator를 fixpoint_full에 먹임 — eval_factor가 num은 t.value,
+  ident면 `lookup(vars,...)`; `vars: List<Var>` 심볼테이블이 전 재귀체인(eval_expr→eval_fold→eval_term→eval_factor→lookup) 관통.
+- 실측(변수 피연산자+precedence): **`x + 3`(x=5)=8, `a * b`(a=4,b=6)=24, `x + y * 4`(x=2,y=3)=14**.
+- 컴파일러 변경 0 — 초기 probe 실패(got 2/5)는 **test의 eval_expr off-by-one**(`eval_term(toks,0,..)` 썼으나 실제 fixpoint2.nl은
+  `eval_term(toks, i+1,..)`+eval_fold 피연산자 `i+2`)뿐. faithful 인덱싱이면 깨끗이 조합 = deep `List<Var>` param 관통+ident-token 해석 동작.
+- e2e fixpoint-full **115→117**(+2 가드), 값정확성 96/96, 회귀0. commit 10f9cc4.
+- 교훈: probe 실패는 컴파일러 갭 vs **test 로직 오류** 구분 필요(실제 self-host 소스의 정확한 인덱싱 대조로 규명)/이번엔 test off-by-one.
+- **= fixpoint2.nl(산술+변수 tier) 변수평가 핵심 동작.** FP12g~aa(18 능력추가+2 통합마일스톤). 남은 fixpoint.nl 갭=`-> List` 직접반환/for/print/TRACKED 2건.
+  다음=fixpoint2.nl run_program 전체 통합(let 바인딩+return, source string→값) or `-> List` dedicated or for/print.
+
 ## 2026-06-07 (/loop: FP12z — `!=` 연산자, name_eq + fixpoint2.nl 심볼테이블 unblock)
 - 다음 큰 모듈 fixpoint2.nl(산술식+multi-char 변수, `List<Var>` 심볼테이블)로 확장 → lookup이 모든 이름에 -1(255) 반환.
 - IR 격리: **`!=`가 토크나이저에 완전 누락** — `!`(33) skip되고 뒤 `=`가 assignment(kind5)로 처리 → `src[a+k] != src[b+k]`가

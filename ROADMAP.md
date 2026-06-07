@@ -483,6 +483,12 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   비교 arm에 kind33 추가→`icmp ne`.** 실측: `!=` value/조건, name_eq(foo==foo→1, foo!=bar→0), **실제 fixpoint2.nl 심볼테이블
   (`List<Var>` name_eq lookup: "foo"→10, "bar"→20)**. e2e 112→115(+3 FP12z 가드), 값정확성 96/96, 회귀0. 교훈: 다음 모듈로 확장이 누락
   연산자(`!=`) 노출/`!=` 누락은 무음파손(RHS 드롭→`!=0`). **= fixpoint2.nl(다음 self-host tier: 산술+변수) 핵심 심볼테이블 동작.**
+- **🎯🎯 변수 평가 — eval_factor가 ident를 lookup으로 해석**(FP12aa, 2026-06-07, commit 10f9cc4). **마일스톤(신규 능력 0)**:
+  fixpoint2.nl 변수-해석 evaluator를 fixpoint_full에 먹임 — eval_factor가 num은 t.value, ident면 `lookup(vars,...)` 호출;
+  `vars: List<Var>` 심볼테이블이 전 재귀체인(eval_expr→eval_fold→eval_term→eval_factor→lookup) 관통. **= 산술+변수 tier**(FP12z 위에).
+  실측(변수 피연산자+precedence): `x + 3`(x=5)=8, `a * b`(a=4,b=6)=24, `x + y * 4`(x=2,y=3)=14. 컴파일러 변경 0 — 초기 probe 실패는
+  test의 eval_expr off-by-one(실제 fixpoint2.nl은 eval_term i+1, eval_fold 피연산자 i+2)뿐, faithful 인덱싱이면 깨끗이 조합. deep
+  `List<Var>` param 관통+ident-token 해석 동작 확인. e2e 115→117(+2 가드), 값정확성 96/96, 회귀0. **= fixpoint2.nl 산술+변수 핵심 동작.**
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**
