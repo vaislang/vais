@@ -378,6 +378,12 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   `fn tokenize(out: List<Int>)`(out-param)로 재작성하면 우회. 직접 List-return은 편의(능력은 out-param으로 존재).
   **해결경로(dedicated, List-param과 같은 패턴)**: build_fns가 `-> List` ret타입 감지, emit_fn hidden out-arg,
   return-xs를 out-copy로, call-site 버퍼할당+바인딩. mechanical+아키텍처 혼합. **부트스트랩 4번째 갭(28곳, 우회존재).**
+  - **우회 동작(FP12p)**: out-param 패턴 완전 동작. 2 갭 추가 해결: ①**push-to-List-param**(is_arr=4 write-through:
+    ptr 로드+len@[63] 로드+ptr[len] store+len+1@[63]) ②**bare call statement**(버려지는 결과 호출도 emit;
+    gen_stmts에 `name(args);` 케이스). 실측: **FULL out-param 토크나이저 `fn tokenize(src: Str, out: List<Int>)`**가
+    src 스캔+out 채움, 호출자가 토큰 읽음=197. **List-return 우회 완전 동작** → self-host tokenize/build_fns 등을
+    out-param으로 재작성하면 직접 List-return 불필요. 직접 List-return은 여전히 편의(미구현)이나 **부트스트랩 비-blocking**.
+    e2e 74→77.
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

@@ -1518,6 +1518,14 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 counter = counter + 1
                 let stop = find_semi(toks, argstop, end)
                 i = stop + 1
+            } else if nx.kind == 9 {
+                # bare call statement: name(args) ; -> emit the call, discard result.
+                # (gen_expr/gen_factor generate the call IR.) Needed for out-param
+                # patterns like `tokenize(src, out);`.
+                let cstop = find_semi(toks, i + 2, end)
+                let e = gen_expr(toks, slots, fns, defs, src, i, cstop, counter)
+                counter = e.next
+                i = cstop + 1
             } else if nx.kind == 27 {
               if asti >= 0 {
                 # struct field write: p . field = expr ;
@@ -1547,6 +1555,60 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 putchar(10)
                 counter = counter + 1
                 i = stop + 1
+              } else if isarr_of(slots, src, t.nstart, t.nlen) == 4 {
+                # push to a List PARAMETER (is_arr=4, buffer pointer): load ptr,
+                # len from ptr[63], store v at ptr[len], len+1 back to ptr[63].
+                let pslot = find_slot(slots, src, t.nstart, t.nlen)
+                let pargstop = paren_end(toks, i + 4)
+                let pe = gen_expr(toks, slots, fns, defs, src, i + 4, pargstop, counter)
+                counter = pe.next
+                let pbp = counter
+                emit_str("  %t")
+                pint(pbp)
+                emit_str(" = load i64*, i64** %v")
+                pint(pslot)
+                putchar(10)
+                let plenp = pbp + 1
+                emit_str("  %t")
+                pint(plenp)
+                emit_str(" = getelementptr i64, i64* %t")
+                pint(pbp)
+                emit_str(", i64 63")
+                putchar(10)
+                let plen = plenp + 1
+                emit_str("  %t")
+                pint(plen)
+                emit_str(" = load i64, i64* %t")
+                pint(plenp)
+                putchar(10)
+                let pep = plen + 1
+                emit_str("  %t")
+                pint(pep)
+                emit_str(" = getelementptr i64, i64* %t")
+                pint(pbp)
+                emit_str(", i64 %t")
+                pint(plen)
+                putchar(10)
+                emit_str("  store i64 ")
+                emit_op(pe)
+                emit_str(", i64* %t")
+                pint(pep)
+                putchar(10)
+                let pinc = pep + 1
+                emit_str("  %t")
+                pint(pinc)
+                emit_str(" = add i64 %t")
+                pint(plen)
+                emit_str(", 1")
+                putchar(10)
+                emit_str("  store i64 %t")
+                pint(pinc)
+                emit_str(", i64* %t")
+                pint(plenp)
+                putchar(10)
+                counter = pinc + 1
+                let pstop = find_semi(toks, pargstop, end)
+                i = pstop + 1
               } else {
                 # list push: lst.push(expr) ;  — store at buf[len]; len = len + 1
                 let slot = find_slot(slots, src, t.nstart, t.nlen)

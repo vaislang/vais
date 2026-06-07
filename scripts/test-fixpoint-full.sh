@@ -162,6 +162,17 @@ check "fn name_eq(s: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen == bl
 # kw3: the keyword recognizer (string param + 6 params + 3 byte compares)
 check "fn kw3(s: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int) {{ if alen == 3 {{ if s[a] == w0 {{ if s[a + 1] == w1 {{ if s[a + 2] == w2 {{ return 1 }} }} }} }}; return 0 }}; return kw3(\`let\`, 0, 3, 108, 101, 116);" 1
 
+# --- FP12p: bare call statements + push-to-List-param (the out-param pattern,
+# which sidesteps List return). A function fills a caller-provided List, and the
+# caller reads it back. The full self-host tokenizer shape `fn tokenize(src: Str,
+# out: List<Int>)`. ---
+# bare call statement (discarded result) is emitted (the call fires)
+check "fn add1(x) {{ return x + 1 }}; fn run() {{ let mut a = 0; add1(a); return 5 }}; return run();" 5
+# push to a List parameter, callee reads its own length
+check "fn fill(out: List<Int>, n: Int) {{ let mut i = 0; while i < n {{ out.push(i * 10); i = i + 1 }}; return out.len }}; fn run() {{ let xs = list(); return fill(xs, 3) }}; return run();" 3
+# THE OUT-PARAM TOKENIZER: scan a string param, fill the out List, caller reads tokens
+check "fn tokenize(src: Str, out: List<Int>) {{ let mut i = 0; while i < src.len() {{ if src[i] == 32 {{ i = i + 1 }} else {{ out.push(src[i]); i = i + 1 }} }}; return 0 }}; fn run() {{ let toks = list(); tokenize(\`ab cd\`, toks); return toks[0] + toks[3] }}; return run();" 197
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +

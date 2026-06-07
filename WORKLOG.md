@@ -1051,3 +1051,15 @@
   return-copy+call 버퍼할당). dedicated. e2e 74 회귀0, 값정확성 96/96. 교훈: **3대 갭 해결 후 다함수 미니렉서/
   파이프라인 동작**(능력 통합 실증)/#4 List-return은 우회(out-param) 존재=비-blocking, 직접반환은 편의/검증된 스킴
   먼저. **부트스트랩: #1/#2/#3 해결, #4 List-return 식별(우회존재).**
+
+## 2026-06-07 (/loop iter 87: 🎯🎯 out-param 패턴 완전 동작 — push-to-List-param + bare call stmt)
+- #4 List-return을 out-param으로 우회. **2 갭 발견·해결**: ①**push-to-List-param**(List param에 `out.push(x)`가 안 됐음=
+  읽기전용이었음; is_arr=4 write-through 추가: ptr 로드+len@[63]+ptr[len] store+len+1@[63]) ②**bare call statement**
+  (`fill(xs, 3);` 버려지는 결과 호출이 gen_stmts서 drop됐음; `nx.kind == 9` 케이스 추가=gen_expr로 emit+discard).
+- 실측: bare call 발화(beep()→stdout 'A'), push-param-callee-len=3, **caller-sees-elements=6**(호출자가 callee 푸시한
+  원소 읽음), **🎯🎯 FULL out-param 토크나이저 `fn tokenize(src: Str, out: List<Int>)`**=197(src 스캔+out 채움+호출자
+  토큰 읽음). **List-return 우회 완전 동작.** 회귀0, e2e fixpoint-full **74→77 PASS**, aggregate 96/96.
+- SELF_HOST.md FP12p(bare call stmt+List push/write-through), ROADMAP #4 우회동작. 교훈: **out-param이 List-return
+  우회**(push-to-param+bare-call-stmt 2갭이 진짜 막던 것)/List param은 읽기만이 아니라 push도 필요/bare call stmt가
+  drop되던 잠복버그(let/return 위치만 emit). **🎯🎯🎯 부트스트랩 양대 패턴(읽기 List param + 쓰기 out-param) 완전 동작
+  = self-host tokenize 완전한 shape(src param→out List 채움) 컴파일.** 다음=실제 self-host tokenize 함수 통째 또는 eval.
