@@ -1001,3 +1001,17 @@
   변경. turn 끝 rushed half-merge 위험 → dedicated 집중 다음 회차. 막히면 추적.
 - 교훈: **아키텍처 변경은 스킴 먼저 격리검증**(clang으로 i64*-param+GEP run=60 확인 후 구현=설계확신)/Stage 분리
   (파싱 먼저 커밋, codegen 다음)/2-wide param이 arg 번호 재매핑 유발=interlocking이라 dedicated 필요. e2e 67, 값정확성 96/96.
+
+## 2026-06-07 (/loop iter 83: 🎯🎯 #2 부트스트랩 갭 Stage 2 — List 파라미터 codegen 동작)
+- **List-param codegen 다단계 구현+동작**. 스킴 단순화로 interlocking 회피: **List param=1 `i64*` arg(len은 buf[63])**
+  →`%aN` 1:1 유지(재매핑 불필요!), 로컬 List 표현 무변경(call-site서만 buf[63]에 len write)=회귀0. ①emit_fn 시그니처
+  `i64* %aN` ②슬롯 is_arr=4(i64** alloca) ③call-site: 로컬 List arg는 len→buf[63] store + 버퍼 base GEP=Op kind3
+  ④gen_factor `[`(load ptr→GEP i64→load)/`.len`(load ptr→GEP[63]→load) 포인터경로 ⑤call-arg kind3→`i64*` emit.
+- 실측: **List-as-param 동작** sum_list(xs)=60(build+pass+sum via xs[i]/xs.len), first(xs)=7, cnt(xs)=3.
+  **parser/eval 시그니처 `fn eval_expr(toks: List<Int>)` 동작.** 회귀0(List 로컬 build=100/재귀120/struct 전부 유지).
+  e2e fixpoint-full **67→70 PASS**, aggregate 96/96.
+- **잔존 sub-갭: List 반환(`fn build() -> List`)** — `return xs` 스택버퍼 escape 못함. 회피: out-param(호출자가 List
+  만들어 &로 넘기고 callee 채움). List-param(읽기) done, List-return(쓰기) 다음. SELF_HOST.md FP12n, ROADMAP #2 읽기측 완료.
+- 교훈: **스킴 단순화가 interlocking 회피 핵심**(1 i64* arg+len@buf[63]→2-wide 재매핑 불필요)/로컬 표현 무변경+call서만
+  buf[63] write=회귀안전/검증된 스킴(clang run=60→30) 구현이 5단계 무회귀 통과. **#2 갭 읽기측 완료=self-host parser/eval
+  코어 시그니처(177곳 &List param) 동작.** 다음=List 반환(out-param 또는 직접) 또는 더 큰 self-host fragment.

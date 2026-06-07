@@ -621,12 +621,63 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 if q >= close { ga = false }
                 else {
                     let astop = arg_comma_end(toks, q, close)
-                    let e = gen_expr(toks, slots, fns, defs, src, q, astop, cc)
-                    cc = e.next
-                    if nargs == 0 { a0k = e.kind; a0v = e.val }
-                    else if nargs == 1 { a1k = e.kind; a1v = e.val }
-                    else if nargs == 2 { a2k = e.kind; a2v = e.val }
-                    else { a3k = e.kind; a3v = e.val }
+                    # List-local arg passed by pointer: a single ident that is a
+                    # List local (is_arr=2). Write its length into buf[63], then
+                    # pass the buffer base as i64* (Op kind 3). The callee reads
+                    # length from [63] and indexes via GEP i64.
+                    let argt = toks[q]
+                    let mut ekind = 0
+                    let mut eval2 = 0
+                    let mut handled = 0
+                    if argt.kind == 1 {
+                        if astop == q + 1 {
+                            let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
+                            if aarr == 2 {
+                                let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
+                                # load length (%v<slot+1>) and store to buf[63]
+                                let lc = cc
+                                emit_str("  %t")
+                                pint(lc)
+                                emit_str(" = load i64, i64* %v")
+                                pint(lslot + 1)
+                                putchar(10)
+                                let l63 = lc + 1
+                                emit_str("  %t")
+                                pint(l63)
+                                emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
+                                pint(lslot)
+                                emit_str(", i64 0, i64 63")
+                                putchar(10)
+                                emit_str("  store i64 %t")
+                                pint(lc)
+                                emit_str(", i64* %t")
+                                pint(l63)
+                                putchar(10)
+                                # buffer base pointer
+                                let bc = l63 + 1
+                                emit_str("  %t")
+                                pint(bc)
+                                emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
+                                pint(lslot)
+                                emit_str(", i64 0, i64 0")
+                                putchar(10)
+                                ekind = 3
+                                eval2 = bc
+                                cc = bc + 1
+                                handled = 1
+                            }
+                        }
+                    }
+                    if handled == 0 {
+                        let e = gen_expr(toks, slots, fns, defs, src, q, astop, cc)
+                        cc = e.next
+                        ekind = e.kind
+                        eval2 = e.val
+                    }
+                    if nargs == 0 { a0k = ekind; a0v = eval2 }
+                    else if nargs == 1 { a1k = ekind; a1v = eval2 }
+                    else if nargs == 2 { a2k = ekind; a2v = eval2 }
+                    else { a3k = ekind; a3v = eval2 }
                     nargs = nargs + 1
                     q = astop + 1
                 }
@@ -646,7 +697,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 else if ai == 2 { ak = a2k; av = a2v }
                 else if ai == 3 { ak = a3k; av = a3v }
                 # kind 2 = i8* (string pointer); else i64.
-                if ak == 2 { emit_str("i8* ") } else { emit_str("i64 ") }
+                if ak == 2 { emit_str("i8* ") } else if ak == 3 { emit_str("i64* ") } else { emit_str("i64 ") }
                 emit_op(Op { kind: ak, val: av, next: 0 })
                 ai = ai + 1
             }
@@ -758,6 +809,30 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 putchar(10)
                 return Op { kind: 1, val: resc, next: resc + 1 }
             }
+            if karr == 4 {
+                # List PARAMETER `.len`: load buffer ptr, GEP to [63], load length.
+                let pslot = find_slot(slots, src, t.nstart, t.nlen)
+                let bp = counter
+                emit_str("  %t")
+                pint(bp)
+                emit_str(" = load i64*, i64** %v")
+                pint(pslot)
+                putchar(10)
+                let lp = bp + 1
+                emit_str("  %t")
+                pint(lp)
+                emit_str(" = getelementptr i64, i64* %t")
+                pint(bp)
+                emit_str(", i64 63")
+                putchar(10)
+                let lv = lp + 1
+                emit_str("  %t")
+                pint(lv)
+                emit_str(" = load i64, i64* %t")
+                pint(lp)
+                putchar(10)
+                return Op { kind: 1, val: lv, next: lv + 1 }
+            }
             let sti = sty_of(slots, src, t.nstart, t.nlen)
             if sti >= 0 {
                 let fld = toks[i + 2]
@@ -827,6 +902,33 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 emit_str(" to i64")
                 putchar(10)
                 return Op { kind: 1, val: szc, next: szc + 1 }
+            }
+            if karr == 4 {
+                # List PARAMETER index: load buffer ptr, GEP i64, load i64.
+                let pslot = find_slot(slots, src, t.nstart, t.nlen)
+                let pbend = bracket_end(toks, i + 2)
+                let pidx = gen_expr(toks, slots, fns, defs, src, i + 2, pbend, counter)
+                let pbase = pidx.next
+                emit_str("  %t")
+                pint(pbase)
+                emit_str(" = load i64*, i64** %v")
+                pint(pslot)
+                putchar(10)
+                let pgep = pbase + 1
+                emit_str("  %t")
+                pint(pgep)
+                emit_str(" = getelementptr i64, i64* %t")
+                pint(pbase)
+                emit_str(", i64 ")
+                emit_op(pidx)
+                putchar(10)
+                let pld = pgep + 1
+                emit_str("  %t")
+                pint(pld)
+                emit_str(" = load i64, i64* %t")
+                pint(pgep)
+                putchar(10)
+                return Op { kind: 1, val: pld, next: pld + 1 }
             }
             # array/list index read: name [ <expr> ] -> GEP + load
             let slot = find_slot(slots, src, t.nstart, t.nlen)
@@ -1793,7 +1895,8 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         if pi > 0 { emit_str(", ") }
         let mut pty = f.p0ty
         if pi == 1 { pty = f.p1ty } else if pi == 2 { pty = f.p2ty } else if pi == 3 { pty = f.p3ty }
-        if pty == 1 { emit_str("i8* %a") } else { emit_str("i64 %a") }
+        # Str -> i8*, List -> i64* (buffer pointer; len read from buf[63]), else i64.
+        if pty == 1 { emit_str("i8* %a") } else if pty == 2 { emit_str("i64* %a") } else { emit_str("i64 %a") }
         pint(pi)
         pi = pi + 1
     }
@@ -1819,6 +1922,19 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
             emit_str("  store i8* %a")
             pint(s2)
             emit_str(", i8** %v")
+            pint(s2)
+            putchar(10)
+        } else if pty == 2 {
+            # List param: is_arr=4 (List-by-pointer). The buffer pointer (i64*) is
+            # stored in an i64** alloca; xs[i] = GEP i64, xs.len = load buf[63].
+            slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 4, alen: 0 , sty: 0 - 1 })
+            emit_str("  %v")
+            pint(s2)
+            emit_str(" = alloca i64*")
+            putchar(10)
+            emit_str("  store i64* %a")
+            pint(s2)
+            emit_str(", i64** %v")
             pint(s2)
             putchar(10)
         } else {

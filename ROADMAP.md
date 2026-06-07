@@ -352,6 +352,14 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
     + 슬롯(ptr+len) + call-site(버퍼ptr+len 2 arg emit) + gen_factor `[`/`.len` 포인터경로. **핵심 난점: List param이
     2 arg 위치 소비→`%aN` 번호 재매핑**(현 1:1 param↔arg 깨짐). dedicated 집중 필요(아키텍처, half-merge 위험).
     fixpoint_full List push는 read-only `&List`엔 불필요(self-host는 &List=읽기).
+  - **Stage 2 완료(FP12n)**: List-param codegen 동작. emit_fn 시그니처(List=`i64* %aN`, 1 arg=`%aN` 재매핑 회피!),
+    슬롯(is_arr=4, i64** alloca), call-site(로컬 List arg는 len을 buf[63]에 store + 버퍼 base GEP를 i64*=Op kind3),
+    gen_factor `[`(GEP i64+load)/`.len`(buf[63] load) 포인터경로. **핵심 단순화: List param=1 i64* arg(len은 buf[63])**
+    →`%aN` 1:1 유지(재매핑 불필요), 로컬 List 표현 무변경(call서만 buf[63] write)=회귀0. 실측: sum_list(xs)=60,
+    first(xs)=7, cnt(xs)=3. **parser/eval 시그니처 `fn eval_expr(toks: List<Int>)` 동작.** e2e 67→70.
+  - **잔존 sub-갭: List 반환(`fn build() -> List`)** — `return xs`가 List 안 넘김(스택버퍼 escape). self-host는
+    tokenize가 List 반환(`fn tokenize(src) -> List<Token>`)하나, 회피: 호출자가 List 만들어 &로 넘기고 callee가 채움
+    (out-param 패턴). List-param(읽기)은 done, List-return(쓰기)은 다음. **#2 갭 읽기측 완료.**
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

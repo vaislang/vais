@@ -144,6 +144,15 @@ check "fn cd(s: Str) {{ let mut i = 0; let mut n = 0; while i < s.len() {{ if s[
 # a REAL tokenizer over a string PARAMETER: count whitespace-separated tokens
 check "fn ntok(s: Str) {{ let mut i = 0; let mut n = 0; let mut inw = 0; while i < s.len() {{ if s[i] == 32 {{ inw = 0 }} else {{ if inw == 0 {{ n = n + 1 }}; inw = 1 }}; i = i + 1 }}; return n }}; return ntok(\`ab cd ef\`);" 3
 
+# --- FP12n: LIST PARAMETERS (`fn f(xs: List<Int>)`) -- the #2 bootstrap pattern
+# (the self-host uses &List<Token> params 177x). A local List is passed by buffer
+# POINTER (length written to buf[63] at the call); the callee indexes via
+# getelementptr i64 and reads xs.len from buf[63]. The parser/evaluator signature
+# `fn eval_expr(toks: &List<Token>, ...)`. ---
+check "fn sum_list(xs: List<Int>) {{ let mut s = 0; let mut i = 0; while i < xs.len {{ s = s + xs[i]; i = i + 1 }}; return s }}; fn run() {{ let xs = list(); xs.push(10); xs.push(20); xs.push(30); return sum_list(xs) }}; return run();" 60
+check "fn first(xs: List<Int>) {{ return xs[0] }}; fn run() {{ let xs = list(); xs.push(7); xs.push(8); return first(xs) }}; return run();" 7
+check "fn cnt(xs: List<Int>) {{ return xs.len }}; fn run() {{ let xs = list(); xs.push(1); xs.push(2); xs.push(3); return cnt(xs) }}; return run();" 3
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +
