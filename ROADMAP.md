@@ -366,6 +366,10 @@ self-host 핵심 능력 전부 달성. 남은 갭 = **순수 규모**(실제 수
   **해결경로(mechanical, 4→8 확장)**: Fn struct p0-p7+ty(8), build_fns 파람루프 8-way, emit_fn 시그니처/슬롯루프 8-way,
   call-arg a0-a7 저장+emit 8-way, gen_factor 호출 8 args. 새 아키텍처 아님(슬롯 배수)=mechanical이나 ~10 site 광범위.
   dedicated 집중(half-done 상태 회피). **양대 갭(string/List param) 다음 차단요소, self-host 코어 직결.**
+  - **해결됨(FP12o)**: 4→8 param 확장 완료(Fn struct p0-p7+ty, build_fns 8-way, emit_fn 시그니처+슬롯 8-way,
+    call-arg a0-a7, gen_factor 8 args). mechanical 확장 ~10 site 무회귀. 실측: s8(8param)=36, **REAL self-host
+    `name_eq`(5param)=1/0, `kw3`(6param)=1** 동작. **#1/#2/#3 = 부트스트랩 3대 갭 전부 해결**(string param/List param/8param).
+    self-host 코어 함수 시그니처(tokenize/name_eq/kw3/gen_stmts/gen_expr) 전부 fixpoint_full로 컴파일.
 - (구) #1 갭 원문:
   현재 compile() 입력은 무타입 param(`fn f(s)`)이라 s가 문자열인지 시그니처로 모름 → param을 i64 slot으로 처리,
   문자열 리터럴 arg를 `0`으로 전달, `s[i]`가 array-GEP(오타입). **self-host 소스는 `Str` param을 176곳 사용**

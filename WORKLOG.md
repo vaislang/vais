@@ -1026,3 +1026,15 @@
 - 이번 iter 경계 정밀식별+#3 문서화. e2e 70(회귀0), 값정확성 96/96. 교훈: **양대 갭 해결 후 실제 self-host 함수가
   다음 갭(8 param) 노출**(building block 있어도 용량 한계)/#3는 mechanical(아키텍처 아님)이나 광범위=dedicated.
   **부트스트랩 경로: #1 string param✅ #2 List param✅(읽기) #3 >4 param(다음) — self-host 코어 함수 직결.**
+
+## 2026-06-07 (/loop iter 85: 🎯🎯🎯 #3 부트스트랩 갭 해결 — 4→8 파라미터 (REAL self-host 함수 동작))
+- **#3 갭(>4 param) 4→8 확장 dedicated 완료**. mechanical 확장 ~10 site: Fn struct p0-p7+ty(8), build_fns 파람루프
+  8-way(decls+type-`:`branch+name-branch+push), emit_fn 시그니처+슬롯루프 8-way, call-arg a0-a7 저장+emit 8-way,
+  gen_factor 호출 8 args. 격리후통합, 단계별.
+- 실측: **5/6/8-param 동작**(s5=15/s6=21/s8=36), **🎯🎯 REAL self-host `name_eq`(5param, string param+byte loop)=1/0,
+  `kw3`(6param, keyword 인식)=1** — 실제 파서 identifier-matcher/keyword recognizer 컴파일+실행. 회귀0(0-4param/
+  string param/List param 전부 유지). e2e fixpoint-full **70→74 PASS**, aggregate 96/96.
+- SELF_HOST.md FP12o(0-8 params), ROADMAP #3 해결. 교훈: **mechanical 확장도 단계별+헤비회귀**(~10 site 8-way 무회귀)/
+  **#1/#2/#3 부트스트랩 3대 갭 전부 해결**(string param 176곳/List param 177곳/8param). **self-host 코어 함수 시그니처
+  (tokenize/name_eq/kw3/gen_stmts/gen_expr) 전부 fixpoint_full로 컴파일.** 다음=실제 self-host 함수 여러개 조합(tokenize+
+  name_eq+kw3 통합 미니렉서) 먹여 다음 경계, 또는 List 반환(out-param).

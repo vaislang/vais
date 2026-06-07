@@ -19,13 +19,15 @@ struct Token { kind: Int, value: Int, nstart: Int, nlen: Int }
 struct Op { kind: Int, val: Int, next: Int }
 # A declared variable: source name range -> it lives at alloca %v<slot>.
 struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: Int }
-# A function: name range, param range, body token range [bstart, bend).
-# A function: name range, up to 4 params (p0s/p0l..p3s/p3l), param count `npar`,
-# and the body token range [bstart, bend).
+# A function: name range, up to 8 params (p0s/p0l..p7s/p7l + p0ty..p7ty), param
+# count `npar`, and the body token range [bstart, bend). 8 params because the
+# self-host core (gen_stmts/gen_expr/gen_fold/gen_term) takes 8.
 struct Fn {
     nstart: Int, nlen: Int,
     p0s: Int, p0l: Int, p1s: Int, p1l: Int, p2s: Int, p2l: Int, p3s: Int, p3l: Int,
+    p4s: Int, p4l: Int, p5s: Int, p5l: Int, p6s: Int, p6l: Int, p7s: Int, p7l: Int,
     p0ty: Int, p1ty: Int, p2ty: Int, p3ty: Int,
+    p4ty: Int, p5ty: Int, p6ty: Int, p7ty: Int,
     npar: Int,
     bstart: Int, bend: Int
 }
@@ -378,10 +380,22 @@ fn build_fns(toks: &List<Token>, src: Str, n: Int) -> List<Fn> {
             let mut p2l = 0
             let mut p3s = 0
             let mut p3l = 0
+            let mut p4s = 0
+            let mut p4l = 0
+            let mut p5s = 0
+            let mut p5l = 0
+            let mut p6s = 0
+            let mut p6l = 0
+            let mut p7s = 0
+            let mut p7l = 0
             let mut p0ty = 0
             let mut p1ty = 0
             let mut p2ty = 0
             let mut p3ty = 0
+            let mut p4ty = 0
+            let mut p5ty = 0
+            let mut p6ty = 0
+            let mut p7ty = 0
             let mut npar = 0
             let mut q = i + 3
             let mut gp = true
@@ -399,10 +413,15 @@ fn build_fns(toks: &List<Token>, src: Str, n: Int) -> List<Fn> {
                     let islist = kw4(src, tyt.nstart, tyt.nlen, 76, 105, 115, 116)
                     let mut pty = isstr
                     if islist == 1 { pty = 2 }
+                    # the type applies to the most recent param (index npar-1).
                     if npar == 1 { p0ty = pty }
                     else if npar == 2 { p1ty = pty }
                     else if npar == 3 { p2ty = pty }
-                    else { p3ty = pty }
+                    else if npar == 4 { p3ty = pty }
+                    else if npar == 5 { p4ty = pty }
+                    else if npar == 6 { p5ty = pty }
+                    else if npar == 7 { p6ty = pty }
+                    else { p7ty = pty }
                     # advance past the type. List<...> spans to the closing `>`
                     # (kind 19); a plain type is a single ident.
                     if islist == 1 {
@@ -421,7 +440,11 @@ fn build_fns(toks: &List<Token>, src: Str, n: Int) -> List<Fn> {
                     if npar == 0 { p0s = qt.nstart; p0l = qt.nlen }
                     else if npar == 1 { p1s = qt.nstart; p1l = qt.nlen }
                     else if npar == 2 { p2s = qt.nstart; p2l = qt.nlen }
-                    else { p3s = qt.nstart; p3l = qt.nlen }
+                    else if npar == 3 { p3s = qt.nstart; p3l = qt.nlen }
+                    else if npar == 4 { p4s = qt.nstart; p4l = qt.nlen }
+                    else if npar == 5 { p5s = qt.nstart; p5l = qt.nlen }
+                    else if npar == 6 { p6s = qt.nstart; p6l = qt.nlen }
+                    else { p7s = qt.nstart; p7l = qt.nlen }
                     npar = npar + 1
                     q = q + 1
                 }
@@ -454,7 +477,9 @@ fn build_fns(toks: &List<Token>, src: Str, n: Int) -> List<Fn> {
             fns.push(Fn {
                 nstart: nt.nstart, nlen: nt.nlen,
                 p0s: p0s, p0l: p0l, p1s: p1s, p1l: p1l, p2s: p2s, p2l: p2l, p3s: p3s, p3l: p3l,
+                p4s: p4s, p4l: p4l, p5s: p5s, p5l: p5l, p6s: p6s, p6l: p6l, p7s: p7s, p7l: p7l,
                 p0ty: p0ty, p1ty: p1ty, p2ty: p2ty, p3ty: p3ty,
+                p4ty: p4ty, p5ty: p5ty, p6ty: p6ty, p7ty: p7ty,
                 npar: npar,
                 bstart: bstart, bend: be
             })
@@ -602,7 +627,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
     if t.kind == 1 {
         let nx = toks[i + 1]
         if nx.kind == 9 {
-            # call: name ( arg0 [, arg1 [, arg2 [, arg3]]] ) — 0..4 args.
+            # call: name ( arg0 [, ... up to arg7] ) — 0..8 args.
             let close = paren_end(toks, i + 2)
             # evaluate each argument (between commas at depth 0), capturing its op.
             let mut nargs = 0
@@ -614,6 +639,14 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let mut a2v = 0
             let mut a3k = 0
             let mut a3v = 0
+            let mut a4k = 0
+            let mut a4v = 0
+            let mut a5k = 0
+            let mut a5v = 0
+            let mut a6k = 0
+            let mut a6v = 0
+            let mut a7k = 0
+            let mut a7v = 0
             let mut cc = counter
             let mut q = i + 2
             let mut ga = true
@@ -677,7 +710,11 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     if nargs == 0 { a0k = ekind; a0v = eval2 }
                     else if nargs == 1 { a1k = ekind; a1v = eval2 }
                     else if nargs == 2 { a2k = ekind; a2v = eval2 }
-                    else { a3k = ekind; a3v = eval2 }
+                    else if nargs == 3 { a3k = ekind; a3v = eval2 }
+                    else if nargs == 4 { a4k = ekind; a4v = eval2 }
+                    else if nargs == 5 { a5k = ekind; a5v = eval2 }
+                    else if nargs == 6 { a6k = ekind; a6v = eval2 }
+                    else { a7k = ekind; a7v = eval2 }
                     nargs = nargs + 1
                     q = astop + 1
                 }
@@ -696,6 +733,10 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 if ai == 1 { ak = a1k; av = a1v }
                 else if ai == 2 { ak = a2k; av = a2v }
                 else if ai == 3 { ak = a3k; av = a3v }
+                else if ai == 4 { ak = a4k; av = a4v }
+                else if ai == 5 { ak = a5k; av = a5v }
+                else if ai == 6 { ak = a6k; av = a6v }
+                else if ai == 7 { ak = a7k; av = a7v }
                 # kind 2 = i8* (string pointer); else i64.
                 if ak == 2 { emit_str("i8* ") } else if ak == 3 { emit_str("i64* ") } else { emit_str("i64 ") }
                 emit_op(Op { kind: ak, val: av, next: 0 })
@@ -1895,6 +1936,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         if pi > 0 { emit_str(", ") }
         let mut pty = f.p0ty
         if pi == 1 { pty = f.p1ty } else if pi == 2 { pty = f.p2ty } else if pi == 3 { pty = f.p3ty }
+        else if pi == 4 { pty = f.p4ty } else if pi == 5 { pty = f.p5ty } else if pi == 6 { pty = f.p6ty } else if pi == 7 { pty = f.p7ty }
         # Str -> i8*, List -> i64* (buffer pointer; len read from buf[63]), else i64.
         if pty == 1 { emit_str("i8* %a") } else if pty == 2 { emit_str("i64* %a") } else { emit_str("i64 %a") }
         pint(pi)
@@ -1913,6 +1955,10 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         if s2 == 1 { pns = f.p1s; pnl = f.p1l; pty = f.p1ty }
         else if s2 == 2 { pns = f.p2s; pnl = f.p2l; pty = f.p2ty }
         else if s2 == 3 { pns = f.p3s; pnl = f.p3l; pty = f.p3ty }
+        else if s2 == 4 { pns = f.p4s; pnl = f.p4l; pty = f.p4ty }
+        else if s2 == 5 { pns = f.p5s; pnl = f.p5l; pty = f.p5ty }
+        else if s2 == 6 { pns = f.p6s; pnl = f.p6l; pty = f.p6ty }
+        else if s2 == 7 { pns = f.p7s; pnl = f.p7l; pty = f.p7ty }
         if pty == 1 {
             slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 3, alen: 0 , sty: 0 - 1 })
             emit_str("  %v")

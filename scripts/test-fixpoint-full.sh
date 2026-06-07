@@ -153,6 +153,15 @@ check "fn sum_list(xs: List<Int>) {{ let mut s = 0; let mut i = 0; while i < xs.
 check "fn first(xs: List<Int>) {{ return xs[0] }}; fn run() {{ let xs = list(); xs.push(7); xs.push(8); return first(xs) }}; return run();" 7
 check "fn cnt(xs: List<Int>) {{ return xs.len }}; fn run() {{ let xs = list(); xs.push(1); xs.push(2); xs.push(3); return cnt(xs) }}; return run();" 3
 
+# --- FP12o: 5-8 PARAMETERS (the self-host core arity -- gen_stmts/gen_expr/etc
+# take 8). Plus the REAL self-host helpers name_eq (5) and kw3 (6). ---
+check "fn s8(a, b, c, d, e, f, g, h) {{ return a + b + c + d + e + f + g + h }}; return s8(1, 2, 3, 4, 5, 6, 7, 8);" 36
+# name_eq: the parser's identifier matcher (string param + 5 params + byte loop)
+check "fn name_eq(s: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen == blen {{ let mut k = 0; let mut ok = 1; while k < alen {{ if s[a + k] == s[b + k] {{ ok = ok }} else {{ ok = 0 }}; k = k + 1 }}; return ok }}; return 0 }}; return name_eq(\`letlet\`, 0, 3, 3, 3);" 1
+check "fn name_eq(s: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen == blen {{ let mut k = 0; let mut ok = 1; while k < alen {{ if s[a + k] == s[b + k] {{ ok = ok }} else {{ ok = 0 }}; k = k + 1 }}; return ok }}; return 0 }}; return name_eq(\`letmut\`, 0, 3, 3, 3);" 0
+# kw3: the keyword recognizer (string param + 6 params + 3 byte compares)
+check "fn kw3(s: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int) {{ if alen == 3 {{ if s[a] == w0 {{ if s[a + 1] == w1 {{ if s[a + 2] == w2 {{ return 1 }} }} }} }}; return 0 }}; return kw3(\`let\`, 0, 3, 108, 101, 116);" 1
+
 # --- FP12c: STRING literals + s[i] byte load + s.len() (the source-tokenization
 # primitive). Strings use backtick as the delimiter (escaped \` for bash). A
 # string literal becomes a module-level @.sN global; s[i] is GEP i8 + load i8 +
