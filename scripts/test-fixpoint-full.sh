@@ -213,6 +213,20 @@ check "fn ne() {{ let a = \`let\`; let b = \`mut\`; let mut i = 0; let mut ok = 
 # real lexer uses to classify identifiers as keywords). Recognizes "let" -> 7.
 check "fn kw() {{ let s = \`let\`; if s.len() == 3 {{ if s[0] == 108 {{ if s[1] == 101 {{ if s[2] == 116 {{ return 7 }} }} }} }}; return 0 }}; return kw();" 7
 
+# --- FP12r: List-of-structs (the real self-host List<Token> shape) ---
+# A List whose elements are whole structs: buffer is [64*nfields x i64] with
+# element stride = field count; push stores each field, toks[i].field reads
+# buf[i*stride + field_index]. This is exactly how the self-host tokenizer
+# builds and consumes List<Token>.
+# push a struct + read length
+check "struct Tok {{ kind, val }}; fn run() {{ let toks = list(); toks.push(Tok {{ kind: 1, val: 10 }}); return toks.len }}; return run();" 1
+# index a List-of-structs element field, two terms in one expression (skip_factor)
+check "struct Tok {{ kind, val }}; fn run() {{ let toks = list(); toks.push(Tok {{ kind: 1, val: 10 }}); toks.push(Tok {{ kind: 2, val: 20 }}); return toks[1].val + toks[0].kind }}; return run();" 21
+# dynamic build-then-consume loop over List<struct> (tokenize -> eval shape)
+check "struct Tok {{ kind, val }}; fn run() {{ let toks = list(); let mut i = 0; while i < 3 {{ toks.push(Tok {{ kind: 1, val: i + 1 }}); i = i + 1 }}; let mut s = 0; let mut j = 0; while j < toks.len {{ s = s + toks[j].val; j = j + 1 }}; return s }}; return run();" 6
+# the actual 4-field self-host Token struct
+check "struct Token {{ kind, value, nstart, nlen }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 5, value: 100, nstart: 2, nlen: 3 }}); toks.push(Token {{ kind: 7, value: 50, nstart: 0, nlen: 1 }}); return toks[0].value + toks[1].value + toks[0].nlen }}; return run();" 153
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'

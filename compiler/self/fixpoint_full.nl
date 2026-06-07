@@ -1015,6 +1015,58 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 putchar(10)
                 return Op { kind: 1, val: pld, next: pld + 1 }
             }
+            # List-of-structs element field read: toks[<expr>].field
+            #   buffer [64*nf x i64], element stride nf -> load buf[idx*nf + fi].
+            let lsty2 = sty_of(slots, src, t.nstart, t.nlen)
+            if karr == 2 {
+              if lsty2 >= 0 {
+                let lbend = bracket_end(toks, i + 2)
+                let dotk = toks[lbend + 1]
+                if dotk.kind == 27 {
+                    let fld = toks[lbend + 2]
+                    let lslot = find_slot(slots, src, t.nstart, t.nlen)
+                    let nf = struct_nfields(defs, lsty2)
+                    let lbuf = 64 * nf
+                    let fi = field_index(defs, lsty2, src, fld.nstart, fld.nlen)
+                    let lidx = gen_expr(toks, slots, fns, defs, src, i + 2, lbend, counter)
+                    let mulc = lidx.next
+                    emit_str("  %t")
+                    pint(mulc)
+                    emit_str(" = mul i64 ")
+                    emit_op(lidx)
+                    emit_str(", ")
+                    pint(nf)
+                    putchar(10)
+                    let offc = mulc + 1
+                    emit_str("  %t")
+                    pint(offc)
+                    emit_str(" = add i64 %t")
+                    pint(mulc)
+                    emit_str(", ")
+                    pint(fi)
+                    putchar(10)
+                    let lgepc = offc + 1
+                    emit_str("  %t")
+                    pint(lgepc)
+                    emit_str(" = getelementptr [")
+                    pint(lbuf)
+                    emit_str(" x i64], [")
+                    pint(lbuf)
+                    emit_str(" x i64]* %v")
+                    pint(lslot)
+                    emit_str(", i64 0, i64 %t")
+                    pint(offc)
+                    putchar(10)
+                    let lldc = lgepc + 1
+                    emit_str("  %t")
+                    pint(lldc)
+                    emit_str(" = load i64, i64* %t")
+                    pint(lgepc)
+                    putchar(10)
+                    return Op { kind: 1, val: lldc, next: lldc + 1 }
+                }
+              }
+            }
             # array/list index read: name [ <expr> ] -> GEP + load
             let slot = find_slot(slots, src, t.nstart, t.nlen)
             let alen = arrlen_of(slots, src, t.nstart, t.nlen)
@@ -1145,7 +1197,14 @@ fn skip_factor(toks: &List<Token>, i: Int) -> Int {
             return paren_end(toks, i + 2) + 1
         }
         if nx.kind == 23 {
-            return bracket_end(toks, i + 2) + 1
+            # name [ idx ]  -> just past ']'. But a List-of-structs element field
+            # read `name [ idx ] . field` extends 2 more tokens (. field).
+            let be = bracket_end(toks, i + 2)
+            let pd = toks[be + 1]
+            if pd.kind == 27 {
+                return be + 3
+            }
+            return be + 1
         }
         if nx.kind == 27 {
             # name . field  = 3 tokens (struct field / List .len without parens).
@@ -1323,6 +1382,41 @@ fn rhs_struct_type(toks: &List<Token>, defs: &List<StructDef>, src: Str, npos: I
     }
     return 0 - 1
 }
+# Element struct-type of `let name = list()` by scanning [start,end) for the
+# first `name . push ( Type {`. Returns the struct-type index, or -1 if the
+# List holds scalars (no struct push found). This lets a List<Token> allocate
+# a contiguous [64*nfields x i64] buffer with element stride = nfields.
+fn list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, start: Int, end: Int, nstart: Int, nlen: Int) -> Int {
+    let mut i = start
+    while i < end {
+        let t = toks[i]
+        # match:  name(1) .(27) push(1) ((9) Type(1) {(11)
+        if t.kind == 1 {
+            if name_eq(src, t.nstart, t.nlen, nstart, nlen) == 1 {
+                let d = toks[i + 1]
+                if d.kind == 27 {
+                    let m = toks[i + 2]
+                    if m.kind == 1 {
+                        if kw4(src, m.nstart, m.nlen, 112, 117, 115, 104) == 1 {
+                            let op = toks[i + 3]
+                            if op.kind == 9 {
+                                let ty = toks[i + 4]
+                                if ty.kind == 1 {
+                                    let br = toks[i + 5]
+                                    if br.kind == 11 {
+                                        return struct_index_by_name(defs, src, ty.nstart, ty.nlen)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
 
 fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>, src: Str, start: Int, end: Int, slot0: Int) -> List<Slot> {
     let mut slots = base
@@ -1349,11 +1443,20 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>,
                 putchar(10)
                 next_slot = next_slot + 1
             } else if rhs_is_list(toks, src, npos) == 1 {
-                # List: buffer at %v<slot> [64 x i64], length at %v<slot+1>=0
-                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: 0 - 1 })
+                # List: buffer at %v<slot>, length at %v<slot+1>=0.
+                # If the List holds structs (first push is `name.push(Type{...})`),
+                # the buffer is [64*nfields x i64] and the slot's sty carries the
+                # element struct-type index (stride = nfields). Otherwise scalar
+                # [64 x i64] with sty=-1.
+                let lest = list_elem_sty(toks, defs, src, npos + 3, end, name.nstart, name.nlen)
+                let mut lbuf = 64
+                if lest >= 0 { lbuf = 64 * struct_nfields(defs, lest) }
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: lest })
                 emit_str("  %v")
                 pint(next_slot)
-                emit_str(" = alloca [64 x i64]")
+                emit_str(" = alloca [")
+                pint(lbuf)
+                emit_str(" x i64]")
                 putchar(10)
                 emit_str("  %v")
                 pint(next_slot + 1)
@@ -1571,7 +1674,11 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 counter = e.next
                 i = cstop + 1
             } else if nx.kind == 27 {
-              if asti >= 0 {
+              let astiarr = isarr_of(slots, src, t.nstart, t.nlen)
+              # struct field write requires a SCALAR struct var (is_arr=0). A
+              # List-of-structs (sty>=0, is_arr=2) must skip this and reach the
+              # push handler in the final else.
+              if asti >= 0 and astiarr == 0 {
                 # struct field write: p . field = expr ;
                 let fld = toks[i + 2]
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
@@ -1654,48 +1761,134 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let pstop = find_semi(toks, pargstop, end)
                 i = pstop + 1
               } else {
-                # list push: lst.push(expr) ;  — store at buf[len]; len = len + 1
+                # list push: lst.push(expr) ;
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
+                let lsty = sty_of(slots, src, t.nstart, t.nlen)
                 # method name at i+2, '(' at i+3, arg from i+4
                 let argstop = paren_end(toks, i + 4)
-                let e = gen_expr(toks, slots, fns, defs, src, i + 4, argstop, counter)
-                counter = e.next
-                emit_str("  %t")
-                pint(counter)
-                emit_str(" = load i64, i64* %v")
-                pint(slot + 1)
-                putchar(10)
-                let lenc = counter
-                counter = counter + 1
-                emit_str("  %t")
-                pint(counter)
-                emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
-                pint(slot)
-                emit_str(", i64 0, i64 %t")
-                pint(lenc)
-                putchar(10)
-                let gepc = counter
-                counter = counter + 1
-                emit_str("  store i64 ")
-                emit_op(e)
-                emit_str(", i64* %t")
-                pint(gepc)
-                putchar(10)
-                emit_str("  %t")
-                pint(counter)
-                emit_str(" = add i64 %t")
-                pint(lenc)
-                emit_str(", 1")
-                putchar(10)
-                let incc = counter
-                counter = counter + 1
-                emit_str("  store i64 %t")
-                pint(incc)
-                emit_str(", i64* %v")
-                pint(slot + 1)
-                putchar(10)
-                let stop = find_semi(toks, argstop, end)
-                i = stop + 1
+                if lsty >= 0 {
+                    # List-of-structs push: arg is `Type { f: v, ... }`. Store each
+                    # field at buf[len*nf + field_index]; buffer is [64*nf x i64].
+                    let nf = struct_nfields(defs, lsty)
+                    let lbuf = 64 * nf
+                    # load len, compute base = len*nf
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = load i64, i64* %v")
+                    pint(slot + 1)
+                    putchar(10)
+                    let lenc = counter
+                    counter = counter + 1
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = mul i64 %t")
+                    pint(lenc)
+                    emit_str(", ")
+                    pint(nf)
+                    putchar(10)
+                    let basec = counter
+                    counter = counter + 1
+                    # iterate the struct-literal fields. Tokens: name . push ( Type {
+                    #   i   i+1 i+2  i+3 i+4  i+5  -> open-brace is at i+5.
+                    let bopen = i + 5
+                    let bclose = match_brace(toks, bopen, end)
+                    let mut q = bopen + 1
+                    while q < bclose {
+                        let fld = toks[q]
+                        let fi = field_index(defs, lsty, src, fld.nstart, fld.nlen)
+                        let mut vstart = q + 1
+                        let colt = toks[q + 1]
+                        if colt.kind == 16 { vstart = q + 2 }
+                        let vstop = arr_elem_end(toks, vstart, bclose)
+                        let e = gen_expr(toks, slots, fns, defs, src, vstart, vstop, counter)
+                        counter = e.next
+                        # field offset = base + fi
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = add i64 %t")
+                        pint(basec)
+                        emit_str(", ")
+                        pint(fi)
+                        putchar(10)
+                        let offc = counter
+                        counter = counter + 1
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = getelementptr [")
+                        pint(lbuf)
+                        emit_str(" x i64], [")
+                        pint(lbuf)
+                        emit_str(" x i64]* %v")
+                        pint(slot)
+                        emit_str(", i64 0, i64 %t")
+                        pint(offc)
+                        putchar(10)
+                        let gepc = counter
+                        counter = counter + 1
+                        emit_str("  store i64 ")
+                        emit_op(e)
+                        emit_str(", i64* %t")
+                        pint(gepc)
+                        putchar(10)
+                        q = vstop + 1
+                    }
+                    # len = len + 1
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = add i64 %t")
+                    pint(lenc)
+                    emit_str(", 1")
+                    putchar(10)
+                    let incc = counter
+                    counter = counter + 1
+                    emit_str("  store i64 %t")
+                    pint(incc)
+                    emit_str(", i64* %v")
+                    pint(slot + 1)
+                    putchar(10)
+                    let stop = find_semi(toks, argstop, end)
+                    i = stop + 1
+                } else {
+                  # scalar List push: store one value at buf[len]; len = len + 1
+                  let e = gen_expr(toks, slots, fns, defs, src, i + 4, argstop, counter)
+                  counter = e.next
+                  emit_str("  %t")
+                  pint(counter)
+                  emit_str(" = load i64, i64* %v")
+                  pint(slot + 1)
+                  putchar(10)
+                  let lenc = counter
+                  counter = counter + 1
+                  emit_str("  %t")
+                  pint(counter)
+                  emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
+                  pint(slot)
+                  emit_str(", i64 0, i64 %t")
+                  pint(lenc)
+                  putchar(10)
+                  let gepc = counter
+                  counter = counter + 1
+                  emit_str("  store i64 ")
+                  emit_op(e)
+                  emit_str(", i64* %t")
+                  pint(gepc)
+                  putchar(10)
+                  emit_str("  %t")
+                  pint(counter)
+                  emit_str(" = add i64 %t")
+                  pint(lenc)
+                  emit_str(", 1")
+                  putchar(10)
+                  let incc = counter
+                  counter = counter + 1
+                  emit_str("  store i64 %t")
+                  pint(incc)
+                  emit_str(", i64* %v")
+                  pint(slot + 1)
+                  putchar(10)
+                  let stop = find_semi(toks, argstop, end)
+                  i = stop + 1
+                }
               }
             } else if nx.kind == 23 {
                 # array element write: name [ idx ] = expr ;
@@ -1937,10 +2130,17 @@ fn collect_top_slots(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: In
                 putchar(10)
                 next_slot = next_slot + 1
             } else if rhs_is_list(toks, src, npos) == 1 {
-                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: 0 - 1 })
+                # List buffer: struct-element Lists get [64*nfields x i64] with
+                # sty = element struct type (stride = nfields); scalar Lists [64 x i64].
+                let lest = list_elem_sty(toks, defs, src, npos + 3, n, name.nstart, name.nlen)
+                let mut lbuf = 64
+                if lest >= 0 { lbuf = 64 * struct_nfields(defs, lest) }
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: lest })
                 emit_str("  %v")
                 pint(next_slot)
-                emit_str(" = alloca [64 x i64]")
+                emit_str(" = alloca [")
+                pint(lbuf)
+                emit_str(" x i64]")
                 putchar(10)
                 emit_str("  %v")
                 pint(next_slot + 1)
