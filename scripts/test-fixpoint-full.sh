@@ -153,14 +153,18 @@ check "fn sum_list(xs: List<Int>) {{ let mut s = 0; let mut i = 0; while i < xs.
 check "fn first(xs: List<Int>) {{ return xs[0] }}; fn run() {{ let xs = list(); xs.push(7); xs.push(8); return first(xs) }}; return run();" 7
 check "fn cnt(xs: List<Int>) {{ return xs.len }}; fn run() {{ let xs = list(); xs.push(1); xs.push(2); xs.push(3); return cnt(xs) }}; return run();" 3
 
-# --- FP12o: 5-8 PARAMETERS (the self-host core arity -- gen_stmts/gen_expr/etc
-# take 8). Plus the REAL self-host helpers name_eq (5) and kw3 (6). ---
+# --- FP12o: 5-10 PARAMETERS (the self-host core arity plus fixpoint2.nl's
+# 10-param word_is helper). Plus the REAL helpers name_eq (5) and kw3 (6). ---
 check "fn s8(a, b, c, d, e, f, g, h) {{ return a + b + c + d + e + f + g + h }}; return s8(1, 2, 3, 4, 5, 6, 7, 8);" 36
+check "fn s10(a, b, c, d, e, f, g, h, i, j) {{ return a + b + c + d + e + f + g + h + i + j }}; return s10(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);" 55
+check "fn fill(a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int, out: List<Int>, n: Int) {{ out.push(n); out.push(n + 2); return 0 }}; fn run() {{ let xs = list(); fill(1, 2, 3, 4, 5, 6, 7, 8, xs, 20); return xs.len * 10 + xs[1] }}; return run();" 42
 # name_eq: the parser's identifier matcher (string param + 5 params + byte loop)
 check "fn name_eq(s: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen == blen {{ let mut k = 0; let mut ok = 1; while k < alen {{ if s[a + k] == s[b + k] {{ ok = ok }} else {{ ok = 0 }}; k = k + 1 }}; return ok }}; return 0 }}; return name_eq(\`letlet\`, 0, 3, 3, 3);" 1
 check "fn name_eq(s: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen == blen {{ let mut k = 0; let mut ok = 1; while k < alen {{ if s[a + k] == s[b + k] {{ ok = ok }} else {{ ok = 0 }}; k = k + 1 }}; return ok }}; return 0 }}; return name_eq(\`letmut\`, 0, 3, 3, 3);" 0
 # kw3: the keyword recognizer (string param + 6 params + 3 byte compares)
 check "fn kw3(s: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int) {{ if alen == 3 {{ if s[a] == w0 {{ if s[a + 1] == w1 {{ if s[a + 2] == w2 {{ return 1 }} }} }} }}; return 0 }}; return kw3(\`let\`, 0, 3, 108, 101, 116);" 1
+# fixpoint2.nl's real word_is helper: string param + 9 scalar params.
+check "fn word_is(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int, w3: Int, w4: Int, w5: Int, wlen: Int) {{ if alen != wlen {{ return 0 }}; if alen >= 1 {{ if src[a] != w0 {{ return 0 }} }}; if alen >= 2 {{ if src[a + 1] != w1 {{ return 0 }} }}; if alen >= 3 {{ if src[a + 2] != w2 {{ return 0 }} }}; if alen >= 4 {{ if src[a + 3] != w3 {{ return 0 }} }}; if alen >= 5 {{ if src[a + 4] != w4 {{ return 0 }} }}; if alen >= 6 {{ if src[a + 5] != w5 {{ return 0 }} }}; return 1 }}; return word_is(\`return\`, 0, 6, 114, 101, 116, 117, 114, 110, 6);" 1
 
 # --- FP12p: bare call statements + push-to-List-param (the out-param pattern,
 # which sidesteps List return). A function fills a caller-provided List, and the
@@ -609,6 +613,38 @@ if [ "$got" = "24" ]; then
   echo "  PASS source-file bootstrap fixpoint.nl emitted IR runs (=24)";
 else
   echo "  FAIL source-file bootstrap emitted binary got=$got want=24"; fail=1
+fi
+
+# Compile the actual compiler/self/fixpoint2.nl source file. This is the
+# arithmetic+variables tier and exercises the real 10-param word_is helper.
+tmp="$(mktemp -d)"
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint2.nl" "$tmp/c.nl" \
+  || { echo "  FAIL source-file bootstrap fixpoint2.nl: embed"; fail=1; }
+python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
+( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+  || { echo "  FAIL source-file bootstrap fixpoint2.nl: compiler build"; fail=1; }
+"$tmp/c" > "$tmp/source_compiler.ll"
+main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
+if [ "$main_count" = "1" ]; then
+  echo "  PASS source-file bootstrap fixpoint2.nl emits a single @main";
+else
+  echo "  FAIL source-file bootstrap fixpoint2.nl main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
+fi
+clang -Wno-override-module -o "$tmp/source_compiler" "$tmp/source_compiler.ll" 2>/dev/null \
+  || { echo "  FAIL source-file bootstrap fixpoint2.nl: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
+"$tmp/source_compiler" > "$tmp/emitted.ll"
+if grep -q 'ret i64 50' "$tmp/emitted.ll"; then
+  echo "  PASS source-file bootstrap fixpoint2.nl emits ret i64 50";
+else
+  echo "  FAIL source-file bootstrap fixpoint2.nl emitted IR missing ret i64 50"; cat "$tmp/emitted.ll"; fail=1
+fi
+clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>/dev/null \
+  || { echo "  FAIL source-file bootstrap fixpoint2.nl: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
+"$tmp/emitted_bin"; got=$?
+if [ "$got" = "50" ]; then
+  echo "  PASS source-file bootstrap fixpoint2.nl emitted IR runs (=50)";
+else
+  echo "  FAIL source-file bootstrap fixpoint2.nl emitted binary got=$got want=50"; fail=1
 fi
 
 # Sanity: a string program emits a module-level string global + i8* alloca +

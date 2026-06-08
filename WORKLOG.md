@@ -1,5 +1,22 @@
 # nl WORKLOG
 
+## 2026-06-08 (계속: FP12nn — 실제 `fixpoint2.nl` source-file bootstrap smoke + 10-param arity)
+- FP12mm의 실제 파일 주입 harness를 다음 self-host tier인 `compiler/self/fixpoint2.nl`에 적용. scratch probe에서
+  정규화/빌드/IR 생성까지는 성공했으나 clang이 `%v-1` undefined로 실패했고, 원인은 실제 `word_is(src, a, alen,
+  w0, w1, w2, w3, w4, w5, wlen)`가 **10개 파라미터**를 쓰는 반면 `fixpoint_full`의 함수 metadata/call/param slot은
+  p0..p7(8개)까지만 보유하던 것.
+- **구현**: `Fn` struct를 p0..p9/p0ty..p9ty로 확장하고, `build_fns`의 파라미터 이름/타입 저장,
+  `fn_param_is_str`, function signature emission, param alloca/slot 등록, call arg capture/emission, post-call List length
+  sync를 모두 10개 인자까지 관통. 회귀 가드로 `s10(1..10)=55`, late `List` out-param sync, 실제 `fixpoint2.nl`의
+  `word_is("return", ...)` shape를 추가.
+- **파일 smoke**: `scripts/test-fixpoint-full.sh`에 실제 `compiler/self/fixpoint2.nl` 주입 게이트 추가. 정규화된 실제 파일 →
+  `fixpoint_full` compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 50` LLVM IR emit → emitted IR
+  clang/run exit 50 확인.
+- 검증: `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen ... OK` (168→174 PASS 상당),
+  `bash scripts/test.sh` = `RESULT: pass=96 fail=0 skip=0`. 의미: 실제 파일 입력 자동 게이트가 `fixpoint.nl` 산술 tier에서
+  `fixpoint2.nl` 산술+변수 tier까지 확대됨. 남은 큰 축은 `fixpoint3.nl` 실제 파일 smoke와 최종 `fixpoint_full.nl`
+  3.9k줄 전체 self-compile.
+
 ## 2026-06-08 (계속: FP12mm — 실제 `fixpoint.nl` source-file bootstrap smoke)
 - 다음 unblocked 목표인 **실제 소스 파일 기반 부트스트랩**으로 진입. scratch probe에서
   `compiler/self/fixpoint.nl` 원본을 현재 compact self-host subset으로 정규화해 `fixpoint_full`에 먹였더니
