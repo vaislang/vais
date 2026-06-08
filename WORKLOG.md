@@ -1,5 +1,26 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: FP12pp — `fixpoint_full.nl` full-source probe 첫 blocker 확정)
+- 다음 목표인 실제 `compiler/self/fixpoint_full.nl` 전체 소스 주입 probe를 실행. 초기 실패 1: `tools/embed_self_source.py`의
+  `re.sub` replacement string이 backslash를 regex escape로 재해석해, 정규화된 소스 안의 `\"`/`\\`가 줄어들며
+  `nl2vais`가 `LexError: Invalid token`으로 실패.
+- **수정 1**: `COMPILE_RE.subn(... replacement ...)`를 lambda replacement로 바꿔 normalized source의 backslash를 그대로 보존.
+- 초기 실패 2: full source가 `"\0A"`/`"\00"`/`"\""` 같은 backslash-bearing string literal을 포함. `fixpoint_full.nl`의
+  string global emission이 literal body bytes를 LLVM `c"..."`에 그대로 써서 LLVM escape로 해석되어 `[N x i8]` 길이와 실제
+  bytes가 어긋남.
+- **수정 2**: `emit_llvm_c_byte` 추가. LLVM C string initializer에서 `\`는 `\5C`, `"`는 `\22`로 emit하고,
+  일반 string literal(`emit_bytes`)과 printf format literal(`emit_fmt_bytes`) 모두 같은 escape 경로를 타게 함.
+- 회귀 가드: 실제 source-file harness로 double-quoted source string `"\\0A"`를 주입해 generated IR이
+  `c"\5C\5C0A\00"`를 emit하고, emitted IR clang/run exit 4를 확인하는 backslash smoke 추가.
+- **현재 full-source probe 위치**: 실제 `fixpoint_full.nl` → normalize/embed → `nl2vais` → `vaisc build` →
+  generated source compiler 실행까지 통과. 생성 IR은 734195 bytes, `@main` 1개, negative GEP 15개. clang 단계에서
+  `emit_op(o: Op)`가 `define i64 @emit_op(i64 %a0)`로 낮아진 뒤 `o.kind` field access가 `%v1`을 찾으며 실패
+  (`use of undefined value '%v1'`). 원인은 full source가 struct-valued param/return(`Op`)을 쓰는데 현재
+  `fixpoint_full` ABI는 List-of-structs/locals 중심이고 일반 struct param/return을 아직 지원하지 않는 것.
+- 검증: `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen ... OK` (기존 180 + backslash smoke 2 PASS),
+  `bash scripts/test.sh` = `RESULT: pass=96 fail=0 skip=0`. 다음 큰 작업은 `Op` 같은 struct-valued function
+  params/returns 지원 또는 해당 helper를 scalar ABI로 낮추는 리팩터.
+
 ## 2026-06-08 (계속: FP12oo — 실제 `fixpoint3.nl` source-file bootstrap smoke)
 - FP12nn 다음 목표로 실제 `compiler/self/fixpoint3.nl` 원본 파일을 `fixpoint_full`에 주입. 초기 상태는
   generated compiler IR 생성/clang까지는 접근했지만 실행 시 `build_fns`에서 crash 또는 `ret i64 0` 오답이 발생.

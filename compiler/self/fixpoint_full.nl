@@ -382,11 +382,20 @@ fn pint(x: Int) -> Int {
     putchar(48 + (x - (x / 10) * 10))
     return 0
 }
-# Copy a source substring verbatim (string-literal content into a global init).
+# Emit one byte into an LLVM c"..." initializer. Backslash and quote must be
+# escaped as hex escapes, or the LLVM string literal changes length / terminates.
+fn emit_llvm_c_byte(c: Int) -> Int {
+    if c == 92 { emit_str("\\5C"); return 0 }
+    if c == 34 { emit_str("\\22"); return 0 }
+    putchar(c)
+    return 0
+}
+# Copy a source substring into a global initializer, escaping LLVM c-string
+# metacharacters while preserving the source byte length.
 fn emit_bytes(src: Str, start: Int, len: Int) -> Int {
     let mut k = 0
     while k < len {
-        putchar(src[start + k])
+        emit_llvm_c_byte(src[start + k])
         k = k + 1
     }
     return 0
@@ -437,7 +446,7 @@ fn emit_fmt_bytes(toks: &List<Token>, fns: &List<Fn>, src: Str, n: Int, lit_i: I
             putchar(37)
             k = k + 1
         } else {
-            putchar(c)
+            emit_llvm_c_byte(c)
             k = k + 1
         }
     }

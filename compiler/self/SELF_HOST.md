@@ -75,16 +75,32 @@ That IR runs to 120.
   literal `%` in an interpolated string was consumed as a printf specifier
   (compiler e711dac1).
 
+## Current full-source probe
+
+As of 2026-06-09, the source-file harness can feed the actual
+`compiler/self/fixpoint_full.nl` source back into `fixpoint_full.nl` far enough to
+normalize/embed it, transpile it, build it with Vais, and run the generated
+source compiler. That compiler emits one LLVM module (`@main` count 1, about
+734 KB of IR).
+
+The first remaining hard blocker is no longer source normalization or string
+global emission. It is **struct-valued function parameters/returns**:
+`fixpoint_full.nl` uses helpers such as `emit_op(o: Op)`,
+`emit_binop(..., l: Op, r: Op)`, and `gen_factor(...) -> Op`. The current unified
+compiler handles structs as locals and List elements, but not as ordinary
+function ABI values. The measured failure is `emit_op(o: Op)` lowering to
+`define i64 @emit_op(i64 %a0)` and then `o.kind` trying to load an undefined
+struct slot.
+
 ## Honest limits
 
 - The compilers handle an **arithmetic + function + recursion subset** of nl
   (multi-digit ints, `+ - *`, `let`, `fn`, calls, `if/then/else`, `< > ==`).
 - A **true self-compilation fixpoint** (nl compiling its *own full compiler
-  source*) requires implementing the entire nl grammar — structs, `while`,
-  `List` + methods, `&` borrows, string interpolation — and a code generator for
-  all of it. That is a months-scale effort (thousands of lines), not reachable in
-  incremental steps. What exists today is a genuine, verified compiler for the
-  subset above, demonstrating every core compiler capability end to end.
+  source*) is now blocked by a concrete measured feature, not by an unknown
+  parser/front-end gap: support the struct aggregate ABI for function
+  params/returns, or lower the `Op` helpers to scalar pairs/triples. Other full
+  source issues may appear after that, but this is the next one to solve.
 - Upstream: two Vais compiler bugs were root-fixed to enable this work
   (`&Vec` borrow recursion, literal-`%` escaping), both gate-verified
   (`check-integrity.sh INTEGRITY OK`, zero regression).
@@ -160,11 +176,10 @@ bodies. The unified compiler can codegen its *own tokenizer's shape* — a funct
 that scans a string byte by byte into a `List` (verified e2e: `fn tok() { let s =
 "..."; let xs = list(); while i < s.len() { xs.push(s[i]); i = i + 1 }; ... }`).
 
-The remaining gap to a *literal* self-compilation fixpoint is **scale**, not a
-missing capability: feed `fixpoint_full.nl` the actual multi-thousand-line nl
-compiler source (with its full mix of these constructs in one program) and have
-the emitted IR reproduce it. That is a months-scale engineering effort — the
-compiler source uses these same constructs but in far greater volume and with
-deeper nesting than the e2e probes. What exists today is a verified, unified code
-generator for every core construct, demonstrated end to end, that contains the
-tokenizer's exact shape.
+The remaining gap to a *literal* self-compilation fixpoint is now measured more
+precisely than "scale": the actual `fixpoint_full.nl` source reaches generated
+IR, and the first hard failure is struct-valued function ABI support (`Op`
+params/returns). What exists today is a verified, unified code generator for the
+core constructs plus source-file smokes for the first three self-host tiers; the
+next full-source step is to support struct aggregate params/returns or remove
+that ABI need from the `Op` helpers.

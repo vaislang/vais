@@ -687,6 +687,40 @@ else
   echo "  FAIL source-file bootstrap fixpoint3.nl emitted binary got=$got want=120"; fail=1
 fi
 
+# Source-file harness + LLVM c-string escaping: the embed helper must preserve
+# backslashes through regex replacement, and fixpoint_full must emit them as
+# LLVM hex escapes so string global lengths stay valid.
+tmp="$(mktemp -d)"
+python3 - "$tmp/source_with_backslash.nl" <<'PY'
+from pathlib import Path
+import sys
+Path(sys.argv[1]).write_text(
+    'fn main() -> Int {\n'
+    '    let s = "\\\\0A"\n'
+    '    return s.len()\n'
+    '}\n'
+)
+PY
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$tmp/source_with_backslash.nl" "$tmp/c.nl" \
+  || { echo "  FAIL source-file backslash smoke: embed"; fail=1; }
+python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
+( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+  || { echo "  FAIL source-file backslash smoke: compiler build"; fail=1; }
+"$tmp/c" > "$tmp/out.ll"
+if grep -q 'c"\\5C\\5C0A\\00"' "$tmp/out.ll"; then
+  echo "  PASS source-file backslash smoke emits LLVM hex escapes";
+else
+  echo "  FAIL source-file backslash smoke missing LLVM hex escapes"; cat "$tmp/out.ll"; fail=1
+fi
+clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null \
+  || { echo "  FAIL source-file backslash smoke: generated IR invalid"; cat "$tmp/out.ll"; fail=1; }
+"$tmp/bin"; got=$?
+if [ "$got" = "4" ]; then
+  echo "  PASS source-file backslash smoke runs (=4)";
+else
+  echo "  FAIL source-file backslash smoke got=$got want=4"; fail=1
+fi
+
 # Sanity: a string program emits a module-level string global + i8* alloca +
 # byte load (GEP i8 / load i8 / zext) — string codegen integrated, not scalar.
 tmp="$(mktemp -d)"

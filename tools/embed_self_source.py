@@ -172,7 +172,7 @@ def main() -> int:
 
     program = normalize_source(source)
     text = harness.read_text()
-    replaced, count = COMPILE_RE.subn('compile("' + program + '")', text, count=1)
+    replaced, count = COMPILE_RE.subn(lambda _m: 'compile("' + program + '")', text, count=1)
     if count != 1:
         print("error: could not find a compile(\"...\") call to replace", file=sys.stderr)
         return 1
