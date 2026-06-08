@@ -230,6 +230,11 @@ check "struct Tok {{ kind, val }}; fn run() {{ let toks = list(); toks.push(Tok 
 check "struct Tok {{ kind, val }}; fn run() {{ let toks = list(); let mut i = 0; while i < 3 {{ toks.push(Tok {{ kind: 1, val: i + 1 }}); i = i + 1 }}; let mut s = 0; let mut j = 0; while j < toks.len {{ s = s + toks[j].val; j = j + 1 }}; return s }}; return run();" 6
 # the actual 4-field self-host Token struct
 check "struct Token {{ kind, value, nstart, nlen }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 5, value: 100, nstart: 2, nlen: 3 }}); toks.push(Token {{ kind: 7, value: 50, nstart: 0, nlen: 1 }}); return toks[0].value + toks[1].value + toks[0].nlen }}; return run();" 153
+# fixpoint3.nl's Fn table shape: 8-field struct, List element local copy, tail fields.
+check "struct Fn {{ nstart, nlen, p1s, p1l, p2s, p2l, bstart, bend }}; fn run() {{ let fns = list(); fns.push(Fn {{ nstart: 1, nlen: 2, p1s: 3, p1l: 4, p2s: 5, p2l: 6, bstart: 7, bend: 8 }}); let f = fns[0]; return f.p2l + f.bstart + f.bend }}; return run();" 21
+# List[index].field assigned to a scalar must read the field, not copy the whole
+# struct element into the destination slot.
+check "struct Fn {{ nstart, nlen, p1s, p1l, p2s, p2l, bstart, bend }}; fn run() {{ let fns = list(); fns.push(Fn {{ nstart: 1, nlen: 2, p1s: 3, p1l: 4, p2s: 5, p2l: 6, bstart: 7, bend: 8 }}); let value = fns[0].nlen; return value }}; return run();" 2
 
 # --- FP12s: List-of-structs PARAMETER (the full self-host tokenizer shape) ---
 # A List<struct> passed by-pointer to a function that pushes structs into it
@@ -452,6 +457,8 @@ check "fn build() -> List<Int> {{ let xs = list(); xs.push(1); xs.push(2); xs.pu
 check "struct Tok {{ kind, val }}; fn build() -> List<Tok> {{ let xs = list(); xs.push(Tok {{ kind: 1, val: 30 }}); xs.push(Tok {{ kind: 2, val: 12 }}); return xs }}; fn run() {{ let ys = build(); return ys[0].val + ys[1].val }}; return run();" 42
 # retlist with an argument
 check "fn make(n: Int) -> List<Int> {{ let xs = list(); xs.push(n); xs.push(n + 1); return xs }}; fn run() {{ let ys = make(20); return ys[0] + ys[1] }}; return run();" 41
+# retlist with a Str parameter variable passed through the hidden out-param call path
+check "fn collect(src: Str) -> List<Int> {{ let xs = list(); xs.push(src[0]); return xs }}; fn run(src: Str) {{ let ys = collect(src); return ys[0] + ys.len }}; return run(\`P\`);" 81
 # fixpoint.nl's original shape: tokenize(src) -> List<Token>, then consume
 check "struct Token {{ kind, value }}; fn tokenize(src: Str) -> List<Token> {{ let toks = list(); let mut i = 0; while i < src.len() {{ let c = src[i]; if c >= 48 and c <= 57 {{ toks.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ toks.push(Token {{ kind: 2, value: 0 }}) }}; i = i + 1 }}; return toks }}; fn run() {{ let toks = tokenize(\`1a2a3\`); let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; return run();" 6
 
@@ -645,6 +652,39 @@ if [ "$got" = "50" ]; then
   echo "  PASS source-file bootstrap fixpoint2.nl emitted IR runs (=50)";
 else
   echo "  FAIL source-file bootstrap fixpoint2.nl emitted binary got=$got want=50"; fail=1
+fi
+
+# Compile the actual compiler/self/fixpoint3.nl source file. This function tier
+# exercises source-normalized multi-line calls, nested string brace escapes, and
+# List<Fn> metadata used by recursive function calls.
+tmp="$(mktemp -d)"
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint3.nl" "$tmp/c.nl" \
+  || { echo "  FAIL source-file bootstrap fixpoint3.nl: embed"; fail=1; }
+python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
+( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+  || { echo "  FAIL source-file bootstrap fixpoint3.nl: compiler build"; fail=1; }
+"$tmp/c" > "$tmp/source_compiler.ll"
+main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
+if [ "$main_count" = "1" ]; then
+  echo "  PASS source-file bootstrap fixpoint3.nl emits a single @main";
+else
+  echo "  FAIL source-file bootstrap fixpoint3.nl main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
+fi
+clang -Wno-override-module -o "$tmp/source_compiler" "$tmp/source_compiler.ll" 2>/dev/null \
+  || { echo "  FAIL source-file bootstrap fixpoint3.nl: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
+"$tmp/source_compiler" > "$tmp/emitted.ll"
+if grep -q 'ret i64 120' "$tmp/emitted.ll"; then
+  echo "  PASS source-file bootstrap fixpoint3.nl emits ret i64 120";
+else
+  echo "  FAIL source-file bootstrap fixpoint3.nl emitted IR missing ret i64 120"; cat "$tmp/emitted.ll"; fail=1
+fi
+clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>/dev/null \
+  || { echo "  FAIL source-file bootstrap fixpoint3.nl: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
+"$tmp/emitted_bin"; got=$?
+if [ "$got" = "120" ]; then
+  echo "  PASS source-file bootstrap fixpoint3.nl emitted IR runs (=120)";
+else
+  echo "  FAIL source-file bootstrap fixpoint3.nl emitted binary got=$got want=120"; fail=1
 fi
 
 # Sanity: a string program emits a module-level string global + i8* alloca +

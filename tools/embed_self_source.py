@@ -69,6 +69,42 @@ def strip_one_line_struct_field_types(line: str) -> str:
     return before + "{ " + ", ".join(fields) + " }" + after
 
 
+def strip_struct_field_types(program: str) -> str:
+    def repl(match: re.Match[str]) -> str:
+        before = match.group(1)
+        body = match.group(2)
+        fields = []
+        for part in body.split(","):
+            name = part.strip().split(":", 1)[0].strip()
+            if name:
+                fields.append(name)
+        return before + "{ " + ", ".join(fields) + " }"
+
+    return re.sub(r"\b(struct\s+[A-Za-z_][A-Za-z0-9_]*\s*)\{([^{}]*)\}", repl, program)
+
+
+def collapse_string_brace_escapes(program: str) -> str:
+    out: list[str] = []
+    in_backtick = False
+    i = 0
+    while i < len(program):
+        ch = program[i]
+        if ch == "`":
+            in_backtick = not in_backtick
+            out.append(ch)
+            i += 1
+        elif in_backtick and program.startswith("{{", i):
+            out.append("{")
+            i += 2
+        elif in_backtick and program.startswith("}}", i):
+            out.append("}")
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
 def add_inline_semis(line: str) -> str:
     # Compact one-line helpers such as `fn is_digit(...) { return ... }`.
     line = re.sub(
@@ -87,6 +123,10 @@ def needs_line_semi(line: str) -> bool:
         return False
     if stripped.startswith("} else") or stripped.startswith("struct "):
         return False
+    # Multi-line call endings, e.g. `fns.push(Fn { ... })`, need to remain a
+    # separate statement after lines are joined into the compact source string.
+    if stripped.endswith(")"):
+        return True
     if stripped.startswith(("let ", "return ", "print(")):
         return True
     if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(\.|\[|\s*=|\()", stripped):
@@ -108,6 +148,8 @@ def normalize_source(path: Path) -> str:
         out.append(line.strip())
 
     program = " ".join(out)
+    program = strip_struct_field_types(program)
+    program = collapse_string_brace_escapes(program)
     # Protect braces for the outer compile("...") string. The outer transpiler
     # lowers doubled braces to literal braces, so fixpoint_full sees the source
     # with single braces at runtime.

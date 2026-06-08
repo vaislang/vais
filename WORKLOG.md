@@ -1,5 +1,31 @@
 # nl WORKLOG
 
+## 2026-06-08 (계속: FP12oo — 실제 `fixpoint3.nl` source-file bootstrap smoke)
+- FP12nn 다음 목표로 실제 `compiler/self/fixpoint3.nl` 원본 파일을 `fixpoint_full`에 주입. 초기 상태는
+  generated compiler IR 생성/clang까지는 접근했지만 실행 시 `build_fns`에서 crash 또는 `ret i64 0` 오답이 발생.
+- **구현/수정**:
+  - `tools/embed_self_source.py`: multi-line `struct Fn { ... }` typed fields까지 정규화하도록 post-join struct field type
+    stripping 추가.
+  - `tools/embed_self_source.py`: multi-line call close `})`에 semicolon 보강. 실제 `fns.push(Fn { ... })` 다음 `i = be + 1`
+    이 한 statement로 합쳐지던 문제를 해결.
+  - `tools/embed_self_source.py`: nested string literal 내부 `{{`/`}}` escape를 먼저 단일 brace로 접은 뒤 outer compile string용
+    brace escape를 적용. 실제 `run_program("fn ... {{ ... }}")`이 런타임에서 이중 brace로 남아 함수 body offset이 어긋나던 문제를 해결.
+  - `fixpoint_full.nl`: `StructDef` 필드 metadata를 6→8 fields로 확장해 실제 `Fn { nstart,nlen,p1s,p1l,p2s,p2l,bstart,bend }`
+    shape 지원.
+  - `fixpoint_full.nl`: Str 변수 식별자 load를 `i8*`로 처리해 `tokenize(src)` 같은 `-> List` hidden out-param call 경로가
+    `i64` 대신 `i8*`를 넘기게 함.
+  - `fixpoint_full.nl`: `-> List` 함수 IR을 `define void`/`ret void`로 emit해 hidden out-param call signature와 함수 정의를 일치.
+  - `fixpoint_full.nl`: `let value = fns[0].nlen` 같은 `List[index].field` scalar assignment가 whole-struct copy 경로로
+    오분류되지 않도록 `rhs_los_elem_sty`에서 dotted field access 제외.
+- **파일 smoke**: `scripts/test-fixpoint-full.sh`에 실제 `compiler/self/fixpoint3.nl` 주입 게이트 추가. 정규화된 실제 파일 →
+  `fixpoint_full` compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 120` LLVM IR emit → emitted IR
+  clang/run exit 120 확인.
+- 회귀 가드 추가: 8-field `Fn` List-of-structs field access, `List[index].field` scalar assignment, Str param retlist call path.
+- 검증: `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen ... OK` (174→180 PASS 상당),
+  `bash scripts/test.sh` = `RESULT: pass=96 fail=0 skip=0`. 의미: 실제 파일 입력 자동 게이트가 `fixpoint.nl` →
+  `fixpoint2.nl` → **`fixpoint3.nl` 재귀 함수언어 tier**까지 확대됨. 남은 큰 축은 최종 `fixpoint_full.nl` 3.9k줄 전체
+  self-compile과 backend 독립화.
+
 ## 2026-06-08 (계속: FP12nn — 실제 `fixpoint2.nl` source-file bootstrap smoke + 10-param arity)
 - FP12mm의 실제 파일 주입 harness를 다음 self-host tier인 `compiler/self/fixpoint2.nl`에 적용. scratch probe에서
   정규화/빌드/IR 생성까지는 성공했으나 clang이 `%v-1` undefined로 실패했고, 원인은 실제 `word_is(src, a, alen,

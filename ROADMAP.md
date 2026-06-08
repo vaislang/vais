@@ -13,12 +13,12 @@
 
 ---
 
-## ⚑ 상태 (2026-06-08): 🎯🎯🎯🎯🎯 실제 소스 부트스트랩 — 세 self-host tier 전부 end-to-end
+## ⚑ 상태 (2026-06-08): 🎯🎯🎯🎯🎯 실제 소스 부트스트랩 — 세 self-host tier 파일 smoke까지 end-to-end
 
 P0 게이트 / P1 코퍼스 / P2 트랜스파일러 / P3 에러인프라 / P4 std시작 / P5 레퍼런스 = **DONE**.
 L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 
-**🎯 실제 소스 부트스트랩 arc 정점(2026-06-08, FP12g~nn)**: fixpoint_full(통합 nl-self-host 컴파일러)이
+**🎯 실제 소스 부트스트랩 arc 정점(2026-06-08, FP12g~oo)**: fixpoint_full(통합 nl-self-host 컴파일러)이
 **세 self-host 언어 tier를 전부 source string→value로 end-to-end 컴파일**:
 - **①산술식**(fixpoint.nl): tokenize+eval, `2 + 3 * 4`=14 (FP12y)
 - **②산술+변수**(fixpoint2.nl): 심볼테이블+변수평가, `let x = 2; let y = x + 1; return x + y * 4`=14 (FP12bb)
@@ -26,7 +26,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 부트스트랩 갭 #1~#5b(string/List param, List-of-structs 로컬+param, typed let, bool, `!=`, let-bind-LOS, else-if-in-loop 등 20 능력추가) 전부 해결.
 
 **현재 게이트 상태**:
-- self-host e2e **fixpoint-full 174 PASS / 0 FAIL** (이 세션 90→174).
+- self-host e2e **fixpoint-full 180 PASS / 0 FAIL** (이 세션 90→180).
 - 값-정확성 aggregate **96/96** (예제코퍼스 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
@@ -36,8 +36,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 1c. ~~**`print(...)` 보간 codegen (fixpoint.nl codegen 단계)**~~ **✅ 해결**(FP12kk~ll, 2026-06-08): 재평가로 비-critical→진짜 갭 격상(fixpoint.nl/fixpoint_codegen의 codegen 단계가 `print("ret i64 {value}")`/`print("%t{counter} = {op_s}...")`로 IR을 emit=핵심 emission). 트랜스파일러가 print→puts rewrite; brace-bearing 리터럴은 `@.fmt<nstart>` 포맷글로벌+`printf`로 라우팅(`{ident}`→`%d` 또는 Str `%s`, `%`→`%%`, trailing `\n`). **lone-`{` vs `{ident}` 모호성**(transpiler가 둘 다 단일 brace로 전달) 해결=Vais lexer 규칙(`{`+식별자+`}`만 보간, lone `{`=리터럴; interp_end 단일구현 3곳 공유). FP12ll이 포맷 전역 pre-pass를 함수 metadata 뒤로 옮겨 Str 파라미터/local string let을 `%s` + `i8*` vararg로 emit, self-host `{op_s}` gap을 닫음. 실측 stdout 9종+capstone(fixpoint.nl 원형 tokenize→eval→emit_ir 통째 컴파일→`2+3*4`→`define i64 @main() {{ ret i64 14 }}` IR emit) + `%s/i8*` IR sanity. = **fixpoint_full이 self-host codegen 단계까지 컴파일=front+codegen 전체 arc.**
 1d. ~~**실제 `fixpoint.nl` source-file bootstrap smoke**~~ **✅ 첫 파일 게이트 해결**(FP12mm, 2026-06-08): `tools/embed_self_source.py`가 실제 `compiler/self/fixpoint.nl` 파일을 현재 compact self-host subset으로 정규화(comments 제거, double-string→backtick, struct field type 제거, semicolon 보강, outer brace escape)해 `fixpoint_full`의 `compile("...")` 입력으로 주입. `fn main()`이 있는 실제 파일에서 duplicate `@main`이 나던 갭을 `has_top_stmts`로 해결(top-level 실행문이 없으면 synthetic wrapper 생략). 실측: 정규화된 실제 `fixpoint.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 24` LLVM IR emit → emitted IR clang/run exit 24. = **snippet 통합에서 실제 파일 입력 자동 게이트로 한 단계 상승.**
 1e. ~~**실제 `fixpoint2.nl` source-file bootstrap smoke + 10-param arity**~~ **✅ 두 번째 파일 게이트 해결**(FP12nn, 2026-06-08): 실제 `compiler/self/fixpoint2.nl` 원본의 `word_is(src, a, alen, w0, w1, w2, w3, w4, w5, wlen)`가 10개 파라미터를 쓰면서 기존 8-param 슬롯 한계를 노출. `Fn` metadata/타입판정/signature/call arg capture/param alloca/post-call List length sync를 p8/p9까지 확장하고, `s10`, late `List` out-param, 실제 `word_is("return", ...)` shape를 회귀 가드로 추가. 실측: 정규화된 실제 `fixpoint2.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 50` LLVM IR emit → emitted IR clang/run exit 50. = **실제 파일 입력 자동 게이트가 산술 tier에서 산술+변수 tier로 확장.**
+1f. ~~**실제 `fixpoint3.nl` source-file bootstrap smoke**~~ **✅ 세 번째 파일 게이트 해결**(FP12oo, 2026-06-08): 실제 `compiler/self/fixpoint3.nl` 원본의 multi-line `Fn` struct/`fns.push(Fn { ... })`, nested string brace escape, 8-field `Fn` metadata, Str param retlist call, `List[index].field` scalar assignment, `-> List` void signature 갭을 해결. 실측: 정규화된 실제 `fixpoint3.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 120` LLVM IR emit → emitted IR clang/run exit 120. = **실제 파일 입력 자동 게이트가 재귀 함수언어 tier까지 확장.**
 2. ~~**TRACKED 컴파일러 버그 2건**~~ **✅ 둘 다 근본수정**(2026-06-08): (ⓐ) all-return if/else-if 빈 merge block → block_returns()+`unreachable`(FP12gg, 580ca3a); (ⓑ) `.len` on List-of-structs가 struct-field GEP로 오인 → struct-field branch에 `karr != 2` 가드(FP12ff, 0d64afb). 둘 다 task chip dismiss.
-3. **실제 수천줄 소스 통째 부트스트랩**(months급, TRACKED) — `fixpoint.nl`/`fixpoint2.nl` 파일 smoke는 통과했지만, `fixpoint3.nl` 원본 파일 확대와 최종 `fixpoint_full.nl` 3.9k줄 전체 self-compile은 아직 남음.
+3. **실제 수천줄 소스 통째 부트스트랩**(months급, TRACKED) — `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl` 파일 smoke는 통과했지만, 최종 `fixpoint_full.nl` 3.9k줄 전체 self-compile은 아직 남음.
 4. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
 3. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
 

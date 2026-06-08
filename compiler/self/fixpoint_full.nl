@@ -33,11 +33,12 @@ struct Fn {
     bstart: Int, bend: Int,
     retlist: Int, retty: Int
 }
-# A struct type: name range + up to 6 field name ranges + field count.
+# A struct type: name range + up to 8 field name ranges + field count.
 struct StructDef {
     nstart: Int, nlen: Int,
     f0s: Int, f0l: Int, f1s: Int, f1l: Int, f2s: Int, f2l: Int,
     f3s: Int, f3l: Int, f4s: Int, f4l: Int, f5s: Int, f5l: Int,
+    f6s: Int, f6l: Int, f7s: Int, f7l: Int,
     nfields: Int
 }
 
@@ -790,6 +791,10 @@ fn build_defs(toks: &List<Token>, n: Int) -> List<StructDef> {
             let mut f4l = 0
             let mut f5s = 0
             let mut f5l = 0
+            let mut f6s = 0
+            let mut f6l = 0
+            let mut f7s = 0
+            let mut f7l = 0
             let mut cnt = 0
             let mut q = bopen + 1
             while q < bclose {
@@ -800,7 +805,9 @@ fn build_defs(toks: &List<Token>, n: Int) -> List<StructDef> {
                     else if cnt == 2 { f2s = qt.nstart; f2l = qt.nlen }
                     else if cnt == 3 { f3s = qt.nstart; f3l = qt.nlen }
                     else if cnt == 4 { f4s = qt.nstart; f4l = qt.nlen }
-                    else { f5s = qt.nstart; f5l = qt.nlen }
+                    else if cnt == 5 { f5s = qt.nstart; f5l = qt.nlen }
+                    else if cnt == 6 { f6s = qt.nstart; f6l = qt.nlen }
+                    else { f7s = qt.nstart; f7l = qt.nlen }
                     cnt = cnt + 1
                 }
                 q = q + 1
@@ -809,6 +816,7 @@ fn build_defs(toks: &List<Token>, n: Int) -> List<StructDef> {
                 nstart: nt.nstart, nlen: nt.nlen,
                 f0s: f0s, f0l: f0l, f1s: f1s, f1l: f1l, f2s: f2s, f2l: f2l,
                 f3s: f3s, f3l: f3l, f4s: f4s, f4l: f4l, f5s: f5s, f5l: f5l,
+                f6s: f6s, f6l: f6l, f7s: f7s, f7l: f7l,
                 nfields: cnt
             })
             i = bclose + 1
@@ -840,6 +848,8 @@ fn field_index(defs: &List<StructDef>, ti: Int, src: Str, qs: Int, ql: Int) -> I
     if d.nfields >= 4 { if name_eq(src, d.f3s, d.f3l, qs, ql) == 1 { return 3 } }
     if d.nfields >= 5 { if name_eq(src, d.f4s, d.f4l, qs, ql) == 1 { return 4 } }
     if d.nfields >= 6 { if name_eq(src, d.f5s, d.f5l, qs, ql) == 1 { return 5 } }
+    if d.nfields >= 7 { if name_eq(src, d.f6s, d.f6l, qs, ql) == 1 { return 6 } }
+    if d.nfields >= 8 { if name_eq(src, d.f7s, d.f7l, qs, ql) == 1 { return 7 } }
     return 0 - 1
 }
 # Slot's struct-type index for a variable (-1 if not a struct).
@@ -1593,6 +1603,14 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             return Op { kind: 1, val: loadc, next: loadc + 1 }
         }
         let slot = find_slot(slots, src, t.nstart, t.nlen)
+        if isarr_of(slots, src, t.nstart, t.nlen) == 3 {
+            emit_str("  %t")
+            pint(counter)
+            emit_str(" = load i8*, i8** %v")
+            pint(slot)
+            putchar(10)
+            return Op { kind: 2, val: counter, next: counter + 1 }
+        }
         # emit `  %t<counter> = load i64, i64* %v<slot>`
         emit_str("  %t")
         pint(counter)
@@ -1932,6 +1950,9 @@ fn rhs_los_elem_sty(toks: &List<Token>, slots: &List<Slot>, src: Str, npos: Int)
     if rhs.kind == 1 {
         let after = toks[vp + 1]
         if after.kind == 23 {
+            let bend = bracket_end(toks, vp + 2)
+            let dot = toks[bend + 1]
+            if dot.kind == 27 { return 0 - 1 }
             let karr = isarr_of(slots, src, rhs.nstart, rhs.nlen)
             if karr == 2 {
                 return sty_of(slots, src, rhs.nstart, rhs.nlen)
@@ -3321,7 +3342,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                             emit_str(", i64* %t")
                             pint(lp)
                             putchar(10)
-                            emit_str("  ret i64 0")
+                            emit_str("  ret void")
                             putchar(10)
                         }
                     }
@@ -3329,8 +3350,12 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             }
             if did_listret == 0 {
                 let e = gen_expr(toks, slots, fns, defs, src, i + 1, stop, counter)
-                emit_str("  ret i64 ")
-                emit_op(e)
+                if retout >= 0 {
+                    emit_str("  ret void")
+                } else {
+                    emit_str("  ret i64 ")
+                    emit_op(e)
+                }
                 putchar(10)
                 counter = e.next
             }
@@ -3797,7 +3822,7 @@ fn gen_top(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, slots: &L
 # Emit one user function: `define i64 @name(i64 %p_in) { <body> }`. The param is
 # copied to alloca %v0; body locals occupy slots 1+. Body = [bstart, bend).
 fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, f: Fn, n: Int) -> Int {
-    emit_str("define i64 @")
+    if f.retlist == 1 { emit_str("define void @") } else { emit_str("define i64 @") }
     emit_name(src, f.nstart, f.nlen)
     emit_str("(")
     # incoming SSA params: %a0, %a1, ...  (Str params are i8*, others i64)
