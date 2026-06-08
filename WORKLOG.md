@@ -1,5 +1,13 @@
 # nl WORKLOG
 
+## 2026-06-08 (계속: FP12ii — fixpoint.nl 원형 산술 컴파일러 end-to-end)
+- `-> List` 직접반환(FP12hh) 위에서 **fixpoint.nl 산술 컴파일러를 원형 그대로**(out-param 우회 없이) 통합 실행:
+  `tokenize(src) -> List<Token>` RETURN + 재귀 evaluator(eval_term/fold/skip_term)가 그 List 소비.
+  `let toks = tokenize(...)`가 hidden out-param으로 버퍼 받고, eval이 읽음.
+- 실측 end-to-end(source→value): `12 + 3 * 4`=24, `2 + 3 * 4`=14, `10 + 20 + 30`=60. = gap #4 닫힘의 가장 깨끗한 실증
+  (실제 소스 모양 직접 컴파일). e2e fixpoint-full **140→143**(+3 가드), 값정확성 96/96, 회귀0. commit bf5dc19.
+- heredoc backtick은 python 하베스트로 프로그램 빌드해 회피(`tokenize(\`12...\`)` backtick이 bash command-sub 트리거).
+
 ## 2026-06-08 (우선순위 ②: 🎯🎯🎯 `-> List` 직접반환 — fixpoint.nl 원형 복원)
 - **검증 스킴(clang run=42)**: caller가 버퍼 할당+hidden out-param 전달, callee가 `return xs`서 버퍼 복사.
 - **Steps 1-3(commit 1cd0bef)**: Fn struct +retlist/+retty; build_fns가 `-> List<Type>` 감지(compile() defs→fns 순서변경으로

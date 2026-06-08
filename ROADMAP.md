@@ -26,7 +26,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 부트스트랩 갭 #1~#5b(string/List param, List-of-structs 로컬+param, typed let, bool, `!=`, let-bind-LOS, else-if-in-loop 등 20 능력추가) 전부 해결.
 
 **현재 게이트 상태**:
-- self-host e2e **fixpoint-full 140 PASS / 0 FAIL** (이 세션 90→140).
+- self-host e2e **fixpoint-full 143 PASS / 0 FAIL** (이 세션 90→140).
 - 값-정확성 aggregate **96/96** (예제코퍼스 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
