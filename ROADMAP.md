@@ -18,7 +18,7 @@
 P0 게이트 / P1 코퍼스 / P2 트랜스파일러 / P3 에러인프라 / P4 std시작 / P5 레퍼런스 = **DONE**.
 L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 
-**🎯 실제 소스 부트스트랩 arc 정점(2026-06-08, FP12g~ee, 41커밋)**: fixpoint_full(통합 nl-self-host 컴파일러)이
+**🎯 실제 소스 부트스트랩 arc 정점(2026-06-08, FP12g~ll)**: fixpoint_full(통합 nl-self-host 컴파일러)이
 **세 self-host 언어 tier를 전부 source string→value로 end-to-end 컴파일**:
 - **①산술식**(fixpoint.nl): tokenize+eval, `2 + 3 * 4`=14 (FP12y)
 - **②산술+변수**(fixpoint2.nl): 심볼테이블+변수평가, `let x = 2; let y = x + 1; return x + y * 4`=14 (FP12bb)
@@ -26,14 +26,14 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 부트스트랩 갭 #1~#5b(string/List param, List-of-structs 로컬+param, typed let, bool, `!=`, let-bind-LOS, else-if-in-loop 등 20 능력추가) 전부 해결.
 
 **현재 게이트 상태**:
-- self-host e2e **fixpoint-full 160 PASS / 0 FAIL** (이 세션 90→160).
+- self-host e2e **fixpoint-full 164 PASS / 0 FAIL** (이 세션 90→164).
 - 값-정확성 aggregate **96/96** (예제코퍼스 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
 1. ~~**fixpoint.nl 편의갭 `-> List` 직접반환**~~ **✅ 근본해결**(FP12hh, 2026-06-08, commit 858defe+1cd0bef): `fn build() -> List<T> {{ ...; return xs }}`가 hidden out-param(caller가 버퍼 할당, callee가 `return xs`서 버퍼 복사)으로 컴파일=**fixpoint.nl 원형 `fn tokenize(src) -> List<Token>` 복원**(gap #4). 실측 scalar/LOS/arg/tokenize-shape 전부 동작.
 1b. ~~**general-nl `for` 구문 codegen**~~ **✅ 해결**(FP12jj, 2026-06-08): `for v in lo..hi { body }`(exclusive)/`..=`(inclusive)를 induction-variable while-loop로 desugar(토크나이저 for=34/in=35/..=36/..==37, gen_stmts kind==34 핸들러, 두 slot collector에 루프변수 예약). 실측 exclusive/inclusive/중첩/if-in-body/List-push/표현식상한/외부var의존 전부 동작. = **fixpoint_full이 이제 모든 일반 nl 구문을 codegen**.
-1c. ~~**`print(...)` 보간 codegen (fixpoint.nl codegen 단계)**~~ **✅ 해결**(FP12kk, 2026-06-08): 재평가로 비-critical→진짜 갭 격상(fixpoint.nl/fixpoint_codegen의 codegen 단계가 `print("ret i64 {value}")`로 IR을 emit=핵심 emission). 트랜스파일러가 print→puts rewrite; brace-bearing 리터럴은 `@.fmt<nstart>` 포맷글로벌+`printf`로 라우팅(`{ident}`→`%d`, `%`→`%%`, trailing `\n`). **lone-`{` vs `{ident}` 모호성**(transpiler가 둘 다 단일 brace로 전달) 해결=Vais lexer 규칙(`{`+식별자+`}`만 보간, lone `{`=리터럴; interp_end 단일구현 3곳 공유). Int-only(현 self-host 보간 전부 Int; string-interp `{op_s}`는 follow-up). 실측 stdout 6종+capstone(fixpoint.nl 원형 tokenize→eval→emit_ir 통째 컴파일→`2+3*4`→`define i64 @main() {{ ret i64 14 }}` IR emit). = **fixpoint_full이 self-host codegen 단계까지 컴파일=front+codegen 전체 arc.** 남은 편의갭: string-interp(`%s`, self-host `{op_s}` 1곳).
+1c. ~~**`print(...)` 보간 codegen (fixpoint.nl codegen 단계)**~~ **✅ 해결**(FP12kk~ll, 2026-06-08): 재평가로 비-critical→진짜 갭 격상(fixpoint.nl/fixpoint_codegen의 codegen 단계가 `print("ret i64 {value}")`/`print("%t{counter} = {op_s}...")`로 IR을 emit=핵심 emission). 트랜스파일러가 print→puts rewrite; brace-bearing 리터럴은 `@.fmt<nstart>` 포맷글로벌+`printf`로 라우팅(`{ident}`→`%d` 또는 Str `%s`, `%`→`%%`, trailing `\n`). **lone-`{` vs `{ident}` 모호성**(transpiler가 둘 다 단일 brace로 전달) 해결=Vais lexer 규칙(`{`+식별자+`}`만 보간, lone `{`=리터럴; interp_end 단일구현 3곳 공유). FP12ll이 포맷 전역 pre-pass를 함수 metadata 뒤로 옮겨 Str 파라미터/local string let을 `%s` + `i8*` vararg로 emit, self-host `{op_s}` gap을 닫음. 실측 stdout 9종+capstone(fixpoint.nl 원형 tokenize→eval→emit_ir 통째 컴파일→`2+3*4`→`define i64 @main() {{ ret i64 14 }}` IR emit) + `%s/i8*` IR sanity. = **fixpoint_full이 self-host codegen 단계까지 컴파일=front+codegen 전체 arc.**
 2. ~~**TRACKED 컴파일러 버그 2건**~~ **✅ 둘 다 근본수정**(2026-06-08): (ⓐ) all-return if/else-if 빈 merge block → block_returns()+`unreachable`(FP12gg, 580ca3a); (ⓑ) `.len` on List-of-structs가 struct-field GEP로 오인 → struct-field branch에 `karr != 2` 가드(FP12ff, 0d64afb). 둘 다 task chip dismiss.
 3. **실제 수천줄 소스 통째 부트스트랩**(months급, TRACKED) — 능력 완비, 순수 규모 문제(개별 tier는 fragment+통합으로 전부 동작 확증).
 4. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.

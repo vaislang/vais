@@ -136,6 +136,64 @@ fn lit_has_brace(src: Str, start: Int, len: Int) -> Int {
     }
     return 0
 }
+# Is a named function parameter annotated as Str?
+fn fn_param_is_str(f: Fn, src: Str, qs: Int, ql: Int) -> Int {
+    if f.npar >= 1 { if f.p0ty == 1 { if name_eq(src, f.p0s, f.p0l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 2 { if f.p1ty == 1 { if name_eq(src, f.p1s, f.p1l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 3 { if f.p2ty == 1 { if name_eq(src, f.p2s, f.p2l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 4 { if f.p3ty == 1 { if name_eq(src, f.p3s, f.p3l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 5 { if f.p4ty == 1 { if name_eq(src, f.p4s, f.p4l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 6 { if f.p5ty == 1 { if name_eq(src, f.p5s, f.p5l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 7 { if f.p6ty == 1 { if name_eq(src, f.p6s, f.p6l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 8 { if f.p7ty == 1 { if name_eq(src, f.p7s, f.p7l, qs, ql) == 1 { return 1 } } }
+    return 0
+}
+
+# Scan earlier lets in [start,end) and report whether name was bound from a string
+# literal. This is used only by the module pre-pass to choose %s vs %d for a
+# printf format global, so it intentionally stays narrower than full typechecking.
+fn range_let_is_str(toks: &List<Token>, src: Str, start: Int, end: Int, qs: Int, ql: Int) -> Int {
+    let mut i = start
+    while i < end {
+        let t = toks[i]
+        if t.kind == 13 {
+            i = skip_fn_def(toks, i, end)
+        } else if t.kind == 26 {
+            i = skip_struct_def(toks, i, end)
+        } else if t.kind == 7 {
+            let nx = toks[i + 1]
+            let mut npos = i + 1
+            if nx.kind == 21 { npos = i + 2 }
+            let name = toks[npos]
+            if name_eq(src, name.nstart, name.nlen, qs, ql) == 1 {
+                let vp = rhs_pos(toks, npos)
+                let rhs = toks[vp]
+                if rhs.kind == 28 { return 1 }
+            }
+            i = i + 1
+        } else {
+            i = i + 1
+        }
+    }
+    return 0
+}
+
+# For the string-literal token at `lit_i`, decide whether `{ident}` should be a
+# string interpolation (%s) by checking the surrounding function's Str params and
+# earlier string-literal lets. Everything else remains integer interpolation (%d).
+fn interp_name_is_str(toks: &List<Token>, fns: &List<Fn>, src: Str, n: Int, lit_i: Int, qs: Int, ql: Int) -> Int {
+    let m = fns.len()
+    let mut fi = 0
+    while fi < m {
+        let f = fns[fi]
+        if lit_i >= f.bstart and lit_i < f.bend {
+            if fn_param_is_str(f, src, qs, ql) == 1 { return 1 }
+            return range_let_is_str(toks, src, f.bstart, lit_i, qs, ql)
+        }
+        fi = fi + 1
+    }
+    return range_let_is_str(toks, src, 0, lit_i, qs, ql)
+}
 fn kw3(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int) -> Int {
     if alen != 3 { return 0 }
     if src[a] != w0 { return 0 }
@@ -330,10 +388,10 @@ fn emit_bytes(src: Str, start: Int, len: Int) -> Int {
     return 0
 }
 # printf format length: bytes the @.fmt<nstart> global occupies for the literal
-# [start,start+len), where each `%` doubles to `%%`, each VALID `{ident}` becomes the
-# 2-byte `%d`, a lone `{` (literal brace) passes through 1:1, other bytes 1:1, plus a
-# trailing newline (puts adds one, so printf must too). The \00 is added by the
-# caller. Int-only interpolation for now ({ident} -> %d).
+# [start,start+len), where each `%` doubles to `%%`, each VALID `{ident}` becomes
+# a 2-byte printf directive (`%d` or `%s`), a lone `{` (literal brace) passes
+# through 1:1, other bytes 1:1, plus a trailing newline (puts adds one, so printf
+# must too). The \00 is added by the caller.
 fn fmt_len(src: Str, start: Int, len: Int) -> Int {
     let mut k = 0
     let mut out = 0
@@ -341,7 +399,7 @@ fn fmt_len(src: Str, start: Int, len: Int) -> Int {
         let c = src[start + k]
         let e = interp_end(src, start, len, k)
         if e >= 0 {
-            # valid `{ident}` -> `%d` (2 bytes); advance past the closing `}`
+            # valid `{ident}` -> printf directive (2 bytes); advance past `}`
             out = out + 2
             k = e + 1
         } else if c == 37 {
@@ -356,16 +414,19 @@ fn fmt_len(src: Str, start: Int, len: Int) -> Int {
     return out + 1
 }
 # Emit the printf format bytes for the literal [start,start+len): `%` -> `%%`,
-# valid `{ident}` -> `%d`, lone `{`/other bytes verbatim, then a trailing `\0A`
-# newline (to match puts). (Caller wraps in c"..\00".)
-fn emit_fmt_bytes(src: Str, start: Int, len: Int) -> Int {
+# valid `{ident}` -> `%d` or `%s`, lone `{`/other bytes verbatim, then a trailing
+# `\0A` newline (to match puts). (Caller wraps in c"..\00".)
+fn emit_fmt_bytes(toks: &List<Token>, fns: &List<Fn>, src: Str, n: Int, lit_i: Int, start: Int, len: Int) -> Int {
     let mut k = 0
     while k < len {
         let c = src[start + k]
         let e = interp_end(src, start, len, k)
         if e >= 0 {
+            let astart = start + k + 1
+            let alen = e - (k + 1)
             putchar(37)
-            putchar(100)
+            if interp_name_is_str(toks, fns, src, n, lit_i, astart, alen) == 1 { putchar(115) }
+            else { putchar(100) }
             k = e + 1
         } else if c == 37 {
             putchar(37)
@@ -383,7 +444,7 @@ fn emit_fmt_bytes(src: Str, start: Int, len: Int) -> Int {
 
 # Module pre-pass: emit a `@.s<nstart> = [len+1 x i8] c"..\00"` global for every
 # string-literal token, keyed by the literal's source nstart (unique per literal).
-fn emit_str_globals(toks: &List<Token>, src: Str, n: Int) -> Int {
+fn emit_str_globals(toks: &List<Token>, fns: &List<Fn>, src: Str, n: Int) -> Int {
     let mut i = 0
     while i < n {
         let t = toks[i]
@@ -397,14 +458,14 @@ fn emit_str_globals(toks: &List<Token>, src: Str, n: Int) -> Int {
             emit_str("\\00\"")
             putchar(10)
             # a brace-bearing literal also gets a printf format global @.fmt<nstart>
-            # ({ident} -> %d, % -> %%) for the print(...) interpolation path.
+            # ({ident} -> %d/%s, % -> %%) for the print(...) interpolation path.
             if lit_has_brace(src, t.nstart, t.nlen) == 1 {
                 emit_str("@.fmt")
                 pint(t.nstart)
                 emit_str(" = private constant [")
                 pint(fmt_len(src, t.nstart, t.nlen) + 1)
                 emit_str(" x i8] c\"")
-                emit_fmt_bytes(src, t.nstart, t.nlen)
+                emit_fmt_bytes(toks, fns, src, n, i, t.nstart, t.nlen)
                 emit_str("\\00\"")
                 putchar(10)
             }
@@ -858,8 +919,8 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
         if nx.kind == 9 {
             # print(...) with interpolation: the transpiler rewrote print->puts, so
             # this is a `puts(<string-lit>)` whose literal contains `{ident}`. Emit a
-            # printf call against the @.fmt<nstart> format global, loading each
-            # interpolated Int variable as an i64 vararg. (Int-only for now.)
+            # printf call against the @.fmt<nstart> format global, loading Int
+            # variables as i64 varargs and Str variables as i8* varargs.
             let sarg = toks[i + 2]
             if is_puts(src, t.nstart, t.nlen) == 1 {
                 if sarg.kind == 28 {
@@ -874,6 +935,14 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         let mut iv5 = 0
                         let mut iv6 = 0
                         let mut iv7 = 0
+                        let mut ik0 = 1
+                        let mut ik1 = 1
+                        let mut ik2 = 1
+                        let mut ik3 = 1
+                        let mut ik4 = 1
+                        let mut ik5 = 1
+                        let mut ik6 = 1
+                        let mut ik7 = 1
                         let mut nv = 0
                         let mut cc2 = counter
                         let mut k = 0
@@ -884,19 +953,23 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                                 let astart = sarg.nstart + k + 1
                                 let alen = e - (k + 1)
                                 let vslot = find_slot(slots, src, astart, alen)
+                                let is_str_arg = isarr_of(slots, src, astart, alen) == 3
                                 emit_str("  %t")
                                 pint(cc2)
-                                emit_str(" = load i64, i64* %v")
+                                if is_str_arg { emit_str(" = load i8*, i8** %v") }
+                                else { emit_str(" = load i64, i64* %v") }
                                 pint(vslot)
                                 putchar(10)
-                                if nv == 0 { iv0 = cc2 }
-                                else if nv == 1 { iv1 = cc2 }
-                                else if nv == 2 { iv2 = cc2 }
-                                else if nv == 3 { iv3 = cc2 }
-                                else if nv == 4 { iv4 = cc2 }
-                                else if nv == 5 { iv5 = cc2 }
-                                else if nv == 6 { iv6 = cc2 }
-                                else { iv7 = cc2 }
+                                let mut vk = 1
+                                if is_str_arg { vk = 2 }
+                                if nv == 0 { iv0 = cc2; ik0 = vk }
+                                else if nv == 1 { iv1 = cc2; ik1 = vk }
+                                else if nv == 2 { iv2 = cc2; ik2 = vk }
+                                else if nv == 3 { iv3 = cc2; ik3 = vk }
+                                else if nv == 4 { iv4 = cc2; ik4 = vk }
+                                else if nv == 5 { iv5 = cc2; ik5 = vk }
+                                else if nv == 6 { iv6 = cc2; ik6 = vk }
+                                else { iv7 = cc2; ik7 = vk }
                                 nv = nv + 1
                                 cc2 = cc2 + 1
                                 k = e + 1
@@ -919,14 +992,16 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         let mut vi = 0
                         while vi < nv {
                             let mut vt = iv0
-                            if vi == 1 { vt = iv1 }
-                            else if vi == 2 { vt = iv2 }
-                            else if vi == 3 { vt = iv3 }
-                            else if vi == 4 { vt = iv4 }
-                            else if vi == 5 { vt = iv5 }
-                            else if vi == 6 { vt = iv6 }
-                            else if vi == 7 { vt = iv7 }
-                            emit_str(", i64 %t")
+                            let mut vk = ik0
+                            if vi == 1 { vt = iv1; vk = ik1 }
+                            else if vi == 2 { vt = iv2; vk = ik2 }
+                            else if vi == 3 { vt = iv3; vk = ik3 }
+                            else if vi == 4 { vt = iv4; vk = ik4 }
+                            else if vi == 5 { vt = iv5; vk = ik5 }
+                            else if vi == 6 { vt = iv6; vk = ik6 }
+                            else if vi == 7 { vt = iv7; vk = ik7 }
+                            if vk == 2 { emit_str(", i8* %t") }
+                            else { emit_str(", i64 %t") }
                             pint(vt)
                             vi = vi + 1
                         }
@@ -3762,10 +3837,12 @@ fn compile(src: Str) -> Int {
     putchar(10)
     emit_str("declare i32 @printf(i8*, ...)")
     putchar(10)
-    # module-level string-literal globals (one per literal, keyed by source pos)
-    emit_str_globals(&toks, src, n)
     let defs = build_defs(&toks, n)
     let fns = build_fns(&toks, &defs, src, n)
+    # module-level string-literal globals (one per literal, keyed by source pos).
+    # Function metadata is available here so interpolation formats can choose %s
+    # for Str params while still emitting globals before any function definition.
+    emit_str_globals(&toks, &fns, src, n)
     # emit each user function
     let m = fns.len()
     let mut fi = 0

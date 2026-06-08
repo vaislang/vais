@@ -1,5 +1,21 @@
 # nl WORKLOG
 
+## 2026-06-08 (계속: FP12ll — print 보간 `%s` / Str vararg 지원, `{op_s}` 갭 closure)
+- 방향 정리 후 다음 작은 gap으로 **string interpolation in self-host print codegen** 착수. baseline 먼저 직렬 확인:
+  `bash scripts/test-fixpoint-full.sh` = `RESULT ... OK`, `bash scripts/test.sh` = `pass=96 fail=0 skip=0`.
+- **clang 스킴 격리검증**: `printf("op=%s n=%d\n", i8* "mul", i64 7)` LLVM IR을 별도 빌드+실행해 `op=mul n=7`
+  확인. 첫 시도는 포맷 글로벌 길이 오산으로 실패(`[15 x i8]` vs 실제 12) → 길이 산술을 재확인하고 진행.
+- **구현**: `emit_str_globals` 전에 `build_defs/build_fns`를 먼저 계산해 포맷 전역 생성이 함수 파라미터 타입을 볼 수 있게 함.
+  `interp_name_is_str`가 해당 문자열 리터럴의 주변 함수 `Str` 파라미터와 앞선 string-literal `let`을 좁게 판정해
+  `emit_fmt_bytes`에서 `{ident}`를 `%d` 또는 `%s`로 방출. 실제 `printf` call vararg 로더도 슬롯 타입을 보고
+  `i64` load 또는 `i8*` load를 맞춰 방출.
+- **실측**: local string `let op_s = "mul"; print("op={op_s}")` → `op=mul`, function param
+  `fn emit(op_s: Str, value: Int)` → `ret i64 42`, mixed int+string `%t{c} = {op_s} ...` → `%t3 = add ...`.
+  IR sanity도 `%s` format + `i8*` vararg를 확인. 기존 int interpolation/lone-brace/printf `%` escape 경로 회귀 없음.
+- 검증: `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen ... OK` (FP12kk 160→164 PASS 상당),
+  `bash scripts/test.sh` = `RESULT: pass=96 fail=0 skip=0`. 교훈: format global pre-pass는 타입이 필요한 순간이 있으므로 함수 metadata를 먼저
+  만들되, IR 전역 emission 순서는 function emission보다 앞에 유지해야 함.
+
 ## 2026-06-08 (우선순위 ④: 🎯🎯🎯 FP12kk — print(...) 보간 codegen = fixpoint.nl codegen 단계 갭 해결)
 - **재평가로 우선순위 격상**: `print`을 비-critical로 봤으나(eval 경로엔 불필요), recon 결과 **fixpoint.nl/fixpoint_codegen의
   codegen 단계가 `print("ret i64 {value}")`/`print("%t{counter} = {op_s}...")`로 LLVM IR을 emit** — 즉 print 보간은
