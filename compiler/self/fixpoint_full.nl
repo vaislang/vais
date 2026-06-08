@@ -3696,6 +3696,23 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
 }
 
 # Generate top-level statements (skip fn defs), threading the symbol+fn tables.
+fn has_top_stmts(toks: &List<Token>, n: Int) -> Int {
+    let mut i = 0
+    while i < n {
+        let t = toks[i]
+        if t.kind == 13 {
+            i = skip_fn_def(toks, i, n)
+        } else if t.kind == 26 {
+            i = skip_struct_def(toks, i, n)
+        } else if t.kind == 6 {
+            i = i + 1
+        } else {
+            return 1
+        }
+    }
+    return 0
+}
+
 fn gen_top(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, slots: &List<Slot>, src: Str, n: Int) -> Int {
     let mut counter = 1
     let mut i = 0
@@ -3851,13 +3868,16 @@ fn compile(src: Str) -> Int {
         emit_fn(&toks, &fns, &defs, src, f, n)
         fi = fi + 1
     }
-    # emit @main from top-level statements (skip fn defs)
-    emit_str("define i64 @main() {")
-    putchar(10)
-    let topslots = collect_top_slots(&toks, &fns, &defs, src, n)
-    let last = gen_top(&toks, &fns, &defs, &topslots, src, n)
-    emit_str("}")
-    putchar(10)
+    # emit synthetic @main only when the source has top-level executable
+    # statements. Real source files often define their own fn main().
+    if has_top_stmts(&toks, n) == 1 {
+        emit_str("define i64 @main() {")
+        putchar(10)
+        let topslots = collect_top_slots(&toks, &fns, &defs, src, n)
+        let last = gen_top(&toks, &fns, &defs, &topslots, src, n)
+        emit_str("}")
+        putchar(10)
+    }
     return 0
 }
 

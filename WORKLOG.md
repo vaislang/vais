@@ -1,5 +1,23 @@
 # nl WORKLOG
 
+## 2026-06-08 (계속: FP12mm — 실제 `fixpoint.nl` source-file bootstrap smoke)
+- 다음 unblocked 목표인 **실제 소스 파일 기반 부트스트랩**으로 진입. scratch probe에서
+  `compiler/self/fixpoint.nl` 원본을 현재 compact self-host subset으로 정규화해 `fixpoint_full`에 먹였더니
+  LLVM IR 생성까지 성공했으나 clang이 **duplicate `@main`**으로 실패: 실제 파일은 `fn main()`을 정의하는데
+  `fixpoint_full`이 top-level wrapper `define @main`도 항상 emit하던 것이 원인.
+- **구현**: `has_top_stmts` 추가. top-level scan에서 `fn`/`struct`/`;`만 있으면 synthetic wrapper를 생략하고,
+  top-level `return`/`let` 등이 있으면 기존처럼 wrapper `@main`을 emit. 기존 snippet형 테스트(`fn f...; return f()`)와
+  실제 파일형 테스트(`fn main()`) 양쪽을 모두 보존.
+- **파일 주입 harness**: `tools/embed_self_source.py` 추가. 현재 self-host subset용 정규화 도구로 comments 제거,
+  double-quoted strings→backtick strings, one-line struct field 타입 제거, line statement 세미콜론 보강,
+  outer `compile("...")` string용 brace escape를 수행.
+- **실측**: `fn main() { return 42 }` 단독 프로그램이 중복 `@main` 없이 실행=42. 이어서 실제
+  `compiler/self/fixpoint.nl` 파일을 정규화해 `fixpoint_full`로 컴파일 → 생성된 compiler IR에 `@main` 1개만 존재 →
+  clang 통과 → 실행 시 `ret i64 24` LLVM IR emit → 그 emitted IR도 clang+실행해 exit 24 확인.
+- 검증: `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen ... OK` (164→168 PASS 상당),
+  `bash scripts/test.sh` = `RESULT: pass=96 fail=0 skip=0`. 한계: 아직 `fixpoint_full.nl` 3.9k줄 전체 self-compile은
+  아님. 다만 실제 파일을 입력으로 삼는 첫 자동 게이트가 생겼고, 다음 파일 확대의 기반이 생김.
+
 ## 2026-06-08 (계속: FP12ll — print 보간 `%s` / Str vararg 지원, `{op_s}` 갭 closure)
 - 방향 정리 후 다음 작은 gap으로 **string interpolation in self-host print codegen** 착수. baseline 먼저 직렬 확인:
   `bash scripts/test-fixpoint-full.sh` = `RESULT ... OK`, `bash scripts/test.sh` = `pass=96 fail=0 skip=0`.

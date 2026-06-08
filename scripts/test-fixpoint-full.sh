@@ -573,6 +573,44 @@ if grep -q 'c"op=%s\\0A\\00"' "$tmp/out.ll" && grep -q 'call i32 (i8\*, .*i8\* %
   echo "  PASS print string interpolation emits %s + i8* vararg";
 else echo "  FAIL did not emit string printf interpolation"; cat "$tmp/out.ll"; fail=1; fi
 
+# --- FP12mm: source-file bootstrap smoke ---
+# Real source files define their own `fn main()`. In that case fixpoint_full must
+# not also synthesize a wrapper @main, or clang rejects duplicate definitions.
+check "fn main() {{ return 42 }}" 42
+
+# Compile the actual compiler/self/fixpoint.nl source file, normalized to the
+# current compact self-host subset by tools/embed_self_source.py. The generated
+# program is itself a tiny compiler; when run it emits LLVM IR with `ret i64 24`.
+tmp="$(mktemp -d)"
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint.nl" "$tmp/c.nl" \
+  || { echo "  FAIL source-file bootstrap: embed"; fail=1; }
+python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
+( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+  || { echo "  FAIL source-file bootstrap: compiler build"; fail=1; }
+"$tmp/c" > "$tmp/source_compiler.ll"
+main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
+if [ "$main_count" = "1" ]; then
+  echo "  PASS source-file bootstrap emits a single @main";
+else
+  echo "  FAIL source-file bootstrap main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
+fi
+clang -Wno-override-module -o "$tmp/source_compiler" "$tmp/source_compiler.ll" 2>/dev/null \
+  || { echo "  FAIL source-file bootstrap: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
+"$tmp/source_compiler" > "$tmp/emitted.ll"
+if grep -q 'ret i64 24' "$tmp/emitted.ll"; then
+  echo "  PASS source-file bootstrap fixpoint.nl emits ret i64 24";
+else
+  echo "  FAIL source-file bootstrap emitted IR missing ret i64 24"; cat "$tmp/emitted.ll"; fail=1
+fi
+clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>/dev/null \
+  || { echo "  FAIL source-file bootstrap: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
+"$tmp/emitted_bin"; got=$?
+if [ "$got" = "24" ]; then
+  echo "  PASS source-file bootstrap fixpoint.nl emitted IR runs (=24)";
+else
+  echo "  FAIL source-file bootstrap emitted binary got=$got want=24"; fail=1
+fi
+
 # Sanity: a string program emits a module-level string global + i8* alloca +
 # byte load (GEP i8 / load i8 / zext) — string codegen integrated, not scalar.
 tmp="$(mktemp -d)"
