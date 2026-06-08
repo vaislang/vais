@@ -26,12 +26,12 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 부트스트랩 갭 #1~#5b(string/List param, List-of-structs 로컬+param, typed let, bool, `!=`, let-bind-LOS, else-if-in-loop 등 20 능력추가) 전부 해결.
 
 **현재 게이트 상태**:
-- self-host e2e **fixpoint-full 135 PASS / 0 FAIL** (이 세션 90→135).
+- self-host e2e **fixpoint-full 140 PASS / 0 FAIL** (이 세션 90→140).
 - 값-정확성 aggregate **96/96** (예제코퍼스 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
-1. **fixpoint.nl 편의갭**(비-blocking): `-> List` 직접반환(#4, out-param 우회존재, clang스킴 run=42 검증) / for(1곳) / print interp(3곳).
+1. ~~**fixpoint.nl 편의갭 `-> List` 직접반환**~~ **✅ 근본해결**(FP12hh, 2026-06-08, commit 858defe+1cd0bef): `fn build() -> List<T> {{ ...; return xs }}`가 hidden out-param(caller가 버퍼 할당, callee가 `return xs`서 버퍼 복사)으로 컴파일=**fixpoint.nl 원형 `fn tokenize(src) -> List<Token>` 복원**(gap #4). 실측 scalar/LOS/arg/tokenize-shape 전부 동작. 남은 편의갭: for(self-host 미사용 0곳, general-nl용)/print(emit_ir 출력단계, eval 파이프라인 비필요).
 2. ~~**TRACKED 컴파일러 버그 2건**~~ **✅ 둘 다 근본수정**(2026-06-08): (ⓐ) all-return if/else-if 빈 merge block → block_returns()+`unreachable`(FP12gg, 580ca3a); (ⓑ) `.len` on List-of-structs가 struct-field GEP로 오인 → struct-field branch에 `karr != 2` 가드(FP12ff, 0d64afb). 둘 다 task chip dismiss.
 3. **실제 수천줄 소스 통째 부트스트랩**(months급, TRACKED) — 능력 완비, 순수 규모 문제(개별 tier는 fragment+통합으로 전부 동작 확증).
 4. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.

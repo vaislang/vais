@@ -1,5 +1,20 @@
 # nl WORKLOG
 
+## 2026-06-08 (우선순위 ②: 🎯🎯🎯 `-> List` 직접반환 — fixpoint.nl 원형 복원)
+- **검증 스킴(clang run=42)**: caller가 버퍼 할당+hidden out-param 전달, callee가 `return xs`서 버퍼 복사.
+- **Steps 1-3(commit 1cd0bef)**: Fn struct +retlist/+retty; build_fns가 `-> List<Type>` 감지(compile() defs→fns 순서변경으로
+  retty 해결); emit_fn이 retlist면 hidden `i64* %a<npar>` 추가; gen_stmts +retout param, `return <listvar>`서 local 버퍼를
+  out-param에 복사(stride별 data + length→out[63]/out[64*nf])+`ret 0`. retout 전 call-site 관통. e2e 135 유지.
+- **Steps 4-5(commit 858defe)**: call_retty() 헬퍼(call이 retlist fn이면 retty 반환); slot collectors(add_local_slots/
+  collect_top_slots에 `fns` 관통)가 `let ys = build()`를 List 버퍼로 할당; gen_stmts let-handler가 `call void @build(args...,
+  i64* ys_base)` emit(regular args + local-List arg by-pointer) + ys.len을 out-param length slot서 sync.
+- 실측 end-to-end: scalar list 반환(=42), 길이생존(=44), List-of-structs 반환(=42), arg 있는 retlist(=41),
+  **🎯 fixpoint.nl 원형 `fn tokenize(src) -> List<Token>` 직접반환+소비(=6)**. = **gap #4 근본해결**(out-param 우회 불필요).
+- e2e fixpoint-full **135→140**(+5 가드), 값정확성 96/96, 회귀0.
+- 교훈: 큰 아키텍처 변경(5+ 사이트)도 Steps 분리+체크포인트 커밋(1cd0bef Steps1-3, 858defe Steps4-5)으로 안전/검증된
+  out-param 머신(is_arr=4)을 return-copy로 재활용=aliasing 회피해 단순화/signature 관통(fns→collectors)은 call site 적으면 OK.
+  **남은 fixpoint.nl 갭=for(self-host 0곳)/print(emit_ir, eval 비필요)=비-critical.**
+
 ## 2026-06-08 (우선순위 순차: TRACKED 컴파일러 버그 2건 근본수정)
 - 사용자 지시: 우선순위 정해 순차 진행. 우선순위 ① 컴파일러 버그(잘못된 결과) > ② -> List > ③ for > ④ print.
 - **FP12ff (commit 0d64afb): `.len` on List-of-structs 오인 수정.** List-of-structs var는 slot.sty에 원소타입 보유 →
