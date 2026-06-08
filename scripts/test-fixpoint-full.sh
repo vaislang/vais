@@ -474,6 +474,36 @@ if grep -q "define i64 @sum_to(i64 %a0)" "$tmp/out.ll" && grep -q "store i64 %a0
   echo "  PASS emits function(param-alloca) + loop + call (functions-with-imperative-bodies codegen)";
 else echo "  FAIL did not emit function+imperative codegen"; cat "$tmp/out.ll"; fail=1; fi
 
+# --- FP12jj: `for <var> in lo..hi { body }` (.. exclusive, ..= inclusive) ---
+# The last general-nl loop construct: tokenized (for=34, in=35, ..=36, ..==37)
+# and desugared in gen_stmts to an induction-variable while-loop on the var's
+# slot. Covers exclusive/inclusive bounds, body arithmetic, function-param hi
+# bound, push into a List, if-in-body, and nested for (inner depends on outer).
+check "let mut s = 0; for i in 0..5 {{ s = s + i }}; return s;" 10
+check "let mut s = 0; for i in 0..=5 {{ s = s + i }}; return s;" 15
+check "let mut s = 0; for i in 1..4 {{ s = s + i }}; return s;" 6
+check "let mut s = 0; for i in 0..3 {{ s = s + i * 2 }}; return s;" 6
+check "fn sumto(n) {{ let mut s = 0; for i in 0..n {{ s = s + i }}; return s }}; return sumto(5);" 10
+check "let mut c = 0; for i in 0..3 {{ for j in 0..3 {{ c = c + 1 }} }}; return c;" 9
+check "let mut s = 0; for i in 0..6 {{ if i > 2 {{ s = s + i }} }}; return s;" 12
+check "let xs = list(); for i in 0..5 {{ xs.push(i * 10) }}; let mut s = 0; let mut j = 0; while j < xs.len {{ s = s + xs[j]; j = j + 1 }}; return s;" 100
+check "let mut s = 0; for i in 1..=3 {{ for j in 1..=i {{ s = s + 1 }} }}; return s;" 6
+# Sanity: a for-loop emits an induction-variable loop (store init, loop label,
+# icmp slt/sle against the bound, add 1 increment) -- desugared, not a builtin.
+tmp="$(mktemp -d)"
+PROG="let mut s = 0; for i in 0..5 {{ s = s + i }}; return s;" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+import os, re, sys
+src = open(sys.argv[1]).read()
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+open(sys.argv[2], "w").write(src)
+PY
+python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
+( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
+"$tmp/c" > "$tmp/out.ll"
+if grep -q "br label %loop" "$tmp/out.ll" && grep -q "icmp slt i64" "$tmp/out.ll" && grep -q "add i64" "$tmp/out.ll"; then
+  echo "  PASS for-loop desugars to induction-variable loop (store/loop/icmp slt/add)";
+else echo "  FAIL did not emit for-loop induction codegen"; cat "$tmp/out.ll"; fail=1; fi
+
 # --- FP12b: putchar — generated program emits output ---
 check_out() {
   local prog="$1" want="$2" tmp; tmp="$(mktemp -d)"

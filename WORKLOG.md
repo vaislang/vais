@@ -1,5 +1,24 @@
 # nl WORKLOG
 
+## 2026-06-08 (우선순위 ③: FP12jj — `for <var> in lo..hi` codegen, 마지막 일반 nl 루프 구문)
+- 사용자 지시 순서대로 ③ for 착수(① 컴파일러 버그 ② -> List 완료 후). fixpoint_full이 **모든 일반 nl 구문을 codegen**
+  하도록 마지막 루프 구문 `for`를 추가(완전성 win). self-host 코어엔 for 사용 0곳이라 비-blocking이었으나, codegen 능력
+  완비 차원에서 구현.
+- **토크나이저**: `for`=kw3('f','o','r')→kind 34, `in`=kw2('i','n')→kind 35. `.` 핸들러(c==46)를 peek-ahead로 재작성:
+  `..=`→kind 37, `..`→kind 36, `.`→kind 27(경계검사 i+1<n, i+2<n 포함).
+- **codegen**: gen_stmts에 kind==34 핸들러 추가 — `for v in lo .. hi { body }`를 induction-variable while-loop로 desugar.
+  layout `for(34) v in(35) <lo> ..(36)/..=(37) <hi> {(11) body }`. lo→`%v<fslot>` store; loop label; var reload+
+  `icmp slt`(exclusive)/`icmp sle`(inclusive) vs hi; body via gen_stmts; `v = v + 1`; br loop. 슬롯 예약은
+  add_local_slots/collect_top_slots에 kind==34 분기(루프변수=scalar i64 alloca at `for_pos+1`).
+- 실측 end-to-end(값≤255): `for i in 0..5`=10, `0..=5`=15, `1..4`=6, body곱셈 `0..3 * 2`=6, 함수param 상한 `0..n`(n=5)=10,
+  **중첩 for** `0..3 × 0..3`=9, if-in-body `0..6 if i>2`=12, **List push** `0..5 push(i*10)`=100, 계산상한 `0..n+2`=5,
+  **내부 range가 외부 var 의존** `1..=3 × 1..=i`=6. = for 구문 견고(exclusive/inclusive/중첩/조건/List/표현식상한 전부).
+- e2e fixpoint-full **143→153 PASS / 0 FAIL**(+9 값 가드 +1 IR sanity[store/loop/icmp slt/add desugar 확인]), 값정확성 96/96, 회귀0.
+- 참고: 예제 코퍼스는 이미 transpiler→Vais 트랙에서 for 커버(e06_for_sum=55, e12_exclusive_range=10, e13_nested_for,
+  e25_for_filter_sum) — 오늘 작업은 별개 트랙(nl self-host 컴파일러가 for를 **스스로 codegen**)을 닫음.
+- 교훈: 마지막 루프 구문도 desugar(induction-var while)로 기존 머신 재활용=신규 codegen 패스 불필요/`.`/`..`/`..=` peek-ahead는
+  경계검사 필수/슬롯 예약은 두 collector 모두(top-level + 함수내) 분기 추가해야 함.
+
 ## 2026-06-08 (계속: FP12ii — fixpoint.nl 원형 산술 컴파일러 end-to-end)
 - `-> List` 직접반환(FP12hh) 위에서 **fixpoint.nl 산술 컴파일러를 원형 그대로**(out-param 우회 없이) 통합 실행:
   `tokenize(src) -> List<Token>` RETURN + 재귀 evaluator(eval_term/fold/skip_term)가 그 List 소비.

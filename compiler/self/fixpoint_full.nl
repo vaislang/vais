@@ -170,6 +170,10 @@ fn tokenize(src: Str) -> List<Token> {
                 toks.push(Token { kind: 13, value: 0, nstart: start, nlen: len })   # fn
             } else if kw6(src, start, len, 115, 116, 114, 117, 99, 116) == 1 {
                 toks.push(Token { kind: 26, value: 0, nstart: start, nlen: len })   # struct
+            } else if kw3(src, start, len, 102, 111, 114) == 1 {
+                toks.push(Token { kind: 34, value: 0, nstart: start, nlen: len })   # for
+            } else if kw2(src, start, len, 105, 110) == 1 {
+                toks.push(Token { kind: 35, value: 0, nstart: start, nlen: len })   # in
             } else {
                 toks.push(Token { kind: 1, value: 0, nstart: start, nlen: len })
             }
@@ -208,7 +212,17 @@ fn tokenize(src: Str) -> List<Token> {
         else if c == 91 { toks.push(Token { kind: 23, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 93 { toks.push(Token { kind: 24, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 44 { toks.push(Token { kind: 25, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
-        else if c == 46 { toks.push(Token { kind: 27, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 46 {
+            # `.` field access (27), `..` exclusive range (36), `..=` inclusive (37)
+            if i + 1 < n {
+                if src[i + 1] == 46 {
+                    if i + 2 < n {
+                        if src[i + 2] == 61 { toks.push(Token { kind: 37, value: 0, nstart: 0, nlen: 0 }); i = i + 3 }
+                        else { toks.push(Token { kind: 36, value: 0, nstart: 0, nlen: 0 }); i = i + 2 }
+                    } else { toks.push(Token { kind: 36, value: 0, nstart: 0, nlen: 0 }); i = i + 2 }
+                } else { toks.push(Token { kind: 27, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+            } else { toks.push(Token { kind: 27, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        }
         else if c == 59 { toks.push(Token { kind: 6, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 58 { toks.push(Token { kind: 16, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 33 {
@@ -1906,6 +1920,17 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
                 putchar(10)
                 next_slot = next_slot + 1
             }
+        } else if t.kind == 34 {
+            # `for <var> in lo .. hi { body }` -- the loop variable is a scalar
+            # i64 local (alloca at %v<slot>); its slot is reserved here, the loop
+            # codegen is in gen_stmts.
+            let fv = toks[i + 1]
+            slots.push(Slot { nstart: fv.nstart, nlen: fv.nlen, slot: next_slot, is_arr: 0, alen: 0 , sty: 0 - 1 })
+            emit_str("  %v")
+            pint(next_slot)
+            emit_str(" = alloca i64")
+            putchar(10)
+            next_slot = next_slot + 1
         }
         i = i + 1
     }
@@ -2979,6 +3004,115 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 counter = e.next
             }
             i = stop + 1
+        } else if t.kind == 34 {
+            # for <var> in <lo> .. <hi> { <body> }   (.. exclusive, ..= inclusive)
+            # layout: for(34) var in(35) <lo> ..(36)/..=(37) <hi> {(11) body }(12)
+            # desugar to an induction-variable while-loop on the var's slot.
+            let fvar = toks[i + 1]
+            let fslot = find_slot(slots, src, fvar.nstart, fvar.nlen)
+            # find the open-brace after the header
+            let mut bopen = i + 1
+            let mut g1 = true
+            while g1 {
+                if bopen >= end { g1 = false }
+                else {
+                    let bt = toks[bopen]
+                    if bt.kind == 11 { g1 = false } else { bopen = bopen + 1 }
+                }
+            }
+            # find the range operator (36 or 37) within the header
+            let mut rop = i + 3
+            let mut g2 = true
+            while g2 {
+                if rop >= bopen { g2 = false }
+                else {
+                    let rt = toks[rop]
+                    if rt.kind == 36 { g2 = false } else { if rt.kind == 37 { g2 = false } else { rop = rop + 1 } }
+                }
+            }
+            let inclusive = toks[rop].kind
+            let bclose = match_brace(toks, bopen, end)
+            # lo-expr [i+3, rop): store into the induction var slot
+            let lo = gen_expr(toks, slots, fns, defs, src, i + 3, rop, counter)
+            counter = lo.next
+            emit_str("  store i64 ")
+            emit_op(lo)
+            emit_str(", i64* %v")
+            pint(fslot)
+            putchar(10)
+            let lbl = counter
+            counter = counter + 1
+            emit_str("  br label %loop")
+            pint(lbl)
+            putchar(10)
+            emit_str("loop")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
+            # reload induction var, compare against hi-expr [rop+1, bopen)
+            let ivnum = counter
+            counter = counter + 1
+            emit_str("  %t")
+            pint(ivnum)
+            emit_str(" = load i64, i64* %v")
+            pint(fslot)
+            putchar(10)
+            let hi = gen_expr(toks, slots, fns, defs, src, rop + 1, bopen, counter)
+            counter = hi.next
+            let cnum = counter
+            counter = counter + 1
+            emit_str("  %t")
+            pint(cnum)
+            if inclusive == 37 {
+                emit_str(" = icmp sle i64 %t")
+            } else {
+                emit_str(" = icmp slt i64 %t")
+            }
+            pint(ivnum)
+            emit_str(", ")
+            emit_op(hi)
+            putchar(10)
+            emit_str("  br i1 %t")
+            pint(cnum)
+            emit_str(", label %body")
+            pint(lbl)
+            emit_str(", label %done")
+            pint(lbl)
+            putchar(10)
+            emit_str("body")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
+            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, counter, retout)
+            # increment: v = v + 1
+            let incld = counter
+            counter = counter + 1
+            emit_str("  %t")
+            pint(incld)
+            emit_str(" = load i64, i64* %v")
+            pint(fslot)
+            putchar(10)
+            let incsum = counter
+            counter = counter + 1
+            emit_str("  %t")
+            pint(incsum)
+            emit_str(" = add i64 %t")
+            pint(incld)
+            emit_str(", 1")
+            putchar(10)
+            emit_str("  store i64 %t")
+            pint(incsum)
+            emit_str(", i64* %v")
+            pint(fslot)
+            putchar(10)
+            emit_str("  br label %loop")
+            pint(lbl)
+            putchar(10)
+            emit_str("done")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
+            i = bclose + 1
         } else if t.kind == 22 {
             # while <lhs> <cmp> <rhs> { <body> }
             # find the open-brace after the condition
@@ -3264,6 +3398,16 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
                 putchar(10)
                 next_slot = next_slot + 1
             }
+            i = i + 1
+        } else if t.kind == 34 {
+            # top-level `for <var> in ...`: reserve a scalar i64 slot for the var.
+            let fv = toks[i + 1]
+            slots.push(Slot { nstart: fv.nstart, nlen: fv.nlen, slot: next_slot, is_arr: 0, alen: 0 , sty: 0 - 1 })
+            emit_str("  %v")
+            pint(next_slot)
+            emit_str(" = alloca i64")
+            putchar(10)
+            next_slot = next_slot + 1
             i = i + 1
         } else {
             i = i + 1
