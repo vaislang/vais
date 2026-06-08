@@ -421,6 +421,20 @@ check "struct Token {{ kind, value }}; fn run() {{ let toks = list(); toks.push(
 # toks.len * 30 (List-of-structs length in a multiplicative term) = 150
 check "struct Token {{ kind, value }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 0, value: 1 }}); toks.push(Token {{ kind: 0, value: 2 }}); toks.push(Token {{ kind: 0, value: 3 }}); toks.push(Token {{ kind: 0, value: 4 }}); toks.push(Token {{ kind: 0, value: 5 }}); return toks.len * 30 }}; return run();" 150
 
+# --- FP12gg: if/else-if chains where ALL branches return (dead merge block) ---
+# An `if {return} else if {return} else {return}` left an empty trailing merge
+# block (no statement follows -> no terminator -> invalid IR: "expected
+# instruction opcode"). Fix: block_returns() detects when both branches return,
+# so the if-handler marks the dead merge block with `unreachable`.
+# 2-way all-return
+check "fn f(c: Int) {{ if c == 0 {{ return 7 }} else {{ return 9 }} }}; fn run() {{ return f(0) + f(5) }}; return run();" 16
+# 3-way all-return (else-if + else, every branch returns)
+check "fn f(c: Int) {{ if c == 0 {{ return 1 }} else if c == 1 {{ return 10 }} else {{ return 100 }} }}; fn run() {{ return f(0) + f(1) + f(2) }}; return run();" 111
+# 4-way all-return (two else-ifs + else)
+check "fn f(c: Int) {{ if c == 0 {{ return 1 }} else if c == 1 {{ return 10 }} else if c == 2 {{ return 50 }} else {{ return 100 }} }}; fn run() {{ return f(0) + f(1) + f(2) + f(3) }}; return run();" 161
+# regression: same chain with assignment (merge IS reachable -- must still work)
+check "fn f(c: Int) {{ let mut r = 0; if c == 0 {{ r = 1 }} else if c == 1 {{ r = 10 }} else if c == 2 {{ r = 50 }} else {{ r = 100 }}; return r }}; fn run() {{ return f(0) + f(1) + f(2) + f(3) }}; return run();" 161
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'

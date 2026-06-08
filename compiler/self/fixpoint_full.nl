@@ -1915,6 +1915,72 @@ fn if_stmt_end(toks: &List<Token>, ifpos: Int, n: Int) -> Int {
     }
     return cur
 }
+# Does the statement range [start, end) end such that control cannot fall through
+# (i.e. every path returns)? True if the range is a `return` statement, or an
+# if / else-if / else chain where the then-block and the whole else region both
+# end in a return (recursively). Used so the if-handler can mark a provably-dead
+# merge block with `unreachable` (LLVM requires every block to have a terminator;
+# an all-branches-return if otherwise leaves an empty trailing merge block).
+fn block_returns(toks: &List<Token>, start: Int, end: Int) -> Int {
+    if start >= end { return 0 }
+    let t = toks[start]
+    if t.kind == 8 {
+        # a `return` statement -- but only conclusive if it's the LAST statement.
+        let semi = find_semi(toks, start + 1, end)
+        if semi + 1 >= end { return 1 }
+        return 0
+    }
+    if t.kind == 15 {
+        # an `if` chain. Conclusive only if it spans to `end` and all branches return.
+        let chainend = if_stmt_end(toks, start, end)
+        if chainend < end { return 0 }
+        # then-block open-brace
+        let mut bo = start + 1
+        let mut g = true
+        while g {
+            if bo >= end {
+                g = false
+            } else {
+                let bt = toks[bo]
+                if bt.kind == 11 {
+                    g = false
+                } else {
+                    bo = bo + 1
+                }
+            }
+        }
+        let bclose = match_brace(toks, bo, end)
+        if block_returns(toks, bo + 1, bclose) == 0 { return 0 }
+        # must have an else (otherwise control can fall through when cond false)
+        let at = bclose + 1
+        if at >= end { return 0 }
+        let et = toks[at]
+        if et.kind != 17 { return 0 }
+        let nxt = toks[at + 1]
+        if nxt.kind == 15 {
+            # else-if: recurse over the nested chain
+            return block_returns(toks, at + 1, chainend)
+        }
+        # plain else: its brace interior must return
+        let mut eo = at + 1
+        let mut g2 = true
+        while g2 {
+            if eo >= end {
+                g2 = false
+            } else {
+                let ot = toks[eo]
+                if ot.kind == 11 {
+                    g2 = false
+                } else {
+                    eo = eo + 1
+                }
+            }
+        }
+        let eclose = match_brace(toks, eo, end)
+        return block_returns(toks, eo + 1, eclose)
+    }
+    return 0
+}
 
 # Generate code for the statements in token range [i, end). Returns the next free
 # SSA temp. Handles `let`, assignment, `return`, and `while` (recursing for the
@@ -2678,6 +2744,19 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             pint(lbl)
             emit_str(":")
             putchar(10)
+            # If both branches return (control can't reach the merge), the merge
+            # block is dead -- terminate it with `unreachable` so it's valid even
+            # when no statement follows (LLVM requires a terminator per block).
+            if has_else == 1 {
+                let then_ret = block_returns(toks, bopen + 1, bclose)
+                let else_ret = block_returns(toks, ebody_start, ebody_end)
+                if then_ret == 1 {
+                    if else_ret == 1 {
+                        emit_str("  unreachable")
+                        putchar(10)
+                    }
+                }
+            }
             if has_else == 1 { i = resume } else { i = bclose + 1 }
         } else {
             i = i + 1
