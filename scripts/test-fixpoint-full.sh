@@ -410,6 +410,17 @@ check "$FP12EE_C fn run() {{ return run_program(\`fn fac(n) {{ return if n <= 1 
 check "$FP12EE_C fn run() {{ return run_program(\`fn fac(n) {{ return if n <= 1 then 1 else n * fac(n - 1) }} return fac(4);\`) }}; return run();" 24
 check "$FP12EE_C fn run() {{ return run_program(\`fn sum(n) {{ return if n <= 0 then 0 else n + sum(n - 1) }} return sum(10);\`) }}; return run();" 55
 
+# --- FP12ff: `.len` on a List-of-structs (was misread as a struct-field GEP) ---
+# A List-of-structs var carries the element struct type in its slot's sty, so
+# `toks.len` wrongly entered the struct-field-read branch -> field_index("len")
+# = -1 -> GEP [nf x i64] index -1 = garbage. Fix: the struct-field branch now
+# requires a scalar struct var (is_arr != 2); a List var's `.X` is always `.len`.
+# (Values kept <= 255 to avoid 8-bit exit-code truncation.)
+# toks.len * 10 + toks[0].value + toks[2].value + toks[4].value = 50 + 12+3+4 = 69
+check "struct Token {{ kind, value }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 0, value: 12 }}); toks.push(Token {{ kind: 1, value: 0 }}); toks.push(Token {{ kind: 0, value: 3 }}); toks.push(Token {{ kind: 1, value: 0 }}); toks.push(Token {{ kind: 0, value: 4 }}); return toks.len * 10 + toks[0].value + toks[2].value + toks[4].value }}; return run();" 69
+# toks.len * 30 (List-of-structs length in a multiplicative term) = 150
+check "struct Token {{ kind, value }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 0, value: 1 }}); toks.push(Token {{ kind: 0, value: 2 }}); toks.push(Token {{ kind: 0, value: 3 }}); toks.push(Token {{ kind: 0, value: 4 }}); toks.push(Token {{ kind: 0, value: 5 }}); return toks.len * 30 }}; return run();" 150
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'

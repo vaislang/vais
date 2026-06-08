@@ -976,8 +976,12 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 putchar(10)
                 return Op { kind: 1, val: lv, next: lv + 1 }
             }
+            # struct field read requires a SCALAR struct var. A List var (is_arr=2)
+            # carries the element struct type in sty too, but `lst.X` is ALWAYS the
+            # List `.len` (a List has no addressable struct fields) -- so List vars
+            # must skip this branch and fall through to the `.len` length load below.
             let sti = sty_of(slots, src, t.nstart, t.nlen)
-            if sti >= 0 {
+            if sti >= 0 and karr != 2 {
                 let fld = toks[i + 2]
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
                 let nf = struct_nfields(defs, sti)
