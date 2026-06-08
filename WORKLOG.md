@@ -1,5 +1,30 @@
 # nl WORKLOG
 
+## 2026-06-08 (우선순위 ④: 🎯🎯🎯 FP12kk — print(...) 보간 codegen = fixpoint.nl codegen 단계 갭 해결)
+- **재평가로 우선순위 격상**: `print`을 비-critical로 봤으나(eval 경로엔 불필요), recon 결과 **fixpoint.nl/fixpoint_codegen의
+  codegen 단계가 `print("ret i64 {value}")`/`print("%t{counter} = {op_s}...")`로 LLVM IR을 emit** — 즉 print 보간은
+  self-host **codegen 단계의 핵심 emission 메커니즘**. 진짜 부트스트랩 갭이었음(메모 "print 비필요"는 eval 경로 한정 오판).
+- **기존 동작**: 트랜스파일러가 `print(`→`puts(`로 rewrite → fixpoint_full이 `puts(strlit)`를 generic call `@puts(i8*)`로 emit.
+  갭=보간 `{var}`가 리터럴 바이트로 남아 치환 안 됨.
+- **clang 스킴 격리검증 먼저**(run=14): `@.fmt = c"ret i64 %d\0A\00"` + `call i32(i8*,...) @printf(fmt, i64 %v)`,
+  literal `%`→`%%`. 검증 후 구현.
+- **구현**: ①helpers `is_puts`/`interp_end`(유효 `{ident}`만 보간, lone `{`=리터럴)/`fmt_len`/`emit_fmt_bytes`(`{ident}`→`%d`,
+  `%`→`%%`, trailing `\n`). ②pre-pass `emit_str_globals`가 brace-bearing 리터럴에 `@.fmt<nstart>` 추가 emit. ③`declare @puts`/
+  `@printf` 모듈헤더. ④gen_factor call-handler가 `is_puts`+단일 string-lit-with-interp arg면 generic 대신 printf emit(각 `{ident}`
+  변수를 i64 load→vararg). Int-only(현 self-host 보간 전부 Int; `{op_s}` string-interp는 follow-up).
+- **🎯🎯🎯 핵심 발견 = lone-`{` vs `{ident}` 모호성**: 트랜스파일러가 nl `{{`(리터럴brace)와 보간 `{x}`를 **둘 다 단일 brace로**
+  compile()에 전달 → 구분 불가. **해결=Vais lexer 규칙 채택**: `{`+식별자+`}`만 보간, lone `{`(예 `define i64 @main() {`의
+  꼬리 brace)=리터럴. interp_end가 이 규칙 단일구현(fmt_len/emit_fmt_bytes/arg-loader 3곳 공유).
+- 실측 stdout: plain `hello world`, 단일 `ret i64 42`, 2-interp+리터럴% `%t3 = add i64 7`, 3-interp `1 2 3`, 루프var
+  `line 0/1/2`, **🎯 `emit(99)`→`define i64 @main() {`(lone brace 리터럴)+`  ret i64 99`(보간)+`}`** = 리터럴/보간 구분 end-to-end.
+- **🎯🎯🎯 capstone(메타 검증)**: fixpoint.nl 원형 통째(tokenize→재귀eval→`emit_ir(value)` print IR)를 fixpoint_full로 컴파일+실행
+  → `2 + 3 * 4` 입력에 **self-host 컴파일러가 `define i64 @main() {{ ret i64 14 }}` LLVM IR을 stdout으로 emit**. = front+codegen
+  전체 self-host arc 동작(source→tokens→value→**emitted IR text**).
+- e2e fixpoint-full **153→160 PASS / 0 FAIL**(+6 stdout 가드 +1 printf IR sanity), 값정확성 96/96, 회귀0.
+- 교훈: **"비-critical" 판정은 recon으로 재검증**(print이 codegen 단계 핵심임을 grep으로 발견=메모 오판 정정)/아키텍처 변경 전 clang
+  스킴 격리(run=14)/모호성은 단일 규칙(interp_end)으로 3곳 공유=일관성/`{{var}}` 하베스트 이스케이프(outer transpiler가 `\{var\}`로
+  →compile()에 `{var}`)/printf는 puts와 newline 시맨틱 맞춰야(trailing `\n`).
+
 ## 2026-06-08 (우선순위 ③: FP12jj — `for <var> in lo..hi` codegen, 마지막 일반 nl 루프 구문)
 - 사용자 지시 순서대로 ③ for 착수(① 컴파일러 버그 ② -> List 완료 후). fixpoint_full이 **모든 일반 nl 구문을 codegen**
   하도록 마지막 루프 구문 `for`를 추가(완전성 win). self-host 코어엔 for 사용 0곳이라 비-blocking이었으나, codegen 능력

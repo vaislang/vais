@@ -76,6 +76,66 @@ fn is_putchar(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 6] != 114 { return 0 }
     return 1
 }
+# Is src[a..a+alen] the builtin name "puts" (p u t s)? The transpiler rewrites
+# nl `print(` to `puts(`, so a print statement arrives here as a puts call.
+fn is_puts(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 4 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 117 { return 0 }
+    if src[a + 2] != 116 { return 0 }
+    if src[a + 3] != 115 { return 0 }
+    return 1
+}
+# Does the string-literal source range [start, start+len) contain a `{` (123)?
+# Marks a print/puts argument that needs printf interpolation rather than a plain
+# puts. (A `{{` escape never survives to here -- the transpiler already collapsed
+# nl `{{` to a single brace only for non-interpolated braces; interpolation `{x}`
+# arrives as a single `{`.)
+#
+# Disambiguating literal braces from interpolation: by the time a string reaches
+# compile(), the transpiler has collapsed BOTH nl `{{` (literal brace) and an
+# interpolation `{x}` to single braces, so they look identical. The rule (matching
+# Vais's own lexer): `{` begins an interpolation ONLY when immediately followed by
+# an identifier (letter/`_`, then letters/digits/`_`) and a closing `}`. A lone `{`
+# (e.g. the trailing `{` of `define i64 @main() {`) is a literal brace.
+#
+# interp_end: if src[start+k] == '{' starts a valid `{ident}`, returns the offset
+# (relative to start) of the closing `}`; else returns -1. `len` bounds the scan.
+fn interp_end(src: Str, start: Int, len: Int, k: Int) -> Int {
+    if k >= len { return 0 - 1 }
+    if src[start + k] != 123 { return 0 - 1 }
+    let mut j = k + 1
+    # first char after `{` must be an identifier start (A-Z a-z _)
+    if j >= len { return 0 - 1 }
+    let c0 = src[start + j]
+    let lo = c0 >= 97 and c0 <= 122
+    let up = c0 >= 65 and c0 <= 90
+    let us = c0 == 95
+    if lo == false and up == false and us == false { return 0 - 1 }
+    j = j + 1
+    let mut go = true
+    while go {
+        if j >= len { return 0 - 1 }
+        let c = src[start + j]
+        if c == 125 { return j }
+        let dl = c >= 97 and c <= 122
+        let du = c >= 65 and c <= 90
+        let dd = c >= 48 and c <= 57
+        let ds = c == 95
+        if dl == false and du == false and dd == false and ds == false { return 0 - 1 }
+        j = j + 1
+    }
+    return 0 - 1
+}
+fn lit_has_brace(src: Str, start: Int, len: Int) -> Int {
+    let mut k = 0
+    while k < len {
+        let e = interp_end(src, start, len, k)
+        if e >= 0 { return 1 }
+        k = k + 1
+    }
+    return 0
+}
 fn kw3(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int) -> Int {
     if alen != 3 { return 0 }
     if src[a] != w0 { return 0 }
@@ -269,6 +329,58 @@ fn emit_bytes(src: Str, start: Int, len: Int) -> Int {
     }
     return 0
 }
+# printf format length: bytes the @.fmt<nstart> global occupies for the literal
+# [start,start+len), where each `%` doubles to `%%`, each VALID `{ident}` becomes the
+# 2-byte `%d`, a lone `{` (literal brace) passes through 1:1, other bytes 1:1, plus a
+# trailing newline (puts adds one, so printf must too). The \00 is added by the
+# caller. Int-only interpolation for now ({ident} -> %d).
+fn fmt_len(src: Str, start: Int, len: Int) -> Int {
+    let mut k = 0
+    let mut out = 0
+    while k < len {
+        let c = src[start + k]
+        let e = interp_end(src, start, len, k)
+        if e >= 0 {
+            # valid `{ident}` -> `%d` (2 bytes); advance past the closing `}`
+            out = out + 2
+            k = e + 1
+        } else if c == 37 {
+            out = out + 2
+            k = k + 1
+        } else {
+            out = out + 1
+            k = k + 1
+        }
+    }
+    # trailing newline to match puts() line semantics
+    return out + 1
+}
+# Emit the printf format bytes for the literal [start,start+len): `%` -> `%%`,
+# valid `{ident}` -> `%d`, lone `{`/other bytes verbatim, then a trailing `\0A`
+# newline (to match puts). (Caller wraps in c"..\00".)
+fn emit_fmt_bytes(src: Str, start: Int, len: Int) -> Int {
+    let mut k = 0
+    while k < len {
+        let c = src[start + k]
+        let e = interp_end(src, start, len, k)
+        if e >= 0 {
+            putchar(37)
+            putchar(100)
+            k = e + 1
+        } else if c == 37 {
+            putchar(37)
+            putchar(37)
+            k = k + 1
+        } else {
+            putchar(c)
+            k = k + 1
+        }
+    }
+    # trailing newline, written as the LLVM escape \0A
+    emit_str("\\0A")
+    return 0
+}
+
 # Module pre-pass: emit a `@.s<nstart> = [len+1 x i8] c"..\00"` global for every
 # string-literal token, keyed by the literal's source nstart (unique per literal).
 fn emit_str_globals(toks: &List<Token>, src: Str, n: Int) -> Int {
@@ -284,6 +396,18 @@ fn emit_str_globals(toks: &List<Token>, src: Str, n: Int) -> Int {
             emit_bytes(src, t.nstart, t.nlen)
             emit_str("\\00\"")
             putchar(10)
+            # a brace-bearing literal also gets a printf format global @.fmt<nstart>
+            # ({ident} -> %d, % -> %%) for the print(...) interpolation path.
+            if lit_has_brace(src, t.nstart, t.nlen) == 1 {
+                emit_str("@.fmt")
+                pint(t.nstart)
+                emit_str(" = private constant [")
+                pint(fmt_len(src, t.nstart, t.nlen) + 1)
+                emit_str(" x i8] c\"")
+                emit_fmt_bytes(src, t.nstart, t.nlen)
+                emit_str("\\00\"")
+                putchar(10)
+            }
         }
         i = i + 1
     }
@@ -732,6 +856,86 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
     if t.kind == 1 {
         let nx = toks[i + 1]
         if nx.kind == 9 {
+            # print(...) with interpolation: the transpiler rewrote print->puts, so
+            # this is a `puts(<string-lit>)` whose literal contains `{ident}`. Emit a
+            # printf call against the @.fmt<nstart> format global, loading each
+            # interpolated Int variable as an i64 vararg. (Int-only for now.)
+            let sarg = toks[i + 2]
+            if is_puts(src, t.nstart, t.nlen) == 1 {
+                if sarg.kind == 28 {
+                    if lit_has_brace(src, sarg.nstart, sarg.nlen) == 1 {
+                        # 1) load each {ident} operand to a temp; remember temp numbers
+                        #    in a small fixed array (up to 8 interpolations).
+                        let mut iv0 = 0
+                        let mut iv1 = 0
+                        let mut iv2 = 0
+                        let mut iv3 = 0
+                        let mut iv4 = 0
+                        let mut iv5 = 0
+                        let mut iv6 = 0
+                        let mut iv7 = 0
+                        let mut nv = 0
+                        let mut cc2 = counter
+                        let mut k = 0
+                        while k < sarg.nlen {
+                            let e = interp_end(src, sarg.nstart, sarg.nlen, k)
+                            if e >= 0 {
+                                # valid `{ident}`: the ident is [k+1, e); load it.
+                                let astart = sarg.nstart + k + 1
+                                let alen = e - (k + 1)
+                                let vslot = find_slot(slots, src, astart, alen)
+                                emit_str("  %t")
+                                pint(cc2)
+                                emit_str(" = load i64, i64* %v")
+                                pint(vslot)
+                                putchar(10)
+                                if nv == 0 { iv0 = cc2 }
+                                else if nv == 1 { iv1 = cc2 }
+                                else if nv == 2 { iv2 = cc2 }
+                                else if nv == 3 { iv3 = cc2 }
+                                else if nv == 4 { iv4 = cc2 }
+                                else if nv == 5 { iv5 = cc2 }
+                                else if nv == 6 { iv6 = cc2 }
+                                else { iv7 = cc2 }
+                                nv = nv + 1
+                                cc2 = cc2 + 1
+                                k = e + 1
+                            } else {
+                                k = k + 1
+                            }
+                        }
+                        # 2) emit the printf call with the format global + i64 varargs
+                        let flen = fmt_len(src, sarg.nstart, sarg.nlen) + 1
+                        let dest = cc2
+                        emit_str("  %t")
+                        pint(dest)
+                        emit_str(" = call i32 (i8*, ...) @printf(i8* getelementptr([")
+                        pint(flen)
+                        emit_str(" x i8], [")
+                        pint(flen)
+                        emit_str(" x i8]* @.fmt")
+                        pint(sarg.nstart)
+                        emit_str(", i64 0, i64 0)")
+                        let mut vi = 0
+                        while vi < nv {
+                            let mut vt = iv0
+                            if vi == 1 { vt = iv1 }
+                            else if vi == 2 { vt = iv2 }
+                            else if vi == 3 { vt = iv3 }
+                            else if vi == 4 { vt = iv4 }
+                            else if vi == 5 { vt = iv5 }
+                            else if vi == 6 { vt = iv6 }
+                            else if vi == 7 { vt = iv7 }
+                            emit_str(", i64 %t")
+                            pint(vt)
+                            vi = vi + 1
+                        }
+                        emit_str(")")
+                        putchar(10)
+                        return Op { kind: 1, val: dest, next: dest + 1 }
+                    }
+                }
+            }
             # call: name ( arg0 [, ... up to arg7] ) — 0..8 args.
             let close = paren_end(toks, i + 2)
             # evaluate each argument (between commas at depth 0), capturing its op.
@@ -3551,6 +3755,12 @@ fn compile(src: Str) -> Int {
     # declare the C putchar so generated code can emit output (the nl compiler's
     # own job is emitting IR text via putchar).
     emit_str("declare i32 @putchar(i32)")
+    putchar(10)
+    # declare puts + printf so generated programs can `print(...)` (the transpiler
+    # rewrites print->puts; brace-bearing literals route to printf interpolation).
+    emit_str("declare i32 @puts(i8*)")
+    putchar(10)
+    emit_str("declare i32 @printf(i8*, ...)")
     putchar(10)
     # module-level string-literal globals (one per literal, keyed by source pos)
     emit_str_globals(&toks, src, n)

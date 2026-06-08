@@ -524,6 +524,36 @@ PYEOF
 check_out "fn show() {{ putchar(72); putchar(73); return 0 }}; return show();" "HI"
 check_out "fn stars(n) {{ let mut i = 0; while i < n {{ putchar(42); i = i + 1 }}; return 0 }}; return stars(5);" "*****"
 
+# --- FP12kk: print(...) with interpolation (the self-host codegen emit stage) ---
+# The transpiler rewrites print->puts; a brace-bearing literal routes to a printf
+# call against a @.fmt<nstart> format global ({ident} -> %d, % -> %%, trailing \n).
+# Disambiguation: a lone `{` (e.g. the trailing brace of `define ... {`) is literal;
+# only a valid `{ident}` interpolates. Interpolation braces are written {{var}} so
+# the outer transpiler unescapes them to single braces reaching compile(). Note:
+# $(...) in check_out strips the trailing newline, so single-line wants omit it.
+check_out "print(\`hello world\`); return 0;" "hello world"
+check_out "let v = 42; print(\`ret i64 {{v}}\`); return 0;" "ret i64 42"
+check_out "let c = 3; let lv = 7; print(\`%t{{c}} = add i64 {{lv}}\`); return 0;" "%t3 = add i64 7"
+check_out "let a = 1; let b = 2; let cc = 3; print(\`{{a}} {{b}} {{cc}}\`); return 0;" "1 2 3"
+check_out "let mut i = 0; while i < 3 {{ print(\`line {{i}}\`); i = i + 1 }}; return 0;" "$(printf 'line 0\nline 1\nline 2')"
+# the actual fixpoint.nl emit_ir codegen tail: a LONE literal `{` then an
+# interpolation, proving literal-vs-interp disambiguation end to end.
+check_out "fn emit(value) {{ print(\`define i64 @main() {{\`); print(\`  ret i64 {{value}}\`); print(\`}}\`); return 0 }}; return emit(99);" "$(printf 'define i64 @main() {\n  ret i64 99\n}')"
+# Sanity: the interpolation path emits a printf call against a @.fmt format global.
+tmp="$(mktemp -d)"
+PROG="let v = 7; print(\`x={{v}}\`); return 0;" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+import os, re, sys
+src = open(sys.argv[1]).read()
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+open(sys.argv[2], "w").write(src)
+PY
+python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
+( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
+"$tmp/c" > "$tmp/out.ll"
+if grep -q '@.fmt' "$tmp/out.ll" && grep -q 'call i32 (i8\*, ...) @printf' "$tmp/out.ll"; then
+  echo "  PASS print interpolation emits @.fmt global + printf call";
+else echo "  FAIL did not emit printf interpolation"; cat "$tmp/out.ll"; fail=1; fi
+
 # Sanity: a string program emits a module-level string global + i8* alloca +
 # byte load (GEP i8 / load i8 / zext) — string codegen integrated, not scalar.
 tmp="$(mktemp -d)"
