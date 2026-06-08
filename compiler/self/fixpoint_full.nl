@@ -29,7 +29,8 @@ struct Fn {
     p0ty: Int, p1ty: Int, p2ty: Int, p3ty: Int,
     p4ty: Int, p5ty: Int, p6ty: Int, p7ty: Int,
     npar: Int,
-    bstart: Int, bend: Int
+    bstart: Int, bend: Int,
+    retlist: Int, retty: Int
 }
 # A struct type: name range + up to 6 field name ranges + field count.
 struct StructDef {
@@ -371,7 +372,7 @@ fn find_fn(fns: &List<Fn>, src: Str, qs: Int, ql: Int) -> Int {
 }
 
 # Build the function table by scanning for `fn name ( param ) { ... }`.
-fn build_fns(toks: &List<Token>, src: Str, n: Int) -> List<Fn> {
+fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> List<Fn> {
     let mut fns: List<Fn> = []
     let mut i = 0
     while i < n {
@@ -464,6 +465,28 @@ fn build_fns(toks: &List<Token>, src: Str, n: Int) -> List<Fn> {
                 let bt = toks[bo]
                 if bt.kind == 11 { gb = false } else { bo = bo + 1 }
             }
+            # Return type: a `-> List<Type>` between ')' and '{' makes this a
+            # list-returning function (compiled via a hidden out-param). Scan
+            # [q+1, bo) for a `List` ident; retty = element struct type (or -1).
+            let mut retlist = 0
+            let mut retty = 0 - 1
+            let mut rq = q + 1
+            while rq < bo {
+                let rt = toks[rq]
+                if rt.kind == 1 {
+                    if kw4(src, rt.nstart, rt.nlen, 76, 105, 115, 116) == 1 {
+                        let lt = toks[rq + 1]
+                        if lt.kind == 18 {
+                            retlist = 1
+                            let et = toks[rq + 2]
+                            if et.kind == 1 {
+                                retty = struct_index_by_name(defs, src, et.nstart, et.nlen)
+                            }
+                        }
+                    }
+                }
+                rq = rq + 1
+            }
             let bstart = bo + 1
             let mut be = bstart
             let mut depth = 1
@@ -488,7 +511,8 @@ fn build_fns(toks: &List<Token>, src: Str, n: Int) -> List<Fn> {
                 p0ty: p0ty, p1ty: p1ty, p2ty: p2ty, p3ty: p3ty,
                 p4ty: p4ty, p5ty: p5ty, p6ty: p6ty, p7ty: p7ty,
                 npar: npar,
-                bstart: bstart, bend: be
+                bstart: bstart, bend: be,
+                retlist: retlist, retty: retty
             })
             i = be + 1
         } else {
@@ -1985,7 +2009,7 @@ fn block_returns(toks: &List<Token>, start: Int, end: Int) -> Int {
 # Generate code for the statements in token range [i, end). Returns the next free
 # SSA temp. Handles `let`, assignment, `return`, and `while` (recursing for the
 # loop body). Labels reuse temp numbers to stay unique.
-fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i0: Int, end: Int, counter0: Int) -> Int {
+fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i0: Int, end: Int, counter0: Int, retout: Int) -> Int {
     let mut i = i0
     let mut counter = counter0
     while i < end {
@@ -2587,11 +2611,176 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             }
         } else if t.kind == 8 {
             let stop = find_semi(toks, i + 1, end)
-            let e = gen_expr(toks, slots, fns, defs, src, i + 1, stop, counter)
-            emit_str("  ret i64 ")
-            emit_op(e)
-            putchar(10)
-            counter = e.next
+            # `return <listvar>` in a `-> List` function (retout >= 0): copy the
+            # list local's buffer into the hidden out-param %a<retout>, then ret 0.
+            let rnext = toks[i + 1]
+            let mut did_listret = 0
+            if retout >= 0 {
+                if rnext.kind == 1 {
+                    if stop == i + 2 {
+                        let rk = isarr_of(slots, src, rnext.nstart, rnext.nlen)
+                        if rk == 2 {
+                            did_listret = 1
+                            let rslot = find_slot(slots, src, rnext.nstart, rnext.nlen)
+                            let rsty = sty_of(slots, src, rnext.nstart, rnext.nlen)
+                            let mut stride = 1
+                            let mut lenidx = 63
+                            let mut bufsz = 64
+                            if rsty >= 0 {
+                                stride = struct_nfields(defs, rsty)
+                                lenidx = 64 * stride
+                                bufsz = 64 * stride + 1
+                            }
+                            # load the local length (%v<rslot+1>) and store to out[lenidx]
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = load i64, i64* %v")
+                            pint(rslot + 1)
+                            putchar(10)
+                            let rlen = counter
+                            counter = counter + 1
+                            # n = len * stride (number of data slots to copy)
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = mul i64 %t")
+                            pint(rlen)
+                            emit_str(", ")
+                            pint(stride)
+                            putchar(10)
+                            let ncopy = counter
+                            counter = counter + 1
+                            # copy loop: k = 0; while k < ncopy { out[k] = src[k]; k++ }
+                            emit_str("  %v")
+                            pint(rslot + 1)
+                            emit_str("c = alloca i64")
+                            putchar(10)
+                            emit_str("  store i64 0, i64* %v")
+                            pint(rslot + 1)
+                            emit_str("c")
+                            putchar(10)
+                            let lbl = counter
+                            counter = counter + 1
+                            emit_str("  br label %rcL")
+                            pint(lbl)
+                            putchar(10)
+                            emit_str("rcL")
+                            pint(lbl)
+                            emit_str(":")
+                            putchar(10)
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = load i64, i64* %v")
+                            pint(rslot + 1)
+                            emit_str("c")
+                            putchar(10)
+                            let kv = counter
+                            counter = counter + 1
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = icmp slt i64 %t")
+                            pint(kv)
+                            emit_str(", %t")
+                            pint(ncopy)
+                            putchar(10)
+                            let kc = counter
+                            counter = counter + 1
+                            emit_str("  br i1 %t")
+                            pint(kc)
+                            emit_str(", label %rcB")
+                            pint(lbl)
+                            emit_str(", label %rcD")
+                            pint(lbl)
+                            putchar(10)
+                            emit_str("rcB")
+                            pint(lbl)
+                            emit_str(":")
+                            putchar(10)
+                            # src elem ptr = [bufsz x i64]* %v<rslot> [0, kv]
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = getelementptr [")
+                            pint(bufsz)
+                            emit_str(" x i64], [")
+                            pint(bufsz)
+                            emit_str(" x i64]* %v")
+                            pint(rslot)
+                            emit_str(", i64 0, i64 %t")
+                            pint(kv)
+                            putchar(10)
+                            let sp = counter
+                            counter = counter + 1
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = load i64, i64* %t")
+                            pint(sp)
+                            putchar(10)
+                            let sv = counter
+                            counter = counter + 1
+                            # dst elem ptr = i64* %a<retout> + kv
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = getelementptr i64, i64* %a")
+                            pint(retout)
+                            emit_str(", i64 %t")
+                            pint(kv)
+                            putchar(10)
+                            let dp = counter
+                            counter = counter + 1
+                            emit_str("  store i64 %t")
+                            pint(sv)
+                            emit_str(", i64* %t")
+                            pint(dp)
+                            putchar(10)
+                            # k = k + 1
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = add i64 %t")
+                            pint(kv)
+                            emit_str(", 1")
+                            putchar(10)
+                            let kn = counter
+                            counter = counter + 1
+                            emit_str("  store i64 %t")
+                            pint(kn)
+                            emit_str(", i64* %v")
+                            pint(rslot + 1)
+                            emit_str("c")
+                            putchar(10)
+                            emit_str("  br label %rcL")
+                            pint(lbl)
+                            putchar(10)
+                            emit_str("rcD")
+                            pint(lbl)
+                            emit_str(":")
+                            putchar(10)
+                            # store length into out[lenidx]
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = getelementptr i64, i64* %a")
+                            pint(retout)
+                            emit_str(", i64 ")
+                            pint(lenidx)
+                            putchar(10)
+                            let lp = counter
+                            counter = counter + 1
+                            emit_str("  store i64 %t")
+                            pint(rlen)
+                            emit_str(", i64* %t")
+                            pint(lp)
+                            putchar(10)
+                            emit_str("  ret i64 0")
+                            putchar(10)
+                        }
+                    }
+                }
+            }
+            if did_listret == 0 {
+                let e = gen_expr(toks, slots, fns, defs, src, i + 1, stop, counter)
+                emit_str("  ret i64 ")
+                emit_op(e)
+                putchar(10)
+                counter = e.next
+            }
             i = stop + 1
         } else if t.kind == 22 {
             # while <lhs> <cmp> <rhs> { <body> }
@@ -2641,7 +2830,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             emit_str(":")
             putchar(10)
             # body statements are [bopen+1, bclose)
-            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, cnum + 1)
+            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, cnum + 1, retout)
             emit_str("  br label %loop")
             pint(lbl)
             putchar(10)
@@ -2725,7 +2914,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             pint(lbl)
             emit_str(":")
             putchar(10)
-            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, cnum + 1)
+            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, cnum + 1, retout)
             emit_str("  br label %imerge")
             pint(lbl)
             putchar(10)
@@ -2735,7 +2924,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             emit_str(":")
             putchar(10)
             if has_else == 1 {
-                counter = gen_stmts(toks, slots, fns, defs, src, ebody_start, ebody_end, counter)
+                counter = gen_stmts(toks, slots, fns, defs, src, ebody_start, ebody_end, counter, retout)
             }
             emit_str("  br label %imerge")
             pint(lbl)
@@ -2909,7 +3098,7 @@ fn gen_top(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, slots: &L
                     else { j = j + 1 }
                 }
             }
-            counter = gen_stmts(toks, slots, fns, defs, src, i, j, counter)
+            counter = gen_stmts(toks, slots, fns, defs, src, i, j, counter, 0 - 1)
             i = j
         }
     }
@@ -2933,6 +3122,13 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         if pty == 1 { emit_str("i8* %a") } else if pty == 2 { emit_str("i64* %a") } else { emit_str("i64 %a") }
         pint(pi)
         pi = pi + 1
+    }
+    # A `-> List` function takes a hidden trailing out-param `i64* %a<npar>`: the
+    # caller passes a buffer, and `return <listvar>` copies the list into it.
+    if f.retlist == 1 {
+        if f.npar > 0 { emit_str(", ") }
+        emit_str("i64* %a")
+        pint(f.npar)
     }
     emit_str(") {")
     putchar(10)
@@ -2999,7 +3195,10 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
     }
     # body locals start at slot npar
     let allslots = add_local_slots(slots, toks, defs, src, f.bstart, f.bend, f.npar, n)
-    let last = gen_stmts(toks, &allslots, fns, defs, src, f.bstart, f.bend, 1)
+    # retout = the hidden out-param index for a `-> List` function, else -1.
+    let mut retout = 0 - 1
+    if f.retlist == 1 { retout = f.npar }
+    let last = gen_stmts(toks, &allslots, fns, defs, src, f.bstart, f.bend, 1, retout)
     emit_str("}")
     putchar(10)
     return 0
@@ -3014,8 +3213,8 @@ fn compile(src: Str) -> Int {
     putchar(10)
     # module-level string-literal globals (one per literal, keyed by source pos)
     emit_str_globals(&toks, src, n)
-    let fns = build_fns(&toks, src, n)
     let defs = build_defs(&toks, n)
+    let fns = build_fns(&toks, &defs, src, n)
     # emit each user function
     let m = fns.len()
     let mut fi = 0
