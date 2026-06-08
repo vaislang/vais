@@ -1,5 +1,21 @@
 # nl WORKLOG
 
+## 2026-06-08 (우선순위 순차: TRACKED 컴파일러 버그 2건 근본수정)
+- 사용자 지시: 우선순위 정해 순차 진행. 우선순위 ① 컴파일러 버그(잘못된 결과) > ② -> List > ③ for > ④ print.
+- **FP12ff (commit 0d64afb): `.len` on List-of-structs 오인 수정.** List-of-structs var는 slot.sty에 원소타입 보유 →
+  gen_factor `name.X`서 struct-field branch(sty>=0)가 List `.len` branch보다 먼저 → `toks.len`이 field로 오인→
+  `field_index(Token,"len")`=-1→`getelementptr [nf x i64] ... -1` garbage. **fix: struct-field branch에 `karr != 2` 가드**
+  (List var의 `.X`는 항상 `.len`). 격리로 "garbage가 우연히 맞는 값 읽어 `.len + x`는 맞아보임"(8-bit 절단도 겹침:
+  519%256=7/512%256=0) 규명. 실측(값≤255): `toks.len * 10 + 3 fields`=69, `toks.len * 30`=150. e2e 129→131.
+- **FP12gg (commit 580ca3a): all-return if/else-if 빈 merge block 수정.** `if {{return}} else if {{return}} else {{return}}`가
+  도달불가 빈 `imerge` block 남김(터미네이터 없음→invalid IR "expected instruction opcode"); 4-way assign 변종도 오염.
+  **fix: block_returns() 헬퍼**(range가 `return`이거나 모든 branch return하는 if-chain인지 재귀판정)+if-handler가 양 branch
+  return시 dead merge에 `unreachable` emit. block_returns는 **multi-line if/else**로 작성(line기반 transpiler가 single-line
+  nested if/else 처리못함=초기 FF-BUILD-FAIL). 실측: 2/3/4-way all-return(16/111/161), assign 변종 회귀OK. e2e 131→135.
+- 두 버그 task chip 전부 dismiss. e2e fixpoint-full **129→135**(+6 가드), 값정확성 96/96, 회귀0.
+- 교훈: probe "OK"가 garbage-우연일치일 수 있음(IR 직접확인 필수)/8-bit 절단과 진짜버그 동시발생 분리/line기반 transpiler는
+  single-line nested if/else 못함→multi-line. 다음 우선순위=② `-> List` 직접반환.
+
 ## 2026-06-08 (/loop: FP12ee — 🎯🎯🎯🎯🎯 재귀 함수언어 end-to-end (if-expr + 재귀))
 - **가장 깊은 self-host 통합**: source-level **재귀** 함수언어를 fixpoint_full이 단일 프로그램으로 컴파일.
 - fixpoint3.nl eval_value grep: 함수 body=`return if <cond> then <a> else <b>`; eval_value가 if-expr 평가

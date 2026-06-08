@@ -26,13 +26,13 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 부트스트랩 갭 #1~#5b(string/List param, List-of-structs 로컬+param, typed let, bool, `!=`, let-bind-LOS, else-if-in-loop 등 20 능력추가) 전부 해결.
 
 **현재 게이트 상태**:
-- self-host e2e **fixpoint-full 129 PASS / 0 FAIL** (이 세션 90→129).
+- self-host e2e **fixpoint-full 135 PASS / 0 FAIL** (이 세션 90→135).
 - 값-정확성 aggregate **96/96** (예제코퍼스 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
 1. **fixpoint.nl 편의갭**(비-blocking): `-> List` 직접반환(#4, out-param 우회존재, clang스킴 run=42 검증) / for(1곳) / print interp(3곳).
-2. **TRACKED 컴파일러 버그**(task chip, 실전 영향없음): 3+레벨 nested else-if 빈 merge block / `.len`+`[i].field` 혼합 multi-term식.
+2. ~~**TRACKED 컴파일러 버그 2건**~~ **✅ 둘 다 근본수정**(2026-06-08): (ⓐ) all-return if/else-if 빈 merge block → block_returns()+`unreachable`(FP12gg, 580ca3a); (ⓑ) `.len` on List-of-structs가 struct-field GEP로 오인 → struct-field branch에 `karr != 2` 가드(FP12ff, 0d64afb). 둘 다 task chip dismiss.
 3. **실제 수천줄 소스 통째 부트스트랩**(months급, TRACKED) — 능력 완비, 순수 규모 문제(개별 tier는 fragment+통합으로 전부 동작 확증).
 4. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
 3. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
