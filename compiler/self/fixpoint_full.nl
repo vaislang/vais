@@ -370,6 +370,24 @@ fn find_fn(fns: &List<Fn>, src: Str, qs: Int, ql: Int) -> Int {
     }
     return 0 - 1
 }
+# If the token at `vp` is a call `<ident> (` to a List-returning function, returns
+# that function's retty (element struct type, >= -1). Returns -2 if the RHS is not
+# a call to a list-returning function. Lets `let ys = build()` size ys's buffer
+# and pass it as the callee's hidden out-param.
+fn call_retty(toks: &List<Token>, fns: &List<Fn>, src: Str, vp: Int) -> Int {
+    let r = toks[vp]
+    if r.kind == 1 {
+        let after = toks[vp + 1]
+        if after.kind == 9 {
+            let idx = find_fn(fns, src, r.nstart, r.nlen)
+            if idx >= 0 {
+                let f = fns[idx]
+                if f.retlist == 1 { return f.retty }
+            }
+        }
+    }
+    return 0 - 2
+}
 
 # Build the function table by scanning for `fn name ( param ) { ... }`.
 fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> List<Fn> {
@@ -1755,7 +1773,7 @@ fn call_arg_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, start
     return 0 - 1
 }
 
-fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>, src: Str, start: Int, end: Int, slot0: Int, n: Int) -> List<Slot> {
+fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, start: Int, end: Int, slot0: Int, n: Int) -> List<Slot> {
     let mut slots = base
     let mut next_slot = slot0
     let mut i = start
@@ -1795,6 +1813,29 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, defs: &List<StructDef>,
                 emit_str(" x i64]")
                 putchar(10)
                 next_slot = next_slot + 1
+            } else if call_retty(toks, fns, src, vp) != 0 - 2 {
+                # `let ys = build()` where build returns a List: ys is a List local
+                # ([64*nf+1 x i64] for struct elems, sty = retty) that the callee
+                # fills via the hidden out-param. Allocate buffer + length slot here;
+                # the call + length-sync are emitted in gen_stmts.
+                let rty = call_retty(toks, fns, src, vp)
+                let mut cbuf = 64
+                if rty >= 0 { cbuf = 64 * struct_nfields(defs, rty) + 1 }
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: rty })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca [")
+                pint(cbuf)
+                emit_str(" x i64]")
+                putchar(10)
+                emit_str("  %v")
+                pint(next_slot + 1)
+                emit_str(" = alloca i64")
+                putchar(10)
+                emit_str("  store i64 0, i64* %v")
+                pint(next_slot + 1)
+                putchar(10)
+                next_slot = next_slot + 2
             } else if rhs_is_list(toks, src, npos) == 1 {
                 # List: buffer at %v<slot>, length at %v<slot+1>=0.
                 # Element type: a `: List<Type>` annotation is authoritative (covers
@@ -2160,6 +2201,162 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     q = vstop + 1
                 }
                 let stop = find_semi(toks, bclose, end)
+                i = stop + 1
+            } else if call_retty(toks, fns, src, vp) != 0 - 2 {
+                # `let ys = build(args)` -- build returns a List. Emit the call with
+                # build's regular args plus a hidden trailing `i64*` = ys's buffer
+                # base; build copies its result into it. Then sync ys.len from the
+                # out-param's length slot (buf[63] scalar / buf[64*nf] struct).
+                let cname = toks[vp]
+                let rty = call_retty(toks, fns, src, vp)
+                let mut stride = 1
+                let mut lenidx = 63
+                let mut cbuf = 64
+                if rty >= 0 {
+                    stride = struct_nfields(defs, rty)
+                    lenidx = 64 * stride
+                    cbuf = 64 * stride + 1
+                }
+                let cclose = paren_end(toks, vp + 2)
+                # evaluate each comma-separated arg (scalar/string/List) into Ops.
+                let mut a0k = 0
+                let mut a0v = 0
+                let mut a1k = 0
+                let mut a1v = 0
+                let mut a2k = 0
+                let mut a2v = 0
+                let mut nca = 0
+                let mut cc = counter
+                let mut q = vp + 2
+                let mut ga = true
+                while ga {
+                    if q >= cclose { ga = false }
+                    else {
+                        let astop = arg_comma_end(toks, q, cclose)
+                        let argt = toks[q]
+                        let mut ek = 0
+                        let mut ev = 0
+                        let mut handled = 0
+                        if argt.kind == 1 {
+                            if astop == q + 1 {
+                                let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
+                                if aarr == 2 {
+                                    # local List arg passed by pointer (write len->buf[63] then base)
+                                    let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
+                                    let alsty = sty_of(slots, src, argt.nstart, argt.nlen)
+                                    let mut albuf = 64
+                                    let mut alidx = 63
+                                    if alsty >= 0 { albuf = 64 * struct_nfields(defs, alsty) + 1; alidx = 64 * struct_nfields(defs, alsty) }
+                                    emit_str("  %t")
+                                    pint(cc)
+                                    emit_str(" = load i64, i64* %v")
+                                    pint(lslot + 1)
+                                    putchar(10)
+                                    let lc = cc
+                                    emit_str("  %t")
+                                    pint(lc + 1)
+                                    emit_str(" = getelementptr [")
+                                    pint(albuf)
+                                    emit_str(" x i64], [")
+                                    pint(albuf)
+                                    emit_str(" x i64]* %v")
+                                    pint(lslot)
+                                    emit_str(", i64 0, i64 ")
+                                    pint(alidx)
+                                    putchar(10)
+                                    emit_str("  store i64 %t")
+                                    pint(lc)
+                                    emit_str(", i64* %t")
+                                    pint(lc + 1)
+                                    putchar(10)
+                                    emit_str("  %t")
+                                    pint(lc + 2)
+                                    emit_str(" = getelementptr [")
+                                    pint(albuf)
+                                    emit_str(" x i64], [")
+                                    pint(albuf)
+                                    emit_str(" x i64]* %v")
+                                    pint(lslot)
+                                    emit_str(", i64 0, i64 0")
+                                    putchar(10)
+                                    ek = 3
+                                    ev = lc + 2
+                                    cc = lc + 3
+                                    handled = 1
+                                }
+                            }
+                        }
+                        if handled == 0 {
+                            let e = gen_expr(toks, slots, fns, defs, src, q, astop, cc)
+                            cc = e.next
+                            ek = e.kind
+                            ev = e.val
+                        }
+                        if nca == 0 { a0k = ek; a0v = ev }
+                        else if nca == 1 { a1k = ek; a1v = ev }
+                        else { a2k = ek; a2v = ev }
+                        nca = nca + 1
+                        q = astop + 1
+                    }
+                }
+                # ys buffer base pointer
+                let ybase = cc
+                emit_str("  %t")
+                pint(ybase)
+                emit_str(" = getelementptr [")
+                pint(cbuf)
+                emit_str(" x i64], [")
+                pint(cbuf)
+                emit_str(" x i64]* %v")
+                pint(slot)
+                emit_str(", i64 0, i64 0")
+                putchar(10)
+                counter = ybase + 1
+                # emit the void call: build(args..., i64* ybase)
+                emit_str("  call void @")
+                emit_name(src, cname.nstart, cname.nlen)
+                emit_str("(")
+                let mut ai = 0
+                while ai < nca {
+                    if ai > 0 { emit_str(", ") }
+                    let mut ak = a0k
+                    let mut av = a0v
+                    if ai == 1 { ak = a1k; av = a1v } else if ai == 2 { ak = a2k; av = a2v }
+                    if ak == 2 { emit_str("i8* ") } else if ak == 3 { emit_str("i64* ") } else { emit_str("i64 ") }
+                    emit_op(Op { kind: ak, val: av, next: 0 })
+                    ai = ai + 1
+                }
+                if nca > 0 { emit_str(", ") }
+                emit_str("i64* %t")
+                pint(ybase)
+                emit_str(")")
+                putchar(10)
+                # sync ys.len (%v<slot+1>) from the out-param's length slot
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = getelementptr [")
+                pint(cbuf)
+                emit_str(" x i64], [")
+                pint(cbuf)
+                emit_str(" x i64]* %v")
+                pint(slot)
+                emit_str(", i64 0, i64 ")
+                pint(lenidx)
+                putchar(10)
+                let lgp = counter
+                counter = counter + 1
+                emit_str("  %t")
+                pint(counter)
+                emit_str(" = load i64, i64* %t")
+                pint(lgp)
+                putchar(10)
+                emit_str("  store i64 %t")
+                pint(counter)
+                emit_str(", i64* %v")
+                pint(slot + 1)
+                putchar(10)
+                counter = counter + 1
+                let stop = find_semi(toks, cclose, end)
                 i = stop + 1
             } else if rhs_is_list(toks, src, npos) == 1 {
                 # let lst = list() / [];  — alloca/len already emitted in collect; skip
@@ -2971,7 +3168,7 @@ fn skip_fn_def(toks: &List<Token>, i: Int, n: Int) -> Int {
 }
 
 # Collect top-level `let` slots (emitting allocas), skipping fn-def bodies.
-fn collect_top_slots(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> List<Slot> {
+fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, n: Int) -> List<Slot> {
     let mut slots: List<Slot> = []
     let mut next_slot = 0
     let mut i = 0
@@ -3194,7 +3391,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         s2 = s2 + 1
     }
     # body locals start at slot npar
-    let allslots = add_local_slots(slots, toks, defs, src, f.bstart, f.bend, f.npar, n)
+    let allslots = add_local_slots(slots, toks, fns, defs, src, f.bstart, f.bend, f.npar, n)
     # retout = the hidden out-param index for a `-> List` function, else -1.
     let mut retout = 0 - 1
     if f.retlist == 1 { retout = f.npar }
@@ -3226,7 +3423,7 @@ fn compile(src: Str) -> Int {
     # emit @main from top-level statements (skip fn defs)
     emit_str("define i64 @main() {")
     putchar(10)
-    let topslots = collect_top_slots(&toks, &defs, src, n)
+    let topslots = collect_top_slots(&toks, &fns, &defs, src, n)
     let last = gen_top(&toks, &fns, &defs, &topslots, src, n)
     emit_str("}")
     putchar(10)

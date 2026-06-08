@@ -435,6 +435,22 @@ check "fn f(c: Int) {{ if c == 0 {{ return 1 }} else if c == 1 {{ return 10 }} e
 # regression: same chain with assignment (merge IS reachable -- must still work)
 check "fn f(c: Int) {{ let mut r = 0; if c == 0 {{ r = 1 }} else if c == 1 {{ r = 10 }} else if c == 2 {{ r = 50 }} else {{ r = 100 }}; return r }}; fn run() {{ return f(0) + f(1) + f(2) + f(3) }}; return run();" 161
 
+# --- FP12hh: `-> List` direct return (fixpoint.nl's original tokenize shape) ---
+# `fn build() -> List<T> { let xs = list(); ...; return xs }` compiles via a
+# hidden out-param: build gets a trailing `i64* %a<npar>`, `return xs` copies xs's
+# buffer into it, and the caller `let ys = build()` allocates ys's buffer and
+# passes it. Restores fixpoint.nl's `fn tokenize(src) -> List<Token>` (gap #4).
+# scalar List return + index
+check "fn build() -> List<Int> {{ let xs = list(); xs.push(10); xs.push(20); xs.push(12); return xs }}; fn run() {{ let ys = build(); return ys[0] + ys[1] + ys[2] }}; return run();" 42
+# returned list length survives the copy
+check "fn build() -> List<Int> {{ let xs = list(); xs.push(1); xs.push(2); xs.push(3); xs.push(4); return xs }}; fn run() {{ let ys = build(); return ys.len * 10 + ys[3] }}; return run();" 44
+# List-of-structs return + field read
+check "struct Tok {{ kind, val }}; fn build() -> List<Tok> {{ let xs = list(); xs.push(Tok {{ kind: 1, val: 30 }}); xs.push(Tok {{ kind: 2, val: 12 }}); return xs }}; fn run() {{ let ys = build(); return ys[0].val + ys[1].val }}; return run();" 42
+# retlist with an argument
+check "fn make(n: Int) -> List<Int> {{ let xs = list(); xs.push(n); xs.push(n + 1); return xs }}; fn run() {{ let ys = make(20); return ys[0] + ys[1] }}; return run();" 41
+# fixpoint.nl's original shape: tokenize(src) -> List<Token>, then consume
+check "struct Token {{ kind, value }}; fn tokenize(src: Str) -> List<Token> {{ let toks = list(); let mut i = 0; while i < src.len() {{ let c = src[i]; if c >= 48 and c <= 57 {{ toks.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ toks.push(Token {{ kind: 2, value: 0 }}) }}; i = i + 1 }}; return toks }}; fn run() {{ let toks = tokenize(\`1a2a3\`); let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; return run();" 6
+
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
 PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'
