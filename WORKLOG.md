@@ -1,5 +1,37 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: full-source self-host 긴 게이트 자동화 + 1세대 `fixpoint.nl` 재소비)
+- `scripts/test-fixpoint-full-self.sh` 추가. 긴 게이트를 별도 스크립트로 자동화:
+  1) 실제 `compiler/self/fixpoint_full.nl` 전체 소스를 `tools/embed_self_source.py`로 주입,
+  2) `nl2vais` + `vaisc`로 seed compiler를 빌드,
+  3) 생성 compiler IR을 clang/run,
+  4) 그 결과물까지 clang/run해 exit 42 확인,
+  5) 이어서 1세대 컴파일러를 실제 `compiler/self/fixpoint.nl`로 retarget해 final IR `ret i64 24`와 final binary exit 24까지 확인.
+- full-source → real-file 재소비 중 드러난 스케일/정규화 갭 수정:
+  - `fixpoint_full.nl`: generated List buffer capacity를 64에서 `list_cap() = 4096` 기반으로 일반화. 실제 파일 크기에서
+    `List<Token>`/`List<Fn>`이 64를 초과해 crash하던 문제 해결.
+  - `fixpoint_full.nl`: double-quoted string literal tokenizer 지원 추가. nested `compile("...`backtick`...")` 소스를 보존하기 위한 기반.
+  - `fixpoint_full.nl`: `gen_factor` 안의 interpolation scan 지역 변수 `e`를 `istop`으로 rename해, 함수 전체 slot collision으로
+    이후 `let e = gen_expr(...)`의 `Op` field read가 깨지던 문제 해결.
+  - `tools/embed_self_source.py`: one-line block/body semicolon 보강, `else_if` 식별자를 `else` keyword로 오인하던
+    `needs_line_semi` 버그 수정, double-quoted 문자열 안 backtick 보존, nested string brace collapse를 double/backtick 양쪽에서 처리.
+  - `tools/embed_self_source.py`: 일반 source 문자열의 backslash bytes는 보존하되, compiler emitter helper
+    `emit_str("...")` 인자만 `\\`/`\"`를 풀도록 분리. 이로써 source-file backslash smoke(`"\\0A"` length 4)와
+    self-source emitter의 LLVM null suffix(`\00"`)가 동시에 통과.
+- 새 긴 게이트 실측:
+  - full-source `fixpoint_full.nl` self probe: generated compiler IR `963501` bytes, `@main` 1개, negative GEP 0개,
+    generated compiler runs, emitted IR `ret i64 42`, emitted binary exit 42.
+  - first-generation compiler consumes real `fixpoint.nl`: generated compiler IR `968121` bytes, `@main` 1개,
+    negative GEP 0개, emitted compiler runs, final IR `ret i64 24`, final binary exit 24.
+- 검증:
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test.sh` = `RESULT: pass=96 fail=0 skip=0`
+  - `git diff --check` = clean
+- 의미: 수동 full-source probe가 자동 긴 게이트로 승격됐고, 생성된 1세대 컴파일러가 실제 file-sized `fixpoint.nl`
+  입력을 다시 컴파일하는 반복 self-host 경로까지 확인됐다. 남은 엔드게임은 codegen gap보다 stage output 비교 oracle과
+  retarget 확대(`fixpoint2/3/full`) 설계다.
+
 ## 2026-06-09 (계속: FP12qq — `fixpoint_full.nl` full-source probe struct ABI 해소)
 - FP12pp에서 확정한 첫 blocker였던 **struct-valued function params/returns**를 `fixpoint_full.nl` 안에서 해결.
   `-> Struct` 함수는 List 반환과 같은 hidden out-param ABI로 낮추고, struct 파라미터는 incoming `i64*`를 로컬

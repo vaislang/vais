@@ -75,22 +75,28 @@ That IR runs to 120.
   literal `%` in an interpolated string was consumed as a printf specifier
   (compiler e711dac1).
 
-## Current full-source probe
+## Current full-source gate
 
 As of 2026-06-09, the source-file harness can feed the actual
 `compiler/self/fixpoint_full.nl` source back into `fixpoint_full.nl` and produce
-a working first-generation compiler. The measured probe is:
+a working first-generation compiler. The long gate is automated as
+`scripts/test-fixpoint-full-self.sh`:
 
 1. normalize/embed the full source with `tools/embed_self_source.py`
 2. transpile with `compiler/transpiler/nl2vais.py`
 3. build the generated Vais compiler with `vaisc`
 4. run that compiler to emit LLVM IR
 5. clang the emitted IR and run the resulting program
+6. retarget that first-generation compiler to the real
+   `compiler/self/fixpoint.nl`, then clang/run the final IR
 
-The latest run emitted a 954648-byte compiler IR module with exactly one
-`@main`, zero negative GEPs, passed clang, ran the generated compiler
-successfully, then clang'd and ran the second-stage emitted IR with exit code
-42.
+The latest run emitted a 963501-byte compiler IR module for the full
+`fixpoint_full.nl` self probe with exactly one `@main`, zero negative GEPs,
+passed clang, ran the generated compiler successfully, then clang'd and ran the
+second-stage emitted IR with exit code 42. The same gate then emitted a
+968121-byte first-generation compiler for the real `fixpoint.nl`, ran that
+compiler, verified the final IR contains `ret i64 24`, clang'd it, and ran the
+final binary with exit code 24.
 
 The FP12pp blocker was **struct-valued function parameters/returns**:
 `fixpoint_full.nl` uses helpers such as `emit_op(o: Op)`,
@@ -105,11 +111,11 @@ forward through the hidden out-param.
 
 - The compilers handle an **arithmetic + function + recursion subset** of nl
   (multi-digit ints, `+ - *`, `let`, `fn`, calls, `if/then/else`, `< > ==`).
-- A **repeatable self-compilation fixpoint** still needs a stronger automated
-  gate: the generated compiler should be run on file-sized input again, ideally
-  with stage output comparison or another stable oracle. The current milestone is
-  one step before that: the full `fixpoint_full.nl` source now builds a working
-  compiler that can emit and run a small program.
+- A **repeatable self-compilation fixpoint** still needs stage comparison or
+  another stable oracle. The current milestone is stronger than a snippet probe:
+  the full `fixpoint_full.nl` source builds a working compiler, and a
+  first-generation compiler can consume the real `fixpoint.nl` file again and
+  produce/run final IR.
 - Upstream: two Vais compiler bugs were root-fixed to enable this work
   (`&Vec` borrow recursion, literal-`%` escaping), both gate-verified
   (`check-integrity.sh INTEGRITY OK`, zero regression).
@@ -186,10 +192,11 @@ that scans a string byte by byte into a `List` (verified e2e: `fn tok() { let s 
 "..."; let xs = list(); while i < s.len() { xs.push(s[i]); i = i + 1 }; ... }`).
 
 The remaining gap to a *literal* repeatable self-compilation fixpoint is now a
-gate shape, not a known codegen blocker: the actual `fixpoint_full.nl` source
-builds a first-generation compiler, that compiler emits LLVM IR for its embedded
-sample, and the emitted program runs. What exists today is a verified, unified
-code generator for the core constructs, source-file smokes for the first three
-self-host tiers, and a full-source first-generation compiler probe. The next
-step is to automate that long probe and make the generated compiler consume
-file-sized input again so stages can be compared.
+stage-comparison problem, not a known codegen blocker: the actual
+`fixpoint_full.nl` source builds a first-generation compiler, that compiler emits
+LLVM IR for its embedded sample, and the emitted program runs. The automated long
+gate also proves a first-generation compiler can consume a real file-sized
+`fixpoint.nl` input again and produce/run final IR (`ret i64 24`). The next step
+is to define a stable stage oracle, then compare generated compiler output across
+repeated stages or retarget the generated compiler to progressively larger real
+sources.

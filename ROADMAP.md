@@ -13,7 +13,7 @@
 
 ---
 
-## ⚑ 상태 (2026-06-09): 🎯🎯🎯🎯🎯 실제 소스 부트스트랩 — `fixpoint_full.nl` full-source 1세대 컴파일러 probe 통과
+## ⚑ 상태 (2026-06-09): 🎯🎯🎯🎯🎯 실제 소스 부트스트랩 — full-source + 1세대 파일 재소비 게이트 통과
 
 P0 게이트 / P1 코퍼스 / P2 트랜스파일러 / P3 에러인프라 / P4 std시작 / P5 레퍼런스 = **DONE**.
 L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
@@ -27,10 +27,12 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 
 **현재 게이트 상태**:
 - self-host e2e `scripts/test-fixpoint-full.sh` **OK** (struct ABI/List alias/metadata/division 회귀 포함).
+- long self-host gate `scripts/test-fixpoint-full-self.sh` **OK**:
+  - 실제 `compiler/self/fixpoint_full.nl` 전체 소스 → generated compiler IR `963501` bytes, `@main` 1개,
+    negative GEP 0개 → clang/run → emitted binary exit **42**.
+  - 그 1세대 컴파일러를 실제 `compiler/self/fixpoint.nl`로 retarget → generated compiler IR `968121` bytes,
+    `@main` 1개, negative GEP 0개 → emitted compiler 실행 → final IR `ret i64 24` → clang/run exit **24**.
 - 값-정확성 aggregate **96/96** (예제코퍼스 + self-host codegen 모듈).
-- full-source 수동 probe: 실제 `compiler/self/fixpoint_full.nl` 전체 소스 → generated compiler IR `954648` bytes,
-  `@main` 1개, negative GEP 0개 → clang OK → generated compiler 실행 OK → emitted IR clang OK →
-  emitted binary exit **42**.
 - 트랜스파일러-단위/nl-check-단위 유지.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
@@ -42,9 +44,14 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 1f. ~~**실제 `fixpoint3.nl` source-file bootstrap smoke**~~ **✅ 세 번째 파일 게이트 해결**(FP12oo, 2026-06-08): 실제 `compiler/self/fixpoint3.nl` 원본의 multi-line `Fn` struct/`fns.push(Fn { ... })`, nested string brace escape, 8-field `Fn` metadata, Str param retlist call, `List[index].field` scalar assignment, `-> List` void signature 갭을 해결. 실측: 정규화된 실제 `fixpoint3.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 120` LLVM IR emit → emitted IR clang/run exit 120. = **실제 파일 입력 자동 게이트가 재귀 함수언어 tier까지 확장.**
 1g. ~~**`fixpoint_full.nl` full-source probe — struct ABI blocker**~~ **✅ full-source 1세대 컴파일러 probe 통과**(FP12pp~qq, 2026-06-09): 실제 `compiler/self/fixpoint_full.nl` 전체를 source-file harness로 주입. embed helper의 regex replacement backslash 손실과 LLVM C-string `\`/`"` escaping 갭을 먼저 해결한 뒤, `emit_op(o: Op)`/`emit_binop(..., l: Op, r: Op)`/`gen_factor -> Op` 계열이 요구한 **struct-valued function params/returns**를 hidden out-param ABI로 지원. 추가로 List param alias, 10-arg `-> List` call path, internal `Fn`/`StructDef` metadata field lookup, `/` operator를 닫음. 실측: normalize/embed → `nl2vais` → `vaisc build` → generated compiler IR `954648` bytes, `@main` 1개, negative GEP 0개 → clang/run → emitted IR clang/run exit 42. = **현재 `fixpoint_full.nl` 전체 소스가 `fixpoint_full`로 컴파일되어 실행 가능한 컴파일러를 만들고, 그 컴파일러가 다시 nl 프로그램을 LLVM IR로 emit/run한다.**
 2. ~~**TRACKED 컴파일러 버그 2건**~~ **✅ 둘 다 근본수정**(2026-06-08): (ⓐ) all-return if/else-if 빈 merge block → block_returns()+`unreachable`(FP12gg, 580ca3a); (ⓑ) `.len` on List-of-structs가 struct-field GEP로 오인 → struct-field branch에 `karr != 2` 가드(FP12ff, 0d64afb). 둘 다 task chip dismiss.
-3. **반복 self-host/fixpoint 게이트 자동화**(TRACKED) — `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl` 파일 smoke는 통과했고, 최종 `fixpoint_full.nl` 3.9k줄 full-source 1세대 compiler probe도 통과. 다음은 이 수동 probe를 `scripts/test-fixpoint-full.sh` 또는 별도 긴 게이트로 자동화하고, generated compiler가 다시 파일/대형 소스를 입력받는 반복 루프(비교 가능한 stage output)를 정리하는 것.
-4. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
-3. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
+3. ~~**반복 self-host/fixpoint 긴 게이트 자동화**~~ **✅ 해결**(2026-06-09): `scripts/test-fixpoint-full-self.sh`
+   추가. 최종 `fixpoint_full.nl` 3.9k줄 full-source 1세대 compiler probe뿐 아니라, generated compiler가 실제
+   `fixpoint.nl` 파일을 다시 입력받아 final IR `ret i64 24`를 emit/run하는 반복 경로까지 자동화.
+4. **다음 self-host 엔드게임**: stage output 비교용 stable oracle 정의, 또는 1세대 컴파일러 retarget 대상을
+   `fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`로 확대해 반복 stage를 정량화. 현재는 codegen blocker가 아니라
+   stage 비교/게이트 설계 문제.
+5. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
+6. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
 
 ---
 

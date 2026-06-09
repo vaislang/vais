@@ -241,15 +241,17 @@ fn tokenize(src: Str) -> List<Token> {
         let c = src[i]
         if is_space(c) {
             i = i + 1
-        } else if c == 96 {
-            # string literal delimited by backtick (96); kind 28 carries the
-            # content source range (nstart/nlen) and length (value).
+        } else if c == 96 or c == 34 {
+            # string literal delimited by backtick (96) or double quote (34);
+            # kind 28 carries the content source range (nstart/nlen) and length.
+            let delim = c
             let sstart = i + 1
             let mut j = sstart
             let mut sgo = true
             while sgo {
                 if j >= n { sgo = false }
-                else if src[j] == 96 { sgo = false }
+                else if delim == 34 and src[j] == 92 { j = j + 2 }
+                else if src[j] == delim { sgo = false }
                 else { j = j + 1 }
             }
             toks.push(Token { kind: 28, value: j - sstart, nstart: sstart, nlen: j - sstart })
@@ -961,6 +963,13 @@ fn emit_op(o: Op) -> Int {
     return 0
 }
 
+# Fixed capacity for generated List buffers. Early self-host stages used 64,
+# which is enough for snippets but not for a first-generation compiler reading a
+# real source file again. 4096 covers fixpoint.nl/fixpoint2.nl-sized inputs while
+# keeping stack allocas small enough for the current generated compiler.
+fn list_cap() -> Int { return 4096 }
+fn list_lenidx() -> Int { return list_cap() - 1 }
+
 # After a call that passed List-local slot `lslot` by pointer, copy the length the
 # callee wrote into buf[63] back into the local's length slot (%v<lslot+1>), so the
 # caller's xs.len / further passes see pushes. No-op if lslot < 0. Returns counter.
@@ -1060,11 +1069,11 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         let mut cc2 = counter
                         let mut k = 0
                         while k < sarg.nlen {
-                            let e = interp_end(src, sarg.nstart, sarg.nlen, k)
-                            if e >= 0 {
+                            let istop = interp_end(src, sarg.nstart, sarg.nlen, k)
+                            if istop >= 0 {
                                 # valid `{ident}`: the ident is [k+1, e); load it.
                                 let astart = sarg.nstart + k + 1
-                                let alen = e - (k + 1)
+                                let alen = istop - (k + 1)
                                 let vslot = find_slot(slots, src, astart, alen)
                                 let is_str_arg = isarr_of(slots, src, astart, alen) == 3
                                 emit_str("  %t")
@@ -1085,7 +1094,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                                 else { iv7 = cc2; ik7 = vk }
                                 nv = nv + 1
                                 cc2 = cc2 + 1
-                                k = e + 1
+                                k = istop + 1
                             } else {
                                 k = k + 1
                             }
@@ -1161,26 +1170,26 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let mut ls7 = 0 - 1
             let mut ls8 = 0 - 1
             let mut ls9 = 0 - 1
-            let mut li0 = 63
-            let mut li1 = 63
-            let mut li2 = 63
-            let mut li3 = 63
-            let mut li4 = 63
-            let mut li5 = 63
-            let mut li6 = 63
-            let mut li7 = 63
-            let mut li8 = 63
-            let mut li9 = 63
-            let mut lb0 = 64
-            let mut lb1 = 64
-            let mut lb2 = 64
-            let mut lb3 = 64
-            let mut lb4 = 64
-            let mut lb5 = 64
-            let mut lb6 = 64
-            let mut lb7 = 64
-            let mut lb8 = 64
-            let mut lb9 = 64
+            let mut li0 = list_lenidx()
+            let mut li1 = list_lenidx()
+            let mut li2 = list_lenidx()
+            let mut li3 = list_lenidx()
+            let mut li4 = list_lenidx()
+            let mut li5 = list_lenidx()
+            let mut li6 = list_lenidx()
+            let mut li7 = list_lenidx()
+            let mut li8 = list_lenidx()
+            let mut li9 = list_lenidx()
+            let mut lb0 = list_cap()
+            let mut lb1 = list_cap()
+            let mut lb2 = list_cap()
+            let mut lb3 = list_cap()
+            let mut lb4 = list_cap()
+            let mut lb5 = list_cap()
+            let mut lb6 = list_cap()
+            let mut lb7 = list_cap()
+            let mut lb8 = list_cap()
+            let mut lb9 = list_cap()
             let mut cc = counter
             let mut q = i + 2
             let mut ga = true
@@ -1206,12 +1215,12 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                                 #   scalar List  -> length at [63], buffer [64 x i64]
                                 #   List<struct> -> length at [64*nf], buffer [64*nf+1]
                                 let alsty = sty_of(slots, src, argt.nstart, argt.nlen)
-                                let mut alenidx = 63
-                                let mut albufsz = 64
+                                let mut alenidx = list_lenidx()
+                                let mut albufsz = list_cap()
                                 if alsty >= 0 {
                                     let anf = struct_nfields(defs, alsty)
-                                    alenidx = 64 * anf
-                                    albufsz = 64 * anf + 1
+                                    alenidx = list_cap() * anf
+                                    albufsz = list_cap() * anf + 1
                                 }
                                 # load length (%v<slot+1>) and store to buf[lenidx]
                                 let lc = cc
@@ -1534,8 +1543,8 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 # length at [64*nf] (past the strided data region).
                 let pslot = find_slot(slots, src, t.nstart, t.nlen)
                 let plsty = sty_of(slots, src, t.nstart, t.nlen)
-                let mut plenidx2 = 63
-                if plsty >= 0 { plenidx2 = 64 * struct_nfields(defs, plsty) }
+                let mut plenidx2 = list_lenidx()
+                if plsty >= 0 { plenidx2 = list_cap() * struct_nfields(defs, plsty) }
                 let bp = counter
                 emit_str("  %t")
                 pint(bp)
@@ -1721,7 +1730,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     let fld = toks[lbend + 2]
                     let lslot = find_slot(slots, src, t.nstart, t.nlen)
                     let nf = struct_nfields(defs, lsty2)
-                    let lbuf = 64 * nf + 1
+                    let lbuf = list_cap() * nf + 1
                     let fi = field_index(defs, lsty2, src, fld.nstart, fld.nlen)
                     let lidx = gen_expr(toks, slots, fns, defs, src, i + 2, lbend, counter)
                     let mulc = lidx.next
@@ -2392,9 +2401,9 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
                 # fills via the hidden out-param. Allocate buffer + length slot here;
                 # the call + length-sync are emitted in gen_stmts.
                 let rty = call_retty(toks, fns, src, vp)
-                let mut cbuf = 64
-                if rty >= 0 { cbuf = 64 * struct_nfields(defs, rty) + 1 }
-                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: rty })
+                let mut cbuf = list_cap()
+                if rty >= 0 { cbuf = list_cap() * struct_nfields(defs, rty) + 1 }
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: list_cap() , sty: rty })
                 emit_str("  %v")
                 pint(next_slot)
                 emit_str(" = alloca [")
@@ -2428,13 +2437,13 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
                 let mut lest = let_anno_elem_sty(toks, defs, src, npos)
                 if lest < 0 { lest = list_elem_sty(toks, defs, src, vp, end, name.nstart, name.nlen) }
                 if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, vp, end, name.nstart, name.nlen, n) }
-                let mut lbuf = 64
+                let mut lbuf = list_cap()
                 # struct-element Lists: [64*nf + 1 x i64] -- the +1 reserves a length
                 # header at index 64*nf so the buffer can be passed by-pointer as a
                 # List-of-structs param (length stored there, past the data region;
                 # avoids the buf[63] collision that stride>1 would otherwise hit).
-                if lest >= 0 { lbuf = 64 * struct_nfields(defs, lest) + 1 }
-                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: lest })
+                if lest >= 0 { lbuf = list_cap() * struct_nfields(defs, lest) + 1 }
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: list_cap() , sty: lest })
                 emit_str("  %v")
                 pint(next_slot)
                 emit_str(" = alloca [")
@@ -2678,26 +2687,26 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
     let mut ls7 = 0 - 1
     let mut ls8 = 0 - 1
     let mut ls9 = 0 - 1
-    let mut li0 = 63
-    let mut li1 = 63
-    let mut li2 = 63
-    let mut li3 = 63
-    let mut li4 = 63
-    let mut li5 = 63
-    let mut li6 = 63
-    let mut li7 = 63
-    let mut li8 = 63
-    let mut li9 = 63
-    let mut lb0 = 64
-    let mut lb1 = 64
-    let mut lb2 = 64
-    let mut lb3 = 64
-    let mut lb4 = 64
-    let mut lb5 = 64
-    let mut lb6 = 64
-    let mut lb7 = 64
-    let mut lb8 = 64
-    let mut lb9 = 64
+    let mut li0 = list_lenidx()
+    let mut li1 = list_lenidx()
+    let mut li2 = list_lenidx()
+    let mut li3 = list_lenidx()
+    let mut li4 = list_lenidx()
+    let mut li5 = list_lenidx()
+    let mut li6 = list_lenidx()
+    let mut li7 = list_lenidx()
+    let mut li8 = list_lenidx()
+    let mut li9 = list_lenidx()
+    let mut lb0 = list_cap()
+    let mut lb1 = list_cap()
+    let mut lb2 = list_cap()
+    let mut lb3 = list_cap()
+    let mut lb4 = list_cap()
+    let mut lb5 = list_cap()
+    let mut lb6 = list_cap()
+    let mut lb7 = list_cap()
+    let mut lb8 = list_cap()
+    let mut lb9 = list_cap()
     let mut cc = counter
     let mut q = q0
     let mut ga = true
@@ -2716,12 +2725,12 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
                     if aarr == 2 {
                         let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
                         let alsty = sty_of(slots, src, argt.nstart, argt.nlen)
-                        let mut alenidx = 63
-                        let mut albufsz = 64
+                        let mut alenidx = list_lenidx()
+                        let mut albufsz = list_cap()
                         if alsty >= 0 {
                             let anf = struct_nfields(defs, alsty)
-                            alenidx = 64 * anf
-                            albufsz = 64 * anf + 1
+                            alenidx = list_cap() * anf
+                            albufsz = list_cap() * anf + 1
                         }
                         let lc = cc
                         emit_str("  %t")
@@ -2975,7 +2984,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     lbufptr = counter
                     counter = counter + 1
                 }
-                let lbufsz = 64 * lnf + 1
+                let lbufsz = list_cap() * lnf + 1
                 let mut fk = 0
                 while fk < lnf {
                     # source elem ptr = buf + (base + fk)
@@ -3109,12 +3118,12 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let cname = toks[vp]
                 let rty = call_retty(toks, fns, src, vp)
                 let mut stride = 1
-                let mut lenidx = 63
-                let mut cbuf = 64
+                let mut lenidx = list_lenidx()
+                let mut cbuf = list_cap()
                 if rty >= 0 {
                     stride = struct_nfields(defs, rty)
-                    lenidx = 64 * stride
-                    cbuf = 64 * stride + 1
+                    lenidx = list_cap() * stride
+                    cbuf = list_cap() * stride + 1
                 }
                 let cclose = paren_end(toks, vp + 2)
                 # evaluate each comma-separated arg (scalar/string/List) into Ops.
@@ -3158,9 +3167,9 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                                     # local List arg passed by pointer (write len->buf[63] then base)
                                     let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
                                     let alsty = sty_of(slots, src, argt.nstart, argt.nlen)
-                                    let mut albuf = 64
-                                    let mut alidx = 63
-                                    if alsty >= 0 { albuf = 64 * struct_nfields(defs, alsty) + 1; alidx = 64 * struct_nfields(defs, alsty) }
+                                    let mut albuf = list_cap()
+                                    let mut alidx = list_lenidx()
+                                    if alsty >= 0 { albuf = list_cap() * struct_nfields(defs, alsty) + 1; alidx = list_cap() * struct_nfields(defs, alsty) }
                                     emit_str("  %t")
                                     pint(cc)
                                     emit_str(" = load i64, i64* %v")
@@ -3522,7 +3531,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 # each field at ptr[len*nf + fi], len+1 -> ptr[64*nf].
                 let psslot = find_slot(slots, src, t.nstart, t.nlen)
                 let pnf = struct_nfields(defs, ppsty)
-                let plenidx = 64 * pnf
+                let plenidx = list_cap() * pnf
                 let psargstop = paren_end(toks, i + 4)
                 # load buffer ptr
                 emit_str("  %t")
@@ -3634,7 +3643,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 pint(plenp)
                 emit_str(" = getelementptr i64, i64* %t")
                 pint(pbp)
-                emit_str(", i64 63")
+                emit_str(", i64 ")
+                pint(list_lenidx())
                 putchar(10)
                 let plen = plenp + 1
                 emit_str("  %t")
@@ -3682,7 +3692,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     # field at buf[len*nf + field_index]; buffer is [64*nf+1 x i64]
                     # (the +1 length-header slot is unused for local push).
                     let nf = struct_nfields(defs, lsty)
-                    let lbuf = 64 * nf + 1
+                    let lbuf = list_cap() * nf + 1
                     # load len, compute base = len*nf
                     emit_str("  %t")
                     pint(counter)
@@ -3773,7 +3783,11 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                   counter = counter + 1
                   emit_str("  %t")
                   pint(counter)
-                  emit_str(" = getelementptr [64 x i64], [64 x i64]* %v")
+                  emit_str(" = getelementptr [")
+                  pint(list_cap())
+                  emit_str(" x i64], [")
+                  pint(list_cap())
+                  emit_str(" x i64]* %v")
                   pint(slot)
                   emit_str(", i64 0, i64 %t")
                   pint(lenc)
@@ -3969,12 +3983,12 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                             let rslot = find_slot(slots, src, rnext.nstart, rnext.nlen)
                             let rsty = sty_of(slots, src, rnext.nstart, rnext.nlen)
                             let mut stride = 1
-                            let mut lenidx = 63
-                            let mut bufsz = 64
+                            let mut lenidx = list_lenidx()
+                            let mut bufsz = list_cap()
                             if rsty >= 0 {
                                 stride = struct_nfields(defs, rsty)
-                                lenidx = 64 * stride
-                                bufsz = 64 * stride + 1
+                                lenidx = list_cap() * stride
+                                bufsz = list_cap() * stride + 1
                             }
                             # load the local length (%v<rslot+1>) and store to out[lenidx]
                             emit_str("  %t")
@@ -4120,10 +4134,10 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                             let rslotp = find_slot(slots, src, rnext.nstart, rnext.nlen)
                             let rstyp = sty_of(slots, src, rnext.nstart, rnext.nlen)
                             let mut stridep = 1
-                            let mut lenidxp = 63
+                            let mut lenidxp = list_lenidx()
                             if rstyp >= 0 {
                                 stridep = struct_nfields(defs, rstyp)
-                                lenidxp = 64 * stridep
+                                lenidxp = list_cap() * stridep
                             }
                             emit_str("  %t")
                             pint(counter)
@@ -4617,9 +4631,9 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
                 let mut lest = let_anno_elem_sty(toks, defs, src, npos)
                 if lest < 0 { lest = list_elem_sty(toks, defs, src, vp, n, name.nstart, name.nlen) }
                 if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, vp, n, name.nstart, name.nlen, n) }
-                let mut lbuf = 64
-                if lest >= 0 { lbuf = 64 * struct_nfields(defs, lest) + 1 }
-                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: 64 , sty: lest })
+                let mut lbuf = list_cap()
+                if lest >= 0 { lbuf = list_cap() * struct_nfields(defs, lest) + 1 }
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 2, alen: list_cap() , sty: lest })
                 emit_str("  %v")
                 pint(next_slot)
                 emit_str(" = alloca [")

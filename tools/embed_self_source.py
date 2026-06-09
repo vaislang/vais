@@ -17,6 +17,7 @@ from pathlib import Path
 
 
 COMPILE_RE = re.compile(r'compile\("(?:[^"\\]|\\.)*"\)')
+PRESERVED_DQUOTE_WITH_BACKTICK_RE = re.compile(r'"(?:[^"\\]|\\.)*`(?:[^"\\]|\\.)*"')
 
 
 def strip_comment(line: str) -> str:
@@ -48,8 +49,28 @@ def strip_comment(line: str) -> str:
 
 
 def double_strings_to_backticks(line: str) -> str:
+    def unescape_emit_body(body: str) -> str:
+        out: list[str] = []
+        i = 0
+        while i < len(body):
+            ch = body[i]
+            if ch == "\\" and i + 1 < len(body):
+                nxt = body[i + 1]
+                if nxt == "\\" or nxt == '"':
+                    out.append(nxt)
+                    i += 2
+                    continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+
     def repl(match: re.Match[str]) -> str:
         body = match.group(0)[1:-1]
+        if "`" in body:
+            return match.group(0)
+        prefix = line[: match.start()].rstrip()
+        if re.search(r"\bemit_str\s*\(\s*$", prefix):
+            body = unescape_emit_body(body)
         return "`" + body + "`"
 
     return re.sub(r'"(?:[^"\\]|\\.)*"', repl, line)
@@ -85,18 +106,30 @@ def strip_struct_field_types(program: str) -> str:
 
 def collapse_string_brace_escapes(program: str) -> str:
     out: list[str] = []
-    in_backtick = False
+    string_delim: str | None = None
+    escaped = False
     i = 0
     while i < len(program):
         ch = program[i]
-        if ch == "`":
-            in_backtick = not in_backtick
+        if escaped:
+            out.append(ch)
+            escaped = False
+            i += 1
+        elif string_delim == '"' and ch == "\\":
+            out.append(ch)
+            escaped = True
+            i += 1
+        elif ch in ('"', "`"):
+            if string_delim is None:
+                string_delim = ch
+            elif string_delim == ch:
+                string_delim = None
             out.append(ch)
             i += 1
-        elif in_backtick and program.startswith("{{", i):
+        elif string_delim is not None and program.startswith("{{", i):
             out.append("{")
             i += 2
-        elif in_backtick and program.startswith("}}", i):
+        elif string_delim is not None and program.startswith("}}", i):
             out.append("}")
             i += 2
         else:
@@ -105,13 +138,44 @@ def collapse_string_brace_escapes(program: str) -> str:
     return "".join(out)
 
 
+INLINE_STMT_RE = re.compile(
+    r"^(?:let\b|return\b|print\s*\(|putchar\s*\(|[A-Za-z_][A-Za-z0-9_]*(?:\s*=|\[|\.|\())"
+)
+
+
+def inline_body_needs_semi(body: str) -> bool:
+    stripped = body.strip()
+    if not stripped or stripped.endswith(";") or stripped.endswith("}"):
+        return False
+    if stripped.startswith(("if ", "else", "while ", "for ", "fn ", "struct ")):
+        return False
+    return INLINE_STMT_RE.match(stripped) is not None
+
+
 def add_inline_semis(line: str) -> str:
-    # Compact one-line helpers such as `fn is_digit(...) { return ... }`.
-    line = re.sub(
-        r"\breturn\s+([^{};]+)\s*}",
-        lambda m: "return " + m.group(1).strip() + "; }",
-        line,
-    )
+    # Compact one-line helpers such as `fn is_digit(...) { return ... }` and
+    # one-line branch bodies such as `if ok { go = false }`.
+    def block_repl(match: re.Match[str]) -> str:
+        body = match.group(1)
+        if inline_body_needs_semi(body):
+            return "{" + body.rstrip() + "; }"
+        return match.group(0)
+
+    prev = None
+    while prev != line:
+        prev = line
+        line = re.sub(r"\{([^{}]*)\}", block_repl, line)
+
+    def tail_repl(match: re.Match[str]) -> str:
+        body = match.group(1)
+        if inline_body_needs_semi(body):
+            return ";" + body.rstrip() + "; }"
+        return match.group(0)
+
+    prev = None
+    while prev != line:
+        prev = line
+        line = re.sub(r";([^{};]*)\s*}", tail_repl, line)
     return line
 
 
@@ -119,9 +183,15 @@ def needs_line_semi(line: str) -> bool:
     stripped = line.strip()
     if not stripped or stripped.endswith(";"):
         return False
-    if stripped.endswith("{") or stripped.endswith("}") or stripped.startswith("else"):
-        return False
     if stripped.startswith("} else") or stripped.startswith("struct "):
+        return False
+    if stripped.endswith("{") or stripped == "else" or stripped.startswith("else "):
+        return False
+    if stripped.endswith("}"):
+        if stripped.startswith(("let ", "return ")):
+            return True
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(\.|\[|\s*=)", stripped):
+            return True
         return False
     # Multi-line call endings, e.g. `fns.push(Fn { ... })`, need to remain a
     # separate statement after lines are joined into the compact source string.
@@ -142,7 +212,8 @@ def normalize_source(path: Path) -> str:
             continue
         line = double_strings_to_backticks(line)
         line = strip_one_line_struct_field_types(line)
-        line = add_inline_semis(line)
+        if PRESERVED_DQUOTE_WITH_BACKTICK_RE.search(line) is None:
+            line = add_inline_semis(line)
         if needs_line_semi(line):
             line = line.rstrip() + ";"
         out.append(line.strip())

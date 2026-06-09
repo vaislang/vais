@@ -13,8 +13,9 @@
 - **메인 산출물**: `compiler/self/fixpoint_full.nl` — nl로 작성한 self-host 컴파일러.
   입력 nl 프로그램 문자열을 받아 **토큰화 → 평가/codegen → LLVM IR을 emit**한다.
 - **현재 상태**: front(tokenize/eval) + codegen(print로 IR emit) 전체 self-host arc 동작.
-  세 self-host tier(산술 / 산술+변수 / 함수+재귀) 전부 source→value end-to-end.
-- **다음 목표**: 실제 수천 줄 소스 통째 부트스트랩(규모 문제) + 점진 인프라.
+  세 self-host tier(산술 / 산술+변수 / 함수+재귀) 전부 source→value end-to-end이고,
+  `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들며 그 컴파일러가 실제 `fixpoint.nl`을 다시 컴파일한다.
+- **다음 목표**: 반복 stage 비교 oracle 정의 + 1세대 retarget 확대(`fixpoint2/3/full`) + 점진 인프라.
 
 ---
 
@@ -50,6 +51,7 @@ sed -n '1,60p' WORKLOG.md
 sed -n '100,110p' compiler/self/SELF_HOST.md   # fixpoint_full 능력 행
 # 4) baseline 게이트 (작업 전 반드시 green 확인 — §3)
 bash scripts/test-fixpoint-full.sh   # self-host codegen e2e (160 테스트, 수십 분~ — 백그라운드 권장)
+bash scripts/test-fixpoint-full-self.sh # long full-source + first-generation file-reconsume gate
 bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host 모듈)
 ```
 
@@ -69,6 +71,7 @@ bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host
 | 게이트 | 명령 | 의미 |
 |--------|------|------|
 | **self-host e2e** | `bash scripts/test-fixpoint-full.sh` | `fixpoint_full.nl`이 nl 프로그램을 컴파일→IR→실행, **exit/stdout 값** 검증. 현재 **160/0**. |
+| **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.nl`을 다시 컴파일해 final IR exit 24까지 확인. 느린 긴 게이트. |
 | **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.nl`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **96/96**. |
 | 기타 tier별 | `scripts/test-fixpoint*.sh` | 개별 codegen 영역(array/list/str/struct/imperative 등) |
 
