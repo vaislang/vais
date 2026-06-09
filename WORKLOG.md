@@ -1,5 +1,21 @@
 # nl WORKLOG
 
+## 2026-06-10 (Vais 백엔드 갭 해소 — 리스트 리터럴 직접 인자 코어션)
+- `ROADMAP.md` TRACKED였던 `f([1,2,3])` → `Vec<T>` 파라미터 직접 전달 갭을 Vais compiler에서 해결.
+  typecheck가 함수 파라미터 기대 타입을 배열 리터럴에 전파하고, codegen이 inline 배열을 std `Vec<T>` layout으로
+  materialize해 by-value 인자로 전달한다.
+- 회귀 검증 중 드러난 Vais codegen span/type registry 오염도 함께 보강:
+  scalar field load의 emitted type 기록, 비교/논리 Binary의 TC span-bleed 컨테이너 업그레이드 차단,
+  조건 변환의 emitted LLVM type 우선 사용을 추가했다.
+- `examples/README.md` 미커버 목록에서 해당 항목 제거. `ROADMAP.md`/`AGENTS.md`의 잔여 Vais 갭 목록 갱신.
+- Vais 검증:
+  - `cargo test -p vaisc --test e2e e2e_phase256_vec_literal_direct_arg_full_build -- --nocapture` = pass
+  - `cargo test -p vais-types` = pass
+  - `cargo test -p vaisc --test e2e phase256_vec_borrow_recursion -- --nocapture` = pass
+  - `cargo build -p vaisc --release` = pass
+  - `cargo test -p vaisc --test e2e phase_package_full_build_smoke -- --nocapture` = pass
+  - `bash scripts/check-integrity.sh` = `INTEGRITY OK`
+
 ## 2026-06-09 (계속: 점진 인프라 — identifier/keyword 스캔 코퍼스 확장)
 - P9 예제 코퍼스에 `examples/e72_identifier_scan.nl` 추가.
   identifier start/continuation 판정, end-of-string safe scan, source-range equality, `let`/`return` keyword 분류,

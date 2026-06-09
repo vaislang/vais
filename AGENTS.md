@@ -34,8 +34,8 @@
 - nl을 깊게 파다 보면 **Vais 컴파일러 버그**(codegen miscompile, ICE 등)를 만난다. 이때
   Vais repo를 수정하게 되는데, **Vais repo의 `CLAUDE.md` 규칙이 그때부터 적용된다**(§5 참조).
   빈도 감각: 최근 세션들에서 nl 작업 중 Vais 버그 근본수정이 여러 건 있었다(`&Vec` borrow
-  codegen, struct-return ICE, `%` 이스케이프 등). 현재 추적 중인 Vais 버그는 6종(ROADMAP의
-  TRACKED 참조 — Map/int→string/중첩Vec/리터럴인자/Vec성장 등). **드물지 않다**고 가정하라.
+  codegen, struct-return ICE, `%` 이스케이프 등). 현재 추적 중인 Vais 갭은 ROADMAP의
+  TRACKED 참조 — Map/int→string/중첩Vec/Vec성장 등. **드물지 않다**고 가정하라.
 - 커밋은 **각 repo에 따로** 한다. nl 변경은 nl repo에, Vais 변경은 Vais repo에.
 - `vaisc`는 PATH에 있어야 하고, std 해석을 위해 `VAIS_COMPILER_ROOT`가 Vais repo를
   가리켜야 한다(게이트 스크립트는 기본값 `/Users/sswoo/study/projects/vais/compiler` 사용).

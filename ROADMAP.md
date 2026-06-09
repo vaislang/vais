@@ -64,7 +64,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    caller slot lookup보다 우선해 stage drift를 제거. `scripts/test-fixpoint-full.sh`에도 두 원인을 직접 찌르는
    짧은 회귀 fixture를 추가.
 5. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
-6. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
+6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 리스트 리터럴 직접 인자는 해결, 잔여 Map/int→string/중첩Vec/Vec성장 등.
 
 ---
 
@@ -127,8 +127,10 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 - **Vais 중첩 Vec codegen 버그**: `Vec<Vec<i64>>` 리터럴/인덱싱이 C003 Type error(하드코딩 Vais도 실패).
   nl 트랜스파일러는 올바른 `Vec<Vec<i64>>` 타입 생성하나(nested 추론 수정 685ba63 다음 커밋) Vais가 codegen
   못 함. nl 중첩 리스트 `[[..]]` 막힘. Vais repo 작업 필요. 2026-06-07 실측.
-- **Vais 리스트-리터럴 직접 인자 코어션 갭**: `f([1,2,3])`(리터럴을 Vec 파라미터에 직접) E001 Type mismatch.
-  바인딩 후 전달(`let v=[..]; f(v)`)은 OK. nl 코퍼스는 bound-var 패턴 권장(e27). Vais 코어션 수정 필요. 2026-06-07 실측.
+- ✅ **Vais 리스트-리터럴 직접 인자 코어션 갭 — 해결**(2026-06-10, compiler): `f([1,2,3])`
+  (리터럴을 `Vec<T>` 파라미터에 직접 전달)이 기대 타입 기반 typecheck + inline Vec materialization으로
+  build/run 통과. 회귀: `e2e_phase256_vec_literal_direct_arg_full_build` exit 37.
+  전체 Vais `scripts/check-integrity.sh`도 `INTEGRITY OK`.
 - **Vais 표면 int→string 변환 부재**: `str(42)` P001(str=타입키워드, 호출불가), `to_string(42)` E002,
   `(42).to_string()` C002. 내부 `__i64_to_str`(FFI impl)만 존재. nl `Str(x)` 변환콜이 `str(x)`로 사상돼 실패.
   → nl-check가 `.to_string()`을 flag하되 대체 약속 안 함(정직). 표면 변환은 Vais 백엔드 작업 필요. 2026-06-06 실측.

@@ -114,9 +114,6 @@ self-host codegen 모듈 포함 101/101).
   OK**(e49) → 반환 경계서만 막힘. ROADMAP TRACKED.
 - **중첩 리스트 `[[..]]`** (`List<List<Int>>`) — **Vais 백엔드 버그**(C003 nested Vec). 트랜스파일러는 올바른
   `Vec<Vec<i64>>` 타입 생성하나 Vais가 codegen 못 함. ROADMAP TRACKED.
-- **리스트 리터럴을 함수 인자로 직접 전달** (`f([1,2,3])`) — Vais 코어션 갭(E001). **우회: 변수에 바인딩 후
-  전달**(`let v = [1,2,3]; f(v)` — e27 참조). ROADMAP TRACKED.
-
 ## 규약
 - 첫 줄 `# expect: N` = main이 반환할 exit code (mod 256).
 - 실행형(main이 값 반환)만 expect 부착. 라이브러리 조각은 미부착(러너 skip).
