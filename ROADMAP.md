@@ -39,7 +39,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
     generated compiler IR `1103434` bytes → 2세대 compiler 실행 → final IR `ret i64 42` → clang/run exit **42**.
   - `tools/normalize_stage_ir.py`로 source-position 기반 `@.sNNN`/`@.fmtNNN` global 이름만 정규화한 뒤,
     stage1 compiler IR과 stage2 compiler IR을 byte-compare → normalized `989685` bytes 일치.
-- 값-정확성 aggregate **100/100** (예제코퍼스 + self-host codegen 모듈).
+- 값-정확성 aggregate **101/101** (예제코퍼스 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:

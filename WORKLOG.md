@@ -1,5 +1,18 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: 점진 인프라 — identifier/keyword 스캔 코퍼스 확장)
+- P9 예제 코퍼스에 `examples/e72_identifier_scan.nl` 추가.
+  identifier start/continuation 판정, end-of-string safe scan, source-range equality, `let`/`return` keyword 분류,
+  일반 식별자(`value42`, `_tmp`) 처리를 self-host lexer와 같은 패턴으로 검증한다.
+- `examples/README.md` 인덱스와 코퍼스 카운트를 83/83, 전체 runner 101/101 기준으로 갱신.
+- `ROADMAP.md`/`AGENTS.md`의 현재 aggregate 수치를 최신 runner 기준으로 동기화.
+- 검증:
+  - `bash scripts/test.sh e72_identifier_scan` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/test.sh` = `RESULT: pass=101 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `git diff --check` = clean
+
 ## 2026-06-09 (계속: 점진 인프라 — 문자열 부분 검색 코퍼스 확장)
 - P9 예제 코퍼스에 `examples/e71_string_index_of.nl` 추가.
   `Str` 파라미터, nested while, computed byte indexing(`hay[i + j]`), `!=`, negative not-found sentinel을
