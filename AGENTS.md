@@ -15,7 +15,10 @@
 - **현재 상태**: front(tokenize/eval) + codegen(print로 IR emit) 전체 self-host arc 동작.
   세 self-host tier(산술 / 산술+변수 / 함수+재귀) 전부 source→value end-to-end이고,
   `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들며 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일한다.
-- **다음 목표**: stage output 비교 oracle 정의 + 점진 인프라.
+- **stage oracle**: 긴 게이트가 stage1/stage2 compiler IR을 비교한다. source-position 기반
+  `@.sNNN`/`@.fmtNNN` global 이름만 정규화하고, 그 외 IR은 byte-for-byte 일치해야 한다.
+- **다음 목표**: 점진 인프라(예제 코퍼스 확장, nl측 갭 수정, cold-start 재측정) 또는 ROADMAP의
+  Vais TRACKED 버그 중 하나를 dedicated로 처리.
 
 ---
 
@@ -50,8 +53,8 @@ sed -n '1,60p' WORKLOG.md
 # 3) self-host 컴파일러 능력 현황
 sed -n '100,110p' compiler/self/SELF_HOST.md   # fixpoint_full 능력 행
 # 4) baseline 게이트 (작업 전 반드시 green 확인 — §3)
-bash scripts/test-fixpoint-full.sh   # self-host codegen e2e (160 테스트, 수십 분~ — 백그라운드 권장)
-bash scripts/test-fixpoint-full-self.sh # long full-source + first-generation file-reconsume gate
+bash scripts/test-fixpoint-full.sh   # self-host codegen e2e + focused regression fixtures
+bash scripts/test-fixpoint-full-self.sh # long full-source + retarget + stage1/stage2 compare gate
 bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host 모듈)
 ```
 
@@ -70,8 +73,8 @@ bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host
 
 | 게이트 | 명령 | 의미 |
 |--------|------|------|
-| **self-host e2e** | `bash scripts/test-fixpoint-full.sh` | `fixpoint_full.nl`이 nl 프로그램을 컴파일→IR→실행, **exit/stdout 값** 검증. 현재 **160/0**. |
-| **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일해 final IR exit 24/50/120/42까지 확인. 느린 긴 게이트. |
+| **self-host e2e** | `bash scripts/test-fixpoint-full.sh` | `fixpoint_full.nl`이 nl 프로그램을 컴파일→IR→실행, **exit/stdout 값** 검증. stage drift 원인(direct double-string decode, callee List<Struct> arg authority) 회귀 포함. |
+| **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일해 final IR exit 24/50/120/42까지 확인. 마지막에 stage1/stage2 compiler IR을 normalized byte-compare한다. 느린 긴 게이트. |
 | **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.nl`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **96/96**. |
 | 기타 tier별 | `scripts/test-fixpoint*.sh` | 개별 codegen 영역(array/list/str/struct/imperative 등) |
 
@@ -186,12 +189,10 @@ nl 작업 중 Vais 버그를 만나 `/Users/sswoo/study/projects/vais/compiler/`
 
 ## 8. 남은 작업 (ROADMAP §남은 것 참조 — 현재 기준)
 
-- **string-interpolation** (`%s`): print 보간이 현재 Int-only. self-host의 `{op_s}`
-  (operator 문자열) 1곳을 위해 `%s` + i8* 포인터 vararg 지원 추가. (작은 follow-up.)
-- **실제 수천 줄 소스 통째 부트스트랩** (months급, TRACKED): 능력은 완비됐고 순수 규모 문제.
-  개별 tier는 fragment+통합으로 전부 동작 확증됨. 점진적으로 더 큰 실제 모듈을
-  `fixpoint_full.compile()`에 먹여 다음 경계를 찾고 dedicated로 해결.
 - **점진 인프라**: 예제 코퍼스 확장(P9, 최강 레버), nl측 갭 수정, cold-start 정확도 재측정.
+  새 gap은 `scripts/test.sh` 또는 focused e2e fixture로 값-정확성까지 고정한다.
+- **self-host hardening**: stage oracle은 해결됐으므로, 이후에는 새로 발견한 stage drift 원인을
+  `scripts/test-fixpoint-full.sh`의 짧은 회귀 fixture와 긴 stage compare gate 양쪽에 묶어둔다.
 - **Vais 백엔드 버그 (TRACKED)**: nl을 파다 만나는 Vais codegen 버그들. §5 규칙으로 근본 수정.
 
 ---

@@ -1,5 +1,27 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: stage comparison oracle + 짧은 stage-drift 회귀 가드)
+- `tools/normalize_stage_ir.py`를 추가해 stage1/stage2 compiler IR 비교 기준을 확정.
+  source-position 기반 LLVM string global 이름(`@.sNNN`, `@.fmtNNN`)만 occurrence-order 이름으로 정규화하고,
+  그 외 IR은 byte-for-byte로 같아야 한다.
+- `scripts/test-fixpoint-full-self.sh`가 seed `fixpoint_full.nl`이 만든 stage1 compiler IR과,
+  1세대 compiler가 `fixpoint_full.nl`을 다시 컴파일해 만든 stage2 compiler IR을 normalized byte-compare한다.
+  실측 normalized IR `989685` bytes 완전 일치.
+- stage 비교 중 드러난 두 drift 원인을 닫음:
+  - direct compact-source double-quoted literal은 LLVM global emit 전에 decode한다. 이로써 stage2가 `\\5C`를
+    double-escape해 stage1과 갈라지는 문제를 제거.
+  - call arg emit은 caller local slot 추정보다 callee param annotation을 우선한다. 특히 `List<Struct>`/struct param
+    전달에서 `StructDef` List를 4-field `Token` List처럼 넘기던 drift를 제거.
+- `scripts/test-fixpoint-full.sh`에도 위 두 원인을 직접 찌르는 짧은 회귀 fixture를 추가.
+  긴 stage compare까지 가지 않아도 direct double-string decode와 callee `List<Struct>` arg authority를 빠르게 잡는다.
+- `AGENTS.md`를 최신 상태로 동기화. 다음 목표를 더 이상 stage oracle이 아니라
+  점진 인프라(corpus/cold-start/nl gap) 또는 Vais TRACKED dedicated로 안내한다.
+- 검증:
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `bash scripts/test.sh` = `RESULT: pass=96 fail=0 skip=0`
+  - `git diff --check` = clean
+
 ## 2026-06-09 (계속: full retarget 기본 긴 게이트 승격)
 - 다음 경계였던 1세대 compiler의 `fixpoint_full.nl` 자체 재소비를 해결.
   `list_struct_cap(nf == 4)`를 65536으로 올려 4-field `Token` 버퍼만 full-source 규모를 감당하게 하고,
