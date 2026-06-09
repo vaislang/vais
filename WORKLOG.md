@@ -1,5 +1,31 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: 1세대 retarget `fixpoint2/3` 확대 + 다음 full-retarget 경계 식별)
+- `scripts/test-fixpoint-full-self.sh`의 retarget 구간을 `run_retarget_probe()`로 일반화하고,
+  1세대 compiler가 실제 `compiler/self/fixpoint.nl`뿐 아니라 `fixpoint2.nl`/`fixpoint3.nl`까지 다시 컴파일하도록 확장.
+- `fixpoint_full.nl`의 generated List capacity를 `list_cap()`/`list_struct_cap()` 계열 헬퍼로 정리.
+  기본 List는 4096으로 유지하고, 4-field `Token` List만 8192까지 확장해 `fixpoint3.nl` 파일 크기 재소비를 통과시킴.
+- `call_param_ty()`를 추가하고 일반 call / `-> Struct` hidden out-param call / `-> List` hidden out-param call 경로에서
+  callee param type이 plain struct(`3+struct_index`)일 때만 로컬 struct를 `i64*`로 전달하게 보강.
+  이로써 `let n = toks.len` 같은 scalar가 stale/오인 `sty` 때문에 `i64*`로 넘겨져 `build_fns(..., n: Int)`가 crash하던
+  `fixpoint3` 재타깃 회귀를 해결.
+- 탐색: 1세대 compiler를 `fixpoint_full.nl` 전체 소스로 retarget하는 것은 아직 게이트에 넣지 않음.
+  경계는 codegen surface보다 scale/storage 문제: `fixpoint_full.nl`은 현재 8192 `Token` cap보다 훨씬 큰 토큰 버퍼가 필요하고,
+  스택 고정버퍼 List를 더 키우면 recursive compiler scope가 불안정해진다. 다음 단계는 heap/segmented List 또는
+  stage-specific token storage + stage 비교 oracle.
+- 새 긴 게이트 실측:
+  - full-source `fixpoint_full.nl` self probe: generated compiler IR `980174` bytes, `@main` 1개, negative GEP 0개,
+    generated compiler runs, emitted IR `ret i64 42`, emitted binary exit 42.
+  - first-generation compiler consumes real `fixpoint.nl`: generated compiler IR `984794` bytes → final IR `ret i64 24` → final binary exit 24.
+  - first-generation compiler consumes real `fixpoint2.nl`: generated compiler IR `990906` bytes → final IR `ret i64 50` → final binary exit 50.
+  - first-generation compiler consumes real `fixpoint3.nl`: generated compiler IR `1002636` bytes → final IR `ret i64 120` → final binary exit 120.
+- 검증:
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test.sh` = `RESULT: pass=96 fail=0 skip=0`
+  - `python3 -m py_compile tools/embed_self_source.py` = OK
+  - `git diff --check` = clean
+
 ## 2026-06-09 (계속: full-source self-host 긴 게이트 자동화 + 1세대 `fixpoint.nl` 재소비)
 - `scripts/test-fixpoint-full-self.sh` 추가. 긴 게이트를 별도 스크립트로 자동화:
   1) 실제 `compiler/self/fixpoint_full.nl` 전체 소스를 `tools/embed_self_source.py`로 주입,

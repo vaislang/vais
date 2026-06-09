@@ -3,9 +3,9 @@
 #
 # This verifies the full-source path, not just snippet-level codegen:
 #   seed fixpoint_full -> generated first-generation compiler IR -> clang/run.
-# It also checks that a first-generation compiler can consume a file-sized
-# embedded source again by retargeting its default compile("...") program to the
-# real compiler/self/fixpoint.nl source.
+# It also checks that first-generation compilers can consume file-sized embedded
+# sources again by retargeting their default compile("...") program to the real
+# compiler/self/fixpoint*.nl sources.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -95,12 +95,19 @@ run_full_probe() {
 
 run_full_probe "$SRC" "full-source fixpoint_full.nl self probe" 42
 
-tmp_variant="$(mktemp -d)"
-python3 "$EMBED" "$SRC" "$HERE/compiler/self/fixpoint.nl" "$tmp_variant/fixpoint_full_compiles_fixpoint.nl" \
-  || { echo "  FAIL full-source retarget: embed fixpoint.nl into compiler"; fail=1; }
-if [ "$fail" -eq 0 ]; then
-  run_full_probe "$tmp_variant/fixpoint_full_compiles_fixpoint.nl" "first-generation compiler consumes fixpoint.nl" 24 compiler
-fi
+run_retarget_probe() {
+  local target="$1" want="$2" label="$3" tmp_variant
+  tmp_variant="$(mktemp -d)"
+  python3 "$EMBED" "$SRC" "$target" "$tmp_variant/retargeted_fixpoint_full.nl" \
+    || { echo "  FAIL full-source retarget: embed $(basename "$target") into compiler"; fail=1; return; }
+  if [ "$fail" -eq 0 ]; then
+    run_full_probe "$tmp_variant/retargeted_fixpoint_full.nl" "$label" "$want" compiler
+  fi
+}
+
+run_retarget_probe "$HERE/compiler/self/fixpoint.nl" 24 "first-generation compiler consumes fixpoint.nl"
+run_retarget_probe "$HERE/compiler/self/fixpoint2.nl" 50 "first-generation compiler consumes fixpoint2.nl"
+run_retarget_probe "$HERE/compiler/self/fixpoint3.nl" 120 "first-generation compiler consumes fixpoint3.nl"
 
 [ "$fail" -eq 0 ] && echo "RESULT: fixpoint_full full-source self-host gate OK" || echo "RESULT: FAILURES"
 exit $fail
