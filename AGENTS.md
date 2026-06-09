@@ -75,7 +75,7 @@ bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host
 |--------|------|------|
 | **self-host e2e** | `bash scripts/test-fixpoint-full.sh` | `fixpoint_full.nl`이 nl 프로그램을 컴파일→IR→실행, **exit/stdout 값** 검증. stage drift 원인(direct double-string decode, callee List<Struct> arg authority) 회귀 포함. |
 | **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일해 final IR exit 24/50/120/42까지 확인. 마지막에 stage1/stage2 compiler IR을 normalized byte-compare한다. 느린 긴 게이트. |
-| **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.nl`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **99/99**. |
+| **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.nl`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **100/100**. |
 | 기타 tier별 | `scripts/test-fixpoint*.sh` | 개별 codegen 영역(array/list/str/struct/imperative 등) |
 
 규칙:

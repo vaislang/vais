@@ -1,5 +1,18 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: 점진 인프라 — 문자열 부분 검색 코퍼스 확장)
+- P9 예제 코퍼스에 `examples/e71_string_index_of.nl` 추가.
+  `Str` 파라미터, nested while, computed byte indexing(`hay[i + j]`), `!=`, negative not-found sentinel을
+  부분 문자열 검색(`index_of`) 패턴으로 검증한다.
+- `examples/README.md` 인덱스와 코퍼스 카운트를 82/82, 전체 runner 100/100 기준으로 갱신.
+- `ROADMAP.md`/`AGENTS.md`의 현재 aggregate 수치를 최신 runner 기준으로 동기화.
+- 검증:
+  - `bash scripts/test.sh e71_string_index_of` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/test.sh` = `RESULT: pass=100 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `git diff --check` = clean
+
 ## 2026-06-09 (계속: 점진 인프라 — 문자열 정수 파싱 코퍼스 확장)
 - P9 예제 코퍼스에 `examples/e70_parse_uint.nl` 추가.
   `Str` byte indexing, digit classification(`b >= 48 and b <= 57`), non-digit early stop, base-10 accumulation을
