@@ -26,7 +26,8 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 부트스트랩 갭 #1~#5b(string/List param, List-of-structs 로컬+param, typed let, bool, `!=`, let-bind-LOS, else-if-in-loop 등 20 능력추가) 전부 해결.
 
 **현재 게이트 상태**:
-- self-host e2e `scripts/test-fixpoint-full.sh` **OK** (struct ABI/List alias/metadata/division 회귀 포함).
+- self-host e2e `scripts/test-fixpoint-full.sh` **OK** (struct ABI/List alias/metadata/division +
+  direct double-string/List<Struct> call authority 회귀 포함).
 - long self-host gate `scripts/test-fixpoint-full-self.sh` **OK**:
   - 실제 `compiler/self/fixpoint_full.nl` 전체 소스 → generated compiler IR `990159` bytes, `@main` 1개,
     negative GEP 0개 → clang/run → emitted binary exit **42**.
@@ -60,7 +61,8 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    `scripts/test-fixpoint-full-self.sh`가 최초 full-source stage1 compiler IR과 `fixpoint_full.nl` retarget으로 생성된
    stage2 compiler IR을 byte-compare한다. 실측 normalized IR `989685` bytes 완전 일치. 이 과정에서 double-quoted
    string literal decode를 fixpoint compiler에 반영하고, 호출 인자 emit은 callee의 `List<Struct>`/struct param 타입을
-   caller slot lookup보다 우선해 stage drift를 제거.
+   caller slot lookup보다 우선해 stage drift를 제거. `scripts/test-fixpoint-full.sh`에도 두 원인을 직접 찌르는
+   짧은 회귀 fixture를 추가.
 5. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
 6. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
 

@@ -83,6 +83,10 @@ check "fn s4(a, b, c, d) {{ return a + b + c + d }}; return s4(10, 20, 30, 40);"
 # List-returning calls use a hidden out-param and must still preserve all regular
 # args. This guards the self-source `build_fns(&toks, &defs, src, n)` shape.
 check "fn make(a, b, c, d) -> List<Int> {{ let xs = list(); xs.push(a); xs.push(b); xs.push(c); xs.push(d); return xs }}; fn run() {{ let ys = make(10, 20, 30, 40); return ys[0] + ys[1] + ys[2] + ys[3] }}; return run();" 100
+# Callee annotations are authoritative for List<Struct> arg stride/buffer shape.
+# This guards the stage-oracle drift where a local StructDef list was later passed
+# as if it were a 4-field Token list.
+check "struct Token {{ kind, value, nstart, nlen }}; struct StructDef {{ nstart, nlen, f0s, f0l, f1s, f1l, f2s, f2l, f3s, f3l, f4s, f4l, f5s, f5l, f6s, f6l, f7s, f7l, nfields }}; fn use_defs(toks: List<Token>, defs: List<StructDef>) {{ return defs.len + toks.len * 10 }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 1, value: 2, nstart: 3, nlen: 4 }}); let defs = list(); defs.push(StructDef {{ nstart: 0, nlen: 1, nfields: 18 }}); return use_defs(toks, defs) }}; return run();" 11
 check "fn dbl(x) {{ return x * 2 }}; fn add(a, b) {{ return a + b }}; return add(dbl(3), dbl(4));" 14
 
 # --- FP12g: comparison as a VALUE (return a == b / a < b / a > b) -> icmp + zext
@@ -733,6 +737,39 @@ if [ "$got" = "4" ]; then
   echo "  PASS source-file backslash smoke runs (=4)";
 else
   echo "  FAIL source-file backslash smoke got=$got want=4"; fail=1
+fi
+
+# Direct compact-source double-quoted literals must be decoded before LLVM global
+# emission. Without this, stage2 self-host output double-escapes `\\5C` and
+# drifts from stage1.
+tmp="$(mktemp -d)"
+python3 - "$SRC" "$tmp/c.nl" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+src = Path(sys.argv[1]).read_text()
+program = 'fn main() {{ let s = "\\\\\\\\5C"; return s.len(); }}'
+literal = program.replace("\\", "\\\\").replace('"', '\\"')
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + literal + '")', src, count=1)
+Path(sys.argv[2]).write_text(src)
+PY
+python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
+( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+  || { echo "  FAIL direct double-string smoke: compiler build"; fail=1; }
+"$tmp/c" > "$tmp/out.ll"
+if grep -Fq 'c"\5C5C\00"' "$tmp/out.ll"; then
+  echo "  PASS direct double-string smoke emits decoded LLVM global";
+else
+  echo "  FAIL direct double-string smoke missing decoded LLVM global"; cat "$tmp/out.ll"; fail=1
+fi
+clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null \
+  || { echo "  FAIL direct double-string smoke: generated IR invalid"; cat "$tmp/out.ll"; fail=1; }
+"$tmp/bin"; got=$?
+if [ "$got" = "3" ]; then
+  echo "  PASS direct double-string smoke runs (=3)";
+else
+  echo "  FAIL direct double-string smoke got=$got want=3"; fail=1
 fi
 
 # Sanity: a string program emits a module-level string global + i8* alloca +
