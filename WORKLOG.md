@@ -1,5 +1,19 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: 점진 인프라 — binary search 코퍼스 확장)
+- P9 예제 코퍼스에 `examples/e68_binary_search.nl` 추가.
+  sorted `List<Int>`를 `&List<Int>`로 빌려 받아 while-loop, 계산 인덱싱, 조기 return, `0 - 1` not-found sentinel을
+  함께 검증한다.
+- 첫 구현은 같은 `List`를 by-value로 두 번 넘겨 Vais move 규칙(E022)에 걸렸고, 기존 e15 패턴처럼
+  reusable collection helper는 `&List<T>`를 받는 형태가 정답임을 예제 주석에 명시했다.
+- `examples/README.md` 인덱스와 코퍼스 카운트를 79/79, 전체 runner 97/97 기준으로 갱신.
+- 검증:
+  - `bash scripts/test.sh e68_binary_search` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/test.sh` = `RESULT: pass=97 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `git diff --check` = clean
+
 ## 2026-06-09 (계속: stage comparison oracle + 짧은 stage-drift 회귀 가드)
 - `tools/normalize_stage_ir.py`를 추가해 stage1/stage2 compiler IR 비교 기준을 확정.
   source-position 기반 LLVM string global 이름(`@.sNNN`, `@.fmtNNN`)만 occurrence-order 이름으로 정규화하고,
