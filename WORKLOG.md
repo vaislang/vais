@@ -1,5 +1,23 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: full retarget 기본 긴 게이트 승격)
+- 다음 경계였던 1세대 compiler의 `fixpoint_full.nl` 자체 재소비를 해결.
+  `list_struct_cap(nf == 4)`를 65536으로 올려 4-field `Token` 버퍼만 full-source 규모를 감당하게 하고,
+  다른 List들은 4096 cap을 유지해 recursive compiler scope의 stack 압박을 피했다.
+- `scripts/test-fixpoint-full-self.sh`에서 `fixpoint_full.nl` retarget을 기본 경로로 승격.
+  이제 긴 게이트는 seed `fixpoint_full.nl`이 1세대 compiler를 만들고, 그 compiler가 실제
+  `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일해 final IR과 binary를 실행한다.
+- 실측:
+  - full-source `fixpoint_full.nl` self probe: generated compiler IR `980576` bytes, `@main` 1개, negative GEP 0개,
+    emitted IR `ret i64 42`, emitted binary exit 42.
+  - first-generation consumes `fixpoint.nl`: generated compiler IR `985196` bytes → final IR `ret i64 24` → final binary exit 24.
+  - first-generation consumes `fixpoint2.nl`: generated compiler IR `991308` bytes → final IR `ret i64 50` → final binary exit 50.
+  - first-generation consumes `fixpoint3.nl`: generated compiler IR `1003038` bytes → final IR `ret i64 120` → final binary exit 120.
+  - first-generation consumes `fixpoint_full.nl`: generated compiler IR `1092583` bytes → second-generation compiler runs →
+    final IR `ret i64 42` → final binary exit 42.
+- 의미: full retarget은 더 이상 tracked blocker가 아니다. 다음 엔드게임은 stage N/N+1 output을 어떤 normalized oracle로
+  비교할지 정하는 문제다.
+
 ## 2026-06-09 (계속: 1세대 retarget `fixpoint2/3` 확대 + 다음 full-retarget 경계 식별)
 - `scripts/test-fixpoint-full-self.sh`의 retarget 구간을 `run_retarget_probe()`로 일반화하고,
   1세대 compiler가 실제 `compiler/self/fixpoint.nl`뿐 아니라 `fixpoint2.nl`/`fixpoint3.nl`까지 다시 컴파일하도록 확장.

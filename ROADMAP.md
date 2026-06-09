@@ -28,12 +28,14 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 **현재 게이트 상태**:
 - self-host e2e `scripts/test-fixpoint-full.sh` **OK** (struct ABI/List alias/metadata/division 회귀 포함).
 - long self-host gate `scripts/test-fixpoint-full-self.sh` **OK**:
-  - 실제 `compiler/self/fixpoint_full.nl` 전체 소스 → generated compiler IR `980174` bytes, `@main` 1개,
+  - 실제 `compiler/self/fixpoint_full.nl` 전체 소스 → generated compiler IR `980576` bytes, `@main` 1개,
     negative GEP 0개 → clang/run → emitted binary exit **42**.
-  - 그 1세대 컴파일러를 실제 `compiler/self/fixpoint.nl`로 retarget → generated compiler IR `984794` bytes,
+  - 그 1세대 컴파일러를 실제 `compiler/self/fixpoint.nl`로 retarget → generated compiler IR `985196` bytes,
     `@main` 1개, negative GEP 0개 → emitted compiler 실행 → final IR `ret i64 24` → clang/run exit **24**.
   - 같은 1세대 retarget을 `compiler/self/fixpoint2.nl`/`fixpoint3.nl`까지 확대:
-    generated compiler IR `990906`/`1002636` bytes → final IR `ret i64 50`/`ret i64 120` → clang/run exit **50**/**120**.
+    generated compiler IR `991308`/`1003038` bytes → final IR `ret i64 50`/`ret i64 120` → clang/run exit **50**/**120**.
+  - 1세대 retarget을 `compiler/self/fixpoint_full.nl` 자체까지 확대:
+    generated compiler IR `1092583` bytes → 2세대 compiler 실행 → final IR `ret i64 42` → clang/run exit **42**.
 - 값-정확성 aggregate **96/96** (예제코퍼스 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
@@ -48,12 +50,12 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 2. ~~**TRACKED 컴파일러 버그 2건**~~ **✅ 둘 다 근본수정**(2026-06-08): (ⓐ) all-return if/else-if 빈 merge block → block_returns()+`unreachable`(FP12gg, 580ca3a); (ⓑ) `.len` on List-of-structs가 struct-field GEP로 오인 → struct-field branch에 `karr != 2` 가드(FP12ff, 0d64afb). 둘 다 task chip dismiss.
 3. ~~**반복 self-host/fixpoint 긴 게이트 자동화**~~ **✅ 해결**(2026-06-09): `scripts/test-fixpoint-full-self.sh`
    추가. 최종 `fixpoint_full.nl` 3.9k줄 full-source 1세대 compiler probe뿐 아니라, generated compiler가 실제
-   `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl` 파일을 다시 입력받아 final IR `ret i64 24`/`50`/`120`을
-   emit/run하는 반복 경로까지 자동화. 이 과정에서 4-field `Token` List cap을 8192로 확장하고,
+   `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl` 파일을 다시 입력받아 final IR `ret i64 24`/`50`/`120`/`42`를
+   emit/run하는 반복 경로까지 자동화. 이 과정에서 4-field `Token` List cap을 65536으로 확장하고,
    함수 호출 인자 emit은 callee param type(`Int`/`Str`/`List`/`Struct`) 기준으로만 struct pointer를 전달하게 보강.
-4. **다음 self-host 엔드게임**: 1세대 컴파일러가 `fixpoint_full.nl` 전체 소스를 다시 소비하는 full retarget.
-   현재 경계는 codegen surface가 아니라 scale/storage: `fixpoint_full.nl`은 `fixpoint3.nl`보다 훨씬 큰 토큰 수를 요구해
-   스택 고정버퍼 List로는 다음 단계가 불안정하다. heap/segmented List 또는 stage-specific token storage와 stable oracle이 필요.
+4. **다음 self-host 엔드게임**: stage output 비교용 stable oracle 정의. 현재는 1세대 compiler가 `fixpoint_full.nl` 전체를
+   다시 소비해 2세대 compiler까지 만들고 실행한다. 남은 것은 "실행됨"을 넘어 stage N/N+1 IR 또는 normalized compiler output을
+   어떤 기준으로 비교할지 정하는 정량화 문제다.
 5. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
 6. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
 
@@ -358,11 +360,10 @@ self-host 핵심 능력 전부 달성. 이후 FP12pp full-source probe에서 실
 FP12qq에서 **struct-valued function params/returns(`Op`) ABI**까지 해결되어 full-source 1세대 compiler probe가 통과.
 
 ## TRACKED (full-source bootstrap next gate)
-- **full retarget next gate**: 자동 긴 게이트는 이제 `fixpoint_full.nl` full-source probe + 1세대 compiler가
-  실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`을 다시 컴파일하는 경로까지 통과한다. 다음 경계는 1세대 compiler가
-  `fixpoint_full.nl` 자체를 다시 입력받는 것. 탐색 결과 codegen surface보다 scale/storage 문제에 가깝다:
-  `fixpoint_full.nl`은 `fixpoint3.nl`보다 훨씬 큰 토큰 버퍼를 요구하고, 현재 스택 고정버퍼 List는 그 단계에서
-  불안정하다. heap/segmented List 또는 stage-specific token storage를 먼저 설계해야 한다.
+- **stage comparison oracle**: 자동 긴 게이트는 이제 `fixpoint_full.nl` full-source probe + 1세대 compiler가
+  실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일하는 경로까지 통과한다.
+  다음 경계는 단순 실행 성공이 아니라 stage N/N+1 output 비교다. LLVM IR에는 SSA 번호/글로벌 순서/포맷 글로벌 키처럼
+  source-position 의존 요소가 있어 byte-for-byte 비교 전에 normalization 기준을 정해야 한다.
 - **fixpoint_full 잔존 codegen 능력 갭 기록**(2026-06-07 경계매핑 이력; 대부분 후속 FP12에서 해결, 최신 full-source 상태는 상단 1g):
   ① 비교-as-value **해결**(FP12g). ② `(...)` 그룹화 **해결**(FP12h). ③ `>=`/`<=` 2-char 비교 **해결**(FP12i,
   단일토큰 kind29/30, sge/sle, value+조건 양쪽; is_digit `c>=48 and c<=57` shape). ④ `for` 루프 **해결**(FP12jj).

@@ -984,11 +984,11 @@ fn emit_op(o: Op) -> Int {
 # which is enough for snippets but not for a compiler reading a real source file
 # again. Most generated Lists stay at 4096 to keep recursive compiler scopes
 # stack-bounded; the 4-field Token shape gets a larger cap for file-sized tier
-# inputs such as fixpoint3.nl.
+# inputs through fixpoint_full.nl full retarget.
 fn list_cap() -> Int { return 4096 }
 fn list_lenidx() -> Int { return list_cap() - 1 }
 fn list_struct_cap(nf: Int) -> Int {
-    if nf == 4 { return 8192 }
+    if nf == 4 { return 65536 }
     return list_cap()
 }
 fn list_lenidx_for_nfields(nf: Int) -> Int { return list_struct_cap(nf) * nf }

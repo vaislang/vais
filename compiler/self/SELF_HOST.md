@@ -88,17 +88,21 @@ a working first-generation compiler. The long gate is automated as
 4. run that compiler to emit LLVM IR
 5. clang the emitted IR and run the resulting program
 6. retarget that first-generation compiler to the real
-   `compiler/self/fixpoint.nl`, `fixpoint2.nl`, and `fixpoint3.nl`, then
-   clang/run each final IR
+   `compiler/self/fixpoint.nl`, `fixpoint2.nl`, `fixpoint3.nl`, and
+   `fixpoint_full.nl`, then clang/run each final IR
 
-The latest run emitted a 980174-byte compiler IR module for the full
+The latest run emitted a 980576-byte compiler IR module for the full
 `fixpoint_full.nl` self probe with exactly one `@main`, zero negative GEPs,
 passed clang, ran the generated compiler successfully, then clang'd and ran the
 second-stage emitted IR with exit code 42. The same gate then retargeted the
 first-generation compiler to the real `fixpoint.nl`, `fixpoint2.nl`, and
-`fixpoint3.nl`, emitted 984794/990906/1002636-byte compiler IR modules,
+`fixpoint3.nl`, emitted 985196/991308/1003038-byte compiler IR modules,
 verified the final IR contains `ret i64 24` / `ret i64 50` / `ret i64 120`,
 clang'd each final IR, and ran the final binaries with exit code 24/50/120.
+It also retargeted the first-generation compiler to `fixpoint_full.nl` itself,
+emitted a 1092583-byte second-generation compiler IR module, ran that compiler,
+verified the final IR contains `ret i64 42`, clang'd it, and ran the final
+binary with exit code 42.
 
 The FP12pp blocker was **struct-valued function parameters/returns**:
 `fixpoint_full.nl` uses helpers such as `emit_op(o: Op)`,
@@ -117,11 +121,9 @@ forward through the hidden out-param.
   another stable oracle. The current milestone is stronger than a snippet probe:
   the full `fixpoint_full.nl` source builds a working compiler, and a
   first-generation compiler can consume the real `fixpoint.nl`, `fixpoint2.nl`,
-  and `fixpoint3.nl` files again and produce/run final IR. Retargeting that
-  first-generation compiler to the full `fixpoint_full.nl` source is the next
-  scale/storage gate; the current stack-backed fixed List buffers need a heap,
-  segmented, or stage-specific storage strategy before that should become a
-  required gate.
+  `fixpoint3.nl`, and `fixpoint_full.nl` files again and produce/run final IR.
+  The next gate is not just "does it run", but a stable stage-output comparison
+  oracle for stage N/N+1 compiler output.
 - Upstream: two Vais compiler bugs were root-fixed to enable this work
   (`&Vec` borrow recursion, literal-`%` escaping), both gate-verified
   (`check-integrity.sh INTEGRITY OK`, zero regression).

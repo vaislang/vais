@@ -5,7 +5,7 @@
 #   seed fixpoint_full -> generated first-generation compiler IR -> clang/run.
 # It also checks that first-generation compilers can consume file-sized embedded
 # sources again by retargeting their default compile("...") program to the real
-# compiler/self/fixpoint*.nl sources.
+# compiler/self/fixpoint*.nl sources, including fixpoint_full.nl itself.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -108,6 +108,7 @@ run_retarget_probe() {
 run_retarget_probe "$HERE/compiler/self/fixpoint.nl" 24 "first-generation compiler consumes fixpoint.nl"
 run_retarget_probe "$HERE/compiler/self/fixpoint2.nl" 50 "first-generation compiler consumes fixpoint2.nl"
 run_retarget_probe "$HERE/compiler/self/fixpoint3.nl" 120 "first-generation compiler consumes fixpoint3.nl"
+run_retarget_probe "$SRC" 42 "first-generation compiler consumes fixpoint_full.nl"
 
 [ "$fail" -eq 0 ] && echo "RESULT: fixpoint_full full-source self-host gate OK" || echo "RESULT: FAILURES"
 exit $fail

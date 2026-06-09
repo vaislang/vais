@@ -14,8 +14,8 @@
   입력 nl 프로그램 문자열을 받아 **토큰화 → 평가/codegen → LLVM IR을 emit**한다.
 - **현재 상태**: front(tokenize/eval) + codegen(print로 IR emit) 전체 self-host arc 동작.
   세 self-host tier(산술 / 산술+변수 / 함수+재귀) 전부 source→value end-to-end이고,
-  `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들며 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`을 다시 컴파일한다.
-- **다음 목표**: 1세대 compiler의 `fixpoint_full.nl` full retarget을 위한 List storage 확장(heap/segmented/stage-specific) + stage 비교 oracle + 점진 인프라.
+  `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들며 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일한다.
+- **다음 목표**: stage output 비교 oracle 정의 + 점진 인프라.
 
 ---
 
@@ -71,7 +71,7 @@ bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host
 | 게이트 | 명령 | 의미 |
 |--------|------|------|
 | **self-host e2e** | `bash scripts/test-fixpoint-full.sh` | `fixpoint_full.nl`이 nl 프로그램을 컴파일→IR→실행, **exit/stdout 값** 검증. 현재 **160/0**. |
-| **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`을 다시 컴파일해 final IR exit 24/50/120까지 확인. 느린 긴 게이트. |
+| **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일해 final IR exit 24/50/120/42까지 확인. 느린 긴 게이트. |
 | **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.nl`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **96/96**. |
 | 기타 tier별 | `scripts/test-fixpoint*.sh` | 개별 codegen 영역(array/list/str/struct/imperative 등) |
 
