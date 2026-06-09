@@ -66,12 +66,23 @@ check "struct Tok {{ kind, start, len }}; fn dist(n) {{ let t = Tok {{ kind: 1, 
 check "struct P {{ x, y }}; fn f(n) {{ let p = P {{ x: n, y: 0 }}; p.y = n * 2; return p.x + p.y }}; return f(4);" 12
 # struct AND List together in one function
 check "struct P {{ a, b }}; fn g(n) {{ let p = P {{ a: 10, b: 20 }}; let xs = list(); xs.push(p.a); xs.push(p.b); xs.push(n); return xs[0] + xs[2] }}; return g(5);" 15
+# struct-valued function ABI: struct return via hidden out-param, struct param
+# by pointer/copy, direct return of a struct local, return of a struct-returning
+# call, and a struct literal passed directly as an argument.
+check "struct Pair {{ a, b }}; fn make(x: Int) -> Pair {{ return Pair {{ a: x, b: x + 1 }} }}; fn wrap(x: Int) -> Pair {{ return make(x) }}; fn id(p: Pair) -> Pair {{ return p }}; fn sum(p: Pair) -> Int {{ return p.a + p.b }}; fn run() {{ let p = wrap(20); let q = id(p); return sum(q) + sum(Pair {{ a: 1, b: 0 }}) }}; return run();" 42
+# Self-source metadata structs have fixed ABI fields beyond the generic
+# 8-field StructDef table; those names must still resolve to real field indexes.
+check "struct Fn {{ nstart, nlen, p0s, p0l, p1s, p1l, p2s, p2l, p3s, p3l, p4s, p4l, p5s, p5l, p6s, p6l, p7s, p7l, p8s, p8l, p9s, p9l, p0ty, p1ty, p2ty, p3ty, p4ty, p5ty, p6ty, p7ty, p8ty, p9ty, npar, bstart, bend, retlist, retty }}; fn run() {{ let f = Fn {{ p9ty: 32, npar: 33, retlist: 36, retty: 37 }}; return f.p9ty + f.npar + f.retlist + f.retty }}; return run();" 138
+check "struct StructDef {{ nstart, nlen, f0s, f0l, f1s, f1l, f2s, f2l, f3s, f3l, f4s, f4l, f5s, f5l, f6s, f6l, f7s, f7l, nfields }}; fn run() {{ let d = StructDef {{ f7l: 7, nfields: 18 }}; return d.f7l + d.nfields }}; return run();" 25
 
 # --- FP12: multi-param (0..4) + zero-param functions + nested call args ---
 check "fn add3(a, b, c) {{ return a + b + c }}; fn answer() {{ return 42 }}; return add3(1, 2, 3) + answer();" 48
 check "fn add(a, b) {{ return a + b }}; return add(3, 4);" 7
 check "fn one() {{ return 1 }}; return one() + one() + one();" 3
 check "fn s4(a, b, c, d) {{ return a + b + c + d }}; return s4(10, 20, 30, 40);" 100
+# List-returning calls use a hidden out-param and must still preserve all regular
+# args. This guards the self-source `build_fns(&toks, &defs, src, n)` shape.
+check "fn make(a, b, c, d) -> List<Int> {{ let xs = list(); xs.push(a); xs.push(b); xs.push(c); xs.push(d); return xs }}; fn run() {{ let ys = make(10, 20, 30, 40); return ys[0] + ys[1] + ys[2] + ys[3] }}; return run();" 100
 check "fn dbl(x) {{ return x * 2 }}; fn add(a, b) {{ return a + b }}; return add(dbl(3), dbl(4));" 14
 
 # --- FP12g: comparison as a VALUE (return a == b / a < b / a > b) -> icmp + zext
@@ -87,6 +98,7 @@ check "fn gt(n) {{ return n > 5 }}; return gt(8);" 1
 check "fn f() {{ return (2 + 3) * 4 }}; return f();" 20
 check "fn f(n) {{ return (n + 1) * (n + 2) }}; return f(3);" 20
 check "fn f() {{ return ((1 + 2) * 3) }}; return f();" 9
+check "fn f() {{ return 42 / 10 + 42 - (42 / 10) * 10 }}; return f();" 6
 # grouped comparisons combined with arithmetic: (a<b) + (b<c) = 1 + 1 = 2
 check "fn f(a, b, c) {{ return (a < b) + (b < c) }}; return f(1, 2, 3);" 2
 
@@ -461,6 +473,8 @@ check "fn make(n: Int) -> List<Int> {{ let xs = list(); xs.push(n); xs.push(n + 
 check "fn collect(src: Str) -> List<Int> {{ let xs = list(); xs.push(src[0]); return xs }}; fn run(src: Str) {{ let ys = collect(src); return ys[0] + ys.len }}; return run(\`P\`);" 81
 # fixpoint.nl's original shape: tokenize(src) -> List<Token>, then consume
 check "struct Token {{ kind, value }}; fn tokenize(src: Str) -> List<Token> {{ let toks = list(); let mut i = 0; while i < src.len() {{ let c = src[i]; if c >= 48 and c <= 57 {{ toks.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ toks.push(Token {{ kind: 2, value: 0 }}) }}; i = i + 1 }}; return toks }}; fn run() {{ let toks = tokenize(\`1a2a3\`); let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; return run();" 6
+# List parameter alias: `let mut xs = base; xs.push(...); return xs`
+check "struct Item {{ value }}; fn grow(base: List<Item>) -> List<Item> {{ let mut xs = base; xs.push(Item {{ value: 42 }}); return xs }}; fn run() {{ let seed = list(); let out = grow(seed); return out.len * 100 + out[0].value }}; return run();" 142
 
 # --- FP12ii: fixpoint.nl's ORIGINAL shape end-to-end (tokenize -> List<Token>) ---
 # With `-> List` direct return working, the whole arithmetic compiler runs in

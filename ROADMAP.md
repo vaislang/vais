@@ -13,12 +13,12 @@
 
 ---
 
-## ⚑ 상태 (2026-06-09): 🎯🎯🎯🎯🎯 실제 소스 부트스트랩 — 세 self-host tier 파일 smoke + full-source 첫 blocker 확정
+## ⚑ 상태 (2026-06-09): 🎯🎯🎯🎯🎯 실제 소스 부트스트랩 — `fixpoint_full.nl` full-source 1세대 컴파일러 probe 통과
 
 P0 게이트 / P1 코퍼스 / P2 트랜스파일러 / P3 에러인프라 / P4 std시작 / P5 레퍼런스 = **DONE**.
 L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 
-**🎯 실제 소스 부트스트랩 arc 정점(2026-06-08~09, FP12g~pp)**: fixpoint_full(통합 nl-self-host 컴파일러)이
+**🎯 실제 소스 부트스트랩 arc 정점(2026-06-08~09, FP12g~qq)**: fixpoint_full(통합 nl-self-host 컴파일러)이
 **세 self-host 언어 tier를 전부 source string→value로 end-to-end 컴파일**:
 - **①산술식**(fixpoint.nl): tokenize+eval, `2 + 3 * 4`=14 (FP12y)
 - **②산술+변수**(fixpoint2.nl): 심볼테이블+변수평가, `let x = 2; let y = x + 1; return x + y * 4`=14 (FP12bb)
@@ -26,8 +26,11 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 부트스트랩 갭 #1~#5b(string/List param, List-of-structs 로컬+param, typed let, bool, `!=`, let-bind-LOS, else-if-in-loop 등 20 능력추가) 전부 해결.
 
 **현재 게이트 상태**:
-- self-host e2e **fixpoint-full 182 PASS / 0 FAIL** (기존 180 + full-source backslash smoke 2).
+- self-host e2e `scripts/test-fixpoint-full.sh` **OK** (struct ABI/List alias/metadata/division 회귀 포함).
 - 값-정확성 aggregate **96/96** (예제코퍼스 + self-host codegen 모듈).
+- full-source 수동 probe: 실제 `compiler/self/fixpoint_full.nl` 전체 소스 → generated compiler IR `954648` bytes,
+  `@main` 1개, negative GEP 0개 → clang OK → generated compiler 실행 OK → emitted IR clang OK →
+  emitted binary exit **42**.
 - 트랜스파일러-단위/nl-check-단위 유지.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
@@ -37,9 +40,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 1d. ~~**실제 `fixpoint.nl` source-file bootstrap smoke**~~ **✅ 첫 파일 게이트 해결**(FP12mm, 2026-06-08): `tools/embed_self_source.py`가 실제 `compiler/self/fixpoint.nl` 파일을 현재 compact self-host subset으로 정규화(comments 제거, double-string→backtick, struct field type 제거, semicolon 보강, outer brace escape)해 `fixpoint_full`의 `compile("...")` 입력으로 주입. `fn main()`이 있는 실제 파일에서 duplicate `@main`이 나던 갭을 `has_top_stmts`로 해결(top-level 실행문이 없으면 synthetic wrapper 생략). 실측: 정규화된 실제 `fixpoint.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 24` LLVM IR emit → emitted IR clang/run exit 24. = **snippet 통합에서 실제 파일 입력 자동 게이트로 한 단계 상승.**
 1e. ~~**실제 `fixpoint2.nl` source-file bootstrap smoke + 10-param arity**~~ **✅ 두 번째 파일 게이트 해결**(FP12nn, 2026-06-08): 실제 `compiler/self/fixpoint2.nl` 원본의 `word_is(src, a, alen, w0, w1, w2, w3, w4, w5, wlen)`가 10개 파라미터를 쓰면서 기존 8-param 슬롯 한계를 노출. `Fn` metadata/타입판정/signature/call arg capture/param alloca/post-call List length sync를 p8/p9까지 확장하고, `s10`, late `List` out-param, 실제 `word_is("return", ...)` shape를 회귀 가드로 추가. 실측: 정규화된 실제 `fixpoint2.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 50` LLVM IR emit → emitted IR clang/run exit 50. = **실제 파일 입력 자동 게이트가 산술 tier에서 산술+변수 tier로 확장.**
 1f. ~~**실제 `fixpoint3.nl` source-file bootstrap smoke**~~ **✅ 세 번째 파일 게이트 해결**(FP12oo, 2026-06-08): 실제 `compiler/self/fixpoint3.nl` 원본의 multi-line `Fn` struct/`fns.push(Fn { ... })`, nested string brace escape, 8-field `Fn` metadata, Str param retlist call, `List[index].field` scalar assignment, `-> List` void signature 갭을 해결. 실측: 정규화된 실제 `fixpoint3.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 120` LLVM IR emit → emitted IR clang/run exit 120. = **실제 파일 입력 자동 게이트가 재귀 함수언어 tier까지 확장.**
-1g. **`fixpoint_full.nl` full-source probe — 다음 blocker 확정**(FP12pp, 2026-06-09): 실제 `compiler/self/fixpoint_full.nl` 전체를 source-file harness로 주입. embed helper의 regex replacement backslash 손실과 LLVM C-string `\`/`"` escaping 갭을 해결해 normalize/embed → `nl2vais` → `vaisc build` → generated source compiler 실행까지 통과. 생성 IR은 734195 bytes, `@main` 1개. 현재 clang blocker는 `emit_op(o: Op)`/`emit_binop(..., l: Op, r: Op)`/`gen_factor -> Op` 계열의 **struct-valued function params/returns**: `Op` param이 `i64`로 내려가고 `o.kind` field access가 undefined `%v1`을 참조. 다음 작업은 struct aggregate ABI 지원 또는 `Op` helpers를 scalar ABI로 낮추는 큰 feature slice.
+1g. ~~**`fixpoint_full.nl` full-source probe — struct ABI blocker**~~ **✅ full-source 1세대 컴파일러 probe 통과**(FP12pp~qq, 2026-06-09): 실제 `compiler/self/fixpoint_full.nl` 전체를 source-file harness로 주입. embed helper의 regex replacement backslash 손실과 LLVM C-string `\`/`"` escaping 갭을 먼저 해결한 뒤, `emit_op(o: Op)`/`emit_binop(..., l: Op, r: Op)`/`gen_factor -> Op` 계열이 요구한 **struct-valued function params/returns**를 hidden out-param ABI로 지원. 추가로 List param alias, 10-arg `-> List` call path, internal `Fn`/`StructDef` metadata field lookup, `/` operator를 닫음. 실측: normalize/embed → `nl2vais` → `vaisc build` → generated compiler IR `954648` bytes, `@main` 1개, negative GEP 0개 → clang/run → emitted IR clang/run exit 42. = **현재 `fixpoint_full.nl` 전체 소스가 `fixpoint_full`로 컴파일되어 실행 가능한 컴파일러를 만들고, 그 컴파일러가 다시 nl 프로그램을 LLVM IR로 emit/run한다.**
 2. ~~**TRACKED 컴파일러 버그 2건**~~ **✅ 둘 다 근본수정**(2026-06-08): (ⓐ) all-return if/else-if 빈 merge block → block_returns()+`unreachable`(FP12gg, 580ca3a); (ⓑ) `.len` on List-of-structs가 struct-field GEP로 오인 → struct-field branch에 `karr != 2` 가드(FP12ff, 0d64afb). 둘 다 task chip dismiss.
-3. **실제 수천줄 소스 통째 부트스트랩**(TRACKED) — `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl` 파일 smoke는 통과했고, 최종 `fixpoint_full.nl` 3.9k줄 probe도 source compiler 실행까지 전진. 남은 첫 명확한 blocker는 struct-valued function params/returns(`Op`) 지원.
+3. **반복 self-host/fixpoint 게이트 자동화**(TRACKED) — `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl` 파일 smoke는 통과했고, 최종 `fixpoint_full.nl` 3.9k줄 full-source 1세대 compiler probe도 통과. 다음은 이 수동 probe를 `scripts/test-fixpoint-full.sh` 또는 별도 긴 게이트로 자동화하고, generated compiler가 다시 파일/대형 소스를 입력받는 반복 루프(비교 가능한 stage output)를 정리하는 것.
 4. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
 3. **Vais 백엔드 버그 6종**(TRACKED, 근본=Vais repo) — Map/int→string/중첩Vec/리터럴인자/Vec성장.
 
@@ -334,22 +337,21 @@ nl-check+std시작 PRELUDE+게이트3종) **충족**. FIXPOINT 큐는 그 너머
 - [x] **FP12f** **파서 코어 실증** — name_eq(두 바이트범위 비교) + 키워드인식. `eq()` "let"=="let"=1,
       **🎯 `kw()` 키워드인식**: `s.len()==3` + 바이트비교 중첩if → "let"=7(실제 렉서 kw3/kw5 패턴). recon만으로.
       e2e 32→35 PASS. **통합컴파일러가 토크나이저+파서 키워드인식 둘 다 codegen = 가장 어려운 문자열-의존
-      두 부분 완비. 당시에는 남은 갭을 규모로 봤고, 이후 FP12pp full-source probe에서 첫 실제 blocker가
-      struct-valued function ABI로 좁혀짐.**
+      두 부분 완비. 당시에는 남은 갭을 규모로 봤고, 이후 FP12pp~qq full-source probe에서 struct-valued function
+      ABI까지 해소되어 1세대 compiler probe가 통과.**
 
 **🎯🎯🎯 codegen 능력 완성 (2026-06-06)**: 통합 컴파일러 fixpoint_full.nl이 nl 컴파일러를 구성하는 **모든 핵심
 구문**(함수 0-4param/재귀/중첩 + 가변변수 + while + if/else + 배열 + 동적List + struct + putchar + 문자열 s[i]/
 s.len())을 단일 프로그램에서 네이티브 LLVM IR로 생성. **동작하는 토크나이저(ntok)와 파서 키워드인식(kw)을 실증.**
 self-host 핵심 능력 전부 달성. 이후 FP12pp full-source probe에서 실제 `fixpoint_full.nl`은 generated IR까지 전진했고,
-첫 명확한 남은 갭은 **struct-valued function params/returns(`Op`) ABI**로 좁혀짐.
+FP12qq에서 **struct-valued function params/returns(`Op`) ABI**까지 해결되어 full-source 1세대 compiler probe가 통과.
 
-## TRACKED (full-source bootstrap blocker)
-- **실제 nl 컴파일러 소스 부트스트랩**: fixpoint_full이 전 코어구문 + 토크나이저/파서 shape를 codegen하나,
-  실제 `fixpoint_full.nl` 전체 소스를 먹인 최신 probe는 normalize/embed → `nl2vais` → `vaisc build` →
-  generated source compiler 실행까지 통과. 현재 첫 blocker는 `emit_op(o: Op)` 등 struct-valued function
-  params/returns가 scalar `i64` ABI로 낮아지는 것. 다음 작업은 struct aggregate ABI 지원 또는 `Op` helper의
-  scalar ABI 리팩터.
-- **fixpoint_full 잔존 codegen 능력 갭 기록**(2026-06-07 경계매핑 이력; 대부분 후속 FP12에서 해결, 최신 full-source blocker는 상단 1g):
+## TRACKED (full-source bootstrap next gate)
+- **반복 self-host/fixpoint 자동 게이트**: fixpoint_full이 전 코어구문 + 토크나이저/파서 shape를 codegen하고,
+  실제 `fixpoint_full.nl` 전체 소스를 먹인 최신 probe도 normalize/embed → `nl2vais` → `vaisc build` →
+  generated source compiler IR clang/run → emitted IR clang/run exit 42까지 통과. 다음 작업은 이 probe를 자동화하고,
+  generated compiler가 다시 파일/대형 소스를 입력받아 stage output을 비교할 수 있는 반복 루프를 만드는 것.
+- **fixpoint_full 잔존 codegen 능력 갭 기록**(2026-06-07 경계매핑 이력; 대부분 후속 FP12에서 해결, 최신 full-source 상태는 상단 1g):
   ① 비교-as-value **해결**(FP12g). ② `(...)` 그룹화 **해결**(FP12h). ③ `>=`/`<=` 2-char 비교 **해결**(FP12i,
   단일토큰 kind29/30, sge/sle, value+조건 양쪽; is_digit `c>=48 and c<=57` shape). ④ `for` 루프 **해결**(FP12jj).
   ⑤ `and`/`or`를 값으로 **해결**(FP12j, kind31/32, precedence comparison보다 낮게=next_logical로 RHS 바운드,

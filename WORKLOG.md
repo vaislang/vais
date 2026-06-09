@@ -1,5 +1,32 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: FP12qq — `fixpoint_full.nl` full-source probe struct ABI 해소)
+- FP12pp에서 확정한 첫 blocker였던 **struct-valued function params/returns**를 `fixpoint_full.nl` 안에서 해결.
+  `-> Struct` 함수는 List 반환과 같은 hidden out-param ABI로 낮추고, struct 파라미터는 incoming `i64*`를 로컬
+  `[nfields x i64]` 슬롯으로 복사한다. `return local_struct`, `return Struct { ... }`, `return other_struct_call(...)`
+  모두 out-param copy/forward 경로로 emit.
+- `Op` 계열만을 위한 임시 우회가 아니라 self-source가 실제로 요구한 ABI 면을 일반화:
+  - `build_fns`가 struct param type과 `-> StructName` return metadata를 기록.
+  - `emit_fn`이 `retlist >= 1`이면 `define void` + hidden out-param signature를 만들고, struct param slots를 예약.
+  - struct literal 인자와 struct local 인자를 call site에서 포인터/임시 aggregate로 전달.
+  - `let x = list_returning_call(...)` 경로의 regular args를 10개까지 확장하고, List/struct/string 인자 순서를 보존.
+- full-source에서 이어서 드러난 갭도 닫음:
+  - `let mut xs = base; xs.push(...); return xs` List param alias를 포인터 alias로 처리하고, `-> List` return 시 hidden
+    out-param으로 복사.
+  - self-source 내부 metadata용 `Fn`/`StructDef`의 고정 ABI field lookup을 추가하되, 8-field 사용자 `struct Fn`은
+    깨지지 않도록 full metadata shape(`nfields >= 19`)에만 적용.
+  - `/` 토큰/precedence/codegen(`sdiv`)을 추가해 `pint`의 `x / 10` 루프가 잘못 토큰화되지 않게 함.
+  - 기본 `main`의 embedded sample을 source-file self embedding에 안전한 단순 프로그램으로 교체.
+- **full-source probe 실측**: 실제 `compiler/self/fixpoint_full.nl` → normalize/embed → `nl2vais` → `vaisc build` →
+  generated compiler IR `954648` bytes, `@main` 1개, negative GEP 0개 → clang OK → generated compiler 실행 OK →
+  emitted IR clang OK → emitted binary exit **42**. 즉 현재 `fixpoint_full.nl` 전체 소스가 `fixpoint_full`로 컴파일되어
+  실행 가능한 1세대 컴파일러를 만들고, 그 컴파일러가 다시 작은 nl 프로그램을 LLVM IR로 emit/run한다.
+- 회귀 가드 추가: struct ABI, List param alias, 4+ arg `-> List` hidden out-param call, internal metadata field lookup,
+  사용자 `struct Fn` 회귀, `/` 연산.
+- 검증: `bash scripts/test-fixpoint-full.sh` = OK, `bash scripts/test.sh` = `RESULT: pass=96 fail=0 skip=0`,
+  수동 full-source probe = 2단계 emitted binary exit 42. 다음 단계는 이 수동 probe를 자동 게이트화하고,
+  generated compiler가 파일/대형 소스를 입력으로 다시 컴파일하는 반복 self-host 루프를 다듬는 것.
+
 ## 2026-06-09 (계속: FP12pp — `fixpoint_full.nl` full-source probe 첫 blocker 확정)
 - 다음 목표인 실제 `compiler/self/fixpoint_full.nl` 전체 소스 주입 probe를 실행. 초기 실패 1: `tools/embed_self_source.py`의
   `re.sub` replacement string이 backslash를 regex escape로 재해석해, 정규화된 소스 안의 `\"`/`\\`가 줄어들며
