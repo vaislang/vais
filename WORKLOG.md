@@ -1,5 +1,18 @@
 # nl WORKLOG
 
+## 2026-06-09 (계속: 점진 인프라 — palindrome 문자열 코퍼스 확장)
+- P9 예제 코퍼스에 `examples/e69_palindrome_string.nl` 추가.
+  `Str` 파라미터, `s.len()`, 양끝 computed byte indexing(`s[left]`/`s[right]`), `!=`, shrinking while window를
+  하나의 two-pointer palindrome 검사로 묶어 검증한다.
+- 홀수 palindrome(`level`), 짝수 palindrome(`abba`), 실패 케이스(`robot`)를 모두 포함해 결과를 42로 고정.
+- `examples/README.md` 인덱스와 코퍼스 카운트를 80/80, 전체 runner 98/98 기준으로 갱신.
+- 검증:
+  - `bash scripts/test.sh e69_palindrome_string` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/test.sh` = `RESULT: pass=98 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `git diff --check` = clean
+
 ## 2026-06-09 (계속: 점진 인프라 — binary search 코퍼스 확장)
 - P9 예제 코퍼스에 `examples/e68_binary_search.nl` 추가.
   sorted `List<Int>`를 `&List<Int>`로 빌려 받아 while-loop, 계산 인덱싱, 조기 return, `0 - 1` not-found sentinel을
