@@ -90,19 +90,24 @@ a working first-generation compiler. The long gate is automated as
 6. retarget that first-generation compiler to the real
    `compiler/self/fixpoint.nl`, `fixpoint2.nl`, `fixpoint3.nl`, and
    `fixpoint_full.nl`, then clang/run each final IR
+7. normalize source-position string global names with
+   `tools/normalize_stage_ir.py` and byte-compare the stage1 compiler IR against
+   the stage2 compiler IR emitted by the `fixpoint_full.nl` retarget
 
-The latest run emitted a 980576-byte compiler IR module for the full
+The latest run emitted a 990159-byte compiler IR module for the full
 `fixpoint_full.nl` self probe with exactly one `@main`, zero negative GEPs,
 passed clang, ran the generated compiler successfully, then clang'd and ran the
 second-stage emitted IR with exit code 42. The same gate then retargeted the
 first-generation compiler to the real `fixpoint.nl`, `fixpoint2.nl`, and
-`fixpoint3.nl`, emitted 985196/991308/1003038-byte compiler IR modules,
+`fixpoint3.nl`, emitted 994779/1000891/1012621-byte compiler IR modules,
 verified the final IR contains `ret i64 24` / `ret i64 50` / `ret i64 120`,
 clang'd each final IR, and ran the final binaries with exit code 24/50/120.
 It also retargeted the first-generation compiler to `fixpoint_full.nl` itself,
-emitted a 1092583-byte second-generation compiler IR module, ran that compiler,
+emitted a 1103434-byte second-generation compiler IR module, ran that compiler,
 verified the final IR contains `ret i64 42`, clang'd it, and ran the final
-binary with exit code 42.
+binary with exit code 42. Finally, it normalized only `@.sNNN`/`@.fmtNNN`
+source-position globals and verified the stage1/stage2 compiler IR match
+byte-for-byte at 989685 normalized bytes.
 
 The FP12pp blocker was **struct-valued function parameters/returns**:
 `fixpoint_full.nl` uses helpers such as `emit_op(o: Op)`,
@@ -117,13 +122,10 @@ forward through the hidden out-param.
 
 - The compilers handle an **arithmetic + function + recursion subset** of nl
   (multi-digit ints, `+ - *`, `let`, `fn`, calls, `if/then/else`, `< > ==`).
-- A **repeatable self-compilation fixpoint** still needs stage comparison or
-  another stable oracle. The current milestone is stronger than a snippet probe:
-  the full `fixpoint_full.nl` source builds a working compiler, and a
-  first-generation compiler can consume the real `fixpoint.nl`, `fixpoint2.nl`,
-  `fixpoint3.nl`, and `fixpoint_full.nl` files again and produce/run final IR.
-  The next gate is not just "does it run", but a stable stage-output comparison
-  oracle for stage N/N+1 compiler output.
+- A **repeatable self-compilation oracle** is now in the long gate for
+  `fixpoint_full.nl`: stage1/stage2 compiler IR must match after normalizing
+  only source-position string global names. This is still a bounded bootstrap
+  oracle, not a proof about every future backend or all possible source files.
 - Upstream: two Vais compiler bugs were root-fixed to enable this work
   (`&Vec` borrow recursion, literal-`%` escaping), both gate-verified
   (`check-integrity.sh INTEGRITY OK`, zero regression).
@@ -199,12 +201,11 @@ bodies. The unified compiler can codegen its *own tokenizer's shape* — a funct
 that scans a string byte by byte into a `List` (verified e2e: `fn tok() { let s =
 "..."; let xs = list(); while i < s.len() { xs.push(s[i]); i = i + 1 }; ... }`).
 
-The remaining gap to a *literal* repeatable self-compilation fixpoint is now a
-stage-comparison problem, not a known codegen blocker: the actual
-`fixpoint_full.nl` source builds a first-generation compiler, that compiler emits
-LLVM IR for its embedded sample, and the emitted program runs. The automated long
-gate also proves a first-generation compiler can consume a real file-sized
-`fixpoint.nl` input again and produce/run final IR (`ret i64 24`). The next step
-is to define a stable stage oracle, then compare generated compiler output across
-repeated stages or retarget the generated compiler to progressively larger real
-sources.
+The repeatable self-compilation boundary is now guarded by a stage oracle: the
+actual `fixpoint_full.nl` source builds a first-generation compiler, a
+first-generation retarget consumes the real `fixpoint_full.nl` source again, and
+the resulting stage1/stage2 compiler IR matches after normalizing only
+source-position string global names. The same long gate still proves a
+first-generation compiler can consume real file-sized `fixpoint.nl`,
+`fixpoint2.nl`, `fixpoint3.nl`, and `fixpoint_full.nl` inputs and produce/run
+final IR.

@@ -13,7 +13,30 @@ VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 TR="$HERE/compiler/transpiler/nl2vais.py"
 SRC="$HERE/compiler/self/fixpoint_full.nl"
 EMBED="$HERE/tools/embed_self_source.py"
+NORM_IR="$HERE/tools/normalize_stage_ir.py"
 fail=0
+last_source_compiler_ll=""
+last_emitted_ll=""
+
+compare_stage_ir() {
+  local left="$1" right="$2" label="$3" tmp bytes
+  tmp="$(mktemp -d)"
+  if [ -z "$left" ] || [ -z "$right" ]; then
+    echo "  FAIL $label: missing stage IR path"; fail=1; return
+  fi
+  python3 "$NORM_IR" "$left" "$tmp/left.ll" \
+    || { echo "  FAIL $label: normalize left"; fail=1; return; }
+  python3 "$NORM_IR" "$right" "$tmp/right.ll" \
+    || { echo "  FAIL $label: normalize right"; fail=1; return; }
+  if cmp -s "$tmp/left.ll" "$tmp/right.ll"; then
+    bytes="$(wc -c < "$tmp/left.ll" | tr -d ' ')"
+    echo "  PASS $label normalized stage IR matches ($bytes bytes)";
+  else
+    echo "  FAIL $label normalized stage IR differs"
+    diff -u "$tmp/left.ll" "$tmp/right.ll" | sed -n '1,160p'
+    fail=1
+  fi
+}
 
 run_full_probe() {
   local source="$1" label="$2" want="$3" mode="${4:-program}" tmp
@@ -27,6 +50,7 @@ run_full_probe() {
     || { echo "  FAIL $label: compiler build"; cat "$tmp/build.log"; fail=1; return; }
 
   "$tmp/c" > "$tmp/source_compiler.ll"
+  last_source_compiler_ll="$tmp/source_compiler.ll"
   local main_count neg_gep_count ir_bytes
   main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
   neg_gep_count="$(grep -c 'i64 -[0-9]' "$tmp/source_compiler.ll" || true)"
@@ -56,6 +80,7 @@ run_full_probe() {
   fi
   clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>"$tmp/clang2.err" \
     || { echo "  FAIL $label: emitted IR invalid"; cat "$tmp/clang2.err"; fail=1; return; }
+  last_emitted_ll="$tmp/emitted.ll"
 
   if [ "$mode" = "compiler" ]; then
     "$tmp/emitted_bin" > "$tmp/final.ll"
@@ -94,6 +119,7 @@ run_full_probe() {
 }
 
 run_full_probe "$SRC" "full-source fixpoint_full.nl self probe" 42
+stage1_self_ir="$last_source_compiler_ll"
 
 run_retarget_probe() {
   local target="$1" want="$2" label="$3" tmp_variant
@@ -109,6 +135,11 @@ run_retarget_probe "$HERE/compiler/self/fixpoint.nl" 24 "first-generation compil
 run_retarget_probe "$HERE/compiler/self/fixpoint2.nl" 50 "first-generation compiler consumes fixpoint2.nl"
 run_retarget_probe "$HERE/compiler/self/fixpoint3.nl" 120 "first-generation compiler consumes fixpoint3.nl"
 run_retarget_probe "$SRC" 42 "first-generation compiler consumes fixpoint_full.nl"
+stage2_self_ir="$last_emitted_ll"
+
+if [ "$fail" -eq 0 ]; then
+  compare_stage_ir "$stage1_self_ir" "$stage2_self_ir" "fixpoint_full stage1/stage2 compiler output"
+fi
 
 [ "$fail" -eq 0 ] && echo "RESULT: fixpoint_full full-source self-host gate OK" || echo "RESULT: FAILURES"
 exit $fail

@@ -233,6 +233,27 @@ fn kw6(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int, w3: Int, w4: Int,
     return 1
 }
 
+fn string_lit_value_len(src: Str, start: Int, raw_len: Int, delim: Int) -> Int {
+    if delim != 34 { return raw_len }
+    let mut k = 0
+    let mut out = 0
+    while k < raw_len {
+        if src[start + k] == 92 {
+            if k + 1 < raw_len {
+                out = out + 1
+                k = k + 2
+            } else {
+                out = out + 1
+                k = k + 1
+            }
+        } else {
+            out = out + 1
+            k = k + 1
+        }
+    }
+    return out
+}
+
 fn tokenize(src: Str) -> List<Token> {
     let mut toks: List<Token> = []
     let n = src.len()
@@ -254,7 +275,7 @@ fn tokenize(src: Str) -> List<Token> {
                 else if src[j] == delim { sgo = false }
                 else { j = j + 1 }
             }
-            toks.push(Token { kind: 28, value: j - sstart, nstart: sstart, nlen: j - sstart })
+            toks.push(Token { kind: 28, value: string_lit_value_len(src, sstart, j - sstart, delim), nstart: sstart, nlen: j - sstart })
             i = j + 1
         } else if is_digit(c) {
             let mut v = 0
@@ -403,6 +424,29 @@ fn emit_bytes(src: Str, start: Int, len: Int) -> Int {
     }
     return 0
 }
+fn emit_literal_bytes(src: Str, start: Int, raw_len: Int) -> Int {
+    if start > 0 {
+        if src[start - 1] == 34 {
+            let mut k = 0
+            while k < raw_len {
+                if src[start + k] == 92 {
+                    if k + 1 < raw_len {
+                        emit_llvm_c_byte(src[start + k + 1])
+                        k = k + 2
+                    } else {
+                        emit_llvm_c_byte(src[start + k])
+                        k = k + 1
+                    }
+                } else {
+                    emit_llvm_c_byte(src[start + k])
+                    k = k + 1
+                }
+            }
+            return 0
+        }
+    }
+    return emit_bytes(src, start, raw_len)
+}
 # printf format length: bytes the @.fmt<nstart> global occupies for the literal
 # [start,start+len), where each `%` doubles to `%%`, each VALID `{ident}` becomes
 # a 2-byte printf directive (`%d` or `%s`), a lone `{` (literal brace) passes
@@ -470,7 +514,7 @@ fn emit_str_globals(toks: &List<Token>, fns: &List<Fn>, src: Str, n: Int) -> Int
             emit_str(" = private constant [")
             pint(t.value + 1)
             emit_str(" x i8] c\"")
-            emit_bytes(src, t.nstart, t.nlen)
+            emit_literal_bytes(src, t.nstart, t.nlen)
             emit_str("\\00\"")
             putchar(10)
             # a brace-bearing literal also gets a printf format global @.fmt<nstart>
@@ -1251,7 +1295,9 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                                 # length index + buffer size depend on element kind:
                                 #   scalar List  -> length at [list_lenidx()], buffer [list_cap() x i64]
                                 #   List<struct> -> length at [cap*nf], buffer [cap*nf+1]
-                                let alsty = sty_of(slots, src, argt.nstart, argt.nlen)
+                                let mut alsty = sty_of(slots, src, argt.nstart, argt.nlen)
+                                let pst = param_list_elem_sty(toks, defs, src, toks.len(), t.nstart, t.nlen, nargs)
+                                if pst >= 0 { alsty = pst }
                                 let mut alenidx = list_lenidx()
                                 let mut albufsz = list_cap()
                                 if alsty >= 0 {
@@ -1326,7 +1372,8 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                             } else if aarr == 0 {
                                 # Struct local passed by value: pass a pointer to
                                 # its first field; callee copies into its local.
-                                let ast = sty_of(slots, src, argt.nstart, argt.nlen)
+                                let mut ast = sty_of(slots, src, argt.nstart, argt.nlen)
+                                if want_ty >= 3 { ast = want_ty - 3 }
                                 if ast >= 0 and want_ty >= 3 {
                                     let aslot = find_slot(slots, src, argt.nstart, argt.nlen)
                                     let anf = struct_nfields(defs, ast)
@@ -2767,7 +2814,9 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
                     let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
                     if aarr == 2 {
                         let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
-                        let alsty = sty_of(slots, src, argt.nstart, argt.nlen)
+                        let mut alsty = sty_of(slots, src, argt.nstart, argt.nlen)
+                        let pst = param_list_elem_sty(toks, defs, src, toks.len(), cname_arg.nstart, cname_arg.nlen, nargs)
+                        if pst >= 0 { alsty = pst }
                         let mut alenidx = list_lenidx()
                         let mut albufsz = list_cap()
                         if alsty >= 0 {
@@ -2835,7 +2884,8 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
                         cc = cc + 1
                         handled = 1
                     } else if aarr == 0 {
-                        let ast = sty_of(slots, src, argt.nstart, argt.nlen)
+                        let mut ast = sty_of(slots, src, argt.nstart, argt.nlen)
+                        if want_ty >= 3 { ast = want_ty - 3 }
                         if ast >= 0 and want_ty >= 3 {
                             let aslot = find_slot(slots, src, argt.nstart, argt.nlen)
                             let anf = struct_nfields(defs, ast)
@@ -3210,7 +3260,9 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                                 if aarr == 2 {
                                     # local List arg passed by pointer (write len->buf[63] then base)
                                     let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
-                                    let alsty = sty_of(slots, src, argt.nstart, argt.nlen)
+                                    let mut alsty = sty_of(slots, src, argt.nstart, argt.nlen)
+                                    let pst = param_list_elem_sty(toks, defs, src, toks.len(), cname.nstart, cname.nlen, nca)
+                                    if pst >= 0 { alsty = pst }
                                     let mut albuf = list_cap()
                                     let mut alidx = list_lenidx()
                                     if alsty >= 0 {
@@ -3268,7 +3320,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                                     handled = 1
                                 } else if aarr == 0 {
                                     # Struct local passed by value: pass its base pointer.
-                                    let ast = sty_of(slots, src, argt.nstart, argt.nlen)
+                                    let mut ast = sty_of(slots, src, argt.nstart, argt.nlen)
+                                    if want_ty >= 3 { ast = want_ty - 3 }
                                     if ast >= 0 and want_ty >= 3 {
                                         let aslot = find_slot(slots, src, argt.nstart, argt.nlen)
                                         let anf = struct_nfields(defs, ast)
