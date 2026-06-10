@@ -64,6 +64,7 @@ CASES = [
     ("and clean", "fn main() -> Int {\n  if a and b { return 1 }\n  return 0\n}", False),
     ("dot enum clean", "fn main() -> Int {\n  match c { Color.Red => 1 }\n}", False),
     ("Int() cast clean", "fn main() -> Int {\n  let x = Int(y)\n  return x\n}", False),
+    ("Str() conversion clean", "fn main() -> Int {\n  let s = Str(42)\n  return 0\n}", False),
     ("=> return clean (P6 allowed)", "fn f() -> Int {\n  match c { Color.Red => return 1 }\n}", False),
     ("string with && not flagged", 'fn main() -> Int {\n  let s = "a && b"\n  return 0\n}', False),
     ("comment with :: not flagged", "fn main() -> Int {\n  # use Foo::bar style elsewhere\n  return 0\n}", False),

@@ -41,11 +41,11 @@ WORD_MAP = {
 }
 
 
-# Numeric scalar conversions: nl writes `Int(x)` / `F64(x)` (P4: conversion is a
-# call, not `x as Int`). Vais's working form is `(x as i64)`. Map the call form to
-# the `as` form BEFORE map_types (which would otherwise produce the invalid
-# `i64(x)`). Only the numeric scalar types -- NOT Str/Bool/Char (different
-# handling) and NOT Some/Ok/struct constructors.
+# Scalar conversions: nl writes `Int(x)` / `F64(x)` / `Str(x)` (P4: conversion is
+# a call, not `x as Int`). Numeric conversions map to Vais casts; string
+# conversion maps to the Vais surface builtin `to_string(x)`. Do this BEFORE
+# map_types (which would otherwise produce invalid `i64(x)` / `str(x)` calls).
+# Bool/Char are not handled here, and Some/Ok/struct constructors stay intact.
 _CONV_TYPES = {
     "Int": "i64", "Int8": "i8", "Int16": "i16", "Int32": "i32", "Int64": "i64",
     "Int128": "i128",
@@ -56,6 +56,11 @@ _CONV_TYPES = {
 
 def map_conversions(line: str) -> str:
     def rewrite(p: str) -> str:
+        p = re.sub(
+            r"\bStr\(([^()]*)\)",
+            lambda m: f"to_string({m.group(1).strip()})",
+            p,
+        )
         for nm, vt in _CONV_TYPES.items():
             # NumType(<expr without nested parens>) -> (<expr> as vais_type)
             p = re.sub(

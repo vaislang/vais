@@ -131,9 +131,11 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   (리터럴을 `Vec<T>` 파라미터에 직접 전달)이 기대 타입 기반 typecheck + inline Vec materialization으로
   build/run 통과. 회귀: `e2e_phase256_vec_literal_direct_arg_full_build` exit 37.
   전체 Vais `scripts/check-integrity.sh`도 `INTEGRITY OK`.
-- **Vais 표면 int→string 변환 부재**: `str(42)` P001(str=타입키워드, 호출불가), `to_string(42)` E002,
-  `(42).to_string()` C002. 내부 `__i64_to_str`(FFI impl)만 존재. nl `Str(x)` 변환콜이 `str(x)`로 사상돼 실패.
-  → nl-check가 `.to_string()`을 flag하되 대체 약속 안 함(정직). 표면 변환은 Vais 백엔드 작업 필요. 2026-06-06 실측.
+- ✅ **Vais 표면 int→string 변환 — 해결**(2026-06-10, compiler `0824cfdf`): `to_string(i64) -> str`와
+  `n.to_string()` lowering을 `snprintf` 기반 str fat pointer 생성으로 추가. `str(42)`는 여전히
+  타입키워드 호출이라 canonical 표면은 `to_string(42)`이며, nl은 `Str(x)`를 `to_string(x)`로
+  트랜스파일한다. 회귀: Vais `phase259_int_to_string`, nl `e73_int_to_string`; nl-check는
+  Rust식 `.to_string()`을 `Str(expr)`로 안내.
 - **Vais HashMap codegen 버그** (Map<K,V> 막힘): `HashMap.new()` 모노모픽화 누락(C002/E004 undefined
   `@HashMap_new`) + `get_opt` Option ptr/i64 불일치. Vais repo `tests/empirical/codegen_bugs/B-01,B-02`에
   repro. nl Map 예제/PRELUDE ✅ 승격 막힘. `.filter()`와 동일 클래스(Vais repo 수정 필요). 2026-06-06 실측 확인.

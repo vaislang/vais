@@ -1,0 +1,20 @@
+# expect: 73
+# Integer-to-string surface conversion: nl `Str(x)` lowers to Vais `to_string(x)`.
+fn main() -> Int {
+    let a = Str(42)
+    if a != "42" {
+        return 1
+    }
+
+    let n = 0 - 7
+    let b = Str(n)
+    if b != "-7" {
+        return 2
+    }
+
+    if b.len() != 2 {
+        return 3
+    }
+
+    return 73
+}
