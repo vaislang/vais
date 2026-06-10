@@ -36,6 +36,7 @@ CASES = [
     # new Rust-ism rules (true positives):
     ("vec! flagged", "fn main() -> Int {\n  let v = vec![1, 2, 3]\n  return 0\n}", True),
     ("Vec<T> type flagged", "fn main() -> Int {\n  let v: Vec<Int> = []\n  return 0\n}", True),
+    ("HashMap type flagged", "fn main() -> Int {\n  m: HashMap<Int, Int> = HashMap.new()\n  return 0\n}", True),
     ("i32 type flagged", "fn main() -> Int {\n  let x: i32 = 5\n  return x\n}", True),
     ("f64 type flagged", "fn main() -> Int {\n  let x: f64 = 0\n  return 0\n}", True),
     ("to_string flagged", "fn main() -> Int {\n  let s = 42.to_string()\n  return 0\n}", True),
@@ -54,6 +55,7 @@ CASES = [
     ("== comparison clean", "fn main() -> Int {\n  if a == b { return 1 }\n  return 0\n}", False),
     ("negative assign clean", "fn main() -> Int {\n  let mut x = 0\n  x = 0 - 5\n  return x\n}", False),
     ("List<T> type clean", "fn main() -> Int {\n  let v: List<Int> = []\n  return 0\n}", False),
+    ("Map<T> type clean", "fn main() -> Int {\n  m: Map<Int, Int> = Map.new()\n  return 0\n}", False),
     ("list literal clean", "fn main() -> Int {\n  let v = [1, 2, 3]\n  return 0\n}", False),
     ("Int type clean", "fn main() -> Int {\n  let x: Int = 5\n  return x\n}", False),
     ("ident containing i32-substr clean", "fn main() -> Int {\n  let pi32 = 5\n  return pi32\n}", False),

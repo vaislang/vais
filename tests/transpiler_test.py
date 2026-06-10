@@ -51,6 +51,7 @@ CASES = [
      ["Vec<Vec<i64>>"], ["List<"]),
     (".sum -> fold", "let s = v.sum()", [".fold(0,"], [".sum()"]),
     ("List type -> Vec", "fn f(x: List<Int>) -> Int {", ["Vec<i64>"], ["List<"]),
+    ("Map type -> HashMap", "fn f(x: Map<Int, Int>) -> Int {", ["HashMap<i64, i64>"], ["Map<Int"]),
     ("field pub strip", "    pub name: Str,", ["name: str"], ["pub name"]),
     ("string interp kept", 'let s = "hi {name}"', ['"hi {name}"'], []),
     ("? kept", "let r = f()?", ["r := f()?"], ["let "]),
@@ -86,6 +87,7 @@ CASES = [
     ("Int in string kept", 'let s = "type is Int"', ['"type is Int"'], ["i64", "as i64"]),
     ("Str conversion in string kept", 'let s = "call Str(n)"', ['"call Str(n)"'], ["to_string"]),
     ("List in string kept", 'let s = "a List here"', ['"a List here"'], ["Vec"]),
+    ("Map in string kept", 'let s = "a Map here"', ['"a Map here"'], ["HashMap"]),
     ("String type -> str", "fn f(s: String) -> Int {", ["str"], ["String"]),
     # loop control: break -> B, continue -> C (whole-word, not in strings)
     ("break -> B", "    if i == 3 { break }", ["{ B }"], ["break"]),

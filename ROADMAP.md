@@ -136,9 +136,11 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   타입키워드 호출이라 canonical 표면은 `to_string(42)`이며, nl은 `Str(x)`를 `to_string(x)`로
   트랜스파일한다. 회귀: Vais `phase259_int_to_string`, nl `e73_int_to_string`; nl-check는
   Rust식 `.to_string()`을 `Str(expr)`로 안내.
-- **Vais HashMap codegen 버그** (Map<K,V> 막힘): `HashMap.new()` 모노모픽화 누락(C002/E004 undefined
-  `@HashMap_new`) + `get_opt` Option ptr/i64 불일치. Vais repo `tests/empirical/codegen_bugs/B-01,B-02`에
-  repro. nl Map 예제/PRELUDE ✅ 승격 막힘. `.filter()`와 동일 클래스(Vais repo 수정 필요). 2026-06-06 실측 확인.
+- ✅ **Vais HashMap/Map 기본 경로 — 해결 확인**(2026-06-11, compiler `835c9672`): `HashMap<u64,u64>.new()`
+  모노모픽화 누락(B-02)은 build/run `exit=200`으로 통과하고, `get_opt(&key)`의 `&K -> K` silent path(B-01)는
+  type checker가 `expected u64, found &u64`로 거부한다. nl `Map<K,V>`는 `HashMap<K,V>`로 트랜스파일하며
+  `e74_map_basic`으로 PRELUDE 기본 insert/get_opt 승격. 회귀: Vais `phase260_hashmap_regressions`,
+  nl `e74_map_basic`; nl-check는 Rust식 `HashMap`을 `Map`으로 안내.
 - ✅ **Vais &Vec borrow 재귀 — 해결**(2026-06-06, compiler 214c97cf): `&Vec<T>`가 슬라이스 fat-ptr로
   잘못 codegen되던 버그 근본 수정 → 이제 주소 전달. **nl이 `&List<T>` borrow로 Vec 재귀 가능**
   (e15_list_recursion 실측 10). fixpoint(AST 순회)의 핵심 기반 확보. by-value=E022 move는 여전(설계상

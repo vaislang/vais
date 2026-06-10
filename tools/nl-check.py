@@ -28,6 +28,7 @@ Catalog (Rust/other-language intuition -> the single nl form):
   Type<..>::new() -> a literal ([] / [1,2,3] / {})
   vec![..]        -> [..]
   Vec<T>          -> List<T>
+  HashMap<K,V>    -> Map<K,V>
   i8..i128/u8..u128/f32/f64/usize/isize -> Int / Int8..Int128 / UInt8.. / F32 / F64
   x.to_string()   -> Str(x)
   .unwrap()/.expect() -> match the Option/Result, or `?`
@@ -84,6 +85,9 @@ RULES = [
     (re.compile(r"\bVec\s*<"),
      "the list type is `List<T>`, not `Vec<T>`",
      lambda m, ln: re.sub(r"\bVec(\s*<)", r"List\1", ln, count=1)),
+    (re.compile(r"\bHashMap\b"),
+     "the map type is `Map<K,V>`, not `HashMap<K,V>`",
+     lambda m, ln: re.sub(r"\bHashMap\b", "Map", ln, count=1)),
     # --- Rust scalar type names (nl uses Int/UInt8.. / F32 / F64, capitalized) ---
     (re.compile(r"(?<![A-Za-z0-9_])(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|usize|isize)(?![A-Za-z0-9_])"),
      "nl scalar types are capitalized: `Int` / `Int8..Int128` / `UInt8..UInt128` / `F32` / `F64`",

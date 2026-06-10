@@ -1,0 +1,11 @@
+# expect: 42
+# Basic Map<K,V> smoke. nl uses Map, transpiles to Vais HashMap, and relies on
+# the compiler's full std/hashmap monomorphized build path.
+fn main() -> Int {
+    m: Map<Int, Int> = Map.new()
+    m.insert(7, 42)
+    match m.get_opt(7) {
+        Some(v) => return v,
+        None => return 0,
+    }
+}
