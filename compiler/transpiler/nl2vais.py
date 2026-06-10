@@ -288,8 +288,8 @@ def map_collection_methods(line: str) -> str:
         # `.sum()` -> `.fold(0, |__a, __x| __a + __x)`
         p = re.sub(r"\.sum\(\)", r".fold(0, |__a, __x| __a + __x)", p)
         # Vais `filter` wants `fn(T)->i64`, but nl predicates are Bool. Wrap a
-        # boolean filter body into i64: `.filter(|x| COND)` ->
-        # `.filter(|x| I (COND) { 1 } else { 0 })`. (Backend limit.)
+        # boolean filter body into the stdlib's i64 predicate ABI:
+        # `.filter(|x| COND)` -> `.filter(|x| I (COND) { 1 } else { 0 })`.
         def filt(m):
             var, cond = m.group(1), m.group(2)
             return f".filter(|{var}| I ({cond}) {{ 1 }} else {{ 0 }})"

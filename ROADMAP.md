@@ -101,8 +101,8 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 ---
 
 ## TRACKED (막혀서 넘어간 것 — 근본은 Vais repo)
-- Vais filter 버그 (task_7cfebeba): `.filter()`가 specialized body서 `%Vec*` 오타입 → nl d6 막힘.
-  Vais repo 작업. nl 트랜스파일은 정상.
+- ✅ Vais filter 버그(task_7cfebeba) — 해결 확인(2026-06-11): `.filter()` + `.sum()`이 nl `d6run`
+  값 검증으로 통과. nl transpiler는 Bool predicate를 Vais stdlib의 i64 predicate ABI로 감싼다.
 - 트랜스파일 천장(원천적): P7 단일coercion / P8 클로저 day-1은 Vais 위에선 실현 불가.
   → L3 자체 컴파일러에서만 해결. (현재 큐는 L3 프론트엔드 진입 전 인프라 다지기.)
 
@@ -120,13 +120,14 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 - **Vais `impl Trait for Type` 미지원**: `impl Area for Sq { ... }`가 P001(`for`서). **`impl Type { ... }`
   (inherent 메서드)는 OK**(e09/e43 동작) → nl 구조체 메서드는 정상, trait 기반 다형성만 막힘. Vais 파서 확장
   필요. nl측은 `impl Type` 형태로 충분(트랜스파일 정상). 2026-06-07 실측.
-- **Vais Vec 성장(push/map/filter) codegen 버그**: 리터럴 Vec에 `.push(x)`는 무음 miscompile(`@Vec_push`
-  undefined, len 오염 → garbage 134), `.map()`은 `@Vec_push` undefined로 빌드실패, `.filter()`는 E001
-  (task_7cfebeba). **read-only(len/index/fold/sum)는 OK**. 리스트 변형/구축은 `for`-루프 누적(e25/e27) 권장.
-  nl self-host codegen 트랙은 Vais Vec 안 쓰고 고정버퍼로 우회. PRELUDE push/map 🔴 정정. 2026-06-07 실측.
+- ✅ **Vais Vec 성장(push/map/filter) — 해결 확인**(2026-06-11, compiler `83c7b3a6`): 현재 compiler는 `Vec.new()+push`
+  성장, `Vec.map(...).fold(...)`, `Vec.filter(...).fold(...)` full build/run 통과. nl은 빈 `List<T>`를
+  `Vec::new()`으로 만들고 `.sum()`을 `.fold(...)`로 낮춘다. 회귀: Vais `phase261_vec_collection_methods`,
+  nl `d6run`, `e75_list_push`, `e76_list_map`. PRELUDE push/map/filter 승격.
 - **Vais 중첩 Vec codegen 버그**: `Vec<Vec<i64>>` 리터럴/인덱싱이 C003 Type error(하드코딩 Vais도 실패).
   nl 트랜스파일러는 올바른 `Vec<Vec<i64>>` 타입 생성하나(nested 추론 수정 685ba63 다음 커밋) Vais가 codegen
-  못 함. nl 중첩 리스트 `[[..]]` 막힘. Vais repo 작업 필요. 2026-06-07 실측.
+  못 함. 2026-06-11 재측정: `rows: Vec<Vec<i64>> = [[1,2],[3,4]]; rows[1][0]` build는 되나 runtime
+  `exit=139`로 segfault. 다음 compiler 작업 필요.
 - ✅ **Vais 리스트-리터럴 직접 인자 코어션 갭 — 해결**(2026-06-10, compiler): `f([1,2,3])`
   (리터럴을 `Vec<T>` 파라미터에 직접 전달)이 기대 타입 기반 typecheck + inline Vec materialization으로
   build/run 통과. 회귀: `e2e_phase256_vec_literal_direct_arg_full_build` exit 37.

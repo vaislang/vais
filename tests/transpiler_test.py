@@ -50,6 +50,9 @@ CASES = [
     ("nested list annotated", "let rows: List<List<Int>> = [[1, 2]]",
      ["Vec<Vec<i64>>"], ["List<"]),
     (".sum -> fold", "let s = v.sum()", [".fold(0,"], [".sum()"]),
+    (".filter bool -> i64 pred", "let s = v.filter(|x| x > 3)",
+     [".filter(|x| I (x > 3) { 1 } else { 0 })"], []),
+    (".map passthrough", "let s = v.map(|x| x * 2)", [".map(|x| x * 2)"], []),
     ("List type -> Vec", "fn f(x: List<Int>) -> Int {", ["Vec<i64>"], ["List<"]),
     ("Map type -> HashMap", "fn f(x: Map<Int, Int>) -> Int {", ["HashMap<i64, i64>"], ["Map<Int"]),
     ("field pub strip", "    pub name: Str,", ["name: str"], ["pub name"]),
@@ -100,6 +103,8 @@ CASES = [
     # string must stay verbatim (these directly affect the self-host compiler,
     # which embeds nl programs as compile("...") strings).
     (".sum in string kept", 'let s = "call v.sum() x"', ['"call v.sum() x"'], ["fold"]),
+    (".filter in string kept", 'let s = "call v.filter(|x| x)"',
+     ['"call v.filter(|x| x)"'], ["I (x)"]),
     ("enum dot in string kept", 'let s = "Color.Red dot"', ['"Color.Red dot"'], ['"Red dot"']),
     ("arm return in string kept", 'let s = "P => return x"', ['"P => return x"'], ["{ return"]),
     # real arm-return STILL wraps (regression guard for the string fix)

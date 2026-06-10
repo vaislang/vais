@@ -1,8 +1,8 @@
 # nl 예제 코퍼스 (P9 인프라)
 
 **검증된 nl 예제.** P9(예제 코퍼스 = 최강 레버, cold-start 1/5→5/5)의 핵심 인프라.
-모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 85/85 PASS; 러너 전체는
-self-host codegen 모듈 포함 103/103).
+모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 88/88 PASS; 러너 전체는
+self-host codegen 모듈 포함 106/106).
 
 > 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
 > AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
@@ -23,6 +23,7 @@ self-host codegen 모듈 포함 103/103).
 | d3run | Result + `?` 전파 | 6 |
 | d4b | List 파라미터 + for | 9 |
 | d5run | pub struct | 42 |
+| d6run | List.filter + `.sum()` | 13 |
 | fr1 | for-range `0..=n` | 15 |
 | fr2 | for-collection | 60 |
 | t1 | 함수 + `let` | 7 |
@@ -100,10 +101,10 @@ self-host codegen 모듈 포함 103/103).
 | e72 | identifier/keyword 스캔 (`let`/`return`/일반 식별자) | 42 |
 | e73 | 정수 → 문자열 변환 `Str(x)` | 73 |
 | e74 | `Map<K,V>` 기본 insert/get_opt | 42 |
+| e75 | 빈 List + `.push()` 성장 | 23 |
+| e76 | `List.map()` + `.sum()` | 12 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
-- **Vec 성장 `.push()`/`.map()`/`.filter()`** — Vais 백엔드 버그(`@Vec_push` 무음 miscompile/undefined).
-  read-only(len/index/fold/sum)는 OK. 리스트 변형/구축은 **`for`-루프 누적**으로(e25/e27 참조).
 - 중첩 `match` (arm 안에 `=> match {...}`) — 라인-재작성기 P001(트랜스파일러 한계). 함수분리로 우회 가능.
 - **`impl Trait for Type`** (trait 기반 다형성) — Vais 미지원(P001). **`impl Type { ... }`(inherent 메서드)는
   OK**(e09/e43) → 구조체 메서드는 정상, trait 디스패치만 막힘. ROADMAP TRACKED.
