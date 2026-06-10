@@ -1,8 +1,8 @@
 # nl 예제 코퍼스 (P9 인프라)
 
 **검증된 nl 예제.** P9(예제 코퍼스 = 최강 레버, cold-start 1/5→5/5)의 핵심 인프라.
-모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 88/88 PASS; 러너 전체는
-self-host codegen 모듈 포함 106/106).
+모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 89/89 PASS; 러너 전체는
+self-host codegen 모듈 포함 107/107).
 
 > 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
 > AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
@@ -103,6 +103,7 @@ self-host codegen 모듈 포함 106/106).
 | e74 | `Map<K,V>` 기본 insert/get_opt | 42 |
 | e75 | 빈 List + `.push()` 성장 | 23 |
 | e76 | `List.map()` + `.sum()` | 12 |
+| e77 | 중첩 `List<List<Int>>` 리터럴 + 이중 인덱싱 | 3 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
 - 중첩 `match` (arm 안에 `=> match {...}`) — 라인-재작성기 P001(트랜스파일러 한계). 함수분리로 우회 가능.
@@ -112,8 +113,6 @@ self-host codegen 모듈 포함 106/106).
   실전 AST는 struct+인덱스 인코딩으로(self-host codegen 트랙 방식). ROADMAP TRACKED.
 - **캡처 클로저 반환** (`fn() -> fn(Int)->Int { return |x| x+n }`) — Vais 미지원(E001). **클로저를 인자로 받는 건
   OK**(e49) → 반환 경계서만 막힘. ROADMAP TRACKED.
-- **중첩 리스트 `[[..]]`** (`List<List<Int>>`) — **Vais 백엔드 버그**(C003 nested Vec). 트랜스파일러는 올바른
-  `Vec<Vec<i64>>` 타입 생성하나 Vais가 codegen 못 함. ROADMAP TRACKED.
 ## 규약
 - 첫 줄 `# expect: N` = main이 반환할 exit code (mod 256).
 - 실행형(main이 값 반환)만 expect 부착. 라이브러리 조각은 미부착(러너 skip).

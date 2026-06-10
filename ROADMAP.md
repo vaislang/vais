@@ -124,10 +124,10 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   성장, `Vec.map(...).fold(...)`, `Vec.filter(...).fold(...)` full build/run 통과. nl은 빈 `List<T>`를
   `Vec::new()`으로 만들고 `.sum()`을 `.fold(...)`로 낮춘다. 회귀: Vais `phase261_vec_collection_methods`,
   nl `d6run`, `e75_list_push`, `e76_list_map`. PRELUDE push/map/filter 승격.
-- **Vais 중첩 Vec codegen 버그**: `Vec<Vec<i64>>` 리터럴/인덱싱이 C003 Type error(하드코딩 Vais도 실패).
-  nl 트랜스파일러는 올바른 `Vec<Vec<i64>>` 타입 생성하나(nested 추론 수정 685ba63 다음 커밋) Vais가 codegen
-  못 함. 2026-06-11 재측정: `rows: Vec<Vec<i64>> = [[1,2],[3,4]]; rows[1][0]` build는 되나 runtime
-  `exit=139`로 segfault. 다음 compiler 작업 필요.
+- ✅ **Vais 중첩 Vec codegen 버그 — 해결 확인**(2026-06-11, compiler `8e0719f2`): `Vec<Vec<i64>>`
+  리터럴이 outer backing buffer에 inner data pointer만 저장해 `rows[1]`에서 40바이트 복사가 garbage/segfault로
+  이어지던 문제를, expected `Vec<T>` 기반 typed literal materialization으로 수정. 회귀: Vais
+  `phase262_nested_vec_literals`, nl `e77_nested_list`.
 - ✅ **Vais 리스트-리터럴 직접 인자 코어션 갭 — 해결**(2026-06-10, compiler): `f([1,2,3])`
   (리터럴을 `Vec<T>` 파라미터에 직접 전달)이 기대 타입 기반 typecheck + inline Vec materialization으로
   build/run 통과. 회귀: `e2e_phase256_vec_literal_direct_arg_full_build` exit 37.
