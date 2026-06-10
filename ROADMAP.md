@@ -141,11 +141,11 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   잘못 codegen되던 버그 근본 수정 → 이제 주소 전달. **nl이 `&List<T>` borrow로 Vec 재귀 가능**
   (e15_list_recursion 실측 10). fixpoint(AST 순회)의 핵심 기반 확보. by-value=E022 move는 여전(설계상
   move 시맨틱이 정상 — borrow가 정답). task_54658a43의 &Vec 측면 closed; by-value move는 의도된 동작.
-- Vais `&&`/`||` 비단락평가 (task_492f7e17): `i<n && arr[i]` 가 i==n서 crash.
-  nl lexer는 nested-if로 우회 중. 근본은 Vais codegen(논리연산→분기). 심각도 높음.
-- Vais 전역 Vec 리터럴 codegen: `G v: Vec<i64> = [..]` → clang "integer constant must have integer type".
-- Vais `&&`/`||` 비단락평가 (task_492f7e17): `i<n && arr[i]` 가 i==n서 crash.
-  nl lexer는 nested-if로 우회 중. 근본은 Vais codegen(논리연산→분기). 심각도 높음.
+- ✅ **Vais `&&`/`||` 단락 평가 — 해결**(2026-06-10, compiler 4fb16591):
+  `false && rhs` / `true || rhs`에서 RHS side effect가 실행되던 eager codegen을 전용
+  branch+phi lowering으로 교체. `logic.left`/`logic.rhs.done` predecessor 블록을 둬 nested
+  control-flow expression 뒤에서도 PHI predecessor가 안정적으로 맞음. phase258 값-정확성 가드 2개 +
+  `scripts/check-integrity.sh` `INTEGRITY OK`.
 - Vais 전역 Vec 리터럴 codegen: `G v: Vec<i64> = [..]` → clang "integer constant must have integer type".
   CX5 재귀 fn-테이블 시도 시 발견 → struct Defs로 대체.
 
