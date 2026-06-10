@@ -151,8 +151,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   branch+phi lowering으로 교체. `logic.left`/`logic.rhs.done` predecessor 블록을 둬 nested
   control-flow expression 뒤에서도 PHI predecessor가 안정적으로 맞음. phase258 값-정확성 가드 2개 +
   `scripts/check-integrity.sh` `INTEGRITY OK`.
-- Vais 전역 Vec 리터럴 codegen: `G v: Vec<i64> = [..]` → clang "integer constant must have integer type".
-  CX5 재귀 fn-테이블 시도 시 발견 → struct Defs로 대체.
+- ✅ **Vais 전역 Vec 리터럴 codegen — 해결 확인**(2026-06-11, compiler `efe806fe`):
+  `G v: Vec<i64> = [..]`를 정적 backing array + Vec struct initializer로 emit. 회귀:
+  Vais `phase263_global_vec_literals`.
 
 ## TRACKED (nl 인터프리터 한계 — 근본은 위 Vais Vec-recursion)
 - **멀티문자 식별자 미지원**: 현 Env=26 단일바이트 슬롯(변수명 1글자=슬롯). `fib`/`sq` 같은 다중자
