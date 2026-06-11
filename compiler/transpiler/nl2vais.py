@@ -364,6 +364,54 @@ UNSUPPORTED = [
     # supported. (Nothing currently flagged; kept for future gaps.)
 ]
 
+
+def expand_nested_match_arms(src: str) -> str:
+    """Pre-pass over raw nl source: wrap `Pattern => match ... { ... },` arms.
+
+    nl allows a match arm to directly contain another match expression. Vais
+    requires a block arm body in this shape, so rewrite:
+        P => match x { ... },
+    into:
+        P => { match x { ... } },
+
+    Brace-tracked so the wrapper closes at the nested match's matching `}`.
+    """
+    lines = src.splitlines()
+    out = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = re.match(r"^(\s*)(.+?=>\s*)match\s+(.+?)\s*\{\s*$", line)
+        if not m:
+            out.append(line)
+            i += 1
+            continue
+
+        indent, arm_head, expr = m.groups()
+        depth = line.count("{") - line.count("}")
+        body = []
+        j = i + 1
+        while j < len(lines) and depth > 0:
+            depth += lines[j].count("{") - lines[j].count("}")
+            if depth == 0:
+                break
+            body.append(lines[j])
+            j += 1
+
+        out.append(f"{indent}{arm_head}{{ match {expr} {{")
+        out.extend(expand_nested_match_arms("\n".join(body)).splitlines())
+        if j < len(lines):
+            close = lines[j]
+            cm = re.match(r"^(\s*)}(,?)\s*$", close)
+            if cm:
+                close_indent, comma = cm.groups()
+                out.append(f"{close_indent}}} }}{comma}")
+            else:
+                out.append(close)
+        i = j + 1
+    return "\n".join(out)
+
+
 _for_ctr = [0]
 
 
@@ -442,6 +490,7 @@ def main():
         print("usage: nl2vais.py input.nl", file=sys.stderr)
         sys.exit(2)
     src = open(sys.argv[1]).read()
+    src = expand_nested_match_arms(src)  # structural pre-pass: arm match -> block arm
     src = expand_for_loops(src)  # structural pre-pass: for-loops -> Vais loop form
     warnings = []
     out_lines = []

@@ -39,7 +39,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
     generated compiler IR `1103434` bytes → 2세대 compiler 실행 → final IR `ret i64 42` → clang/run exit **42**.
   - `tools/normalize_stage_ir.py`로 source-position 기반 `@.sNNN`/`@.fmtNNN` global 이름만 정규화한 뒤,
     stage1 compiler IR과 stage2 compiler IR을 byte-compare → normalized `989685` bytes 일치.
-- 값-정확성 aggregate **101/101** (예제코퍼스 + self-host codegen 모듈).
+- 값-정확성 aggregate **109/109** (예제코퍼스 91/91 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
@@ -85,6 +85,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 - [x] **T2. exclusive range** `..` (현재 `..=`만).
 - [x] **T3. 트랜스파일러 자체 단위테스트** (입력 nl → 기대 Vais 출력 비교, 회귀 방지).
 - [x] **T4. nested for / 복합 표현** 견고성 (현재 라인-재작성기 한계 구간).
+- [x] **T5. 중첩 `match` arm**: `Pattern => match ... { ... }`를 block arm으로 구조 pre-pass.
 
 ### P3 — 에러 인프라 (P4: AI self-correction)
 - [x] **E1. nl 에러 래퍼** (`tools/nl-check`): nl→Vais 트랜스파일 실패/Vais 에러를 nl 좌표+`help:`로 변환.
@@ -117,6 +118,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   Vais(`enum Expr { Add(Expr,Expr) }`) 생성하나 Vais가 재귀 ADT payload 추출 못 함. **비재귀 enum(2-payload Int)은
   OK**(e50). **이것이 nl self-host codegen 트랙이 AST를 재귀enum 대신 struct+인덱스로 인코딩하는 근본 이유.**
   재귀 ADT는 실전 인터프리터/파서의 핵심 → 중요 갭. Vais 코어 작업 필요. 2026-06-07 실측.
+- **Vais enum payload 안의 enum payload ICE**: `enum Wrap { Has(Option<Int>) }`처럼 enum variant payload가
+  또 다른 enum일 때 payload를 꺼내 `match`하면 codegen이 `i64` load를 `StructValue`로 기대하며 ICE. Option
+  단독(e16), struct field Option(e40), struct payload enum(e64)은 OK. 2026-06-11 `e79_nested_match` 작성 중 축소 발견.
 - ✅ **Vais `impl Trait for Type` 문법 — 해결 확인**(2026-06-11, compiler `78abb89c`):
   `impl Area for Sq { ... }`를 기존 내부형 `impl Sq: Area { ... }`와 같은 AST로 파싱. 회귀:
   Vais `phase264_impl_trait_for_type`, nl `e78_trait_impl_for`.

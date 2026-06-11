@@ -1,8 +1,8 @@
 # nl 예제 코퍼스 (P9 인프라)
 
 **검증된 nl 예제.** P9(예제 코퍼스 = 최강 레버, cold-start 1/5→5/5)의 핵심 인프라.
-모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 90/90 PASS; 러너 전체는
-self-host codegen 모듈 포함 108/108).
+모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 91/91 PASS; 러너 전체는
+self-host codegen 모듈 포함 109/109).
 
 > 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
 > AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
@@ -105,11 +105,13 @@ self-host codegen 모듈 포함 108/108).
 | e76 | `List.map()` + `.sum()` | 12 |
 | e77 | 중첩 `List<List<Int>>` 리터럴 + 이중 인덱싱 | 3 |
 | e78 | `impl Trait for Type` trait 구현/dispatch | 42 |
+| e79 | 중첩 `match` arm (`=> match {...}`) | 42 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
-- 중첩 `match` (arm 안에 `=> match {...}`) — 라인-재작성기 P001(트랜스파일러 한계). 함수분리로 우회 가능.
 - **재귀(자기참조) enum** (`enum Expr { Add(Expr, Expr) }`) — Vais 무음 miscompile. **비재귀 enum은 OK**(e50) →
   실전 AST는 struct+인덱스 인코딩으로(self-host codegen 트랙 방식). ROADMAP TRACKED.
+- **enum payload 안의 enum payload** (`enum Wrap { Has(Option<Int>) }`) — Vais codegen ICE. Option 단독(e16),
+  struct field Option(e40), struct payload enum(e64)은 OK. ROADMAP TRACKED.
 - **캡처 클로저 반환** (`fn() -> fn(Int)->Int { return |x| x+n }`) — Vais 미지원(E001). **클로저를 인자로 받는 건
   OK**(e49) → 반환 경계서만 막힘. ROADMAP TRACKED.
 ## 규약

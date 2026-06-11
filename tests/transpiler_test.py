@@ -20,7 +20,8 @@ spec.loader.exec_module(mod)
 
 
 def transpile(src: str) -> str:
-    # Exercise the same pipeline main() uses (for-expansion + per-line).
+    # Exercise the same pipeline main() uses (structural pre-passes + per-line).
+    src = mod.expand_nested_match_arms(src)
     src = mod.expand_for_loops(src)
     return "\n".join(mod.transpile_line(l + "\n") for l in src.splitlines())
 
@@ -108,6 +109,10 @@ CASES = [
     ("arm return in string kept", 'let s = "P => return x"', ['"P => return x"'], ["{ return"]),
     # real arm-return STILL wraps (regression guard for the string fix)
     ("real arm return wraps", "Some(v) => return v,", ["=> { return v }"], []),
+    ("nested match arm wraps",
+     "Has(o) => match o {\n    Some(v) => return v,\n    None => return 0,\n},",
+     ["Has(o) => { match o {", "Some(v) => { return v },", "} },"],
+     ["Has(o) => match o {"]),
 ]
 
 
