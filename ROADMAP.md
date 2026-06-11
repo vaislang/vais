@@ -104,15 +104,16 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 ## TRACKED (막혀서 넘어간 것 — 근본은 Vais repo)
 - ✅ Vais filter 버그(task_7cfebeba) — 해결 확인(2026-06-11): `.filter()` + `.sum()`이 nl `d6run`
   값 검증으로 통과. nl transpiler는 Bool predicate를 Vais stdlib의 i64 predicate ABI로 감싼다.
-- 트랜스파일 천장(원천적): P7 단일coercion / P8 클로저 day-1은 Vais 위에선 실현 불가.
-  → L3 자체 컴파일러에서만 해결. (현재 큐는 L3 프론트엔드 진입 전 인프라 다지기.)
+- 트랜스파일 천장(원천적): P8 캡처 클로저 반환은 Vais production ABI로 해결됐지만, P7 단일coercion /
+  P4 에러 / 전체 day-1 일관성은 여전히 L3 자체 컴파일러에서만 근본 해결.
+  (현재 큐는 L3 프론트엔드 진입 전 인프라 다지기.)
 
 ---
 
 ## TRACKED 추가 (Vais 버그)
-- **Vais 캡처 클로저 반환 미지원**: `fn adder(n) -> fn(Int)->Int { return |x| x + n }`(n 캡처 클로저를 bare
-  fn-ptr로 반환) E001. **클로저를 인자로 받는 건 OK**(e49) — 반환 경계서 env 캡처가 막힘(bare fn-ptr엔 env 없음,
-  {code,env} 표현 미지원). Vais 클로저 ABI 작업 필요. 하드코딩 Vais도 실패. 2026-06-07 실측.
+- ✅ **Vais 캡처 클로저 반환/전달 ABI — 해결 확인**(2026-06-11, compiler): production `vaisc build`
+  경로가 캡처 클로저를 tagged `{code, env}` 객체로 넘기고, bare fn-ptr와 공존. `fn adder(n) -> fn(Int)->Int { return |x| x + n }`
+  및 self-capturing callback 통과. 회귀: Vais `phase253_closure_capture_boundary`, nl `e80_closure_return`.
 - ✅ **Vais 재귀(자기참조) enum codegen 버그 — 해결 확인**(2026-06-11, compiler): `enum Expr { Lit(Int), Add(Expr, Expr), ... }`
   payload layout 계산 전에 enum backing type을 선등록해 recursive payload를 i64 fallback 대신 enum struct로 낮춘다.
   회귀: Vais `phase266_recursive_enum`, nl `e50_ast_eval`.

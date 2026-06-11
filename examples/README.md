@@ -106,10 +106,10 @@ self-host codegen 모듈 포함 109/109).
 | e77 | 중첩 `List<List<Int>>` 리터럴 + 이중 인덱싱 | 3 |
 | e78 | `impl Trait for Type` trait 구현/dispatch | 42 |
 | e79 | 중첩 `match` arm + enum payload 안 Option payload | 42 |
+| e80 | 캡처 클로저 반환 (`{code, env}` ABI) | 7 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
-- **캡처 클로저 반환** (`fn() -> fn(Int)->Int { return |x| x+n }`) — Vais 미지원(E001). **클로저를 인자로 받는 건
-  OK**(e49) → 반환 경계서만 막힘. ROADMAP TRACKED.
+- 현재 예제 코퍼스 기준 known 캡처 클로저 반환 갭은 해결됨(e80). 남은 한계는 ROADMAP의 L3/P7/P4 항목 참조.
 ## 규약
 - 첫 줄 `# expect: N` = main이 반환할 exit code (mod 256).
 - 실행형(main이 값 반환)만 expect 부착. 라이브러리 조각은 미부착(러너 skip).

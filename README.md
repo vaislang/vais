@@ -49,16 +49,17 @@ nl/
 ## 현재 상태 (트랜스파일 프로토타입)
 
 **전략**: Vais 백엔드 재활용. nl 표면 문법을 Vais로 트랜스파일해 vaisc로 컴파일.
-- AI가 쓴 nl 코드 **12/13 실제 컴파일+실행** (트랜스파일러 미지원 0).
-- 유일한 실패: Vais 백엔드의 filter 버그 (트랜스파일 문제 아님).
+- 현재 value-corpus **110/110 실제 컴파일+실행 통과** (`scripts/test.sh`, 2026-06-11).
+- 초기 실패였던 Vais filter 버그와 캡처 클로저 반환 ABI 갭은 production Vais 경로에서 해결 확인.
 
 ```bash
 scripts/build.sh examples/c4.nl -o /tmp/c4 && /tmp/c4   # struct 예제 → 42
 ```
 
 ### 천장 (정직한 한계 — docs README 상세)
-트랜스파일은 **nl 표면이 Vais 표면과 1:1일 때만** 작동한다. nl의 핵심 차별점(P7 단일 coercion,
-P8 클로저 day-1, P4 에러)은 **Vais로 표현 불가** — Vais 천장(버그·산재coercion·bare클로저)에 갇힌다.
+트랜스파일은 **nl 표면이 Vais 표면과 1:1일 때만** 작동한다. P8의 핵심 갭이던 캡처 클로저 반환은
+Vais production `{code,env}` ABI로 해결 확인됐지만, P7 단일 coercion/P4 에러 인프라/전체 day-1 일관성은
+여전히 Vais 표면에 갇힌다.
 → **진짜 nl의 가치를 보려면 자체 컴파일러(L3)**: lexer/parser/types/codegen. 다세션 작업.
 
 ---
