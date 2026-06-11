@@ -76,7 +76,7 @@ self-host codegen 모듈 포함 109/109).
 | e47 | char 리터럴 + 비교 ('A') | 1 |
 | e48 | 문자열 바이트 인덱싱 s[0] | 104 |
 | e49 | 클로저를 함수 인자로 (일급함수) | 12 |
-| e50 | 식 평가기 (enum Node + match 디스패치) | 14 |
+| e50 | 재귀 enum AST 평가기 (`Node` 안에 `Node`) | 14 |
 | e51 | struct+인덱스 재귀 AST (재귀enum 우회) | 14 |
 | e52 | 상태머신 run-counter (in-word 플래그) | 3 |
 | e53 | 단어 세기 (문자열 스캔 + 상태머신=토크나이저) | 4 |
@@ -108,8 +108,6 @@ self-host codegen 모듈 포함 109/109).
 | e79 | 중첩 `match` arm + enum payload 안 Option payload | 42 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
-- **재귀(자기참조) enum** (`enum Expr { Add(Expr, Expr) }`) — Vais 무음 miscompile. **비재귀 enum은 OK**(e50) →
-  실전 AST는 struct+인덱스 인코딩으로(self-host codegen 트랙 방식). ROADMAP TRACKED.
 - **캡처 클로저 반환** (`fn() -> fn(Int)->Int { return |x| x+n }`) — Vais 미지원(E001). **클로저를 인자로 받는 건
   OK**(e49) → 반환 경계서만 막힘. ROADMAP TRACKED.
 ## 규약

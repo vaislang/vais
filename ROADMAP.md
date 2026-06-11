@@ -113,11 +113,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 - **Vais 캡처 클로저 반환 미지원**: `fn adder(n) -> fn(Int)->Int { return |x| x + n }`(n 캡처 클로저를 bare
   fn-ptr로 반환) E001. **클로저를 인자로 받는 건 OK**(e49) — 반환 경계서 env 캡처가 막힘(bare fn-ptr엔 env 없음,
   {code,env} 표현 미지원). Vais 클로저 ABI 작업 필요. 하드코딩 Vais도 실패. 2026-06-07 실측.
-- **Vais 재귀(자기참조) enum codegen 버그**: `enum Expr { Lit(Int), Add(Expr, Expr), ... }`(enum이 자신을
-  payload로) 무음 miscompile — 1-level `Mul(Lit(3),Lit(4))`도 0/garbage 139 반환. 트랜스파일러는 올바른
-  Vais(`enum Expr { Add(Expr,Expr) }`) 생성하나 Vais가 재귀 ADT payload 추출 못 함. **비재귀 enum(2-payload Int)은
-  OK**(e50). **이것이 nl self-host codegen 트랙이 AST를 재귀enum 대신 struct+인덱스로 인코딩하는 근본 이유.**
-  재귀 ADT는 실전 인터프리터/파서의 핵심 → 중요 갭. Vais 코어 작업 필요. 2026-06-07 실측.
+- ✅ **Vais 재귀(자기참조) enum codegen 버그 — 해결 확인**(2026-06-11, compiler): `enum Expr { Lit(Int), Add(Expr, Expr), ... }`
+  payload layout 계산 전에 enum backing type을 선등록해 recursive payload를 i64 fallback 대신 enum struct로 낮춘다.
+  회귀: Vais `phase266_recursive_enum`, nl `e50_ast_eval`.
 - ✅ **Vais enum payload 안의 enum payload ICE — 해결 확인**(2026-06-11, compiler): `enum Wrap { Has(Option<Int>) }`
   처럼 enum variant payload가 또 다른 enum일 때 payload를 꺼내 `match`하던 경로를 user enum single-field
   payload resolved-type tracking으로 수정. 회귀: Vais `phase265_enum_nested_payload`, nl `e79_nested_match`.
