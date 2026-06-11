@@ -118,9 +118,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   Vais(`enum Expr { Add(Expr,Expr) }`) 생성하나 Vais가 재귀 ADT payload 추출 못 함. **비재귀 enum(2-payload Int)은
   OK**(e50). **이것이 nl self-host codegen 트랙이 AST를 재귀enum 대신 struct+인덱스로 인코딩하는 근본 이유.**
   재귀 ADT는 실전 인터프리터/파서의 핵심 → 중요 갭. Vais 코어 작업 필요. 2026-06-07 실측.
-- **Vais enum payload 안의 enum payload ICE**: `enum Wrap { Has(Option<Int>) }`처럼 enum variant payload가
-  또 다른 enum일 때 payload를 꺼내 `match`하면 codegen이 `i64` load를 `StructValue`로 기대하며 ICE. Option
-  단독(e16), struct field Option(e40), struct payload enum(e64)은 OK. 2026-06-11 `e79_nested_match` 작성 중 축소 발견.
+- ✅ **Vais enum payload 안의 enum payload ICE — 해결 확인**(2026-06-11, compiler): `enum Wrap { Has(Option<Int>) }`
+  처럼 enum variant payload가 또 다른 enum일 때 payload를 꺼내 `match`하던 경로를 user enum single-field
+  payload resolved-type tracking으로 수정. 회귀: Vais `phase265_enum_nested_payload`, nl `e79_nested_match`.
 - ✅ **Vais `impl Trait for Type` 문법 — 해결 확인**(2026-06-11, compiler `78abb89c`):
   `impl Area for Sq { ... }`를 기존 내부형 `impl Sq: Area { ... }`와 같은 AST로 파싱. 회귀:
   Vais `phase264_impl_trait_for_type`, nl `e78_trait_impl_for`.

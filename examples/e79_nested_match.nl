@@ -1,16 +1,11 @@
 # expect: 42
-# Nested match as a direct match-arm body. The transpiler wraps the inner match
-# arm body for Vais, while nl keeps the compact `=> match ...` surface.
-enum Wrap { Empty, Has(Int) }
-
-fn lookup(x: Int) -> Option<Int> {
-    if x > 0 { return Some(x + 1) }
-    return None
-}
+# Nested match as a direct match-arm body, with an enum payload that itself
+# contains an Option payload.
+enum Wrap { Empty, Has(Option<Int>) }
 
 fn pick(w: Wrap) -> Int {
     match w {
-        Has(x) => match lookup(x) {
+        Has(o) => match o {
             Some(v) => return v,
             None => return 0,
         },
@@ -19,5 +14,5 @@ fn pick(w: Wrap) -> Int {
 }
 
 fn main() -> Int {
-    return pick(Has(41))
+    return pick(Has(Some(42)))
 }

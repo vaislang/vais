@@ -105,13 +105,11 @@ self-host codegen 모듈 포함 109/109).
 | e76 | `List.map()` + `.sum()` | 12 |
 | e77 | 중첩 `List<List<Int>>` 리터럴 + 이중 인덱싱 | 3 |
 | e78 | `impl Trait for Type` trait 구현/dispatch | 42 |
-| e79 | 중첩 `match` arm (`=> match {...}`) | 42 |
+| e79 | 중첩 `match` arm + enum payload 안 Option payload | 42 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
 - **재귀(자기참조) enum** (`enum Expr { Add(Expr, Expr) }`) — Vais 무음 miscompile. **비재귀 enum은 OK**(e50) →
   실전 AST는 struct+인덱스 인코딩으로(self-host codegen 트랙 방식). ROADMAP TRACKED.
-- **enum payload 안의 enum payload** (`enum Wrap { Has(Option<Int>) }`) — Vais codegen ICE. Option 단독(e16),
-  struct field Option(e40), struct payload enum(e64)은 OK. ROADMAP TRACKED.
 - **캡처 클로저 반환** (`fn() -> fn(Int)->Int { return |x| x+n }`) — Vais 미지원(E001). **클로저를 인자로 받는 건
   OK**(e49) → 반환 경계서만 막힘. ROADMAP TRACKED.
 ## 규약
