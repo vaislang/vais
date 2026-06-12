@@ -39,7 +39,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
     generated compiler IR `1103434` bytes → 2세대 compiler 실행 → final IR `ret i64 42` → clang/run exit **42**.
   - `tools/normalize_stage_ir.py`로 source-position 기반 `@.sNNN`/`@.fmtNNN` global 이름만 정규화한 뒤,
     stage1 compiler IR과 stage2 compiler IR을 byte-compare → normalized `989685` bytes 일치.
-- 값-정확성 aggregate **109/109** (예제코퍼스 91/91 + self-host codegen 모듈).
+- 값-정확성 aggregate **111/111** (예제코퍼스 93/93 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
@@ -113,7 +113,8 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 ## TRACKED 추가 (Vais 버그)
 - ✅ **Vais 캡처 클로저 반환/전달 ABI — 해결 확인**(2026-06-11, compiler): production `vaisc build`
   경로가 캡처 클로저를 tagged `{code, env}` 객체로 넘기고, bare fn-ptr와 공존. `fn adder(n) -> fn(Int)->Int { return |x| x + n }`
-  및 self-capturing callback 통과. 회귀: Vais `phase253_closure_capture_boundary`, nl `e80_closure_return`.
+  및 self-capturing callback 통과. 회귀: Vais `phase253_closure_capture_boundary`, nl `e80_closure_return`,
+  `e81_closure_return_apply`.
 - ✅ **Vais 재귀(자기참조) enum codegen 버그 — 해결 확인**(2026-06-11, compiler): `enum Expr { Lit(Int), Add(Expr, Expr), ... }`
   payload layout 계산 전에 enum backing type을 선등록해 recursive payload를 i64 fallback 대신 enum struct로 낮춘다.
   회귀: Vais `phase266_recursive_enum`, nl `e50_ast_eval`.

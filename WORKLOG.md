@@ -1,5 +1,20 @@
 # nl WORKLOG
 
+## 2026-06-12 (점진 인프라 — 반환 클로저 재전달 코퍼스 확장)
+- P9 예제 코퍼스에 `examples/e81_closure_return_apply.nl` 추가.
+  캡처 클로저가 함수에서 반환된 뒤, 다시 `fn(Int) -> Int` 고차함수 파라미터로 넘어가고 그 안에서 두 번 호출되는
+  경로를 검증한다. e80이 단독 direct-call ABI를 잠갔다면, e81은 escape closure object의 call-boundary 재전달을 잠근다.
+- `examples/README.md` 인덱스와 카운트를 예제 93/93, 전체 runner 111/111 기준으로 갱신.
+- `README.md`/`ROADMAP.md`/`AGENTS.md`의 현재 aggregate 수치를 최신 runner 기준으로 동기화.
+- 검증:
+  - `bash scripts/test.sh e81_closure_return_apply` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/test.sh` = `RESULT: pass=111 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `python3 tests/transpiler_test.py` = `RESULT: 59/59 pass`
+  - `python3 tests/nl_check_test.py` = `RESULT: 40/40 pass`
+  - `git diff --check` = clean
+
 ## 2026-06-10 (Vais 백엔드 갭 해소 — 리스트 리터럴 직접 인자 코어션)
 - `ROADMAP.md` TRACKED였던 `f([1,2,3])` → `Vec<T>` 파라미터 직접 전달 갭을 Vais compiler에서 해결.
   typecheck가 함수 파라미터 기대 타입을 배열 리터럴에 전파하고, codegen이 inline 배열을 std `Vec<T>` layout으로

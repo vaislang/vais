@@ -49,7 +49,7 @@ nl/
 ## 현재 상태 (트랜스파일 프로토타입)
 
 **전략**: Vais 백엔드 재활용. nl 표면 문법을 Vais로 트랜스파일해 vaisc로 컴파일.
-- 현재 value-corpus **110/110 실제 컴파일+실행 통과** (`scripts/test.sh`, 2026-06-11).
+- 현재 value-corpus **111/111 실제 컴파일+실행 통과** (`scripts/test.sh`, 2026-06-12).
 - 초기 실패였던 Vais filter 버그와 캡처 클로저 반환 ABI 갭은 production Vais 경로에서 해결 확인.
 
 ```bash
