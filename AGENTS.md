@@ -60,6 +60,7 @@ bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host
 bash scripts/test-vaisc.sh           # New Vais `vaisc` CLI/IR/build/run + Legacy oracle smoke
 bash scripts/test-vaisc-front.sh     # New Vais day-1 native front accept/reject contract
 bash scripts/test-vaisc-direct.sh    # New Vais direct LLVM emitter, Legacy 없이 emit/build/run
+bash scripts/test-vaisc-errors.sh    # New Vais native P4 diagnostics: 좌표/help/fix
 ```
 
 전제: `vaisc`가 PATH에 있어야 한다(`which vaisc`로 확인; 없으면 Vais repo에서 빌드).
@@ -83,6 +84,7 @@ bash scripts/test-vaisc-direct.sh    # New Vais direct LLVM emitter, Legacy 없�
 | **New Vais CLI smoke** | `bash scripts/test-vaisc.sh` | `.vais` 입력을 repo-local `scripts/vaisc`로 LLVM IR emit/build/run하고 Legacy bootstrap oracle과 exit 값을 비교. |
 | **New Vais front contract** | `bash scripts/test-vaisc-front.sh` | day-1 native subset을 accepted source로 실행하고, bad helper signature/for/struct/Rust `&&`/list/string 등 unsupported 문법이 `help:` 진단으로 실패하는지 확인. |
 | **New Vais direct emitter** | `bash scripts/test-vaisc-direct.sh` | `--engine direct`가 Legacy Vais 없이 단일 `main` arithmetic return을 LLVM IR로 emit/build/run하고 bootstrap engine과 값을 비교. |
+| **New Vais P4 diagnostics** | `bash scripts/test-vaisc-errors.sh` | native `vaisc` 오류가 source 좌표, 원문 line, caret, `help:`, `fix:`를 포함하는지 확인. |
 | 기타 tier별 | `scripts/test-fixpoint*.sh` | 개별 codegen 영역(array/list/str/struct/imperative 등) |
 
 규칙:

@@ -17,6 +17,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +45,15 @@ class FrontIssue:
     col: int
     message: str
     help: str
+    fix: str | None = None
+
+
+@dataclass(frozen=True)
+class FrontRule:
+    pattern: re.Pattern[str]
+    message: str
+    help: str
+    fix: Callable[[re.Match[str], str], str | None] | None = None
 
 
 def code_only(line: str) -> str:
@@ -73,8 +83,63 @@ def code_only(line: str) -> str:
     return "".join(out)
 
 
-def issue_from_match(match: re.Match[str], line_no: int, message: str, help_text: str) -> FrontIssue:
-    return FrontIssue(line_no, match.start() + 1, message, help_text)
+def issue_from_match(
+    match: re.Match[str],
+    line_no: int,
+    raw: str,
+    rule: FrontRule,
+) -> FrontIssue:
+    fix = rule.fix(match, raw.rstrip()) if rule.fix else None
+    return FrontIssue(line_no, match.start() + 1, rule.message, rule.help, fix)
+
+
+def caret_at(col: int) -> str:
+    return " " * max(col - 1, 0) + "^"
+
+
+def replace_once(old: str, new: str) -> Callable[[re.Match[str], str], str]:
+    def fix(_: re.Match[str], raw: str) -> str:
+        return raw.replace(old, new, 1)
+
+    return fix
+
+
+def fix_not(match: re.Match[str], raw: str) -> str:
+    return raw[: match.start()] + "not " + raw[match.end() :]
+
+
+def fix_as(match: re.Match[str], raw: str) -> str:
+    target = match.group(1)
+    prefix = raw[: match.start()].rstrip()
+    expr = re.search(r"([A-Za-z_][A-Za-z0-9_]*|\d+|\([^)]*\))\s*$", prefix)
+    if expr is None:
+        return f"use `{target}(expr)` instead of `expr as {target}`"
+    expr_text = expr.group(1)
+    return raw[: expr.start(1)] + f"{target}({expr_text})" + raw[match.end() :]
+
+
+def fix_scalar_type(match: re.Match[str], raw: str) -> str:
+    mapping = {
+        "i8": "Int8",
+        "i16": "Int16",
+        "i32": "Int",
+        "i64": "Int",
+        "i128": "Int128",
+        "u8": "UInt8",
+        "u16": "UInt16",
+        "u32": "UInt32",
+        "u64": "UInt64",
+        "u128": "UInt128",
+        "f32": "F32",
+        "f64": "F64",
+        "usize": "Int",
+        "isize": "Int",
+    }
+    return raw[: match.start()] + mapping[match.group(1)] + raw[match.end() :]
+
+
+def fix_turbofish_new(match: re.Match[str], raw: str) -> str:
+    return raw[: match.start()] + "[]" + raw[match.end() :]
 
 
 FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
@@ -151,48 +216,76 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
 ]
 
 
-FRONT_HELP_RULES: list[tuple[re.Pattern[str], str, str]] = [
-    (
+FRONT_HELP_RULES: list[FrontRule] = [
+    FrontRule(
         re.compile(r"&&"),
         "logical AND uses the word `and`, not `&&`",
         "replace `&&` with `and`.",
+        replace_once("&&", "and"),
     ),
-    (
+    FrontRule(
         re.compile(r"\|\|"),
         "logical OR uses the word `or`, not `||`",
         "replace `||` with `or`.",
+        replace_once("||", "or"),
     ),
-    (
+    FrontRule(
         re.compile(r"(?<![<>=!])!(?!=)(?=\s*\w|\s*\()"),
         "logical NOT uses the word `not`, not `!`",
         "replace `!expr` with `not expr`.",
+        fix_not,
     ),
-    (
+    FrontRule(
         re.compile(r"\bas\s+([A-Za-z_]\w*)"),
         "type conversion is explicit `Type(x)`, not `x as Type`",
         "write `Type(expr)` instead of `expr as Type`.",
+        fix_as,
     ),
-    (
-        re.compile(r"\b[A-Z]\w*::"),
+    FrontRule(
+        re.compile(r"\b[A-Za-z_]\w*::"),
         "enum/path access uses `.`, not `::`",
         "replace `::` with `.`.",
+        replace_once("::", "."),
     ),
-    (
-        re.compile(r"\bVec\s*<|\bvec!\s*\["),
-        "the New Vais list spelling is `List<T>` and `[a, b]`, not Rust Vec syntax",
-        "use `List<T>`/list literals on the Legacy path for now; day-1 native front is scalar-only.",
+    FrontRule(
+        re.compile(r"\b\w+<[^>]*>::new\s*\(\)"),
+        "no turbofish constructor; use a literal instead of `Type<...>::new()`",
+        "use a list/map literal such as `[]`, `[1, 2]`, or `{}`.",
+        fix_turbofish_new,
     ),
-    (
+    FrontRule(
+        re.compile(r"\bvec!\s*\["),
+        "list literals are just `[a, b]`, not `vec![...]`",
+        "replace `vec![...]` with `[ ... ]`.",
+        lambda m, raw: raw[: m.start()] + "[" + raw[m.end() :],
+    ),
+    FrontRule(
+        re.compile(r"\bVec\s*<"),
+        "the New Vais list type is `List<T>`, not `Vec<T>`",
+        "replace `Vec<T>` with `List<T>`.",
+        lambda m, raw: raw[: m.start()] + "List" + raw[m.end() - 1 :],
+    ),
+    FrontRule(
         re.compile(r"\bHashMap\b"),
         "the New Vais map spelling is `Map<K,V>`, not `HashMap<K,V>`",
         "use `Map<K,V>` on the Legacy path for now; day-1 native front is scalar-only.",
+        replace_once("HashMap", "Map"),
     ),
-    (
+    FrontRule(
+        re.compile(
+            r"(?<![A-Za-z0-9_])(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|usize|isize)(?![A-Za-z0-9_])"
+        ),
+        "New Vais scalar types are capitalized, not Rust scalar names",
+        "use `Int`, `Int8..Int128`, `UInt8..UInt128`, `F32`, or `F64`.",
+        fix_scalar_type,
+    ),
+    FrontRule(
         re.compile(r"\bString\b"),
         "the string type is `Str`, not `String`",
         "use `Str` on the Legacy path for now; day-1 native front is scalar-only.",
+        replace_once("String", "Str"),
     ),
-    (
+    FrontRule(
         re.compile(r"[+\-*/%]=(?!=)"),
         "compound assignment is not New Vais syntax",
         "write it out, e.g. `x = x + 1`.",
@@ -259,16 +352,16 @@ def check_front_contract(source: Path) -> None:
         has_main = has_main or line_has_main
         has_bad_main = has_bad_main or line_has_bad_main
 
-        for pattern, message, help_text in FRONT_HELP_RULES:
-            match = pattern.search(code)
+        for rule in FRONT_HELP_RULES:
+            match = rule.pattern.search(code)
             if match:
-                issues.append(issue_from_match(match, line_no, message, help_text))
+                issues.append(issue_from_match(match, line_no, raw, rule))
                 break
         else:
             for pattern, message, help_text in FRONT_UNSUPPORTED_RULES:
                 match = pattern.search(code)
                 if match:
-                    issues.append(issue_from_match(match, line_no, message, help_text))
+                    issues.append(FrontIssue(line_no, match.start() + 1, message, help_text))
                     break
 
     if has_bad_main and not has_main:
@@ -291,10 +384,13 @@ def check_front_contract(source: Path) -> None:
                 f"error: {issue.message}",
                 f"  --> {source}:{issue.line}:{issue.col}",
                 f"  {raw}",
+                f"  {caret_at(issue.col)}",
                 f"  help: {issue.help}",
-                "",
             ]
         )
+        if issue.fix:
+            formatted.append(f"  fix: {issue.fix}")
+        formatted.append("")
     raise FrontContractError("\n".join(formatted).rstrip())
 
 
@@ -304,6 +400,7 @@ class DirectFunction:
     params: str
     return_type: str | None
     body: str
+    body_start: int
     line: int
     col: int
 
@@ -351,16 +448,35 @@ def line_col_at(text: str, index: int) -> tuple[int, int]:
     return line, col
 
 
-def direct_error(source: Path, line: int, col: int, message: str, help_text: str) -> DirectEmitError:
-    return DirectEmitError(
-        "\n".join(
-            [
-                f"error: {message}",
-                f"  --> {source}:{line}:{col}",
-                f"  help: {help_text}",
-            ]
-        )
-    )
+def source_line(source: Path, line: int) -> str:
+    try:
+        lines = source.read_text().splitlines()
+    except OSError:
+        return ""
+    if 1 <= line <= len(lines):
+        return lines[line - 1]
+    return ""
+
+
+def direct_error(
+    source: Path,
+    line: int,
+    col: int,
+    message: str,
+    help_text: str,
+    fix_text: str | None = None,
+) -> DirectEmitError:
+    raw = source_line(source, line)
+    formatted = [
+        f"error: {message}",
+        f"  --> {source}:{line}:{col}",
+        f"  {raw}",
+        f"  {caret_at(col)}",
+        f"  help: {help_text}",
+    ]
+    if fix_text:
+        formatted.append(f"  fix: {fix_text}")
+    return DirectEmitError("\n".join(formatted))
 
 
 def source_code_view(text: str) -> str:
@@ -387,8 +503,7 @@ def find_matching_brace(text: str, open_index: int, source: Path) -> int:
     )
 
 
-def extract_direct_functions(source: Path, text: str) -> list[DirectFunction]:
-    code = source_code_view(text)
+def extract_direct_functions(source: Path, code: str) -> list[DirectFunction]:
     functions: list[DirectFunction] = []
     cursor = 0
     while True:
@@ -404,6 +519,7 @@ def extract_direct_functions(source: Path, text: str) -> list[DirectFunction]:
                 params=match.group(2).strip(),
                 return_type=match.group(3),
                 body=code[open_index + 1 : close_index],
+                body_start=open_index + 1,
                 line=line,
                 col=col,
             )
@@ -412,50 +528,68 @@ def extract_direct_functions(source: Path, text: str) -> list[DirectFunction]:
     return functions
 
 
-def tokenize_direct_expr(source: Path, expr: str, base_line: int) -> list[DirectToken]:
+def advance_position(text: str, line: int, col: int) -> tuple[int, int]:
+    for ch in text:
+        if ch == "\n":
+            line += 1
+            col = 1
+        else:
+            col += 1
+    return line, col
+
+
+def tokenize_direct_expr(source: Path, expr: str, start_line: int, start_col: int) -> list[DirectToken]:
     tokens: list[DirectToken] = []
     index = 0
+    line = start_line
+    col = start_col
     while index < len(expr):
         ch = expr[index]
         if ch.isspace():
+            line, col = advance_position(ch, line, col)
             index += 1
             continue
 
         int_match = DIRECT_INT_RE.match(expr, index)
         if int_match:
-            tokens.append(DirectToken("int", int_match.group(0), base_line, int_match.start() + 1))
+            text = int_match.group(0)
+            tokens.append(DirectToken("int", text, line, col))
             index = int_match.end()
+            line, col = advance_position(text, line, col)
             continue
 
         two = expr[index : index + 2]
         if two in DIRECT_OPS:
-            tokens.append(DirectToken(two, two, base_line, index + 1))
+            tokens.append(DirectToken(two, two, line, col))
             index += 2
+            line, col = advance_position(two, line, col)
             continue
 
         if ch in DIRECT_OPS:
-            tokens.append(DirectToken(ch, ch, base_line, index + 1))
+            tokens.append(DirectToken(ch, ch, line, col))
             index += 1
+            line, col = advance_position(ch, line, col)
             continue
 
         if ch.isalpha() or ch == "_":
             raise direct_error(
                 source,
-                base_line,
-                index + 1,
+                line,
+                col,
                 "direct LLVM emitter currently supports literal Int expressions only",
                 "use integer literals and arithmetic here, or use the default bootstrap engine.",
+                "return 40 + 2",
             )
 
         raise direct_error(
             source,
-            base_line,
-            index + 1,
+            line,
+            col,
             f"direct LLVM emitter cannot parse token `{ch}`",
             "use integer literals, arithmetic operators, comparisons, and parentheses.",
         )
 
-    tokens.append(DirectToken("eof", "", base_line, len(expr) + 1))
+    tokens.append(DirectToken("eof", "", line, col))
     return tokens
 
 
@@ -582,17 +716,24 @@ class DirectExprParser:
         )
 
 
-def extract_direct_return_expr(source: Path, body: str, base_line: int) -> str:
-    match = re.fullmatch(r"\s*return\s+(.+?)\s*;?\s*", body, re.DOTALL)
+def extract_direct_return_expr(
+    source: Path,
+    code: str,
+    function: DirectFunction,
+) -> tuple[str, int, int]:
+    match = re.fullmatch(r"\s*return\s+(.+?)\s*;?\s*", function.body, re.DOTALL)
     if match is None:
+        line, col = line_col_at(code, function.body_start)
         raise direct_error(
             source,
-            base_line,
-            1,
+            line,
+            col,
             "direct LLVM emitter currently supports a single `return` statement in `main`",
             "write `fn main() -> Int { return 40 + 2 }` for the NV-C2 direct slice.",
+            "fn main() -> Int { return 40 + 2 }",
         )
-    return match.group(1).strip()
+    line, col = line_col_at(code, function.body_start + match.start(1))
+    return match.group(1).strip(), line, col
 
 
 def direct_emit_ir(source: Path, ir_out: Path | None) -> str | None:
@@ -601,7 +742,8 @@ def direct_emit_ir(source: Path, ir_out: Path | None) -> str | None:
     check_front_contract(source)
 
     text = source.read_text()
-    functions = extract_direct_functions(source, text)
+    code = source_code_view(text)
+    functions = extract_direct_functions(source, code)
     if len(functions) != 1 or functions[0].name != "main":
         raise direct_error(
             source,
@@ -612,8 +754,8 @@ def direct_emit_ir(source: Path, ir_out: Path | None) -> str | None:
         )
 
     main_fn = functions[0]
-    expr = extract_direct_return_expr(source, main_fn.body, main_fn.line)
-    tokens = tokenize_direct_expr(source, expr, main_fn.line)
+    expr, expr_line, expr_col = extract_direct_return_expr(source, code, main_fn)
+    tokens = tokenize_direct_expr(source, expr, expr_line, expr_col)
     parser = DirectExprParser(source, tokens)
     result = parser.parse()
     ir_lines = ["define i64 @main() {", *parser.instructions, f"  ret i64 {result.ref}", "}", ""]

@@ -58,6 +58,7 @@ Current green gates are the baseline:
 - `bash scripts/test-vaisc.sh` = New Vais `vaisc` smoke OK
 - `bash scripts/test-vaisc-front.sh` = New Vais day-1 front contract OK
 - `bash scripts/test-vaisc-direct.sh` = New Vais direct emitter OK
+- `bash scripts/test-vaisc-errors.sh` = New Vais native P4 diagnostics OK
 - `bash scripts/test.sh` = 112/112
 - `bash scripts/test-fixpoint-full.sh` = self-host e2e OK
 - `bash scripts/test-fixpoint-full-self.sh` = full-source stage compare OK
@@ -160,6 +161,26 @@ Done when:
 ### NV-C3: P4 Diagnostics
 
 Move known `nl-check` correction knowledge into the native compiler path.
+
+Status: done as of 2026-06-13 for the native day-1 diagnostic slice.
+
+Diagnostic contract:
+- include New Vais source coordinates,
+- print the source line and a caret at the reported column,
+- include `help:`,
+- include `fix:` for known correction patterns.
+
+Covered day-1 patterns:
+- `&&` -> `and`,
+- `||` -> `or`,
+- `x as Type` -> `Type(x)`,
+- `Path::Name` -> `Path.Name`,
+- Rust scalar type names such as `i32`/`f64` -> New Vais type names,
+- turbofish constructors such as `Vec<Int>::new()` -> literals,
+- direct emitter parse failures such as identifiers in literal-only return expressions.
+
+Gate:
+- `bash scripts/test-vaisc-errors.sh`
 
 Done when:
 - at least `&&`, `||`, `as`, `::`, Rust type names, and turbofish produce `help:` suggestions,

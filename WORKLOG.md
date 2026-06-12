@@ -1,5 +1,29 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C3 — New Vais native P4 diagnostics)
+- native `vaisc` front/direct diagnostics를 source coordinate, source line, caret, `help:`, optional `fix:` 형태로 확장했다.
+  day-1 사용자가 Rust/NL 전환기 문법을 넣었을 때 바로 고칠 수 있는 메시지를 compiler entrypoint에서 제공한다.
+- 기존 `nl-check` 성격의 day-1 correction을 native `vaisc` 경로로 옮겼다.
+  현재 `&&`/`||`/`!`, `as` cast, `::`, `vec![...]`, `Vec<T>`, `HashMap`, `String`,
+  Rust scalar type, turbofish constructor `Vec<T>::new()`에 `fix:` 예시를 낸다.
+- direct emitter parse 실패도 source line/caret을 표시하고, identifier expression과 missing return에는
+  direct slice가 받는 literal-only `return 40 + 2` 형태의 `fix:` 예시를 낸다.
+- `scripts/test-vaisc-errors.sh`를 추가해 대표 front/direct 진단이 message/path/caret/help/fix를 모두 포함하는지 검증한다.
+- 문서 갱신: `README.md`, `ROADMAP.md`, `AGENTS.md`,
+  `docs/design/NEW-LANGUAGE-README.md`, `docs/design/new-vais-compiler-mainline-2026-06-13.md`,
+  `docs/reference/LANGUAGE.md`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py tools/embed_self_source.py compiler/transpiler/nl2vais.py` = pass
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `python3 tests/transpiler_test.py` = `RESULT: 59/59 pass`
+  - `python3 tests/nl_check_test.py` = `RESULT: 40/40 pass`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+
 ## 2026-06-13 (NV-C2 — New Vais direct LLVM emitter entrypoint)
 - `scripts/vaisc`에 `--engine direct`를 추가해 Legacy Vais bootstrap과 분리된 최소 직접 LLVM IR emitter 경로를 열었다.
   기본 engine은 기존 `bootstrap`으로 유지해 현재 전체 self-host/compiler 경로를 깨지 않게 했다.
