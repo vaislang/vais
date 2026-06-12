@@ -1,6 +1,6 @@
-# AGENTS.md — nl 프로젝트 자율 작업 가이드 (Codex / AI 에이전트용)
+# AGENTS.md — New Vais 프로젝트 자율 작업 가이드 (Codex / AI 에이전트용)
 
-> 이 문서는 **맥락 없이 들어온 AI 에이전트**(Codex 등)가 nl 프로젝트를 안전하게
+> 이 문서는 **맥락 없이 들어온 AI 에이전트**(Codex 등)가 New Vais 프로젝트를 안전하게
 > 자율 진행하기 위한 진입점이다. 작업 시작 전 **반드시 끝까지 읽어라.**
 > 진실의 원천(source of truth)은 `ROADMAP.md`다. 이 문서는 *방법론*을 담는다.
 
@@ -8,17 +8,16 @@
 
 ## 0. 30초 요약
 
-- **nl**은 AI가 정확히 쓰는 언어를 백지에서 만드는 프로젝트. 백엔드는 **Vais 컴파일러 재활용**.
-- 파이프라인: `nl 소스` → `nl2vais.py`(트랜스파일러) → `Vais` → `vaisc build` → 네이티브 LLVM 실행.
-- **메인 산출물**: `compiler/self/fixpoint_full.nl` — nl로 작성한 self-host 컴파일러.
+- **New Vais**는 AI가 정확히 쓰는 언어로 확정된 새 Vais mainline이다. `nl`은 전환기 repo/확장자 코드명이다.
+- 현재 bootstrap 파이프라인: `New Vais(.nl) 소스` → `nl2vais.py` → `Legacy Vais` → `vaisc build` → 네이티브 LLVM 실행.
+- **메인 산출물**: `compiler/self/fixpoint_full.nl` — New Vais로 작성한 self-host 컴파일러 seed.
   입력 nl 프로그램 문자열을 받아 **토큰화 → 평가/codegen → LLVM IR을 emit**한다.
 - **현재 상태**: front(tokenize/eval) + codegen(print로 IR emit) 전체 self-host arc 동작.
   세 self-host tier(산술 / 산술+변수 / 함수+재귀) 전부 source→value end-to-end이고,
   `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들며 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일한다.
 - **stage oracle**: 긴 게이트가 stage1/stage2 compiler IR을 비교한다. source-position 기반
   `@.sNNN`/`@.fmtNNN` global 이름만 정규화하고, 그 외 IR은 byte-for-byte 일치해야 한다.
-- **다음 목표**: 점진 인프라(예제 코퍼스 확장, nl측 갭 수정, cold-start 재측정) 또는 ROADMAP의
-  Vais TRACKED 버그 중 하나를 dedicated로 처리.
+- **다음 목표**: ROADMAP의 NV-C0~NV-C4. 자체 컴파일러 mainline을 만들고 Legacy Vais 의존을 bootstrap/oracle로 줄인다.
 
 ---
 
@@ -28,15 +27,15 @@
 
 | repo | 경로 | 역할 | 규칙 |
 |------|------|------|------|
-| **nl** | `/Users/sswoo/study/projects/nl` | 언어 자체(트랜스파일러/self-host 컴파일러/예제/게이트) | 이 문서 |
-| **Vais** | `/Users/sswoo/study/projects/vais/compiler` | 백엔드 컴파일러(`vaisc`) | **그 repo의 `CLAUDE.md` 엄격 규칙** |
+| **New Vais** | `/Users/sswoo/study/projects/nl` | 언어 자체(트랜스파일러/self-host 컴파일러/예제/게이트). 경로명은 전환기 코드명. | 이 문서 |
+| **Legacy Vais** | `/Users/sswoo/study/projects/vais/compiler` | bootstrap/oracle 백엔드 컴파일러(`vaisc`) | **그 repo의 `CLAUDE.md` 엄격 규칙** |
 
-- nl을 깊게 파다 보면 **Vais 컴파일러 버그**(codegen miscompile, ICE 등)를 만난다. 이때
-  Vais repo를 수정하게 되는데, **Vais repo의 `CLAUDE.md` 규칙이 그때부터 적용된다**(§5 참조).
+- New Vais를 깊게 파다 보면 **Legacy Vais 컴파일러 버그**(codegen miscompile, ICE 등)를 만난다. 이때
+  Legacy Vais repo를 수정하게 되는데, **그 repo의 `CLAUDE.md` 규칙이 그때부터 적용된다**(§5 참조).
   빈도 감각: 최근 세션들에서 nl 작업 중 Vais 버그 근본수정이 여러 건 있었다(`&Vec` borrow
-  codegen, struct-return ICE, `%` 이스케이프 등). 현재 해결/추적 중인 Vais 갭은 ROADMAP의
+  codegen, struct-return ICE, `%` 이스케이프 등). 현재 해결/추적 중인 Legacy Vais 갭은 ROADMAP의
   TRACKED 참조. **드물지 않다**고 가정하라.
-- 커밋은 **각 repo에 따로** 한다. nl 변경은 nl repo에, Vais 변경은 Vais repo에.
+- 커밋은 **각 repo에 따로** 한다. New Vais 변경은 nl repo에, Legacy Vais 변경은 Vais repo에.
 - `vaisc`는 PATH에 있어야 하고, std 해석을 위해 `VAIS_COMPILER_ROOT`가 Vais repo를
   가리켜야 한다(게이트 스크립트는 기본값 `/Users/sswoo/study/projects/vais/compiler` 사용).
 
@@ -64,7 +63,7 @@ bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host
 
 **baseline을 먼저 측정하라.** 작업 전 게이트가 green인지 확인하지 않으면, 나중에
 실패가 내 변경 탓인지 원래 깨져 있었는지 구분할 수 없다.
-*baseline이 이미 빨간 경우*: 내 작업과 무관할 수 있다. 실패가 ROADMAP §TRACKED의 Vais
+*baseline이 이미 빨간 경우*: 내 작업과 무관할 수 있다. 실패가 ROADMAP §TRACKED의 Legacy Vais
 백엔드 버그 때문인지 먼저 확인하고, 그게 아니면 사용자에게 보고 후 진행 여부를 정하라.
 
 ---
@@ -116,9 +115,9 @@ bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host
 
 ---
 
-## 5. Vais 컴파일러 repo 수정 시 (⚠️ 별개 repo, 엄격 규칙)
+## 5. Legacy Vais 컴파일러 repo 수정 시 (⚠️ 별개 repo, 엄격 규칙)
 
-nl 작업 중 Vais 버그를 만나 `/Users/sswoo/study/projects/vais/compiler/`를 고칠 때는
+New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/vais/compiler/`를 고칠 때는
 **그 repo의 `CLAUDE.md`를 먼저 읽고** 다음을 엄수한다:
 
 - **baseline 기록 먼저** — 수정 전 `cd compiler && bash scripts/check-integrity.sh`로 현재
@@ -187,13 +186,11 @@ nl 작업 중 Vais 버그를 만나 `/Users/sswoo/study/projects/vais/compiler/`
 
 ---
 
-## 8. 남은 작업 (ROADMAP §남은 것 참조 — 현재 기준)
+## 8. 남은 작업 (ROADMAP §방향 결정 / 현재 우선순위 큐 참조)
 
-- **점진 인프라**: 예제 코퍼스 확장(P9, 최강 레버), nl측 갭 수정, cold-start 정확도 재측정.
-  새 gap은 `scripts/test.sh` 또는 focused e2e fixture로 값-정확성까지 고정한다.
-- **self-host hardening**: stage oracle은 해결됐으므로, 이후에는 새로 발견한 stage drift 원인을
-  `scripts/test-fixpoint-full.sh`의 짧은 회귀 fixture와 긴 stage compare gate 양쪽에 묶어둔다.
-- **Vais 백엔드 버그 (TRACKED)**: nl을 파다 만나는 Vais codegen 버그들. §5 규칙으로 근본 수정.
+- **NV-C0~NV-C4 자체 컴파일러 mainline**: CLI/IR 계약, front subset, 직접 LLVM emitter, P4 에러 UX, parity gate.
+- **self-host hardening**: stage oracle은 해결됐으므로, 새 stage drift 원인은 짧은 회귀 fixture와 긴 stage compare gate 양쪽에 묶어둔다.
+- **Legacy Vais 백엔드 버그 (TRACKED)**: bootstrap/oracle 경로를 파다 만나는 codegen 버그들. §5 규칙으로 근본 수정.
 
 ---
 
@@ -201,9 +198,9 @@ nl 작업 중 Vais 버그를 만나 `/Users/sswoo/study/projects/vais/compiler/`
 
 - ❌ baseline 측정 없이 작업 시작
 - ❌ 게이트 회귀(1개라도)를 무시하고 커밋
-- ❌ 두 repo를 헷갈려 nl 변경을 Vais repo에 커밋(또는 반대)
-- ❌ Vais 문법을 모델 기억으로 작성(docs/fixture로 검증)
-- ❌ Vais codegen 수정 후 IR/실행 값 검증 생략(silent miscompile)
+- ❌ 두 repo를 헷갈려 New Vais 변경을 Legacy Vais repo에 커밋(또는 반대)
+- ❌ Legacy Vais 문법을 모델 기억으로 작성(docs/fixture로 검증)
+- ❌ Legacy Vais codegen 수정 후 IR/실행 값 검증 생략(silent miscompile)
 - ❌ 단일 라인 nested if/else를 트랜스파일러에 먹임
 - ❌ probe "OK"를 IR 확인 없이 신뢰
 - ❌ e2e와 aggregate 게이트 동시 실행(cache race)

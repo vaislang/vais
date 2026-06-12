@@ -1,5 +1,20 @@
 # nl WORKLOG
 
+## 2026-06-13 (방향 확정 — New Vais + 자체 컴파일러 mainline)
+- 사용자 결정 반영: `nl` 전환기 코드명 프로젝트를 **New Vais / Vais** 로 확정하고, 자체 컴파일러를 mainline으로 전환한다.
+- 기존 `/Users/sswoo/study/projects/vais/compiler`는 **Legacy Vais bootstrap/oracle backend** 로 명시했다.
+  repo 경로 `nl`, 확장자 `.nl`, `nl2vais.py`는 게이트 안정성을 위해 당장 rename하지 않고 전환기 코드명으로 유지한다.
+- `README.md`, `ROADMAP.md`, `AGENTS.md`, `RENAME.md`, `docs/reference/LANGUAGE.md`,
+  `docs/design/NEW-LANGUAGE-README.md`를 갱신하고
+  `docs/design/new-vais-compiler-mainline-2026-06-13.md`를 추가해 NV-C0~NV-C4 자체 컴파일러 우선순위를 기록했다.
+- 검증:
+  - `python3 tests/transpiler_test.py` = `RESULT: 59/59 pass`
+  - `python3 tests/nl_check_test.py` = `RESULT: 40/40 pass`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `git diff --check` = clean
+
 ## 2026-06-13 (점진 인프라 — 리스트 리터럴 직접 인자 코퍼스 확장)
 - P9 예제 코퍼스에 `examples/e82_list_literal_direct_arg.nl` 추가.
   `sum3([10, 20, 12])` 형태로 리스트 리터럴이 `List<Int>` 파라미터 기대 타입을 받아 바로 materialize되는

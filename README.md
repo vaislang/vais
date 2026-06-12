@@ -1,17 +1,18 @@
-# nl — AI-native 프로그래밍 언어 (가칭)
+# New Vais — AI-native 프로그래밍 언어
 
-> **이름은 가칭 `nl`(new-language)이다.** 의미 없는 중립 코드네임 — 진짜 이름은 미정.
-> 변경 방법: `RENAME.md`. (이름 확정 전 상표/충돌 검증은 사용자 몫 — AI가 대신 못 함.)
+> **공식 방향(2026-06-13)**: 이 프로젝트는 **새 Vais(New Vais)** 로 확정한다.
+> `nl`은 repo/확장자/스크립트가 안정될 때까지 유지하는 구현 코드명이다.
+> 기존 `/Users/sswoo/study/projects/vais/compiler`는 **Legacy Vais bootstrap backend** 로만 유지한다.
 
 ---
 
 ## 무엇인가
 
-**"AI(바이브코딩)가 가장 정확하게 쓰는 언어"**를 백지에서 설계·구현하는 프로젝트.
-기존 언어 **Vais를 실패 사례 데이터**로 삼아, 그 함정을 설계로 원천 차단한다.
+**"AI(바이브코딩)가 가장 정확하게 쓰는 언어"**를 백지에서 설계·구현한 새 Vais 프로젝트.
+기존 언어 **Legacy Vais**를 실패 사례 데이터와 bootstrap backend로 삼아, 그 함정을 설계로 원천 차단한다.
 
 설계·검증은 전부 **실측 데이터** 기반 (`docs/design/` 참조). 핵심 결과:
-- ✅ "AI가 잘 쓰는 언어"는 만들 수 있다 — cold-start 정확도 예제유무 1/5→5/5, nl 문법 5/5~6/6 (실측).
+- ✅ "AI가 잘 쓰는 언어"는 만들 수 있다 — cold-start 정확도 예제유무 1/5→5/5, New Vais 문법 5/5~6/6 (실측).
 - ❌ "범용 Rust 대체"는 별개의 훨씬 어려운 문제 — 생태계 해자는 설계로 못 푼다.
   → 이 둘을 분리하는 것이 핵심. (`docs/design/ai-native-competitiveness-assessment-*.md`)
 
@@ -31,36 +32,36 @@
 ## 폴더 구조
 
 ```
-nl/
+nl/                         # 전환기 repo 코드명. 사용자-facing 언어명은 New Vais.
 ├── README.md            이 파일
 ├── RENAME.md            이름 변경 가이드
 ├── docs/design/         설계 문서 (경쟁력/원칙 P1~P9/문법 v0.1·v0.2/모호성 감사)
 ├── compiler/
-│   └── transpiler/      nl → Vais 트랜스파일러 (현재 백엔드 = Vais 재활용)
+│   └── transpiler/      New Vais(.nl) → Legacy Vais 트랜스파일러 (bootstrap backend)
 │       └── nl2vais.py
-├── examples/            .nl 예제 = cold-start 코퍼스 (P9 인프라)
+├── examples/            .nl 예제 = New Vais cold-start 코퍼스 (P9 인프라)
 ├── tests/               값-정확성 e2e (P7b) — TODO
 └── scripts/
-    └── build.sh         .nl 빌드 (트랜스파일 + vaisc)
+    └── build.sh         .nl 빌드 (Legacy Vais bootstrap + vaisc)
 ```
 
 ---
 
-## 현재 상태 (트랜스파일 프로토타입)
+## 현재 상태
 
-**전략**: Vais 백엔드 재활용. nl 표면 문법을 Vais로 트랜스파일해 vaisc로 컴파일.
+**전략**: New Vais 표면 문법을 Legacy Vais로 트랜스파일해 `vaisc`로 검증하고,
+동시에 자체 컴파일러 라인을 mainline으로 전환한다.
 - 현재 value-corpus **112/112 실제 컴파일+실행 통과** (`scripts/test.sh`, 2026-06-13).
-- 초기 실패였던 Vais filter 버그와 캡처 클로저 반환 ABI 갭은 production Vais 경로에서 해결 확인.
+- 초기 실패였던 Legacy Vais filter 버그와 캡처 클로저 반환 ABI 갭은 production 경로에서 해결 확인.
 
 ```bash
 scripts/build.sh examples/c4.nl -o /tmp/c4 && /tmp/c4   # struct 예제 → 42
 ```
 
-### 천장 (정직한 한계 — docs README 상세)
-트랜스파일은 **nl 표면이 Vais 표면과 1:1일 때만** 작동한다. P8의 핵심 갭이던 캡처 클로저 반환은
-Vais production `{code,env}` ABI로 해결 확인됐지만, P7 단일 coercion/P4 에러 인프라/전체 day-1 일관성은
-여전히 Vais 표면에 갇힌다.
-→ **진짜 nl의 가치를 보려면 자체 컴파일러(L3)**: lexer/parser/types/codegen. 다세션 작업.
+### 전환 원칙
+Legacy Vais 백엔드는 당분간 **oracle/bootstrap** 으로 유지한다. 폴더명 `nl`, 확장자 `.nl`,
+`nl2vais.py`는 게이트 안정성을 위해 즉시 rename하지 않는다. 자체 컴파일러가 예제 코퍼스와
+self-host 게이트를 대체할 만큼 parity를 얻으면 물리적 rename과 legacy 의존 축소를 진행한다.
 
 ---
 
@@ -68,28 +69,29 @@ Vais production `{code,env}` ABI로 해결 확인됐지만, P7 단일 coercion/P
 
 | 수준 | 내용 | 상태 |
 |------|------|------|
-| L1 | nl 표면 동작 + AI 정확 생성 | ✅ 완료 (cold-start 5/5, 6/6) |
+| L1 | New Vais 표면 동작 + AI 정확 생성 | ✅ 완료 (cold-start 5/5, 6/6) |
 | L2 | 트랜스파일러가 v0.2 표현 | ✅ 사실상 완료 (12/13) |
-| **L3** | **자체 컴파일러 — P7/P8 day-1 구현** | 🔲 **다음 (이 폴더의 목표)** |
+| **L3** | **자체 컴파일러 — P7/P8/P4 day-1 구현** | 🚧 **mainline으로 진입** |
 | L4 | 프로덕션 (생태계) | 🔲 별개 거대 문제 |
 
-### L3 시작 시 결정할 것
-- **컴파일러 작성 언어**: Rust(vais처럼) / 또는 self-host 부트스트랩 / 다른 언어.
-- **백엔드**: Vais 재활용 → 점진적 자체 codegen(LLVM 직접) / 또는 LLVM 바로.
-- **에러 인프라(P4)**: `help:`+수정코드를 day-1에.
-- (이 결정들은 사용자 의도 필요 — 추측 금지.)
+### L3 결정 사항
+- **언어명**: 사용자-facing 이름은 New Vais/Vais로 확정. `nl`은 전환기 코드명.
+- **컴파일러 작성 언어**: New Vais self-host 라인을 우선한다. 현재 `compiler/self/fixpoint_full.nl`이 seed.
+- **백엔드**: Legacy Vais는 bootstrap/oracle로 유지하고, 자체 컴파일러는 직접 LLVM IR emit 경로로 전진한다.
+- **에러 인프라(P4)**: `help:`+수정코드와 값-정확성 게이트를 day-1 계약으로 둔다.
+- **mainline 계약**: `docs/design/new-vais-compiler-mainline-2026-06-13.md`.
 
 ---
 
 ## 출처
-이 프로젝트는 2026-06-06 Vais 세션에서 분기됨. 원본 설계·실측은 vais repo의
-`docs/design/`에도 보존(Vais 실패 분석이라 vais에도 의미 있음). nl 폴더는 그 사본 + 독립 진행.
+이 프로젝트는 2026-06-06 Legacy Vais 세션에서 분기됨. 원본 설계·실측은 vais repo의
+`docs/design/`에도 보존되어 있다. 이 repo는 이제 New Vais의 mainline이다.
 
 ---
 
 ## AI 에이전트(Codex 등)로 작업한다면
 
 > **시작 전 [`AGENTS.md`](AGENTS.md)를 끝까지 읽어라.** 검증된 작업 방법론, 두 repo 경계
-> (nl ↔ Vais 백엔드), 게이트(안전망) 실행법, 함정 카탈로그(silent miscompile / 8-bit 절단 /
+> (New Vais/nl ↔ Legacy Vais 백엔드), 게이트(안전망) 실행법, 함정 카탈로그(silent miscompile / 8-bit 절단 /
 > cache race / line-기반 트랜스파일러 한계 / `{{`-이스케이프)가 모두 거기 있다.
 > 진실의 원천은 `ROADMAP.md`(현재-only), 최근 맥락은 `WORKLOG.md`(최신이 맨 위).

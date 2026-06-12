@@ -1,19 +1,36 @@
-# nl ROADMAP — source of truth (current-only)
+# New Vais ROADMAP — source of truth (current-only)
 
 > 이 파일은 /loop 자율 진행의 **단일 진실원**. 현재 작업만 담는다(해결된 건 WORKLOG로).
+> repo 경로와 확장자는 전환기 코드명 `nl`을 유지하지만, 사용자-facing 언어명은 **New Vais / Vais** 로 확정됐다.
 > 각 task는 **값-정확성 검증 + 커밋** 후 done. 막히면 추적(TRACKED)하고 넘어간다.
 
 ## 완료 정의 (정직)
-- ✅ 목표: **L3(자체 컴파일러 프론트엔드) + 핵심 인프라**(예제코퍼스 P9, 에러 P4, std 시작, 게이트 P7b).
+- ✅ 목표: **New Vais 자체 컴파일러 + 핵심 인프라**(예제코퍼스 P9, 에러 P4, std 시작, 게이트 P7b).
 - ❌ 비목표: L4(생태계/시장) — 코드로 "완료" 불가. 의도적 제외.
-- 백엔드: 당분간 Vais 재활용(트랜스파일). 자체 codegen은 L3 후반/후속.
+- 백엔드: Legacy Vais는 bootstrap/oracle로 유지. mainline은 New Vais 자체 컴파일러와 직접 LLVM IR emit.
 
-## "nl은 컴파일러만이 아니다" — 만드는 것 전체
-컴파일러 + std + 툴 + **예제 코퍼스(P9, nl 차별점)** + 문서 + 검증 게이트.
+## "New Vais는 컴파일러만이 아니다" — 만드는 것 전체
+컴파일러 + std + 툴 + **예제 코퍼스(P9, New Vais 차별점)** + 문서 + 검증 게이트.
 
 ---
 
-## ⚑ 상태 (2026-06-09): 🎯🎯🎯🎯🎯 실제 소스 부트스트랩 — full-source + stage 비교 oracle 통과
+## 방향 결정 (2026-06-13)
+
+- [x] **D0. 이름 확정**: `nl`은 구현 코드명, 사용자-facing 언어명은 **New Vais / Vais**.
+- [x] **D1. Legacy 경계 확정**: `/Users/sswoo/study/projects/vais/compiler`는 Legacy Vais bootstrap backend와 oracle.
+- [x] **D2. 자체 컴파일러 mainline 진입**: `compiler/self/fixpoint_full.nl`을 seed로 삼아 직접 LLVM IR emit 컴파일러로 전진.
+- [x] **D3. 즉시 rename 보류**: repo/확장자/스크립트 rename은 자체 컴파일러 parity 이후 별도 migration으로 처리.
+
+### 현재 우선순위 큐
+1. **NV-C0 컴파일러 제품 경계 정의**: CLI 입력/출력, IR 출력 계약, bootstrap/legacy oracle 비교 방법을 문서와 테스트로 고정.
+2. **NV-C1 자체 컴파일러 front 계약 고정**: lexer/parser/type surface에서 v0.2 중 "day-1 New Vais" subset을 명시.
+3. **NV-C2 직접 LLVM IR emitter 분리**: Legacy Vais 트랜스파일 경로와 독립된 emitter entrypoint를 만들고, 작은 프로그램부터 값 검증.
+4. **NV-C3 P4 에러 UX day-1**: `help:` 수정 코드와 nl 좌표를 자체 컴파일러 에러 경로에 붙인다.
+5. **NV-C4 parity gate**: `examples/` 코퍼스와 self-host tier를 legacy bootstrap 결과와 비교하는 자체 컴파일러 게이트를 추가.
+
+세부 계약: `docs/design/new-vais-compiler-mainline-2026-06-13.md`.
+
+## ⚑ 상태 (2026-06-13): New Vais 확정 + 실제 소스 부트스트랩 baseline green
 
 P0 게이트 / P1 코퍼스 / P2 트랜스파일러 / P3 에러인프라 / P4 std시작 / P5 레퍼런스 = **DONE**.
 L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
@@ -42,7 +59,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 - 값-정확성 aggregate **112/112** (예제코퍼스 94/94 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
-**완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
+**완료 정의(L3+코퍼스+에러인프라+std) = New Vais baseline 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
 1. ~~**fixpoint.nl 편의갭 `-> List` 직접반환**~~ **✅ 근본해결**(FP12hh, 2026-06-08, commit 858defe+1cd0bef): `fn build() -> List<T> {{ ...; return xs }}`가 hidden out-param(caller가 버퍼 할당, callee가 `return xs`서 버퍼 복사)으로 컴파일=**fixpoint.nl 원형 `fn tokenize(src) -> List<Token>` 복원**(gap #4). 실측 scalar/LOS/arg/tokenize-shape 전부 동작.
 1b. ~~**general-nl `for` 구문 codegen**~~ **✅ 해결**(FP12jj, 2026-06-08): `for v in lo..hi { body }`(exclusive)/`..=`(inclusive)를 induction-variable while-loop로 desugar(토크나이저 for=34/in=35/..=36/..==37, gen_stmts kind==34 핸들러, 두 slot collector에 루프변수 예약). 실측 exclusive/inclusive/중첩/if-in-body/List-push/표현식상한/외부var의존 전부 동작. = **fixpoint_full이 이제 모든 일반 nl 구문을 codegen**.
 1c. ~~**`print(...)` 보간 codegen (fixpoint.nl codegen 단계)**~~ **✅ 해결**(FP12kk~ll, 2026-06-08): 재평가로 비-critical→진짜 갭 격상(fixpoint.nl/fixpoint_codegen의 codegen 단계가 `print("ret i64 {value}")`/`print("%t{counter} = {op_s}...")`로 IR을 emit=핵심 emission). 트랜스파일러가 print→puts rewrite; brace-bearing 리터럴은 `@.fmt<nstart>` 포맷글로벌+`printf`로 라우팅(`{ident}`→`%d` 또는 Str `%s`, `%`→`%%`, trailing `\n`). **lone-`{` vs `{ident}` 모호성**(transpiler가 둘 다 단일 brace로 전달) 해결=Vais lexer 규칙(`{`+식별자+`}`만 보간, lone `{`=리터럴; interp_end 단일구현 3곳 공유). FP12ll이 포맷 전역 pre-pass를 함수 metadata 뒤로 옮겨 Str 파라미터/local string let을 `%s` + `i8*` vararg로 emit, self-host `{op_s}` gap을 닫음. 실측 stdout 9종+capstone(fixpoint.nl 원형 tokenize→eval→emit_ir 통째 컴파일→`2+3*4`→`define i64 @main() {{ ret i64 14 }}` IR emit) + `%s/i8*` IR sanity. = **fixpoint_full이 self-host codegen 단계까지 컴파일=front+codegen 전체 arc.**
@@ -63,7 +80,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    string literal decode를 fixpoint compiler에 반영하고, 호출 인자 emit은 callee의 `List<Struct>`/struct param 타입을
    caller slot lookup보다 우선해 stage drift를 제거. `scripts/test-fixpoint-full.sh`에도 두 원인을 직접 찌르는
    짧은 회귀 fixture를 추가.
-5. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
+5. **자체 컴파일러 mainline**(NV-C0~NV-C4) — 새 우선순위. Legacy Vais는 bootstrap/oracle로만 사용.
 6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---
@@ -101,12 +118,12 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 
 ---
 
-## TRACKED (막혀서 넘어간 것 — 근본은 Vais repo)
+## TRACKED (막혀서 넘어간 것 — 근본은 Legacy Vais repo)
 - ✅ Vais filter 버그(task_7cfebeba) — 해결 확인(2026-06-11): `.filter()` + `.sum()`이 nl `d6run`
   값 검증으로 통과. nl transpiler는 Bool predicate를 Vais stdlib의 i64 predicate ABI로 감싼다.
-- 트랜스파일 천장(원천적): P8 캡처 클로저 반환은 Vais production ABI로 해결됐지만, P7 단일coercion /
-  P4 에러 / 전체 day-1 일관성은 여전히 L3 자체 컴파일러에서만 근본 해결.
-  (현재 큐는 L3 프론트엔드 진입 전 인프라 다지기.)
+- 트랜스파일 천장(원천적): P8 캡처 클로저 반환은 Legacy Vais production ABI로 해결됐지만, P7 단일coercion /
+  P4 에러 / 전체 day-1 일관성은 New Vais 자체 컴파일러에서만 근본 해결.
+  (현재 큐는 자체 컴파일러 mainline.)
 
 ---
 
@@ -159,23 +176,23 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   `G v: Vec<i64> = [..]`를 정적 backing array + Vec struct initializer로 emit. 회귀:
   Vais `phase263_global_vec_literals`.
 
-## TRACKED (nl 인터프리터 한계 — 근본은 위 Vais Vec-recursion)
+## TRACKED (초기 New Vais 인터프리터 한계 — 근본은 위 Legacy Vais Vec-recursion)
 - **멀티문자 식별자 미지원**: 현 Env=26 단일바이트 슬롯(변수명 1글자=슬롯). `fib`/`sq` 같은 다중자
   이름은 name(문자열)→slot 매핑 필요 → 문자열-키 심볼테이블 = Vec/map 재귀전달 = Vais E022 재충돌.
   CX1-9 전부 단일자 이름이 honest scope. 멀티문자는 심볼테이블 재설계(이름 인터닝 등) = 큰 단계.
-- **진짜 self-compile fixpoint**: 현 cx5_compiler는 산술/함수/재귀 프로그램을 *값으로 평가*하는
-  인터프리터. nl이 자기 컴파일러 소스를 컴파일(fixpoint)하려면 전체 nl 문법 파싱 + 실제 codegen
-  필요 = L3 엔드게임. 백엔드 전략(자체 codegen vs Vais 수정) **사용자 결정** 필요.
+- **진짜 self-compile fixpoint**: 초기 cx5_compiler는 산술/함수/재귀 프로그램을 *값으로 평가*하는
+  인터프리터였다. New Vais가 자기 컴파일러 소스를 컴파일(fixpoint)하려면 전체 문법 파싱 + 실제 codegen이
+  필요했고, 2026-06-13에 **직접 LLVM IR 자체 컴파일러 mainline**으로 결정됐다.
 
-## L3 진입 (인프라 다진 후 — 별도 큰 단계)
-자체 컴파일러: lexer → parser → typecheck → (Vais IR lowering 또는 자체 codegen).
-**시작 시 사용자 결정 필요**: 컴파일러 작성 언어(Rust/self-host/기타), 백엔드 전략, 에러 day-1.
-→ 이건 추측 금지. 인프라(P0~P5) 완료 후 사용자에게 escalate.
+## L3 / New Vais 자체 컴파일러 mainline
+자체 컴파일러: lexer → parser → typecheck → 직접 LLVM IR emit.
+**사용자 결정 완료(2026-06-13)**: 새 Vais로 확정하고 자체 컴파일러로 간다.
+Legacy Vais는 bootstrap/oracle로 유지하고, 새 기능의 최종 의미론은 이 repo와 자체 컴파일러가 소유한다.
 
-## L3 진입 — self-host (사용자 결정: nl 자체로, 2026-06-06)
+## L3 진입 — self-host (New Vais 자체로, 2026-06-06~)
 
-부트스트랩 경로: nl 컴파일러 소스(.nl) → [트랜스파일러=시드] → Vais → vaisc → gen1.
-nl 컴파일러 코드는 트랜스파일러 지원 부분집합으로만 작성 (검증: while/if/and/s[i]/struct/enum/Vec).
+부트스트랩 경로: New Vais 컴파일러 소스(.nl) → [트랜스파일러=시드] → Legacy Vais → vaisc → gen1.
+New Vais 컴파일러 코드는 트랜스파일러 지원 부분집합으로만 작성 (검증: while/if/and/s[i]/struct/enum/Vec).
 
 ### L3 큐
 - [x] **L3.0** 부트스트랩 가능성 검증 (nl 렉서 조각 트랜스파일+실행 OK).
@@ -327,7 +344,7 @@ nl-check+std시작 PRELUDE+게이트3종) **충족**. FIXPOINT 큐는 그 너머
 ## 진행 규칙 (/loop)
 1. 큐 맨 위 미완료 task 실행 → 값-정확성/러너 green 확인 → 커밋 → 체크.
 2. 막히면 TRACKED로 옮기고 다음 task.
-3. P0~P5 다 끝나면 L3 결정을 사용자에게 escalate (추측으로 L3 시작 안 함).
+3. (historical) P0~P5 완료 후 L3 결정을 사용자에게 escalate. 2026-06-13에 New Vais + 자체 컴파일러 mainline으로 결정 완료.
 4. WORKLOG.md에 각 iteration 기록.
 
 ## 통합 (사용자 결정: 구문별 codegen을 하나로, 2026-06-06)

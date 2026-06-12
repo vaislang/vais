@@ -1,6 +1,7 @@
-# nl 언어 레퍼런스
+# New Vais 언어 레퍼런스
 
-> nl(가칭) 작성용 실용 레퍼런스. **모든 구문은 `examples/`로 검증됨**(값-정확성 게이트 통과).
+> New Vais 작성용 실용 레퍼런스. 전환기 파일 확장자는 `.nl`이다.
+> **모든 구문은 `examples/`로 검증됨**(값-정확성 게이트 통과).
 > 설계 근거(왜 이렇게)는 `docs/design/`; 이 문서는 "어떻게 쓰나".
 > 핵심 규칙: **한 작업 = 한 가지 문법** (모호성 0). Rust 직관으로 쓰면 `nl-check`가 수정 안내.
 
@@ -97,7 +98,7 @@ fn main() -> Int {
 let a = [10, 20, 30]              # 리스트 리터럴
 let empty: List<Int> = []        # 빈 것은 타입 명시
 let total = a.sum()              # 메서드 체인
-let big = a.filter(|x| x > 10).map(|x| x * 2).sum()   # (filter는 현재 백엔드 버그 주의)
+let big = a.filter(|x| x > 10).map(|x| x * 2).sum()
 let n = a.len()
 let first = a[0]
 ```
@@ -110,7 +111,7 @@ let add = |n| n + base       # 캡처 자동
 fn apply(f: fn(Int) -> Int, x: Int) -> Int { return f(x) }
 ```
 - `|파라미터| 식` 또는 `|파라미터| { ... }`.
-- 캡처는 자동. (※ 현재 프로토타입 백엔드는 *경계 넘는* 캡처에 제약 — 설계 P8이 이를 근본 해결.)
+- 캡처는 자동. 반환된 캡처 클로저와 고차함수 재전달도 코퍼스에서 검증됨(e80~e81).
 
 ## 10. Option / Result / 에러
 ```
@@ -167,7 +168,7 @@ scripts/test.sh                            # 값-정확성 (examples 전체)
 python3 tools/nl-check.py prog.nl          # 문법 lint (help: 수정안내)
 ```
 
-## 현재 한계 (프로토타입)
-- 백엔드 = Vais 재활용 (트랜스파일). 일부 Vais 버그 상속 (예: `.filter()` — ROADMAP TRACKED).
-- 진짜 차별점(P7 단일coercion, P8 클로저 day-1)은 L3 자체 컴파일러에서 실현.
+## 현재 한계 (전환기)
+- 현재 실행 경로는 Legacy Vais 재활용(트랜스파일)이다. 새 Vais 자체 컴파일러가 mainline으로 전환 중이다.
+- 진짜 차별점(P7 단일coercion, P8 클로저 day-1, P4 help 에러)은 자체 컴파일러에서 최종 소유한다.
 - 이 레퍼런스의 모든 예제는 검증됨(`examples/`); 미검증 구문은 안 적었다.

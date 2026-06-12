@@ -1,16 +1,15 @@
-# 새 AI-native 언어 설계 — 인덱스 & 다음 세션 진입점
+# New Vais 설계 — 인덱스
 
-**최종 갱신**: 2026-06-06
-**상태**: 종이 설계 + 데이터 검증 완료. 다음 = 프로토타입 (dedicated 세션).
+**최종 갱신**: 2026-06-13
+**상태**: 종이 설계 + 데이터 검증 + 프로토타입/self-host baseline 완료. 사용자-facing 이름은 **New Vais / Vais** 로 확정.
 
 ---
 
 ## 이게 무엇인가
 
-기존 Vais를 **실패 사례 데이터**로 삼아, "AI(바이브코딩)가 가장 정확하게 쓰는 언어"를 백지에서
-설계하는 작업. 2026-06-06 세션에서 방향·원칙·문법·검증을 **실측 데이터로** 정립.
-
-가칭: **Aria** (미확정).
+기존 Legacy Vais를 **실패 사례 데이터**로 삼아, "AI(바이브코딩)가 가장 정확하게 쓰는 언어"를 백지에서
+설계하고 구현하는 작업. 2026-06-06 세션에서 방향·원칙·문법·검증을 **실측 데이터로** 정립했고,
+2026-06-13에 새 Vais mainline으로 확정했다.
 
 ---
 
@@ -32,6 +31,7 @@
    모든 구문이 한 가지로 확정. **프로토타입의 입력.**
 4. **`new-language-ambiguity-audit-2026-06-06.md`** — 모호성 감사.
    v0.1의 결함 발견 → v0.2가 해결. **감사 방법론.**
+5. **`new-vais-compiler-mainline-2026-06-13.md`** — New Vais 확정 후 자체 컴파일러 mainline 계약.
 
 ---
 
@@ -66,20 +66,19 @@
 
 ---
 
-## 다음 세션 진입점 (프로토타입)
+## 현재 진입점 (자체 컴파일러 mainline)
 
-**목표**: v0.2 문법의 작은 부분집합을 실제로 컴파일.
+**목표**: Legacy Vais bootstrap/oracle을 유지하면서 New Vais 자체 컴파일러를 mainline으로 전진.
 
 **전략** (실패 줄이는 순서):
-1. **작게 시작** — v0.2 §2.1~2.3 (함수/변수/조건/반복/enum/struct)만. 컬렉션·클로저·제네릭은 후순위.
-2. **표면 문법 파서** → AST. (Vais 파서를 참조하되 영어 키워드/모호성0로 새로.)
-3. **Vais 백엔드 재활용** — AST를 Vais 타입체커/codegen이 받을 수 있는 형태로 연결, 또는
-   Vais IR로 lowering. (재작성 최소화가 핵심.)
-4. **각 구문마다 값-정확성 e2e** (P7b) — 컴파일+실행+결과 검증.
-5. **구현이 노출하는 새 함정을 문서화** → 종이 설계 갱신 (Vais처럼 구현이 진실).
+1. **현재 baseline 보존** — `scripts/test.sh` 112/112, self-host e2e, full-source stage compare green 유지.
+2. **제품 경계 고정** — 자체 컴파일러 CLI/IR 출력/legacy oracle 비교 계약을 먼저 문서화하고 테스트화.
+3. **직접 LLVM emitter 분리** — `compiler/self/fixpoint_full.nl` seed에서 Legacy Vais 트랜스파일 의존을 단계적으로 줄임.
+4. **P4 에러 UX day-1** — `help:` 수정코드와 nl 좌표를 자체 컴파일러 경로에 포함.
+5. **구현이 노출하는 새 함정을 문서화** → 설계 갱신.
 
-**재활용 가능 자산** (Vais):
-- LLVM codegen 파이프라인, 타입체커/추론, self-host 노하우, 빠른 프론트엔드, 게이트 패턴.
+**재활용 가능 자산** (Legacy Vais):
+- bootstrap/oracle 경로, LLVM codegen 경험, 타입체커/추론 노하우, self-host 노하우, 빠른 프론트엔드, 게이트 패턴.
 **폐기**: 단일문자 키워드, 토큰절약, 산재 coercion, bare-fn-ptr 클로저.
 
 **경고** (Vais 교훈):
@@ -97,9 +96,7 @@
 
 ---
 
-## 병행: 기존 Vais 안정성 (서비스-가능 작업)
+## 병행: Legacy Vais 안정성 (bootstrap/oracle)
 
-새 언어와 별개로, 기존 Vais를 "안정적 서비스"로 끌어올리는 작업도 진행 중:
-- 이번 세션 8버그 수정 + VALUE CORRECTNESS 게이트 + vaisdb 정렬-정확성 게이트.
-- **최대 블로커**: 클로저 ABI (task_98f2db47) — vaisdb SQL ORDER BY를 무음 오염. 검증 fixture 준비됨.
-- 새 언어 P8(클로저 day-1 확정)이 정확히 이 버그 클래스를 차단하는 설계 — 두 작업이 연결됨.
+New Vais 자체 컴파일러가 parity를 얻을 때까지 기존 Vais 컴파일러는 Legacy bootstrap/oracle로 유지한다.
+이미 캡처 클로저 ABI, Vec/Map/string 등 주요 갭은 값-정확성 회귀로 잠겨 있다.
