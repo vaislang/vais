@@ -1,5 +1,21 @@
 # nl WORKLOG
 
+## 2026-06-13 (점진 인프라 — 리스트 리터럴 직접 인자 코퍼스 확장)
+- P9 예제 코퍼스에 `examples/e82_list_literal_direct_arg.nl` 추가.
+  `sum3([10, 20, 12])` 형태로 리스트 리터럴이 `List<Int>` 파라미터 기대 타입을 받아 바로 materialize되는
+  경로를 nl 표면에서 검증한다.
+- `examples/README.md` 인덱스와 카운트를 예제 94/94, 전체 runner 112/112 기준으로 갱신.
+- `README.md`/`ROADMAP.md`/`AGENTS.md`의 현재 aggregate 수치를 최신 runner 기준으로 동기화하고,
+  이미 해결된 Map/int→string/중첩Vec/Vec성장 갭이 잔여처럼 보이던 stale 문구를 정리.
+- 검증:
+  - `bash scripts/test.sh e82_list_literal_direct_arg` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `python3 tests/transpiler_test.py` = `RESULT: 59/59 pass`
+  - `python3 tests/nl_check_test.py` = `RESULT: 40/40 pass`
+  - `git diff --check` = clean
+
 ## 2026-06-12 (점진 인프라 — 반환 클로저 재전달 코퍼스 확장)
 - P9 예제 코퍼스에 `examples/e81_closure_return_apply.nl` 추가.
   캡처 클로저가 함수에서 반환된 뒤, 다시 `fn(Int) -> Int` 고차함수 파라미터로 넘어가고 그 안에서 두 번 호출되는

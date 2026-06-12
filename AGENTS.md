@@ -34,8 +34,8 @@
 - nl을 깊게 파다 보면 **Vais 컴파일러 버그**(codegen miscompile, ICE 등)를 만난다. 이때
   Vais repo를 수정하게 되는데, **Vais repo의 `CLAUDE.md` 규칙이 그때부터 적용된다**(§5 참조).
   빈도 감각: 최근 세션들에서 nl 작업 중 Vais 버그 근본수정이 여러 건 있었다(`&Vec` borrow
-  codegen, struct-return ICE, `%` 이스케이프 등). 현재 추적 중인 Vais 갭은 ROADMAP의
-  TRACKED 참조 — Map/int→string/중첩Vec/Vec성장 등. **드물지 않다**고 가정하라.
+  codegen, struct-return ICE, `%` 이스케이프 등). 현재 해결/추적 중인 Vais 갭은 ROADMAP의
+  TRACKED 참조. **드물지 않다**고 가정하라.
 - 커밋은 **각 repo에 따로** 한다. nl 변경은 nl repo에, Vais 변경은 Vais repo에.
 - `vaisc`는 PATH에 있어야 하고, std 해석을 위해 `VAIS_COMPILER_ROOT`가 Vais repo를
   가리켜야 한다(게이트 스크립트는 기본값 `/Users/sswoo/study/projects/vais/compiler` 사용).
@@ -75,7 +75,7 @@ bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host
 |--------|------|------|
 | **self-host e2e** | `bash scripts/test-fixpoint-full.sh` | `fixpoint_full.nl`이 nl 프로그램을 컴파일→IR→실행, **exit/stdout 값** 검증. stage drift 원인(direct double-string decode, callee List<Struct> arg authority) 회귀 포함. |
 | **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일해 final IR exit 24/50/120/42까지 확인. 마지막에 stage1/stage2 compiler IR을 normalized byte-compare한다. 느린 긴 게이트. |
-| **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.nl`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **111/111**. |
+| **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.nl`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **112/112**. |
 | 기타 tier별 | `scripts/test-fixpoint*.sh` | 개별 codegen 영역(array/list/str/struct/imperative 등) |
 
 규칙:

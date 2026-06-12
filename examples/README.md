@@ -1,8 +1,8 @@
 # nl 예제 코퍼스 (P9 인프라)
 
 **검증된 nl 예제.** P9(예제 코퍼스 = 최강 레버, cold-start 1/5→5/5)의 핵심 인프라.
-모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 93/93 PASS; 러너 전체는
-self-host codegen 모듈 포함 111/111).
+모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 94/94 PASS; 러너 전체는
+self-host codegen 모듈 포함 112/112).
 
 > 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
 > AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
@@ -108,9 +108,10 @@ self-host codegen 모듈 포함 111/111).
 | e79 | 중첩 `match` arm + enum payload 안 Option payload | 42 |
 | e80 | 캡처 클로저 반환 (`{code, env}` ABI) | 7 |
 | e81 | 반환된 캡처 클로저를 고차함수 인자로 재전달 | 21 |
+| e82 | 리스트 리터럴 직접 인자 (`f([..])`) | 42 |
 
 ## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
-- 현재 예제 코퍼스 기준 known 캡처 클로저 반환/재전달 갭은 해결됨(e80~e81). 남은 한계는 ROADMAP의 L3/P7/P4 항목 참조.
+- 현재 예제 코퍼스 기준 known 캡처 클로저 반환/재전달 갭과 리스트 리터럴 직접 인자 갭은 해결됨(e80~e82). 남은 한계는 ROADMAP의 L3/P7/P4 항목 참조.
 ## 규약
 - 첫 줄 `# expect: N` = main이 반환할 exit code (mod 256).
 - 실행형(main이 값 반환)만 expect 부착. 라이브러리 조각은 미부착(러너 skip).

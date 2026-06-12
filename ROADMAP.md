@@ -39,7 +39,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
     generated compiler IR `1103434` bytes → 2세대 compiler 실행 → final IR `ret i64 42` → clang/run exit **42**.
   - `tools/normalize_stage_ir.py`로 source-position 기반 `@.sNNN`/`@.fmtNNN` global 이름만 정규화한 뒤,
     stage1 compiler IR과 stage2 compiler IR을 byte-compare → normalized `989685` bytes 일치.
-- 값-정확성 aggregate **111/111** (예제코퍼스 93/93 + self-host codegen 모듈).
+- 값-정확성 aggregate **112/112** (예제코퍼스 94/94 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = nl측 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
@@ -64,7 +64,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    caller slot lookup보다 우선해 stage drift를 제거. `scripts/test-fixpoint-full.sh`에도 두 원인을 직접 찌르는
    짧은 회귀 fixture를 추가.
 5. **점진 인프라**(코퍼스 확장 / nl측 갭 수정 / cold-start 재측정) — scale-blocked 아님.
-6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 리스트 리터럴 직접 인자는 해결, 잔여 Map/int→string/중첩Vec/Vec성장 등.
+6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---
 
@@ -135,7 +135,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 - ✅ **Vais 리스트-리터럴 직접 인자 코어션 갭 — 해결**(2026-06-10, compiler): `f([1,2,3])`
   (리터럴을 `Vec<T>` 파라미터에 직접 전달)이 기대 타입 기반 typecheck + inline Vec materialization으로
   build/run 통과. 회귀: `e2e_phase256_vec_literal_direct_arg_full_build` exit 37.
-  전체 Vais `scripts/check-integrity.sh`도 `INTEGRITY OK`.
+  nl 회귀: `e82_list_literal_direct_arg`. 전체 Vais `scripts/check-integrity.sh`도 `INTEGRITY OK`.
 - ✅ **Vais 표면 int→string 변환 — 해결**(2026-06-10, compiler `0824cfdf`): `to_string(i64) -> str`와
   `n.to_string()` lowering을 `snprintf` 기반 str fat pointer 생성으로 추가. `str(42)`는 여전히
   타입키워드 호출이라 canonical 표면은 `to_string(42)`이며, nl은 `Str(x)`를 `to_string(x)`로
