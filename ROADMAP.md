@@ -24,7 +24,7 @@
 ### 현재 우선순위 큐
 1. [x] **NV-C0 컴파일러 제품 경계 정의**: `scripts/vaisc`가 `.vais`/`.nl` 입력을 받아 LLVM IR emit/build/run을 제공하고, `scripts/test-vaisc.sh`가 Legacy bootstrap oracle과 값 비교.
 2. [x] **NV-C1 자체 컴파일러 front 계약 고정**: day-1 native subset(Int 함수/let/return/if/while/plain call)을 `scripts/vaisc` preflight로 고정하고, unsupported 문법은 `help:` 진단으로 거절.
-3. [ ] **NV-C2 직접 LLVM IR emitter 분리**: Legacy Vais 트랜스파일 경로와 독립된 emitter entrypoint를 만들고, 작은 프로그램부터 값 검증.
+3. [x] **NV-C2 직접 LLVM IR emitter 분리**: `scripts/vaisc --engine direct`가 Legacy Vais 없이 단일 `fn main() -> Int { return <Int expr> }`를 직접 LLVM IR로 emit/build/run하고 bootstrap oracle과 값 비교.
 4. [ ] **NV-C3 P4 에러 UX day-1**: `help:` 수정 코드와 nl 좌표를 자체 컴파일러 에러 경로에 붙인다.
 5. [ ] **NV-C4 parity gate**: `examples/` 코퍼스와 self-host tier를 legacy bootstrap 결과와 비교하는 자체 컴파일러 게이트를 추가.
 
@@ -64,6 +64,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 - New Vais front 계약 smoke `scripts/test-vaisc-front.sh` **OK**:
   accepted day-1 subset exit 42, `fn main`/helper signature/for/struct/Rust `&&`/list/string type을
   source 좌표와 `help:` 진단으로 거절.
+- New Vais direct emitter smoke `scripts/test-vaisc-direct.sh` **OK**:
+  `scripts/vaisc --engine direct`가 깨진 `LEGACY_VAISC` 환경에서도 arithmetic `main`을 직접 LLVM IR로
+  emit/build/run exit 42, 기본 bootstrap engine과 같은 값을 반환.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = New Vais baseline 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
 1. ~~**fixpoint.nl 편의갭 `-> List` 직접반환**~~ **✅ 근본해결**(FP12hh, 2026-06-08, commit 858defe+1cd0bef): `fn build() -> List<T> {{ ...; return xs }}`가 hidden out-param(caller가 버퍼 할당, callee가 `return xs`서 버퍼 복사)으로 컴파일=**fixpoint.nl 원형 `fn tokenize(src) -> List<Token>` 복원**(gap #4). 실측 scalar/LOS/arg/tokenize-shape 전부 동작.
@@ -86,7 +89,8 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    string literal decode를 fixpoint compiler에 반영하고, 호출 인자 emit은 callee의 `List<Struct>`/struct param 타입을
    caller slot lookup보다 우선해 stage drift를 제거. `scripts/test-fixpoint-full.sh`에도 두 원인을 직접 찌르는
    짧은 회귀 fixture를 추가.
-5. **자체 컴파일러 mainline**(NV-C2~NV-C4) — 새 우선순위. `NV-C0` 제품 경계와 `NV-C1` front 계약은 완료, Legacy Vais는 bootstrap/oracle로만 사용.
+5. **자체 컴파일러 mainline**(NV-C3~NV-C4) — 새 우선순위. `NV-C0` 제품 경계, `NV-C1` front 계약,
+   `NV-C2` direct emitter entrypoint는 완료, Legacy Vais는 bootstrap/oracle로만 사용.
 6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---

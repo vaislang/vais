@@ -1,5 +1,29 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C2 — New Vais direct LLVM emitter entrypoint)
+- `scripts/vaisc`에 `--engine direct`를 추가해 Legacy Vais bootstrap과 분리된 최소 직접 LLVM IR emitter 경로를 열었다.
+  기본 engine은 기존 `bootstrap`으로 유지해 현재 전체 self-host/compiler 경로를 깨지 않게 했다.
+- direct engine의 첫 slice는 단일 `fn main() -> Int { return <Int expr> }`만 받는다.
+  `<Int expr>`는 정수 리터럴, 괄호, `+`/`-`/`*`/`/`/`%`, 비교 연산을 직접 LLVM `i64`/`icmp`/`zext` IR로 낮춘다.
+- `scripts/test-vaisc-direct.sh`를 추가했다.
+  `LEGACY_VAISC`를 일부러 깨진 경로로 두고도 direct emit/build/run이 exit 42로 성공하는지 확인하고,
+  같은 source를 기본 bootstrap engine으로 실행해 값이 일치하는지 비교한다.
+  helper function은 direct slice 밖이므로 `help:` 진단으로 실패하는지도 확인한다.
+- 문서 갱신: `README.md`, `ROADMAP.md`, `AGENTS.md`,
+  `docs/design/NEW-LANGUAGE-README.md`, `docs/design/new-vais-compiler-mainline-2026-06-13.md`,
+  `docs/reference/LANGUAGE.md`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py tools/embed_self_source.py compiler/transpiler/nl2vais.py` = pass
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `python3 tests/transpiler_test.py` = `RESULT: 59/59 pass`
+  - `python3 tests/nl_check_test.py` = `RESULT: 40/40 pass`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `git diff --check` = clean
+
 ## 2026-06-13 (NV-C1 — New Vais native day-1 front 계약)
 - `scripts/vaisc` 앞단에 native day-1 front preflight를 추가했다.
   accepted subset은 `fn main() -> Int`, helper `fn ... -> Int`, `let`/`let mut`, Int 산술/비교,

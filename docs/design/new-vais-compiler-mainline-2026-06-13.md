@@ -57,6 +57,7 @@ Current green gates are the baseline:
 
 - `bash scripts/test-vaisc.sh` = New Vais `vaisc` smoke OK
 - `bash scripts/test-vaisc-front.sh` = New Vais day-1 front contract OK
+- `bash scripts/test-vaisc-direct.sh` = New Vais direct emitter OK
 - `bash scripts/test.sh` = 112/112
 - `bash scripts/test-fixpoint-full.sh` = self-host e2e OK
 - `bash scripts/test-fixpoint-full-self.sh` = full-source stage compare OK
@@ -132,6 +133,24 @@ Done when:
 ### NV-C2: Direct LLVM IR Emitter
 
 Separate direct LLVM IR emission from the Legacy Vais transpiler path.
+
+Status: done as of 2026-06-13 for the first minimal direct slice.
+
+Command contract:
+- `scripts/vaisc emit-ir SOURCE.vais --engine direct -o OUT.ll`
+- `scripts/vaisc build SOURCE.vais --engine direct -o OUT`
+- `scripts/vaisc run SOURCE.vais --engine direct`
+
+Current direct subset:
+- exactly one `fn main() -> Int`,
+- body is a single `return <expr>`,
+- `<expr>` supports Int literals, parentheses, `+`, `-`, `*`, `/`, `%`,
+  and integer comparisons lowered through `icmp`/`zext`.
+
+The default engine remains `bootstrap` while direct parity grows.
+
+Gate:
+- `bash scripts/test-vaisc-direct.sh`
 
 Done when:
 - simple arithmetic and return emit valid LLVM IR,

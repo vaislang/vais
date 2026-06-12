@@ -34,6 +34,10 @@ class FrontContractError(CompileError):
     pass
 
 
+class DirectEmitError(CompileError):
+    pass
+
+
 @dataclass(frozen=True)
 class FrontIssue:
     line: int
@@ -294,6 +298,340 @@ def check_front_contract(source: Path) -> None:
     raise FrontContractError("\n".join(formatted).rstrip())
 
 
+@dataclass(frozen=True)
+class DirectFunction:
+    name: str
+    params: str
+    return_type: str | None
+    body: str
+    line: int
+    col: int
+
+
+@dataclass(frozen=True)
+class DirectToken:
+    kind: str
+    text: str
+    line: int
+    col: int
+
+
+@dataclass(frozen=True)
+class DirectValue:
+    ty: str
+    ref: str
+
+
+DIRECT_FN_START = re.compile(
+    r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*(?:->\s*([A-Za-z_][A-Za-z0-9_]*))?\s*\{"
+)
+DIRECT_INT_RE = re.compile(r"\d+")
+DIRECT_OPS = {"==", "!=", "<=", ">=", "+", "-", "*", "/", "%", "(", ")", "<", ">"}
+DIRECT_BINOPS = {
+    "+": "add",
+    "-": "sub",
+    "*": "mul",
+    "/": "sdiv",
+    "%": "srem",
+}
+DIRECT_CMPOPS = {
+    "==": "eq",
+    "!=": "ne",
+    "<": "slt",
+    "<=": "sle",
+    ">": "sgt",
+    ">=": "sge",
+}
+
+
+def line_col_at(text: str, index: int) -> tuple[int, int]:
+    line = text.count("\n", 0, index) + 1
+    prev = text.rfind("\n", 0, index)
+    col = index + 1 if prev < 0 else index - prev
+    return line, col
+
+
+def direct_error(source: Path, line: int, col: int, message: str, help_text: str) -> DirectEmitError:
+    return DirectEmitError(
+        "\n".join(
+            [
+                f"error: {message}",
+                f"  --> {source}:{line}:{col}",
+                f"  help: {help_text}",
+            ]
+        )
+    )
+
+
+def source_code_view(text: str) -> str:
+    return "\n".join(code_only(line) for line in text.splitlines())
+
+
+def find_matching_brace(text: str, open_index: int, source: Path) -> int:
+    depth = 0
+    for index in range(open_index, len(text)):
+        ch = text[index]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    line, col = line_col_at(text, open_index)
+    raise direct_error(
+        source,
+        line,
+        col,
+        "direct LLVM emitter found an unterminated function body",
+        "close the function body with `}`.",
+    )
+
+
+def extract_direct_functions(source: Path, text: str) -> list[DirectFunction]:
+    code = source_code_view(text)
+    functions: list[DirectFunction] = []
+    cursor = 0
+    while True:
+        match = DIRECT_FN_START.search(code, cursor)
+        if match is None:
+            break
+        open_index = match.end() - 1
+        close_index = find_matching_brace(code, open_index, source)
+        line, col = line_col_at(code, match.start())
+        functions.append(
+            DirectFunction(
+                name=match.group(1),
+                params=match.group(2).strip(),
+                return_type=match.group(3),
+                body=code[open_index + 1 : close_index],
+                line=line,
+                col=col,
+            )
+        )
+        cursor = close_index + 1
+    return functions
+
+
+def tokenize_direct_expr(source: Path, expr: str, base_line: int) -> list[DirectToken]:
+    tokens: list[DirectToken] = []
+    index = 0
+    while index < len(expr):
+        ch = expr[index]
+        if ch.isspace():
+            index += 1
+            continue
+
+        int_match = DIRECT_INT_RE.match(expr, index)
+        if int_match:
+            tokens.append(DirectToken("int", int_match.group(0), base_line, int_match.start() + 1))
+            index = int_match.end()
+            continue
+
+        two = expr[index : index + 2]
+        if two in DIRECT_OPS:
+            tokens.append(DirectToken(two, two, base_line, index + 1))
+            index += 2
+            continue
+
+        if ch in DIRECT_OPS:
+            tokens.append(DirectToken(ch, ch, base_line, index + 1))
+            index += 1
+            continue
+
+        if ch.isalpha() or ch == "_":
+            raise direct_error(
+                source,
+                base_line,
+                index + 1,
+                "direct LLVM emitter currently supports literal Int expressions only",
+                "use integer literals and arithmetic here, or use the default bootstrap engine.",
+            )
+
+        raise direct_error(
+            source,
+            base_line,
+            index + 1,
+            f"direct LLVM emitter cannot parse token `{ch}`",
+            "use integer literals, arithmetic operators, comparisons, and parentheses.",
+        )
+
+    tokens.append(DirectToken("eof", "", base_line, len(expr) + 1))
+    return tokens
+
+
+class DirectExprParser:
+    def __init__(self, source: Path, tokens: list[DirectToken]) -> None:
+        self.source = source
+        self.tokens = tokens
+        self.pos = 0
+        self.tmp = 0
+        self.instructions: list[str] = []
+
+    def current(self) -> DirectToken:
+        return self.tokens[self.pos]
+
+    def take(self, kind: str) -> DirectToken | None:
+        if self.current().kind == kind:
+            token = self.current()
+            self.pos += 1
+            return token
+        return None
+
+    def expect(self, kind: str, help_text: str) -> DirectToken:
+        token = self.current()
+        if token.kind != kind:
+            raise direct_error(
+                self.source,
+                token.line,
+                token.col,
+                f"direct LLVM emitter expected `{kind}`",
+                help_text,
+            )
+        self.pos += 1
+        return token
+
+    def new_tmp(self) -> str:
+        self.tmp += 1
+        return f"%t{self.tmp}"
+
+    def ensure_i64(self, value: DirectValue) -> DirectValue:
+        if value.ty == "i64":
+            return value
+        if value.ty == "i1":
+            out = self.new_tmp()
+            self.instructions.append(f"  {out} = zext i1 {value.ref} to i64")
+            return DirectValue("i64", out)
+        raise AssertionError(f"unknown direct value type {value.ty}")
+
+    def emit_i64_binop(self, op: str, left: DirectValue, right: DirectValue) -> DirectValue:
+        left = self.ensure_i64(left)
+        right = self.ensure_i64(right)
+        out = self.new_tmp()
+        self.instructions.append(f"  {out} = {DIRECT_BINOPS[op]} i64 {left.ref}, {right.ref}")
+        return DirectValue("i64", out)
+
+    def emit_cmp(self, op: str, left: DirectValue, right: DirectValue) -> DirectValue:
+        left = self.ensure_i64(left)
+        right = self.ensure_i64(right)
+        out = self.new_tmp()
+        self.instructions.append(f"  {out} = icmp {DIRECT_CMPOPS[op]} i64 {left.ref}, {right.ref}")
+        return DirectValue("i1", out)
+
+    def parse(self) -> DirectValue:
+        value = self.parse_compare()
+        token = self.current()
+        if token.kind != "eof":
+            raise direct_error(
+                self.source,
+                token.line,
+                token.col,
+                f"direct LLVM emitter found trailing token `{token.text}`",
+                "keep the return expression to one arithmetic/comparison expression.",
+            )
+        return self.ensure_i64(value)
+
+    def parse_compare(self) -> DirectValue:
+        value = self.parse_sum()
+        while self.current().kind in DIRECT_CMPOPS:
+            op = self.current().kind
+            self.pos += 1
+            value = self.emit_cmp(op, value, self.parse_sum())
+        return value
+
+    def parse_sum(self) -> DirectValue:
+        value = self.parse_term()
+        while self.current().kind in {"+", "-"}:
+            op = self.current().kind
+            self.pos += 1
+            value = self.emit_i64_binop(op, value, self.parse_term())
+        return value
+
+    def parse_term(self) -> DirectValue:
+        value = self.parse_unary()
+        while self.current().kind in {"*", "/", "%"}:
+            op = self.current().kind
+            self.pos += 1
+            value = self.emit_i64_binop(op, value, self.parse_unary())
+        return value
+
+    def parse_unary(self) -> DirectValue:
+        if self.take("-"):
+            value = self.ensure_i64(self.parse_unary())
+            if value.ref.isdigit():
+                return DirectValue("i64", f"-{value.ref}")
+            out = self.new_tmp()
+            self.instructions.append(f"  {out} = sub i64 0, {value.ref}")
+            return DirectValue("i64", out)
+        return self.parse_primary()
+
+    def parse_primary(self) -> DirectValue:
+        token = self.current()
+        if token.kind == "int":
+            self.pos += 1
+            return DirectValue("i64", token.text)
+        if self.take("("):
+            value = self.parse_compare()
+            self.expect(")", "close the parenthesized expression.")
+            return value
+        raise direct_error(
+            self.source,
+            token.line,
+            token.col,
+            "direct LLVM emitter expected an Int literal or parenthesized expression",
+            "use a return expression such as `40 + 2`.",
+        )
+
+
+def extract_direct_return_expr(source: Path, body: str, base_line: int) -> str:
+    match = re.fullmatch(r"\s*return\s+(.+?)\s*;?\s*", body, re.DOTALL)
+    if match is None:
+        raise direct_error(
+            source,
+            base_line,
+            1,
+            "direct LLVM emitter currently supports a single `return` statement in `main`",
+            "write `fn main() -> Int { return 40 + 2 }` for the NV-C2 direct slice.",
+        )
+    return match.group(1).strip()
+
+
+def direct_emit_ir(source: Path, ir_out: Path | None) -> str | None:
+    if not source.is_file():
+        raise CompileError(f"source not found: {source}")
+    check_front_contract(source)
+
+    text = source.read_text()
+    functions = extract_direct_functions(source, text)
+    if len(functions) != 1 or functions[0].name != "main":
+        raise direct_error(
+            source,
+            1,
+            1,
+            "direct LLVM emitter currently supports only a single `fn main() -> Int`",
+            "use the default bootstrap engine for helper functions until the direct emitter grows calls.",
+        )
+
+    main_fn = functions[0]
+    expr = extract_direct_return_expr(source, main_fn.body, main_fn.line)
+    tokens = tokenize_direct_expr(source, expr, main_fn.line)
+    parser = DirectExprParser(source, tokens)
+    result = parser.parse()
+    ir_lines = ["define i64 @main() {", *parser.instructions, f"  ret i64 {result.ref}", "}", ""]
+    ir = "\n".join(ir_lines)
+
+    if ir_out is None:
+        return ir
+    ir_out.parent.mkdir(parents=True, exist_ok=True)
+    ir_out.write_text(ir)
+    return None
+
+
+def emit_ir_for_args(source: Path, ir_out: Path | None, args: argparse.Namespace) -> str | None:
+    if args.engine == "direct":
+        return direct_emit_ir(source, ir_out)
+    return bootstrap_emit_ir(source, ir_out, args)
+
+
 def run_checked(
     cmd: list[str],
     *,
@@ -414,12 +752,12 @@ def bootstrap_emit_ir(source: Path, ir_out: Path | None, args: argparse.Namespac
 def emit_ir(args: argparse.Namespace) -> int:
     source = Path(args.source).resolve()
     if args.output == "-":
-        text = bootstrap_emit_ir(source, None, args)
+        text = emit_ir_for_args(source, None, args)
         assert text is not None
         sys.stdout.write(text)
         return 0
 
-    bootstrap_emit_ir(source, Path(args.output).resolve(), args)
+    emit_ir_for_args(source, Path(args.output).resolve(), args)
     return 0
 
 
@@ -429,7 +767,7 @@ def build(args: argparse.Namespace) -> int:
     tmp, holder = tmpdir_from_args(args)
     try:
         ir_path = Path(args.ir_out).resolve() if args.ir_out else tmp / "out.ll"
-        bootstrap_emit_ir(source, ir_path, args)
+        emit_ir_for_args(source, ir_path, args)
         out.parent.mkdir(parents=True, exist_ok=True)
         run_checked(
             [args.clang, "-Wno-override-module", "-o", str(out), str(ir_path)],
@@ -457,6 +795,15 @@ def run_program(args: argparse.Namespace) -> int:
 
 
 def add_common_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--engine",
+        choices=("bootstrap", "direct"),
+        default=os.environ.get("VAISC_ENGINE", "bootstrap"),
+        help=(
+            "Compiler engine. `bootstrap` uses the full transitional self-host path; "
+            "`direct` uses the NV-C2 minimal LLVM emitter."
+        ),
+    )
     parser.add_argument(
         "--legacy-root",
         default=os.environ.get("VAIS_COMPILER_ROOT", str(DEFAULT_LEGACY_ROOT)),
@@ -507,7 +854,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except FrontContractError as exc:
+    except (FrontContractError, DirectEmitError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     except CompileError as exc:

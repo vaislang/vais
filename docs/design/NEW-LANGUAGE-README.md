@@ -74,7 +74,7 @@
 1. **현재 baseline 보존** — `scripts/test.sh` 112/112, self-host e2e, full-source stage compare green 유지.
 2. **제품 경계 유지** — `scripts/vaisc emit-ir/build/run`이 `.vais`/`.nl` 입력을 받고 Legacy oracle smoke와 비교된다.
 3. **front 계약 유지** — day-1 native subset은 Int 함수/let/return/if/while/plain call이며 unsupported 문법은 `help:` 진단으로 실패한다.
-4. **직접 LLVM emitter 분리** — `compiler/self/fixpoint_full.nl` seed에서 Legacy Vais 트랜스파일 의존을 단계적으로 줄임.
+4. **직접 LLVM emitter 분리** — `scripts/vaisc --engine direct`가 최소 arithmetic `main`을 Legacy Vais 없이 emit/build/run하며, 이후 `compiler/self/fixpoint_full.nl` seed에서 Legacy Vais 트랜스파일 의존을 단계적으로 줄임.
 5. **P4 에러 UX 확장** — `help:` 수정코드와 nl 좌표를 자체 컴파일러 경로 전반으로 확대.
 6. **구현이 노출하는 새 함정을 문서화** → 설계 갱신.
 
