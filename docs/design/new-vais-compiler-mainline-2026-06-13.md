@@ -18,7 +18,7 @@ It is not the owner of New Vais semantics.
 Build the New Vais native compiler as the mainline:
 
 ```
-New Vais source (.nl during transition)
+New Vais source (.vais, with .nl accepted during transition)
   -> New Vais lexer/parser/typecheck
   -> direct LLVM IR emitter
   -> clang/native execution
@@ -55,6 +55,7 @@ The native compiler owns these from day one:
 
 Current green gates are the baseline:
 
+- `bash scripts/test-vaisc.sh` = New Vais `vaisc` smoke OK
 - `bash scripts/test.sh` = 112/112
 - `bash scripts/test-fixpoint-full.sh` = self-host e2e OK
 - `bash scripts/test-fixpoint-full-self.sh` = full-source stage compare OK
@@ -71,15 +72,28 @@ Every native-compiler slice must either:
 
 Define the native compiler CLI and artifact contract.
 
-Required decisions:
-- input: `.nl` source path and/or source string,
-- output: LLVM IR file/stdout,
-- execution gate: emitted IR builds with `clang` and exits with expected value,
-- oracle: compare behavior with bootstrap path for the same source.
+Status: done as of 2026-06-13.
+
+Command contract:
+- `scripts/vaisc emit-ir SOURCE.vais -o OUT.ll`
+- `scripts/vaisc build SOURCE.vais -o OUT`
+- `scripts/vaisc run SOURCE.vais`
+
+Transition rules:
+- `SOURCE.vais` is the user-facing source spelling.
+- `.nl` remains accepted as the transitional extension.
+- repo-local `scripts/vaisc` avoids colliding with the Legacy `vaisc` binary while the bootstrap remains active.
+- Legacy `vaisc` is resolved only as an internal bootstrap/oracle backend.
+
+Gate:
+- `bash scripts/test-vaisc.sh`
 
 Done when:
 - a tiny native compiler entrypoint has a documented command shape,
 - at least one smoke program emits LLVM IR through that entrypoint,
+- generated IR builds/runs with `clang`,
+- New Vais `build`/`run` commands return the expected value,
+- Legacy bootstrap oracle returns the same value,
 - verification is scriptable.
 
 ### NV-C1: Front Contract

@@ -1,5 +1,28 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C0 — New Vais `vaisc` 제품 경계)
+- New Vais 사용자-facing compiler 명령 계약을 `vaisc`로 고정했다.
+  전환기 충돌 방지를 위해 repo-local wrapper `scripts/vaisc`가 `tools/vaisc.py`를 실행한다.
+- `tools/vaisc.py`는 `emit-ir`, `build`, `run` subcommand를 제공한다.
+  `.vais`와 전환기 `.nl` 입력을 받아 `compiler/self/fixpoint_full.nl` self-host compiler에 주입하고,
+  Legacy Vais compiler는 bootstrap/oracle backend로만 호출한다.
+- `scripts/build.sh`는 Legacy oracle 경로로 남기되 `LEGACY_VAISC`/Legacy target binary를 명시적으로 찾아
+  repo-local `scripts/vaisc`와 PATH 충돌하지 않게 했다.
+- `scripts/test-vaisc.sh`를 추가해 `.vais` smoke source를 기준으로 다음을 검증한다:
+  `scripts/vaisc emit-ir` → clang/run exit 42, `scripts/vaisc build`/`run` exit 42,
+  `scripts/build.sh` Legacy bootstrap oracle exit 42.
+- 문서 갱신: `README.md`, `ROADMAP.md`, `AGENTS.md`, `RENAME.md`,
+  `docs/design/NEW-LANGUAGE-README.md`, `docs/design/new-vais-compiler-mainline-2026-06-13.md`,
+  `docs/reference/LANGUAGE.md`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py tools/embed_self_source.py compiler/transpiler/nl2vais.py` = pass
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `python3 tests/transpiler_test.py` = `RESULT: 59/59 pass`
+  - `python3 tests/nl_check_test.py` = `RESULT: 40/40 pass`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+
 ## 2026-06-13 (방향 확정 — New Vais + 자체 컴파일러 mainline)
 - 사용자 결정 반영: `nl` 전환기 코드명 프로젝트를 **New Vais / Vais** 로 확정하고, 자체 컴파일러를 mainline으로 전환한다.
 - 기존 `/Users/sswoo/study/projects/vais/compiler`는 **Legacy Vais bootstrap/oracle backend** 로 명시했다.

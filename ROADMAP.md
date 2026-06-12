@@ -22,11 +22,11 @@
 - [x] **D3. 즉시 rename 보류**: repo/확장자/스크립트 rename은 자체 컴파일러 parity 이후 별도 migration으로 처리.
 
 ### 현재 우선순위 큐
-1. **NV-C0 컴파일러 제품 경계 정의**: CLI 입력/출력, IR 출력 계약, bootstrap/legacy oracle 비교 방법을 문서와 테스트로 고정.
-2. **NV-C1 자체 컴파일러 front 계약 고정**: lexer/parser/type surface에서 v0.2 중 "day-1 New Vais" subset을 명시.
-3. **NV-C2 직접 LLVM IR emitter 분리**: Legacy Vais 트랜스파일 경로와 독립된 emitter entrypoint를 만들고, 작은 프로그램부터 값 검증.
-4. **NV-C3 P4 에러 UX day-1**: `help:` 수정 코드와 nl 좌표를 자체 컴파일러 에러 경로에 붙인다.
-5. **NV-C4 parity gate**: `examples/` 코퍼스와 self-host tier를 legacy bootstrap 결과와 비교하는 자체 컴파일러 게이트를 추가.
+1. [x] **NV-C0 컴파일러 제품 경계 정의**: `scripts/vaisc`가 `.vais`/`.nl` 입력을 받아 LLVM IR emit/build/run을 제공하고, `scripts/test-vaisc.sh`가 Legacy bootstrap oracle과 값 비교.
+2. [ ] **NV-C1 자체 컴파일러 front 계약 고정**: lexer/parser/type surface에서 v0.2 중 "day-1 New Vais" subset을 명시.
+3. [ ] **NV-C2 직접 LLVM IR emitter 분리**: Legacy Vais 트랜스파일 경로와 독립된 emitter entrypoint를 만들고, 작은 프로그램부터 값 검증.
+4. [ ] **NV-C3 P4 에러 UX day-1**: `help:` 수정 코드와 nl 좌표를 자체 컴파일러 에러 경로에 붙인다.
+5. [ ] **NV-C4 parity gate**: `examples/` 코퍼스와 self-host tier를 legacy bootstrap 결과와 비교하는 자체 컴파일러 게이트를 추가.
 
 세부 계약: `docs/design/new-vais-compiler-mainline-2026-06-13.md`.
 
@@ -58,6 +58,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
     stage1 compiler IR과 stage2 compiler IR을 byte-compare → normalized `989685` bytes 일치.
 - 값-정확성 aggregate **112/112** (예제코퍼스 94/94 + self-host codegen 모듈).
 - 트랜스파일러-단위/nl-check-단위 유지.
+- New Vais `vaisc` 제품 경계 smoke `scripts/test-vaisc.sh` **OK**:
+  `.vais` 입력 → `scripts/vaisc emit-ir` → clang/run exit 42,
+  `scripts/vaisc build`/`run` exit 42, Legacy bootstrap oracle exit 42.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = New Vais baseline 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
 1. ~~**fixpoint.nl 편의갭 `-> List` 직접반환**~~ **✅ 근본해결**(FP12hh, 2026-06-08, commit 858defe+1cd0bef): `fn build() -> List<T> {{ ...; return xs }}`가 hidden out-param(caller가 버퍼 할당, callee가 `return xs`서 버퍼 복사)으로 컴파일=**fixpoint.nl 원형 `fn tokenize(src) -> List<Token>` 복원**(gap #4). 실측 scalar/LOS/arg/tokenize-shape 전부 동작.
@@ -80,7 +83,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    string literal decode를 fixpoint compiler에 반영하고, 호출 인자 emit은 callee의 `List<Struct>`/struct param 타입을
    caller slot lookup보다 우선해 stage drift를 제거. `scripts/test-fixpoint-full.sh`에도 두 원인을 직접 찌르는
    짧은 회귀 fixture를 추가.
-5. **자체 컴파일러 mainline**(NV-C0~NV-C4) — 새 우선순위. Legacy Vais는 bootstrap/oracle로만 사용.
+5. **자체 컴파일러 mainline**(NV-C1~NV-C4) — 새 우선순위. `NV-C0` 제품 경계는 완료, Legacy Vais는 bootstrap/oracle로만 사용.
 6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---

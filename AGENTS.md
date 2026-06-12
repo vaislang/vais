@@ -17,7 +17,9 @@
   `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들며 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일한다.
 - **stage oracle**: 긴 게이트가 stage1/stage2 compiler IR을 비교한다. source-position 기반
   `@.sNNN`/`@.fmtNNN` global 이름만 정규화하고, 그 외 IR은 byte-for-byte 일치해야 한다.
-- **다음 목표**: ROADMAP의 NV-C0~NV-C4. 자체 컴파일러 mainline을 만들고 Legacy Vais 의존을 bootstrap/oracle로 줄인다.
+- **현재 New Vais 명령 계약**: repo-local `scripts/vaisc`가 공식 `vaisc` 전환 대상이다.
+  Legacy `vaisc` 바이너리는 내부 bootstrap/oracle 용도다.
+- **다음 목표**: ROADMAP의 NV-C1~NV-C4. 자체 컴파일러 mainline을 만들고 Legacy Vais 의존을 bootstrap/oracle로 줄인다.
 
 ---
 
@@ -55,6 +57,7 @@ sed -n '100,110p' compiler/self/SELF_HOST.md   # fixpoint_full 능력 행
 bash scripts/test-fixpoint-full.sh   # self-host codegen e2e + focused regression fixtures
 bash scripts/test-fixpoint-full-self.sh # long full-source + retarget + stage1/stage2 compare gate
 bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host 모듈)
+bash scripts/test-vaisc.sh           # New Vais `vaisc` CLI/IR/build/run + Legacy oracle smoke
 ```
 
 전제: `vaisc`가 PATH에 있어야 한다(`which vaisc`로 확인; 없으면 Vais repo에서 빌드).
@@ -75,6 +78,7 @@ bash scripts/test.sh                 # 값-정확성 aggregate (예제+self-host
 | **self-host e2e** | `bash scripts/test-fixpoint-full.sh` | `fixpoint_full.nl`이 nl 프로그램을 컴파일→IR→실행, **exit/stdout 값** 검증. stage drift 원인(direct double-string decode, callee List<Struct> arg authority) 회귀 포함. |
 | **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일해 final IR exit 24/50/120/42까지 확인. 마지막에 stage1/stage2 compiler IR을 normalized byte-compare한다. 느린 긴 게이트. |
 | **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.nl`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **112/112**. |
+| **New Vais CLI smoke** | `bash scripts/test-vaisc.sh` | `.vais` 입력을 repo-local `scripts/vaisc`로 LLVM IR emit/build/run하고 Legacy bootstrap oracle과 exit 값을 비교. |
 | 기타 tier별 | `scripts/test-fixpoint*.sh` | 개별 codegen 영역(array/list/str/struct/imperative 등) |
 
 규칙:
@@ -188,7 +192,8 @@ New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/va
 
 ## 8. 남은 작업 (ROADMAP §방향 결정 / 현재 우선순위 큐 참조)
 
-- **NV-C0~NV-C4 자체 컴파일러 mainline**: CLI/IR 계약, front subset, 직접 LLVM emitter, P4 에러 UX, parity gate.
+- **NV-C1~NV-C4 자체 컴파일러 mainline**: front subset, 직접 LLVM emitter, P4 에러 UX, parity gate.
+- **NV-C0 완료 상태 유지**: `scripts/vaisc`와 `scripts/test-vaisc.sh`가 깨지면 제품 경계 회귀로 본다.
 - **self-host hardening**: stage oracle은 해결됐으므로, 새 stage drift 원인은 짧은 회귀 fixture와 긴 stage compare gate 양쪽에 묶어둔다.
 - **Legacy Vais 백엔드 버그 (TRACKED)**: bootstrap/oracle 경로를 파다 만나는 codegen 버그들. §5 규칙으로 근본 수정.
 

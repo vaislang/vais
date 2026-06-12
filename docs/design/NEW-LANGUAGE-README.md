@@ -72,10 +72,11 @@
 
 **전략** (실패 줄이는 순서):
 1. **현재 baseline 보존** — `scripts/test.sh` 112/112, self-host e2e, full-source stage compare green 유지.
-2. **제품 경계 고정** — 자체 컴파일러 CLI/IR 출력/legacy oracle 비교 계약을 먼저 문서화하고 테스트화.
-3. **직접 LLVM emitter 분리** — `compiler/self/fixpoint_full.nl` seed에서 Legacy Vais 트랜스파일 의존을 단계적으로 줄임.
-4. **P4 에러 UX day-1** — `help:` 수정코드와 nl 좌표를 자체 컴파일러 경로에 포함.
-5. **구현이 노출하는 새 함정을 문서화** → 설계 갱신.
+2. **제품 경계 유지** — `scripts/vaisc emit-ir/build/run`이 `.vais`/`.nl` 입력을 받고 Legacy oracle smoke와 비교된다.
+3. **front 계약 고정** — v0.2 중 day-1 native subset과 unsupported diagnostics를 명시.
+4. **직접 LLVM emitter 분리** — `compiler/self/fixpoint_full.nl` seed에서 Legacy Vais 트랜스파일 의존을 단계적으로 줄임.
+5. **P4 에러 UX day-1** — `help:` 수정코드와 nl 좌표를 자체 컴파일러 경로에 포함.
+6. **구현이 노출하는 새 함정을 문서화** → 설계 갱신.
 
 **재활용 가능 자산** (Legacy Vais):
 - bootstrap/oracle 경로, LLVM codegen 경험, 타입체커/추론 노하우, self-host 노하우, 빠른 프론트엔드, 게이트 패턴.

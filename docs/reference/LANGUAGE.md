@@ -165,6 +165,8 @@ print("the answer is {x}")     # 보간 "{식}"
 ```
 scripts/build.sh prog.nl -o out && ./out   # 빌드+실행
 scripts/test.sh                            # 값-정확성 (examples 전체)
+scripts/vaisc emit-ir program.vais -o program.ll  # New Vais compiler IR 출력
+scripts/vaisc build program.vais -o program       # New Vais compiler + clang
 python3 tools/nl-check.py prog.nl          # 문법 lint (help: 수정안내)
 ```
 

@@ -232,7 +232,7 @@ def normalize_source(path: Path) -> str:
 def main() -> int:
     if len(sys.argv) != 4:
         print(
-            "usage: embed_self_source.py FIXPOINT_FULL.nl SOURCE.nl OUT.nl",
+            "usage: embed_self_source.py FIXPOINT_FULL.nl SOURCE.(vais|nl) OUT.nl",
             file=sys.stderr,
         )
         return 2
