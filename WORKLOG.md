@@ -1,5 +1,29 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C1 — New Vais native day-1 front 계약)
+- `scripts/vaisc` 앞단에 native day-1 front preflight를 추가했다.
+  accepted subset은 `fn main() -> Int`, helper `fn ... -> Int`, `let`/`let mut`, Int 산술/비교,
+  `return`, `if`/`else`, `while`, plain function call이다.
+- unsupported 문법은 실제 bootstrap/build 전에 source 좌표와 `help:`가 있는 P4-style 진단으로 거절한다.
+  현재 거절 대상: bad `main`, bad helper signature, `for`, `struct`, `enum`, `match`, closure, trait/impl,
+  Str/Char/Bool, List/Map/Option/Result, list/indexing, method call, `?`, print/putchar,
+  Rust식 `&&`/`||`/`!`/`as`/`::`/`Vec`/`HashMap`/`String`/compound assignment.
+- `scripts/test-vaisc-front.sh`를 추가해 accepted day-1 source가 exit 42로 실행되고,
+  bad main/helper signature/for/struct/Rust `&&`/list/string type이 `help:` 진단으로 실패하는지 확인한다.
+- 문서 갱신: `README.md`, `ROADMAP.md`, `AGENTS.md`,
+  `docs/design/NEW-LANGUAGE-README.md`, `docs/design/new-vais-compiler-mainline-2026-06-13.md`,
+  `docs/reference/LANGUAGE.md`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py tools/embed_self_source.py compiler/transpiler/nl2vais.py` = pass
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `python3 tests/transpiler_test.py` = `RESULT: 59/59 pass`
+  - `python3 tests/nl_check_test.py` = `RESULT: 40/40 pass`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+  - `git diff --check` = clean
+
 ## 2026-06-13 (NV-C0 — New Vais `vaisc` 제품 경계)
 - New Vais 사용자-facing compiler 명령 계약을 `vaisc`로 고정했다.
   전환기 충돌 방지를 위해 repo-local wrapper `scripts/vaisc`가 `tools/vaisc.py`를 실행한다.

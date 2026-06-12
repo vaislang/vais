@@ -56,6 +56,7 @@ The native compiler owns these from day one:
 Current green gates are the baseline:
 
 - `bash scripts/test-vaisc.sh` = New Vais `vaisc` smoke OK
+- `bash scripts/test-vaisc-front.sh` = New Vais day-1 front contract OK
 - `bash scripts/test.sh` = 112/112
 - `bash scripts/test-fixpoint-full.sh` = self-host e2e OK
 - `bash scripts/test-fixpoint-full-self.sh` = full-source stage compare OK
@@ -100,14 +101,28 @@ Done when:
 
 Freeze the day-1 subset that the native compiler must parse/typecheck first.
 
-Initial subset:
+Status: done as of 2026-06-13.
+
+Accepted day-1 native subset:
 - `fn main() -> Int`,
+- helper `fn name(a: Int, ...) -> Int`,
 - `let` / `let mut`,
-- integer literals and arithmetic,
+- integer literals, arithmetic, comparison values,
 - `return`,
 - `if` / `else`,
 - `while`,
 - function calls.
+
+Rejected with P4-style `help:` diagnostics:
+- missing or non-`Int` `fn main` entrypoint,
+- helper functions without `name: Int` params and `-> Int` return,
+- `for`, `struct`, `enum`, `match`, closures, traits/impls,
+- strings/chars/bools, collections, `Option`/`Result`, `?`,
+- printing/IO and method calls,
+- Rust-habit spellings such as `&&`, `||`, `!`, `as`, `::`, `Vec`, `HashMap`, `String`, compound assignment.
+
+Gate:
+- `bash scripts/test-vaisc-front.sh`
 
 Done when:
 - subset is documented,

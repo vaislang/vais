@@ -167,10 +167,13 @@ scripts/build.sh prog.nl -o out && ./out   # 빌드+실행
 scripts/test.sh                            # 값-정확성 (examples 전체)
 scripts/vaisc emit-ir program.vais -o program.ll  # New Vais compiler IR 출력
 scripts/vaisc build program.vais -o program       # New Vais compiler + clang
+scripts/test-vaisc-front.sh                # native day-1 front 계약 검증
 python3 tools/nl-check.py prog.nl          # 문법 lint (help: 수정안내)
 ```
 
 ## 현재 한계 (전환기)
 - 현재 실행 경로는 Legacy Vais 재활용(트랜스파일)이다. 새 Vais 자체 컴파일러가 mainline으로 전환 중이다.
+- `scripts/vaisc` native day-1 front는 Int 함수/let/return/if/while/plain call만 받는다.
+  넓은 언어 표면은 아직 Legacy bootstrap 경로나 후속 native slice에서 다룬다.
 - 진짜 차별점(P7 단일coercion, P8 클로저 day-1, P4 help 에러)은 자체 컴파일러에서 최종 소유한다.
 - 이 레퍼런스의 모든 예제는 검증됨(`examples/`); 미검증 구문은 안 적었다.
