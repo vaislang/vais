@@ -71,7 +71,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   `&&`/`||`/`as`/`::`/Rust scalar type/turbofish와 direct emitter parse 실패가 source 좌표,
   원문 line, caret, `help:`, `fix:`를 포함.
 - New Vais parity manifest gate `scripts/test-vaisc-parity.sh` **OK**:
-  `native-supported=17`, `bootstrap-only=11`, `tracked=6`.
+  `native-supported=23`, `bootstrap-only=11`, `tracked=0`.
   native-supported 예제는 New Vais `scripts/vaisc`와 Legacy bootstrap oracle 양쪽에서 `# expect` 값과 일치하고,
   bootstrap-only/self-host tier는 Legacy-green + native front reject 상태로 고정한다.
 
@@ -98,8 +98,8 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    짧은 회귀 fixture를 추가.
 5. **자체 컴파일러 mainline** — `NV-C0` 제품 경계, `NV-C1` front 계약,
    `NV-C2` direct emitter entrypoint, `NV-C3` native P4 diagnostics, `NV-C4` parity manifest gate 완료.
-   `%`/`srem` native codegen을 추가해 modulo 계열 3개 tracked 예제를 승격했다. 다음 확장 단위는
-   `tools/vaisc-parity.tsv`의 남은 `tracked` 항목을 하나씩 native-supported로 승격하는 것이다.
+   `%`/`srem`, bitwise builtin, `Int(...)`, generic marker skip, string literal equality, char literal support를 추가해
+   `tools/vaisc-parity.tsv`의 모든 tracked 항목을 native-supported로 승격했다.
 6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---

@@ -1,5 +1,28 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C4b — tracked parity closure)
+- `compiler/self/fixpoint_full.nl` native codegen에서 남은 tracked parity gap 6개를 닫았다.
+  - `bitnot`/`bitand`/`bitor`/`bitxor`/`shl`/`shr` builtin calls를 LLVM integer ops로 낮춘다.
+  - `Int(x)` conversion call은 현재 Int-native slice에서 identity로 낮춘다.
+  - `fn name<T>(...)` generic marker를 function table/param scanner에서 건너뛰어 Int helper로 컴파일한다.
+  - single-byte char literal `'A'`를 ASCII Int literal로 토큰화한다.
+  - local string literal equality는 slot metadata의 literal bytes 비교로 0/1 상수 fold한다.
+- `tools/vaisc-parity.tsv`에서 남은 tracked 6개를 모두 native-supported로 승격했다:
+  `examples/c3.nl`, `examples/e31_bitwise.nl`, `examples/e34_int_conversion.nl`,
+  `examples/e43_generic_fn.nl`, `examples/e45_string_eq.nl`, `examples/e47_char_ops.nl`.
+- string equality fold가 self-host stage에서 `rt` local name reuse로 field metadata를 헷갈리게 하던 부분을
+  `ltok`/`rtok`로 분리해 full-source generated IR의 negative GEP sanity를 유지했다.
+- 현재 parity coverage: `native-supported=23`, `bootstrap-only=11`, `tracked=0`.
+- 검증:
+  - `scripts/vaisc emit-ir` + `clang` targeted checks:
+    `c3=5`, `e31_bitwise=7`, `e34_int_conversion=5`, `e43_generic_fn=5`,
+    `e45_string_eq=1`, `e47_char_ops=1`
+  - `bash -n scripts/test-vaisc-parity.sh` = pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=23 bootstrap=11 tracked=0)`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+
 ## 2026-06-13 (NV-C4a — modulo parity promotion)
 - `compiler/self/fixpoint_full.nl` native tokenizer/codegen에 `%` term operator를 추가했다.
   `%`는 kind `39`로 토큰화되고 `*`/`/`와 같은 precedence에서 LLVM `srem i64`로 낮아진다.

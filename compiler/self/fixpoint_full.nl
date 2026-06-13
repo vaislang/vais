@@ -88,6 +88,26 @@ fn is_puts(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 3] != 115 { return 0 }
     return 1
 }
+
+# Builtin call ids used by the native parity surface:
+#   1=Int(x) identity/truncation, 2=bitnot(x), 3=bitand, 4=bitor,
+#   5=bitxor, 6=shl, 7=shr.
+fn builtin_call_id(src: Str, a: Int, alen: Int) -> Int {
+    if alen == 3 {
+        if src[a] == 73 and src[a + 1] == 110 and src[a + 2] == 116 { return 1 }
+        if src[a] == 115 and src[a + 1] == 104 and src[a + 2] == 108 { return 6 }
+        if src[a] == 115 and src[a + 1] == 104 and src[a + 2] == 114 { return 7 }
+    }
+    if alen == 5 {
+        if src[a] == 98 and src[a + 1] == 105 and src[a + 2] == 116 and src[a + 3] == 111 and src[a + 4] == 114 { return 4 }
+    }
+    if alen == 6 {
+        if src[a] == 98 and src[a + 1] == 105 and src[a + 2] == 116 and src[a + 3] == 110 and src[a + 4] == 111 and src[a + 5] == 116 { return 2 }
+        if src[a] == 98 and src[a + 1] == 105 and src[a + 2] == 116 and src[a + 3] == 97 and src[a + 4] == 110 and src[a + 5] == 100 { return 3 }
+        if src[a] == 98 and src[a + 1] == 105 and src[a + 2] == 116 and src[a + 3] == 120 and src[a + 4] == 111 and src[a + 5] == 114 { return 5 }
+    }
+    return 0
+}
 # Does the string-literal source range [start, start+len) contain a `{` (123)?
 # Marks a print/puts argument that needs printf interpolation rather than a plain
 # puts. (A `{{` escape never survives to here -- the transpiler already collapsed
@@ -277,6 +297,12 @@ fn tokenize(src: Str) -> List<Token> {
             }
             toks.push(Token { kind: 28, value: string_lit_value_len(src, sstart, j - sstart, delim), nstart: sstart, nlen: j - sstart })
             i = j + 1
+        } else if c == 39 {
+            # single-byte char literal, e.g. 'A', lowers to its ASCII Int value.
+            let mut v = 0
+            if i + 1 < n { v = src[i + 1] }
+            toks.push(Token { kind: 0, value: v, nstart: i + 1, nlen: 1 })
+            i = i + 3
         } else if is_digit(c) {
             let mut v = 0
             let mut go = true
@@ -630,6 +656,26 @@ fn find_fn(fns: &List<Fn>, src: Str, qs: Int, ql: Int) -> Int {
     }
     return 0 - 1
 }
+# Index of the params '(' in `fn name(...)` or `fn name<T>(...)`.
+fn fn_params_open(toks: &List<Token>, fnpos: Int) -> Int {
+    let mut op = fnpos + 2
+    let lt = toks[op]
+    if lt.kind == 18 {
+        let mut depth = 1
+        op = op + 1
+        let mut go = true
+        while go {
+            let t = toks[op]
+            if t.kind == 18 { depth = depth + 1; op = op + 1 }
+            else if t.kind == 19 {
+                depth = depth - 1
+                if depth == 0 { go = false } else { op = op + 1 }
+            } else { op = op + 1 }
+        }
+        op = op + 1
+    }
+    return op
+}
 # Return callee param type encoding for argument position `argpos`:
 #   0 Int, 1 Str, 2 List, 3+struct_index plain struct.
 fn call_param_ty(fns: &List<Fn>, src: Str, qs: Int, ql: Int, argpos: Int) -> Int {
@@ -690,7 +736,9 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
         let t = toks[i]
         if t.kind == 13 {
             let nt = toks[i + 1]
-            # i+2 open-paren; params (idents, comma-separated) until close-paren; then body.
+            # params (idents, comma-separated) until close-paren; then body.
+            # Generic markers like `fn id<T>(x: T)` are skipped here.
+            let popen = fn_params_open(toks, i)
             let mut p0s = 0
             let mut p0l = 0
             let mut p1s = 0
@@ -722,7 +770,7 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
             let mut p8ty = 0
             let mut p9ty = 0
             let mut npar = 0
-            let mut q = i + 3
+            let mut q = popen + 1
             let mut gp = true
             while gp {
                 let qt = toks[q]
@@ -1017,6 +1065,24 @@ fn sty_of(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
     return 0 - 1
 }
 
+# Compare two local string-literal slots by their literal bytes. Returns 0/1 for
+# known string locals, or -1 if either operand is not a local string literal.
+fn string_slot_eq(slots: &List<Slot>, src: Str, ans: Int, anl: Int, bns: Int, bnl: Int) -> Int {
+    if isarr_of(slots, src, ans, anl) != 3 { return 0 - 1 }
+    if isarr_of(slots, src, bns, bnl) != 3 { return 0 - 1 }
+    let al = arrlen_of(slots, src, ans, anl)
+    let bl = arrlen_of(slots, src, bns, bnl)
+    if al != bl { return 0 }
+    let ak = strkey_of(slots, src, ans, anl)
+    let bk = strkey_of(slots, src, bns, bnl)
+    let mut k = 0
+    while k < al {
+        if src[ak + k] != src[bk + k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
 # Print an operand inline. kind 0 = literal int; kind 1 = i64 temp; kind 2 = i8*
 # temp (string pointer) -- both temps print as %t<val>.
 fn emit_op(o: Op) -> Int {
@@ -1216,6 +1282,42 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             }
             # call: name ( arg0 [, ... up to arg9] ) — 0..10 args.
             let close = paren_end(toks, i + 2)
+            let bid = builtin_call_id(src, t.nstart, t.nlen)
+            if bid > 0 {
+                # Int(x) conversion is identity for the current Int-native slice.
+                if bid == 1 {
+                    return gen_expr(toks, slots, fns, defs, src, i + 2, close, counter)
+                }
+                if bid == 2 {
+                    let arg = gen_expr(toks, slots, fns, defs, src, i + 2, close, counter)
+                    let dest = arg.next
+                    emit_str("  %t")
+                    pint(dest)
+                    emit_str(" = xor i64 ")
+                    emit_op(arg)
+                    emit_str(", -1")
+                    putchar(10)
+                    return Op { kind: 1, val: dest, next: dest + 1 }
+                }
+                let comma = arg_comma_end(toks, i + 2, close)
+                let lhs = gen_expr(toks, slots, fns, defs, src, i + 2, comma, counter)
+                let rhs = gen_expr(toks, slots, fns, defs, src, comma + 1, close, lhs.next)
+                let dest2 = rhs.next
+                emit_str("  %t")
+                pint(dest2)
+                emit_str(" = ")
+                if bid == 3 { emit_str("and") }
+                else if bid == 4 { emit_str("or") }
+                else if bid == 5 { emit_str("xor") }
+                else if bid == 6 { emit_str("shl") }
+                else { emit_str("ashr") }
+                emit_str(" i64 ")
+                emit_op(lhs)
+                emit_str(", ")
+                emit_op(rhs)
+                putchar(10)
+                return Op { kind: 1, val: dest2, next: dest2 + 1 }
+            }
             # evaluate each argument (between commas at depth 0), capturing its op.
             let mut nargs = 0
             let mut a0k = 0
@@ -2069,6 +2171,23 @@ fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
         # RHS is the additive expr up to the next `and`/`or` (so logicals stay
         # lower-precedence): `c >= 48 and c <= 57` parses as `(c>=48) and (c<=57)`.
         # kind 33 = `!=` (not-equal); the others are < > == <= >=.
+        if op.kind == 20 or op.kind == 33 {
+            let ltok = toks[i - 1]
+            let rtok = toks[i + 1]
+            if ltok.kind == 1 {
+                if rtok.kind == 1 {
+                    let seq = string_slot_eq(slots, src, ltok.nstart, ltok.nlen, rtok.nstart, rtok.nlen)
+                    if seq >= 0 {
+                        let mut sv = seq
+                        if op.kind == 33 {
+                            if seq == 0 { sv = 1 } else { sv = 0 }
+                        }
+                        let cacc0 = Op { kind: 0, val: sv, next: acc.next }
+                        return gen_fold(toks, slots, fns, defs, src, skip_factor(toks, i + 1), stop, cacc0)
+                    }
+                }
+            }
+        }
         let rstop = next_logical(toks, i + 1, stop)
         let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, rstop, acc.next)
         let cnum = rhs.next
@@ -2323,9 +2442,10 @@ fn param_list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: 
             let nm = toks[i + 1]
             if nm.kind == 1 {
                 if name_eq(src, nm.nstart, nm.nlen, cns, cnl) == 1 {
-                    # params start after '(' at i+2. Walk to the argpos-th param's
+                    # params start after the function header's '('. Walk to the argpos-th param's
                     # type annotation. A param is `name` or `name : Type`.
-                    let mut q = i + 3
+                    let popen = fn_params_open(toks, i)
+                    let mut q = popen + 1
                     let mut pos = 0
                     let mut go = true
                     while go {

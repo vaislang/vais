@@ -104,6 +104,12 @@ check "fn f(n) {{ return (n + 1) * (n + 2) }}; return f(3);" 20
 check "fn f() {{ return ((1 + 2) * 3) }}; return f();" 9
 check "fn f() {{ return 42 / 10 + 42 - (42 / 10) * 10 }}; return f();" 6
 check "fn f(n) {{ return n % 10 }}; return f(12345);" 5
+check "fn f() {{ return bitnot(0) + 6 }}; return f();" 5
+check "fn f() {{ return bitor(4, 2) + bitand(3, 1) }}; return f();" 7
+check "fn f(x) {{ return Int(x) }}; return f(5);" 5
+check "fn identity<T>(x: T) -> T {{ return x }}; return identity(5);" 5
+check "fn f() {{ let a = \`foo\`; let b = \`foo\`; if a == b {{ return 1 }}; return 0 }}; return f();" 1
+check "fn f() {{ let c = 'A'; if c == 'A' {{ return 1 }}; return 0 }}; return f();" 1
 # grouped comparisons combined with arithmetic: (a<b) + (b<c) = 1 + 1 = 2
 check "fn f(a, b, c) {{ return (a < b) + (b < c) }}; return f(1, 2, 3);" 2
 
