@@ -86,7 +86,7 @@ bash scripts/test-vaisc-parity.sh    # New Vais native/bootstrap/tracked parity 
 | **New Vais front contract** | `bash scripts/test-vaisc-front.sh` | native subset과 print/putchar, simple struct, payload-free enum/match, small Int-coded payload enum/match, single-Int closure return, List push/len/index/sum slice를 accepted source로 실행하고, bad helper signature/for/broader payload enum/match/broader closure/Rust `&&`/unsupported method/string 등 unsupported 문법이 `help:` 진단으로 실패하는지 확인. |
 | **New Vais direct emitter** | `bash scripts/test-vaisc-direct.sh` | `--engine direct`가 Legacy Vais 없이 단일 `main` arithmetic return을 LLVM IR로 emit/build/run하고 bootstrap engine과 값을 비교. |
 | **New Vais P4 diagnostics** | `bash scripts/test-vaisc-errors.sh` | native `vaisc` 오류가 source 좌표, 원문 line, caret, `help:`, `fix:`를 포함하는지 확인. |
-| **New Vais parity manifest** | `bash scripts/test-vaisc-parity.sh` | `tools/vaisc-parity.tsv`에 기록된 `native-supported` 예제를 New Vais `vaisc`와 Legacy oracle 양쪽에서 값 비교하고, `bootstrap-only`/`tracked` 상태가 stale하지 않은지 확인. |
+| **New Vais parity manifest** | `bash scripts/test-vaisc-parity.sh` | `tools/vaisc-parity.tsv`에 기록된 `native-supported` 예제와 trusted self-host tier를 New Vais `vaisc`와 Legacy oracle 양쪽에서 값 비교하고, `bootstrap-only`/`tracked` 상태가 stale하지 않은지 확인. |
 | 기타 tier별 | `scripts/test-fixpoint*.sh` | 개별 codegen 영역(array/list/str/struct/imperative 등) |
 
 규칙:

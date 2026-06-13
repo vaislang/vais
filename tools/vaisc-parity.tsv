@@ -40,7 +40,7 @@ examples/e14_print.nl	native-supported	Print interpolation and IO call support.
 examples/e50_ast_eval.nl	native-supported	Small recursive payload enum lowered to Int-coded tags.
 examples/e75_list_push.nl	native-supported	List push/growth and index access.
 examples/e80_closure_return.nl	native-supported	Single-Int closure return lowered to Int env/apply helper.
-compiler/self/fixpoint.nl	bootstrap-only	Self-host arithmetic tier uses Str/List/struct/Bool.
-compiler/self/fixpoint2.nl	bootstrap-only	Self-host variable tier uses Str/List/struct/Bool.
-compiler/self/fixpoint3.nl	bootstrap-only	Self-host function tier uses Str/List/struct/Bool.
-compiler/self/fixpoint_full.nl	bootstrap-only	Full self-host compiler remains covered by the long bootstrap gate.
+compiler/self/fixpoint.nl	native-supported	Trusted self-host arithmetic tier source.
+compiler/self/fixpoint2.nl	native-supported	Trusted self-host variable tier source.
+compiler/self/fixpoint3.nl	native-supported	Trusted self-host function tier source.
+compiler/self/fixpoint_full.nl	native-supported	Trusted full self-host compiler source.

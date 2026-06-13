@@ -76,7 +76,7 @@
 3. **front 계약 유지** — native subset은 Int 함수/let/return/if/while/plain call, print/putchar, simple struct, payload-free enum/match, small Int-coded payload enum/match, single-Int closure return, List push/len/index/sum slice이며 unsupported 문법은 `help:` 진단으로 실패한다.
 4. **직접 LLVM emitter 분리** — `scripts/vaisc --engine direct`가 최소 arithmetic `main`을 Legacy Vais 없이 emit/build/run하며, 이후 `compiler/self/fixpoint_full.nl` seed에서 Legacy Vais 트랜스파일 의존을 단계적으로 줄임.
 5. **P4 에러 UX 유지** — native `vaisc` day-1 오류는 source 좌표, 원문 line, caret, `help:`, `fix:`를 포함한다.
-6. **parity manifest 유지** — `tools/vaisc-parity.tsv`가 native-supported/bootstrap-only/tracked 예제와 self-host tier를 기록하고 `scripts/test-vaisc-parity.sh`가 값 비교한다.
+6. **parity manifest 유지** — `tools/vaisc-parity.tsv`가 native-supported/bootstrap-only/tracked 예제와 trusted self-host tier를 기록하고 `scripts/test-vaisc-parity.sh`가 값 비교한다.
 7. **구현이 노출하는 새 함정을 문서화** → 설계 갱신.
 
 **재활용 가능 자산** (Legacy Vais):

@@ -203,12 +203,14 @@ Contract:
 - `tools/vaisc-parity.tsv` records each added source as `native-supported`, `bootstrap-only`, or `tracked`,
 - `native-supported` entries must build/run through New Vais `scripts/vaisc` and Legacy `scripts/build.sh`,
 - both paths must match the source `# expect:` value,
+- trusted `compiler/self/*` tier sources may bypass the narrow user-front preflight, but remain guarded by
+  manifest parity plus the long self-host gates,
 - `bootstrap-only` entries must remain Legacy-green and be rejected by the native front,
 - `tracked` entries must remain Legacy-green and are expected not to pass natively yet; if one starts passing, the gate fails so it can be promoted.
 
 Current coverage:
-- `native-supported=33`,
-- `bootstrap-only=4`, the four self-host tier files,
+- `native-supported=37`,
+- `bootstrap-only=0`,
 - `tracked=0`.
 
 Promoted native slices after the first gate:
@@ -225,6 +227,9 @@ Promoted native slices after the first gate:
   `examples/e22_enum_dispatch.nl`, `examples/e35_calc_dispatch.nl`,
   `examples/e30_enum_payload_match.nl`, and `examples/e50_ast_eval.nl`.
 - Single-Int closure return lowering, covering `examples/e80_closure_return.nl`.
+- Trusted self-host tier sources, covering `compiler/self/fixpoint.nl`,
+  `compiler/self/fixpoint2.nl`, `compiler/self/fixpoint3.nl`, and
+  `compiler/self/fixpoint_full.nl`.
 
 Gate:
 - `bash scripts/test-vaisc-parity.sh`

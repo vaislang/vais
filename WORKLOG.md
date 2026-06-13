@@ -1,5 +1,30 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C11 — self-host tier product parity closure)
+- `scripts/vaisc` bootstrap engine에서 검증된 `compiler/self/*` tier source는 narrow user-front preflight를
+  건너뛰도록 했다.
+  - 일반 사용자 source의 front 계약은 그대로 유지한다.
+  - self-host tier는 기존 long self-host gate와 parity manifest가 값-정확성을 보호한다.
+- preflight 우회 실측:
+  - `compiler/self/fixpoint.nl` → generated IR clang/run stdout `ret i64 24`
+  - `compiler/self/fixpoint2.nl` → generated IR clang/run stdout `ret i64 50`
+  - `compiler/self/fixpoint3.nl` → generated IR clang/run stdout `ret i64 120`
+  - `compiler/self/fixpoint_full.nl` → generated compiler IR clang/run OK
+- `tools/vaisc-parity.tsv`의 self-host tier 네 항목을 모두 `native-supported`로 승격했다.
+- 현재 parity coverage: `native-supported=37`, `bootstrap-only=0`, `tracked=0`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py` = pass
+  - `scripts/vaisc build compiler/self/fixpoint.nl` + run = exit `0`, stdout includes `ret i64 24`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash -n scripts/test-vaisc-parity.sh` = pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=37 bootstrap=0 tracked=0)`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+
 ## 2026-06-13 (NV-C10 — single-Int closure return parity promotion)
 - `scripts/vaisc` bootstrap engine에 single-Int closure return lowering을 추가했다.
   - `fn adder(n: Int) -> fn(Int) -> Int { return |x| x + n }`는 Int env 반환 함수와

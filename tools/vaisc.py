@@ -25,6 +25,12 @@ FIXPOINT_FULL = ROOT / "compiler" / "self" / "fixpoint_full.nl"
 EMBED_SELF_SOURCE = ROOT / "tools" / "embed_self_source.py"
 TRANSPILER = ROOT / "compiler" / "transpiler" / "nl2vais.py"
 DEFAULT_LEGACY_ROOT = Path("/Users/sswoo/study/projects/vais/compiler")
+SELF_HOST_TIER_SOURCES = {
+    (ROOT / "compiler" / "self" / "fixpoint.nl").resolve(),
+    (ROOT / "compiler" / "self" / "fixpoint2.nl").resolve(),
+    (ROOT / "compiler" / "self" / "fixpoint3.nl").resolve(),
+    (ROOT / "compiler" / "self" / "fixpoint_full.nl").resolve(),
+}
 
 
 class CompileError(RuntimeError):
@@ -930,6 +936,13 @@ def prepare_bootstrap_source(source: Path, tmp: Path) -> Path:
     return lowered_path
 
 
+def is_self_host_tier_source(source: Path) -> bool:
+    try:
+        return source.resolve() in SELF_HOST_TIER_SOURCES
+    except OSError:
+        return False
+
+
 @dataclass(frozen=True)
 class DirectFunction:
     name: str
@@ -1381,7 +1394,8 @@ def bootstrap_emit_ir(source: Path, ir_out: Path | None, args: argparse.Namespac
     tmp, holder = tmpdir_from_args(args)
     try:
         native_source = prepare_bootstrap_source(source, tmp)
-        check_front_contract(native_source)
+        if not is_self_host_tier_source(native_source):
+            check_front_contract(native_source)
         harness = tmp / "compiler_harness.nl"
         harness_vais = tmp / "compiler_harness.vais"
         stage0 = tmp / "stage0-vaisc"

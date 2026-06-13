@@ -184,5 +184,6 @@ python3 tools/nl-check.py prog.nl          # 문법 lint (help: 수정안내)
   넓은 언어 표면은 아직 Legacy bootstrap 경로나 후속 native slice에서 다룬다.
 - native `vaisc` 오류는 day-1 범위에서 source 좌표, 원문 line, caret, `help:`, `fix:`를 포함한다.
 - `tools/vaisc-parity.tsv`가 native-supported/bootstrap-only/tracked 상태를 기록한다.
+  `compiler/self/*` tier는 검증된 compiler source로 `scripts/vaisc` bootstrap engine에서 직접 받는다.
 - 진짜 차별점(P7 단일coercion, P8 클로저 day-1)은 자체 컴파일러에서 최종 소유한다.
 - 이 레퍼런스의 모든 예제는 검증됨(`examples/`); 미검증 구문은 안 적었다.
