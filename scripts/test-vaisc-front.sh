@@ -3,7 +3,7 @@
 #
 # The native front is intentionally narrow: Int functions, let/let mut,
 # integer arithmetic/comparisons, return, if/else, while, plain function calls,
-# print/putchar, simple structs, and the first List push/len/index slice.
+# print/putchar, simple structs, and the first List push/len/index/sum slice.
 # Broader language features stay on the Legacy bootstrap path until their native
 # slices land.
 set -uo pipefail
@@ -96,14 +96,14 @@ fn main() -> Int {
     xs.push(10)
     xs.push(20)
     xs.push(30)
-    return xs.len() + xs[1]
+    return xs.sum() - xs.len() - xs[1] - xs[0] - xs[2] + 26
 }
 SRC
 
 "$VAISC" run "$list_accept" >"$tmp/list_accept.out" 2>"$tmp/list_accept.err"
 got=$?
 if [ "$got" = "23" ]; then
-    echo "  PASS accepts List push/len/index slice"
+    echo "  PASS accepts List push/len/index/sum slice"
 else
     echo "  FAIL accepts List slice got=$got want=23"
     cat "$tmp/list_accept.err"
@@ -167,10 +167,10 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "sum_method" "method calls beyond push/len" "plain function call" <<'SRC'
+expect_reject "unsupported_method" "method calls beyond push/len/sum" "plain function call" <<'SRC'
 fn main() -> Int {
     let xs = [20, 22]
-    return xs.sum()
+    return xs.clear()
 }
 SRC
 

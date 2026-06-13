@@ -73,7 +73,7 @@
 **전략** (실패 줄이는 순서):
 1. **현재 baseline 보존** — `scripts/test.sh` 112/112, self-host e2e, full-source stage compare green 유지.
 2. **제품 경계 유지** — `scripts/vaisc emit-ir/build/run`이 `.vais`/`.nl` 입력을 받고 Legacy oracle smoke와 비교된다.
-3. **front 계약 유지** — native subset은 Int 함수/let/return/if/while/plain call, print/putchar, simple struct, List push/len/index slice이며 unsupported 문법은 `help:` 진단으로 실패한다.
+3. **front 계약 유지** — native subset은 Int 함수/let/return/if/while/plain call, print/putchar, simple struct, List push/len/index/sum slice이며 unsupported 문법은 `help:` 진단으로 실패한다.
 4. **직접 LLVM emitter 분리** — `scripts/vaisc --engine direct`가 최소 arithmetic `main`을 Legacy Vais 없이 emit/build/run하며, 이후 `compiler/self/fixpoint_full.nl` seed에서 Legacy Vais 트랜스파일 의존을 단계적으로 줄임.
 5. **P4 에러 UX 유지** — native `vaisc` day-1 오류는 source 좌표, 원문 line, caret, `help:`, `fix:`를 포함한다.
 6. **parity manifest 유지** — `tools/vaisc-parity.tsv`가 native-supported/bootstrap-only/tracked 예제와 self-host tier를 기록하고 `scripts/test-vaisc-parity.sh`가 값 비교한다.

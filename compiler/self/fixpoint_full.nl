@@ -88,6 +88,13 @@ fn is_puts(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 3] != 115 { return 0 }
     return 1
 }
+fn is_sum(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 3 { return 0 }
+    if src[a] != 115 { return 0 }
+    if src[a + 1] != 117 { return 0 }
+    if src[a + 2] != 109 { return 0 }
+    return 1
+}
 
 # Builtin call ids used by the native parity surface:
 #   1=Int(x) identity/truncation, 2=bitnot(x), 3=bitand, 4=bitor,
@@ -1628,6 +1635,175 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             # NOTE: string check FIRST — a string slot stores the global key in
             # sty, which would otherwise be misread as a struct index.
             let karr = isarr_of(slots, src, t.nstart, t.nlen)
+            let meth = toks[i + 2]
+            if is_sum(src, meth.nstart, meth.nlen) == 1 {
+                let sslot = find_slot(slots, src, t.nstart, t.nlen)
+                let sal = arrlen_of(slots, src, t.nstart, t.nlen)
+                if karr == 1 {
+                    if sal <= 0 { return Op { kind: 0, val: 0, next: counter } }
+                    let mut j = 0
+                    let mut nc = counter
+                    let mut acc = 0
+                    while j < sal {
+                        emit_str("  %t")
+                        pint(nc)
+                        emit_str(" = getelementptr [")
+                        pint(sal)
+                        emit_str(" x i64], [")
+                        pint(sal)
+                        emit_str(" x i64]* %v")
+                        pint(sslot)
+                        emit_str(", i64 0, i64 ")
+                        pint(j)
+                        putchar(10)
+                        let lp = nc
+                        nc = nc + 1
+                        emit_str("  %t")
+                        pint(nc)
+                        emit_str(" = load i64, i64* %t")
+                        pint(lp)
+                        putchar(10)
+                        let lv = nc
+                        nc = nc + 1
+                        if j == 0 {
+                            acc = lv
+                        } else {
+                            emit_str("  %t")
+                            pint(nc)
+                            emit_str(" = add i64 %t")
+                            pint(acc)
+                            emit_str(", %t")
+                            pint(lv)
+                            putchar(10)
+                            acc = nc
+                            nc = nc + 1
+                        }
+                        j = j + 1
+                    }
+                    return Op { kind: 1, val: acc, next: nc }
+                }
+                if karr == 2 {
+                    # Local scalar List<Int> `.sum()`: loop over the current
+                    # length counter at %v<slot+1> and accumulate elements.
+                    let cap = sal
+                    let base = counter
+                    emit_str("  %sum")
+                    pint(base)
+                    emit_str(" = alloca i64")
+                    putchar(10)
+                    emit_str("  %si")
+                    pint(base)
+                    emit_str(" = alloca i64")
+                    putchar(10)
+                    emit_str("  store i64 0, i64* %sum")
+                    pint(base)
+                    putchar(10)
+                    emit_str("  store i64 0, i64* %si")
+                    pint(base)
+                    putchar(10)
+                    emit_str("  br label %sumL")
+                    pint(base)
+                    putchar(10)
+                    emit_str("sumL")
+                    pint(base)
+                    emit_str(":")
+                    putchar(10)
+                    let ic = base + 1
+                    emit_str("  %t")
+                    pint(ic)
+                    emit_str(" = load i64, i64* %si")
+                    pint(base)
+                    putchar(10)
+                    let lc = ic + 1
+                    emit_str("  %t")
+                    pint(lc)
+                    emit_str(" = load i64, i64* %v")
+                    pint(sslot + 1)
+                    putchar(10)
+                    let cmpc = lc + 1
+                    emit_str("  %t")
+                    pint(cmpc)
+                    emit_str(" = icmp slt i64 %t")
+                    pint(ic)
+                    emit_str(", %t")
+                    pint(lc)
+                    putchar(10)
+                    emit_str("  br i1 %t")
+                    pint(cmpc)
+                    emit_str(", label %sumB")
+                    pint(base)
+                    emit_str(", label %sumD")
+                    pint(base)
+                    putchar(10)
+                    emit_str("sumB")
+                    pint(base)
+                    emit_str(":")
+                    putchar(10)
+                    let gepc = cmpc + 1
+                    emit_str("  %t")
+                    pint(gepc)
+                    emit_str(" = getelementptr [")
+                    pint(cap)
+                    emit_str(" x i64], [")
+                    pint(cap)
+                    emit_str(" x i64]* %v")
+                    pint(sslot)
+                    emit_str(", i64 0, i64 %t")
+                    pint(ic)
+                    putchar(10)
+                    let evc = gepc + 1
+                    emit_str("  %t")
+                    pint(evc)
+                    emit_str(" = load i64, i64* %t")
+                    pint(gepc)
+                    putchar(10)
+                    let svc = evc + 1
+                    emit_str("  %t")
+                    pint(svc)
+                    emit_str(" = load i64, i64* %sum")
+                    pint(base)
+                    putchar(10)
+                    let addc = svc + 1
+                    emit_str("  %t")
+                    pint(addc)
+                    emit_str(" = add i64 %t")
+                    pint(svc)
+                    emit_str(", %t")
+                    pint(evc)
+                    putchar(10)
+                    emit_str("  store i64 %t")
+                    pint(addc)
+                    emit_str(", i64* %sum")
+                    pint(base)
+                    putchar(10)
+                    let inc = addc + 1
+                    emit_str("  %t")
+                    pint(inc)
+                    emit_str(" = add i64 %t")
+                    pint(ic)
+                    emit_str(", 1")
+                    putchar(10)
+                    emit_str("  store i64 %t")
+                    pint(inc)
+                    emit_str(", i64* %si")
+                    pint(base)
+                    putchar(10)
+                    emit_str("  br label %sumL")
+                    pint(base)
+                    putchar(10)
+                    emit_str("sumD")
+                    pint(base)
+                    emit_str(":")
+                    putchar(10)
+                    let resc = inc + 1
+                    emit_str("  %t")
+                    pint(resc)
+                    emit_str(" = load i64, i64* %sum")
+                    pint(base)
+                    putchar(10)
+                    return Op { kind: 1, val: resc, next: resc + 1 }
+                }
+            }
             if karr == 3 {
                 let slen = arrlen_of(slots, src, t.nstart, t.nlen)
                 if slen > 0 {

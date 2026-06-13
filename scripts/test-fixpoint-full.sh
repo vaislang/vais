@@ -476,6 +476,9 @@ check "fn f(c: Int) {{ let mut r = 0; if c == 0 {{ r = 1 }} else if c == 1 {{ r 
 check "fn build() -> List<Int> {{ let xs = list(); xs.push(10); xs.push(20); xs.push(12); return xs }}; fn run() {{ let ys = build(); return ys[0] + ys[1] + ys[2] }}; return run();" 42
 # returned list length survives the copy
 check "fn build() -> List<Int> {{ let xs = list(); xs.push(1); xs.push(2); xs.push(3); xs.push(4); return xs }}; fn run() {{ let ys = build(); return ys.len * 10 + ys[3] }}; return run();" 44
+# List/array sum method used by the native c2 parity slice
+check "let xs = [10, 20, 30]; return xs.sum();" 60
+check "let xs = list(); xs.push(7); xs.push(8); xs.push(9); return xs.sum();" 24
 # List-of-structs return + field read
 check "struct Tok {{ kind, val }}; fn build() -> List<Tok> {{ let xs = list(); xs.push(Tok {{ kind: 1, val: 30 }}); xs.push(Tok {{ kind: 2, val: 12 }}); return xs }}; fn run() {{ let ys = build(); return ys[0].val + ys[1].val }}; return run();" 42
 # retlist with an argument

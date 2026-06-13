@@ -189,8 +189,8 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
         "write a named function for this slice; closure object parity is tracked after the front contract.",
     ),
     (
-        re.compile(r"\.(?!(?:push|len)\s*\()[A-Za-z_][A-Za-z0-9_]*\s*\("),
-        "method calls beyond push/len are not in the New Vais native front subset yet",
+        re.compile(r"\.(?!(?:push|len|sum)\s*\()[A-Za-z_][A-Za-z0-9_]*\s*\("),
+        "method calls beyond push/len/sum are not in the New Vais native front subset yet",
         "use a plain function call, or keep this source on the Legacy bootstrap path until that method is promoted.",
     ),
     (

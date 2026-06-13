@@ -117,14 +117,14 @@ Accepted day-1 native subset:
 - function calls,
 - `print("...{x}...")` interpolation and `putchar(Int)` IO calls,
 - simple `struct` literals and field access,
-- `List<Int>` local push/growth, `.len()`, and index access.
+- `List<Int>` local push/growth, `.len()`, `.sum()`, and index access.
 
 Rejected with P4-style `help:` diagnostics:
 - missing or non-`Int` `fn main` entrypoint,
 - helper functions without `name: Int` params and `-> Int` return,
 - `for`, `enum`, `match`, closures, traits/impls,
 - strings/chars/bools, `Map`/`Option`/`Result`, `?`,
-- method calls beyond `.push()`/`.len()`,
+- method calls beyond `.push()`/`.len()`/`.sum()`,
 - Rust-habit spellings such as `&&`, `||`, `!`, `as`, `::`, `Vec`, `HashMap`, `String`, compound assignment.
 
 Gate:
@@ -204,8 +204,8 @@ Contract:
 - `tracked` entries must remain Legacy-green and are expected not to pass natively yet; if one starts passing, the gate fails so it can be promoted.
 
 Current coverage:
-- `native-supported=26`,
-- `bootstrap-only=8`, including the four self-host tier files,
+- `native-supported=27`,
+- `bootstrap-only=7`, including the four self-host tier files,
 - `tracked=0`.
 
 Promoted native slices after the first gate:
@@ -216,6 +216,7 @@ Promoted native slices after the first gate:
 - `print` interpolation and `putchar` IO calls, covering `examples/e14_print.nl`.
 - Simple struct field access and List push/growth/index access, covering
   `examples/c4.nl` and `examples/e75_list_push.nl`.
+- List literal `.sum()` support, covering `examples/c2.nl`.
 
 Gate:
 - `bash scripts/test-vaisc-parity.sh`

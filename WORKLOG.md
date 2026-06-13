@@ -1,5 +1,27 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C7 — List `.sum()` parity promotion)
+- `compiler/self/fixpoint_full.nl` native codegen에 `is_sum` name helper와 `name.sum()` lowering을 추가했다.
+  - fixed array/list literal은 요소 GEP+load를 unroll해 합산한다.
+  - local scalar `List<Int>`는 현재 length counter를 읽어 루프로 합산한다.
+- `scripts/test-fixpoint-full.sh`에 fixed list literal `.sum()`과 dynamic List `.sum()` fixtures를 추가했다.
+- `scripts/vaisc` native front 허용 method를 `.push()`/`.len()`/`.sum()`으로 확장하고, unsupported method 진단은
+  그 외 method만 잡도록 좁혔다.
+- `tools/vaisc-parity.tsv`에서 `examples/c2.nl`을 `native-supported`로 승격했다.
+- 현재 parity coverage: `native-supported=27`, `bootstrap-only=7`, `tracked=0`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py` = pass
+  - `scripts/vaisc build examples/c2.nl` + run = exit `60`, IR includes `add i64`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash -n scripts/test-vaisc-parity.sh` = pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=27 bootstrap=7 tracked=0)`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+
 ## 2026-06-13 (NV-C6 — struct/List parity promotion)
 - front-only 우회 실측으로 `examples/c4.nl`과 `examples/e75_list_push.nl`이 이미 New Vais native backend에서
   값정확성 통과함을 확인하고, 해당 slice를 제품 front에 편입했다.
