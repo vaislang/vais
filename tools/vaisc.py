@@ -164,11 +164,6 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
         "use `while` with an explicit mutable index for now.",
     ),
     (
-        re.compile(r"\b(print|putchar)\s*\("),
-        "printing is not in the New Vais native day-1 front subset yet",
-        "return an Int from `main` for this slice; IO stays on the bootstrap path for now.",
-    ),
-    (
         re.compile(r"\b(Str|Char|Bool)\b"),
         "only Int scalar typing is in the New Vais native day-1 front subset",
         "use Int parameters/locals for this slice; string, char, and bool surface types come later.",

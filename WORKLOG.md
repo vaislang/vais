@@ -1,5 +1,22 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C5 — print/putchar parity promotion)
+- `scripts/vaisc` native front에서 `print`/`putchar` 금지를 제거해 이미 self-host codegen에 있던 IO slice를
+  제품 경로로 열었다.
+- `scripts/test-vaisc-front.sh`에 `print("the answer is {x}")` 보간과 `putchar(33)` stdout 검증을 추가했다.
+- `tools/vaisc-parity.tsv`에서 `examples/e14_print.nl`을 `native-supported`로 승격했다.
+- 현재 parity coverage: `native-supported=24`, `bootstrap-only=10`, `tracked=0`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py` = pass
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `scripts/vaisc build examples/e14_print.nl` + run = exit `0`, stdout `the answer is 42`, IR includes `printf`
+  - `bash -n scripts/test-vaisc-parity.sh` = pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=24 bootstrap=10 tracked=0)`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+
 ## 2026-06-13 (NV-C4b — tracked parity closure)
 - `compiler/self/fixpoint_full.nl` native codegen에서 남은 tracked parity gap 6개를 닫았다.
   - `bitnot`/`bitand`/`bitor`/`bitxor`/`shl`/`shr` builtin calls를 LLVM integer ops로 낮춘다.

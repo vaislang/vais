@@ -3,8 +3,8 @@
 #
 # The day-1 native front is intentionally narrow: Int functions, let/let mut,
 # integer arithmetic/comparisons, return, if/else, while, and plain function
-# calls. Broader language features stay on the Legacy bootstrap path until their
-# native slices land.
+# calls. The first IO slice also accepts print/putchar. Broader language
+# features stay on the Legacy bootstrap path until their native slices land.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,6 +41,28 @@ if [ "$got" = "42" ]; then
 else
     echo "  FAIL accepts day-1 subset got=$got want=42"
     cat "$tmp/accept.err"
+    fail=1
+fi
+
+io_accept="$tmp/front_io_accept.vais"
+cat > "$io_accept" <<'SRC'
+fn main() -> Int {
+    let x = 42
+    print("the answer is {x}")
+    putchar(33)
+    return 0
+}
+SRC
+
+"$VAISC" run "$io_accept" >"$tmp/io_accept.out" 2>"$tmp/io_accept.err"
+got=$?
+io_out="$(cat "$tmp/io_accept.out")"
+io_want="$(printf 'the answer is 42\n!')"
+if [ "$got" = "0" ] && [ "$io_out" = "$io_want" ]; then
+    echo "  PASS accepts print interpolation and putchar IO slice"
+else
+    echo "  FAIL accepts IO slice got=$got stdout=[$io_out]"
+    cat "$tmp/io_accept.err"
     fail=1
 fi
 

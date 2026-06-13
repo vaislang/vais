@@ -33,7 +33,7 @@ examples/t1.nl	native-supported	Simple typed helper smoke.
 examples/c1.nl	bootstrap-only	Enum/match remains Legacy bootstrap-only.
 examples/c2.nl	bootstrap-only	List literal and sum remain Legacy bootstrap-only.
 examples/c4.nl	bootstrap-only	Struct field access remains Legacy bootstrap-only.
-examples/e14_print.nl	bootstrap-only	Print/interpolation remains Legacy bootstrap-only in vaisc front.
+examples/e14_print.nl	native-supported	Print interpolation and IO call support.
 examples/e50_ast_eval.nl	bootstrap-only	Recursive AST enum remains Legacy bootstrap-only.
 examples/e75_list_push.nl	bootstrap-only	List push/growth remains Legacy bootstrap-only.
 examples/e80_closure_return.nl	bootstrap-only	Closure return ABI remains Legacy bootstrap-only.
