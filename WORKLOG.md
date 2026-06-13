@@ -1,4 +1,21 @@
-# nl WORKLOG
+# New Vais WORKLOG
+
+## 2026-06-13 (NV-M5 — current docs naming/status alignment)
+- 현재 진입 문서의 이름/상태를 New Vais 확정 이후 기준으로 정리했다.
+  - `compiler/self/SELF_HOST.md`: self-host 문서 제목/설명/표의 현행 모듈명을 `.vais`로 맞추고,
+    현재 언어 표현을 New Vais 기준으로 정리했다.
+  - `std/PRELUDE.md`: 제목/표 헤더를 New Vais/Legacy Vais 매핑으로 바꾸고, 2026-06-11에 해결 확인된
+    Map/Vec push/map/filter 상태를 ✅로 갱신했다.
+  - `README.md`/`AGENTS.md`/`RENAME.md`: `vais-check` canonical lint command, `.vais` 임시 파일명,
+    compatibility wrapper 상태를 반영했다.
+- 검증:
+  - `git diff --check` = pass
+  - `python3 tests/vais_check_test.py` = `RESULT: 40/40 pass`
+  - `bash scripts/test.sh c4` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/test.sh e74_map_basic` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/test.sh e75_list_push/e76_list_map/d6run/e25_for_filter_sum` = all pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=37 bootstrap=0 tracked=0)`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
 
 ## 2026-06-13 (NV-M4 — `vais-check` canonical lint command)
 - P4 lint 도구의 canonical 이름을 `tools/vais-check.py`로 승격했다.

@@ -5,6 +5,7 @@
 트랜스파일러의 canonical 이름은 `legacy_vais_bootstrap.py`로 바꿨고, 기존 `nl2vais.py`는 호환 래퍼로만 남긴다.
 checked-in New Vais 소스 확장자는 `.vais`로 전환했고, `.nl` transitional 호환성은
 `scripts/test-vais-extension-migration.sh`로 검증한다.
+lint 도구의 canonical 이름은 `tools/vais-check.py`이며, 기존 `tools/nl-check.py`는 호환 래퍼다.
 
 기존 `/Users/sswoo/study/projects/vais/compiler`는 **Legacy Vais bootstrap backend** 이다.
 새 Vais의 의미론과 예제 코퍼스는 이 repo가 진실의 원천이다.
@@ -17,8 +18,9 @@ checked-in New Vais 소스 확장자는 `.vais`로 전환했고, `.nl` transitio
 | 2. 파일 확장자 | `.vais` checked-in, `.nl` transitional compat | 완료. 호환 제거는 별도 gate |
 | 3. New Vais compiler command | `scripts/vaisc` | 최종 설치/배포 때 PATH의 `vaisc`로 승격 |
 | 4. legacy bootstrap adapter | `compiler/transpiler/legacy_vais_bootstrap.py` | 완료. `nl2vais.py`는 호환 래퍼 |
-| 5. 빌드 스크립트 | `scripts/build.sh`의 확장자/경로 | Legacy bootstrap oracle로 유지 |
-| 6. 코드/문서 내 산문상 "nl" | docstring, README, 설계문서 | 현재는 "repo 코드명" 의미로 보존 |
+| 5. lint command | `tools/vais-check.py` | 완료. `tools/nl-check.py`는 호환 래퍼 |
+| 6. 빌드 스크립트 | `scripts/build.sh`의 확장자/경로 | Legacy bootstrap oracle로 유지 |
+| 7. 코드/문서 내 산문상 "nl" | docstring, README, 설계문서 | 현재는 "repo 코드명" 의미로 보존 |
 
 ## 지금 하지 않는 것
 
@@ -32,6 +34,8 @@ checked-in New Vais 소스 확장자는 `.vais`로 전환했고, `.nl` transitio
 - `.vais` 입력 파일은 `scripts/vaisc` 경로에서 smoke 검증한다.
 - `compiler/transpiler/legacy_vais_bootstrap.py`를 canonical legacy adapter로 승격했다.
 - `compiler/transpiler/nl2vais.py`는 기존 외부 호출을 깨지 않기 위한 compatibility wrapper로 유지한다.
+- `tools/vais-check.py`를 canonical lint command로 승격했다.
+- `tools/nl-check.py`는 기존 외부 호출을 깨지 않기 위한 compatibility wrapper로 유지한다.
 - checked-in source를 `.vais`로 물리 rename했다.
 - `.vais` corpus를 `.nl` mirror로 복사한 compatibility gate를 추가했다.
 
@@ -44,6 +48,7 @@ cd vais
 bash scripts/test-vais-extension-migration.sh
 # 3. 호환 래퍼 제거 여부 결정
 git rm compiler/transpiler/nl2vais.py              # 외부 호출이 모두 사라진 뒤에만
+git rm tools/nl-check.py                           # 외부 호출이 모두 사라진 뒤에만
 # 4. 산문 치환 (검토 후)
 grep -rl '\bnl\b' . --include='*.md' --include='*.py'   # 먼저 확인
 # 그다음 신중히 sed 치환

@@ -12,7 +12,7 @@
 - 현재 bootstrap 파이프라인: `New Vais(.vais/.nl) 소스` → `legacy_vais_bootstrap.py` → `Legacy Vais` → `vaisc build` → 네이티브 LLVM 실행.
   `nl2vais.py`는 기존 호출을 위한 compatibility wrapper다.
 - **메인 산출물**: `compiler/self/fixpoint_full.vais` — New Vais로 작성한 self-host 컴파일러 seed.
-  입력 nl 프로그램 문자열을 받아 **토큰화 → 평가/codegen → LLVM IR을 emit**한다.
+  입력 New Vais 프로그램 문자열을 받아 **토큰화 → 평가/codegen → LLVM IR을 emit**한다.
 - **현재 상태**: front(tokenize/eval) + codegen(print로 IR emit) 전체 self-host arc 동작.
   세 self-host tier(산술 / 산술+변수 / 함수+재귀) 전부 source→value end-to-end이고,
   `fixpoint_full.vais` 전체 소스가 1세대 컴파일러를 만들며 그 컴파일러가 실제 `fixpoint.vais`/`fixpoint2.vais`/`fixpoint3.vais`/`fixpoint_full.vais`를 다시 컴파일한다.
@@ -177,7 +177,7 @@ New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/va
 - **probe garbage 우연일치**: 잘못된 GEP가 우연히 그럴듯한 값을 읽을 수 있다. `x * 100`처럼
   곱해보면 garbage(보통 0)가 드러난다. **IR 직접 확인이 최종 판정**.
 - **테스트 프로그램은 Python으로 빌드**: bash heredoc 안의 backtick `` `...` ``은
-  command substitution을 트리거한다. 테스트 프로그램은 Python 스크립트로 `/tmp/q.nl`을
+  command substitution을 트리거한다. 테스트 프로그램은 Python 스크립트로 `/tmp/q.vais`를
   써서 만들어라(게이트 스크립트의 `check`/`check_out`이 이미 그렇게 한다).
 
 ---
