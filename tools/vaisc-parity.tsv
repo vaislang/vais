@@ -15,11 +15,14 @@ examples/e07_nested_if.nl	native-supported	Nested if/else.
 examples/e11_while.nl	native-supported	While loop with mutable accumulator.
 examples/e18_while_accumulator.nl	native-supported	While loop with arithmetic update.
 examples/e20_triangular.nl	native-supported	Recursive triangular number.
+examples/e22_enum_dispatch.nl	native-supported	Payload-free enum dispatch helper.
 examples/e26_pipeline.nl	native-supported	Plain function pipeline.
 examples/e29_gcd.nl	native-supported	Modulo recursion.
+examples/e30_enum_payload_match.nl	native-supported	Int payload enum match lowering.
 examples/e31_bitwise.nl	native-supported	Bitwise builtin calls.
 examples/e33_guard_chain.nl	native-supported	Int guard chain.
 examples/e34_int_conversion.nl	native-supported	Int conversion call.
+examples/e35_calc_dispatch.nl	native-supported	Payload-free enum dispatch with bitwise builtin.
 examples/e38_negatives.nl	native-supported	Negative Int arithmetic.
 examples/e42_while_call.nl	native-supported	While loop calling helper.
 examples/e43_generic_fn.nl	native-supported	Generic marker skipped for Int helper.
@@ -34,7 +37,7 @@ examples/c1.nl	native-supported	Payload-free enum tags and simple return-arm mat
 examples/c2.nl	native-supported	List literal and sum support.
 examples/c4.nl	native-supported	Struct literal and field access.
 examples/e14_print.nl	native-supported	Print interpolation and IO call support.
-examples/e50_ast_eval.nl	bootstrap-only	Recursive AST enum remains Legacy bootstrap-only.
+examples/e50_ast_eval.nl	native-supported	Small recursive payload enum lowered to Int-coded tags.
 examples/e75_list_push.nl	native-supported	List push/growth and index access.
 examples/e80_closure_return.nl	bootstrap-only	Closure return ABI remains Legacy bootstrap-only.
 compiler/self/fixpoint.nl	bootstrap-only	Self-host arithmetic tier uses Str/List/struct/Bool.

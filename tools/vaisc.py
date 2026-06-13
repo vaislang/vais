@@ -145,12 +145,12 @@ def fix_turbofish_new(match: re.Match[str], raw: str) -> str:
 FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
     (
         re.compile(r"\benum\b"),
-        "enum declarations beyond payload-free enum tags are not in the New Vais native front subset yet",
-        "use a payload-free enum with simple return-arm match, or keep payload enums on the Legacy bootstrap path.",
+        "enum declarations beyond payload-free tags or small Int-coded payload enums are not in the New Vais native front subset yet",
+        "use payload-free enum tags or Int/self-recursive payload enums with simple return-arm match; keep broader payload enums on the Legacy bootstrap path.",
     ),
     (
         re.compile(r"\bmatch\b"),
-        "`match` beyond payload-free enum return arms is not in the New Vais native front subset yet",
+        "`match` beyond simple enum return arms is not in the New Vais native front subset yet",
         "use if/else for native sources, or keep payload match code on the Legacy bootstrap path.",
     ),
     (
@@ -382,6 +382,62 @@ def check_front_contract(source: Path) -> None:
 SIMPLE_ENUM_DECL_RE = re.compile(r"^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*([^{}()]*)\s*\}\s*$")
 SIMPLE_MATCH_RE = re.compile(r"^(\s*)match\s+(.+?)\s*\{\s*$")
 SIMPLE_MATCH_ARM_RE = re.compile(r"^(.+?)\s*=>\s*(.+?),?\s*$")
+PAYLOAD_ENUM_DECL_RE = re.compile(r"^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*(.+?)\s*\}\s*$")
+PAYLOAD_ENUM_BASE = 1_000_000
+IDENT_TEXT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+@dataclass(frozen=True)
+class PayloadVariant:
+    enum_name: str
+    name: str
+    tag: int
+    tag_count: int
+    fields: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PayloadEnum:
+    name: str
+    variants: dict[str, PayloadVariant]
+
+
+def split_top_level_commas(text: str) -> list[str] | None:
+    parts: list[str] = []
+    depth = 0
+    start = 0
+    string_delim: str | None = None
+    escaped = False
+    for idx, ch in enumerate(text):
+        if escaped:
+            escaped = False
+            continue
+        if string_delim == '"' and ch == "\\":
+            escaped = True
+            continue
+        if ch in ('"', "`"):
+            if string_delim is None:
+                string_delim = ch
+            elif string_delim == ch:
+                string_delim = None
+            continue
+        if string_delim is not None:
+            continue
+        if ch in "([{":
+            depth += 1
+            continue
+        if ch in ")]}":
+            depth -= 1
+            if depth < 0:
+                return None
+            continue
+        if ch == "," and depth == 0:
+            parts.append(text[start:idx].strip())
+            start = idx + 1
+    if depth != 0 or string_delim is not None:
+        return None
+    parts.append(text[start:].strip())
+    return parts
 
 
 def lower_simple_enum_match_text(text: str) -> str:
@@ -467,9 +523,282 @@ def lower_simple_enum_match_text(text: str) -> str:
     return "\n".join(out) + ("\n" if text.endswith("\n") else "")
 
 
+def parse_payload_enum_decl(code: str) -> PayloadEnum | None:
+    match = PAYLOAD_ENUM_DECL_RE.match(code)
+    if match is None:
+        return None
+    enum_name = match.group(1)
+    specs = split_top_level_commas(match.group(2))
+    if not specs:
+        return None
+
+    parsed: list[tuple[str, tuple[str, ...]]] = []
+    saw_payload = False
+    for spec in specs:
+        item = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)(?:\((.*)\))?", spec)
+        if item is None:
+            return None
+        fields_text = item.group(2)
+        fields: tuple[str, ...] = ()
+        if fields_text is not None:
+            saw_payload = True
+            field_parts = split_top_level_commas(fields_text)
+            if field_parts is None:
+                return None
+            fields = tuple(part.strip() for part in field_parts if part.strip())
+            if any(field not in ("Int", enum_name) for field in fields):
+                return None
+        parsed.append((item.group(1), fields))
+
+    if not saw_payload:
+        return None
+
+    tag_count = len(parsed)
+    variants: dict[str, PayloadVariant] = {}
+    for tag, (name, fields) in enumerate(parsed):
+        if name in variants:
+            return None
+        variants[name] = PayloadVariant(enum_name, name, tag, tag_count, fields)
+    return PayloadEnum(enum_name, variants)
+
+
+def payload_variant_lookup(enums: dict[str, PayloadEnum]) -> dict[str, PayloadVariant] | None:
+    lookup: dict[str, PayloadVariant] = {}
+    for enum in enums.values():
+        for name, variant in enum.variants.items():
+            if name in lookup:
+                return None
+            lookup[name] = variant
+    return lookup
+
+
+def replace_payload_enum_types(line: str, enums: dict[str, PayloadEnum]) -> str:
+    out = line
+    for enum_name in enums:
+        out = re.sub(rf":\s*{enum_name}\b", ": Int", out)
+        out = re.sub(rf"->\s*{enum_name}\b", "-> Int", out)
+    return out
+
+
+def find_matching_paren_mask(mask: str, open_index: int) -> int:
+    depth = 0
+    for idx in range(open_index, len(mask)):
+        ch = mask[idx]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return idx
+    return -1
+
+
+def encode_payload_variant_call(
+    variant: PayloadVariant,
+    args: list[str],
+    lookup: dict[str, PayloadVariant],
+    enums: dict[str, PayloadEnum],
+) -> str | None:
+    if len(args) != len(variant.fields):
+        return None
+    terms: list[str] = []
+    for idx, arg in enumerate(args):
+        lowered = rewrite_payload_constructor_calls(arg, lookup, enums)
+        if lowered is None:
+            return None
+        factor = PAYLOAD_ENUM_BASE**idx
+        if factor == 1:
+            terms.append(f"({lowered.strip()})")
+        else:
+            terms.append(f"{factor} * ({lowered.strip()})")
+    payload = " + ".join(terms) if terms else "0"
+    return f"({variant.tag} + {variant.tag_count} * ({payload}))"
+
+
+def rewrite_payload_constructor_calls(
+    text: str,
+    lookup: dict[str, PayloadVariant],
+    enums: dict[str, PayloadEnum],
+) -> str | None:
+    mask = code_only(text)
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        if not (mask[i].isalpha() or mask[i] == "_"):
+            out.append(text[i])
+            i += 1
+            continue
+
+        j = i + 1
+        while j < len(mask) and (mask[j].isalnum() or mask[j] == "_"):
+            j += 1
+        first = mask[i:j]
+        cursor = j
+        while cursor < len(mask) and mask[cursor].isspace():
+            cursor += 1
+
+        variant: PayloadVariant | None = None
+        replace_end = j
+        if first in enums and cursor < len(mask) and mask[cursor] == ".":
+            vstart = cursor + 1
+            while vstart < len(mask) and mask[vstart].isspace():
+                vstart += 1
+            vend = vstart
+            while vend < len(mask) and (mask[vend].isalnum() or mask[vend] == "_"):
+                vend += 1
+            variant = enums[first].variants.get(mask[vstart:vend])
+            cursor = vend
+            replace_end = vend
+            while cursor < len(mask) and mask[cursor].isspace():
+                cursor += 1
+        else:
+            variant = lookup.get(first)
+
+        if variant is None:
+            out.append(text[i:j])
+            i = j
+            continue
+
+        if variant.fields:
+            if cursor >= len(mask) or mask[cursor] != "(":
+                out.append(text[i:j])
+                i = j
+                continue
+            close = find_matching_paren_mask(mask, cursor)
+            if close < 0:
+                return None
+            args = split_top_level_commas(text[cursor + 1 : close])
+            if args is None:
+                return None
+            encoded = encode_payload_variant_call(variant, args, lookup, enums)
+            if encoded is None:
+                return None
+            out.append(encoded)
+            i = close + 1
+            continue
+
+        out.append(str(variant.tag))
+        i = replace_end
+
+    return "".join(out)
+
+
+def parse_payload_pattern(
+    pattern: str,
+    lookup: dict[str, PayloadVariant],
+    enums: dict[str, PayloadEnum],
+) -> tuple[PayloadVariant, list[str]] | None:
+    match = re.fullmatch(r"(?:(?P<enum>[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*)?(?P<variant>[A-Za-z_][A-Za-z0-9_]*)(?:\((?P<fields>.*)\))?", pattern)
+    if match is None:
+        return None
+    enum_name = match.group("enum")
+    variant_name = match.group("variant")
+    if enum_name:
+        enum = enums.get(enum_name)
+        if enum is None:
+            return None
+        variant = enum.variants.get(variant_name)
+    else:
+        variant = lookup.get(variant_name)
+    if variant is None:
+        return None
+    fields_text = match.group("fields")
+    binders = [] if fields_text is None else split_top_level_commas(fields_text)
+    if binders is None or len(binders) != len(variant.fields):
+        return None
+    if any(IDENT_TEXT_RE.fullmatch(binder) is None for binder in binders):
+        return None
+    return variant, binders
+
+
+def lower_payload_enum_match_text(text: str) -> str:
+    """Lower small Int/self-recursive payload enums into Int tag/payload codes."""
+    lines = text.splitlines()
+    enums: dict[str, PayloadEnum] = {}
+    kept: list[str] = []
+    saw_payload_enum = False
+
+    for raw in lines:
+        code = code_only(raw).strip()
+        enum_def = parse_payload_enum_decl(code)
+        if enum_def is not None:
+            enums[enum_def.name] = enum_def
+            saw_payload_enum = True
+            continue
+        if re.search(r"\benum\b", code):
+            return text
+        kept.append(raw)
+
+    if not saw_payload_enum:
+        return text
+
+    lookup = payload_variant_lookup(enums)
+    if lookup is None:
+        return text
+
+    typed_lines = [replace_payload_enum_types(raw, enums) for raw in kept]
+    out: list[str] = []
+    i = 0
+    while i < len(typed_lines):
+        raw = typed_lines[i]
+        match = SIMPLE_MATCH_RE.match(code_only(raw))
+        if match is None:
+            out.append(raw)
+            i += 1
+            continue
+
+        indent = match.group(1)
+        expr = match.group(2).strip()
+        arms: list[tuple[PayloadVariant, list[str], str]] = []
+        i += 1
+        while i < len(typed_lines):
+            arm_code = code_only(typed_lines[i]).strip()
+            if arm_code == "}":
+                break
+            arm_match = SIMPLE_MATCH_ARM_RE.match(arm_code)
+            if arm_match is None:
+                return text
+            parsed = parse_payload_pattern(arm_match.group(1).strip(), lookup, enums)
+            if parsed is None:
+                return text
+            body = arm_match.group(2).strip().rstrip(",").rstrip()
+            if not body.startswith("return "):
+                return text
+            body_expr = rewrite_payload_constructor_calls(body[len("return ") :], lookup, enums)
+            if body_expr is None:
+                return text
+            arms.append((parsed[0], parsed[1], body_expr))
+            i += 1
+        if i >= len(typed_lines) or code_only(typed_lines[i]).strip() != "}":
+            return text
+        if not arms:
+            return text
+
+        for idx, (variant, binders, body_expr) in enumerate(arms):
+            keyword = "if" if idx == 0 else "else if"
+            out.append(f"{indent}{keyword} {expr} % {variant.tag_count} == {variant.tag} {{")
+            for field_idx, binder in enumerate(binders):
+                denom = variant.tag_count * (PAYLOAD_ENUM_BASE**field_idx)
+                out.append(f"{indent}    let {binder} = ({expr} / {denom}) % {PAYLOAD_ENUM_BASE}")
+            out.append(f"{indent}    return {body_expr}")
+            out.append(f"{indent}}}")
+        out.append(f"{indent}return 0")
+        i += 1
+
+    rewritten: list[str] = []
+    for raw in out:
+        lowered = rewrite_payload_constructor_calls(raw, lookup, enums)
+        if lowered is None:
+            return text
+        rewritten.append(lowered)
+    return "\n".join(rewritten) + ("\n" if text.endswith("\n") else "")
+
+
 def prepare_bootstrap_source(source: Path, tmp: Path) -> Path:
     raw = source.read_text()
     lowered = lower_simple_enum_match_text(raw)
+    if lowered == raw:
+        lowered = lower_payload_enum_match_text(raw)
     if lowered == raw:
         return source
     lowered_path = tmp / "front_lowered.nl"

@@ -3,8 +3,8 @@
 #
 # The native front is intentionally narrow: Int functions, let/let mut,
 # integer arithmetic/comparisons, return, if/else, while, plain function calls,
-# print/putchar, simple structs, payload-free enum/match, and the first
-# List push/len/index/sum slice.
+# print/putchar, simple structs, payload-free enum/match, small Int-coded
+# payload enum/match, and the first List push/len/index/sum slice.
 # Broader language features stay on the Legacy bootstrap path until their native
 # slices land.
 set -uo pipefail
@@ -118,6 +118,33 @@ else
     fail=1
 fi
 
+payload_enum_accept="$tmp/front_payload_enum_accept.vais"
+cat > "$payload_enum_accept" <<'SRC'
+enum Node { Lit(Int), Add(Node, Node), Mul(Node, Node) }
+
+fn eval(n: Node) -> Int {
+    match n {
+        Lit(v) => return v,
+        Add(a, b) => return eval(a) + eval(b),
+        Mul(a, b) => return eval(a) * eval(b),
+    }
+}
+
+fn main() -> Int {
+    return eval(Add(Mul(Lit(3), Lit(4)), Lit(2)))
+}
+SRC
+
+"$VAISC" run "$payload_enum_accept" >"$tmp/payload_enum_accept.out" 2>"$tmp/payload_enum_accept.err"
+got=$?
+if [ "$got" = "14" ]; then
+    echo "  PASS accepts small payload enum/match slice"
+else
+    echo "  FAIL accepts payload enum/match slice got=$got want=14"
+    cat "$tmp/payload_enum_accept.err"
+    fail=1
+fi
+
 list_accept="$tmp/front_list_accept.vais"
 cat > "$list_accept" <<'SRC'
 fn main() -> Int {
@@ -187,15 +214,16 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "payload_enum" "enum declarations beyond payload-free" "payload enums" <<'SRC'
-enum Node { Lit(Int) }
+expect_reject "payload_enum_struct" "enum declarations beyond payload-free tags" "broader payload enums" <<'SRC'
+struct Pt { x: Int }
+enum Node { Lit(Pt) }
 
 fn main() -> Int {
     return 0
 }
 SRC
 
-expect_reject "match_expr_body" "match.*payload-free enum return arms" "payload match code" <<'SRC'
+expect_reject "match_expr_body" "match.*simple enum return arms" "payload match code" <<'SRC'
 enum Color { Red, Green }
 
 fn main() -> Int {

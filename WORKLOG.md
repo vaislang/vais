@@ -1,5 +1,26 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C9 — small payload enum/match parity promotion)
+- `scripts/vaisc` bootstrap engine에 small Int-coded payload enum lowering을 추가했다.
+  - `enum Node { Lit(Int), Add(Node, Node), Mul(Node, Node) }` 같은 Int/self-recursive payload enum을
+    `Int` tag/payload 코드로 낮춘다.
+  - 단순 return-arm `match`는 tag 검사와 payload binder `let`으로 낮춘다.
+  - broader payload enum, struct payload, non-return-arm match는 계속 P4 front 진단으로 거절한다.
+- `scripts/test-vaisc-front.sh`에 recursive payload enum/match accepted fixture와 broader payload reject fixture를 추가했다.
+- `tools/vaisc-parity.tsv`에서 `examples/e22_enum_dispatch.nl`, `examples/e30_enum_payload_match.nl`,
+  `examples/e35_calc_dispatch.nl`, `examples/e50_ast_eval.nl`을 `native-supported`로 승격했다.
+- 현재 parity coverage: `native-supported=32`, `bootstrap-only=5`, `tracked=0`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py` = pass
+  - `scripts/vaisc build examples/e50_ast_eval.nl` + run = exit `14`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash -n scripts/test-vaisc-parity.sh` = pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=32 bootstrap=5 tracked=0)`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+
 ## 2026-06-13 (NV-C8 — payload-free enum/match parity promotion)
 - `scripts/vaisc` bootstrap engine에 payload-free enum tag와 단순 return-arm `match`를 Int native subset으로 낮추는
   source lowering을 추가했다.
