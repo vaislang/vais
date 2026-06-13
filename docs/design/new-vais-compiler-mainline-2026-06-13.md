@@ -201,9 +201,13 @@ Contract:
 - `tracked` entries must remain Legacy-green and are expected not to pass natively yet; if one starts passing, the gate fails so it can be promoted.
 
 Current coverage:
-- `native-supported=14`,
+- `native-supported=17`,
 - `bootstrap-only=11`, including the four self-host tier files,
-- `tracked=9`.
+- `tracked=6`.
+
+Promoted native slices after the first gate:
+- `%` term operator tokenization and `srem` lowering, covering `gcd`, Collatz,
+  and digit-sum examples.
 
 Gate:
 - `bash scripts/test-vaisc-parity.sh`

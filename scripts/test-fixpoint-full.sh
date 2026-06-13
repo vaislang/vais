@@ -103,6 +103,7 @@ check "fn f() {{ return (2 + 3) * 4 }}; return f();" 20
 check "fn f(n) {{ return (n + 1) * (n + 2) }}; return f(3);" 20
 check "fn f() {{ return ((1 + 2) * 3) }}; return f();" 9
 check "fn f() {{ return 42 / 10 + 42 - (42 / 10) * 10 }}; return f();" 6
+check "fn f(n) {{ return n % 10 }}; return f(12345);" 5
 # grouped comparisons combined with arithmetic: (a<b) + (b<c) = 1 + 1 = 2
 check "fn f(a, b, c) {{ return (a < b) + (b < c) }}; return f(1, 2, 3);" 2
 

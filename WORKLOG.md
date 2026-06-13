@@ -1,5 +1,22 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C4a — modulo parity promotion)
+- `compiler/self/fixpoint_full.nl` native tokenizer/codegen에 `%` term operator를 추가했다.
+  `%`는 kind `39`로 토큰화되고 `*`/`/`와 같은 precedence에서 LLVM `srem i64`로 낮아진다.
+- `scripts/test-fixpoint-full.sh`에 `n % 10` focused fixture를 추가했다.
+- `tools/vaisc-parity.tsv`에서 modulo 관련 tracked 예제 3개를 native-supported로 승격했다:
+  `examples/e29_gcd.nl`, `examples/e56_collatz.nl`, `examples/e60_digit_sum.nl`.
+- 현재 parity coverage: `native-supported=17`, `bootstrap-only=11`, `tracked=6`.
+- 검증:
+  - `scripts/vaisc build examples/e29_gcd.nl` = exit `6`, IR includes `srem`
+  - `scripts/vaisc build examples/e56_collatz.nl` = exit `8`, IR includes `srem`
+  - `scripts/vaisc build examples/e60_digit_sum.nl` = exit `15`, IR includes `srem`
+  - `bash -n scripts/test-vaisc-parity.sh` = pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=17 bootstrap=11 tracked=6)`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+
 ## 2026-06-13 (NV-C4 — New Vais parity manifest gate)
 - `tools/vaisc-parity.tsv`를 추가해 예제와 self-host tier를 `native-supported`, `bootstrap-only`,
   `tracked` 상태로 기록했다.

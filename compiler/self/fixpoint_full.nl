@@ -11,7 +11,7 @@
 # Requires the Vais fixes: `&Vec` borrow recursion (214c97cf) + literal-`%`
 # escaping (e711dac1).
 
-# Token kinds: 0=num,1=ident,2='+',3='*',4='-',38='/',5='=',6=';',7=let,8=return,21=mut,
+# Token kinds: 0=num,1=ident,2='+',3='*',4='-',38='/',39='%',5='=',6=';',7=let,8=return,21=mut,
 #              18='<',19='>',20='==',22=while,11='{',12='}',9='(',10=')',13=fn,
 #              15=if,17=else,25=','
 struct Token { kind: Int, value: Int, nstart: Int, nlen: Int }
@@ -326,6 +326,7 @@ fn tokenize(src: Str) -> List<Token> {
         else if c == 42 { toks.push(Token { kind: 3, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 45 { toks.push(Token { kind: 4, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 47 { toks.push(Token { kind: 38, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
+        else if c == 37 { toks.push(Token { kind: 39, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 40 { toks.push(Token { kind: 9, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 41 { toks.push(Token { kind: 10, value: 0, nstart: 0, nlen: 0 }); i = i + 1 }
         else if c == 60 {
@@ -1916,10 +1917,11 @@ fn emit_binop(op_s: Str, l: Op, r: Op, counter: Int) -> Int {
 fn gen_term(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, stop: Int, acc: Op) -> Op {
     if i >= stop { return acc }
     let t = toks[i]
-    if t.kind == 3 or t.kind == 38 {
+    if t.kind == 3 or t.kind == 38 or t.kind == 39 {
         let rf = gen_factor(toks, slots, fns, defs, src, i + 1, acc.next)
         let mut dest = 0
         if t.kind == 38 { dest = emit_binop("sdiv", acc, rf, rf.next) }
+        else if t.kind == 39 { dest = emit_binop("srem", acc, rf, rf.next) }
         else { dest = emit_binop("mul", acc, rf, rf.next) }
         let nacc = Op { kind: 1, val: dest, next: dest + 1 }
         let after = skip_factor(toks, i + 1)
@@ -1930,7 +1932,7 @@ fn gen_term(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
 fn skip_term(toks: &List<Token>, i: Int, stop: Int) -> Int {
     if i >= stop { return stop }
     let t = toks[i]
-    if t.kind == 3 or t.kind == 38 {
+    if t.kind == 3 or t.kind == 38 or t.kind == 39 {
         let after = skip_factor(toks, i + 1)
         return skip_term(toks, after, stop)
     }
