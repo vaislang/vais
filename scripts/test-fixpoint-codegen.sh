@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end check for the REAL code generator (compiler/self/fixpoint_codegen.nl):
+# End-to-end check for the REAL code generator (compiler/self/fixpoint_codegen.vais):
 # it tokenizes an arithmetic source into a List<Token> and emits LLVM IR that
 # COMPUTES the result at runtime (mul/add/sub instructions + SSA temps), rather
 # than pre-evaluating to a constant. We compile the generated IR and verify the
@@ -12,7 +12,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_codegen.nl"
+SRC="$HERE/compiler/self/fixpoint_codegen.vais"
 fail=0
 
 check() {

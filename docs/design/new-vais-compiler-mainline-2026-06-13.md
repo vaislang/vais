@@ -2,10 +2,11 @@
 
 ## Decision
 
-New Vais / Vais is the user-facing language name. The `nl` repository name and
-`.nl` extension remain transitional implementation names. The legacy bootstrap
-adapter's canonical name is `legacy_vais_bootstrap.py`; `nl2vais.py` remains as
-a compatibility wrapper for old calls.
+New Vais / Vais is the user-facing language name. The `nl` repository name
+remains a transitional implementation name; checked-in source files now use the
+`.vais` extension, with `.nl` accepted as transitional compatibility. The legacy
+bootstrap adapter's canonical name is `legacy_vais_bootstrap.py`; `nl2vais.py`
+remains as a compatibility wrapper for old calls.
 
 Legacy Vais (`/Users/sswoo/study/projects/vais/compiler`) stays as:
 - bootstrap backend for the current validated pipeline,
@@ -28,7 +29,7 @@ New Vais source (.vais, with .nl accepted during transition)
 The native path must eventually replace the transitional path:
 
 ```
-New Vais source (.nl)
+New Vais source (.vais/.nl)
   -> legacy_vais_bootstrap.py
   -> Legacy Vais
   -> vaisc
@@ -37,7 +38,8 @@ New Vais source (.nl)
 
 ## Non-Goals
 
-- Do not rename `projects/nl` or `.nl` without a dedicated migration gate.
+- Do not rename `projects/nl` without a dedicated migration gate.
+- Do not remove `.nl` transitional compatibility without a dedicated gate.
 - Do not delete the `nl2vais.py` compatibility wrapper until old external calls
   are migrated.
 - Do not delete the Legacy Vais bootstrap path before the native compiler has
@@ -63,7 +65,7 @@ Current green gates are the baseline:
 - `bash scripts/test-vaisc-direct.sh` = New Vais direct emitter OK
 - `bash scripts/test-vaisc-errors.sh` = New Vais native P4 diagnostics OK
 - `bash scripts/test-vaisc-parity.sh` = New Vais native parity manifest OK
-- `bash scripts/test-vais-extension-migration.sh` = `.vais` mirror migration gate OK
+- `bash scripts/test-vais-extension-migration.sh` = transitional `.nl` compatibility gate OK
 - `bash scripts/test.sh` = 112/112
 - `bash scripts/test-fixpoint-full.sh` = self-host e2e OK
 - `bash scripts/test-fixpoint-full-self.sh` = full-source stage compare OK
@@ -222,18 +224,18 @@ Promoted native slices after the first gate:
   and digit-sum examples.
 - Bitwise builtin calls, `Int(...)`, generic marker skip for Int helpers,
   string literal equality, and single-byte char literals.
-- `print` interpolation and `putchar` IO calls, covering `examples/e14_print.nl`.
+- `print` interpolation and `putchar` IO calls, covering `examples/e14_print.vais`.
 - Simple struct field access and List push/growth/index access, covering
-  `examples/c4.nl` and `examples/e75_list_push.nl`.
-- List literal `.sum()` support, covering `examples/c2.nl`.
-- Payload-free enum tags and simple return-arm match, covering `examples/c1.nl`.
+  `examples/c4.vais` and `examples/e75_list_push.vais`.
+- List literal `.sum()` support, covering `examples/c2.vais`.
+- Payload-free enum tags and simple return-arm match, covering `examples/c1.vais`.
 - Payload-free enum dispatch and small Int/self-recursive payload enum lowering, covering
-  `examples/e22_enum_dispatch.nl`, `examples/e35_calc_dispatch.nl`,
-  `examples/e30_enum_payload_match.nl`, and `examples/e50_ast_eval.nl`.
-- Single-Int closure return lowering, covering `examples/e80_closure_return.nl`.
-- Trusted self-host tier sources, covering `compiler/self/fixpoint.nl`,
-  `compiler/self/fixpoint2.nl`, `compiler/self/fixpoint3.nl`, and
-  `compiler/self/fixpoint_full.nl`.
+  `examples/e22_enum_dispatch.vais`, `examples/e35_calc_dispatch.vais`,
+  `examples/e30_enum_payload_match.vais`, and `examples/e50_ast_eval.vais`.
+- Single-Int closure return lowering, covering `examples/e80_closure_return.vais`.
+- Trusted self-host tier sources, covering `compiler/self/fixpoint.vais`,
+  `compiler/self/fixpoint2.vais`, `compiler/self/fixpoint3.vais`, and
+  `compiler/self/fixpoint_full.vais`.
 
 Gate:
 - `bash scripts/test-vaisc-parity.sh`
@@ -245,12 +247,12 @@ Done when:
 
 ## Migration Rule
 
-NV-C4 now covers the core examples and self-host tiers, and the `.vais` mirror
-migration gate is green. The adapter rename is done; the remaining physical
-rename decisions are:
+NV-C4 now covers the core examples and self-host tiers, the checked-in source
+extension is `.vais`, and the transitional `.nl` compatibility gate is green.
+The adapter rename is done; the remaining physical rename decisions are:
 
 - `projects/nl` -> `projects/vais`,
-- optional `.nl` -> `.vais`,
+- eventual removal of `.nl` compatibility,
 - eventual removal of the `nl2vais.py` compatibility wrapper.
 
 Until then, `nl` is a stable implementation code name, not the language brand.

@@ -8,14 +8,14 @@
 
 ## 0. 30초 요약
 
-- **New Vais**는 AI가 정확히 쓰는 언어로 확정된 새 Vais mainline이다. `nl`은 전환기 repo/확장자 코드명이다.
-- 현재 bootstrap 파이프라인: `New Vais(.nl) 소스` → `legacy_vais_bootstrap.py` → `Legacy Vais` → `vaisc build` → 네이티브 LLVM 실행.
+- **New Vais**는 AI가 정확히 쓰는 언어로 확정된 새 Vais mainline이다. `nl`은 전환기 repo 코드명이고, checked-in 소스 확장자는 `.vais`다.
+- 현재 bootstrap 파이프라인: `New Vais(.vais/.nl) 소스` → `legacy_vais_bootstrap.py` → `Legacy Vais` → `vaisc build` → 네이티브 LLVM 실행.
   `nl2vais.py`는 기존 호출을 위한 compatibility wrapper다.
-- **메인 산출물**: `compiler/self/fixpoint_full.nl` — New Vais로 작성한 self-host 컴파일러 seed.
+- **메인 산출물**: `compiler/self/fixpoint_full.vais` — New Vais로 작성한 self-host 컴파일러 seed.
   입력 nl 프로그램 문자열을 받아 **토큰화 → 평가/codegen → LLVM IR을 emit**한다.
 - **현재 상태**: front(tokenize/eval) + codegen(print로 IR emit) 전체 self-host arc 동작.
   세 self-host tier(산술 / 산술+변수 / 함수+재귀) 전부 source→value end-to-end이고,
-  `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들며 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일한다.
+  `fixpoint_full.vais` 전체 소스가 1세대 컴파일러를 만들며 그 컴파일러가 실제 `fixpoint.vais`/`fixpoint2.vais`/`fixpoint3.vais`/`fixpoint_full.vais`를 다시 컴파일한다.
 - **stage oracle**: 긴 게이트가 stage1/stage2 compiler IR을 비교한다. source-position 기반
   `@.sNNN`/`@.fmtNNN` global 이름만 정규화하고, 그 외 IR은 byte-for-byte 일치해야 한다.
 - **현재 New Vais 명령 계약**: repo-local `scripts/vaisc`가 공식 `vaisc` 전환 대상이다.
@@ -63,7 +63,7 @@ bash scripts/test-vaisc-front.sh     # New Vais day-1 native front accept/reject
 bash scripts/test-vaisc-direct.sh    # New Vais direct LLVM emitter, Legacy 없이 emit/build/run
 bash scripts/test-vaisc-errors.sh    # New Vais native P4 diagnostics: 좌표/help/fix
 bash scripts/test-vaisc-parity.sh    # New Vais native/bootstrap/tracked parity manifest
-bash scripts/test-vais-extension-migration.sh # .nl corpus를 임시 .vais mirror로 검증
+bash scripts/test-vais-extension-migration.sh # .vais corpus를 임시 .nl mirror로 검증
 ```
 
 전제: Legacy Vais repo에 빌드된 `target/debug/vaisc` 또는 `target/release/vaisc`가 있어야 한다.
@@ -83,9 +83,9 @@ bootstrap/oracle 스크립트는 `scripts/legacy-vaisc-env.sh`를 통해 이 rep
 
 | 게이트 | 명령 | 의미 |
 |--------|------|------|
-| **self-host e2e** | `bash scripts/test-fixpoint-full.sh` | `fixpoint_full.nl`이 nl 프로그램을 컴파일→IR→실행, **exit/stdout 값** 검증. stage drift 원인(direct double-string decode, callee List<Struct> arg authority) 회귀 포함. |
-| **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.nl` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`을 다시 컴파일해 final IR exit 24/50/120/42까지 확인. 마지막에 stage1/stage2 compiler IR을 normalized byte-compare한다. 느린 긴 게이트. |
-| **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.nl`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **112/112**. |
+| **self-host e2e** | `bash scripts/test-fixpoint-full.sh` | `fixpoint_full.vais`가 New Vais 프로그램을 컴파일→IR→실행, **exit/stdout 값** 검증. stage drift 원인(direct double-string decode, callee List<Struct> arg authority) 회귀 포함. |
+| **full-source self-host** | `bash scripts/test-fixpoint-full-self.sh` | 실제 `fixpoint_full.vais` 전체 소스가 1세대 컴파일러를 만들고, 그 컴파일러가 실제 `fixpoint.vais`/`fixpoint2.vais`/`fixpoint3.vais`/`fixpoint_full.vais`를 다시 컴파일해 final IR exit 24/50/120/42까지 확인. 마지막에 stage1/stage2 compiler IR을 normalized byte-compare한다. 느린 긴 게이트. |
+| **값-정확성 aggregate** | `bash scripts/test.sh` | `examples/*.vais`(첫 줄 `# expect: N`) + self-host 모듈 빌드+실행+값 비교. 현재 **112/112**. |
 | **New Vais CLI smoke** | `bash scripts/test-vaisc.sh` | `.vais` 입력을 repo-local `scripts/vaisc`로 LLVM IR emit/build/run하고 Legacy bootstrap oracle과 exit 값을 비교. |
 | **New Vais front contract** | `bash scripts/test-vaisc-front.sh` | native subset과 print/putchar, simple struct, payload-free enum/match, small Int-coded payload enum/match, single-Int closure return, List push/len/index/sum slice를 accepted source로 실행하고, bad helper signature/for/broader payload enum/match/broader closure/Rust `&&`/unsupported method/string 등 unsupported 문법이 `help:` 진단으로 실패하는지 확인. |
 | **New Vais direct emitter** | `bash scripts/test-vaisc-direct.sh` | `--engine direct`가 Legacy Vais 없이 단일 `main` arithmetic return을 LLVM IR로 emit/build/run하고 bootstrap engine과 값을 비교. |
@@ -162,7 +162,7 @@ New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/va
   컴파일러에 먹이는 프로그램에서 보간을 원하면 `{{var}}`로 써야 outer transpiler가
   `\{var\}`로 바꿔 compile()에 `{var}`가 도달한다.
 
-### fixpoint_full.nl (self-host 컴파일러)
+### fixpoint_full.vais (self-host 컴파일러)
 - **lone-`{` vs `{ident}` 모호성**: 트랜스파일러가 리터럴 brace와 보간을 둘 다 단일 brace로
   전달 → 구분은 **Vais lexer 규칙**(`{`+식별자+`}`만 보간, lone `{`=리터럴)으로. `interp_end`
   헬퍼가 이 규칙을 단일 구현하고 fmt_len/emit_fmt_bytes/arg-loader 3곳이 공유한다.
@@ -204,7 +204,7 @@ New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/va
 
 ## 8. 남은 작업 (ROADMAP §방향 결정 / 현재 우선순위 큐 참조)
 
-- **migration/hardening 큐**: repo/확장자 물리 rename은 별도 gate로 진행하고, legacy adapter wrapper 제거는 외부 호출이 사라진 뒤에만 한다.
+- **migration/hardening 큐**: checked-in 확장자는 `.vais`로 전환됐다. repo 폴더 rename과 legacy adapter wrapper 제거는 별도 gate 후 진행한다.
 - **NV-C0 완료 상태 유지**: `scripts/vaisc`와 `scripts/test-vaisc.sh`가 깨지면 제품 경계 회귀로 본다.
 - **NV-C1 완료 상태 유지**: `scripts/vaisc` front preflight와 `scripts/test-vaisc-front.sh`가 깨지면 native front 계약 회귀로 본다.
 - **self-host hardening**: stage oracle은 해결됐으므로, 새 stage drift 원인은 짧은 회귀 fixture와 긴 stage compare gate 양쪽에 묶어둔다.

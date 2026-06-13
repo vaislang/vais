@@ -3,7 +3,7 @@
 
 This is the user-facing `vaisc` command contract for New Vais. During the
 transition it bootstraps through Legacy Vais, but the emitted LLVM IR is produced
-by the New Vais self-host compiler in compiler/self/fixpoint_full.nl.
+by the New Vais self-host compiler in compiler/self/fixpoint_full.vais.
 """
 
 from __future__ import annotations
@@ -21,18 +21,14 @@ from typing import Callable
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXPOINT_FULL = ROOT / "compiler" / "self" / "fixpoint_full.nl"
+FIXPOINT_FULL = ROOT / "compiler" / "self" / "fixpoint_full.vais"
 EMBED_SELF_SOURCE = ROOT / "tools" / "embed_self_source.py"
 TRANSPILER = ROOT / "compiler" / "transpiler" / "legacy_vais_bootstrap.py"
 DEFAULT_LEGACY_ROOT = Path("/Users/sswoo/study/projects/vais/compiler")
 SELF_HOST_TIER_SOURCES = {
-    (ROOT / "compiler" / "self" / "fixpoint.nl").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint.vais").resolve(),
-    (ROOT / "compiler" / "self" / "fixpoint2.nl").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint2.vais").resolve(),
-    (ROOT / "compiler" / "self" / "fixpoint3.nl").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint3.vais").resolve(),
-    (ROOT / "compiler" / "self" / "fixpoint_full.nl").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint_full.vais").resolve(),
 }
 SELF_HOST_TIER_STEMS = {
@@ -941,7 +937,7 @@ def prepare_bootstrap_source(source: Path, tmp: Path) -> Path:
             lowered = new_lowered
     if lowered == raw:
         return source
-    lowered_path = tmp / "front_lowered.nl"
+    lowered_path = tmp / "front_lowered.vais"
     lowered_path.write_text(lowered)
     return lowered_path
 
@@ -1422,8 +1418,8 @@ def bootstrap_emit_ir(source: Path, ir_out: Path | None, args: argparse.Namespac
         native_source = prepare_bootstrap_source(source, tmp)
         if not is_self_host_tier_source(native_source):
             check_front_contract(native_source)
-        harness = tmp / "compiler_harness.nl"
-        harness_vais = tmp / "compiler_harness.vais"
+        harness = tmp / "compiler_harness.vais"
+        harness_vais = tmp / "compiler_harness.legacy.vais"
         stage0 = tmp / "stage0-vaisc"
         transpile_err = tmp / "transpile.err"
         build_log = tmp / "legacy-build.log"

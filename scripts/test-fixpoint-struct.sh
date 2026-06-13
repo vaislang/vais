@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the STRUCT code generator
-# (compiler/self/fixpoint_struct.nl): compiles `struct Name {{ f0, f1, ... }}`
+# (compiler/self/fixpoint_struct.vais): compiles `struct Name {{ f0, f1, ... }}`
 # declarations, `Name {{ f0: v0, ... }}` literals, `p.field` reads, and `p.field
 # = expr` writes into real LLVM IR (struct = [N x i64], field name -> index ->
 # getelementptr). Structs are the records the nl compiler itself uses.
@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_struct.nl"
+SRC="$HERE/compiler/self/fixpoint_struct.vais"
 fail=0
 
 check() {

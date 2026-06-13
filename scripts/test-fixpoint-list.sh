@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the dynamic LIST code generator
-# (compiler/self/fixpoint_list.nl): compiles `let lst = list()`, `lst.push(expr)`,
+# (compiler/self/fixpoint_list.vais): compiles `let lst = list()`, `lst.push(expr)`,
 # `lst.len`, `lst[expr]`, `lst[expr] = expr` into real LLVM IR. A List is a
 # fixed-capacity backing buffer (alloca [64 x i64]) + a length counter — so
 # push/len/index work without true heap growth. List<T> is THE data structure
@@ -10,7 +10,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_list.nl"
+SRC="$HERE/compiler/self/fixpoint_list.vais"
 fail=0
 
 check() {

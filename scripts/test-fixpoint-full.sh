@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end check for the FULL code generator (compiler/self/fixpoint_full.nl):
+# End-to-end check for the FULL code generator (compiler/self/fixpoint_full.vais):
 # functions with IMPERATIVE bodies — `fn name(param) { let mut ...; while ...;
 # if ...; return ... }` plus calls. Each function emits `define i64 @name(i64
 # %p_in)` with the param copied to an alloca, body locals alloca'd, the
@@ -10,7 +10,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_full.nl"
+SRC="$HERE/compiler/self/fixpoint_full.vais"
 fail=0
 
 check() {
@@ -177,7 +177,7 @@ check "fn sum_list(xs: List<Int>) {{ let mut s = 0; let mut i = 0; while i < xs.
 check "fn first(xs: List<Int>) {{ return xs[0] }}; fn run() {{ let xs = list(); xs.push(7); xs.push(8); return first(xs) }}; return run();" 7
 check "fn cnt(xs: List<Int>) {{ return xs.len }}; fn run() {{ let xs = list(); xs.push(1); xs.push(2); xs.push(3); return cnt(xs) }}; return run();" 3
 
-# --- FP12o: 5-10 PARAMETERS (the self-host core arity plus fixpoint2.nl's
+# --- FP12o: 5-10 PARAMETERS (the self-host core arity plus fixpoint2.vais's
 # 10-param word_is helper). Plus the REAL helpers name_eq (5) and kw3 (6). ---
 check "fn s8(a, b, c, d, e, f, g, h) {{ return a + b + c + d + e + f + g + h }}; return s8(1, 2, 3, 4, 5, 6, 7, 8);" 36
 check "fn s10(a, b, c, d, e, f, g, h, i, j) {{ return a + b + c + d + e + f + g + h + i + j }}; return s10(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);" 55
@@ -187,7 +187,7 @@ check "fn name_eq(s: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen == bl
 check "fn name_eq(s: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen == blen {{ let mut k = 0; let mut ok = 1; while k < alen {{ if s[a + k] == s[b + k] {{ ok = ok }} else {{ ok = 0 }}; k = k + 1 }}; return ok }}; return 0 }}; return name_eq(\`letmut\`, 0, 3, 3, 3);" 0
 # kw3: the keyword recognizer (string param + 6 params + 3 byte compares)
 check "fn kw3(s: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int) {{ if alen == 3 {{ if s[a] == w0 {{ if s[a + 1] == w1 {{ if s[a + 2] == w2 {{ return 1 }} }} }} }}; return 0 }}; return kw3(\`let\`, 0, 3, 108, 101, 116);" 1
-# fixpoint2.nl's real word_is helper: string param + 9 scalar params.
+# fixpoint2.vais's real word_is helper: string param + 9 scalar params.
 check "fn word_is(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int, w3: Int, w4: Int, w5: Int, wlen: Int) {{ if alen != wlen {{ return 0 }}; if alen >= 1 {{ if src[a] != w0 {{ return 0 }} }}; if alen >= 2 {{ if src[a + 1] != w1 {{ return 0 }} }}; if alen >= 3 {{ if src[a + 2] != w2 {{ return 0 }} }}; if alen >= 4 {{ if src[a + 3] != w3 {{ return 0 }} }}; if alen >= 5 {{ if src[a + 4] != w4 {{ return 0 }} }}; if alen >= 6 {{ if src[a + 5] != w5 {{ return 0 }} }}; return 1 }}; return word_is(\`return\`, 0, 6, 114, 101, 116, 117, 114, 110, 6);" 1
 
 # --- FP12p: bare call statements + push-to-List-param (the out-param pattern,
@@ -223,7 +223,7 @@ check "fn f() {{ let s = \`ABC\`; return s[1] + s.len() }}; return f();" 69
 # string + struct in one function: scan length into a struct field
 check "struct C {{ n }}; fn run() {{ let s = \`hello\`; let mut i = 0; let c = C {{ n: 0 }}; while i < s.len() {{ i = i + 1 }}; c.n = i; return c.n }}; return run();" 5
 # THE TOKENIZER CORE: a function scans a string byte by byte into a List
-# (exactly the shape fixpoint.nl's own tokenizer takes), returns count + first byte
+# (exactly the shape fixpoint.vais's own tokenizer takes), returns count + first byte
 check "fn tok() {{ let s = \`Hi\`; let xs = list(); let mut i = 0; while i < s.len() {{ xs.push(s[i]); i = i + 1 }}; return xs.len + xs[0] }}; return tok();" 74
 # THE LEXER INNER LOOP: if-on-byte inside a while-over-string. Counts 'l'(108)
 # in "yellow" -> 2 (string indexing + comparison + conditional in a scan loop).
@@ -254,7 +254,7 @@ check "struct Tok {{ kind, val }}; fn run() {{ let toks = list(); toks.push(Tok 
 check "struct Tok {{ kind, val }}; fn run() {{ let toks = list(); let mut i = 0; while i < 3 {{ toks.push(Tok {{ kind: 1, val: i + 1 }}); i = i + 1 }}; let mut s = 0; let mut j = 0; while j < toks.len {{ s = s + toks[j].val; j = j + 1 }}; return s }}; return run();" 6
 # the actual 4-field self-host Token struct
 check "struct Token {{ kind, value, nstart, nlen }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 5, value: 100, nstart: 2, nlen: 3 }}); toks.push(Token {{ kind: 7, value: 50, nstart: 0, nlen: 1 }}); return toks[0].value + toks[1].value + toks[0].nlen }}; return run();" 153
-# fixpoint3.nl's Fn table shape: 8-field struct, List element local copy, tail fields.
+# fixpoint3.vais's Fn table shape: 8-field struct, List element local copy, tail fields.
 check "struct Fn {{ nstart, nlen, p1s, p1l, p2s, p2l, bstart, bend }}; fn run() {{ let fns = list(); fns.push(Fn {{ nstart: 1, nlen: 2, p1s: 3, p1l: 4, p2s: 5, p2l: 6, bstart: 7, bend: 8 }}); let f = fns[0]; return f.p2l + f.bstart + f.bend }}; return run();" 21
 # List[index].field assigned to a scalar must read the field, not copy the whole
 # struct element into the destination slot.
@@ -309,7 +309,7 @@ check "let n: Int = 42; return n;" 42
 check "struct Token {{ kind, value }}; fn tokenize(s: Str) {{ let mut toks: List<Token> = []; let mut i = 0; while i < s.len() {{ let c = s[i]; if c >= 48 and c <= 57 {{ toks.push(Token {{ kind: 1, value: c - 48 }}) }}; i = i + 1 }}; let mut sum = 0; let mut j = 0; while j < toks.len {{ sum = sum + toks[j].value; j = j + 1 }}; return sum }}; return tokenize(\`1a2a3\`);" 6
 
 # --- FP12v: boolean literals `true`/`false` -- real self-host loop-flag pattern ---
-# fixpoint.nl uses `let mut go = true; ... go = false` for digit-run / scan loops.
+# fixpoint.vais uses `let mut go = true; ... go = false` for digit-run / scan loops.
 # true/false are tokenized as identifiers (kind 1); gen_factor treats them as the
 # integer constants 1/0 (nl bools are i64) instead of looking them up as variables.
 # bool flag controlling a while loop (the `while go { ...; go = false }` pattern)
@@ -333,14 +333,14 @@ check "fn run() {{ let mut i = 0; let mut v = 0; let mut go = true; while go {{ 
 # else-if with a function-call condition in a loop
 check "fn pos(x: Int) {{ if x >= 0 {{ return 1 }}; return 0 }}; fn run() {{ let mut i = 0; let mut v = 0; let mut go = true; while go {{ if i >= 3 {{ go = false }} else if pos(i) == 1 {{ v = v + 1; i = i + 1 }} else {{ go = false }} }}; return v }}; return run();" 3
 # THE real self-host tokenizer: 4 token kinds (digit-run/+/*/-), else-if chain,
-# is_space/is_digit helper calls -- fixpoint.nl's tokenize, out-param form.
+# is_space/is_digit helper calls -- fixpoint.vais's tokenize, out-param form.
 # token count (5: num12, +, num3, *, num4)
 check "fn is_space(c: Int) {{ if c == 32 {{ return 1 }}; return 0 }}; fn is_digit(c: Int) {{ if c >= 48 and c <= 57 {{ return 1 }}; return 0 }}; struct Token {{ kind, value }}; fn tokenize(src: Str, out: List<Token>) {{ let n = src.len(); let mut i = 0; while i < n {{ let c = src[i]; if is_space(c) == 1 {{ i = i + 1 }} else if is_digit(c) == 1 {{ let mut v = 0; let mut go = true; while go {{ if i >= n {{ go = false }} else if is_digit(src[i]) == 1 {{ v = v * 10 + (src[i] - 48); i = i + 1 }} else {{ go = false }} }}; out.push(Token {{ kind: 0, value: v }}) }} else if c == 43 {{ out.push(Token {{ kind: 1, value: 0 }}); i = i + 1 }} else if c == 42 {{ out.push(Token {{ kind: 2, value: 0 }}); i = i + 1 }} else if c == 45 {{ out.push(Token {{ kind: 3, value: 0 }}); i = i + 1 }} else {{ i = i + 1 }} }}; return 0 }}; fn run() {{ let toks = list(); tokenize(\`12 + 3 * 4\`, toks); return toks.len }}; return run();" 5
 # token values: toks[0].value(12) + toks[2].value(3) + toks[4].value(4) = 19
 check "fn is_space(c: Int) {{ if c == 32 {{ return 1 }}; return 0 }}; fn is_digit(c: Int) {{ if c >= 48 and c <= 57 {{ return 1 }}; return 0 }}; struct Token {{ kind, value }}; fn tokenize(src: Str, out: List<Token>) {{ let n = src.len(); let mut i = 0; while i < n {{ let c = src[i]; if is_space(c) == 1 {{ i = i + 1 }} else if is_digit(c) == 1 {{ let mut v = 0; let mut go = true; while go {{ if i >= n {{ go = false }} else if is_digit(src[i]) == 1 {{ v = v * 10 + (src[i] - 48); i = i + 1 }} else {{ go = false }} }}; out.push(Token {{ kind: 0, value: v }}) }} else if c == 43 {{ out.push(Token {{ kind: 1, value: 0 }}); i = i + 1 }} else if c == 42 {{ out.push(Token {{ kind: 2, value: 0 }}); i = i + 1 }} else if c == 45 {{ out.push(Token {{ kind: 3, value: 0 }}); i = i + 1 }} else {{ i = i + 1 }} }}; return 0 }}; fn run() {{ let toks = list(); tokenize(\`12 + 3 * 4\`, toks); return toks[0].value + toks[2].value + toks[4].value }}; return run();" 19
 
 # --- FP12x: `let t = toks[i]` binding a List-of-structs element + t.field ---
-# fixpoint.nl's evaluator does `let t = toks[i]; if t.kind == 2 { ... }` -- it
+# fixpoint.vais's evaluator does `let t = toks[i]; if t.kind == 2 { ... }` -- it
 # binds a whole Token struct to a local and reads its fields. The let must copy
 # all nf fields into a [nf x i64] struct local (sty=elem type). Works for both a
 # local List-of-structs (is_arr=2) and a List-of-structs param (is_arr=4).
@@ -348,7 +348,7 @@ check "fn is_space(c: Int) {{ if c == 32 {{ return 1 }}; return 0 }}; fn is_digi
 check "struct Tok {{ kind, val }}; fn run() {{ let toks = list(); toks.push(Tok {{ kind: 7, val: 30 }}); toks.push(Tok {{ kind: 9, val: 12 }}); let a = toks[0]; let b = toks[1]; return a.val + b.val + a.kind }}; return run();" 49
 # bind a List-of-structs PARAM element
 check "struct Tok {{ kind, val }}; fn fk(toks: List<Tok>) {{ let t = toks[0]; return t.kind }}; fn run() {{ let xs = list(); xs.push(Tok {{ kind: 7, val: 42 }}); return fk(xs) }}; return run();" 7
-# THE real fixpoint.nl evaluator: mutually-recursive eval over List<Token> with
+# THE real fixpoint.vais evaluator: mutually-recursive eval over List<Token> with
 # `let t = toks[i]` kind dispatch -- evaluates 2+3*4 = 14 (precedence + left-fold)
 check "struct Token {{ kind, value }}; fn eval_term(toks: List<Token>, i: Int, n: Int, acc: Int) {{ if i >= n {{ return acc }}; let t = toks[i]; if t.kind == 2 {{ let rhs = toks[i + 1]; return eval_term(toks, i + 2, n, acc * rhs.value) }}; return acc }}; fn skip_term(toks: List<Token>, i: Int, n: Int) {{ if i >= n {{ return n }}; let t = toks[i]; if t.kind == 2 {{ return skip_term(toks, i + 2, n) }}; return i }}; fn eval_expr_fold(toks: List<Token>, i: Int, n: Int, acc: Int) {{ if i >= n {{ return acc }}; let op = toks[i]; if op.kind == 1 {{ let rs = i + 1; let rf = toks[rs]; let term = eval_term(toks, rs + 1, n, rf.value); let after = skip_term(toks, rs + 1, n); return eval_expr_fold(toks, after, n, acc + term) }}; if op.kind == 3 {{ let rs = i + 1; let rf = toks[rs]; let term = eval_term(toks, rs + 1, n, rf.value); let after = skip_term(toks, rs + 1, n); return eval_expr_fold(toks, after, n, acc - term) }}; return acc }}; fn eval_expr(toks: List<Token>, n: Int) {{ if n <= 0 {{ return 0 }}; let first = toks[0]; let acc = eval_term(toks, 1, n, first.value); let after = skip_term(toks, 1, n); return eval_expr_fold(toks, after, n, acc) }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 0, value: 2 }}); toks.push(Token {{ kind: 1, value: 0 }}); toks.push(Token {{ kind: 0, value: 3 }}); toks.push(Token {{ kind: 2, value: 0 }}); toks.push(Token {{ kind: 0, value: 4 }}); return eval_expr(toks, 5) }}; return run();" 14
 # the same evaluator, left-assoc + precedence: 10 - 2 * 3 = 4
@@ -357,7 +357,7 @@ check "struct Token {{ kind, value }}; fn eval_term(toks: List<Token>, i: Int, n
 # --- FP12y: the COMPLETE self-host pipeline integrated end-to-end ---
 # A single program: run(src: Str) tokenizes the expression string into a
 # List<Token> (out-param), then evaluates it (eval over the List<Token>), and
-# returns the value. This is fixpoint.nl's whole tokenize+eval compiler, run as
+# returns the value. This is fixpoint.vais's whole tokenize+eval compiler, run as
 # one integrated program -- the smallest complete self-host compiler, end to end.
 # (No new compiler capability -- it composes FP12w tokenize + FP12x evaluator.)
 FP12Y_PIPE='fn is_space(c: Int) {{ if c == 32 {{ return 1 }}; return 0 }}; fn is_digit(c: Int) {{ if c >= 48 and c <= 57 {{ return 1 }}; return 0 }}; struct Token {{ kind, value }}; fn tokenize(src: Str, out: List<Token>) {{ let n = src.len(); let mut i = 0; while i < n {{ let c = src[i]; if is_space(c) == 1 {{ i = i + 1 }} else if is_digit(c) == 1 {{ let mut v = 0; let mut go = true; while go {{ if i >= n {{ go = false }} else if is_digit(src[i]) == 1 {{ v = v * 10 + (src[i] - 48); i = i + 1 }} else {{ go = false }} }}; out.push(Token {{ kind: 0, value: v }}) }} else if c == 43 {{ out.push(Token {{ kind: 1, value: 0 }}); i = i + 1 }} else if c == 42 {{ out.push(Token {{ kind: 2, value: 0 }}); i = i + 1 }} else if c == 45 {{ out.push(Token {{ kind: 3, value: 0 }}); i = i + 1 }} else {{ i = i + 1 }} }}; return 0 }}; fn eval_term(toks: List<Token>, i: Int, n: Int, acc: Int) {{ if i >= n {{ return acc }}; let t = toks[i]; if t.kind == 2 {{ let rhs = toks[i + 1]; return eval_term(toks, i + 2, n, acc * rhs.value) }}; return acc }}; fn skip_term(toks: List<Token>, i: Int, n: Int) {{ if i >= n {{ return n }}; let t = toks[i]; if t.kind == 2 {{ return skip_term(toks, i + 2, n) }}; return i }}; fn eval_expr_fold(toks: List<Token>, i: Int, n: Int, acc: Int) {{ if i >= n {{ return acc }}; let op = toks[i]; if op.kind == 1 {{ let rs = i + 1; let rf = toks[rs]; let term = eval_term(toks, rs + 1, n, rf.value); let after = skip_term(toks, rs + 1, n); return eval_expr_fold(toks, after, n, acc + term) }}; if op.kind == 3 {{ let rs = i + 1; let rf = toks[rs]; let term = eval_term(toks, rs + 1, n, rf.value); let after = skip_term(toks, rs + 1, n); return eval_expr_fold(toks, after, n, acc - term) }}; return acc }}; fn eval_expr(toks: List<Token>, n: Int) {{ if n <= 0 {{ return 0 }}; let first = toks[0]; let acc = eval_term(toks, 1, n, first.value); let after = skip_term(toks, 1, n); return eval_expr_fold(toks, after, n, acc) }}; fn run(src: Str) {{ let toks = list(); tokenize(src, toks); return eval_expr(toks, toks.len) }};'
@@ -368,20 +368,20 @@ check "$FP12Y_PIPE fn main2() {{ return run(\`10 - 2 * 3\`) }}; return main2();"
 # 7 + 8 + 9 = 24 (left-fold over a longer expression)
 check "$FP12Y_PIPE fn main2() {{ return run(\`7 + 8 + 9\`) }}; return main2();" 24
 
-# --- FP12z: `!=` operator + name_eq + List<Var> symbol table (fixpoint2.nl) ---
+# --- FP12z: `!=` operator + name_eq + List<Var> symbol table (fixpoint2.vais) ---
 # `!=` was entirely missing from the tokenizer (`!` was skipped, `=` became an
 # assignment), so `src[a+k] != src[b+k]` lowered to `... != 0` (RHS dropped).
 # This broke name_eq (source-byte comparison) and the symbol-table lookup it
-# powers -- the core of fixpoint2.nl (arithmetic + multi-char variables).
+# powers -- the core of fixpoint2.vais (arithmetic + multi-char variables).
 # != as a value / condition
 check "fn run() {{ let a = 5; let b = 3; let r = a != b; if a != 5 {{ return 0 }}; return r * 42 }}; return run();" 42
 # name_eq: compares two source-byte ranges (the symbol-table key check)
 check "fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn run() {{ let src = \`foo bar foo\`; return name_eq(src, 0, 3, 8, 3) * 10 + name_eq(src, 0, 3, 4, 3) }}; return run();" 10
-# THE fixpoint2.nl symbol table: List<Var> looked up by name_eq on source bytes
+# THE fixpoint2.vais symbol table: List<Var> looked up by name_eq on source bytes
 check "struct Var {{ nstart, nlen, value }}; fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn lookup(vars: List<Var>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = vars.len; while i < m {{ let v = vars[i]; if name_eq(src, v.nstart, v.nlen, qs, ql) == 1 {{ return v.value }}; i = i + 1 }}; return 0 - 1 }}; fn run() {{ let vars = list(); vars.push(Var {{ nstart: 0, nlen: 3, value: 10 }}); vars.push(Var {{ nstart: 4, nlen: 3, value: 20 }}); let src = \`foo bar foo\`; return lookup(vars, src, 8, 3) + lookup(vars, src, 4, 3) }}; return run();" 30
 
 # --- FP12aa: variable evaluation -- eval_factor resolves idents via lookup ---
-# fixpoint2.nl's evaluator: eval_factor returns t.value for a num, else
+# fixpoint2.vais's evaluator: eval_factor returns t.value for a num, else
 # lookup(vars, ...) for an identifier; the vars: List<Var> symbol table is
 # threaded through the whole recursive eval chain (eval_expr -> eval_fold ->
 # eval_term -> eval_factor -> lookup). This is the arithmetic+variables tier.
@@ -391,7 +391,7 @@ check "struct Token {{ kind, value, nstart, nlen }}; struct Var {{ nstart, nlen,
 check "struct Token {{ kind, value, nstart, nlen }}; struct Var {{ nstart, nlen, value }}; fn lookup(vars: List<Var>, q: Int) {{ let mut i = 0; let m = vars.len; while i < m {{ let v = vars[i]; if v.nstart == q {{ return v.value }}; i = i + 1 }}; return 0 }}; fn eval_factor(toks: List<Token>, i: Int, vars: List<Var>) {{ let t = toks[i]; if t.kind == 0 {{ return t.value }}; return lookup(vars, t.nstart) }}; fn eval_term(toks: List<Token>, i: Int, n: Int, vars: List<Var>, acc: Int) {{ if i >= n {{ return acc }}; let t = toks[i]; if t.kind == 2 {{ let rf = eval_factor(toks, i + 1, vars); return eval_term(toks, i + 2, n, vars, acc * rf) }}; return acc }}; fn skip_term(toks: List<Token>, i: Int, n: Int) {{ if i >= n {{ return n }}; let t = toks[i]; if t.kind == 2 {{ return skip_term(toks, i + 2, n) }}; return i }}; fn eval_fold(toks: List<Token>, i: Int, stop: Int, vars: List<Var>, acc: Int) {{ if i >= stop {{ return acc }}; let op = toks[i]; if op.kind == 4 {{ let rf = eval_factor(toks, i + 1, vars); let term = eval_term(toks, i + 2, stop, vars, rf); let after = skip_term(toks, i + 2, stop); return eval_fold(toks, after, stop, vars, acc + term) }}; return acc }}; fn eval_expr(toks: List<Token>, i: Int, stop: Int, vars: List<Var>) {{ let first = eval_factor(toks, i, vars); let acc = eval_term(toks, i + 1, stop, vars, first); let after = skip_term(toks, i + 1, stop); return eval_fold(toks, after, stop, vars, acc) }}; fn run() {{ let vars = list(); vars.push(Var {{ nstart: 0, nlen: 1, value: 2 }}); vars.push(Var {{ nstart: 2, nlen: 1, value: 3 }}); let toks = list(); toks.push(Token {{ kind: 1, value: 0, nstart: 0, nlen: 1 }}); toks.push(Token {{ kind: 4, value: 0, nstart: 0, nlen: 0 }}); toks.push(Token {{ kind: 1, value: 0, nstart: 2, nlen: 1 }}); toks.push(Token {{ kind: 2, value: 0, nstart: 0, nlen: 0 }}); toks.push(Token {{ kind: 0, value: 4, nstart: 0, nlen: 0 }}); return eval_expr(toks, 0, 5, vars) }}; return run();" 14
 
 # --- FP12bb: the COMPLETE arithmetic+variables compiler end-to-end ---
-# fixpoint2.nl as one integrated program: run_program(src) tokenizes a multi-let
+# fixpoint2.vais as one integrated program: run_program(src) tokenizes a multi-let
 # program (kw_let/kw_return keyword recognition + idents + nums + + * = ;), builds
 # a List<Var> symbol table from the `let` bindings (variables may reference earlier
 # variables), evaluates each expr with precedence, and returns the `return` value.
@@ -405,8 +405,8 @@ check "$FP12BB_C fn run() {{ return run_program(\`let a = 4; let b = 6; return a
 # let x = 2; let y = x + 1; return x + y * 4  -> 14 (y references x; precedence)
 check "$FP12BB_C fn run() {{ return run_program(\`let x = 2; let y = x + 1; return x + y * 4;\`) }}; return run();" 14
 
-# --- FP12cc: functions + recursion (fixpoint3.nl, the 3rd tier) ---
-# fixpoint3.nl adds multi-char function definitions/calls with recursion: a
+# --- FP12cc: functions + recursion (fixpoint3.vais, the 3rd tier) ---
+# fixpoint3.vais adds multi-char function definitions/calls with recursion: a
 # List<Fn> function table looked up by find_fn, and eval_call which binds the
 # arguments into a FRESH per-call List<Var> scope and recursively evaluates the
 # body (so a function can call itself). Verified: the function table + call
@@ -418,7 +418,7 @@ check "struct Fn {{ nstart, nlen, p1s, p1l, bstart, bend }}; struct Var {{ nstar
 # recursive eval with a fresh List<Var> scope per call -- factorial(5) = 120
 check "struct Var {{ nstart, nlen, value }}; fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn lookup(vars: List<Var>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = vars.len; while i < m {{ let v = vars[i]; if name_eq(src, v.nstart, v.nlen, qs, ql) == 1 {{ return v.value }}; i = i + 1 }}; return 0 }}; fn eval_fac(src: Str, ns: Int, nl: Int, n: Int) {{ let scope = list(); scope.push(Var {{ nstart: ns, nlen: nl, value: n }}); let v = lookup(scope, src, ns, nl); if v <= 1 {{ return 1 }}; return v * eval_fac(src, ns, nl, v - 1) }}; fn run() {{ let src = \`n\`; return eval_fac(src, 0, 1, 5) }}; return run();" 120
 
-# --- FP12dd: the COMPLETE function-language compiler end-to-end (fixpoint3.nl tier) ---
+# --- FP12dd: the COMPLETE function-language compiler end-to-end (fixpoint3.vais tier) ---
 # run_program(src) tokenizes a function-language program (fn/return keywords +
 # idents + nums + + * ( ) { } ;), scans the `fn` definitions into a List<Fn>
 # function table (build_fns), finds the top-level `return <call>;`, and evaluates
@@ -468,11 +468,11 @@ check "fn f(c: Int) {{ if c == 0 {{ return 1 }} else if c == 1 {{ return 10 }} e
 # regression: same chain with assignment (merge IS reachable -- must still work)
 check "fn f(c: Int) {{ let mut r = 0; if c == 0 {{ r = 1 }} else if c == 1 {{ r = 10 }} else if c == 2 {{ r = 50 }} else {{ r = 100 }}; return r }}; fn run() {{ return f(0) + f(1) + f(2) + f(3) }}; return run();" 161
 
-# --- FP12hh: `-> List` direct return (fixpoint.nl's original tokenize shape) ---
+# --- FP12hh: `-> List` direct return (fixpoint.vais's original tokenize shape) ---
 # `fn build() -> List<T> { let xs = list(); ...; return xs }` compiles via a
 # hidden out-param: build gets a trailing `i64* %a<npar>`, `return xs` copies xs's
 # buffer into it, and the caller `let ys = build()` allocates ys's buffer and
-# passes it. Restores fixpoint.nl's `fn tokenize(src) -> List<Token>` (gap #4).
+# passes it. Restores fixpoint.vais's `fn tokenize(src) -> List<Token>` (gap #4).
 # scalar List return + index
 check "fn build() -> List<Int> {{ let xs = list(); xs.push(10); xs.push(20); xs.push(12); return xs }}; fn run() {{ let ys = build(); return ys[0] + ys[1] + ys[2] }}; return run();" 42
 # returned list length survives the copy
@@ -486,14 +486,14 @@ check "struct Tok {{ kind, val }}; fn build() -> List<Tok> {{ let xs = list(); x
 check "fn make(n: Int) -> List<Int> {{ let xs = list(); xs.push(n); xs.push(n + 1); return xs }}; fn run() {{ let ys = make(20); return ys[0] + ys[1] }}; return run();" 41
 # retlist with a Str parameter variable passed through the hidden out-param call path
 check "fn collect(src: Str) -> List<Int> {{ let xs = list(); xs.push(src[0]); return xs }}; fn run(src: Str) {{ let ys = collect(src); return ys[0] + ys.len }}; return run(\`P\`);" 81
-# fixpoint.nl's original shape: tokenize(src) -> List<Token>, then consume
+# fixpoint.vais's original shape: tokenize(src) -> List<Token>, then consume
 check "struct Token {{ kind, value }}; fn tokenize(src: Str) -> List<Token> {{ let toks = list(); let mut i = 0; while i < src.len() {{ let c = src[i]; if c >= 48 and c <= 57 {{ toks.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ toks.push(Token {{ kind: 2, value: 0 }}) }}; i = i + 1 }}; return toks }}; fn run() {{ let toks = tokenize(\`1a2a3\`); let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; return run();" 6
 # List parameter alias: `let mut xs = base; xs.push(...); return xs`
 check "struct Item {{ value }}; fn grow(base: List<Item>) -> List<Item> {{ let mut xs = base; xs.push(Item {{ value: 42 }}); return xs }}; fn run() {{ let seed = list(); let out = grow(seed); return out.len * 100 + out[0].value }}; return run();" 142
 
-# --- FP12ii: fixpoint.nl's ORIGINAL shape end-to-end (tokenize -> List<Token>) ---
+# --- FP12ii: fixpoint.vais's ORIGINAL shape end-to-end (tokenize -> List<Token>) ---
 # With `-> List` direct return working, the whole arithmetic compiler runs in
-# fixpoint.nl's verbatim shape: tokenize(src) RETURNS a List<Token> (not an
+# fixpoint.vais's verbatim shape: tokenize(src) RETURNS a List<Token> (not an
 # out-param), and the recursive evaluator consumes it -- no workaround rewrite.
 check "struct Token {{ kind, value }}; fn tokenize(src: Str) -> List<Token> {{ let toks = list(); let n = src.len(); let mut i = 0; while i < n {{ let c = src[i]; if c >= 48 and c <= 57 {{ let mut v = 0; let mut go = true; while go {{ if i >= n {{ go = false }} else if src[i] >= 48 and src[i] <= 57 {{ v = v * 10 + (src[i] - 48); i = i + 1 }} else {{ go = false }} }}; toks.push(Token {{ kind: 0, value: v }}) }} else if c == 43 {{ toks.push(Token {{ kind: 1, value: 0 }}); i = i + 1 }} else if c == 42 {{ toks.push(Token {{ kind: 2, value: 0 }}); i = i + 1 }} else {{ i = i + 1 }} }}; return toks }}; fn eval_term(toks: List<Token>, i: Int, n: Int, acc: Int) {{ if i >= n {{ return acc }}; let t = toks[i]; if t.kind == 2 {{ let rhs = toks[i + 1]; return eval_term(toks, i + 2, n, acc * rhs.value) }}; return acc }}; fn skip_term(toks: List<Token>, i: Int, n: Int) {{ if i >= n {{ return n }}; let t = toks[i]; if t.kind == 2 {{ return skip_term(toks, i + 2, n) }}; return i }}; fn eval_fold(toks: List<Token>, i: Int, n: Int, acc: Int) {{ if i >= n {{ return acc }}; let op = toks[i]; if op.kind == 1 {{ let rs = i + 1; let rf = toks[rs]; let term = eval_term(toks, rs + 1, n, rf.value); let after = skip_term(toks, rs + 1, n); return eval_fold(toks, after, n, acc + term) }}; return acc }}; fn eval_expr(toks: List<Token>, n: Int) {{ if n <= 0 {{ return 0 }}; let first = toks[0]; let acc = eval_term(toks, 1, n, first.value); let after = skip_term(toks, 1, n); return eval_fold(toks, after, n, acc) }}; fn run() {{ let toks = tokenize(\`12 + 3 * 4\`); return eval_expr(toks, toks.len) }}; return run();" 24
 check "struct Token {{ kind, value }}; fn tokenize(src: Str) -> List<Token> {{ let toks = list(); let n = src.len(); let mut i = 0; while i < n {{ let c = src[i]; if c >= 48 and c <= 57 {{ let mut v = 0; let mut go = true; while go {{ if i >= n {{ go = false }} else if src[i] >= 48 and src[i] <= 57 {{ v = v * 10 + (src[i] - 48); i = i + 1 }} else {{ go = false }} }}; toks.push(Token {{ kind: 0, value: v }}) }} else if c == 43 {{ toks.push(Token {{ kind: 1, value: 0 }}); i = i + 1 }} else if c == 42 {{ toks.push(Token {{ kind: 2, value: 0 }}); i = i + 1 }} else {{ i = i + 1 }} }}; return toks }}; fn eval_term(toks: List<Token>, i: Int, n: Int, acc: Int) {{ if i >= n {{ return acc }}; let t = toks[i]; if t.kind == 2 {{ let rhs = toks[i + 1]; return eval_term(toks, i + 2, n, acc * rhs.value) }}; return acc }}; fn skip_term(toks: List<Token>, i: Int, n: Int) {{ if i >= n {{ return n }}; let t = toks[i]; if t.kind == 2 {{ return skip_term(toks, i + 2, n) }}; return i }}; fn eval_fold(toks: List<Token>, i: Int, n: Int, acc: Int) {{ if i >= n {{ return acc }}; let op = toks[i]; if op.kind == 1 {{ let rs = i + 1; let rf = toks[rs]; let term = eval_term(toks, rs + 1, n, rf.value); let after = skip_term(toks, rs + 1, n); return eval_fold(toks, after, n, acc + term) }}; return acc }}; fn eval_expr(toks: List<Token>, n: Int) {{ if n <= 0 {{ return 0 }}; let first = toks[0]; let acc = eval_term(toks, 1, n, first.value); let after = skip_term(toks, 1, n); return eval_fold(toks, after, n, acc) }}; fn run() {{ let toks = tokenize(\`2 + 3 * 4\`); return eval_expr(toks, toks.len) }}; return run();" 14
@@ -580,7 +580,7 @@ check_out "let op_s = \`mul\`; print(\`op={{op_s}}\`); return 0;" "op=mul"
 check_out "fn emit(op_s: Str, value: Int) {{ print(\`  ret {{op_s}} {{value}}\`); return 0 }}; return emit(\`i64\`, 42);" "  ret i64 42"
 check_out "let c = 3; let op_s = \`add\`; print(\`%t{{c}} = {{op_s}} i64 2, 4\`); return 0;" "%t3 = add i64 2, 4"
 check_out "let mut i = 0; while i < 3 {{ print(\`line {{i}}\`); i = i + 1 }}; return 0;" "$(printf 'line 0\nline 1\nline 2')"
-# the actual fixpoint.nl emit_ir codegen tail: a LONE literal `{` then an
+# the actual fixpoint.vais emit_ir codegen tail: a LONE literal `{` then an
 # interpolation, proving literal-vs-interp disambiguation end to end.
 check_out "fn emit(value) {{ print(\`define i64 @main() {{\`); print(\`  ret i64 {{value}}\`); print(\`}}\`); return 0 }}; return emit(99);" "$(printf 'define i64 @main() {\n  ret i64 99\n}')"
 # Sanity: the interpolation path emits a printf call against a @.fmt format global.
@@ -618,11 +618,11 @@ else echo "  FAIL did not emit string printf interpolation"; cat "$tmp/out.ll"; 
 # not also synthesize a wrapper @main, or clang rejects duplicate definitions.
 check "fn main() {{ return 42 }}" 42
 
-# Compile the actual compiler/self/fixpoint.nl source file, normalized to the
+# Compile the actual compiler/self/fixpoint.vais source file, normalized to the
 # current compact self-host subset by tools/embed_self_source.py. The generated
 # program is itself a tiny compiler; when run it emits LLVM IR with `ret i64 24`.
 tmp="$(mktemp -d)"
-python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint.nl" "$tmp/c.nl" \
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint.vais" "$tmp/c.nl" \
   || { echo "  FAIL source-file bootstrap: embed"; fail=1; }
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
 legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
@@ -638,7 +638,7 @@ clang -Wno-override-module -o "$tmp/source_compiler" "$tmp/source_compiler.ll" 2
   || { echo "  FAIL source-file bootstrap: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
 "$tmp/source_compiler" > "$tmp/emitted.ll"
 if grep -q 'ret i64 24' "$tmp/emitted.ll"; then
-  echo "  PASS source-file bootstrap fixpoint.nl emits ret i64 24";
+  echo "  PASS source-file bootstrap fixpoint.vais emits ret i64 24";
 else
   echo "  FAIL source-file bootstrap emitted IR missing ret i64 24"; cat "$tmp/emitted.ll"; fail=1
 fi
@@ -646,74 +646,74 @@ clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>/dev/null \
   || { echo "  FAIL source-file bootstrap: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
 "$tmp/emitted_bin"; got=$?
 if [ "$got" = "24" ]; then
-  echo "  PASS source-file bootstrap fixpoint.nl emitted IR runs (=24)";
+  echo "  PASS source-file bootstrap fixpoint.vais emitted IR runs (=24)";
 else
   echo "  FAIL source-file bootstrap emitted binary got=$got want=24"; fail=1
 fi
 
-# Compile the actual compiler/self/fixpoint2.nl source file. This is the
+# Compile the actual compiler/self/fixpoint2.vais source file. This is the
 # arithmetic+variables tier and exercises the real 10-param word_is helper.
 tmp="$(mktemp -d)"
-python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint2.nl" "$tmp/c.nl" \
-  || { echo "  FAIL source-file bootstrap fixpoint2.nl: embed"; fail=1; }
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint2.vais" "$tmp/c.nl" \
+  || { echo "  FAIL source-file bootstrap fixpoint2.vais: embed"; fail=1; }
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
 legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
-  || { echo "  FAIL source-file bootstrap fixpoint2.nl: compiler build"; fail=1; }
+  || { echo "  FAIL source-file bootstrap fixpoint2.vais: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/source_compiler.ll"
 main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
 if [ "$main_count" = "1" ]; then
-  echo "  PASS source-file bootstrap fixpoint2.nl emits a single @main";
+  echo "  PASS source-file bootstrap fixpoint2.vais emits a single @main";
 else
-  echo "  FAIL source-file bootstrap fixpoint2.nl main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
+  echo "  FAIL source-file bootstrap fixpoint2.vais main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/source_compiler" "$tmp/source_compiler.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap fixpoint2.nl: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
+  || { echo "  FAIL source-file bootstrap fixpoint2.vais: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
 "$tmp/source_compiler" > "$tmp/emitted.ll"
 if grep -q 'ret i64 50' "$tmp/emitted.ll"; then
-  echo "  PASS source-file bootstrap fixpoint2.nl emits ret i64 50";
+  echo "  PASS source-file bootstrap fixpoint2.vais emits ret i64 50";
 else
-  echo "  FAIL source-file bootstrap fixpoint2.nl emitted IR missing ret i64 50"; cat "$tmp/emitted.ll"; fail=1
+  echo "  FAIL source-file bootstrap fixpoint2.vais emitted IR missing ret i64 50"; cat "$tmp/emitted.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap fixpoint2.nl: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
+  || { echo "  FAIL source-file bootstrap fixpoint2.vais: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
 "$tmp/emitted_bin"; got=$?
 if [ "$got" = "50" ]; then
-  echo "  PASS source-file bootstrap fixpoint2.nl emitted IR runs (=50)";
+  echo "  PASS source-file bootstrap fixpoint2.vais emitted IR runs (=50)";
 else
-  echo "  FAIL source-file bootstrap fixpoint2.nl emitted binary got=$got want=50"; fail=1
+  echo "  FAIL source-file bootstrap fixpoint2.vais emitted binary got=$got want=50"; fail=1
 fi
 
-# Compile the actual compiler/self/fixpoint3.nl source file. This function tier
+# Compile the actual compiler/self/fixpoint3.vais source file. This function tier
 # exercises source-normalized multi-line calls, nested string brace escapes, and
 # List<Fn> metadata used by recursive function calls.
 tmp="$(mktemp -d)"
-python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint3.nl" "$tmp/c.nl" \
-  || { echo "  FAIL source-file bootstrap fixpoint3.nl: embed"; fail=1; }
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint3.vais" "$tmp/c.nl" \
+  || { echo "  FAIL source-file bootstrap fixpoint3.vais: embed"; fail=1; }
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
 legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
-  || { echo "  FAIL source-file bootstrap fixpoint3.nl: compiler build"; fail=1; }
+  || { echo "  FAIL source-file bootstrap fixpoint3.vais: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/source_compiler.ll"
 main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
 if [ "$main_count" = "1" ]; then
-  echo "  PASS source-file bootstrap fixpoint3.nl emits a single @main";
+  echo "  PASS source-file bootstrap fixpoint3.vais emits a single @main";
 else
-  echo "  FAIL source-file bootstrap fixpoint3.nl main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
+  echo "  FAIL source-file bootstrap fixpoint3.vais main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/source_compiler" "$tmp/source_compiler.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap fixpoint3.nl: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
+  || { echo "  FAIL source-file bootstrap fixpoint3.vais: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
 "$tmp/source_compiler" > "$tmp/emitted.ll"
 if grep -q 'ret i64 120' "$tmp/emitted.ll"; then
-  echo "  PASS source-file bootstrap fixpoint3.nl emits ret i64 120";
+  echo "  PASS source-file bootstrap fixpoint3.vais emits ret i64 120";
 else
-  echo "  FAIL source-file bootstrap fixpoint3.nl emitted IR missing ret i64 120"; cat "$tmp/emitted.ll"; fail=1
+  echo "  FAIL source-file bootstrap fixpoint3.vais emitted IR missing ret i64 120"; cat "$tmp/emitted.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap fixpoint3.nl: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
+  || { echo "  FAIL source-file bootstrap fixpoint3.vais: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
 "$tmp/emitted_bin"; got=$?
 if [ "$got" = "120" ]; then
-  echo "  PASS source-file bootstrap fixpoint3.nl emitted IR runs (=120)";
+  echo "  PASS source-file bootstrap fixpoint3.vais emitted IR runs (=120)";
 else
-  echo "  FAIL source-file bootstrap fixpoint3.nl emitted binary got=$got want=120"; fail=1
+  echo "  FAIL source-file bootstrap fixpoint3.vais emitted binary got=$got want=120"; fail=1
 fi
 
 # Source-file harness + LLVM c-string escaping: the embed helper must preserve

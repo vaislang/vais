@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the FUNCTION code generator
-# (compiler/self/fixpoint_codegen3.nl): compiles `fn <name>(<param>) {{ return
+# (compiler/self/fixpoint_codegen3.vais): compiles `fn <name>(<param>) {{ return
 # <expr> }}; ... return <expr>` into real multi-function LLVM IR — each function
 # becomes a `define i64 @<name>(i64 %<param>)` and each call a `call` instruction.
 # Multi-char names are emitted as LLVM identifiers. The generated program runs.
@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_codegen3.nl"
+SRC="$HERE/compiler/self/fixpoint_codegen3.vais"
 fail=0
 
 check() {

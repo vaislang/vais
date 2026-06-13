@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Embed a normalized self-host source file into fixpoint_full.nl.
+"""Embed a normalized self-host source file into fixpoint_full.vais.
 
 This is a bootstrap harness helper, not the language frontend. The current
 fixpoint_full compiler consumes a compact semicolon-oriented subset from a
-single string literal. Real nl source files are line-oriented, contain comments,
+single string literal. Real New Vais source files are line-oriented, contain comments,
 use double-quoted strings, and write typed struct fields. This helper normalizes
 that surface just enough to feed real source files through the current
 fixpoint_full path.
@@ -232,7 +232,7 @@ def normalize_source(path: Path) -> str:
 def main() -> int:
     if len(sys.argv) != 4:
         print(
-            "usage: embed_self_source.py FIXPOINT_FULL.nl SOURCE.(vais|nl) OUT.nl",
+            "usage: embed_self_source.py FIXPOINT_FULL.(vais|nl) SOURCE.(vais|nl) OUT.(vais|nl)",
             file=sys.stderr,
         )
         return 2

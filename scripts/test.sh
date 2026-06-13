@@ -12,7 +12,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 TRANSPILER="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 SOURCE_ROOT="${VAIS_TEST_ROOT:-$HERE}"
-SOURCE_EXT="${VAIS_TEST_EXT:-nl}"
+SOURCE_EXT="${VAIS_TEST_EXT:-vais}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 
 run_one() {

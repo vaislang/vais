@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the variable code generator
-# (compiler/self/fixpoint_codegen2.nl): compiles `let <name> = <expr>; ... return
+# (compiler/self/fixpoint_codegen2.vais): compiles `let <name> = <expr>; ... return
 # <expr>` (multi-char names) into LLVM IR that COMPUTES at runtime. Variables use
 # an SSA model — each binding maps a name to the operand its expression produced.
 set -uo pipefail
@@ -8,7 +8,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_codegen2.nl"
+SRC="$HERE/compiler/self/fixpoint_codegen2.vais"
 fail=0
 
 check() {

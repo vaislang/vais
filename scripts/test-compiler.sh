@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end self-host check: the nl compiler (compiler/self/compiler.nl) turns a
+# End-to-end self-host check: the nl compiler (compiler/self/compiler.vais) turns a
 # program string (let-bindings + return over arithmetic with variables) into LLVM
 # IR; we compile that IR and verify the value.
 set -uo pipefail
@@ -7,7 +7,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/compiler.nl"
+SRC="$HERE/compiler/self/compiler.vais"
 fail=0
 check() {
   local prog="$1" want="$2" tmp; tmp="$(mktemp -d)"

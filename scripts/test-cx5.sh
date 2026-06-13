@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end CX5 check: the nl compiler (compiler/self/cx5_compiler.nl) parses a
+# End-to-end CX5 check: the nl compiler (compiler/self/cx5_compiler.vais) parses a
 # program with user-defined functions + calls, emits LLVM IR; we compile that IR
 # and verify the value. Exercises function definitions, call dispatch, and the
 # struct-Env design that lets evaluation recurse under the Vais Vec-move limit.
@@ -10,7 +10,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/cx5_compiler.nl"
+SRC="$HERE/compiler/self/cx5_compiler.vais"
 fail=0
 
 # check <program-string> <expected-value>

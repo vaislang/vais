@@ -1,6 +1,6 @@
 # New Vais 언어 레퍼런스
 
-> New Vais 작성용 실용 레퍼런스. 전환기 파일 확장자는 `.nl`이다.
+> New Vais 작성용 실용 레퍼런스. 기본 파일 확장자는 `.vais`이고, `.nl`은 전환기 호환 입력이다.
 > **모든 구문은 `examples/`로 검증됨**(값-정확성 게이트 통과).
 > 설계 근거(왜 이렇게)는 `docs/design/`; 이 문서는 "어떻게 쓰나".
 > 핵심 규칙: **한 작업 = 한 가지 문법** (모호성 0). Rust 직관으로 쓰면 `nl-check`가 수정 안내.
@@ -147,7 +147,7 @@ print("the answer is {x}")     # 보간 "{식}"
 
 ---
 
-## 흔한 실수 → 올바른 nl (nl-check가 잡아줌)
+## 흔한 실수 → 올바른 Vais (nl-check가 잡아줌)
 | Rust 직관 (틀림) | nl (맞음) |
 |------|------|
 | `a && b` | `a and b` |
@@ -163,7 +163,7 @@ print("the answer is {x}")     # 보간 "{식}"
 
 ## 빌드/검증
 ```
-scripts/build.sh prog.nl -o out && ./out   # 빌드+실행
+scripts/build.sh prog.vais -o out && ./out # Legacy bootstrap 빌드+실행
 scripts/test.sh                            # 값-정확성 (examples 전체)
 scripts/vaisc emit-ir program.vais -o program.ll  # New Vais compiler IR 출력
 scripts/vaisc build program.vais -o program       # New Vais compiler + clang
@@ -172,7 +172,7 @@ scripts/test-vaisc-front.sh                # native day-1 front 계약 검증
 scripts/test-vaisc-direct.sh               # direct emitter 계약 검증
 scripts/test-vaisc-errors.sh               # native P4 진단 계약 검증
 scripts/test-vaisc-parity.sh               # native/bootstrap/tracked parity manifest
-python3 tools/nl-check.py prog.nl          # 문법 lint (help: 수정안내)
+python3 tools/nl-check.py prog.vais        # 문법 lint (help: 수정안내)
 ```
 
 ## 현재 한계 (전환기)

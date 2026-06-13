@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the IMPERATIVE code generator
-# (compiler/self/fixpoint_imperative.nl): compiles `let [mut] <name> = <expr>;
+# (compiler/self/fixpoint_imperative.vais): compiles `let [mut] <name> = <expr>;
 # <name> = <expr>; ... return <expr>` into LLVM IR using alloca/store/load, so
 # variables can be MUTATED. Foundation for loops (toward full self-compile).
 set -uo pipefail
@@ -8,7 +8,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_imperative.nl"
+SRC="$HERE/compiler/self/fixpoint_imperative.vais"
 fail=0
 
 check() {

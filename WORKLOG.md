@@ -1,5 +1,37 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-M3 — source extension physical rename)
+- checked-in New Vais source corpus를 실제 `.vais` 확장자로 전환했다.
+  - `examples/*.nl` → `examples/*.vais`
+  - `compiler/self/*.nl` → `compiler/self/*.vais`
+  - `tools/vaisc-parity.tsv` manifest도 `.vais` 경로를 canonical로 사용한다.
+- `scripts/test.sh` 기본 확장자를 `.vais`로 바꿨고, `VAIS_TEST_EXT=nl` override는 transitional compatibility용으로 유지했다.
+- `tools/vaisc.py`의 기본 self-host seed를 `compiler/self/fixpoint_full.vais`로 바꾸고,
+  bootstrap 임시 harness/lowered source도 `.vais` 이름을 쓰게 했다.
+- `scripts/test-vais-extension-migration.sh`는 방향을 뒤집어 checked-in `.vais` corpus를 임시 `.nl` mirror로 복사한 뒤
+  value corpus와 parity를 검증하는 compatibility gate가 됐다.
+- README/AGENTS/RENAME/ROADMAP/reference/mainline/SELF_HOST 문서를 `.vais` primary, `.nl` transitional compat 상태로 정리했다.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py tools/embed_self_source.py compiler/transpiler/legacy_vais_bootstrap.py compiler/transpiler/nl2vais.py tests/transpiler_test.py` = pass
+  - `bash -n scripts/*.sh` = pass
+  - `git diff --check` = pass
+  - `python3 tests/transpiler_test.py` = `RESULT: 59/59 pass`
+  - `python3 tests/nl_check_test.py` = `RESULT: 40/40 pass`
+  - `bash scripts/test.sh c4` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/build.sh examples/c4.vais` + run = exit `42`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=37 bootstrap=0 tracked=0)`
+  - `bash scripts/test-vais-extension-migration.sh` =
+    `.nl` mirror `scripts/test.sh` `RESULT: pass=112 fail=0 skip=0` +
+    mirror parity `RESULT: New Vais vaisc NV-C4 parity gate OK (native=37 bootstrap=0 tracked=0)` +
+    `RESULT: New Vais transitional .nl extension compatibility gate OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+
 ## 2026-06-13 (NV-M2 — `.vais` extension migration gate)
 - `.nl` checked-in corpus를 바로 rename하지 않고, 임시 mirror에서 모든 source를 `.vais`로 복사해 검증하는
   `scripts/test-vais-extension-migration.sh`를 추가했다.

@@ -10,7 +10,7 @@ silently opens TWO ways to write one thing — exactly the ambiguity nl forbids
 (P1-P3). nl-check enforces "one way" by flagging the non-nl spelling BEFORE
 transpile and telling the user the single correct form.
 
-Usage:  python3 nl-check.py file.nl
+Usage:  python3 nl-check.py file.vais
 Exit 0 = clean; exit 1 = issues found (printed with help:).
 
 Format per issue:
@@ -155,7 +155,7 @@ def check(path: str) -> int:
 
 def main():
     if len(sys.argv) != 2:
-        print("usage: nl-check.py file.nl", file=sys.stderr)
+        print("usage: nl-check.py file.vais", file=sys.stderr)
         sys.exit(2)
     sys.exit(check(sys.argv[1]))
 

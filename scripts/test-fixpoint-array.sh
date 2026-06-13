@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the ARRAY code generator
-# (compiler/self/fixpoint_array.nl): compiles fixed-size integer arrays into real
+# (compiler/self/fixpoint_array.vais): compiles fixed-size integer arrays into real
 # LLVM IR — `let a = [v0, v1, ...]` (alloca [N x i64] + element stores), `a[expr]`
 # (getelementptr + load), `a[expr] = expr` (getelementptr + store), plus scalar
 # mutable vars + `while`. Arrays are the basis for the List the compiler uses.
@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_array.nl"
+SRC="$HERE/compiler/self/fixpoint_array.vais"
 fail=0
 
 check() {

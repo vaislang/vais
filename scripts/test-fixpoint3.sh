@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the multi-char-FUNCTION fixpoint compiler
-# (compiler/self/fixpoint3.nl): tokenizes `fn <name>(<params>) {{ return <expr>
+# (compiler/self/fixpoint3.vais): tokenizes `fn <name>(<params>) {{ return <expr>
 # }}; ... let/return ...` into a List<Token>, builds a List<Fn> function table
 # (functions + params keyed by source-name ranges, bodies as token ranges),
 # evaluates with multi-char variable + function names, and emits LLVM IR.
@@ -11,7 +11,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint3.nl"
+SRC="$HERE/compiler/self/fixpoint3.vais"
 fail=0
 
 check() {

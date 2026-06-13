@@ -7,40 +7,40 @@
 #
 # Keep this list small and intentional. Add examples here when their status is
 # clear enough to protect in scripts/test-vaisc-parity.sh.
-examples/e03_recursion.nl	native-supported	Int recursion.
-examples/e04_mutual_rec.nl	native-supported	Mutual recursion and branch return.
-examples/e05_multi_fn.nl	native-supported	Multiple Int helpers.
-examples/c3.nl	native-supported	Bitwise not builtin.
-examples/e07_nested_if.nl	native-supported	Nested if/else.
-examples/e11_while.nl	native-supported	While loop with mutable accumulator.
-examples/e18_while_accumulator.nl	native-supported	While loop with arithmetic update.
-examples/e20_triangular.nl	native-supported	Recursive triangular number.
-examples/e22_enum_dispatch.nl	native-supported	Payload-free enum dispatch helper.
-examples/e26_pipeline.nl	native-supported	Plain function pipeline.
-examples/e29_gcd.nl	native-supported	Modulo recursion.
-examples/e30_enum_payload_match.nl	native-supported	Int payload enum match lowering.
-examples/e31_bitwise.nl	native-supported	Bitwise builtin calls.
-examples/e33_guard_chain.nl	native-supported	Int guard chain.
-examples/e34_int_conversion.nl	native-supported	Int conversion call.
-examples/e35_calc_dispatch.nl	native-supported	Payload-free enum dispatch with bitwise builtin.
-examples/e38_negatives.nl	native-supported	Negative Int arithmetic.
-examples/e42_while_call.nl	native-supported	While loop calling helper.
-examples/e43_generic_fn.nl	native-supported	Generic marker skipped for Int helper.
-examples/e45_string_eq.nl	native-supported	String literal equality.
-examples/e47_char_ops.nl	native-supported	Single-byte char literal equality.
-examples/e56_collatz.nl	native-supported	Modulo/division recursion.
-examples/e60_digit_sum.nl	native-supported	Modulo/division loop.
-examples/e66_fibonacci.nl	native-supported	Recursive Fibonacci.
-examples/e67_power.nl	native-supported	Recursive power.
-examples/t1.nl	native-supported	Simple typed helper smoke.
-examples/c1.nl	native-supported	Payload-free enum tags and simple return-arm match.
-examples/c2.nl	native-supported	List literal and sum support.
-examples/c4.nl	native-supported	Struct literal and field access.
-examples/e14_print.nl	native-supported	Print interpolation and IO call support.
-examples/e50_ast_eval.nl	native-supported	Small recursive payload enum lowered to Int-coded tags.
-examples/e75_list_push.nl	native-supported	List push/growth and index access.
-examples/e80_closure_return.nl	native-supported	Single-Int closure return lowered to Int env/apply helper.
-compiler/self/fixpoint.nl	native-supported	Trusted self-host arithmetic tier source.
-compiler/self/fixpoint2.nl	native-supported	Trusted self-host variable tier source.
-compiler/self/fixpoint3.nl	native-supported	Trusted self-host function tier source.
-compiler/self/fixpoint_full.nl	native-supported	Trusted full self-host compiler source.
+examples/e03_recursion.vais	native-supported	Int recursion.
+examples/e04_mutual_rec.vais	native-supported	Mutual recursion and branch return.
+examples/e05_multi_fn.vais	native-supported	Multiple Int helpers.
+examples/c3.vais	native-supported	Bitwise not builtin.
+examples/e07_nested_if.vais	native-supported	Nested if/else.
+examples/e11_while.vais	native-supported	While loop with mutable accumulator.
+examples/e18_while_accumulator.vais	native-supported	While loop with arithmetic update.
+examples/e20_triangular.vais	native-supported	Recursive triangular number.
+examples/e22_enum_dispatch.vais	native-supported	Payload-free enum dispatch helper.
+examples/e26_pipeline.vais	native-supported	Plain function pipeline.
+examples/e29_gcd.vais	native-supported	Modulo recursion.
+examples/e30_enum_payload_match.vais	native-supported	Int payload enum match lowering.
+examples/e31_bitwise.vais	native-supported	Bitwise builtin calls.
+examples/e33_guard_chain.vais	native-supported	Int guard chain.
+examples/e34_int_conversion.vais	native-supported	Int conversion call.
+examples/e35_calc_dispatch.vais	native-supported	Payload-free enum dispatch with bitwise builtin.
+examples/e38_negatives.vais	native-supported	Negative Int arithmetic.
+examples/e42_while_call.vais	native-supported	While loop calling helper.
+examples/e43_generic_fn.vais	native-supported	Generic marker skipped for Int helper.
+examples/e45_string_eq.vais	native-supported	String literal equality.
+examples/e47_char_ops.vais	native-supported	Single-byte char literal equality.
+examples/e56_collatz.vais	native-supported	Modulo/division recursion.
+examples/e60_digit_sum.vais	native-supported	Modulo/division loop.
+examples/e66_fibonacci.vais	native-supported	Recursive Fibonacci.
+examples/e67_power.vais	native-supported	Recursive power.
+examples/t1.vais	native-supported	Simple typed helper smoke.
+examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
+examples/c2.vais	native-supported	List literal and sum support.
+examples/c4.vais	native-supported	Struct literal and field access.
+examples/e14_print.vais	native-supported	Print interpolation and IO call support.
+examples/e50_ast_eval.vais	native-supported	Small recursive payload enum lowered to Int-coded tags.
+examples/e75_list_push.vais	native-supported	List push/growth and index access.
+examples/e80_closure_return.vais	native-supported	Single-Int closure return lowered to Int env/apply helper.
+compiler/self/fixpoint.vais	native-supported	Trusted self-host arithmetic tier source.
+compiler/self/fixpoint2.vais	native-supported	Trusted self-host variable tier source.
+compiler/self/fixpoint3.vais	native-supported	Trusted self-host function tier source.
+compiler/self/fixpoint_full.vais	native-supported	Trusted full self-host compiler source.

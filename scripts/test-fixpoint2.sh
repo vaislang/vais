@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the multi-char-identifier fixpoint compiler
-# (compiler/self/fixpoint2.nl): tokenizes `let <name> = <expr>; ... return
+# (compiler/self/fixpoint2.vais): tokenizes `let <name> = <expr>; ... return
 # <expr>` into a List<Token> (identifiers carry their NAME as a source range),
 # evaluates with a List<Var> symbol table looked up by source-name comparison,
 # and emits LLVM IR. Resolves the single-letter-identifier limitation.
@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint2.nl"
+SRC="$HERE/compiler/self/fixpoint2.vais"
 fail=0
 
 check() {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end check for the STRING code generator (compiler/self/fixpoint_str.nl):
+# End-to-end check for the STRING code generator (compiler/self/fixpoint_str.vais):
 # compiles string literals + byte indexing + length into real LLVM IR. This is
 # the capability the nl compiler needs to tokenize its own SOURCE: a string
 # literal becomes a global [N x i8] constant; the variable is an i8* to its
@@ -14,7 +14,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_str.nl"
+SRC="$HERE/compiler/self/fixpoint_str.vais"
 fail=0
 
 check() {

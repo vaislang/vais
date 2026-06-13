@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Long self-host gate for compiler/self/fixpoint_full.nl.
+# Long self-host gate for compiler/self/fixpoint_full.vais.
 #
 # This verifies the full-source path, not just snippet-level codegen:
 #   seed fixpoint_full -> generated first-generation compiler IR -> clang/run.
 # It also checks that first-generation compilers can consume file-sized embedded
 # sources again by retargeting their default compile("...") program to the real
-# compiler/self/fixpoint*.nl sources, including fixpoint_full.nl itself.
+# compiler/self/fixpoint*.vais sources, including fixpoint_full.vais itself.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_full.nl"
+SRC="$HERE/compiler/self/fixpoint_full.vais"
 EMBED="$HERE/tools/embed_self_source.py"
 NORM_IR="$HERE/tools/normalize_stage_ir.py"
 fail=0
@@ -119,23 +119,23 @@ run_full_probe() {
   fi
 }
 
-run_full_probe "$SRC" "full-source fixpoint_full.nl self probe" 42
+run_full_probe "$SRC" "full-source fixpoint_full.vais self probe" 42
 stage1_self_ir="$last_source_compiler_ll"
 
 run_retarget_probe() {
   local target="$1" want="$2" label="$3" tmp_variant
   tmp_variant="$(mktemp -d)"
-  python3 "$EMBED" "$SRC" "$target" "$tmp_variant/retargeted_fixpoint_full.nl" \
+  python3 "$EMBED" "$SRC" "$target" "$tmp_variant/retargeted_fixpoint_full.vais" \
     || { echo "  FAIL full-source retarget: embed $(basename "$target") into compiler"; fail=1; return; }
   if [ "$fail" -eq 0 ]; then
-    run_full_probe "$tmp_variant/retargeted_fixpoint_full.nl" "$label" "$want" compiler
+    run_full_probe "$tmp_variant/retargeted_fixpoint_full.vais" "$label" "$want" compiler
   fi
 }
 
-run_retarget_probe "$HERE/compiler/self/fixpoint.nl" 24 "first-generation compiler consumes fixpoint.nl"
-run_retarget_probe "$HERE/compiler/self/fixpoint2.nl" 50 "first-generation compiler consumes fixpoint2.nl"
-run_retarget_probe "$HERE/compiler/self/fixpoint3.nl" 120 "first-generation compiler consumes fixpoint3.nl"
-run_retarget_probe "$SRC" 42 "first-generation compiler consumes fixpoint_full.nl"
+run_retarget_probe "$HERE/compiler/self/fixpoint.vais" 24 "first-generation compiler consumes fixpoint.vais"
+run_retarget_probe "$HERE/compiler/self/fixpoint2.vais" 50 "first-generation compiler consumes fixpoint2.vais"
+run_retarget_probe "$HERE/compiler/self/fixpoint3.vais" 120 "first-generation compiler consumes fixpoint3.vais"
+run_retarget_probe "$SRC" 42 "first-generation compiler consumes fixpoint_full.vais"
 stage2_self_ir="$last_emitted_ll"
 
 if [ "$fail" -eq 0 ]; then

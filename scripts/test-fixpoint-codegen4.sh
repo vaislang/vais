@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the CONTROL-FLOW code generator
-# (compiler/self/fixpoint_codegen4.nl): compiles functions whose bodies may be
+# (compiler/self/fixpoint_codegen4.vais): compiles functions whose bodies may be
 # `return if <cond> then <e> else <e>` into real LLVM IR with icmp / conditional
 # br / labeled basic blocks / phi — so RECURSIVE functions (factorial, fib) are
 # generated as native code. The generated program runs.
@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint_codegen4.nl"
+SRC="$HERE/compiler/self/fixpoint_codegen4.vais"
 fail=0
 
 check() {

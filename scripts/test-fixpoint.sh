@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end check for the List-based fixpoint compiler
-# (compiler/self/fixpoint.nl): it tokenizes a source string into a List<Token>,
+# (compiler/self/fixpoint.vais): it tokenizes a source string into a List<Token>,
 # evaluates the token list recursively (by &borrow), and emits LLVM IR. We
 # compile the IR and verify the value.
 #
@@ -11,7 +11,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-SRC="$HERE/compiler/self/fixpoint.nl"
+SRC="$HERE/compiler/self/fixpoint.vais"
 fail=0
 
 # check <source-program> <expected-value>

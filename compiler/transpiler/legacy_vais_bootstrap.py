@@ -8,7 +8,7 @@ to Legacy Vais, so this adapter is the cheapest path to a working prototype
 without hand-maintaining a second native backend. Unsupported constructs are
 reported, not silently mangled (honesty over coverage).
 
-Usage:  python3 legacy_vais_bootstrap.py input.nl > output.vais
+Usage:  python3 legacy_vais_bootstrap.py input.vais > output.vais
         (then: vaisc build output.vais -o out && ./out)
 
 NOT a real lexer/parser yet — it is a line/token rewriter. The point is to prove
@@ -487,7 +487,7 @@ def expand_for_loops(src: str) -> str:
 
 def main():
     if len(sys.argv) != 2:
-        print("usage: legacy_vais_bootstrap.py input.nl", file=sys.stderr)
+        print("usage: legacy_vais_bootstrap.py input.(vais|nl)", file=sys.stderr)
         sys.exit(2)
     src = open(sys.argv[1]).read()
     src = expand_nested_match_arms(src)  # structural pre-pass: arm match -> block arm
