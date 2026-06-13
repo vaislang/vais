@@ -5,7 +5,7 @@
 # prefers the Legacy repo build artifacts over PATH so tests do not accidentally
 # pick up an older installed `vaisc`.
 
-VAIS_COMPILER_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
+VAIS_COMPILER_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais-legacy/compiler}"
 VAIS_ROOT="$VAIS_COMPILER_ROOT"
 
 _legacy_candidate="${LEGACY_VAISC:-}"

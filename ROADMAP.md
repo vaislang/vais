@@ -1,7 +1,7 @@
 # New Vais ROADMAP — source of truth (current-only)
 
 > 이 파일은 /loop 자율 진행의 **단일 진실원**. 현재 작업만 담는다(해결된 건 WORKLOG로).
-> repo 경로 `nl`은 전환기 코드명으로 유지하지만, checked-in 소스 확장자는 `.vais`이고 사용자-facing 언어명은 **New Vais / Vais** 로 확정됐다.
+> repo 경로는 `/Users/sswoo/study/projects/vais`로 승격됐고, checked-in 소스 확장자는 `.vais`이며 사용자-facing 언어명은 **New Vais / Vais** 로 확정됐다.
 > 각 task는 **값-정확성 검증 + 커밋** 후 done. 막히면 추적(TRACKED)하고 넘어간다.
 
 ## 완료 정의 (정직)
@@ -16,10 +16,10 @@
 
 ## 방향 결정 (2026-06-13)
 
-- [x] **D0. 이름 확정**: `nl`은 구현 코드명, 사용자-facing 언어명은 **New Vais / Vais**.
-- [x] **D1. Legacy 경계 확정**: `/Users/sswoo/study/projects/vais/compiler`는 Legacy Vais bootstrap backend와 oracle.
+- [x] **D0. 이름 확정**: 사용자-facing 언어명은 **New Vais / Vais**. `nl`은 과거 구현 코드명.
+- [x] **D1. Legacy 경계 확정**: `/Users/sswoo/study/projects/vais-legacy/compiler`는 Legacy Vais bootstrap backend와 oracle.
 - [x] **D2. 자체 컴파일러 mainline 진입**: `compiler/self/fixpoint_full.vais`을 seed로 삼아 직접 LLVM IR emit 컴파일러로 전진.
-- [x] **D3. repo rename 보류**: repo 폴더 `nl`은 별도 migration gate로 처리.
+- [x] **D3. repo physical rename**: 기존 `/projects/vais`는 `/projects/vais-legacy`로 백업하고, New Vais repo를 `/projects/vais`로 승격.
 - [x] **D4. legacy adapter canonical rename**: `legacy_vais_bootstrap.py`를 canonical bootstrap adapter로 승격하고, `nl2vais.py`는 호환 래퍼로 유지.
 - [x] **D5. `.vais` 확장자 migration gate**: 임시 mirror에서 전체 `.nl` corpus를 `.vais`로 복사해 value corpus와 native parity를 통과.
 - [x] **D6. source 확장자 physical rename**: checked-in `examples/`와 `compiler/self/` 소스를 `.vais`로 전환하고, `.nl`은 transitional compatibility gate로 검증.
@@ -35,6 +35,7 @@
 8. [x] **NV-M3 source extension physical rename**: checked-in corpus를 `.vais`로 옮기고, 같은 스크립트가 임시 `.nl` mirror로 역방향 호환성을 검증한다.
 9. [x] **NV-M4 `vais-check` canonical lint command**: `tools/vais-check.py`를 canonical P4 lint command로 승격하고, `tools/nl-check.py`는 compatibility wrapper로 유지한다.
 10. [x] **NV-M5 current docs naming/status alignment**: SELF_HOST/PRELUDE/README/AGENTS/RENAME의 현재 상태를 `.vais`/New Vais/`vais-check` 기준으로 정리하고, 의도적인 `.nl` transitional compatibility 언급만 보존한다.
+11. [x] **NV-M6 repo physical rename**: Legacy Vais를 `/Users/sswoo/study/projects/vais-legacy`로 백업 이동하고 New Vais를 `/Users/sswoo/study/projects/vais`로 승격, bootstrap/oracle 기본 경로를 `vais-legacy/compiler`로 전환한다.
 
 세부 계약: `docs/design/new-vais-compiler-mainline-2026-06-13.md`.
 
@@ -43,7 +44,7 @@
 P0 게이트 / P1 코퍼스 / P2 트랜스파일러 / P3 에러인프라 / P4 std시작 / P5 레퍼런스 = **DONE**.
 L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 
-**🎯 실제 소스 부트스트랩 arc 정점(2026-06-08~09, FP12g~qq)**: fixpoint_full(통합 nl-self-host 컴파일러)이
+**🎯 실제 소스 부트스트랩 arc 정점(2026-06-08~09, FP12g~qq)**: fixpoint_full(통합 New Vais self-host 컴파일러)이
 **세 self-host 언어 tier를 전부 source string→value로 end-to-end 컴파일**:
 - **①산술식**(fixpoint.vais): tokenize+eval, `2 + 3 * 4`=14 (FP12y)
 - **②산술+변수**(fixpoint2.vais): 심볼테이블+변수평가, `let x = 2; let y = x + 1; return x + y * 4`=14 (FP12bb)
@@ -126,7 +127,8 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    `.vais` 임시 mirror migration gate를 통과한 뒤 실제 source 파일 확장자를 `.vais`로 전환했다.
    `tools/vais-check.py`도 canonical lint command로 승격했고 `tools/nl-check.py`는 wrapper다.
    현재 문서의 self-host/PRELUDE/README/AGENTS/RENAME도 New Vais/`.vais`/`vais-check` 기준으로 맞췄다.
-   `.nl`은 역방향 compatibility gate로 유지하며, repo 폴더 `nl` rename은 별도 physical migration으로 남긴다.
+   repo 폴더도 `/projects/vais`로 승격했고, Legacy backend 기본 경로는 `/projects/vais-legacy/compiler`다.
+   `.nl`은 역방향 compatibility gate로 유지한다.
 7. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---

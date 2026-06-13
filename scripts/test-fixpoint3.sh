@@ -8,7 +8,7 @@
 # Bodies are written with `{{`/`}}` (nl escape -> Vais `\{`/`\}`).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
+VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais-legacy/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
 SRC="$HERE/compiler/self/fixpoint3.vais"

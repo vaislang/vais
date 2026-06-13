@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXPOINT_FULL = ROOT / "compiler" / "self" / "fixpoint_full.vais"
 EMBED_SELF_SOURCE = ROOT / "tools" / "embed_self_source.py"
 TRANSPILER = ROOT / "compiler" / "transpiler" / "legacy_vais_bootstrap.py"
-DEFAULT_LEGACY_ROOT = Path("/Users/sswoo/study/projects/vais/compiler")
+DEFAULT_LEGACY_ROOT = Path("/Users/sswoo/study/projects/vais-legacy/compiler")
 SELF_HOST_TIER_SOURCES = {
     (ROOT / "compiler" / "self" / "fixpoint.vais").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint2.vais").resolve(),
@@ -1396,7 +1396,7 @@ def resolve_legacy_vaisc(legacy_root: Path) -> str:
     raise CompileError(
         "could not find Legacy Vais bootstrap compiler. "
         "Set LEGACY_VAISC=/path/to/legacy/vaisc or build "
-        "/Users/sswoo/study/projects/vais/compiler."
+        "/Users/sswoo/study/projects/vais-legacy/compiler."
     )
 
 

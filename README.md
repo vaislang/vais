@@ -1,8 +1,8 @@
 # New Vais — AI-native 프로그래밍 언어
 
 > **공식 방향(2026-06-13)**: 이 프로젝트는 **새 Vais(New Vais)** 로 확정한다.
-> `nl`은 repo 경로가 안정될 때까지 유지하는 구현 코드명이다. checked-in 소스 확장자는 `.vais`다.
-> 기존 `/Users/sswoo/study/projects/vais/compiler`는 **Legacy Vais bootstrap backend** 로만 유지한다.
+> repo 경로도 `/Users/sswoo/study/projects/vais`로 승격했다. checked-in 소스 확장자는 `.vais`다.
+> 기존 `/Users/sswoo/study/projects/vais-legacy/compiler`는 **Legacy Vais bootstrap backend** 로만 유지한다.
 
 ---
 
@@ -32,7 +32,7 @@
 ## 폴더 구조
 
 ```
-nl/                         # 전환기 repo 코드명. 사용자-facing 언어명은 New Vais.
+vais/                       # New Vais mainline repo.
 ├── README.md            이 파일
 ├── RENAME.md            이름 변경 가이드
 ├── docs/design/         설계 문서 (경쟁력/원칙 P1~P9/문법 v0.1·v0.2/모호성 감사)
@@ -85,14 +85,13 @@ scripts/build.sh examples/c4.vais -o /tmp/c4              # Legacy bootstrap ora
 ```
 
 Legacy bootstrap/oracle 스크립트는 `scripts/legacy-vaisc-env.sh`를 통해
-`/Users/sswoo/study/projects/vais/compiler/target/{debug,release}/vaisc`를 PATH보다 우선해 사용한다.
+`/Users/sswoo/study/projects/vais-legacy/compiler/target/{debug,release}/vaisc`를 PATH보다 우선해 사용한다.
 
 ### 전환 원칙
-Legacy Vais 백엔드는 당분간 **oracle/bootstrap** 으로 유지한다. 폴더명 `nl`은
-repo 코드명으로 남아 있지만, checked-in New Vais 소스 확장자는 `.vais`다. `.nl`은
+Legacy Vais 백엔드는 당분간 **oracle/bootstrap** 으로 유지한다. checked-in New Vais 소스 확장자는 `.vais`다. `.nl`은
 전환기 호환 입력으로 유지하고, 역방향 compatibility gate로 계속 검증한다. legacy adapter의 canonical 이름은
 `legacy_vais_bootstrap.py`이며, `nl2vais.py`는 기존 호출을 위한 compatibility wrapper다.
-이후 repo 폴더 rename과 legacy 의존 축소는 별도 migration 커밋으로 진행한다.
+이후 legacy 의존 축소와 compatibility wrapper 제거는 별도 migration 커밋으로 진행한다.
 
 ---
 
@@ -106,7 +105,7 @@ repo 코드명으로 남아 있지만, checked-in New Vais 소스 확장자는 `
 | L4 | 프로덕션 (생태계) | 🔲 별개 거대 문제 |
 
 ### L3 결정 사항
-- **언어명**: 사용자-facing 이름은 New Vais/Vais로 확정. `nl`은 전환기 코드명.
+- **언어명**: 사용자-facing 이름은 New Vais/Vais로 확정. `nl`은 과거 구현 코드명이다.
 - **컴파일러 작성 언어**: New Vais self-host 라인을 우선한다. 현재 `compiler/self/fixpoint_full.vais`이 seed.
 - **백엔드**: Legacy Vais는 bootstrap/oracle로 유지하고, 자체 컴파일러는 직접 LLVM IR emit 경로로 전진한다.
 - **명령명**: New Vais compiler의 공식 명령 계약은 `vaisc`. 전환기에는 repo-local `scripts/vaisc`로 실행해
@@ -126,6 +125,6 @@ repo 코드명으로 남아 있지만, checked-in New Vais 소스 확장자는 `
 ## AI 에이전트(Codex 등)로 작업한다면
 
 > **시작 전 [`AGENTS.md`](AGENTS.md)를 끝까지 읽어라.** 검증된 작업 방법론, 두 repo 경계
-> (New Vais/nl ↔ Legacy Vais 백엔드), 게이트(안전망) 실행법, 함정 카탈로그(silent miscompile / 8-bit 절단 /
+> (New Vais ↔ Legacy Vais 백엔드), 게이트(안전망) 실행법, 함정 카탈로그(silent miscompile / 8-bit 절단 /
 > cache race / line-기반 트랜스파일러 한계 / `{{`-이스케이프)가 모두 거기 있다.
 > 진실의 원천은 `ROADMAP.md`(현재-only), 최근 맥락은 `WORKLOG.md`(최신이 맨 위).

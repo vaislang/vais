@@ -14,7 +14,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 TRANSPILER="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
-VAIS_COMPILER_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
+VAIS_COMPILER_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais-legacy/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 
 SRC="${1:?usage: build.sh program.(vais|nl) [-o out]}"

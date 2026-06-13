@@ -5,7 +5,7 @@
 # checks that the IR it GENERATES is valid and computes the right answer.)
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
+VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais-legacy/compiler}"
 source "$HERE/scripts/legacy-vaisc-env.sh"
 TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
 tmp="$(mktemp -d)"

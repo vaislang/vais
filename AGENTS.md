@@ -8,7 +8,7 @@
 
 ## 0. 30초 요약
 
-- **New Vais**는 AI가 정확히 쓰는 언어로 확정된 새 Vais mainline이다. `nl`은 전환기 repo 코드명이고, checked-in 소스 확장자는 `.vais`다.
+- **New Vais**는 AI가 정확히 쓰는 언어로 확정된 새 Vais mainline이다. repo 경로는 `/Users/sswoo/study/projects/vais`이고, checked-in 소스 확장자는 `.vais`다.
 - 현재 bootstrap 파이프라인: `New Vais(.vais/.nl) 소스` → `legacy_vais_bootstrap.py` → `Legacy Vais` → `vaisc build` → 네이티브 LLVM 실행.
   `nl2vais.py`는 기존 호출을 위한 compatibility wrapper다.
 - **메인 산출물**: `compiler/self/fixpoint_full.vais` — New Vais로 작성한 self-host 컴파일러 seed.
@@ -30,24 +30,24 @@
 
 | repo | 경로 | 역할 | 규칙 |
 |------|------|------|------|
-| **New Vais** | `/Users/sswoo/study/projects/nl` | 언어 자체(트랜스파일러/self-host 컴파일러/예제/게이트). 경로명은 전환기 코드명. | 이 문서 |
-| **Legacy Vais** | `/Users/sswoo/study/projects/vais/compiler` | bootstrap/oracle 백엔드 컴파일러(`vaisc`) | **그 repo의 `CLAUDE.md` 엄격 규칙** |
+| **New Vais** | `/Users/sswoo/study/projects/vais` | 언어 자체(트랜스파일러/self-host 컴파일러/예제/게이트). | 이 문서 |
+| **Legacy Vais** | `/Users/sswoo/study/projects/vais-legacy/compiler` | bootstrap/oracle 백엔드 컴파일러(`vaisc`) | **그 repo의 `CLAUDE.md` 엄격 규칙** |
 
 - New Vais를 깊게 파다 보면 **Legacy Vais 컴파일러 버그**(codegen miscompile, ICE 등)를 만난다. 이때
   Legacy Vais repo를 수정하게 되는데, **그 repo의 `CLAUDE.md` 규칙이 그때부터 적용된다**(§5 참조).
-  빈도 감각: 최근 세션들에서 nl 작업 중 Vais 버그 근본수정이 여러 건 있었다(`&Vec` borrow
+  빈도 감각: 최근 세션들에서 New Vais 작업 중 Legacy Vais 버그 근본수정이 여러 건 있었다(`&Vec` borrow
   codegen, struct-return ICE, `%` 이스케이프 등). 현재 해결/추적 중인 Legacy Vais 갭은 ROADMAP의
   TRACKED 참조. **드물지 않다**고 가정하라.
-- 커밋은 **각 repo에 따로** 한다. New Vais 변경은 nl repo에, Legacy Vais 변경은 Vais repo에.
-- `vaisc`는 PATH에 있어야 하고, std 해석을 위해 `VAIS_COMPILER_ROOT`가 Vais repo를
-  가리켜야 한다(게이트 스크립트는 기본값 `/Users/sswoo/study/projects/vais/compiler` 사용).
+- 커밋은 **각 repo에 따로** 한다. New Vais 변경은 New Vais repo에, Legacy Vais 변경은 Legacy Vais repo에.
+- `vaisc`는 PATH에 있어야 하고, std 해석을 위해 `VAIS_COMPILER_ROOT`가 Legacy Vais repo를
+  가리켜야 한다(게이트 스크립트는 기본값 `/Users/sswoo/study/projects/vais-legacy/compiler` 사용).
 
 ---
 
 ## 2. 세션 시작 루틴 (매번)
 
 ```bash
-cd /Users/sswoo/study/projects/nl
+cd /Users/sswoo/study/projects/vais
 # 1) 현재 목표 파악
 sed -n '1,45p' ROADMAP.md          # 상태 헤더 + 남은 항목 + 우선순위 큐
 # 2) 최근 작업 맥락 (WORKLOG는 최신이 맨 위)
@@ -133,7 +133,7 @@ bootstrap/oracle 스크립트는 `scripts/legacy-vaisc-env.sh`를 통해 이 rep
 
 ## 5. Legacy Vais 컴파일러 repo 수정 시 (⚠️ 별개 repo, 엄격 규칙)
 
-New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/vais/compiler/`를 고칠 때는
+New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/vais-legacy/compiler/`를 고칠 때는
 **그 repo의 `CLAUDE.md`를 먼저 읽고** 다음을 엄수한다:
 
 - **baseline 기록 먼저** — 수정 전 `cd compiler && bash scripts/check-integrity.sh`로 현재
@@ -146,7 +146,7 @@ New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/va
 - **codegen 버그는 silent miscompile 위험이 높다** — 컴파일만 통과하고 **값이 틀릴** 수 있다.
   반드시 **생성 IR 확인 + clang 빌드 + 실행 값 검증**까지 한다. (Vais 게이트의 VALUE
   CORRECTNESS 단계가 이 맹점을 막으려 추가됐다.)
-- **두 repo는 별개 커밋** — Vais 수정은 Vais repo에 커밋, nl 가드는 nl repo에 커밋.
+- **두 repo는 별개 커밋** — Legacy Vais 수정은 Legacy Vais repo에 커밋, New Vais 가드는 New Vais repo에 커밋.
 - Vais 커밋 메시지 끝에 Co-Authored-By 라인(그 repo 규칙 따름).
 
 ---
@@ -193,7 +193,7 @@ New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/va
 6. fixpoint_full.compile() fragment로 값 측정 (≤255 / stdout)
 7. e2e 가드 추가
 8. 두 메인 게이트 직렬 실행 → 회귀 0 확인
-9. 커밋 (nl repo; Vais 수정이면 Vais repo에 별도)
+9. 커밋 (New Vais repo; Legacy Vais 수정이면 Legacy Vais repo에 별도)
 10. WORKLOG(맨 위) + ROADMAP(게이트 카운트/항목 상태) + SELF_HOST.md 갱신
 11. 막혔으면 TRACKED에 file:line 남기고 다른 항목으로
 ```
@@ -204,7 +204,7 @@ New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/va
 
 ## 8. 남은 작업 (ROADMAP §방향 결정 / 현재 우선순위 큐 참조)
 
-- **migration/hardening 큐**: checked-in 확장자는 `.vais`로 전환됐다. repo 폴더 rename과 legacy adapter wrapper 제거는 별도 gate 후 진행한다.
+- **migration/hardening 큐**: checked-in 확장자는 `.vais`로 전환됐고 repo 폴더도 `/projects/vais`로 승격됐다. 남은 것은 `.nl` 입력과 compatibility wrapper 제거 여부다.
 - **NV-C0 완료 상태 유지**: `scripts/vaisc`와 `scripts/test-vaisc.sh`가 깨지면 제품 경계 회귀로 본다.
 - **NV-C1 완료 상태 유지**: `scripts/vaisc` front preflight와 `scripts/test-vaisc-front.sh`가 깨지면 native front 계약 회귀로 본다.
 - **self-host hardening**: stage oracle은 해결됐으므로, 새 stage drift 원인은 짧은 회귀 fixture와 긴 stage compare gate 양쪽에 묶어둔다.

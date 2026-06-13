@@ -1,5 +1,27 @@
 # New Vais WORKLOG
 
+## 2026-06-14 (NV-M6 — repo physical rename to `projects/vais`)
+- New Vais repo를 물리적으로 `/Users/sswoo/study/projects/vais` 위치로 승격했다.
+  - 기존 Legacy Vais repo는 `/Users/sswoo/study/projects/vais-legacy`로 백업 이동했다.
+  - 기존 `/Users/sswoo/study/projects/nl` repo를 `/Users/sswoo/study/projects/vais`로 이동했다.
+  - New Vais 내부의 Legacy bootstrap/oracle 기본 경로를 `/Users/sswoo/study/projects/vais-legacy/compiler`로 갱신했다.
+  - README/AGENTS/RENAME/ROADMAP/mainline design 문서를 새 물리 배치에 맞췄다.
+- 검증:
+  - `git diff --check` = pass
+  - `python3 -m py_compile tools/vaisc.py compiler/transpiler/legacy_vais_bootstrap.py compiler/transpiler/nl2vais.py tests/transpiler_test.py tests/vais_check_test.py` = pass
+  - `bash -n scripts/*.sh` = pass
+  - `python3 tests/vais_check_test.py` = `RESULT: 40/40 pass`
+  - `python3 tests/transpiler_test.py` = `RESULT: 59/59 pass`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=37 bootstrap=0 tracked=0)`
+  - `bash scripts/test-vais-extension-migration.sh` = `RESULT: New Vais transitional .nl extension compatibility gate OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+  - `bash scripts/test-fixpoint-full-self.sh` = `RESULT: fixpoint_full full-source self-host gate OK`
+
 ## 2026-06-13 (NV-M5 — current docs naming/status alignment)
 - 현재 진입 문서의 이름/상태를 New Vais 확정 이후 기준으로 정리했다.
   - `compiler/self/SELF_HOST.md`: self-host 문서 제목/설명/표의 현행 모듈명을 `.vais`로 맞추고,
@@ -423,7 +445,7 @@
 
 ## 2026-06-13 (방향 확정 — New Vais + 자체 컴파일러 mainline)
 - 사용자 결정 반영: `nl` 전환기 코드명 프로젝트를 **New Vais / Vais** 로 확정하고, 자체 컴파일러를 mainline으로 전환한다.
-- 기존 `/Users/sswoo/study/projects/vais/compiler`는 **Legacy Vais bootstrap/oracle backend** 로 명시했다.
+- 기존 `/Users/sswoo/study/projects/vais-legacy/compiler`는 **Legacy Vais bootstrap/oracle backend** 로 명시했다.
   repo 경로 `nl`, 확장자 `.nl`, `nl2vais.py`는 게이트 안정성을 위해 당장 rename하지 않고 전환기 코드명으로 유지한다.
 - `README.md`, `ROADMAP.md`, `AGENTS.md`, `RENAME.md`, `docs/reference/LANGUAGE.md`,
   `docs/design/NEW-LANGUAGE-README.md`를 갱신하고

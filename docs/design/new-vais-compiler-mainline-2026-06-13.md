@@ -2,13 +2,14 @@
 
 ## Decision
 
-New Vais / Vais is the user-facing language name. The `nl` repository name
-remains a transitional implementation name; checked-in source files now use the
-`.vais` extension, with `.nl` accepted as transitional compatibility. The legacy
-bootstrap adapter's canonical name is `legacy_vais_bootstrap.py`; `nl2vais.py`
-remains as a compatibility wrapper for old calls.
+New Vais / Vais is the user-facing language name. The mainline repository now
+lives at `/Users/sswoo/study/projects/vais`; `nl` is only a historical
+implementation code name. Checked-in source files use the `.vais` extension,
+with `.nl` accepted as transitional compatibility. The legacy bootstrap
+adapter's canonical name is `legacy_vais_bootstrap.py`; `nl2vais.py` remains as
+a compatibility wrapper for old calls.
 
-Legacy Vais (`/Users/sswoo/study/projects/vais/compiler`) stays as:
+Legacy Vais (`/Users/sswoo/study/projects/vais-legacy/compiler`) stays as:
 - bootstrap backend for the current validated pipeline,
 - oracle for value-correctness comparison,
 - regression source when New Vais exposes backend/compiler bugs.
@@ -38,7 +39,6 @@ New Vais source (.vais/.nl)
 
 ## Non-Goals
 
-- Do not rename `projects/nl` without a dedicated migration gate.
 - Do not remove `.nl` transitional compatibility without a dedicated gate.
 - Do not delete the `nl2vais.py` compatibility wrapper until old external calls
   are migrated.
@@ -249,10 +249,11 @@ Done when:
 
 NV-C4 now covers the core examples and self-host tiers, the checked-in source
 extension is `.vais`, and the transitional `.nl` compatibility gate is green.
-The adapter rename is done; the remaining physical rename decisions are:
+The adapter rename and repo physical rename are done; the remaining compatibility
+cleanup decisions are:
 
-- `projects/nl` -> `projects/vais`,
 - eventual removal of `.nl` compatibility,
 - eventual removal of the `nl2vais.py` compatibility wrapper.
 
-Until then, `nl` is a stable implementation code name, not the language brand.
+`nl` remains only in compatibility wrappers, historical worklog/design records,
+and transitional `.nl` input support.
