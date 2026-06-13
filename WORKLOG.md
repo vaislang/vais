@@ -1,5 +1,24 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C10 — single-Int closure return parity promotion)
+- `scripts/vaisc` bootstrap engine에 single-Int closure return lowering을 추가했다.
+  - `fn adder(n: Int) -> fn(Int) -> Int { return |x| x + n }`는 Int env 반환 함수와
+    `adder__apply(env, x)` helper로 closure-convert한다.
+  - broader closure literal/call shape는 계속 P4 front 진단으로 거절한다.
+- `scripts/test-vaisc-front.sh`에 closure return accepted fixture와 broader closure reject fixture를 추가했다.
+- `tools/vaisc-parity.tsv`에서 `examples/e80_closure_return.nl`을 `native-supported`로 승격했다.
+- 현재 parity coverage: `native-supported=33`, `bootstrap-only=4`, `tracked=0`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py` = pass
+  - `scripts/vaisc build examples/e80_closure_return.nl` + run = exit `7`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash -n scripts/test-vaisc-parity.sh` = pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=33 bootstrap=4 tracked=0)`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+
 ## 2026-06-13 (NV-C9 — small payload enum/match parity promotion)
 - `scripts/vaisc` bootstrap engine에 small Int-coded payload enum lowering을 추가했다.
   - `enum Node { Lit(Int), Add(Node, Node), Mul(Node, Node) }` 같은 Int/self-recursive payload enum을

@@ -23,7 +23,7 @@
 
 ### 현재 우선순위 큐
 1. [x] **NV-C0 컴파일러 제품 경계 정의**: `scripts/vaisc`가 `.vais`/`.nl` 입력을 받아 LLVM IR emit/build/run을 제공하고, `scripts/test-vaisc.sh`가 Legacy bootstrap oracle과 값 비교.
-2. [x] **NV-C1 자체 컴파일러 front 계약 고정**: native subset(Int 함수/let/return/if/while/plain call + print/putchar IO + simple struct + payload-free enum/match + small Int-coded payload enum/match + List push/len/index/sum)을 `scripts/vaisc` preflight로 고정하고, unsupported 문법은 `help:` 진단으로 거절.
+2. [x] **NV-C1 자체 컴파일러 front 계약 고정**: native subset(Int 함수/let/return/if/while/plain call + print/putchar IO + simple struct + payload-free enum/match + small Int-coded payload enum/match + single-Int closure return + List push/len/index/sum)을 `scripts/vaisc` preflight로 고정하고, unsupported 문법은 `help:` 진단으로 거절.
 3. [x] **NV-C2 직접 LLVM IR emitter 분리**: `scripts/vaisc --engine direct`가 Legacy Vais 없이 단일 `fn main() -> Int { return <Int expr> }`를 직접 LLVM IR로 emit/build/run하고 bootstrap oracle과 값 비교.
 4. [x] **NV-C3 P4 에러 UX day-1**: native `vaisc` 경로가 Rust식 습관과 direct emitter parse 실패에 source 좌표/line/caret/`help:`/`fix:` 진단을 낸다.
 5. [x] **NV-C4 parity gate**: `tools/vaisc-parity.tsv`가 `examples/` 코퍼스와 self-host tier를 `native-supported`/`bootstrap-only`/`tracked`로 기록하고, `scripts/test-vaisc-parity.sh`가 native-supported 항목을 Legacy bootstrap 결과와 값 비교.
@@ -63,8 +63,8 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   `scripts/vaisc build`/`run` exit 42, Legacy bootstrap oracle exit 42.
 - New Vais front 계약 smoke `scripts/test-vaisc-front.sh` **OK**:
   accepted scalar subset exit 42, print interpolation/putchar stdout, simple struct, payload-free enum/match,
-  small Int-coded payload enum/match, List push/len/index/sum 검증,
-  `fn main`/helper signature/for/broader payload enum/Rust `&&`/unsupported method/string type을
+  small Int-coded payload enum/match, single-Int closure return, List push/len/index/sum 검증,
+  `fn main`/helper signature/for/broader payload enum/broader closure/Rust `&&`/unsupported method/string type을
   source 좌표와 `help:` 진단으로 거절.
 - New Vais direct emitter smoke `scripts/test-vaisc-direct.sh` **OK**:
   `scripts/vaisc --engine direct`가 깨진 `LEGACY_VAISC` 환경에서도 arithmetic `main`을 직접 LLVM IR로
@@ -73,7 +73,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
   `&&`/`||`/`as`/`::`/Rust scalar type/turbofish와 direct emitter parse 실패가 source 좌표,
   원문 line, caret, `help:`, `fix:`를 포함.
 - New Vais parity manifest gate `scripts/test-vaisc-parity.sh` **OK**:
-  `native-supported=32`, `bootstrap-only=5`, `tracked=0`.
+  `native-supported=33`, `bootstrap-only=4`, `tracked=0`.
   native-supported 예제는 New Vais `scripts/vaisc`와 Legacy bootstrap oracle 양쪽에서 `# expect` 값과 일치하고,
   bootstrap-only/self-host tier는 Legacy-green + native front reject 상태로 고정한다.
 
@@ -107,7 +107,8 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    slice와 payload-free enum/match slice, small payload enum slice를
    `examples/c2.nl`/`examples/c1.nl`/`examples/e22_enum_dispatch.nl`/
    `examples/e35_calc_dispatch.nl`/`examples/e30_enum_payload_match.nl`/
-   `examples/e50_ast_eval.nl`로 native-supported에 편입했다.
+   `examples/e50_ast_eval.nl`, single-Int closure return slice를 `examples/e80_closure_return.nl`로
+   native-supported에 편입했다.
 6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---

@@ -185,8 +185,8 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
     ),
     (
         re.compile(r"\|[^|]*\|"),
-        "closures are not in the New Vais native day-1 front subset yet",
-        "write a named function for this slice; closure object parity is tracked after the front contract.",
+        "closures beyond the single-Int closure-return slice are not in the New Vais native front subset yet",
+        "use a single Int capture returning `fn(Int) -> Int`, or write a named function for broader closure cases.",
     ),
     (
         re.compile(r"\.(?!(?:push|len|sum)\s*\()[A-Za-z_][A-Za-z0-9_]*\s*\("),
@@ -794,11 +794,135 @@ def lower_payload_enum_match_text(text: str) -> str:
     return "\n".join(rewritten) + ("\n" if text.endswith("\n") else "")
 
 
+CLOSURE_RETURN_FN_RE = re.compile(
+    r"^(\s*)fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*Int\s*\)\s*->\s*fn\s*\(\s*Int\s*\)\s*->\s*Int\s*\{\s*$"
+)
+CLOSURE_RETURN_LINE_RE = re.compile(r"^\s*return\s*\|\s*([A-Za-z_][A-Za-z0-9_]*)\s*\|\s*(.+?)\s*$")
+
+
+def replace_word(expr: str, name: str, replacement: str) -> str:
+    return re.sub(rf"\b{re.escape(name)}\b", replacement, expr)
+
+
+def rewrite_closure_var_calls(text: str, closure_vars: dict[str, str]) -> str | None:
+    mask = code_only(text)
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        if not (mask[i].isalpha() or mask[i] == "_"):
+            out.append(text[i])
+            i += 1
+            continue
+
+        j = i + 1
+        while j < len(mask) and (mask[j].isalnum() or mask[j] == "_"):
+            j += 1
+        name = mask[i:j]
+        apply_name = closure_vars.get(name)
+        if apply_name is None:
+            out.append(text[i:j])
+            i = j
+            continue
+
+        cursor = j
+        while cursor < len(mask) and mask[cursor].isspace():
+            cursor += 1
+        if cursor >= len(mask) or mask[cursor] != "(":
+            out.append(text[i:j])
+            i = j
+            continue
+        close = find_matching_paren_mask(mask, cursor)
+        if close < 0:
+            return None
+        args = split_top_level_commas(text[cursor + 1 : close])
+        if args is None or len(args) != 1:
+            return None
+        out.append(f"{apply_name}({name}, {args[0].strip()})")
+        i = close + 1
+    return "".join(out)
+
+
+def lower_simple_closure_return_text(text: str) -> str:
+    """Closure-convert `fn make(n)->fn(Int)->Int { return |x| ... }` to Int env."""
+    lines = text.splitlines()
+    lowered: list[str] = []
+    makers: dict[str, str] = {}
+    changed = False
+    i = 0
+    while i < len(lines):
+        raw = lines[i]
+        match = CLOSURE_RETURN_FN_RE.match(code_only(raw))
+        if match is None:
+            lowered.append(raw)
+            i += 1
+            continue
+
+        if i + 2 >= len(lines):
+            return text
+        ret_match = CLOSURE_RETURN_LINE_RE.match(code_only(lines[i + 1]).strip())
+        if ret_match is None or code_only(lines[i + 2]).strip() != "}":
+            return text
+
+        indent = match.group(1)
+        maker_name = match.group(2)
+        capture_name = match.group(3)
+        closure_arg = ret_match.group(1)
+        body_expr = ret_match.group(2).strip().rstrip(",").rstrip()
+        if IDENT_TEXT_RE.fullmatch(closure_arg) is None:
+            return text
+        apply_name = f"{maker_name}__apply"
+        apply_expr = replace_word(body_expr, capture_name, "env")
+
+        lowered.append(f"{indent}fn {maker_name}({capture_name}: Int) -> Int {{")
+        lowered.append(f"{indent}    return {capture_name}")
+        lowered.append(f"{indent}}}")
+        lowered.append("")
+        lowered.append(f"{indent}fn {apply_name}(env: Int, {closure_arg}: Int) -> Int {{")
+        lowered.append(f"{indent}    return {apply_expr}")
+        lowered.append(f"{indent}}}")
+        makers[maker_name] = apply_name
+        changed = True
+        i += 3
+
+    if not changed:
+        return text
+
+    rewritten: list[str] = []
+    closure_vars: dict[str, str] = {}
+    brace_depth = 0
+    for raw in lowered:
+        code = code_only(raw)
+        if re.match(r"^\s*fn\b", code):
+            closure_vars = {}
+
+        let_match = re.match(r"^\s*let\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(", code)
+        if let_match and let_match.group(2) in makers:
+            closure_vars[let_match.group(1)] = makers[let_match.group(2)]
+
+        line = rewrite_closure_var_calls(raw, closure_vars)
+        if line is None:
+            return text
+        rewritten.append(line)
+
+        brace_depth += code.count("{") - code.count("}")
+        if brace_depth <= 0:
+            closure_vars = {}
+            brace_depth = 0
+
+    return "\n".join(rewritten) + ("\n" if text.endswith("\n") else "")
+
+
 def prepare_bootstrap_source(source: Path, tmp: Path) -> Path:
     raw = source.read_text()
-    lowered = lower_simple_enum_match_text(raw)
-    if lowered == raw:
-        lowered = lower_payload_enum_match_text(raw)
+    lowered = raw
+    for lowerer in (
+        lower_simple_enum_match_text,
+        lower_payload_enum_match_text,
+        lower_simple_closure_return_text,
+    ):
+        new_lowered = lowerer(lowered)
+        if new_lowered != lowered:
+            lowered = new_lowered
     if lowered == raw:
         return source
     lowered_path = tmp / "front_lowered.nl"

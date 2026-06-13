@@ -4,7 +4,8 @@
 # The native front is intentionally narrow: Int functions, let/let mut,
 # integer arithmetic/comparisons, return, if/else, while, plain function calls,
 # print/putchar, simple structs, payload-free enum/match, small Int-coded
-# payload enum/match, and the first List push/len/index/sum slice.
+# payload enum/match, single-Int closure return, and the first
+# List push/len/index/sum slice.
 # Broader language features stay on the Legacy bootstrap path until their native
 # slices land.
 set -uo pipefail
@@ -145,6 +146,28 @@ else
     fail=1
 fi
 
+closure_accept="$tmp/front_closure_accept.vais"
+cat > "$closure_accept" <<'SRC'
+fn adder(n: Int) -> fn(Int) -> Int {
+    return |x| x + n
+}
+
+fn main() -> Int {
+    let add3 = adder(3)
+    return add3(4)
+}
+SRC
+
+"$VAISC" run "$closure_accept" >"$tmp/closure_accept.out" 2>"$tmp/closure_accept.err"
+got=$?
+if [ "$got" = "7" ]; then
+    echo "  PASS accepts single-Int closure return slice"
+else
+    echo "  FAIL accepts closure return slice got=$got want=7"
+    cat "$tmp/closure_accept.err"
+    fail=1
+fi
+
 list_accept="$tmp/front_list_accept.vais"
 cat > "$list_accept" <<'SRC'
 fn main() -> Int {
@@ -232,6 +255,13 @@ fn main() -> Int {
         Color.Red => 1,
         Color.Green => 2,
     }
+}
+SRC
+
+expect_reject "closure_literal" "closures beyond the single-Int closure-return" "broader closure cases" <<'SRC'
+fn main() -> Int {
+    let add1 = |x| x + 1
+    return add1(2)
 }
 SRC
 

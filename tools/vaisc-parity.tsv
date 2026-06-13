@@ -39,7 +39,7 @@ examples/c4.nl	native-supported	Struct literal and field access.
 examples/e14_print.nl	native-supported	Print interpolation and IO call support.
 examples/e50_ast_eval.nl	native-supported	Small recursive payload enum lowered to Int-coded tags.
 examples/e75_list_push.nl	native-supported	List push/growth and index access.
-examples/e80_closure_return.nl	bootstrap-only	Closure return ABI remains Legacy bootstrap-only.
+examples/e80_closure_return.nl	native-supported	Single-Int closure return lowered to Int env/apply helper.
 compiler/self/fixpoint.nl	bootstrap-only	Self-host arithmetic tier uses Str/List/struct/Bool.
 compiler/self/fixpoint2.nl	bootstrap-only	Self-host variable tier uses Str/List/struct/Bool.
 compiler/self/fixpoint3.nl	bootstrap-only	Self-host function tier uses Str/List/struct/Bool.

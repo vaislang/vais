@@ -119,12 +119,13 @@ Accepted day-1 native subset:
 - simple `struct` literals and field access,
 - payload-free enum tags and simple return-arm `match`,
 - small Int-coded payload enum/match slices,
+- single-Int closure return lowering,
 - `List<Int>` local push/growth, `.len()`, `.sum()`, and index access.
 
 Rejected with P4-style `help:` diagnostics:
 - missing or non-`Int` `fn main` entrypoint,
 - helper functions without `name: Int` params and `-> Int` return,
-- `for`, broader payload enum/match, closures, traits/impls,
+- `for`, broader payload enum/match, broader closures, traits/impls,
 - strings/chars/bools, `Map`/`Option`/`Result`, `?`,
 - method calls beyond `.push()`/`.len()`/`.sum()`,
 - Rust-habit spellings such as `&&`, `||`, `!`, `as`, `::`, `Vec`, `HashMap`, `String`, compound assignment.
@@ -206,8 +207,8 @@ Contract:
 - `tracked` entries must remain Legacy-green and are expected not to pass natively yet; if one starts passing, the gate fails so it can be promoted.
 
 Current coverage:
-- `native-supported=32`,
-- `bootstrap-only=5`, including the four self-host tier files,
+- `native-supported=33`,
+- `bootstrap-only=4`, the four self-host tier files,
 - `tracked=0`.
 
 Promoted native slices after the first gate:
@@ -223,6 +224,7 @@ Promoted native slices after the first gate:
 - Payload-free enum dispatch and small Int/self-recursive payload enum lowering, covering
   `examples/e22_enum_dispatch.nl`, `examples/e35_calc_dispatch.nl`,
   `examples/e30_enum_payload_match.nl`, and `examples/e50_ast_eval.nl`.
+- Single-Int closure return lowering, covering `examples/e80_closure_return.nl`.
 
 Gate:
 - `bash scripts/test-vaisc-parity.sh`
