@@ -19,7 +19,8 @@
 - [x] **D0. 이름 확정**: `nl`은 구현 코드명, 사용자-facing 언어명은 **New Vais / Vais**.
 - [x] **D1. Legacy 경계 확정**: `/Users/sswoo/study/projects/vais/compiler`는 Legacy Vais bootstrap backend와 oracle.
 - [x] **D2. 자체 컴파일러 mainline 진입**: `compiler/self/fixpoint_full.nl`을 seed로 삼아 직접 LLVM IR emit 컴파일러로 전진.
-- [x] **D3. 즉시 rename 보류**: repo/확장자/스크립트 rename은 자체 컴파일러 parity 이후 별도 migration으로 처리.
+- [x] **D3. repo/확장자 rename 보류**: repo 폴더와 `.nl` 확장자는 별도 migration gate로 처리.
+- [x] **D4. legacy adapter canonical rename**: `legacy_vais_bootstrap.py`를 canonical bootstrap adapter로 승격하고, `nl2vais.py`는 호환 래퍼로 유지.
 
 ### 현재 우선순위 큐
 1. [x] **NV-C0 컴파일러 제품 경계 정의**: `scripts/vaisc`가 `.vais`/`.nl` 입력을 받아 LLVM IR emit/build/run을 제공하고, `scripts/test-vaisc.sh`가 Legacy bootstrap oracle과 값 비교.
@@ -27,6 +28,7 @@
 3. [x] **NV-C2 직접 LLVM IR emitter 분리**: `scripts/vaisc --engine direct`가 Legacy Vais 없이 단일 `fn main() -> Int { return <Int expr> }`를 직접 LLVM IR로 emit/build/run하고 bootstrap oracle과 값 비교.
 4. [x] **NV-C3 P4 에러 UX day-1**: native `vaisc` 경로가 Rust식 습관과 direct emitter parse 실패에 source 좌표/line/caret/`help:`/`fix:` 진단을 낸다.
 5. [x] **NV-C4 parity gate**: `tools/vaisc-parity.tsv`가 `examples/` 코퍼스와 self-host tier를 `native-supported`/`bootstrap-only`/`tracked`로 기록하고, `scripts/test-vaisc-parity.sh`가 native-supported 항목을 Legacy bootstrap 결과와 값 비교.
+6. [x] **NV-M1 naming migration slice**: Legacy bootstrap adapter canonical path를 `compiler/transpiler/legacy_vais_bootstrap.py`로 바꾸고, 도구/스크립트/현재 문서는 새 이름을 사용한다. 기존 `nl2vais.py`는 compatibility wrapper다.
 
 세부 계약: `docs/design/new-vais-compiler-mainline-2026-06-13.md`.
 
@@ -84,7 +86,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 1d. ~~**실제 `fixpoint.nl` source-file bootstrap smoke**~~ **✅ 첫 파일 게이트 해결**(FP12mm, 2026-06-08): `tools/embed_self_source.py`가 실제 `compiler/self/fixpoint.nl` 파일을 현재 compact self-host subset으로 정규화(comments 제거, double-string→backtick, struct field type 제거, semicolon 보강, outer brace escape)해 `fixpoint_full`의 `compile("...")` 입력으로 주입. `fn main()`이 있는 실제 파일에서 duplicate `@main`이 나던 갭을 `has_top_stmts`로 해결(top-level 실행문이 없으면 synthetic wrapper 생략). 실측: 정규화된 실제 `fixpoint.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 24` LLVM IR emit → emitted IR clang/run exit 24. = **snippet 통합에서 실제 파일 입력 자동 게이트로 한 단계 상승.**
 1e. ~~**실제 `fixpoint2.nl` source-file bootstrap smoke + 10-param arity**~~ **✅ 두 번째 파일 게이트 해결**(FP12nn, 2026-06-08): 실제 `compiler/self/fixpoint2.nl` 원본의 `word_is(src, a, alen, w0, w1, w2, w3, w4, w5, wlen)`가 10개 파라미터를 쓰면서 기존 8-param 슬롯 한계를 노출. `Fn` metadata/타입판정/signature/call arg capture/param alloca/post-call List length sync를 p8/p9까지 확장하고, `s10`, late `List` out-param, 실제 `word_is("return", ...)` shape를 회귀 가드로 추가. 실측: 정규화된 실제 `fixpoint2.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 50` LLVM IR emit → emitted IR clang/run exit 50. = **실제 파일 입력 자동 게이트가 산술 tier에서 산술+변수 tier로 확장.**
 1f. ~~**실제 `fixpoint3.nl` source-file bootstrap smoke**~~ **✅ 세 번째 파일 게이트 해결**(FP12oo, 2026-06-08): 실제 `compiler/self/fixpoint3.nl` 원본의 multi-line `Fn` struct/`fns.push(Fn { ... })`, nested string brace escape, 8-field `Fn` metadata, Str param retlist call, `List[index].field` scalar assignment, `-> List` void signature 갭을 해결. 실측: 정규화된 실제 `fixpoint3.nl` → fixpoint_full compile → generated compiler IR `@main` 1개 → clang/run → `ret i64 120` LLVM IR emit → emitted IR clang/run exit 120. = **실제 파일 입력 자동 게이트가 재귀 함수언어 tier까지 확장.**
-1g. ~~**`fixpoint_full.nl` full-source probe — struct ABI blocker**~~ **✅ full-source 1세대 컴파일러 probe 통과**(FP12pp~qq, 2026-06-09): 실제 `compiler/self/fixpoint_full.nl` 전체를 source-file harness로 주입. embed helper의 regex replacement backslash 손실과 LLVM C-string `\`/`"` escaping 갭을 먼저 해결한 뒤, `emit_op(o: Op)`/`emit_binop(..., l: Op, r: Op)`/`gen_factor -> Op` 계열이 요구한 **struct-valued function params/returns**를 hidden out-param ABI로 지원. 추가로 List param alias, 10-arg `-> List` call path, internal `Fn`/`StructDef` metadata field lookup, `/` operator를 닫음. 실측: normalize/embed → `nl2vais` → `vaisc build` → generated compiler IR `954648` bytes, `@main` 1개, negative GEP 0개 → clang/run → emitted IR clang/run exit 42. = **현재 `fixpoint_full.nl` 전체 소스가 `fixpoint_full`로 컴파일되어 실행 가능한 컴파일러를 만들고, 그 컴파일러가 다시 nl 프로그램을 LLVM IR로 emit/run한다.**
+1g. ~~**`fixpoint_full.nl` full-source probe — struct ABI blocker**~~ **✅ full-source 1세대 컴파일러 probe 통과**(FP12pp~qq, 2026-06-09): 실제 `compiler/self/fixpoint_full.nl` 전체를 source-file harness로 주입. embed helper의 regex replacement backslash 손실과 LLVM C-string `\`/`"` escaping 갭을 먼저 해결한 뒤, `emit_op(o: Op)`/`emit_binop(..., l: Op, r: Op)`/`gen_factor -> Op` 계열이 요구한 **struct-valued function params/returns**를 hidden out-param ABI로 지원. 추가로 List param alias, 10-arg `-> List` call path, internal `Fn`/`StructDef` metadata field lookup, `/` operator를 닫음. 실측: normalize/embed → legacy bootstrap adapter → `vaisc build` → generated compiler IR `954648` bytes, `@main` 1개, negative GEP 0개 → clang/run → emitted IR clang/run exit 42. = **현재 `fixpoint_full.nl` 전체 소스가 `fixpoint_full`로 컴파일되어 실행 가능한 컴파일러를 만들고, 그 컴파일러가 다시 nl 프로그램을 LLVM IR로 emit/run한다.**
 2. ~~**TRACKED 컴파일러 버그 2건**~~ **✅ 둘 다 근본수정**(2026-06-08): (ⓐ) all-return if/else-if 빈 merge block → block_returns()+`unreachable`(FP12gg, 580ca3a); (ⓑ) `.len` on List-of-structs가 struct-field GEP로 오인 → struct-field branch에 `karr != 2` 가드(FP12ff, 0d64afb). 둘 다 task chip dismiss.
 3. ~~**반복 self-host/fixpoint 긴 게이트 자동화**~~ **✅ 해결**(2026-06-09): `scripts/test-fixpoint-full-self.sh`
    추가. 최종 `fixpoint_full.nl` 3.9k줄 full-source 1세대 compiler probe뿐 아니라, generated compiler가 실제
@@ -111,7 +113,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    native-supported에 편입했다.
    검증된 `compiler/self/fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl` tier source도
    product bootstrap engine 입력으로 허용해 manifest bootstrap-only를 0으로 닫았다.
-6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
+6. **naming migration** — `legacy_vais_bootstrap.py`가 canonical legacy adapter이고, `nl2vais.py`는 wrapper다.
+   repo 폴더 `nl`과 `.nl` 확장자는 아직 검증 인프라 경로이므로 별도 migration gate에서 다룬다.
+7. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---
 

@@ -13,35 +13,9 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-TRANSPILER="$HERE/compiler/transpiler/nl2vais.py"
+TRANSPILER="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
 VAIS_COMPILER_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
-LEGACY_VAISC="${LEGACY_VAISC:-}"
-
-if [ -z "$LEGACY_VAISC" ]; then
-    for candidate in \
-        "$VAIS_COMPILER_ROOT/target/debug/vaisc" \
-        "$VAIS_COMPILER_ROOT/target/release/vaisc"
-    do
-        if [ -x "$candidate" ]; then
-            LEGACY_VAISC="$candidate"
-            break
-        fi
-    done
-fi
-if [ -z "$LEGACY_VAISC" ]; then
-    LEGACY_VAISC="$(command -v vaisc || true)"
-fi
-if [ -z "$LEGACY_VAISC" ]; then
-    echo "error: Legacy vaisc not found. Set LEGACY_VAISC=/path/to/legacy/vaisc" >&2
-    exit 1
-fi
-LEGACY_VAISC_RESOLVED="$(cd "$(dirname "$LEGACY_VAISC")" && pwd)/$(basename "$LEGACY_VAISC")"
-REPO_VAISC="$(cd "$HERE/scripts" && pwd)/vaisc"
-if [ "$LEGACY_VAISC_RESOLVED" = "$REPO_VAISC" ]; then
-    echo "error: scripts/build.sh needs Legacy vaisc, but PATH resolved repo-local scripts/vaisc" >&2
-    echo "hint: set LEGACY_VAISC=/path/to/legacy/vaisc" >&2
-    exit 1
-fi
+source "$HERE/scripts/legacy-vaisc-env.sh"
 
 SRC="${1:?usage: build.sh program.(vais|nl) [-o out]}"
 OUT="a.out"
@@ -53,5 +27,5 @@ python3 "$TRANSPILER" "$SRC" > "$VAIS_OUT"
 # 2. compile with vaisc (run from Vais root so `use std/...` resolves)
 ABS_VAIS_OUT="$(cd "$(dirname "$VAIS_OUT")" && pwd)/$(basename "$VAIS_OUT")"
 ABS_OUT="$(cd "$(dirname "$OUT")" 2>/dev/null && pwd || pwd)/$(basename "$OUT")"
-( cd "$VAIS_COMPILER_ROOT" && rm -rf /tmp/.vais-cache && "$LEGACY_VAISC_RESOLVED" build "$ABS_VAIS_OUT" -o "$ABS_OUT" )
+legacy_vaisc_build "$ABS_VAIS_OUT" -o "$ABS_OUT"
 echo "built: $ABS_OUT  (from $SRC)"

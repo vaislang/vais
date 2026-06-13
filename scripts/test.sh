@@ -9,8 +9,9 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-TRANSPILER="$HERE/compiler/transpiler/nl2vais.py"
+TRANSPILER="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
+source "$HERE/scripts/legacy-vaisc-env.sh"
 
 run_one() {
     local src="$1"
@@ -26,7 +27,7 @@ run_one() {
         echo "  SKIP $name: $(head -1 "$tmp/warn" | sed 's/.*UNSUPPORTED//' | cut -c1-40)"; return 3
     fi
     local bin="$tmp/$name.bin"
-    if ! ( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$vais" -o "$bin" ) >"$tmp/build" 2>&1; then
+    if ! legacy_vaisc_build "$vais" -o "$bin" >"$tmp/build" 2>&1; then
         echo "  FAIL $name: build error ($(grep -m1 'error' "$tmp/build" | cut -c1-40))"; return 1
     fi
     "$bin"; local got=$?

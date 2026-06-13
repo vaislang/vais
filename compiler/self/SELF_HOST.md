@@ -83,7 +83,7 @@ a working first-generation compiler. The long gate is automated as
 `scripts/test-fixpoint-full-self.sh`:
 
 1. normalize/embed the full source with `tools/embed_self_source.py`
-2. transpile with `compiler/transpiler/nl2vais.py`
+2. transpile with `compiler/transpiler/legacy_vais_bootstrap.py`
 3. build the generated Vais compiler with `vaisc`
 4. run that compiler to emit LLVM IR
 5. clang the emitted IR and run the resulting program

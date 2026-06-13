@@ -23,7 +23,7 @@ from typing import Callable
 ROOT = Path(__file__).resolve().parents[1]
 FIXPOINT_FULL = ROOT / "compiler" / "self" / "fixpoint_full.nl"
 EMBED_SELF_SOURCE = ROOT / "tools" / "embed_self_source.py"
-TRANSPILER = ROOT / "compiler" / "transpiler" / "nl2vais.py"
+TRANSPILER = ROOT / "compiler" / "transpiler" / "legacy_vais_bootstrap.py"
 DEFAULT_LEGACY_ROOT = Path("/Users/sswoo/study/projects/vais/compiler")
 SELF_HOST_TIER_SOURCES = {
     (ROOT / "compiler" / "self" / "fixpoint.nl").resolve(),

@@ -9,7 +9,8 @@
 ## 0. 30초 요약
 
 - **New Vais**는 AI가 정확히 쓰는 언어로 확정된 새 Vais mainline이다. `nl`은 전환기 repo/확장자 코드명이다.
-- 현재 bootstrap 파이프라인: `New Vais(.nl) 소스` → `nl2vais.py` → `Legacy Vais` → `vaisc build` → 네이티브 LLVM 실행.
+- 현재 bootstrap 파이프라인: `New Vais(.nl) 소스` → `legacy_vais_bootstrap.py` → `Legacy Vais` → `vaisc build` → 네이티브 LLVM 실행.
+  `nl2vais.py`는 기존 호출을 위한 compatibility wrapper다.
 - **메인 산출물**: `compiler/self/fixpoint_full.nl` — New Vais로 작성한 self-host 컴파일러 seed.
   입력 nl 프로그램 문자열을 받아 **토큰화 → 평가/codegen → LLVM IR을 emit**한다.
 - **현재 상태**: front(tokenize/eval) + codegen(print로 IR emit) 전체 self-host arc 동작.
@@ -19,7 +20,7 @@
   `@.sNNN`/`@.fmtNNN` global 이름만 정규화하고, 그 외 IR은 byte-for-byte 일치해야 한다.
 - **현재 New Vais 명령 계약**: repo-local `scripts/vaisc`가 공식 `vaisc` 전환 대상이다.
   Legacy `vaisc` 바이너리는 내부 bootstrap/oracle 용도다.
-- **다음 목표**: ROADMAP의 NV-C2~NV-C4. 자체 컴파일러 mainline을 만들고 Legacy Vais 의존을 bootstrap/oracle로 줄인다.
+- **다음 목표**: ROADMAP의 migration/hardening 큐. 자체 컴파일러 mainline을 유지하면서 Legacy Vais 의존을 bootstrap/oracle로 계속 축소한다.
 
 ---
 
@@ -64,7 +65,9 @@ bash scripts/test-vaisc-errors.sh    # New Vais native P4 diagnostics: 좌표/he
 bash scripts/test-vaisc-parity.sh    # New Vais native/bootstrap/tracked parity manifest
 ```
 
-전제: `vaisc`가 PATH에 있어야 한다(`which vaisc`로 확인; 없으면 Vais repo에서 빌드).
+전제: Legacy Vais repo에 빌드된 `target/debug/vaisc` 또는 `target/release/vaisc`가 있어야 한다.
+bootstrap/oracle 스크립트는 `scripts/legacy-vaisc-env.sh`를 통해 이 repo-local binary를 PATH보다 우선한다.
+없으면 `LEGACY_VAISC=/path/to/vaisc`로 지정하거나, 마지막 fallback으로 PATH의 `vaisc`를 사용한다.
 게이트는 테스트마다 transpile+vaisc build+clang+run을 하므로 **느리다**(특히 e2e).
 백그라운드로 시작하고 `RESULT:` 줄을 기다려라.
 
@@ -149,7 +152,7 @@ New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/va
 
 ## 6. 함정 카탈로그 (실측으로 학습된 것들 — 다시 밟지 마라)
 
-### 트랜스파일러 (`nl2vais.py`)
+### Legacy bootstrap adapter (`legacy_vais_bootstrap.py`, old `nl2vais.py` wrapper)
 - **line/token rewriter이지 진짜 파서가 아니다.** 단일 라인 nested if/else
   (`else { ...; if .. {} else {} }`)를 못 다룬다 → **여러 줄로 작성**하라.
 - `expand_for_loops`의 brace 카운트는 `#` 주석 안의 brace도 센다 → **루프 본문 주석에
@@ -200,7 +203,7 @@ New Vais 작업 중 Legacy Vais 버그를 만나 `/Users/sswoo/study/projects/va
 
 ## 8. 남은 작업 (ROADMAP §방향 결정 / 현재 우선순위 큐 참조)
 
-- **NV-C2~NV-C4 자체 컴파일러 mainline**: 직접 LLVM emitter, P4 에러 UX, parity gate.
+- **migration/hardening 큐**: repo/확장자 물리 rename은 별도 gate로 진행하고, legacy adapter wrapper 제거는 외부 호출이 사라진 뒤에만 한다.
 - **NV-C0 완료 상태 유지**: `scripts/vaisc`와 `scripts/test-vaisc.sh`가 깨지면 제품 경계 회귀로 본다.
 - **NV-C1 완료 상태 유지**: `scripts/vaisc` front preflight와 `scripts/test-vaisc-front.sh`가 깨지면 native front 계약 회귀로 본다.
 - **self-host hardening**: stage oracle은 해결됐으므로, 새 stage drift 원인은 짧은 회귀 fixture와 긴 stage compare gate 양쪽에 묶어둔다.

@@ -8,7 +8,8 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
-TR="$HERE/compiler/transpiler/nl2vais.py"
+source "$HERE/scripts/legacy-vaisc-env.sh"
+TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
 SRC="$HERE/compiler/self/fixpoint_full.nl"
 fail=0
 
@@ -21,7 +22,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] +
 open(sys.argv[2], "w").write(src)
 PY
   python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-  ( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+  legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
     || { echo "  FAIL '$prog': compiler build"; fail=1; return; }
   "$tmp/c" > "$tmp/out.ll"
   clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null \
@@ -507,7 +508,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] +
 open(sys.argv[2], "w").write(src)
 PY
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q "define i64 @sum_to(i64 %a0)" "$tmp/out.ll" && grep -q "store i64 %a0" "$tmp/out.ll" && grep -q "br label %loop" "$tmp/out.ll" && grep -q "call i64 @sum_to" "$tmp/out.ll"; then
   echo "  PASS emits function(param-alloca) + loop + call (functions-with-imperative-bodies codegen)";
@@ -537,7 +538,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] +
 open(sys.argv[2], "w").write(src)
 PY
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q "br label %loop" "$tmp/out.ll" && grep -q "icmp slt i64" "$tmp/out.ll" && grep -q "add i64" "$tmp/out.ll"; then
   echo "  PASS for-loop desugars to induction-variable loop (store/loop/icmp slt/add)";
@@ -553,7 +554,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] +
 open(sys.argv[2], "w").write(src)
 PYEOF
   python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-  ( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 || { echo "  FAIL '$prog': compiler build"; fail=1; return; }
+  legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 || { echo "  FAIL '$prog': compiler build"; fail=1; return; }
   "$tmp/c" > "$tmp/out.ll"
   clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null || { echo "  FAIL '$prog': IR invalid"; fail=1; return; }
   local got; got="$("$tmp/bin")"
@@ -591,7 +592,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] +
 open(sys.argv[2], "w").write(src)
 PY
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q '@.fmt' "$tmp/out.ll" && grep -q 'call i32 (i8\*, ...) @printf' "$tmp/out.ll"; then
   echo "  PASS print interpolation emits @.fmt global + printf call";
@@ -606,7 +607,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] +
 open(sys.argv[2], "w").write(src)
 PY
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q 'c"op=%s\\0A\\00"' "$tmp/out.ll" && grep -q 'call i32 (i8\*, .*i8\* %t' "$tmp/out.ll"; then
   echo "  PASS print string interpolation emits %s + i8* vararg";
@@ -624,7 +625,7 @@ tmp="$(mktemp -d)"
 python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint.nl" "$tmp/c.nl" \
   || { echo "  FAIL source-file bootstrap: embed"; fail=1; }
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
   || { echo "  FAIL source-file bootstrap: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/source_compiler.ll"
 main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
@@ -656,7 +657,7 @@ tmp="$(mktemp -d)"
 python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint2.nl" "$tmp/c.nl" \
   || { echo "  FAIL source-file bootstrap fixpoint2.nl: embed"; fail=1; }
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
   || { echo "  FAIL source-file bootstrap fixpoint2.nl: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/source_compiler.ll"
 main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
@@ -689,7 +690,7 @@ tmp="$(mktemp -d)"
 python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint3.nl" "$tmp/c.nl" \
   || { echo "  FAIL source-file bootstrap fixpoint3.nl: embed"; fail=1; }
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
   || { echo "  FAIL source-file bootstrap fixpoint3.nl: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/source_compiler.ll"
 main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
@@ -732,7 +733,7 @@ PY
 python3 "$HERE/tools/embed_self_source.py" "$SRC" "$tmp/source_with_backslash.nl" "$tmp/c.nl" \
   || { echo "  FAIL source-file backslash smoke: embed"; fail=1; }
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
   || { echo "  FAIL source-file backslash smoke: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/out.ll"
 if grep -q 'c"\\5C\\5C0A\\00"' "$tmp/out.ll"; then
@@ -765,7 +766,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + literal + '")', src,
 Path(sys.argv[2]).write_text(src)
 PY
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
   || { echo "  FAIL direct double-string smoke: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/out.ll"
 if grep -Fq 'c"\5C5C\00"' "$tmp/out.ll"; then
@@ -792,7 +793,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] +
 open(sys.argv[2], "w").write(src)
 PY
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q 'private constant \[' "$tmp/out.ll" && grep -q 'alloca i8\*' "$tmp/out.ll" && grep -q 'getelementptr i8, i8\*' "$tmp/out.ll" && grep -q 'zext i8' "$tmp/out.ll"; then
   echo "  PASS emits string global + i8* alloca + byte load [string codegen integrated]";

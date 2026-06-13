@@ -6,10 +6,11 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
-TR="$HERE/compiler/transpiler/nl2vais.py"
+source "$HERE/scripts/legacy-vaisc-env.sh"
+TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
 tmp="$(mktemp -d)"
 python3 "$TR" "$HERE/compiler/self/codegen.nl" > "$tmp/cg.vais"
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/cg.vais" -o "$tmp/cg" ) >/dev/null 2>&1 || { echo "FAIL: codegen.nl build"; exit 1; }
+legacy_vaisc_build "$tmp/cg.vais" -o "$tmp/cg" >/dev/null 2>&1 || { echo "FAIL: codegen.nl build"; exit 1; }
 "$tmp/cg" > "$tmp/out.ll"
 clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null || { echo "FAIL: generated IR invalid"; cat "$tmp/out.ll"; exit 1; }
 "$tmp/bin"; got=$?

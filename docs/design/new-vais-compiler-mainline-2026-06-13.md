@@ -2,9 +2,10 @@
 
 ## Decision
 
-New Vais / Vais is the user-facing language name. The `nl` repository name,
-`.nl` extension, and `nl2vais.py` remain transitional implementation names
-until the native compiler reaches parity with the current bootstrap gates.
+New Vais / Vais is the user-facing language name. The `nl` repository name and
+`.nl` extension remain transitional implementation names. The legacy bootstrap
+adapter's canonical name is `legacy_vais_bootstrap.py`; `nl2vais.py` remains as
+a compatibility wrapper for old calls.
 
 Legacy Vais (`/Users/sswoo/study/projects/vais/compiler`) stays as:
 - bootstrap backend for the current validated pipeline,
@@ -28,7 +29,7 @@ The native path must eventually replace the transitional path:
 
 ```
 New Vais source (.nl)
-  -> nl2vais.py
+  -> legacy_vais_bootstrap.py
   -> Legacy Vais
   -> vaisc
   -> clang/native execution
@@ -36,7 +37,9 @@ New Vais source (.nl)
 
 ## Non-Goals
 
-- Do not rename `projects/nl`, `.nl`, or `nl2vais.py` before parity.
+- Do not rename `projects/nl` or `.nl` without a dedicated migration gate.
+- Do not delete the `nl2vais.py` compatibility wrapper until old external calls
+  are migrated.
 - Do not delete the Legacy Vais bootstrap path before the native compiler has
   its own parity gate.
 - Do not attempt L4 ecosystem/product distribution in this phase.
@@ -241,11 +244,11 @@ Done when:
 
 ## Migration Rule
 
-Only after NV-C4 covers the core examples and self-host tiers should the project
-consider physical rename:
+NV-C4 now covers the core examples and self-host tiers. The adapter rename is
+done; the remaining physical rename decisions are:
 
 - `projects/nl` -> `projects/vais`,
 - optional `.nl` -> `.vais`,
-- `nl2vais.py` -> bootstrap/legacy adapter name.
+- eventual removal of the `nl2vais.py` compatibility wrapper.
 
 Until then, `nl` is a stable implementation code name, not the language brand.

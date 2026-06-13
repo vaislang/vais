@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Unit tests for the nl->Vais transpiler (regression protection for the tool
+"""Unit tests for the New Vais -> Legacy Vais bootstrap adapter (regression protection for the tool
 itself, separate from the value-correctness runner). Checks that specific nl
-snippets transpile to the expected Vais — so a transpiler change that breaks a
+snippets adapt to the expected Legacy Vais — so an adapter change that breaks a
 mapping is caught even if no example exercises it.
 
 Run:  python3 tests/transpiler_test.py
@@ -12,9 +12,9 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TRANSPILER = os.path.join(HERE, "..", "compiler", "transpiler", "nl2vais.py")
+TRANSPILER = os.path.join(HERE, "..", "compiler", "transpiler", "legacy_vais_bootstrap.py")
 
-spec = importlib.util.spec_from_file_location("nl2vais", TRANSPILER)
+spec = importlib.util.spec_from_file_location("legacy_vais_bootstrap", TRANSPILER)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 

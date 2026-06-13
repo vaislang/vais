@@ -7,7 +7,8 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
-TR="$HERE/compiler/transpiler/nl2vais.py"
+source "$HERE/scripts/legacy-vaisc-env.sh"
+TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
 SRC="$HERE/compiler/self/fixpoint_struct.nl"
 fail=0
 
@@ -20,7 +21,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] +
 open(sys.argv[2], "w").write(src)
 PY
   python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-  ( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1 \
+  legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
     || { echo "  FAIL '$prog': compiler build"; fail=1; return; }
   "$tmp/c" > "$tmp/out.ll"
   clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null \
@@ -50,7 +51,7 @@ src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] +
 open(sys.argv[2], "w").write(src)
 PY
 python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >/dev/null 2>&1
+legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q "alloca \[2 x i64\]" "$tmp/out.ll" && grep -q "getelementptr \[2 x i64\]" "$tmp/out.ll"; then
   echo "  PASS emits struct alloca + field GEP (record codegen)";

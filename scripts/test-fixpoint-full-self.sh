@@ -10,7 +10,8 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais/compiler}"
-TR="$HERE/compiler/transpiler/nl2vais.py"
+source "$HERE/scripts/legacy-vaisc-env.sh"
+TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
 SRC="$HERE/compiler/self/fixpoint_full.nl"
 EMBED="$HERE/tools/embed_self_source.py"
 NORM_IR="$HERE/tools/normalize_stage_ir.py"
@@ -46,7 +47,7 @@ run_full_probe() {
     || { echo "  FAIL $label: embed"; fail=1; return; }
   python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>"$tmp/transpile.err" \
     || { echo "  FAIL $label: transpile"; cat "$tmp/transpile.err"; fail=1; return; }
-  ( cd "$VAIS_ROOT" && rm -rf /tmp/.vais-cache && vaisc build "$tmp/c.vais" -o "$tmp/c" ) >"$tmp/build.log" 2>&1 \
+  legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >"$tmp/build.log" 2>&1 \
     || { echo "  FAIL $label: compiler build"; cat "$tmp/build.log"; fail=1; return; }
 
   "$tmp/c" > "$tmp/source_compiler.ll"
