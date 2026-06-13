@@ -144,11 +144,6 @@ def fix_turbofish_new(match: re.Match[str], raw: str) -> str:
 
 FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
     (
-        re.compile(r"\bstruct\b"),
-        "struct declarations are not in the New Vais native day-1 front subset yet",
-        "use Int values/functions for this slice, or keep structs on the Legacy bootstrap path until NV-C4.",
-    ),
-    (
         re.compile(r"\benum\b"),
         "enum declarations are not in the New Vais native day-1 front subset yet",
         "model this day-1 case with Int tags, or keep enums on the Legacy bootstrap path until NV-C4.",
@@ -174,8 +169,8 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
         "use Int 0/1 values or comparisons in this slice.",
     ),
     (
-        re.compile(r"\b(List|Map|Option|Result)\s*<|\blist\s*\("),
-        "collections and sum-result types are not in the New Vais native day-1 front subset yet",
+        re.compile(r"\b(Map|Option|Result)\s*<|\blist\s*\("),
+        "map and sum-result types are not in the New Vais native front subset yet",
         "keep this source on the Legacy bootstrap path until the native parity gate grows to it.",
     ),
     (
@@ -194,14 +189,9 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
         "write a named function for this slice; closure object parity is tracked after the front contract.",
     ),
     (
-        re.compile(r"\["),
-        "list/array literals and indexing are not in the New Vais native day-1 front subset yet",
-        "use scalar Int locals and function calls for this slice.",
-    ),
-    (
-        re.compile(r"\.[A-Za-z_][A-Za-z0-9_]*\s*\("),
-        "method calls are not in the New Vais native day-1 front subset yet",
-        "use a plain function call for this slice.",
+        re.compile(r"\.(?!(?:push|len)\s*\()[A-Za-z_][A-Za-z0-9_]*\s*\("),
+        "method calls beyond push/len are not in the New Vais native front subset yet",
+        "use a plain function call, or keep this source on the Legacy bootstrap path until that method is promoted.",
     ),
     (
         re.compile(r"\?"),

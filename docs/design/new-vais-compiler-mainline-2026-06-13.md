@@ -115,14 +115,16 @@ Accepted day-1 native subset:
 - `if` / `else`,
 - `while`,
 - function calls,
-- `print("...{x}...")` interpolation and `putchar(Int)` IO calls.
+- `print("...{x}...")` interpolation and `putchar(Int)` IO calls,
+- simple `struct` literals and field access,
+- `List<Int>` local push/growth, `.len()`, and index access.
 
 Rejected with P4-style `help:` diagnostics:
 - missing or non-`Int` `fn main` entrypoint,
 - helper functions without `name: Int` params and `-> Int` return,
-- `for`, `struct`, `enum`, `match`, closures, traits/impls,
-- strings/chars/bools, collections, `Option`/`Result`, `?`,
-- method calls,
+- `for`, `enum`, `match`, closures, traits/impls,
+- strings/chars/bools, `Map`/`Option`/`Result`, `?`,
+- method calls beyond `.push()`/`.len()`,
 - Rust-habit spellings such as `&&`, `||`, `!`, `as`, `::`, `Vec`, `HashMap`, `String`, compound assignment.
 
 Gate:
@@ -202,8 +204,8 @@ Contract:
 - `tracked` entries must remain Legacy-green and are expected not to pass natively yet; if one starts passing, the gate fails so it can be promoted.
 
 Current coverage:
-- `native-supported=24`,
-- `bootstrap-only=10`, including the four self-host tier files,
+- `native-supported=26`,
+- `bootstrap-only=8`, including the four self-host tier files,
 - `tracked=0`.
 
 Promoted native slices after the first gate:
@@ -212,6 +214,8 @@ Promoted native slices after the first gate:
 - Bitwise builtin calls, `Int(...)`, generic marker skip for Int helpers,
   string literal equality, and single-byte char literals.
 - `print` interpolation and `putchar` IO calls, covering `examples/e14_print.nl`.
+- Simple struct field access and List push/growth/index access, covering
+  `examples/c4.nl` and `examples/e75_list_push.nl`.
 
 Gate:
 - `bash scripts/test-vaisc-parity.sh`

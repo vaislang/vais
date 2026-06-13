@@ -1,5 +1,26 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C6 — struct/List parity promotion)
+- front-only 우회 실측으로 `examples/c4.nl`과 `examples/e75_list_push.nl`이 이미 New Vais native backend에서
+  값정확성 통과함을 확인하고, 해당 slice를 제품 front에 편입했다.
+- `scripts/vaisc` native front에서 simple `struct` 선언/리터럴/field access와 `List<Int>` push/growth,
+  `.len()`, index access를 허용했다. 아직 실패하는 `.sum()` 같은 method는 계속 P4 진단으로 거절한다.
+- `scripts/test-vaisc-front.sh`에 struct field access와 List push/len/index accepted fixture를 추가하고,
+  기존 list-literal reject fixture는 unsupported `.sum()` reject로 교체했다.
+- `tools/vaisc-parity.tsv`에서 `examples/c4.nl`, `examples/e75_list_push.nl`을 `native-supported`로 승격했다.
+- 현재 parity coverage: `native-supported=26`, `bootstrap-only=8`, `tracked=0`.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py` = pass
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - targeted native checks: `examples/c4.nl` exit `42`, `examples/e75_list_push.nl` exit `23`,
+    `examples/c2.nl` remains rejected at unsupported `.sum()` with `help:`
+  - `bash -n scripts/test-vaisc-parity.sh` = pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=26 bootstrap=8 tracked=0)`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+
 ## 2026-06-13 (NV-C5 — print/putchar parity promotion)
 - `scripts/vaisc` native front에서 `print`/`putchar` 금지를 제거해 이미 self-host codegen에 있던 IO slice를
   제품 경로로 열었다.

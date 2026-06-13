@@ -32,10 +32,10 @@ examples/e67_power.nl	native-supported	Recursive power.
 examples/t1.nl	native-supported	Simple typed helper smoke.
 examples/c1.nl	bootstrap-only	Enum/match remains Legacy bootstrap-only.
 examples/c2.nl	bootstrap-only	List literal and sum remain Legacy bootstrap-only.
-examples/c4.nl	bootstrap-only	Struct field access remains Legacy bootstrap-only.
+examples/c4.nl	native-supported	Struct literal and field access.
 examples/e14_print.nl	native-supported	Print interpolation and IO call support.
 examples/e50_ast_eval.nl	bootstrap-only	Recursive AST enum remains Legacy bootstrap-only.
-examples/e75_list_push.nl	bootstrap-only	List push/growth remains Legacy bootstrap-only.
+examples/e75_list_push.nl	native-supported	List push/growth and index access.
 examples/e80_closure_return.nl	bootstrap-only	Closure return ABI remains Legacy bootstrap-only.
 compiler/self/fixpoint.nl	bootstrap-only	Self-host arithmetic tier uses Str/List/struct/Bool.
 compiler/self/fixpoint2.nl	bootstrap-only	Self-host variable tier uses Str/List/struct/Bool.

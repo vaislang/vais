@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # NV-C1 front-contract gate for the New Vais `vaisc` command.
 #
-# The day-1 native front is intentionally narrow: Int functions, let/let mut,
-# integer arithmetic/comparisons, return, if/else, while, and plain function
-# calls. The first IO slice also accepts print/putchar. Broader language
-# features stay on the Legacy bootstrap path until their native slices land.
+# The native front is intentionally narrow: Int functions, let/let mut,
+# integer arithmetic/comparisons, return, if/else, while, plain function calls,
+# print/putchar, simple structs, and the first List push/len/index slice.
+# Broader language features stay on the Legacy bootstrap path until their native
+# slices land.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -66,6 +67,49 @@ else
     fail=1
 fi
 
+struct_accept="$tmp/front_struct_accept.vais"
+cat > "$struct_accept" <<'SRC'
+struct Box {
+    value: Int,
+}
+
+fn main() -> Int {
+    let b = Box { value: 42 }
+    return b.value
+}
+SRC
+
+"$VAISC" run "$struct_accept" >"$tmp/struct_accept.out" 2>"$tmp/struct_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS accepts struct literal and field access slice"
+else
+    echo "  FAIL accepts struct slice got=$got want=42"
+    cat "$tmp/struct_accept.err"
+    fail=1
+fi
+
+list_accept="$tmp/front_list_accept.vais"
+cat > "$list_accept" <<'SRC'
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(10)
+    xs.push(20)
+    xs.push(30)
+    return xs.len() + xs[1]
+}
+SRC
+
+"$VAISC" run "$list_accept" >"$tmp/list_accept.out" 2>"$tmp/list_accept.err"
+got=$?
+if [ "$got" = "23" ]; then
+    echo "  PASS accepts List push/len/index slice"
+else
+    echo "  FAIL accepts List slice got=$got want=23"
+    cat "$tmp/list_accept.err"
+    fail=1
+fi
+
 expect_reject() {
     local name="$1"
     local needle="$2"
@@ -114,15 +158,6 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "struct_decl" "struct declarations" "Legacy bootstrap" <<'SRC'
-struct Pair { a, b }
-
-fn main() -> Int {
-    let p = Pair { a: 20, b: 22 }
-    return p.a + p.b
-}
-SRC
-
 expect_reject "rust_and" "logical AND uses the word" "replace .*&&.*and" <<'SRC'
 fn main() -> Int {
     if 1 == 1 && 2 == 2 {
@@ -132,10 +167,10 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "list_literal" "list/array literals" "scalar Int" <<'SRC'
+expect_reject "sum_method" "method calls beyond push/len" "plain function call" <<'SRC'
 fn main() -> Int {
     let xs = [20, 22]
-    return xs[0] + xs[1]
+    return xs.sum()
 }
 SRC
 
