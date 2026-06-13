@@ -27,9 +27,19 @@ TRANSPILER = ROOT / "compiler" / "transpiler" / "legacy_vais_bootstrap.py"
 DEFAULT_LEGACY_ROOT = Path("/Users/sswoo/study/projects/vais/compiler")
 SELF_HOST_TIER_SOURCES = {
     (ROOT / "compiler" / "self" / "fixpoint.nl").resolve(),
+    (ROOT / "compiler" / "self" / "fixpoint.vais").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint2.nl").resolve(),
+    (ROOT / "compiler" / "self" / "fixpoint2.vais").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint3.nl").resolve(),
+    (ROOT / "compiler" / "self" / "fixpoint3.vais").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint_full.nl").resolve(),
+    (ROOT / "compiler" / "self" / "fixpoint_full.vais").resolve(),
+}
+SELF_HOST_TIER_STEMS = {
+    "fixpoint",
+    "fixpoint2",
+    "fixpoint3",
+    "fixpoint_full",
 }
 
 
@@ -938,9 +948,25 @@ def prepare_bootstrap_source(source: Path, tmp: Path) -> Path:
 
 def is_self_host_tier_source(source: Path) -> bool:
     try:
-        return source.resolve() in SELF_HOST_TIER_SOURCES
+        resolved = source.resolve()
     except OSError:
         return False
+    if resolved in SELF_HOST_TIER_SOURCES:
+        return True
+    if source.suffix not in {".nl", ".vais"} or source.stem not in SELF_HOST_TIER_STEMS:
+        return False
+    trust_roots = os.environ.get("VAISC_SELF_HOST_TRUST_ROOTS", "")
+    for raw_root in trust_roots.split(os.pathsep):
+        if not raw_root:
+            continue
+        root = Path(raw_root).expanduser()
+        try:
+            trusted = (root / "compiler" / "self" / source.name).resolve()
+        except OSError:
+            continue
+        if resolved == trusted:
+            return True
+    return False
 
 
 @dataclass(frozen=True)

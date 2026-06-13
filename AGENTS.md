@@ -63,6 +63,7 @@ bash scripts/test-vaisc-front.sh     # New Vais day-1 native front accept/reject
 bash scripts/test-vaisc-direct.sh    # New Vais direct LLVM emitter, Legacy 없이 emit/build/run
 bash scripts/test-vaisc-errors.sh    # New Vais native P4 diagnostics: 좌표/help/fix
 bash scripts/test-vaisc-parity.sh    # New Vais native/bootstrap/tracked parity manifest
+bash scripts/test-vais-extension-migration.sh # .nl corpus를 임시 .vais mirror로 검증
 ```
 
 전제: Legacy Vais repo에 빌드된 `target/debug/vaisc` 또는 `target/release/vaisc`가 있어야 한다.

@@ -79,6 +79,7 @@ scripts/vaisc build program.vais -o /tmp/program        # clang까지 연결
 scripts/vaisc run program.vais --engine direct          # NV-C2 최소 direct LLVM emitter
 scripts/test-vaisc-errors.sh                            # NV-C3 native P4 diagnostics
 scripts/test-vaisc-parity.sh                            # NV-C4 native/bootstrap/tracked parity manifest
+scripts/test-vais-extension-migration.sh                 # .nl corpus를 임시 .vais mirror로 검증
 scripts/build.sh examples/c4.nl -o /tmp/c4              # Legacy bootstrap oracle 경로
 ```
 
@@ -87,9 +88,10 @@ Legacy bootstrap/oracle 스크립트는 `scripts/legacy-vaisc-env.sh`를 통해
 
 ### 전환 원칙
 Legacy Vais 백엔드는 당분간 **oracle/bootstrap** 으로 유지한다. 폴더명 `nl`과 확장자 `.nl`은
-게이트 안정성을 위해 즉시 rename하지 않는다. legacy adapter의 canonical 이름은
+현재 checked-in 경로로 유지한다. 다만 `.vais` mirror migration gate는 통과했고, 실제 physical rename은
+별도 migration 커밋으로 진행한다. legacy adapter의 canonical 이름은
 `legacy_vais_bootstrap.py`이며, `nl2vais.py`는 기존 호출을 위한 compatibility wrapper다.
-이후 물리적 rename과 legacy 의존 축소는 별도 migration gate로 진행한다.
+이후 실제 파일 rename과 legacy 의존 축소는 별도 physical migration 커밋으로 진행한다.
 
 ---
 

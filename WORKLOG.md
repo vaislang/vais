@@ -1,5 +1,31 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-M2 — `.vais` extension migration gate)
+- `.nl` checked-in corpus를 바로 rename하지 않고, 임시 mirror에서 모든 source를 `.vais`로 복사해 검증하는
+  `scripts/test-vais-extension-migration.sh`를 추가했다.
+  - `examples/*.nl`와 `compiler/self/*.nl`을 temp root의 `.vais` 파일로 복사한다.
+  - `tools/vaisc-parity.tsv`도 temp manifest에서 `.vais` 경로로 변환한다.
+  - temp mirror로 `scripts/test.sh` value corpus와 `scripts/test-vaisc-parity.sh` native parity를 모두 실행한다.
+- `scripts/test.sh`는 `VAIS_TEST_ROOT`/`VAIS_TEST_EXT`를 받아 `.nl`/`.vais` corpus를 같은 방식으로 검증할 수 있게 했다.
+- `scripts/test-vaisc-parity.sh`는 `VAISC_PARITY_ROOT`를 받아 manifest의 상대 경로를 temp mirror에 매핑할 수 있게 했다.
+- `tools/vaisc.py` trusted self-host tier는 repo-local `.vais` future paths와
+  `VAISC_SELF_HOST_TRUST_ROOTS` mirror root를 인식한다.
+- 검증:
+  - `python3 -m py_compile tools/vaisc.py` = pass
+  - `bash -n scripts/test.sh scripts/test-vaisc-parity.sh scripts/test-vais-extension-migration.sh` = pass
+  - `bash scripts/test.sh c4` = `RESULT: pass=1 fail=0 skip=0`
+  - `bash scripts/test-vaisc-parity.sh tools/vaisc-parity.tsv` =
+    `RESULT: New Vais vaisc NV-C4 parity gate OK (native=37 bootstrap=0 tracked=0)`
+  - `bash scripts/test-vais-extension-migration.sh` =
+    `.vais` mirror `scripts/test.sh` `RESULT: pass=112 fail=0 skip=0` +
+    mirror parity `RESULT: New Vais vaisc NV-C4 parity gate OK (native=37 bootstrap=0 tracked=0)` +
+    `RESULT: New Vais .vais extension migration gate OK`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+
 ## 2026-06-13 (NV-M1 — legacy bootstrap adapter canonical rename)
 - `compiler/transpiler/nl2vais.py`를 `compiler/transpiler/legacy_vais_bootstrap.py`로 canonical rename했다.
   - 기존 `compiler/transpiler/nl2vais.py`는 CLI/import 호환 wrapper로 유지한다.

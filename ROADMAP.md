@@ -21,6 +21,7 @@
 - [x] **D2. 자체 컴파일러 mainline 진입**: `compiler/self/fixpoint_full.nl`을 seed로 삼아 직접 LLVM IR emit 컴파일러로 전진.
 - [x] **D3. repo/확장자 rename 보류**: repo 폴더와 `.nl` 확장자는 별도 migration gate로 처리.
 - [x] **D4. legacy adapter canonical rename**: `legacy_vais_bootstrap.py`를 canonical bootstrap adapter로 승격하고, `nl2vais.py`는 호환 래퍼로 유지.
+- [x] **D5. `.vais` 확장자 migration gate**: 임시 mirror에서 전체 `.nl` corpus를 `.vais`로 복사해 value corpus와 native parity를 통과.
 
 ### 현재 우선순위 큐
 1. [x] **NV-C0 컴파일러 제품 경계 정의**: `scripts/vaisc`가 `.vais`/`.nl` 입력을 받아 LLVM IR emit/build/run을 제공하고, `scripts/test-vaisc.sh`가 Legacy bootstrap oracle과 값 비교.
@@ -29,6 +30,7 @@
 4. [x] **NV-C3 P4 에러 UX day-1**: native `vaisc` 경로가 Rust식 습관과 direct emitter parse 실패에 source 좌표/line/caret/`help:`/`fix:` 진단을 낸다.
 5. [x] **NV-C4 parity gate**: `tools/vaisc-parity.tsv`가 `examples/` 코퍼스와 self-host tier를 `native-supported`/`bootstrap-only`/`tracked`로 기록하고, `scripts/test-vaisc-parity.sh`가 native-supported 항목을 Legacy bootstrap 결과와 값 비교.
 6. [x] **NV-M1 naming migration slice**: Legacy bootstrap adapter canonical path를 `compiler/transpiler/legacy_vais_bootstrap.py`로 바꾸고, 도구/스크립트/현재 문서는 새 이름을 사용한다. 기존 `nl2vais.py`는 compatibility wrapper다.
+7. [x] **NV-M2 `.vais` 확장자 migration gate**: `scripts/test-vais-extension-migration.sh`가 임시 `.vais` mirror로 `scripts/test.sh` 112/112와 `scripts/test-vaisc-parity.sh` native=37/bootstrap=0/tracked=0을 통과한다.
 
 세부 계약: `docs/design/new-vais-compiler-mainline-2026-06-13.md`.
 
@@ -114,7 +116,7 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    검증된 `compiler/self/fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl` tier source도
    product bootstrap engine 입력으로 허용해 manifest bootstrap-only를 0으로 닫았다.
 6. **naming migration** — `legacy_vais_bootstrap.py`가 canonical legacy adapter이고, `nl2vais.py`는 wrapper다.
-   repo 폴더 `nl`과 `.nl` 확장자는 아직 검증 인프라 경로이므로 별도 migration gate에서 다룬다.
+   `.vais` 임시 mirror migration gate는 통과했으며, repo 폴더 `nl`과 실제 파일 extension rename은 별도 physical migration으로 남긴다.
 7. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---

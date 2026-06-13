@@ -63,6 +63,7 @@ Current green gates are the baseline:
 - `bash scripts/test-vaisc-direct.sh` = New Vais direct emitter OK
 - `bash scripts/test-vaisc-errors.sh` = New Vais native P4 diagnostics OK
 - `bash scripts/test-vaisc-parity.sh` = New Vais native parity manifest OK
+- `bash scripts/test-vais-extension-migration.sh` = `.vais` mirror migration gate OK
 - `bash scripts/test.sh` = 112/112
 - `bash scripts/test-fixpoint-full.sh` = self-host e2e OK
 - `bash scripts/test-fixpoint-full-self.sh` = full-source stage compare OK
@@ -244,8 +245,9 @@ Done when:
 
 ## Migration Rule
 
-NV-C4 now covers the core examples and self-host tiers. The adapter rename is
-done; the remaining physical rename decisions are:
+NV-C4 now covers the core examples and self-host tiers, and the `.vais` mirror
+migration gate is green. The adapter rename is done; the remaining physical
+rename decisions are:
 
 - `projects/nl` -> `projects/vais`,
 - optional `.nl` -> `.vais`,

@@ -12,6 +12,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAISC="$HERE/scripts/vaisc"
 LEGACY_BUILD="$HERE/scripts/build.sh"
 MANIFEST="${1:-$HERE/tools/vaisc-parity.tsv}"
+SOURCE_ROOT="${VAISC_PARITY_ROOT:-$HERE}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -134,7 +135,7 @@ while IFS=$'\t' read -r rel status note; do
     case "$rel" in
         ""|\#*) continue ;;
     esac
-    src="$HERE/$rel"
+    src="$SOURCE_ROOT/$rel"
     if [ ! -f "$src" ]; then
         echo "  FAIL manifest path missing: $rel"
         fail=1
