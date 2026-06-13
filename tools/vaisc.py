@@ -145,13 +145,13 @@ def fix_turbofish_new(match: re.Match[str], raw: str) -> str:
 FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
     (
         re.compile(r"\benum\b"),
-        "enum declarations are not in the New Vais native day-1 front subset yet",
-        "model this day-1 case with Int tags, or keep enums on the Legacy bootstrap path until NV-C4.",
+        "enum declarations beyond payload-free enum tags are not in the New Vais native front subset yet",
+        "use a payload-free enum with simple return-arm match, or keep payload enums on the Legacy bootstrap path.",
     ),
     (
         re.compile(r"\bmatch\b"),
-        "`match` is not in the New Vais native day-1 front subset yet",
-        "use if/else for day-1 native sources, or keep match-based code on the Legacy bootstrap path.",
+        "`match` beyond payload-free enum return arms is not in the New Vais native front subset yet",
+        "use if/else for native sources, or keep payload match code on the Legacy bootstrap path.",
     ),
     (
         re.compile(r"\bfor\b"),
@@ -377,6 +377,104 @@ def check_front_contract(source: Path) -> None:
             formatted.append(f"  fix: {issue.fix}")
         formatted.append("")
     raise FrontContractError("\n".join(formatted).rstrip())
+
+
+SIMPLE_ENUM_DECL_RE = re.compile(r"^\s*enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*([^{}()]*)\s*\}\s*$")
+SIMPLE_MATCH_RE = re.compile(r"^(\s*)match\s+(.+?)\s*\{\s*$")
+SIMPLE_MATCH_ARM_RE = re.compile(r"^(.+?)\s*=>\s*(.+?),?\s*$")
+
+
+def lower_simple_enum_match_text(text: str) -> str:
+    """Lower payload-free enum/match sugar into the current Int-native subset."""
+    lines = text.splitlines()
+    enum_tags: dict[str, dict[str, int]] = {}
+    kept: list[str] = []
+    saw_enum = False
+
+    for raw in lines:
+        code = code_only(raw).strip()
+        match = SIMPLE_ENUM_DECL_RE.match(code)
+        if match:
+            enum_name = match.group(1)
+            variants = [part.strip() for part in match.group(2).split(",") if part.strip()]
+            if not variants:
+                return text
+            tags: dict[str, int] = {}
+            for idx, variant in enumerate(variants):
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", variant) is None:
+                    return text
+                tags[variant] = idx
+            enum_tags[enum_name] = tags
+            saw_enum = True
+            continue
+        if re.search(r"\benum\b", code):
+            return text
+        kept.append(raw)
+
+    if not saw_enum:
+        return text
+
+    lowered: list[str] = []
+    for raw in kept:
+        line = raw
+        for enum_name, tags in enum_tags.items():
+            line = re.sub(rf":\s*{enum_name}\b", ": Int", line)
+            line = re.sub(rf"->\s*{enum_name}\b", "-> Int", line)
+            for variant, tag in tags.items():
+                line = re.sub(rf"\b{enum_name}\s*\.\s*{variant}\b", str(tag), line)
+        lowered.append(line)
+
+    out: list[str] = []
+    i = 0
+    while i < len(lowered):
+        raw = lowered[i]
+        match = SIMPLE_MATCH_RE.match(code_only(raw))
+        if match is None:
+            out.append(raw)
+            i += 1
+            continue
+
+        indent = match.group(1)
+        expr = match.group(2).strip()
+        arms: list[tuple[str, str]] = []
+        i += 1
+        while i < len(lowered):
+            arm_code = code_only(lowered[i]).strip()
+            if arm_code == "}":
+                break
+            arm_match = SIMPLE_MATCH_ARM_RE.match(arm_code)
+            if arm_match is None:
+                return text
+            pattern = arm_match.group(1).strip()
+            body = arm_match.group(2).strip().rstrip(",").rstrip()
+            if re.fullmatch(r"-?\d+", pattern) is None or not body.startswith("return "):
+                return text
+            arms.append((pattern, body))
+            i += 1
+        if i >= len(lowered) or code_only(lowered[i]).strip() != "}":
+            return text
+        if not arms:
+            return text
+
+        for idx, (pattern, body) in enumerate(arms):
+            keyword = "if" if idx == 0 else "else if"
+            out.append(f"{indent}{keyword} {expr} == {pattern} {{")
+            out.append(f"{indent}    {body}")
+            out.append(f"{indent}}}")
+        out.append(f"{indent}return 0")
+        i += 1
+
+    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
+
+
+def prepare_bootstrap_source(source: Path, tmp: Path) -> Path:
+    raw = source.read_text()
+    lowered = lower_simple_enum_match_text(raw)
+    if lowered == raw:
+        return source
+    lowered_path = tmp / "front_lowered.nl"
+    lowered_path.write_text(lowered)
+    return lowered_path
 
 
 @dataclass(frozen=True)
@@ -826,10 +924,11 @@ def tmpdir_from_args(args: argparse.Namespace) -> tuple[Path, tempfile.Temporary
 def bootstrap_emit_ir(source: Path, ir_out: Path | None, args: argparse.Namespace) -> str | None:
     if not source.is_file():
         raise CompileError(f"source not found: {source}")
-    check_front_contract(source)
 
     tmp, holder = tmpdir_from_args(args)
     try:
+        native_source = prepare_bootstrap_source(source, tmp)
+        check_front_contract(native_source)
         harness = tmp / "compiler_harness.nl"
         harness_vais = tmp / "compiler_harness.vais"
         stage0 = tmp / "stage0-vaisc"
@@ -841,7 +940,7 @@ def bootstrap_emit_ir(source: Path, ir_out: Path | None, args: argparse.Namespac
                 sys.executable,
                 str(EMBED_SELF_SOURCE),
                 str(FIXPOINT_FULL),
-                str(source),
+                str(native_source),
                 str(harness),
             ]
         )

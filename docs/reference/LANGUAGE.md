@@ -179,7 +179,7 @@ python3 tools/nl-check.py prog.nl          # 문법 lint (help: 수정안내)
 - 기본 실행 경로는 아직 bootstrap engine이지만, `--engine direct`는 단일 `main` arithmetic return을
   Legacy Vais 없이 직접 LLVM IR로 emit/build/run한다.
 - `scripts/vaisc` native front는 Int 함수/let/return/if/while/plain call, print/putchar,
-  simple struct, List push/len/index/sum slice를 받는다.
+  simple struct, payload-free enum/match, List push/len/index/sum slice를 받는다.
   넓은 언어 표면은 아직 Legacy bootstrap 경로나 후속 native slice에서 다룬다.
 - native `vaisc` 오류는 day-1 범위에서 source 좌표, 원문 line, caret, `help:`, `fix:`를 포함한다.
 - `tools/vaisc-parity.tsv`가 native-supported/bootstrap-only/tracked 상태를 기록한다.

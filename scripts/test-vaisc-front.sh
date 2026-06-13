@@ -3,7 +3,8 @@
 #
 # The native front is intentionally narrow: Int functions, let/let mut,
 # integer arithmetic/comparisons, return, if/else, while, plain function calls,
-# print/putchar, simple structs, and the first List push/len/index/sum slice.
+# print/putchar, simple structs, payload-free enum/match, and the first
+# List push/len/index/sum slice.
 # Broader language features stay on the Legacy bootstrap path until their native
 # slices land.
 set -uo pipefail
@@ -89,6 +90,34 @@ else
     fail=1
 fi
 
+enum_accept="$tmp/front_enum_accept.vais"
+cat > "$enum_accept" <<'SRC'
+enum Color { Red, Green, Blue }
+
+fn color_number(c: Color) -> Int {
+    match c {
+        Color.Red => return 1,
+        Color.Green => return 2,
+        Color.Blue => return 3,
+    }
+}
+
+fn main() -> Int {
+    let c = Color.Green
+    return color_number(c)
+}
+SRC
+
+"$VAISC" run "$enum_accept" >"$tmp/enum_accept.out" 2>"$tmp/enum_accept.err"
+got=$?
+if [ "$got" = "2" ]; then
+    echo "  PASS accepts payload-free enum/match slice"
+else
+    echo "  FAIL accepts enum/match slice got=$got want=2"
+    cat "$tmp/enum_accept.err"
+    fail=1
+fi
+
 list_accept="$tmp/front_list_accept.vais"
 cat > "$list_accept" <<'SRC'
 fn main() -> Int {
@@ -155,6 +184,26 @@ fn main() -> Int {
         s = s + i
     }
     return s
+}
+SRC
+
+expect_reject "payload_enum" "enum declarations beyond payload-free" "payload enums" <<'SRC'
+enum Node { Lit(Int) }
+
+fn main() -> Int {
+    return 0
+}
+SRC
+
+expect_reject "match_expr_body" "match.*payload-free enum return arms" "payload match code" <<'SRC'
+enum Color { Red, Green }
+
+fn main() -> Int {
+    let c = Color.Green
+    match c {
+        Color.Red => 1,
+        Color.Green => 2,
+    }
 }
 SRC
 
