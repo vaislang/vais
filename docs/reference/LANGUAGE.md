@@ -3,7 +3,7 @@
 > New Vais 작성용 실용 레퍼런스. 기본 파일 확장자는 `.vais`이고, `.nl`은 전환기 호환 입력이다.
 > **모든 구문은 `examples/`로 검증됨**(값-정확성 게이트 통과).
 > 설계 근거(왜 이렇게)는 `docs/design/`; 이 문서는 "어떻게 쓰나".
-> 핵심 규칙: **한 작업 = 한 가지 문법** (모호성 0). Rust 직관으로 쓰면 `nl-check`가 수정 안내.
+> 핵심 규칙: **한 작업 = 한 가지 문법** (모호성 0). Rust 직관으로 쓰면 `vais-check`가 수정 안내.
 
 ---
 
@@ -32,7 +32,7 @@ count = count + 1  # 재대입은 가변만
 | 실수 | `F32`, `F64` |
 | 기타 | `Bool`, `Str`, `Char` |
 | 컬렉션 | `List<T>`, `Map<K,V>` |
-- 변환은 **명시적 함수형**: `Int(x)`, `F32(y)`. (`x as Int` 안 됨 — nl-check가 잡음.)
+- 변환은 **명시적 함수형**: `Int(x)`, `F32(y)`. (`x as Int` 안 됨 — vais-check가 잡음.)
 
 ## 4. 조건
 ```
@@ -147,8 +147,8 @@ print("the answer is {x}")     # 보간 "{식}"
 
 ---
 
-## 흔한 실수 → 올바른 Vais (nl-check가 잡아줌)
-| Rust 직관 (틀림) | nl (맞음) |
+## 흔한 실수 → 올바른 Vais (vais-check가 잡아줌)
+| Rust 직관 (틀림) | Vais (맞음) |
 |------|------|
 | `a && b` | `a and b` |
 | `a \|\| b` | `a or b` |
@@ -172,7 +172,7 @@ scripts/test-vaisc-front.sh                # native day-1 front 계약 검증
 scripts/test-vaisc-direct.sh               # direct emitter 계약 검증
 scripts/test-vaisc-errors.sh               # native P4 진단 계약 검증
 scripts/test-vaisc-parity.sh               # native/bootstrap/tracked parity manifest
-python3 tools/nl-check.py prog.vais        # 문법 lint (help: 수정안내)
+python3 tools/vais-check.py prog.vais      # 문법 lint (help: 수정안내)
 ```
 
 ## 현재 한계 (전환기)

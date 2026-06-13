@@ -1,5 +1,20 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-M4 — `vais-check` canonical lint command)
+- P4 lint 도구의 canonical 이름을 `tools/vais-check.py`로 승격했다.
+  - 기존 `tools/nl-check.py`는 외부 호출 호환을 위한 wrapper로 남겼다.
+  - 단위 테스트도 `tests/vais_check_test.py`로 옮기고 `.vais` temp source를 쓰게 했다.
+  - LANGUAGE/PRELUDE/ROADMAP/mainline 문서의 현재 이름을 `vais-check`로 갱신했다.
+- 검증:
+  - `python3 tests/vais_check_test.py` = `RESULT: 40/40 pass`
+  - `python3 tools/vais-check.py <clean .vais>` = clean
+  - `python3 tools/nl-check.py <clean .vais>` = clean wrapper OK
+  - `python3 -m py_compile` equivalent with `/tmp` cfile for `tools/vais-check.py`,
+    `tools/nl-check.py`, `compiler/transpiler/legacy_vais_bootstrap.py` = pass
+  - `git diff --check` = pass
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test.sh c4` = `RESULT: pass=1 fail=0 skip=0`
+
 ## 2026-06-13 (NV-M3 — source extension physical rename)
 - checked-in New Vais source corpus를 실제 `.vais` 확장자로 전환했다.
   - `examples/*.nl` → `examples/*.vais`

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Unit tests for nl-check (P4 error infra): flags non-nl spellings with help:,
-and must NOT flag valid nl. Run: python3 tests/nl_check_test.py"""
+"""Unit tests for vais-check (P4 error infra): flags non-Vais spellings with help:,
+and must NOT flag valid Vais. Run: python3 tests/vais_check_test.py"""
 import importlib.util
 import os
 import sys
@@ -8,13 +8,13 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location(
-    "nlcheck", os.path.join(HERE, "..", "tools", "nl-check.py"))
+    "vaischeck", os.path.join(HERE, "..", "tools", "vais-check.py"))
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 
 def run(src: str) -> int:
-    with tempfile.NamedTemporaryFile("w", suffix=".nl", delete=False) as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".vais", delete=False) as f:
         f.write(src)
         path = f.name
     # capture stdout

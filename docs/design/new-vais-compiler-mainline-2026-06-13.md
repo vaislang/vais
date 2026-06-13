@@ -70,7 +70,7 @@ Current green gates are the baseline:
 - `bash scripts/test-fixpoint-full.sh` = self-host e2e OK
 - `bash scripts/test-fixpoint-full-self.sh` = full-source stage compare OK
 - `python3 tests/transpiler_test.py` = 59/59
-- `python3 tests/nl_check_test.py` = 40/40
+- `python3 tests/vais_check_test.py` = 40/40
 
 Every native-compiler slice must either:
 - pass the relevant subset and preserve these gates, or
@@ -173,7 +173,7 @@ Done when:
 
 ### NV-C3: P4 Diagnostics
 
-Move known `nl-check` correction knowledge into the native compiler path.
+Move known `vais-check` correction knowledge into the native compiler path.
 
 Status: done as of 2026-06-13 for the native day-1 diagnostic slice.
 
