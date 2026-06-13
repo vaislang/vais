@@ -1,0 +1,43 @@
+# New Vais native parity manifest.
+# Format: path<TAB>status<TAB>note
+# Status values:
+# - native-supported: scripts/vaisc must build/run value-correct and match Legacy oracle.
+# - bootstrap-only: Legacy oracle must stay value-correct; native front must reject it for now.
+# - tracked: Legacy oracle must stay value-correct; native is known not to be value-correct yet.
+#
+# Keep this list small and intentional. Add examples here when their status is
+# clear enough to protect in scripts/test-vaisc-parity.sh.
+examples/e03_recursion.nl	native-supported	Int recursion.
+examples/e04_mutual_rec.nl	native-supported	Mutual recursion and branch return.
+examples/e05_multi_fn.nl	native-supported	Multiple Int helpers.
+examples/e07_nested_if.nl	native-supported	Nested if/else.
+examples/e11_while.nl	native-supported	While loop with mutable accumulator.
+examples/e18_while_accumulator.nl	native-supported	While loop with arithmetic update.
+examples/e20_triangular.nl	native-supported	Recursive triangular number.
+examples/e26_pipeline.nl	native-supported	Plain function pipeline.
+examples/e33_guard_chain.nl	native-supported	Int guard chain.
+examples/e38_negatives.nl	native-supported	Negative Int arithmetic.
+examples/e42_while_call.nl	native-supported	While loop calling helper.
+examples/e66_fibonacci.nl	native-supported	Recursive Fibonacci.
+examples/e67_power.nl	native-supported	Recursive power.
+examples/t1.nl	native-supported	Simple typed helper smoke.
+examples/c1.nl	bootstrap-only	Enum/match remains Legacy bootstrap-only.
+examples/c2.nl	bootstrap-only	List literal and sum remain Legacy bootstrap-only.
+examples/c4.nl	bootstrap-only	Struct field access remains Legacy bootstrap-only.
+examples/e14_print.nl	bootstrap-only	Print/interpolation remains Legacy bootstrap-only in vaisc front.
+examples/e50_ast_eval.nl	bootstrap-only	Recursive AST enum remains Legacy bootstrap-only.
+examples/e75_list_push.nl	bootstrap-only	List push/growth remains Legacy bootstrap-only.
+examples/e80_closure_return.nl	bootstrap-only	Closure return ABI remains Legacy bootstrap-only.
+compiler/self/fixpoint.nl	bootstrap-only	Self-host arithmetic tier uses Str/List/struct/Bool.
+compiler/self/fixpoint2.nl	bootstrap-only	Self-host variable tier uses Str/List/struct/Bool.
+compiler/self/fixpoint3.nl	bootstrap-only	Self-host function tier uses Str/List/struct/Bool.
+compiler/self/fixpoint_full.nl	bootstrap-only	Full self-host compiler remains covered by the long bootstrap gate.
+examples/c3.nl	tracked	Native emits invalid IR for bitnot builtin shape.
+examples/e29_gcd.nl	tracked	Native modulo recursion currently returns the wrong value.
+examples/e31_bitwise.nl	tracked	Native emits invalid IR for bitwise builtin shape.
+examples/e34_int_conversion.nl	tracked	Native emits invalid IR for conversion builtin shape.
+examples/e43_generic_fn.nl	tracked	Native front accepts but generic fn lowers incorrectly.
+examples/e45_string_eq.nl	tracked	Native front accepts but string equality lowers invalid IR.
+examples/e47_char_ops.nl	tracked	Native front accepts but char operation lowers invalid IR.
+examples/e56_collatz.nl	tracked	Native recursion/modulo branch currently returns the wrong value.
+examples/e60_digit_sum.nl	tracked	Native multi-digit loop currently returns the wrong value.

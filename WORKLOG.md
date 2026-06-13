@@ -1,5 +1,27 @@
 # nl WORKLOG
 
+## 2026-06-13 (NV-C4 — New Vais parity manifest gate)
+- `tools/vaisc-parity.tsv`를 추가해 예제와 self-host tier를 `native-supported`, `bootstrap-only`,
+  `tracked` 상태로 기록했다.
+- `scripts/test-vaisc-parity.sh`를 추가했다.
+  native-supported 항목은 New Vais `scripts/vaisc`와 Legacy `scripts/build.sh` 양쪽에서 빌드/실행해
+  `# expect` 값과 비교한다. bootstrap-only 항목은 Legacy-green + native front reject를 요구한다.
+  tracked 항목은 Legacy-green을 요구하고, native가 갑자기 값정확성에 성공하면 manifest 승격을 요구하도록 실패시킨다.
+- 현재 manifest coverage: `native-supported=14`, `bootstrap-only=11`, `tracked=9`.
+  self-host tier `fixpoint.nl`/`fixpoint2.nl`/`fixpoint3.nl`/`fixpoint_full.nl`은 bootstrap-only로 명시했다.
+- 문서 갱신: `README.md`, `ROADMAP.md`, `AGENTS.md`,
+  `docs/design/NEW-LANGUAGE-README.md`, `docs/design/new-vais-compiler-mainline-2026-06-13.md`,
+  `docs/reference/LANGUAGE.md`.
+- 검증:
+  - `bash -n scripts/test-vaisc-parity.sh` = pass
+  - `bash scripts/test-vaisc-parity.sh` = `RESULT: New Vais vaisc NV-C4 parity gate OK (native=14 bootstrap=11 tracked=9)`
+  - `bash scripts/test-vaisc.sh` = `RESULT: New Vais vaisc NV-C0 smoke OK`
+  - `bash scripts/test-vaisc-front.sh` = `RESULT: New Vais vaisc NV-C1 front contract OK`
+  - `bash scripts/test-vaisc-direct.sh` = `RESULT: New Vais vaisc NV-C2 direct emitter OK`
+  - `bash scripts/test-vaisc-errors.sh` = `RESULT: New Vais vaisc NV-C3 diagnostics OK`
+  - `bash scripts/test.sh` = `RESULT: pass=112 fail=0 skip=0`
+  - `bash scripts/test-fixpoint-full.sh` = `RESULT: fixpoint full codegen (functions with imperative bodies) end-to-end OK`
+
 ## 2026-06-13 (NV-C3 — New Vais native P4 diagnostics)
 - native `vaisc` front/direct diagnostics를 source coordinate, source line, caret, `help:`, optional `fix:` 형태로 확장했다.
   day-1 사용자가 Rust/NL 전환기 문법을 넣었을 때 바로 고칠 수 있는 메시지를 compiler entrypoint에서 제공한다.

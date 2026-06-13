@@ -26,7 +26,7 @@
 2. [x] **NV-C1 자체 컴파일러 front 계약 고정**: day-1 native subset(Int 함수/let/return/if/while/plain call)을 `scripts/vaisc` preflight로 고정하고, unsupported 문법은 `help:` 진단으로 거절.
 3. [x] **NV-C2 직접 LLVM IR emitter 분리**: `scripts/vaisc --engine direct`가 Legacy Vais 없이 단일 `fn main() -> Int { return <Int expr> }`를 직접 LLVM IR로 emit/build/run하고 bootstrap oracle과 값 비교.
 4. [x] **NV-C3 P4 에러 UX day-1**: native `vaisc` 경로가 Rust식 습관과 direct emitter parse 실패에 source 좌표/line/caret/`help:`/`fix:` 진단을 낸다.
-5. [ ] **NV-C4 parity gate**: `examples/` 코퍼스와 self-host tier를 legacy bootstrap 결과와 비교하는 자체 컴파일러 게이트를 추가.
+5. [x] **NV-C4 parity gate**: `tools/vaisc-parity.tsv`가 `examples/` 코퍼스와 self-host tier를 `native-supported`/`bootstrap-only`/`tracked`로 기록하고, `scripts/test-vaisc-parity.sh`가 native-supported 항목을 Legacy bootstrap 결과와 값 비교.
 
 세부 계약: `docs/design/new-vais-compiler-mainline-2026-06-13.md`.
 
@@ -70,6 +70,10 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
 - New Vais P4 diagnostic smoke `scripts/test-vaisc-errors.sh` **OK**:
   `&&`/`||`/`as`/`::`/Rust scalar type/turbofish와 direct emitter parse 실패가 source 좌표,
   원문 line, caret, `help:`, `fix:`를 포함.
+- New Vais parity manifest gate `scripts/test-vaisc-parity.sh` **OK**:
+  `native-supported=14`, `bootstrap-only=11`, `tracked=9`.
+  native-supported 예제는 New Vais `scripts/vaisc`와 Legacy bootstrap oracle 양쪽에서 `# expect` 값과 일치하고,
+  bootstrap-only/self-host tier는 Legacy-green + native front reject 상태로 고정한다.
 
 **완료 정의(L3+코퍼스+에러인프라+std) = New Vais baseline 충족 + 실제 소스 부트스트랩 핵심 tier 전부 end-to-end.** 남은 것:
 1. ~~**fixpoint.nl 편의갭 `-> List` 직접반환**~~ **✅ 근본해결**(FP12hh, 2026-06-08, commit 858defe+1cd0bef): `fn build() -> List<T> {{ ...; return xs }}`가 hidden out-param(caller가 버퍼 할당, callee가 `return xs`서 버퍼 복사)으로 컴파일=**fixpoint.nl 원형 `fn tokenize(src) -> List<Token>` 복원**(gap #4). 실측 scalar/LOS/arg/tokenize-shape 전부 동작.
@@ -92,8 +96,9 @@ L3(self-host) + CX1~9 + FIXPOINT(FP1~FP12f) = **DONE**.
    string literal decode를 fixpoint compiler에 반영하고, 호출 인자 emit은 callee의 `List<Struct>`/struct param 타입을
    caller slot lookup보다 우선해 stage drift를 제거. `scripts/test-fixpoint-full.sh`에도 두 원인을 직접 찌르는
    짧은 회귀 fixture를 추가.
-5. **자체 컴파일러 mainline**(NV-C4) — 새 우선순위. `NV-C0` 제품 경계, `NV-C1` front 계약,
-   `NV-C2` direct emitter entrypoint, `NV-C3` native P4 diagnostics는 완료, Legacy Vais는 bootstrap/oracle로만 사용.
+5. **자체 컴파일러 mainline** — `NV-C0` 제품 경계, `NV-C1` front 계약,
+   `NV-C2` direct emitter entrypoint, `NV-C3` native P4 diagnostics, `NV-C4` parity manifest gate 완료.
+   다음 확장 단위는 `tools/vaisc-parity.tsv`의 `tracked` 항목을 하나씩 native-supported로 승격하는 것이다.
 6. **Vais 백엔드/파서 갭**(TRACKED, 근본=Vais repo) — 현재 주요 Map/int→string/중첩Vec/Vec성장/리스트 리터럴 직접 인자 갭은 해결 확인됨. 새 갭은 실측 후 TRACKED에 추가.
 
 ---

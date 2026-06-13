@@ -59,6 +59,7 @@ Current green gates are the baseline:
 - `bash scripts/test-vaisc-front.sh` = New Vais day-1 front contract OK
 - `bash scripts/test-vaisc-direct.sh` = New Vais direct emitter OK
 - `bash scripts/test-vaisc-errors.sh` = New Vais native P4 diagnostics OK
+- `bash scripts/test-vaisc-parity.sh` = New Vais native parity manifest OK
 - `bash scripts/test.sh` = 112/112
 - `bash scripts/test-fixpoint-full.sh` = self-host e2e OK
 - `bash scripts/test-fixpoint-full-self.sh` = full-source stage compare OK
@@ -189,6 +190,23 @@ Done when:
 ### NV-C4: Parity Gate
 
 Create a native compiler gate that runs a growing subset of `examples/`.
+
+Status: done as of 2026-06-13 for the manifest-backed first gate.
+
+Contract:
+- `tools/vaisc-parity.tsv` records each added source as `native-supported`, `bootstrap-only`, or `tracked`,
+- `native-supported` entries must build/run through New Vais `scripts/vaisc` and Legacy `scripts/build.sh`,
+- both paths must match the source `# expect:` value,
+- `bootstrap-only` entries must remain Legacy-green and be rejected by the native front,
+- `tracked` entries must remain Legacy-green and are expected not to pass natively yet; if one starts passing, the gate fails so it can be promoted.
+
+Current coverage:
+- `native-supported=14`,
+- `bootstrap-only=11`, including the four self-host tier files,
+- `tracked=9`.
+
+Gate:
+- `bash scripts/test-vaisc-parity.sh`
 
 Done when:
 - native gate runs separately from `scripts/test.sh`,
