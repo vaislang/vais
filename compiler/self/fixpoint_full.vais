@@ -1,7 +1,7 @@
 # expect: 0
-# nl self-host — fixpoint FULL code generator: FUNCTIONS with IMPERATIVE BODIES.
+# Vais self-host — fixpoint FULL code generator: FUNCTIONS with IMPERATIVE BODIES.
 #
-# This is the merge most directly on the self-compile path: the nl compiler's own
+# This is the merge most directly on the self-compile path: the Vais compiler's own
 # functions are `fn name(param) { let mut ...; while ...; if ...; return ... }`.
 # Generates real LLVM IR where each function is a `define i64 @name(i64 %p)` with
 # the param copied to a local alloca, body locals alloca'd, the imperative body
@@ -21,7 +21,7 @@ struct Op { kind: Int, val: Int, next: Int }
 struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: Int }
 # A function: name range, up to 10 params (p0s/p0l..p9s/p9l + p0ty..p9ty), param
 # count `npar`, and the body token range [bstart, bend). 10 params covers the
-# file-source bootstrap helpers such as fixpoint2.nl's word_is.
+# file-source helper functions such as fixpoint2.vais word_is.
 struct Fn {
     nstart: Int, nlen: Int,
     p0s: Int, p0l: Int, p1s: Int, p1l: Int, p2s: Int, p2l: Int, p3s: Int, p3l: Int,
@@ -78,14 +78,22 @@ fn is_putchar(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 6] != 114 { return 0 }
     return 1
 }
-# Is src[a..a+alen] the builtin name "puts" (p u t s)? The transpiler rewrites
-# nl `print(` to `puts(`, so a print statement arrives here as a puts call.
+# Is src[a..a+alen] the builtin name "puts" (p u t s)?
 fn is_puts(src: Str, a: Int, alen: Int) -> Int {
     if alen != 4 { return 0 }
     if src[a] != 112 { return 0 }
     if src[a + 1] != 117 { return 0 }
     if src[a + 2] != 116 { return 0 }
     if src[a + 3] != 115 { return 0 }
+    return 1
+}
+fn is_print(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 5 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 114 { return 0 }
+    if src[a + 2] != 105 { return 0 }
+    if src[a + 3] != 110 { return 0 }
+    if src[a + 4] != 116 { return 0 }
     return 1
 }
 fn is_sum(src: Str, a: Int, alen: Int) -> Int {
@@ -117,15 +125,11 @@ fn builtin_call_id(src: Str, a: Int, alen: Int) -> Int {
 }
 # Does the string-literal source range [start, start+len) contain a `{` (123)?
 # Marks a print/puts argument that needs printf interpolation rather than a plain
-# puts. (A `{{` escape never survives to here -- the transpiler already collapsed
-# nl `{{` to a single brace only for non-interpolated braces; interpolation `{x}`
-# arrives as a single `{`.)
+# puts.
 #
-# Disambiguating literal braces from interpolation: by the time a string reaches
-# compile(), the transpiler has collapsed BOTH nl `{{` (literal brace) and an
-# interpolation `{x}` to single braces, so they look identical. The rule (matching
-# Vais's own lexer): `{` begins an interpolation ONLY when immediately followed by
-# an identifier (letter/`_`, then letters/digits/`_`) and a closing `}`. A lone `{`
+# Disambiguating literal braces from interpolation: `{` begins an interpolation ONLY
+# when immediately followed by an identifier (letter/`_`, then letters/digits/`_`)
+# and a closing `}`. A lone `{`
 # (e.g. the trailing `{` of `define i64 @main() {`) is a literal brace.
 #
 # interp_end: if src[start+k] == '{' starts a valid `{ident}`, returns the offset
@@ -891,6 +895,7 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                     else { be = be + 1 }
                 }
             }
+            i = be + 1
             fns.push(Fn {
                 nstart: nt.nstart, nlen: nt.nlen,
                 p0s: p0s, p0l: p0l, p1s: p1s, p1l: p1l, p2s: p2s, p2l: p2l, p3s: p3s, p3l: p3l,
@@ -902,7 +907,6 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                 bstart: bstart, bend: be,
                 retlist: retlist, retty: retty
             })
-            i = be + 1
         } else {
             i = i + 1
         }
@@ -968,6 +972,7 @@ fn build_defs(toks: &List<Token>, n: Int) -> List<StructDef> {
                 }
                 q = q + 1
             }
+            i = bclose + 1
             defs.push(StructDef {
                 nstart: nt.nstart, nlen: nt.nlen,
                 f0s: f0s, f0l: f0l, f1s: f1s, f1l: f1l, f2s: f2s, f2l: f2l,
@@ -975,7 +980,6 @@ fn build_defs(toks: &List<Token>, n: Int) -> List<StructDef> {
                 f6s: f6s, f6l: f6l, f7s: f7s, f7l: f7l,
                 nfields: cnt
             })
-            i = bclose + 1
         } else {
             i = i + 1
         }
@@ -1102,7 +1106,7 @@ fn emit_op(o: Op) -> Int {
 # which is enough for snippets but not for a compiler reading a real source file
 # again. Most generated Lists stay at 4096 to keep recursive compiler scopes
 # stack-bounded; the 4-field Token shape gets a larger cap for file-sized tier
-# inputs through fixpoint_full.nl full retarget.
+# inputs through fixpoint_full.vais full retarget.
 fn list_cap() -> Int { return 4096 }
 fn list_lenidx() -> Int { return list_cap() - 1 }
 fn list_struct_cap(nf: Int) -> Int {
@@ -1164,7 +1168,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
     let t = toks[i]
     if t.kind == 0 { return Op { kind: 0, val: t.value, next: counter } }
     # boolean literals `true`/`false` are tokenized as identifiers (kind 1); treat
-    # them as the integer constants 1/0 (Vais/nl bools are i64). Used by the common
+    # them as the integer constants 1/0 (Vais bools are i64). Used by the common
     # self-host `let mut go = true; ... go = false` loop-flag pattern.
     if t.kind == 1 {
         if kw4(src, t.nstart, t.nlen, 116, 114, 117, 101) == 1 { return Op { kind: 0, val: 1, next: counter } }
@@ -1193,12 +1197,11 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
     if t.kind == 1 {
         let nx = toks[i + 1]
         if nx.kind == 9 {
-            # print(...) with interpolation: the transpiler rewrote print->puts, so
-            # this is a `puts(<string-lit>)` whose literal contains `{ident}`. Emit a
-            # printf call against the @.fmt<nstart> format global, loading Int
+            # print/puts with interpolation: a string literal containing `{ident}`
+            # emits a printf call against the @.fmt<nstart> format global, loading Int
             # variables as i64 varargs and Str variables as i8* varargs.
             let sarg = toks[i + 2]
-            if is_puts(src, t.nstart, t.nlen) == 1 {
+            if is_puts(src, t.nstart, t.nlen) == 1 or is_print(src, t.nstart, t.nlen) == 1 {
                 if sarg.kind == 28 {
                     if lit_has_brace(src, sarg.nstart, sarg.nlen) == 1 {
                         # 1) load each {ident} operand to a temp; remember temp numbers
@@ -1285,6 +1288,18 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         putchar(10)
                         return Op { kind: 1, val: dest, next: dest + 1 }
                     }
+                    let pdest = counter
+                    emit_str("  %t")
+                    pint(pdest)
+                    emit_str(" = call i32 @puts(i8* getelementptr([")
+                    pint(sarg.value + 1)
+                    emit_str(" x i8], [")
+                    pint(sarg.value + 1)
+                    emit_str(" x i8]* @.s")
+                    pint(sarg.nstart)
+                    emit_str(", i64 0, i64 0))")
+                    putchar(10)
+                    return Op { kind: 1, val: pdest, next: pdest + 1 }
                 }
             }
             # call: name ( arg0 [, ... up to arg9] ) — 0..10 args.
@@ -2927,30 +2942,30 @@ fn match_brace(toks: &List<Token>, op: Int, n: Int) -> Int {
 # else-region of an outer `if` covers a nested `else if ... else ...` entirely
 # (not just the first inner then-block). Returns the index after the last `}`.
 fn if_stmt_end(toks: &List<Token>, ifpos: Int, n: Int) -> Int {
-    # skip the condition to the then-block's `{`
-    let mut bo = ifpos + 1
-    let mut g1 = true
-    while g1 {
-        if bo >= n { g1 = false }
-        else {
-            let bt = toks[bo]
-            if bt.kind == 11 { g1 = false } else { bo = bo + 1 }
-        }
-    }
-    let mut cur = match_brace(toks, bo, n) + 1
-    # consume any number of `else { }` / `else if [cond] { }` clauses
+    let mut cur_if = ifpos
+    let mut cur = ifpos
     let mut go = true
     while go {
-        if cur >= n { go = false }
-        else {
+        # skip the condition to the then-block's `{`
+        let mut bo = cur_if + 1
+        let mut g1 = true
+        while g1 {
+            if bo >= n { g1 = false }
+            else {
+                let bt = toks[bo]
+                if bt.kind == 11 { g1 = false } else { bo = bo + 1 }
+            }
+        }
+        cur = match_brace(toks, bo, n) + 1
+        if cur >= n {
+            go = false
+        } else {
             let et = toks[cur]
             if et.kind == 17 {
                 let nxt = toks[cur + 1]
                 if nxt.kind == 15 {
-                    # `else if` -> recurse over the nested if-chain and stop (the
-                    # recursion consumes the rest of the chain).
-                    cur = if_stmt_end(toks, cur + 1, n)
-                    go = false
+                    # Continue with the nested `if` in an `else if` chain.
+                    cur_if = cur + 1
                 } else {
                     # plain `else { }` -> skip to its `{`, match, and stop.
                     let mut eo = cur + 1
@@ -2978,19 +2993,28 @@ fn if_stmt_end(toks: &List<Token>, ifpos: Int, n: Int) -> Int {
 # an all-branches-return if otherwise leaves an empty trailing merge block).
 fn block_returns(toks: &List<Token>, start: Int, end: Int) -> Int {
     if start >= end { return 0 }
-    let t = toks[start]
+    let mut s = start
+    let mut trim = true
+    while trim {
+        if s >= end { return 0 }
+        let st = toks[s]
+        if st.kind == 12 { s = s + 1 }
+        else if st.kind == 17 { s = s + 1 }
+        else { trim = false }
+    }
+    let t = toks[s]
     if t.kind == 8 {
         # a `return` statement -- but only conclusive if it's the LAST statement.
-        let semi = find_semi(toks, start + 1, end)
+        let semi = find_semi(toks, s + 1, end)
         if semi + 1 >= end { return 1 }
         return 0
     }
     if t.kind == 15 {
         # an `if` chain. Conclusive only if it spans to `end` and all branches return.
-        let chainend = if_stmt_end(toks, start, end)
+        let chainend = if_stmt_end(toks, s, end)
         if chainend < end { return 0 }
         # then-block open-brace
-        let mut bo = start + 1
+        let mut bo = s + 1
         let mut g = true
         while g {
             if bo >= end {
@@ -4220,11 +4244,15 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
                 let alen = arrlen_of(slots, src, t.nstart, t.nlen)
                 let bend = bracket_end(toks, i + 2)
-                let idx = gen_expr(toks, slots, fns, defs, src, i + 2, bend, counter)
-                counter = idx.next
+                let idxop = gen_expr(toks, slots, fns, defs, src, i + 2, bend, counter)
+                let idxkind = idxop.kind
+                let idxval = idxop.val
+                counter = idxop.next
                 let stop = find_semi(toks, bend + 2, end)
-                let val = gen_expr(toks, slots, fns, defs, src, bend + 2, stop, counter)
-                counter = val.next
+                let valop = gen_expr(toks, slots, fns, defs, src, bend + 2, stop, counter)
+                let valkind = valop.kind
+                let valval = valop.val
+                counter = valop.next
                 emit_str("  %t")
                 pint(counter)
                 emit_str(" = getelementptr [")
@@ -4234,10 +4262,10 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 emit_str(" x i64]* %v")
                 pint(slot)
                 emit_str(", i64 0, i64 ")
-                emit_op(idx)
+                emit_op(Op { kind: idxkind, val: idxval, next: 0 })
                 putchar(10)
                 emit_str("  store i64 ")
-                emit_op(val)
+                emit_op(Op { kind: valkind, val: valval, next: 0 })
                 emit_str(", i64* %t")
                 pint(counter)
                 putchar(10)
@@ -4893,10 +4921,9 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                         # `else if ...` -> the else body is the entire nested if
                         # statement (a statement gen_stmts handles recursively).
                         else_if = 1
-                        let chainend = if_stmt_end(toks, after_then + 1, end)
-                        ebody_start = after_then + 1
-                        ebody_end = chainend
-                        resume = chainend
+                        ebody_start = bclose + 2
+                        ebody_end = if_stmt_end(toks, ebody_start, end)
+                        resume = ebody_end
                     } else {
                         # plain `else { ... }` -> body is the brace interior.
                         let mut eo = after_then + 1
@@ -4931,15 +4958,20 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             emit_str(", label %ielse")
             pint(lbl)
             putchar(10)
+            let then_ret = block_returns(toks, bopen + 1, bclose)
+            let mut else_ret = 0
+            if has_else == 1 { else_ret = block_returns(toks, ebody_start, ebody_end) }
             # then block
             emit_str("ithen")
             pint(lbl)
             emit_str(":")
             putchar(10)
             counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, cnum + 1, retout, retkind)
-            emit_str("  br label %imerge")
-            pint(lbl)
-            putchar(10)
+            if then_ret == 0 {
+                emit_str("  br label %imerge")
+                pint(lbl)
+                putchar(10)
+            }
             # else block (empty if no else)
             emit_str("ielse")
             pint(lbl)
@@ -4948,9 +4980,11 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             if has_else == 1 {
                 counter = gen_stmts(toks, slots, fns, defs, src, ebody_start, ebody_end, counter, retout, retkind)
             }
-            emit_str("  br label %imerge")
-            pint(lbl)
-            putchar(10)
+            if else_ret == 0 {
+                emit_str("  br label %imerge")
+                pint(lbl)
+                putchar(10)
+            }
             emit_str("imerge")
             pint(lbl)
             emit_str(":")
@@ -4959,8 +4993,6 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             # block is dead -- terminate it with `unreachable` so it's valid even
             # when no statement follows (LLVM requires a terminator per block).
             if has_else == 1 {
-                let then_ret = block_returns(toks, bopen + 1, bclose)
-                let else_ret = block_returns(toks, ebody_start, ebody_end)
                 if then_ret == 1 {
                     if else_ret == 1 {
                         emit_str("  unreachable")
@@ -5320,12 +5352,12 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
 fn compile(src: Str) -> Int {
     let toks = tokenize(src)
     let n = toks.len()
-    # declare the C putchar so generated code can emit output (the nl compiler's
+    # declare the C putchar so generated code can emit output (the Vais compiler's
     # own job is emitting IR text via putchar).
     emit_str("declare i32 @putchar(i32)")
     putchar(10)
-    # declare puts + printf so generated programs can `print(...)` (the transpiler
-    # rewrites print->puts; brace-bearing literals route to printf interpolation).
+    # declare puts + printf so generated programs can print strings and interpolated
+    # values directly.
     emit_str("declare i32 @puts(i8*)")
     putchar(10)
     emit_str("declare i32 @printf(i8*, ...)")

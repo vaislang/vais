@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# NV-C0 smoke gate for the New Vais `vaisc` command contract.
+# NV-C0 smoke gate for the Vais `vaisc` command contract.
 #
-# This intentionally uses a `.vais` source path. `.nl` remains accepted as the
-# transitional extension, but user-facing New Vais should be able to start from
-# a Vais-named source file and command.
+# This intentionally uses a `.vais` source path and the user-facing Vais command.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VAISC="$HERE/scripts/vaisc"
-LEGACY_BUILD="$HERE/scripts/build.sh"
 fail=0
 
 tmp="$(mktemp -d)"
@@ -79,23 +76,8 @@ else
     fail=1
 fi
 
-if bash "$LEGACY_BUILD" "$src" -o "$tmp/legacy_bin" >"$tmp/legacy-build.out" 2>"$tmp/legacy-build.err"; then
-    "$tmp/legacy_bin"
-    legacy=$?
-    if [ "$legacy" = "42" ]; then
-        echo "  PASS Legacy bootstrap oracle runs (=42)"
-    else
-        echo "  FAIL Legacy bootstrap oracle got=$legacy want=42"
-        fail=1
-    fi
-else
-    echo "  FAIL Legacy bootstrap oracle build"
-    cat "$tmp/legacy-build.err"
-    fail=1
-fi
-
 if [ "$fail" -eq 0 ]; then
-    echo "RESULT: New Vais vaisc NV-C0 smoke OK"
+    echo "RESULT: Vais vaisc NV-C0 smoke OK"
 else
     echo "RESULT: FAILURES"
 fi

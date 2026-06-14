@@ -1,8 +1,8 @@
 # expect: 0
 # String interpolation in print: "{name}" / "{n}" splice values into output.
-# (nl uses {x} interpolation directly in string literals — no format! macro.)
+# (Vais uses {x} interpolation directly in string literals — no format! macro.)
 fn main() -> Int {
-    let name = "nl"
+    let name = "vais"
     let n = 3
     print("lang={name} n={n}")
     return 0

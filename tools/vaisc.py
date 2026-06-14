@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
-"""New Vais compiler CLI bootstrap wrapper.
-
-This is the user-facing `vaisc` command contract for New Vais. During the
-transition it bootstraps through Legacy Vais, but the emitted LLVM IR is produced
-by the New Vais self-host compiler in compiler/self/fixpoint_full.vais.
-"""
+"""Vais compiler CLI."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,22 +16,13 @@ from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXPOINT_FULL = ROOT / "compiler" / "self" / "fixpoint_full.vais"
-EMBED_SELF_SOURCE = ROOT / "tools" / "embed_self_source.py"
-TRANSPILER = ROOT / "compiler" / "transpiler" / "legacy_vais_bootstrap.py"
-DEFAULT_LEGACY_ROOT = Path("/Users/sswoo/study/projects/vais-legacy/compiler")
+CORE_LL = ROOT / "compiler" / "self" / "vaisc_core.ll"
 SELF_HOST_TIER_SOURCES = {
     (ROOT / "compiler" / "self" / "fixpoint.vais").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint2.vais").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint3.vais").resolve(),
     (ROOT / "compiler" / "self" / "fixpoint_full.vais").resolve(),
 }
-SELF_HOST_TIER_STEMS = {
-    "fixpoint",
-    "fixpoint2",
-    "fixpoint3",
-    "fixpoint_full",
-}
-
 
 class CompileError(RuntimeError):
     pass
@@ -157,57 +142,57 @@ def fix_turbofish_new(match: re.Match[str], raw: str) -> str:
 FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
     (
         re.compile(r"\benum\b"),
-        "enum declarations beyond payload-free tags or small Int-coded payload enums are not in the New Vais native front subset yet",
-        "use payload-free enum tags or Int/self-recursive payload enums with simple return-arm match; keep broader payload enums on the Legacy bootstrap path.",
+        "enum declarations beyond payload-free tags or small Int-coded payload enums are not in the Vais native front subset yet",
+        "use payload-free enum tags or Int/self-recursive payload enums with simple return-arm match; keep broader payload enums on the full compiler path.",
     ),
     (
         re.compile(r"\bmatch\b"),
-        "`match` beyond simple enum return arms is not in the New Vais native front subset yet",
-        "use if/else for native sources, or keep payload match code on the Legacy bootstrap path.",
+        "`match` beyond simple enum return arms is not in the Vais native front subset yet",
+        "use if/else for native sources, or keep payload match code on the full compiler path.",
     ),
     (
         re.compile(r"\bfor\b"),
-        "`for` loops are not in the New Vais native day-1 front subset yet",
+        "`for` loops are not in the Vais native day-1 front subset yet",
         "use `while` with an explicit mutable index for now.",
     ),
     (
         re.compile(r"\b(Str|Char|Bool)\b"),
-        "only Int scalar typing is in the New Vais native day-1 front subset",
+        "only Int scalar typing is in the Vais native day-1 front subset",
         "use Int parameters/locals for this slice; string, char, and bool surface types come later.",
     ),
     (
         re.compile(r"\b(true|false)\b"),
-        "boolean literals are not in the New Vais native day-1 front subset yet",
+        "boolean literals are not in the Vais native day-1 front subset yet",
         "use Int 0/1 values or comparisons in this slice.",
     ),
     (
         re.compile(r"\b(Map|Option|Result)\s*<|\blist\s*\("),
-        "map and sum-result types are not in the New Vais native front subset yet",
-        "keep this source on the Legacy bootstrap path until the native parity gate grows to it.",
+        "map and sum-result types are not in the Vais native front subset yet",
+        "keep this source on the full compiler path until the native parity gate grows to it.",
     ),
     (
         re.compile(r"\b(break|continue)\b"),
-        "loop control statements are not in the New Vais native day-1 front subset yet",
+        "loop control statements are not in the Vais native day-1 front subset yet",
         "rewrite the loop with an explicit condition variable for now.",
     ),
     (
         re.compile(r"\b(trait|impl)\b"),
-        "traits and impl blocks are not in the New Vais native day-1 front subset yet",
+        "traits and impl blocks are not in the Vais native day-1 front subset yet",
         "use plain functions for this slice.",
     ),
     (
         re.compile(r"\|[^|]*\|"),
-        "closures beyond the single-Int closure-return slice are not in the New Vais native front subset yet",
+        "closures beyond the single-Int closure-return slice are not in the Vais native front subset yet",
         "use a single Int capture returning `fn(Int) -> Int`, or write a named function for broader closure cases.",
     ),
     (
         re.compile(r"\.(?!(?:push|len|sum)\s*\()[A-Za-z_][A-Za-z0-9_]*\s*\("),
-        "method calls beyond push/len/sum are not in the New Vais native front subset yet",
-        "use a plain function call, or keep this source on the Legacy bootstrap path until that method is promoted.",
+        "method calls beyond push/len/sum are not in the Vais native front subset yet",
+        "use a plain function call, or keep this source on the full compiler path until that method is promoted.",
     ),
     (
         re.compile(r"\?"),
-        "error propagation with `?` is not in the New Vais native day-1 front subset yet",
+        "error propagation with `?` is not in the Vais native day-1 front subset yet",
         "return an Int status code explicitly in this slice.",
     ),
 ]
@@ -258,33 +243,33 @@ FRONT_HELP_RULES: list[FrontRule] = [
     ),
     FrontRule(
         re.compile(r"\bVec\s*<"),
-        "the New Vais list type is `List<T>`, not `Vec<T>`",
+        "the Vais list type is `List<T>`, not `Vec<T>`",
         "replace `Vec<T>` with `List<T>`.",
         lambda m, raw: raw[: m.start()] + "List" + raw[m.end() - 1 :],
     ),
     FrontRule(
         re.compile(r"\bHashMap\b"),
-        "the New Vais map spelling is `Map<K,V>`, not `HashMap<K,V>`",
-        "use `Map<K,V>` on the Legacy path for now; day-1 native front is scalar-only.",
+        "the Vais map spelling is `Map<K,V>`, not `HashMap<K,V>`",
+        "use `Map<K,V>` on the full compiler path for now; day-1 native front is scalar-only.",
         replace_once("HashMap", "Map"),
     ),
     FrontRule(
         re.compile(
             r"(?<![A-Za-z0-9_])(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|usize|isize)(?![A-Za-z0-9_])"
         ),
-        "New Vais scalar types are capitalized, not Rust scalar names",
+        "Vais scalar types are capitalized, not Rust scalar names",
         "use `Int`, `Int8..Int128`, `UInt8..UInt128`, `F32`, or `F64`.",
         fix_scalar_type,
     ),
     FrontRule(
         re.compile(r"\bString\b"),
         "the string type is `Str`, not `String`",
-        "use `Str` on the Legacy path for now; day-1 native front is scalar-only.",
+        "use `Str` on the full compiler path for now; day-1 native front is scalar-only.",
         replace_once("String", "Str"),
     ),
     FrontRule(
         re.compile(r"[+\-*/%]=(?!=)"),
-        "compound assignment is not New Vais syntax",
+        "compound assignment is not Vais syntax",
         "write it out, e.g. `x = x + 1`.",
     ),
 ]
@@ -318,7 +303,7 @@ def check_function_contracts(code: str, line_no: int) -> tuple[list[FrontIssue],
                 FrontIssue(
                     line_no,
                     match.start() + 1,
-                    "New Vais native day-1 helper functions must return `Int`",
+                    "Vais native day-1 helper functions must return `Int`",
                     "write helpers as `fn name(a: Int, ...) -> Int { ... }`.",
                 )
             )
@@ -328,7 +313,7 @@ def check_function_contracts(code: str, line_no: int) -> tuple[list[FrontIssue],
                 FrontIssue(
                     line_no,
                     match.start(2) + 1,
-                    "New Vais native day-1 helper parameters must be `name: Int`",
+                    "Vais native day-1 helper parameters must be `name: Int`",
                     "use Int-typed helper parameters in this slice, e.g. `fn add(a: Int, b: Int) -> Int`.",
                 )
             )
@@ -336,8 +321,9 @@ def check_function_contracts(code: str, line_no: int) -> tuple[list[FrontIssue],
     return issues, has_main, has_bad_main
 
 
-def check_front_contract(source: Path) -> None:
+def check_front_contract(source: Path, display_source: Path | None = None) -> None:
     lines = source.read_text().splitlines()
+    shown_source = display_source or source
     issues: list[FrontIssue] = []
     has_main = False
     has_bad_main = False
@@ -362,11 +348,11 @@ def check_front_contract(source: Path) -> None:
                     break
 
     if has_bad_main and not has_main:
-        message = "New Vais native day-1 front requires `fn main() -> Int` exactly"
+        message = "Vais native day-1 front requires `fn main() -> Int` exactly"
         help_text = "write the entrypoint as `fn main() -> Int { ... }`."
         issues.insert(0, FrontIssue(1, 1, message, help_text))
     elif not has_main:
-        message = "New Vais native day-1 front requires `fn main() -> Int`"
+        message = "Vais native day-1 front requires `fn main() -> Int`"
         help_text = "add `fn main() -> Int { return <int> }` as the program entrypoint."
         issues.insert(0, FrontIssue(1, 1, message, help_text))
 
@@ -379,7 +365,7 @@ def check_front_contract(source: Path) -> None:
         formatted.extend(
             [
                 f"error: {issue.message}",
-                f"  --> {source}:{issue.line}:{issue.col}",
+                f"  --> {shown_source}:{issue.line}:{issue.col}",
                 f"  {raw}",
                 f"  {caret_at(issue.col)}",
                 f"  help: {issue.help}",
@@ -924,9 +910,114 @@ def lower_simple_closure_return_text(text: str) -> str:
     return "\n".join(rewritten) + ("\n" if text.endswith("\n") else "")
 
 
-def prepare_bootstrap_source(source: Path, tmp: Path) -> Path:
-    raw = source.read_text()
-    lowered = raw
+def strip_vais_line_comment(line: str) -> str:
+    string_delim: str | None = None
+    escaped = False
+    for idx, ch in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if string_delim == '"' and ch == "\\":
+            escaped = True
+            continue
+        if ch in ('"', "`"):
+            if string_delim is None:
+                string_delim = ch
+            elif string_delim == ch:
+                string_delim = None
+            continue
+        if string_delim is None and ch == "#":
+            return line[:idx].rstrip()
+    return line.rstrip()
+
+
+def lower_struct_field_types_text(text: str) -> str:
+    def lower_one_line(match: re.Match[str]) -> str:
+        prefix, body, suffix = match.group(1), match.group(2), match.group(3)
+        parts = split_top_level_commas(body)
+        if parts is None:
+            return match.group(0)
+        lowered: list[str] = []
+        changed = False
+        for part in parts:
+            if not part:
+                continue
+            next_part = re.sub(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[^,{}]+$", r"\1", part.strip())
+            changed = changed or next_part != part.strip()
+            lowered.append(next_part)
+        if not changed:
+            return match.group(0)
+        return f"{prefix}{', '.join(lowered)}{suffix}"
+
+    text = re.sub(r"(\bstruct\s+[A-Za-z_][A-Za-z0-9_]*\s*\{)([^{}]*)(\})", lower_one_line, text)
+    lines = text.splitlines()
+    out: list[str] = []
+    in_struct = False
+    depth = 0
+    for raw in lines:
+        stripped = raw.strip()
+        if not in_struct and re.match(r"^struct\s+[A-Za-z_][A-Za-z0-9_]*\b", stripped) and "{" in stripped and "}" not in stripped:
+            in_struct = True
+            depth = stripped.count("{") - stripped.count("}")
+            out.append(raw)
+            continue
+        if in_struct:
+            match = re.match(r"^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:\s*[^,{}]+(,?)\s*$", raw)
+            if match:
+                comma = match.group(3) or ","
+                out.append(f"{match.group(1)}{match.group(2)}{comma}")
+            else:
+                out.append(raw)
+            depth += stripped.count("{") - stripped.count("}")
+            if depth <= 0:
+                in_struct = False
+                depth = 0
+            continue
+        out.append(raw)
+    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
+
+
+def statement_needs_semicolon(stripped: str) -> bool:
+    if not stripped or stripped.endswith(";"):
+        return False
+    if stripped.startswith(("fn ", "struct ", "enum ", "if ", "else", "while ", "for ")):
+        return False
+    if stripped in {"{", "}"}:
+        return False
+    if stripped.endswith("{") or stripped.endswith(","):
+        return False
+    if stripped.startswith(("let ", "return ", "print(", "putchar(", "puts(")):
+        return True
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s*=", stripped):
+        return True
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s*\(", stripped):
+        return True
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+\s*\(", stripped):
+        return True
+    return False
+
+
+def add_statement_semicolons_text(text: str) -> str:
+    out: list[str] = []
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if statement_needs_semicolon(stripped):
+            out.append(f"{raw};")
+        else:
+            out.append(raw)
+    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
+
+
+def normalize_full_source_text(text: str) -> str:
+    no_comments = "\n".join(strip_vais_line_comment(line) for line in text.splitlines())
+    if text.endswith("\n"):
+        no_comments += "\n"
+    lowered_structs = lower_struct_field_types_text(no_comments)
+    return add_statement_semicolons_text(lowered_structs)
+
+
+def lower_front_source_text(raw: str) -> str:
+    lowered = normalize_full_source_text(raw)
     for lowerer in (
         lower_simple_enum_match_text,
         lower_payload_enum_match_text,
@@ -935,9 +1026,52 @@ def prepare_bootstrap_source(source: Path, tmp: Path) -> Path:
         new_lowered = lowerer(lowered)
         if new_lowered != lowered:
             lowered = new_lowered
+    return add_statement_semicolons_text(lowered)
+
+
+def lower_int_annotations_for_core_text(text: str) -> str:
+    out: list[str] = []
+    for raw in text.splitlines():
+        line = raw
+        if re.match(r"^\s*fn\b", code_only(line)):
+            def lower_params(match: re.Match[str]) -> str:
+                params = re.sub(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*:\s*Int\b", r"\1", match.group(2))
+                return f"{match.group(1)}{params}{match.group(3)}"
+
+            line = re.sub(r"^(\s*fn\s+[A-Za-z_][A-Za-z0-9_]*\s*\()([^)]*)(\).*)$", lower_params, line)
+            line = re.sub(r"\)\s*->\s*Int\b", ")", line)
+        line = re.sub(r"^(\s*let\s+(?:mut\s+)?[A-Za-z_][A-Za-z0-9_]*)\s*:\s*Int\s*=", r"\1 =", line)
+        out.append(line)
+    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
+
+
+def lower_print_for_core_text(text: str) -> str:
+    out: list[str] = []
+    for raw in text.splitlines():
+        mask = code_only(raw)
+        line = raw
+        for match in reversed(list(re.finditer(r"\bprint\s*\(", mask))):
+            line = line[: match.start()] + "puts(" + line[match.end() :]
+        out.append(line)
+    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
+
+
+def prepare_front_source(source: Path, tmp: Path) -> Path:
+    raw = source.read_text()
+    lowered = lower_front_source_text(raw)
     if lowered == raw:
         return source
     lowered_path = tmp / "front_lowered.vais"
+    lowered_path.write_text(lowered)
+    return lowered_path
+
+
+def prepare_full_source(front_source: Path, tmp: Path) -> Path:
+    raw = front_source.read_text()
+    lowered = lower_print_for_core_text(lower_int_annotations_for_core_text(raw))
+    if lowered == raw:
+        return front_source
+    lowered_path = tmp / "core_lowered.vais"
     lowered_path.write_text(lowered)
     return lowered_path
 
@@ -949,7 +1083,7 @@ def is_self_host_tier_source(source: Path) -> bool:
         return False
     if resolved in SELF_HOST_TIER_SOURCES:
         return True
-    if source.suffix not in {".nl", ".vais"} or source.stem not in SELF_HOST_TIER_STEMS:
+    if source.suffix != ".vais":
         return False
     trust_roots = os.environ.get("VAISC_SELF_HOST_TRUST_ROOTS", "")
     for raw_root in trust_roots.split(os.pathsep):
@@ -1148,7 +1282,7 @@ def tokenize_direct_expr(source: Path, expr: str, start_line: int, start_col: in
                 line,
                 col,
                 "direct LLVM emitter currently supports literal Int expressions only",
-                "use integer literals and arithmetic here, or use the default bootstrap engine.",
+                "use integer literals and arithmetic here, or use the full compiler engine.",
                 "return 40 + 2",
             )
 
@@ -1321,7 +1455,7 @@ def direct_emit_ir(source: Path, ir_out: Path | None) -> str | None:
             1,
             1,
             "direct LLVM emitter currently supports only a single `fn main() -> Int`",
-            "use the default bootstrap engine for helper functions until the direct emitter grows calls.",
+            "use the full compiler engine for helper functions until the direct emitter grows calls.",
         )
 
     main_fn = functions[0]
@@ -1340,9 +1474,15 @@ def direct_emit_ir(source: Path, ir_out: Path | None) -> str | None:
 
 
 def emit_ir_for_args(source: Path, ir_out: Path | None, args: argparse.Namespace) -> str | None:
+    validate_vais_source(source)
     if args.engine == "direct":
         return direct_emit_ir(source, ir_out)
-    return bootstrap_emit_ir(source, ir_out, args)
+    return full_emit_ir(source, ir_out, args)
+
+
+def validate_vais_source(source: Path) -> None:
+    if source.suffix != ".vais":
+        raise CompileError(f"Vais source files must use the .vais extension: {source}")
 
 
 def run_checked(
@@ -1366,38 +1506,83 @@ def run_checked(
     return proc
 
 
-def resolve_legacy_vaisc(legacy_root: Path) -> str:
-    override = os.environ.get("LEGACY_VAISC")
-    candidates: list[Path] = []
-    if override:
-        candidates.append(Path(override))
-    candidates.extend(
-        [
-            legacy_root / "target" / "debug" / "vaisc",
-            legacy_root / "target" / "release" / "vaisc",
-            DEFAULT_LEGACY_ROOT / "target" / "debug" / "vaisc",
-            DEFAULT_LEGACY_ROOT / "target" / "release" / "vaisc",
-        ]
-    )
-    for candidate in candidates:
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return str(candidate)
+def write_core_runner(path: Path) -> None:
+    path.write_text(
+        r"""
+#include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-    found = shutil.which("vaisc")
-    if found:
-        resolved = Path(found).resolve()
-        repo_wrappers = {
-            (ROOT / "scripts" / "vaisc").resolve(),
-            Path(__file__).resolve(),
-        }
-        if resolved not in repo_wrappers:
-            return found
+extern int64_t compile(char *src);
 
-    raise CompileError(
-        "could not find Legacy Vais bootstrap compiler. "
-        "Set LEGACY_VAISC=/path/to/legacy/vaisc or build "
-        "/Users/sswoo/study/projects/vais-legacy/compiler."
+static char *read_source(const char *path) {
+    FILE *fp = fopen(path, "rb");
+    if (fp == NULL) {
+        fprintf(stderr, "vaisc: cannot open %s: %s\n", path, strerror(errno));
+        return NULL;
+    }
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fprintf(stderr, "vaisc: cannot seek %s\n", path);
+        fclose(fp);
+        return NULL;
+    }
+    long size = ftell(fp);
+    if (size < 0) {
+        fprintf(stderr, "vaisc: cannot size %s\n", path);
+        fclose(fp);
+        return NULL;
+    }
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        fprintf(stderr, "vaisc: cannot rewind %s\n", path);
+        fclose(fp);
+        return NULL;
+    }
+    char *buf = (char *)malloc((size_t)size + 1);
+    if (buf == NULL) {
+        fprintf(stderr, "vaisc: out of memory reading %s\n", path);
+        fclose(fp);
+        return NULL;
+    }
+    size_t nread = fread(buf, 1, (size_t)size, fp);
+    if (nread != (size_t)size) {
+        fprintf(stderr, "vaisc: short read for %s\n", path);
+        free(buf);
+        fclose(fp);
+        return NULL;
+    }
+    buf[size] = '\0';
+    fclose(fp);
+    return buf;
+}
+
+int main(int argc, char **argv) {
+    if (argc != 2) {
+        fprintf(stderr, "usage: vaisc-core-runner input.vais\n");
+        return 2;
+    }
+    char *src = read_source(argv[1]);
+    if (src == NULL) {
+        return 1;
+    }
+    int64_t rc = compile(src);
+    free(src);
+    return (int)rc;
+}
+""".lstrip()
     )
+
+
+def write_reusable_core(path: Path) -> None:
+    if not CORE_LL.is_file():
+        raise CompileError(f"missing Vais compiler core: {CORE_LL}")
+    text = CORE_LL.read_text()
+    main_def = re.compile(r"^define i64 @main\(\) \{$", re.MULTILINE)
+    count = len(main_def.findall(text))
+    if count != 1:
+        raise CompileError(f"invalid Vais compiler core: expected one @main, found {count}")
+    path.write_text(main_def.sub("define i64 @vais_selftest_main() {", text, count=1))
 
 
 def tmpdir_from_args(args: argparse.Namespace) -> tuple[Path, tempfile.TemporaryDirectory[str] | None]:
@@ -1409,55 +1594,43 @@ def tmpdir_from_args(args: argparse.Namespace) -> tuple[Path, tempfile.Temporary
     return Path(holder.name), holder
 
 
-def bootstrap_emit_ir(source: Path, ir_out: Path | None, args: argparse.Namespace) -> str | None:
+def full_emit_ir(source: Path, ir_out: Path | None, args: argparse.Namespace) -> str | None:
     if not source.is_file():
         raise CompileError(f"source not found: {source}")
 
     tmp, holder = tmpdir_from_args(args)
     try:
-        native_source = prepare_bootstrap_source(source, tmp)
-        if not is_self_host_tier_source(native_source):
-            check_front_contract(native_source)
-        harness = tmp / "compiler_harness.vais"
-        harness_vais = tmp / "compiler_harness.legacy.vais"
+        trusted_self_host = is_self_host_tier_source(source)
+        front_source = prepare_front_source(source, tmp)
+        if not trusted_self_host:
+            check_front_contract(front_source, source)
+        native_source = prepare_full_source(front_source, tmp)
+        core_ll = tmp / "vaisc_core.ll"
+        runner_c = tmp / "vaisc_core_runner.c"
         stage0 = tmp / "stage0-vaisc"
-        transpile_err = tmp / "transpile.err"
-        build_log = tmp / "legacy-build.log"
+        build_log = tmp / "core-build.log"
+        clang = getattr(args, "clang", os.environ.get("CLANG", "clang"))
 
-        run_checked(
-            [
-                sys.executable,
-                str(EMBED_SELF_SOURCE),
-                str(FIXPOINT_FULL),
-                str(native_source),
-                str(harness),
-            ]
-        )
-        with harness_vais.open("w") as out, transpile_err.open("w") as err:
-            run_checked([sys.executable, str(TRANSPILER), str(harness)], stdout=out, stderr=err)
-
-        legacy_root = Path(args.legacy_root).resolve()
-        legacy_vaisc = resolve_legacy_vaisc(legacy_root)
-        shutil.rmtree("/tmp/.vais-cache", ignore_errors=True)
+        write_reusable_core(core_ll)
+        write_core_runner(runner_c)
         with build_log.open("w") as log:
             run_checked(
-                [legacy_vaisc, "build", str(harness_vais), "-o", str(stage0)],
-                cwd=legacy_root,
+                [clang, "-Wno-override-module", "-o", str(stage0), str(core_ll), str(runner_c)],
                 stdout=log,
                 stderr=subprocess.STDOUT,
             )
 
         if ir_out is None:
-            proc = subprocess.run([str(stage0)], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc = subprocess.run([str(stage0), str(native_source)], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if proc.returncode != 0:
-                raise CompileError(f"generated New Vais compiler exited {proc.returncode}: {proc.stderr}")
+                raise CompileError(f"generated Vais compiler exited {proc.returncode}: {proc.stderr}")
             return proc.stdout
 
         ir_out.parent.mkdir(parents=True, exist_ok=True)
         with ir_out.open("w") as out:
-            proc = subprocess.run([str(stage0)], text=True, stdout=out, stderr=subprocess.PIPE)
+            proc = subprocess.run([str(stage0), str(native_source)], text=True, stdout=out, stderr=subprocess.PIPE)
         if proc.returncode != 0:
-            raise CompileError(f"generated New Vais compiler exited {proc.returncode}: {proc.stderr}")
+            raise CompileError(f"generated Vais compiler exited {proc.returncode}: {proc.stderr}")
         return None
     finally:
         if holder is not None:
@@ -1512,42 +1685,34 @@ def run_program(args: argparse.Namespace) -> int:
 def add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--engine",
-        choices=("bootstrap", "direct"),
-        default=os.environ.get("VAISC_ENGINE", "bootstrap"),
+        choices=("full", "direct"),
+        default=os.environ.get("VAISC_ENGINE", "full"),
         help=(
-            "Compiler engine. `bootstrap` uses the full transitional self-host path; "
-            "`direct` uses the NV-C2 minimal LLVM emitter."
+            "Compiler engine. `full` uses the self-host compiler; "
+            "`direct` uses the minimal LLVM emitter."
         ),
-    )
-    parser.add_argument(
-        "--legacy-root",
-        default=os.environ.get("VAIS_COMPILER_ROOT", str(DEFAULT_LEGACY_ROOT)),
-        help="Legacy Vais compiler repo used only as bootstrap/oracle backend.",
     )
     parser.add_argument(
         "--keep-tmp",
         action="store_true",
-        help="Keep the temporary bootstrap directory for debugging.",
+        help="Keep the temporary compiler directory for debugging.",
     )
 
 
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vaisc",
-        description=(
-            "New Vais compiler CLI. Accepts .vais and transitional .nl sources "
-            "that fit the native day-1 front contract."
-        ),
+        description="Vais compiler CLI. Accepts .vais source files.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    emit = sub.add_parser("emit-ir", help="Compile New Vais source to LLVM IR.")
+    emit = sub.add_parser("emit-ir", help="Compile Vais source to LLVM IR.")
     emit.add_argument("source")
     emit.add_argument("-o", "--output", default="-", help="LLVM IR output path, or '-' for stdout.")
     add_common_flags(emit)
     emit.set_defaults(func=emit_ir)
 
-    bld = sub.add_parser("build", help="Compile New Vais source to a native binary.")
+    bld = sub.add_parser("build", help="Compile Vais source to a native binary.")
     bld.add_argument("source")
     bld.add_argument("-o", "--output", required=True, help="Native binary output path.")
     bld.add_argument("--ir-out", help="Optional path to also keep emitted LLVM IR.")
@@ -1555,7 +1720,7 @@ def make_parser() -> argparse.ArgumentParser:
     add_common_flags(bld)
     bld.set_defaults(func=build)
 
-    run = sub.add_parser("run", help="Compile and run New Vais source, returning the program exit code.")
+    run = sub.add_parser("run", help="Compile and run Vais source, returning the program exit code.")
     run.add_argument("source")
     run.add_argument("--clang", default=os.environ.get("CLANG", "clang"))
     add_common_flags(run)

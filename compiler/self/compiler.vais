@@ -1,5 +1,5 @@
 # expect: 0
-# nl self-host compiler — CX1: arithmetic + variables (written in nl).
+# Vais self-host compiler — CX1: arithmetic + variables (written in Vais).
 #
 # Input "language": a program string of statements separated by ';':
 #   let <var> = <arith> ;   (bind a single-letter variable a..z)
@@ -7,7 +7,7 @@
 # <arith> is + - * / over numbers AND variables (single letters a..z).
 # Pipeline: source string -> evaluate (with a 26-slot symbol table) -> emit IR.
 #
-# Bootstrap: this .nl -> seed transpiler -> Vais -> vaisc -> gen1.
+# Bootstrap: this .vais -> seed transpiler -> Vais -> vaisc -> gen1.
 # Single-pass / index based (avoids Vais Vec-recursion limit task_54658a43 and
 # && short-circuit limit task_492f7e17 via nested guards). Variable storage uses
 # a fixed 26-int table keyed by (letter - 'a') to avoid string-map Vais limits.

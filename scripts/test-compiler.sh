@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# End-to-end self-host check: the nl compiler (compiler/self/compiler.vais) turns a
+# End-to-end self-host check: the Vais compiler (compiler/self/compiler.vais) turns a
 # program string (let-bindings + return over arithmetic with variables) into LLVM
 # IR; we compile that IR and verify the value.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais-legacy/compiler}"
-source "$HERE/scripts/legacy-vaisc-env.sh"
-TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
+source "$HERE/scripts/vais-build-env.sh"
 SRC="$HERE/compiler/self/compiler.vais"
 fail=0
 check() {
   local prog="$1" want="$2" tmp; tmp="$(mktemp -d)"
-  sed "s|run_program(\"[^\"]*\")|run_program(\"$prog\")|" "$SRC" > "$tmp/c.nl"
-  python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais"
-  legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 || { echo "  FAIL '$prog': build"; fail=1; return; }
+  sed "s|run_program(\"[^\"]*\")|run_program(\"$prog\")|" "$SRC" > "$tmp/c.input.vais"
+  cp "$tmp/c.input.vais" "$tmp/c.vais"
+  vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 || { echo "  FAIL '$prog': build"; fail=1; return; }
   "$tmp/c" > "$tmp/out.ll"
   clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null || { echo "  FAIL '$prog': IR invalid"; fail=1; return; }
   "$tmp/bin"; local got=$?

@@ -2,7 +2,7 @@
 # Count whitespace-separated words: a word is a maximal run of non-space bytes.
 # Combines string scanning (s[i] / s.len()) with an in-word-flag state machine --
 # the core of a tokenizer. (Written by a cold-start AI from the corpus; the type
-# is Str, not String -- nl-check steers `String` -> `Str`.)
+# is Str, not String -- vais-check steers `String` -> `Str`.)
 fn word_count(s: Str) -> Int {
     let n = s.len()
     let mut i = 0

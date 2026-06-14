@@ -1,7 +1,7 @@
 # expect: 0
-# nl self-host — fixpoint compiler v3: multi-char FUNCTIONS on the List pipeline.
+# Vais self-host — fixpoint compiler v3: multi-char FUNCTIONS on the List pipeline.
 #
-# Extends fixpoint2.nl (multi-char identifiers via List<Token> + List<Var>) with
+# Extends fixpoint2.vais (multi-char identifiers via List<Token> + List<Var>) with
 # function definitions and calls, BOTH using multi-character names:
 #   fn <name>(<p>) { return <expr> }      (single param, body is `return <expr>`)
 #   fn <name>(<p>, <q>) { return <expr> } (two params)

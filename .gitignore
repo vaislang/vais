@@ -1,5 +1,6 @@
 *.vais
 *.ll
+!compiler/self/vaisc_core.ll
 *.warn
 .vais-cache/
 a.out

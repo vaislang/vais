@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NV-C3 P4 diagnostic gate for the New Vais `vaisc` native path.
+# NV-C3 P4 diagnostic gate for the Vais `vaisc` native path.
 #
 # Checks that known Rust/Vais habit errors and direct-emitter parse errors carry
 # source coordinates, the source line, a caret, `help:`, and a concrete `fix:`.
@@ -45,7 +45,7 @@ expect_diag() {
     fi
 }
 
-expect_diag "rust_and" "bootstrap" "logical AND uses the word" "and" <<'SRC'
+expect_diag "rust_and" "full" "logical AND uses the word" "and" <<'SRC'
 fn main() -> Int {
     if 1 == 1 && 2 == 2 {
         return 42
@@ -54,7 +54,7 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "rust_or" "bootstrap" "logical OR uses the word" "or" <<'SRC'
+expect_diag "rust_or" "full" "logical OR uses the word" "or" <<'SRC'
 fn main() -> Int {
     if 1 == 0 || 2 == 2 {
         return 42
@@ -63,19 +63,19 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "as_cast" "bootstrap" "Type(x).*not.*x as Type" "Int(1)" <<'SRC'
+expect_diag "as_cast" "full" "Type(x).*not.*x as Type" "Int(1)" <<'SRC'
 fn main() -> Int {
     return 1 as Int
 }
 SRC
 
-expect_diag "colon_path" "bootstrap" "not .::" "Foo.Bar" <<'SRC'
+expect_diag "colon_path" "full" "not .::" "Foo.Bar" <<'SRC'
 fn main() -> Int {
     return Foo::Bar
 }
 SRC
 
-expect_diag "rust_scalar_type" "bootstrap" "scalar types are capitalized" "fn id(x: Int)" <<'SRC'
+expect_diag "rust_scalar_type" "full" "scalar types are capitalized" "fn id(x: Int)" <<'SRC'
 fn id(x: i32) -> Int {
     return x
 }
@@ -85,7 +85,7 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "turbofish_new" "bootstrap" "no turbofish constructor" "let xs = \\[]" <<'SRC'
+expect_diag "turbofish_new" "full" "no turbofish constructor" "let xs = \\[]" <<'SRC'
 fn main() -> Int {
     let xs = Vec<Int>::new()
     return 42
@@ -105,7 +105,7 @@ fn main() -> Int {
 SRC
 
 if [ "$fail" -eq 0 ]; then
-    echo "RESULT: New Vais vaisc NV-C3 diagnostics OK"
+    echo "RESULT: Vais vaisc NV-C3 diagnostics OK"
 else
     echo "RESULT: FAILURES"
 fi

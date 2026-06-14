@@ -1,8 +1,8 @@
 # expect: 5
-# nl self-host compiler — L3.2 lexer (written in nl): emits real tokens.
+# Vais self-host compiler — L3.2 lexer (written in Vais): emits real tokens.
 #
-# Bootstrap: this .nl source -> seed transpiler -> Vais -> vaisc -> gen1.
-# Eventually gen1 lexes nl directly. Uses only the transpiler-supported subset.
+# Bootstrap: this .vais source -> seed transpiler -> Vais -> vaisc -> gen1.
+# Eventually gen1 lexes Vais directly. Uses only the transpiler-supported subset.
 #
 # Token kinds (small starter set):
 #   1 = IDENT   (alpha run: letters/_/digits after first)

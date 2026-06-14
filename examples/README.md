@@ -1,117 +1,15 @@
-# nl 예제 코퍼스 (P9 인프라)
+# Vais Example Corpus
 
-**검증된 nl 예제.** P9(예제 코퍼스 = 최강 레버, cold-start 1/5→5/5)의 핵심 인프라.
-모든 `# expect: N` 예제는 `scripts/test.sh`로 빌드+실행+값 검증된다 (현재 94/94 PASS; 러너 전체는
-self-host codegen 모듈 포함 112/112).
+Each `.vais` file with `# expect: N` is part of the value-correctness corpus.
 
-> 사용: `scripts/test.sh` (전체) / `scripts/test.sh e03_recursion` (하나).
-> AI에게 nl을 가르칠 때 이 예제들을 컨텍스트로 제공하면 cold-start 정확도가 오른다(실측).
->
-> **재확인 (2026-06-06)**: nl을 처음 보는 신선한 서브에이전트에게 이 코퍼스만 주고 코퍼스에 없는
-> 새 과제(재귀 삼각수)를 시켰더니 **첫 시도에 컴파일+실행 성공**(값 28 정확). 결과를 e20으로 승격.
-> 맥락 없는 진짜 AI로 P9 명제(예제가 cold-start를 가능케 함) 재입증.
+Run:
 
-## 문법 커버리지 인덱스
+```bash
+bash scripts/test.sh
+```
 
-| 예제 | 커버 문법 | expect |
-|------|-----------|--------|
-| c1 | enum + match + `=> return` | 2 |
-| c2 | list 리터럴 + `.sum()` | 60 |
-| c3 | `bitnot()` | 5 |
-| c4 | struct 기본 | 42 |
-| c5 | 클로저 캡처 (in-scope) | 7 |
-| d3run | Result + `?` 전파 | 6 |
-| d4b | List 파라미터 + for | 9 |
-| d5run | pub struct | 42 |
-| d6run | List.filter + `.sum()` | 13 |
-| fr1 | for-range `0..=n` | 15 |
-| fr2 | for-collection | 60 |
-| t1 | 함수 + `let` | 7 |
-| e01 | 중첩 struct (3-deep) | 9 |
-| e02 | enum 다중 payload | 42 |
-| e03 | 재귀 (factorial) | 120 |
-| e04 | 상호 재귀 | 1 |
-| e05 | 다중 함수 + 중첩 호출 | 24 |
-| e06 | for-range 합산 | 55 |
-| e07 | else if 체인 | 2 |
-| e08 | Option + arm-return | 8 |
-| e09 | struct 메서드 체인 | 25 |
-| e10 | bool 논리 (and/or/not) | 1 |
-| e11 | while 루프 | 10 |
-| e12 | exclusive range `..` | 10 |
-| e13 | 중첩 for | 9 |
-| e14 | print (출력) | 0 |
-| e15 | List 재귀 (`&List<T>` borrow) | 10 |
-| e16 | Option match + payload 바인딩 | 42 |
-| e17 | struct 반환 → 필드 접근 | 12 |
-| e18 | while 누적기 (가변 acc + 카운터) | 30 |
-| e19 | 문자열 보간 출력 `print("{x}")` | 0 |
-| e20 | 재귀 삼각수 (cold-start AI 작성) | 28 |
-| e21 | Result Ok/Err match | 7 |
-| e22 | enum 디스패치 (match in helper) | 12 |
-| e23 | Option 흐름 (lookup→match→합산) | 15 |
-| e24 | struct 필드가 enum + match | 1 |
-| e25 | for + if 필터 합산 (수동 filter) | 12 |
-| e26 | 함수 합성 파이프라인 (중첩 호출) | 19 |
-| e27 | List 파라미터 max (loop, bound-var 전달) | 9 |
-| e28 | struct 함수적 갱신 (rebuild+재대입) | 8 |
-| e29 | GCD (2-인자 재귀 + modulo) | 6 |
-| e30 | enum payload match (페이로드 바인딩) | 42 |
-| e31 | bitwise (bitor/bitand/... 단어형) | 7 |
-| e32 | 중첩 struct 필드 변이 (o.inner.v=) | 7 |
-| e33 | guard 체인 (조기 return 분기) | 2 |
-| e34 | 숫자 변환 Int(x) (call형, F64→Int) | 5 |
-| e35 | 계산기 enum 디스패치 + bitwise (cold-start) | 2 |
-| e36 | bool 반환 함수 → if 조건 | 1 |
-| e37 | 다중필드 struct 계산 (area=w*h) | 50 |
-| e38 | 음수 (0 - n) + 산술 | 5 |
-| e39 | `?` 에러 전파 (실패 경로) | 0 |
-| e40 | Option을 struct 필드로 + match | 7 |
-| e41 | 재귀로 struct accumulator 전달 | 6 |
-| e42 | while로 함수 반복 적용 | 8 |
-| e43 | 제네릭 함수 identity<T> | 5 |
-| e44 | 문자열 길이 s.len() | 5 |
-| e45 | 문자열 동등성 a == b | 1 |
-| e46 | 제네릭 함수 + struct 조합 | 7 |
-| e47 | char 리터럴 + 비교 ('A') | 1 |
-| e48 | 문자열 바이트 인덱싱 s[0] | 104 |
-| e49 | 클로저를 함수 인자로 (일급함수) | 12 |
-| e50 | 재귀 enum AST 평가기 (`Node` 안에 `Node`) | 14 |
-| e51 | struct+인덱스 재귀 AST (재귀enum 우회) | 14 |
-| e52 | 상태머신 run-counter (in-word 플래그) | 3 |
-| e53 | 단어 세기 (문자열 스캔 + 상태머신=토크나이저) | 4 |
-| e54 | 재고 합계 (struct 메서드 + 다중 인스턴스 집계) | 42 |
-| e55 | match 와일드카드 `_` (기본 분기) | 2 |
-| e56 | Collatz 스텝 수 (재귀 + 짝/홀 분기) | 8 |
-| e57 | break (루프 조기 종료) | 3 |
-| e58 | continue (반복 건너뛰기) | 4 |
-| e59 | 튜플 반환 + 구조분해 `let (a,b)=` | 7 |
-| e60 | 자릿수 합 (% 10 / / 10 추출 루프) | 15 |
-| e61 | 배열 계산 인덱스 a[i]+a[i+1] | 50 |
-| e62 | struct로 다중값 반환 (튜플 대안) | 12 |
-| e63 | 제네릭 struct Box<T> | 7 |
-| e64 | enum 페이로드가 struct (Has(Pt)) | 5 |
-| e65 | while 루프 + break + 누적 | 10 |
-| e66 | 피보나치 (트리 재귀) | 13 |
-| e67 | 거듭제곱 (2-인자 재귀 지수) | 81 |
-| e68 | 이진 탐색 (`&List<T>` borrow + while + 계산 인덱싱) | 42 |
-| e69 | 문자열 palindrome (two-pointer `s[i]`/`s[j]`) | 42 |
-| e70 | 문자열 정수 파싱 (digit-run `parse_uint`) | 42 |
-| e71 | 문자열 부분 검색 (nested while `index_of`) | 42 |
-| e72 | identifier/keyword 스캔 (`let`/`return`/일반 식별자) | 42 |
-| e73 | 정수 → 문자열 변환 `Str(x)` | 73 |
-| e74 | `Map<K,V>` 기본 insert/get_opt | 42 |
-| e75 | 빈 List + `.push()` 성장 | 23 |
-| e76 | `List.map()` + `.sum()` | 12 |
-| e77 | 중첩 `List<List<Int>>` 리터럴 + 이중 인덱싱 | 3 |
-| e78 | `impl Trait for Type` trait 구현/dispatch | 42 |
-| e79 | 중첩 `match` arm + enum payload 안 Option payload | 42 |
-| e80 | 캡처 클로저 반환 (`{code, env}` ABI) | 7 |
-| e81 | 반환된 캡처 클로저를 고차함수 인자로 재전달 | 21 |
-| e82 | 리스트 리터럴 직접 인자 (`f([..])`) | 42 |
+Compiler parity coverage is tracked in `tools/vaisc-parity.tsv` and checked with:
 
-## 미커버 (Vais 백엔드/트랜스파일러 한계 — ROADMAP TRACKED)
-- 현재 예제 코퍼스 기준 known 캡처 클로저 반환/재전달 갭과 리스트 리터럴 직접 인자 갭은 해결됨(e80~e82). 남은 한계는 ROADMAP의 L3/P7/P4 항목 참조.
-## 규약
-- 첫 줄 `# expect: N` = main이 반환할 exit code (mod 256).
-- 실행형(main이 값 반환)만 expect 부착. 라이브러리 조각은 미부착(러너 skip).
+```bash
+bash scripts/test-vaisc-parity.sh
+```

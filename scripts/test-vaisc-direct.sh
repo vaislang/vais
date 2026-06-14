@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# NV-C2 direct-emitter gate for the New Vais `vaisc` command.
+# NV-C2 direct-emitter gate for the Vais `vaisc` command.
 #
-# The direct engine is intentionally smaller than the bootstrap engine in this
+# The direct engine is intentionally smaller than the full engine in this
 # slice: it compiles one `fn main() -> Int` with a single Int return expression
-# straight to LLVM IR, without invoking Legacy Vais.
+# straight to LLVM IR through the minimal native emitter.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,7 +11,6 @@ VAISC="$HERE/scripts/vaisc"
 fail=0
 
 tmp="$(mktemp -d)"
-missing_legacy="$tmp/missing-legacy/vaisc"
 src="$tmp/nv_c2_direct.vais"
 cat > "$src" <<'SRC'
 fn main() -> Int {
@@ -19,15 +18,15 @@ fn main() -> Int {
 }
 SRC
 
-if LEGACY_VAISC="$missing_legacy" "$VAISC" emit-ir "$src" \
-    --engine direct --legacy-root "$tmp/no-legacy" -o "$tmp/direct.ll" \
+if "$VAISC" emit-ir "$src" \
+    --engine direct -o "$tmp/direct.ll" \
     >"$tmp/direct-emit.out" 2>"$tmp/direct-emit.err"; then
     main_count="$(grep -c '^define i64 @main()' "$tmp/direct.ll" || true)"
     if [ "$main_count" = "1" ] &&
         grep -q ' mul i64 ' "$tmp/direct.ll" &&
         grep -q ' sdiv i64 ' "$tmp/direct.ll" &&
         grep -q ' ret i64 ' "$tmp/direct.ll"; then
-        echo "  PASS direct emit-ir emits arithmetic @main without Legacy Vais"
+        echo "  PASS direct emit-ir emits arithmetic @main"
     else
         echo "  FAIL direct emit-ir shape"
         cat "$tmp/direct.ll"
@@ -54,8 +53,8 @@ else
     fail=1
 fi
 
-if LEGACY_VAISC="$missing_legacy" "$VAISC" build "$src" \
-    --engine direct --legacy-root "$tmp/no-legacy" -o "$tmp/direct_bin" \
+if "$VAISC" build "$src" \
+    --engine direct -o "$tmp/direct_bin" \
     >"$tmp/direct-build.out" 2>"$tmp/direct-build.err"; then
     "$tmp/direct_bin"
     direct_build=$?
@@ -71,8 +70,8 @@ else
     fail=1
 fi
 
-LEGACY_VAISC="$missing_legacy" "$VAISC" run "$src" \
-    --engine direct --legacy-root "$tmp/no-legacy" \
+"$VAISC" run "$src" \
+    --engine direct \
     >"$tmp/direct-run.out" 2>"$tmp/direct-run.err"
 direct_run=$?
 if [ "$direct_run" = "42" ]; then
@@ -83,13 +82,13 @@ else
     fail=1
 fi
 
-"$VAISC" run "$src" >"$tmp/bootstrap-run.out" 2>"$tmp/bootstrap-run.err"
-bootstrap_run=$?
-if [ "$bootstrap_run" = "42" ]; then
-    echo "  PASS bootstrap oracle matches direct result (=42)"
+"$VAISC" run "$src" >"$tmp/full-run.out" 2>"$tmp/full-run.err"
+full_run=$?
+if [ "$full_run" = "42" ]; then
+    echo "  PASS full engine matches direct result (=42)"
 else
-    echo "  FAIL bootstrap oracle got=$bootstrap_run want=42"
-    cat "$tmp/bootstrap-run.err"
+    echo "  FAIL full engine got=$full_run want=42"
+    cat "$tmp/full-run.err"
     fail=1
 fi
 
@@ -104,8 +103,8 @@ fn main() -> Int {
 }
 SRC
 
-LEGACY_VAISC="$missing_legacy" "$VAISC" emit-ir "$helper_src" \
-    --engine direct --legacy-root "$tmp/no-legacy" -o "$tmp/helper.ll" \
+"$VAISC" emit-ir "$helper_src" \
+    --engine direct -o "$tmp/helper.ll" \
     >"$tmp/helper.out" 2>"$tmp/helper.err"
 helper_rc=$?
 if [ "$helper_rc" != "0" ] &&
@@ -119,7 +118,7 @@ else
 fi
 
 if [ "$fail" -eq 0 ]; then
-    echo "RESULT: New Vais vaisc NV-C2 direct emitter OK"
+    echo "RESULT: Vais vaisc NV-C2 direct emitter OK"
 else
     echo "RESULT: FAILURES"
 fi

@@ -1,5 +1,5 @@
 # expect: 73
-# Integer-to-string surface conversion: nl `Str(x)` lowers to Vais `to_string(x)`.
+# Integer-to-string surface conversion: Vais `Str(x)` lowers to Vais `to_string(x)`.
 fn main() -> Int {
     let a = Str(42)
     if a != "42" {

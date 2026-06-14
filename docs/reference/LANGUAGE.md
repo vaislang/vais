@@ -1,6 +1,6 @@
-# New Vais 언어 레퍼런스
+# Vais 언어 레퍼런스
 
-> New Vais 작성용 실용 레퍼런스. 기본 파일 확장자는 `.vais`이고, `.nl`은 전환기 호환 입력이다.
+> Vais 작성용 실용 레퍼런스. 파일 확장자는 `.vais`다.
 > **모든 구문은 `examples/`로 검증됨**(값-정확성 게이트 통과).
 > 설계 근거(왜 이렇게)는 `docs/design/`; 이 문서는 "어떻게 쓰나".
 > 핵심 규칙: **한 작업 = 한 가지 문법** (모호성 0). Rust 직관으로 쓰면 `vais-check`가 수정 안내.
@@ -163,27 +163,25 @@ print("the answer is {x}")     # 보간 "{식}"
 
 ## 빌드/검증
 ```
-scripts/build.sh prog.vais -o out && ./out # Legacy bootstrap 빌드+실행
 scripts/test.sh                            # 값-정확성 (examples 전체)
-scripts/vaisc emit-ir program.vais -o program.ll  # New Vais compiler IR 출력
-scripts/vaisc build program.vais -o program       # New Vais compiler + clang
+scripts/vaisc emit-ir program.vais -o program.ll  # Vais compiler IR 출력
+scripts/vaisc build program.vais -o program       # Vais compiler + clang
 scripts/vaisc run program.vais --engine direct    # 최소 direct LLVM emitter
 scripts/test-vaisc-front.sh                # native day-1 front 계약 검증
 scripts/test-vaisc-direct.sh               # direct emitter 계약 검증
 scripts/test-vaisc-errors.sh               # native P4 진단 계약 검증
-scripts/test-vaisc-parity.sh               # native/bootstrap/tracked parity manifest
+scripts/test-vaisc-parity.sh               # native/full/tracked parity manifest
 python3 tools/vais-check.py prog.vais      # 문법 lint (help: 수정안내)
 ```
 
-## 현재 한계 (전환기)
-- 기본 실행 경로는 아직 bootstrap engine이지만, `--engine direct`는 단일 `main` arithmetic return을
-  Legacy Vais 없이 직접 LLVM IR로 emit/build/run한다.
+## 현재 한계
+- 기본 실행 경로는 full engine이다. `--engine direct`는 단일 `main` arithmetic return을 직접 LLVM IR로 emit/build/run한다.
 - `scripts/vaisc` native front는 Int 함수/let/return/if/while/plain call, print/putchar,
   simple struct, payload-free enum/match, small Int-coded payload enum/match, single-Int closure return,
   List push/len/index/sum slice를 받는다.
-  넓은 언어 표면은 아직 Legacy bootstrap 경로나 후속 native slice에서 다룬다.
+  넓은 언어 표면은 full compiler path나 후속 native slice에서 다룬다.
 - native `vaisc` 오류는 day-1 범위에서 source 좌표, 원문 line, caret, `help:`, `fix:`를 포함한다.
-- `tools/vaisc-parity.tsv`가 native-supported/bootstrap-only/tracked 상태를 기록한다.
-  `compiler/self/*` tier는 검증된 compiler source로 `scripts/vaisc` bootstrap engine에서 직접 받는다.
+- `tools/vaisc-parity.tsv`가 native-supported/full-only/tracked 상태를 기록한다.
+  `compiler/self/*` tier는 검증된 compiler source로 `scripts/vaisc` full engine에서 직접 받는다.
 - 진짜 차별점(P7 단일coercion, P8 클로저 day-1)은 자체 컴파일러에서 최종 소유한다.
 - 이 레퍼런스의 모든 예제는 검증됨(`examples/`); 미검증 구문은 안 적었다.

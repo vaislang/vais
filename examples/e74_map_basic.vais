@@ -1,5 +1,5 @@
 # expect: 42
-# Basic Map<K,V> smoke. nl uses Map, transpiles to Vais HashMap, and relies on
+# Basic Map<K,V> smoke. Vais uses Map, transpiles to Vais HashMap, and relies on
 # the compiler's full std/hashmap monomorphized build path.
 fn main() -> Int {
     m: Map<Int, Int> = Map.new()

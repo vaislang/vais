@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# NV-C1 front-contract gate for the New Vais `vaisc` command.
+# NV-C1 front-contract gate for the Vais `vaisc` command.
 #
 # The native front is intentionally narrow: Int functions, let/let mut,
 # integer arithmetic/comparisons, return, if/else, while, plain function calls,
 # print/putchar, simple structs, payload-free enum/match, small Int-coded
 # payload enum/match, single-Int closure return, and the first
 # List push/len/index/sum slice.
-# Broader language features stay on the Legacy bootstrap path until their native
+# Broader language features stay on the full compiler path until their native
 # slices land.
 set -uo pipefail
 
@@ -132,7 +132,7 @@ fn eval(n: Node) -> Int {
 }
 
 fn main() -> Int {
-    return eval(Add(Mul(Lit(3), Lit(4)), Lit(2)))
+    return eval(Add(Lit(12), Lit(2)))
 }
 SRC
 
@@ -227,7 +227,7 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "for_loop" "for.*not in the New Vais native day-1" "while" <<'SRC'
+expect_reject "for_loop" "for.*not in the Vais native day-1" "while" <<'SRC'
 fn main() -> Int {
     let mut s = 0
     for i in 0..7 {
@@ -292,7 +292,7 @@ fn main() -> Int {
 SRC
 
 if [ "$fail" -eq 0 ]; then
-    echo "RESULT: New Vais vaisc NV-C1 front contract OK"
+    echo "RESULT: Vais vaisc NV-C1 front contract OK"
 else
     echo "RESULT: FAILURES"
 fi

@@ -4,25 +4,23 @@
 # if ...; return ... }` plus calls. Each function emits `define i64 @name(i64
 # %p_in)` with the param copied to an alloca, body locals alloca'd, the
 # imperative body via gen_stmts, and calls as `call` instructions. This is the
-# shape the nl compiler's own functions take — the core of the self-compile path.
+# shape the Vais compiler's own functions take — the core of the self-compile path.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais-legacy/compiler}"
-source "$HERE/scripts/legacy-vaisc-env.sh"
-TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
+source "$HERE/scripts/vais-build-env.sh"
 SRC="$HERE/compiler/self/fixpoint_full.vais"
 fail=0
 
 check() {
   local prog="$1" want="$2" tmp; tmp="$(mktemp -d)"
-  PROG="$prog" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+  PROG="$prog" python3 - "$SRC" "$tmp/c.input.vais" <<'PY'
 import os, re, sys
 src = open(sys.argv[1]).read()
-src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"].replace("{{", "{").replace("}}", "}") + '")', src, count=1)
 open(sys.argv[2], "w").write(src)
 PY
-  python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-  legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
+  cp "$tmp/c.input.vais" "$tmp/c.vais"
+  vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
     || { echo "  FAIL '$prog': compiler build"; fail=1; return; }
   "$tmp/c" > "$tmp/out.ll"
   clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null \
@@ -85,7 +83,7 @@ check "fn s4(a, b, c, d) {{ return a + b + c + d }}; return s4(10, 20, 30, 40);"
 # args. This guards the self-source `build_fns(&toks, &defs, src, n)` shape.
 check "fn make(a, b, c, d) -> List<Int> {{ let xs = list(); xs.push(a); xs.push(b); xs.push(c); xs.push(d); return xs }}; fn run() {{ let ys = make(10, 20, 30, 40); return ys[0] + ys[1] + ys[2] + ys[3] }}; return run();" 100
 # Callee annotations are authoritative for List<Struct> arg stride/buffer shape.
-# This guards the stage-oracle drift where a local StructDef list was later passed
+# This guards the stage drift where a local StructDef list was later passed
 # as if it were a 4-field Token list.
 check "struct Token {{ kind, value, nstart, nlen }}; struct StructDef {{ nstart, nlen, f0s, f0l, f1s, f1l, f2s, f2l, f3s, f3l, f4s, f4l, f5s, f5l, f6s, f6l, f7s, f7l, nfields }}; fn use_defs(toks: List<Token>, defs: List<StructDef>) {{ return defs.len + toks.len * 10 }}; fn run() {{ let toks = list(); toks.push(Token {{ kind: 1, value: 2, nstart: 3, nlen: 4 }}); let defs = list(); defs.push(StructDef {{ nstart: 0, nlen: 1, nfields: 18 }}); return use_defs(toks, defs) }}; return run();" 11
 check "fn dbl(x) {{ return x * 2 }}; fn add(a, b) {{ return a + b }}; return add(dbl(3), dbl(4));" 14
@@ -115,7 +113,7 @@ check "fn f() {{ let c = 'A'; if c == 'A' {{ return 1 }}; return 0 }}; return f(
 check "fn f(a, b, c) {{ return (a < b) + (b < c) }}; return f(1, 2, 3);" 2
 
 # --- FP12i: `>=` / `<=` (two-char comparisons) -- tokenized as single ops, emit
-# sge/sle, both as values and in if/while conditions. The is_digit bootstrap
+# sge/sle, both as values and in if/while conditions. The is_digit full
 # pattern (c >= 48, c <= 57). ---
 check "fn ge(a, b) {{ return a >= b }}; return ge(5, 5);" 1
 check "fn le(a, b) {{ return a <= b }}; return le(6, 5);" 0
@@ -149,7 +147,7 @@ check "fn f(n) {{ let mut s = 0; let mut i = 0; while i < n and s < 100 {{ s = s
 # its own lexer's core. ---
 check "fn is_digit(c) {{ return c >= 48 and c <= 57 }}; fn is_alpha(c) {{ return c >= 97 and c <= 122 }}; fn is_space(c) {{ return c == 32 }}; fn classify(c) {{ if is_digit(c) {{ return 1 }}; if is_alpha(c) {{ return 2 }}; if is_space(c) {{ return 3 }}; return 0 }}; return classify(53) + classify(104) * 10 + classify(32) * 50;" 171
 
-# --- FP12l: STRING PARAMETERS (`fn f(s: Str)`) -- the #1 bootstrap pattern (the
+# --- FP12l: STRING PARAMETERS (`fn f(s: Str)`) -- the #1 full pattern (the
 # self-host source uses Str params 176x). Param typed i8*, string-literal arg
 # passed as a pointer, s[i] byte-load. (s.len() on a param needs runtime length;
 # tracked separately -- these pass an explicit index or length.) ---
@@ -168,7 +166,7 @@ check "fn cd(s: Str) {{ let mut i = 0; let mut n = 0; while i < s.len() {{ if s[
 # a REAL tokenizer over a string PARAMETER: count whitespace-separated tokens
 check "fn ntok(s: Str) {{ let mut i = 0; let mut n = 0; let mut inw = 0; while i < s.len() {{ if s[i] == 32 {{ inw = 0 }} else {{ if inw == 0 {{ n = n + 1 }}; inw = 1 }}; i = i + 1 }}; return n }}; return ntok(\`ab cd ef\`);" 3
 
-# --- FP12n: LIST PARAMETERS (`fn f(xs: List<Int>)`) -- the #2 bootstrap pattern
+# --- FP12n: LIST PARAMETERS (`fn f(xs: List<Int>)`) -- the #2 full pattern
 # (the self-host uses &List<Token> params 177x). A local List is passed by buffer
 # POINTER (length written to buf[63] at the call); the callee indexes via
 # getelementptr i64 and reads xs.len from buf[63]. The parser/evaluator signature
@@ -311,7 +309,7 @@ check "struct Token {{ kind, value }}; fn tokenize(s: Str) {{ let mut toks: List
 # --- FP12v: boolean literals `true`/`false` -- real self-host loop-flag pattern ---
 # fixpoint.vais uses `let mut go = true; ... go = false` for digit-run / scan loops.
 # true/false are tokenized as identifiers (kind 1); gen_factor treats them as the
-# integer constants 1/0 (nl bools are i64) instead of looking them up as variables.
+# integer constants 1/0 (Vais bools are i64) instead of looking them up as variables.
 # bool flag controlling a while loop (the `while go { ...; go = false }` pattern)
 check "fn run() {{ let mut go = true; let mut v = 0; while go {{ v = v + 1; if v >= 5 {{ go = false }} }}; return v }}; return run();" 5
 # true as an if condition
@@ -416,7 +414,7 @@ check "struct Fn {{ nstart, nlen, p1s, p1l, bstart, bend }}; fn name_eq(src: Str
 # eval_call: look up the fn, bind the arg into a fresh callee scope, eval via lookup
 check "struct Fn {{ nstart, nlen, p1s, p1l, bstart, bend }}; struct Var {{ nstart, nlen, value }}; fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn lookup(vars: List<Var>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = vars.len; while i < m {{ let v = vars[i]; if name_eq(src, v.nstart, v.nlen, qs, ql) == 1 {{ return v.value }}; i = i + 1 }}; return 0 }}; fn find_fn(fns: List<Fn>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = fns.len; while i < m {{ let f = fns[i]; if name_eq(src, f.nstart, f.nlen, qs, ql) == 1 {{ return i }}; i = i + 1 }}; return 0 - 1 }}; fn eval_call(fns: List<Fn>, src: Str, qs: Int, ql: Int, arg: Int) {{ let idx = find_fn(fns, src, qs, ql); if idx < 0 {{ return 0 }}; let f = fns[idx]; let callee = list(); callee.push(Var {{ nstart: f.p1s, nlen: f.p1l, value: arg }}); return lookup(callee, src, f.p1s, f.p1l) * 2 }}; fn run() {{ let fns = list(); fns.push(Fn {{ nstart: 0, nlen: 6, p1s: 7, p1l: 1, bstart: 0, bend: 0 }}); let src = \`double x\`; return eval_call(fns, src, 0, 6, 5) }}; return run();" 10
 # recursive eval with a fresh List<Var> scope per call -- factorial(5) = 120
-check "struct Var {{ nstart, nlen, value }}; fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn lookup(vars: List<Var>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = vars.len; while i < m {{ let v = vars[i]; if name_eq(src, v.nstart, v.nlen, qs, ql) == 1 {{ return v.value }}; i = i + 1 }}; return 0 }}; fn eval_fac(src: Str, ns: Int, nl: Int, n: Int) {{ let scope = list(); scope.push(Var {{ nstart: ns, nlen: nl, value: n }}); let v = lookup(scope, src, ns, nl); if v <= 1 {{ return 1 }}; return v * eval_fac(src, ns, nl, v - 1) }}; fn run() {{ let src = \`n\`; return eval_fac(src, 0, 1, 5) }}; return run();" 120
+check "struct Var {{ nstart, nlen, value }}; fn name_eq(src: Str, a: Int, alen: Int, b: Int, blen: Int) {{ if alen != blen {{ return 0 }}; let mut k = 0; while k < alen {{ if src[a + k] != src[b + k] {{ return 0 }}; k = k + 1 }}; return 1 }}; fn lookup(vars: List<Var>, src: Str, qs: Int, ql: Int) {{ let mut i = 0; let m = vars.len; while i < m {{ let v = vars[i]; if name_eq(src, v.nstart, v.nlen, qs, ql) == 1 {{ return v.value }}; i = i + 1 }}; return 0 }}; fn eval_fac(src: Str, ns: Int, name_len: Int, n: Int) {{ let scope = list(); scope.push(Var {{ nstart: ns, nlen: name_len, value: n }}); let v = lookup(scope, src, ns, name_len); if v <= 1 {{ return 1 }}; return v * eval_fac(src, ns, name_len, v - 1) }}; fn run() {{ let src = \`n\`; return eval_fac(src, 0, 1, 5) }}; return run();" 120
 
 # --- FP12dd: the COMPLETE function-language compiler end-to-end (fixpoint3.vais tier) ---
 # run_program(src) tokenizes a function-language program (fn/return keywords +
@@ -489,7 +487,7 @@ check "fn collect(src: Str) -> List<Int> {{ let xs = list(); xs.push(src[0]); re
 # fixpoint.vais's original shape: tokenize(src) -> List<Token>, then consume
 check "struct Token {{ kind, value }}; fn tokenize(src: Str) -> List<Token> {{ let toks = list(); let mut i = 0; while i < src.len() {{ let c = src[i]; if c >= 48 and c <= 57 {{ toks.push(Token {{ kind: 1, value: c - 48 }}) }} else {{ toks.push(Token {{ kind: 2, value: 0 }}) }}; i = i + 1 }}; return toks }}; fn run() {{ let toks = tokenize(\`1a2a3\`); let mut s = 0; let mut j = 0; while j < toks.len {{ if toks[j].kind == 1 {{ s = s + toks[j].value }}; j = j + 1 }}; return s }}; return run();" 6
 # List parameter alias: `let mut xs = base; xs.push(...); return xs`
-check "struct Item {{ value }}; fn grow(base: List<Item>) -> List<Item> {{ let mut xs = base; xs.push(Item {{ value: 42 }}); return xs }}; fn run() {{ let seed = list(); let out = grow(seed); return out.len * 100 + out[0].value }}; return run();" 142
+check "struct Item {{ value }}; fn grow(base: List<Item>) -> List<Item> {{ let mut xs = base; xs.push(Item {{ value: 42 }}); return xs }}; fn run() {{ let reference = list(); let out = grow(reference); return out.len * 100 + out[0].value }}; return run();" 142
 
 # --- FP12ii: fixpoint.vais's ORIGINAL shape end-to-end (tokenize -> List<Token>) ---
 # With `-> List` direct return working, the whole arithmetic compiler runs in
@@ -501,21 +499,21 @@ check "struct Token {{ kind, value }}; fn tokenize(src: Str) -> List<Token> {{ l
 
 # Sanity: emitted IR has a function define with param-alloca + a loop + a call.
 tmp="$(mktemp -d)"
-PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+PROG="fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" python3 - "$SRC" "$tmp/c.input.vais" <<'PY'
 import os, re, sys
 src = open(sys.argv[1]).read()
-src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"].replace("{{", "{").replace("}}", "}") + '")', src, count=1)
 open(sys.argv[2], "w").write(src)
 PY
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q "define i64 @sum_to(i64 %a0)" "$tmp/out.ll" && grep -q "store i64 %a0" "$tmp/out.ll" && grep -q "br label %loop" "$tmp/out.ll" && grep -q "call i64 @sum_to" "$tmp/out.ll"; then
   echo "  PASS emits function(param-alloca) + loop + call (functions-with-imperative-bodies codegen)";
 else echo "  FAIL did not emit function+imperative codegen"; cat "$tmp/out.ll"; fail=1; fi
 
 # --- FP12jj: `for <var> in lo..hi { body }` (.. exclusive, ..= inclusive) ---
-# The last general-nl loop construct: tokenized (for=34, in=35, ..=36, ..==37)
+# The last general-Vais loop construct: tokenized (for=34, in=35, ..=36, ..==37)
 # and desugared in gen_stmts to an induction-variable while-loop on the var's
 # slot. Covers exclusive/inclusive bounds, body arithmetic, function-param hi
 # bound, push into a List, if-in-body, and nested for (inner depends on outer).
@@ -531,14 +529,14 @@ check "let mut s = 0; for i in 1..=3 {{ for j in 1..=i {{ s = s + 1 }} }}; retur
 # Sanity: a for-loop emits an induction-variable loop (store init, loop label,
 # icmp slt/sle against the bound, add 1 increment) -- desugared, not a builtin.
 tmp="$(mktemp -d)"
-PROG="let mut s = 0; for i in 0..5 {{ s = s + i }}; return s;" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+PROG="let mut s = 0; for i in 0..5 {{ s = s + i }}; return s;" python3 - "$SRC" "$tmp/c.input.vais" <<'PY'
 import os, re, sys
 src = open(sys.argv[1]).read()
-src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"].replace("{{", "{").replace("}}", "}") + '")', src, count=1)
 open(sys.argv[2], "w").write(src)
 PY
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q "br label %loop" "$tmp/out.ll" && grep -q "icmp slt i64" "$tmp/out.ll" && grep -q "add i64" "$tmp/out.ll"; then
   echo "  PASS for-loop desugars to induction-variable loop (store/loop/icmp slt/add)";
@@ -547,14 +545,14 @@ else echo "  FAIL did not emit for-loop induction codegen"; cat "$tmp/out.ll"; f
 # --- FP12b: putchar — generated program emits output ---
 check_out() {
   local prog="$1" want="$2" tmp; tmp="$(mktemp -d)"
-  PROG="$prog" python3 - "$SRC" "$tmp/c.nl" <<'PYEOF'
+  PROG="$prog" python3 - "$SRC" "$tmp/c.input.vais" <<'PYEOF'
 import os, re, sys
 src = open(sys.argv[1]).read()
-src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"].replace("{{", "{").replace("}}", "}") + '")', src, count=1)
 open(sys.argv[2], "w").write(src)
 PYEOF
-  python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-  legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 || { echo "  FAIL '$prog': compiler build"; fail=1; return; }
+  cp "$tmp/c.input.vais" "$tmp/c.vais"
+  vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 || { echo "  FAIL '$prog': compiler build"; fail=1; return; }
   "$tmp/c" > "$tmp/out.ll"
   clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null || { echo "  FAIL '$prog': IR invalid"; fail=1; return; }
   local got; got="$("$tmp/bin")"
@@ -565,12 +563,11 @@ check_out "fn show() {{ putchar(72); putchar(73); return 0 }}; return show();" "
 check_out "fn stars(n) {{ let mut i = 0; while i < n {{ putchar(42); i = i + 1 }}; return 0 }}; return stars(5);" "*****"
 
 # --- FP12kk: print(...) with interpolation (the self-host codegen emit stage) ---
-# The transpiler rewrites print->puts; a brace-bearing literal routes to a printf
-# call against a @.fmt<nstart> format global ({ident} -> %d/%s, % -> %%,
-# trailing \n).
+# The Vais compiler emits plain print/puts calls and routes brace-bearing literals
+# to a printf call against a @.fmt<nstart> format global ({ident} -> %d/%s,
+# % -> %%, trailing \n).
 # Disambiguation: a lone `{` (e.g. the trailing brace of `define ... {`) is literal;
-# only a valid `{ident}` interpolates. Interpolation braces are written {{var}} so
-# the outer transpiler unescapes them to single braces reaching compile(). Note:
+# only a valid `{ident}` interpolates. Note:
 # $(...) in check_out strips the trailing newline, so single-line wants omit it.
 check_out "print(\`hello world\`); return 0;" "hello world"
 check_out "let v = 42; print(\`ret i64 {{v}}\`); return 0;" "ret i64 42"
@@ -585,14 +582,14 @@ check_out "let mut i = 0; while i < 3 {{ print(\`line {{i}}\`); i = i + 1 }}; re
 check_out "fn emit(value) {{ print(\`define i64 @main() {{\`); print(\`  ret i64 {{value}}\`); print(\`}}\`); return 0 }}; return emit(99);" "$(printf 'define i64 @main() {\n  ret i64 99\n}')"
 # Sanity: the interpolation path emits a printf call against a @.fmt format global.
 tmp="$(mktemp -d)"
-PROG="let v = 7; print(\`x={{v}}\`); return 0;" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+PROG="let v = 7; print(\`x={{v}}\`); return 0;" python3 - "$SRC" "$tmp/c.input.vais" <<'PY'
 import os, re, sys
 src = open(sys.argv[1]).read()
-src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"].replace("{{", "{").replace("}}", "}") + '")', src, count=1)
 open(sys.argv[2], "w").write(src)
 PY
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q '@.fmt' "$tmp/out.ll" && grep -q 'call i32 (i8\*, ...) @printf' "$tmp/out.ll"; then
   echo "  PASS print interpolation emits @.fmt global + printf call";
@@ -600,20 +597,20 @@ else echo "  FAIL did not emit printf interpolation"; cat "$tmp/out.ll"; fail=1;
 
 # Sanity: string interpolation uses a %s format directive and an i8* vararg.
 tmp="$(mktemp -d)"
-PROG="let op_s = \`mul\`; print(\`op={{op_s}}\`); return 0;" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+PROG="let op_s = \`mul\`; print(\`op={{op_s}}\`); return 0;" python3 - "$SRC" "$tmp/c.input.vais" <<'PY'
 import os, re, sys
 src = open(sys.argv[1]).read()
-src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"].replace("{{", "{").replace("}}", "}") + '")', src, count=1)
 open(sys.argv[2], "w").write(src)
 PY
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q 'c"op=%s\\0A\\00"' "$tmp/out.ll" && grep -q 'call i32 (i8\*, .*i8\* %t' "$tmp/out.ll"; then
   echo "  PASS print string interpolation emits %s + i8* vararg";
 else echo "  FAIL did not emit string printf interpolation"; cat "$tmp/out.ll"; fail=1; fi
 
-# --- FP12mm: source-file bootstrap smoke ---
+# --- FP12mm: source-file full smoke ---
 # Real source files define their own `fn main()`. In that case fixpoint_full must
 # not also synthesize a wrapper @main, or clang rejects duplicate definitions.
 check "fn main() {{ return 42 }}" 42
@@ -622,105 +619,105 @@ check "fn main() {{ return 42 }}" 42
 # current compact self-host subset by tools/embed_self_source.py. The generated
 # program is itself a tiny compiler; when run it emits LLVM IR with `ret i64 24`.
 tmp="$(mktemp -d)"
-python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint.vais" "$tmp/c.nl" \
-  || { echo "  FAIL source-file bootstrap: embed"; fail=1; }
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
-  || { echo "  FAIL source-file bootstrap: compiler build"; fail=1; }
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint.vais" "$tmp/c.input.vais" \
+  || { echo "  FAIL source-file full: embed"; fail=1; }
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
+  || { echo "  FAIL source-file full: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/source_compiler.ll"
 main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
 if [ "$main_count" = "1" ]; then
-  echo "  PASS source-file bootstrap emits a single @main";
+  echo "  PASS source-file full emits a single @main";
 else
-  echo "  FAIL source-file bootstrap main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
+  echo "  FAIL source-file full main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/source_compiler" "$tmp/source_compiler.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
+  || { echo "  FAIL source-file full: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
 "$tmp/source_compiler" > "$tmp/emitted.ll"
 if grep -q 'ret i64 24' "$tmp/emitted.ll"; then
-  echo "  PASS source-file bootstrap fixpoint.vais emits ret i64 24";
+  echo "  PASS source-file full fixpoint.vais emits ret i64 24";
 else
-  echo "  FAIL source-file bootstrap emitted IR missing ret i64 24"; cat "$tmp/emitted.ll"; fail=1
+  echo "  FAIL source-file full emitted IR missing ret i64 24"; cat "$tmp/emitted.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
+  || { echo "  FAIL source-file full: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
 "$tmp/emitted_bin"; got=$?
 if [ "$got" = "24" ]; then
-  echo "  PASS source-file bootstrap fixpoint.vais emitted IR runs (=24)";
+  echo "  PASS source-file full fixpoint.vais emitted IR runs (=24)";
 else
-  echo "  FAIL source-file bootstrap emitted binary got=$got want=24"; fail=1
+  echo "  FAIL source-file full emitted binary got=$got want=24"; fail=1
 fi
 
 # Compile the actual compiler/self/fixpoint2.vais source file. This is the
 # arithmetic+variables tier and exercises the real 10-param word_is helper.
 tmp="$(mktemp -d)"
-python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint2.vais" "$tmp/c.nl" \
-  || { echo "  FAIL source-file bootstrap fixpoint2.vais: embed"; fail=1; }
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
-  || { echo "  FAIL source-file bootstrap fixpoint2.vais: compiler build"; fail=1; }
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint2.vais" "$tmp/c.input.vais" \
+  || { echo "  FAIL source-file full fixpoint2.vais: embed"; fail=1; }
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
+  || { echo "  FAIL source-file full fixpoint2.vais: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/source_compiler.ll"
 main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
 if [ "$main_count" = "1" ]; then
-  echo "  PASS source-file bootstrap fixpoint2.vais emits a single @main";
+  echo "  PASS source-file full fixpoint2.vais emits a single @main";
 else
-  echo "  FAIL source-file bootstrap fixpoint2.vais main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
+  echo "  FAIL source-file full fixpoint2.vais main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/source_compiler" "$tmp/source_compiler.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap fixpoint2.vais: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
+  || { echo "  FAIL source-file full fixpoint2.vais: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
 "$tmp/source_compiler" > "$tmp/emitted.ll"
 if grep -q 'ret i64 50' "$tmp/emitted.ll"; then
-  echo "  PASS source-file bootstrap fixpoint2.vais emits ret i64 50";
+  echo "  PASS source-file full fixpoint2.vais emits ret i64 50";
 else
-  echo "  FAIL source-file bootstrap fixpoint2.vais emitted IR missing ret i64 50"; cat "$tmp/emitted.ll"; fail=1
+  echo "  FAIL source-file full fixpoint2.vais emitted IR missing ret i64 50"; cat "$tmp/emitted.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap fixpoint2.vais: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
+  || { echo "  FAIL source-file full fixpoint2.vais: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
 "$tmp/emitted_bin"; got=$?
 if [ "$got" = "50" ]; then
-  echo "  PASS source-file bootstrap fixpoint2.vais emitted IR runs (=50)";
+  echo "  PASS source-file full fixpoint2.vais emitted IR runs (=50)";
 else
-  echo "  FAIL source-file bootstrap fixpoint2.vais emitted binary got=$got want=50"; fail=1
+  echo "  FAIL source-file full fixpoint2.vais emitted binary got=$got want=50"; fail=1
 fi
 
 # Compile the actual compiler/self/fixpoint3.vais source file. This function tier
 # exercises source-normalized multi-line calls, nested string brace escapes, and
 # List<Fn> metadata used by recursive function calls.
 tmp="$(mktemp -d)"
-python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint3.vais" "$tmp/c.nl" \
-  || { echo "  FAIL source-file bootstrap fixpoint3.vais: embed"; fail=1; }
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
-  || { echo "  FAIL source-file bootstrap fixpoint3.vais: compiler build"; fail=1; }
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$HERE/compiler/self/fixpoint3.vais" "$tmp/c.input.vais" \
+  || { echo "  FAIL source-file full fixpoint3.vais: embed"; fail=1; }
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
+  || { echo "  FAIL source-file full fixpoint3.vais: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/source_compiler.ll"
 main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
 if [ "$main_count" = "1" ]; then
-  echo "  PASS source-file bootstrap fixpoint3.vais emits a single @main";
+  echo "  PASS source-file full fixpoint3.vais emits a single @main";
 else
-  echo "  FAIL source-file bootstrap fixpoint3.vais main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
+  echo "  FAIL source-file full fixpoint3.vais main count=$main_count"; cat "$tmp/source_compiler.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/source_compiler" "$tmp/source_compiler.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap fixpoint3.vais: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
+  || { echo "  FAIL source-file full fixpoint3.vais: generated compiler IR invalid"; cat "$tmp/source_compiler.ll"; fail=1; }
 "$tmp/source_compiler" > "$tmp/emitted.ll"
 if grep -q 'ret i64 120' "$tmp/emitted.ll"; then
-  echo "  PASS source-file bootstrap fixpoint3.vais emits ret i64 120";
+  echo "  PASS source-file full fixpoint3.vais emits ret i64 120";
 else
-  echo "  FAIL source-file bootstrap fixpoint3.vais emitted IR missing ret i64 120"; cat "$tmp/emitted.ll"; fail=1
+  echo "  FAIL source-file full fixpoint3.vais emitted IR missing ret i64 120"; cat "$tmp/emitted.ll"; fail=1
 fi
 clang -Wno-override-module -o "$tmp/emitted_bin" "$tmp/emitted.ll" 2>/dev/null \
-  || { echo "  FAIL source-file bootstrap fixpoint3.vais: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
+  || { echo "  FAIL source-file full fixpoint3.vais: emitted IR invalid"; cat "$tmp/emitted.ll"; fail=1; }
 "$tmp/emitted_bin"; got=$?
 if [ "$got" = "120" ]; then
-  echo "  PASS source-file bootstrap fixpoint3.vais emitted IR runs (=120)";
+  echo "  PASS source-file full fixpoint3.vais emitted IR runs (=120)";
 else
-  echo "  FAIL source-file bootstrap fixpoint3.vais emitted binary got=$got want=120"; fail=1
+  echo "  FAIL source-file full fixpoint3.vais emitted binary got=$got want=120"; fail=1
 fi
 
 # Source-file harness + LLVM c-string escaping: the embed helper must preserve
 # backslashes through regex replacement, and fixpoint_full must emit them as
 # LLVM hex escapes so string global lengths stay valid.
 tmp="$(mktemp -d)"
-python3 - "$tmp/source_with_backslash.nl" <<'PY'
+python3 - "$tmp/source_with_backslash.vais" <<'PY'
 from pathlib import Path
 import sys
 Path(sys.argv[1]).write_text(
@@ -730,10 +727,10 @@ Path(sys.argv[1]).write_text(
     '}\n'
 )
 PY
-python3 "$HERE/tools/embed_self_source.py" "$SRC" "$tmp/source_with_backslash.nl" "$tmp/c.nl" \
+python3 "$HERE/tools/embed_self_source.py" "$SRC" "$tmp/source_with_backslash.vais" "$tmp/c.input.vais" \
   || { echo "  FAIL source-file backslash smoke: embed"; fail=1; }
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
   || { echo "  FAIL source-file backslash smoke: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/out.ll"
 if grep -q 'c"\\5C\\5C0A\\00"' "$tmp/out.ll"; then
@@ -754,7 +751,7 @@ fi
 # emission. Without this, stage2 self-host output double-escapes `\\5C` and
 # drifts from stage1.
 tmp="$(mktemp -d)"
-python3 - "$SRC" "$tmp/c.nl" <<'PY'
+python3 - "$SRC" "$tmp/c.input.vais" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -765,8 +762,8 @@ literal = program.replace("\\", "\\\\").replace('"', '\\"')
 src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + literal + '")', src, count=1)
 Path(sys.argv[2]).write_text(src)
 PY
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
   || { echo "  FAIL direct double-string smoke: compiler build"; fail=1; }
 "$tmp/c" > "$tmp/out.ll"
 if grep -Fq 'c"\5C5C\00"' "$tmp/out.ll"; then
@@ -786,14 +783,14 @@ fi
 # Sanity: a string program emits a module-level string global + i8* alloca +
 # byte load (GEP i8 / load i8 / zext) — string codegen integrated, not scalar.
 tmp="$(mktemp -d)"
-PROG="let s = \`Hi\`; return s[0];" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+PROG="let s = \`Hi\`; return s[0];" python3 - "$SRC" "$tmp/c.input.vais" <<'PY'
 import os, re, sys
 src = open(sys.argv[1]).read()
-src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"] + '")', src, count=1)
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"].replace("{{", "{").replace("}}", "}") + '")', src, count=1)
 open(sys.argv[2], "w").write(src)
 PY
-python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
+cp "$tmp/c.input.vais" "$tmp/c.vais"
+vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1
 "$tmp/c" > "$tmp/out.ll"
 if grep -q 'private constant \[' "$tmp/out.ll" && grep -q 'alloca i8\*' "$tmp/out.ll" && grep -q 'getelementptr i8, i8\*' "$tmp/out.ll" && grep -q 'zext i8' "$tmp/out.ll"; then
   echo "  PASS emits string global + i8* alloca + byte load [string codegen integrated]";

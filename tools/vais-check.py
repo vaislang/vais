@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-vais-check — lint New Vais source for non-Vais (usually Rust/other-language intuition)
+vais-check — lint Vais source for non-Vais (usually Rust/other-language intuition)
 constructs and report them with `help:` + the exact fix (design principle P4:
 errors give the cure, not just the symptom — the key lever for AI self-correction).
 
-WHY this exists: the New Vais -> Legacy Vais bootstrap adapter currently *accepts* some Rust-intuition
-spellings (e.g. `&&`, `as Int`) because Vais accepts them after mapping. That
-silently opens TWO ways to write one thing — exactly the ambiguity New Vais forbids
-(P1-P3). vais-check enforces "one way" by flagging the non-Vais spelling BEFORE
-transpile and telling the user the single correct form.
+WHY this exists: Rust-intuition spellings such as `&&` or `x as Int` silently
+open two ways to write one thing. vais-check enforces the single Vais spelling
+and tells the user the concrete correction.
 
 Usage:  python3 vais-check.py file.vais
 Exit 0 = clean; exit 1 = issues found (printed with help:).
@@ -21,7 +19,7 @@ Format per issue:
 
 Scope: line-based lint (prototype). Skips string literals and comments.
 
-Catalog (Rust/other-language intuition -> the single New Vais form):
+Catalog (Rust/other-language intuition -> the single Vais form):
   &&/||/!         -> and / or / not
   x as Type       -> Type(x)
   Path::x         -> Path.x       (dot, not ::)
@@ -34,7 +32,7 @@ Catalog (Rust/other-language intuition -> the single New Vais form):
   .unwrap()/.expect() -> match the Option/Result, or `?`
   if let          -> match
   elsif/elif      -> else if
-  x += 1 (+=/-=/*=//=)  -> x = x + 1  (no compound assignment in New Vais)
+  x += 1 (+=/-=/*=//=)  -> x = x + 1  (no compound assignment in Vais)
 """
 import re
 import sys
@@ -81,51 +79,51 @@ RULES = [
     (re.compile(r"\bvec!\s*\["),
      "list literals are just `[1, 2, 3]`, not `vec![...]`",
      lambda m, ln: re.sub(r"\bvec!\s*\[", "[", ln, count=1)),
-    # --- collection TYPE name (nl uses List<T>, not Vec<T>) ---
+    # --- collection TYPE name (Vais uses List<T>, not Vec<T>) ---
     (re.compile(r"\bVec\s*<"),
      "the list type is `List<T>`, not `Vec<T>`",
      lambda m, ln: re.sub(r"\bVec(\s*<)", r"List\1", ln, count=1)),
     (re.compile(r"\bHashMap\b"),
      "the map type is `Map<K,V>`, not `HashMap<K,V>`",
      lambda m, ln: re.sub(r"\bHashMap\b", "Map", ln, count=1)),
-    # --- Rust scalar type names (nl uses Int/UInt8.. / F32 / F64, capitalized) ---
+    # --- Rust scalar type names (Vais uses Int/UInt8.. / F32 / F64, capitalized) ---
     (re.compile(r"(?<![A-Za-z0-9_])(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|usize|isize)(?![A-Za-z0-9_])"),
-     "nl scalar types are capitalized: `Int` / `Int8..Int128` / `UInt8..UInt128` / `F32` / `F64`",
-     lambda m, ln: f"... use the nl type name (e.g. Int) instead of `{m.group(1)}`"),
-    # --- .to_string() is a Rust-ism; nl uses explicit conversion calls. ---
+     "Vais scalar types are capitalized: `Int` / `Int8..Int128` / `UInt8..UInt128` / `F32` / `F64`",
+     lambda m, ln: f"... use the Vais type name (e.g. Int) instead of `{m.group(1)}`"),
+    # --- .to_string() is a Rust-ism; Vais uses explicit conversion calls. ---
     (re.compile(r"\.to_string\s*\("),
-     "no `.to_string()` method in nl (Rust-ism); use explicit `Str(x)` conversion",
+     "no `.to_string()` method in Vais (Rust-ism); use explicit `Str(x)` conversion",
      lambda m, ln: "... use `Str(expr)` instead of `.to_string()`"),
-    # --- Option/Result unwrap (nl uses match or `?`) ---
+    # --- Option/Result unwrap (Vais uses match or `?`) ---
     (re.compile(r"\.unwrap\s*\("),
      "no `.unwrap()`; use a `match` arm (Some(v)/None) or `?` to propagate",
      lambda m, ln: "... match the Option/Result or use `?` instead of `.unwrap()`"),
     (re.compile(r"\.expect\s*\("),
      "no `.expect()`; use a `match` arm (Some(v)/None) or `?` to propagate",
      lambda m, ln: "... match the Option/Result or use `?` instead of `.expect()`"),
-    # --- `if let` (nl uses match) ---
+    # --- `if let` (Vais uses match) ---
     (re.compile(r"\bif\s+let\b"),
      "no `if let`; use a `match` (e.g. `match opt { Some(v) => ..., None => ... }`)",
      lambda m, ln: "... rewrite as a match on the Option/Result"),
-    # --- `elsif`/`elif` typo (nl uses `else if`) ---
+    # --- `elsif`/`elif` typo (Vais uses `else if`) ---
     (re.compile(r"\b(elsif|elif)\b"),
      "the keyword is `else if` (two words), not `elsif`/`elif`",
      lambda m, ln: re.sub(r"\b(elsif|elif)\b", "else if", ln, count=1)),
-    # --- `String` type (Rust-ism) -> nl's type name is `Str` ---
+    # --- `String` type (Rust-ism) -> Vais's type name is `Str` ---
     (re.compile(r"\bString\b"),
      "the string type is `Str`, not `String`",
      lambda m, ln: re.sub(r"\bString\b", "Str", ln, count=1)),
-    # --- compound assignment (nl has none; write it out: `x = x + e`). Match
+    # --- compound assignment (Vais has none; write it out: `x = x + e`). Match
     # `+= -= *= /= %=` but NOT comparison/equality (== <= >= != ) — the operator
     # char is preceded by + - * / % and followed by `=` not part of `==`. ---
     (re.compile(r"[+\-*/%]=(?!=)"),
-     "no compound assignment in nl; write it out, e.g. `x = x + 1` (not `x += 1`)",
-     lambda m, ln: "... expand to `x = x <op> e` (nl has no `+=`/`-=`/`*=`/`/=`)"),
+     "no compound assignment in Vais; write it out, e.g. `x = x + 1` (not `x += 1`)",
+     lambda m, ln: "... expand to `x = x <op> e` (Vais has no `+=`/`-=`/`*=`/`/=`)"),
     (re.compile(r"=>\s*return\b"),
-     None,  # allowed in nl (P6) — informational only, not an error
+     None,  # allowed in Vais (P6) — informational only, not an error
      None),
     (re.compile(r"\bfn\s+[A-Z]\b"),
-     None, None),  # single-uppercase fn name is fine in nl (keyword space split)
+     None, None),  # single-uppercase fn name is fine in Vais (keyword space split)
 ]
 
 

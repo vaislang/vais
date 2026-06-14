@@ -2,16 +2,14 @@
 # Long self-host gate for compiler/self/fixpoint_full.vais.
 #
 # This verifies the full-source path, not just snippet-level codegen:
-#   seed fixpoint_full -> generated first-generation compiler IR -> clang/run.
+#   reference fixpoint_full -> generated first-generation compiler IR -> clang/run.
 # It also checks that first-generation compilers can consume file-sized embedded
 # sources again by retargeting their default compile("...") program to the real
 # compiler/self/fixpoint*.vais sources, including fixpoint_full.vais itself.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais-legacy/compiler}"
-source "$HERE/scripts/legacy-vaisc-env.sh"
-TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
+source "$HERE/scripts/vais-build-env.sh"
 SRC="$HERE/compiler/self/fixpoint_full.vais"
 EMBED="$HERE/tools/embed_self_source.py"
 NORM_IR="$HERE/tools/normalize_stage_ir.py"
@@ -43,11 +41,11 @@ run_full_probe() {
   local source="$1" label="$2" want="$3" mode="${4:-program}" tmp
   tmp="$(mktemp -d)"
 
-  python3 "$EMBED" "$SRC" "$source" "$tmp/c.nl" \
+  python3 "$EMBED" "$SRC" "$source" "$tmp/c.input.vais" \
     || { echo "  FAIL $label: embed"; fail=1; return; }
-  python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>"$tmp/transpile.err" \
-    || { echo "  FAIL $label: transpile"; cat "$tmp/transpile.err"; fail=1; return; }
-  legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >"$tmp/build.log" 2>&1 \
+  cp "$tmp/c.input.vais" "$tmp/c.vais" 2>"$tmp/prepare.err" \
+    || { echo "  FAIL $label: prepare"; cat "$tmp/prepare.err"; fail=1; return; }
+  vais_build "$tmp/c.vais" -o "$tmp/c" >"$tmp/build.log" 2>&1 \
     || { echo "  FAIL $label: compiler build"; cat "$tmp/build.log"; fail=1; return; }
 
   "$tmp/c" > "$tmp/source_compiler.ll"

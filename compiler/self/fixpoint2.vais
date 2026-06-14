@@ -1,7 +1,7 @@
 # expect: 0
-# nl self-host — fixpoint compiler v2: MULTI-CHAR identifiers via List<Token>.
+# Vais self-host — fixpoint compiler v2: MULTI-CHAR identifiers via List<Token>.
 #
-# Builds on fixpoint.nl (List<Token> pipeline) and resolves the single-letter
+# Builds on fixpoint.vais (List<Token> pipeline) and resolves the single-letter
 # limitation: tokens carry an identifier's NAME as a source range (nstart, nlen),
 # and the symbol table is a List<Var> looked up by comparing source bytes
 # (name_eq). This is possible because the Vais `&Vec` borrow-recursion fix

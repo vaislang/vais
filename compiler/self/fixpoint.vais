@@ -1,7 +1,7 @@
 # expect: 0
-# nl self-host — fixpoint compiler (List-based pipeline).
+# Vais self-host — fixpoint compiler (List-based pipeline).
 #
-# Unlike cx5_compiler.nl (which re-scans the source string on every eval), this
+# Unlike cx5_compiler.vais (which re-scans the source string on every eval), this
 # compiler runs a real pipeline: source -> tokenize -> List<Token> -> recursive
 # evaluation over the borrowed token list -> LLVM IR. The List<Token> stage is
 # possible because the Vais `&Vec` borrow-recursion codegen bug was fixed

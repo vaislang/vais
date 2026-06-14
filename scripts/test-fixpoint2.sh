@@ -6,22 +6,20 @@
 # and emits LLVM IR. Resolves the single-letter-identifier limitation.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-VAIS_ROOT="${VAIS_COMPILER_ROOT:-/Users/sswoo/study/projects/vais-legacy/compiler}"
-source "$HERE/scripts/legacy-vaisc-env.sh"
-TR="$HERE/compiler/transpiler/legacy_vais_bootstrap.py"
+source "$HERE/scripts/vais-build-env.sh"
 SRC="$HERE/compiler/self/fixpoint2.vais"
 fail=0
 
 check() {
   local prog="$1" want="$2" tmp; tmp="$(mktemp -d)"
-  PROG="$prog" python3 - "$SRC" "$tmp/c.nl" <<'PY'
+  PROG="$prog" python3 - "$SRC" "$tmp/c.input.vais" <<'PY'
 import os, re, sys
 src = open(sys.argv[1]).read()
-src = re.sub(r'run_program\("(?:[^"\\]|\\.)*"\)', 'run_program("' + os.environ["PROG"] + '")', src, count=1)
+src = re.sub(r'run_program\("(?:[^"\\]|\\.)*"\)', 'run_program("' + os.environ["PROG"].replace("{{", "{").replace("}}", "}") + '")', src, count=1)
 open(sys.argv[2], "w").write(src)
 PY
-  python3 "$TR" "$tmp/c.nl" > "$tmp/c.vais" 2>/dev/null
-  legacy_vaisc_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
+  cp "$tmp/c.input.vais" "$tmp/c.vais"
+  vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
     || { echo "  FAIL '$prog': build"; fail=1; return; }
   "$tmp/c" > "$tmp/out.ll"
   clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null \

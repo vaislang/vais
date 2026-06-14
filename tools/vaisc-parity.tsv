@@ -1,9 +1,9 @@
-# New Vais native parity manifest.
+# Vais native parity manifest.
 # Format: path<TAB>status<TAB>note
 # Status values:
-# - native-supported: scripts/vaisc must build/run value-correct and match Legacy oracle.
-# - bootstrap-only: Legacy oracle must stay value-correct; native front must reject it for now.
-# - tracked: Legacy oracle must stay value-correct; native is known not to be value-correct yet.
+# - native-supported: scripts/vaisc must build/run value-correct.
+# - full-only: tracked outside the release subset for now.
+# - tracked: known not to be value-correct in the release subset yet.
 #
 # Keep this list small and intentional. Add examples here when their status is
 # clear enough to protect in scripts/test-vaisc-parity.sh.
@@ -40,7 +40,3 @@ examples/e14_print.vais	native-supported	Print interpolation and IO call support
 examples/e50_ast_eval.vais	native-supported	Small recursive payload enum lowered to Int-coded tags.
 examples/e75_list_push.vais	native-supported	List push/growth and index access.
 examples/e80_closure_return.vais	native-supported	Single-Int closure return lowered to Int env/apply helper.
-compiler/self/fixpoint.vais	native-supported	Trusted self-host arithmetic tier source.
-compiler/self/fixpoint2.vais	native-supported	Trusted self-host variable tier source.
-compiler/self/fixpoint3.vais	native-supported	Trusted self-host function tier source.
-compiler/self/fixpoint_full.vais	native-supported	Trusted full self-host compiler source.

@@ -1,8 +1,8 @@
 # expect: 7
-# nl self-host compiler — L3.3 parser/evaluator (written in nl).
+# Vais self-host compiler — L3.3 parser/evaluator (written in Vais).
 #
 # Parses+evaluates arithmetic with operator precedence (* before +), proving
-# recursive-descent-equivalent parsing works in nl. Bootstrap: this .nl ->
+# recursive-descent-equivalent parsing works in Vais. Bootstrap: this .vais ->
 # seed transpiler -> Vais -> vaisc -> gen1.
 #
 # Token encoding (Int list): 0..9 = number, -1 = '+', -2 = '*'.

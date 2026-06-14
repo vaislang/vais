@@ -48,7 +48,7 @@ CASES = [
     ("+= flagged", "fn main() -> Int {\n  let mut s = 0\n  s += 1\n  return s\n}", True),
     ("-= flagged", "fn main() -> Int {\n  let mut s = 0\n  s -= 1\n  return s\n}", True),
     ("*= flagged", "fn main() -> Int {\n  let mut s = 1\n  s *= 2\n  return s\n}", True),
-    # valid nl must NOT be flagged:
+    # valid Vais must NOT be flagged:
     ("<= comparison clean", "fn main() -> Int {\n  if a <= b { return 1 }\n  return 0\n}", False),
     (">= comparison clean", "fn main() -> Int {\n  if a >= b { return 1 }\n  return 0\n}", False),
     ("!= comparison clean", "fn main() -> Int {\n  if a != b { return 1 }\n  return 0\n}", False),

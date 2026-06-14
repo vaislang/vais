@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Embed a normalized self-host source file into fixpoint_full.vais.
 
-This is a bootstrap harness helper, not the language frontend. The current
+This is a source embedding helper, not the language frontend. The current
 fixpoint_full compiler consumes a compact semicolon-oriented subset from a
-single string literal. Real New Vais source files are line-oriented, contain comments,
+single string literal. Real Vais source files are line-oriented, contain comments,
 use double-quoted strings, and write typed struct fields. This helper normalizes
 that surface just enough to feed real source files through the current
 fixpoint_full path.
@@ -221,10 +221,6 @@ def normalize_source(path: Path) -> str:
     program = " ".join(out)
     program = strip_struct_field_types(program)
     program = collapse_string_brace_escapes(program)
-    # Protect braces for the outer compile("...") string. The outer transpiler
-    # lowers doubled braces to literal braces, so fixpoint_full sees the source
-    # with single braces at runtime.
-    program = program.replace("{", "{{").replace("}", "}}")
     program = program.replace("\\", "\\\\").replace('"', '\\"')
     return program
 
@@ -232,7 +228,7 @@ def normalize_source(path: Path) -> str:
 def main() -> int:
     if len(sys.argv) != 4:
         print(
-            "usage: embed_self_source.py FIXPOINT_FULL.(vais|nl) SOURCE.(vais|nl) OUT.(vais|nl)",
+            "usage: embed_self_source.py FIXPOINT_FULL.vais SOURCE.vais OUT.vais",
             file=sys.stderr,
         )
         return 2
@@ -240,6 +236,10 @@ def main() -> int:
     harness = Path(sys.argv[1])
     source = Path(sys.argv[2])
     out_path = Path(sys.argv[3])
+    for path in (harness, source, out_path):
+        if path.suffix != ".vais":
+            print(f"error: expected .vais path: {path}", file=sys.stderr)
+            return 2
 
     program = normalize_source(source)
     text = harness.read_text()

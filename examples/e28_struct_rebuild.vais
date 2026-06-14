@@ -1,6 +1,6 @@
 # expect: 8
 # Update a struct by rebuilding it (functional update) and reassigning.
-# (nl structs are values; `bump` returns a fresh Counter, applied repeatedly.)
+# (Vais structs are values; `bump` returns a fresh Counter, applied repeatedly.)
 struct Counter { n: Int }
 
 fn bump(c: Counter) -> Counter {
