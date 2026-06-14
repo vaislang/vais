@@ -18,3 +18,5 @@
 - Added `.github/workflows/deploy-website.yml` for GitHub Pages deployment from `website/dist`.
 - Pushed `codex/website-docs-deploy` to `vaislang/vais`.
 - Deployed the built site to `gh-pages` and switched `vaislang.dev` Pages settings to `gh-pages` with HTTPS enforced.
+- Preserved the old remote `main` at `archive/old-main-2026-06-14`.
+- Force-updated remote `main` to the current Vais-only history.

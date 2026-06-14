@@ -26,15 +26,13 @@ npm run preview
 
 ## Deploy
 
-Current live deployment uses the `gh-pages` branch root because the remote
-default branch still has the older repository history. Build locally, copy
-`website/dist/` into the root of the `gh-pages` branch, keep existing
-`benchmark-data/`, then push `gh-pages`.
+Current live deployment should use `.github/workflows/deploy-website.yml` with
+GitHub Pages set to deploy from Actions. On push to `main`, the workflow builds
+`website/` and uploads `website/dist` as the Pages artifact.
 
-The repository also includes `.github/workflows/deploy-website.yml` for GitHub
-Pages Actions. Use that workflow after the GitHub default branch is moved to the
-current Vais repository history. With that setup, GitHub Pages should deploy from
-Actions and the workflow will build `website/` and upload `website/dist`.
+The `gh-pages` branch may still contain the last manual deployment and preserved
+benchmark data, but it is no longer the preferred source once Pages is configured
+for Actions.
 
 For manual hosting, deploy the generated `dist/` directory to the host
 configured for `vaislang.dev`. The build copies `public/CNAME` into

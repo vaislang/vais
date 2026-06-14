@@ -27,10 +27,12 @@ This file tracks current work only.
 - Official site source now lives in `website/` in this repository.
 - GitHub Pages workflow was added for `website/` build and artifact deployment.
 - `vaislang.dev` is deployed from `gh-pages` using the current `website/dist` output.
+- GitHub `main` now points to the current Vais-only history; old remote `main`
+  is preserved at `archive/old-main-2026-06-14`.
 
 ## Next Work
 
-1. Decide how to land the current Vais-only history onto the GitHub default branch; the existing remote `main` has older unrelated history.
+1. Keep GitHub Pages deployment green from the `website/` workflow.
 2. Expand the native direct emitter beyond the current slice: helper calls, locals, control flow, structs, lists, and the trusted self-host tier.
 3. Package `scripts/vaisc` as a release command with Python 3 and clang prerequisites.
 4. Keep self-host regeneration and parity gates mandatory for compiler changes.
