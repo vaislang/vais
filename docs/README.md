@@ -36,9 +36,10 @@ source is `website/`, and the public entry point should contain only:
 
 1. What Vais is today.
 2. How to compile and run a `.vais` file.
-3. The current verified language surface.
-4. The self-host compiler status.
-5. Links to the exact gates that protect those claims.
+3. How to install or package the standalone native `vaisc` binary.
+4. The current verified language surface.
+5. The self-host compiler status.
+6. Links to the exact gates that protect those claims.
 
 Any public site content that advertises a different language syntax or
 unverified ecosystem readiness is stale relative to this repository unless it is

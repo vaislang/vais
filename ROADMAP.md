@@ -14,6 +14,8 @@ This file tracks current work only.
 - `compiler/self/vaisc_core.ll` is the reusable self-host compiler core used by `scripts/vaisc`.
 - The full compiler path reads `.vais` source files directly through the self-host core.
 - Pure regeneration of `compiler/self/vaisc_core.ll` from `compiler/self/fixpoint_full.vais` is green.
+- The native compiler can be installed as a standalone `vaisc` binary outside
+  the checkout and packaged as a release archive.
 
 ## Current Reality
 
@@ -22,6 +24,8 @@ This file tracks current work only.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal checks and the
   development-only direct engine fallback.
+- Standalone install, uninstall, package, and install/package verification
+  scripts exist for the native compiler binary.
 - Internal compiler gates no longer depend on a source pass-through helper.
 - Public documentation now starts at `README.md` and `docs/README.md`.
 - `docs/reference/LANGUAGE.md` describes only the current gate-backed language surface.
@@ -35,8 +39,8 @@ This file tracks current work only.
 
 ## Next Work
 
-1. Package the native `scripts/vaisc` path for release installs outside a
-   checkout, including install/uninstall scripts or release archives.
+1. Publish the standalone release archive from GitHub Releases once the next
+   source tag is cut.
 2. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 3. Replace the remaining Python-only internal checks and direct-engine fallback
@@ -46,7 +50,42 @@ This file tracks current work only.
    the trusted self-host tier.
 5. Keep source release tags, GitHub Releases, GitHub Pages, self-host regeneration, and parity gates green.
 
-## Active Milestone: Python-Free Public `vaisc`
+## Active Milestone: Standalone Install And Release Archive
+
+Mode: sequential
+
+- [x] 1. Add install and uninstall scripts for standalone `vaisc`.
+- [x] 2. Add release archive packaging for the native binary and first-read docs.
+- [x] 3. Add an install/package gate that proves installed and packaged binaries run.
+- [x] 4. Sync docs/site/changelog and run release gates.
+
+### Task Briefs
+
+#### 1. Standalone install and uninstall
+
+- Target files: `scripts/install-vaisc.sh`, `scripts/uninstall-vaisc.sh`.
+- Requirements: build the native compiler from the checked-in self-host core and install it as `PREFIX/bin/vaisc`; uninstall removes that binary.
+- Done: installing into a temporary prefix creates an executable `vaisc`, and uninstall removes it.
+
+#### 2. Release archive packaging
+
+- Target files: `scripts/package-vaisc-release.sh`, `.gitignore`.
+- Requirements: build a standalone archive containing `bin/vaisc` and the current first-read docs; keep generated archives out of git.
+- Done: the package script creates `dist/vais-VERSION-OS-ARCH.tar.gz`.
+
+#### 3. Install/package gate
+
+- Target files: `scripts/test-vaisc-install.sh`, `AGENTS.md`, `README.md`.
+- Requirements: verify installed and packaged binaries can report version, run `doctor`, and compile/run a `.vais` smoke source.
+- Done: `bash scripts/test-vaisc-install.sh` passes without writing outside a temporary directory.
+
+#### 4. Documentation, site, and gates
+
+- Target files: `README.md`, `docs/README.md`, `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`.
+- Requirements: public docs describe checkout use, standalone install, uninstall, package, and the gate protecting them.
+- Done: docs and site are synced, website builds, stale public-claim scan is clean, and release gates pass.
+
+## Completed Milestone: Python-Free Public `vaisc`
 
 Mode: sequential
 
@@ -89,6 +128,8 @@ Run before closing compiler changes:
 python3 -m py_compile tools/vaisc.py tools/vais-check.py tools/embed_self_source.py tests/vais_check_test.py
 bash -n scripts/*.sh
 python3 tests/vais_check_test.py
+bash scripts/test-vaisc-native.sh
+bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc.sh
 bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-direct.sh

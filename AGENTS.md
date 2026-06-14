@@ -17,6 +17,9 @@
 - `compiler/self/fixpoint_full.vais` is the trusted full self-host compiler source.
 - `compiler/self/vaisc_core.ll` is the reusable self-host compiler core used by `scripts/vaisc`.
 - `scripts/build-vaisc-native.sh` builds the native public driver.
+- `scripts/install-vaisc.sh`, `scripts/uninstall-vaisc.sh`, and
+  `scripts/package-vaisc-release.sh` manage standalone native installs and
+  release archives.
 - `scripts/build.sh` and `scripts/vais-build-env.sh` are internal core-refresh tools.
 
 ## Documentation Paths
@@ -35,6 +38,7 @@ python3 -m py_compile tools/vaisc.py tools/vais-check.py tools/embed_self_source
 bash -n scripts/*.sh
 python3 tests/vais_check_test.py
 bash scripts/test-vaisc-native.sh
+bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc.sh
 bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-direct.sh

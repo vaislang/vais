@@ -281,6 +281,7 @@ scripts/vaisc build examples/c4.vais -o /tmp/c4
 scripts/vaisc run examples/c4.vais
 
 bash scripts/test-vaisc-native.sh
+bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-parity.sh
 bash scripts/test.sh

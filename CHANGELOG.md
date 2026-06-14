@@ -8,7 +8,8 @@
   self-host compiler core.
 - Normal user `emit-ir`, `build`, `run`, and `doctor` use the native driver.
 - Development-only fallback paths remain internal.
-- Added `scripts/build-vaisc-native.sh` and `scripts/test-vaisc-native.sh`.
+- Added standalone install, uninstall, package, and native install/package test
+  scripts.
 
 ## v0.2.0 - 2026-06-14
 

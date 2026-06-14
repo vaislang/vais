@@ -5,6 +5,7 @@
 .vais-cache/
 a.out
 build/
+dist/
 
 # Python bytecode
 __pycache__/

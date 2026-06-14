@@ -81,7 +81,10 @@ cd vais
 scripts/vaisc doctor
 scripts/vaisc run examples/c4.vais
 scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
-scripts/vaisc build examples/c4.vais -o /tmp/c4</code></pre>
+scripts/vaisc build examples/c4.vais -o /tmp/c4
+
+scripts/install-vaisc.sh --prefix "$HOME/.local"
+"$HOME/.local/bin/vaisc" doctor</code></pre>
         </div>
       </div>
     </section>
@@ -171,6 +174,10 @@ fn main() -> Int {
             <p><code>scripts/vaisc doctor</code> checks the local compiler path and reports the linked self-host core.</p>
           </article>
           <article class="panel">
+            <h3>Standalone install</h3>
+            <p><code>scripts/install-vaisc.sh</code> installs a standalone <code>vaisc</code> binary outside the checkout.</p>
+          </article>
+          <article class="panel">
             <h3>Self-host status</h3>
             <p><code>compiler/self/*.vais</code> contains the compiler work written in Vais and is protected by self-host fixpoint gates.</p>
           </article>
@@ -193,6 +200,7 @@ fn main() -> Int {
           <button class="copy-btn" data-copy-target="verify-code" aria-label="Copy verification commands">Copy</button>
           <pre id="verify-code"><code>scripts/vaisc doctor
 bash scripts/test-vaisc-native.sh
+bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc.sh
 bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-errors.sh

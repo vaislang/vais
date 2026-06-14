@@ -20,6 +20,28 @@ scripts/vaisc build examples/c4.vais -o /tmp/c4
 
 The main command accepts `.vais` files only.
 
+## Install
+
+For a standalone `vaisc` binary outside the checkout:
+
+```bash
+scripts/install-vaisc.sh --prefix "$HOME/.local"
+"$HOME/.local/bin/vaisc" doctor
+"$HOME/.local/bin/vaisc" run examples/c4.vais
+```
+
+To remove that install:
+
+```bash
+scripts/uninstall-vaisc.sh --prefix "$HOME/.local"
+```
+
+To build a release archive:
+
+```bash
+scripts/package-vaisc-release.sh
+```
+
 ## Documentation
 
 | Start here | Purpose |
@@ -38,6 +60,8 @@ compiler/self/          self-host compiler sources and reusable core
 docs/                   canonical documentation
 examples/               .vais examples; release subset tracked by parity manifest
 scripts/vaisc           native public compiler command
+scripts/install*.sh     standalone compiler install/uninstall helpers
+scripts/package*.sh     standalone release archive helper
 scripts/test*.sh        compiler and value-correctness gates
 std/PRELUDE.md          prelude API status
 tools/                  native driver source, internal checks, parity manifest, source embedding tools
@@ -51,6 +75,7 @@ Public compiler smoke:
 ```bash
 scripts/vaisc doctor
 bash scripts/test-vaisc-native.sh
+bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc.sh
 bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-errors.sh
