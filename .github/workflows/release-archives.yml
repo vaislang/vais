@@ -62,8 +62,10 @@ jobs:
               return 42
           }
           SRC
+          set +e
           "$packaged" run "$tmp/smoke.vais"
           rc=$?
+          set -e
           if [ "$rc" != "42" ]; then
             echo "expected run exit 42, got $rc" >&2
             exit 1
