@@ -6,8 +6,10 @@
   `[]`, `list()`, small integer list literals, `push`, `len`/`len()`, index,
   and `sum()`.
 - Added direct-engine gate coverage for local `List<Int>` emit/run behavior.
+- Expanded native direct mode with `List<Int>` function parameter and return
+  value ABI.
 - Synced language reference, roadmap, changelog, design notes, and site copy
-  with the promoted direct list slice.
+  with the promoted direct list slices.
 
 ## 2026-06-14
 

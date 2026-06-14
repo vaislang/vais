@@ -252,6 +252,52 @@ else
     fail=1
 fi
 
+list_abi_src="$tmp/direct_list_int_abi.vais"
+cat > "$list_abi_src" <<'SRC'
+fn make(a: Int, b: Int, c: Int) -> List<Int> {
+    let xs: List<Int> = []
+    xs.push(a)
+    xs.push(b)
+    xs.push(c)
+    return xs
+}
+
+fn pass(xs: List<Int>) -> List<Int> {
+    return xs
+}
+
+fn score(xs: List<Int>) -> Int {
+    return xs.sum() + xs.len() + xs[1]
+}
+
+fn main() -> Int {
+    let xs = make(10, 20, 30)
+    let ys: List<Int> = pass(xs)
+    return score(ys) - 41
+}
+SRC
+
+if "$VAISC" emit-ir "$list_abi_src" \
+    --engine direct -o "$tmp/list-abi.ll" \
+    >"$tmp/list-abi.out" 2>"$tmp/list-abi.err" &&
+    grep -q 'define .*@make' "$tmp/list-abi.ll" &&
+    grep -q 'define .*@score' "$tmp/list-abi.ll" &&
+    grep -q 'call .*@score' "$tmp/list-abi.ll"; then
+    "$VAISC" run "$list_abi_src" --engine direct >"$tmp/list-abi-run.out" 2>"$tmp/list-abi-run.err"
+    list_abi_run=$?
+    if [ "$list_abi_run" = "42" ]; then
+        echo "  PASS direct List<Int> parameter and return ABI runs (=42)"
+    else
+        echo "  FAIL direct List<Int> ABI got=$list_abi_run want=42"
+        cat "$tmp/list-abi-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct List<Int> ABI emission"
+    cat "$tmp/list-abi.err"
+    fail=1
+fi
+
 fakebin="$tmp/fake-python"
 mkdir -p "$fakebin"
 cat > "$fakebin/python3" <<'PY'

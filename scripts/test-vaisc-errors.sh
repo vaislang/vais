@@ -109,7 +109,7 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "direct_list_constructor_expr" "direct" "unknown Int identifier" "return 40 + 2" <<'SRC'
+expect_diag "direct_list_constructor_expr" "direct" "return expression type does not match" "return 40 + 2" <<'SRC'
 fn main() -> Int {
     return list()
 }
@@ -122,10 +122,31 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "direct_list_value_expr" "direct" "cannot use a List<Int> value as an Int expression" "xs.len()" <<'SRC'
+expect_diag "direct_list_value_expr" "direct" "return expression type does not match" "return 40 + 2" <<'SRC'
 fn main() -> Int {
     let xs: List<Int> = []
     return xs
+}
+SRC
+
+expect_diag "direct_list_arg_type" "direct" "function call argument type does not match" "pass a matching argument" <<'SRC'
+fn id(n: Int) -> Int {
+    return n
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    return id(xs)
+}
+SRC
+
+expect_diag "direct_inline_list_arg" "direct" "does not lower inline List<Int> call arguments" "let xs: List<Int> = \\[]" <<'SRC'
+fn count(xs: List<Int>) -> Int {
+    return xs.len()
+}
+
+fn main() -> Int {
+    return count([])
 }
 SRC
 

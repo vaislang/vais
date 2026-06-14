@@ -13,6 +13,8 @@
 - The native direct engine now covers local `List<Int>` initialization with
   `[]`, `list()`, and small integer list literals, plus `push`, `len`, index,
   and `sum`.
+- The native direct engine now accepts `List<Int>` function parameters and
+  return values through the direct value ABI.
 
 ## v0.2.1 - 2026-06-14
 

@@ -125,7 +125,7 @@ while i < n {
 
 The direct engine gate covers `if`, `while`, local `let`, assignment, helper
 calls, `return`, simple Int-field struct locals, struct parameter/return
-helpers, and local `List<Int>` initialization, `push`, `len`, index, and `sum`.
+helpers, and `List<Int>` local operations plus parameter/return value ABI.
 Strings and the self-host compiler tier remain full-engine territory.
 
 Verified today:
@@ -229,10 +229,10 @@ Verified today:
 - `xs[index]`.
 - `xs.sum()`.
 
-The direct engine gate covers local `List<Int>` values created with `[]`,
-`list()`, or small integer list literals, plus `push`, `len`/`len()`, index, and
-`sum()`. List parameters, list return values, and `List<Struct>` stay on the full
-engine path.
+The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
+small integer list literals, plus `push`, `len`/`len()`, index, `sum()`, and
+function parameter/return value ABI. Inline list literals as call/return
+expressions and `List<Struct>` stay on the full engine path.
 
 Methods such as `map`, `filter`, and arbitrary user-defined methods are not
 release-surface claims yet.

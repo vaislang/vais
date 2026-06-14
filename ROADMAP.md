@@ -24,6 +24,8 @@ This file tracks current work only.
 - The native direct engine covers the first local `List<Int>` slice: `[]`,
   `list()`, small integer list literals, `push`, `len`/`len()`, index, and
   `sum()`.
+- The native direct engine covers `List<Int>` function parameter and return
+  value ABI.
 
 ## Current Reality
 
@@ -31,7 +33,8 @@ This file tracks current work only.
 - The direct engine is intentionally narrow and currently supports Int helpers,
   locals, assignment, calls, `if`, `while`, returns, simple Int-field struct
   local literal/read/write, struct parameter/return helper ABI, and local
-  `List<Int>` initialization plus `push`, `len`, index, and `sum`.
+  `List<Int>` initialization plus `push`, `len`, index, `sum`, and
+  `List<Int>` parameter/return value ABI.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal repository checks
   and diagnostics only.
@@ -51,8 +54,9 @@ This file tracks current work only.
 ## Next Work
 
 1. Keep standalone release archives attached to future source tags.
-2. Extend the direct engine beyond local `List<Int>` values toward list
-   parameter/return ABI and larger list-family coverage.
+2. Extend the direct engine beyond `List<Int>` value ABI toward inline list
+   call/return lowering, push-to-parameter semantics, and larger list-family
+   coverage.
 3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 4. Replace the remaining Python-only internal checks when the language has
@@ -128,6 +132,42 @@ Mode: sequential
 - Requirements: public docs describe the promoted direct list slice and leave
   list parameters/returns as future work.
 - Done: docs and site copy are synced to the current direct/full engine split.
+
+## Completed Milestone: Native Direct List Int Value ABI
+
+Mode: sequential
+
+- [x] 1. Parse `List<Int>` in direct function headers.
+- [x] 2. Lower `List<Int>` parameters and return values through the direct value ABI.
+- [x] 3. Add direct/error gates for list ABI and type mismatch diagnostics.
+- [x] 4. Sync docs/site/changelog with the promoted ABI slice.
+
+### Task Briefs
+
+#### 1. Function header parsing
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct function parameter and return annotations may use
+  `List<Int>` in addition to `Int` and declared structs.
+- Done: direct header parsing and validation accept `List<Int>`.
+
+#### 2. List value ABI lowering
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode can pass `List<Int>` values to helpers, return local
+  or helper-produced `List<Int>` values, and bind returned list values to locals.
+- Done: direct lowering emits `DirectListInt` parameter/return values and checks
+  return, local initializer, assignment, and call-argument types before C/LLVM.
+
+#### 3. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
+  `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
+  `WORKLOG.md`, `docs/design/`.
+- Requirements: gate the promoted ABI and keep unsupported inline list
+  call/return expressions out of public direct claims.
+- Done: direct gates cover list parameter/return ABI and diagnostics cover list
+  type mismatches and inline list call arguments.
 
 ## Completed Milestone: Standalone Install And Release Archive
 
