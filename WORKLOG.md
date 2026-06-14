@@ -16,3 +16,5 @@
 - Website `dist/` was rebuilt and checked for stale public syntax, install, and ecosystem claims.
 - Official website source was copied into this repository at `website/` so future docs and site changes share one Vais baseline.
 - Added `.github/workflows/deploy-website.yml` for GitHub Pages deployment from `website/dist`.
+- Pushed `codex/website-docs-deploy` to `vaislang/vais`.
+- Deployed the built site to `gh-pages` and switched `vaislang.dev` Pages settings to `gh-pages` with HTTPS enforced.
