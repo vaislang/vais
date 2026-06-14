@@ -8,7 +8,8 @@
 - `scripts/vaisc --engine direct` now stays on the native driver instead of the
   internal Python fallback.
 - The native direct engine now covers Int helper calls, locals, assignment,
-  `if`, `while`, and return expressions.
+  `if`, `while`, return expressions, and simple Int-field struct local
+  literal/read/write.
 
 ## v0.2.1 - 2026-06-14
 

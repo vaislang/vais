@@ -77,7 +77,7 @@ Verified release surface:
 | `Str` | String literals and selected string operations |
 | `Char` | Single-byte character literals in verified examples |
 | `List<Int>` | Empty/list literal, `push`, `len`, index, `sum` |
-| Simple `struct` | Literal construction and field access |
+| Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match and small recursive `Int` payload enum/match |
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
@@ -124,7 +124,7 @@ while i < n {
 ```
 
 The direct engine gate covers `if`, `while`, local `let`, assignment, helper
-calls, and `return` for the Int-only subset. Structs, lists, strings, and the
+calls, `return`, and simple Int-field struct locals. Lists, strings, and the
 self-host compiler tier remain full-engine territory.
 
 Verified today:
@@ -153,6 +153,7 @@ Verified today:
 - Simple struct declarations with `Int` fields.
 - Struct literals.
 - Field access.
+- Field write for direct-engine local struct values.
 - Selected struct/list combinations through self-host gates.
 
 ## Enums And Match

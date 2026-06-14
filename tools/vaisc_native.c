@@ -49,9 +49,21 @@ typedef struct {
 } DirectFnInfo;
 
 typedef struct {
-    char *items[128];
+    char *name;
+    char *type;
+} DirectLocalInfo;
+
+typedef struct {
+    DirectLocalInfo items[128];
     int count;
 } DirectNameSet;
+
+typedef struct {
+    char *name;
+    char *fields[16];
+    int field_count;
+    int line_no;
+} DirectStructInfo;
 
 static int run_program_wait(char *const argv[]);
 static int make_tmp_path(char *buf, size_t buflen, const char *suffix);
@@ -1268,21 +1280,44 @@ static char *prepare_source_file(const char *path) {
 }
 
 static void direct_names_free(DirectNameSet *set) {
-    for (int i = 0; i < set->count; i++) free(set->items[i]);
+    for (int i = 0; i < set->count; i++) {
+        free(set->items[i].name);
+        free(set->items[i].type);
+    }
     set->count = 0;
 }
 
-static int direct_names_has(DirectNameSet *set, const char *name) {
+static DirectLocalInfo *direct_names_find(DirectNameSet *set, const char *name) {
     for (int i = 0; i < set->count; i++) {
-        if (strcmp(set->items[i], name) == 0) return 1;
+        if (strcmp(set->items[i].name, name) == 0) return &set->items[i];
     }
-    return 0;
+    return NULL;
+}
+
+static int direct_names_has(DirectNameSet *set, const char *name) {
+    return direct_names_find(set, name) != NULL;
+}
+
+static const char *direct_names_type(DirectNameSet *set, const char *name) {
+    DirectLocalInfo *info = direct_names_find(set, name);
+    return info == NULL ? NULL : info->type;
+}
+
+static void direct_names_add_typed(DirectNameSet *set, const char *name, const char *type) {
+    DirectLocalInfo *existing = direct_names_find(set, name);
+    if (existing != NULL) {
+        free(existing->type);
+        existing->type = strdup(type);
+        return;
+    }
+    if (set->count >= 128) return;
+    set->items[set->count].name = strdup(name);
+    set->items[set->count].type = strdup(type);
+    set->count++;
 }
 
 static void direct_names_add(DirectNameSet *set, const char *name) {
-    if (direct_names_has(set, name)) return;
-    if (set->count >= 128) return;
-    set->items[set->count++] = strdup(name);
+    direct_names_add_typed(set, name, "Int");
 }
 
 static void direct_fns_free(DirectFnInfo *fns, int count) {
@@ -1297,6 +1332,229 @@ static DirectFnInfo *direct_find_fn(DirectFnInfo *fns, int count, const char *na
         if (strcmp(fns[i].name, name) == 0) return &fns[i];
     }
     return NULL;
+}
+
+static void direct_struct_free_one(DirectStructInfo *info) {
+    free(info->name);
+    for (int i = 0; i < info->field_count; i++) free(info->fields[i]);
+    memset(info, 0, sizeof(*info));
+}
+
+static void direct_structs_free(DirectStructInfo *structs, int count) {
+    for (int i = 0; i < count; i++) direct_struct_free_one(&structs[i]);
+}
+
+static DirectStructInfo *direct_find_struct(DirectStructInfo *structs, int count, const char *name) {
+    for (int i = 0; i < count; i++) {
+        if (strcmp(structs[i].name, name) == 0) return &structs[i];
+    }
+    return NULL;
+}
+
+static int direct_struct_has_field(DirectStructInfo *info, const char *field) {
+    for (int i = 0; i < info->field_count; i++) {
+        if (strcmp(info->fields[i], field) == 0) return 1;
+    }
+    return 0;
+}
+
+static int find_matching_brace_c(const char *text, int open_index) {
+    int depth = 0;
+    for (int i = open_index; text[i] != '\0'; i++) {
+        if (text[i] == '{') depth++;
+        if (text[i] == '}') {
+            depth--;
+            if (depth == 0) return i;
+        }
+    }
+    return -1;
+}
+
+static int direct_parse_struct_field(
+    const char *path,
+    int line_no,
+    const char *source_line,
+    const char *text,
+    DirectStructInfo *out
+) {
+    char *part = trim_copy(text);
+    const char *s = skip_ws(part);
+    if (*s == '\0') {
+        free(part);
+        return 0;
+    }
+    if (!is_ident_start(*s)) {
+        report_issue(path, line_no, 1, source_line,
+            "direct native emitter expected a struct field name",
+            "write struct fields as `name: Int`.",
+            NULL);
+        free(part);
+        return -1;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *field = substr_copy(name_start, (size_t)(s - name_start));
+    const char *rest = skip_ws(s);
+    if (*rest == ':') {
+        char *ty = trim_copy(rest + 1);
+        int ok = strcmp(ty, "Int") == 0;
+        free(ty);
+        if (!ok) {
+            report_issue(path, line_no, find_col(source_line, field), source_line,
+                "direct native emitter supports Int struct fields only",
+                "write this direct-engine field as `name: Int`.",
+                NULL);
+            free(field);
+            free(part);
+            return -1;
+        }
+    } else if (*rest != '\0') {
+        report_issue(path, line_no, find_col(source_line, field), source_line,
+            "direct native emitter expected an Int struct field",
+            "write struct fields as `name: Int`.",
+            NULL);
+        free(field);
+        free(part);
+        return -1;
+    }
+    if (direct_struct_has_field(out, field)) {
+        report_issue(path, line_no, find_col(source_line, field), source_line,
+            "direct native emitter found a duplicate struct field",
+            "use each field name only once in a struct declaration.",
+            NULL);
+        free(field);
+        free(part);
+        return -1;
+    }
+    if (out->field_count >= 16) {
+        report_issue(path, line_no, 1, source_line,
+            "direct native emitter supports up to 16 struct fields",
+            "split this direct-engine struct into a smaller shape for now.",
+            NULL);
+        free(field);
+        free(part);
+        return -1;
+    }
+    out->fields[out->field_count++] = field;
+    free(part);
+    return 0;
+}
+
+static int direct_parse_struct_fields(
+    const char *path,
+    int line_no,
+    const char *source_line,
+    const char *body,
+    DirectStructInfo *out
+) {
+    const char *start = body;
+    for (const char *p = body; ; p++) {
+        char ch = *p;
+        if (ch == ',' || ch == '\n' || ch == '\0') {
+            char *piece = substr_copy(start, (size_t)(p - start));
+            int rc = direct_parse_struct_field(path, line_no, source_line, piece, out);
+            free(piece);
+            if (rc < 0) return -1;
+            if (ch == '\0') break;
+            start = p + 1;
+        }
+        if (ch == '\0') break;
+    }
+    if (out->field_count == 0) {
+        report_issue(path, line_no, 1, source_line,
+            "direct native emitter expected at least one Int struct field",
+            "write a shape such as `struct Box { value: Int }`.",
+            NULL);
+        return -1;
+    }
+    return 0;
+}
+
+static int direct_parse_struct_decl(
+    LineVec *lines,
+    size_t start_index,
+    DirectStructInfo *out,
+    size_t *end_index,
+    const char *path
+) {
+    char *first = strip_line_comment(lines->items[start_index], strlen(lines->items[start_index]));
+    const char *s = skip_ws(first);
+    if (!starts_with(s, "struct ")) {
+        free(first);
+        return 0;
+    }
+    s += 7;
+    if (!is_ident_start(*s)) {
+        report_issue(path, (int)start_index + 1, find_col(lines->items[start_index], "struct"), lines->items[start_index],
+            "direct native emitter expected a struct name",
+            "write `struct Name { field: Int }`.",
+            NULL);
+        free(first);
+        return -1;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *open = strchr(s, '{');
+    if (open == NULL) {
+        report_issue(path, (int)start_index + 1, find_col(lines->items[start_index], "struct"), lines->items[start_index],
+            "direct native emitter expected a struct body",
+            "write `struct Name { field: Int }`.",
+            NULL);
+        free(first);
+        return -1;
+    }
+
+    memset(out, 0, sizeof(*out));
+    out->name = substr_copy(name_start, (size_t)(s - name_start));
+    out->line_no = (int)start_index + 1;
+
+    StrBuf body;
+    sb_init(&body);
+    const char *close = strchr(open + 1, '}');
+    if (close != NULL) {
+        sb_append_n(&body, open + 1, (size_t)(close - open - 1));
+        *end_index = start_index;
+    } else {
+        sb_append(&body, open + 1);
+        sb_append(&body, "\n");
+        int found = 0;
+        for (size_t i = start_index + 1; i < lines->len; i++) {
+            char *field_line = strip_line_comment(lines->items[i], strlen(lines->items[i]));
+            const char *field_close = strchr(field_line, '}');
+            if (field_close != NULL) {
+                sb_append_n(&body, field_line, (size_t)(field_close - field_line));
+                *end_index = i;
+                found = 1;
+                free(field_line);
+                break;
+            }
+            sb_append(&body, field_line);
+            sb_append(&body, "\n");
+            free(field_line);
+        }
+        if (!found) {
+            report_issue(path, (int)start_index + 1, find_col(lines->items[start_index], "struct"), lines->items[start_index],
+                "direct native emitter expected `}` to close the struct",
+                "close the struct declaration before declaring functions.",
+                NULL);
+            free(body.data);
+            direct_struct_free_one(out);
+            free(first);
+            return -1;
+        }
+    }
+
+    if (direct_parse_struct_fields(path, (int)start_index + 1, lines->items[start_index], body.data, out) != 0) {
+        free(body.data);
+        direct_struct_free_one(out);
+        free(first);
+        return -1;
+    }
+    free(body.data);
+    free(first);
+    return 1;
 }
 
 static int parse_direct_fn_header(const char *line, DirectFnInfo *out) {
@@ -1366,6 +1624,147 @@ static char *direct_translate_expr(const char *expr) {
     return c;
 }
 
+static char *direct_rewrite_struct_literals(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    StrBuf out;
+    sb_init(&out);
+    for (int i = 0; expr[i] != '\0';) {
+        if (!is_ident_start(expr[i])) {
+            sb_append_n(&out, expr + i, 1);
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(expr[i])) i++;
+        char *name = substr_copy(expr + start, (size_t)(i - start));
+        int cursor = i;
+        while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
+        DirectStructInfo *st = direct_find_struct(structs, struct_count, name);
+        if (st == NULL || expr[cursor] != '{') {
+            sb_append_n(&out, expr + start, (size_t)(i - start));
+            free(name);
+            continue;
+        }
+        int close = find_matching_brace_c(expr, cursor);
+        if (close < 0) {
+            report_issue(path, line_no, find_col(line, name), line,
+                "direct native emitter expected `}` to close the struct literal",
+                "write a complete literal such as `Box { value: 42 }`.",
+                NULL);
+            free(name);
+            free(out.data);
+            return NULL;
+        }
+        char *body = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+        char *parts[16] = {0};
+        int n = split_top_level_commas_c(body, parts, 16);
+        free(body);
+        if (n < 0) {
+            report_issue(path, line_no, find_col(line, name), line,
+                "direct native emitter supports up to 16 struct literal fields",
+                "keep this direct-engine literal within the small struct slice.",
+                NULL);
+            free(name);
+            free(out.data);
+            return NULL;
+        }
+        sb_append(&out, "(");
+        sb_append(&out, name);
+        sb_append(&out, "){");
+        for (int p = 0; p < n; p++) {
+            char *colon = strchr(parts[p], ':');
+            if (colon == NULL) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter expected named struct literal fields",
+                    "write fields as `name: expr` inside the literal.",
+                    NULL);
+                for (int k = 0; k < n; k++) free(parts[k]);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            char *field_raw = substr_copy(parts[p], (size_t)(colon - parts[p]));
+            char *field = trim_copy(field_raw);
+            free(field_raw);
+            if (!direct_struct_has_field(st, field)) {
+                report_issue(path, line_no, find_col(line, field), line,
+                    "direct native emitter found an unknown struct field",
+                    "use a field declared on this struct.",
+                    NULL);
+                for (int k = 0; k < n; k++) free(parts[k]);
+                free(field);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            char *value = trim_copy(colon + 1);
+            char *rewritten_value = direct_rewrite_struct_literals(path, line_no, line, value, structs, struct_count);
+            free(value);
+            if (rewritten_value == NULL) {
+                for (int k = 0; k < n; k++) free(parts[k]);
+                free(field);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            if (p > 0) sb_append(&out, ", ");
+            sb_append(&out, ".");
+            sb_append(&out, field);
+            sb_append(&out, " = ");
+            sb_append(&out, rewritten_value);
+            free(rewritten_value);
+            free(field);
+        }
+        sb_append(&out, "}");
+        for (int p = 0; p < n; p++) free(parts[p]);
+        free(name);
+        i = close + 1;
+    }
+    return sb_take(&out);
+}
+
+static char *direct_infer_expr_type(
+    const char *expr,
+    DirectNameSet *locals,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (is_ident_start(*s)) {
+        const char *name_start = s;
+        s++;
+        while (is_ident_continue(*s)) s++;
+        char *name = substr_copy(name_start, (size_t)(s - name_start));
+        const char *rest = skip_ws(s);
+        if (*rest == '\0') {
+            const char *local_type = direct_names_type(locals, name);
+            if (local_type != NULL) {
+                char *out = strdup(local_type);
+                free(name);
+                free(trimmed);
+                return out;
+            }
+        }
+        if (*rest == '{' && direct_find_struct(structs, struct_count, name) != NULL) {
+            char *out = strdup(name);
+            free(name);
+            free(trimmed);
+            return out;
+        }
+        free(name);
+    }
+    free(trimmed);
+    return strdup("Int");
+}
+
 static int direct_is_keyword(const char *name) {
     return strcmp(name, "fn") == 0 || strcmp(name, "return") == 0 ||
         strcmp(name, "let") == 0 || strcmp(name, "mut") == 0 ||
@@ -1382,11 +1781,20 @@ static int direct_check_expr(
     const char *expr,
     DirectNameSet *locals,
     DirectFnInfo *fns,
-    int fn_count
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count
 ) {
     for (int i = 0; expr[i] != '\0';) {
         if (!is_ident_start(expr[i])) {
             i++;
+            continue;
+        }
+        int prev = i - 1;
+        while (prev >= 0 && (expr[prev] == ' ' || expr[prev] == '\t')) prev--;
+        if (prev >= 0 && expr[prev] == '.') {
+            i++;
+            while (is_ident_continue(expr[i])) i++;
             continue;
         }
         int start = i;
@@ -1395,9 +1803,39 @@ static int direct_check_expr(
         char *name = substr_copy(expr + start, (size_t)(i - start));
         int cursor = i;
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
+        if (expr[cursor] == ':') {
+            free(name);
+            i = cursor + 1;
+            continue;
+        }
+        if (expr[cursor] == '.') {
+            int field_start = cursor + 1;
+            while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
+            int field_end = field_start;
+            while (is_ident_continue(expr[field_end])) field_end++;
+            char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
+            const char *base_type = direct_names_type(locals, name);
+            DirectStructInfo *st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
+            if (st == NULL || !direct_struct_has_field(st, field)) {
+                int col = find_col(line, name);
+                report_issue(path, line_no, col, line,
+                    "direct native emitter found an unknown struct field access",
+                    "read fields from a known direct-engine struct local.",
+                    "return b.value");
+                free(field);
+                free(name);
+                return 1;
+            }
+            free(field);
+            free(name);
+            i = field_end;
+            continue;
+        }
         int is_call = expr[cursor] == '(';
+        int is_struct_literal = expr[cursor] == '{' && direct_find_struct(structs, struct_count, name) != NULL;
         int ok = direct_is_keyword(name) || direct_names_has(locals, name) ||
-            (is_call && direct_find_fn(fns, fn_count, name) != NULL);
+            (is_call && direct_find_fn(fns, fn_count, name) != NULL) ||
+            is_struct_literal;
         if (!ok) {
             int col = find_col(line, name);
             report_issue(path, line_no, col, line,
@@ -1422,6 +1860,61 @@ static char *direct_after_keyword_expr(const char *s, const char *keyword, char 
     return trim_copy(substr_copy(expr, (size_t)(end - expr)));
 }
 
+static int direct_parse_field_target(const char *lhs, char **base, char **field) {
+    const char *s = skip_ws(lhs);
+    if (!is_ident_start(*s)) return 0;
+    const char *base_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *base_end = s;
+    const char *dot = skip_ws(s);
+    if (*dot != '.') return 0;
+    s = skip_ws(dot + 1);
+    if (!is_ident_start(*s)) return 0;
+    const char *field_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    if (*skip_ws(s) != '\0') return 0;
+    *base = substr_copy(base_start, (size_t)(base_end - base_start));
+    *field = substr_copy(field_start, (size_t)(s - field_start));
+    return 1;
+}
+
+static int direct_check_assignment_target(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *lhs,
+    DirectNameSet *locals,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    if (direct_names_has(locals, lhs)) return 0;
+    char *base = NULL;
+    char *field = NULL;
+    if (direct_parse_field_target(lhs, &base, &field)) {
+        const char *base_type = direct_names_type(locals, base);
+        DirectStructInfo *st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
+        if (st != NULL && direct_struct_has_field(st, field)) {
+            free(base);
+            free(field);
+            return 0;
+        }
+        report_issue(path, line_no, find_col(line, base), line,
+            "direct native emitter assignment target is not a known struct field",
+            "assign to a field declared on a direct-engine struct local.",
+            NULL);
+        free(base);
+        free(field);
+        return 1;
+    }
+    report_issue(path, line_no, find_col(line, lhs), line,
+        "direct native emitter assignment target is not a known local",
+        "define the target with `let` before assigning to it.",
+        NULL);
+    return 1;
+}
+
 static int direct_lower_line(
     const char *path,
     int line_no,
@@ -1429,6 +1922,8 @@ static int direct_lower_line(
     DirectNameSet *locals,
     DirectFnInfo *fns,
     int fn_count,
+    DirectStructInfo *structs,
+    int struct_count,
     StrBuf *out
 ) {
     char *stripped = strip_line_comment(line, strlen(line));
@@ -1473,7 +1968,7 @@ static int direct_lower_line(
     }
     if (starts_with(s, "} else if ")) {
         char *expr = direct_after_keyword_expr(s + 2, "else if", '{');
-        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)) {
             free(expr);
             free(stripped);
             return 1;
@@ -1494,7 +1989,7 @@ static int direct_lower_line(
     }
     if (starts_with(s, "if ")) {
         char *expr = direct_after_keyword_expr(s, "if", '{');
-        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)) {
             free(expr);
             free(stripped);
             return 1;
@@ -1510,7 +2005,7 @@ static int direct_lower_line(
     }
     if (starts_with(s, "while ")) {
         char *expr = direct_after_keyword_expr(s, "while", '{');
-        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)) {
             free(expr);
             free(stripped);
             return 1;
@@ -1528,16 +2023,23 @@ static int direct_lower_line(
         char *expr = trim_copy(s + 7);
         size_t n = strlen(expr);
         if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
-        if (direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+        if (direct_check_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)) {
             free(expr);
             free(stripped);
             return 1;
         }
-        char *c_expr = direct_translate_expr(expr);
+        char *rewritten = direct_rewrite_struct_literals(path, line_no, line, expr, structs, struct_count);
+        if (rewritten == NULL) {
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
         sb_append(out, "return ");
         sb_append(out, c_expr);
         sb_append(out, ";\n");
         free(c_expr);
+        free(rewritten);
         free(expr);
         free(stripped);
         return 0;
@@ -1557,24 +2059,40 @@ static int direct_lower_line(
         while (is_ident_continue(*p)) p++;
         char *name = substr_copy(name_start, (size_t)(p - name_start));
         p = skip_ws(p);
+        char *local_type = NULL;
         if (*p == ':') {
             p = skip_ws(p + 1);
-            if (!starts_with(p, "Int") || is_ident_continue(p[3])) {
+            if (!is_ident_start(*p)) {
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter supports Int locals only",
-                    "use `let name: Int = expr` or omit the Int annotation.",
+                    "direct native emitter expected a local type",
+                    "use `Int` or a declared struct type in this direct-engine slice.",
                     NULL);
                 free(name);
                 free(stripped);
                 return 1;
             }
-            p = skip_ws(p + 3);
+            const char *type_start = p;
+            p++;
+            while (is_ident_continue(*p)) p++;
+            local_type = substr_copy(type_start, (size_t)(p - type_start));
+            if (strcmp(local_type, "Int") != 0 && direct_find_struct(structs, struct_count, local_type) == NULL) {
+                report_issue(path, line_no, find_col(line, local_type), line,
+                    "direct native emitter supports Int locals and declared struct locals only",
+                    "use `let name: Int = expr`, `let name: Struct = expr`, or omit the annotation.",
+                    NULL);
+                free(local_type);
+                free(name);
+                free(stripped);
+                return 1;
+            }
+            p = skip_ws(p);
         }
         if (*p != '=') {
             report_issue(path, line_no, find_col(line, name), line,
                 "direct native emitter expected an initialized local",
                 "write `let name = expr`.",
                 NULL);
+            free(local_type);
             free(name);
             free(stripped);
             return 1;
@@ -1582,21 +2100,37 @@ static int direct_lower_line(
         char *expr = trim_copy(p + 1);
         size_t n = strlen(expr);
         if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
-        if (direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+        if (direct_check_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)) {
             free(expr);
+            free(local_type);
             free(name);
             free(stripped);
             return 1;
         }
-        char *c_expr = direct_translate_expr(expr);
-        sb_append(out, "long ");
+        if (local_type == NULL) local_type = direct_infer_expr_type(expr, locals, structs, struct_count);
+        char *rewritten = direct_rewrite_struct_literals(path, line_no, line, expr, structs, struct_count);
+        if (rewritten == NULL) {
+            free(expr);
+            free(local_type);
+            free(name);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
+        if (strcmp(local_type, "Int") == 0) sb_append(out, "long ");
+        else {
+            sb_append(out, local_type);
+            sb_append(out, " ");
+        }
         sb_append(out, name);
         sb_append(out, " = ");
         sb_append(out, c_expr);
         sb_append(out, ";\n");
-        direct_names_add(locals, name);
+        direct_names_add_typed(locals, name, local_type);
         free(c_expr);
+        free(rewritten);
         free(expr);
+        free(local_type);
         free(name);
         free(stripped);
         return 0;
@@ -1609,28 +2143,32 @@ static int direct_lower_line(
         char *expr = trim_copy(eq + 1);
         size_t n = strlen(expr);
         if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
-        if (!direct_names_has(locals, lhs)) {
-            report_issue(path, line_no, find_col(line, lhs), line,
-                "direct native emitter assignment target is not a known Int local",
-                "define the target with `let` before assigning to it.",
-                NULL);
+        if (direct_check_assignment_target(path, line_no, line, lhs, locals, structs, struct_count)) {
             free(lhs);
             free(expr);
             free(stripped);
             return 1;
         }
-        if (direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+        if (direct_check_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)) {
             free(lhs);
             free(expr);
             free(stripped);
             return 1;
         }
-        char *c_expr = direct_translate_expr(expr);
+        char *rewritten = direct_rewrite_struct_literals(path, line_no, line, expr, structs, struct_count);
+        if (rewritten == NULL) {
+            free(lhs);
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
         sb_append(out, lhs);
         sb_append(out, " = ");
         sb_append(out, c_expr);
         sb_append(out, ";\n");
         free(c_expr);
+        free(rewritten);
         free(lhs);
         free(expr);
         free(stripped);
@@ -1638,8 +2176,8 @@ static int direct_lower_line(
     }
 
     report_issue(path, line_no, 1, line,
-        "direct native emitter supports Int functions, lets, assignment, if, while, calls, and return",
-        "use the full engine for syntax outside the direct Int subset.",
+        "direct native emitter supports Int functions, struct locals, lets, assignment, if, while, calls, and return",
+        "use the full engine for syntax outside the direct subset.",
         NULL);
     free(stripped);
     return 1;
@@ -1648,18 +2186,64 @@ static int direct_lower_line(
 static char *direct_lower_to_c(const char *path, const char *raw) {
     LineVec lines = split_lines(raw);
     DirectFnInfo fns[64];
+    DirectStructInfo structs[32];
     int fn_count = 0;
+    int struct_count = 0;
     memset(fns, 0, sizeof(fns));
+    memset(structs, 0, sizeof(structs));
+    int *skip_lines = (int *)calloc(lines.len == 0 ? 1 : lines.len, sizeof(int));
+    if (skip_lines == NULL) die_oom();
     int has_main = 0;
 
     for (size_t i = 0; i < lines.len; i++) {
+        DirectStructInfo st;
+        memset(&st, 0, sizeof(st));
+        size_t struct_end = i;
+        int parsed_struct = direct_parse_struct_decl(&lines, i, &st, &struct_end, path);
+        if (parsed_struct == 1) {
+            if (struct_count >= 32) {
+                fprintf(stderr, "error: too many direct structs\n");
+                direct_struct_free_one(&st);
+                free(skip_lines);
+                lines_free(&lines);
+                direct_structs_free(structs, struct_count);
+                direct_fns_free(fns, fn_count);
+                return NULL;
+            }
+            if (direct_find_struct(structs, struct_count, st.name) != NULL) {
+                report_issue(path, st.line_no, find_col(lines.items[i], st.name), lines.items[i],
+                    "direct native emitter found a duplicate struct name",
+                    "use a unique name for each direct-engine struct declaration.",
+                    NULL);
+                direct_struct_free_one(&st);
+                free(skip_lines);
+                lines_free(&lines);
+                direct_structs_free(structs, struct_count);
+                direct_fns_free(fns, fn_count);
+                return NULL;
+            }
+            for (size_t j = i; j <= struct_end && j < lines.len; j++) skip_lines[j] = 1;
+            structs[struct_count++] = st;
+            i = struct_end;
+            continue;
+        }
+        if (parsed_struct < 0) {
+            free(skip_lines);
+            lines_free(&lines);
+            direct_structs_free(structs, struct_count);
+            direct_fns_free(fns, fn_count);
+            return NULL;
+        }
+
         DirectFnInfo info;
         memset(&info, 0, sizeof(info));
         int parsed = parse_direct_fn_header(lines.items[i], &info);
         if (parsed == 1) {
             if (fn_count >= 64) {
                 fprintf(stderr, "error: too many direct functions\n");
+                free(skip_lines);
                 lines_free(&lines);
+                direct_structs_free(structs, struct_count);
                 direct_fns_free(fns, fn_count);
                 return NULL;
             }
@@ -1671,7 +2255,10 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
                         "write the entrypoint without parameters.",
                         NULL);
                     free(info.name);
+                    for (int p = 0; p < info.param_count; p++) free(info.params[p]);
+                    free(skip_lines);
                     lines_free(&lines);
+                    direct_structs_free(structs, struct_count);
                     direct_fns_free(fns, fn_count);
                     return NULL;
                 }
@@ -1683,7 +2270,9 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
                 "direct native emitter supports Int-only function headers",
                 "write functions as `fn name(a: Int, ...) -> Int { ... }`.",
                 NULL);
+            free(skip_lines);
             lines_free(&lines);
+            direct_structs_free(structs, struct_count);
             direct_fns_free(fns, fn_count);
             return NULL;
         }
@@ -1694,7 +2283,9 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             "direct native emitter requires `fn main() -> Int`",
             "add `fn main() -> Int { return <int> }` as the program entrypoint.",
             NULL);
+        free(skip_lines);
         lines_free(&lines);
+        direct_structs_free(structs, struct_count);
         direct_fns_free(fns, fn_count);
         return NULL;
     }
@@ -1702,6 +2293,17 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     StrBuf out;
     sb_init(&out);
     sb_append(&out, "typedef long Int;\n");
+    for (int s = 0; s < struct_count; s++) {
+        sb_append(&out, "typedef struct {");
+        for (int f = 0; f < structs[s].field_count; f++) {
+            sb_append(&out, " long ");
+            sb_append(&out, structs[s].fields[f]);
+            sb_append(&out, ";");
+        }
+        sb_append(&out, " } ");
+        sb_append(&out, structs[s].name);
+        sb_append(&out, ";\n");
+    }
     for (int f = 0; f < fn_count; f++) {
         sb_append(&out, "long ");
         sb_append(&out, fns[f].name);
@@ -1719,6 +2321,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     int main_depth = 0;
     int main_has_return = 0;
     for (size_t i = 0; i < lines.len; i++) {
+        if (skip_lines[i]) continue;
         DirectFnInfo line_header;
         memset(&line_header, 0, sizeof(line_header));
         int header_state = parse_direct_fn_header(lines.items[i], &line_header);
@@ -1727,14 +2330,16 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             main_depth = 0;
         }
         if (in_main && strstr(skip_ws(lines.items[i]), "return ") != NULL) main_has_return = 1;
-        if (direct_lower_line(path, (int)i + 1, lines.items[i], &locals, fns, fn_count, &out) != 0) {
+        if (direct_lower_line(path, (int)i + 1, lines.items[i], &locals, fns, fn_count, structs, struct_count, &out) != 0) {
             if (header_state == 1) {
                 free(line_header.name);
                 for (int p = 0; p < line_header.param_count; p++) free(line_header.params[p]);
             }
             free(out.data);
+            free(skip_lines);
             direct_names_free(&locals);
             lines_free(&lines);
+            direct_structs_free(structs, struct_count);
             direct_fns_free(fns, fn_count);
             return NULL;
         }
@@ -1760,14 +2365,18 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             "write `fn main() -> Int { return 40 + 2 }` for the direct Int subset.",
             "fn main() -> Int { return 40 + 2 }");
         free(out.data);
+        free(skip_lines);
         direct_names_free(&locals);
         lines_free(&lines);
+        direct_structs_free(structs, struct_count);
         direct_fns_free(fns, fn_count);
         return NULL;
     }
 
+    free(skip_lines);
     direct_names_free(&locals);
     lines_free(&lines);
+    direct_structs_free(structs, struct_count);
     direct_fns_free(fns, fn_count);
     return sb_take(&out);
 }

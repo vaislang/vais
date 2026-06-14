@@ -2,8 +2,8 @@
 # NV-C2 direct-emitter gate for the Vais `vaisc` command.
 #
 # The direct engine is intentionally smaller than the full engine in this
-# slice: it compiles Int-only helpers, locals, calls, and control flow through
-# the native direct path without the Python fallback.
+# slice: it compiles Int helpers, locals, calls, simple struct locals, and
+# control flow through the native direct path without the Python fallback.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -132,6 +132,44 @@ if "$VAISC" emit-ir "$helper_src" \
 else
     echo "  FAIL direct helper/control emission"
     cat "$tmp/helper.err"
+    fail=1
+fi
+
+struct_src="$tmp/direct_struct.vais"
+cat > "$struct_src" <<'SRC'
+struct Box {
+    value: Int,
+    bonus: Int,
+}
+
+fn inc(n: Int) -> Int {
+    return n + 1
+}
+
+fn main() -> Int {
+    let b = Box { value: 39, bonus: inc(1) }
+    b.value = b.value + b.bonus + 1
+    return b.value
+}
+SRC
+
+if "$VAISC" emit-ir "$struct_src" \
+    --engine direct -o "$tmp/struct.ll" \
+    >"$tmp/struct.out" 2>"$tmp/struct.err" &&
+    grep -q '%struct.Box = type' "$tmp/struct.ll" &&
+    grep -q 'getelementptr .*%struct.Box' "$tmp/struct.ll"; then
+    "$VAISC" run "$struct_src" --engine direct >"$tmp/struct-run.out" 2>"$tmp/struct-run.err"
+    struct_run=$?
+    if [ "$struct_run" = "42" ]; then
+        echo "  PASS direct struct local literal, field read, and field write run (=42)"
+    else
+        echo "  FAIL direct struct got=$struct_run want=42"
+        cat "$tmp/struct-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct struct emission"
+    cat "$tmp/struct.err"
     fail=1
 fi
 

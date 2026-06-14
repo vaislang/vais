@@ -29,3 +29,5 @@
 - Added release archive workflow for source tags.
 - Moved `--engine direct` onto the native driver and expanded it through Int
   helper calls, locals, assignment, `if`, and `while`.
+- Expanded native direct mode with simple Int-field struct local literal,
+  field read, and field write support.

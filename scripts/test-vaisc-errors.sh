@@ -98,6 +98,17 @@ fn main() -> Int {
 }
 SRC
 
+expect_diag "direct_struct_field" "direct" "unknown struct field access" "return b.value" <<'SRC'
+struct Box {
+    value: Int,
+}
+
+fn main() -> Int {
+    let b = Box { value: 42 }
+    return b.missing
+}
+SRC
+
 expect_diag "direct_missing_return" "direct" "requires at least one .*return.* statement" "fn main() -> Int" <<'SRC'
 fn main() -> Int {
     let x = 42
