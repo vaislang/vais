@@ -13,14 +13,17 @@
 
 ## Compiler-Core Regeneration
 
-`compiler/self/vaisc_core.ll` is the checked-in compiler core used by `scripts/vaisc`.
-The core regenerates from `compiler/self/fixpoint_full.vais` and is verified by the self-host gates.
+`compiler/self/vaisc_core.ll` is the checked-in compiler core linked into the
+native `scripts/vaisc` public command. The core regenerates from
+`compiler/self/fixpoint_full.vais` and is verified by the self-host gates.
 
 ## Architecture Notes
 
 - Tokens carry source ranges `(nstart, nlen)` so identifier comparison is byte-accurate.
 - Recursive evaluator/compiler tiers use explicit symbol tables and function tables.
 - Codegen emits real LLVM IR and validates it by compiling the emitted IR with clang.
+- `tools/vaisc_native.c` is the host driver for CLI, source preparation, file IO,
+  and clang invocation; the compiler core remains the self-host Vais tier.
 - Lists, structs, string indexing, control flow, function calls, and print emission are covered by the release gates.
 
 ## Next Work

@@ -1,5 +1,15 @@
 # Vais Changelog
 
+## Unreleased
+
+### Changed
+
+- `scripts/vaisc` now defaults to a native public driver that links the checked-in
+  self-host compiler core.
+- Normal user `emit-ir`, `build`, `run`, and `doctor` use the native driver.
+- Development-only fallback paths remain internal.
+- Added `scripts/build-vaisc-native.sh` and `scripts/test-vaisc-native.sh`.
+
 ## v0.2.0 - 2026-06-14
 
 Current Vais source release.

@@ -15,9 +15,12 @@ Vais is the active language line in this repository.
 ```text
 Vais source (.vais)
   -> scripts/vaisc emit-ir/build/run
+  -> native host driver
   -> reusable self-host compiler core
   -> LLVM IR
   -> native executable
 ```
 
-The product compiler path reads `.vais` files directly through the reusable self-host core.
+The product compiler path reads `.vais` files through a native host driver linked
+with the reusable self-host core. Python remains for internal checks and
+development-only direct-engine fallback paths.

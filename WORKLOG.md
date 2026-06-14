@@ -23,3 +23,5 @@
 - Switched `vaislang.dev` from the temporary `gh-pages` deployment to the `main`
   GitHub Pages workflow.
 - Added `CHANGELOG.md` for the current source release baseline.
+- Added a native `vaisc` host driver and switched `scripts/vaisc` normal
+  `emit-ir`, `build`, and `run` to the Python-free public path.

@@ -13,5 +13,6 @@ vais_build() {
     mkdir -p "$(dirname "$trusted")"
     cp "$src" "$trusted"
     VAISC_SELF_HOST_TRUST_ROOTS="${VAISC_SELF_HOST_TRUST_ROOTS:+$VAISC_SELF_HOST_TRUST_ROOTS:}$trust_root" \
+        VAISC_FORCE_PYTHON=1 \
         "$HERE/scripts/vaisc" build "$trusted" "$@"
 }

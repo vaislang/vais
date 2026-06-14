@@ -2,4 +2,50 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-exec python3 "$HERE/tools/vaisc.py" "$@"
+
+prev_engine=0
+for arg in "$@"; do
+    if [ "$prev_engine" -eq 1 ]; then
+        if [ "$arg" = "direct" ]; then
+            exec python3 "$HERE/tools/vaisc.py" "$@"
+        fi
+        prev_engine=0
+        continue
+    fi
+    if [ "$arg" = "--engine" ]; then
+        prev_engine=1
+        continue
+    fi
+    case "$arg" in
+        --engine=direct)
+            exec python3 "$HERE/tools/vaisc.py" "$@"
+            ;;
+    esac
+done
+
+if [ "${VAISC_FORCE_PYTHON:-}" = "1" ]; then
+    exec python3 "$HERE/tools/vaisc.py" "$@"
+fi
+
+native="$HERE/build/vaisc"
+needs_build=0
+if [ ! -x "$native" ]; then
+    needs_build=1
+else
+    for dep in \
+        "$HERE/compiler/self/vaisc_core.ll" \
+        "$HERE/tools/vaisc_native.c" \
+        "$HERE/scripts/build-vaisc-native.sh"
+    do
+        if [ "$dep" -nt "$native" ]; then
+            needs_build=1
+            break
+        fi
+    done
+fi
+
+if [ "$needs_build" -eq 1 ]; then
+    "$HERE/scripts/build-vaisc-native.sh" "$native" >/dev/null
+fi
+
+exec "$native" "$@"

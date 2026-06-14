@@ -10,8 +10,8 @@ Vais documentation uses these terms:
 | Term | Meaning |
 | --- | --- |
 | Verified | Covered by `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-parity.sh`, `scripts/test.sh`, or a self-host gate |
-| Full engine | Compiled by the reusable self-host compiler core |
-| Direct engine | Narrow native LLVM emitter selected with `--engine direct` |
+| Full engine | Compiled by the native public driver linked with the reusable self-host compiler core |
+| Direct engine | Narrow development LLVM emitter selected with `--engine direct` |
 | Specified | Intended surface, not yet protected as a release claim |
 
 Public examples should use verified syntax unless they explicitly document a
@@ -275,10 +275,12 @@ Common corrections:
 ## Build And Test
 
 ```bash
+scripts/vaisc doctor
 scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
 scripts/vaisc build examples/c4.vais -o /tmp/c4
 scripts/vaisc run examples/c4.vais
 
+bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-parity.sh
 bash scripts/test.sh

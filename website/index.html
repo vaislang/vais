@@ -69,8 +69,8 @@
           <p class="eyebrow">Quick start</p>
           <h2>Compile a verified <code>.vais</code> program.</h2>
           <p>
-            The current toolchain is source based. Use Python 3 and <code>clang</code>,
-            then run the compiler from the repository root.
+            The public compiler command builds a native host driver and uses
+            <code>clang</code> to link generated LLVM IR.
           </p>
         </div>
         <div class="terminal" aria-label="Quick start commands">
@@ -78,7 +78,7 @@
           <pre id="quick-code"><code>git clone https://github.com/vaislang/vais
 cd vais
 
-python3 tests/vais_check_test.py
+scripts/vaisc doctor
 scripts/vaisc run examples/c4.vais
 scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
 scripts/vaisc build examples/c4.vais -o /tmp/c4</code></pre>
@@ -156,18 +156,19 @@ fn main() -> Int {
           <h2>One public command: <code>scripts/vaisc</code>.</h2>
           <p>
             The compiler accepts <code>.vais</code> files, emits LLVM IR, and links
-            native binaries through <code>clang</code>. A narrow direct engine is
-            available for promoted slices with <code>--engine direct</code>.
+            native binaries through <code>clang</code>. Normal <code>emit-ir</code>,
+            <code>build</code>, and <code>run</code> commands use the native public
+            driver.
           </p>
         </div>
         <div class="status-grid">
           <article class="panel">
             <h3>Full engine</h3>
-            <p>Runs through the reusable self-host compiler core checked in at <code>compiler/self/vaisc_core.ll</code>.</p>
+            <p>Runs through a native host driver linked with the reusable self-host compiler core checked in at <code>compiler/self/vaisc_core.ll</code>.</p>
           </article>
           <article class="panel">
-            <h3>Direct engine</h3>
-            <p>Selected with <code>--engine direct</code> for the native LLVM subset covered by direct-engine gates.</p>
+            <h3>Native command</h3>
+            <p><code>scripts/vaisc doctor</code> checks the local compiler path and reports the linked self-host core.</p>
           </article>
           <article class="panel">
             <h3>Self-host status</h3>
@@ -190,10 +191,10 @@ fn main() -> Int {
         </div>
         <div class="terminal" aria-label="Verification commands">
           <button class="copy-btn" data-copy-target="verify-code" aria-label="Copy verification commands">Copy</button>
-          <pre id="verify-code"><code>python3 tests/vais_check_test.py
+          <pre id="verify-code"><code>scripts/vaisc doctor
+bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc.sh
 bash scripts/test-vaisc-front.sh
-bash scripts/test-vaisc-direct.sh
 bash scripts/test-vaisc-errors.sh
 bash scripts/test-vaisc-parity.sh
 bash scripts/test.sh

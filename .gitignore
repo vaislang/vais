@@ -4,6 +4,7 @@
 *.warn
 .vais-cache/
 a.out
+build/
 
 # Python bytecode
 __pycache__/

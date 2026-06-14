@@ -10,9 +10,13 @@
 ## Compiler Paths
 
 - `scripts/vaisc` is the product-facing compiler CLI.
-- `tools/vaisc.py` implements `emit-ir`, `build`, and `run`.
+- `tools/vaisc_native.c` implements the native public driver for `emit-ir`,
+  `build`, `run`, `doctor`, and `--version`.
+- `tools/vaisc.py` is the internal Python fallback for development-only direct
+  engine slices and repository checks.
 - `compiler/self/fixpoint_full.vais` is the trusted full self-host compiler source.
 - `compiler/self/vaisc_core.ll` is the reusable self-host compiler core used by `scripts/vaisc`.
+- `scripts/build-vaisc-native.sh` builds the native public driver.
 - `scripts/build.sh` and `scripts/vais-build-env.sh` are internal core-refresh tools.
 
 ## Documentation Paths
@@ -30,6 +34,7 @@ Use the smallest gate that covers the change, then broaden when touching shared 
 python3 -m py_compile tools/vaisc.py tools/vais-check.py tools/embed_self_source.py tests/vais_check_test.py
 bash -n scripts/*.sh
 python3 tests/vais_check_test.py
+bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc.sh
 bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-direct.sh
