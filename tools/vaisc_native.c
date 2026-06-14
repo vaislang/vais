@@ -44,7 +44,9 @@ typedef struct {
 typedef struct {
     char *name;
     char *params[16];
+    char *param_types[16];
     int param_count;
+    char *return_type;
     int line_no;
 } DirectFnInfo;
 
@@ -1316,14 +1318,14 @@ static void direct_names_add_typed(DirectNameSet *set, const char *name, const c
     set->count++;
 }
 
-static void direct_names_add(DirectNameSet *set, const char *name) {
-    direct_names_add_typed(set, name, "Int");
-}
-
 static void direct_fns_free(DirectFnInfo *fns, int count) {
     for (int i = 0; i < count; i++) {
         free(fns[i].name);
-        for (int p = 0; p < fns[i].param_count; p++) free(fns[i].params[p]);
+        free(fns[i].return_type);
+        for (int p = 0; p < fns[i].param_count; p++) {
+            free(fns[i].params[p]);
+            free(fns[i].param_types[p]);
+        }
     }
 }
 
@@ -1356,6 +1358,21 @@ static int direct_struct_has_field(DirectStructInfo *info, const char *field) {
         if (strcmp(info->fields[i], field) == 0) return 1;
     }
     return 0;
+}
+
+static int direct_is_plain_ident(const char *text) {
+    if (!is_ident_start(text[0])) return 0;
+    int i = 1;
+    while (is_ident_continue(text[i])) i++;
+    return text[i] == '\0';
+}
+
+static int direct_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
+    return strcmp(type, "Int") == 0 || direct_find_struct(structs, struct_count, type) != NULL;
+}
+
+static const char *direct_c_type(const char *type) {
+    return strcmp(type, "Int") == 0 ? "long" : type;
 }
 
 static int find_matching_brace_c(const char *text, int open_index) {
@@ -1574,18 +1591,26 @@ static int parse_direct_fn_header(const char *line, DirectFnInfo *out) {
         return -1;
     }
     const char *ret = skip_ws(arrow + 2);
-    if (!starts_with(ret, "Int") || is_ident_continue(ret[3])) {
+    if (!is_ident_start(*ret)) {
         free(name);
         return -1;
     }
+    const char *ret_end = ret + 1;
+    while (is_ident_continue(*ret_end)) ret_end++;
+    if (*skip_ws(ret_end) != '{') {
+        free(name);
+        return -1;
+    }
+    char *return_type = substr_copy(ret, (size_t)(ret_end - ret));
     memset(out, 0, sizeof(*out));
     out->name = name;
+    out->return_type = return_type;
     char *params_text = substr_copy(open + 1, (size_t)(close - open - 1));
     char *parts[16] = {0};
     int n = split_top_level_commas_c(params_text, parts, 16);
     free(params_text);
     if (n < 0) {
-        free(name);
+        direct_fns_free(out, 1);
         return -1;
     }
     if (n == 1 && parts[0] != NULL && strlen(skip_ws(parts[0])) == 0) {
@@ -1597,22 +1622,58 @@ static int parse_direct_fn_header(const char *line, DirectFnInfo *out) {
         char *colon = strchr(part, ':');
         if (colon == NULL) {
             free(part);
+            direct_fns_free(out, 1);
             for (int k = i + 1; k < n; k++) free(parts[k]);
             return -1;
         }
         char *pname = trim_copy(substr_copy(part, (size_t)(colon - part)));
         char *pty = trim_copy(colon + 1);
-        int ok = is_ident_start(pname[0]) && strcmp(pty, "Int") == 0;
-        free(pty);
+        int ok = direct_is_plain_ident(pname) && direct_is_plain_ident(pty);
         free(part);
         if (!ok) {
             free(pname);
+            free(pty);
+            free(out->name);
+            free(out->return_type);
+            for (int p = 0; p < out->param_count; p++) {
+                free(out->params[p]);
+                free(out->param_types[p]);
+            }
             for (int k = i + 1; k < n; k++) free(parts[k]);
             return -1;
         }
-        out->params[out->param_count++] = pname;
+        out->params[out->param_count] = pname;
+        out->param_types[out->param_count] = pty;
+        out->param_count++;
     }
     return 1;
+}
+
+static int direct_validate_fn_types(
+    const char *path,
+    const char *line,
+    DirectFnInfo *info,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    int issues = 0;
+    if (!direct_type_allowed(structs, struct_count, info->return_type)) {
+        report_issue(path, info->line_no, find_col(line, info->return_type), line,
+            "direct native emitter function return type is not available",
+            "use `Int` or a struct declared in this file.",
+            NULL);
+        issues++;
+    }
+    for (int p = 0; p < info->param_count; p++) {
+        if (!direct_type_allowed(structs, struct_count, info->param_types[p])) {
+            report_issue(path, info->line_no, find_col(line, info->param_types[p]), line,
+                "direct native emitter function parameter type is not available",
+                "use `Int` or a struct declared in this file.",
+                NULL);
+            issues++;
+        }
+    }
+    return issues;
 }
 
 static char *direct_translate_expr(const char *expr) {
@@ -1733,6 +1794,8 @@ static char *direct_rewrite_struct_literals(
 static char *direct_infer_expr_type(
     const char *expr,
     DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
     DirectStructInfo *structs,
     int struct_count
 ) {
@@ -1758,6 +1821,18 @@ static char *direct_infer_expr_type(
             free(name);
             free(trimmed);
             return out;
+        }
+        if (*rest == '(') {
+            int close = find_matching_paren_c(trimmed, (int)(rest - trimmed));
+            if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                DirectFnInfo *fn = direct_find_fn(fns, fn_count, name);
+                if (fn != NULL) {
+                    char *out = strdup(fn->return_type);
+                    free(name);
+                    free(trimmed);
+                    return out;
+                }
+            }
         }
         free(name);
     }
@@ -1937,25 +2012,28 @@ static int direct_lower_line(
     int parsed_header = parse_direct_fn_header(stripped, &header);
     if (parsed_header == 1) {
         direct_names_free(locals);
-        for (int p = 0; p < header.param_count; p++) direct_names_add(locals, header.params[p]);
-        sb_append(out, "long ");
+        for (int p = 0; p < header.param_count; p++) {
+            direct_names_add_typed(locals, header.params[p], header.param_types[p]);
+        }
+        sb_append(out, direct_c_type(header.return_type));
+        sb_append(out, " ");
         sb_append(out, header.name);
         sb_append(out, "(");
         for (int p = 0; p < header.param_count; p++) {
             if (p > 0) sb_append(out, ", ");
-            sb_append(out, "long ");
+            sb_append(out, direct_c_type(header.param_types[p]));
+            sb_append(out, " ");
             sb_append(out, header.params[p]);
         }
         sb_append(out, ") {\n");
-        free(header.name);
-        for (int p = 0; p < header.param_count; p++) free(header.params[p]);
+        direct_fns_free(&header, 1);
         free(stripped);
         return 0;
     }
     if (parsed_header < 0 || starts_with(s, "fn ")) {
         report_issue(path, line_no, find_col(line, "fn"), line,
-            "direct native emitter supports Int-only function headers",
-            "write functions as `fn name(a: Int, ...) -> Int { ... }`.",
+            "direct native emitter supports Int and declared-struct function headers",
+            "write functions with `Int` or declared struct parameter and return types.",
             NULL);
         free(stripped);
         return 1;
@@ -2107,7 +2185,7 @@ static int direct_lower_line(
             free(stripped);
             return 1;
         }
-        if (local_type == NULL) local_type = direct_infer_expr_type(expr, locals, structs, struct_count);
+        if (local_type == NULL) local_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
         char *rewritten = direct_rewrite_struct_literals(path, line_no, line, expr, structs, struct_count);
         if (rewritten == NULL) {
             free(expr);
@@ -2249,13 +2327,12 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             }
             info.line_no = (int)i + 1;
             if (strcmp(info.name, "main") == 0) {
-                if (info.param_count != 0) {
+                if (info.param_count != 0 || strcmp(info.return_type, "Int") != 0) {
                     report_issue(path, (int)i + 1, find_col(lines.items[i], "main"), lines.items[i],
                         "direct native emitter requires `fn main() -> Int`",
                         "write the entrypoint without parameters.",
                         NULL);
-                    free(info.name);
-                    for (int p = 0; p < info.param_count; p++) free(info.params[p]);
+                    direct_fns_free(&info, 1);
                     free(skip_lines);
                     lines_free(&lines);
                     direct_structs_free(structs, struct_count);
@@ -2267,9 +2344,19 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             fns[fn_count++] = info;
         } else if (parsed < 0) {
             report_issue(path, (int)i + 1, 1, lines.items[i],
-                "direct native emitter supports Int-only function headers",
-                "write functions as `fn name(a: Int, ...) -> Int { ... }`.",
+                "direct native emitter supports Int and declared-struct function headers",
+                "write functions with `Int` or declared struct parameter and return types.",
                 NULL);
+            free(skip_lines);
+            lines_free(&lines);
+            direct_structs_free(structs, struct_count);
+            direct_fns_free(fns, fn_count);
+            return NULL;
+        }
+    }
+
+    for (int f = 0; f < fn_count; f++) {
+        if (direct_validate_fn_types(path, lines.items[fns[f].line_no - 1], &fns[f], structs, struct_count) != 0) {
             free(skip_lines);
             lines_free(&lines);
             direct_structs_free(structs, struct_count);
@@ -2305,12 +2392,14 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
         sb_append(&out, ";\n");
     }
     for (int f = 0; f < fn_count; f++) {
-        sb_append(&out, "long ");
+        sb_append(&out, direct_c_type(fns[f].return_type));
+        sb_append(&out, " ");
         sb_append(&out, fns[f].name);
         sb_append(&out, "(");
         for (int p = 0; p < fns[f].param_count; p++) {
             if (p > 0) sb_append(&out, ", ");
-            sb_append(&out, "long ");
+            sb_append(&out, direct_c_type(fns[f].param_types[p]));
+            sb_append(&out, " ");
             sb_append(&out, fns[f].params[p]);
         }
         sb_append(&out, ");\n");
@@ -2332,8 +2421,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
         if (in_main && strstr(skip_ws(lines.items[i]), "return ") != NULL) main_has_return = 1;
         if (direct_lower_line(path, (int)i + 1, lines.items[i], &locals, fns, fn_count, structs, struct_count, &out) != 0) {
             if (header_state == 1) {
-                free(line_header.name);
-                for (int p = 0; p < line_header.param_count; p++) free(line_header.params[p]);
+                direct_fns_free(&line_header, 1);
             }
             free(out.data);
             free(skip_lines);
@@ -2344,8 +2432,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             return NULL;
         }
         if (header_state == 1) {
-            free(line_header.name);
-            for (int p = 0; p < line_header.param_count; p++) free(line_header.params[p]);
+            direct_fns_free(&line_header, 1);
         }
         if (in_main) {
             const char *code = lines.items[i];

@@ -9,7 +9,7 @@
   internal Python fallback.
 - The native direct engine now covers Int helper calls, locals, assignment,
   `if`, `while`, return expressions, and simple Int-field struct local
-  literal/read/write.
+  literal/read/write plus struct parameter/return helper ABI.
 
 ## v0.2.1 - 2026-06-14
 

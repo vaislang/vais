@@ -2,8 +2,9 @@
 # NV-C2 direct-emitter gate for the Vais `vaisc` command.
 #
 # The direct engine is intentionally smaller than the full engine in this
-# slice: it compiles Int helpers, locals, calls, simple struct locals, and
-# control flow through the native direct path without the Python fallback.
+# slice: it compiles Int helpers, locals, calls, simple struct locals and
+# struct ABI helpers, plus control flow through the native direct path without
+# the Python fallback.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -170,6 +171,52 @@ if "$VAISC" emit-ir "$struct_src" \
 else
     echo "  FAIL direct struct emission"
     cat "$tmp/struct.err"
+    fail=1
+fi
+
+abi_src="$tmp/direct_struct_abi.vais"
+cat > "$abi_src" <<'SRC'
+struct Pair {
+    a: Int,
+    b: Int,
+}
+
+fn make(x: Int) -> Pair {
+    return Pair { a: x, b: x + 1 }
+}
+
+fn id(p: Pair) -> Pair {
+    return p
+}
+
+fn sum(p: Pair) -> Int {
+    return p.a + p.b
+}
+
+fn main() -> Int {
+    let p = id(make(20))
+    return sum(p) + sum(Pair { a: 0, b: 1 })
+}
+SRC
+
+if "$VAISC" emit-ir "$abi_src" \
+    --engine direct -o "$tmp/abi.ll" \
+    >"$tmp/abi.out" 2>"$tmp/abi.err" &&
+    grep -q '%struct.Pair = type' "$tmp/abi.ll" &&
+    grep -q 'define .*@make' "$tmp/abi.ll" &&
+    grep -q 'define .*@sum' "$tmp/abi.ll"; then
+    "$VAISC" run "$abi_src" --engine direct >"$tmp/abi-run.out" 2>"$tmp/abi-run.err"
+    abi_run=$?
+    if [ "$abi_run" = "42" ]; then
+        echo "  PASS direct struct parameter and return ABI runs (=42)"
+    else
+        echo "  FAIL direct struct ABI got=$abi_run want=42"
+        cat "$tmp/abi-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct struct ABI emission"
+    cat "$tmp/abi.err"
     fail=1
 fi
 

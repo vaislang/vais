@@ -124,8 +124,9 @@ while i < n {
 ```
 
 The direct engine gate covers `if`, `while`, local `let`, assignment, helper
-calls, `return`, and simple Int-field struct locals. Lists, strings, and the
-self-host compiler tier remain full-engine territory.
+calls, `return`, simple Int-field struct locals, and struct parameter/return
+helpers. Lists, strings, and the self-host compiler tier remain full-engine
+territory.
 
 Verified today:
 
@@ -148,12 +149,25 @@ fn main() -> Int {
 }
 ```
 
+Struct helper values are also gate-backed:
+
+```vais
+fn make_box(value: Int) -> Box {
+    return Box { value: value }
+}
+
+fn read_box(b: Box) -> Int {
+    return b.value
+}
+```
+
 Verified today:
 
 - Simple struct declarations with `Int` fields.
 - Struct literals.
 - Field access.
 - Field write for direct-engine local struct values.
+- Struct parameters and return values in direct-engine helper functions.
 - Selected struct/list combinations through self-host gates.
 
 ## Enums And Match

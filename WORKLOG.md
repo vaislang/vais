@@ -31,3 +31,4 @@
   helper calls, locals, assignment, `if`, and `while`.
 - Expanded native direct mode with simple Int-field struct local literal,
   field read, and field write support.
+- Expanded native direct mode with struct parameter and return helper ABI.
