@@ -174,8 +174,16 @@ fn main() -> Int {
             <p><code>scripts/vaisc doctor</code> checks the local compiler path and reports the linked self-host core.</p>
           </article>
           <article class="panel">
+            <h3>Direct Int path</h3>
+            <p><code>--engine direct</code> stays native for Int helpers, locals, calls, <code>if</code>, and <code>while</code>.</p>
+          </article>
+          <article class="panel">
             <h3>Standalone install</h3>
             <p><code>scripts/install-vaisc.sh</code> installs a standalone <code>vaisc</code> binary outside the checkout.</p>
+          </article>
+          <article class="panel">
+            <h3>Release archives</h3>
+            <p>Tag builds publish standalone compiler archives through the release archive workflow.</p>
           </article>
           <article class="panel">
             <h3>Self-host status</h3>
@@ -203,6 +211,7 @@ bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc.sh
 bash scripts/test-vaisc-front.sh
+bash scripts/test-vaisc-direct.sh
 bash scripts/test-vaisc-errors.sh
 bash scripts/test-vaisc-parity.sh
 bash scripts/test.sh

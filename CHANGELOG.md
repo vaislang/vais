@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-No changes yet.
+### Changed
+
+- Added a GitHub Actions release archive workflow for tag builds.
+- `scripts/vaisc --engine direct` now stays on the native driver instead of the
+  internal Python fallback.
+- The native direct engine now covers Int helper calls, locals, assignment,
+  `if`, `while`, and return expressions.
 
 ## v0.2.1 - 2026-06-14
 

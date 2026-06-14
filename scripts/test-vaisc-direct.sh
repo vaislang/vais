@@ -2,8 +2,8 @@
 # NV-C2 direct-emitter gate for the Vais `vaisc` command.
 #
 # The direct engine is intentionally smaller than the full engine in this
-# slice: it compiles one `fn main() -> Int` with a single Int return expression
-# straight to LLVM IR through the minimal native emitter.
+# slice: it compiles Int-only helpers, locals, calls, and control flow through
+# the native direct path without the Python fallback.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,7 +14,10 @@ tmp="$(mktemp -d)"
 src="$tmp/nv_c2_direct.vais"
 cat > "$src" <<'SRC'
 fn main() -> Int {
-    return (6 * 7) + (8 / 4) - 2
+    let a = 6
+    let b = 7
+    let c = 8
+    return (a * b) + (c / 4) - 2
 }
 SRC
 
@@ -23,8 +26,8 @@ if "$VAISC" emit-ir "$src" \
     >"$tmp/direct-emit.out" 2>"$tmp/direct-emit.err"; then
     main_count="$(grep -c '^define i64 @main()' "$tmp/direct.ll" || true)"
     if [ "$main_count" = "1" ] &&
-        grep -q ' mul i64 ' "$tmp/direct.ll" &&
-        grep -q ' sdiv i64 ' "$tmp/direct.ll" &&
+        grep -q ' mul .*i64 ' "$tmp/direct.ll" &&
+        grep -q ' sdiv .*i64 ' "$tmp/direct.ll" &&
         grep -q ' ret i64 ' "$tmp/direct.ll"; then
         echo "  PASS direct emit-ir emits arithmetic @main"
     else
@@ -92,28 +95,60 @@ else
     fail=1
 fi
 
-helper_src="$tmp/direct_helper_reject.vais"
+helper_src="$tmp/direct_helper_control.vais"
 cat > "$helper_src" <<'SRC'
 fn add(a: Int, b: Int) -> Int {
     return a + b
 }
 
 fn main() -> Int {
-    return add(20, 22)
+    let mut i = 0
+    let mut acc = 0
+    while i < 6 {
+        if i > 2 {
+            acc = add(acc, i)
+        }
+        i = i + 1
+    }
+    return acc + 30
 }
 SRC
 
-"$VAISC" emit-ir "$helper_src" \
+if "$VAISC" emit-ir "$helper_src" \
     --engine direct -o "$tmp/helper.ll" \
-    >"$tmp/helper.out" 2>"$tmp/helper.err"
-helper_rc=$?
-if [ "$helper_rc" != "0" ] &&
-    grep -q "only a single .*fn main" "$tmp/helper.err" &&
-    grep -q "help:" "$tmp/helper.err"; then
-    echo "  PASS direct emitter rejects helper functions with P4 help"
+    >"$tmp/helper.out" 2>"$tmp/helper.err" &&
+    grep -q '^define i64 @add' "$tmp/helper.ll" &&
+    grep -q 'call i64 @add' "$tmp/helper.ll" &&
+    grep -q ' br ' "$tmp/helper.ll"; then
+    "$VAISC" run "$helper_src" --engine direct >"$tmp/helper-run.out" 2>"$tmp/helper-run.err"
+    helper_run=$?
+    if [ "$helper_run" = "42" ]; then
+        echo "  PASS direct helper calls, locals, if, and while run (=42)"
+    else
+        echo "  FAIL direct helper/control got=$helper_run want=42"
+        cat "$tmp/helper-run.err"
+        fail=1
+    fi
 else
-    echo "  FAIL direct emitter helper rejection"
+    echo "  FAIL direct helper/control emission"
     cat "$tmp/helper.err"
+    fail=1
+fi
+
+fakebin="$tmp/fake-python"
+mkdir -p "$fakebin"
+cat > "$fakebin/python3" <<'PY'
+#!/usr/bin/env sh
+exit 99
+PY
+chmod +x "$fakebin/python3"
+PATH="$fakebin:$PATH" "$VAISC" run "$helper_src" --engine direct >"$tmp/no-python.out" 2>"$tmp/no-python.err"
+no_python_run=$?
+if [ "$no_python_run" = "42" ]; then
+    echo "  PASS direct engine does not invoke python3"
+else
+    echo "  FAIL direct engine used python3 or returned $no_python_run"
+    cat "$tmp/no-python.err"
     fail=1
 fi
 

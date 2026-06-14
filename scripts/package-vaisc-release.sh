@@ -58,6 +58,10 @@ fi
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
+case "$arch" in
+    x86_64|amd64) arch="x64" ;;
+    aarch64) arch="arm64" ;;
+esac
 name="vais-$VERSION-$os-$arch"
 pkg="$OUT_DIR/$name"
 archive="$OUT_DIR/$name.tar.gz"

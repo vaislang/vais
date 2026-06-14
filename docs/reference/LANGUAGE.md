@@ -11,7 +11,7 @@ Vais documentation uses these terms:
 | --- | --- |
 | Verified | Covered by `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-parity.sh`, `scripts/test.sh`, or a self-host gate |
 | Full engine | Compiled by the native public driver linked with the reusable self-host compiler core |
-| Direct engine | Narrow development LLVM emitter selected with `--engine direct` |
+| Direct engine | Native Int-subset LLVM path selected with `--engine direct` |
 | Specified | Intended surface, not yet protected as a release claim |
 
 Public examples should use verified syntax unless they explicitly document a
@@ -49,6 +49,8 @@ Verified today:
 - Recursive and mutually recursive `Int` functions.
 - Generic marker syntax for simple `Int` helper cases, as tracked in the parity
   manifest.
+
+The direct engine gate covers Int helper calls in addition to the full engine.
 
 ## Variables
 
@@ -120,6 +122,10 @@ while i < n {
     i = i + 1
 }
 ```
+
+The direct engine gate covers `if`, `while`, local `let`, assignment, helper
+calls, and `return` for the Int-only subset. Structs, lists, strings, and the
+self-host compiler tier remain full-engine territory.
 
 Verified today:
 

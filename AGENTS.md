@@ -11,15 +11,17 @@
 
 - `scripts/vaisc` is the product-facing compiler CLI.
 - `tools/vaisc_native.c` implements the native public driver for `emit-ir`,
-  `build`, `run`, `doctor`, and `--version`.
-- `tools/vaisc.py` is the internal Python fallback for development-only direct
-  engine slices and repository checks.
+  `build`, `run`, `doctor`, `--version`, and the native direct engine.
+- `tools/vaisc.py` is the internal Python fallback for repository checks and
+  development diagnostics only; public direct mode stays native.
 - `compiler/self/fixpoint_full.vais` is the trusted full self-host compiler source.
 - `compiler/self/vaisc_core.ll` is the reusable self-host compiler core used by `scripts/vaisc`.
 - `scripts/build-vaisc-native.sh` builds the native public driver.
 - `scripts/install-vaisc.sh`, `scripts/uninstall-vaisc.sh`, and
   `scripts/package-vaisc-release.sh` manage standalone native installs and
   release archives.
+- `.github/workflows/release-archives.yml` publishes standalone archives for
+  source tags.
 - `scripts/build.sh` and `scripts/vais-build-env.sh` are internal core-refresh tools.
 
 ## Documentation Paths

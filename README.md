@@ -42,6 +42,9 @@ To build a release archive:
 scripts/package-vaisc-release.sh
 ```
 
+Tag builds also run the release archive workflow and attach standalone archives
+to the matching GitHub Release.
+
 ## Documentation
 
 | Start here | Purpose |
@@ -78,6 +81,7 @@ bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc.sh
 bash scripts/test-vaisc-front.sh
+bash scripts/test-vaisc-direct.sh
 bash scripts/test-vaisc-errors.sh
 bash scripts/test-vaisc-parity.sh
 bash scripts/test.sh

@@ -26,3 +26,6 @@
 - Added a native `vaisc` host driver and switched `scripts/vaisc` normal
   `emit-ir`, `build`, and `run` to the Python-free public path.
 - Added standalone native install, uninstall, package, and install/package gates.
+- Added release archive workflow for source tags.
+- Moved `--engine direct` onto the native driver and expanded it through Int
+  helper calls, locals, assignment, `if`, and `while`.

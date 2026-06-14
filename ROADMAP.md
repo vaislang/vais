@@ -16,11 +16,16 @@ This file tracks current work only.
 - Pure regeneration of `compiler/self/vaisc_core.ll` from `compiler/self/fixpoint_full.vais` is green.
 - The native compiler can be installed as a standalone `vaisc` binary outside
   the checkout and packaged as a release archive.
+- Source tag builds have a release archive workflow for standalone compiler
+  assets.
+- The native direct engine covers Int helper calls, locals, assignment, `if`,
+  `while`, and returns without invoking Python.
 
 ## Current Reality
 
 - The full compiler path emits LLVM IR through the self-host compiler source in `compiler/self/fixpoint_full.vais`.
-- The direct engine is intentionally narrow and currently supports a single `fn main() -> Int { return <Int expr> }` style slice.
+- The direct engine is intentionally narrow and currently supports Int-only
+  helpers, locals, assignment, calls, `if`, `while`, and returns.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal checks and the
   development-only direct engine fallback.
@@ -40,14 +45,48 @@ This file tracks current work only.
 ## Next Work
 
 1. Keep standalone release archives attached to future source tags.
-2. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
+2. Extend the direct engine toward structs and lists after the Int control-flow
+   slice.
+3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
-3. Replace the remaining Python-only internal checks and direct-engine fallback
-   when the language has enough file/process support.
-4. After the release command is Python-free, expand the direct emitter beyond
-   the current slice: helper calls, locals, control flow, structs, lists, and
-   the trusted self-host tier.
+4. Replace the remaining Python-only internal checks when the language has
+   enough file/process support.
 5. Keep source release tags, GitHub Releases, GitHub Pages, self-host regeneration, and parity gates green.
+
+## Completed Milestone: Release Automation And Native Direct Int Slice
+
+Mode: sequential
+
+- [x] 1. Add release archive workflow for source tags.
+- [x] 2. Remove the public direct-engine Python fallback.
+- [x] 3. Expand the native direct engine through Int helper calls, locals, assignment, `if`, and `while`.
+- [x] 4. Sync README, language docs, website copy, changelog, and gates.
+
+### Task Briefs
+
+#### 1. Release archive workflow
+
+- Target files: `.github/workflows/release-archives.yml`, `scripts/package-vaisc-release.sh`.
+- Requirements: tag builds package standalone compiler archives and upload them to the matching GitHub Release.
+- Done: workflow builds Linux/macOS archive jobs, smokes packaged `vaisc`, creates the release when needed, and uploads archives.
+
+#### 2. Native direct path
+
+- Target files: `scripts/vaisc`, `tools/vaisc_native.c`.
+- Requirements: `--engine direct` must stay on the native driver and must not invoke Python.
+- Done: `scripts/test-vaisc-direct.sh` proves direct mode still works with a failing `python3` shim first in `PATH`.
+
+#### 3. Direct Int control-flow slice
+
+- Target files: `tools/vaisc_native.c`, `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`.
+- Requirements: direct mode accepts Int helper functions, locals, assignment, calls, `if`, `while`, and returns; unsupported identifiers keep P4 diagnostics.
+- Done: direct tests cover arithmetic, helper calls, locals, control flow, full-engine parity, and P4 errors.
+
+#### 4. Documentation and gates
+
+- Target files: `README.md`, `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `AGENTS.md`, `ROADMAP.md`, `WORKLOG.md`.
+- Requirements: public docs describe current native direct and release archive automation without publishing unsupported direct structs/lists/self-host claims.
+- Done: docs/site/changelog are synced and release gates pass.
 
 ## Completed Milestone: Standalone Install And Release Archive
 

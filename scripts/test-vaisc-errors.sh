@@ -92,13 +92,13 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "direct_identifier" "direct" "literal Int expressions only" "return 40 + 2" <<'SRC'
+expect_diag "direct_identifier" "direct" "unknown Int identifier" "return 40 + 2" <<'SRC'
 fn main() -> Int {
     return answer
 }
 SRC
 
-expect_diag "direct_missing_return" "direct" "single .*return.* statement" "fn main() -> Int" <<'SRC'
+expect_diag "direct_missing_return" "direct" "requires at least one .*return.* statement" "fn main() -> Int" <<'SRC'
 fn main() -> Int {
     let x = 42
 }

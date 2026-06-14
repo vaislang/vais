@@ -41,6 +41,21 @@ typedef struct {
     char *apply;
 } ClosureMaker;
 
+typedef struct {
+    char *name;
+    char *params[16];
+    int param_count;
+    int line_no;
+} DirectFnInfo;
+
+typedef struct {
+    char *items[128];
+    int count;
+} DirectNameSet;
+
+static int run_program_wait(char *const argv[]);
+static int make_tmp_path(char *buf, size_t buflen, const char *suffix);
+
 static void die_oom(void) {
     fprintf(stderr, "error: out of memory\n");
     exit(1);
@@ -1252,6 +1267,564 @@ static char *prepare_source_file(const char *path) {
     return prepared;
 }
 
+static void direct_names_free(DirectNameSet *set) {
+    for (int i = 0; i < set->count; i++) free(set->items[i]);
+    set->count = 0;
+}
+
+static int direct_names_has(DirectNameSet *set, const char *name) {
+    for (int i = 0; i < set->count; i++) {
+        if (strcmp(set->items[i], name) == 0) return 1;
+    }
+    return 0;
+}
+
+static void direct_names_add(DirectNameSet *set, const char *name) {
+    if (direct_names_has(set, name)) return;
+    if (set->count >= 128) return;
+    set->items[set->count++] = strdup(name);
+}
+
+static void direct_fns_free(DirectFnInfo *fns, int count) {
+    for (int i = 0; i < count; i++) {
+        free(fns[i].name);
+        for (int p = 0; p < fns[i].param_count; p++) free(fns[i].params[p]);
+    }
+}
+
+static DirectFnInfo *direct_find_fn(DirectFnInfo *fns, int count, const char *name) {
+    for (int i = 0; i < count; i++) {
+        if (strcmp(fns[i].name, name) == 0) return &fns[i];
+    }
+    return NULL;
+}
+
+static int parse_direct_fn_header(const char *line, DirectFnInfo *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ")) return 0;
+    s += 3;
+    if (!is_ident_start(*s)) return -1;
+    const char *name_start = s;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    const char *brace = close == NULL ? NULL : strchr(close, '{');
+    const char *arrow = close == NULL ? NULL : strstr(close, "->");
+    if (open == NULL || close == NULL || brace == NULL || arrow == NULL) {
+        free(name);
+        return -1;
+    }
+    const char *ret = skip_ws(arrow + 2);
+    if (!starts_with(ret, "Int") || is_ident_continue(ret[3])) {
+        free(name);
+        return -1;
+    }
+    memset(out, 0, sizeof(*out));
+    out->name = name;
+    char *params_text = substr_copy(open + 1, (size_t)(close - open - 1));
+    char *parts[16] = {0};
+    int n = split_top_level_commas_c(params_text, parts, 16);
+    free(params_text);
+    if (n < 0) {
+        free(name);
+        return -1;
+    }
+    if (n == 1 && parts[0] != NULL && strlen(skip_ws(parts[0])) == 0) {
+        free(parts[0]);
+        return 1;
+    }
+    for (int i = 0; i < n; i++) {
+        char *part = parts[i];
+        char *colon = strchr(part, ':');
+        if (colon == NULL) {
+            free(part);
+            for (int k = i + 1; k < n; k++) free(parts[k]);
+            return -1;
+        }
+        char *pname = trim_copy(substr_copy(part, (size_t)(colon - part)));
+        char *pty = trim_copy(colon + 1);
+        int ok = is_ident_start(pname[0]) && strcmp(pty, "Int") == 0;
+        free(pty);
+        free(part);
+        if (!ok) {
+            free(pname);
+            for (int k = i + 1; k < n; k++) free(parts[k]);
+            return -1;
+        }
+        out->params[out->param_count++] = pname;
+    }
+    return 1;
+}
+
+static char *direct_translate_expr(const char *expr) {
+    char *a = replace_word_all(expr, "and", "&&");
+    char *b = replace_word_all(a, "or", "||");
+    free(a);
+    char *c = replace_word_all(b, "not", "!");
+    free(b);
+    return c;
+}
+
+static int direct_is_keyword(const char *name) {
+    return strcmp(name, "fn") == 0 || strcmp(name, "return") == 0 ||
+        strcmp(name, "let") == 0 || strcmp(name, "mut") == 0 ||
+        strcmp(name, "if") == 0 || strcmp(name, "else") == 0 ||
+        strcmp(name, "while") == 0 || strcmp(name, "Int") == 0 ||
+        strcmp(name, "and") == 0 || strcmp(name, "or") == 0 ||
+        strcmp(name, "not") == 0;
+}
+
+static int direct_check_expr(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count
+) {
+    for (int i = 0; expr[i] != '\0';) {
+        if (!is_ident_start(expr[i])) {
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(expr[i])) i++;
+        char *name = substr_copy(expr + start, (size_t)(i - start));
+        int cursor = i;
+        while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
+        int is_call = expr[cursor] == '(';
+        int ok = direct_is_keyword(name) || direct_names_has(locals, name) ||
+            (is_call && direct_find_fn(fns, fn_count, name) != NULL);
+        if (!ok) {
+            int col = find_col(line, name);
+            report_issue(path, line_no, col, line,
+                "direct native emitter found an unknown Int identifier",
+                "define it with `let`, pass it as an Int parameter, or call a known helper function.",
+                "return 40 + 2");
+            free(name);
+            return 1;
+        }
+        free(name);
+    }
+    return 0;
+}
+
+static char *direct_after_keyword_expr(const char *s, const char *keyword, char stop) {
+    s = skip_ws(s);
+    size_t n = strlen(keyword);
+    if (strncmp(s, keyword, n) != 0) return NULL;
+    const char *expr = skip_ws(s + n);
+    const char *end = strrchr(expr, stop);
+    if (end == NULL) return NULL;
+    return trim_copy(substr_copy(expr, (size_t)(end - expr)));
+}
+
+static int direct_lower_line(
+    const char *path,
+    int line_no,
+    const char *line,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    StrBuf *out
+) {
+    char *stripped = strip_line_comment(line, strlen(line));
+    const char *s = skip_ws(stripped);
+    if (*s == '\0') {
+        free(stripped);
+        return 0;
+    }
+
+    DirectFnInfo header;
+    int parsed_header = parse_direct_fn_header(stripped, &header);
+    if (parsed_header == 1) {
+        direct_names_free(locals);
+        for (int p = 0; p < header.param_count; p++) direct_names_add(locals, header.params[p]);
+        sb_append(out, "long ");
+        sb_append(out, header.name);
+        sb_append(out, "(");
+        for (int p = 0; p < header.param_count; p++) {
+            if (p > 0) sb_append(out, ", ");
+            sb_append(out, "long ");
+            sb_append(out, header.params[p]);
+        }
+        sb_append(out, ") {\n");
+        free(header.name);
+        for (int p = 0; p < header.param_count; p++) free(header.params[p]);
+        free(stripped);
+        return 0;
+    }
+    if (parsed_header < 0 || starts_with(s, "fn ")) {
+        report_issue(path, line_no, find_col(line, "fn"), line,
+            "direct native emitter supports Int-only function headers",
+            "write functions as `fn name(a: Int, ...) -> Int { ... }`.",
+            NULL);
+        free(stripped);
+        return 1;
+    }
+
+    if (strcmp(s, "}") == 0) {
+        sb_append(out, "}\n");
+        free(stripped);
+        return 0;
+    }
+    if (starts_with(s, "} else if ")) {
+        char *expr = direct_after_keyword_expr(s + 2, "else if", '{');
+        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(expr);
+        sb_append(out, "} else if (");
+        sb_append(out, c_expr);
+        sb_append(out, ") {\n");
+        free(c_expr);
+        free(expr);
+        free(stripped);
+        return 0;
+    }
+    if (starts_with(s, "} else")) {
+        sb_append(out, "} else {\n");
+        free(stripped);
+        return 0;
+    }
+    if (starts_with(s, "if ")) {
+        char *expr = direct_after_keyword_expr(s, "if", '{');
+        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(expr);
+        sb_append(out, "if (");
+        sb_append(out, c_expr);
+        sb_append(out, ") {\n");
+        free(c_expr);
+        free(expr);
+        free(stripped);
+        return 0;
+    }
+    if (starts_with(s, "while ")) {
+        char *expr = direct_after_keyword_expr(s, "while", '{');
+        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(expr);
+        sb_append(out, "while (");
+        sb_append(out, c_expr);
+        sb_append(out, ") {\n");
+        free(c_expr);
+        free(expr);
+        free(stripped);
+        return 0;
+    }
+    if (starts_with(s, "return ")) {
+        char *expr = trim_copy(s + 7);
+        size_t n = strlen(expr);
+        if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
+        if (direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(expr);
+        sb_append(out, "return ");
+        sb_append(out, c_expr);
+        sb_append(out, ";\n");
+        free(c_expr);
+        free(expr);
+        free(stripped);
+        return 0;
+    }
+    if (starts_with(s, "let ")) {
+        const char *p = skip_ws(s + 4);
+        if (starts_with(p, "mut ")) p = skip_ws(p + 4);
+        if (!is_ident_start(*p)) {
+            report_issue(path, line_no, find_col(line, "let"), line,
+                "direct native emitter expected an Int local binding",
+                "write `let name = expr` or `let mut name = expr`.",
+                NULL);
+            free(stripped);
+            return 1;
+        }
+        const char *name_start = p;
+        while (is_ident_continue(*p)) p++;
+        char *name = substr_copy(name_start, (size_t)(p - name_start));
+        p = skip_ws(p);
+        if (*p == ':') {
+            p = skip_ws(p + 1);
+            if (!starts_with(p, "Int") || is_ident_continue(p[3])) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter supports Int locals only",
+                    "use `let name: Int = expr` or omit the Int annotation.",
+                    NULL);
+                free(name);
+                free(stripped);
+                return 1;
+            }
+            p = skip_ws(p + 3);
+        }
+        if (*p != '=') {
+            report_issue(path, line_no, find_col(line, name), line,
+                "direct native emitter expected an initialized local",
+                "write `let name = expr`.",
+                NULL);
+            free(name);
+            free(stripped);
+            return 1;
+        }
+        char *expr = trim_copy(p + 1);
+        size_t n = strlen(expr);
+        if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
+        if (direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+            free(expr);
+            free(name);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(expr);
+        sb_append(out, "long ");
+        sb_append(out, name);
+        sb_append(out, " = ");
+        sb_append(out, c_expr);
+        sb_append(out, ";\n");
+        direct_names_add(locals, name);
+        free(c_expr);
+        free(expr);
+        free(name);
+        free(stripped);
+        return 0;
+    }
+
+    const char *eq = strchr(s, '=');
+    const char *semi = strchr(s, ';');
+    if (eq != NULL && (semi == NULL || eq < semi)) {
+        char *lhs = trim_copy(substr_copy(s, (size_t)(eq - s)));
+        char *expr = trim_copy(eq + 1);
+        size_t n = strlen(expr);
+        if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
+        if (!direct_names_has(locals, lhs)) {
+            report_issue(path, line_no, find_col(line, lhs), line,
+                "direct native emitter assignment target is not a known Int local",
+                "define the target with `let` before assigning to it.",
+                NULL);
+            free(lhs);
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        if (direct_check_expr(path, line_no, line, expr, locals, fns, fn_count)) {
+            free(lhs);
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(expr);
+        sb_append(out, lhs);
+        sb_append(out, " = ");
+        sb_append(out, c_expr);
+        sb_append(out, ";\n");
+        free(c_expr);
+        free(lhs);
+        free(expr);
+        free(stripped);
+        return 0;
+    }
+
+    report_issue(path, line_no, 1, line,
+        "direct native emitter supports Int functions, lets, assignment, if, while, calls, and return",
+        "use the full engine for syntax outside the direct Int subset.",
+        NULL);
+    free(stripped);
+    return 1;
+}
+
+static char *direct_lower_to_c(const char *path, const char *raw) {
+    LineVec lines = split_lines(raw);
+    DirectFnInfo fns[64];
+    int fn_count = 0;
+    memset(fns, 0, sizeof(fns));
+    int has_main = 0;
+
+    for (size_t i = 0; i < lines.len; i++) {
+        DirectFnInfo info;
+        memset(&info, 0, sizeof(info));
+        int parsed = parse_direct_fn_header(lines.items[i], &info);
+        if (parsed == 1) {
+            if (fn_count >= 64) {
+                fprintf(stderr, "error: too many direct functions\n");
+                lines_free(&lines);
+                direct_fns_free(fns, fn_count);
+                return NULL;
+            }
+            info.line_no = (int)i + 1;
+            if (strcmp(info.name, "main") == 0) {
+                if (info.param_count != 0) {
+                    report_issue(path, (int)i + 1, find_col(lines.items[i], "main"), lines.items[i],
+                        "direct native emitter requires `fn main() -> Int`",
+                        "write the entrypoint without parameters.",
+                        NULL);
+                    free(info.name);
+                    lines_free(&lines);
+                    direct_fns_free(fns, fn_count);
+                    return NULL;
+                }
+                has_main = 1;
+            }
+            fns[fn_count++] = info;
+        } else if (parsed < 0) {
+            report_issue(path, (int)i + 1, 1, lines.items[i],
+                "direct native emitter supports Int-only function headers",
+                "write functions as `fn name(a: Int, ...) -> Int { ... }`.",
+                NULL);
+            lines_free(&lines);
+            direct_fns_free(fns, fn_count);
+            return NULL;
+        }
+    }
+
+    if (!has_main) {
+        report_issue(path, 1, 1, lines.len ? lines.items[0] : "",
+            "direct native emitter requires `fn main() -> Int`",
+            "add `fn main() -> Int { return <int> }` as the program entrypoint.",
+            NULL);
+        lines_free(&lines);
+        direct_fns_free(fns, fn_count);
+        return NULL;
+    }
+
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, "typedef long Int;\n");
+    for (int f = 0; f < fn_count; f++) {
+        sb_append(&out, "long ");
+        sb_append(&out, fns[f].name);
+        sb_append(&out, "(");
+        for (int p = 0; p < fns[f].param_count; p++) {
+            if (p > 0) sb_append(&out, ", ");
+            sb_append(&out, "long ");
+            sb_append(&out, fns[f].params[p]);
+        }
+        sb_append(&out, ");\n");
+    }
+    DirectNameSet locals;
+    memset(&locals, 0, sizeof(locals));
+    int in_main = 0;
+    int main_depth = 0;
+    int main_has_return = 0;
+    for (size_t i = 0; i < lines.len; i++) {
+        DirectFnInfo line_header;
+        memset(&line_header, 0, sizeof(line_header));
+        int header_state = parse_direct_fn_header(lines.items[i], &line_header);
+        if (header_state == 1 && strcmp(line_header.name, "main") == 0) {
+            in_main = 1;
+            main_depth = 0;
+        }
+        if (in_main && strstr(skip_ws(lines.items[i]), "return ") != NULL) main_has_return = 1;
+        if (direct_lower_line(path, (int)i + 1, lines.items[i], &locals, fns, fn_count, &out) != 0) {
+            if (header_state == 1) {
+                free(line_header.name);
+                for (int p = 0; p < line_header.param_count; p++) free(line_header.params[p]);
+            }
+            free(out.data);
+            direct_names_free(&locals);
+            lines_free(&lines);
+            direct_fns_free(fns, fn_count);
+            return NULL;
+        }
+        if (header_state == 1) {
+            free(line_header.name);
+            for (int p = 0; p < line_header.param_count; p++) free(line_header.params[p]);
+        }
+        if (in_main) {
+            const char *code = lines.items[i];
+            for (int c = 0; code[c] != '\0'; c++) {
+                if (code[c] == '{') main_depth++;
+                if (code[c] == '}') main_depth--;
+            }
+            if (main_depth <= 0) {
+                in_main = 0;
+                main_depth = 0;
+            }
+        }
+    }
+    if (!main_has_return) {
+        report_issue(path, 1, 1, lines.len ? lines.items[0] : "",
+            "direct native emitter requires at least one `return` statement",
+            "write `fn main() -> Int { return 40 + 2 }` for the direct Int subset.",
+            "fn main() -> Int { return 40 + 2 }");
+        free(out.data);
+        direct_names_free(&locals);
+        lines_free(&lines);
+        direct_fns_free(fns, fn_count);
+        return NULL;
+    }
+
+    direct_names_free(&locals);
+    lines_free(&lines);
+    direct_fns_free(fns, fn_count);
+    return sb_take(&out);
+}
+
+static int copy_file_to_stdout(const char *path) {
+    char *text = read_file(path);
+    if (text == NULL) return 1;
+    fputs(text, stdout);
+    free(text);
+    return 0;
+}
+
+static int direct_emit_ir_file(const char *source, const char *out_path, const char *clang) {
+    if (!has_vais_suffix(source)) {
+        fprintf(stderr, "error: Vais source files must use the .vais extension: %s\n", source);
+        return 1;
+    }
+    char *raw = read_file(source);
+    if (raw == NULL) return 1;
+    char *c_src = direct_lower_to_c(source, raw);
+    free(raw);
+    if (c_src == NULL) return 1;
+
+    char c_path[512];
+    char ll_path[512];
+    if (make_tmp_path(c_path, sizeof(c_path), "direct.c") != 0) {
+        free(c_src);
+        return 1;
+    }
+    const char *emit_path = out_path;
+    if (strcmp(out_path, "-") == 0) {
+        if (make_tmp_path(ll_path, sizeof(ll_path), "direct.ll") != 0) {
+            free(c_src);
+            return 1;
+        }
+        emit_path = ll_path;
+    }
+    FILE *fp = fopen(c_path, "wb");
+    if (fp == NULL) {
+        fprintf(stderr, "error: cannot write %s: %s\n", c_path, strerror(errno));
+        free(c_src);
+        return 1;
+    }
+    fputs(c_src, fp);
+    fclose(fp);
+    free(c_src);
+
+    char *const argv[] = {(char *)clang, "-S", "-emit-llvm", "-Wno-main-return-type", "-O0", "-o", (char *)emit_path, c_path, NULL};
+    int rc = run_program_wait(argv);
+    if (rc != 0) {
+        fprintf(stderr, "error: clang direct emit failed with exit code %d\n", rc);
+        return 1;
+    }
+    if (strcmp(out_path, "-") == 0) return copy_file_to_stdout(emit_path);
+    return 0;
+}
+
 static int compile_to_stream(char *prepared) {
     int64_t rc = compile(prepared);
     fflush(stdout);
@@ -1336,9 +1909,9 @@ static int make_tmp_path(char *buf, size_t buflen, const char *suffix) {
 static void print_help(void) {
     printf("Vais compiler %s\n", VAIS_VERSION);
     printf("usage:\n");
-    printf("  vaisc emit-ir <source.vais> [-o out.ll]\n");
-    printf("  vaisc build <source.vais> -o out [--ir-out out.ll] [--clang clang]\n");
-    printf("  vaisc run <source.vais> [--clang clang]\n");
+    printf("  vaisc emit-ir <source.vais> [-o out.ll] [--engine full|direct]\n");
+    printf("  vaisc build <source.vais> -o out [--ir-out out.ll] [--clang clang] [--engine full|direct]\n");
+    printf("  vaisc run <source.vais> [--clang clang] [--engine full|direct]\n");
     printf("  vaisc doctor\n");
     printf("  vaisc --version\n");
 }
@@ -1361,15 +1934,18 @@ static int command_doctor(void) {
 static int command_emit_ir(int argc, char **argv) {
     const char *source = NULL;
     const char *output = "-";
+    const char *engine = "full";
+    const char *clang = getenv("CLANG");
+    if (clang == NULL || clang[0] == '\0') clang = "clang";
     for (int i = 2; i < argc; i++) {
         if ((strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) && i + 1 < argc) {
             output = argv[++i];
+        } else if (strcmp(argv[i], "--clang") == 0 && i + 1 < argc) {
+            clang = argv[++i];
         } else if (strcmp(argv[i], "--engine") == 0 && i + 1 < argc) {
-            const char *engine = argv[++i];
-            if (strcmp(engine, "full") != 0) {
-                fprintf(stderr, "error: native vaisc currently supports --engine full only\n");
-                return 1;
-            }
+            engine = argv[++i];
+        } else if (starts_with(argv[i], "--engine=")) {
+            engine = argv[i] + 9;
         } else if (strcmp(argv[i], "--keep-tmp") == 0) {
             continue;
         } else if (source == NULL) {
@@ -1383,6 +1959,11 @@ static int command_emit_ir(int argc, char **argv) {
         fprintf(stderr, "error: emit-ir needs a source path\n");
         return 1;
     }
+    if (strcmp(engine, "direct") == 0) return direct_emit_ir_file(source, output, clang);
+    if (strcmp(engine, "full") != 0) {
+        fprintf(stderr, "error: unknown engine: %s\n", engine);
+        return 1;
+    }
     char *prepared = prepare_source_file(source);
     if (prepared == NULL) return 1;
     int rc = strcmp(output, "-") == 0 ? compile_to_stream(prepared) : compile_to_file(prepared, output);
@@ -1394,6 +1975,7 @@ static int command_build(int argc, char **argv) {
     const char *source = NULL;
     const char *output = NULL;
     const char *ir_out = NULL;
+    const char *engine = "full";
     const char *clang = getenv("CLANG");
     if (clang == NULL || clang[0] == '\0') clang = "clang";
     for (int i = 2; i < argc; i++) {
@@ -1404,11 +1986,9 @@ static int command_build(int argc, char **argv) {
         } else if (strcmp(argv[i], "--clang") == 0 && i + 1 < argc) {
             clang = argv[++i];
         } else if (strcmp(argv[i], "--engine") == 0 && i + 1 < argc) {
-            const char *engine = argv[++i];
-            if (strcmp(engine, "full") != 0) {
-                fprintf(stderr, "error: native vaisc currently supports --engine full only\n");
-                return 1;
-            }
+            engine = argv[++i];
+        } else if (starts_with(argv[i], "--engine=")) {
+            engine = argv[i] + 9;
         } else if (strcmp(argv[i], "--keep-tmp") == 0) {
             continue;
         } else if (source == NULL) {
@@ -1428,27 +2008,34 @@ static int command_build(int argc, char **argv) {
         if (make_tmp_path(tmp_ir, sizeof(tmp_ir), "out.ll") != 0) return 1;
         ir_path = tmp_ir;
     }
-    char *prepared = prepare_source_file(source);
-    if (prepared == NULL) return 1;
-    int rc = compile_to_file(prepared, ir_path);
-    free(prepared);
+    int rc = 0;
+    if (strcmp(engine, "direct") == 0) {
+        rc = direct_emit_ir_file(source, ir_path, clang);
+    } else if (strcmp(engine, "full") == 0) {
+        char *prepared = prepare_source_file(source);
+        if (prepared == NULL) return 1;
+        rc = compile_to_file(prepared, ir_path);
+        free(prepared);
+    } else {
+        fprintf(stderr, "error: unknown engine: %s\n", engine);
+        return 1;
+    }
     if (rc != 0) return rc;
     return clang_build(clang, ir_path, output);
 }
 
 static int command_run(int argc, char **argv) {
     const char *source = NULL;
+    const char *engine = "full";
     const char *clang = getenv("CLANG");
     if (clang == NULL || clang[0] == '\0') clang = "clang";
     for (int i = 2; i < argc; i++) {
         if (strcmp(argv[i], "--clang") == 0 && i + 1 < argc) {
             clang = argv[++i];
         } else if (strcmp(argv[i], "--engine") == 0 && i + 1 < argc) {
-            const char *engine = argv[++i];
-            if (strcmp(engine, "full") != 0) {
-                fprintf(stderr, "error: native vaisc currently supports --engine full only\n");
-                return 1;
-            }
+            engine = argv[++i];
+        } else if (starts_with(argv[i], "--engine=")) {
+            engine = argv[i] + 9;
         } else if (strcmp(argv[i], "--keep-tmp") == 0) {
             continue;
         } else if (source == NULL) {
@@ -1464,8 +2051,8 @@ static int command_run(int argc, char **argv) {
     }
     char bin_path[512];
     if (make_tmp_path(bin_path, sizeof(bin_path), "a.out") != 0) return 1;
-    char *build_argv[] = {"vaisc", "build", (char *)source, "-o", bin_path, "--clang", (char *)clang, NULL};
-    int build_argc = 7;
+    char *build_argv[] = {"vaisc", "build", (char *)source, "-o", bin_path, "--clang", (char *)clang, "--engine", (char *)engine, NULL};
+    int build_argc = 9;
     int rc = command_build(build_argc, build_argv);
     if (rc != 0) return rc;
     char *const run_argv[] = {bin_path, NULL};
