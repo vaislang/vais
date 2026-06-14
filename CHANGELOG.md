@@ -10,6 +10,9 @@
 - The native direct engine now covers Int helper calls, locals, assignment,
   `if`, `while`, return expressions, and simple Int-field struct local
   literal/read/write plus struct parameter/return helper ABI.
+- The native direct engine now covers local `List<Int>` initialization with
+  `[]`, `list()`, and small integer list literals, plus `push`, `len`, index,
+  and `sum`.
 
 ## v0.2.1 - 2026-06-14
 

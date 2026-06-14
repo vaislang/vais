@@ -11,7 +11,7 @@ Vais documentation uses these terms:
 | --- | --- |
 | Verified | Covered by `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-parity.sh`, `scripts/test.sh`, or a self-host gate |
 | Full engine | Compiled by the native public driver linked with the reusable self-host compiler core |
-| Direct engine | Native Int-subset LLVM path selected with `--engine direct` |
+| Direct engine | Native promoted-slice LLVM path selected with `--engine direct` |
 | Specified | Intended surface, not yet protected as a release claim |
 
 Public examples should use verified syntax unless they explicitly document a
@@ -124,9 +124,9 @@ while i < n {
 ```
 
 The direct engine gate covers `if`, `while`, local `let`, assignment, helper
-calls, `return`, simple Int-field struct locals, and struct parameter/return
-helpers. Lists, strings, and the self-host compiler tier remain full-engine
-territory.
+calls, `return`, simple Int-field struct locals, struct parameter/return
+helpers, and local `List<Int>` initialization, `push`, `len`, index, and `sum`.
+Strings and the self-host compiler tier remain full-engine territory.
 
 Verified today:
 
@@ -228,6 +228,11 @@ Verified today:
 - `xs.len()`.
 - `xs[index]`.
 - `xs.sum()`.
+
+The direct engine gate covers local `List<Int>` values created with `[]`,
+`list()`, or small integer list literals, plus `push`, `len`/`len()`, index, and
+`sum()`. List parameters, list return values, and `List<Struct>` stay on the full
+engine path.
 
 Methods such as `map`, `filter`, and arbitrary user-defined methods are not
 release-surface claims yet.

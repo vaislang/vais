@@ -1,5 +1,14 @@
 # Vais Worklog
 
+## 2026-06-15
+
+- Expanded native direct mode with the first local `List<Int>` slice:
+  `[]`, `list()`, small integer list literals, `push`, `len`/`len()`, index,
+  and `sum()`.
+- Added direct-engine gate coverage for local `List<Int>` emit/run behavior.
+- Synced language reference, roadmap, changelog, design notes, and site copy
+  with the promoted direct list slice.
+
 ## 2026-06-14
 
 - Vais-only source surface enforced.

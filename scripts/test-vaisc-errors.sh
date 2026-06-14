@@ -109,6 +109,26 @@ fn main() -> Int {
 }
 SRC
 
+expect_diag "direct_list_constructor_expr" "direct" "unknown Int identifier" "return 40 + 2" <<'SRC'
+fn main() -> Int {
+    return list()
+}
+SRC
+
+expect_diag "direct_list_method" "direct" "supports List<Int> push, len, index, and sum" "xs.push(value)" <<'SRC'
+fn main() -> Int {
+    let xs: List<Int> = []
+    return xs.clear()
+}
+SRC
+
+expect_diag "direct_list_value_expr" "direct" "cannot use a List<Int> value as an Int expression" "xs.len()" <<'SRC'
+fn main() -> Int {
+    let xs: List<Int> = []
+    return xs
+}
+SRC
+
 expect_diag "direct_missing_return" "direct" "requires at least one .*return.* statement" "fn main() -> Int" <<'SRC'
 fn main() -> Int {
     let x = 42

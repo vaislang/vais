@@ -22,5 +22,5 @@ Vais source (.vais)
 ```
 
 The product compiler path reads `.vais` files through a native host driver linked
-with the reusable self-host core. Python remains for internal checks and
-development-only direct-engine fallback paths.
+with the reusable self-host core. Python remains for internal repository checks
+and diagnostics, not for the public compiler runtime.

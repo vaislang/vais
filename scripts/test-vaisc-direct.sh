@@ -220,6 +220,38 @@ else
     fail=1
 fi
 
+list_src="$tmp/direct_list_int.vais"
+cat > "$list_src" <<'SRC'
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(10)
+    xs.push(20)
+    xs.push(30)
+    let ys = [1, 2, xs.len()]
+    return xs.sum() - xs.len() - xs[1] + ys[2] + ys.sum() - 4
+}
+SRC
+
+if "$VAISC" emit-ir "$list_src" \
+    --engine direct -o "$tmp/list.ll" \
+    >"$tmp/list.out" 2>"$tmp/list.err" &&
+    grep -q '__vais_list_int_sum' "$tmp/list.ll" &&
+    grep -q 'getelementptr .*DirectListInt' "$tmp/list.ll"; then
+    "$VAISC" run "$list_src" --engine direct >"$tmp/list-run.out" 2>"$tmp/list-run.err"
+    list_run=$?
+    if [ "$list_run" = "42" ]; then
+        echo "  PASS direct local List<Int> push, len, index, literal, and sum run (=42)"
+    else
+        echo "  FAIL direct List<Int> got=$list_run want=42"
+        cat "$tmp/list-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct List<Int> emission"
+    cat "$tmp/list.err"
+    fail=1
+fi
+
 fakebin="$tmp/fake-python"
 mkdir -p "$fakebin"
 cat > "$fakebin/python3" <<'PY'

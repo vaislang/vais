@@ -21,16 +21,20 @@ This file tracks current work only.
 - The native direct engine covers Int helper calls, locals, assignment, `if`,
   `while`, returns, simple Int-field struct locals, and struct parameter/return
   helpers without invoking Python.
+- The native direct engine covers the first local `List<Int>` slice: `[]`,
+  `list()`, small integer list literals, `push`, `len`/`len()`, index, and
+  `sum()`.
 
 ## Current Reality
 
 - The full compiler path emits LLVM IR through the self-host compiler source in `compiler/self/fixpoint_full.vais`.
 - The direct engine is intentionally narrow and currently supports Int helpers,
   locals, assignment, calls, `if`, `while`, returns, simple Int-field struct
-  local literal/read/write, and struct parameter/return helper ABI.
+  local literal/read/write, struct parameter/return helper ABI, and local
+  `List<Int>` initialization plus `push`, `len`, index, and `sum`.
 - The release compiler command uses a native host driver for normal user
-  `emit-ir`, `build`, and `run`; Python remains for internal checks and the
-  development-only direct engine fallback.
+  `emit-ir`, `build`, and `run`; Python remains for internal repository checks
+  and diagnostics only.
 - Standalone install, uninstall, package, and install/package verification
   scripts exist for the native compiler binary.
 - Internal compiler gates no longer depend on a source pass-through helper.
@@ -47,7 +51,8 @@ This file tracks current work only.
 ## Next Work
 
 1. Keep standalone release archives attached to future source tags.
-2. Extend the direct engine toward the first `List<Int>` slice.
+2. Extend the direct engine beyond local `List<Int>` values toward list
+   parameter/return ABI and larger list-family coverage.
 3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 4. Replace the remaining Python-only internal checks when the language has
@@ -88,6 +93,41 @@ Mode: sequential
 - Target files: `README.md`, `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `AGENTS.md`, `ROADMAP.md`, `WORKLOG.md`.
 - Requirements: public docs describe current native direct and release archive automation without publishing unsupported direct lists or self-host claims.
 - Done: docs/site/changelog are synced and release gates pass.
+
+## Completed Milestone: Native Direct Local List Slice
+
+Mode: sequential
+
+- [x] 1. Add native direct local `List<Int>` storage and helper lowering.
+- [x] 2. Add direct tests for `[]`, small integer list literals, `push`, `len`, index, and `sum`.
+- [x] 3. Sync docs/site/changelog with the promoted direct list slice.
+
+### Task Briefs
+
+#### 1. Direct local List<Int> lowering
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode accepts local `List<Int>` values without invoking
+  Python; function parameter/return list ABI stays out of this slice.
+- Done: direct lowering emits `DirectListInt` locals for `[]`, `list()`, and
+  small integer list literals, lowers `push`, `len`/`len()`, index reads, and
+  `sum()`.
+
+#### 2. Direct list gate
+
+- Target files: `scripts/test-vaisc-direct.sh`.
+- Requirements: prove the new list slice emits LLVM IR and runs through
+  `scripts/vaisc --engine direct`.
+- Done: direct gate covers local list push, length, index, literal, and sum
+  behavior returning 42.
+
+#### 3. Documentation sync
+
+- Target files: `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`,
+  `ROADMAP.md`, `WORKLOG.md`, `docs/design/`.
+- Requirements: public docs describe the promoted direct list slice and leave
+  list parameters/returns as future work.
+- Done: docs and site copy are synced to the current direct/full engine split.
 
 ## Completed Milestone: Standalone Install And Release Archive
 
