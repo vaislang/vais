@@ -7,6 +7,11 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 fail=0
 tmp="$(mktemp -d)"
 native="$tmp/vaisc"
+want_version="$(sed -n 's/^#define VAIS_VERSION "\(.*\)"/\1/p' "$HERE/tools/vaisc_native.c" | head -1)"
+if [ -z "$want_version" ]; then
+    echo "error: cannot determine Vais version" >&2
+    exit 1
+fi
 
 if "$HERE/scripts/build-vaisc-native.sh" "$native" >"$tmp/build-native.out" 2>"$tmp/build-native.err"; then
     echo "  PASS native vaisc builds"
@@ -16,7 +21,7 @@ else
     exit 1
 fi
 
-if "$native" --version >"$tmp/version.out" 2>"$tmp/version.err" && grep -q '^vaisc 0.2.0$' "$tmp/version.out"; then
+if "$native" --version >"$tmp/version.out" 2>"$tmp/version.err" && grep -q "^vaisc $want_version$" "$tmp/version.out"; then
     echo "  PASS native vaisc --version"
 else
     echo "  FAIL native vaisc --version"

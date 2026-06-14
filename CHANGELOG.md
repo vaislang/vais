@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+No changes yet.
+
+## v0.2.1 - 2026-06-14
+
+Current Vais source release.
+
 ### Changed
 
 - `scripts/vaisc` now defaults to a native public driver that links the checked-in
@@ -11,9 +17,31 @@
 - Added standalone install, uninstall, package, and native install/package test
   scripts.
 
+### Requirements
+
+- `clang`
+
+### Verification
+
+The release baseline is protected by:
+
+```bash
+python3 -m py_compile tools/vaisc.py tools/vais-check.py tools/embed_self_source.py tests/vais_check_test.py
+bash -n scripts/*.sh
+python3 tests/vais_check_test.py
+bash scripts/test-vaisc-native.sh
+bash scripts/test-vaisc-install.sh
+bash scripts/test-vaisc.sh
+bash scripts/test-vaisc-front.sh
+bash scripts/test-vaisc-direct.sh
+bash scripts/test-vaisc-errors.sh
+bash scripts/test-vaisc-parity.sh
+bash scripts/test.sh
+```
+
 ## v0.2.0 - 2026-06-14
 
-Current Vais source release.
+Previous Vais source release.
 
 ### Included
 

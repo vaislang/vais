@@ -33,14 +33,13 @@ This file tracks current work only.
 - Official site source now lives in `website/` in this repository.
 - GitHub Pages workflow was added for `website/` build and artifact deployment.
 - `vaislang.dev` deploys from the `website/` GitHub Pages workflow on `main`.
-- `CHANGELOG.md` records the current `v0.2.0` source release baseline.
+- `CHANGELOG.md` records the current `v0.2.1` source release baseline.
 - GitHub `main` now points to the current Vais-only history; old remote `main`
   is preserved at `archive/old-main-2026-06-14`.
 
 ## Next Work
 
-1. Publish the standalone release archive from GitHub Releases once the next
-   source tag is cut.
+1. Keep standalone release archives attached to future source tags.
 2. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 3. Replace the remaining Python-only internal checks and direct-engine fallback
@@ -50,7 +49,7 @@ This file tracks current work only.
    the trusted self-host tier.
 5. Keep source release tags, GitHub Releases, GitHub Pages, self-host regeneration, and parity gates green.
 
-## Active Milestone: Standalone Install And Release Archive
+## Completed Milestone: Standalone Install And Release Archive
 
 Mode: sequential
 

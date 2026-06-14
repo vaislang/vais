@@ -65,7 +65,10 @@ archive="$OUT_DIR/$name.tar.gz"
 rm -rf "$pkg" "$archive"
 mkdir -p "$pkg/bin" "$pkg/docs/reference" "$pkg/compiler/self"
 
-"$HERE/scripts/build-vaisc-native.sh" "$pkg/bin/vaisc" >/dev/null
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+"$HERE/scripts/build-vaisc-native.sh" "$tmp/vaisc" >/dev/null
+install -m 0755 "$tmp/vaisc" "$pkg/bin/vaisc"
 cp "$HERE/README.md" "$pkg/README.md"
 cp "$HERE/CHANGELOG.md" "$pkg/CHANGELOG.md"
 cp "$HERE/docs/reference/LANGUAGE.md" "$pkg/docs/reference/LANGUAGE.md"
