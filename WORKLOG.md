@@ -20,3 +20,5 @@
 - Deployed the built site to `gh-pages` and switched `vaislang.dev` Pages settings to `gh-pages` with HTTPS enforced.
 - Preserved the old remote `main` at `archive/old-main-2026-06-14`.
 - Force-updated remote `main` to the current Vais-only history.
+- Switched `vaislang.dev` from the temporary `gh-pages` deployment to the `main`
+  GitHub Pages workflow.

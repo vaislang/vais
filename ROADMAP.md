@@ -26,7 +26,7 @@ This file tracks current work only.
 - Local official website source was refreshed and rebuilt from the canonical Vais docs.
 - Official site source now lives in `website/` in this repository.
 - GitHub Pages workflow was added for `website/` build and artifact deployment.
-- `vaislang.dev` is deployed from `gh-pages` using the current `website/dist` output.
+- `vaislang.dev` deploys from the `website/` GitHub Pages workflow on `main`.
 - GitHub `main` now points to the current Vais-only history; old remote `main`
   is preserved at `archive/old-main-2026-06-14`.
 
