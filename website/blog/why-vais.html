@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Why Vais</title>
+  <meta name="description" content="Why the current Vais project is centered on the .vais language and scripts/vaisc compiler.">
+  <link rel="canonical" href="https://vaislang.dev/blog/why-vais.html">
+  <link rel="icon" type="image/png" href="/logo-icon.png">
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo"><img src="/logo-icon.png" alt="" class="logo-img"><span>Vais</span></a>
+      <div class="nav-links" id="nav-links">
+        <a href="/">Home</a>
+        <a href="/#quick-start">Quick Start</a>
+        <a href="/#verification">Verification</a>
+        <a href="https://github.com/vaislang/vais" target="_blank" rel="noopener">GitHub</a>
+      </div>
+      <button class="nav-mobile-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links"><span></span><span></span><span></span></button>
+    </div>
+  </nav>
+  <main class="simple-page">
+    <section class="band">
+      <div class="container">
+        <article class="panel">
+          <p class="eyebrow">Current rationale</p>
+          <h1>Why Vais</h1>
+          <p>
+            Vais is being kept as one named language and one compiler workflow:
+            source files use the <code>.vais</code> extension, and the public command is
+            <code>scripts/vaisc</code>.
+          </p>
+          <p>
+            The useful boundary is simple: document only the syntax and compiler behavior
+            protected by the repository gates, then expand the language by adding tests and
+            self-host coverage first.
+          </p>
+          <p>
+            That keeps the project readable for humans, usable by tools, and honest about
+            what the compiler can build today.
+          </p>
+          <div class="link-row">
+            <a href="/#language">See current syntax</a>
+            <a href="/#compiler">See compiler status</a>
+            <a href="/#verification">See gates</a>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

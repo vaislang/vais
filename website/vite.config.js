@@ -1,0 +1,26 @@
+import { defineConfig } from 'vite';
+import { resolve } from 'path';
+
+export default defineConfig({
+  root: '.',
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        blog: resolve(__dirname, 'blog/index.html'),
+        'blog-why-vais': resolve(__dirname, 'blog/why-vais.html'),
+        'blog-verification': resolve(__dirname, 'blog/performance-comparison.html'),
+        'blog-self-host': resolve(__dirname, 'blog/self-hosting-journey.html'),
+        'blog-language-reference': resolve(__dirname, 'blog/language-reference.html'),
+        vaisx: resolve(__dirname, 'vaisx/index.html'),
+        ecosystem: resolve(__dirname, 'ecosystem/index.html'),
+      },
+    },
+  },
+  server: {
+    port: 3001,
+    open: true,
+  },
+});

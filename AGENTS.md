@@ -15,6 +15,13 @@
 - `compiler/self/vaisc_core.ll` is the reusable self-host compiler core used by `scripts/vaisc`.
 - `scripts/build.sh` and `scripts/vais-build-env.sh` are internal core-refresh tools.
 
+## Documentation Paths
+
+- `README.md` and `docs/README.md` are the first-read documentation entry points.
+- `docs/reference/LANGUAGE.md` is the current gate-backed language guide.
+- `compiler/self/SELF_HOST.md` is the compiler-internals guide.
+- Public GitHub or site copy must be synced from these files, not from older external docs.
+
 ## Gates
 
 Use the smallest gate that covers the change, then broaden when touching shared compiler behavior.
@@ -40,4 +47,4 @@ bash scripts/test-fixpoint-full-self.sh
 
 ## Current Priority
 
-Keep the self-host core and release gates green as the compiler surface expands.
+Sync GitHub/site-facing docs from the canonical docs, then keep the self-host core and release gates green as the compiler surface expands.

@@ -1,187 +1,287 @@
-# Vais 언어 레퍼런스
+# Vais Language Reference
 
-> Vais 작성용 실용 레퍼런스. 파일 확장자는 `.vais`다.
-> **모든 구문은 `examples/`로 검증됨**(값-정확성 게이트 통과).
-> 설계 근거(왜 이렇게)는 `docs/design/`; 이 문서는 "어떻게 쓰나".
-> 핵심 규칙: **한 작업 = 한 가지 문법** (모호성 0). Rust 직관으로 쓰면 `vais-check`가 수정 안내.
+This page describes the current gate-backed Vais source surface. Vais files use
+the `.vais` extension and are compiled with `scripts/vaisc`.
 
----
+## Status Model
 
-## 1. 함수
+Vais documentation uses these terms:
+
+| Term | Meaning |
+| --- | --- |
+| Verified | Covered by `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-parity.sh`, `scripts/test.sh`, or a self-host gate |
+| Full engine | Compiled by the reusable self-host compiler core |
+| Direct engine | Narrow native LLVM emitter selected with `--engine direct` |
+| Specified | Intended surface, not yet protected as a release claim |
+
+Public examples should use verified syntax unless they explicitly document a
+planned or experimental area.
+
+## Program Shape
+
+```vais
+fn main() -> Int {
+    return 42
+}
 ```
+
+- Entry point: `fn main() -> Int`.
+- Source files must end in `.vais`.
+- Statements do not require semicolons in ordinary source files.
+- Line comments start with `#`.
+
+## Functions
+
+```vais
 fn add(a: Int, b: Int) -> Int {
     return a + b
 }
-```
-- `fn 이름(파라미터: 타입, ...) -> 반환타입 { ... }`
-- 반환은 `return`. 진입점은 `fn main() -> Int`.
 
-## 2. 변수
-```
-let x = 5          # 불변
-let mut count = 0  # 가변
-count = count + 1  # 재대입은 가변만
-```
-- 바인딩은 `let` / `let mut` **한 가지**. (`:=`/`~` 같은 다른 형태 없음.)
-- 타입은 보통 추론. 명시하려면 `let x: Int = 5`.
-
-## 3. 타입
-| 종류 | 이름 |
-|------|------|
-| 정수 | `Int`, `Int8`/`Int16`/`Int32`/`Int64`/`Int128`, `UInt8`..`UInt128` |
-| 실수 | `F32`, `F64` |
-| 기타 | `Bool`, `Str`, `Char` |
-| 컬렉션 | `List<T>`, `Map<K,V>` |
-- 변환은 **명시적 함수형**: `Int(x)`, `F32(y)`. (`x as Int` 안 됨 — vais-check가 잡음.)
-
-## 4. 조건
-```
-if n < 0 {
-    return 0
-} else if n == 0 {
-    return 1
-} else {
-    return 2
+fn main() -> Int {
+    return add(20, 22)
 }
 ```
-- 논리는 **단어**: `and`, `or`, `not`. (`&&`/`||`/`!` 안 됨.)
-  ```
-  if a and not b { ... }
-  ```
 
-## 5. 반복
-```
-for i in 0..=10 { ... }   # 포함 범위 (10 포함)
-for i in 0..10 { ... }    # 제외 범위 (10 미포함)
-for x in items { ... }    # 컬렉션 순회
-while cond { ... }        # 조건 반복
-```
-- 규칙: 범위/컬렉션 → `for`, 조건 → `while`. C식 `for(;;)` 없음.
+Verified today:
 
-## 6. enum + match
+- `Int` parameters and `Int` return values.
+- Multiple helper functions.
+- Recursive and mutually recursive `Int` functions.
+- Generic marker syntax for simple `Int` helper cases, as tracked in the parity
+  manifest.
+
+## Variables
+
+```vais
+let x = 5
+let mut total = 0
+total = total + x
+let typed: Int = 42
 ```
+
+- `let` binds an immutable value.
+- `let mut` binds a mutable value.
+- `let name: Int = value` is verified for `Int`.
+- Compound assignment such as `+=` is not Vais syntax.
+
+## Types
+
+Verified release surface:
+
+| Type | Notes |
+| --- | --- |
+| `Int` | Primary scalar type |
+| `Bool` | Produced by comparisons and boolean expressions |
+| `Str` | String literals and selected string operations |
+| `Char` | Single-byte character literals in verified examples |
+| `List<Int>` | Empty/list literal, `push`, `len`, index, `sum` |
+| Simple `struct` | Literal construction and field access |
+| Small `enum` | Payload-free enum/match and small recursive `Int` payload enum/match |
+
+Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
+and `tools/vaisc-parity.tsv`.
+
+## Expressions And Operators
+
+```vais
+return (a + b) * 2
+return n % 10
+return a == b
+return a < b and b < c
+```
+
+Verified operators:
+
+- Arithmetic: `+`, `-`, `*`, `/`, `%`
+- Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Boolean words: `and`, `or`, `not`
+- Bit helpers: `bitnot(x)`, `bitand(a, b)`, `bitor(a, b)`, `bitxor(a, b)`,
+  `shl(x, n)`, `shr(x, n)`
+- Conversion call: `Int(x)` in verified examples
+
+Vais does not use Rust spellings such as `&&`, `||`, `!x`, `x as Int`, or
+`Enum::Variant`.
+
+## Control Flow
+
+```vais
+if n <= 1 {
+    return 1
+} else if n == 2 {
+    return 2
+} else {
+    return n * fact(n - 1)
+}
+
+let mut i = 0
+let mut sum = 0
+while i < n {
+    sum = sum + i
+    i = i + 1
+}
+```
+
+Verified today:
+
+- `if`, `else if`, `else`
+- `while`
+- Early `return`
+
+`for`, `break`, and `continue` are not release-surface claims yet.
+
+## Structs
+
+```vais
+struct Box {
+    value: Int,
+}
+
+fn main() -> Int {
+    let b = Box { value: 42 }
+    return b.value
+}
+```
+
+Verified today:
+
+- Simple struct declarations with `Int` fields.
+- Struct literals.
+- Field access.
+- Selected struct/list combinations through self-host gates.
+
+## Enums And Match
+
+Payload-free enum:
+
+```vais
 enum Color { Red, Green, Blue }
 
-fn pick(c: Color) -> Int {
+fn number(c: Color) -> Int {
     match c {
-        Color.Red => 1,       # variant는 항상 점: EnumName.Variant
-        Color.Green => 2,
-        Color.Blue => 3,
+        Color.Red => return 1,
+        Color.Green => return 2,
+        Color.Blue => return 3,
     }
 }
 ```
-- variant 접근은 **점 `.`** 한 가지. (`::` 안 됨, unqualified 안 됨.)
-- payload: `enum Shape { Circle(Int), Rect(Int, Int) }` → `match s { Circle(r) => r, Rect(w, h) => w*h }`.
-- arm에서 즉시 반환: `Color.Red => return 1` (그냥 됨).
 
-## 7. struct
+Small payload enum:
+
+```vais
+enum Node { Lit(Int), Add(Node, Node), Mul(Node, Node) }
+
+fn eval(n: Node) -> Int {
+    match n {
+        Lit(v) => return v,
+        Add(a, b) => return eval(a) + eval(b),
+        Mul(a, b) => return eval(a) * eval(b),
+    }
+}
 ```
-struct Point { x: Int, y: Int }
+
+Verified today:
+
+- Payload-free enum tags with `Enum.Tag` spelling.
+- Simple return-arm `match`.
+- Small recursive `Int` payload enum/match lowering used by the parity corpus.
+
+Broader payload shapes are not a release claim yet.
+
+## Lists
+
+```vais
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(10)
+    xs.push(20)
+    xs.push(30)
+    return xs.len() + xs[1]
+}
+```
+
+Verified today:
+
+- Empty `List<Int>` with an explicit type.
+- Integer list literals such as `[10, 20, 30]`.
+- `xs.push(value)`.
+- `xs.len()`.
+- `xs[index]`.
+- `xs.sum()`.
+
+Methods such as `map`, `filter`, and arbitrary user-defined methods are not
+release-surface claims yet.
+
+## Strings, Characters, And Output
+
+```vais
+fn main() -> Int {
+    let x = 42
+    print("the answer is {x}")
+    putchar(33)
+    return 0
+}
+```
+
+Verified today:
+
+- String literals.
+- String equality in parity examples.
+- String length/indexing in self-host gates.
+- Single-byte character literal equality in parity examples.
+- `print("...{name}...")` interpolation for simple identifiers.
+- `putchar(Int)`.
+
+## Closures
+
+The verified closure slice is intentionally narrow:
+
+```vais
+fn adder(n: Int) -> fn(Int) -> Int {
+    return |x| x + n
+}
 
 fn main() -> Int {
-    let p = Point { x: 3, y: 4 }
-    return p.x + p.y
+    let add3 = adder(3)
+    return add3(4)
 }
 ```
-- 1글자 이름도 됨 (`struct V { ... }`) — 키워드와 안 겹침.
-- 메서드 (impl):
-  ```
-  impl Counter {
-      fn bump(self, n: Int) -> Counter { return Counter { value: self.value + n } }
-      fn get(self) -> Int { return self.value }
-  }
-  ```
-- 가시성: `pub struct`, 필드 `pub name: ...` (기본 private).
 
-## 8. 컬렉션
-```
-let a = [10, 20, 30]              # 리스트 리터럴
-let empty: List<Int> = []        # 빈 것은 타입 명시
-let total = a.sum()              # 메서드 체인
-let big = a.filter(|x| x > 10).map(|x| x * 2).sum()
-let n = a.len()
-let first = a[0]
-```
-- 컬렉션 연산은 **메서드** 한 가지. 자유함수(`sum(v)`) 없음.
+General closure literals and broader higher-order function patterns are not
+release-surface claims yet.
 
-## 9. 클로저
-```
-let base = 10
-let add = |n| n + base       # 캡처 자동
-fn apply(f: fn(Int) -> Int, x: Int) -> Int { return f(x) }
-```
-- `|파라미터| 식` 또는 `|파라미터| { ... }`.
-- 캡처는 자동. 반환된 캡처 클로저와 고차함수 재전달도 코퍼스에서 검증됨(e80~e81).
+## Diagnostics
 
-## 10. Option / Result / 에러
+`tools/vais-check.py` and `scripts/vaisc` front diagnostics catch common
+non-Vais spellings and print source coordinates, `help:`, and when available a
+concrete `fix:`.
+
+```bash
+python3 tools/vais-check.py examples/c4.vais
 ```
-fn find(k: Int) -> Option<Int> {
-    if k > 0 { return Some(k) }
-    return None
-}
-let v = match find(5) { Some(x) => x, None => 0 }
 
-fn read(a: Int, b: Int) -> Result<Int, Str> {
-    if b == 0 { return Err("zero") }
-    return Ok(a / b)
-}
-fn use_it() -> Result<Int, Str> {
-    let r = read(10, 2)?   # ? : 실패면 전파
-    return Ok(r + 1)
-}
-```
-- 부재는 항상 `Option` (null 없음). 실패는 `Result` + `?`.
+Common corrections:
 
-## 11. 출력
-```
-let x = 42
-print("the answer is {x}")     # 보간 "{식}"
-```
-- `print(EXPR)` — 한 줄 출력, `"{식}"` 보간 지원. (`format(...)`/`+` 연결 없음.)
-
-## 12. 연산자
-- 산술: `+ - * / %`
-- 비교: `== != < > <= >=`
-- 논리(단어): `and or not`
-- 비트(함수): `bitnot(x) bitand(a,b) bitor(a,b) bitxor(a,b) shl(x,n) shr(x,n)`
-
----
-
-## 흔한 실수 → 올바른 Vais (vais-check가 잡아줌)
-| Rust 직관 (틀림) | Vais (맞음) |
-|------|------|
+| Do not write | Write |
+| --- | --- |
 | `a && b` | `a and b` |
-| `a \|\| b` | `a or b` |
+| `a || b` | `a or b` |
 | `!x` | `not x` |
 | `x as Int` | `Int(x)` |
 | `Color::Red` | `Color.Red` |
-| `List<Int>::new()` | `[]` 또는 `[1,2,3]` |
-| `sum(v)` | `v.sum()` |
-| `format("{}", x)` | `"{x}"` |
+| `Vec<T>` | `List<T>` |
+| `String` | `Str` |
+| `x += 1` | `x = x + 1` |
 
----
+## Build And Test
 
-## 빌드/검증
-```
-scripts/test.sh                            # 값-정확성 (examples 전체)
-scripts/vaisc emit-ir program.vais -o program.ll  # Vais compiler IR 출력
-scripts/vaisc build program.vais -o program       # Vais compiler + clang
-scripts/vaisc run program.vais --engine direct    # 최소 direct LLVM emitter
-scripts/test-vaisc-front.sh                # native day-1 front 계약 검증
-scripts/test-vaisc-direct.sh               # direct emitter 계약 검증
-scripts/test-vaisc-errors.sh               # native P4 진단 계약 검증
-scripts/test-vaisc-parity.sh               # native/full/tracked parity manifest
-python3 tools/vais-check.py prog.vais      # 문법 lint (help: 수정안내)
+```bash
+scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
+scripts/vaisc build examples/c4.vais -o /tmp/c4
+scripts/vaisc run examples/c4.vais
+
+bash scripts/test-vaisc-front.sh
+bash scripts/test-vaisc-parity.sh
+bash scripts/test.sh
 ```
 
-## 현재 한계
-- 기본 실행 경로는 full engine이다. `--engine direct`는 단일 `main` arithmetic return을 직접 LLVM IR로 emit/build/run한다.
-- `scripts/vaisc` native front는 Int 함수/let/return/if/while/plain call, print/putchar,
-  simple struct, payload-free enum/match, small Int-coded payload enum/match, single-Int closure return,
-  List push/len/index/sum slice를 받는다.
-  넓은 언어 표면은 full compiler path나 후속 native slice에서 다룬다.
-- native `vaisc` 오류는 day-1 범위에서 source 좌표, 원문 line, caret, `help:`, `fix:`를 포함한다.
-- `tools/vaisc-parity.tsv`가 native-supported/full-only/tracked 상태를 기록한다.
-  `compiler/self/*` tier는 검증된 compiler source로 `scripts/vaisc` full engine에서 직접 받는다.
-- 진짜 차별점(P7 단일coercion, P8 클로저 day-1)은 자체 컴파일러에서 최종 소유한다.
-- 이 레퍼런스의 모든 예제는 검증됨(`examples/`); 미검증 구문은 안 적었다.
+The exact release subset is tracked in `tools/vaisc-parity.tsv`.

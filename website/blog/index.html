@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vais Notes</title>
+  <meta name="description" content="Current Vais language and compiler notes.">
+  <link rel="canonical" href="https://vaislang.dev/blog/">
+  <link rel="icon" type="image/png" href="/logo-icon.png">
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo"><img src="/logo-icon.png" alt="" class="logo-img"><span>Vais</span></a>
+      <div class="nav-links" id="nav-links">
+        <a href="/">Home</a>
+        <a href="/#language">Language</a>
+        <a href="/#compiler">Compiler</a>
+        <a href="https://github.com/vaislang/vais/blob/main/docs/README.md" target="_blank" rel="noopener">Docs</a>
+      </div>
+      <button class="nav-mobile-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links"><span></span><span></span><span></span></button>
+    </div>
+  </nav>
+  <main class="simple-page">
+    <section class="band">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Notes</p>
+          <h1>Vais Notes</h1>
+          <p>Public notes now follow the current <code>.vais</code> language, <code>scripts/vaisc</code>, and repository verification gates.</p>
+        </div>
+        <div class="note-grid">
+          <article class="panel">
+            <h3>Why Vais</h3>
+            <p>The current rationale for keeping the public project centered on one language and one compiler command.</p>
+            <a href="/blog/why-vais.html">Read note</a>
+          </article>
+          <article class="panel">
+            <h3>Language Reference</h3>
+            <p>The verified syntax surface for functions, variables, control flow, structs, enums, lists, strings, and closures.</p>
+            <a href="https://github.com/vaislang/vais/blob/main/docs/reference/LANGUAGE.md" target="_blank" rel="noopener">Open reference</a>
+          </article>
+          <article class="panel">
+            <h3>Self-host Compiler</h3>
+            <p>The current self-host compiler core and the gates that protect it.</p>
+            <a href="https://github.com/vaislang/vais/blob/main/compiler/self/SELF_HOST.md" target="_blank" rel="noopener">Open status</a>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

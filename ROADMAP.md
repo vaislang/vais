@@ -21,12 +21,18 @@ This file tracks current work only.
 - The direct engine is intentionally narrow and currently supports a single `fn main() -> Int { return <Int expr> }` style slice.
 - The release compiler command needs Python 3 and clang.
 - Internal compiler gates no longer depend on a source pass-through helper.
+- Public documentation now starts at `README.md` and `docs/README.md`.
+- `docs/reference/LANGUAGE.md` describes only the current gate-backed language surface.
+- Local official website source was refreshed and rebuilt from the canonical Vais docs.
+- Official site source now lives in `website/` in this repository.
+- GitHub Pages workflow was added for `website/` build and artifact deployment.
 
 ## Next Work
 
-1. Expand the native direct emitter beyond the current slice: helper calls, locals, control flow, structs, lists, and the trusted self-host tier.
-2. Package `scripts/vaisc` as a release command with Python 3 and clang prerequisites.
-3. Keep self-host regeneration and parity gates mandatory for compiler changes.
+1. Connect this repository to the real GitHub remote and enable GitHub Pages from Actions for `vaislang.dev`.
+2. Expand the native direct emitter beyond the current slice: helper calls, locals, control flow, structs, lists, and the trusted self-host tier.
+3. Package `scripts/vaisc` as a release command with Python 3 and clang prerequisites.
+4. Keep self-host regeneration and parity gates mandatory for compiler changes.
 
 ## Verification Baseline
 
