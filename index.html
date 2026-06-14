@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vais - Language and Self-Host Compiler</title>
+  <meta name="description" content="Vais is a .vais language and self-host compiler workspace. The public compiler command is scripts/vaisc.">
+  <meta property="og:title" content="Vais - Language and Self-Host Compiler">
+  <meta property="og:description" content="Current Vais syntax, compiler workflow, self-host status, and verification gates.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="/assets/logo-icon-D5s608LC.png">
+  <meta property="og:url" content="https://vaislang.dev/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Vais - Language and Self-Host Compiler">
+  <meta name="twitter:description" content="Current Vais syntax, compiler workflow, self-host status, and verification gates.">
+  <meta name="twitter:image" content="/assets/logo-icon-D5s608LC.png">
+  <link rel="canonical" href="https://vaislang.dev/">
+  <link rel="icon" type="image/png" href="/assets/logo-icon-D5s608LC.png">
+  <link rel="apple-touch-icon" href="/assets/logo-icon-D5s608LC.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
+  <script type="module" crossorigin src="/assets/main-BnnBEOG5.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/main-Di06QHko.css">
+</head>
+<body>
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Vais home">
+        <img src="/assets/logo-icon-D5s608LC.png" alt="" class="logo-img">
+        <span>Vais</span>
+      </a>
+      <div class="nav-links" id="nav-links">
+        <a href="#quick-start">Quick Start</a>
+        <a href="#language">Language</a>
+        <a href="#compiler">Compiler</a>
+        <a href="#verification">Verification</a>
+        <a href="/blog/">Notes</a>
+        <a href="https://github.com/vaislang/vais" target="_blank" rel="noopener">GitHub</a>
+      </div>
+      <button class="nav-mobile-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container hero-inner">
+      <img src="/assets/logo-icon-D5s608LC.png" alt="" class="hero-mark">
+      <p class="eyebrow">Current public baseline</p>
+      <h1>Vais</h1>
+      <p class="hero-subtitle">
+        Vais is a <code>.vais</code> language and self-host compiler workspace.
+        The public compiler command is <code>scripts/vaisc</code>.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#quick-start">Run Vais</a>
+        <a class="btn btn-secondary" href="https://github.com/vaislang/vais/blob/main/docs/README.md" target="_blank" rel="noopener">Read Docs</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="band band-light" id="quick-start">
+      <div class="container two-column">
+        <div>
+          <p class="eyebrow">Quick start</p>
+          <h2>Compile a verified <code>.vais</code> program.</h2>
+          <p>
+            The current toolchain is source based. Use Python 3 and <code>clang</code>,
+            then run the compiler from the repository root.
+          </p>
+        </div>
+        <div class="terminal" aria-label="Quick start commands">
+          <button class="copy-btn" data-copy-target="quick-code" aria-label="Copy quick start commands">Copy</button>
+          <pre id="quick-code"><code>git clone https://github.com/vaislang/vais
+cd vais
+
+python3 tests/vais_check_test.py
+scripts/vaisc run examples/c4.vais
+scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
+scripts/vaisc build examples/c4.vais -o /tmp/c4</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="language">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Language surface</p>
+          <h2>Current Vais uses full-word syntax.</h2>
+          <p>
+            Public examples are limited to the syntax protected by the compiler gates.
+            The main scalar type is <code>Int</code>, variable binding uses <code>let</code>,
+            and control flow uses <code>if</code>, <code>else</code>, and <code>while</code>.
+          </p>
+        </div>
+        <div class="example-grid">
+          <article class="panel">
+            <h3>Structs</h3>
+            <pre><code># expect: 42
+struct Box {
+    value: Int,
+}
+
+fn main() -> Int {
+    let b = Box { value: 42 }
+    return b.value
+}</code></pre>
+          </article>
+          <article class="panel">
+            <h3>Enums and match</h3>
+            <pre><code># expect: 2
+enum Color { Red, Green, Blue }
+
+fn color_number(c: Color) -> Int {
+    match c {
+        Color.Red => return 1,
+        Color.Green => return 2,
+        Color.Blue => return 3,
+    }
+}
+
+fn main() -> Int {
+    let c = Color.Green
+    return color_number(c)
+}</code></pre>
+          </article>
+          <article class="panel">
+            <h3>Loops</h3>
+            <pre><code># expect: 10
+fn main() -> Int {
+    let mut s = 0
+    let mut i = 0
+    while i &lt; 5 {
+        s = s + i
+        i = i + 1
+    }
+    return s
+}</code></pre>
+          </article>
+        </div>
+        <div class="link-row">
+          <a href="https://github.com/vaislang/vais/blob/main/docs/reference/LANGUAGE.md" target="_blank" rel="noopener">Open language reference</a>
+          <a href="https://github.com/vaislang/vais/blob/main/examples/README.md" target="_blank" rel="noopener">Open examples</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="band band-muted" id="compiler">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Compiler</p>
+          <h2>One public command: <code>scripts/vaisc</code>.</h2>
+          <p>
+            The compiler accepts <code>.vais</code> files, emits LLVM IR, and links
+            native binaries through <code>clang</code>. A narrow direct engine is
+            available for promoted slices with <code>--engine direct</code>.
+          </p>
+        </div>
+        <div class="status-grid">
+          <article class="panel">
+            <h3>Full engine</h3>
+            <p>Runs through the reusable self-host compiler core checked in at <code>compiler/self/vaisc_core.ll</code>.</p>
+          </article>
+          <article class="panel">
+            <h3>Direct engine</h3>
+            <p>Selected with <code>--engine direct</code> for the native LLVM subset covered by direct-engine gates.</p>
+          </article>
+          <article class="panel">
+            <h3>Self-host status</h3>
+            <p><code>compiler/self/*.vais</code> contains the compiler work written in Vais and is protected by self-host fixpoint gates.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="verification">
+      <div class="container two-column">
+        <div>
+          <p class="eyebrow">Verification</p>
+          <h2>Claims are tied to gates.</h2>
+          <p>
+            Public language and compiler statements are limited to the checks below.
+            New syntax or runtime claims belong in the public docs only after a gate
+            covers them.
+          </p>
+        </div>
+        <div class="terminal" aria-label="Verification commands">
+          <button class="copy-btn" data-copy-target="verify-code" aria-label="Copy verification commands">Copy</button>
+          <pre id="verify-code"><code>python3 tests/vais_check_test.py
+bash scripts/test-vaisc.sh
+bash scripts/test-vaisc-front.sh
+bash scripts/test-vaisc-direct.sh
+bash scripts/test-vaisc-errors.sh
+bash scripts/test-vaisc-parity.sh
+bash scripts/test.sh
+
+bash scripts/test-fixpoint-full-self.sh
+bash scripts/test-fixpoint-full.sh</code></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div>
+        <img src="/assets/logo-icon-D5s608LC.png" alt="" class="footer-logo">
+        <p>Vais language and compiler workspace.</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/vaislang/vais" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/vaislang/vais/blob/main/docs/README.md" target="_blank" rel="noopener">Docs</a>
+        <a href="https://github.com/vaislang/vais/blob/main/compiler/self/SELF_HOST.md" target="_blank" rel="noopener">Self-host</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
