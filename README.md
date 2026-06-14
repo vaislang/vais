@@ -29,6 +29,7 @@ scripts/vaisc run examples/c4.vais --engine direct
 | Start here | Purpose |
 | --- | --- |
 | [docs/README.md](docs/README.md) | Documentation map and publication rules |
+| [CHANGELOG.md](CHANGELOG.md) | Current source release notes |
 | [docs/reference/LANGUAGE.md](docs/reference/LANGUAGE.md) | Current syntax and verified language surface |
 | [examples/README.md](examples/README.md) | Value-checked example corpus |
 | [compiler/self/SELF_HOST.md](compiler/self/SELF_HOST.md) | Self-host compiler status |

@@ -22,3 +22,4 @@
 - Force-updated remote `main` to the current Vais-only history.
 - Switched `vaislang.dev` from the temporary `gh-pages` deployment to the `main`
   GitHub Pages workflow.
+- Added `CHANGELOG.md` for the current source release baseline.
