@@ -109,6 +109,18 @@ fn main() -> Int {
 }
 SRC
 
+expect_diag "direct_list_struct_field_target" "direct" "assignment target is not a known List<Struct> field" "xs\\[0\\].value = 42" <<'SRC'
+struct Box {
+    value: Int,
+}
+
+fn main() -> Int {
+    let xs: List<Box> = [Box { value: 1 }]
+    xs[0].missing = 42
+    return 0
+}
+SRC
+
 expect_diag "direct_list_constructor_expr" "direct" "return expression type does not match" "return 40 + 2" <<'SRC'
 fn main() -> Int {
     return list()

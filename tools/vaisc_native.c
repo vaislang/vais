@@ -2873,6 +2873,30 @@ static int direct_parse_field_target(const char *lhs, char **base, char **field)
     return 1;
 }
 
+static int direct_parse_list_field_target(const char *lhs, char **base, char **field) {
+    const char *s = skip_ws(lhs);
+    if (!is_ident_start(*s)) return 0;
+    const char *base_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *base_end = s;
+    const char *open = skip_ws(s);
+    if (*open != '[') return 0;
+    int close = find_matching_bracket_c(lhs, (int)(open - lhs));
+    if (close < 0) return 0;
+    s = skip_ws(lhs + close + 1);
+    if (*s != '.') return 0;
+    s = skip_ws(s + 1);
+    if (!is_ident_start(*s)) return 0;
+    const char *field_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    if (*skip_ws(s) != '\0') return 0;
+    *base = substr_copy(base_start, (size_t)(base_end - base_start));
+    *field = substr_copy(field_start, (size_t)(s - field_start));
+    return 1;
+}
+
 static int direct_check_assignment_target(
     const char *path,
     int line_no,
@@ -2901,11 +2925,61 @@ static int direct_check_assignment_target(
         free(field);
         return 1;
     }
+    if (direct_parse_list_field_target(lhs, &base, &field)) {
+        const char *base_type = direct_names_type(locals, base);
+        char *elem_type = direct_list_element_type(base_type);
+        DirectStructInfo *st = elem_type == NULL ? NULL : direct_find_struct(structs, struct_count, elem_type);
+        if (st != NULL && direct_struct_has_field(st, field)) {
+            free(elem_type);
+            free(base);
+            free(field);
+            return 0;
+        }
+        report_issue(path, line_no, find_col(line, base), line,
+            "direct native emitter assignment target is not a known List<Struct> field",
+            "assign to a field declared on the list element struct.",
+            "xs[0].value = 42");
+        free(elem_type);
+        free(base);
+        free(field);
+        return 1;
+    }
     report_issue(path, line_no, find_col(line, lhs), line,
         "direct native emitter assignment target is not a known local",
         "define the target with `let` before assigning to it.",
         NULL);
     return 1;
+}
+
+static const char *direct_assignment_target_type(
+    const char *lhs,
+    DirectNameSet *locals,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    const char *local_type = direct_names_type(locals, lhs);
+    if (local_type != NULL) return local_type;
+    char *base = NULL;
+    char *field = NULL;
+    if (direct_parse_field_target(lhs, &base, &field)) {
+        const char *base_type = direct_names_type(locals, base);
+        DirectStructInfo *st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
+        int ok = st != NULL && direct_struct_has_field(st, field);
+        free(base);
+        free(field);
+        return ok ? "Int" : NULL;
+    }
+    if (direct_parse_list_field_target(lhs, &base, &field)) {
+        const char *base_type = direct_names_type(locals, base);
+        char *elem_type = direct_list_element_type(base_type);
+        DirectStructInfo *st = elem_type == NULL ? NULL : direct_find_struct(structs, struct_count, elem_type);
+        int ok = st != NULL && direct_struct_has_field(st, field);
+        free(elem_type);
+        free(base);
+        free(field);
+        return ok ? "Int" : NULL;
+    }
+    return NULL;
 }
 
 static int direct_parse_method_statement(const char *s, char **base, char **method, char **args) {
@@ -3486,7 +3560,7 @@ static int direct_lower_line(
             free(stripped);
             return 1;
         }
-        const char *target_type = direct_names_type(locals, lhs);
+        const char *target_type = direct_assignment_target_type(lhs, locals, structs, struct_count);
         int allow_list_assignment = direct_is_list_type(target_type);
         if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, allow_list_assignment ? target_type : NULL)) {
             free(lhs);
@@ -3513,26 +3587,39 @@ static int direct_lower_line(
         StrBuf prelude;
         sb_init(&prelude);
         direct_current_prelude = &prelude;
-        char *rewritten = allow_list_assignment
-            ? direct_rewrite_list_value_expr(path, line_no, line, expr, target_type, locals, fns, fn_count, structs, struct_count)
-            : direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
-        direct_current_prelude = NULL;
-        if (rewritten == NULL) {
+        char *rewritten_lhs = direct_rewrite_expr(path, line_no, line, lhs, locals, fns, fn_count, structs, struct_count);
+        if (rewritten_lhs == NULL) {
+            direct_current_prelude = NULL;
             free(prelude.data);
             free(lhs);
             free(expr);
             free(stripped);
             return 1;
         }
+        char *rewritten = allow_list_assignment
+            ? direct_rewrite_list_value_expr(path, line_no, line, expr, target_type, locals, fns, fn_count, structs, struct_count)
+            : direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
+        if (rewritten == NULL) {
+            free(prelude.data);
+            free(rewritten_lhs);
+            free(lhs);
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_lhs = direct_translate_expr(rewritten_lhs);
         char *c_expr = direct_translate_expr(rewritten);
         sb_append(out, prelude.data);
         if (allow_list_assignment && direct_names_is_ref(locals, lhs)) sb_append(out, "*");
-        sb_append(out, lhs);
+        sb_append(out, c_lhs);
         sb_append(out, " = ");
         sb_append(out, c_expr);
         sb_append(out, ";\n");
         free(prelude.data);
+        free(c_lhs);
         free(c_expr);
+        free(rewritten_lhs);
         free(rewritten);
         free(lhs);
         free(expr);

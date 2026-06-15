@@ -26,6 +26,8 @@
 - Added direct-engine gate coverage for `List<Box>` ABI behavior returning 42.
 - Added context-typed direct list assignment for `List<Int>` and `List<Struct>`,
   including list-parameter replacement and gate coverage returning 42.
+- Added direct-engine indexed field assignment for `List<Struct>` locals and
+  parameters, plus P4 diagnostics for unknown indexed fields.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 

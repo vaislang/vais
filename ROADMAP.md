@@ -39,6 +39,8 @@ This file tracks current work only.
   ABI, including inline list arguments and returned-list argument hoisting.
 - The native direct engine covers context-typed assignment for `List<Int>` and
   `List<Struct>` locals and list parameters.
+- The native direct engine covers indexed `List<Struct>` field assignment,
+  including assignments through list parameters.
 
 ## Current Reality
 
@@ -51,7 +53,7 @@ This file tracks current work only.
   literal/constructor call and return values. Statement contexts and `while`
   conditions also hoist `List<Int>`-returning helper calls before passing them
   to `List<Int>` parameters. Local `List<Struct>` values support typed `[]`,
-  `list()`, list literal initialization, `push`, `len`, index, field reads,
+  `list()`, list literal initialization, `push`, `len`, index, field reads/writes,
   parameter reference, return value ABI, inline list arguments, and
   returned-list argument hoisting. Context-typed list assignment is supported
   for `List<Int>` and `List<Struct>` locals and list parameters.
@@ -81,6 +83,38 @@ This file tracks current work only.
 4. Replace the remaining Python-only internal checks when the language has
    enough file/process support.
 5. Keep source release tags, GitHub Releases, GitHub Pages, self-host regeneration, and parity gates green.
+
+## Completed Milestone: Native Direct List Struct Field Assignment
+
+Mode: sequential
+
+- [x] 1. Parse `List<Struct>` indexed field assignment targets.
+- [x] 2. Type-check indexed struct-list field assignments as `Int` field writes.
+- [x] 3. Gate local and parameter `xs[index].field = value` behavior.
+- [x] 4. Sync docs/site/changelog with the promoted field-write slice.
+
+### Task Briefs
+
+#### 1. Indexed List<Struct> field assignment
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode accepts assignments such as `xs[0].value = 42` and
+  `xs[i].value = value` when `xs` is a `List<DeclaredStruct>` and `value` is a
+  declared `Int` field.
+- Done: assignment target validation now recognizes `base[index].field`, checks
+  the list element struct field, and rewrites the left-hand side through the
+  existing list-index expression lowering.
+
+#### 2. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
+  `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
+  `WORKLOG.md`, `docs/design/`.
+- Requirements: prove local and parameter `List<Struct>` indexed field writes
+  execute through `scripts/vaisc --engine direct` and keep unknown element
+  fields behind a P4 diagnostic.
+- Done: direct gate covers local and parameter `List<Box>` field writes
+  returning 42; error gate covers an unknown indexed field target.
 
 ## Completed Milestone: Native Direct List Assignment
 

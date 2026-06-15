@@ -29,6 +29,8 @@
   arguments, and returned-list argument hoisting now use the native list ABI.
 - `List<Int>` and `List<Struct>` direct-engine assignment now supports
   context-typed `[]`, `list()`, list literals, local lists, and returned lists.
+- `List<Struct>` direct-engine indexed field assignment now supports local and
+  parameter writes such as `xs[0].value = 42`.
 
 ## v0.2.1 - 2026-06-14
 

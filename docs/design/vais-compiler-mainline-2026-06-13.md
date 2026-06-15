@@ -29,7 +29,7 @@ scripts/vaisc run examples/c4.vais --engine direct
   parameter/return helpers, and `List<Int>` local, parameter, inline, return,
   returned-argument, and loop-hoisted operations, plus `List<Struct>`
   construction with `[]`, `list()`, list literals, `push`, `len`, index, field
-  reads, assignment, parameter/return ABI, inline arguments, and
+  reads/writes, assignment, parameter/return ABI, inline arguments, and
   returned-argument hoisting.
 - Front diagnostics: native `scripts/vaisc`, `tools/vaisc.py` for internal
   repository checks, and `tools/vais-check.py`.

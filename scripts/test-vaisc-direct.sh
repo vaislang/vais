@@ -352,6 +352,48 @@ else
     fail=1
 fi
 
+list_struct_field_write_src="$tmp/direct_list_struct_field_write.vais"
+cat > "$list_struct_field_write_src" <<'SRC'
+struct Box {
+    value: Int,
+}
+
+fn bump(xs: List<Box>, i: Int, v: Int) -> Int {
+    xs[i].value = v
+    return xs[i].value
+}
+
+fn main() -> Int {
+    let xs: List<Box> = [Box { value: 1 }, Box { value: 2 }]
+    xs[0].value = 10
+    let a = bump(xs, 1, 30)
+    let b = Box { value: 3 }
+    b.value = xs[0].value + a + 2
+    return b.value
+}
+SRC
+
+if "$VAISC" emit-ir "$list_struct_field_write_src" \
+    --engine direct -o "$tmp/list-struct-field-write.ll" \
+    >"$tmp/list-struct-field-write.out" 2>"$tmp/list-struct-field-write.err" &&
+    grep -q '%struct.DirectList_Box = type' "$tmp/list-struct-field-write.ll" &&
+    grep -q 'store i64 10' "$tmp/list-struct-field-write.ll" &&
+    grep -q 'define i64 @bump(ptr' "$tmp/list-struct-field-write.ll"; then
+    "$VAISC" run "$list_struct_field_write_src" --engine direct >"$tmp/list-struct-field-write-run.out" 2>"$tmp/list-struct-field-write-run.err"
+    list_struct_field_write_run=$?
+    if [ "$list_struct_field_write_run" = "42" ]; then
+        echo "  PASS direct List<Struct> indexed field assignment runs (=42)"
+    else
+        echo "  FAIL direct List<Struct> field assignment got=$list_struct_field_write_run want=42"
+        cat "$tmp/list-struct-field-write-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct List<Struct> field assignment emission"
+    cat "$tmp/list-struct-field-write.err"
+    fail=1
+fi
+
 list_assignment_src="$tmp/direct_list_assignment.vais"
 cat > "$list_assignment_src" <<'SRC'
 struct Box {
