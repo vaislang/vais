@@ -2177,17 +2177,21 @@ static char *direct_rewrite_list_arg_expr(
         return sb_take(&out);
     }
     if (direct_expr_exact_list_return_call(expr, fns, fn_count)) {
-        if (direct_current_prelude == NULL) {
-            report_issue(path, line_no, find_col(line, expr), line,
-                "direct native emitter requires a local List argument in this expression context",
-                "bind the returned list before passing it here.",
-                "let xs: List<Int> = make()");
-            return NULL;
-        }
         char *rewritten_value = direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
         if (rewritten_value == NULL) return NULL;
         char *c_value = direct_translate_expr(rewritten_value);
         free(rewritten_value);
+        if (direct_current_prelude == NULL) {
+            StrBuf out;
+            sb_init(&out);
+            sb_append(&out, "&((");
+            sb_append(&out, direct_c_type(list_type));
+            sb_append(&out, "[]){");
+            sb_append(&out, c_value);
+            sb_append(&out, "})[0]");
+            free(c_value);
+            return sb_take(&out);
+        }
         char tmp_name[64];
         snprintf(tmp_name, sizeof(tmp_name), "__vais_list_arg_%d", locals->temp_count++);
         sb_append(direct_current_prelude, direct_c_type(list_type));

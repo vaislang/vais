@@ -767,6 +767,66 @@ else
     fail=1
 fi
 
+list_else_if_hoist_src="$tmp/direct_list_else_if_hoist.vais"
+cat > "$list_else_if_hoist_src" <<'SRC'
+struct Box {
+    value: Int,
+}
+
+fn make_int(n: Int) -> List<Int> {
+    return [n, n + 1]
+}
+
+fn score_int(xs: List<Int>) -> Int {
+    return xs.sum()
+}
+
+fn make_box(n: Int) -> List<Box> {
+    return [Box { value: n }, Box { value: n + 1 }]
+}
+
+fn score_box(xs: List<Box>) -> Int {
+    return xs[0].value + xs[1].value
+}
+
+fn main() -> Int {
+    let mut total = 0
+    if score_int([1, 1]) == 99 {
+        total = total + 1
+    } else if score_int(make_int(20)) == 41 {
+        total = total + 20
+    }
+    if score_box([Box { value: 1 }]) == 99 {
+        total = total + 1
+    } else if score_box(make_box(10)) == 21 {
+        total = total + 22
+    }
+    return total
+}
+SRC
+
+if "$VAISC" emit-ir "$list_else_if_hoist_src" \
+    --engine direct -o "$tmp/list-else-if-hoist.ll" \
+    >"$tmp/list-else-if-hoist.out" 2>"$tmp/list-else-if-hoist.err" &&
+    grep -q 'call void @make_int' "$tmp/list-else-if-hoist.ll" &&
+    grep -q 'call .*@score_int' "$tmp/list-else-if-hoist.ll" &&
+    grep -q 'call void @make_box' "$tmp/list-else-if-hoist.ll" &&
+    grep -q 'call .*@score_box' "$tmp/list-else-if-hoist.ll"; then
+    "$VAISC" run "$list_else_if_hoist_src" --engine direct >"$tmp/list-else-if-hoist-run.out" 2>"$tmp/list-else-if-hoist-run.err"
+    list_else_if_hoist_run=$?
+    if [ "$list_else_if_hoist_run" = "42" ]; then
+        echo "  PASS direct List<Int> and List<Struct> else-if returned arguments lower (=42)"
+    else
+        echo "  FAIL direct list else-if returned arguments got=$list_else_if_hoist_run want=42"
+        cat "$tmp/list-else-if-hoist-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct list else-if returned-argument emission"
+    cat "$tmp/list-else-if-hoist.err"
+    fail=1
+fi
+
 fakebin="$tmp/fake-python"
 mkdir -p "$fakebin"
 cat > "$fakebin/python3" <<'PY'
