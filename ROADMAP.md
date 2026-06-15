@@ -18,6 +18,8 @@ This file tracks current work only.
   the checkout and packaged as a release archive.
 - Source tag builds have a release archive workflow for standalone compiler
   assets.
+- The `v0.2.2` source tag produced a GitHub Release with Linux x64, macOS
+  arm64, and macOS x64 standalone compiler archives.
 - The native direct engine covers Int helper calls, locals, assignment, `if`,
   `while`, returns, simple Int-field struct locals, and struct parameter/return
   helpers without invoking Python.
@@ -82,17 +84,15 @@ This file tracks current work only.
 
 ## Next Work
 
-1. Lock the release process around source tags, standalone archives, changelog
-   entries, and site/documentation sync.
-2. Expand the standard library only through gate-backed APIs.
-3. Add a small module/package/import model before growing multi-file examples.
-4. Add file and process primitives, then replace Python-only internal checks
+1. Expand the standard library only through gate-backed APIs.
+2. Add a small module/package/import model before growing multi-file examples.
+3. Add file and process primitives, then replace Python-only internal checks
    with Vais-backed tools where the language is strong enough.
-5. Broaden types, collections, and control syntax without publishing ungated
+4. Broaden types, collections, and control syntax without publishing ungated
    claims.
-6. Move more compiler development and verification into the self-host tier while
+5. Move more compiler development and verification into the self-host tier while
    keeping native host responsibilities explicit.
-7. Keep GitHub Releases, GitHub Pages, self-host regeneration, direct/full parity,
+6. Keep GitHub Releases, GitHub Pages, self-host regeneration, direct/full parity,
    and value gates green at each milestone.
 
 ## Vais v1 Completion Roadmap
@@ -111,9 +111,9 @@ Goal: make every future capability land behind a repeatable release process.
   `README.md`, and release docs.
 - [x] 0.2 Add a release checklist that runs native, install/package, direct,
   front, parity, value, and self-host regeneration gates before tagging.
-- [ ] 0.3 Prove one source tag produces a GitHub Release with standalone
+- [x] 0.3 Prove one source tag produces a GitHub Release with standalone
   archives and a smoke-tested packaged `vaisc`.
-- [ ] 0.4 Keep `vaislang.dev` synced from repository docs for every release.
+- [x] 0.4 Keep `vaislang.dev` synced from repository docs for every release.
 
 Done: a clean checkout can produce and verify a tagged release archive, and the
 public site describes exactly that release.
@@ -236,11 +236,46 @@ examples, and reproduce the release archive from source.
 
 ### Current First Executable Milestone
 
-Start with Phase 0. The next concrete slice is:
+Phase 0 is complete. The next concrete slice is Phase 1:
 
 - [x] Add a release checklist document and wire it to the current gate commands.
-- [ ] Confirm the release archive workflow can be manually run for a chosen tag.
+- [x] Confirm the release archive workflow publishes archives for a chosen tag.
 - [x] Decide the next release version before creating any public tag.
+- [ ] Promote the first small standard-library `List<T>` API slice with gates.
+
+## Completed Milestone: v0.2.2 Source Release
+
+Mode: sequential
+
+- [x] 1. Promote release metadata to a dated `v0.2.2` changelog entry.
+- [x] 2. Run the full pre-tag release gate and produce the local standalone
+  archive.
+- [x] 3. Push the annotated `v0.2.2` source tag and verify the release archive
+  workflow.
+- [x] 4. Verify the GitHub Pages deploy and live `vaislang.dev` release copy.
+
+### Task Briefs
+
+#### 1. Release metadata
+
+- Target files: `tools/vaisc_native.c`, `CHANGELOG.md`,
+  `docs/release/RELEASE_CHECKLIST.md`, `website/package.json`,
+  `website/package-lock.json`.
+- Requirements: make the native compiler, changelog, release checklist, and
+  website package agree on the `v0.2.2` source release line.
+- Done: `scripts/vaisc --version` reports `0.2.2` through the native driver, and
+  the changelog records `v0.2.2 - 2026-06-15`.
+
+#### 2. Release verification
+
+- Target files: `.github/workflows/release-archives.yml`,
+  `scripts/test-release-gates.sh`, `website/`.
+- Requirements: prove the tag path publishes standalone archives and the live
+  website remains synced with the repository release docs.
+- Done: `bash scripts/test-release-gates.sh` passed, `v0.2.2` published
+  `vais-0.2.2-linux-x64.tar.gz`, `vais-0.2.2-darwin-arm64.tar.gz`, and
+  `vais-0.2.2-darwin-x64.tar.gz`, and the `Deploy Website` workflow succeeded
+  for commit `5dfb49e3`.
 
 ## Completed Milestone: Release Discipline Checklist
 

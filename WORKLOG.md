@@ -41,6 +41,13 @@
   line, tag policy, manual archive workflow command, and post-tag checks.
 - Prepared the `v0.2.2` source release metadata across the native compiler
   version, changelog, release checklist, roadmap, and website package.
+- Ran `bash scripts/test-release-gates.sh` for `v0.2.2`; it passed and produced
+  `dist/vais-0.2.2-darwin-arm64.tar.gz`.
+- Pushed the annotated `v0.2.2` source tag and verified the GitHub Release
+  assets for Linux x64, macOS arm64, and macOS x64.
+- Verified the `Deploy Website` workflow for commit `5dfb49e3` and confirmed
+  live `vaislang.dev` still exposes `scripts/vaisc` and
+  `bash scripts/test-release-gates.sh`.
 
 ## 2026-06-14
 
