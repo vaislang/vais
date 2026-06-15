@@ -20,6 +20,10 @@
   including typed `[]`, `list()`, list literals, `push`, `len`, index, and
   field reads.
 - Added direct-engine gate coverage for local `List<Box>` emit/run behavior.
+- Expanded direct-engine `List<Struct>` support through function parameter and
+  return ABI, inline call arguments, returned-list argument hoisting, and
+  while-condition hoisting.
+- Added direct-engine gate coverage for `List<Box>` ABI behavior returning 42.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 

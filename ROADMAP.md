@@ -35,6 +35,8 @@ This file tracks current work only.
 - The native direct engine covers local `List<Struct>` values for declared
   structs: typed `[]`, `list()`, list literal initialization, `push`, `len`,
   index, and field reads.
+- The native direct engine covers `List<Struct>` function parameter and return
+  ABI, including inline list arguments and returned-list argument hoisting.
 
 ## Current Reality
 
@@ -47,8 +49,9 @@ This file tracks current work only.
   literal/constructor call and return values. Statement contexts and `while`
   conditions also hoist `List<Int>`-returning helper calls before passing them
   to `List<Int>` parameters. Local `List<Struct>` values support typed `[]`,
-  `list()`, list literal initialization, `push`, `len`, index, and field reads;
-  `List<Struct>` function parameter and return ABI is still future work.
+  `list()`, list literal initialization, `push`, `len`, index, field reads,
+  parameter reference, return value ABI, inline list arguments, and
+  returned-list argument hoisting.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal repository checks
   and diagnostics only.
@@ -68,13 +71,47 @@ This file tracks current work only.
 ## Next Work
 
 1. Keep standalone release archives attached to future source tags.
-2. Extend the direct engine beyond local `List<Struct>` values toward
-   `List<Struct>` parameter and return ABI.
+2. Extend the direct engine beyond the current `List<Int>` and `List<Struct>`
+   ABI toward broader list operations and larger composite value coverage.
 3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 4. Replace the remaining Python-only internal checks when the language has
    enough file/process support.
 5. Keep source release tags, GitHub Releases, GitHub Pages, self-host regeneration, and parity gates green.
+
+## Completed Milestone: Native Direct List Struct ABI
+
+Mode: sequential
+
+- [x] 1. Accept `List<Struct>` in direct function parameter and return types.
+- [x] 2. Lower `List<Struct>` parameters as native references and return values by value.
+- [x] 3. Gate inline `List<Struct>` arguments and returned-list argument hoisting.
+- [x] 4. Sync docs/site/changelog with the promoted struct-list ABI.
+
+### Task Briefs
+
+#### 1. Direct List<Struct> ABI lowering
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode can pass local `List<DeclaredStruct>` values to
+  helpers by reference, return `List<DeclaredStruct>` values by value, lower
+  inline struct-list literals, and hoist `List<Struct>`-returning helper calls
+  before passing them to `List<Struct>` parameters.
+- Done: direct lowering now uses `DirectList_<Struct> *` for list parameters,
+  `DirectList_<Struct>` for returns and temporaries, and context-typed list
+  literals for `List<Struct>`.
+
+#### 2. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
+  `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
+  `WORKLOG.md`, `docs/design/`.
+- Requirements: prove `List<Struct>` parameters, return values, inline
+  arguments, returned-list argument hoisting, and while-condition hoisting run
+  through `scripts/vaisc --engine direct`.
+- Done: direct gate covers `List<Box>` parameter mutation, return-by-value,
+  inline arguments, returned-list arguments, and while-condition hoisting
+  returning 42.
 
 ## Completed Milestone: Native Direct Local List Struct Slice
 
@@ -82,7 +119,7 @@ Mode: sequential
 
 - [x] 1. Parse and validate direct-engine local `List<Struct>` types.
 - [x] 2. Lower local `List<Struct>` storage, `[]`, `list()`, literals, `push`, `len`, index, and field reads.
-- [x] 3. Gate the promoted slice and keep `List<Struct>` function ABI as future work.
+- [x] 3. Gate the promoted slice and leave `List<Struct>` function ABI to the following milestone.
 - [x] 4. Sync docs/site/changelog with the promoted local struct-list slice.
 
 ### Task Briefs
@@ -91,8 +128,8 @@ Mode: sequential
 
 - Target files: `tools/vaisc_native.c`.
 - Requirements: direct mode accepts local `List<DeclaredStruct>` values without
-  invoking Python; function parameter/return list ABI stays limited to
-  `List<Int>` for this slice.
+  invoking Python; `List<Struct>` function parameter/return ABI is handled by
+  the following milestone.
 - Done: direct lowering emits `DirectList_<Struct>` locals for typed `[]`,
   `list()`, and small struct list literals, lowers `push`, `len`/`len()`, index
   reads, and field reads such as `xs[0].value`.
@@ -103,8 +140,8 @@ Mode: sequential
   `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
   `WORKLOG.md`, `docs/design/`.
 - Requirements: prove the local `List<Struct>` slice emits LLVM IR and runs
-  through `scripts/vaisc --engine direct`, while unsupported `List<Struct>`
-  function ABI remains outside public direct claims.
+  through `scripts/vaisc --engine direct`, with function ABI left for the next
+  promoted slice.
 - Done: direct gate covers local `List<Box>` push, length, index, and field-read
   behavior returning 42.
 

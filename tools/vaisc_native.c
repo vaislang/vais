@@ -1441,6 +1441,7 @@ static int direct_is_list_struct_type(DirectStructInfo *structs, int struct_coun
 static int direct_fn_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
     return strcmp(type, "Int") == 0 ||
         direct_is_list_int_type(type) ||
+        direct_is_list_struct_type(structs, struct_count, type) ||
         direct_find_struct(structs, struct_count, type) != NULL;
 }
 
@@ -1469,7 +1470,13 @@ static const char *direct_c_type(const char *type) {
 }
 
 static const char *direct_c_param_type(const char *type) {
-    if (direct_is_list_int_type(type)) return "DirectListInt *";
+    if (direct_is_list_type(type)) {
+        static char bufs[4][136];
+        static int slot = 0;
+        slot = (slot + 1) % 4;
+        snprintf(bufs[slot], sizeof(bufs[slot]), "%s *", direct_c_type(type));
+        return bufs[slot];
+    }
     return direct_c_type(type);
 }
 
@@ -1794,7 +1801,7 @@ static int direct_validate_fn_types(
     if (!direct_fn_type_allowed(structs, struct_count, info->return_type)) {
         report_issue(path, info->line_no, find_col(line, info->return_type), line,
             "direct native emitter function return type is not available",
-            "use `Int`, `List<Int>`, or a struct declared in this file.",
+            "use `Int`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
             NULL);
         issues++;
     }
@@ -1802,7 +1809,7 @@ static int direct_validate_fn_types(
         if (!direct_fn_type_allowed(structs, struct_count, info->param_types[p])) {
             report_issue(path, info->line_no, find_col(line, info->param_types[p]), line,
                 "direct native emitter function parameter type is not available",
-                "use `Int`, `List<Int>`, or a struct declared in this file.",
+                "use `Int`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
                 NULL);
             issues++;
         }
@@ -2037,7 +2044,7 @@ static DirectFnInfo *direct_expr_exact_call_fn(const char *expr, DirectFnInfo *f
 
 static int direct_expr_exact_list_return_call(const char *expr, DirectFnInfo *fns, int fn_count) {
     DirectFnInfo *fn = direct_expr_exact_call_fn(expr, fns, fn_count);
-    return fn != NULL && direct_is_list_int_type(fn->return_type);
+    return fn != NULL && direct_is_list_type(fn->return_type);
 }
 
 static void direct_append_list_len_ref(StrBuf *out, const char *name, int is_ref) {
@@ -2083,18 +2090,20 @@ static char *direct_rewrite_list_literal_value_expr(
     int line_no,
     const char *line,
     const char *expr,
+    const char *list_type,
     DirectNameSet *locals,
     DirectFnInfo *fns,
     int fn_count,
     DirectStructInfo *structs,
     int struct_count
 ) {
+    if (!direct_is_list_type(list_type)) return NULL;
     char *items[16] = {0};
     int item_count = 0;
     int literal_state = direct_parse_list_initializer_items(expr, items, 16, &item_count);
     if (literal_state < 0) {
         report_issue(path, line_no, find_col(line, "List"), line,
-            "direct native emitter supports up to 16 List<Int> literal items",
+            "direct native emitter supports up to 16 List literal items",
             "bind a local list and call `push` for larger direct-engine lists.",
             NULL);
         for (int k = 0; k < 16; k++) free(items[k]);
@@ -2107,23 +2116,13 @@ static char *direct_rewrite_list_literal_value_expr(
 
     StrBuf out;
     sb_init(&out);
-    sb_append(&out, "((DirectListInt){ .data = {");
+    sb_append(&out, "((");
+    sb_append(&out, direct_c_type(list_type));
+    sb_append(&out, "){ .data = {");
     if (item_count == 0) {
         sb_append(&out, "0");
     }
     for (int item = 0; item < item_count; item++) {
-        char *item_type = direct_infer_expr_type(items[item], locals, fns, fn_count, structs, struct_count);
-        if (strcmp(item_type, "Int") != 0) {
-            report_issue(path, line_no, find_col(line, "List"), line,
-                "direct native emitter List<Int> literals accept Int items only",
-                "push struct values through the full engine for now.",
-                NULL);
-            free(item_type);
-            for (int k = item; k < 16; k++) free(items[k]);
-            free(out.data);
-            return NULL;
-        }
-        free(item_type);
         char *rewritten_item = direct_rewrite_expr(path, line_no, line, items[item], locals, fns, fn_count, structs, struct_count);
         if (rewritten_item == NULL) {
             for (int k = item; k < 16; k++) free(items[k]);
@@ -2151,6 +2150,7 @@ static char *direct_rewrite_list_arg_expr(
     int line_no,
     const char *line,
     const char *expr,
+    const char *list_type,
     DirectNameSet *locals,
     DirectFnInfo *fns,
     int fn_count,
@@ -2158,7 +2158,7 @@ static char *direct_rewrite_list_arg_expr(
     int struct_count
 ) {
     if (direct_is_list_initializer_expr(expr)) {
-        char *value = direct_rewrite_list_literal_value_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+        char *value = direct_rewrite_list_literal_value_expr(path, line_no, line, expr, list_type, locals, fns, fn_count, structs, struct_count);
         if (value == NULL) return NULL;
         StrBuf out;
         sb_init(&out);
@@ -2179,7 +2179,7 @@ static char *direct_rewrite_list_arg_expr(
     if (direct_expr_exact_list_return_call(expr, fns, fn_count)) {
         if (direct_current_prelude == NULL) {
             report_issue(path, line_no, find_col(line, expr), line,
-                "direct native emitter requires a local List<Int> argument in this expression context",
+                "direct native emitter requires a local List argument in this expression context",
                 "bind the returned list before passing it here.",
                 "let xs: List<Int> = make()");
             return NULL;
@@ -2190,7 +2190,8 @@ static char *direct_rewrite_list_arg_expr(
         free(rewritten_value);
         char tmp_name[64];
         snprintf(tmp_name, sizeof(tmp_name), "__vais_list_arg_%d", locals->temp_count++);
-        sb_append(direct_current_prelude, "DirectListInt ");
+        sb_append(direct_current_prelude, direct_c_type(list_type));
+        sb_append(direct_current_prelude, " ");
         sb_append(direct_current_prelude, tmp_name);
         sb_append(direct_current_prelude, " = ");
         sb_append(direct_current_prelude, c_value);
@@ -2203,7 +2204,7 @@ static char *direct_rewrite_list_arg_expr(
         return sb_take(&out);
     }
     report_issue(path, line_no, find_col(line, expr), line,
-        "direct native emitter requires a local List<Int> argument",
+        "direct native emitter requires a local List argument",
         "bind the list value to a local before passing it.",
         "let xs: List<Int> = []");
     return NULL;
@@ -2214,6 +2215,7 @@ static char *direct_rewrite_list_value_expr(
     int line_no,
     const char *line,
     const char *expr,
+    const char *list_type,
     DirectNameSet *locals,
     DirectFnInfo *fns,
     int fn_count,
@@ -2221,7 +2223,7 @@ static char *direct_rewrite_list_value_expr(
     int struct_count
 ) {
     if (direct_is_list_initializer_expr(expr)) {
-        return direct_rewrite_list_literal_value_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+        return direct_rewrite_list_literal_value_expr(path, line_no, line, expr, list_type, locals, fns, fn_count, structs, struct_count);
     }
     char *name = NULL;
     if (direct_expr_bare_list_local(locals, expr, &name)) {
@@ -2297,8 +2299,8 @@ static char *direct_rewrite_list_expr(
                 sb_append(&out, "(");
                 for (int a = 0; a < argc; a++) {
                     char *rewritten_arg = NULL;
-                    if (direct_is_list_int_type(fn->param_types[a])) {
-                        rewritten_arg = direct_rewrite_list_arg_expr(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count);
+                    if (direct_is_list_type(fn->param_types[a])) {
+                        rewritten_arg = direct_rewrite_list_arg_expr(path, line_no, line, args[a], fn->param_types[a], locals, fns, fn_count, structs, struct_count);
                     } else {
                         rewritten_arg = direct_rewrite_expr(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count);
                     }
@@ -2558,41 +2560,48 @@ static int direct_check_expr_inner(
     int fn_count,
     DirectStructInfo *structs,
     int struct_count,
-    int allow_list_value
+    const char *allowed_list_type
 ) {
-    if (allow_list_value) {
+    if (allowed_list_type != NULL) {
+        char *allowed_list_elem_type = direct_list_element_type(allowed_list_type);
+        if (allowed_list_elem_type == NULL) return 1;
         char *items[16] = {0};
         int item_count = 0;
         int literal_state = direct_parse_list_initializer_items(expr, items, 16, &item_count);
         if (literal_state < 0) {
             report_issue(path, line_no, find_col(line, "List"), line,
-                "direct native emitter supports up to 16 List<Int> literal items",
+                "direct native emitter supports up to 16 List literal items",
                 "bind a local list and call `push` for larger direct-engine lists.",
                 NULL);
             for (int k = 0; k < 16; k++) free(items[k]);
+            free(allowed_list_elem_type);
             return 1;
         }
         if (literal_state == 1) {
             for (int item = 0; item < item_count; item++) {
-                if (direct_check_expr_inner(path, line_no, line, items[item], locals, fns, fn_count, structs, struct_count, 0)) {
+                if (direct_check_expr_inner(path, line_no, line, items[item], locals, fns, fn_count, structs, struct_count, NULL)) {
                     for (int k = item; k < 16; k++) free(items[k]);
+                    free(allowed_list_elem_type);
                     return 1;
                 }
                 char *item_type = direct_infer_expr_type(items[item], locals, fns, fn_count, structs, struct_count);
-                if (strcmp(item_type, "Int") != 0) {
+                if (strcmp(item_type, allowed_list_elem_type) != 0) {
                     report_issue(path, line_no, find_col(line, "List"), line,
-                        "direct native emitter List<Int> literals accept Int items only",
-                        "push struct values through the full engine for now.",
+                        "direct native emitter list literal item type does not match the expected list element type",
+                        "use items with the element type declared by the surrounding list.",
                         NULL);
                     free(item_type);
                     for (int k = item; k < 16; k++) free(items[k]);
+                    free(allowed_list_elem_type);
                     return 1;
                 }
                 free(item_type);
                 free(items[item]);
             }
+            free(allowed_list_elem_type);
             return 0;
         }
+        free(allowed_list_elem_type);
     }
     for (int i = 0; expr[i] != '\0';) {
         if (!is_ident_start(expr[i])) {
@@ -2727,14 +2736,14 @@ static int direct_check_expr_inner(
                     return 1;
                 }
                 for (int a = 0; a < argc; a++) {
-                    int allow_arg_list = direct_is_list_int_type(fn->param_types[a]);
+                    int allow_arg_list = direct_is_list_type(fn->param_types[a]);
                     int inline_list_arg = 0;
                     int returned_list_arg = 0;
                     if (allow_arg_list) {
                         int literal_state = direct_list_initializer_state(args[a]);
                         if (literal_state < 0) {
                             report_issue(path, line_no, find_col(line, "List"), line,
-                                "direct native emitter supports up to 16 List<Int> literal items",
+                                "direct native emitter supports up to 16 List literal items",
                                 "bind a local list and call `push` for larger direct-engine lists.",
                                 NULL);
                             for (int k = 0; k < 16; k++) free(args[k]);
@@ -2743,6 +2752,14 @@ static int direct_check_expr_inner(
                         }
                         inline_list_arg = literal_state == 1;
                         returned_list_arg = direct_expr_exact_list_return_call(args[a], fns, fn_count);
+                    }
+                    if (allow_arg_list && inline_list_arg) {
+                        if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, fn->param_types[a])) {
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(name);
+                            return 1;
+                        }
+                        continue;
                     }
                     char *arg_type = direct_infer_expr_type(args[a], locals, fns, fn_count, structs, struct_count);
                     if (!direct_type_compatible(fn->param_types[a], arg_type)) {
@@ -2756,16 +2773,8 @@ static int direct_check_expr_inner(
                         return 1;
                     }
                     free(arg_type);
-                    if (allow_arg_list && inline_list_arg) {
-                        if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, 1)) {
-                            for (int k = 0; k < 16; k++) free(args[k]);
-                            free(name);
-                            return 1;
-                        }
-                        continue;
-                    }
                     if (allow_arg_list && returned_list_arg) {
-                        if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, 1)) {
+                        if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, fn->param_types[a])) {
                             for (int k = 0; k < 16; k++) free(args[k]);
                             free(name);
                             return 1;
@@ -2774,14 +2783,14 @@ static int direct_check_expr_inner(
                     }
                     if (allow_arg_list && !direct_expr_bare_list_local(locals, args[a], NULL)) {
                         report_issue(path, line_no, find_col(line, name), line,
-                            "direct native emitter requires a local List<Int> argument",
+                            "direct native emitter requires a local List argument",
                             "bind the list value to a local before passing it.",
                             "let xs: List<Int> = []");
                         for (int k = 0; k < 16; k++) free(args[k]);
                         free(name);
                         return 1;
                     }
-                    if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, allow_arg_list)) {
+                    if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, allow_arg_list ? fn->param_types[a] : NULL)) {
                         for (int k = 0; k < 16; k++) free(args[k]);
                         free(name);
                         return 1;
@@ -2794,7 +2803,7 @@ static int direct_check_expr_inner(
             }
         }
         const char *local_type = direct_names_type(locals, name);
-        if (direct_is_list_type(local_type) && expr[cursor] != '[' && !allow_list_value) {
+        if (direct_is_list_type(local_type) && expr[cursor] != '[' && allowed_list_type == NULL) {
             report_issue(path, line_no, find_col(line, name), line,
                 "direct native emitter cannot use a List value as an Int expression",
                 "read a list element, length, or sum value instead.",
@@ -2831,7 +2840,7 @@ static int direct_check_expr(
     DirectStructInfo *structs,
     int struct_count
 ) {
-    return direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, 0);
+    return direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, NULL);
 }
 
 static char *direct_after_keyword_expr(const char *s, const char *keyword, char stop) {
@@ -2951,7 +2960,7 @@ static int direct_lower_line(
         direct_names_free(locals);
         locals->current_return_type = strdup(header.return_type);
         for (int p = 0; p < header.param_count; p++) {
-            direct_names_add_typed_ref(locals, header.params[p], header.param_types[p], direct_is_list_int_type(header.param_types[p]));
+            direct_names_add_typed_ref(locals, header.params[p], header.param_types[p], direct_is_list_type(header.param_types[p]));
         }
         sb_append(out, direct_c_type(header.return_type));
         sb_append(out, " ");
@@ -2970,8 +2979,8 @@ static int direct_lower_line(
     }
     if (parsed_header < 0 || starts_with(s, "fn ")) {
         report_issue(path, line_no, find_col(line, "fn"), line,
-            "direct native emitter supports Int, List<Int>, and declared-struct function headers",
-            "write functions with `Int`, `List<Int>`, or declared struct parameter and return types.",
+            "direct native emitter supports Int, List<Int>, List<Struct>, and declared-struct function headers",
+            "write functions with `Int`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
             NULL);
         free(stripped);
         return 1;
@@ -3075,20 +3084,23 @@ static int direct_lower_line(
         size_t n = strlen(expr);
         if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
         const char *return_type = locals->current_return_type == NULL ? "Int" : locals->current_return_type;
-        char *expr_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
-        if (!direct_type_compatible(return_type, expr_type)) {
-            report_issue(path, line_no, find_col(line, "return"), line,
-                "direct native emitter return expression type does not match the function return type",
-                "return a value with the type declared in the function header.",
-                "return 40 + 2");
+        int allow_list_return = direct_is_list_type(return_type);
+        int inline_list_return = allow_list_return && direct_is_list_initializer_expr(expr);
+        if (!inline_list_return) {
+            char *expr_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
+            if (!direct_type_compatible(return_type, expr_type)) {
+                report_issue(path, line_no, find_col(line, "return"), line,
+                    "direct native emitter return expression type does not match the function return type",
+                    "return a value with the type declared in the function header.",
+                    "return 40 + 2");
+                free(expr_type);
+                free(expr);
+                free(stripped);
+                return 1;
+            }
             free(expr_type);
-            free(expr);
-            free(stripped);
-            return 1;
         }
-        free(expr_type);
-        int allow_list_return = direct_is_list_int_type(return_type);
-        if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, allow_list_return)) {
+        if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, allow_list_return ? return_type : NULL)) {
             free(expr);
             free(stripped);
             return 1;
@@ -3097,7 +3109,7 @@ static int direct_lower_line(
         sb_init(&prelude);
         direct_current_prelude = &prelude;
         char *rewritten = allow_list_return
-            ? direct_rewrite_list_value_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)
+            ? direct_rewrite_list_value_expr(path, line_no, line, expr, return_type, locals, fns, fn_count, structs, struct_count)
             : direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
         direct_current_prelude = NULL;
         if (rewritten == NULL) {
@@ -3140,7 +3152,7 @@ static int direct_lower_line(
             if (local_type == NULL) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter expected a local type",
-                    "use `Int`, `List<Int>`, or a declared struct type in this direct-engine slice.",
+                    "use `Int`, `List<Int>`, `List<Struct>`, or a declared struct type in this direct-engine slice.",
                     NULL);
                 free(name);
                 free(stripped);
@@ -3148,8 +3160,8 @@ static int direct_lower_line(
             }
             if (!direct_local_type_allowed(structs, struct_count, local_type)) {
                 report_issue(path, line_no, find_col(line, local_type), line,
-                    "direct native emitter supports Int, List<Int>, and declared struct locals only",
-                    "use `let name: Int = expr`, `let name: List<Int> = []`, `let name: Struct = expr`, or omit the annotation.",
+                    "direct native emitter supports Int, List<Int>, List<Struct>, and declared struct locals only",
+                    "use `let name: Int = expr`, `let name: List<Int> = []`, `let name: List<Box> = []`, `let name: Struct = expr`, or omit the annotation.",
                     NULL);
                 free(local_type);
                 free(name);
@@ -3184,7 +3196,7 @@ static int direct_lower_line(
                 int literal_state = direct_parse_list_literal_items(expr, items, 16, &item_count);
                 if (literal_state < 0) {
                     report_issue(path, line_no, find_col(line, name), line,
-                        "direct native emitter supports up to 16 List<Int> literal items",
+                        "direct native emitter supports up to 16 List literal items",
                         "start with `[]` and call `push` for larger direct-engine lists.",
                         NULL);
                     for (int k = 0; k < 16; k++) free(items[k]);
@@ -3256,7 +3268,7 @@ static int direct_lower_line(
                 free(stripped);
                 return 0;
             }
-            if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, 1)) {
+            if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, local_type)) {
                 free(expr);
                 free(local_type);
                 free(list_elem_type);
@@ -3282,7 +3294,7 @@ static int direct_lower_line(
             StrBuf prelude;
             sb_init(&prelude);
             direct_current_prelude = &prelude;
-            char *rewritten = direct_rewrite_list_value_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+            char *rewritten = direct_rewrite_list_value_expr(path, line_no, line, expr, local_type, locals, fns, fn_count, structs, struct_count);
             direct_current_prelude = NULL;
             if (rewritten == NULL) {
                 free(prelude.data);
@@ -3475,8 +3487,8 @@ static int direct_lower_line(
             return 1;
         }
         const char *target_type = direct_names_type(locals, lhs);
-        int allow_list_assignment = direct_is_list_int_type(target_type);
-        if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, allow_list_assignment)) {
+        int allow_list_assignment = direct_is_list_type(target_type);
+        if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, allow_list_assignment ? target_type : NULL)) {
             free(lhs);
             free(expr);
             free(stripped);
@@ -3499,7 +3511,7 @@ static int direct_lower_line(
         sb_init(&prelude);
         direct_current_prelude = &prelude;
         char *rewritten = allow_list_assignment
-            ? direct_rewrite_list_value_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)
+            ? direct_rewrite_list_value_expr(path, line_no, line, expr, target_type, locals, fns, fn_count, structs, struct_count)
             : direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
         direct_current_prelude = NULL;
         if (rewritten == NULL) {
@@ -3526,7 +3538,7 @@ static int direct_lower_line(
     }
 
     report_issue(path, line_no, 1, line,
-        "direct native emitter supports Int functions, struct locals, List<Int> locals, lets, assignment, if, while, calls, and return",
+        "direct native emitter supports Int functions, struct locals, List locals, lets, assignment, if, while, calls, and return",
         "use the full engine for syntax outside the direct subset.",
         NULL);
     free(stripped);
@@ -3616,8 +3628,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             fns[fn_count++] = info;
         } else if (parsed < 0) {
             report_issue(path, (int)i + 1, 1, lines.items[i],
-                "direct native emitter supports Int, List<Int>, and declared-struct function headers",
-                "write functions with `Int`, `List<Int>`, or declared struct parameter and return types.",
+                "direct native emitter supports Int, List<Int>, List<Struct>, and declared-struct function headers",
+                "write functions with `Int`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
                 NULL);
             free(skip_lines);
             lines_free(&lines);

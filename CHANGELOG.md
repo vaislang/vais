@@ -25,6 +25,8 @@
   iteration instead of requiring a local list binding.
 - Local `List<Struct>` values now lower through the direct engine for typed
   `[]`, `list()`, list literals, `push`, `len`, index, and field reads.
+- `List<Struct>` direct-engine function parameters, return values, inline list
+  arguments, and returned-list argument hoisting now use the native list ABI.
 
 ## v0.2.1 - 2026-06-14
 

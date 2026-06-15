@@ -289,6 +289,69 @@ else
     fail=1
 fi
 
+list_struct_abi_src="$tmp/direct_list_struct_abi.vais"
+cat > "$list_struct_abi_src" <<'SRC'
+struct Box {
+    value: Int,
+}
+
+fn make(v: Int) -> List<Box> {
+    return [Box { value: v }, Box { value: v + 1 }]
+}
+
+fn empty_box() -> List<Box> {
+    return []
+}
+
+fn append(out: List<Box>, v: Int) -> Int {
+    out.push(Box { value: v })
+    return out.len()
+}
+
+fn score(xs: List<Box>) -> Int {
+    return xs[0].value + xs.len()
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    let n = append(xs, 20)
+    let ys: List<Box> = make(21)
+    let zs: List<Box> = empty_box()
+    zs.push(Box { value: 1 })
+    let inline_score = score([Box { value: 17 }])
+    let returned_score = score(make(2))
+    let mut i = 0
+    let mut total = 0
+    while score(make(i)) < 5 {
+        total = total + score(make(i))
+        i = i + 1
+    }
+    return xs[0].value + ys[1].value + n + zs[0].value + inline_score + returned_score + total - 33
+}
+SRC
+
+if "$VAISC" emit-ir "$list_struct_abi_src" \
+    --engine direct -o "$tmp/list-struct-abi.ll" \
+    >"$tmp/list-struct-abi.out" 2>"$tmp/list-struct-abi.err" &&
+    grep -q '%struct.DirectList_Box = type' "$tmp/list-struct-abi.ll" &&
+    grep -q 'sret(%struct.DirectList_Box)' "$tmp/list-struct-abi.ll" &&
+    grep -q 'define i64 @append(ptr' "$tmp/list-struct-abi.ll" &&
+    grep -q 'define i64 @score(ptr' "$tmp/list-struct-abi.ll"; then
+    "$VAISC" run "$list_struct_abi_src" --engine direct >"$tmp/list-struct-abi-run.out" 2>"$tmp/list-struct-abi-run.err"
+    list_struct_abi_run=$?
+    if [ "$list_struct_abi_run" = "42" ]; then
+        echo "  PASS direct List<Struct> parameter, return, inline, and hoisted arguments run (=42)"
+    else
+        echo "  FAIL direct List<Struct> ABI got=$list_struct_abi_run want=42"
+        cat "$tmp/list-struct-abi-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct List<Struct> ABI emission"
+    cat "$tmp/list-struct-abi.err"
+    fail=1
+fi
+
 list_abi_src="$tmp/direct_list_int_abi.vais"
 cat > "$list_abi_src" <<'SRC'
 fn make(a: Int, b: Int, c: Int) -> List<Int> {
