@@ -30,6 +30,8 @@
   parameters, plus P4 diagnostics for unknown indexed fields.
 - Added direct-engine element assignment for `List<Int>` and `List<Struct>`
   locals and parameters, including list-index element type inference.
+- Added direct-engine returned-list argument hoisting for plain `if` conditions
+  with both `List<Int>` and `List<Struct>`.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 

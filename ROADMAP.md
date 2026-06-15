@@ -32,6 +32,8 @@ This file tracks current work only.
   `List<Int>` call arguments in statement contexts.
 - The native direct engine hoists `List<Int>`-returning helper calls in `while`
   conditions and reevaluates them on each loop iteration.
+- The native direct engine hoists `List<Int>` and `List<Struct>` returned-list
+  helper calls used as list arguments in plain `if` conditions.
 - The native direct engine covers local `List<Struct>` values for declared
   structs: typed `[]`, `list()`, list literal initialization, `push`, `len`,
   index, and field reads.
@@ -52,12 +54,13 @@ This file tracks current work only.
   local literal/read/write, struct parameter/return helper ABI, and local
   `List<Int>` initialization plus `push`, `len`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
-  literal/constructor call and return values. Statement contexts and `while`
-  conditions also hoist `List<Int>`-returning helper calls before passing them
-  to `List<Int>` parameters. Local `List<Struct>` values support typed `[]`,
-  `list()`, list literal initialization, `push`, `len`, index, field reads/writes,
-  parameter reference, return value ABI, inline list arguments, and
-  returned-list argument hoisting. Context-typed list assignment is supported
+  literal/constructor call and return values. Statement contexts, plain `if`
+  conditions, and `while` conditions also hoist `List<Int>`-returning helper
+  calls before passing them to `List<Int>` parameters. Local `List<Struct>`
+  values support typed `[]`, `list()`, list literal initialization, `push`,
+  `len`, index, field reads/writes, parameter reference, return value ABI,
+  inline list arguments, and returned-list argument hoisting in statements plus
+  plain `if` and `while` conditions. Context-typed list assignment is supported
   for `List<Int>` and `List<Struct>` locals and list parameters. Element
   assignment is supported for `List<Int>` and `List<Struct>`, including through
   list parameters.
@@ -87,6 +90,36 @@ This file tracks current work only.
 4. Replace the remaining Python-only internal checks when the language has
    enough file/process support.
 5. Keep source release tags, GitHub Releases, GitHub Pages, self-host regeneration, and parity gates green.
+
+## Completed Milestone: Native Direct List If-Condition Hoisting
+
+Mode: sequential
+
+- [x] 1. Hoist returned `List<Int>` and `List<Struct>` helper calls in plain `if` conditions.
+- [x] 2. Gate direct `if score(make(...))` behavior for both integer and struct lists.
+- [x] 3. Sync docs/site/changelog with the promoted condition-hoisting slice.
+
+### Task Briefs
+
+#### 1. Direct plain-if returned-list argument hoisting
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode accepts plain `if` conditions such as
+  `if score(make(20)) == 41 {` when `make` returns a list and `score` receives
+  the matching `List<T>` parameter.
+- Done: direct `if` lowering now attaches the existing list-argument prelude
+  before the generated C `if`, so returned-list temporaries are available to
+  the condition expression.
+
+#### 2. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `docs/reference/LANGUAGE.md`,
+  `website/`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`, `docs/design/`.
+- Requirements: prove direct `List<Int>` and `List<Struct>` returned-list
+  arguments execute inside plain `if` conditions and keep public docs precise
+  about the promoted scope.
+- Done: direct gate covers `score_int(make_int(...))` and
+  `score_box(make_box(...))` inside plain `if` conditions returning 42.
 
 ## Completed Milestone: Native Direct List Element Assignment
 

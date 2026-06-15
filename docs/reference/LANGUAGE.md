@@ -258,7 +258,7 @@ fn main() -> Int {
 ```
 
 List-returning helper calls can be passed directly to `List<Int>` parameters in
-ordinary statements:
+ordinary statements and plain `if` conditions:
 
 ```vais
 fn make(n: Int) -> List<Int> {
@@ -270,7 +270,10 @@ fn score(xs: List<Int>) -> Int {
 }
 
 fn main() -> Int {
-    return score(make(20))
+    if score(make(20)) == 41 {
+        return 42
+    }
+    return 0
 }
 ```
 
@@ -307,7 +310,7 @@ Verified today:
 - Inline `[]`, `list()`, and integer list literals as `List<Int>` return values
   and call arguments in the direct engine.
 - `List<Int>`-returning helper calls used directly as `List<Int>` call arguments
-  in statement contexts and `while` conditions.
+  in statement contexts plus plain `if` and `while` conditions.
 - `xs.push(value)`.
 - `xs.len()`.
 - `xs[index]`.
@@ -327,7 +330,8 @@ small integer list literals, plus `push`, `len`/`len()`, index, `sum()`, and
 function calls where `List<Int>` parameters are local list names or inline list
 values. It also covers `List<Int>`-returning helper calls passed directly to
 `List<Int>` parameters in `return`, `let`, list-literal item, `push`, assignment
-statements, and `while` conditions. In the direct engine native ABI, `List<Int>`
+statements, plain `if` conditions, and `while` conditions. In the direct engine
+native ABI, `List<Int>`
 parameters are passed by reference, so `push` on a local-list parameter mutates
 the caller's local list, and assigning a new list to a list parameter replaces
 the caller's local list. `push` or assignment on an inline or returned-list
@@ -336,7 +340,7 @@ returned by value. The
 same parameter-reference and return-by-value ABI applies to `List<Struct>` for
 declared structs, including inline list arguments and `List<Struct>`-returning
 helper calls passed directly to `List<Struct>` parameters in statement contexts
-and `while` conditions. Direct list elements can be assigned with
+plus plain `if` and `while` conditions. Direct list elements can be assigned with
 `xs[index] = value`, and indexed `List<Struct>` element fields can be assigned
 with `xs[index].field = value`; both work through list parameters. `sum()` on
 `List<Struct>` is not a direct-engine release claim.
