@@ -82,14 +82,165 @@ This file tracks current work only.
 
 ## Next Work
 
-1. Keep standalone release archives attached to future source tags.
-2. Extend the direct engine beyond the current list ABI and assignment coverage
-   toward broader list operations and larger composite value coverage.
-3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
-   Python-free public command path.
-4. Replace the remaining Python-only internal checks when the language has
-   enough file/process support.
-5. Keep source release tags, GitHub Releases, GitHub Pages, self-host regeneration, and parity gates green.
+1. Lock the release process around source tags, standalone archives, changelog
+   entries, and site/documentation sync.
+2. Expand the standard library only through gate-backed APIs.
+3. Add a small module/package/import model before growing multi-file examples.
+4. Add file and process primitives, then replace Python-only internal checks
+   with Vais-backed tools where the language is strong enough.
+5. Broaden types, collections, and control syntax without publishing ungated
+   claims.
+6. Move more compiler development and verification into the self-host tier while
+   keeping native host responsibilities explicit.
+7. Keep GitHub Releases, GitHub Pages, self-host regeneration, direct/full parity,
+   and value gates green at each milestone.
+
+## Vais v1 Completion Roadmap
+
+This is the durable completion plan for turning the current Vais baseline into a
+language/toolchain that can reasonably be called complete for a first stable
+release. "Complete" means documented, implemented, tested, packaged, and
+published from this repository without compatibility notes for older names or
+alternate source extensions.
+
+### Phase 0: Release Discipline
+
+Goal: make every future capability land behind a repeatable release process.
+
+- [ ] 0.1 Define the next release line and tag policy in `CHANGELOG.md`,
+  `README.md`, and release docs.
+- [ ] 0.2 Add a release checklist that runs native, install/package, direct,
+  front, parity, value, and self-host regeneration gates before tagging.
+- [ ] 0.3 Prove one source tag produces a GitHub Release with standalone
+  archives and a smoke-tested packaged `vaisc`.
+- [ ] 0.4 Keep `vaislang.dev` synced from repository docs for every release.
+
+Done: a clean checkout can produce and verify a tagged release archive, and the
+public site describes exactly that release.
+
+### Phase 1: Standard Library Core
+
+Goal: grow a small, reliable prelude instead of a large speculative API list.
+
+- [ ] 1.1 Promote verified `List<T>` operations beyond the current direct slices:
+  `is_empty`, `last`, `pop`, and bounds-safe diagnostics or documented trap
+  behavior.
+- [ ] 1.2 Promote `Str` operations needed by real tools: `len`, index,
+  equality, byte classification helpers, and integer parsing helpers.
+- [ ] 1.3 Promote `Map<K,V>` only after a minimal gate-backed design exists for
+  construction, insert, lookup, contains, and length.
+- [ ] 1.4 Add examples and value tests for every promoted prelude API.
+- [ ] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
+
+Done: `std/PRELUDE.md` has no public "Verified" entry without a matching gate.
+
+### Phase 2: Modules, Packages, And Imports
+
+Goal: allow real projects to split code across files without inventing a large
+package manager too early.
+
+- [ ] 2.1 Specify a minimal module model: file module names, import paths, symbol
+  visibility, duplicate-name diagnostics, and cycle behavior.
+- [ ] 2.2 Implement single-package multi-file compilation for `scripts/vaisc`.
+- [ ] 2.3 Add `import` support for local package paths with deterministic
+  ordering and stable diagnostics.
+- [ ] 2.4 Add package manifest support only for name/version/source roots and
+  local dependencies.
+- [ ] 2.5 Add examples, docs, and gates for module imports, duplicate symbols,
+  cycles, and package smoke builds.
+
+Done: a small multi-file Vais project builds with `scripts/vaisc build` and is
+covered by CI gates.
+
+### Phase 3: File And Process Support
+
+Goal: give Vais enough host interaction to replace internal Python checks where
+practical.
+
+- [ ] 3.1 Specify file read/write, path, temp directory, stdout/stderr, exit code,
+  and process execution APIs.
+- [ ] 3.2 Implement host-backed intrinsics in the native driver without mixing
+  them into pure compiler-core logic.
+- [ ] 3.3 Port the simplest Python-only checker to Vais first, keeping Python as
+  a comparison oracle until parity is proven.
+- [ ] 3.4 Port additional internal scripts only when file/process APIs are
+  stable and tested.
+- [ ] 3.5 Remove Python from public/release gates before removing it from
+  development diagnostics.
+
+Done: at least one internal checker runs from Vais source, and release gates no
+longer require Python except where explicitly marked development-only.
+
+### Phase 4: Broader Language Surface
+
+Goal: expand the language deliberately while avoiding unsupported public claims.
+
+- [ ] 4.1 Stabilize `Bool`, `Str`, and `Char` as first-class surface types across
+  full and direct gates where feasible.
+- [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
+  simple return-arm shape is fully gated.
+- [ ] 4.3 Decide `for`, `break`, and `continue` semantics and lower them through
+  both full and direct paths where claimed.
+- [ ] 4.4 Expand collections with `Map`, `Option`, and `Result` only after syntax,
+  ABI, and diagnostics are specified.
+- [ ] 4.5 Keep unsupported syntax behind `tools/vais-check.py` and front-contract
+  diagnostics until promoted.
+
+Done: `docs/reference/LANGUAGE.md` describes a coherent v1 surface, and every
+listed feature has examples plus compiler gates.
+
+### Phase 5: Self-Host Expansion
+
+Goal: make the self-host compiler own more of the actual compiler behavior over
+time.
+
+- [ ] 5.1 Keep `compiler/self/fixpoint_full.vais` and `vaisc_core.ll`
+  regeneration green after each language expansion.
+- [ ] 5.2 Move front-contract validation that belongs to the compiler into
+  self-host Vais code once the language can express it cleanly.
+- [ ] 5.3 Move more diagnostics and source preparation out of host C/Python while
+  keeping OS-facing file/process work behind explicit host APIs.
+- [ ] 5.4 Add stage comparison gates for self-host output where deterministic IR
+  is practical.
+
+Done: the compiler can rebuild its checked-in core from Vais source, and the
+native host driver is limited to CLI, OS integration, and linking duties.
+
+### Phase 6: Stable v1 Release
+
+Goal: publish a coherent first stable Vais release.
+
+- [ ] 6.1 Freeze the v1 language reference and prelude reference.
+- [ ] 6.2 Cut a release candidate tag and attach verified standalone archives.
+- [ ] 6.3 Run all release, direct/full, install/package, website, and self-host
+  gates from a clean checkout.
+- [ ] 6.4 Publish final docs/site copy from repository canonical docs.
+- [ ] 6.5 Cut the final v1 tag and verify the GitHub Release assets and
+  `vaislang.dev` content.
+
+Done: users can install `vaisc`, read the v1 docs, compile the gate-backed
+examples, and reproduce the release archive from source.
+
+### Execution Rules
+
+- Work phase order is dependency order. Do not jump to later public claims unless
+  their gates and docs are also updated.
+- Each milestone must update `ROADMAP.md`, `CHANGELOG.md`, canonical docs, and
+  website copy when public behavior changes.
+- Direct engine growth is valuable, but the full self-host path remains the
+  language authority unless a direct slice is explicitly promoted.
+- Python removal is not an isolated cleanup task; it depends on file/process
+  support and Vais-backed replacement tools.
+- Release tags are public state. Create or move tags only as a deliberate
+  release milestone.
+
+### Current First Executable Milestone
+
+Start with Phase 0. The next concrete slice is:
+
+- [ ] Add a release checklist document and wire it to the current gate commands.
+- [ ] Confirm the release archive workflow can be manually run for a chosen tag.
+- [ ] Decide the next release version before creating any public tag.
 
 ## Completed Milestone: Native Direct List Else-If Condition Arguments
 
