@@ -23,6 +23,8 @@
   when passed directly to `List<Int>` parameters in statement contexts.
 - Direct-engine `while` conditions now hoist returned-list arguments per
   iteration instead of requiring a local list binding.
+- Local `List<Struct>` values now lower through the direct engine for typed
+  `[]`, `list()`, list literals, `push`, `len`, index, and field reads.
 
 ## v0.2.1 - 2026-06-14
 

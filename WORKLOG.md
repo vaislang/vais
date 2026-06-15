@@ -16,6 +16,10 @@
   passed directly to `List<Int>` parameters in statement contexts.
 - Added per-iteration direct-engine hoisting for returned-list arguments inside
   `while` conditions.
+- Added direct-engine local `List<Struct>` lowering for declared structs,
+  including typed `[]`, `list()`, list literals, `push`, `len`, index, and
+  field reads.
+- Added direct-engine gate coverage for local `List<Box>` emit/run behavior.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 

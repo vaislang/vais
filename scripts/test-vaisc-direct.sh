@@ -252,6 +252,43 @@ else
     fail=1
 fi
 
+list_struct_src="$tmp/direct_list_struct_local.vais"
+cat > "$list_struct_src" <<'SRC'
+struct Box {
+    value: Int,
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 10 })
+    xs.push(Box { value: 30 })
+    let ys: List<Box> = [Box { value: 1 }]
+    let zs: List<Box> = list()
+    zs.push(Box { value: 2 })
+    return xs[0].value + xs[1].value + xs.len() + ys[0].value + zs[0].value - 3
+}
+SRC
+
+if "$VAISC" emit-ir "$list_struct_src" \
+    --engine direct -o "$tmp/list-struct.ll" \
+    >"$tmp/list-struct.out" 2>"$tmp/list-struct.err" &&
+    grep -q 'DirectList_Box' "$tmp/list-struct.ll" &&
+    grep -q 'getelementptr .*struct.Box' "$tmp/list-struct.ll"; then
+    "$VAISC" run "$list_struct_src" --engine direct >"$tmp/list-struct-run.out" 2>"$tmp/list-struct-run.err"
+    list_struct_run=$?
+    if [ "$list_struct_run" = "42" ]; then
+        echo "  PASS direct local List<Struct> push, len, index, and field read run (=42)"
+    else
+        echo "  FAIL direct List<Struct> got=$list_struct_run want=42"
+        cat "$tmp/list-struct-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct List<Struct> emission"
+    cat "$tmp/list-struct.err"
+    fail=1
+fi
+
 list_abi_src="$tmp/direct_list_int_abi.vais"
 cat > "$list_abi_src" <<'SRC'
 fn make(a: Int, b: Int, c: Int) -> List<Int> {

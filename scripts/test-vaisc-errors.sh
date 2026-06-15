@@ -115,7 +115,7 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "direct_list_method" "direct" "supports List<Int> push, len, index, and sum" "xs.push(value)" <<'SRC'
+expect_diag "direct_list_method" "direct" "supports List push, len, index, and List<Int> sum" "xs.push(value)" <<'SRC'
 fn main() -> Int {
     let xs: List<Int> = []
     return xs.clear()

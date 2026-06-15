@@ -77,6 +77,7 @@ Verified release surface:
 | `Str` | String literals and selected string operations |
 | `Char` | Single-byte character literals in verified examples |
 | `List<Int>` | Empty/list literal, `push`, `len`, index, `sum` |
+| `List<Struct>` | Direct-engine local `[]`, `list()`, list literal, `push`, `len`, index, field read |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match and small recursive `Int` payload enum/match |
 
@@ -126,7 +127,8 @@ while i < n {
 The direct engine gate covers `if`, `while`, local `let`, assignment, helper
 calls, `return`, simple Int-field struct locals, struct parameter/return
 helpers, and `List<Int>` local operations plus parameter reference and return
-value ABI.
+value ABI, plus local `List<Struct>` construction with `[]`, `list()`, list
+literals, `push`, `len`, index, and field read.
 Strings and the self-host compiler tier remain full-engine territory.
 
 Verified today:
@@ -271,6 +273,23 @@ fn main() -> Int {
 }
 ```
 
+Declared struct values can also be stored in local direct-engine lists:
+
+```vais
+struct Box {
+    value: Int,
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 20 })
+    xs.push(Box { value: 22 })
+    let ys: List<Box> = list()
+    ys.push(Box { value: 0 })
+    return xs[0].value + xs[1].value + ys[0].value
+}
+```
+
 Verified today:
 
 - Empty `List<Int>` with an explicit type.
@@ -285,6 +304,8 @@ Verified today:
 - `xs.sum()`.
 - Passing a local `List<Int>` to a `List<Int>` parameter.
 - Returning `List<Int>` from helper functions.
+- Local `List<Struct>` values with an explicit type, `[]`, `list()`, list literals,
+  `push`, `len`, index, and field reads in the direct engine.
 
 The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
 small integer list literals, plus `push`, `len`/`len()`, index, `sum()`, and
@@ -294,8 +315,11 @@ values. It also covers `List<Int>`-returning helper calls passed directly to
 statements, and `while` conditions. In the direct engine native ABI, `List<Int>`
 parameters are passed by reference, so `push` on a local-list parameter mutates
 the caller's local list; `push` on an inline or returned-list temporary mutates
-only that temporary value. `List<Int>` return values are returned by value.
-`List<Struct>` is not a direct-engine release claim yet.
+only that temporary value. `List<Int>` return values are returned by value. The
+direct engine also covers local `List<Struct>` variables for declared structs
+with `[]`, `list()`, list literals, `push`, `len`, index, and field reads.
+`List<Struct>` function parameters, return values, inline call arguments, and
+`sum()` are not direct-engine release claims yet.
 
 Methods such as `map`, `filter`, and arbitrary user-defined methods are not
 release-surface claims yet.

@@ -1419,14 +1419,34 @@ static int direct_is_list_int_type(const char *type) {
     return type != NULL && strcmp(type, "List<Int>") == 0;
 }
 
-static int direct_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
+static int direct_is_list_type(const char *type) {
+    size_t n = type == NULL ? 0 : strlen(type);
+    return n > 6 && starts_with(type, "List<") && type[n - 1] == '>';
+}
+
+static char *direct_list_element_type(const char *type) {
+    if (!direct_is_list_type(type)) return NULL;
+    size_t n = strlen(type);
+    return substr_copy(type + 5, n - 6);
+}
+
+static int direct_is_list_struct_type(DirectStructInfo *structs, int struct_count, const char *type) {
+    char *elem = direct_list_element_type(type);
+    if (elem == NULL) return 0;
+    int ok = strcmp(elem, "Int") != 0 && direct_find_struct(structs, struct_count, elem) != NULL;
+    free(elem);
+    return ok;
+}
+
+static int direct_fn_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
     return strcmp(type, "Int") == 0 ||
         direct_is_list_int_type(type) ||
         direct_find_struct(structs, struct_count, type) != NULL;
 }
 
 static int direct_local_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
-    return direct_type_allowed(structs, struct_count, type);
+    return direct_fn_type_allowed(structs, struct_count, type) ||
+        direct_is_list_struct_type(structs, struct_count, type);
 }
 
 static int direct_type_compatible(const char *expected, const char *actual) {
@@ -1436,6 +1456,15 @@ static int direct_type_compatible(const char *expected, const char *actual) {
 
 static const char *direct_c_type(const char *type) {
     if (direct_is_list_int_type(type)) return "DirectListInt";
+    if (direct_is_list_type(type)) {
+        static char bufs[4][128];
+        static int slot = 0;
+        char *elem = direct_list_element_type(type);
+        slot = (slot + 1) % 4;
+        snprintf(bufs[slot], sizeof(bufs[slot]), "DirectList_%s", elem == NULL ? "Unknown" : elem);
+        free(elem);
+        return bufs[slot];
+    }
     return strcmp(type, "Int") == 0 ? "long" : type;
 }
 
@@ -1450,13 +1479,23 @@ static char *direct_parse_local_type(const char **cursor) {
         const char *q = skip_ws(p + 4);
         if (*q == '<') {
             q = skip_ws(q + 1);
-            if (starts_with(q, "Int") && !is_ident_continue(q[3])) {
-                q = skip_ws(q + 3);
-                if (*q == '>') {
-                    *cursor = skip_ws(q + 1);
-                    return strdup("List<Int>");
-                }
+            if (!is_ident_start(*q)) return NULL;
+            const char *elem_start = q;
+            q++;
+            while (is_ident_continue(*q)) q++;
+            char *elem = substr_copy(elem_start, (size_t)(q - elem_start));
+            q = skip_ws(q);
+            if (*q == '>') {
+                *cursor = skip_ws(q + 1);
+                StrBuf out;
+                sb_init(&out);
+                sb_append(&out, "List<");
+                sb_append(&out, elem);
+                sb_append(&out, ">");
+                free(elem);
+                return sb_take(&out);
             }
+            free(elem);
         }
     }
     if (!is_ident_start(*p)) return NULL;
@@ -1752,7 +1791,7 @@ static int direct_validate_fn_types(
     int struct_count
 ) {
     int issues = 0;
-    if (!direct_type_allowed(structs, struct_count, info->return_type)) {
+    if (!direct_fn_type_allowed(structs, struct_count, info->return_type)) {
         report_issue(path, info->line_no, find_col(line, info->return_type), line,
             "direct native emitter function return type is not available",
             "use `Int`, `List<Int>`, or a struct declared in this file.",
@@ -1760,7 +1799,7 @@ static int direct_validate_fn_types(
         issues++;
     }
     for (int p = 0; p < info->param_count; p++) {
-        if (!direct_type_allowed(structs, struct_count, info->param_types[p])) {
+        if (!direct_fn_type_allowed(structs, struct_count, info->param_types[p])) {
             report_issue(path, info->line_no, find_col(line, info->param_types[p]), line,
                 "direct native emitter function parameter type is not available",
                 "use `Int`, `List<Int>`, or a struct declared in this file.",
@@ -1957,7 +1996,7 @@ static int direct_expr_bare_list_local(DirectNameSet *locals, const char *expr, 
         return 0;
     }
     char *name = substr_copy(start, (size_t)(s - start));
-    int ok = direct_is_list_int_type(direct_names_type(locals, name));
+    int ok = direct_is_list_type(direct_names_type(locals, name));
     if (ok && name_out != NULL) {
         *name_out = name;
     } else {
@@ -2280,7 +2319,7 @@ static char *direct_rewrite_list_expr(
                 continue;
             }
         }
-        if (!direct_is_list_int_type(base_type)) {
+        if (!direct_is_list_type(base_type)) {
             sb_append_n(&out, expr + start, (size_t)(i - start));
             free(name);
             continue;
@@ -2361,6 +2400,16 @@ static char *direct_rewrite_list_expr(
                 continue;
             }
             if (strcmp(field, "sum") == 0) {
+                if (!direct_is_list_int_type(base_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports sum only on List<Int>",
+                        "read struct list fields explicitly before summing.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
                 if (*after != '(') {
                     report_issue(path, line_no, find_col(line, name), line,
                         "direct native emitter List<Int>.sum must be called",
@@ -2404,8 +2453,8 @@ static char *direct_rewrite_list_expr(
                 continue;
             }
             report_issue(path, line_no, find_col(line, name), line,
-                "direct native emitter supports List<Int> len, index, and sum expressions",
-                "write `xs.len()`, `xs[i]`, or `xs.sum()`.",
+                "direct native emitter supports List len, index, and List<Int> sum expressions",
+                "write `xs.len()`, `xs[i]`, or `xs.sum()` for List<Int>.",
                 NULL);
             free(field);
             free(name);
@@ -2575,7 +2624,7 @@ static int direct_check_expr_inner(
             while (is_ident_continue(expr[field_end])) field_end++;
             char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
             const char *base_type = direct_names_type(locals, name);
-            if (direct_is_list_int_type(base_type)) {
+            if (direct_is_list_type(base_type)) {
                 const char *after = skip_ws(expr + field_end);
                 if (strcmp(field, "len") == 0) {
                     if (*after == '(') {
@@ -2598,6 +2647,15 @@ static int direct_check_expr_inner(
                     continue;
                 }
                 if (strcmp(field, "sum") == 0 && *after == '(') {
+                    if (!direct_is_list_int_type(base_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports sum only on List<Int>",
+                            "read struct list fields explicitly before summing.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
                     int close = find_matching_paren_c(expr, (int)(after - expr));
                     if (close < 0) {
                         report_issue(path, line_no, find_col(line, name), line,
@@ -2614,8 +2672,8 @@ static int direct_check_expr_inner(
                     continue;
                 }
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter supports List<Int> push, len, index, and sum",
-                    "write `xs.push(value)`, `xs.len()`, `xs[i]`, or `xs.sum()`.",
+                    "direct native emitter supports List push, len, index, and List<Int> sum",
+                    "write `xs.push(value)`, `xs.len()`, `xs[i]`, or `xs.sum()` for List<Int>.",
                     "xs.push(value)");
                 free(field);
                 free(name);
@@ -2736,9 +2794,9 @@ static int direct_check_expr_inner(
             }
         }
         const char *local_type = direct_names_type(locals, name);
-        if (direct_is_list_int_type(local_type) && expr[cursor] != '[' && !allow_list_value) {
+        if (direct_is_list_type(local_type) && expr[cursor] != '[' && !allow_list_value) {
             report_issue(path, line_no, find_col(line, name), line,
-                "direct native emitter cannot use a List<Int> value as an Int expression",
+                "direct native emitter cannot use a List value as an Int expression",
                 "read a list element, length, or sum value instead.",
                 "xs.len()");
             free(name);
@@ -3113,7 +3171,8 @@ static int direct_lower_line(
         size_t n = strlen(expr);
         if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
         if (local_type == NULL) local_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
-        if (direct_is_list_int_type(local_type)) {
+        if (direct_is_list_type(local_type)) {
+            char *list_elem_type = direct_list_element_type(local_type);
             if (direct_is_list_initializer_expr(expr)) {
                 sb_append(out, direct_c_type(local_type));
                 sb_append(out, " ");
@@ -3131,6 +3190,7 @@ static int direct_lower_line(
                     for (int k = 0; k < 16; k++) free(items[k]);
                     free(expr);
                     free(local_type);
+                    free(list_elem_type);
                     free(name);
                     free(stripped);
                     return 1;
@@ -3140,20 +3200,22 @@ static int direct_lower_line(
                         for (int k = item; k < item_count; k++) free(items[k]);
                         free(expr);
                         free(local_type);
+                        free(list_elem_type);
                         free(name);
                         free(stripped);
                         return 1;
                     }
                     char *item_type = direct_infer_expr_type(items[item], locals, fns, fn_count, structs, struct_count);
-                    if (strcmp(item_type, "Int") != 0) {
+                    if (strcmp(item_type, list_elem_type) != 0) {
                         report_issue(path, line_no, find_col(line, name), line,
-                            "direct native emitter List<Int> literals accept Int items only",
-                            "push struct values through the full engine for now.",
+                            "direct native emitter list literal item type does not match the local list element type",
+                            "push values with the element type declared by the local list.",
                             NULL);
                         free(item_type);
                         for (int k = item; k < item_count; k++) free(items[k]);
                         free(expr);
                         free(local_type);
+                        free(list_elem_type);
                         free(name);
                         free(stripped);
                         return 1;
@@ -3169,6 +3231,7 @@ static int direct_lower_line(
                         for (int k = item; k < item_count; k++) free(items[k]);
                         free(expr);
                         free(local_type);
+                        free(list_elem_type);
                         free(name);
                         free(stripped);
                         return 1;
@@ -3188,6 +3251,7 @@ static int direct_lower_line(
                 }
                 free(expr);
                 free(local_type);
+                free(list_elem_type);
                 free(name);
                 free(stripped);
                 return 0;
@@ -3195,6 +3259,7 @@ static int direct_lower_line(
             if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, 1)) {
                 free(expr);
                 free(local_type);
+                free(list_elem_type);
                 free(name);
                 free(stripped);
                 return 1;
@@ -3208,6 +3273,7 @@ static int direct_lower_line(
                 free(expr_type);
                 free(expr);
                 free(local_type);
+                free(list_elem_type);
                 free(name);
                 free(stripped);
                 return 1;
@@ -3222,6 +3288,7 @@ static int direct_lower_line(
                 free(prelude.data);
                 free(expr);
                 free(local_type);
+                free(list_elem_type);
                 free(name);
                 free(stripped);
                 return 1;
@@ -3240,6 +3307,7 @@ static int direct_lower_line(
             free(rewritten);
             free(expr);
             free(local_type);
+            free(list_elem_type);
             free(name);
             free(stripped);
             return 0;
@@ -3305,10 +3373,10 @@ static int direct_lower_line(
     char *method_args = NULL;
     if (direct_parse_method_statement(s, &method_base, &method_name, &method_args)) {
         const char *base_type = direct_names_type(locals, method_base);
-        if (!direct_is_list_int_type(base_type) || strcmp(method_name, "push") != 0) {
+        if (!direct_is_list_type(base_type) || strcmp(method_name, "push") != 0) {
             report_issue(path, line_no, find_col(line, method_base), line,
-                "direct native emitter supports List<Int>.push statements only",
-                "write `xs.push(value)` on a local `List<Int>`.",
+                "direct native emitter supports List.push statements only",
+                "write `xs.push(value)` on a local list.",
                 NULL);
             free(method_base);
             free(method_name);
@@ -3316,14 +3384,16 @@ static int direct_lower_line(
             free(stripped);
             return 1;
         }
+        char *list_elem_type = direct_list_element_type(base_type);
         char *args[16] = {0};
         int argc = split_top_level_commas_c(method_args, args, 16);
         if (argc != 1 || strlen(skip_ws(args[0])) == 0) {
             report_issue(path, line_no, find_col(line, method_name), line,
-                "direct native emitter List<Int>.push expects one Int argument",
+                "direct native emitter List.push expects one argument",
                 "write `xs.push(value)`.",
                 NULL);
             for (int k = 0; k < 16; k++) free(args[k]);
+            free(list_elem_type);
             free(method_base);
             free(method_name);
             free(method_args);
@@ -3332,6 +3402,7 @@ static int direct_lower_line(
         }
         if (direct_check_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count)) {
             for (int k = 0; k < 16; k++) free(args[k]);
+            free(list_elem_type);
             free(method_base);
             free(method_name);
             free(method_args);
@@ -3339,13 +3410,14 @@ static int direct_lower_line(
             return 1;
         }
         char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
-        if (strcmp(arg_type, "Int") != 0) {
+        if (strcmp(arg_type, list_elem_type) != 0) {
             report_issue(path, line_no, find_col(line, method_name), line,
-                "direct native emitter List<Int>.push accepts Int values only",
-                "use the full engine for List<Struct> values.",
+                "direct native emitter List.push argument type does not match the list element type",
+                "push a value with the element type declared by the local list.",
                 NULL);
             free(arg_type);
             for (int k = 0; k < 16; k++) free(args[k]);
+            free(list_elem_type);
             free(method_base);
             free(method_name);
             free(method_args);
@@ -3361,6 +3433,7 @@ static int direct_lower_line(
         if (rewritten_arg == NULL) {
             free(prelude.data);
             for (int k = 0; k < 16; k++) free(args[k]);
+            free(list_elem_type);
             free(method_base);
             free(method_name);
             free(method_args);
@@ -3380,6 +3453,7 @@ static int direct_lower_line(
         free(c_arg);
         free(rewritten_arg);
         for (int k = 0; k < 16; k++) free(args[k]);
+        free(list_elem_type);
         free(method_base);
         free(method_name);
         free(method_args);
@@ -3588,6 +3662,13 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             sb_append(&out, ";");
         }
         sb_append(&out, " } ");
+        sb_append(&out, structs[s].name);
+        sb_append(&out, ";\n");
+    }
+    for (int s = 0; s < struct_count; s++) {
+        sb_append(&out, "typedef struct { ");
+        sb_append(&out, structs[s].name);
+        sb_append(&out, " data[256]; long len; } DirectList_");
         sb_append(&out, structs[s].name);
         sb_append(&out, ";\n");
     }
