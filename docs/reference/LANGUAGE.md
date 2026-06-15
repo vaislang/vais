@@ -76,8 +76,8 @@ Verified release surface:
 | `Bool` | Produced by comparisons and boolean expressions |
 | `Str` | String literals and selected string operations |
 | `Char` | Single-byte character literals in verified examples |
-| `List<Int>` | Empty/list literal, assignment, `push`, `len`, index, `sum` |
-| `List<Struct>` | Direct-engine `[]`, `list()`, list literal, assignment, `push`, `len`, index, field read/write, parameter reference, return value |
+| `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, index, `sum` |
+| `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, index, field read/write, parameter reference, return value |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match and small recursive `Int` payload enum/match |
 
@@ -128,8 +128,8 @@ The direct engine gate covers `if`, `while`, local `let`, assignment, helper
 calls, `return`, simple Int-field struct locals, struct parameter/return
 helpers, and `List<Int>` local operations plus parameter reference and return
 value ABI, plus `List<Struct>` construction with `[]`, `list()`, list literals,
-assignment, `push`, `len`, index, field read/write, parameter reference, and return
-value ABI.
+list/element assignment, `push`, `len`, index, field read/write, parameter
+reference, and return value ABI.
 Strings and the self-host compiler tier remain full-engine territory.
 
 Verified today:
@@ -294,6 +294,7 @@ fn main() -> Int {
     xs.push(Box { value: 20 })
     let ys: List<Box> = make(21)
     xs = [Box { value: 19 }]
+    xs[0] = Box { value: 20 }
     xs[0].value = xs[0].value + 1
     return xs[0].value + ys[1].value + score([Box { value: 1 }])
 }
@@ -313,12 +314,13 @@ Verified today:
 - `xs.sum()`.
 - Assigning `[]`, `list()`, list literals, local list values, and returned-list
   values to a matching direct-engine list local or list parameter.
+- Assigning values to matching direct-engine list elements with `xs[index] = value`.
 - Passing a local `List<Int>` to a `List<Int>` parameter.
 - Returning `List<Int>` from helper functions.
 - `List<Struct>` values with an explicit type, `[]`, `list()`, list literals,
-  assignment, `push`, `len`, index, field reads/writes, parameter references, return
-  values, inline call arguments, and returned-list call arguments in the direct
-  engine.
+  list/element assignment, `push`, `len`, index, field reads/writes, parameter
+  references, return values, inline call arguments, and returned-list call
+  arguments in the direct engine.
 
 The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
 small integer list literals, plus `push`, `len`/`len()`, index, `sum()`, and
@@ -334,9 +336,10 @@ returned by value. The
 same parameter-reference and return-by-value ABI applies to `List<Struct>` for
 declared structs, including inline list arguments and `List<Struct>`-returning
 helper calls passed directly to `List<Struct>` parameters in statement contexts
-and `while` conditions. Indexed `List<Struct>` element fields can be assigned
-with `xs[index].field = value`; this also works through list parameters.
-`sum()` on `List<Struct>` is not a direct-engine release claim.
+and `while` conditions. Direct list elements can be assigned with
+`xs[index] = value`, and indexed `List<Struct>` element fields can be assigned
+with `xs[index].field = value`; both work through list parameters. `sum()` on
+`List<Struct>` is not a direct-engine release claim.
 
 Methods such as `map`, `filter`, and arbitrary user-defined methods are not
 release-surface claims yet.

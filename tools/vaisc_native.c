@@ -2517,6 +2517,18 @@ static char *direct_infer_expr_type(
                 return out;
             }
         }
+        if (*rest == '[') {
+            int close = find_matching_bracket_c(trimmed, (int)(rest - trimmed));
+            if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                const char *local_type = direct_names_type(locals, name);
+                char *elem_type = direct_list_element_type(local_type);
+                if (elem_type != NULL) {
+                    free(name);
+                    free(trimmed);
+                    return elem_type;
+                }
+            }
+        }
         if (*rest == '{' && direct_find_struct(structs, struct_count, name) != NULL) {
             char *out = strdup(name);
             free(name);
@@ -2897,6 +2909,21 @@ static int direct_parse_list_field_target(const char *lhs, char **base, char **f
     return 1;
 }
 
+static int direct_parse_list_index_target(const char *lhs, char **base) {
+    const char *s = skip_ws(lhs);
+    if (!is_ident_start(*s)) return 0;
+    const char *base_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *base_end = s;
+    const char *open = skip_ws(s);
+    if (*open != '[') return 0;
+    int close = find_matching_bracket_c(lhs, (int)(open - lhs));
+    if (close < 0 || *skip_ws(lhs + close + 1) != '\0') return 0;
+    *base = substr_copy(base_start, (size_t)(base_end - base_start));
+    return 1;
+}
+
 static int direct_check_assignment_target(
     const char *path,
     int line_no,
@@ -2923,6 +2950,23 @@ static int direct_check_assignment_target(
             NULL);
         free(base);
         free(field);
+        return 1;
+    }
+    if (direct_parse_list_index_target(lhs, &base)) {
+        const char *base_type = direct_names_type(locals, base);
+        char *elem_type = direct_list_element_type(base_type);
+        int ok = elem_type != NULL && (strcmp(elem_type, "Int") == 0 || direct_find_struct(structs, struct_count, elem_type) != NULL);
+        if (ok) {
+            free(elem_type);
+            free(base);
+            return 0;
+        }
+        report_issue(path, line_no, find_col(line, base), line,
+            "direct native emitter assignment target is not a known List element",
+            "assign to an element of a known direct-engine list.",
+            "xs[0] = value");
+        free(elem_type);
+        free(base);
         return 1;
     }
     if (direct_parse_list_field_target(lhs, &base, &field)) {
@@ -2968,6 +3012,21 @@ static const char *direct_assignment_target_type(
         free(base);
         free(field);
         return ok ? "Int" : NULL;
+    }
+    if (direct_parse_list_index_target(lhs, &base)) {
+        const char *base_type = direct_names_type(locals, base);
+        static char bufs[4][128];
+        static int slot = 0;
+        char *elem_type = direct_list_element_type(base_type);
+        if (elem_type == NULL) {
+            free(base);
+            return NULL;
+        }
+        slot = (slot + 1) % 4;
+        snprintf(bufs[slot], sizeof(bufs[slot]), "%s", elem_type);
+        free(elem_type);
+        free(base);
+        return bufs[slot];
     }
     if (direct_parse_list_field_target(lhs, &base, &field)) {
         const char *base_type = direct_names_type(locals, base);

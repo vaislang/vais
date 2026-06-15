@@ -394,6 +394,57 @@ else
     fail=1
 fi
 
+list_element_assignment_src="$tmp/direct_list_element_assignment.vais"
+cat > "$list_element_assignment_src" <<'SRC'
+struct Box {
+    value: Int,
+}
+
+fn set_box(xs: List<Box>, i: Int, v: Int) -> Int {
+    xs[i] = Box { value: v }
+    return xs[i].value
+}
+
+fn set_int(xs: List<Int>, i: Int, v: Int) -> Int {
+    xs[i] = v
+    return xs[i]
+}
+
+fn main() -> Int {
+    let boxes: List<Box> = [Box { value: 1 }, Box { value: 2 }]
+    boxes[0] = Box { value: 10 }
+    boxes[1] = boxes[0]
+    let a = set_box(boxes, 1, 20)
+    let ints: List<Int> = [1, 2]
+    ints[0] = 5
+    ints[1] = ints[0]
+    let b = set_int(ints, 1, 7)
+    return boxes[0].value + boxes[1].value + a + ints[0] + ints[1] + b - 27
+}
+SRC
+
+if "$VAISC" emit-ir "$list_element_assignment_src" \
+    --engine direct -o "$tmp/list-element-assignment.ll" \
+    >"$tmp/list-element-assignment.out" 2>"$tmp/list-element-assignment.err" &&
+    grep -q '%struct.DirectList_Box = type' "$tmp/list-element-assignment.ll" &&
+    grep -q 'define i64 @set_box(ptr' "$tmp/list-element-assignment.ll" &&
+    grep -q 'llvm.memcpy' "$tmp/list-element-assignment.ll" &&
+    grep -q 'store i64 5' "$tmp/list-element-assignment.ll"; then
+    "$VAISC" run "$list_element_assignment_src" --engine direct >"$tmp/list-element-assignment-run.out" 2>"$tmp/list-element-assignment-run.err"
+    list_element_assignment_run=$?
+    if [ "$list_element_assignment_run" = "42" ]; then
+        echo "  PASS direct List<Int> and List<Struct> element assignments run (=42)"
+    else
+        echo "  FAIL direct list element assignment got=$list_element_assignment_run want=42"
+        cat "$tmp/list-element-assignment-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct list element assignment emission"
+    cat "$tmp/list-element-assignment.err"
+    fail=1
+fi
+
 list_assignment_src="$tmp/direct_list_assignment.vais"
 cat > "$list_assignment_src" <<'SRC'
 struct Box {

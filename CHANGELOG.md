@@ -31,6 +31,8 @@
   context-typed `[]`, `list()`, list literals, local lists, and returned lists.
 - `List<Struct>` direct-engine indexed field assignment now supports local and
   parameter writes such as `xs[0].value = 42`.
+- `List<Int>` and `List<Struct>` direct-engine element assignment now supports
+  local and parameter writes such as `xs[0] = value`.
 
 ## v0.2.1 - 2026-06-14
 

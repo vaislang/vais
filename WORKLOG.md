@@ -28,6 +28,8 @@
   including list-parameter replacement and gate coverage returning 42.
 - Added direct-engine indexed field assignment for `List<Struct>` locals and
   parameters, plus P4 diagnostics for unknown indexed fields.
+- Added direct-engine element assignment for `List<Int>` and `List<Struct>`
+  locals and parameters, including list-index element type inference.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 

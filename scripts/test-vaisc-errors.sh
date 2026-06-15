@@ -121,6 +121,14 @@ fn main() -> Int {
 }
 SRC
 
+expect_diag "direct_list_element_target" "direct" "assignment target is not a known List element" "xs\\[0\\] = value" <<'SRC'
+fn main() -> Int {
+    let x = 1
+    x[0] = 42
+    return 0
+}
+SRC
+
 expect_diag "direct_list_constructor_expr" "direct" "return expression type does not match" "return 40 + 2" <<'SRC'
 fn main() -> Int {
     return list()

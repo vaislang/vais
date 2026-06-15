@@ -39,6 +39,8 @@ This file tracks current work only.
   ABI, including inline list arguments and returned-list argument hoisting.
 - The native direct engine covers context-typed assignment for `List<Int>` and
   `List<Struct>` locals and list parameters.
+- The native direct engine covers `List<Int>` and `List<Struct>` element
+  assignment, including assignments through list parameters.
 - The native direct engine covers indexed `List<Struct>` field assignment,
   including assignments through list parameters.
 
@@ -56,7 +58,9 @@ This file tracks current work only.
   `list()`, list literal initialization, `push`, `len`, index, field reads/writes,
   parameter reference, return value ABI, inline list arguments, and
   returned-list argument hoisting. Context-typed list assignment is supported
-  for `List<Int>` and `List<Struct>` locals and list parameters.
+  for `List<Int>` and `List<Struct>` locals and list parameters. Element
+  assignment is supported for `List<Int>` and `List<Struct>`, including through
+  list parameters.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal repository checks
   and diagnostics only.
@@ -83,6 +87,39 @@ This file tracks current work only.
 4. Replace the remaining Python-only internal checks when the language has
    enough file/process support.
 5. Keep source release tags, GitHub Releases, GitHub Pages, self-host regeneration, and parity gates green.
+
+## Completed Milestone: Native Direct List Element Assignment
+
+Mode: sequential
+
+- [x] 1. Parse `List` indexed element assignment targets.
+- [x] 2. Infer `xs[index]` expression types from the list element type.
+- [x] 3. Gate `List<Int>` and `List<Struct>` element assignment locally and through parameters.
+- [x] 4. Sync docs/site/changelog with the promoted element-assignment slice.
+
+### Task Briefs
+
+#### 1. Indexed list element assignment
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode accepts assignments such as `xs[0] = 42`,
+  `boxes[0] = Box { value: 42 }`, and `boxes[1] = boxes[0]` when the value
+  matches the list element type.
+- Done: assignment target validation now recognizes `base[index]`, target type
+  lookup returns the list element type, and exact list-index expressions infer
+  to their element type.
+
+#### 2. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
+  `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
+  `WORKLOG.md`, `docs/design/`.
+- Requirements: prove local and parameter element assignments execute through
+  `scripts/vaisc --engine direct` for both `List<Int>` and `List<Struct>`, and
+  keep non-list indexed assignment targets behind a P4 diagnostic.
+- Done: direct gate covers `List<Box>` element literal assignment, element copy,
+  parameter element replacement, and `List<Int>` element assignment returning
+  42; error gate covers a non-list indexed assignment target.
 
 ## Completed Milestone: Native Direct List Struct Field Assignment
 
