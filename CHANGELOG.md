@@ -27,6 +27,8 @@
   `[]`, `list()`, list literals, `push`, `len`, index, and field reads.
 - `List<Struct>` direct-engine function parameters, return values, inline list
   arguments, and returned-list argument hoisting now use the native list ABI.
+- `List<Int>` and `List<Struct>` direct-engine assignment now supports
+  context-typed `[]`, `list()`, list literals, local lists, and returned lists.
 
 ## v0.2.1 - 2026-06-14
 

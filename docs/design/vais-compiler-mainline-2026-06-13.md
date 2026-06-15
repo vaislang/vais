@@ -27,9 +27,10 @@ scripts/vaisc run examples/c4.vais --engine direct
 - Direct engine: promoted native slices for Int helpers, locals, control flow,
   calls, returns, simple Int-field struct local literal/read/write, struct
   parameter/return helpers, and `List<Int>` local, parameter, inline, return,
-  returned-argument, and loop-hoisted operations, plus local `List<Struct>`
+  returned-argument, and loop-hoisted operations, plus `List<Struct>`
   construction with `[]`, `list()`, list literals, `push`, `len`, index, field
-  reads, parameter/return ABI, inline arguments, and returned-argument hoisting.
+  reads, assignment, parameter/return ABI, inline arguments, and
+  returned-argument hoisting.
 - Front diagnostics: native `scripts/vaisc`, `tools/vaisc.py` for internal
   repository checks, and `tools/vais-check.py`.
 - Value corpus: release-subset `examples/*.vais` files tracked in `tools/vaisc-parity.tsv`.

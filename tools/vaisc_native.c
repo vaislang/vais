@@ -3494,19 +3494,22 @@ static int direct_lower_line(
             free(stripped);
             return 1;
         }
-        char *expr_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
-        if (target_type != NULL && !direct_type_compatible(target_type, expr_type)) {
-            report_issue(path, line_no, find_col(line, lhs), line,
-                "direct native emitter assignment expression type does not match the target",
-                "assign a value with the same type as the target local.",
-                NULL);
+        int contextual_list_assignment = allow_list_assignment && direct_is_list_initializer_expr(expr);
+        if (!contextual_list_assignment) {
+            char *expr_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
+            if (target_type != NULL && !direct_type_compatible(target_type, expr_type)) {
+                report_issue(path, line_no, find_col(line, lhs), line,
+                    "direct native emitter assignment expression type does not match the target",
+                    "assign a value with the same type as the target local.",
+                    NULL);
+                free(expr_type);
+                free(lhs);
+                free(expr);
+                free(stripped);
+                return 1;
+            }
             free(expr_type);
-            free(lhs);
-            free(expr);
-            free(stripped);
-            return 1;
         }
-        free(expr_type);
         StrBuf prelude;
         sb_init(&prelude);
         direct_current_prelude = &prelude;

@@ -24,6 +24,8 @@
   return ABI, inline call arguments, returned-list argument hoisting, and
   while-condition hoisting.
 - Added direct-engine gate coverage for `List<Box>` ABI behavior returning 42.
+- Added context-typed direct list assignment for `List<Int>` and `List<Struct>`,
+  including list-parameter replacement and gate coverage returning 42.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 

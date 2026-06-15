@@ -37,6 +37,8 @@ This file tracks current work only.
   index, and field reads.
 - The native direct engine covers `List<Struct>` function parameter and return
   ABI, including inline list arguments and returned-list argument hoisting.
+- The native direct engine covers context-typed assignment for `List<Int>` and
+  `List<Struct>` locals and list parameters.
 
 ## Current Reality
 
@@ -51,7 +53,8 @@ This file tracks current work only.
   to `List<Int>` parameters. Local `List<Struct>` values support typed `[]`,
   `list()`, list literal initialization, `push`, `len`, index, field reads,
   parameter reference, return value ABI, inline list arguments, and
-  returned-list argument hoisting.
+  returned-list argument hoisting. Context-typed list assignment is supported
+  for `List<Int>` and `List<Struct>` locals and list parameters.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal repository checks
   and diagnostics only.
@@ -71,13 +74,45 @@ This file tracks current work only.
 ## Next Work
 
 1. Keep standalone release archives attached to future source tags.
-2. Extend the direct engine beyond the current `List<Int>` and `List<Struct>`
-   ABI toward broader list operations and larger composite value coverage.
+2. Extend the direct engine beyond the current list ABI and assignment coverage
+   toward broader list operations and larger composite value coverage.
 3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 4. Replace the remaining Python-only internal checks when the language has
    enough file/process support.
 5. Keep source release tags, GitHub Releases, GitHub Pages, self-host regeneration, and parity gates green.
+
+## Completed Milestone: Native Direct List Assignment
+
+Mode: sequential
+
+- [x] 1. Make direct list assignment context-typed for `List<Int>` and `List<Struct>`.
+- [x] 2. Support assigning `[]`, `list()`, list literals, local lists, and returned lists to matching list locals and list parameters.
+- [x] 3. Gate caller-visible replacement through list parameter assignment.
+- [x] 4. Sync docs/site/changelog with the promoted assignment slice.
+
+### Task Briefs
+
+#### 1. Context-typed list assignment
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct assignment to a list target should validate list
+  literals using the target element type instead of inferring bare list
+  literals as `List<Int>`.
+- Done: assignment lowering now treats list initializer expressions as
+  context-typed when the target is `List<T>`, then rewrites the value with the
+  target list type.
+
+#### 2. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `docs/reference/LANGUAGE.md`,
+  `website/`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`, `docs/design/`.
+- Requirements: prove direct `List<Int>` and `List<Struct>` assignment runs,
+  including assignment through a `List<Struct>` parameter that replaces the
+  caller's list.
+- Done: direct gate covers `List<Box>` local assignment from `[]`, `list()`,
+  literals, returned lists, parameter replacement, and `List<Int>` literal
+  assignment returning 42.
 
 ## Completed Milestone: Native Direct List Struct ABI
 

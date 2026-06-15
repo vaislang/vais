@@ -352,6 +352,59 @@ else
     fail=1
 fi
 
+list_assignment_src="$tmp/direct_list_assignment.vais"
+cat > "$list_assignment_src" <<'SRC'
+struct Box {
+    value: Int,
+}
+
+fn make(v: Int) -> List<Box> {
+    return [Box { value: v }, Box { value: v + 1 }]
+}
+
+fn replace(out: List<Box>, v: Int) -> Int {
+    out = [Box { value: v }, Box { value: v + 1 }]
+    out = make(v + 2)
+    return out.len()
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs = []
+    xs.push(Box { value: 5 })
+    xs = list()
+    xs.push(Box { value: 7 })
+    xs = make(20)
+    let n = replace(xs, 30)
+    let ints: List<Int> = []
+    ints = [1, 2]
+    ints = list()
+    ints.push(4)
+    ints = [5, 6]
+    return xs[0].value + xs[1].value + n + ints.sum() - 36
+}
+SRC
+
+if "$VAISC" emit-ir "$list_assignment_src" \
+    --engine direct -o "$tmp/list-assignment.ll" \
+    >"$tmp/list-assignment.out" 2>"$tmp/list-assignment.err" &&
+    grep -q '%struct.DirectList_Box = type' "$tmp/list-assignment.ll" &&
+    grep -q 'sret(%struct.DirectList_Box)' "$tmp/list-assignment.ll"; then
+    "$VAISC" run "$list_assignment_src" --engine direct >"$tmp/list-assignment-run.out" 2>"$tmp/list-assignment-run.err"
+    list_assignment_run=$?
+    if [ "$list_assignment_run" = "42" ]; then
+        echo "  PASS direct List<Int> and List<Struct> assignments run (=42)"
+    else
+        echo "  FAIL direct list assignment got=$list_assignment_run want=42"
+        cat "$tmp/list-assignment-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct list assignment emission"
+    cat "$tmp/list-assignment.err"
+    fail=1
+fi
+
 list_abi_src="$tmp/direct_list_int_abi.vais"
 cat > "$list_abi_src" <<'SRC'
 fn make(a: Int, b: Int, c: Int) -> List<Int> {
