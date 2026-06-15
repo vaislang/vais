@@ -125,7 +125,8 @@ while i < n {
 
 The direct engine gate covers `if`, `while`, local `let`, assignment, helper
 calls, `return`, simple Int-field struct locals, struct parameter/return
-helpers, and `List<Int>` local operations plus parameter/return value ABI.
+helpers, and `List<Int>` local operations plus parameter reference and return
+value ABI.
 Strings and the self-host compiler tier remain full-engine territory.
 
 Verified today:
@@ -220,6 +221,22 @@ fn main() -> Int {
 }
 ```
 
+Function parameters can also receive a local `List<Int>`:
+
+```vais
+fn fill(out: List<Int>, n: Int) -> Int {
+    out.push(n)
+    out.push(n + 2)
+    return out.len()
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    let count = fill(xs, 20)
+    return count * 10 + xs[1]
+}
+```
+
 Verified today:
 
 - Empty `List<Int>` with an explicit type.
@@ -228,11 +245,17 @@ Verified today:
 - `xs.len()`.
 - `xs[index]`.
 - `xs.sum()`.
+- Passing a local `List<Int>` to a `List<Int>` parameter.
+- Returning `List<Int>` from helper functions.
 
 The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
 small integer list literals, plus `push`, `len`/`len()`, index, `sum()`, and
-function parameter/return value ABI. Inline list literals as call/return
-expressions and `List<Struct>` stay on the full engine path.
+function calls where `List<Int>` parameters are local list names. In the direct
+engine native ABI, `List<Int>` parameters are passed by reference, so `push` on
+the parameter mutates the caller's local list. `List<Int>` return values are
+returned by value. Inline list literals, list-returning calls used directly as
+`List<Int>` arguments, and `List<Struct>` are not direct-engine release claims
+yet.
 
 Methods such as `map`, `filter`, and arbitrary user-defined methods are not
 release-surface claims yet.

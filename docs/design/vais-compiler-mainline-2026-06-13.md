@@ -26,7 +26,8 @@ scripts/vaisc run examples/c4.vais --engine direct
   and calls the self-host `compile(src)` function.
 - Direct engine: promoted native slices for Int helpers, locals, control flow,
   calls, returns, simple Int-field struct local literal/read/write, struct
-  parameter/return helpers, and `List<Int>` value operations.
+  parameter/return helpers, and `List<Int>` local, parameter, and return
+  operations.
 - Front diagnostics: native `scripts/vaisc`, `tools/vaisc.py` for internal
   repository checks, and `tools/vais-check.py`.
 - Value corpus: release-subset `examples/*.vais` files tracked in `tools/vaisc-parity.tsv`.

@@ -150,6 +150,22 @@ fn main() -> Int {
 }
 SRC
 
+expect_diag "direct_returned_list_arg" "direct" "requires a local List<Int> argument" "let xs: List<Int> = \\[]" <<'SRC'
+fn make() -> List<Int> {
+    let xs: List<Int> = []
+    xs.push(42)
+    return xs
+}
+
+fn count(xs: List<Int>) -> Int {
+    return xs.len()
+}
+
+fn main() -> Int {
+    return count(make())
+}
+SRC
+
 expect_diag "direct_missing_return" "direct" "requires at least one .*return.* statement" "fn main() -> Int" <<'SRC'
 fn main() -> Int {
     let x = 42

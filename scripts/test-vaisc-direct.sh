@@ -298,6 +298,41 @@ else
     fail=1
 fi
 
+list_out_src="$tmp/direct_list_int_out_param.vais"
+cat > "$list_out_src" <<'SRC'
+fn fill(out: List<Int>, n: Int) -> Int {
+    out.push(n)
+    out.push(n + 2)
+    return out.len()
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    let count = fill(xs, 20)
+    return count * 10 + xs[1]
+}
+SRC
+
+if "$VAISC" emit-ir "$list_out_src" \
+    --engine direct -o "$tmp/list-out.ll" \
+    >"$tmp/list-out.out" 2>"$tmp/list-out.err" &&
+    grep -q 'define .*@fill' "$tmp/list-out.ll" &&
+    grep -q 'call .*@fill' "$tmp/list-out.ll"; then
+    "$VAISC" run "$list_out_src" --engine direct >"$tmp/list-out-run.out" 2>"$tmp/list-out-run.err"
+    list_out_run=$?
+    if [ "$list_out_run" = "42" ]; then
+        echo "  PASS direct List<Int> parameter push mutates caller list (=42)"
+    else
+        echo "  FAIL direct List<Int> out-param got=$list_out_run want=42"
+        cat "$tmp/list-out-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct List<Int> out-param emission"
+    cat "$tmp/list-out.err"
+    fail=1
+fi
+
 fakebin="$tmp/fake-python"
 mkdir -p "$fakebin"
 cat > "$fakebin/python3" <<'PY'

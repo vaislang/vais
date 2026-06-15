@@ -25,7 +25,7 @@ This file tracks current work only.
   `list()`, small integer list literals, `push`, `len`/`len()`, index, and
   `sum()`.
 - The native direct engine covers `List<Int>` function parameter and return
-  value ABI.
+  ABI, including push-to-parameter mutation for local list arguments.
 
 ## Current Reality
 
@@ -34,7 +34,7 @@ This file tracks current work only.
   locals, assignment, calls, `if`, `while`, returns, simple Int-field struct
   local literal/read/write, struct parameter/return helper ABI, and local
   `List<Int>` initialization plus `push`, `len`, index, `sum`, and
-  `List<Int>` parameter/return value ABI.
+  `List<Int>` parameter reference and return value ABI.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal repository checks
   and diagnostics only.
@@ -54,9 +54,8 @@ This file tracks current work only.
 ## Next Work
 
 1. Keep standalone release archives attached to future source tags.
-2. Extend the direct engine beyond `List<Int>` value ABI toward inline list
-   call/return lowering, push-to-parameter semantics, and larger list-family
-   coverage.
+2. Extend the direct engine beyond the current `List<Int>` ABI toward inline
+   list call/return lowering and larger list-family coverage.
 3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 4. Replace the remaining Python-only internal checks when the language has
@@ -133,12 +132,44 @@ Mode: sequential
   list parameters/returns as future work.
 - Done: docs and site copy are synced to the current direct/full engine split.
 
-## Completed Milestone: Native Direct List Int Value ABI
+## Completed Milestone: Native Direct List Int Out-Param Semantics
+
+Mode: sequential
+
+- [x] 1. Lower `List<Int>` parameters as direct native references.
+- [x] 2. Preserve `List<Int>` return values as value returns.
+- [x] 3. Gate callee `push` mutation of caller local lists.
+- [x] 4. Keep unsupported non-local direct list arguments covered by diagnostics.
+- [x] 5. Sync docs/site/changelog with the promoted out-param slice.
+
+### Task Briefs
+
+#### 1. Direct list parameter references
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode passes named local `List<Int>` arguments to
+  `List<Int>` parameters by reference while keeping non-list parameters on their
+  existing value ABI.
+- Done: direct lowering emits native pointer parameters for `List<Int>`, rewrites
+  calls to pass local list addresses, and rewrites parameter `len`, index, `sum`,
+  assignment, and `push` operations through the referenced list.
+
+#### 2. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
+  `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
+  `WORKLOG.md`, `docs/design/`.
+- Requirements: prove callee `push` mutates the caller local list and keep inline
+  or returned list expressions out of direct list argument claims.
+- Done: direct gates cover caller-visible mutation and diagnostics require
+  `List<Int>` arguments to be local list names.
+
+## Completed Milestone: Native Direct List Int ABI
 
 Mode: sequential
 
 - [x] 1. Parse `List<Int>` in direct function headers.
-- [x] 2. Lower `List<Int>` parameters and return values through the direct value ABI.
+- [x] 2. Lower `List<Int>` parameters and return values through the direct ABI.
 - [x] 3. Add direct/error gates for list ABI and type mismatch diagnostics.
 - [x] 4. Sync docs/site/changelog with the promoted ABI slice.
 
@@ -151,13 +182,15 @@ Mode: sequential
   `List<Int>` in addition to `Int` and declared structs.
 - Done: direct header parsing and validation accept `List<Int>`.
 
-#### 2. List value ABI lowering
+#### 2. List ABI lowering
 
 - Target files: `tools/vaisc_native.c`.
-- Requirements: direct mode can pass `List<Int>` values to helpers, return local
-  or helper-produced `List<Int>` values, and bind returned list values to locals.
-- Done: direct lowering emits `DirectListInt` parameter/return values and checks
-  return, local initializer, assignment, and call-argument types before C/LLVM.
+- Requirements: direct mode can pass local `List<Int>` values to helpers, return
+  local or helper-produced `List<Int>` values, and bind returned list values to
+  locals.
+- Done: direct lowering handles `List<Int>` helper parameters and return values
+  and checks return, local initializer, assignment, and call-argument types
+  before C/LLVM.
 
 #### 3. Gates and documentation
 

@@ -7,7 +7,9 @@
   and `sum()`.
 - Added direct-engine gate coverage for local `List<Int>` emit/run behavior.
 - Expanded native direct mode with `List<Int>` function parameter and return
-  value ABI.
+  ABI.
+- Switched direct `List<Int>` parameters to native references for local list
+  arguments and gated caller-visible callee `push` mutation.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 
