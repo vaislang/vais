@@ -183,7 +183,7 @@ fn main() -> Int {
           </article>
           <article class="panel">
             <h3>Release archives</h3>
-            <p>Tag builds publish standalone compiler archives through the release archive workflow.</p>
+            <p>Tag builds publish standalone compiler archives through the release archive workflow after the pre-tag release gate is green.</p>
           </article>
           <article class="panel">
             <h3>Self-host status</h3>
@@ -217,7 +217,9 @@ bash scripts/test-vaisc-parity.sh
 bash scripts/test.sh
 
 bash scripts/test-fixpoint-full-self.sh
-bash scripts/test-fixpoint-full.sh</code></pre>
+bash scripts/test-fixpoint-full.sh
+
+bash scripts/test-release-gates.sh</code></pre>
         </div>
       </div>
     </section>

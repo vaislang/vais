@@ -34,6 +34,11 @@
   conditions with both `List<Int>` and `List<Struct>`.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
+- Added `scripts/test-release-gates.sh` as the pre-tag release gate covering
+  native, install/package, front, direct, errors, parity, value, self-host,
+  archive, website, and diff checks.
+- Added `docs/release/RELEASE_CHECKLIST.md` with the `v0.2.2` next-release
+  line, tag policy, manual archive workflow command, and post-tag checks.
 
 ## 2026-06-14
 

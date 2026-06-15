@@ -107,9 +107,9 @@ alternate source extensions.
 
 Goal: make every future capability land behind a repeatable release process.
 
-- [ ] 0.1 Define the next release line and tag policy in `CHANGELOG.md`,
+- [x] 0.1 Define the next release line and tag policy in `CHANGELOG.md`,
   `README.md`, and release docs.
-- [ ] 0.2 Add a release checklist that runs native, install/package, direct,
+- [x] 0.2 Add a release checklist that runs native, install/package, direct,
   front, parity, value, and self-host regeneration gates before tagging.
 - [ ] 0.3 Prove one source tag produces a GitHub Release with standalone
   archives and a smoke-tested packaged `vaisc`.
@@ -238,9 +238,39 @@ examples, and reproduce the release archive from source.
 
 Start with Phase 0. The next concrete slice is:
 
-- [ ] Add a release checklist document and wire it to the current gate commands.
+- [x] Add a release checklist document and wire it to the current gate commands.
 - [ ] Confirm the release archive workflow can be manually run for a chosen tag.
-- [ ] Decide the next release version before creating any public tag.
+- [x] Decide the next release version before creating any public tag.
+
+## Completed Milestone: Release Discipline Checklist
+
+Mode: sequential
+
+- [x] 1. Add a full pre-tag release gate script.
+- [x] 2. Add a release checklist with version/tag policy and post-tag verification.
+- [x] 3. Link release discipline from the first-read docs and changelog.
+
+### Task Briefs
+
+#### 1. Release gate command
+
+- Target files: `scripts/test-release-gates.sh`.
+- Requirements: provide one command that runs the release-level gates before a
+  public source tag is created.
+- Done: `bash scripts/test-release-gates.sh` runs Python syntax checks, shell
+  syntax checks, front/direct/error/parity/value/native/install gates,
+  self-host regeneration gates, release archive packaging, website build, and
+  `git diff --check`.
+
+#### 2. Release checklist
+
+- Target files: `docs/release/RELEASE_CHECKLIST.md`, `README.md`,
+  `docs/README.md`, `CHANGELOG.md`, `ROADMAP.md`.
+- Requirements: document the next planned release line, tag policy, pre-tag
+  checks, manual archive workflow trigger, and post-tag verification.
+- Done: the current source release remains `v0.2.1`, the next planned source
+  release is `v0.2.2`, and tag creation is explicitly deferred until release
+  gates are green.
 
 ## Completed Milestone: Native Direct List Else-If Condition Arguments
 

@@ -42,8 +42,15 @@ To build a release archive:
 scripts/package-vaisc-release.sh
 ```
 
+Before cutting a public tag, run the full release gate:
+
+```bash
+bash scripts/test-release-gates.sh
+```
+
 Tag builds also run the release archive workflow and attach standalone archives
-to the matching GitHub Release.
+to the matching GitHub Release. The release checklist is
+[docs/release/RELEASE_CHECKLIST.md](docs/release/RELEASE_CHECKLIST.md).
 
 ## Documentation
 
@@ -51,6 +58,7 @@ to the matching GitHub Release.
 | --- | --- |
 | [docs/README.md](docs/README.md) | Documentation map and publication rules |
 | [CHANGELOG.md](CHANGELOG.md) | Current source release notes |
+| [docs/release/RELEASE_CHECKLIST.md](docs/release/RELEASE_CHECKLIST.md) | Pre-tag release checklist |
 | [docs/reference/LANGUAGE.md](docs/reference/LANGUAGE.md) | Current syntax and verified language surface |
 | [examples/README.md](examples/README.md) | Value-checked example corpus |
 | [compiler/self/SELF_HOST.md](compiler/self/SELF_HOST.md) | Self-host compiler status |
@@ -88,6 +96,8 @@ bash scripts/test.sh
 
 bash scripts/test-fixpoint-full-self.sh
 bash scripts/test-fixpoint-full.sh
+
+bash scripts/test-release-gates.sh
 ```
 
 The public language and compiler claims in this repository are limited to what

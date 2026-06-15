@@ -9,6 +9,7 @@ compiler workspace.
 | --- | --- |
 | [../README.md](../README.md) | Repository overview and quick commands |
 | [../CHANGELOG.md](../CHANGELOG.md) | Current source release notes |
+| [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) | Pre-tag release checklist |
 | [reference/LANGUAGE.md](reference/LANGUAGE.md) | Current Vais syntax and verified language surface |
 | [../examples/README.md](../examples/README.md) | Value-checked example corpus |
 | [../std/PRELUDE.md](../std/PRELUDE.md) | Prelude APIs and their verification status |
@@ -24,6 +25,7 @@ compiler workspace.
 - Claims marked as verified must be backed by a gate in `scripts/` or
   `tools/vaisc-parity.tsv`.
 - Release notes must be sourced from `CHANGELOG.md`.
+- Public release tags must follow [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md).
 - `ROADMAP.md`, `WORKLOG.md`, and `AGENTS.md` are project coordination files, not
   first-read user documentation.
 - Do not publish older language, compiler, package, or ecosystem claims as

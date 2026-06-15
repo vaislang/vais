@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+Next planned source release: `v0.2.2`.
+
 ### Changed
 
+- Added `scripts/test-release-gates.sh` and
+  `docs/release/RELEASE_CHECKLIST.md` as the pre-tag release contract for
+  future source releases.
 - Added a GitHub Actions release archive workflow for tag builds.
 - `scripts/vaisc --engine direct` now stays on the native driver instead of the
   internal Python fallback.
