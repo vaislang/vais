@@ -140,19 +140,20 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "direct_returned_list_arg" "direct" "requires a local List<Int> argument" "let xs: List<Int> = \\[]" <<'SRC'
+expect_diag "direct_returned_list_arg_loop" "direct" "requires a local List<Int> argument in this expression context" "let xs: List<Int> = make()" <<'SRC'
 fn make() -> List<Int> {
-    let xs: List<Int> = []
-    xs.push(42)
-    return xs
+    return [1]
 }
 
-fn count(xs: List<Int>) -> Int {
+fn score(xs: List<Int>) -> Int {
     return xs.len()
 }
 
 fn main() -> Int {
-    return count(make())
+    while score(make()) > 0 {
+        return 42
+    }
+    return 0
 }
 SRC
 

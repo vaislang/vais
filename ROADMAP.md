@@ -28,6 +28,8 @@ This file tracks current work only.
   ABI, including push-to-parameter mutation for local list arguments.
 - The native direct engine covers inline `List<Int>` literal and `list()`
   values in call arguments and return expressions.
+- The native direct engine hoists `List<Int>`-returning helper calls used as
+  `List<Int>` call arguments in statement contexts.
 
 ## Current Reality
 
@@ -37,7 +39,9 @@ This file tracks current work only.
   local literal/read/write, struct parameter/return helper ABI, and local
   `List<Int>` initialization plus `push`, `len`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
-  literal/constructor call and return values.
+  literal/constructor call and return values. Statement contexts also hoist
+  `List<Int>`-returning helper calls before passing them to `List<Int>`
+  parameters.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal repository checks
   and diagnostics only.
@@ -57,8 +61,8 @@ This file tracks current work only.
 ## Next Work
 
 1. Keep standalone release archives attached to future source tags.
-2. Extend the direct engine beyond the current `List<Int>` ABI toward
-   list-returning call arguments and larger list-family coverage.
+2. Extend the direct engine beyond the current `List<Int>` ABI toward hoisting
+   in loop conditions and larger list-family coverage.
 3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 4. Replace the remaining Python-only internal checks when the language has
@@ -163,8 +167,39 @@ Mode: sequential
   `WORKLOG.md`, `docs/design/`.
 - Requirements: prove inline list values execute through direct mode and keep
   list-returning helper calls used directly as list arguments behind a diagnostic.
-- Done: direct gates cover inline list call/return values and diagnostics still
-  reject `count(make())` until temp hoisting is implemented.
+- Done: direct gates cover inline list call/return values; non-literal
+  returned-list arguments were left for the returned-argument hoisting milestone.
+
+## Completed Milestone: Native Direct List Int Returned-Argument Hoisting
+
+Mode: sequential
+
+- [x] 1. Hoist `List<Int>`-returning helper calls used as `List<Int>` arguments.
+- [x] 2. Gate nested returned-list arguments across return, let, list literal,
+  push, and assignment statements.
+- [x] 3. Keep loop-condition returned-list arguments behind a diagnostic.
+- [x] 4. Sync docs/site/changelog with the promoted hoisting slice.
+
+### Task Briefs
+
+#### 1. Returned-list argument hoisting
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode can lower statement-context calls such as
+  `score(make(10))`, `score(pass(make(5)))`, list literal items containing those
+  calls, `push(score(make(2)))`, and assignment from those calls.
+- Done: direct lowering adds per-function temporary `DirectListInt` locals before
+  the current C statement and passes their addresses to `List<Int>` parameters.
+
+#### 2. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
+  `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
+  `WORKLOG.md`, `docs/design/`.
+- Requirements: prove returned-list arguments execute through direct mode and
+  document that loop-condition hoisting is still outside the direct claim.
+- Done: direct gates cover returned-list argument hoisting and diagnostics still
+  reject returned-list argument hoisting inside `while` conditions.
 
 ## Completed Milestone: Native Direct List Int Out-Param Semantics
 

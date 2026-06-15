@@ -375,6 +375,53 @@ else
     fail=1
 fi
 
+list_hoist_src="$tmp/direct_list_int_return_call_args.vais"
+cat > "$list_hoist_src" <<'SRC'
+fn make(a: Int) -> List<Int> {
+    return [a, a + 1]
+}
+
+fn pass(xs: List<Int>) -> List<Int> {
+    xs.push(1)
+    return xs
+}
+
+fn score(xs: List<Int>) -> Int {
+    xs.push(10)
+    return xs.sum() + xs.len()
+}
+
+fn main() -> Int {
+    let a = score(make(10))
+    let b = score(pass(make(5)))
+    let xs: List<Int> = [score(make(1))]
+    xs.push(score(make(2)))
+    a = score(make(0))
+    return a + b + xs.len()
+}
+SRC
+
+if "$VAISC" emit-ir "$list_hoist_src" \
+    --engine direct -o "$tmp/list-hoist.ll" \
+    >"$tmp/list-hoist.out" 2>"$tmp/list-hoist.err" &&
+    grep -q 'call void @make' "$tmp/list-hoist.ll" &&
+    grep -q 'call void @pass' "$tmp/list-hoist.ll" &&
+    grep -q 'call .*@score' "$tmp/list-hoist.ll"; then
+    "$VAISC" run "$list_hoist_src" --engine direct >"$tmp/list-hoist-run.out" 2>"$tmp/list-hoist-run.err"
+    list_hoist_run=$?
+    if [ "$list_hoist_run" = "42" ]; then
+        echo "  PASS direct List<Int> return-call arguments hoist and run (=42)"
+    else
+        echo "  FAIL direct List<Int> hoist got=$list_hoist_run want=42"
+        cat "$tmp/list-hoist-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct List<Int> hoist emission"
+    cat "$tmp/list-hoist.err"
+    fail=1
+fi
+
 fakebin="$tmp/fake-python"
 mkdir -p "$fakebin"
 cat > "$fakebin/python3" <<'PY'

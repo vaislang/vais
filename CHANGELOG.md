@@ -19,6 +19,8 @@
   arguments, so callee `push` operations mutate the caller's list.
 - Inline `List<Int>` literals and `list()` now lower in direct-engine call
   arguments and return expressions.
+- `List<Int>`-returning helper calls now hoist into direct-engine temporaries
+  when passed directly to `List<Int>` parameters in statement contexts.
 
 ## v0.2.1 - 2026-06-14
 

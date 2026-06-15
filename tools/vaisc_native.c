@@ -60,6 +60,7 @@ typedef struct {
     DirectLocalInfo items[128];
     int count;
     char *current_return_type;
+    int temp_count;
 } DirectNameSet;
 
 typedef struct {
@@ -71,6 +72,8 @@ typedef struct {
 
 static int run_program_wait(char *const argv[]);
 static int make_tmp_path(char *buf, size_t buflen, const char *suffix);
+
+static StrBuf *direct_current_prelude = NULL;
 
 static void die_oom(void) {
     fprintf(stderr, "error: out of memory\n");
@@ -1307,6 +1310,7 @@ static void direct_names_free(DirectNameSet *set) {
         free(set->items[i].type);
     }
     set->count = 0;
+    set->temp_count = 0;
     free(set->current_return_type);
     set->current_return_type = NULL;
 }
@@ -1963,6 +1967,40 @@ static int direct_expr_bare_list_local(DirectNameSet *locals, const char *expr, 
     return ok;
 }
 
+static DirectFnInfo *direct_expr_exact_call_fn(const char *expr, DirectFnInfo *fns, int fn_count) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return NULL;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    const char *rest = skip_ws(s);
+    if (*rest != '(') {
+        free(name);
+        free(trimmed);
+        return NULL;
+    }
+    int close = find_matching_paren_c(trimmed, (int)(rest - trimmed));
+    if (close < 0 || *skip_ws(trimmed + close + 1) != '\0') {
+        free(name);
+        free(trimmed);
+        return NULL;
+    }
+    DirectFnInfo *fn = direct_find_fn(fns, fn_count, name);
+    free(name);
+    free(trimmed);
+    return fn;
+}
+
+static int direct_expr_exact_list_return_call(const char *expr, DirectFnInfo *fns, int fn_count) {
+    DirectFnInfo *fn = direct_expr_exact_call_fn(expr, fns, fn_count);
+    return fn != NULL && direct_is_list_int_type(fn->return_type);
+}
+
 static void direct_append_list_len_ref(StrBuf *out, const char *name, int is_ref) {
     sb_append(out, name);
     sb_append(out, is_ref ? "->len" : ".len");
@@ -2091,19 +2129,45 @@ static char *direct_rewrite_list_arg_expr(
         return sb_take(&out);
     }
     char *name = NULL;
-    if (!direct_expr_bare_list_local(locals, expr, &name)) {
-        report_issue(path, line_no, find_col(line, "List"), line,
-            "direct native emitter requires a local List<Int> argument",
-            "bind the list value to a local before passing it.",
-            "let xs: List<Int> = []");
-        return NULL;
+    if (direct_expr_bare_list_local(locals, expr, &name)) {
+        StrBuf out;
+        sb_init(&out);
+        if (!direct_names_is_ref(locals, name)) sb_append(&out, "&");
+        sb_append(&out, name);
+        free(name);
+        return sb_take(&out);
     }
-    StrBuf out;
-    sb_init(&out);
-    if (!direct_names_is_ref(locals, name)) sb_append(&out, "&");
-    sb_append(&out, name);
-    free(name);
-    return sb_take(&out);
+    if (direct_expr_exact_list_return_call(expr, fns, fn_count)) {
+        if (direct_current_prelude == NULL) {
+            report_issue(path, line_no, find_col(line, expr), line,
+                "direct native emitter requires a local List<Int> argument in this expression context",
+                "bind the returned list before passing it here.",
+                "let xs: List<Int> = make()");
+            return NULL;
+        }
+        char *rewritten_value = direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+        if (rewritten_value == NULL) return NULL;
+        char *c_value = direct_translate_expr(rewritten_value);
+        free(rewritten_value);
+        char tmp_name[64];
+        snprintf(tmp_name, sizeof(tmp_name), "__vais_list_arg_%d", locals->temp_count++);
+        sb_append(direct_current_prelude, "DirectListInt ");
+        sb_append(direct_current_prelude, tmp_name);
+        sb_append(direct_current_prelude, " = ");
+        sb_append(direct_current_prelude, c_value);
+        sb_append(direct_current_prelude, ";\n");
+        free(c_value);
+        StrBuf out;
+        sb_init(&out);
+        sb_append(&out, "&");
+        sb_append(&out, tmp_name);
+        return sb_take(&out);
+    }
+    report_issue(path, line_no, find_col(line, expr), line,
+        "direct native emitter requires a local List<Int> argument",
+        "bind the list value to a local before passing it.",
+        "let xs: List<Int> = []");
+    return NULL;
 }
 
 static char *direct_rewrite_list_value_expr(
@@ -2607,6 +2671,7 @@ static int direct_check_expr_inner(
                 for (int a = 0; a < argc; a++) {
                     int allow_arg_list = direct_is_list_int_type(fn->param_types[a]);
                     int inline_list_arg = 0;
+                    int returned_list_arg = 0;
                     if (allow_arg_list) {
                         int literal_state = direct_list_initializer_state(args[a]);
                         if (literal_state < 0) {
@@ -2619,6 +2684,7 @@ static int direct_check_expr_inner(
                             return 1;
                         }
                         inline_list_arg = literal_state == 1;
+                        returned_list_arg = direct_expr_exact_list_return_call(args[a], fns, fn_count);
                     }
                     char *arg_type = direct_infer_expr_type(args[a], locals, fns, fn_count, structs, struct_count);
                     if (!direct_type_compatible(fn->param_types[a], arg_type)) {
@@ -2633,6 +2699,14 @@ static int direct_check_expr_inner(
                     }
                     free(arg_type);
                     if (allow_arg_list && inline_list_arg) {
+                        if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, 1)) {
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(name);
+                            return 1;
+                        }
+                        continue;
+                    }
+                    if (allow_arg_list && returned_list_arg) {
                         if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, 1)) {
                             for (int k = 0; k < 16; k++) free(args[k]);
                             free(name);
@@ -2947,18 +3021,25 @@ static int direct_lower_line(
             free(stripped);
             return 1;
         }
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
         char *rewritten = allow_list_return
             ? direct_rewrite_list_value_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)
             : direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
         if (rewritten == NULL) {
+            free(prelude.data);
             free(expr);
             free(stripped);
             return 1;
         }
         char *c_expr = direct_translate_expr(rewritten);
+        sb_append(out, prelude.data);
         sb_append(out, "return ");
         sb_append(out, c_expr);
         sb_append(out, ";\n");
+        free(prelude.data);
         free(c_expr);
         free(rewritten);
         free(expr);
@@ -3064,8 +3145,13 @@ static int direct_lower_line(
                         return 1;
                     }
                     free(item_type);
+                    StrBuf prelude;
+                    sb_init(&prelude);
+                    direct_current_prelude = &prelude;
                     char *rewritten_item = direct_rewrite_expr(path, line_no, line, items[item], locals, fns, fn_count, structs, struct_count);
+                    direct_current_prelude = NULL;
                     if (rewritten_item == NULL) {
+                        free(prelude.data);
                         for (int k = item; k < item_count; k++) free(items[k]);
                         free(expr);
                         free(local_type);
@@ -3074,12 +3160,14 @@ static int direct_lower_line(
                         return 1;
                     }
                     char *c_item = direct_translate_expr(rewritten_item);
+                    sb_append(out, prelude.data);
                     sb_append(out, name);
                     sb_append(out, ".data[");
                     sb_append(out, name);
                     sb_append(out, ".len++] = ");
                     sb_append(out, c_item);
                     sb_append(out, ";\n");
+                    free(prelude.data);
                     free(c_item);
                     free(rewritten_item);
                     free(items[item]);
@@ -3111,8 +3199,13 @@ static int direct_lower_line(
                 return 1;
             }
             free(expr_type);
+            StrBuf prelude;
+            sb_init(&prelude);
+            direct_current_prelude = &prelude;
             char *rewritten = direct_rewrite_list_value_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+            direct_current_prelude = NULL;
             if (rewritten == NULL) {
+                free(prelude.data);
                 free(expr);
                 free(local_type);
                 free(name);
@@ -3120,6 +3213,7 @@ static int direct_lower_line(
                 return 1;
             }
             char *c_expr = direct_translate_expr(rewritten);
+            sb_append(out, prelude.data);
             sb_append(out, direct_c_type(local_type));
             sb_append(out, " ");
             sb_append(out, name);
@@ -3127,6 +3221,7 @@ static int direct_lower_line(
             sb_append(out, c_expr);
             sb_append(out, ";\n");
             direct_names_add_typed(locals, name, local_type);
+            free(prelude.data);
             free(c_expr);
             free(rewritten);
             free(expr);
@@ -3156,8 +3251,13 @@ static int direct_lower_line(
             return 1;
         }
         free(expr_type);
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
         char *rewritten = direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
         if (rewritten == NULL) {
+            free(prelude.data);
             free(expr);
             free(local_type);
             free(name);
@@ -3165,6 +3265,7 @@ static int direct_lower_line(
             return 1;
         }
         char *c_expr = direct_translate_expr(rewritten);
+        sb_append(out, prelude.data);
         if (strcmp(local_type, "Int") == 0) sb_append(out, "long ");
         else {
             sb_append(out, local_type);
@@ -3175,6 +3276,7 @@ static int direct_lower_line(
         sb_append(out, c_expr);
         sb_append(out, ";\n");
         direct_names_add_typed(locals, name, local_type);
+        free(prelude.data);
         free(c_expr);
         free(rewritten);
         free(expr);
@@ -3237,8 +3339,13 @@ static int direct_lower_line(
             return 1;
         }
         free(arg_type);
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
         char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
         if (rewritten_arg == NULL) {
+            free(prelude.data);
             for (int k = 0; k < 16; k++) free(args[k]);
             free(method_base);
             free(method_name);
@@ -3248,12 +3355,14 @@ static int direct_lower_line(
         }
         char *c_arg = direct_translate_expr(rewritten_arg);
         int base_is_ref = direct_names_is_ref(locals, method_base);
+        sb_append(out, prelude.data);
         direct_append_list_data_ref(out, method_base, base_is_ref);
         sb_append(out, "[");
         direct_append_list_len_ref(out, method_base, base_is_ref);
         sb_append(out, "++] = ");
         sb_append(out, c_arg);
         sb_append(out, ";\n");
+        free(prelude.data);
         free(c_arg);
         free(rewritten_arg);
         for (int k = 0; k < 16; k++) free(args[k]);
@@ -3298,21 +3407,28 @@ static int direct_lower_line(
             return 1;
         }
         free(expr_type);
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
         char *rewritten = allow_list_assignment
             ? direct_rewrite_list_value_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)
             : direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
         if (rewritten == NULL) {
+            free(prelude.data);
             free(lhs);
             free(expr);
             free(stripped);
             return 1;
         }
         char *c_expr = direct_translate_expr(rewritten);
+        sb_append(out, prelude.data);
         if (allow_list_assignment && direct_names_is_ref(locals, lhs)) sb_append(out, "*");
         sb_append(out, lhs);
         sb_append(out, " = ");
         sb_append(out, c_expr);
         sb_append(out, ";\n");
+        free(prelude.data);
         free(c_expr);
         free(rewritten);
         free(lhs);

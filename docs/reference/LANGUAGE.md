@@ -254,12 +254,31 @@ fn main() -> Int {
 }
 ```
 
+List-returning helper calls can be passed directly to `List<Int>` parameters in
+ordinary statements:
+
+```vais
+fn make(n: Int) -> List<Int> {
+    return [n, n + 1]
+}
+
+fn score(xs: List<Int>) -> Int {
+    return xs.sum()
+}
+
+fn main() -> Int {
+    return score(make(20))
+}
+```
+
 Verified today:
 
 - Empty `List<Int>` with an explicit type.
 - Integer list literals such as `[10, 20, 30]`.
 - Inline `[]`, `list()`, and integer list literals as `List<Int>` return values
   and call arguments in the direct engine.
+- `List<Int>`-returning helper calls used directly as `List<Int>` call arguments
+  in statement contexts.
 - `xs.push(value)`.
 - `xs.len()`.
 - `xs[index]`.
@@ -270,12 +289,14 @@ Verified today:
 The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
 small integer list literals, plus `push`, `len`/`len()`, index, `sum()`, and
 function calls where `List<Int>` parameters are local list names or inline list
-values. In the direct engine native ABI, `List<Int>` parameters are passed by
-reference, so `push` on a local-list parameter mutates the caller's local list;
-`push` on an inline-list argument mutates only that temporary value.
-`List<Int>` return values are returned by value. List-returning helper calls used
-directly as `List<Int>` arguments, and `List<Struct>`, are not direct-engine
-release claims yet.
+values. It also covers `List<Int>`-returning helper calls passed directly to
+`List<Int>` parameters in `return`, `let`, list-literal item, `push`, and
+assignment statements. In the direct engine native ABI, `List<Int>` parameters
+are passed by reference, so `push` on a local-list parameter mutates the caller's
+local list; `push` on an inline or returned-list temporary mutates only that
+temporary value. `List<Int>` return values are returned by value. Returned-list
+argument hoisting inside `while` conditions and `List<Struct>` are not
+direct-engine release claims yet.
 
 Methods such as `map`, `filter`, and arbitrary user-defined methods are not
 release-surface claims yet.

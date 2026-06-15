@@ -12,6 +12,8 @@
   arguments and gated caller-visible callee `push` mutation.
 - Added direct-engine lowering and gate coverage for inline `List<Int>` literal
   and `list()` call/return values.
+- Added direct-engine temporary hoisting for `List<Int>`-returning helper calls
+  passed directly to `List<Int>` parameters in statement contexts.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 
