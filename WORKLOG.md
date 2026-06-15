@@ -39,6 +39,8 @@
   archive, website, and diff checks.
 - Added `docs/release/RELEASE_CHECKLIST.md` with the `v0.2.2` next-release
   line, tag policy, manual archive workflow command, and post-tag checks.
+- Prepared the `v0.2.2` source release metadata across the native compiler
+  version, changelog, release checklist, roadmap, and website package.
 
 ## 2026-06-14
 

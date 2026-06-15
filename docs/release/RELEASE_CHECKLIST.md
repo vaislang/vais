@@ -4,8 +4,8 @@ This checklist is the pre-tag release contract for the Vais mainline.
 
 ## Current Release Line
 
-- Current source release: `v0.2.1`
-- Next planned source release: `v0.2.2`
+- Current source release: `v0.2.2`
+- Next planned source release: `v0.2.3`
 - Stable target: `v1.0.0` after the v1 completion roadmap is gate-backed
 
 Use `vMAJOR.MINOR.PATCH` source tags. Do not move a public tag after release
@@ -33,8 +33,8 @@ archives have been published.
 6. Create the annotated release tag only after the gate is green:
 
    ```bash
-   git tag -a v0.2.2 -m "Vais v0.2.2"
-   git push origin v0.2.2
+   git tag -a <tag> -m "Vais <tag>"
+   git push origin <tag>
    ```
 
 ## GitHub Release Archives
@@ -47,7 +47,7 @@ needed, and uploads the archives.
 To run the archive workflow manually for an existing tag:
 
 ```bash
-gh workflow run release-archives.yml -f tag=v0.2.2
+gh workflow run release-archives.yml -f tag=<tag>
 ```
 
 Only run the manual workflow for a tag that already points to the intended
@@ -65,7 +65,7 @@ release commit.
 2. Confirm the GitHub Release exists and has uploaded archives:
 
    ```bash
-   gh release view v0.2.2
+   gh release view <tag>
    ```
 
 3. Confirm the website deploy for the same commit succeeds:

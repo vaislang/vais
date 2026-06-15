@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-Next planned source release: `v0.2.2`.
+No changes yet.
+
+## v0.2.2 - 2026-06-15
+
+Current Vais source release.
 
 ### Changed
 
@@ -41,9 +45,21 @@ Next planned source release: `v0.2.2`.
 - `List<Int>` and `List<Struct>` returned-list arguments now lower inside
   direct-engine `if` and `else if` conditions.
 
+### Requirements
+
+- `clang`
+
+### Verification
+
+The release baseline is protected by:
+
+```bash
+bash scripts/test-release-gates.sh
+```
+
 ## v0.2.1 - 2026-06-14
 
-Current Vais source release.
+Previous Vais source release.
 
 ### Changed
 
