@@ -278,7 +278,7 @@ Verified today:
 - Inline `[]`, `list()`, and integer list literals as `List<Int>` return values
   and call arguments in the direct engine.
 - `List<Int>`-returning helper calls used directly as `List<Int>` call arguments
-  in statement contexts.
+  in statement contexts and `while` conditions.
 - `xs.push(value)`.
 - `xs.len()`.
 - `xs[index]`.
@@ -290,13 +290,12 @@ The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
 small integer list literals, plus `push`, `len`/`len()`, index, `sum()`, and
 function calls where `List<Int>` parameters are local list names or inline list
 values. It also covers `List<Int>`-returning helper calls passed directly to
-`List<Int>` parameters in `return`, `let`, list-literal item, `push`, and
-assignment statements. In the direct engine native ABI, `List<Int>` parameters
-are passed by reference, so `push` on a local-list parameter mutates the caller's
-local list; `push` on an inline or returned-list temporary mutates only that
-temporary value. `List<Int>` return values are returned by value. Returned-list
-argument hoisting inside `while` conditions and `List<Struct>` are not
-direct-engine release claims yet.
+`List<Int>` parameters in `return`, `let`, list-literal item, `push`, assignment
+statements, and `while` conditions. In the direct engine native ABI, `List<Int>`
+parameters are passed by reference, so `push` on a local-list parameter mutates
+the caller's local list; `push` on an inline or returned-list temporary mutates
+only that temporary value. `List<Int>` return values are returned by value.
+`List<Struct>` is not a direct-engine release claim yet.
 
 Methods such as `map`, `filter`, and arbitrary user-defined methods are not
 release-surface claims yet.

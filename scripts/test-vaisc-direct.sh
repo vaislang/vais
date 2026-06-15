@@ -422,6 +422,49 @@ else
     fail=1
 fi
 
+list_while_hoist_src="$tmp/direct_list_int_while_hoist.vais"
+cat > "$list_while_hoist_src" <<'SRC'
+fn make(n: Int) -> List<Int> {
+    return [n]
+}
+
+fn score(xs: List<Int>) -> Int {
+    xs.push(1)
+    return xs.sum()
+}
+
+fn main() -> Int {
+    let mut i = 0
+    let mut total = 0
+    while score(make(i)) < 4 {
+        total = total + score(make(i))
+        i = i + 1
+    }
+    return total * 6 + i * 2
+}
+SRC
+
+if "$VAISC" emit-ir "$list_while_hoist_src" \
+    --engine direct -o "$tmp/list-while-hoist.ll" \
+    >"$tmp/list-while-hoist.out" 2>"$tmp/list-while-hoist.err" &&
+    grep -q 'br label' "$tmp/list-while-hoist.ll" &&
+    grep -q 'call void @make' "$tmp/list-while-hoist.ll" &&
+    grep -q 'call .*@score' "$tmp/list-while-hoist.ll"; then
+    "$VAISC" run "$list_while_hoist_src" --engine direct >"$tmp/list-while-hoist-run.out" 2>"$tmp/list-while-hoist-run.err"
+    list_while_hoist_run=$?
+    if [ "$list_while_hoist_run" = "42" ]; then
+        echo "  PASS direct List<Int> while-condition returned arguments hoist per iteration (=42)"
+    else
+        echo "  FAIL direct List<Int> while hoist got=$list_while_hoist_run want=42"
+        cat "$tmp/list-while-hoist-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct List<Int> while hoist emission"
+    cat "$tmp/list-while-hoist.err"
+    fail=1
+fi
+
 fakebin="$tmp/fake-python"
 mkdir -p "$fakebin"
 cat > "$fakebin/python3" <<'PY'

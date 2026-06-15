@@ -2982,16 +2982,30 @@ static int direct_lower_line(
             free(stripped);
             return 1;
         }
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
         char *rewritten = direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
         if (rewritten == NULL) {
+            free(prelude.data);
             free(expr);
             free(stripped);
             return 1;
         }
         char *c_expr = direct_translate_expr(rewritten);
-        sb_append(out, "while (");
-        sb_append(out, c_expr);
-        sb_append(out, ") {\n");
+        if (prelude.len > 0) {
+            sb_append(out, "while (1) {\n");
+            sb_append(out, prelude.data);
+            sb_append(out, "if (!(");
+            sb_append(out, c_expr);
+            sb_append(out, ")) break;\n");
+        } else {
+            sb_append(out, "while (");
+            sb_append(out, c_expr);
+            sb_append(out, ") {\n");
+        }
+        free(prelude.data);
         free(c_expr);
         free(rewritten);
         free(expr);

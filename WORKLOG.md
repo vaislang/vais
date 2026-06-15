@@ -14,6 +14,8 @@
   and `list()` call/return values.
 - Added direct-engine temporary hoisting for `List<Int>`-returning helper calls
   passed directly to `List<Int>` parameters in statement contexts.
+- Added per-iteration direct-engine hoisting for returned-list arguments inside
+  `while` conditions.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 

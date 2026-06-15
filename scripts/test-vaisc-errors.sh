@@ -140,23 +140,6 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "direct_returned_list_arg_loop" "direct" "requires a local List<Int> argument in this expression context" "let xs: List<Int> = make()" <<'SRC'
-fn make() -> List<Int> {
-    return [1]
-}
-
-fn score(xs: List<Int>) -> Int {
-    return xs.len()
-}
-
-fn main() -> Int {
-    while score(make()) > 0 {
-        return 42
-    }
-    return 0
-}
-SRC
-
 expect_diag "direct_missing_return" "direct" "requires at least one .*return.* statement" "fn main() -> Int" <<'SRC'
 fn main() -> Int {
     let x = 42

@@ -21,6 +21,8 @@
   arguments and return expressions.
 - `List<Int>`-returning helper calls now hoist into direct-engine temporaries
   when passed directly to `List<Int>` parameters in statement contexts.
+- Direct-engine `while` conditions now hoist returned-list arguments per
+  iteration instead of requiring a local list binding.
 
 ## v0.2.1 - 2026-06-14
 

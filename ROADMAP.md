@@ -30,6 +30,8 @@ This file tracks current work only.
   values in call arguments and return expressions.
 - The native direct engine hoists `List<Int>`-returning helper calls used as
   `List<Int>` call arguments in statement contexts.
+- The native direct engine hoists `List<Int>`-returning helper calls in `while`
+  conditions and reevaluates them on each loop iteration.
 
 ## Current Reality
 
@@ -39,9 +41,9 @@ This file tracks current work only.
   local literal/read/write, struct parameter/return helper ABI, and local
   `List<Int>` initialization plus `push`, `len`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
-  literal/constructor call and return values. Statement contexts also hoist
-  `List<Int>`-returning helper calls before passing them to `List<Int>`
-  parameters.
+  literal/constructor call and return values. Statement contexts and `while`
+  conditions also hoist `List<Int>`-returning helper calls before passing them
+  to `List<Int>` parameters.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal repository checks
   and diagnostics only.
@@ -61,8 +63,8 @@ This file tracks current work only.
 ## Next Work
 
 1. Keep standalone release archives attached to future source tags.
-2. Extend the direct engine beyond the current `List<Int>` ABI toward hoisting
-   in loop conditions and larger list-family coverage.
+2. Extend the direct engine beyond the current `List<Int>` ABI toward larger
+   list-family coverage.
 3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 4. Replace the remaining Python-only internal checks when the language has
@@ -198,8 +200,38 @@ Mode: sequential
   `WORKLOG.md`, `docs/design/`.
 - Requirements: prove returned-list arguments execute through direct mode and
   document that loop-condition hoisting is still outside the direct claim.
-- Done: direct gates cover returned-list argument hoisting and diagnostics still
-  reject returned-list argument hoisting inside `while` conditions.
+- Done: direct gates cover returned-list argument hoisting in statement contexts;
+  while-condition hoisting was left for the following milestone.
+
+## Completed Milestone: Native Direct List Int While Hoisting
+
+Mode: sequential
+
+- [x] 1. Hoist `List<Int>`-returning helper calls inside direct `while`
+  conditions.
+- [x] 2. Preserve per-iteration condition reevaluation.
+- [x] 3. Gate while-condition returned-list argument hoisting.
+- [x] 4. Sync docs/site/changelog with the promoted loop-hoisting slice.
+
+### Task Briefs
+
+#### 1. While condition hoisting
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode can lower `while score(make(i)) < limit { ... }`
+  without evaluating `make(i)` only once before the loop.
+- Done: direct lowering emits `while (1)` when condition prelude temporaries are
+  required, rebuilds the hoisted `DirectListInt` temporaries each iteration, and
+  breaks when the translated condition is false.
+
+#### 2. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
+  `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
+  `WORKLOG.md`, `docs/design/`.
+- Requirements: prove returned-list argument hoisting in direct `while`
+  conditions executes through direct mode and keep docs synced to the new claim.
+- Done: direct gates cover per-iteration while-condition hoisting returning 42.
 
 ## Completed Milestone: Native Direct List Int Out-Param Semantics
 
