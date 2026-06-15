@@ -5,7 +5,7 @@
 # integer arithmetic/comparisons, return, if/else, while, plain function calls,
 # print/putchar, simple structs, payload-free enum/match, small Int-coded
 # payload enum/match, single-Int closure return, and the first
-# List push/len/is_empty/index/sum slice.
+# List push/len/is_empty/last/index/sum slice.
 # Broader language features stay on the full compiler path until their native
 # slices land.
 set -uo pipefail
@@ -176,14 +176,14 @@ fn main() -> Int {
     xs.push(10)
     xs.push(20)
     xs.push(30)
-    return xs.sum() - xs.len() - xs[1] - xs[0] - xs[2] + 26 + empty.is_empty() - xs.is_empty() - 1
+    return xs.sum() - xs.len() - xs[1] - xs[0] - xs[2] + 26 + empty.is_empty() - xs.is_empty() - 1 + xs.last() - 30
 }
 SRC
 
 "$VAISC" run "$list_accept" >"$tmp/list_accept.out" 2>"$tmp/list_accept.err"
 got=$?
 if [ "$got" = "23" ]; then
-    echo "  PASS accepts List push/len/is_empty/index/sum slice"
+    echo "  PASS accepts List push/len/is_empty/last/index/sum slice"
 else
     echo "  FAIL accepts List slice got=$got want=23"
     cat "$tmp/list_accept.err"

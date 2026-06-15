@@ -49,6 +49,8 @@ This file tracks current work only.
   including assignments through list parameters.
 - `List<T>.is_empty()` is promoted for the full self-host path and native
   direct engine, with gates for Int and declared-struct lists.
+- `List<T>.last()` is promoted for non-empty lists in the full self-host path
+  and native direct engine, with Int and declared-struct list gates.
 
 ## Current Reality
 
@@ -56,13 +58,13 @@ This file tracks current work only.
 - The direct engine is intentionally narrow and currently supports Int helpers,
   locals, assignment, calls, `if`, `while`, returns, simple Int-field struct
   local literal/read/write, struct parameter/return helper ABI, and local
-  `List<Int>` initialization plus `push`, `len`, `is_empty`, index, `sum`, and
+  `List<Int>` initialization plus `push`, `len`, `is_empty`, `last`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
   literal/constructor call and return values. Statement contexts, `if`,
   `else if`, and `while` conditions also lower `List<Int>`-returning helper
   calls before passing them to `List<Int>` parameters. Local `List<Struct>`
   values support typed `[]`, `list()`, list literal initialization, `push`,
-  `len`, `is_empty`, index, field reads/writes, parameter reference, return value ABI,
+  `len`, `is_empty`, `last`, index, field reads/writes, parameter reference, return value ABI,
   inline list arguments, and returned-list argument lowering in statements plus
   `if`, `else if`, and `while` conditions. Context-typed list assignment is supported
   for `List<Int>` and `List<Struct>` locals and list parameters. Element
@@ -126,7 +128,7 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
 
 - [x] 1.1a Promote verified `List<T>.is_empty()` across the full self-host path
   and native direct engine.
-- [ ] 1.1b Promote verified `List<T>.last()` across the full self-host path and
+- [x] 1.1b Promote verified `List<T>.last()` across the full self-host path and
   native direct engine.
 - [ ] 1.1c Promote verified `List<T>.pop()` across the full self-host path and
   native direct engine.
@@ -249,8 +251,49 @@ Phase 0 is complete. The next concrete slice is Phase 1:
 - [x] Confirm the release archive workflow publishes archives for a chosen tag.
 - [x] Decide the next release version before creating any public tag.
 - [x] Promote the first small standard-library `List<T>` API slice with gates.
-- [ ] Promote the next `List<T>` API slice, either `last()` or `pop()`, with
-  full/direct/docs coverage.
+- [ ] Promote the next `List<T>` API slice, `pop()`, with full/direct/docs
+  coverage.
+
+## Completed Milestone: List last API
+
+Mode: sequential
+
+- [x] 1. Add `List<T>.last()` lowering to the full self-host compiler for
+  non-empty scalar lists and struct-list local binding.
+- [x] 2. Add native direct `List<Int>` and `List<Struct>` `last()` expression
+  support with type inference.
+- [x] 3. Gate local and parameter `List<Int>.last()` plus struct-list
+  `let item = xs.last()` usage.
+- [x] 4. Sync `std/PRELUDE.md`, the language reference, changelog, roadmap,
+  worklog, and website copy.
+
+### Task Briefs
+
+#### 1. Full compiler last API
+
+- Target files: `compiler/self/fixpoint_full.vais`,
+  `compiler/self/vaisc_core.ll`, `scripts/test-fixpoint-full.sh`.
+- Requirements: compile `xs.last()` by reading `len - 1` and reusing existing
+  list buffer/index lowering; support struct-list values by binding the result
+  to a local before field reads.
+- Done: full gates cover `List<Int>.last()` through a `List<Int>` parameter and
+  `List<Tok>.last()` through local and parameter struct-list bindings.
+
+#### 2. Native direct last API
+
+- Target files: `tools/vaisc_native.c`, `scripts/test-vaisc-direct.sh`,
+  `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-errors.sh`.
+- Requirements: keep direct mode native-only, infer `xs.last()` as the list
+  element type, and reject malformed calls in the rewrite path.
+- Done: direct gates cover `List<Int>.last()` locals and parameters plus
+  `List<Box>.last()` binding.
+
+#### 3. Documentation and gate sync
+
+- Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
+  `website/index.html`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`.
+- Requirements: document only the non-empty-list API now; keep `pop()` and
+  bounds behavior as pending Phase 1 work.
 
 ## Completed Milestone: List is_empty API
 

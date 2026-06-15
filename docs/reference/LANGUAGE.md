@@ -76,8 +76,8 @@ Verified release surface:
 | `Bool` | Produced by comparisons and boolean expressions |
 | `Str` | String literals and selected string operations |
 | `Char` | Single-byte character literals in verified examples |
-| `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, index, `sum` |
-| `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, index, field read/write, parameter reference, return value |
+| `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, index, `sum` |
+| `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, index, field read/write, parameter reference, return value |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match and small recursive `Int` payload enum/match |
 
@@ -220,7 +220,7 @@ fn main() -> Int {
     xs.push(10)
     xs.push(20)
     xs.push(30)
-    return xs.len() + xs[1] + xs.is_empty()
+    return xs.len() + xs[1] + xs.is_empty() + xs.last()
 }
 ```
 
@@ -291,7 +291,8 @@ fn make(v: Int) -> List<Box> {
 }
 
 fn score(xs: List<Box>) -> Int {
-    return xs[0].value + xs.len()
+    let tail = xs.last()
+    return xs[0].value + xs.len() + tail.value
 }
 
 fn main() -> Int {
@@ -316,6 +317,7 @@ Verified today:
 - `xs.push(value)`.
 - `xs.len()`.
 - `xs.is_empty()`.
+- `xs.last()`.
 - `xs[index]`.
 - `xs.sum()`.
 - Assigning `[]`, `list()`, list literals, local list values, and returned-list
@@ -324,14 +326,18 @@ Verified today:
 - Passing a local `List<Int>` to a `List<Int>` parameter.
 - Returning `List<Int>` from helper functions.
 - `List<Struct>` values with an explicit type, `[]`, `list()`, list literals,
-  list/element assignment, `push`, `len`, index, field reads/writes, parameter
+  list/element assignment, `push`, `len`, `last`, index, field reads/writes, parameter
   references, return values, inline call arguments, and returned-list call
   arguments in the direct engine.
 
+`last()` is currently a non-empty-list API. Bounds-safe diagnostics or trap
+behavior for empty lists and out-of-range indexes remains a Phase 1 roadmap
+item.
+
 The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
-small integer list literals, plus `push`, `len`/`len()`, `is_empty()`, index,
-`sum()`, and function calls where `List<Int>` parameters are local list names or
-inline list values. It also covers `List<Int>`-returning helper calls passed
+small integer list literals, plus `push`, `len`/`len()`, `is_empty()`,
+`last()`, index, `sum()`, and function calls where `List<Int>` parameters are
+local list names or inline list values. It also covers `List<Int>`-returning helper calls passed
 directly to `List<Int>` parameters in `return`, `let`, list-literal item, `push`, assignment
 statements, `if`, `else if`, and `while` conditions. In the direct engine
 native ABI, `List<Int>`
@@ -345,8 +351,9 @@ declared structs, including inline list arguments and `List<Struct>`-returning
 helper calls passed directly to `List<Struct>` parameters in statement contexts
 plus `if`, `else if`, and `while` conditions. Direct list elements can be assigned with
 `xs[index] = value`, and indexed `List<Struct>` element fields can be assigned
-with `xs[index].field = value`; both work through list parameters. `sum()` on
-`List<Struct>` is not a direct-engine release claim.
+with `xs[index].field = value`; both work through list parameters.
+`List<Struct>.last()` can be bound to a struct local before reading fields.
+`sum()` on `List<Struct>` is not a direct-engine release claim.
 
 Methods such as `map`, `filter`, and arbitrary user-defined methods are not
 release-surface claims yet.

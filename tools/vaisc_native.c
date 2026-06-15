@@ -2070,6 +2070,13 @@ static void direct_append_list_is_empty_ref(StrBuf *out, const char *name, int i
     sb_append(out, " == 0 ? 1 : 0)");
 }
 
+static void direct_append_list_last_ref(StrBuf *out, const char *name, int is_ref) {
+    direct_append_list_data_ref(out, name, is_ref);
+    sb_append(out, "[(long)(");
+    direct_append_list_len_ref(out, name, is_ref);
+    sb_append(out, " - 1)]");
+}
+
 static char *direct_rewrite_expr(
     const char *path,
     int line_no,
@@ -2454,6 +2461,49 @@ static char *direct_rewrite_list_expr(
                 i = close + 1;
                 continue;
             }
+            if (strcmp(field, "last") == 0) {
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.last must be called",
+                        "write `xs.last()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List.last",
+                        "write `xs.last()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *args = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *trimmed_args = trim_copy(args);
+                int has_args = trimmed_args[0] != '\0';
+                free(trimmed_args);
+                free(args);
+                if (has_args) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.last takes no arguments",
+                        "write `xs.last()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                direct_append_list_last_ref(&out, name, is_ref);
+                free(field);
+                free(name);
+                i = close + 1;
+                continue;
+            }
             if (strcmp(field, "sum") == 0) {
                 if (!direct_is_list_int_type(base_type)) {
                     report_issue(path, line_no, find_col(line, name), line,
@@ -2508,8 +2558,8 @@ static char *direct_rewrite_list_expr(
                 continue;
             }
             report_issue(path, line_no, find_col(line, name), line,
-                "direct native emitter supports List len, is_empty, index, and List<Int> sum expressions",
-                "write `xs.len()`, `xs.is_empty()`, `xs[i]`, or `xs.sum()` for List<Int>.",
+                "direct native emitter supports List len, is_empty, last, index, and List<Int> sum expressions",
+                "write `xs.len()`, `xs.is_empty()`, `xs.last()`, `xs[i]`, or `xs.sum()` for List<Int>.",
                 NULL);
             free(field);
             free(name);
@@ -2581,6 +2631,26 @@ static char *direct_infer_expr_type(
                     return elem_type;
                 }
             }
+        }
+        if (*rest == '.') {
+            int field_start = (int)(rest - trimmed) + 1;
+            while (trimmed[field_start] == ' ' || trimmed[field_start] == '\t') field_start++;
+            int field_end = field_start;
+            while (is_ident_continue(trimmed[field_end])) field_end++;
+            char *field = substr_copy(trimmed + field_start, (size_t)(field_end - field_start));
+            const char *after = skip_ws(trimmed + field_end);
+            const char *local_type = direct_names_type(locals, name);
+            if (direct_is_list_type(local_type) && strcmp(field, "last") == 0 && *after == '(') {
+                int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                    char *elem_type = direct_list_element_type(local_type);
+                    free(field);
+                    free(name);
+                    free(trimmed);
+                    return elem_type;
+                }
+            }
+            free(field);
         }
         if (*rest == '{' && direct_find_struct(structs, struct_count, name) != NULL) {
             char *out = strdup(name);
@@ -2736,6 +2806,22 @@ static int direct_check_expr_inner(
                     free(name);
                     continue;
                 }
+                if (strcmp(field, "last") == 0 && *after == '(') {
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List.last",
+                            "write `xs.last()`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
                 if (strcmp(field, "sum") == 0 && *after == '(') {
                     if (!direct_is_list_int_type(base_type)) {
                         report_issue(path, line_no, find_col(line, name), line,
@@ -2762,8 +2848,8 @@ static int direct_check_expr_inner(
                     continue;
                 }
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter supports List push, len, is_empty, index, and List<Int> sum",
-                    "write `xs.push(value)`, `xs.len()`, `xs.is_empty()`, `xs[i]`, or `xs.sum()` for List<Int>.",
+                    "direct native emitter supports List push, len, is_empty, last, index, and List<Int> sum",
+                    "write `xs.push(value)`, `xs.len()`, `xs.is_empty()`, `xs.last()`, `xs[i]`, or `xs.sum()` for List<Int>.",
                     "xs.push(value)");
                 free(field);
                 free(name);

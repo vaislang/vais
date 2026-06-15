@@ -13,6 +13,11 @@
   and website copy with the current gate-backed list surface.
 - Ran `bash scripts/test-release-gates.sh`; it passed and produced
   `dist/vais-0.2.2-darwin-arm64.tar.gz`.
+- Added `List<T>.last()` for non-empty lists to the full self-host compiler and
+  native direct engine.
+- Added struct-list `last()` binding coverage with `let item = xs.last()`.
+- Updated front, direct, full, and diagnostic gates plus public docs for the
+  promoted `last()` API.
 
 ## 2026-06-15
 

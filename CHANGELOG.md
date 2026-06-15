@@ -7,6 +7,9 @@
 - Added verified `List<T>.is_empty()` support in the full self-host compiler and
   native direct engine, with front, direct, error, full, and release-gate
   coverage.
+- Added verified `List<T>.last()` support for non-empty lists in the full
+  self-host compiler and native direct engine, including struct-list local
+  binding coverage.
 
 ## v0.2.2 - 2026-06-15
 
