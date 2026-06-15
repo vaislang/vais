@@ -10,6 +10,8 @@
   ABI.
 - Switched direct `List<Int>` parameters to native references for local list
   arguments and gated caller-visible callee `push` mutation.
+- Added direct-engine lowering and gate coverage for inline `List<Int>` literal
+  and `list()` call/return values.
 - Synced language reference, roadmap, changelog, design notes, and site copy
   with the promoted direct list slices.
 

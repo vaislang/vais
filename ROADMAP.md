@@ -26,6 +26,8 @@ This file tracks current work only.
   `sum()`.
 - The native direct engine covers `List<Int>` function parameter and return
   ABI, including push-to-parameter mutation for local list arguments.
+- The native direct engine covers inline `List<Int>` literal and `list()`
+  values in call arguments and return expressions.
 
 ## Current Reality
 
@@ -34,7 +36,8 @@ This file tracks current work only.
   locals, assignment, calls, `if`, `while`, returns, simple Int-field struct
   local literal/read/write, struct parameter/return helper ABI, and local
   `List<Int>` initialization plus `push`, `len`, index, `sum`, and
-  `List<Int>` parameter reference and return value ABI.
+  `List<Int>` parameter reference, return value ABI, and inline list
+  literal/constructor call and return values.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal repository checks
   and diagnostics only.
@@ -54,8 +57,8 @@ This file tracks current work only.
 ## Next Work
 
 1. Keep standalone release archives attached to future source tags.
-2. Extend the direct engine beyond the current `List<Int>` ABI toward inline
-   list call/return lowering and larger list-family coverage.
+2. Extend the direct engine beyond the current `List<Int>` ABI toward
+   list-returning call arguments and larger list-family coverage.
 3. Keep README, language docs, website copy, and `CHANGELOG.md` synced with the
    Python-free public command path.
 4. Replace the remaining Python-only internal checks when the language has
@@ -132,6 +135,37 @@ Mode: sequential
   list parameters/returns as future work.
 - Done: docs and site copy are synced to the current direct/full engine split.
 
+## Completed Milestone: Native Direct List Int Inline Values
+
+Mode: sequential
+
+- [x] 1. Lower inline `List<Int>` literals and `list()` as direct return values.
+- [x] 2. Lower inline `List<Int>` literals and `list()` as direct call arguments.
+- [x] 3. Gate inline call/return values and preserve non-local argument diagnostics.
+- [x] 4. Sync docs/site/changelog with the promoted inline value slice.
+
+### Task Briefs
+
+#### 1. Inline list value lowering
+
+- Target files: `tools/vaisc_native.c`.
+- Requirements: direct mode can lower `return []`, `return [1, 2]`,
+  `return list()`, `score([])`, `score([1, 2])`, and `score(list())` for
+  `List<Int>` signatures without invoking Python.
+- Done: direct lowering emits `DirectListInt` compound literals for inline list
+  return values and passes addresses of inline list compound literals to
+  `List<Int>` parameters.
+
+#### 2. Gates and documentation
+
+- Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
+  `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
+  `WORKLOG.md`, `docs/design/`.
+- Requirements: prove inline list values execute through direct mode and keep
+  list-returning helper calls used directly as list arguments behind a diagnostic.
+- Done: direct gates cover inline list call/return values and diagnostics still
+  reject `count(make())` until temp hoisting is implemented.
+
 ## Completed Milestone: Native Direct List Int Out-Param Semantics
 
 Mode: sequential
@@ -139,7 +173,7 @@ Mode: sequential
 - [x] 1. Lower `List<Int>` parameters as direct native references.
 - [x] 2. Preserve `List<Int>` return values as value returns.
 - [x] 3. Gate callee `push` mutation of caller local lists.
-- [x] 4. Keep unsupported non-local direct list arguments covered by diagnostics.
+- [x] 4. Keep unsupported non-local returned-list arguments covered by diagnostics.
 - [x] 5. Sync docs/site/changelog with the promoted out-param slice.
 
 ### Task Briefs
@@ -159,10 +193,10 @@ Mode: sequential
 - Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
   `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
   `WORKLOG.md`, `docs/design/`.
-- Requirements: prove callee `push` mutates the caller local list and keep inline
-  or returned list expressions out of direct list argument claims.
+- Requirements: prove callee `push` mutates the caller local list and keep
+  returned list expressions out of direct list argument claims.
 - Done: direct gates cover caller-visible mutation and diagnostics require
-  `List<Int>` arguments to be local list names.
+  non-literal `List<Int>` arguments to be local list names.
 
 ## Completed Milestone: Native Direct List Int ABI
 
@@ -197,10 +231,10 @@ Mode: sequential
 - Target files: `scripts/test-vaisc-direct.sh`, `scripts/test-vaisc-errors.sh`,
   `docs/reference/LANGUAGE.md`, `website/`, `CHANGELOG.md`, `ROADMAP.md`,
   `WORKLOG.md`, `docs/design/`.
-- Requirements: gate the promoted ABI and keep unsupported inline list
-  call/return expressions out of public direct claims.
+- Requirements: gate the promoted ABI and keep unsupported direct list call
+  expressions out of public direct claims.
 - Done: direct gates cover list parameter/return ABI and diagnostics cover list
-  type mismatches and inline list call arguments.
+  type mismatches and non-local list call arguments.
 
 ## Completed Milestone: Standalone Install And Release Archive
 

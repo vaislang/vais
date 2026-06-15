@@ -140,16 +140,6 @@ fn main() -> Int {
 }
 SRC
 
-expect_diag "direct_inline_list_arg" "direct" "does not lower inline List<Int> call arguments" "let xs: List<Int> = \\[]" <<'SRC'
-fn count(xs: List<Int>) -> Int {
-    return xs.len()
-}
-
-fn main() -> Int {
-    return count([])
-}
-SRC
-
 expect_diag "direct_returned_list_arg" "direct" "requires a local List<Int> argument" "let xs: List<Int> = \\[]" <<'SRC'
 fn make() -> List<Int> {
     let xs: List<Int> = []

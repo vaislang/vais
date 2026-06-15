@@ -333,6 +333,48 @@ else
     fail=1
 fi
 
+list_inline_src="$tmp/direct_list_int_inline_values.vais"
+cat > "$list_inline_src" <<'SRC'
+fn make(a: Int) -> List<Int> {
+    return [a, a + 2]
+}
+
+fn empty() -> List<Int> {
+    return []
+}
+
+fn score(xs: List<Int>) -> Int {
+    xs.push(10)
+    return xs.sum() + xs.len()
+}
+
+fn main() -> Int {
+    let xs = make(20)
+    let ys = empty()
+    return score([5, 5]) + score(list()) + xs[1] + ys.len() - 14
+}
+SRC
+
+if "$VAISC" emit-ir "$list_inline_src" \
+    --engine direct -o "$tmp/list-inline.ll" \
+    >"$tmp/list-inline.out" 2>"$tmp/list-inline.err" &&
+    grep -q 'define .*@make' "$tmp/list-inline.ll" &&
+    grep -q 'call .*@score' "$tmp/list-inline.ll"; then
+    "$VAISC" run "$list_inline_src" --engine direct >"$tmp/list-inline-run.out" 2>"$tmp/list-inline-run.err"
+    list_inline_run=$?
+    if [ "$list_inline_run" = "42" ]; then
+        echo "  PASS direct inline List<Int> call and return values run (=42)"
+    else
+        echo "  FAIL direct inline List<Int> got=$list_inline_run want=42"
+        cat "$tmp/list-inline-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct inline List<Int> emission"
+    cat "$tmp/list-inline.err"
+    fail=1
+fi
+
 fakebin="$tmp/fake-python"
 mkdir -p "$fakebin"
 cat > "$fakebin/python3" <<'PY'

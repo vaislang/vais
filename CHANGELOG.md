@@ -17,6 +17,8 @@
   return values through the direct ABI.
 - `List<Int>` direct-engine parameters are now native references for local list
   arguments, so callee `push` operations mutate the caller's list.
+- Inline `List<Int>` literals and `list()` now lower in direct-engine call
+  arguments and return expressions.
 
 ## v0.2.1 - 2026-06-14
 
