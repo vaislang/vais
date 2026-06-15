@@ -103,6 +103,18 @@ fn is_sum(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 2] != 109 { return 0 }
     return 1
 }
+fn is_is_empty(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 8 { return 0 }
+    if src[a] != 105 { return 0 }
+    if src[a + 1] != 115 { return 0 }
+    if src[a + 2] != 95 { return 0 }
+    if src[a + 3] != 101 { return 0 }
+    if src[a + 4] != 109 { return 0 }
+    if src[a + 5] != 112 { return 0 }
+    if src[a + 6] != 116 { return 0 }
+    if src[a + 7] != 121 { return 0 }
+    return 1
+}
 
 # Builtin call ids used by the native parity surface:
 #   1=Int(x) identity/truncation, 2=bitnot(x), 3=bitand, 4=bitor,
@@ -1651,6 +1663,77 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             # sty, which would otherwise be misread as a struct index.
             let karr = isarr_of(slots, src, t.nstart, t.nlen)
             let meth = toks[i + 2]
+            if is_is_empty(src, meth.nstart, meth.nlen) == 1 {
+                if karr == 1 {
+                    let sal = arrlen_of(slots, src, t.nstart, t.nlen)
+                    if sal == 0 { return Op { kind: 0, val: 1, next: counter } }
+                    return Op { kind: 0, val: 0, next: counter }
+                }
+                if karr == 2 {
+                    let sslot = find_slot(slots, src, t.nstart, t.nlen)
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = load i64, i64* %v")
+                    pint(sslot + 1)
+                    putchar(10)
+                    let cmpc = counter + 1
+                    emit_str("  %t")
+                    pint(cmpc)
+                    emit_str(" = icmp eq i64 %t")
+                    pint(counter)
+                    emit_str(", 0")
+                    putchar(10)
+                    let zc = cmpc + 1
+                    emit_str("  %t")
+                    pint(zc)
+                    emit_str(" = zext i1 %t")
+                    pint(cmpc)
+                    emit_str(" to i64")
+                    putchar(10)
+                    return Op { kind: 1, val: zc, next: zc + 1 }
+                }
+                if karr == 4 {
+                    let pslot = find_slot(slots, src, t.nstart, t.nlen)
+                    let plsty = sty_of(slots, src, t.nstart, t.nlen)
+                    let mut plenidx2 = list_lenidx()
+                    if plsty >= 0 { plenidx2 = list_lenidx_for_nfields(struct_nfields(defs, plsty)) }
+                    let bp = counter
+                    emit_str("  %t")
+                    pint(bp)
+                    emit_str(" = load i64*, i64** %v")
+                    pint(pslot)
+                    putchar(10)
+                    let lp = bp + 1
+                    emit_str("  %t")
+                    pint(lp)
+                    emit_str(" = getelementptr i64, i64* %t")
+                    pint(bp)
+                    emit_str(", i64 ")
+                    pint(plenidx2)
+                    putchar(10)
+                    let lv = lp + 1
+                    emit_str("  %t")
+                    pint(lv)
+                    emit_str(" = load i64, i64* %t")
+                    pint(lp)
+                    putchar(10)
+                    let cmpc = lv + 1
+                    emit_str("  %t")
+                    pint(cmpc)
+                    emit_str(" = icmp eq i64 %t")
+                    pint(lv)
+                    emit_str(", 0")
+                    putchar(10)
+                    let zc = cmpc + 1
+                    emit_str("  %t")
+                    pint(zc)
+                    emit_str(" = zext i1 %t")
+                    pint(cmpc)
+                    emit_str(" to i64")
+                    putchar(10)
+                    return Op { kind: 1, val: zc, next: zc + 1 }
+                }
+            }
             if is_sum(src, meth.nstart, meth.nlen) == 1 {
                 let sslot = find_slot(slots, src, t.nstart, t.nlen)
                 let sal = arrlen_of(slots, src, t.nstart, t.nlen)

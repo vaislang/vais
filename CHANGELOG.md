@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-No changes yet.
+### Changed
+
+- Added verified `List<T>.is_empty()` support in the full self-host compiler and
+  native direct engine, with front, direct, error, full, and release-gate
+  coverage.
 
 ## v0.2.2 - 2026-06-15
 

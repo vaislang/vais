@@ -2064,6 +2064,12 @@ static void direct_append_list_sum_ref(StrBuf *out, const char *name, int is_ref
     sb_append(out, ")");
 }
 
+static void direct_append_list_is_empty_ref(StrBuf *out, const char *name, int is_ref) {
+    sb_append(out, "(");
+    direct_append_list_len_ref(out, name, is_ref);
+    sb_append(out, " == 0 ? 1 : 0)");
+}
+
 static char *direct_rewrite_expr(
     const char *path,
     int line_no,
@@ -2405,6 +2411,49 @@ static char *direct_rewrite_list_expr(
                 i = next_i;
                 continue;
             }
+            if (strcmp(field, "is_empty") == 0) {
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.is_empty must be called",
+                        "write `xs.is_empty()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List.is_empty",
+                        "write `xs.is_empty()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *args = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *trimmed_args = trim_copy(args);
+                int has_args = trimmed_args[0] != '\0';
+                free(trimmed_args);
+                free(args);
+                if (has_args) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.is_empty takes no arguments",
+                        "write `xs.is_empty()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                direct_append_list_is_empty_ref(&out, name, is_ref);
+                free(field);
+                free(name);
+                i = close + 1;
+                continue;
+            }
             if (strcmp(field, "sum") == 0) {
                 if (!direct_is_list_int_type(base_type)) {
                     report_issue(path, line_no, find_col(line, name), line,
@@ -2459,8 +2508,8 @@ static char *direct_rewrite_list_expr(
                 continue;
             }
             report_issue(path, line_no, find_col(line, name), line,
-                "direct native emitter supports List len, index, and List<Int> sum expressions",
-                "write `xs.len()`, `xs[i]`, or `xs.sum()` for List<Int>.",
+                "direct native emitter supports List len, is_empty, index, and List<Int> sum expressions",
+                "write `xs.len()`, `xs.is_empty()`, `xs[i]`, or `xs.sum()` for List<Int>.",
                 NULL);
             free(field);
             free(name);
@@ -2671,6 +2720,22 @@ static int direct_check_expr_inner(
                     free(name);
                     continue;
                 }
+                if (strcmp(field, "is_empty") == 0 && *after == '(') {
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List.is_empty",
+                            "write `xs.is_empty()`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
                 if (strcmp(field, "sum") == 0 && *after == '(') {
                     if (!direct_is_list_int_type(base_type)) {
                         report_issue(path, line_no, find_col(line, name), line,
@@ -2697,8 +2762,8 @@ static int direct_check_expr_inner(
                     continue;
                 }
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter supports List push, len, index, and List<Int> sum",
-                    "write `xs.push(value)`, `xs.len()`, `xs[i]`, or `xs.sum()` for List<Int>.",
+                    "direct native emitter supports List push, len, is_empty, index, and List<Int> sum",
+                    "write `xs.push(value)`, `xs.len()`, `xs.is_empty()`, `xs[i]`, or `xs.sum()` for List<Int>.",
                     "xs.push(value)");
                 free(field);
                 free(name);

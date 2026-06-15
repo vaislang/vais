@@ -47,6 +47,8 @@ This file tracks current work only.
   assignment, including assignments through list parameters.
 - The native direct engine covers indexed `List<Struct>` field assignment,
   including assignments through list parameters.
+- `List<T>.is_empty()` is promoted for the full self-host path and native
+  direct engine, with gates for Int and declared-struct lists.
 
 ## Current Reality
 
@@ -54,13 +56,13 @@ This file tracks current work only.
 - The direct engine is intentionally narrow and currently supports Int helpers,
   locals, assignment, calls, `if`, `while`, returns, simple Int-field struct
   local literal/read/write, struct parameter/return helper ABI, and local
-  `List<Int>` initialization plus `push`, `len`, index, `sum`, and
+  `List<Int>` initialization plus `push`, `len`, `is_empty`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
   literal/constructor call and return values. Statement contexts, `if`,
   `else if`, and `while` conditions also lower `List<Int>`-returning helper
   calls before passing them to `List<Int>` parameters. Local `List<Struct>`
   values support typed `[]`, `list()`, list literal initialization, `push`,
-  `len`, index, field reads/writes, parameter reference, return value ABI,
+  `len`, `is_empty`, index, field reads/writes, parameter reference, return value ABI,
   inline list arguments, and returned-list argument lowering in statements plus
   `if`, `else if`, and `while` conditions. Context-typed list assignment is supported
   for `List<Int>` and `List<Struct>` locals and list parameters. Element
@@ -122,9 +124,14 @@ public site describes exactly that release.
 
 Goal: grow a small, reliable prelude instead of a large speculative API list.
 
-- [ ] 1.1 Promote verified `List<T>` operations beyond the current direct slices:
-  `is_empty`, `last`, `pop`, and bounds-safe diagnostics or documented trap
-  behavior.
+- [x] 1.1a Promote verified `List<T>.is_empty()` across the full self-host path
+  and native direct engine.
+- [ ] 1.1b Promote verified `List<T>.last()` across the full self-host path and
+  native direct engine.
+- [ ] 1.1c Promote verified `List<T>.pop()` across the full self-host path and
+  native direct engine.
+- [ ] 1.1d Define bounds-safe diagnostics or documented trap behavior for
+  indexed list operations.
 - [ ] 1.2 Promote `Str` operations needed by real tools: `len`, index,
   equality, byte classification helpers, and integer parsing helpers.
 - [ ] 1.3 Promote `Map<K,V>` only after a minimal gate-backed design exists for
@@ -241,7 +248,49 @@ Phase 0 is complete. The next concrete slice is Phase 1:
 - [x] Add a release checklist document and wire it to the current gate commands.
 - [x] Confirm the release archive workflow publishes archives for a chosen tag.
 - [x] Decide the next release version before creating any public tag.
-- [ ] Promote the first small standard-library `List<T>` API slice with gates.
+- [x] Promote the first small standard-library `List<T>` API slice with gates.
+- [ ] Promote the next `List<T>` API slice, either `last()` or `pop()`, with
+  full/direct/docs coverage.
+
+## Completed Milestone: List is_empty API
+
+Mode: sequential
+
+- [x] 1. Add `List<T>.is_empty()` lowering to the full self-host compiler.
+- [x] 2. Regenerate `compiler/self/vaisc_core.ll` from
+  `compiler/self/fixpoint_full.vais`.
+- [x] 3. Add native direct `List<Int>` and `List<Struct>` `is_empty()` support.
+- [x] 4. Gate the API in full, front, direct, and diagnostic test suites.
+- [x] 5. Sync `std/PRELUDE.md`, the language reference, and website copy.
+
+### Task Briefs
+
+#### 1. Full compiler list API
+
+- Target files: `compiler/self/fixpoint_full.vais`,
+  `compiler/self/vaisc_core.ll`, `scripts/test-fixpoint-full.sh`.
+- Requirements: compile `xs.is_empty()` for local and parameter lists without
+  relying on a broad method fallback.
+- Done: full gates cover `List<Int>.is_empty()` and declared-struct
+  `List<T>.is_empty()` returning the expected boolean-as-Int values.
+
+#### 2. Native direct list API
+
+- Target files: `tools/vaisc_native.c`, `scripts/test-vaisc-direct.sh`,
+  `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-errors.sh`.
+- Requirements: keep public direct mode native-only and reject malformed
+  `is_empty` calls with explicit diagnostics.
+- Done: direct gates cover local Int and struct lists, and front/error gates
+  document the promoted method surface.
+
+#### 3. Documentation and release gate
+
+- Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
+  `website/index.html`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`.
+- Requirements: public docs name only the gate-backed API and leave remaining
+  list work as roadmap items.
+- Done: `bash scripts/test-release-gates.sh` passed after the compiler/core
+  changes.
 
 ## Completed Milestone: v0.2.2 Source Release
 

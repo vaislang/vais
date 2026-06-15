@@ -1,5 +1,19 @@
 # Vais Worklog
 
+## 2026-06-16
+
+- Added `List<T>.is_empty()` to the full self-host compiler for local and
+  parameter lists.
+- Regenerated `compiler/self/vaisc_core.ll` from
+  `compiler/self/fixpoint_full.vais`.
+- Added native direct `List<Int>` and `List<Struct>` `is_empty()` lowering and
+  diagnostics.
+- Added full, front, direct, and error gate coverage for the promoted API.
+- Synced `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`, roadmap, changelog,
+  and website copy with the current gate-backed list surface.
+- Ran `bash scripts/test-release-gates.sh`; it passed and produced
+  `dist/vais-0.2.2-darwin-arm64.tar.gz`.
+
 ## 2026-06-15
 
 - Expanded native direct mode with the first local `List<Int>` slice:

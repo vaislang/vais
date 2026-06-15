@@ -76,8 +76,8 @@ Verified release surface:
 | `Bool` | Produced by comparisons and boolean expressions |
 | `Str` | String literals and selected string operations |
 | `Char` | Single-byte character literals in verified examples |
-| `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, index, `sum` |
-| `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, index, field read/write, parameter reference, return value |
+| `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, index, `sum` |
+| `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, index, field read/write, parameter reference, return value |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match and small recursive `Int` payload enum/match |
 
@@ -220,7 +220,7 @@ fn main() -> Int {
     xs.push(10)
     xs.push(20)
     xs.push(30)
-    return xs.len() + xs[1]
+    return xs.len() + xs[1] + xs.is_empty()
 }
 ```
 
@@ -315,6 +315,7 @@ Verified today:
   in statement contexts plus `if`, `else if`, and `while` conditions.
 - `xs.push(value)`.
 - `xs.len()`.
+- `xs.is_empty()`.
 - `xs[index]`.
 - `xs.sum()`.
 - Assigning `[]`, `list()`, list literals, local list values, and returned-list
@@ -328,10 +329,10 @@ Verified today:
   arguments in the direct engine.
 
 The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
-small integer list literals, plus `push`, `len`/`len()`, index, `sum()`, and
-function calls where `List<Int>` parameters are local list names or inline list
-values. It also covers `List<Int>`-returning helper calls passed directly to
-`List<Int>` parameters in `return`, `let`, list-literal item, `push`, assignment
+small integer list literals, plus `push`, `len`/`len()`, `is_empty()`, index,
+`sum()`, and function calls where `List<Int>` parameters are local list names or
+inline list values. It also covers `List<Int>`-returning helper calls passed
+directly to `List<Int>` parameters in `return`, `let`, list-literal item, `push`, assignment
 statements, `if`, `else if`, and `while` conditions. In the direct engine
 native ABI, `List<Int>`
 parameters are passed by reference, so `push` on a local-list parameter mutates

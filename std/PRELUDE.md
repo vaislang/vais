@@ -20,6 +20,7 @@ intended but not a public release claim yet.
 | `List<T>` | Partial |
 | `Map<K,V>` | Specified |
 | `v.len()` | Verified |
+| `v.is_empty()` | Verified |
 | `v[i]` | Verified |
 | `v.sum()` | Verified for Int lists |
 | `v.push(x)` | Verified for Int lists and selected self-host shapes |

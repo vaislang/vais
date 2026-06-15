@@ -55,6 +55,8 @@ check "fn pick(k) {{ let a = [7, 8, 9]; let mut r = 0; if k > 1 {{ r = a[2] }} e
 check "fn build(n) {{ let xs = list(); let mut i = 0; while i < n {{ xs.push(i * 10); i = i + 1 }}; let mut s = 0; let mut j = 0; while j < xs.len {{ s = s + xs[j]; j = j + 1 }}; return s }}; return build(5);" 100
 # List length tracking in a function
 check "fn cnt(n) {{ let xs = list(); let mut i = 0; while i < n {{ xs.push(i); i = i + 1 }}; return xs.len }}; return cnt(7);" 7
+# List empty-state helper for local and parameter lists
+check "fn mark(xs: List<Int>) {{ return xs.is_empty() }}; fn run() {{ let empty: List<Int> = []; let full = list(); full.push(1); return mark(empty) * 40 + mark(full) + full.len + 1 }}; return run();" 42
 # function using BOTH an array and a List
 check "fn mix(n) {{ let a = [100, 200]; let xs = list(); xs.push(a[0]); xs.push(a[1]); xs.push(n); return xs[0] + xs[2] }}; return mix(5);" 105
 
@@ -65,6 +67,8 @@ check "struct Tok {{ kind, start, len }}; fn dist(n) {{ let t = Tok {{ kind: 1, 
 check "struct P {{ x, y }}; fn f(n) {{ let p = P {{ x: n, y: 0 }}; p.y = n * 2; return p.x + p.y }}; return f(4);" 12
 # struct AND List together in one function
 check "struct P {{ a, b }}; fn g(n) {{ let p = P {{ a: 10, b: 20 }}; let xs = list(); xs.push(p.a); xs.push(p.b); xs.push(n); return xs[0] + xs[2] }}; return g(5);" 15
+# List empty-state helper for struct lists
+check "struct Tok {{ kind, val }}; fn run() {{ let empty: List<Tok> = []; let full: List<Tok> = []; full.push(Tok {{ kind: 1, val: 2 }}); return empty.is_empty() * 40 + full.is_empty() + full.len + 1 }}; return run();" 42
 # struct-valued function ABI: struct return via hidden out-param, struct param
 # by pointer/copy, direct return of a struct local, return of a struct-returning
 # call, and a struct literal passed directly as an argument.
