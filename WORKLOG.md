@@ -1,5 +1,14 @@
 # Vais Worklog
 
+## 2026-06-17
+
+- Replaced the stale Map example with the verified local `Map<Int,Int>` API:
+  `{}`, `insert`, `get(key, default)`, `contains`, and `len`.
+- Added a release-corpus List method example for `is_empty()`, `last()`, and
+  `pop()`.
+- Promoted both examples in `tools/vaisc-parity.tsv` and synced the roadmap,
+  examples README, and changelog with the value corpus.
+
 ## 2026-06-16
 
 - Added `List<T>.is_empty()` to the full self-host compiler for local and

@@ -1,11 +1,11 @@
 # expect: 42
-# Basic Map<K,V> smoke. Vais uses Map, transpiles to Vais HashMap, and relies on
-# the compiler's full std/hashmap monomorphized build path.
+# Local Map<Int,Int> construction, insert/replace, get fallback, contains, and len.
 fn main() -> Int {
-    m: Map<Int, Int> = Map.new()
-    m.insert(7, 42)
-    match m.get_opt(7) {
-        Some(v) => return v,
-        None => return 0,
-    }
+    let scores: Map<Int,Int> = {}
+    scores.insert(4, 38)
+    scores.insert(4, 40)
+    scores.insert(9, 2)
+    let found = scores.get(4, 0)
+    let missing = scores.get(5, 0 - 1)
+    return found + missing + scores.contains(4) + scores.contains(5) + scores.len()
 }

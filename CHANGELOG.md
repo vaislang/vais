@@ -27,6 +27,9 @@
   and native direct engine with `{}`, `insert`, `get(key, default)`, `contains`,
   and `len`; front diagnostics still reject Map parameters, return values,
   assignment, and generic key/value forms.
+- Added release-corpus examples for local `Map<Int,Int>` and `List<T>`
+  `is_empty()`, `last()`, and `pop()` so promoted prelude APIs have value-test
+  coverage.
 
 ## v0.2.2 - 2026-06-15
 

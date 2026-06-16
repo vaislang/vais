@@ -1,0 +1,11 @@
+# expect: 42
+# List<T> is_empty, last, and pop on a non-empty Int list.
+fn main() -> Int {
+    let empty: List<Int> = []
+    let xs: List<Int> = []
+    xs.push(8)
+    xs.push(10)
+    let tail = xs.last()
+    let popped = xs.pop()
+    return empty.is_empty() * 21 + xs.len() + tail + popped + xs.is_empty() * 100
+}

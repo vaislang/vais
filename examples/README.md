@@ -25,7 +25,10 @@ bash scripts/test-vaisc-parity.sh
 ```
 
 Representative promoted examples include `examples/e83_parse_helpers.vais` for
-the named `parse_uint(s)` and `parse_int(s)` prelude helpers.
+the named `parse_uint(s)` and `parse_int(s)` prelude helpers,
+`examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and
+`examples/e84_list_methods.vais` for `List<T>.is_empty()`, `last()`, and
+`pop()`.
 
 Files not listed as `native-supported` are retained as examples or future
 coverage candidates, but they are not public release claims until promoted into

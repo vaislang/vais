@@ -64,6 +64,8 @@ This file tracks current work only.
 - The first `Map` slice is verified in the full self-host compiler and native
   direct engine for local `Map<Int,Int>` values with `{}`, `insert`,
   `get(key, default)`, `contains`, and `len`.
+- Promoted prelude APIs have value-corpus examples, including local
+  `Map<Int,Int>` and `List<T>.is_empty()`, `last()`, and `pop()`.
 
 ## Current Reality
 
@@ -165,8 +167,8 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
 - [x] 1.3c Promote full self-host local `Map<Int,Int>` for the same surface.
 - [ ] 1.3d Broaden `Map<K,V>` only after generic key/value lowering and ABI
   behavior are specified.
-- [ ] 1.4 Add examples and value tests for every promoted prelude API.
-- [ ] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
+- [x] 1.4 Add examples and value tests for every promoted prelude API.
+- [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
 
 Done: `std/PRELUDE.md` has no public "Verified" entry without a matching gate.
 
@@ -289,6 +291,20 @@ Phase 0 is complete. The next concrete slice is Phase 1:
 - [x] Promote native direct local `Map<Int,Int>` construction and local
   operations.
 - [x] Promote the next Phase 1 slice: full self-host local `Map<Int,Int>`.
+- [x] Add release-corpus examples for the promoted prelude API surface.
+- [ ] Specify the next Phase 1 slice: Map ABI/generic expansion or defer to the
+  Phase 2 module model.
+
+## Completed Milestone: Prelude API Value Examples
+
+Mode: sequential
+
+- [x] 1. Replace stale Map example syntax with the verified local
+  `Map<Int,Int>` API.
+- [x] 2. Add a release-corpus List example for `is_empty()`, `last()`, and
+  `pop()`.
+- [x] 3. Promote both examples in `tools/vaisc-parity.tsv`.
+- [x] 4. Keep the examples README and roadmap aligned with the value corpus.
 
 ## Completed Milestone: Local Map<Int,Int>
 
