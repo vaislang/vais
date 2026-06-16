@@ -55,13 +55,18 @@ This file tracks current work only.
   and native direct engine, with Int and declared-struct list gates.
 - Indexed `List` reads/writes plus `last()` and `pop()` now trap at runtime on
   negative indexes, out-of-range indexes, or empty-list access.
+- `Str` length, byte index, equality/inequality, `Bool` byte-classification
+  helpers, and user-defined integer parsing patterns are promoted through
+  public front, parity, and native direct gates.
 
 ## Current Reality
 
 - The full compiler path emits LLVM IR through the self-host compiler source in `compiler/self/fixpoint_full.vais`.
 - The direct engine is intentionally narrow and currently supports Int helpers,
-  locals, assignment, calls, `if`, `while`, returns, simple Int-field struct
-  local literal/read/write, struct parameter/return helper ABI, and local
+  Bool/Str scalar helpers, locals, assignment, calls, `if`, inline
+  `if { return ... }`, `while`, returns, `Str` literals, `Str.len()`, `Str`
+  byte index, `Str` equality/inequality, simple Int-field struct local
+  literal/read/write, struct parameter/return helper ABI, and local
   `List<Int>` initialization plus `push`, `len`, `is_empty`, `last`, `pop`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
   literal/constructor call and return values. Statement contexts, `if`,
@@ -138,8 +143,11 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
   native direct engine.
 - [x] 1.1d Define bounds-safe diagnostics or documented trap behavior for
   indexed list operations.
-- [ ] 1.2 Promote `Str` operations needed by real tools: `len`, index,
-  equality, byte classification helpers, and integer parsing helpers.
+- [x] 1.2a Promote `Str` operations needed by real tools: `len`, index,
+  equality, byte classification helpers, and user-defined integer parsing
+  patterns.
+- [ ] 1.2b Decide and promote a named integer parsing prelude API, if it should
+  be part of the public standard library instead of a user helper pattern.
 - [ ] 1.3 Promote `Map<K,V>` only after a minimal gate-backed design exists for
   construction, insert, lookup, contains, and length.
 - [ ] 1.4 Add examples and value tests for every promoted prelude API.
@@ -259,8 +267,54 @@ Phase 0 is complete. The next concrete slice is Phase 1:
   coverage.
 - [x] Define the next `List<T>` behavior slice: empty-list and out-of-range
   runtime trap behavior.
-- [ ] Promote the next Phase 1 slice: `Str` length/index/equality helpers and
+- [x] Promote the next Phase 1 slice: `Str` length/index/equality helpers and
   byte-classification utilities needed by real tools.
+- [ ] Decide the next Phase 1 slice: a named integer parsing prelude API or
+  `Map<K,V>` design.
+
+## Completed Milestone: Str tool-helper slice
+
+Mode: sequential
+
+- [x] 1. Allow public front-contract scalar helper signatures with `Int`,
+  `Bool`, and `Str`.
+- [x] 2. Lower native direct `Str` literals, locals, parameters, return values,
+  `s.len()`, `s[i]`, `a == b`, and `a != b`.
+- [x] 3. Gate `Bool` byte-classification helpers and user-defined integer
+  parsing over `Str`.
+- [x] 4. Promote `examples/e48_string_index.vais`,
+  `examples/e70_parse_uint.vais`, and `examples/e72_identifier_scan.vais` in
+  the parity manifest.
+- [x] 5. Sync `std/PRELUDE.md`, the language reference, changelog, roadmap,
+  worklog, and website copy.
+
+### Task Briefs
+
+#### 1. Front and direct scalar surface
+
+- Target files: `tools/vaisc.py`, `tools/vaisc_native.c`,
+  `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-direct.sh`.
+- Requirements: keep `fn main() -> Int`, but allow helper signatures and locals
+  for `Int`, `Bool`, and `Str`; direct mode must stay native-only.
+- Done: front and direct gates cover `Str` params/locals, `Bool` classifier
+  helpers, and native direct lowering without Python.
+
+#### 2. String operations and tool patterns
+
+- Target files: `tools/vaisc_native.c`, `tools/vaisc-parity.tsv`,
+  `examples/e48_string_index.vais`, `examples/e70_parse_uint.vais`,
+  `examples/e72_identifier_scan.vais`.
+- Requirements: protect `s.len()`, `s[i]`, string equality/inequality,
+  byte-classification helpers, and parse/identifier-scan tool shapes.
+- Done: direct and parity gates cover string index, string equality, parse_uint,
+  and identifier scanning.
+
+#### 3. Documentation and roadmap sync
+
+- Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
+  `website/index.html`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`.
+- Requirements: document the promoted `Str` helper surface as gate-backed while
+  leaving any named integer parsing prelude API as a follow-up decision.
 
 ## Completed Milestone: List bounds trap behavior
 

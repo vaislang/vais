@@ -156,14 +156,9 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
         "use `while` with an explicit mutable index for now.",
     ),
     (
-        re.compile(r"\b(Str|Char|Bool)\b"),
-        "only Int scalar typing is in the Vais native day-1 front subset",
-        "use Int parameters/locals for this slice; string, char, and bool surface types come later.",
-    ),
-    (
-        re.compile(r"\b(true|false)\b"),
-        "boolean literals are not in the Vais native day-1 front subset yet",
-        "use Int 0/1 values or comparisons in this slice.",
+        re.compile(r"\bChar\b"),
+        "Char is not in the verified native front subset yet",
+        "use `Int`, `Str`, or `Bool` in this slice.",
     ),
     (
         re.compile(r"\b(Map|Option|Result)\s*<|\blist\s*\("),
@@ -264,7 +259,7 @@ FRONT_HELP_RULES: list[FrontRule] = [
     FrontRule(
         re.compile(r"\bString\b"),
         "the string type is `Str`, not `String`",
-        "use `Str` on the full compiler path for now; day-1 native front is scalar-only.",
+        "use `Str`.",
         replace_once("String", "Str"),
     ),
     FrontRule(
@@ -278,7 +273,8 @@ FRONT_HELP_RULES: list[FrontRule] = [
 FRONT_FN_HEADER = re.compile(
     r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*(?:->\s*([A-Za-z_][A-Za-z0-9_]*))?"
 )
-FRONT_INT_PARAM = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*:\s*Int\Z")
+FRONT_SCALAR_PARAM = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*:\s*(?:Int|Str|Bool)\Z")
+FRONT_SCALAR_RETURNS = {"Int", "Str", "Bool"}
 
 
 def check_function_contracts(code: str, line_no: int) -> tuple[list[FrontIssue], bool, bool]:
@@ -298,23 +294,23 @@ def check_function_contracts(code: str, line_no: int) -> tuple[list[FrontIssue],
                 has_bad_main = True
             continue
 
-        if return_type != "Int":
+        if return_type not in FRONT_SCALAR_RETURNS:
             issues.append(
                 FrontIssue(
                     line_no,
                     match.start() + 1,
-                    "Vais native day-1 helper functions must return `Int`",
-                    "write helpers as `fn name(a: Int, ...) -> Int { ... }`.",
+                    "Vais native helper functions must return a verified scalar type",
+                    "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, or `-> Str`.",
                 )
             )
 
-        if params and any(not FRONT_INT_PARAM.fullmatch(part.strip()) for part in params.split(",")):
+        if params and any(not FRONT_SCALAR_PARAM.fullmatch(part.strip()) for part in params.split(",")):
             issues.append(
                 FrontIssue(
                     line_no,
                     match.start(2) + 1,
-                    "Vais native day-1 helper parameters must be `name: Int`",
-                    "use Int-typed helper parameters in this slice, e.g. `fn add(a: Int, b: Int) -> Int`.",
+                    "Vais native helper parameters must use verified scalar types",
+                    "use `Int`, `Str`, or `Bool` parameters in this slice.",
                 )
             )
 

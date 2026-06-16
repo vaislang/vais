@@ -41,9 +41,22 @@ checks before mutating the list length.
 | `Int8`..`Int128` | Specified |
 | `UInt8`..`UInt128` | Specified |
 | `F32`, `F64` | Specified |
-| `Bool`, `Str`, `Char` | Partial |
+| `Bool` | Verified for comparisons, boolean literals, and scalar helper signatures |
+| `Str` | Verified for literals, scalar helper signatures, length, index, and equality |
+| `Char` | Partial |
 | `Int(x)` | Verified |
 | `F64(x)`, `UInt8(x)`, `Str(x)` | Specified |
+
+## Strings
+
+| API | Status |
+| --- | --- |
+| `"text"` and `` `text` `` | Verified |
+| `s.len()` | Verified |
+| `s[i]` | Verified |
+| `a == b`, `a != b` | Verified for `Str` |
+| byte-classification helpers such as `is_digit(c: Int) -> Bool` | Verified pattern |
+| user-defined integer parsing over `Str` | Verified pattern |
 
 ## Control And Operators
 

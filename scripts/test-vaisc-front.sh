@@ -191,6 +191,39 @@ else
     fail=1
 fi
 
+str_accept="$tmp/front_str_accept.vais"
+cat > "$str_accept" <<'SRC'
+fn is_digit(c: Int) -> Bool {
+    return c >= 48 and c <= 57
+}
+
+fn count_digits(s: Str) -> Int {
+    let mut i = 0
+    let mut n = 0
+    while i < s.len() {
+        if is_digit(s[i]) {
+            n = n + 1
+        }
+        i = i + 1
+    }
+    return n
+}
+
+fn main() -> Int {
+    return count_digits("a1b2") * 21
+}
+SRC
+
+"$VAISC" run "$str_accept" >"$tmp/str_accept.out" 2>"$tmp/str_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS accepts Str parameter, Bool helper, len, index, and byte classification slice"
+else
+    echo "  FAIL accepts Str slice got=$got want=42"
+    cat "$tmp/str_accept.err"
+    fail=1
+fi
+
 expect_reject() {
     local name="$1"
     local needle="$2"
@@ -283,8 +316,8 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "string_type" "only Int scalar typing" "string, char, and bool" <<'SRC'
-fn len(s: Str) -> Int {
+expect_reject "string_type" "helper parameters must use verified scalar types" "Int.*Str.*Bool" <<'SRC'
+fn len(s: String) -> Int {
     return 42
 }
 

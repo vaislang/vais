@@ -16,6 +16,10 @@
 - Defined verified runtime trap behavior for invalid `List` access: negative or
   out-of-range index operations, `last()` on an empty list, and `pop()` on an
   empty list.
+- Promoted the first `Str` tool-helper slice: public front contracts now accept
+  `Bool` and `Str` helper signatures, native direct mode lowers string
+  literals, `s.len()`, `s[i]`, and `Str` equality/inequality, and parity now
+  covers string indexing, user-defined integer parsing, and identifier scanning.
 
 ## v0.2.2 - 2026-06-15
 

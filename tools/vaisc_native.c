@@ -404,12 +404,60 @@ static char *substr_copy(const char *start, size_t n) {
     return out;
 }
 
+static int is_string_delim_c(char ch) {
+    return ch == '"' || ch == '`';
+}
+
+static int skip_string_literal_c(const char *text, int start) {
+    char delim = text[start];
+    if (!is_string_delim_c(delim)) return start + 1;
+    for (int i = start + 1; text[i] != '\0'; i++) {
+        if (delim == '"' && text[i] == '\\' && text[i + 1] != '\0') {
+            i++;
+            continue;
+        }
+        if (text[i] == delim) return i + 1;
+    }
+    return -1;
+}
+
+static void sb_append_c_escaped_byte(StrBuf *out, char ch) {
+    unsigned char c = (unsigned char)ch;
+    if (c == '\\') {
+        sb_append(out, "\\\\");
+    } else if (c == '"') {
+        sb_append(out, "\\\"");
+    } else if (c == '\n') {
+        sb_append(out, "\\n");
+    } else if (c == '\r') {
+        sb_append(out, "\\r");
+    } else if (c == '\t') {
+        sb_append(out, "\\t");
+    } else if (c < 32 || c >= 127) {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "\\x%02x", c);
+        sb_append(out, buf);
+    } else {
+        sb_append_n(out, &ch, 1);
+    }
+}
+
 static int split_top_level_commas_c(const char *text, char **parts, int max_parts) {
     int count = 0;
     int depth = 0;
     const char *start = text;
     for (const char *p = text; ; p++) {
         char ch = *p;
+        if (is_string_delim_c(ch)) {
+            int end = skip_string_literal_c(text, (int)(p - text));
+            if (end < 0) {
+                p = text + strlen(text);
+                ch = *p;
+            } else {
+                p = text + end - 1;
+                continue;
+            }
+        }
         if (ch == '(' || ch == '[' || ch == '{') depth++;
         if (ch == ')' || ch == ']' || ch == '}') depth--;
         if ((ch == ',' && depth == 0) || ch == '\0') {
@@ -520,6 +568,12 @@ static char *replace_enum_types(const char *line, EnumInfo *info) {
 static int find_matching_paren_c(const char *text, int open_index) {
     int depth = 0;
     for (int i = open_index; text[i] != '\0'; i++) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
         if (text[i] == '(') depth++;
         if (text[i] == ')') {
             depth--;
@@ -534,6 +588,12 @@ static int find_matching_bracket_c(const char *text, int open_index) {
     int bracket_depth = 0;
     int brace_depth = 0;
     for (int i = open_index; text[i] != '\0'; i++) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
         if (text[i] == '(') paren_depth++;
         else if (text[i] == ')') paren_depth--;
         else if (text[i] == '{') brace_depth++;
@@ -787,6 +847,16 @@ static char *replace_word_all(const char *text, const char *name, const char *re
     sb_init(&out);
     size_t name_len = strlen(name);
     for (size_t i = 0; text[i] != '\0';) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, (int)i);
+            if (end < 0) {
+                sb_append(&out, text + i);
+                break;
+            }
+            sb_append_n(&out, text + i, (size_t)end - i);
+            i = (size_t)end;
+            continue;
+        }
         int before_ok = i == 0 || !is_ident_continue(text[i - 1]);
         int after_ok = !is_ident_continue(text[i + name_len]);
         if (before_ok && after_ok && strncmp(text + i, name, name_len) == 0) {
@@ -1105,7 +1175,7 @@ static int is_valid_int_params(const char *params) {
             return 0;
         }
         char *ty = trim_copy(colon + 1);
-        int ok = strcmp(ty, "Int") == 0;
+        int ok = strcmp(ty, "Int") == 0 || strcmp(ty, "Str") == 0 || strcmp(ty, "Bool") == 0;
         free(ty);
         if (!ok) {
             for (int k = 0; k < n; k++) free(parts[k]);
@@ -1150,17 +1220,17 @@ static int check_fn_contract_line(
             *has_bad_main = 1;
         }
     } else {
-        if (ret == NULL || strcmp(ret, "Int") != 0) {
+        if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0)) {
             report_issue(path, line_no, find_col(line, "fn "), line,
-                "Vais native day-1 helper functions must return `Int`",
-                "write helpers as `fn name(a: Int, ...) -> Int { ... }`.",
+                "Vais native helper functions must return a verified scalar type",
+                "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, or `-> Str`.",
                 NULL);
             issue = 1;
         }
         if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params)) {
             report_issue(path, line_no, find_col(line, params), line,
-                "Vais native day-1 helper parameters must be `name: Int`",
-                "use Int-typed helper parameters in this slice, e.g. `fn add(a: Int, b: Int) -> Int`.",
+                "Vais native helper parameters must use verified scalar types",
+                "use `Int`, `Str`, or `Bool` parameters in this slice.",
                 NULL);
             issue = 1;
         }
@@ -1242,10 +1312,10 @@ static int check_front_contract_text(const char *text, const char *path) {
                 "use `while` with an explicit mutable index for now.",
                 NULL);
             issues++;
-        } else if (strstr(line, "Str") != NULL || strstr(line, "Char") != NULL || strstr(line, "Bool") != NULL || strstr(line, "String") != NULL) {
+        } else if (strstr(line, "Char") != NULL || strstr(line, "String") != NULL) {
             report_issue(path, line_no, 1, line,
-                "only Int scalar typing is in the Vais native day-1 front subset",
-                "use Int parameters/locals for this slice; string, char, and bool surface types come later.",
+                "this scalar type is not in the verified native front subset",
+                "use `Int`, `Str`, or `Bool` in this slice.",
                 NULL);
             issues++;
         } else if (strstr(line, "|") != NULL) {
@@ -1438,8 +1508,18 @@ static int direct_is_list_struct_type(DirectStructInfo *structs, int struct_coun
     return ok;
 }
 
+static int direct_is_str_type(const char *type) {
+    return type != NULL && strcmp(type, "Str") == 0;
+}
+
+static int direct_is_bool_type(const char *type) {
+    return type != NULL && strcmp(type, "Bool") == 0;
+}
+
 static int direct_fn_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
     return strcmp(type, "Int") == 0 ||
+        direct_is_str_type(type) ||
+        direct_is_bool_type(type) ||
         direct_is_list_int_type(type) ||
         direct_is_list_struct_type(structs, struct_count, type) ||
         direct_find_struct(structs, struct_count, type) != NULL;
@@ -1452,10 +1532,14 @@ static int direct_local_type_allowed(DirectStructInfo *structs, int struct_count
 
 static int direct_type_compatible(const char *expected, const char *actual) {
     if (expected == NULL || actual == NULL) return 1;
+    if ((strcmp(expected, "Int") == 0 || strcmp(expected, "Bool") == 0) &&
+        (strcmp(actual, "Int") == 0 || strcmp(actual, "Bool") == 0)) return 1;
     return strcmp(expected, actual) == 0;
 }
 
 static const char *direct_c_type(const char *type) {
+    if (direct_is_str_type(type)) return "Str";
+    if (direct_is_bool_type(type)) return "Bool";
     if (direct_is_list_int_type(type)) return "DirectListInt";
     if (direct_is_list_type(type)) {
         static char bufs[4][128];
@@ -1516,6 +1600,12 @@ static char *direct_parse_local_type(const char **cursor) {
 static int find_matching_brace_c(const char *text, int open_index) {
     int depth = 0;
     for (int i = open_index; text[i] != '\0'; i++) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
         if (text[i] == '{') depth++;
         if (text[i] == '}') {
             depth--;
@@ -1801,7 +1891,7 @@ static int direct_validate_fn_types(
     if (!direct_fn_type_allowed(structs, struct_count, info->return_type)) {
         report_issue(path, info->line_no, find_col(line, info->return_type), line,
             "direct native emitter function return type is not available",
-            "use `Int`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
+            "use `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
             NULL);
         issues++;
     }
@@ -1809,7 +1899,7 @@ static int direct_validate_fn_types(
         if (!direct_fn_type_allowed(structs, struct_count, info->param_types[p])) {
             report_issue(path, info->line_no, find_col(line, info->param_types[p]), line,
                 "direct native emitter function parameter type is not available",
-                "use `Int`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
+                "use `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
                 NULL);
             issues++;
         }
@@ -1893,6 +1983,20 @@ static char *direct_rewrite_struct_literals(
     StrBuf out;
     sb_init(&out);
     for (int i = 0; expr[i] != '\0';) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an unterminated string literal",
+                    "close the string before the end of the line.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
         if (!is_ident_start(expr[i])) {
             sb_append_n(&out, expr + i, 1);
             i++;
@@ -2123,6 +2227,143 @@ static char *direct_infer_expr_type(
     int struct_count
 );
 
+static int direct_expr_is_string_literal(const char *expr) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int ok = 0;
+    if (is_string_delim_c(*s)) {
+        int end = skip_string_literal_c(s, 0);
+        ok = end >= 0 && *skip_ws(s + end) == '\0';
+    }
+    free(trimmed);
+    return ok;
+}
+
+static char *direct_rewrite_string_literals(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr
+) {
+    StrBuf out;
+    sb_init(&out);
+    for (int i = 0; expr[i] != '\0';) {
+        if (!is_string_delim_c(expr[i])) {
+            sb_append_n(&out, expr + i, 1);
+            i++;
+            continue;
+        }
+        char delim = expr[i];
+        int end = skip_string_literal_c(expr, i);
+        if (end < 0) {
+            report_issue(path, line_no, 1, line,
+                "direct native emitter found an unterminated string literal",
+                "close the string before the end of the line.",
+                NULL);
+            free(out.data);
+            return NULL;
+        }
+        sb_append(&out, "\"");
+        int j = i + 1;
+        while (j < end - 1) {
+            if (delim == '"' && expr[j] == '\\' && j + 1 < end - 1) {
+                j++;
+                sb_append_c_escaped_byte(&out, expr[j]);
+                j++;
+                continue;
+            }
+            sb_append_c_escaped_byte(&out, expr[j]);
+            j++;
+        }
+        sb_append(&out, "\"");
+        i = end;
+    }
+    return sb_take(&out);
+}
+
+static int direct_find_top_level_eq_op(const char *expr, int *op_len) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    for (int i = 0; expr[i] != '\0'; i++) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '(') paren_depth++;
+        else if (expr[i] == ')') paren_depth--;
+        else if (expr[i] == '[') bracket_depth++;
+        else if (expr[i] == ']') bracket_depth--;
+        else if (expr[i] == '{') brace_depth++;
+        else if (expr[i] == '}') brace_depth--;
+        else if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+            if (expr[i] == '=' && expr[i + 1] == '=') {
+                *op_len = 2;
+                return i;
+            }
+            if (expr[i] == '!' && expr[i + 1] == '=') {
+                *op_len = 2;
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+static char *direct_rewrite_str_equality_expr(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    int op_len = 0;
+    int op = direct_find_top_level_eq_op(expr, &op_len);
+    if (op < 0) return NULL;
+    char *lhs_raw = substr_copy(expr, (size_t)op);
+    char *lhs = trim_copy(lhs_raw);
+    free(lhs_raw);
+    char *rhs = trim_copy(expr + op + op_len);
+    char *lhs_type = direct_infer_expr_type(lhs, locals, fns, fn_count, structs, struct_count);
+    char *rhs_type = direct_infer_expr_type(rhs, locals, fns, fn_count, structs, struct_count);
+    int is_str_eq = direct_is_str_type(lhs_type) && direct_is_str_type(rhs_type);
+    free(lhs_type);
+    free(rhs_type);
+    if (!is_str_eq) {
+        free(lhs);
+        free(rhs);
+        return NULL;
+    }
+    char *rewritten_lhs = direct_rewrite_expr(path, line_no, line, lhs, locals, fns, fn_count, structs, struct_count);
+    char *rewritten_rhs = direct_rewrite_expr(path, line_no, line, rhs, locals, fns, fn_count, structs, struct_count);
+    free(lhs);
+    free(rhs);
+    if (rewritten_lhs == NULL || rewritten_rhs == NULL) {
+        free(rewritten_lhs);
+        free(rewritten_rhs);
+        return NULL;
+    }
+    StrBuf out;
+    sb_init(&out);
+    int not_equal = expr[op] == '!';
+    if (not_equal) sb_append(&out, "(!");
+    sb_append(&out, "__vais_str_eq(");
+    sb_append(&out, rewritten_lhs);
+    sb_append(&out, ", ");
+    sb_append(&out, rewritten_rhs);
+    sb_append(&out, ")");
+    if (not_equal) sb_append(&out, ")");
+    free(rewritten_lhs);
+    free(rewritten_rhs);
+    return sb_take(&out);
+}
+
 static char *direct_rewrite_list_literal_value_expr(
     const char *path,
     int line_no,
@@ -2293,6 +2534,20 @@ static char *direct_rewrite_list_expr(
     StrBuf out;
     sb_init(&out);
     for (int i = 0; expr[i] != '\0';) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an unterminated string literal",
+                    "close the string before the end of the line.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
         if (!is_ident_start(expr[i])) {
             sb_append_n(&out, expr + i, 1);
             i++;
@@ -2362,6 +2617,95 @@ static char *direct_rewrite_list_expr(
                 i = close + 1;
                 continue;
             }
+        }
+        if (direct_is_str_type(base_type)) {
+            if (expr[cursor] == '[') {
+                int close = find_matching_bracket_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `]` to close a Str index",
+                        "write indexes as `s[i]`.",
+                        NULL);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *index_expr = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *rewritten_index = direct_rewrite_expr(path, line_no, line, index_expr, locals, fns, fn_count, structs, struct_count);
+                free(index_expr);
+                if (rewritten_index == NULL) {
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                sb_append(&out, "__vais_str_byte(");
+                sb_append(&out, name);
+                sb_append(&out, ", (long)(");
+                sb_append(&out, rewritten_index);
+                sb_append(&out, "))");
+                free(rewritten_index);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (expr[cursor] == '.') {
+                int field_start = cursor + 1;
+                while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
+                int field_end = field_start;
+                while (is_ident_continue(expr[field_end])) field_end++;
+                char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
+                const char *after = skip_ws(expr + field_end);
+                if (strcmp(field, "len") == 0) {
+                    int next_i = field_end;
+                    if (*after == '(') {
+                        int close = find_matching_paren_c(expr, (int)(after - expr));
+                        if (close < 0) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter expected `)` after Str.len",
+                                "write `s.len()` or `s.len`.",
+                                NULL);
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
+                        char *args = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                        char *trimmed_args = trim_copy(args);
+                        int has_args = trimmed_args[0] != '\0';
+                        free(trimmed_args);
+                        free(args);
+                        if (has_args) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter Str.len takes no arguments",
+                                "write `s.len()`.",
+                                NULL);
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
+                        next_i = close + 1;
+                    }
+                    sb_append(&out, "__vais_str_len(");
+                    sb_append(&out, name);
+                    sb_append(&out, ")");
+                    free(field);
+                    free(name);
+                    i = next_i;
+                    continue;
+                }
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter supports Str len and index expressions",
+                    "write `s.len()` or `s[i]`.",
+                    NULL);
+                free(field);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + start, (size_t)(i - start));
+            free(name);
+            continue;
         }
         if (!direct_is_list_type(base_type)) {
             sb_append_n(&out, expr + start, (size_t)(i - start));
@@ -2656,9 +3000,17 @@ static char *direct_rewrite_expr(
 ) {
     char *struct_rewritten = direct_rewrite_struct_literals(path, line_no, line, expr, structs, struct_count);
     if (struct_rewritten == NULL) return NULL;
+    char *eq_rewritten = direct_rewrite_str_equality_expr(path, line_no, line, struct_rewritten, locals, fns, fn_count, structs, struct_count);
+    if (eq_rewritten != NULL) {
+        free(struct_rewritten);
+        return eq_rewritten;
+    }
     char *list_rewritten = direct_rewrite_list_expr(path, line_no, line, struct_rewritten, locals, fns, fn_count, structs, struct_count);
     free(struct_rewritten);
-    return list_rewritten;
+    if (list_rewritten == NULL) return NULL;
+    char *string_rewritten = direct_rewrite_string_literals(path, line_no, line, list_rewritten);
+    free(list_rewritten);
+    return string_rewritten;
 }
 
 static char *direct_infer_expr_type(
@@ -2671,6 +3023,10 @@ static char *direct_infer_expr_type(
 ) {
     char *trimmed = trim_copy(expr);
     const char *s = skip_ws(trimmed);
+    if (direct_expr_is_string_literal(trimmed)) {
+        free(trimmed);
+        return strdup("Str");
+    }
     if (direct_is_list_initializer_expr(trimmed)) {
         free(trimmed);
         return strdup("List<Int>");
@@ -2694,6 +3050,11 @@ static char *direct_infer_expr_type(
             int close = find_matching_bracket_c(trimmed, (int)(rest - trimmed));
             if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
                 const char *local_type = direct_names_type(locals, name);
+                if (direct_is_str_type(local_type)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
                 char *elem_type = direct_list_element_type(local_type);
                 if (elem_type != NULL) {
                     free(name);
@@ -2710,6 +3071,23 @@ static char *direct_infer_expr_type(
             char *field = substr_copy(trimmed + field_start, (size_t)(field_end - field_start));
             const char *after = skip_ws(trimmed + field_end);
             const char *local_type = direct_names_type(locals, name);
+            if (direct_is_str_type(local_type) && strcmp(field, "len") == 0) {
+                if (*after == '\0') {
+                    free(field);
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (*after == '(') {
+                    int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                    if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return strdup("Int");
+                    }
+                }
+            }
             if (direct_is_list_type(local_type) && (strcmp(field, "last") == 0 || strcmp(field, "pop") == 0) && *after == '(') {
                 int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
                 if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
@@ -2751,6 +3129,8 @@ static int direct_is_keyword(const char *name) {
         strcmp(name, "let") == 0 || strcmp(name, "mut") == 0 ||
         strcmp(name, "if") == 0 || strcmp(name, "else") == 0 ||
         strcmp(name, "while") == 0 || strcmp(name, "Int") == 0 ||
+        strcmp(name, "Str") == 0 || strcmp(name, "Bool") == 0 ||
+        strcmp(name, "true") == 0 || strcmp(name, "false") == 0 ||
         strcmp(name, "and") == 0 || strcmp(name, "or") == 0 ||
         strcmp(name, "not") == 0;
 }
@@ -2809,6 +3189,18 @@ static int direct_check_expr_inner(
         free(allowed_list_elem_type);
     }
     for (int i = 0; expr[i] != '\0';) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an unterminated string literal",
+                    "close the string before the end of the line.",
+                    NULL);
+                return 1;
+            }
+            i = end;
+            continue;
+        }
         if (!is_ident_start(expr[i])) {
             i++;
             continue;
@@ -2838,6 +3230,36 @@ static int direct_check_expr_inner(
             while (is_ident_continue(expr[field_end])) field_end++;
             char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
             const char *base_type = direct_names_type(locals, name);
+            if (direct_is_str_type(base_type)) {
+                const char *after = skip_ws(expr + field_end);
+                if (strcmp(field, "len") == 0) {
+                    if (*after == '(') {
+                        int close = find_matching_paren_c(expr, (int)(after - expr));
+                        if (close < 0) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter expected `)` after Str.len",
+                                "write `s.len()` or `s.len`.",
+                                NULL);
+                            free(field);
+                            free(name);
+                            return 1;
+                        }
+                        i = close + 1;
+                    } else {
+                        i = field_end;
+                    }
+                    free(field);
+                    free(name);
+                    continue;
+                }
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter supports Str len and index expressions",
+                    "write `s.len()` or `s[i]`.",
+                    NULL);
+                free(field);
+                free(name);
+                return 1;
+            }
             if (direct_is_list_type(base_type)) {
                 const char *after = skip_ws(expr + field_end);
                 if (strcmp(field, "len") == 0) {
@@ -3106,6 +3528,50 @@ static char *direct_after_keyword_expr(const char *s, const char *keyword, char 
     return trim_copy(substr_copy(expr, (size_t)(end - expr)));
 }
 
+static int direct_find_top_level_char(const char *text, char target) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    for (int i = 0; text[i] != '\0'; i++) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (text[i] == target && paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) return i;
+        if (text[i] == '(') paren_depth++;
+        else if (text[i] == ')') paren_depth--;
+        else if (text[i] == '[') bracket_depth++;
+        else if (text[i] == ']') bracket_depth--;
+        else if (text[i] == '{') brace_depth++;
+        else if (text[i] == '}') brace_depth--;
+    }
+    return -1;
+}
+
+static int direct_parse_inline_block(const char *s, const char *keyword, char **expr_out, char **body_out) {
+    s = skip_ws(s);
+    size_t n = strlen(keyword);
+    if (strncmp(s, keyword, n) != 0) return 0;
+    char next = s[n];
+    if (!(next == ' ' || next == '\t')) return 0;
+    const char *expr = skip_ws(s + n);
+    int open_rel = direct_find_top_level_char(expr, '{');
+    if (open_rel < 0) return 0;
+    int open_abs = (int)(expr - s) + open_rel;
+    int close_abs = find_matching_brace_c(s, open_abs);
+    if (close_abs < 0) return 0;
+    if (*skip_ws(s + close_abs + 1) != '\0') return 0;
+    char *expr_raw = substr_copy(expr, (size_t)open_rel);
+    char *body_raw = substr_copy(s + open_abs + 1, (size_t)(close_abs - open_abs - 1));
+    *expr_out = trim_copy(expr_raw);
+    *body_out = trim_copy(body_raw);
+    free(expr_raw);
+    free(body_raw);
+    return 1;
+}
+
 static int direct_parse_field_target(const char *lhs, char **base, char **field) {
     const char *s = skip_ws(lhs);
     if (!is_ident_start(*s)) return 0;
@@ -3353,8 +3819,8 @@ static int direct_lower_line(
     }
     if (parsed_header < 0 || starts_with(s, "fn ")) {
         report_issue(path, line_no, find_col(line, "fn"), line,
-            "direct native emitter supports Int, List<Int>, List<Struct>, and declared-struct function headers",
-            "write functions with `Int`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
+            "direct native emitter supports Int, Bool, Str, List<Int>, List<Struct>, and declared-struct function headers",
+            "write functions with `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
             NULL);
         free(stripped);
         return 1;
@@ -3392,6 +3858,43 @@ static int direct_lower_line(
         sb_append(out, "} else {\n");
         free(stripped);
         return 0;
+    }
+    char *inline_expr = NULL;
+    char *inline_body = NULL;
+    if (direct_parse_inline_block(s, "if", &inline_expr, &inline_body)) {
+        if (inline_expr == NULL || inline_body == NULL ||
+            direct_check_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count)) {
+            free(inline_expr);
+            free(inline_body);
+            free(stripped);
+            return 1;
+        }
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
+        char *rewritten = direct_rewrite_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
+        if (rewritten == NULL) {
+            free(prelude.data);
+            free(inline_expr);
+            free(inline_body);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
+        sb_append(out, prelude.data);
+        sb_append(out, "if (");
+        sb_append(out, c_expr);
+        sb_append(out, ") {\n");
+        int body_rc = direct_lower_line(path, line_no, inline_body, locals, fns, fn_count, structs, struct_count, out);
+        sb_append(out, "}\n");
+        free(prelude.data);
+        free(c_expr);
+        free(rewritten);
+        free(inline_expr);
+        free(inline_body);
+        free(stripped);
+        return body_rc;
     }
     if (starts_with(s, "if ")) {
         char *expr = direct_after_keyword_expr(s, "if", '{');
@@ -3533,16 +4036,17 @@ static int direct_lower_line(
             if (local_type == NULL) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter expected a local type",
-                    "use `Int`, `List<Int>`, `List<Struct>`, or a declared struct type in this direct-engine slice.",
+                    "use `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or a declared struct type in this direct-engine slice.",
                     NULL);
                 free(name);
                 free(stripped);
                 return 1;
             }
+            p = skip_ws(p);
             if (!direct_local_type_allowed(structs, struct_count, local_type)) {
                 report_issue(path, line_no, find_col(line, local_type), line,
-                    "direct native emitter supports Int, List<Int>, List<Struct>, and declared struct locals only",
-                    "use `let name: Int = expr`, `let name: List<Int> = []`, `let name: List<Box> = []`, `let name: Struct = expr`, or omit the annotation.",
+                    "direct native emitter supports Int, Bool, Str, List<Int>, List<Struct>, and declared struct locals only",
+                    "use `let name: Int = expr`, `let name: Bool = expr`, `let name: Str = expr`, `let name: List<Int> = []`, `let name: List<Box> = []`, `let name: Struct = expr`, or omit the annotation.",
                     NULL);
                 free(local_type);
                 free(name);
@@ -4025,8 +4529,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             fns[fn_count++] = info;
         } else if (parsed < 0) {
             report_issue(path, (int)i + 1, 1, lines.items[i],
-                "direct native emitter supports Int, List<Int>, List<Struct>, and declared-struct function headers",
-                "write functions with `Int`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
+                "direct native emitter supports Int, Bool, Str, List<Int>, List<Struct>, and declared-struct function headers",
+                "write functions with `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
                 NULL);
             free(skip_lines);
             lines_free(&lines);
@@ -4060,7 +4564,14 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
 
     StrBuf out;
     sb_init(&out);
+    sb_append(&out, "#include <stdbool.h>\n");
+    sb_append(&out, "#include <string.h>\n");
     sb_append(&out, "typedef long Int;\n");
+    sb_append(&out, "typedef long Bool;\n");
+    sb_append(&out, "typedef const char *Str;\n");
+    sb_append(&out, "static long __vais_str_len(const char *s) { return (long)strlen(s); }\n");
+    sb_append(&out, "static long __vais_str_byte(const char *s, long index) { return (long)(unsigned char)s[index]; }\n");
+    sb_append(&out, "static long __vais_str_eq(const char *a, const char *b) { return strcmp(a, b) == 0 ? 1 : 0; }\n");
     sb_append(&out, "static long __vais_list_checked_index(long index, long len) { if (index < 0 || index >= len) __builtin_trap(); return index; }\n");
     sb_append(&out, "static long __vais_list_checked_last(long len) { if (len <= 0) __builtin_trap(); return len - 1; }\n");
     sb_append(&out, "static long __vais_list_checked_pop_index(long *len) { if (*len <= 0) __builtin_trap(); *len -= 1; return *len; }\n");

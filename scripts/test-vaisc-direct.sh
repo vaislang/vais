@@ -268,6 +268,63 @@ else
     fail=1
 fi
 
+str_src="$tmp/direct_str_slice.vais"
+cat > "$str_src" <<'SRC'
+fn is_digit(c: Int) -> Bool {
+    return c >= 48 and c <= 57
+}
+
+fn same(a: Str, b: Str) -> Bool {
+    return a == b
+}
+
+fn byte_at(s: Str, i: Int) -> Int {
+    return s[i]
+}
+
+fn count_digits(s: Str) -> Int {
+    let mut i = 0
+    let mut n = 0
+    while i < s.len() {
+        if is_digit(s[i]) {
+            n = n + 1
+        }
+        i = i + 1
+    }
+    return n
+}
+
+fn main() -> Int {
+    let a: Str = "a1b2"
+    let b = `a1b2`
+    if a != b {
+        return 0
+    }
+    return count_digits(a) * 20 + byte_at(b, 0) - 96 + same("ok", `ok`)
+}
+SRC
+
+if "$VAISC" emit-ir "$str_src" \
+    --engine direct -o "$tmp/str.ll" \
+    >"$tmp/str.out" 2>"$tmp/str.err" &&
+    grep -q '__vais_str_len' "$tmp/str.ll" &&
+    grep -q '__vais_str_byte' "$tmp/str.ll" &&
+    grep -q '__vais_str_eq' "$tmp/str.ll"; then
+    "$VAISC" run "$str_src" --engine direct >"$tmp/str-run.out" 2>"$tmp/str-run.err"
+    str_run=$?
+    if [ "$str_run" = "42" ]; then
+        echo "  PASS direct Str len, index, equality, Bool helper, and byte classification run (=42)"
+    else
+        echo "  FAIL direct Str slice got=$str_run want=42"
+        cat "$tmp/str-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct Str slice emission"
+    cat "$tmp/str.err"
+    fail=1
+fi
+
 list_struct_src="$tmp/direct_list_struct_local.vais"
 cat > "$list_struct_src" <<'SRC'
 struct Box {

@@ -50,7 +50,8 @@ Verified today:
 - Generic marker syntax for simple `Int` helper cases, as tracked in the parity
   manifest.
 
-The direct engine gate covers Int helper calls in addition to the full engine.
+The direct engine gate covers Int, Bool, and Str helper calls in addition to the
+full engine.
 
 ## Variables
 
@@ -63,7 +64,8 @@ let typed: Int = 42
 
 - `let` binds an immutable value.
 - `let mut` binds a mutable value.
-- `let name: Int = value` is verified for `Int`.
+- `let name: Int = value`, `let name: Bool = value`, and
+  `let name: Str = value` are verified for scalar locals.
 - Compound assignment such as `+=` is not Vais syntax.
 
 ## Types
@@ -73,8 +75,8 @@ Verified release surface:
 | Type | Notes |
 | --- | --- |
 | `Int` | Primary scalar type |
-| `Bool` | Produced by comparisons and boolean expressions |
-| `Str` | String literals and selected string operations |
+| `Bool` | Produced by comparisons, boolean expressions, and helper signatures |
+| `Str` | String literals, helper signatures, length, index, and equality |
 | `Char` | Single-byte character literals in verified examples |
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
@@ -125,12 +127,12 @@ while i < n {
 ```
 
 The direct engine gate covers `if`, `while`, local `let`, assignment, helper
-calls, `return`, simple Int-field struct locals, struct parameter/return
-helpers, and `List<Int>` local operations plus parameter reference and return
-value ABI, plus `List<Struct>` construction with `[]`, `list()`, list literals,
-list/element assignment, `push`, `len`, index, field read/write, parameter
-reference, and return value ABI.
-Strings and the self-host compiler tier remain full-engine territory.
+calls, `return`, simple inline `if { return ... }`, `Bool`/`Str` scalar helper
+signatures, `Str` literals/length/index/equality, simple Int-field struct
+locals, struct parameter/return helpers, and `List<Int>` local operations plus
+parameter reference and return value ABI, plus `List<Struct>` construction with
+`[]`, `list()`, list literals, list/element assignment, `push`, `len`, index,
+field read/write, parameter reference, and return value ABI.
 
 Verified today:
 
@@ -377,9 +379,16 @@ fn main() -> Int {
 
 Verified today:
 
-- String literals.
-- String equality in parity examples.
-- String length/indexing in self-host gates.
+- String literals with `"` or backtick delimiters.
+- `Str` helper parameters, local values, and helper return values.
+- `s.len()` and `s[i]` in the full self-host path and native direct engine.
+- `a == b` and `a != b` for `Str` in the native direct engine and parity
+  examples.
+- `Bool` byte-classification helpers such as `is_digit(c: Int) -> Bool`.
+- User-defined integer parsing over `Str`, as covered by
+  `examples/e70_parse_uint.vais`.
+- Identifier scanning over `Str`, as covered by
+  `examples/e72_identifier_scan.vais`.
 - Single-byte character literal equality in parity examples.
 - `print("...{name}...")` interpolation for simple identifiers.
 - `putchar(Int)`.

@@ -28,10 +28,13 @@ examples/e42_while_call.vais	native-supported	While loop calling helper.
 examples/e43_generic_fn.vais	native-supported	Generic marker skipped for Int helper.
 examples/e45_string_eq.vais	native-supported	String literal equality.
 examples/e47_char_ops.vais	native-supported	Single-byte char literal equality.
+examples/e48_string_index.vais	native-supported	String byte indexing.
 examples/e56_collatz.vais	native-supported	Modulo/division recursion.
 examples/e60_digit_sum.vais	native-supported	Modulo/division loop.
 examples/e66_fibonacci.vais	native-supported	Recursive Fibonacci.
 examples/e67_power.vais	native-supported	Recursive power.
+examples/e70_parse_uint.vais	native-supported	Str len/index with Bool digit classifier.
+examples/e72_identifier_scan.vais	native-supported	Identifier scan over Str with byte classification.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.

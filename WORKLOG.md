@@ -30,6 +30,13 @@
   and empty `pop()` behavior.
 - Updated `std/PRELUDE.md`, language reference, roadmap, changelog, and website
   copy for the list bounds trap contract.
+- Promoted the first `Str` tool-helper slice through the public front contract,
+  native direct engine, and parity manifest.
+- Added direct lowering for `Str` literals, locals, parameters, returns,
+  `s.len()`, `s[i]`, and `Str` equality/inequality, plus `Bool` helper
+  signatures.
+- Promoted string index, parse_uint, and identifier-scan examples in
+  `tools/vaisc-parity.tsv`.
 
 ## 2026-06-15
 
