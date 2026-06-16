@@ -13,6 +13,9 @@
 - Added verified `List<T>.pop()` support for non-empty lists in the full
   self-host compiler and native direct engine, including caller-visible length
   mutation for list parameters.
+- Defined verified runtime trap behavior for invalid `List` access: negative or
+  out-of-range index operations, `last()` on an empty list, and `pop()` on an
+  empty list.
 
 ## v0.2.2 - 2026-06-15
 

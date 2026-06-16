@@ -30,6 +30,26 @@ PY
   else echo "  FAIL '$prog': got=$got want=$want"; fail=1; fi
 }
 
+check_trap() {
+  local prog="$1" label="$2" tmp; tmp="$(mktemp -d)"
+  PROG="$prog" python3 - "$SRC" "$tmp/c.input.vais" <<'PY'
+import os, re, sys
+src = open(sys.argv[1]).read()
+src = re.sub(r'compile\("(?:[^"\\]|\\.)*"\)', 'compile("' + os.environ["PROG"].replace("{{", "{").replace("}}", "}") + '")', src, count=1)
+open(sys.argv[2], "w").write(src)
+PY
+  cp "$tmp/c.input.vais" "$tmp/c.vais"
+  vais_build "$tmp/c.vais" -o "$tmp/c" >/dev/null 2>&1 \
+    || { echo "  FAIL '$label': compiler build"; fail=1; return; }
+  "$tmp/c" > "$tmp/out.ll"
+  clang -Wno-override-module -o "$tmp/bin" "$tmp/out.ll" 2>/dev/null \
+    || { echo "  FAIL '$label': generated IR invalid"; fail=1; return; }
+  bash -c '"$1" > "$2" 2>&1' _ "$tmp/bin" "$tmp/run.out" >/dev/null 2>&1
+  local got=$?
+  if [ "$got" -ne 0 ]; then echo "  PASS '$label' traps on invalid List access";
+  else echo "  FAIL '$label': trap did not fire"; fail=1; fi
+}
+
 # function with a loop body
 check "fn sum_to(n) {{ let mut s = 0; let mut i = 1; while i < n {{ s = s + i; i = i + 1 }}; return s }}; return sum_to(6);" 15
 # factorial via loop
@@ -61,6 +81,10 @@ check "fn mark(xs: List<Int>) {{ return xs.is_empty() }}; fn run() {{ let empty:
 check "fn tail(xs: List<Int>) {{ return xs.last() }}; fn run() {{ let xs = list(); xs.push(20); xs.push(42); return tail(xs) }}; return run();" 42
 # List pop helper for local and parameter lists
 check "fn take(xs: List<Int>) {{ return xs.pop() }}; fn run() {{ let xs = list(); xs.push(20); xs.push(42); let v = take(xs); return v + xs.len - 1 }}; return run();" 42
+# List invalid access traps
+check_trap "fn run() {{ let xs = list(); xs.push(1); return xs[1] }}; return run();" "List index out of range"
+check_trap "fn run() {{ let xs = list(); return xs.last() }}; return run();" "List last on empty"
+check_trap "fn run() {{ let xs = list(); return xs.pop() }}; return run();" "List pop on empty"
 # function using BOTH an array and a List
 check "fn mix(n) {{ let a = [100, 200]; let xs = list(); xs.push(a[0]); xs.push(a[1]); xs.push(n); return xs[0] + xs[2] }}; return mix(5);" 105
 
@@ -77,6 +101,7 @@ check "struct Tok {{ kind, val }}; fn run() {{ let empty: List<Tok> = []; let fu
 check "struct Tok {{ kind, val }}; fn tail(xs: List<Tok>) {{ let t = xs.last(); return t.val }}; fn run() {{ let xs: List<Tok> = []; xs.push(Tok {{ kind: 1, val: 10 }}); xs.push(Tok {{ kind: 0, val: 42 }}); let local = xs.last(); return tail(xs) + local.kind }}; return run();" 42
 # List pop helper for struct lists
 check "struct Tok {{ kind, val }}; fn take(xs: List<Tok>) {{ let t = xs.pop(); return t.val }}; fn run() {{ let xs: List<Tok> = []; xs.push(Tok {{ kind: 1, val: 10 }}); xs.push(Tok {{ kind: 0, val: 40 }}); xs.push(Tok {{ kind: 2, val: 2 }}); let local = xs.pop(); let got = take(xs); return local.kind + local.val + got - xs.len - 1 }}; return run();" 42
+check_trap "struct Tok {{ kind, val }}; fn run() {{ let xs: List<Tok> = []; let t = xs.last(); return t.val }}; return run();" "List struct last on empty"
 # struct-valued function ABI: struct return via hidden out-param, struct param
 # by pointer/copy, direct return of a struct local, return of a struct-returning
 # call, and a struct literal passed directly as an argument.

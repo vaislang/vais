@@ -2072,17 +2072,17 @@ static void direct_append_list_is_empty_ref(StrBuf *out, const char *name, int i
 
 static void direct_append_list_last_ref(StrBuf *out, const char *name, int is_ref) {
     direct_append_list_data_ref(out, name, is_ref);
-    sb_append(out, "[(long)(");
+    sb_append(out, "[__vais_list_checked_last(");
     direct_append_list_len_ref(out, name, is_ref);
-    sb_append(out, " - 1)]");
+    sb_append(out, ")]");
 }
 
 static void direct_append_list_pop_ref(StrBuf *out, const char *name, int is_ref, const char *base_type, DirectNameSet *locals) {
     if (direct_current_prelude == NULL) {
         direct_append_list_data_ref(out, name, is_ref);
-        sb_append(out, "[(long)(");
+        sb_append(out, "[__vais_list_checked_pop_index(&");
         direct_append_list_len_ref(out, name, is_ref);
-        sb_append(out, " -= 1)]");
+        sb_append(out, ")]");
         return;
     }
     char *elem_type = direct_list_element_type(base_type);
@@ -2093,9 +2093,9 @@ static void direct_append_list_pop_ref(StrBuf *out, const char *name, int is_ref
     sb_append(direct_current_prelude, tmp_name);
     sb_append(direct_current_prelude, " = ");
     direct_append_list_data_ref(direct_current_prelude, name, is_ref);
-    sb_append(direct_current_prelude, "[(long)(");
+    sb_append(direct_current_prelude, "[__vais_list_checked_last(");
     direct_append_list_len_ref(direct_current_prelude, name, is_ref);
-    sb_append(direct_current_prelude, " - 1)];\n");
+    sb_append(direct_current_prelude, ")];\n");
     direct_append_list_len_ref(direct_current_prelude, name, is_ref);
     sb_append(direct_current_prelude, " -= 1;\n");
     sb_append(out, tmp_name);
@@ -2390,8 +2390,10 @@ static char *direct_rewrite_list_expr(
                 return NULL;
             }
             direct_append_list_data_ref(&out, name, is_ref);
-            sb_append(&out, "[(long)(");
+            sb_append(&out, "[__vais_list_checked_index((long)(");
             sb_append(&out, rewritten_index);
+            sb_append(&out, "), ");
+            direct_append_list_len_ref(&out, name, is_ref);
             sb_append(&out, ")]");
             free(rewritten_index);
             free(name);
@@ -4059,6 +4061,9 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     StrBuf out;
     sb_init(&out);
     sb_append(&out, "typedef long Int;\n");
+    sb_append(&out, "static long __vais_list_checked_index(long index, long len) { if (index < 0 || index >= len) __builtin_trap(); return index; }\n");
+    sb_append(&out, "static long __vais_list_checked_last(long len) { if (len <= 0) __builtin_trap(); return len - 1; }\n");
+    sb_append(&out, "static long __vais_list_checked_pop_index(long *len) { if (*len <= 0) __builtin_trap(); *len -= 1; return *len; }\n");
     sb_append(&out, "typedef struct { long data[256]; long len; } DirectListInt;\n");
     sb_append(&out, "static long __vais_list_int_sum(DirectListInt *xs) { long total = 0; for (long i = 0; i < xs->len; i++) total += xs->data[i]; return total; }\n");
     for (int s = 0; s < struct_count; s++) {

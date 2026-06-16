@@ -304,7 +304,7 @@ fn main() -> Int {
     xs = [Box { value: 19 }]
     xs[0] = Box { value: 20 }
     xs[0].value = xs[0].value + 1
-    return xs[0].value + ys[1].value + score([Box { value: 1 }])
+    return xs[0].value + ys[1].value + score([Box { value: 0 }, Box { value: 0 }]) - 1
 }
 ```
 
@@ -326,6 +326,8 @@ Verified today:
 - Assigning `[]`, `list()`, list literals, local list values, and returned-list
   values to a matching direct-engine list local or list parameter.
 - Assigning values to matching direct-engine list elements with `xs[index] = value`.
+- Runtime trap behavior for out-of-range `xs[index]`, empty `xs.last()`, and
+  empty `xs.pop()` in the full self-host path and native direct engine.
 - Passing a local `List<Int>` to a `List<Int>` parameter.
 - Returning `List<Int>` from helper functions.
 - `List<Struct>` values with an explicit type, `[]`, `list()`, list literals,
@@ -333,9 +335,9 @@ Verified today:
   references, return values, inline call arguments, and returned-list call
   arguments in the direct engine.
 
-`last()` and `pop()` are currently non-empty-list APIs. Bounds-safe diagnostics
-or trap behavior for empty lists and out-of-range indexes remains a Phase 1
-roadmap item.
+Invalid list access is a runtime trap. This covers negative indexes,
+out-of-range indexes, `last()` on an empty list, and `pop()` on an empty list.
+`pop()` checks before mutating the list length.
 
 The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
 small integer list literals, plus `push`, `len`/`len()`, `is_empty()`,

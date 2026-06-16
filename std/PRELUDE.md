@@ -29,8 +29,9 @@ intended but not a public release claim yet.
 | `v.map(|x| ...)` | Specified |
 | `v.filter(|x| BOOL)` | Specified |
 
-`v.last()` and `v.pop()` are verified for non-empty lists. Empty-list and
-out-of-range behavior is tracked separately in the roadmap.
+Invalid list access traps at runtime. This includes negative or out-of-range
+`v[i]`, `v.last()` on an empty list, and `v.pop()` on an empty list. `v.pop()`
+checks before mutating the list length.
 
 ## Types And Conversion
 

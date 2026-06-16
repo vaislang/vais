@@ -53,6 +53,8 @@ This file tracks current work only.
   and native direct engine, with Int and declared-struct list gates.
 - `List<T>.pop()` is promoted for non-empty lists in the full self-host path
   and native direct engine, with Int and declared-struct list gates.
+- Indexed `List` reads/writes plus `last()` and `pop()` now trap at runtime on
+  negative indexes, out-of-range indexes, or empty-list access.
 
 ## Current Reality
 
@@ -134,7 +136,7 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
   native direct engine.
 - [x] 1.1c Promote verified `List<T>.pop()` across the full self-host path and
   native direct engine.
-- [ ] 1.1d Define bounds-safe diagnostics or documented trap behavior for
+- [x] 1.1d Define bounds-safe diagnostics or documented trap behavior for
   indexed list operations.
 - [ ] 1.2 Promote `Str` operations needed by real tools: `len`, index,
   equality, byte classification helpers, and integer parsing helpers.
@@ -255,8 +257,49 @@ Phase 0 is complete. The next concrete slice is Phase 1:
 - [x] Promote the first small standard-library `List<T>` API slice with gates.
 - [x] Promote the next `List<T>` API slice, `pop()`, with full/direct/docs
   coverage.
-- [ ] Define the next `List<T>` behavior slice: empty-list and out-of-range
-  diagnostics or trap behavior.
+- [x] Define the next `List<T>` behavior slice: empty-list and out-of-range
+  runtime trap behavior.
+- [ ] Promote the next Phase 1 slice: `Str` length/index/equality helpers and
+  byte-classification utilities needed by real tools.
+
+## Completed Milestone: List bounds trap behavior
+
+Mode: sequential
+
+- [x] 1. Add full self-host runtime trap lowering for invalid `List` index
+  reads/writes, `last()` on an empty list, and `pop()` on an empty list.
+- [x] 2. Add native direct checked-index helpers for `List<Int>` and
+  `List<Struct>` reads/writes plus checked `last()` and `pop()`.
+- [x] 3. Gate trap behavior with full self-host and native direct invalid-list
+  access tests.
+- [x] 4. Sync `std/PRELUDE.md`, the language reference, changelog, roadmap,
+  worklog, and website copy.
+
+### Task Briefs
+
+#### 1. Full compiler bounds traps
+
+- Target files: `compiler/self/fixpoint_full.vais`,
+  `compiler/self/vaisc_core.ll`, `scripts/test-fixpoint-full.sh`.
+- Requirements: emit `llvm.trap` before out-of-range list GEPs and before
+  empty-list `last()`/`pop()` length mutation.
+- Done: full gates cover invalid scalar list index, empty scalar `last()`,
+  empty scalar `pop()`, and empty struct-list `last()`.
+
+#### 2. Native direct bounds traps
+
+- Target files: `tools/vaisc_native.c`, `scripts/test-vaisc-direct.sh`.
+- Requirements: keep direct mode native-only, avoid double-evaluating index
+  expressions, and check `pop()` before length mutation.
+- Done: direct gates cover invalid `List<Int>` index, empty `last()`, and empty
+  `pop()`.
+
+#### 3. Documentation and gate sync
+
+- Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
+  `website/index.html`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`.
+- Requirements: document trap behavior as the current release-surface contract,
+  not as future work.
 
 ## Completed Milestone: List pop API
 
@@ -295,8 +338,9 @@ Mode: sequential
 
 - Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
   `website/index.html`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`.
-- Requirements: document only the non-empty-list API now; keep bounds behavior
-  as pending Phase 1 work.
+- Requirements at that milestone: document only the non-empty-list API.
+  Bounds behavior is now covered by the completed List bounds trap behavior
+  milestone above.
 
 ## Completed Milestone: List last API
 
@@ -336,9 +380,9 @@ Mode: sequential
 
 - Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
   `website/index.html`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`.
-- Requirements: document only the non-empty-list API at that milestone. `pop()`
-  is now covered by the completed List pop API milestone above; bounds behavior
-  remains pending Phase 1 work.
+- Requirements at that milestone: document only the non-empty-list API. `pop()`
+  is now covered by the completed List pop API milestone above, and bounds
+  behavior is covered by the completed List bounds trap behavior milestone.
 
 ## Completed Milestone: List is_empty API
 

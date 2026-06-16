@@ -24,6 +24,12 @@
   length mutation.
 - Updated front, direct, full, and diagnostic gates plus public docs for the
   promoted `pop()` API.
+- Added runtime trap behavior for invalid `List` access in the full self-host
+  compiler and native direct engine.
+- Added full and direct gate coverage for out-of-range index, empty `last()`,
+  and empty `pop()` behavior.
+- Updated `std/PRELUDE.md`, language reference, roadmap, changelog, and website
+  copy for the list bounds trap contract.
 
 ## 2026-06-15
 

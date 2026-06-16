@@ -1190,6 +1190,84 @@ fn sync_list_len(lslot: Int, lenidx: Int, bufsz: Int, counter: Int) -> Int {
     return lv + 1
 }
 
+fn emit_list_bounds_trap(idx: Op, len: Op, counter: Int) -> Int {
+    let lt0 = counter
+    emit_str("  %t")
+    pint(lt0)
+    emit_str(" = icmp slt i64 ")
+    emit_op(idx)
+    emit_str(", 0")
+    putchar(10)
+    let ge = lt0 + 1
+    emit_str("  %t")
+    pint(ge)
+    emit_str(" = icmp sge i64 ")
+    emit_op(idx)
+    emit_str(", ")
+    emit_op(len)
+    putchar(10)
+    let bad = ge + 1
+    emit_str("  %t")
+    pint(bad)
+    emit_str(" = or i1 %t")
+    pint(lt0)
+    emit_str(", %t")
+    pint(ge)
+    putchar(10)
+    let lab = bad + 1
+    emit_str("  br i1 %t")
+    pint(bad)
+    emit_str(", label %list_bounds_trap")
+    pint(lab)
+    emit_str(", label %list_bounds_ok")
+    pint(lab)
+    putchar(10)
+    emit_str("list_bounds_trap")
+    pint(lab)
+    emit_str(":")
+    putchar(10)
+    emit_str("  call void @llvm.trap()")
+    putchar(10)
+    emit_str("  unreachable")
+    putchar(10)
+    emit_str("list_bounds_ok")
+    pint(lab)
+    emit_str(":")
+    putchar(10)
+    return lab + 1
+}
+
+fn emit_list_nonempty_trap(len: Op, counter: Int) -> Int {
+    let bad = counter
+    emit_str("  %t")
+    pint(bad)
+    emit_str(" = icmp sle i64 ")
+    emit_op(len)
+    emit_str(", 0")
+    putchar(10)
+    let lab = bad + 1
+    emit_str("  br i1 %t")
+    pint(bad)
+    emit_str(", label %list_empty_trap")
+    pint(lab)
+    emit_str(", label %list_empty_ok")
+    pint(lab)
+    putchar(10)
+    emit_str("list_empty_trap")
+    pint(lab)
+    emit_str(":")
+    putchar(10)
+    emit_str("  call void @llvm.trap()")
+    putchar(10)
+    emit_str("  unreachable")
+    putchar(10)
+    emit_str("list_empty_ok")
+    pint(lab)
+    emit_str(":")
+    putchar(10)
+    return lab + 1
+}
+
 # A factor: number, or a variable (emit a load from its alloca -> a temp).
 fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, counter: Int) -> Op {
     let t = toks[i]
@@ -1782,7 +1860,8 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     pint(sslot + 1)
                     putchar(10)
                     let lenc = counter
-                    let idxc = lenc + 1
+                    let afterchk = emit_list_nonempty_trap(Op { kind: 1, val: lenc, next: 0 }, lenc + 1)
+                    let idxc = afterchk
                     emit_str("  %t")
                     pint(idxc)
                     emit_str(" = sub i64 %t")
@@ -1831,7 +1910,8 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     emit_str(" = load i64, i64* %t")
                     pint(lp)
                     putchar(10)
-                    let idxc = lv + 1
+                    let afterchk = emit_list_nonempty_trap(Op { kind: 1, val: lv, next: 0 }, lv + 1)
+                    let idxc = afterchk
                     emit_str("  %t")
                     pint(idxc)
                     emit_str(" = sub i64 %t")
@@ -1865,7 +1945,8 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     pint(sslot + 1)
                     putchar(10)
                     let lenc = counter
-                    let idxc = lenc + 1
+                    let afterchk = emit_list_nonempty_trap(Op { kind: 1, val: lenc, next: 0 }, lenc + 1)
+                    let idxc = afterchk
                     emit_str("  %t")
                     pint(idxc)
                     emit_str(" = sub i64 %t")
@@ -1919,7 +2000,8 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     emit_str(" = load i64, i64* %t")
                     pint(lp)
                     putchar(10)
-                    let idxc = lv + 1
+                    let afterchk = emit_list_nonempty_trap(Op { kind: 1, val: lv, next: 0 }, lv + 1)
+                    let idxc = afterchk
                     emit_str("  %t")
                     pint(idxc)
                     emit_str(" = sub i64 %t")
@@ -2335,7 +2417,22 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         emit_str(" = load i64*, i64** %v")
                         pint(p4slot)
                         putchar(10)
-                        let p4mul = p4base + 1
+                        let p4lenp = p4base + 1
+                        emit_str("  %t")
+                        pint(p4lenp)
+                        emit_str(" = getelementptr i64, i64* %t")
+                        pint(p4base)
+                        emit_str(", i64 ")
+                        pint(list_lenidx_for_nfields(p4nf))
+                        putchar(10)
+                        let p4len = p4lenp + 1
+                        emit_str("  %t")
+                        pint(p4len)
+                        emit_str(" = load i64, i64* %t")
+                        pint(p4lenp)
+                        putchar(10)
+                        let p4after = emit_list_bounds_trap(p4idx, Op { kind: 1, val: p4len, next: 0 }, p4len + 1)
+                        let p4mul = p4after
                         emit_str("  %t")
                         pint(p4mul)
                         emit_str(" = mul i64 ")
@@ -2378,7 +2475,22 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 emit_str(" = load i64*, i64** %v")
                 pint(pslot)
                 putchar(10)
-                let pgep = pbase + 1
+                let plenp = pbase + 1
+                emit_str("  %t")
+                pint(plenp)
+                emit_str(" = getelementptr i64, i64* %t")
+                pint(pbase)
+                emit_str(", i64 ")
+                pint(list_lenidx())
+                putchar(10)
+                let plen = plenp + 1
+                emit_str("  %t")
+                pint(plen)
+                emit_str(" = load i64, i64* %t")
+                pint(plenp)
+                putchar(10)
+                let pafter = emit_list_bounds_trap(pidx, Op { kind: 1, val: plen, next: 0 }, plen + 1)
+                let pgep = pafter
                 emit_str("  %t")
                 pint(pgep)
                 emit_str(" = getelementptr i64, i64* %t")
@@ -2408,7 +2520,14 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     let lbuf = list_bufsz_for_nfields(nf)
                     let fi = field_index(defs, lsty2, src, fld.nstart, fld.nlen)
                     let lidx = gen_expr(toks, slots, fns, defs, src, i + 2, lbend, counter)
-                    let mulc = lidx.next
+                    let llen = lidx.next
+                    emit_str("  %t")
+                    pint(llen)
+                    emit_str(" = load i64, i64* %v")
+                    pint(lslot + 1)
+                    putchar(10)
+                    let lafter = emit_list_bounds_trap(lidx, Op { kind: 1, val: llen, next: 0 }, llen + 1)
+                    let mulc = lafter
                     emit_str("  %t")
                     pint(mulc)
                     emit_str(" = mul i64 ")
@@ -2451,7 +2570,16 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let alen = arrlen_of(slots, src, t.nstart, t.nlen)
             let bend = bracket_end(toks, i + 2)
             let idx = gen_expr(toks, slots, fns, defs, src, i + 2, bend, counter)
-            let gepc = idx.next
+            let mut gepc = idx.next
+            if karr == 2 {
+                emit_str("  %t")
+                pint(gepc)
+                emit_str(" = load i64, i64* %v")
+                pint(slot + 1)
+                putchar(10)
+                let dlen = gepc
+                gepc = emit_list_bounds_trap(idx, Op { kind: 1, val: dlen, next: 0 }, dlen + 1)
+            }
             emit_str("  %t")
             pint(gepc)
             emit_str(" = getelementptr [")
@@ -3699,6 +3827,40 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     lidxval = lidx0.val
                     counter = lidx0.next
                     lafter = libend + 1
+                    if lkarr == 4 {
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = load i64*, i64** %v")
+                        pint(lsrcslot)
+                        putchar(10)
+                        lbufptr = counter
+                        lhavebuf = 1
+                        counter = counter + 1
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = getelementptr i64, i64* %t")
+                        pint(lbufptr)
+                        emit_str(", i64 ")
+                        pint(list_lenidx_for_nfields(lnf))
+                        putchar(10)
+                        let llenp0 = counter
+                        counter = counter + 1
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = load i64, i64* %t")
+                        pint(llenp0)
+                        putchar(10)
+                        let llen0 = counter
+                        counter = emit_list_bounds_trap(Op { kind: lidxkind, val: lidxval, next: 0 }, Op { kind: 1, val: llen0, next: 0 }, llen0 + 1)
+                    } else {
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = load i64, i64* %v")
+                        pint(lsrcslot + 1)
+                        putchar(10)
+                        let llen0 = counter
+                        counter = emit_list_bounds_trap(Op { kind: lidxkind, val: lidxval, next: 0 }, Op { kind: 1, val: llen0, next: 0 }, llen0 + 1)
+                    }
                 } else {
                     let lmeth = toks[vp + 2]
                     if is_pop(src, lmeth.nstart, lmeth.nlen) == 1 { lpop = 1 }
@@ -3736,7 +3898,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                         putchar(10)
                     }
                     let llenc = counter
-                    counter = counter + 1
+                    counter = emit_list_nonempty_trap(Op { kind: 1, val: llenc, next: 0 }, llenc + 1)
                     emit_str("  %t")
                     pint(counter)
                     emit_str(" = sub i64 %t")
@@ -4623,11 +4785,21 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 # array element write: name [ idx ] = expr ;
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
                 let alen = arrlen_of(slots, src, t.nstart, t.nlen)
+                let warr = isarr_of(slots, src, t.nstart, t.nlen)
                 let bend = bracket_end(toks, i + 2)
                 let idxop = gen_expr(toks, slots, fns, defs, src, i + 2, bend, counter)
                 let idxkind = idxop.kind
                 let idxval = idxop.val
                 counter = idxop.next
+                if warr == 2 {
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = load i64, i64* %v")
+                    pint(slot + 1)
+                    putchar(10)
+                    let wlen = counter
+                    counter = emit_list_bounds_trap(Op { kind: idxkind, val: idxval, next: 0 }, Op { kind: 1, val: wlen, next: 0 }, wlen + 1)
+                }
                 let stop = find_semi(toks, bend + 2, end)
                 let valop = gen_expr(toks, slots, fns, defs, src, bend + 2, stop, counter)
                 let valkind = valop.kind
@@ -5741,6 +5913,8 @@ fn compile(src: Str) -> Int {
     emit_str("declare i32 @puts(i8*)")
     putchar(10)
     emit_str("declare i32 @printf(i8*, ...)")
+    putchar(10)
+    emit_str("declare void @llvm.trap()")
     putchar(10)
     let defs = build_defs(&toks, n)
     let fns = build_fns(&toks, &defs, src, n)

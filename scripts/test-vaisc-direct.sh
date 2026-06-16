@@ -12,6 +12,19 @@ VAISC="$HERE/scripts/vaisc"
 fail=0
 
 tmp="$(mktemp -d)"
+
+expect_direct_trap() {
+    local label="$1" src="$2"
+    "$VAISC" run "$src" --engine direct >"$tmp/$label.out" 2>"$tmp/$label.err"
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "  PASS direct List bounds trap: $label"
+    else
+        echo "  FAIL direct List bounds trap did not fire: $label"
+        fail=1
+    fi
+}
+
 src="$tmp/nv_c2_direct.vais"
 cat > "$src" <<'SRC'
 fn main() -> Int {
@@ -294,6 +307,34 @@ else
     cat "$tmp/list-struct.err"
     fail=1
 fi
+
+list_bad_index_src="$tmp/direct_list_bad_index.vais"
+cat > "$list_bad_index_src" <<'SRC'
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(1)
+    return xs[1]
+}
+SRC
+expect_direct_trap "bad-index" "$list_bad_index_src"
+
+list_bad_last_src="$tmp/direct_list_bad_last.vais"
+cat > "$list_bad_last_src" <<'SRC'
+fn main() -> Int {
+    let xs: List<Int> = []
+    return xs.last()
+}
+SRC
+expect_direct_trap "bad-last" "$list_bad_last_src"
+
+list_bad_pop_src="$tmp/direct_list_bad_pop.vais"
+cat > "$list_bad_pop_src" <<'SRC'
+fn main() -> Int {
+    let xs: List<Int> = []
+    return xs.pop()
+}
+SRC
+expect_direct_trap "bad-pop" "$list_bad_pop_src"
 
 list_struct_abi_src="$tmp/direct_list_struct_abi.vais"
 cat > "$list_struct_abi_src" <<'SRC'
@@ -803,7 +844,7 @@ fn main() -> Int {
     } else if score_int(make_int(20)) == 41 {
         total = total + 20
     }
-    if score_box([Box { value: 1 }]) == 99 {
+    if score_box([Box { value: 1 }, Box { value: 1 }]) == 99 {
         total = total + 1
     } else if score_box(make_box(10)) == 21 {
         total = total + 22
