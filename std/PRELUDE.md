@@ -18,7 +18,7 @@ intended but not a public release claim yet.
 | `[1, 2, 3]` | Verified for Int lists |
 | `List<Int>` | Verified |
 | `List<T>` | Partial |
-| `Map<K,V>` | Specified |
+| `Map<K,V>` | Specified; first planned gate-backed slice is `Map<Int,Int>` |
 | `v.len()` | Verified |
 | `v.is_empty()` | Verified |
 | `v.last()` | Verified |
@@ -32,6 +32,22 @@ intended but not a public release claim yet.
 Invalid list access traps at runtime. This includes negative or out-of-range
 `v[i]`, `v.last()` on an empty list, and `v.pop()` on an empty list. `v.pop()`
 checks before mutating the list length.
+
+### Planned Map Slice
+
+`Map<K,V>` is not verified yet. The first planned public slice is deliberately
+small:
+
+| API | Planned behavior |
+| --- | --- |
+| `let m: Map<Int,Int> = {}` | Construct an empty integer map |
+| `m.insert(key, value)` | Insert or replace an integer value by integer key |
+| `m.get(key, default)` | Return the value for `key`, or `default` when absent |
+| `m.contains(key)` | Return whether `key` is present |
+| `m.len()` | Return the number of present keys |
+
+The first slice does not include generic key/value lowering, iteration,
+deletion, `Option`, `Result`, hashing controls, or map literals with entries.
 
 ## Types And Conversion
 

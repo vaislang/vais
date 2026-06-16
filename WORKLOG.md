@@ -41,6 +41,9 @@
   full self-host compiler, native direct engine, front gate, parity manifest,
   and value corpus.
 - Regenerated `compiler/self/vaisc_core.ll` with the named parsing helpers.
+- Specified the first planned `Map<Int,Int>` slice and added front-gate
+  diagnostics so `Map` stays out of public verified examples until compiler
+  support lands.
 
 ## 2026-06-15
 

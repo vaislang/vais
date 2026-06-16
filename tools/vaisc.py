@@ -161,9 +161,14 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
         "use `Int`, `Str`, or `Bool` in this slice.",
     ),
     (
-        re.compile(r"\b(Map|Option|Result)\s*<|\blist\s*\("),
-        "map and sum-result types are not in the Vais native front subset yet",
-        "keep this source on the full compiler path until the native parity gate grows to it.",
+        re.compile(r"\bMap\s*<"),
+        "Map<K,V> is specified but not verified in the Vais native front subset yet",
+        "the first planned Map slice is `Map<Int,Int>` with `{}`, `insert`, `get(key, default)`, `contains`, and `len`; wait for that gate before using Map in public examples.",
+    ),
+    (
+        re.compile(r"\b(Option|Result)\s*<|\blist\s*\("),
+        "sum-result types and the `list()` constructor are not in the Vais native front subset yet",
+        "use verified scalar/List syntax, or keep this source on the full compiler path until the native parity gate grows to it.",
     ),
     (
         re.compile(r"\b(break|continue)\b"),
@@ -245,7 +250,7 @@ FRONT_HELP_RULES: list[FrontRule] = [
     FrontRule(
         re.compile(r"\bHashMap\b"),
         "the Vais map spelling is `Map<K,V>`, not `HashMap<K,V>`",
-        "use `Map<K,V>` on the full compiler path for now; day-1 native front is scalar-only.",
+        "use `Map<K,V>` only after the planned Map gate lands; the native front does not verify Map yet.",
         replace_once("HashMap", "Map"),
     ),
     FrontRule(

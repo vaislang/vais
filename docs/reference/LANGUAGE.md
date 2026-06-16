@@ -367,6 +367,37 @@ before reading fields.
 Methods such as `map`, `filter`, and arbitrary user-defined methods are not
 release-surface claims yet.
 
+## Maps
+
+`Map<K,V>` is specified but not verified. Public examples should not use it
+until a compiler gate protects the behavior.
+
+The first planned gate-backed slice is:
+
+```vais
+fn main() -> Int {
+    let scores: Map<Int,Int> = {}
+    scores.insert(4, 38)
+    scores.insert(4, 40)
+    return scores.get(4, 0) + scores.contains(4) + scores.len()
+}
+```
+
+Planned behavior:
+
+- Only `Map<Int,Int>` is in the first implementation target.
+- `{}` constructs an empty map when the local type is explicitly
+  `Map<Int,Int>`.
+- `insert(key, value)` inserts or replaces a value.
+- `get(key, default)` returns `default` when the key is absent. This avoids
+  publishing `Option` before `Option` itself is gate-backed.
+- `contains(key)` returns whether a key is present.
+- `len()` returns the number of present keys.
+
+Not included in the first Map slice: generic key/value lowering, deletion,
+iteration, entry literals, `Option`, `Result`, custom hashing, or public ABI
+claims for Map parameters and return values.
+
 ## Strings, Characters, And Output
 
 ```vais

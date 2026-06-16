@@ -334,6 +334,14 @@ fn main() -> Int {
 }
 SRC
 
+expect_reject "map_not_verified" "Map<K,V> is specified but not verified" "first planned Map slice" <<'SRC'
+fn main() -> Int {
+    let scores: Map<Int, Int> = {}
+    scores.insert(4, 38)
+    return scores.get(4, 0)
+}
+SRC
+
 expect_reject "string_type" "helper parameters must use verified scalar types" "Int.*Str.*Bool" <<'SRC'
 fn len(s: String) -> Int {
     return 42

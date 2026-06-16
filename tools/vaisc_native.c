@@ -1318,6 +1318,13 @@ static int check_front_contract_text(const char *text, const char *path) {
                 "use `Int`, `Str`, or `Bool` in this slice.",
                 NULL);
             issues++;
+        } else if (strstr(line, "Map<") != NULL || strstr(line, "Map <") != NULL) {
+            int col = strstr(line, "Map<") != NULL ? find_col(line, "Map<") : find_col(line, "Map <");
+            report_issue(path, line_no, col, line,
+                "Map<K,V> is specified but not verified in the Vais native front subset yet",
+                "the first planned Map slice is `Map<Int,Int>` with `{}`, `insert`, `get(key, default)`, `contains`, and `len`; wait for that gate before using Map in public examples.",
+                NULL);
+            issues++;
         } else if (strstr(line, "|") != NULL) {
             report_issue(path, line_no, find_col(line, "|"), line,
                 "closures beyond the single-Int closure-return slice are not in the Vais native front subset yet",

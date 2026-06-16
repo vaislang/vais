@@ -61,6 +61,9 @@ This file tracks current work only.
 - Named integer parsing helpers `parse_uint(s)` and `parse_int(s)` are promoted
   through the full self-host compiler, native direct engine, front gate, parity
   manifest, value corpus, and regenerated reusable core.
+- The first `Map` contract is specified as a future `Map<Int,Int>` slice with
+  `{}`, `insert`, `get(key, default)`, `contains`, and `len`; public front gates
+  still reject `Map` until implementation lands.
 
 ## Current Reality
 
@@ -152,8 +155,12 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
   patterns.
 - [x] 1.2b Decide and promote a named integer parsing prelude API, if it should
   be part of the public standard library instead of a user helper pattern.
-- [ ] 1.3 Promote `Map<K,V>` only after a minimal gate-backed design exists for
-  construction, insert, lookup, contains, and length.
+- [x] 1.3a Specify the first `Map` slice and gate unsupported `Map` use with a
+  clear front diagnostic.
+- [ ] 1.3b Promote `Map<Int,Int>` for construction, insert/replace,
+  `get(key, default)`, `contains`, and `len`.
+- [ ] 1.3c Broaden `Map<K,V>` only after generic key/value lowering and ABI
+  behavior are specified.
 - [ ] 1.4 Add examples and value tests for every promoted prelude API.
 - [ ] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
 
@@ -274,7 +281,44 @@ Phase 0 is complete. The next concrete slice is Phase 1:
 - [x] Promote the next Phase 1 slice: `Str` length/index/equality helpers and
   byte-classification utilities needed by real tools.
 - [x] Decide and promote the named integer parsing prelude API.
-- [ ] Promote the next Phase 1 slice: minimal `Map<K,V>` design and gate plan.
+- [x] Specify the minimal `Map<Int,Int>` design and gate unsupported `Map` use.
+- [ ] Promote the next Phase 1 slice: `Map<Int,Int>` construction and local
+  operations.
+
+## Completed Milestone: Map design and front gate contract
+
+Mode: sequential
+
+- [x] 1. Keep `Map<K,V>` out of the verified surface until compiler gates cover
+  it.
+- [x] 2. Define the first implementation target as `Map<Int,Int>` only.
+- [x] 3. Choose explicit-empty construction with `let m: Map<Int,Int> = {}`.
+- [x] 4. Choose `insert(key, value)` for insert/replace, `get(key, default)` for
+  lookup without `Option`, `contains(key)` for presence, and `len()` for
+  cardinality.
+- [x] 5. Add front-gate diagnostics so public `Map` use fails clearly until the
+  implementation lands.
+
+### Task Briefs
+
+#### 1. Map<Int,Int> implementation slice
+
+- Target files: `tools/vaisc_native.c`,
+  `compiler/self/fixpoint_full.vais`, `compiler/self/vaisc_core.ll`.
+- Requirements: local `Map<Int,Int>` values support `{}`, `insert`,
+  `get(key, default)`, `contains`, and `len` without publishing broader
+  generic or ABI claims.
+- Done when: front, direct, full, parity, and value gates pass a local map
+  example returning a deterministic value.
+
+#### 2. Map docs and release claims
+
+- Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
+  `scripts/test-vaisc-front.sh`, `website/index.html`.
+- Requirements: `Map` remains "Specified" until implementation gates land; the
+  unsupported diagnostic names the first planned slice.
+- Done when: `scripts/test-vaisc-front.sh` rejects `Map` with the planned-slice
+  help text, and docs/site no longer imply a verified generic `Map<K,V>`.
 
 ## Completed Milestone: Named integer parsing prelude helpers
 
