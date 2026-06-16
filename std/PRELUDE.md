@@ -18,7 +18,8 @@ intended but not a public release claim yet.
 | `[1, 2, 3]` | Verified for Int lists |
 | `List<Int>` | Verified |
 | `List<T>` | Partial |
-| `Map<K,V>` | Specified; first planned gate-backed slice is `Map<Int,Int>` |
+| `Map<Int,Int>` | Verified for native direct local values |
+| `Map<K,V>` | Specified beyond the direct `Map<Int,Int>` slice |
 | `v.len()` | Verified |
 | `v.is_empty()` | Verified |
 | `v.last()` | Verified |
@@ -33,12 +34,11 @@ Invalid list access traps at runtime. This includes negative or out-of-range
 `v[i]`, `v.last()` on an empty list, and `v.pop()` on an empty list. `v.pop()`
 checks before mutating the list length.
 
-### Planned Map Slice
+### Map Slice
 
-`Map<K,V>` is not verified yet. The first planned public slice is deliberately
-small:
+The verified Map surface is deliberately small and native-direct only:
 
-| API | Planned behavior |
+| API | Verified behavior |
 | --- | --- |
 | `let m: Map<Int,Int> = {}` | Construct an empty integer map |
 | `m.insert(key, value)` | Insert or replace an integer value by integer key |
@@ -46,8 +46,11 @@ small:
 | `m.contains(key)` | Return whether `key` is present |
 | `m.len()` | Return the number of present keys |
 
-The first slice does not include generic key/value lowering, iteration,
-deletion, `Option`, `Result`, hashing controls, or map literals with entries.
+This slice is currently available through `scripts/vaisc --engine direct`.
+The full self-host compiler path still rejects `Map` until its lowering lands.
+The slice does not include generic key/value lowering, function parameters,
+return values, assignment, iteration, deletion, `Option`, `Result`, hashing
+controls, or map literals with entries.
 
 ## Types And Conversion
 

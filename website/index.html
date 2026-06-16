@@ -157,10 +157,11 @@ fn main() -> Int {
           <a href="https://github.com/vaislang/vais/blob/main/examples/README.md" target="_blank" rel="noopener">Open examples</a>
         </div>
         <p class="note">
-          <code>Map&lt;K,V&gt;</code> is specified but not verified yet. The first
-          planned gate-backed slice is <code>Map&lt;Int,Int&gt;</code> with
-          <code>{}</code>, <code>insert</code>, <code>get(key, default)</code>,
-          <code>contains</code>, and <code>len</code>.
+          The native direct engine verifies local <code>Map&lt;Int,Int&gt;</code>
+          values with <code>{}</code>, <code>insert</code>,
+          <code>get(key, default)</code>, <code>contains</code>, and
+          <code>len</code>. Broader <code>Map&lt;K,V&gt;</code> and full compiler
+          lowering are still future work.
         </p>
       </div>
     </section>
@@ -188,7 +189,7 @@ fn main() -> Int {
           </article>
           <article class="panel">
             <h3>Direct path</h3>
-            <p><code>--engine direct</code> stays native for Int/Bool/Str helpers, locals, calls, <code>if</code>, inline <code>if { return ... }</code>, <code>while</code>, simple struct helpers, <code>Str</code> literals with <code>len</code>, index, equality, <code>parse_uint</code>, and <code>parse_int</code>, <code>List&lt;Int&gt;</code> local values with list/element assignment, <code>push</code>, <code>len</code>, <code>is_empty()</code>, <code>last()</code>, <code>pop()</code>, index, <code>sum</code>, parameter, inline, return, returned-argument, if/else-if condition, and loop-hoisted operations, plus <code>List&lt;Struct&gt;</code> construction with <code>[]</code>, <code>list()</code>, list literals, list/element assignment, <code>push</code>, <code>len</code>, <code>is_empty()</code>, <code>last()</code>, <code>pop()</code>, index, field reads/writes, parameter/return ABI, inline arguments, and returned-argument lowering in statements plus <code>if</code>, <code>else if</code>, and <code>while</code> conditions. Invalid list access traps at runtime.</p>
+            <p><code>--engine direct</code> stays native for Int/Bool/Str helpers, locals, calls, <code>if</code>, inline <code>if { return ... }</code>, <code>while</code>, simple struct helpers, <code>Str</code> literals with <code>len</code>, index, equality, <code>parse_uint</code>, and <code>parse_int</code>, local <code>Map&lt;Int,Int&gt;</code> values with <code>{}</code>, <code>insert</code>, <code>get</code>, <code>contains</code>, and <code>len</code>, <code>List&lt;Int&gt;</code> local values with list/element assignment, <code>push</code>, <code>len</code>, <code>is_empty()</code>, <code>last()</code>, <code>pop()</code>, index, <code>sum</code>, parameter, inline, return, returned-argument, if/else-if condition, and loop-hoisted operations, plus <code>List&lt;Struct&gt;</code> construction with <code>[]</code>, <code>list()</code>, list literals, list/element assignment, <code>push</code>, <code>len</code>, <code>is_empty()</code>, <code>last()</code>, <code>pop()</code>, index, field reads/writes, parameter/return ABI, inline arguments, and returned-argument lowering in statements plus <code>if</code>, <code>else if</code>, and <code>while</code> conditions. Invalid list access traps at runtime.</p>
           </article>
           <article class="panel">
             <h3>Standalone install</h3>

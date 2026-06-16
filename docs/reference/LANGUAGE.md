@@ -80,6 +80,7 @@ Verified release surface:
 | `Char` | Single-byte character literals in verified examples |
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
+| `Map<Int,Int>` | Direct-engine local `{}`, `insert`, `get(key, default)`, `contains`, and `len` |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match and small recursive `Int` payload enum/match |
 
@@ -131,7 +132,8 @@ The direct engine gate covers `if`, `while`, local `let`, assignment, helper
 calls, `return`, simple inline `if { return ... }`, `Bool`/`Str` scalar helper
 signatures, `Str` literals/length/index/equality, simple Int-field struct
 locals, struct parameter/return helpers, and `List<Int>` local operations plus
-parameter reference and return value ABI, plus `List<Struct>` construction with
+parameter reference and return value ABI, local `Map<Int,Int>` construction and
+lookup/update helpers, plus `List<Struct>` construction with
 `[]`, `list()`, list literals, list/element assignment, `push`, `len`, index,
 field read/write, parameter reference, and return value ABI.
 
@@ -369,23 +371,27 @@ release-surface claims yet.
 
 ## Maps
 
-`Map<K,V>` is specified but not verified. Public examples should not use it
-until a compiler gate protects the behavior.
+`Map<Int,Int>` has a verified native direct local-value slice. Use
+`scripts/vaisc --engine direct` for this surface. The default full compiler path
+still rejects `Map` until self-host lowering lands.
 
-The first planned gate-backed slice is:
+Verified direct-engine example:
 
 ```vais
 fn main() -> Int {
     let scores: Map<Int,Int> = {}
     scores.insert(4, 38)
     scores.insert(4, 40)
-    return scores.get(4, 0) + scores.contains(4) + scores.len()
+    scores.insert(9, 2)
+    let found = scores.get(4, 0)
+    let missing = scores.get(5, 0 - 1)
+    return found + missing + scores.contains(4) + scores.contains(5) + scores.len()
 }
 ```
 
-Planned behavior:
+Verified direct behavior:
 
-- Only `Map<Int,Int>` is in the first implementation target.
+- Only local `Map<Int,Int>` values are supported.
 - `{}` constructs an empty map when the local type is explicitly
   `Map<Int,Int>`.
 - `insert(key, value)` inserts or replaces a value.
@@ -394,9 +400,10 @@ Planned behavior:
 - `contains(key)` returns whether a key is present.
 - `len()` returns the number of present keys.
 
-Not included in the first Map slice: generic key/value lowering, deletion,
-iteration, entry literals, `Option`, `Result`, custom hashing, or public ABI
-claims for Map parameters and return values.
+Not included in the current Map slice: full self-host compiler lowering,
+generic key/value lowering, assignment, deletion, iteration, entry literals,
+`Option`, `Result`, custom hashing, or public ABI claims for Map parameters and
+return values.
 
 ## Strings, Characters, And Output
 

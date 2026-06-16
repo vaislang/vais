@@ -334,7 +334,7 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "map_not_verified" "Map<K,V> is specified but not verified" "first planned Map slice" <<'SRC'
+expect_reject "map_direct_only" "Map<K,V> is only verified for local Map<Int,Int>" "engine direct" <<'SRC'
 fn main() -> Int {
     let scores: Map<Int, Int> = {}
     scores.insert(4, 38)

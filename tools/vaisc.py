@@ -162,8 +162,8 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
     ),
     (
         re.compile(r"\bMap\s*<"),
-        "Map<K,V> is specified but not verified in the Vais native front subset yet",
-        "the first planned Map slice is `Map<Int,Int>` with `{}`, `insert`, `get(key, default)`, `contains`, and `len`; wait for that gate before using Map in public examples.",
+        "Map<K,V> is only verified for local Map<Int,Int> in the direct engine for now",
+        "use `scripts/vaisc ... --engine direct` for local `Map<Int,Int>` with `{}`, `insert`, `get(key, default)`, `contains`, and `len`, or wait for full compiler Map support.",
     ),
     (
         re.compile(r"\b(Option|Result)\s*<|\blist\s*\("),
@@ -250,7 +250,7 @@ FRONT_HELP_RULES: list[FrontRule] = [
     FrontRule(
         re.compile(r"\bHashMap\b"),
         "the Vais map spelling is `Map<K,V>`, not `HashMap<K,V>`",
-        "use `Map<K,V>` only after the planned Map gate lands; the native front does not verify Map yet.",
+        "use `Map<K,V>` only in the verified direct local `Map<Int,Int>` slice for now.",
         replace_once("HashMap", "Map"),
     ),
     FrontRule(

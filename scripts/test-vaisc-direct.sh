@@ -357,6 +357,39 @@ else
     fail=1
 fi
 
+map_src="$tmp/direct_map_int_int.vais"
+cat > "$map_src" <<'SRC'
+fn main() -> Int {
+    let scores: Map<Int, Int> = {}
+    scores.insert(4, 38)
+    scores.insert(4, 40)
+    scores.insert(9, 2)
+    return scores.get(4, 0) + scores.get(5, 0 - 1) + scores.contains(4) + scores.contains(5) + scores.len()
+}
+SRC
+
+if "$VAISC" emit-ir "$map_src" \
+    --engine direct -o "$tmp/map.ll" \
+    >"$tmp/map.out" 2>"$tmp/map.err" &&
+    grep -q '__vais_map_int_int_insert' "$tmp/map.ll" &&
+    grep -q '__vais_map_int_int_get' "$tmp/map.ll" &&
+    grep -q '__vais_map_int_int_contains' "$tmp/map.ll" &&
+    grep -q '__vais_map_int_int_len' "$tmp/map.ll"; then
+    "$VAISC" run "$map_src" --engine direct >"$tmp/map-run.out" 2>"$tmp/map-run.err"
+    map_run=$?
+    if [ "$map_run" = "42" ]; then
+        echo "  PASS direct local Map<Int,Int> insert/get/contains/len run (=42)"
+    else
+        echo "  FAIL direct Map<Int,Int> got=$map_run want=42"
+        cat "$tmp/map-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct Map<Int,Int> emission"
+    cat "$tmp/map.err"
+    fail=1
+fi
+
 list_struct_src="$tmp/direct_list_struct_local.vais"
 cat > "$list_struct_src" <<'SRC'
 struct Box {

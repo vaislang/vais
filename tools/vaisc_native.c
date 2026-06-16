@@ -1321,8 +1321,8 @@ static int check_front_contract_text(const char *text, const char *path) {
         } else if (strstr(line, "Map<") != NULL || strstr(line, "Map <") != NULL) {
             int col = strstr(line, "Map<") != NULL ? find_col(line, "Map<") : find_col(line, "Map <");
             report_issue(path, line_no, col, line,
-                "Map<K,V> is specified but not verified in the Vais native front subset yet",
-                "the first planned Map slice is `Map<Int,Int>` with `{}`, `insert`, `get(key, default)`, `contains`, and `len`; wait for that gate before using Map in public examples.",
+                "Map<K,V> is only verified for local Map<Int,Int> in the direct engine for now",
+                "use `scripts/vaisc ... --engine direct` for local `Map<Int,Int>` with `{}`, `insert`, `get(key, default)`, `contains`, and `len`, or wait for full compiler Map support.",
                 NULL);
             issues++;
         } else if (strstr(line, "|") != NULL) {
@@ -1496,6 +1496,10 @@ static int direct_is_list_int_type(const char *type) {
     return type != NULL && strcmp(type, "List<Int>") == 0;
 }
 
+static int direct_is_map_int_int_type(const char *type) {
+    return type != NULL && strcmp(type, "Map<Int,Int>") == 0;
+}
+
 static int direct_is_list_type(const char *type) {
     size_t n = type == NULL ? 0 : strlen(type);
     return n > 6 && starts_with(type, "List<") && type[n - 1] == '>';
@@ -1534,7 +1538,8 @@ static int direct_fn_type_allowed(DirectStructInfo *structs, int struct_count, c
 
 static int direct_local_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
     return direct_fn_type_allowed(structs, struct_count, type) ||
-        direct_is_list_struct_type(structs, struct_count, type);
+        direct_is_list_struct_type(structs, struct_count, type) ||
+        direct_is_map_int_int_type(type);
 }
 
 static int direct_type_compatible(const char *expected, const char *actual) {
@@ -1548,6 +1553,7 @@ static const char *direct_c_type(const char *type) {
     if (direct_is_str_type(type)) return "Str";
     if (direct_is_bool_type(type)) return "Bool";
     if (direct_is_list_int_type(type)) return "DirectListInt";
+    if (direct_is_map_int_int_type(type)) return "DirectMapIntInt";
     if (direct_is_list_type(type)) {
         static char bufs[4][128];
         static int slot = 0;
@@ -1573,6 +1579,45 @@ static const char *direct_c_param_type(const char *type) {
 
 static char *direct_parse_local_type(const char **cursor) {
     const char *p = skip_ws(*cursor);
+    if (starts_with(p, "Map") && !is_ident_continue(p[3])) {
+        const char *q = skip_ws(p + 3);
+        if (*q == '<') {
+            q = skip_ws(q + 1);
+            if (!is_ident_start(*q)) return NULL;
+            const char *key_start = q;
+            q++;
+            while (is_ident_continue(*q)) q++;
+            char *key = substr_copy(key_start, (size_t)(q - key_start));
+            q = skip_ws(q);
+            if (*q == ',') {
+                q = skip_ws(q + 1);
+                if (!is_ident_start(*q)) {
+                    free(key);
+                    return NULL;
+                }
+                const char *value_start = q;
+                q++;
+                while (is_ident_continue(*q)) q++;
+                char *value = substr_copy(value_start, (size_t)(q - value_start));
+                q = skip_ws(q);
+                if (*q == '>') {
+                    *cursor = skip_ws(q + 1);
+                    StrBuf out;
+                    sb_init(&out);
+                    sb_append(&out, "Map<");
+                    sb_append(&out, key);
+                    sb_append(&out, ",");
+                    sb_append(&out, value);
+                    sb_append(&out, ">");
+                    free(key);
+                    free(value);
+                    return sb_take(&out);
+                }
+                free(value);
+            }
+            free(key);
+        }
+    }
     if (starts_with(p, "List") && !is_ident_continue(p[4])) {
         const char *q = skip_ws(p + 4);
         if (*q == '<') {
@@ -1977,6 +2022,13 @@ static int direct_list_initializer_state(const char *expr) {
 static int direct_is_list_initializer_expr(const char *expr) {
     int parsed = direct_list_initializer_state(expr);
     return parsed == 1;
+}
+
+static int direct_is_map_empty_initializer_expr(const char *expr) {
+    char *trimmed = trim_copy(expr);
+    int ok = strcmp(trimmed, "{}") == 0;
+    free(trimmed);
+    return ok;
 }
 
 static char *direct_rewrite_struct_literals(
@@ -2804,6 +2856,107 @@ static char *direct_rewrite_list_expr(
             continue;
         }
         if (!direct_is_list_type(base_type)) {
+            if (direct_is_map_int_int_type(base_type)) {
+                if (expr[cursor] == '.') {
+                    int field_start = cursor + 1;
+                    while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
+                    int field_end = field_start;
+                    while (is_ident_continue(expr[field_end])) field_end++;
+                    char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
+                    const char *after = skip_ws(expr + field_end);
+                    if (strcmp(field, "len") == 0) {
+                        if (*after != '(') {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter Map.len must be called",
+                                "write `m.len()`.",
+                                NULL);
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
+                        int close = find_matching_paren_c(expr, (int)(after - expr));
+                        if (close < 0) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter expected `)` after Map.len",
+                                "write `m.len()`.",
+                                NULL);
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
+                        sb_append(&out, "__vais_map_int_int_len(&");
+                        sb_append(&out, name);
+                        sb_append(&out, ")");
+                        free(field);
+                        free(name);
+                        i = close + 1;
+                        continue;
+                    }
+                    if ((strcmp(field, "contains") == 0 || strcmp(field, "get") == 0) && *after == '(') {
+                        int close = find_matching_paren_c(expr, (int)(after - expr));
+                        if (close < 0) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter expected `)` after Map method",
+                                "write `m.contains(key)` or `m.get(key, default)`.",
+                                NULL);
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
+                        char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                        char *args[16] = {0};
+                        int argc = split_top_level_commas_c(inside, args, 16);
+                        free(inside);
+                        int expected = strcmp(field, "contains") == 0 ? 1 : 2;
+                        if (argc != expected) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter Map method argument count does not match",
+                                "write `m.contains(key)` or `m.get(key, default)`.",
+                                NULL);
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
+                        sb_append(&out, strcmp(field, "contains") == 0 ? "__vais_map_int_int_contains(&" : "__vais_map_int_int_get(&");
+                        sb_append(&out, name);
+                        for (int a = 0; a < argc; a++) {
+                            char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count);
+                            if (rewritten_arg == NULL) {
+                                for (int k = 0; k < 16; k++) free(args[k]);
+                                free(field);
+                                free(name);
+                                free(out.data);
+                                return NULL;
+                            }
+                            sb_append(&out, ", ");
+                            sb_append(&out, rewritten_arg);
+                            free(rewritten_arg);
+                        }
+                        sb_append(&out, ")");
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        i = close + 1;
+                        continue;
+                    }
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports Map get, contains, and len expressions",
+                        "write `m.get(key, default)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                sb_append_n(&out, expr + start, (size_t)(i - start));
+                free(name);
+                continue;
+            }
             sb_append_n(&out, expr + start, (size_t)(i - start));
             free(name);
             continue;
@@ -3197,6 +3350,26 @@ static char *direct_infer_expr_type(
                     return elem_type;
                 }
             }
+            if (direct_is_map_int_int_type(local_type)) {
+                if ((strcmp(field, "get") == 0 || strcmp(field, "len") == 0) && *after == '(') {
+                    int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                    if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return strdup("Int");
+                    }
+                }
+                if (strcmp(field, "contains") == 0 && *after == '(') {
+                    int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                    if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return strdup("Bool");
+                    }
+                }
+            }
             free(field);
         }
         if (*rest == '{' && direct_find_struct(structs, struct_count, name) != NULL) {
@@ -3467,6 +3640,118 @@ static int direct_check_expr_inner(
                 free(name);
                 return 1;
             }
+            if (direct_is_map_int_int_type(base_type)) {
+                const char *after = skip_ws(expr + field_end);
+                if (strcmp(field, "len") == 0) {
+                    if (*after != '(') {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter Map.len must be called",
+                            "write `m.len()`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after Map.len",
+                            "write `m.len()`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *args_text = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                    char *trimmed_args = trim_copy(args_text);
+                    int has_args = trimmed_args[0] != '\0';
+                    free(trimmed_args);
+                    free(args_text);
+                    if (has_args) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter Map.len takes no arguments",
+                            "write `m.len()`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
+                if ((strcmp(field, "contains") == 0 || strcmp(field, "get") == 0) && *after == '(') {
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after Map method",
+                            "write `m.contains(key)` or `m.get(key, default)`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                    char *args[16] = {0};
+                    int argc = split_top_level_commas_c(inside, args, 16);
+                    free(inside);
+                    int expected = strcmp(field, "contains") == 0 ? 1 : 2;
+                    if (argc != expected) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter Map method argument count does not match",
+                            "write `m.contains(key)` or `m.get(key, default)`.",
+                            NULL);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    for (int a = 0; a < argc; a++) {
+                        if (args[a] == NULL || strlen(skip_ws(args[a])) == 0) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter Map arguments cannot be empty",
+                                "pass Int expressions to the Map method.",
+                                NULL);
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(field);
+                            free(name);
+                            return 1;
+                        }
+                        if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, NULL)) {
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(field);
+                            free(name);
+                            return 1;
+                        }
+                        char *arg_type = direct_infer_expr_type(args[a], locals, fns, fn_count, structs, struct_count);
+                        if (!direct_type_compatible("Int", arg_type)) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter Map arguments must be Int values",
+                                "use `Map<Int,Int>` with Int keys and Int values in this slice.",
+                                NULL);
+                            free(arg_type);
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(field);
+                            free(name);
+                            return 1;
+                        }
+                        free(arg_type);
+                    }
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter supports Map insert, get, contains, and len",
+                    "write `m.insert(key, value)`, `m.get(key, default)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>.",
+                    NULL);
+                free(field);
+                free(name);
+                return 1;
+            }
             DirectStructInfo *st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
             if (st == NULL || !direct_struct_has_field(st, field)) {
                 int col = find_col(line, name);
@@ -3632,6 +3917,14 @@ static int direct_check_expr_inner(
                 "direct native emitter cannot use a List value as an Int expression",
                 "read a list element, length, or sum value instead.",
                 "xs.len()");
+            free(name);
+            return 1;
+        }
+        if (direct_is_map_int_int_type(local_type)) {
+            report_issue(path, line_no, find_col(line, name), line,
+                "direct native emitter cannot use a Map value as an Int expression",
+                "read a map value with `m.get(key, default)`, `m.contains(key)`, or `m.len()`.",
+                "m.get(key, 0)");
             free(name);
             return 1;
         }
@@ -4185,7 +4478,7 @@ static int direct_lower_line(
             if (local_type == NULL) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter expected a local type",
-                    "use `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or a declared struct type in this direct-engine slice.",
+                    "use `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, or a declared struct type in this direct-engine slice.",
                     NULL);
                 free(name);
                 free(stripped);
@@ -4194,8 +4487,8 @@ static int direct_lower_line(
             p = skip_ws(p);
             if (!direct_local_type_allowed(structs, struct_count, local_type)) {
                 report_issue(path, line_no, find_col(line, local_type), line,
-                    "direct native emitter supports Int, Bool, Str, List<Int>, List<Struct>, and declared struct locals only",
-                    "use `let name: Int = expr`, `let name: Bool = expr`, `let name: Str = expr`, `let name: List<Int> = []`, `let name: List<Box> = []`, `let name: Struct = expr`, or omit the annotation.",
+                    "direct native emitter supports Int, Bool, Str, List<Int>, List<Struct>, Map<Int,Int>, and declared struct locals only",
+                    "use `let name: Int = expr`, `let name: Bool = expr`, `let name: Str = expr`, `let name: List<Int> = []`, `let name: Map<Int,Int> = {}`, `let name: Struct = expr`, or omit the annotation.",
                     NULL);
                 free(local_type);
                 free(name);
@@ -4216,7 +4509,39 @@ static int direct_lower_line(
         char *expr = trim_copy(p + 1);
         size_t n = strlen(expr);
         if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
+        if (local_type == NULL && direct_is_map_empty_initializer_expr(expr)) {
+            report_issue(path, line_no, find_col(line, name), line,
+                "direct native emitter requires a Map type annotation for `{}`",
+                "write `let name: Map<Int,Int> = {}` for the first Map slice.",
+                "let m: Map<Int,Int> = {}");
+            free(expr);
+            free(name);
+            free(stripped);
+            return 1;
+        }
         if (local_type == NULL) local_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
+        if (direct_is_map_int_int_type(local_type)) {
+            if (!direct_is_map_empty_initializer_expr(expr)) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter Map<Int,Int> locals must start with `{}`",
+                    "initialize the local with `let name: Map<Int,Int> = {}` and then call `insert`.",
+                    "let m: Map<Int,Int> = {}");
+                free(expr);
+                free(local_type);
+                free(name);
+                free(stripped);
+                return 1;
+            }
+            sb_append(out, "DirectMapIntInt ");
+            sb_append(out, name);
+            sb_append(out, " = {0};\n");
+            direct_names_add_typed(locals, name, local_type);
+            free(expr);
+            free(local_type);
+            free(name);
+            free(stripped);
+            return 0;
+        }
         if (direct_is_list_type(local_type)) {
             char *list_elem_type = direct_list_element_type(local_type);
             if (direct_is_list_initializer_expr(expr)) {
@@ -4419,10 +4744,101 @@ static int direct_lower_line(
     char *method_args = NULL;
     if (direct_parse_method_statement(s, &method_base, &method_name, &method_args)) {
         const char *base_type = direct_names_type(locals, method_base);
+        if (direct_is_map_int_int_type(base_type)) {
+            if (strcmp(method_name, "insert") != 0) {
+                report_issue(path, line_no, find_col(line, method_base), line,
+                    "direct native emitter supports Map.insert statements only",
+                    "write `m.insert(key, value)` on a local Map<Int,Int>.",
+                    NULL);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            char *args[16] = {0};
+            int argc = split_top_level_commas_c(method_args, args, 16);
+            if (argc != 2 || args[0] == NULL || args[1] == NULL ||
+                strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+                report_issue(path, line_no, find_col(line, method_name), line,
+                    "direct native emitter Map.insert expects key and value arguments",
+                    "write `m.insert(key, value)`.",
+                    NULL);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            for (int a = 0; a < argc; a++) {
+                if (direct_check_expr(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(method_base);
+                    free(method_name);
+                    free(method_args);
+                    free(stripped);
+                    return 1;
+                }
+                char *arg_type = direct_infer_expr_type(args[a], locals, fns, fn_count, structs, struct_count);
+                if (!direct_type_compatible("Int", arg_type)) {
+                    report_issue(path, line_no, find_col(line, method_name), line,
+                        "direct native emitter Map.insert arguments must be Int values",
+                        "use `Map<Int,Int>` with Int keys and Int values in this slice.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(method_base);
+                    free(method_name);
+                    free(method_args);
+                    free(stripped);
+                    return 1;
+                }
+                free(arg_type);
+            }
+            StrBuf prelude;
+            sb_init(&prelude);
+            direct_current_prelude = &prelude;
+            char *rewritten_key = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+            char *rewritten_value = rewritten_key == NULL ? NULL : direct_rewrite_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count);
+            direct_current_prelude = NULL;
+            if (rewritten_key == NULL || rewritten_value == NULL) {
+                free(prelude.data);
+                free(rewritten_key);
+                free(rewritten_value);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            char *c_key = direct_translate_expr(rewritten_key);
+            char *c_value = direct_translate_expr(rewritten_value);
+            sb_append(out, prelude.data);
+            sb_append(out, "__vais_map_int_int_insert(&");
+            sb_append(out, method_base);
+            sb_append(out, ", ");
+            sb_append(out, c_key);
+            sb_append(out, ", ");
+            sb_append(out, c_value);
+            sb_append(out, ");\n");
+            free(prelude.data);
+            free(c_key);
+            free(c_value);
+            free(rewritten_key);
+            free(rewritten_value);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            free(method_base);
+            free(method_name);
+            free(method_args);
+            free(stripped);
+            return 0;
+        }
         if (!direct_is_list_type(base_type) || strcmp(method_name, "push") != 0) {
             report_issue(path, line_no, find_col(line, method_base), line,
-                "direct native emitter supports List.push statements only",
-                "write `xs.push(value)` on a local list.",
+                "direct native emitter supports List.push and Map.insert statements only",
+                "write `xs.push(value)` on a local list or `m.insert(key, value)` on a local Map<Int,Int>.",
                 NULL);
             free(method_base);
             free(method_name);
@@ -4588,7 +5004,7 @@ static int direct_lower_line(
     }
 
     report_issue(path, line_no, 1, line,
-        "direct native emitter supports Int functions, struct locals, List locals, lets, assignment, if, while, calls, and return",
+        "direct native emitter supports Int functions, struct locals, List locals, Map<Int,Int> locals, lets, assignment, if, while, calls, and return",
         "use the full engine for syntax outside the direct subset.",
         NULL);
     free(stripped);
@@ -4728,6 +5144,12 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "static long __vais_list_checked_pop_index(long *len) { if (*len <= 0) __builtin_trap(); *len -= 1; return *len; }\n");
     sb_append(&out, "typedef struct { long data[256]; long len; } DirectListInt;\n");
     sb_append(&out, "static long __vais_list_int_sum(DirectListInt *xs) { long total = 0; for (long i = 0; i < xs->len; i++) total += xs->data[i]; return total; }\n");
+    sb_append(&out, "typedef struct { long keys[256]; long values[256]; unsigned char present[256]; long len; } DirectMapIntInt;\n");
+    sb_append(&out, "static long __vais_map_int_int_find(DirectMapIntInt *m, long key) { for (long i = 0; i < m->len; i++) if (m->present[i] && m->keys[i] == key) return i; return -1; }\n");
+    sb_append(&out, "static void __vais_map_int_int_insert(DirectMapIntInt *m, long key, long value) { long i = __vais_map_int_int_find(m, key); if (i >= 0) { m->values[i] = value; return; } if (m->len >= 256) __builtin_trap(); i = m->len++; m->present[i] = 1; m->keys[i] = key; m->values[i] = value; }\n");
+    sb_append(&out, "static long __vais_map_int_int_get(DirectMapIntInt *m, long key, long fallback) { long i = __vais_map_int_int_find(m, key); return i >= 0 ? m->values[i] : fallback; }\n");
+    sb_append(&out, "static long __vais_map_int_int_contains(DirectMapIntInt *m, long key) { return __vais_map_int_int_find(m, key) >= 0 ? 1 : 0; }\n");
+    sb_append(&out, "static long __vais_map_int_int_len(DirectMapIntInt *m) { return m->len; }\n");
     for (int s = 0; s < struct_count; s++) {
         sb_append(&out, "typedef struct {");
         for (int f = 0; f < structs[s].field_count; f++) {

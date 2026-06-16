@@ -84,7 +84,7 @@ RULES = [
      "the list type is `List<T>`, not `Vec<T>`",
      lambda m, ln: re.sub(r"\bVec(\s*<)", r"List\1", ln, count=1)),
     (re.compile(r"\bHashMap\b"),
-     "the map type spelling is `Map<K,V>`, not `HashMap<K,V>`; Map is specified but not verified yet",
+     "the map type spelling is `Map<K,V>`, not `HashMap<K,V>`; only local `Map<Int,Int>` is verified in the direct engine for now",
      lambda m, ln: re.sub(r"\bHashMap\b", "Map", ln, count=1)),
     # --- Rust scalar type names (Vais uses Int/UInt8.. / F32 / F64, capitalized) ---
     (re.compile(r"(?<![A-Za-z0-9_])(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|usize|isize)(?![A-Za-z0-9_])"),
