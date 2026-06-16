@@ -133,7 +133,7 @@ fn is_pop(src: Str, a: Int, alen: Int) -> Int {
 
 # Builtin call ids used by the native parity surface:
 #   1=Int(x) identity/truncation, 2=bitnot(x), 3=bitand, 4=bitor,
-#   5=bitxor, 6=shl, 7=shr.
+#   5=bitxor, 6=shl, 7=shr, 8=parse_uint(Str), 9=parse_int(Str).
 fn builtin_call_id(src: Str, a: Int, alen: Int) -> Int {
     if alen == 3 {
         if src[a] == 73 and src[a + 1] == 110 and src[a + 2] == 116 { return 1 }
@@ -147,6 +147,12 @@ fn builtin_call_id(src: Str, a: Int, alen: Int) -> Int {
         if src[a] == 98 and src[a + 1] == 105 and src[a + 2] == 116 and src[a + 3] == 110 and src[a + 4] == 111 and src[a + 5] == 116 { return 2 }
         if src[a] == 98 and src[a + 1] == 105 and src[a + 2] == 116 and src[a + 3] == 97 and src[a + 4] == 110 and src[a + 5] == 100 { return 3 }
         if src[a] == 98 and src[a + 1] == 105 and src[a + 2] == 116 and src[a + 3] == 120 and src[a + 4] == 111 and src[a + 5] == 114 { return 5 }
+    }
+    if alen == 9 {
+        if src[a] == 112 and src[a + 1] == 97 and src[a + 2] == 114 and src[a + 3] == 115 and src[a + 4] == 101 and src[a + 5] == 95 and src[a + 6] == 105 and src[a + 7] == 110 and src[a + 8] == 116 { return 9 }
+    }
+    if alen == 10 {
+        if src[a] == 112 and src[a + 1] == 97 and src[a + 2] == 114 and src[a + 3] == 115 and src[a + 4] == 101 and src[a + 5] == 95 and src[a + 6] == 117 and src[a + 7] == 105 and src[a + 8] == 110 and src[a + 9] == 116 { return 8 }
     }
     return 0
 }
@@ -1425,6 +1431,18 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     emit_str(", -1")
                     putchar(10)
                     return Op { kind: 1, val: dest, next: dest + 1 }
+                }
+                if bid == 8 or bid == 9 {
+                    let argp = gen_expr(toks, slots, fns, defs, src, i + 2, close, counter)
+                    let destp = argp.next
+                    emit_str("  %t")
+                    pint(destp)
+                    if bid == 8 { emit_str(" = call i64 @__vais_parse_uint(i8* ") }
+                    else { emit_str(" = call i64 @__vais_parse_int(i8* ") }
+                    emit_op(argp)
+                    emit_str(")")
+                    putchar(10)
+                    return Op { kind: 1, val: destp, next: destp + 1 }
                 }
                 let comma = arg_comma_end(toks, i + 2, close)
                 let lhs = gen_expr(toks, slots, fns, defs, src, i + 2, comma, counter)
@@ -5901,6 +5919,104 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
     return 0
 }
 
+fn emit_parse_helpers() -> Int {
+    emit_str("define i64 @__vais_parse_uint(i8* %s) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %i = alloca i64")
+    putchar(10)
+    emit_str("  %value = alloca i64")
+    putchar(10)
+    emit_str("  store i64 0, i64* %i")
+    putchar(10)
+    emit_str("  store i64 0, i64* %value")
+    putchar(10)
+    emit_str("  br label %loop")
+    putchar(10)
+    emit_str("loop:")
+    putchar(10)
+    emit_str("  %iv = load i64, i64* %i")
+    putchar(10)
+    emit_str("  %ptr = getelementptr i8, i8* %s, i64 %iv")
+    putchar(10)
+    emit_str("  %b8 = load i8, i8* %ptr")
+    putchar(10)
+    emit_str("  %b = zext i8 %b8 to i64")
+    putchar(10)
+    emit_str("  %nul = icmp eq i64 %b, 0")
+    putchar(10)
+    emit_str("  br i1 %nul, label %done, label %digit")
+    putchar(10)
+    emit_str("digit:")
+    putchar(10)
+    emit_str("  %lt = icmp slt i64 %b, 48")
+    putchar(10)
+    emit_str("  %gt = icmp sgt i64 %b, 57")
+    putchar(10)
+    emit_str("  %bad = or i1 %lt, %gt")
+    putchar(10)
+    emit_str("  br i1 %bad, label %done, label %acc")
+    putchar(10)
+    emit_str("acc:")
+    putchar(10)
+    emit_str("  %old = load i64, i64* %value")
+    putchar(10)
+    emit_str("  %mul = mul i64 %old, 10")
+    putchar(10)
+    emit_str("  %dig = sub i64 %b, 48")
+    putchar(10)
+    emit_str("  %next = add i64 %mul, %dig")
+    putchar(10)
+    emit_str("  store i64 %next, i64* %value")
+    putchar(10)
+    emit_str("  %inc = add i64 %iv, 1")
+    putchar(10)
+    emit_str("  store i64 %inc, i64* %i")
+    putchar(10)
+    emit_str("  br label %loop")
+    putchar(10)
+    emit_str("done:")
+    putchar(10)
+    emit_str("  %out = load i64, i64* %value")
+    putchar(10)
+    emit_str("  ret i64 %out")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    emit_str("define i64 @__vais_parse_int(i8* %s) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %first = load i8, i8* %s")
+    putchar(10)
+    emit_str("  %first64 = zext i8 %first to i64")
+    putchar(10)
+    emit_str("  %neg = icmp eq i64 %first64, 45")
+    putchar(10)
+    emit_str("  br i1 %neg, label %negcase, label %poscase")
+    putchar(10)
+    emit_str("negcase:")
+    putchar(10)
+    emit_str("  %rest = getelementptr i8, i8* %s, i64 1")
+    putchar(10)
+    emit_str("  %u = call i64 @__vais_parse_uint(i8* %rest)")
+    putchar(10)
+    emit_str("  %out = sub i64 0, %u")
+    putchar(10)
+    emit_str("  ret i64 %out")
+    putchar(10)
+    emit_str("poscase:")
+    putchar(10)
+    emit_str("  %u2 = call i64 @__vais_parse_uint(i8* %s)")
+    putchar(10)
+    emit_str("  ret i64 %u2")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    return 0
+}
+
 fn compile(src: Str) -> Int {
     let toks = tokenize(src)
     let n = toks.len()
@@ -5916,6 +6032,7 @@ fn compile(src: Str) -> Int {
     putchar(10)
     emit_str("declare void @llvm.trap()")
     putchar(10)
+    emit_parse_helpers()
     let defs = build_defs(&toks, n)
     let fns = build_fns(&toks, &defs, src, n)
     # module-level string-literal globals (one per literal, keyed by source pos).

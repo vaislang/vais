@@ -103,6 +103,7 @@ Verified operators:
 - Bit helpers: `bitnot(x)`, `bitand(a, b)`, `bitor(a, b)`, `bitxor(a, b)`,
   `shl(x, n)`, `shr(x, n)`
 - Conversion call: `Int(x)` in verified examples
+- Parsing helpers: `parse_uint(s)` and `parse_int(s)` for `Str`
 
 Vais does not use Rust spellings such as `&&`, `||`, `!x`, `x as Int`, or
 `Enum::Variant`.
@@ -385,6 +386,8 @@ Verified today:
 - `a == b` and `a != b` for `Str` in the native direct engine and parity
   examples.
 - `Bool` byte-classification helpers such as `is_digit(c: Int) -> Bool`.
+- Named integer parsing helpers `parse_uint(s)` and `parse_int(s)`, as covered
+  by `examples/e83_parse_helpers.vais`.
 - User-defined integer parsing over `Str`, as covered by
   `examples/e70_parse_uint.vais`.
 - Identifier scanning over `Str`, as covered by
@@ -392,6 +395,10 @@ Verified today:
 - Single-byte character literal equality in parity examples.
 - `print("...{name}...")` interpolation for simple identifiers.
 - `putchar(Int)`.
+
+`parse_uint` parses a leading unsigned decimal run and stops at the first
+non-decimal byte. `parse_int` accepts a leading `-` and then parses the same
+decimal run. Empty input and input with no leading decimal digit return `0`.
 
 ## Closures
 

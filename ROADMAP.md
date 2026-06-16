@@ -58,6 +58,9 @@ This file tracks current work only.
 - `Str` length, byte index, equality/inequality, `Bool` byte-classification
   helpers, and user-defined integer parsing patterns are promoted through
   public front, parity, and native direct gates.
+- Named integer parsing helpers `parse_uint(s)` and `parse_int(s)` are promoted
+  through the full self-host compiler, native direct engine, front gate, parity
+  manifest, value corpus, and regenerated reusable core.
 
 ## Current Reality
 
@@ -65,8 +68,9 @@ This file tracks current work only.
 - The direct engine is intentionally narrow and currently supports Int helpers,
   Bool/Str scalar helpers, locals, assignment, calls, `if`, inline
   `if { return ... }`, `while`, returns, `Str` literals, `Str.len()`, `Str`
-  byte index, `Str` equality/inequality, simple Int-field struct local
-  literal/read/write, struct parameter/return helper ABI, and local
+  byte index, `Str` equality/inequality, named `parse_uint`/`parse_int`
+  helpers, simple Int-field struct local literal/read/write, struct
+  parameter/return helper ABI, and local
   `List<Int>` initialization plus `push`, `len`, `is_empty`, `last`, `pop`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
   literal/constructor call and return values. Statement contexts, `if`,
@@ -146,7 +150,7 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
 - [x] 1.2a Promote `Str` operations needed by real tools: `len`, index,
   equality, byte classification helpers, and user-defined integer parsing
   patterns.
-- [ ] 1.2b Decide and promote a named integer parsing prelude API, if it should
+- [x] 1.2b Decide and promote a named integer parsing prelude API, if it should
   be part of the public standard library instead of a user helper pattern.
 - [ ] 1.3 Promote `Map<K,V>` only after a minimal gate-backed design exists for
   construction, insert, lookup, contains, and length.
@@ -269,8 +273,49 @@ Phase 0 is complete. The next concrete slice is Phase 1:
   runtime trap behavior.
 - [x] Promote the next Phase 1 slice: `Str` length/index/equality helpers and
   byte-classification utilities needed by real tools.
-- [ ] Decide the next Phase 1 slice: a named integer parsing prelude API or
-  `Map<K,V>` design.
+- [x] Decide and promote the named integer parsing prelude API.
+- [ ] Promote the next Phase 1 slice: minimal `Map<K,V>` design and gate plan.
+
+## Completed Milestone: Named integer parsing prelude helpers
+
+Mode: sequential
+
+- [x] 1. Define `parse_uint(s: Str) -> Int` as leading unsigned decimal parsing
+  that stops at the first non-decimal byte and returns `0` for empty/no-digit
+  input.
+- [x] 2. Define `parse_int(s: Str) -> Int` as optional leading `-` plus the same
+  decimal parsing behavior.
+- [x] 3. Lower both helpers through the full self-host compiler and regenerate
+  `compiler/self/vaisc_core.ll`.
+- [x] 4. Lower both helpers through the native direct engine without invoking
+  Python.
+- [x] 5. Add front, direct, full self-host, parity, and value gates with
+  `examples/e83_parse_helpers.vais`.
+- [x] 6. Sync `std/PRELUDE.md`, the language reference, changelog, roadmap,
+  worklog, examples index, and website copy.
+
+### Task Briefs
+
+#### 1. Full and direct compiler support
+
+- Target files: `compiler/self/fixpoint_full.vais`,
+  `compiler/self/vaisc_core.ll`, `tools/vaisc_native.c`.
+- Requirements: `parse_uint` and `parse_int` are named prelude helpers, not
+  user-defined example helpers; the full path must emit reusable helper IR and
+  the direct path must stay native-only.
+- Done: full codegen emits `@__vais_parse_uint` and `@__vais_parse_int`; direct
+  mode rewrites calls to native helpers and verifies `Str` arguments.
+
+#### 2. Gates and public docs
+
+- Target files: `scripts/test-fixpoint-full.sh`,
+  `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-direct.sh`,
+  `tools/vaisc-parity.tsv`, `examples/e83_parse_helpers.vais`,
+  `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`, `website/index.html`.
+- Requirements: the API is public only when examples and release gates protect
+  both full and direct behavior.
+- Done: the named helpers are covered by full, front, direct, parity, and value
+  tests.
 
 ## Completed Milestone: Str tool-helper slice
 

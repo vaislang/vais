@@ -37,6 +37,10 @@
   signatures.
 - Promoted string index, parse_uint, and identifier-scan examples in
   `tools/vaisc-parity.tsv`.
+- Promoted named `parse_uint(s)` and `parse_int(s)` prelude helpers through the
+  full self-host compiler, native direct engine, front gate, parity manifest,
+  and value corpus.
+- Regenerated `compiler/self/vaisc_core.ll` with the named parsing helpers.
 
 ## 2026-06-15
 

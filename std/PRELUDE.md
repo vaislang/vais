@@ -45,6 +45,8 @@ checks before mutating the list length.
 | `Str` | Verified for literals, scalar helper signatures, length, index, and equality |
 | `Char` | Partial |
 | `Int(x)` | Verified |
+| `parse_uint(s)` | Verified for `Str`; parses a leading unsigned decimal run |
+| `parse_int(s)` | Verified for `Str`; accepts a leading `-` before the decimal run |
 | `F64(x)`, `UInt8(x)`, `Str(x)` | Specified |
 
 ## Strings
@@ -56,7 +58,10 @@ checks before mutating the list length.
 | `s[i]` | Verified |
 | `a == b`, `a != b` | Verified for `Str` |
 | byte-classification helpers such as `is_digit(c: Int) -> Bool` | Verified pattern |
-| user-defined integer parsing over `Str` | Verified pattern |
+| `parse_uint(s)`, `parse_int(s)` | Verified |
+
+`parse_uint` and `parse_int` stop at the first non-decimal byte. Empty input or
+input with no leading decimal digit returns `0`; `parse_int("-5")` returns `-5`.
 
 ## Control And Operators
 

@@ -35,6 +35,7 @@ examples/e66_fibonacci.vais	native-supported	Recursive Fibonacci.
 examples/e67_power.vais	native-supported	Recursive power.
 examples/e70_parse_uint.vais	native-supported	Str len/index with Bool digit classifier.
 examples/e72_identifier_scan.vais	native-supported	Identifier scan over Str with byte classification.
+examples/e83_parse_helpers.vais	native-supported	Named parse_uint/parse_int Str helpers.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.

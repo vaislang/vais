@@ -325,6 +325,38 @@ else
     fail=1
 fi
 
+parse_src="$tmp/direct_parse_helpers.vais"
+cat > "$parse_src" <<'SRC'
+fn main() -> Int {
+    let s: Str = "16x"
+    let a = parse_uint("19")
+    let b = parse_uint(s)
+    let c = parse_int("-5")
+    let d = parse_int(`12z`)
+    return a + b + c + d
+}
+SRC
+
+if "$VAISC" emit-ir "$parse_src" \
+    --engine direct -o "$tmp/parse.ll" \
+    >"$tmp/parse.out" 2>"$tmp/parse.err" &&
+    grep -q '__vais_parse_uint' "$tmp/parse.ll" &&
+    grep -q '__vais_parse_int' "$tmp/parse.ll"; then
+    "$VAISC" run "$parse_src" --engine direct >"$tmp/parse-run.out" 2>"$tmp/parse-run.err"
+    parse_run=$?
+    if [ "$parse_run" = "42" ]; then
+        echo "  PASS direct parse_uint/parse_int Str helpers run (=42)"
+    else
+        echo "  FAIL direct parse helpers got=$parse_run want=42"
+        cat "$tmp/parse-run.err"
+        fail=1
+    fi
+else
+    echo "  FAIL direct parse helper emission"
+    cat "$tmp/parse.err"
+    fail=1
+fi
+
 list_struct_src="$tmp/direct_list_struct_local.vais"
 cat > "$list_struct_src" <<'SRC'
 struct Box {

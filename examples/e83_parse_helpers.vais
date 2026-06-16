@@ -1,0 +1,11 @@
+# expect: 42
+# Named integer parsing prelude helpers parse a leading decimal run from Str.
+# parse_int additionally accepts a leading '-' sign.
+fn main() -> Int {
+    let a = parse_uint("19")
+    let b = parse_uint("16x")
+    let c = parse_int("-5")
+    let d = parse_int(`12z`)
+    let e = parse_uint("x99")
+    return a + b + c + d + e
+}

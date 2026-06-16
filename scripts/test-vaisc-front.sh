@@ -224,6 +224,24 @@ else
     fail=1
 fi
 
+parse_accept="$tmp/front_parse_accept.vais"
+cat > "$parse_accept" <<'SRC'
+fn main() -> Int {
+    let s: Str = "16x"
+    return parse_uint("19") + parse_uint(s) + parse_int("-5") + parse_int(`12z`)
+}
+SRC
+
+"$VAISC" run "$parse_accept" >"$tmp/parse_accept.out" 2>"$tmp/parse_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS accepts named parse_uint/parse_int Str helpers"
+else
+    echo "  FAIL accepts parse helpers got=$got want=42"
+    cat "$tmp/parse_accept.err"
+    fail=1
+fi
+
 expect_reject() {
     local name="$1"
     local needle="$2"

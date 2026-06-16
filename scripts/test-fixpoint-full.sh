@@ -202,6 +202,8 @@ check "fn slen(s: Str) {{ return s.len() }}; return slen(\`hello\`);" 5
 check "fn cd(s: Str) {{ let mut i = 0; let mut n = 0; while i < s.len() {{ if s[i] >= 48 and s[i] <= 57 {{ n = n + 1 }}; i = i + 1 }}; return n }}; return cd(\`a1b2c3\`);" 3
 # a REAL tokenizer over a string PARAMETER: count whitespace-separated tokens
 check "fn ntok(s: Str) {{ let mut i = 0; let mut n = 0; let mut inw = 0; while i < s.len() {{ if s[i] == 32 {{ inw = 0 }} else {{ if inw == 0 {{ n = n + 1 }}; inw = 1 }}; i = i + 1 }}; return n }}; return ntok(\`ab cd ef\`);" 3
+# named parsing helpers over Str
+check "return parse_uint(\`19\`) + parse_uint(\`16x\`) + parse_int(\`-5\`) + parse_int(\`12z\`) + parse_uint(\`x99\`);" 42
 
 # --- FP12n: LIST PARAMETERS (`fn f(xs: List<Int>)`) -- the #2 full pattern
 # (the self-host uses &List<Token> params 177x). A local List is passed by buffer

@@ -20,6 +20,9 @@
   `Bool` and `Str` helper signatures, native direct mode lowers string
   literals, `s.len()`, `s[i]`, and `Str` equality/inequality, and parity now
   covers string indexing, user-defined integer parsing, and identifier scanning.
+- Promoted named integer parsing prelude helpers: `parse_uint(s)` and
+  `parse_int(s)` now lower through the full self-host compiler and native direct
+  engine, with front, direct, parity, value, and self-host gate coverage.
 
 ## v0.2.2 - 2026-06-15
 

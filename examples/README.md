@@ -24,6 +24,9 @@ Compiler parity coverage is tracked in `tools/vaisc-parity.tsv`:
 bash scripts/test-vaisc-parity.sh
 ```
 
+Representative promoted examples include `examples/e83_parse_helpers.vais` for
+the named `parse_uint(s)` and `parse_int(s)` prelude helpers.
+
 Files not listed as `native-supported` are retained as examples or future
 coverage candidates, but they are not public release claims until promoted into
 the parity manifest.

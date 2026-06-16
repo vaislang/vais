@@ -2227,6 +2227,10 @@ static char *direct_infer_expr_type(
     int struct_count
 );
 
+static int direct_is_parse_builtin_name(const char *name) {
+    return strcmp(name, "parse_uint") == 0 || strcmp(name, "parse_int") == 0;
+}
+
 static int direct_expr_is_string_literal(const char *expr) {
     char *trimmed = trim_copy(expr);
     const char *s = skip_ws(trimmed);
@@ -2277,6 +2281,91 @@ static char *direct_rewrite_string_literals(
         }
         sb_append(&out, "\"");
         i = end;
+    }
+    return sb_take(&out);
+}
+
+static char *direct_rewrite_parse_builtin_calls(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    StrBuf out;
+    sb_init(&out);
+    for (int i = 0; expr[i] != '\0';) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an unterminated string literal",
+                    "close the string before the end of the line.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (!is_ident_start(expr[i])) {
+            sb_append_n(&out, expr + i, 1);
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(expr[i])) i++;
+        char *name = substr_copy(expr + start, (size_t)(i - start));
+        int cursor = i;
+        while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
+        if (!direct_is_parse_builtin_name(name) || expr[cursor] != '(') {
+            sb_append_n(&out, expr + start, (size_t)(i - start));
+            free(name);
+            continue;
+        }
+        int close = find_matching_paren_c(expr, cursor);
+        if (close < 0) {
+            report_issue(path, line_no, find_col(line, name), line,
+                "direct native emitter expected `)` to close the parse call",
+                "write `parse_uint(s)` or `parse_int(s)`.",
+                NULL);
+            free(name);
+            free(out.data);
+            return NULL;
+        }
+        char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+        char *args[16] = {0};
+        int argc = split_top_level_commas_c(inside, args, 16);
+        free(inside);
+        if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+            report_issue(path, line_no, find_col(line, name), line,
+                "direct native emitter parse helpers take one Str argument",
+                "write `parse_uint(s)` or `parse_int(s)`.",
+                NULL);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            free(name);
+            free(out.data);
+            return NULL;
+        }
+        char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+        for (int k = 0; k < 16; k++) free(args[k]);
+        if (rewritten_arg == NULL) {
+            free(name);
+            free(out.data);
+            return NULL;
+        }
+        sb_append(&out, strcmp(name, "parse_uint") == 0 ? "__vais_parse_uint(" : "__vais_parse_int(");
+        sb_append(&out, rewritten_arg);
+        sb_append(&out, ")");
+        free(rewritten_arg);
+        free(name);
+        i = close + 1;
     }
     return sb_take(&out);
 }
@@ -3008,8 +3097,11 @@ static char *direct_rewrite_expr(
     char *list_rewritten = direct_rewrite_list_expr(path, line_no, line, struct_rewritten, locals, fns, fn_count, structs, struct_count);
     free(struct_rewritten);
     if (list_rewritten == NULL) return NULL;
-    char *string_rewritten = direct_rewrite_string_literals(path, line_no, line, list_rewritten);
+    char *parse_rewritten = direct_rewrite_parse_builtin_calls(path, line_no, line, list_rewritten, locals, fns, fn_count, structs, struct_count);
     free(list_rewritten);
+    if (parse_rewritten == NULL) return NULL;
+    char *string_rewritten = direct_rewrite_string_literals(path, line_no, line, parse_rewritten);
+    free(parse_rewritten);
     return string_rewritten;
 }
 
@@ -3109,6 +3201,11 @@ static char *direct_infer_expr_type(
         if (*rest == '(') {
             int close = find_matching_paren_c(trimmed, (int)(rest - trimmed));
             if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                if (direct_is_parse_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
                 DirectFnInfo *fn = direct_find_fn(fns, fn_count, name);
                 if (fn != NULL) {
                     char *out = strdup(fn->return_type);
@@ -3381,6 +3478,51 @@ static int direct_check_expr_inner(
         }
         int is_call = expr[cursor] == '(';
         if (is_call) {
+            if (direct_is_parse_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the parse call",
+                        "close the call arguments.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter parse helpers take one Str argument",
+                        "write `parse_uint(s)` or `parse_int(s)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_str_type(arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter parse helpers require a Str argument",
+                        "pass a string literal or `Str` local.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(arg_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
             DirectFnInfo *fn = direct_find_fn(fns, fn_count, name);
             if (fn != NULL) {
                 int close = find_matching_paren_c(expr, cursor);
@@ -4572,6 +4714,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "static long __vais_str_len(const char *s) { return (long)strlen(s); }\n");
     sb_append(&out, "static long __vais_str_byte(const char *s, long index) { return (long)(unsigned char)s[index]; }\n");
     sb_append(&out, "static long __vais_str_eq(const char *a, const char *b) { return strcmp(a, b) == 0 ? 1 : 0; }\n");
+    sb_append(&out, "static long __vais_parse_uint(const char *s) { long value = 0; for (long i = 0; s[i] != '\\0'; i++) { unsigned char b = (unsigned char)s[i]; if (b < '0' || b > '9') break; value = value * 10 + (long)(b - '0'); } return value; }\n");
+    sb_append(&out, "static long __vais_parse_int(const char *s) { if (s[0] == '-') return 0 - __vais_parse_uint(s + 1); return __vais_parse_uint(s); }\n");
     sb_append(&out, "static long __vais_list_checked_index(long index, long len) { if (index < 0 || index >= len) __builtin_trap(); return index; }\n");
     sb_append(&out, "static long __vais_list_checked_last(long len) { if (len <= 0) __builtin_trap(); return len - 1; }\n");
     sb_append(&out, "static long __vais_list_checked_pop_index(long *len) { if (*len <= 0) __builtin_trap(); *len -= 1; return *len; }\n");
