@@ -334,11 +334,31 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "map_direct_only" "Map<K,V> is only verified for local Map<Int,Int>" "engine direct" <<'SRC'
+map_accept="$tmp/front_map_accept.vais"
+cat > "$map_accept" <<'SRC'
 fn main() -> Int {
     let scores: Map<Int, Int> = {}
     scores.insert(4, 38)
-    return scores.get(4, 0)
+    scores.insert(4, 40)
+    scores.insert(9, 2)
+    return scores.get(4, 0) + scores.get(5, 0 - 1) + scores.contains(4) + scores.contains(5) + scores.len()
+}
+SRC
+
+"$VAISC" run "$map_accept" >"$tmp/map_accept.out" 2>"$tmp/map_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS accepts local Map<Int,Int> full slice"
+else
+    echo "  FAIL accepts local Map<Int,Int> got=$got want=42"
+    cat "$tmp/map_accept.err"
+    fail=1
+fi
+
+expect_reject "map_generic_not_verified" "only local Map<Int,Int> values are verified" "generic key/value forms" <<'SRC'
+fn main() -> Int {
+    let scores: Map<Str, Int> = {}
+    return 0
 }
 SRC
 

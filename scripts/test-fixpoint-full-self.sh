@@ -52,7 +52,7 @@ run_full_probe() {
   last_source_compiler_ll="$tmp/source_compiler.ll"
   local main_count neg_gep_count ir_bytes
   main_count="$(grep -c '^define i64 @main()' "$tmp/source_compiler.ll" || true)"
-  neg_gep_count="$(grep -c 'i64 -[0-9]' "$tmp/source_compiler.ll" || true)"
+  neg_gep_count="$(grep -Ec '^[[:space:]]+%[^=]+ = getelementptr .*i(32|64) -[0-9]' "$tmp/source_compiler.ll" || true)"
   ir_bytes="$(wc -c < "$tmp/source_compiler.ll" | tr -d ' ')"
   if [ "$main_count" = "1" ]; then
     echo "  PASS $label emits one @main ($ir_bytes bytes)";

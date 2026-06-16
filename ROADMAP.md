@@ -61,10 +61,9 @@ This file tracks current work only.
 - Named integer parsing helpers `parse_uint(s)` and `parse_int(s)` are promoted
   through the full self-host compiler, native direct engine, front gate, parity
   manifest, value corpus, and regenerated reusable core.
-- The first `Map` slice is verified in the native direct engine for local
-  `Map<Int,Int>` values with `{}`, `insert`, `get(key, default)`, `contains`,
-  and `len`; the full self-host compiler path still rejects `Map` until its
-  lowering lands.
+- The first `Map` slice is verified in the full self-host compiler and native
+  direct engine for local `Map<Int,Int>` values with `{}`, `insert`,
+  `get(key, default)`, `contains`, and `len`.
 
 ## Current Reality
 
@@ -87,9 +86,9 @@ This file tracks current work only.
   for `List<Int>` and `List<Struct>` locals and list parameters. Element
   assignment is supported for `List<Int>` and `List<Struct>`, including through
   list parameters. Local `Map<Int,Int>` values support `{}`, `insert`,
-  `get(key, default)`, `contains`, and `len` in the direct engine; Map function
-  parameters, return values, assignment, generic key/value forms, and full
-  self-host lowering are not claimed yet.
+  `get(key, default)`, `contains`, and `len` in both the full self-host compiler
+  path and native direct engine; Map function parameters, return values,
+  assignment, and generic key/value forms are not claimed yet.
 - The release compiler command uses a native host driver for normal user
   `emit-ir`, `build`, and `run`; Python remains for internal repository checks
   and diagnostics only.
@@ -163,7 +162,7 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
   clear front diagnostic.
 - [x] 1.3b Promote native direct local `Map<Int,Int>` for construction,
   insert/replace, `get(key, default)`, `contains`, and `len`.
-- [ ] 1.3c Promote full self-host local `Map<Int,Int>` for the same surface.
+- [x] 1.3c Promote full self-host local `Map<Int,Int>` for the same surface.
 - [ ] 1.3d Broaden `Map<K,V>` only after generic key/value lowering and ABI
   behavior are specified.
 - [ ] 1.4 Add examples and value tests for every promoted prelude API.
@@ -289,9 +288,9 @@ Phase 0 is complete. The next concrete slice is Phase 1:
 - [x] Specify the minimal `Map<Int,Int>` design and gate unsupported `Map` use.
 - [x] Promote native direct local `Map<Int,Int>` construction and local
   operations.
-- [ ] Promote the next Phase 1 slice: full self-host local `Map<Int,Int>`.
+- [x] Promote the next Phase 1 slice: full self-host local `Map<Int,Int>`.
 
-## Completed Milestone: Direct local Map<Int,Int>
+## Completed Milestone: Local Map<Int,Int>
 
 Mode: sequential
 
@@ -302,8 +301,11 @@ Mode: sequential
 - [x] 4. Lower `m.get(key, default)`, `m.contains(key)`, and `m.len()`
   expressions.
 - [x] 5. Gate direct emitted helper symbols and runtime value behavior.
-- [x] 6. Keep default/full front diagnostics explicit that Map is direct-only
-  until full self-host lowering lands.
+- [x] 6. Lower the same local surface in the full self-host compiler and
+  regenerate the reusable compiler core.
+- [x] 7. Keep front diagnostics explicit that only local `Map<Int,Int>` is
+  verified; Map parameters, returns, assignment, and generic key/value forms
+  stay rejected.
 
 ### Task Briefs
 
@@ -313,7 +315,7 @@ Mode: sequential
   `compiler/self/vaisc_core.ll`, `scripts/test-fixpoint-full.sh`.
 - Requirements: match the direct local Map surface without adding generic or
   ABI claims; regenerate the reusable compiler core after the source change.
-- Done when: full self-host gates pass a local `Map<Int,Int>` example returning
+- Done: full self-host gates pass a local `Map<Int,Int>` example returning
   the same deterministic value as the direct gate.
 
 #### 2. Map ABI and generic expansion
@@ -336,8 +338,8 @@ Mode: sequential
 - [x] 4. Choose `insert(key, value)` for insert/replace, `get(key, default)` for
   lookup without `Option`, `contains(key)` for presence, and `len()` for
   cardinality.
-- [x] 5. Add front-gate diagnostics so public `Map` use fails clearly until the
-  implementation lands.
+- [x] 5. Add front-gate diagnostics so unsupported public `Map` use fails
+  clearly outside the verified local `Map<Int,Int>` slice.
 
 ### Task Briefs
 
@@ -348,17 +350,17 @@ Mode: sequential
   `get(key, default)`, `contains`, and `len` without publishing broader
   generic or ABI claims.
 - Done: native direct gates pass a local map example returning a deterministic
-  value. Full self-host lowering is tracked by the following milestone.
+  value, and full self-host gates pass the same local map behavior.
 
 #### 2. Map docs and release claims
 
 - Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
   `scripts/test-vaisc-front.sh`, `website/index.html`.
-- Requirements: docs distinguish the verified direct local `Map<Int,Int>` slice
-  from unsupported full/generic Map behavior.
-- Done: `scripts/test-vaisc-front.sh` rejects default/full `Map` use with
-  direct-engine guidance, and docs/site do not imply a verified generic
-  `Map<K,V>`.
+- Requirements: docs distinguish the verified local `Map<Int,Int>` slice from
+  unsupported generic and ABI Map behavior.
+- Done: `scripts/test-vaisc-front.sh` accepts local `Map<Int,Int>` and rejects
+  unsupported generic `Map<K,V>` forms; docs/site do not imply a verified
+  generic `Map<K,V>`.
 
 ## Completed Milestone: Named integer parsing prelude helpers
 

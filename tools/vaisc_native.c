@@ -1241,6 +1241,39 @@ static int check_fn_contract_line(
     return issue;
 }
 
+static int front_supported_map_local_line(const char *line) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let") || is_ident_continue(s[3])) return 0;
+    s = skip_ws(s + 3);
+    if (starts_with(s, "mut") && !is_ident_continue(s[3])) {
+        s = skip_ws(s + 3);
+    }
+    if (!is_ident_start(*s)) return 0;
+    while (is_ident_continue(*s)) s++;
+    s = skip_ws(s);
+    if (*s != ':') return 0;
+    const char *q = skip_ws(s + 1);
+    if (!starts_with(q, "Map") || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
+    if (*q != '<') return 0;
+    q = skip_ws(q + 1);
+    if (strncmp(q, "Int", 3) != 0 || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
+    if (*q != ',') return 0;
+    q = skip_ws(q + 1);
+    if (strncmp(q, "Int", 3) != 0 || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
+    if (*q != '>') return 0;
+    const char *eq = strchr(q, '=');
+    if (eq == NULL) return 0;
+    const char *rhs = skip_ws(eq + 1);
+    if (*rhs != '{') return 0;
+    rhs = skip_ws(rhs + 1);
+    if (*rhs != '}') return 0;
+    rhs = skip_ws(rhs + 1);
+    return *rhs == '\0' || *rhs == ';';
+}
+
 static int check_front_contract_text(const char *text, const char *path) {
     LineVec lines = split_lines(text);
     int issues = 0;
@@ -1319,12 +1352,14 @@ static int check_front_contract_text(const char *text, const char *path) {
                 NULL);
             issues++;
         } else if (strstr(line, "Map<") != NULL || strstr(line, "Map <") != NULL) {
-            int col = strstr(line, "Map<") != NULL ? find_col(line, "Map<") : find_col(line, "Map <");
-            report_issue(path, line_no, col, line,
-                "Map<K,V> is only verified for local Map<Int,Int> in the direct engine for now",
-                "use `scripts/vaisc ... --engine direct` for local `Map<Int,Int>` with `{}`, `insert`, `get(key, default)`, `contains`, and `len`, or wait for full compiler Map support.",
-                NULL);
-            issues++;
+            if (!front_supported_map_local_line(line)) {
+                int col = strstr(line, "Map<") != NULL ? find_col(line, "Map<") : find_col(line, "Map <");
+                report_issue(path, line_no, col, line,
+                    "only local Map<Int,Int> values are verified for now",
+                    "write `let name: Map<Int,Int> = {}` and use `insert`, `get(key, default)`, `contains`, and `len`; Map parameters, returns, and generic key/value forms are not verified yet.",
+                    NULL);
+                issues++;
+            }
         } else if (strstr(line, "|") != NULL) {
             report_issue(path, line_no, find_col(line, "|"), line,
                 "closures beyond the single-Int closure-return slice are not in the Vais native front subset yet",

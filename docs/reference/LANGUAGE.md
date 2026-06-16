@@ -80,7 +80,7 @@ Verified release surface:
 | `Char` | Single-byte character literals in verified examples |
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
-| `Map<Int,Int>` | Direct-engine local `{}`, `insert`, `get(key, default)`, `contains`, and `len` |
+| `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, `contains`, and `len` |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match and small recursive `Int` payload enum/match |
 
@@ -371,11 +371,10 @@ release-surface claims yet.
 
 ## Maps
 
-`Map<Int,Int>` has a verified native direct local-value slice. Use
-`scripts/vaisc --engine direct` for this surface. The default full compiler path
-still rejects `Map` until self-host lowering lands.
+`Map<Int,Int>` has a verified local-value slice in the full self-host compiler
+path and native direct engine.
 
-Verified direct-engine example:
+Verified example:
 
 ```vais
 fn main() -> Int {
@@ -389,7 +388,7 @@ fn main() -> Int {
 }
 ```
 
-Verified direct behavior:
+Verified behavior:
 
 - Only local `Map<Int,Int>` values are supported.
 - `{}` constructs an empty map when the local type is explicitly
@@ -400,10 +399,9 @@ Verified direct behavior:
 - `contains(key)` returns whether a key is present.
 - `len()` returns the number of present keys.
 
-Not included in the current Map slice: full self-host compiler lowering,
-generic key/value lowering, assignment, deletion, iteration, entry literals,
-`Option`, `Result`, custom hashing, or public ABI claims for Map parameters and
-return values.
+Not included in the current Map slice: generic key/value lowering, assignment,
+deletion, iteration, entry literals, `Option`, `Result`, custom hashing, or
+public ABI claims for Map parameters and return values.
 
 ## Strings, Characters, And Output
 

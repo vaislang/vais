@@ -23,9 +23,10 @@
 - Promoted named integer parsing prelude helpers: `parse_uint(s)` and
   `parse_int(s)` now lower through the full self-host compiler and native direct
   engine, with front, direct, parity, value, and self-host gate coverage.
-- Added verified native direct local `Map<Int,Int>` support with `{}`,
-  `insert`, `get(key, default)`, `contains`, and `len`; default/full front
-  diagnostics still reject `Map` until self-host lowering lands.
+- Added verified local `Map<Int,Int>` support across the full self-host compiler
+  and native direct engine with `{}`, `insert`, `get(key, default)`, `contains`,
+  and `len`; front diagnostics still reject Map parameters, return values,
+  assignment, and generic key/value forms.
 
 ## v0.2.2 - 2026-06-15
 

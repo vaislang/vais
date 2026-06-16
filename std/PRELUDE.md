@@ -18,8 +18,8 @@ intended but not a public release claim yet.
 | `[1, 2, 3]` | Verified for Int lists |
 | `List<Int>` | Verified |
 | `List<T>` | Partial |
-| `Map<Int,Int>` | Verified for native direct local values |
-| `Map<K,V>` | Specified beyond the direct `Map<Int,Int>` slice |
+| `Map<Int,Int>` | Verified for local values |
+| `Map<K,V>` | Specified beyond the local `Map<Int,Int>` slice |
 | `v.len()` | Verified |
 | `v.is_empty()` | Verified |
 | `v.last()` | Verified |
@@ -36,7 +36,7 @@ checks before mutating the list length.
 
 ### Map Slice
 
-The verified Map surface is deliberately small and native-direct only:
+The verified Map surface is deliberately small:
 
 | API | Verified behavior |
 | --- | --- |
@@ -46,8 +46,8 @@ The verified Map surface is deliberately small and native-direct only:
 | `m.contains(key)` | Return whether `key` is present |
 | `m.len()` | Return the number of present keys |
 
-This slice is currently available through `scripts/vaisc --engine direct`.
-The full self-host compiler path still rejects `Map` until its lowering lands.
+This slice is currently available through the full self-host compiler path and
+`scripts/vaisc --engine direct`.
 The slice does not include generic key/value lowering, function parameters,
 return values, assignment, iteration, deletion, `Option`, `Result`, hashing
 controls, or map literals with entries.

@@ -18,6 +18,7 @@ struct Token { kind: Int, value: Int, nstart: Int, nlen: Int }
 # Operand: kind 0=literal(val), 1=temp(%t<val>). next = next free SSA temp.
 struct Op { kind: Int, val: Int, next: Int }
 # A declared variable: source name range -> it lives at alloca %v<slot>.
+# is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map<Int,Int> local.
 struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: Int }
 # A function: name range, up to 10 params (p0s/p0l..p9s/p9l + p0ty..p9ty), param
 # count `npar`, and the body token range [bstart, bend). 10 params covers the
@@ -128,6 +129,35 @@ fn is_pop(src: Str, a: Int, alen: Int) -> Int {
     if src[a] != 112 { return 0 }
     if src[a + 1] != 111 { return 0 }
     if src[a + 2] != 112 { return 0 }
+    return 1
+}
+fn is_get(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 3 { return 0 }
+    if src[a] != 103 { return 0 }
+    if src[a + 1] != 101 { return 0 }
+    if src[a + 2] != 116 { return 0 }
+    return 1
+}
+fn is_insert(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 6 { return 0 }
+    if src[a] != 105 { return 0 }
+    if src[a + 1] != 110 { return 0 }
+    if src[a + 2] != 115 { return 0 }
+    if src[a + 3] != 101 { return 0 }
+    if src[a + 4] != 114 { return 0 }
+    if src[a + 5] != 116 { return 0 }
+    return 1
+}
+fn is_contains(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 8 { return 0 }
+    if src[a] != 99 { return 0 }
+    if src[a + 1] != 111 { return 0 }
+    if src[a + 2] != 110 { return 0 }
+    if src[a + 3] != 116 { return 0 }
+    if src[a + 4] != 97 { return 0 }
+    if src[a + 5] != 105 { return 0 }
+    if src[a + 6] != 110 { return 0 }
+    if src[a + 7] != 115 { return 0 }
     return 1
 }
 
@@ -1160,6 +1190,10 @@ fn list_bufsz_for_sty(defs: &List<StructDef>, sty: Int) -> Int {
     if sty >= 0 { return list_bufsz_for_nfields(struct_nfields(defs, sty)) }
     return list_cap()
 }
+fn map_cap() -> Int { return 256 }
+fn map_value_base() -> Int { return map_cap() }
+fn map_lenidx() -> Int { return map_cap() * 2 }
+fn map_bufsz() -> Int { return map_lenidx() + 1 }
 
 # After a call that passed List-local slot `lslot` by pointer, copy the length the
 # callee wrote into buf[63] back into the local's length slot (%v<lslot+1>), so the
@@ -1774,6 +1808,89 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             # sty, which would otherwise be misread as a struct index.
             let karr = isarr_of(slots, src, t.nstart, t.nlen)
             let meth = toks[i + 2]
+            if karr == 5 {
+                let mslot = find_slot(slots, src, t.nstart, t.nlen)
+                let opn = toks[i + 3]
+                if opn.kind == 9 {
+                    let close = paren_end(toks, i + 4)
+                    if kw3(src, meth.nstart, meth.nlen, 108, 101, 110) == 1 {
+                        let base = counter
+                        emit_str("  %t")
+                        pint(base)
+                        emit_str(" = getelementptr [")
+                        pint(map_bufsz())
+                        emit_str(" x i64], [")
+                        pint(map_bufsz())
+                        emit_str(" x i64]* %v")
+                        pint(mslot)
+                        emit_str(", i64 0, i64 0")
+                        putchar(10)
+                        let dest = base + 1
+                        emit_str("  %t")
+                        pint(dest)
+                        emit_str(" = call i64 @__vais_map_int_int_len(i64* %t")
+                        pint(base)
+                        emit_str(")")
+                        putchar(10)
+                        return Op { kind: 1, val: dest, next: dest + 1 }
+                    }
+                    if is_contains(src, meth.nstart, meth.nlen) == 1 {
+                        let a0stop = arg_comma_end(toks, i + 4, close)
+                        let key = gen_expr(toks, slots, fns, defs, src, i + 4, a0stop, counter)
+                        let base = key.next
+                        emit_str("  %t")
+                        pint(base)
+                        emit_str(" = getelementptr [")
+                        pint(map_bufsz())
+                        emit_str(" x i64], [")
+                        pint(map_bufsz())
+                        emit_str(" x i64]* %v")
+                        pint(mslot)
+                        emit_str(", i64 0, i64 0")
+                        putchar(10)
+                        let dest = base + 1
+                        emit_str("  %t")
+                        pint(dest)
+                        emit_str(" = call i64 @__vais_map_int_int_contains(i64* %t")
+                        pint(base)
+                        emit_str(", i64 ")
+                        emit_op(key)
+                        emit_str(")")
+                        putchar(10)
+                        return Op { kind: 1, val: dest, next: dest + 1 }
+                    }
+                    if is_get(src, meth.nstart, meth.nlen) == 1 {
+                        let a0stop = arg_comma_end(toks, i + 4, close)
+                        let key = gen_expr(toks, slots, fns, defs, src, i + 4, a0stop, counter)
+                        let defstop = arg_comma_end(toks, a0stop + 1, close)
+                        let fallback = gen_expr(toks, slots, fns, defs, src, a0stop + 1, defstop, key.next)
+                        let base = fallback.next
+                        emit_str("  %t")
+                        pint(base)
+                        emit_str(" = getelementptr [")
+                        pint(map_bufsz())
+                        emit_str(" x i64], [")
+                        pint(map_bufsz())
+                        emit_str(" x i64]* %v")
+                        pint(mslot)
+                        emit_str(", i64 0, i64 0")
+                        putchar(10)
+                        let dest = base + 1
+                        emit_str("  %t")
+                        pint(dest)
+                        emit_str(" = call i64 @__vais_map_int_int_get(i64* %t")
+                        pint(base)
+                        emit_str(", i64 ")
+                        emit_op(key)
+                        emit_str(", i64 ")
+                        emit_op(fallback)
+                        emit_str(")")
+                        putchar(10)
+                        return Op { kind: 1, val: dest, next: dest + 1 }
+                    }
+                }
+                return Op { kind: 0, val: 0, next: counter }
+            }
             if is_is_empty(src, meth.nstart, meth.nlen) == 1 {
                 if karr == 1 {
                     let sal = arrlen_of(slots, src, t.nstart, t.nlen)
@@ -2969,6 +3086,32 @@ fn rhs_is_list(toks: &List<Token>, src: Str, npos: Int) -> Int {
     }
     return 0
 }
+fn let_anno_is_map_int_int(toks: &List<Token>, src: Str, npos: Int) -> Int {
+    let c1 = toks[npos + 1]
+    if c1.kind != 16 { return 0 }
+    let ty = toks[npos + 2]
+    if kw3(src, ty.nstart, ty.nlen, 77, 97, 112) != 1 { return 0 }
+    let lt = toks[npos + 3]
+    if lt.kind != 18 { return 0 }
+    let kt = toks[npos + 4]
+    if kw3(src, kt.nstart, kt.nlen, 73, 110, 116) != 1 { return 0 }
+    let comma = toks[npos + 5]
+    if comma.kind != 25 { return 0 }
+    let vt = toks[npos + 6]
+    if kw3(src, vt.nstart, vt.nlen, 73, 110, 116) != 1 { return 0 }
+    let gt = toks[npos + 7]
+    if gt.kind != 19 { return 0 }
+    return 1
+}
+fn rhs_is_empty_map(toks: &List<Token>, npos: Int) -> Int {
+    let vp = rhs_pos(toks, npos)
+    let rhs = toks[vp]
+    if rhs.kind == 11 {
+        let close = toks[vp + 1]
+        if close.kind == 12 { return 1 }
+    }
+    return 0
+}
 # If `let name = Name { ... }`, returns the struct-type index of Name, else -1.
 fn rhs_struct_type(toks: &List<Token>, defs: &List<StructDef>, src: Str, npos: Int) -> Int {
     let vp = rhs_pos(toks, npos)
@@ -3209,7 +3352,30 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
             let vp = rhs_pos(toks, npos)
             let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
-            if sti >= 0 {
+            if let_anno_is_map_int_int(toks, src, npos) == 1 and rhs_is_empty_map(toks, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: 0 - 1 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca [")
+                pint(map_bufsz())
+                emit_str(" x i64]")
+                putchar(10)
+                emit_str("  %mp")
+                pint(next_slot)
+                emit_str(" = getelementptr [")
+                pint(map_bufsz())
+                emit_str(" x i64], [")
+                pint(map_bufsz())
+                emit_str(" x i64]* %v")
+                pint(next_slot)
+                emit_str(", i64 0, i64 ")
+                pint(map_lenidx())
+                putchar(10)
+                emit_str("  store i64 0, i64* %mp")
+                pint(next_slot)
+                putchar(10)
+                next_slot = next_slot + 1
+            } else if sti >= 0 {
                 # struct var: alloca [nfields x i64], sty = type index
                 let nf = struct_nfields(defs, sti)
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 0, alen: 0 , sty: sti })
@@ -3822,7 +3988,10 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             let rhs = toks[vp]
             let los_est = rhs_los_elem_sty(toks, slots, src, npos)
             let lsti = rhs_struct_type(toks, defs, src, npos)
-            if los_est >= 0 {
+            if isarr_of(slots, src, name.nstart, name.nlen) == 5 {
+                let stop = find_semi(toks, vp, end)
+                i = stop + 1
+            } else if los_est >= 0 {
                 # `let t = toks[idx]`, `let t = toks.last()`, or
                 # `let t = toks.pop()` -> copy the struct element into t's
                 # [nf x i64] local. `pop()` also stores the decremented length.
@@ -4478,7 +4647,46 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
               # struct field write requires a SCALAR struct var (is_arr=0). A
               # List-of-structs (sty>=0, is_arr=2) must skip this and reach the
               # push handler in the final else.
-              if asti >= 0 and astiarr == 0 {
+              if astiarr == 5 {
+                let meth = toks[i + 2]
+                if is_insert(src, meth.nstart, meth.nlen) == 1 {
+                    let close = paren_end(toks, i + 4)
+                    let a0stop = arg_comma_end(toks, i + 4, close)
+                    let key = gen_expr(toks, slots, fns, defs, src, i + 4, a0stop, counter)
+                    counter = key.next
+                    let vstop = arg_comma_end(toks, a0stop + 1, close)
+                    let value = gen_expr(toks, slots, fns, defs, src, a0stop + 1, vstop, counter)
+                    counter = value.next
+                    let mslot = find_slot(slots, src, t.nstart, t.nlen)
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = getelementptr [")
+                    pint(map_bufsz())
+                    emit_str(" x i64], [")
+                    pint(map_bufsz())
+                    emit_str(" x i64]* %v")
+                    pint(mslot)
+                    emit_str(", i64 0, i64 0")
+                    putchar(10)
+                    let base = counter
+                    counter = counter + 1
+                    emit_str("  call void @__vais_map_int_int_insert(i64* %t")
+                    pint(base)
+                    emit_str(", i64 ")
+                    emit_op(key)
+                    emit_str(", i64 ")
+                    emit_op(value)
+                    emit_str(")")
+                    putchar(10)
+                    let stop = find_semi(toks, close, end)
+                    i = stop + 1
+                } else {
+                    let stop = find_semi(toks, i, end)
+                    let e = gen_expr(toks, slots, fns, defs, src, i, stop, counter)
+                    counter = e.next
+                    i = stop + 1
+                }
+              } else if asti >= 0 and astiarr == 0 {
                 # struct field write: p . field = expr ;
                 let fld = toks[i + 2]
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
@@ -5614,7 +5822,30 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
             let vp = rhs_pos(toks, npos)
             let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
-            if sti >= 0 {
+            if let_anno_is_map_int_int(toks, src, npos) == 1 and rhs_is_empty_map(toks, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: 0 - 1 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca [")
+                pint(map_bufsz())
+                emit_str(" x i64]")
+                putchar(10)
+                emit_str("  %mp")
+                pint(next_slot)
+                emit_str(" = getelementptr [")
+                pint(map_bufsz())
+                emit_str(" x i64], [")
+                pint(map_bufsz())
+                emit_str(" x i64]* %v")
+                pint(next_slot)
+                emit_str(", i64 0, i64 ")
+                pint(map_lenidx())
+                putchar(10)
+                emit_str("  store i64 0, i64* %mp")
+                pint(next_slot)
+                putchar(10)
+                next_slot = next_slot + 1
+            } else if sti >= 0 {
                 let nf = struct_nfields(defs, sti)
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 0, alen: 0 , sty: sti })
                 emit_str("  %v")
@@ -6017,6 +6248,168 @@ fn emit_parse_helpers() -> Int {
     return 0
 }
 
+fn emit_map_helpers() -> Int {
+    emit_str("define i64 @__vais_map_int_int_find(i64* %m, i64 %key) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %i = alloca i64")
+    putchar(10)
+    emit_str("  store i64 0, i64* %i")
+    putchar(10)
+    emit_str("  %lenp = getelementptr i64, i64* %m, i64 512")
+    putchar(10)
+    emit_str("  %len = load i64, i64* %lenp")
+    putchar(10)
+    emit_str("  br label %loop")
+    putchar(10)
+    emit_str("loop:")
+    putchar(10)
+    emit_str("  %iv = load i64, i64* %i")
+    putchar(10)
+    emit_str("  %done = icmp sge i64 %iv, %len")
+    putchar(10)
+    emit_str("  br i1 %done, label %notfound, label %body")
+    putchar(10)
+    emit_str("body:")
+    putchar(10)
+    emit_str("  %kp = getelementptr i64, i64* %m, i64 %iv")
+    putchar(10)
+    emit_str("  %kv = load i64, i64* %kp")
+    putchar(10)
+    emit_str("  %eq = icmp eq i64 %kv, %key")
+    putchar(10)
+    emit_str("  br i1 %eq, label %found, label %next")
+    putchar(10)
+    emit_str("next:")
+    putchar(10)
+    emit_str("  %inc = add i64 %iv, 1")
+    putchar(10)
+    emit_str("  store i64 %inc, i64* %i")
+    putchar(10)
+    emit_str("  br label %loop")
+    putchar(10)
+    emit_str("found:")
+    putchar(10)
+    emit_str("  ret i64 %iv")
+    putchar(10)
+    emit_str("notfound:")
+    putchar(10)
+    emit_str("  ret i64 -1")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    emit_str("define void @__vais_map_int_int_insert(i64* %m, i64 %key, i64 %value) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %idx = call i64 @__vais_map_int_int_find(i64* %m, i64 %key)")
+    putchar(10)
+    emit_str("  %exists = icmp sge i64 %idx, 0")
+    putchar(10)
+    emit_str("  br i1 %exists, label %update, label %append")
+    putchar(10)
+    emit_str("update:")
+    putchar(10)
+    emit_str("  %uvoff = add i64 256, %idx")
+    putchar(10)
+    emit_str("  %uvp = getelementptr i64, i64* %m, i64 %uvoff")
+    putchar(10)
+    emit_str("  store i64 %value, i64* %uvp")
+    putchar(10)
+    emit_str("  ret void")
+    putchar(10)
+    emit_str("append:")
+    putchar(10)
+    emit_str("  %lenp = getelementptr i64, i64* %m, i64 512")
+    putchar(10)
+    emit_str("  %len = load i64, i64* %lenp")
+    putchar(10)
+    emit_str("  %full = icmp sge i64 %len, 256")
+    putchar(10)
+    emit_str("  br i1 %full, label %trap, label %ok")
+    putchar(10)
+    emit_str("trap:")
+    putchar(10)
+    emit_str("  call void @llvm.trap()")
+    putchar(10)
+    emit_str("  unreachable")
+    putchar(10)
+    emit_str("ok:")
+    putchar(10)
+    emit_str("  %kp = getelementptr i64, i64* %m, i64 %len")
+    putchar(10)
+    emit_str("  store i64 %key, i64* %kp")
+    putchar(10)
+    emit_str("  %voff = add i64 256, %len")
+    putchar(10)
+    emit_str("  %vp = getelementptr i64, i64* %m, i64 %voff")
+    putchar(10)
+    emit_str("  store i64 %value, i64* %vp")
+    putchar(10)
+    emit_str("  %next = add i64 %len, 1")
+    putchar(10)
+    emit_str("  store i64 %next, i64* %lenp")
+    putchar(10)
+    emit_str("  ret void")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    emit_str("define i64 @__vais_map_int_int_get(i64* %m, i64 %key, i64 %fallback) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %idx = call i64 @__vais_map_int_int_find(i64* %m, i64 %key)")
+    putchar(10)
+    emit_str("  %exists = icmp sge i64 %idx, 0")
+    putchar(10)
+    emit_str("  br i1 %exists, label %found, label %missing")
+    putchar(10)
+    emit_str("found:")
+    putchar(10)
+    emit_str("  %voff = add i64 256, %idx")
+    putchar(10)
+    emit_str("  %vp = getelementptr i64, i64* %m, i64 %voff")
+    putchar(10)
+    emit_str("  %value = load i64, i64* %vp")
+    putchar(10)
+    emit_str("  ret i64 %value")
+    putchar(10)
+    emit_str("missing:")
+    putchar(10)
+    emit_str("  ret i64 %fallback")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    emit_str("define i64 @__vais_map_int_int_contains(i64* %m, i64 %key) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %idx = call i64 @__vais_map_int_int_find(i64* %m, i64 %key)")
+    putchar(10)
+    emit_str("  %exists = icmp sge i64 %idx, 0")
+    putchar(10)
+    emit_str("  %out = zext i1 %exists to i64")
+    putchar(10)
+    emit_str("  ret i64 %out")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    emit_str("define i64 @__vais_map_int_int_len(i64* %m) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %lenp = getelementptr i64, i64* %m, i64 512")
+    putchar(10)
+    emit_str("  %len = load i64, i64* %lenp")
+    putchar(10)
+    emit_str("  ret i64 %len")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    return 0
+}
+
 fn compile(src: Str) -> Int {
     let toks = tokenize(src)
     let n = toks.len()
@@ -6033,6 +6426,7 @@ fn compile(src: Str) -> Int {
     emit_str("declare void @llvm.trap()")
     putchar(10)
     emit_parse_helpers()
+    emit_map_helpers()
     let defs = build_defs(&toks, n)
     let fns = build_fns(&toks, &defs, src, n)
     # module-level string-literal globals (one per literal, keyed by source pos).

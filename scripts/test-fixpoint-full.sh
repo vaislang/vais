@@ -517,6 +517,8 @@ check "fn build() -> List<Int> {{ let xs = list(); xs.push(1); xs.push(2); xs.pu
 # List/array sum method used by the native c2 parity slice
 check "let xs = [10, 20, 30]; return xs.sum();" 60
 check "let xs = list(); xs.push(7); xs.push(8); xs.push(9); return xs.sum();" 24
+# local Map<Int,Int> construction, insert/replace, get/default, contains, len
+check "fn run() {{ let scores: Map<Int,Int> = {{}}; scores.insert(4, 38); scores.insert(4, 40); scores.insert(9, 2); return scores.get(4, 0) + scores.get(5, 0 - 1) + scores.contains(4) + scores.contains(5) + scores.len() }}; return run();" 42
 # List-of-structs return + field read
 check "struct Tok {{ kind, val }}; fn build() -> List<Tok> {{ let xs = list(); xs.push(Tok {{ kind: 1, val: 30 }}); xs.push(Tok {{ kind: 2, val: 12 }}); return xs }}; fn run() {{ let ys = build(); return ys[0].val + ys[1].val }}; return run();" 42
 # retlist with an argument

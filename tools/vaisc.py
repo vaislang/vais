@@ -161,11 +161,6 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
         "use `Int`, `Str`, or `Bool` in this slice.",
     ),
     (
-        re.compile(r"\bMap\s*<"),
-        "Map<K,V> is only verified for local Map<Int,Int> in the direct engine for now",
-        "use `scripts/vaisc ... --engine direct` for local `Map<Int,Int>` with `{}`, `insert`, `get(key, default)`, `contains`, and `len`, or wait for full compiler Map support.",
-    ),
-    (
         re.compile(r"\b(Option|Result)\s*<|\blist\s*\("),
         "sum-result types and the `list()` constructor are not in the Vais native front subset yet",
         "use verified scalar/List syntax, or keep this source on the full compiler path until the native parity gate grows to it.",
@@ -186,8 +181,8 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
         "use a single Int capture returning `fn(Int) -> Int`, or write a named function for broader closure cases.",
     ),
     (
-        re.compile(r"\.(?!(?:push|len|is_empty|last|pop|sum)\s*\()[A-Za-z_][A-Za-z0-9_]*\s*\("),
-        "method calls beyond push/len/is_empty/last/pop/sum are not in the Vais native front subset yet",
+        re.compile(r"\.(?!(?:push|len|is_empty|last|pop|sum|insert|get|contains)\s*\()[A-Za-z_][A-Za-z0-9_]*\s*\("),
+        "method calls beyond push/len/is_empty/last/pop/sum/insert/get/contains are not in the Vais native front subset yet",
         "use a plain function call, or keep this source on the full compiler path until that method is promoted.",
     ),
     (
@@ -250,7 +245,7 @@ FRONT_HELP_RULES: list[FrontRule] = [
     FrontRule(
         re.compile(r"\bHashMap\b"),
         "the Vais map spelling is `Map<K,V>`, not `HashMap<K,V>`",
-        "use `Map<K,V>` only in the verified direct local `Map<Int,Int>` slice for now.",
+        "use `Map<K,V>` only in the verified local `Map<Int,Int>` slice for now.",
         replace_once("HashMap", "Map"),
     ),
     FrontRule(
@@ -322,6 +317,16 @@ def check_function_contracts(code: str, line_no: int) -> tuple[list[FrontIssue],
     return issues, has_main, has_bad_main
 
 
+def supported_map_local_line(code: str) -> bool:
+    return (
+        re.search(
+            r"\blet\b\s+(?:mut\s+)?[A-Za-z_][A-Za-z0-9_]*\s*:\s*Map\s*<\s*Int\s*,\s*Int\s*>\s*=\s*\{\s*\}",
+            code,
+        )
+        is not None
+    )
+
+
 def check_front_contract(source: Path, display_source: Path | None = None) -> None:
     lines = source.read_text().splitlines()
     shown_source = display_source or source
@@ -342,6 +347,17 @@ def check_front_contract(source: Path, display_source: Path | None = None) -> No
                 issues.append(issue_from_match(match, line_no, raw, rule))
                 break
         else:
+            map_match = re.search(r"\bMap\s*<", code)
+            if map_match and not supported_map_local_line(code):
+                issues.append(
+                    FrontIssue(
+                        line_no,
+                        map_match.start() + 1,
+                        "only local Map<Int,Int> values are verified for now",
+                        "write `let name: Map<Int,Int> = {}` and use `insert`, `get(key, default)`, `contains`, and `len`; Map parameters, returns, and generic key/value forms are not verified yet.",
+                    )
+                )
+                continue
             for pattern, message, help_text in FRONT_UNSUPPORTED_RULES:
                 match = pattern.search(code)
                 if match:

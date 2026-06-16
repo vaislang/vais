@@ -43,8 +43,10 @@
 - Regenerated `compiler/self/vaisc_core.ll` with the named parsing helpers.
 - Added native direct local `Map<Int,Int>` lowering for `{}`, `insert`,
   `get(key, default)`, `contains`, and `len`, with direct gate coverage.
-- Updated default/full front diagnostics so Map users are pointed to
-  `--engine direct` until self-host lowering lands.
+- Added full self-host local `Map<Int,Int>` lowering for the same surface and
+  regenerated `compiler/self/vaisc_core.ll`.
+- Updated front diagnostics so local `Map<Int,Int>` values are accepted while
+  Map parameters, returns, assignment, and generic key/value forms stay gated.
 
 ## 2026-06-15
 
