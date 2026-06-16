@@ -22,14 +22,15 @@ intended but not a public release claim yet.
 | `v.len()` | Verified |
 | `v.is_empty()` | Verified |
 | `v.last()` | Verified |
+| `v.pop()` | Verified |
 | `v[i]` | Verified |
 | `v.sum()` | Verified for Int lists |
 | `v.push(x)` | Verified for Int lists and selected self-host shapes |
 | `v.map(|x| ...)` | Specified |
 | `v.filter(|x| BOOL)` | Specified |
 
-`v.last()` is verified for non-empty lists. Empty-list and out-of-range behavior
-is tracked separately in the roadmap.
+`v.last()` and `v.pop()` are verified for non-empty lists. Empty-list and
+out-of-range behavior is tracked separately in the roadmap.
 
 ## Types And Conversion
 

@@ -51,6 +51,8 @@ This file tracks current work only.
   direct engine, with gates for Int and declared-struct lists.
 - `List<T>.last()` is promoted for non-empty lists in the full self-host path
   and native direct engine, with Int and declared-struct list gates.
+- `List<T>.pop()` is promoted for non-empty lists in the full self-host path
+  and native direct engine, with Int and declared-struct list gates.
 
 ## Current Reality
 
@@ -58,13 +60,13 @@ This file tracks current work only.
 - The direct engine is intentionally narrow and currently supports Int helpers,
   locals, assignment, calls, `if`, `while`, returns, simple Int-field struct
   local literal/read/write, struct parameter/return helper ABI, and local
-  `List<Int>` initialization plus `push`, `len`, `is_empty`, `last`, index, `sum`, and
+  `List<Int>` initialization plus `push`, `len`, `is_empty`, `last`, `pop`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
   literal/constructor call and return values. Statement contexts, `if`,
   `else if`, and `while` conditions also lower `List<Int>`-returning helper
   calls before passing them to `List<Int>` parameters. Local `List<Struct>`
   values support typed `[]`, `list()`, list literal initialization, `push`,
-  `len`, `is_empty`, `last`, index, field reads/writes, parameter reference, return value ABI,
+  `len`, `is_empty`, `last`, `pop`, index, field reads/writes, parameter reference, return value ABI,
   inline list arguments, and returned-list argument lowering in statements plus
   `if`, `else if`, and `while` conditions. Context-typed list assignment is supported
   for `List<Int>` and `List<Struct>` locals and list parameters. Element
@@ -130,7 +132,7 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
   and native direct engine.
 - [x] 1.1b Promote verified `List<T>.last()` across the full self-host path and
   native direct engine.
-- [ ] 1.1c Promote verified `List<T>.pop()` across the full self-host path and
+- [x] 1.1c Promote verified `List<T>.pop()` across the full self-host path and
   native direct engine.
 - [ ] 1.1d Define bounds-safe diagnostics or documented trap behavior for
   indexed list operations.
@@ -251,8 +253,50 @@ Phase 0 is complete. The next concrete slice is Phase 1:
 - [x] Confirm the release archive workflow publishes archives for a chosen tag.
 - [x] Decide the next release version before creating any public tag.
 - [x] Promote the first small standard-library `List<T>` API slice with gates.
-- [ ] Promote the next `List<T>` API slice, `pop()`, with full/direct/docs
+- [x] Promote the next `List<T>` API slice, `pop()`, with full/direct/docs
   coverage.
+- [ ] Define the next `List<T>` behavior slice: empty-list and out-of-range
+  diagnostics or trap behavior.
+
+## Completed Milestone: List pop API
+
+Mode: sequential
+
+- [x] 1. Add `List<T>.pop()` lowering to the full self-host compiler for
+  non-empty scalar lists and struct-list local binding.
+- [x] 2. Add native direct `List<Int>` and `List<Struct>` `pop()` expression
+  support with type inference and deterministic prelude temporaries.
+- [x] 3. Gate local and parameter `List<Int>.pop()` plus struct-list
+  `let item = xs.pop()` usage, including caller-visible length mutation.
+- [x] 4. Sync `std/PRELUDE.md`, the language reference, changelog, roadmap,
+  worklog, and website copy.
+
+### Task Briefs
+
+#### 1. Full compiler pop API
+
+- Target files: `compiler/self/fixpoint_full.vais`,
+  `compiler/self/vaisc_core.ll`, `scripts/test-fixpoint-full.sh`.
+- Requirements: compile `xs.pop()` by reading `len - 1`, returning that element,
+  and storing the decremented length for local and parameter lists.
+- Done: full gates cover `List<Int>.pop()` through a `List<Int>` parameter and
+  `List<Tok>.pop()` through local and parameter struct-list bindings.
+
+#### 2. Native direct pop API
+
+- Target files: `tools/vaisc_native.c`, `scripts/test-vaisc-direct.sh`,
+  `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-errors.sh`.
+- Requirements: keep direct mode native-only, infer `xs.pop()` as the list
+  element type, and sequence mutation through generated temporaries.
+- Done: direct gates cover `List<Int>.pop()` locals and parameters plus
+  `List<Box>.pop()` binding.
+
+#### 3. Documentation and gate sync
+
+- Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
+  `website/index.html`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`.
+- Requirements: document only the non-empty-list API now; keep bounds behavior
+  as pending Phase 1 work.
 
 ## Completed Milestone: List last API
 
@@ -292,8 +336,9 @@ Mode: sequential
 
 - Target files: `std/PRELUDE.md`, `docs/reference/LANGUAGE.md`,
   `website/index.html`, `CHANGELOG.md`, `ROADMAP.md`, `WORKLOG.md`.
-- Requirements: document only the non-empty-list API now; keep `pop()` and
-  bounds behavior as pending Phase 1 work.
+- Requirements: document only the non-empty-list API at that milestone. `pop()`
+  is now covered by the completed List pop API milestone above; bounds behavior
+  remains pending Phase 1 work.
 
 ## Completed Milestone: List is_empty API
 

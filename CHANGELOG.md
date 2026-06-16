@@ -10,6 +10,9 @@
 - Added verified `List<T>.last()` support for non-empty lists in the full
   self-host compiler and native direct engine, including struct-list local
   binding coverage.
+- Added verified `List<T>.pop()` support for non-empty lists in the full
+  self-host compiler and native direct engine, including caller-visible length
+  mutation for list parameters.
 
 ## v0.2.2 - 2026-06-15
 

@@ -230,7 +230,8 @@ fn main() -> Int {
     xs.push(30)
     let ys = [1, 2, xs.len()]
     let tail = xs.last()
-    return xs.sum() - xs.len() - xs[1] + ys[2] + ys.sum() - 4 + empty.is_empty() - xs.is_empty() - 1 + tail - 30
+    let popped = xs.pop()
+    return xs.sum() - xs.len() - xs[1] + ys[2] + ys.sum() + 25 + empty.is_empty() - xs.is_empty() - 1 + tail - 30 + popped - 30
 }
 SRC
 
@@ -242,7 +243,7 @@ if "$VAISC" emit-ir "$list_src" \
     "$VAISC" run "$list_src" --engine direct >"$tmp/list-run.out" 2>"$tmp/list-run.err"
     list_run=$?
     if [ "$list_run" = "42" ]; then
-        echo "  PASS direct local List<Int> push, len, is_empty, last, index, literal, and sum run (=42)"
+        echo "  PASS direct local List<Int> push, len, is_empty, last, pop, index, literal, and sum run (=42)"
     else
         echo "  FAIL direct List<Int> got=$list_run want=42"
         cat "$tmp/list-run.err"
@@ -269,7 +270,8 @@ fn main() -> Int {
     let zs: List<Box> = list()
     zs.push(Box { value: 2 })
     let tail = xs.last()
-    return xs[0].value + xs[1].value + xs.len() + ys[0].value + zs[0].value - 3 + empty_boxes.is_empty() - xs.is_empty() - 1 + tail.value - 30
+    let popped = xs.pop()
+    return xs[0].value + xs.len() + ys[0].value + zs[0].value + 28 + empty_boxes.is_empty() - xs.is_empty() - 1 + tail.value - 30 + popped.value - 30
 }
 SRC
 
@@ -281,7 +283,7 @@ if "$VAISC" emit-ir "$list_struct_src" \
     "$VAISC" run "$list_struct_src" --engine direct >"$tmp/list-struct-run.out" 2>"$tmp/list-struct-run.err"
     list_struct_run=$?
     if [ "$list_struct_run" = "42" ]; then
-        echo "  PASS direct local List<Struct> push, len, is_empty, last, index, and field read run (=42)"
+        echo "  PASS direct local List<Struct> push, len, is_empty, last, pop, index, and field read run (=42)"
     else
         echo "  FAIL direct List<Struct> got=$list_struct_run want=42"
         cat "$tmp/list-struct-run.err"
@@ -517,7 +519,8 @@ fn pass(xs: List<Int>) -> List<Int> {
 }
 
 fn score(xs: List<Int>) -> Int {
-    return xs.sum() + xs.len() + xs[1] + xs.last() - 30
+    let tail = xs.pop()
+    return xs.sum() + xs.len() + xs[1] + tail + 1
 }
 
 fn main() -> Int {

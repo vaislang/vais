@@ -186,8 +186,8 @@ FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
         "use a single Int capture returning `fn(Int) -> Int`, or write a named function for broader closure cases.",
     ),
     (
-        re.compile(r"\.(?!(?:push|len|sum)\s*\()[A-Za-z_][A-Za-z0-9_]*\s*\("),
-        "method calls beyond push/len/sum are not in the Vais native front subset yet",
+        re.compile(r"\.(?!(?:push|len|is_empty|last|pop|sum)\s*\()[A-Za-z_][A-Za-z0-9_]*\s*\("),
+        "method calls beyond push/len/is_empty/last/pop/sum are not in the Vais native front subset yet",
         "use a plain function call, or keep this source on the full compiler path until that method is promoted.",
     ),
     (

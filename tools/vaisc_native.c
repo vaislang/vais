@@ -1256,7 +1256,7 @@ static int check_front_contract_text(const char *text, const char *path) {
             issues++;
         } else if (strstr(line, ".clear(") != NULL) {
             report_issue(path, line_no, find_col(line, ".clear("), line,
-                "method calls beyond push/len/sum are not in the Vais native front subset yet",
+                "method calls beyond push/len/is_empty/last/pop/sum are not in the Vais native front subset yet",
                 "use a plain function call, or keep this source on the full compiler path until that method is promoted.",
                 NULL);
             issues++;
@@ -2077,6 +2077,31 @@ static void direct_append_list_last_ref(StrBuf *out, const char *name, int is_re
     sb_append(out, " - 1)]");
 }
 
+static void direct_append_list_pop_ref(StrBuf *out, const char *name, int is_ref, const char *base_type, DirectNameSet *locals) {
+    if (direct_current_prelude == NULL) {
+        direct_append_list_data_ref(out, name, is_ref);
+        sb_append(out, "[(long)(");
+        direct_append_list_len_ref(out, name, is_ref);
+        sb_append(out, " -= 1)]");
+        return;
+    }
+    char *elem_type = direct_list_element_type(base_type);
+    char tmp_name[64];
+    snprintf(tmp_name, sizeof(tmp_name), "__vais_list_pop_%d", locals->temp_count++);
+    sb_append(direct_current_prelude, direct_c_type(elem_type == NULL ? "Int" : elem_type));
+    sb_append(direct_current_prelude, " ");
+    sb_append(direct_current_prelude, tmp_name);
+    sb_append(direct_current_prelude, " = ");
+    direct_append_list_data_ref(direct_current_prelude, name, is_ref);
+    sb_append(direct_current_prelude, "[(long)(");
+    direct_append_list_len_ref(direct_current_prelude, name, is_ref);
+    sb_append(direct_current_prelude, " - 1)];\n");
+    direct_append_list_len_ref(direct_current_prelude, name, is_ref);
+    sb_append(direct_current_prelude, " -= 1;\n");
+    sb_append(out, tmp_name);
+    free(elem_type);
+}
+
 static char *direct_rewrite_expr(
     const char *path,
     int line_no,
@@ -2504,6 +2529,49 @@ static char *direct_rewrite_list_expr(
                 i = close + 1;
                 continue;
             }
+            if (strcmp(field, "pop") == 0) {
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.pop must be called",
+                        "write `xs.pop()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List.pop",
+                        "write `xs.pop()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *args = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *trimmed_args = trim_copy(args);
+                int has_args = trimmed_args[0] != '\0';
+                free(trimmed_args);
+                free(args);
+                if (has_args) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.pop takes no arguments",
+                        "write `xs.pop()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                direct_append_list_pop_ref(&out, name, is_ref, base_type, locals);
+                free(field);
+                free(name);
+                i = close + 1;
+                continue;
+            }
             if (strcmp(field, "sum") == 0) {
                 if (!direct_is_list_int_type(base_type)) {
                     report_issue(path, line_no, find_col(line, name), line,
@@ -2558,8 +2626,8 @@ static char *direct_rewrite_list_expr(
                 continue;
             }
             report_issue(path, line_no, find_col(line, name), line,
-                "direct native emitter supports List len, is_empty, last, index, and List<Int> sum expressions",
-                "write `xs.len()`, `xs.is_empty()`, `xs.last()`, `xs[i]`, or `xs.sum()` for List<Int>.",
+                "direct native emitter supports List len, is_empty, last, pop, index, and List<Int> sum expressions",
+                "write `xs.len()`, `xs.is_empty()`, `xs.last()`, `xs.pop()`, `xs[i]`, or `xs.sum()` for List<Int>.",
                 NULL);
             free(field);
             free(name);
@@ -2640,7 +2708,7 @@ static char *direct_infer_expr_type(
             char *field = substr_copy(trimmed + field_start, (size_t)(field_end - field_start));
             const char *after = skip_ws(trimmed + field_end);
             const char *local_type = direct_names_type(locals, name);
-            if (direct_is_list_type(local_type) && strcmp(field, "last") == 0 && *after == '(') {
+            if (direct_is_list_type(local_type) && (strcmp(field, "last") == 0 || strcmp(field, "pop") == 0) && *after == '(') {
                 int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
                 if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
                     char *elem_type = direct_list_element_type(local_type);
@@ -2822,6 +2890,22 @@ static int direct_check_expr_inner(
                     free(name);
                     continue;
                 }
+                if (strcmp(field, "pop") == 0 && *after == '(') {
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List.pop",
+                            "write `xs.pop()`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
                 if (strcmp(field, "sum") == 0 && *after == '(') {
                     if (!direct_is_list_int_type(base_type)) {
                         report_issue(path, line_no, find_col(line, name), line,
@@ -2848,8 +2932,8 @@ static int direct_check_expr_inner(
                     continue;
                 }
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter supports List push, len, is_empty, last, index, and List<Int> sum",
-                    "write `xs.push(value)`, `xs.len()`, `xs.is_empty()`, `xs.last()`, `xs[i]`, or `xs.sum()` for List<Int>.",
+                    "direct native emitter supports List push, len, is_empty, last, pop, index, and List<Int> sum",
+                    "write `xs.push(value)`, `xs.len()`, `xs.is_empty()`, `xs.last()`, `xs.pop()`, `xs[i]`, or `xs.sum()` for List<Int>.",
                     "xs.push(value)");
                 free(field);
                 free(name);

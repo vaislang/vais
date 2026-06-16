@@ -59,6 +59,8 @@ check "fn cnt(n) {{ let xs = list(); let mut i = 0; while i < n {{ xs.push(i); i
 check "fn mark(xs: List<Int>) {{ return xs.is_empty() }}; fn run() {{ let empty: List<Int> = []; let full = list(); full.push(1); return mark(empty) * 40 + mark(full) + full.len + 1 }}; return run();" 42
 # List last-element helper for local and parameter lists
 check "fn tail(xs: List<Int>) {{ return xs.last() }}; fn run() {{ let xs = list(); xs.push(20); xs.push(42); return tail(xs) }}; return run();" 42
+# List pop helper for local and parameter lists
+check "fn take(xs: List<Int>) {{ return xs.pop() }}; fn run() {{ let xs = list(); xs.push(20); xs.push(42); let v = take(xs); return v + xs.len - 1 }}; return run();" 42
 # function using BOTH an array and a List
 check "fn mix(n) {{ let a = [100, 200]; let xs = list(); xs.push(a[0]); xs.push(a[1]); xs.push(n); return xs[0] + xs[2] }}; return mix(5);" 105
 
@@ -73,6 +75,8 @@ check "struct P {{ a, b }}; fn g(n) {{ let p = P {{ a: 10, b: 20 }}; let xs = li
 check "struct Tok {{ kind, val }}; fn run() {{ let empty: List<Tok> = []; let full: List<Tok> = []; full.push(Tok {{ kind: 1, val: 2 }}); return empty.is_empty() * 40 + full.is_empty() + full.len + 1 }}; return run();" 42
 # List last-element helper for struct lists
 check "struct Tok {{ kind, val }}; fn tail(xs: List<Tok>) {{ let t = xs.last(); return t.val }}; fn run() {{ let xs: List<Tok> = []; xs.push(Tok {{ kind: 1, val: 10 }}); xs.push(Tok {{ kind: 0, val: 42 }}); let local = xs.last(); return tail(xs) + local.kind }}; return run();" 42
+# List pop helper for struct lists
+check "struct Tok {{ kind, val }}; fn take(xs: List<Tok>) {{ let t = xs.pop(); return t.val }}; fn run() {{ let xs: List<Tok> = []; xs.push(Tok {{ kind: 1, val: 10 }}); xs.push(Tok {{ kind: 0, val: 40 }}); xs.push(Tok {{ kind: 2, val: 2 }}); let local = xs.pop(); let got = take(xs); return local.kind + local.val + got - xs.len - 1 }}; return run();" 42
 # struct-valued function ABI: struct return via hidden out-param, struct param
 # by pointer/copy, direct return of a struct local, return of a struct-returning
 # call, and a struct literal passed directly as an argument.

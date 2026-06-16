@@ -123,6 +123,13 @@ fn is_last(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 3] != 116 { return 0 }
     return 1
 }
+fn is_pop(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 3 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 111 { return 0 }
+    if src[a + 2] != 112 { return 0 }
+    return 1
+}
 
 # Builtin call ids used by the native parity surface:
 #   1=Int(x) identity/truncation, 2=bitnot(x), 3=bitand, 4=bitor,
@@ -1848,6 +1855,99 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     return Op { kind: 1, val: loadc, next: loadc + 1 }
                 }
             }
+            if is_pop(src, meth.nstart, meth.nlen) == 1 {
+                let lsty = sty_of(slots, src, t.nstart, t.nlen)
+                if karr == 2 and lsty < 0 {
+                    let sslot = find_slot(slots, src, t.nstart, t.nlen)
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = load i64, i64* %v")
+                    pint(sslot + 1)
+                    putchar(10)
+                    let lenc = counter
+                    let idxc = lenc + 1
+                    emit_str("  %t")
+                    pint(idxc)
+                    emit_str(" = sub i64 %t")
+                    pint(lenc)
+                    emit_str(", 1")
+                    putchar(10)
+                    emit_str("  store i64 %t")
+                    pint(idxc)
+                    emit_str(", i64* %v")
+                    pint(sslot + 1)
+                    putchar(10)
+                    let gepc = idxc + 1
+                    emit_str("  %t")
+                    pint(gepc)
+                    emit_str(" = getelementptr [")
+                    pint(list_cap())
+                    emit_str(" x i64], [")
+                    pint(list_cap())
+                    emit_str(" x i64]* %v")
+                    pint(sslot)
+                    emit_str(", i64 0, i64 %t")
+                    pint(idxc)
+                    putchar(10)
+                    let loadc = gepc + 1
+                    emit_str("  %t")
+                    pint(loadc)
+                    emit_str(" = load i64, i64* %t")
+                    pint(gepc)
+                    putchar(10)
+                    return Op { kind: 1, val: loadc, next: loadc + 1 }
+                }
+                if karr == 4 and lsty < 0 {
+                    let pslot = find_slot(slots, src, t.nstart, t.nlen)
+                    let bp = counter
+                    emit_str("  %t")
+                    pint(bp)
+                    emit_str(" = load i64*, i64** %v")
+                    pint(pslot)
+                    putchar(10)
+                    let lp = bp + 1
+                    emit_str("  %t")
+                    pint(lp)
+                    emit_str(" = getelementptr i64, i64* %t")
+                    pint(bp)
+                    emit_str(", i64 ")
+                    pint(list_lenidx())
+                    putchar(10)
+                    let lv = lp + 1
+                    emit_str("  %t")
+                    pint(lv)
+                    emit_str(" = load i64, i64* %t")
+                    pint(lp)
+                    putchar(10)
+                    let idxc = lv + 1
+                    emit_str("  %t")
+                    pint(idxc)
+                    emit_str(" = sub i64 %t")
+                    pint(lv)
+                    emit_str(", 1")
+                    putchar(10)
+                    emit_str("  store i64 %t")
+                    pint(idxc)
+                    emit_str(", i64* %t")
+                    pint(lp)
+                    putchar(10)
+                    let gepc = idxc + 1
+                    emit_str("  %t")
+                    pint(gepc)
+                    emit_str(" = getelementptr i64, i64* %t")
+                    pint(bp)
+                    emit_str(", i64 %t")
+                    pint(idxc)
+                    putchar(10)
+                    let loadc = gepc + 1
+                    emit_str("  %t")
+                    pint(loadc)
+                    emit_str(" = load i64, i64* %t")
+                    pint(gepc)
+                    putchar(10)
+                    return Op { kind: 1, val: loadc, next: loadc + 1 }
+                }
+            }
             if is_sum(src, meth.nstart, meth.nlen) == 1 {
                 let sslot = find_slot(slots, src, t.nstart, t.nlen)
                 let sal = arrlen_of(slots, src, t.nstart, t.nlen)
@@ -2759,7 +2859,7 @@ fn rhs_los_elem_sty(toks: &List<Token>, slots: &List<Slot>, src: Str, npos: Int)
         }
         if after.kind == 27 {
             let meth = toks[vp + 2]
-            if is_last(src, meth.nstart, meth.nlen) == 1 {
+            if is_last(src, meth.nstart, meth.nlen) == 1 or is_pop(src, meth.nstart, meth.nlen) == 1 {
                 let karr2 = isarr_of(slots, src, rhs.nstart, rhs.nlen)
                 if karr2 == 2 {
                     return sty_of(slots, src, rhs.nstart, rhs.nlen)
@@ -3577,8 +3677,9 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             let los_est = rhs_los_elem_sty(toks, slots, src, npos)
             let lsti = rhs_struct_type(toks, defs, src, npos)
             if los_est >= 0 {
-                # `let t = toks[idx]` or `let t = toks.last()` -> copy the struct
-                # element into t's [nf x i64] local.
+                # `let t = toks[idx]`, `let t = toks.last()`, or
+                # `let t = toks.pop()` -> copy the struct element into t's
+                # [nf x i64] local. `pop()` also stores the decremented length.
                 let lvar = toks[vp]
                 let lnf = struct_nfields(defs, los_est)
                 let lkarr = isarr_of(slots, src, lvar.nstart, lvar.nlen)
@@ -3589,6 +3690,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let mut lidxval = 0
                 let mut lbufptr = 0
                 let mut lhavebuf = 0
+                let mut lpop = 0
+                let mut lpop_lenp = 0
                 if lnext.kind == 23 {
                     let libend = bracket_end(toks, vp + 2)
                     let lidx0 = gen_expr(toks, slots, fns, defs, src, vp + 2, libend, counter)
@@ -3597,6 +3700,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     counter = lidx0.next
                     lafter = libend + 1
                 } else {
+                    let lmeth = toks[vp + 2]
+                    if is_pop(src, lmeth.nstart, lmeth.nlen) == 1 { lpop = 1 }
                     let lclose = paren_end(toks, vp + 4)
                     lafter = lclose + 1
                     if lkarr == 4 {
@@ -3616,6 +3721,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                         pint(list_lenidx_for_nfields(lnf))
                         putchar(10)
                         let llenp = counter
+                        lpop_lenp = llenp
                         counter = counter + 1
                         emit_str("  %t")
                         pint(counter)
@@ -3724,6 +3830,18 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     pint(fdst)
                     putchar(10)
                     fk = fk + 1
+                }
+                if lpop == 1 {
+                    emit_str("  store i64 %t")
+                    pint(lidxval)
+                    if lkarr == 4 {
+                        emit_str(", i64* %t")
+                        pint(lpop_lenp)
+                    } else {
+                        emit_str(", i64* %v")
+                        pint(lsrcslot + 1)
+                    }
+                    putchar(10)
                 }
                 let stop = find_semi(toks, lafter, end)
                 i = stop + 1

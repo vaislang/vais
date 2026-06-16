@@ -18,6 +18,12 @@
 - Added struct-list `last()` binding coverage with `let item = xs.last()`.
 - Updated front, direct, full, and diagnostic gates plus public docs for the
   promoted `last()` API.
+- Added `List<T>.pop()` for non-empty lists to the full self-host compiler and
+  native direct engine.
+- Added scalar and struct-list `pop()` gate coverage, including parameter-list
+  length mutation.
+- Updated front, direct, full, and diagnostic gates plus public docs for the
+  promoted `pop()` API.
 
 ## 2026-06-15
 
