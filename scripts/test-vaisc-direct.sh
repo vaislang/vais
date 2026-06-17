@@ -25,6 +25,21 @@ expect_direct_trap() {
     fi
 }
 
+expect_direct_reject() {
+    local label="$1" src="$2" needle="$3" help="$4"
+    "$VAISC" emit-ir "$src" --engine direct -o "$tmp/$label.ll" >"$tmp/$label.out" 2>"$tmp/$label.err"
+    local rc=$?
+    if [ "$rc" -ne 0 ] &&
+        grep -q "$needle" "$tmp/$label.err" &&
+        grep -q "$help" "$tmp/$label.err"; then
+        echo "  PASS direct rejects $label"
+    else
+        echo "  FAIL direct reject $label rc=$rc"
+        cat "$tmp/$label.err"
+        fail=1
+    fi
+}
+
 src="$tmp/nv_c2_direct.vais"
 cat > "$src" <<'SRC'
 fn main() -> Int {
@@ -86,6 +101,16 @@ else
     cat "$tmp/direct-build.err"
     fail=1
 fi
+
+direct_import_src="$tmp/direct_import.vais"
+cat > "$direct_import_src" <<'SRC'
+import math.add
+
+fn main() -> Int {
+    return 42
+}
+SRC
+expect_direct_reject "import" "$direct_import_src" "direct native emitter does not support imports" "use the full engine for local imports"
 
 "$VAISC" run "$src" \
     --engine direct \

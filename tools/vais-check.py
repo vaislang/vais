@@ -27,7 +27,7 @@ Catalog (Rust/other-language intuition -> the single Vais form):
   vec![..]        -> [..]
   Vec<T>          -> List<T>
   HashMap<K,V>    -> Map<K,V>
-  import/module/package -> future Phase 2 surface, not implemented yet
+  module/package -> future Phase 2 surface, not implemented yet
   i8..i128/u8..u128/f32/f64/usize/isize -> Int / Int8..Int128 / UInt8.. / F32 / F64
   x.to_string()   -> Str(x)
   .unwrap()/.expect() -> match the Option/Result, or `?`
@@ -87,9 +87,9 @@ RULES = [
     (re.compile(r"\bHashMap\b"),
      "the map type spelling is `Map<K,V>`, not `HashMap<K,V>`; only local `Map<Int,Int>` is verified for now",
      lambda m, ln: re.sub(r"\bHashMap\b", "Map", ln, count=1)),
-    (re.compile(r"^\s*(import|module|package)\b"),
-     "modules and imports are specified but not implemented in scripts/vaisc yet",
-     lambda m, ln: "... keep code in one .vais file until the Phase 2 module model is implemented"),
+    (re.compile(r"^\s*(module|package)\b"),
+     "module and package declarations are not implemented yet",
+     lambda m, ln: "... omit the declaration until module/package declarations are implemented"),
     # --- Rust scalar type names (Vais uses Int/UInt8.. / F32 / F64, capitalized) ---
     (re.compile(r"(?<![A-Za-z0-9_])(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|usize|isize)(?![A-Za-z0-9_])"),
      "Vais scalar types are capitalized: `Int` / `Int8..Int128` / `UInt8..UInt128` / `F32` / `F64`",

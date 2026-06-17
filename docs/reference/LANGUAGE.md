@@ -33,12 +33,24 @@ fn main() -> Int {
 ## Modules, Packages, And Imports
 
 The Phase 2 module model is specified in
-[../design/MODULES.md](../design/MODULES.md), but it is not implemented in
-`scripts/vaisc` yet. Current verified builds use one entry `.vais` file.
+[../design/MODULES.md](../design/MODULES.md). The first implemented slice
+supports local dotted imports in the full engine:
 
-Until the implementation and gates land, the front contract rejects `import`,
-`module`, and `package` declarations with a diagnostic that points back to the
-single-file release surface.
+```vais
+import math.add
+
+fn main() -> Int {
+    return add(20, 22)
+}
+```
+
+For an entry file `main.vais`, `import math.add` resolves to `math/add.vais`
+under the entry file's directory. Imported files are merged in deterministic
+import-path order before compilation. Missing imports, duplicate top-level
+symbols, and import cycles are front-contract errors.
+
+Explicit `module` and `package` declarations are reserved for later Phase 2
+gates and are rejected for now. The direct engine remains single-file.
 
 ## Functions
 

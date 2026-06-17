@@ -31,8 +31,10 @@
   `is_empty()`, `last()`, and `pop()` so promoted prelude APIs have value-test
   coverage.
 - Specified the Phase 2 module/package/import model and added public front
-  diagnostics that reject `import`, `module`, and `package` until multi-file
-  compilation is implemented and gated.
+  diagnostics for reserved `module` and `package` declarations.
+- Added the first full-engine local import implementation for single-package
+  multi-file builds, including missing-import, duplicate-symbol, and
+  import-cycle diagnostics.
 
 ## v0.2.2 - 2026-06-15
 

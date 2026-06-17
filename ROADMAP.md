@@ -66,6 +66,9 @@ This file tracks current work only.
   `get(key, default)`, `contains`, and `len`.
 - Promoted prelude APIs have value-corpus examples, including local
   `Map<Int,Int>` and `List<T>.is_empty()`, `last()`, and `pop()`.
+- The full compiler path supports single-package local dotted imports such as
+  `import math.add`, with gates for multi-file success, missing imports,
+  duplicate symbols, and import cycles.
 
 ## Current Reality
 
@@ -110,7 +113,7 @@ This file tracks current work only.
 ## Next Work
 
 1. Expand the standard library only through gate-backed APIs.
-2. Add a small module/package/import model before growing multi-file examples.
+2. Add a minimal package manifest on top of the implemented local import model.
 3. Add file and process primitives, then replace Python-only internal checks
    with Vais-backed tools where the language is strong enough.
 4. Broaden types, collections, and control syntax without publishing ungated
@@ -179,13 +182,12 @@ package manager too early.
 
 - [x] 2.1 Specify a minimal module model: file module names, import paths, symbol
   visibility, duplicate-name diagnostics, and cycle behavior.
-- [ ] 2.2 Implement single-package multi-file compilation for `scripts/vaisc`.
-- [ ] 2.3 Add `import` support for local package paths with deterministic
+- [x] 2.2 Implement single-package multi-file compilation for `scripts/vaisc`.
+- [x] 2.3 Add `import` support for local package paths with deterministic
   ordering and stable diagnostics.
 - [ ] 2.4 Add package manifest support only for name/version/source roots and
   local dependencies.
-- [ ] 2.5 Add examples, docs, and gates for module imports, duplicate symbols,
-  cycles, and package smoke builds.
+- [ ] 2.5 Add package manifest examples, docs, gates, and package smoke builds.
 
 Done: a small multi-file Vais project builds with `scripts/vaisc build` and is
 covered by CI gates.
@@ -274,7 +276,7 @@ examples, and reproduce the release archive from source.
 
 ### Current First Executable Milestone
 
-Phase 0 is complete. The next concrete slice is Phase 1:
+The current concrete slice is Phase 2 package structure:
 
 - [x] Add a release checklist document and wire it to the current gate commands.
 - [x] Confirm the release archive workflow publishes archives for a chosen tag.
@@ -296,7 +298,22 @@ Phase 0 is complete. The next concrete slice is Phase 1:
   Phase 2 module model.
 - [x] Specify the minimal Phase 2 module/import/package model and reject
   unimplemented module syntax with public front diagnostics.
-- [ ] Implement single-package multi-file compilation for `scripts/vaisc`.
+- [x] Implement single-package multi-file compilation for `scripts/vaisc`.
+- [x] Add local import support with missing-import, duplicate-symbol, and
+  import-cycle diagnostics.
+- [ ] Add the minimal package manifest slice.
+
+## Completed Milestone: Single-Package Local Imports
+
+Mode: sequential
+
+- [x] 1. Resolve static dotted `import` paths under the entry file directory.
+- [x] 2. Merge imported modules before the entry source for full-engine builds.
+- [x] 3. Keep direct-engine builds single-file.
+- [x] 4. Reject missing imports, duplicate top-level symbols, and import cycles
+  with P4 diagnostics.
+- [x] 5. Add a multi-file example and front-contract gates for native and Python
+  fallback paths.
 
 ## Completed Milestone: Minimal Module Model Specification
 
@@ -306,8 +323,8 @@ Mode: sequential
   visibility, duplicate-name diagnostics, and cycle behavior.
 - [x] 2. Keep `Map<K,V>` generic/ABI expansion deferred until its lowering and
   ABI are specified separately.
-- [x] 3. Add front diagnostics for `import`, `module`, and `package` while the
-  compiler remains single-file.
+- [x] 3. Add front diagnostics for reserved `module` and `package` syntax and
+  use the spec as the import implementation contract.
 - [x] 4. Sync canonical docs, website copy, roadmap, worklog, and changelog.
 
 ## Completed Milestone: Prelude API Value Examples

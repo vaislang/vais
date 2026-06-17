@@ -1,10 +1,11 @@
 # Vais Module Model
 
-Status: specified for Phase 2. Not implemented in `scripts/vaisc` yet.
+Status: first local-import slice implemented for the full `scripts/vaisc`
+engine.
 
-Current verified builds compile one entry `.vais` file. The front contract
-rejects `import`, `module`, and `package` declarations until the implementation
-and gates below exist.
+Current verified builds can compile one entry `.vais` file plus local files
+reached through static dotted `import` declarations. Explicit `module` and
+`package` declarations are still reserved and rejected.
 
 ## Goals
 
@@ -25,7 +26,7 @@ and gates below exist.
 
 ## Import Paths
 
-The first implementation should support only local package imports:
+The first implementation supports only local package imports:
 
 ```vais
 import math.add
@@ -49,9 +50,9 @@ the first slice.
 
 ## Ordering
 
-Compilation loads the entry file, recursively loads imports, then emits the
-merged module graph in deterministic package-relative path order. The same
-checkout must produce the same source merge order on every platform.
+Compilation loads the entry file, recursively loads each file's imports in
+module-name order, then emits imported modules before the importing file. The
+same checkout must produce the same source merge order on every platform.
 
 ## Cycles
 
@@ -76,7 +77,7 @@ source = "src"
 No registry, semver solver, build scripts, features, binary targets, or external
 dependencies are part of the first module/package implementation.
 
-## Required Gates
+## Current Gates
 
 - `scripts/vaisc build examples/module_basic/main.vais` builds a multi-file
   local package.

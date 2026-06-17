@@ -1,0 +1,6 @@
+# expect: 42
+import math.add
+
+fn main() -> Int {
+    return add(20, 22)
+}

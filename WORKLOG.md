@@ -9,8 +9,12 @@
 - Promoted both examples in `tools/vaisc-parity.tsv` and synced the roadmap,
   examples README, and changelog with the value corpus.
 - Specified the Phase 2 module/package/import model in `docs/design/MODULES.md`.
-- Added front and `vais-check` diagnostics that reject `import`, `module`, and
-  `package` until multi-file compilation is implemented and gated.
+- Added front and `vais-check` diagnostics for reserved `module` and `package`
+  declarations.
+- Implemented the first full-engine local import slice in the native public
+  driver and Python fallback.
+- Added gates for multi-file import success, missing imports, duplicate
+  symbols, and import cycles.
 
 ## 2026-06-16
 

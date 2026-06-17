@@ -18,6 +18,12 @@ Run a single example by basename:
 bash scripts/test.sh c4
 ```
 
+Run the multi-file import example:
+
+```bash
+scripts/vaisc run examples/module_basic/main.vais
+```
+
 Compiler parity coverage is tracked in `tools/vaisc-parity.tsv`:
 
 ```bash

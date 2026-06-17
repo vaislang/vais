@@ -60,7 +60,7 @@ to the matching GitHub Release. The release checklist is
 | [CHANGELOG.md](CHANGELOG.md) | Current source release notes |
 | [docs/release/RELEASE_CHECKLIST.md](docs/release/RELEASE_CHECKLIST.md) | Pre-tag release checklist |
 | [docs/reference/LANGUAGE.md](docs/reference/LANGUAGE.md) | Current syntax and verified language surface |
-| [docs/design/MODULES.md](docs/design/MODULES.md) | Planned module/package/import model |
+| [docs/design/MODULES.md](docs/design/MODULES.md) | Current module/package/import model |
 | [examples/README.md](examples/README.md) | Value-checked example corpus |
 | [compiler/self/SELF_HOST.md](compiler/self/SELF_HOST.md) | Self-host compiler status |
 | [website/DEPLOYMENT.md](website/DEPLOYMENT.md) | Official site source and deployment notes |

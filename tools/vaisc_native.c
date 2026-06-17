@@ -25,6 +25,26 @@ typedef struct {
 
 typedef struct {
     char *name;
+    char *path;
+    int line_no;
+} ModuleSymbol;
+
+typedef struct {
+    char *path;
+    char *module;
+} ModuleStackEntry;
+
+typedef struct {
+    char *root;
+    LineVec visited;
+    ModuleStackEntry stack[128];
+    int stack_count;
+    ModuleSymbol symbols[512];
+    int symbol_count;
+} ModuleResolver;
+
+typedef struct {
+    char *name;
     int tag;
     int field_count;
 } VariantInfo;
@@ -1287,13 +1307,12 @@ static int check_front_contract_text(const char *text, const char *path) {
         char *fix = NULL;
         const char *trim = skip_ws(line);
         const char *module_kw = NULL;
-        if (starts_with(trim, "import") && !is_ident_continue(trim[6])) module_kw = "import";
-        else if (starts_with(trim, "module") && !is_ident_continue(trim[6])) module_kw = "module";
+        if (starts_with(trim, "module") && !is_ident_continue(trim[6])) module_kw = "module";
         else if (starts_with(trim, "package") && !is_ident_continue(trim[7])) module_kw = "package";
         if (module_kw != NULL) {
             report_issue(path, line_no, find_col(line, module_kw), line,
-                "modules and imports are specified but not implemented in scripts/vaisc yet",
-                "keep code in one .vais file for now; the Phase 2 module model will add local imports, duplicate-symbol diagnostics, and cycle diagnostics.",
+                "module and package declarations are not implemented yet",
+                "omit the declaration; module names are derived from file paths in the first import slice.",
                 NULL);
             issues++;
         } else if (strstr(line, "&&") != NULL) {
@@ -1402,25 +1421,358 @@ static int check_front_contract_text(const char *text, const char *path) {
     return issues == 0 ? 0 : 1;
 }
 
+typedef struct {
+    char *name;
+    int line_no;
+    char *line;
+} ImportInfo;
+
+static char *dirname_copy(const char *path) {
+    const char *slash = strrchr(path, '/');
+    if (slash == NULL) return strdup(".");
+    if (slash == path) return strdup("/");
+    return substr_copy(path, (size_t)(slash - path));
+}
+
+static char *canonical_existing_path(const char *path) {
+    char resolved[4096];
+    if (realpath(path, resolved) == NULL) return NULL;
+    return strdup(resolved);
+}
+
+static int linevec_contains(LineVec *lv, const char *text) {
+    for (size_t i = 0; i < lv->len; i++) {
+        if (strcmp(lv->items[i], text) == 0) return 1;
+    }
+    return 0;
+}
+
+static char *module_name_for_path_c(ModuleResolver *r, const char *path) {
+    const char *rel = path;
+    size_t root_len = strlen(r->root);
+    if (strncmp(path, r->root, root_len) == 0 && path[root_len] == '/') rel = path + root_len + 1;
+    char *out = strdup(rel);
+    if (out == NULL) die_oom();
+    size_t n = strlen(out);
+    if (n >= 5 && strcmp(out + n - 5, ".vais") == 0) out[n - 5] = '\0';
+    for (char *p = out; *p != '\0'; p++) {
+        if (*p == '/') *p = '.';
+    }
+    return out;
+}
+
+static char *module_path_for_import(ModuleResolver *r, const char *name) {
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, r->root);
+    sb_append(&out, "/");
+    for (const char *p = name; *p != '\0'; p++) {
+        char ch = *p == '.' ? '/' : *p;
+        sb_append_n(&out, &ch, 1);
+    }
+    sb_append(&out, ".vais");
+    return sb_take(&out);
+}
+
+static char *parse_import_name_c(const char *code) {
+    const char *s = skip_ws(code);
+    if (!starts_with(s, "import") || is_ident_continue(s[6])) return NULL;
+    s = skip_ws(s + 6);
+    const char *start = s;
+    if (!is_ident_start(*s)) return NULL;
+    while (1) {
+        while (is_ident_continue(*s)) s++;
+        if (*s != '.') break;
+        s++;
+        if (!is_ident_start(*s)) return NULL;
+    }
+    const char *end = s;
+    s = skip_ws(s);
+    if (*s == ';') s = skip_ws(s + 1);
+    if (*s != '\0') return NULL;
+    return substr_copy(start, (size_t)(end - start));
+}
+
+static char *parse_top_level_symbol_c(const char *code) {
+    const char *s = skip_ws(code);
+    const char *name = NULL;
+    if (starts_with(s, "fn") && !is_ident_continue(s[2])) name = skip_ws(s + 2);
+    else if (starts_with(s, "struct") && !is_ident_continue(s[6])) name = skip_ws(s + 6);
+    else if (starts_with(s, "enum") && !is_ident_continue(s[4])) name = skip_ws(s + 4);
+    else return NULL;
+    if (!is_ident_start(*name)) return NULL;
+    const char *end = name + 1;
+    while (is_ident_continue(*end)) end++;
+    return substr_copy(name, (size_t)(end - name));
+}
+
+static int import_info_cmp(const void *a, const void *b) {
+    const ImportInfo *ia = (const ImportInfo *)a;
+    const ImportInfo *ib = (const ImportInfo *)b;
+    return strcmp(ia->name, ib->name);
+}
+
+static int module_resolver_stack_index(ModuleResolver *r, const char *path) {
+    for (int i = 0; i < r->stack_count; i++) {
+        if (strcmp(r->stack[i].path, path) == 0) return i;
+    }
+    return -1;
+}
+
+static int module_resolver_add_symbol(ModuleResolver *r, const char *path, int line_no, const char *line, const char *name) {
+    for (int i = 0; i < r->symbol_count; i++) {
+        if (strcmp(r->symbols[i].name, name) == 0) {
+            StrBuf help;
+            sb_init(&help);
+            sb_append(&help, "first definition is at ");
+            sb_append(&help, r->symbols[i].path);
+            sb_append(&help, ":");
+            char num[32];
+            snprintf(num, sizeof(num), "%d", r->symbols[i].line_no);
+            sb_append(&help, num);
+            sb_append(&help, "; rename one symbol before importing both files.");
+            StrBuf msg;
+            sb_init(&msg);
+            sb_append(&msg, "duplicate top-level symbol `");
+            sb_append(&msg, name);
+            sb_append(&msg, "`");
+            report_issue(path, line_no, find_col(line, name), line, msg.data, help.data, NULL);
+            free(help.data);
+            free(msg.data);
+            return 1;
+        }
+    }
+    if (r->symbol_count >= 512) {
+        fprintf(stderr, "error: too many top-level symbols in module graph\n");
+        return 1;
+    }
+    r->symbols[r->symbol_count].name = strdup(name);
+    r->symbols[r->symbol_count].path = strdup(path);
+    r->symbols[r->symbol_count].line_no = line_no;
+    if (r->symbols[r->symbol_count].name == NULL || r->symbols[r->symbol_count].path == NULL) die_oom();
+    r->symbol_count++;
+    return 0;
+}
+
+static char *module_resolver_load(ModuleResolver *r, const char *path, const char *issue_path, int issue_line, const char *issue_text);
+
+static char *module_resolver_cycle_help(ModuleResolver *r, int start) {
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, "remove one import from the cycle: ");
+    for (int i = start; i < r->stack_count; i++) {
+        if (i > start) sb_append(&out, " -> ");
+        sb_append(&out, r->stack[i].module);
+    }
+    sb_append(&out, " -> ");
+    sb_append(&out, r->stack[start].module);
+    sb_append(&out, ".");
+    return sb_take(&out);
+}
+
+static char *module_resolver_load(ModuleResolver *r, const char *path, const char *issue_path, int issue_line, const char *issue_text) {
+    char *real = canonical_existing_path(path);
+    if (real == NULL) {
+        if (issue_path != NULL && issue_text != NULL) {
+            StrBuf help;
+            sb_init(&help);
+            sb_append(&help, "expected local module file at ");
+            sb_append(&help, path);
+            sb_append(&help, ".");
+            report_issue(issue_path, issue_line, find_col(issue_text, "import"), issue_text,
+                "import path not found", help.data, NULL);
+            free(help.data);
+        } else {
+            fprintf(stderr, "error: source not found: %s\n", path);
+        }
+        return NULL;
+    }
+    int cycle_start = module_resolver_stack_index(r, real);
+    if (cycle_start >= 0) {
+        char *help = module_resolver_cycle_help(r, cycle_start);
+        report_issue(issue_path ? issue_path : path, issue_line > 0 ? issue_line : 1, issue_text ? find_col(issue_text, "import") : 1, issue_text ? issue_text : "",
+            "import cycle detected", help, NULL);
+        free(help);
+        free(real);
+        return NULL;
+    }
+    if (linevec_contains(&r->visited, real)) {
+        free(real);
+        return strdup("");
+    }
+    if (r->stack_count >= 128) {
+        fprintf(stderr, "error: import graph is too deep\n");
+        free(real);
+        return NULL;
+    }
+    char *module_name = module_name_for_path_c(r, real);
+    r->stack[r->stack_count].path = strdup(real);
+    r->stack[r->stack_count].module = module_name;
+    if (r->stack[r->stack_count].path == NULL) die_oom();
+    r->stack_count++;
+
+    char *raw = read_file(real);
+    if (raw == NULL) {
+        r->stack_count--;
+        free(r->stack[r->stack_count].path);
+        free(r->stack[r->stack_count].module);
+        free(real);
+        return NULL;
+    }
+    LineVec lines = split_lines(raw);
+    LineVec body;
+    lines_init(&body);
+    ImportInfo imports[64];
+    int import_count = 0;
+    int failed = 0;
+    for (size_t i = 0; i < lines.len && !failed; i++) {
+        const char *line = lines.items[i];
+        int line_no = (int)i + 1;
+        char *code = strip_line_comment(line, strlen(line));
+        const char *trim = skip_ws(code);
+        char *import_name = parse_import_name_c(code);
+        if (import_name != NULL) {
+            if (import_count >= 64) {
+                report_issue(real, line_no, find_col(line, "import"), line,
+                    "too many imports in one module",
+                    "split the module or reduce imports in this first Phase 2 slice.",
+                    NULL);
+                free(import_name);
+                failed = 1;
+            } else {
+                imports[import_count].name = import_name;
+                imports[import_count].line_no = line_no;
+                imports[import_count].line = strdup(line);
+                if (imports[import_count].line == NULL) die_oom();
+                import_count++;
+            }
+            free(code);
+            continue;
+        }
+        if (starts_with(trim, "import") && !is_ident_continue(trim[6])) {
+            report_issue(real, line_no, find_col(line, "import"), line,
+                "invalid import path",
+                "write a static dotted local import such as `import math.add`.",
+                NULL);
+            failed = 1;
+            free(code);
+            break;
+        }
+        if ((starts_with(trim, "module") && !is_ident_continue(trim[6])) ||
+            (starts_with(trim, "package") && !is_ident_continue(trim[7]))) {
+            const char *kw = starts_with(trim, "module") ? "module" : "package";
+            report_issue(real, line_no, find_col(line, kw), line,
+                "module and package declarations are not implemented yet",
+                "omit the declaration; module names are derived from file paths in the first import slice.",
+                NULL);
+            failed = 1;
+            free(code);
+            break;
+        }
+        char *symbol = parse_top_level_symbol_c(code);
+        if (symbol != NULL) {
+            failed = module_resolver_add_symbol(r, real, line_no, line, symbol);
+            free(symbol);
+            if (failed) {
+                free(code);
+                break;
+            }
+        }
+        lines_push(&body, strdup(line));
+        if (body.items[body.len - 1] == NULL) die_oom();
+        free(code);
+    }
+
+    StrBuf merged;
+    sb_init(&merged);
+    if (!failed) {
+        qsort(imports, (size_t)import_count, sizeof(ImportInfo), import_info_cmp);
+        for (int i = 0; i < import_count; i++) {
+            char *target = module_path_for_import(r, imports[i].name);
+            char *piece = module_resolver_load(r, target, real, imports[i].line_no, imports[i].line);
+            free(target);
+            if (piece == NULL) {
+                failed = 1;
+                break;
+            }
+            if (piece[0] != '\0') {
+                sb_append(&merged, piece);
+                if (merged.len > 0 && merged.data[merged.len - 1] != '\n') sb_append(&merged, "\n");
+            }
+            free(piece);
+        }
+    }
+    if (!failed) {
+        char *body_text = join_lines(&body, 1);
+        sb_append(&merged, body_text);
+        free(body_text);
+        lines_push(&r->visited, strdup(real));
+        if (r->visited.items[r->visited.len - 1] == NULL) die_oom();
+    }
+
+    for (int i = 0; i < import_count; i++) {
+        free(imports[i].name);
+        free(imports[i].line);
+    }
+    lines_free(&body);
+    lines_free(&lines);
+    free(raw);
+    r->stack_count--;
+    free(r->stack[r->stack_count].path);
+    free(r->stack[r->stack_count].module);
+    free(real);
+    if (failed) {
+        free(merged.data);
+        return NULL;
+    }
+    return sb_take(&merged);
+}
+
+static void module_resolver_free(ModuleResolver *r) {
+    free(r->root);
+    lines_free(&r->visited);
+    for (int i = 0; i < r->symbol_count; i++) {
+        free(r->symbols[i].name);
+        free(r->symbols[i].path);
+    }
+}
+
+static char *resolve_module_graph_source(const char *path) {
+    char *dir = dirname_copy(path);
+    char *root = canonical_existing_path(dir);
+    if (root == NULL) root = strdup(dir);
+    if (root == NULL) die_oom();
+    free(dir);
+
+    ModuleResolver r;
+    r.root = root;
+    lines_init(&r.visited);
+    r.stack_count = 0;
+    r.symbol_count = 0;
+    char *merged = module_resolver_load(&r, path, NULL, 0, NULL);
+    module_resolver_free(&r);
+    return merged;
+}
+
 static char *prepare_source_file(const char *path) {
     if (!has_vais_suffix(path)) {
         fprintf(stderr, "error: Vais source files must use the .vais extension: %s\n", path);
         return NULL;
     }
-    char *raw = read_file(path);
-    if (raw == NULL) return NULL;
-    char *normalized = normalize_source_text(raw, 0);
+    char *merged = resolve_module_graph_source(path);
+    if (merged == NULL) return NULL;
+    char *normalized = normalize_source_text(merged, 0);
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
     if (check_front_contract_text(closure_lowered, path) != 0) {
-        free(raw);
+        free(merged);
         free(normalized);
         free(enum_lowered);
         free(closure_lowered);
         return NULL;
     }
     char *prepared = normalize_source_text(closure_lowered, 1);
-    free(raw);
+    free(merged);
     free(normalized);
     free(enum_lowered);
     free(closure_lowered);
@@ -5070,6 +5422,36 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     int has_main = 0;
 
     for (size_t i = 0; i < lines.len; i++) {
+        char *code = strip_line_comment(lines.items[i], strlen(lines.items[i]));
+        const char *trim = skip_ws(code);
+        if (starts_with(trim, "import") && !is_ident_continue(trim[6])) {
+            report_issue(path, (int)i + 1, find_col(lines.items[i], "import"), lines.items[i],
+                "direct native emitter does not support imports",
+                "use the full engine for local imports; direct engine builds stay single-file.",
+                NULL);
+            free(code);
+            free(skip_lines);
+            lines_free(&lines);
+            direct_structs_free(structs, struct_count);
+            direct_fns_free(fns, fn_count);
+            return NULL;
+        }
+        if ((starts_with(trim, "module") && !is_ident_continue(trim[6])) ||
+            (starts_with(trim, "package") && !is_ident_continue(trim[7]))) {
+            const char *kw = starts_with(trim, "module") ? "module" : "package";
+            report_issue(path, (int)i + 1, find_col(lines.items[i], kw), lines.items[i],
+                "module and package declarations are not implemented yet",
+                "omit the declaration; module names are derived from file paths in the first import slice.",
+                NULL);
+            free(code);
+            free(skip_lines);
+            lines_free(&lines);
+            direct_structs_free(structs, struct_count);
+            direct_fns_free(fns, fn_count);
+            return NULL;
+        }
+        free(code);
+
         DirectStructInfo st;
         memset(&st, 0, sizeof(st));
         size_t struct_end = i;

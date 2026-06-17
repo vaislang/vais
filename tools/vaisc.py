@@ -142,8 +142,8 @@ def fix_turbofish_new(match: re.Match[str], raw: str) -> str:
 FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
     (
         re.compile(r"^\s*(import|module|package)\b"),
-        "modules and imports are specified but not implemented in scripts/vaisc yet",
-        "keep code in one .vais file for now; the Phase 2 module model will add local imports, duplicate-symbol diagnostics, and cycle diagnostics.",
+        "imports are supported only by the full engine; module and package declarations are not implemented yet",
+        "use `scripts/vaisc build file.vais` without `--engine direct` for local imports, and keep `module`/`package` declarations out until their Phase 2 gates land.",
     ),
     (
         re.compile(r"\benum\b"),
@@ -1078,10 +1078,162 @@ def lower_print_for_core_text(text: str) -> str:
     return "\n".join(out) + ("\n" if text.endswith("\n") else "")
 
 
+IMPORT_LINE = re.compile(r"^\s*import\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*;?\s*$")
+MODULE_DECL_LINE = re.compile(r"^\s*(module|package)\b")
+TOP_LEVEL_SYMBOL = re.compile(r"^\s*(fn|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)\b")
+
+
+def format_source_issue(path: Path, line_no: int, col: int, line: str, message: str, help_text: str) -> str:
+    return "\n".join(
+        [
+            f"error: {message}",
+            f"  --> {path}:{line_no}:{col}",
+            f"  {line}",
+            f"  {caret_at(col)}",
+            f"  help: {help_text}",
+        ]
+    )
+
+
+def module_name_for_path(path: Path, root: Path) -> str:
+    try:
+        rel = path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        rel = path.name
+    rel_text = str(rel)
+    if rel_text.endswith(".vais"):
+        rel_text = rel_text[:-5]
+    return rel_text.replace(os.sep, ".")
+
+
+def resolve_module_path(root: Path, module_name: str) -> Path:
+    return root.joinpath(*module_name.split(".")).with_suffix(".vais")
+
+
+class ModuleResolver:
+    def __init__(self, root: Path) -> None:
+        self.root = root.resolve()
+        self.visited: set[Path] = set()
+        self.stack: list[Path] = []
+        self.symbols: dict[str, tuple[Path, int]] = {}
+
+    def diagnostic(
+        self,
+        path: Path,
+        line_no: int,
+        col: int,
+        line: str,
+        message: str,
+        help_text: str,
+    ) -> FrontContractError:
+        return FrontContractError(format_source_issue(path, line_no, col, line, message, help_text))
+
+    def load(self, path: Path, importer: tuple[Path, int, str] | None = None) -> str:
+        try:
+            real = path.resolve()
+        except OSError:
+            real = path
+
+        if real in self.stack:
+            cycle_paths = self.stack[self.stack.index(real) :] + [real]
+            cycle = " -> ".join(module_name_for_path(p, self.root) for p in cycle_paths)
+            if importer is None:
+                issue_path, line_no, line = path, 1, ""
+            else:
+                issue_path, line_no, line = importer
+            raise self.diagnostic(
+                issue_path,
+                line_no,
+                max(code_only(line).find("import") + 1, 1),
+                line,
+                "import cycle detected",
+                f"remove one import from the cycle: {cycle}.",
+            )
+
+        if real in self.visited:
+            return ""
+        if not real.is_file():
+            if importer is None:
+                raise CompileError(f"source not found: {path}")
+            issue_path, line_no, line = importer
+            raise self.diagnostic(
+                issue_path,
+                line_no,
+                max(code_only(line).find("import") + 1, 1),
+                line,
+                "import path not found",
+                f"expected local module file at {path}.",
+            )
+
+        self.stack.append(real)
+        raw = real.read_text()
+        imports: list[tuple[str, int, str]] = []
+        body: list[str] = []
+        for line_no, raw_line in enumerate(raw.splitlines(), 1):
+            code = code_only(raw_line)
+            stripped = code.strip()
+            import_match = IMPORT_LINE.match(code)
+            if import_match:
+                imports.append((import_match.group(1), line_no, raw_line))
+                continue
+            if stripped.startswith("import"):
+                raise self.diagnostic(
+                    real,
+                    line_no,
+                    max(code.find("import") + 1, 1),
+                    raw_line,
+                    "invalid import path",
+                    "write a static dotted local import such as `import math.add`.",
+                )
+            module_match = MODULE_DECL_LINE.match(code)
+            if module_match:
+                raise self.diagnostic(
+                    real,
+                    line_no,
+                    module_match.start(1) + 1,
+                    raw_line,
+                    "module and package declarations are not implemented yet",
+                    "omit the declaration; module names are derived from file paths in the first import slice.",
+                )
+            symbol_match = TOP_LEVEL_SYMBOL.match(code)
+            if symbol_match:
+                name = symbol_match.group(2)
+                previous = self.symbols.get(name)
+                if previous is not None:
+                    prev_path, prev_line = previous
+                    raise self.diagnostic(
+                        real,
+                        line_no,
+                        symbol_match.start(2) + 1,
+                        raw_line,
+                        f"duplicate top-level symbol `{name}`",
+                        f"first definition is at {prev_path}:{prev_line}; rename one symbol before importing both files.",
+                    )
+                self.symbols[name] = (real, line_no)
+            body.append(raw_line)
+
+        pieces: list[str] = []
+        for module_name, line_no, raw_line in sorted(imports, key=lambda item: item[0]):
+            target = resolve_module_path(self.root, module_name)
+            pieces.append(self.load(target, (real, line_no, raw_line)))
+        pieces.append("\n".join(body))
+
+        self.stack.pop()
+        self.visited.add(real)
+        return "\n".join(piece for piece in pieces if piece.strip()) + "\n"
+
+
+def resolve_module_graph_source(source: Path) -> str:
+    if not source.is_file():
+        raise CompileError(f"source not found: {source}")
+    resolver = ModuleResolver(source.parent)
+    return resolver.load(source)
+
+
 def prepare_front_source(source: Path, tmp: Path) -> Path:
-    raw = source.read_text()
+    raw = resolve_module_graph_source(source)
     lowered = lower_front_source_text(raw)
-    if lowered == raw:
+    if lowered == raw and raw == source.read_text():
         return source
     lowered_path = tmp / "front_lowered.vais"
     lowered_path.write_text(lowered)

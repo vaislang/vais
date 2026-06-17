@@ -8,9 +8,10 @@ OUT="${1:-$HERE/build/vaisc}"
 BUILD_DIR="$(dirname "$OUT")"
 CORE="$HERE/compiler/self/vaisc_core.ll"
 DRIVER="$HERE/tools/vaisc_native.c"
-CORE_NATIVE="$BUILD_DIR/vaisc_core_native.ll"
+CORE_NATIVE="$BUILD_DIR/vaisc_core_native.$(basename "$OUT").$$.ll"
 
 mkdir -p "$BUILD_DIR"
+trap 'rm -f "$CORE_NATIVE"' EXIT
 
 main_count="$(grep -c '^define i64 @main() {$' "$CORE" || true)"
 if [ "$main_count" != "1" ]; then

@@ -242,6 +242,41 @@ else
     fail=1
 fi
 
+module_root="$tmp/module_basic"
+mkdir -p "$module_root/math"
+cat > "$module_root/math/add.vais" <<'SRC'
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+SRC
+cat > "$module_root/main.vais" <<'SRC'
+import math.add
+
+fn main() -> Int {
+    return add(20, 22)
+}
+SRC
+
+"$VAISC" run "$module_root/main.vais" >"$tmp/module_accept.out" 2>"$tmp/module_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS accepts local import multi-file full slice"
+else
+    echo "  FAIL accepts local import multi-file got=$got want=42"
+    cat "$tmp/module_accept.err"
+    fail=1
+fi
+
+VAISC_FORCE_PYTHON=1 "$VAISC" run "$module_root/main.vais" >"$tmp/module_py_accept.out" 2>"$tmp/module_py_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS Python fallback accepts local import multi-file slice"
+else
+    echo "  FAIL Python fallback local import got=$got want=42"
+    cat "$tmp/module_py_accept.err"
+    fail=1
+fi
+
 expect_reject() {
     local name="$1"
     local needle="$2"
@@ -362,15 +397,7 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "import_not_implemented" "modules and imports are specified" "one .vais file" <<'SRC'
-import math.add
-
-fn main() -> Int {
-    return add(20, 22)
-}
-SRC
-
-expect_reject "module_not_implemented" "modules and imports are specified" "Phase 2 module model" <<'SRC'
+expect_reject "module_not_implemented" "module and package declarations are not implemented" "module names are derived from file paths" <<'SRC'
 module math.add
 
 fn main() -> Int {
@@ -378,11 +405,64 @@ fn main() -> Int {
 }
 SRC
 
-expect_reject "package_not_implemented" "modules and imports are specified" "Phase 2 module model" <<'SRC'
+expect_reject "package_not_implemented" "module and package declarations are not implemented" "module names are derived from file paths" <<'SRC'
 package demo
 
 fn main() -> Int {
     return 42
+}
+SRC
+
+expect_reject "missing_import" "import path not found" "expected local module file" <<'SRC'
+import math.missing
+
+fn main() -> Int {
+    return 0
+}
+SRC
+
+dup_root="$tmp/duplicate_import"
+mkdir -p "$dup_root/a" "$dup_root/b"
+cat > "$dup_root/a/one.vais" <<'SRC'
+fn helper() -> Int {
+    return 1
+}
+SRC
+cat > "$dup_root/b/two.vais" <<'SRC'
+fn helper() -> Int {
+    return 2
+}
+SRC
+expect_reject "duplicate_import/main" "duplicate top-level symbol" "first definition" <<'SRC'
+import a.one
+import b.two
+
+fn main() -> Int {
+    return helper()
+}
+SRC
+
+cycle_root="$tmp/cycle_import"
+mkdir -p "$cycle_root"
+cat > "$cycle_root/a.vais" <<'SRC'
+import b
+
+fn a() -> Int {
+    return 1
+}
+SRC
+cat > "$cycle_root/b.vais" <<'SRC'
+import a
+
+fn b() -> Int {
+    return 2
+}
+SRC
+expect_reject "cycle_import/main" "import cycle detected" "remove one import from the cycle" <<'SRC'
+import a
+
+fn main() -> Int {
+    return a()
 }
 SRC
 

@@ -8,24 +8,43 @@ if [ "${VAISC_FORCE_PYTHON:-}" = "1" ]; then
 fi
 
 native="$HERE/build/vaisc"
-needs_build=0
-if [ ! -x "$native" ]; then
-    needs_build=1
-else
+native_needs_build() {
+    if [ ! -x "$native" ]; then
+        return 0
+    fi
     for dep in \
         "$HERE/compiler/self/vaisc_core.ll" \
         "$HERE/tools/vaisc_native.c" \
         "$HERE/scripts/build-vaisc-native.sh"
     do
         if [ "$dep" -nt "$native" ]; then
-            needs_build=1
-            break
+            return 0
         fi
     done
-fi
+    return 1
+}
 
-if [ "$needs_build" -eq 1 ]; then
-    "$HERE/scripts/build-vaisc-native.sh" "$native" >/dev/null
+if native_needs_build; then
+    lock="$native.lock"
+    while ! mkdir "$lock" 2>/dev/null; do
+        sleep 0.1
+    done
+    tmp_native=""
+    cleanup_build_lock() {
+        if [ -n "$tmp_native" ]; then
+            rm -f "$tmp_native"
+        fi
+        rmdir "$lock" 2>/dev/null || true
+    }
+    trap cleanup_build_lock EXIT INT TERM
+    if native_needs_build; then
+        tmp_native="$native.tmp.$$"
+        "$HERE/scripts/build-vaisc-native.sh" "$tmp_native" >/dev/null
+        mv "$tmp_native" "$native"
+        tmp_native=""
+    fi
+    cleanup_build_lock
+    trap - EXIT INT TERM
 fi
 
 exec "$native" "$@"
