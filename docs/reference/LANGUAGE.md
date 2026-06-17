@@ -478,6 +478,29 @@ Verified today:
 non-decimal byte. `parse_int` accepts a leading `-` and then parses the same
 decimal run. Empty input and input with no leading decimal digit return `0`.
 
+## Host Files, Paths, And Processes
+
+Phase 3 host APIs are specified but not verified yet. The planned first surface
+is:
+
+```vais
+fs_exists(path: Str) -> Bool
+fs_read_text(path: Str) -> Str
+fs_write_text(path: Str, text: Str) -> Int
+fs_mkdirs(path: Str) -> Int
+fs_cwd() -> Str
+fs_temp_dir() -> Str
+path_join(base: Str, child: Str) -> Str
+path_basename(path: Str) -> Str
+path_dirname(path: Str) -> Str
+proc_run(argv: List<Str>) -> Int
+proc_capture(argv: List<Str>) -> ProcessResult
+```
+
+The host API contract is maintained in
+[../design/HOST_IO.md](../design/HOST_IO.md). These names should not be treated
+as release-surface verified until gates are added.
+
 ## Closures
 
 The verified closure slice is intentionally narrow:

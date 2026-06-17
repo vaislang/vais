@@ -11,6 +11,25 @@ intended but not a public release claim yet.
 | `print(EXPR)` | Verified |
 | `putchar(Int)` | Verified |
 
+## Host Files, Paths, And Processes
+
+The Phase 3 host API is specified but not verified yet. The planned surface is
+documented in [../docs/design/HOST_IO.md](../docs/design/HOST_IO.md).
+
+| API | Status |
+| --- | --- |
+| `fs_exists(path: Str) -> Bool` | Specified |
+| `fs_read_text(path: Str) -> Str` | Specified |
+| `fs_write_text(path: Str, text: Str) -> Int` | Specified |
+| `fs_mkdirs(path: Str) -> Int` | Specified |
+| `fs_cwd() -> Str` | Specified |
+| `fs_temp_dir() -> Str` | Specified |
+| `path_join(base: Str, child: Str) -> Str` | Specified |
+| `path_basename(path: Str) -> Str` | Specified |
+| `path_dirname(path: Str) -> Str` | Specified |
+| `proc_run(argv: List<Str>) -> Int` | Specified |
+| `proc_capture(argv: List<Str>) -> ProcessResult` | Specified |
+
 ## Collections
 
 | API | Status |

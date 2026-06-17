@@ -9,6 +9,9 @@
   paths.
 - Added native and Python fallback gates for package manifest success,
   dependency imports, and manifest diagnostics.
+- Specified the Phase 3 host file/path/process API boundary in
+  `docs/design/HOST_IO.md` and listed the APIs as specified in
+  `std/PRELUDE.md`.
 
 ## 2026-06-17
 

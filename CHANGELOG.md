@@ -40,6 +40,9 @@
 - Added local dependency package paths in `vais.toml` `[dependencies]` for the
   full engine, including native and Python fallback gates for dependency
   imports and manifest diagnostics.
+- Specified the Phase 3 host file/path/process API plan for future
+  Python-checker replacement work, with the APIs marked as specified rather than
+  verified.
 
 ## v0.2.2 - 2026-06-15
 

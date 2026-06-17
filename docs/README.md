@@ -18,6 +18,7 @@ compiler workspace.
 | [design/VAIS-DESIGN.md](design/VAIS-DESIGN.md) | Short design contract |
 | [design/vais-compiler-mainline-2026-06-13.md](design/vais-compiler-mainline-2026-06-13.md) | Compiler mainline contract |
 | [design/MODULES.md](design/MODULES.md) | Current Phase 2 module/package/import model |
+| [design/HOST_IO.md](design/HOST_IO.md) | Specified Phase 3 file/process host API model |
 
 ## Documentation Rules
 

@@ -75,6 +75,8 @@ This file tracks current work only.
 - The full compiler path supports local dependency package paths in `vais.toml`
   `[dependencies]`, with native and Python fallback gates for dependency
   imports and dependency manifest diagnostics.
+- Phase 3 host file/path/process APIs are specified in `docs/design/HOST_IO.md`
+  and listed as specified, not verified, in `std/PRELUDE.md`.
 
 ## Current Reality
 
@@ -206,7 +208,7 @@ Done: small multi-file and local dependency Vais projects build with
 Goal: give Vais enough host interaction to replace internal Python checks where
 practical.
 
-- [ ] 3.1 Specify file read/write, path, temp directory, stdout/stderr, exit code,
+- [x] 3.1 Specify file read/write, path, temp directory, stdout/stderr, exit code,
   and process execution APIs.
 - [ ] 3.2 Implement host-backed intrinsics in the native driver without mixing
   them into pure compiler-core logic.
@@ -312,8 +314,24 @@ The current concrete slice is Phase 2 package structure:
   import-cycle diagnostics.
 - [x] Add the minimal package manifest slice.
 - [x] Add local package dependency paths.
-- [ ] Specify the minimal Phase 3 file/process API needed to replace internal
+- [x] Specify the minimal Phase 3 file/process API needed to replace internal
   Python repository checks.
+- [ ] Implement the first native-driver host I/O intrinsic smoke gate.
+
+## Completed Milestone: Phase 3 Host API Specification
+
+Mode: sequential
+
+- [x] 1. Define the boundary between host-backed standard library intrinsics and
+  pure compiler-core logic.
+- [x] 2. Specify text file APIs for existence checks, whole-file reads,
+  whole-file writes, and directory creation.
+- [x] 3. Specify path helpers for current directory, temporary directory, joins,
+  basenames, and dirnames.
+- [x] 4. Specify argv-based process execution and captured process output without
+  shell expansion.
+- [x] 5. Mark the APIs as specified, not verified, in canonical docs and identify
+  the first Python-checker port target.
 
 ## Completed Milestone: Local Dependency Package Paths
 
