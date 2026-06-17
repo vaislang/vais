@@ -30,6 +30,16 @@ fn main() -> Int {
 - Statements do not require semicolons in ordinary source files.
 - Line comments start with `#`.
 
+## Modules, Packages, And Imports
+
+The Phase 2 module model is specified in
+[../design/MODULES.md](../design/MODULES.md), but it is not implemented in
+`scripts/vaisc` yet. Current verified builds use one entry `.vais` file.
+
+Until the implementation and gates land, the front contract rejects `import`,
+`module`, and `package` declarations with a diagnostic that points back to the
+single-file release surface.
+
 ## Functions
 
 ```vais

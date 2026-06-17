@@ -362,6 +362,30 @@ fn main() -> Int {
 }
 SRC
 
+expect_reject "import_not_implemented" "modules and imports are specified" "one .vais file" <<'SRC'
+import math.add
+
+fn main() -> Int {
+    return add(20, 22)
+}
+SRC
+
+expect_reject "module_not_implemented" "modules and imports are specified" "Phase 2 module model" <<'SRC'
+module math.add
+
+fn main() -> Int {
+    return 42
+}
+SRC
+
+expect_reject "package_not_implemented" "modules and imports are specified" "Phase 2 module model" <<'SRC'
+package demo
+
+fn main() -> Int {
+    return 42
+}
+SRC
+
 expect_reject "string_type" "helper parameters must use verified scalar types" "Int.*Str.*Bool" <<'SRC'
 fn len(s: String) -> Int {
     return 42

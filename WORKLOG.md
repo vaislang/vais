@@ -8,6 +8,9 @@
   `pop()`.
 - Promoted both examples in `tools/vaisc-parity.tsv` and synced the roadmap,
   examples README, and changelog with the value corpus.
+- Specified the Phase 2 module/package/import model in `docs/design/MODULES.md`.
+- Added front and `vais-check` diagnostics that reject `import`, `module`, and
+  `package` until multi-file compilation is implemented and gated.
 
 ## 2026-06-16
 

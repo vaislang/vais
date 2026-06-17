@@ -177,7 +177,7 @@ Done: `std/PRELUDE.md` has no public "Verified" entry without a matching gate.
 Goal: allow real projects to split code across files without inventing a large
 package manager too early.
 
-- [ ] 2.1 Specify a minimal module model: file module names, import paths, symbol
+- [x] 2.1 Specify a minimal module model: file module names, import paths, symbol
   visibility, duplicate-name diagnostics, and cycle behavior.
 - [ ] 2.2 Implement single-package multi-file compilation for `scripts/vaisc`.
 - [ ] 2.3 Add `import` support for local package paths with deterministic
@@ -292,8 +292,23 @@ Phase 0 is complete. The next concrete slice is Phase 1:
   operations.
 - [x] Promote the next Phase 1 slice: full self-host local `Map<Int,Int>`.
 - [x] Add release-corpus examples for the promoted prelude API surface.
-- [ ] Specify the next Phase 1 slice: Map ABI/generic expansion or defer to the
+- [x] Specify the next Phase 1 slice: Map ABI/generic expansion or defer to the
   Phase 2 module model.
+- [x] Specify the minimal Phase 2 module/import/package model and reject
+  unimplemented module syntax with public front diagnostics.
+- [ ] Implement single-package multi-file compilation for `scripts/vaisc`.
+
+## Completed Milestone: Minimal Module Model Specification
+
+Mode: sequential
+
+- [x] 1. Specify file-derived module names, local dotted import paths, symbol
+  visibility, duplicate-name diagnostics, and cycle behavior.
+- [x] 2. Keep `Map<K,V>` generic/ABI expansion deferred until its lowering and
+  ABI are specified separately.
+- [x] 3. Add front diagnostics for `import`, `module`, and `package` while the
+  compiler remains single-file.
+- [x] 4. Sync canonical docs, website copy, roadmap, worklog, and changelog.
 
 ## Completed Milestone: Prelude API Value Examples
 

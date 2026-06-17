@@ -1285,7 +1285,18 @@ static int check_front_contract_text(const char *text, const char *path) {
         issues += check_fn_contract_line(path, line_no, line, &has_main, &has_bad_main);
 
         char *fix = NULL;
-        if (strstr(line, "&&") != NULL) {
+        const char *trim = skip_ws(line);
+        const char *module_kw = NULL;
+        if (starts_with(trim, "import") && !is_ident_continue(trim[6])) module_kw = "import";
+        else if (starts_with(trim, "module") && !is_ident_continue(trim[6])) module_kw = "module";
+        else if (starts_with(trim, "package") && !is_ident_continue(trim[7])) module_kw = "package";
+        if (module_kw != NULL) {
+            report_issue(path, line_no, find_col(line, module_kw), line,
+                "modules and imports are specified but not implemented in scripts/vaisc yet",
+                "keep code in one .vais file for now; the Phase 2 module model will add local imports, duplicate-symbol diagnostics, and cycle diagnostics.",
+                NULL);
+            issues++;
+        } else if (strstr(line, "&&") != NULL) {
             fix = replace_once_for_fix(line, "&&", "and");
             report_issue(path, line_no, find_col(line, "&&"), line,
                 "logical AND uses the word `and`, not `&&`",

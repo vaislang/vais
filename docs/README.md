@@ -17,6 +17,7 @@ compiler workspace.
 | [../website/DEPLOYMENT.md](../website/DEPLOYMENT.md) | Official site source and deployment notes |
 | [design/VAIS-DESIGN.md](design/VAIS-DESIGN.md) | Short design contract |
 | [design/vais-compiler-mainline-2026-06-13.md](design/vais-compiler-mainline-2026-06-13.md) | Compiler mainline contract |
+| [design/MODULES.md](design/MODULES.md) | Planned Phase 2 module/package/import model |
 
 ## Documentation Rules
 

@@ -141,6 +141,11 @@ def fix_turbofish_new(match: re.Match[str], raw: str) -> str:
 
 FRONT_UNSUPPORTED_RULES: list[tuple[re.Pattern[str], str, str]] = [
     (
+        re.compile(r"^\s*(import|module|package)\b"),
+        "modules and imports are specified but not implemented in scripts/vaisc yet",
+        "keep code in one .vais file for now; the Phase 2 module model will add local imports, duplicate-symbol diagnostics, and cycle diagnostics.",
+    ),
+    (
         re.compile(r"\benum\b"),
         "enum declarations beyond payload-free tags or small Int-coded payload enums are not in the Vais native front subset yet",
         "use payload-free enum tags or Int/self-recursive payload enums with simple return-arm match; keep broader payload enums on the full compiler path.",
