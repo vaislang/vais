@@ -317,6 +317,57 @@ else
     fail=1
 fi
 
+dependency_root="$tmp/dependency_basic"
+mkdir -p "$dependency_root/app/src" "$dependency_root/mathlib/src/arith"
+cat > "$dependency_root/app/vais.toml" <<'SRC'
+name = "dependency_app"
+version = "0.1.0"
+source = "src"
+
+[dependencies]
+mathlib = "../mathlib"
+SRC
+cat > "$dependency_root/mathlib/vais.toml" <<'SRC'
+name = "mathlib"
+version = "0.1.0"
+source = "src"
+SRC
+cat > "$dependency_root/mathlib/src/arith/add.vais" <<'SRC'
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+SRC
+cat > "$dependency_root/mathlib/src/public.vais" <<'SRC'
+import arith.add
+SRC
+cat > "$dependency_root/app/src/main.vais" <<'SRC'
+import mathlib.public
+
+fn main() -> Int {
+    return add(20, 22)
+}
+SRC
+
+"$VAISC" run "$dependency_root/app/src/main.vais" >"$tmp/dependency_accept.out" 2>"$tmp/dependency_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS accepts local dependency package paths"
+else
+    echo "  FAIL accepts local dependency package paths got=$got want=42"
+    cat "$tmp/dependency_accept.err"
+    fail=1
+fi
+
+VAISC_FORCE_PYTHON=1 "$VAISC" run "$dependency_root/app/src/main.vais" >"$tmp/dependency_py_accept.out" 2>"$tmp/dependency_py_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS Python fallback accepts local dependency package paths"
+else
+    echo "  FAIL Python fallback local dependency package paths got=$got want=42"
+    cat "$tmp/dependency_py_accept.err"
+    fail=1
+fi
+
 expect_reject() {
     local name="$1"
     local needle="$2"
@@ -508,6 +559,65 @@ fn main() -> Int {
 }
 SRC
 expect_reject_path "bad_source_manifest" "$bad_source_root/src/main.vais" "package manifest source must be a local relative path" "absolute paths and .*\\.\\."
+
+missing_dep_root="$tmp/missing_dependency_manifest"
+mkdir -p "$missing_dep_root/src"
+cat > "$missing_dep_root/vais.toml" <<'SRC'
+name = "missing_dep"
+version = "0.1.0"
+source = "src"
+
+[dependencies]
+missing = "../missing"
+SRC
+cat > "$missing_dep_root/src/main.vais" <<'SRC'
+fn main() -> Int {
+    return 42
+}
+SRC
+expect_reject_path "missing_dependency_manifest" "$missing_dep_root/src/main.vais" "local dependency manifest not found" "expected local dependency manifest"
+
+bad_dep_path_root="$tmp/bad_dependency_path"
+mkdir -p "$bad_dep_path_root/src"
+cat > "$bad_dep_path_root/vais.toml" <<'SRC'
+name = "bad_dep_path"
+version = "0.1.0"
+source = "src"
+
+[dependencies]
+web = "https://example.com/pkg"
+SRC
+cat > "$bad_dep_path_root/src/main.vais" <<'SRC'
+fn main() -> Int {
+    return 42
+}
+SRC
+expect_reject_path "bad_dependency_path" "$bad_dep_path_root/src/main.vais" "local dependency path must be a relative local path" "absolute paths, URLs"
+
+dependency_cycle_root="$tmp/dependency_cycle"
+mkdir -p "$dependency_cycle_root/a/src" "$dependency_cycle_root/b/src"
+cat > "$dependency_cycle_root/a/vais.toml" <<'SRC'
+name = "cycle_a"
+version = "0.1.0"
+source = "src"
+
+[dependencies]
+b = "../b"
+SRC
+cat > "$dependency_cycle_root/b/vais.toml" <<'SRC'
+name = "cycle_b"
+version = "0.1.0"
+source = "src"
+
+[dependencies]
+a = "../a"
+SRC
+cat > "$dependency_cycle_root/a/src/main.vais" <<'SRC'
+fn main() -> Int {
+    return 42
+}
+SRC
+expect_reject_path "dependency_cycle" "$dependency_cycle_root/a/src/main.vais" "local dependency cycle detected" "remove one dependency"
 
 dup_root="$tmp/duplicate_import"
 mkdir -p "$dup_root/a" "$dup_root/b"

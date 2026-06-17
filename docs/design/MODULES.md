@@ -1,12 +1,13 @@
 # Vais Module Model
 
-Status: first local-import and source-root manifest slices implemented for the
-full `scripts/vaisc` engine.
+Status: first local-import, source-root manifest, and local dependency path
+slices implemented for the full `scripts/vaisc` engine.
 
 Current verified builds can compile one entry `.vais` file plus local files
 reached through static dotted `import` declarations. A nearest `vais.toml`
-manifest can set the package source root. Explicit `module` and `package`
-declarations are still reserved and rejected.
+manifest can set the package source root and name local dependency package
+paths. Explicit `module` and `package` declarations are still reserved and
+rejected.
 
 ## Goals
 
@@ -30,7 +31,7 @@ declarations are still reserved and rejected.
 
 ## Import Paths
 
-The first implementation supports only local package imports:
+The first implementation supports static dotted imports:
 
 ```vais
 import math.add
@@ -40,6 +41,18 @@ import math.add
 root. Import paths must be static dotted identifiers. Absolute paths, `..`,
 environment expansion, URLs, wildcard imports, and generated imports are not in
 the first slices.
+
+When a package manifest declares a local dependency alias, the first import
+segment can name that dependency:
+
+```vais
+import mathlib.public
+```
+
+If no file exists at `mathlib/public.vais` under the current package source
+root, `mathlib.public` resolves to `public.vais` under the dependency package's
+source root. Files loaded from a dependency still resolve their own plain
+imports under that dependency's source root.
 
 ## Visibility And Symbols
 
@@ -69,21 +82,27 @@ main -> math.add -> main
 
 ## Package Manifest
 
-The first package manifest is `vais.toml` with only:
+The package manifest is `vais.toml`:
 
 ```toml
 name = "demo"
 version = "0.1.0"
 source = "src"
+
+[dependencies]
+mathlib = "../mathlib"
 ```
 
 `name`, `version`, and `source` are required top-level string keys. `source`
 must be a local relative path such as `src`; absolute paths and `..` are
-rejected. The compiled entry file must be under the resolved source root.
+rejected. The compiled entry file must be under the resolved source root. The
+optional `[dependencies]` section maps dependency aliases to local relative
+package directories containing their own `vais.toml`. Dependency paths may use
+`..` for sibling packages, but absolute paths, URLs, backslashes, and empty path
+segments are rejected.
 
 No registry, semver solver, build scripts, features, binary targets, or external
-dependencies are part of the first module/package implementation. Local package
-dependencies are reserved for the next Phase 2 slice.
+dependencies are part of the current module/package implementation.
 
 ## Current Gates
 
@@ -94,6 +113,10 @@ dependencies are reserved for the next Phase 2 slice.
   using `vais.toml`.
 - `scripts/vaisc run examples/package_basic/src/main.vais` returns the expected
   value.
+- `scripts/vaisc build examples/dependency_basic/app/src/main.vais` builds a
+  package that imports a local dependency package through `vais.toml`.
+- `scripts/vaisc run examples/dependency_basic/app/src/main.vais` returns the
+  expected value.
 - Duplicate top-level symbols produce a P4 diagnostic with both file paths.
 - Missing import paths produce a P4 diagnostic with the resolved path.
 - Import cycles produce a P4 diagnostic with the cycle path.

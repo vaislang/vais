@@ -30,6 +30,12 @@ Run the package-manifest example:
 scripts/vaisc run examples/package_basic/src/main.vais
 ```
 
+Run the local dependency package example:
+
+```bash
+scripts/vaisc run examples/dependency_basic/app/src/main.vais
+```
+
 Compiler parity coverage is tracked in `tools/vaisc-parity.tsv`:
 
 ```bash

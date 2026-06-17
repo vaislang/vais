@@ -1082,6 +1082,15 @@ IMPORT_LINE = re.compile(r"^\s*import\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-
 MODULE_DECL_LINE = re.compile(r"^\s*(module|package)\b")
 TOP_LEVEL_SYMBOL = re.compile(r"^\s*(fn|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)\b")
 MANIFEST_ASSIGNMENT = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\"([^\"]*)\"\s*$")
+MANIFEST_SECTION = re.compile(r"^\s*\[([A-Za-z_][A-Za-z0-9_]*)\]\s*$")
+
+
+@dataclass(frozen=True)
+class PackageDependencySpec:
+    alias: str
+    path: str
+    line: int
+    raw: str
 
 
 @dataclass(frozen=True)
@@ -1092,6 +1101,14 @@ class PackageManifest:
     name: str
     version: str
     source: str
+    dependencies: tuple[PackageDependencySpec, ...] = ()
+
+
+@dataclass
+class PackageGraph:
+    source_root: Path
+    dependency_roots: dict[str, Path]
+    package_aliases: dict[Path, str]
 
 
 def format_source_issue(path: Path, line_no: int, col: int, line: str, message: str, help_text: str) -> str:
@@ -1166,13 +1183,42 @@ def source_path_is_safe(value: str) -> bool:
     return all(part not in ("", "..") for part in value.split("/"))
 
 
+def dependency_path_is_safe(value: str) -> bool:
+    if not value or value.startswith("/") or "\\" in value or ":" in value:
+        return False
+    return all(part != "" for part in value.split("/"))
+
+
+def path_is_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def parse_package_manifest(path: Path) -> PackageManifest:
     raw_lines = path.read_text().splitlines()
     values: dict[str, tuple[str, int, str]] = {}
+    dependencies: dict[str, PackageDependencySpec] = {}
     allowed = {"name", "version", "source"}
+    section = "root"
     for line_no, raw_line in enumerate(raw_lines, 1):
         code = strip_manifest_comment(raw_line)
         if not code.strip():
+            continue
+        section_match = MANIFEST_SECTION.match(code)
+        if section_match:
+            section_name = section_match.group(1)
+            if section_name != "dependencies":
+                raise manifest_issue(
+                    path,
+                    line_no,
+                    raw_line,
+                    f"unsupported package manifest section `[{section_name}]`",
+                    "only the `[dependencies]` section is supported in this package manifest slice.",
+                )
+            section = section_name
             continue
         match = MANIFEST_ASSIGNMENT.match(code)
         if not match:
@@ -1180,17 +1226,28 @@ def parse_package_manifest(path: Path) -> PackageManifest:
                 path,
                 line_no,
                 raw_line,
-                "package manifest supports only name, version, and source for now",
-                "write top-level string keys: `name`, `version`, and `source`.",
+                "invalid package manifest entry",
+                "write top-level string keys `name`, `version`, and `source`, plus optional `[dependencies]` string entries.",
             )
         key, value = match.group(1), match.group(2)
+        if section == "dependencies":
+            if key in dependencies:
+                raise manifest_issue(
+                    path,
+                    line_no,
+                    raw_line,
+                    f"duplicate local dependency alias `{key}`",
+                    "keep exactly one path for each local dependency alias.",
+                )
+            dependencies[key] = PackageDependencySpec(alias=key, path=value, line=line_no, raw=raw_line)
+            continue
         if key not in allowed:
             raise manifest_issue(
                 path,
                 line_no,
                 raw_line,
-                "package manifest supports only name, version, and source for now",
-                "remove unsupported keys until local dependency manifests are implemented.",
+                "unsupported package manifest key",
+                "use only top-level `name`, `version`, and `source`; put local packages under `[dependencies]`.",
             )
         if key in values:
             raise manifest_issue(
@@ -1241,17 +1298,80 @@ def parse_package_manifest(path: Path) -> PackageManifest:
         name=values["name"][0],
         version=values["version"][0],
         source=source_value,
+        dependencies=tuple(dependencies.values()),
     )
 
 
-def source_root_for_entry(source: Path) -> Path:
+def add_package_to_graph(
+    manifest: PackageManifest,
+    alias: str,
+    graph: PackageGraph,
+    stack: tuple[Path, ...],
+) -> None:
+    source_root = manifest.source_root.resolve()
+    graph.package_aliases.setdefault(source_root, alias)
+    if alias:
+        previous = graph.dependency_roots.get(alias)
+        if previous is not None and previous != source_root:
+            raw_lines = manifest.path.read_text().splitlines()
+            raise manifest_issue(
+                manifest.path,
+                1,
+                raw_lines[0] if raw_lines else "",
+                f"duplicate local dependency alias `{alias}`",
+                "use distinct dependency aliases across the loaded package graph.",
+            )
+        graph.dependency_roots[alias] = source_root
+
+    for dependency in manifest.dependencies:
+        if not dependency_path_is_safe(dependency.path):
+            raise manifest_issue(
+                manifest.path,
+                dependency.line,
+                dependency.raw,
+                "local dependency path must be a relative local path",
+                "use a path such as `../mathlib`; absolute paths, URLs, and empty segments are not supported.",
+            )
+        dependency_manifest = (manifest.root / dependency.path / "vais.toml").resolve()
+        if dependency_manifest in stack:
+            cycle = " -> ".join(str(item) for item in (*stack, dependency_manifest))
+            raise manifest_issue(
+                manifest.path,
+                dependency.line,
+                dependency.raw,
+                "local dependency cycle detected",
+                f"remove one dependency from the cycle: {cycle}.",
+            )
+        if not dependency_manifest.is_file():
+            raise manifest_issue(
+                manifest.path,
+                dependency.line,
+                dependency.raw,
+                "local dependency manifest not found",
+                f"expected local dependency manifest at {dependency_manifest}.",
+            )
+        dependency_manifest_info = parse_package_manifest(dependency_manifest)
+        previous = graph.dependency_roots.get(dependency.alias)
+        if previous is not None and previous != dependency_manifest_info.source_root:
+            raise manifest_issue(
+                manifest.path,
+                dependency.line,
+                dependency.raw,
+                f"duplicate local dependency alias `{dependency.alias}`",
+                "use distinct dependency aliases across the loaded package graph.",
+            )
+        add_package_to_graph(dependency_manifest_info, dependency.alias, graph, (*stack, dependency_manifest))
+
+
+def package_graph_for_entry(source: Path) -> PackageGraph:
     manifest_path = find_package_manifest(source)
     if manifest_path is None:
-        return source.parent.resolve()
+        root = source.parent.resolve()
+        return PackageGraph(source_root=root, dependency_roots={}, package_aliases={root: ""})
     manifest = parse_package_manifest(manifest_path)
-    try:
-        source.resolve().relative_to(manifest.source_root)
-    except ValueError:
+    graph = PackageGraph(source_root=manifest.source_root, dependency_roots={}, package_aliases={})
+    add_package_to_graph(manifest, "", graph, (manifest.path.resolve(),))
+    if not path_is_under(source, manifest.source_root):
         source_value, source_line, source_raw = manifest.source, 1, ""
         raw_lines = manifest.path.read_text().splitlines()
         for line_no, raw_line in enumerate(raw_lines, 1):
@@ -1267,12 +1387,17 @@ def source_root_for_entry(source: Path) -> Path:
             "package entry is outside manifest source root",
             f"compile a `.vais` file under {manifest.source_root} or update `source`.",
         )
-    return manifest.source_root
+    return graph
+
+
+def source_root_for_entry(source: Path) -> Path:
+    return package_graph_for_entry(source).source_root
 
 
 class ModuleResolver:
-    def __init__(self, root: Path) -> None:
-        self.root = root.resolve()
+    def __init__(self, graph: PackageGraph) -> None:
+        self.graph = graph
+        self.root = graph.source_root.resolve()
         self.visited: set[Path] = set()
         self.stack: list[Path] = []
         self.symbols: dict[str, tuple[Path, int]] = {}
@@ -1288,6 +1413,32 @@ class ModuleResolver:
     ) -> FrontContractError:
         return FrontContractError(format_source_issue(path, line_no, col, line, message, help_text))
 
+    def package_root_for_path(self, path: Path) -> Path:
+        real = path.resolve()
+        matches = [root for root in self.graph.package_aliases if path_is_under(real, root)]
+        if not matches:
+            return self.root
+        return max(matches, key=lambda item: len(str(item)))
+
+    def module_name_for_path(self, path: Path) -> str:
+        root = self.package_root_for_path(path)
+        name = module_name_for_path(path, root)
+        alias = self.graph.package_aliases.get(root, "")
+        if not alias:
+            return name
+        return f"{alias}.{name}" if name else alias
+
+    def resolve_import_path(self, current_path: Path, module_name: str) -> Path:
+        current_root = self.package_root_for_path(current_path)
+        local_target = resolve_module_path(current_root, module_name)
+        if local_target.is_file():
+            return local_target
+
+        alias, separator, rest = module_name.partition(".")
+        if separator and alias in self.graph.dependency_roots:
+            return resolve_module_path(self.graph.dependency_roots[alias], rest)
+        return local_target
+
     def load(self, path: Path, importer: tuple[Path, int, str] | None = None) -> str:
         try:
             real = path.resolve()
@@ -1296,7 +1447,7 @@ class ModuleResolver:
 
         if real in self.stack:
             cycle_paths = self.stack[self.stack.index(real) :] + [real]
-            cycle = " -> ".join(module_name_for_path(p, self.root) for p in cycle_paths)
+            cycle = " -> ".join(self.module_name_for_path(p) for p in cycle_paths)
             if importer is None:
                 issue_path, line_no, line = path, 1, ""
             else:
@@ -1374,7 +1525,7 @@ class ModuleResolver:
 
         pieces: list[str] = []
         for module_name, line_no, raw_line in sorted(imports, key=lambda item: item[0]):
-            target = resolve_module_path(self.root, module_name)
+            target = self.resolve_import_path(real, module_name)
             pieces.append(self.load(target, (real, line_no, raw_line)))
         pieces.append("\n".join(body))
 
@@ -1386,7 +1537,7 @@ class ModuleResolver:
 def resolve_module_graph_source(source: Path) -> str:
     if not source.is_file():
         raise CompileError(f"source not found: {source}")
-    resolver = ModuleResolver(source_root_for_entry(source))
+    resolver = ModuleResolver(package_graph_for_entry(source))
     return resolver.load(source)
 
 

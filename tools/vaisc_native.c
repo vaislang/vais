@@ -35,7 +35,16 @@ typedef struct {
 } ModuleStackEntry;
 
 typedef struct {
+    char *alias;
+    char *source_root;
+} PackageRootInfo;
+
+typedef struct {
     char *root;
+    PackageRootInfo packages[64];
+    int package_count;
+    PackageRootInfo dependencies[64];
+    int dependency_count;
     LineVec visited;
     ModuleStackEntry stack[128];
     int stack_count;
@@ -1428,6 +1437,13 @@ typedef struct {
 } ImportInfo;
 
 typedef struct {
+    char *alias;
+    char *path;
+    int line_no;
+    char *line;
+} PackageDependencyInfo;
+
+typedef struct {
     char *name;
     char *version;
     char *source;
@@ -1437,6 +1453,8 @@ typedef struct {
     char *name_text;
     char *version_text;
     char *source_text;
+    PackageDependencyInfo dependencies[32];
+    int dependency_count;
 } PackageManifestInfo;
 
 static char *dirname_copy(const char *path) {
@@ -1512,6 +1530,22 @@ static int parse_manifest_assignment_c(const char *code, char **key_out, char **
     return 1;
 }
 
+static char *parse_manifest_section_c(const char *code) {
+    const char *s = skip_ws(code);
+    if (*s != '[') return NULL;
+    s++;
+    if (!is_ident_start(*s)) return NULL;
+    const char *start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *end = s;
+    s = skip_ws(s);
+    if (*s != ']') return NULL;
+    s = skip_ws(s + 1);
+    if (*s != '\0') return NULL;
+    return substr_copy(start, (size_t)(end - start));
+}
+
 static int package_source_path_is_safe_c(const char *value) {
     if (value[0] == '\0' || value[0] == '/' || strchr(value, '\\') != NULL) return 0;
     const char *p = value;
@@ -1521,6 +1555,18 @@ static int package_source_path_is_safe_c(const char *value) {
         size_t n = (size_t)(p - start);
         if (n == 0) return 0;
         if (n == 2 && start[0] == '.' && start[1] == '.') return 0;
+        if (*p == '/') p++;
+    }
+    return 1;
+}
+
+static int package_dependency_path_is_safe_c(const char *value) {
+    if (value[0] == '\0' || value[0] == '/' || strchr(value, '\\') != NULL || strchr(value, ':') != NULL) return 0;
+    const char *p = value;
+    while (*p != '\0') {
+        const char *start = p;
+        while (*p != '\0' && *p != '/') p++;
+        if (p == start) return 0;
         if (*p == '/') p++;
     }
     return 1;
@@ -1540,6 +1586,11 @@ static void package_manifest_info_free(PackageManifestInfo *info) {
     free(info->name_text);
     free(info->version_text);
     free(info->source_text);
+    for (int i = 0; i < info->dependency_count; i++) {
+        free(info->dependencies[i].alias);
+        free(info->dependencies[i].path);
+        free(info->dependencies[i].line);
+    }
 }
 
 static int set_manifest_key(
@@ -1567,8 +1618,8 @@ static int set_manifest_key(
         text_slot = &info->source_text;
     } else {
         report_issue(manifest_path, line_no, 1, line,
-            "package manifest supports only name, version, and source for now",
-            "remove unsupported keys until local dependency manifests are implemented.",
+            "unsupported package manifest key",
+            "use only top-level `name`, `version`, and `source`; put local packages under `[dependencies]`.",
             NULL);
         free(value);
         return 1;
@@ -1593,13 +1644,55 @@ static int set_manifest_key(
     return 0;
 }
 
-static char *parse_package_manifest_source_root(const char *manifest_path, const char *entry_path) {
+static int add_manifest_dependency(
+    PackageManifestInfo *info,
+    const char *manifest_path,
+    int line_no,
+    const char *line,
+    char *alias,
+    char *path
+) {
+    for (int i = 0; i < info->dependency_count; i++) {
+        if (strcmp(info->dependencies[i].alias, alias) == 0) {
+            StrBuf msg;
+            sb_init(&msg);
+            sb_append(&msg, "duplicate local dependency alias `");
+            sb_append(&msg, alias);
+            sb_append(&msg, "`");
+            report_issue(manifest_path, line_no, 1, line, msg.data,
+                "keep exactly one path for each local dependency alias.",
+                NULL);
+            free(msg.data);
+            free(alias);
+            free(path);
+            return 1;
+        }
+    }
+    if (info->dependency_count >= 32) {
+        report_issue(manifest_path, line_no, 1, line,
+            "too many local dependencies in package manifest",
+            "split the package or reduce dependencies in this first package slice.",
+            NULL);
+        free(alias);
+        free(path);
+        return 1;
+    }
+    PackageDependencyInfo *dep = &info->dependencies[info->dependency_count++];
+    dep->alias = alias;
+    dep->path = path;
+    dep->line_no = line_no;
+    dep->line = strdup(line);
+    if (dep->line == NULL) die_oom();
+    return 0;
+}
+
+static int parse_package_manifest_info(const char *manifest_path, PackageManifestInfo *info) {
+    memset(info, 0, sizeof(*info));
     char *raw = read_file(manifest_path);
-    if (raw == NULL) return NULL;
+    if (raw == NULL) return 1;
     LineVec lines = split_lines(raw);
-    PackageManifestInfo info;
-    memset(&info, 0, sizeof(info));
     int failed = 0;
+    int section = 0;
     for (size_t i = 0; i < lines.len && !failed; i++) {
         const char *line = lines.items[i];
         char *code = strip_manifest_comment_c(line);
@@ -1607,27 +1700,51 @@ static char *parse_package_manifest_source_root(const char *manifest_path, const
             free(code);
             continue;
         }
+        char *section_name = parse_manifest_section_c(code);
+        if (section_name != NULL) {
+            if (strcmp(section_name, "dependencies") != 0) {
+                StrBuf msg;
+                sb_init(&msg);
+                sb_append(&msg, "unsupported package manifest section `[");
+                sb_append(&msg, section_name);
+                sb_append(&msg, "]`");
+                report_issue(manifest_path, (int)i + 1, 1, line, msg.data,
+                    "only the `[dependencies]` section is supported in this package manifest slice.",
+                    NULL);
+                free(msg.data);
+                failed = 1;
+            } else {
+                section = 1;
+            }
+            free(section_name);
+            free(code);
+            continue;
+        }
         char *key = NULL;
         char *value = NULL;
         if (!parse_manifest_assignment_c(code, &key, &value)) {
             report_issue(manifest_path, (int)i + 1, 1, line,
-                "package manifest supports only name, version, and source for now",
-                "write top-level string keys: `name`, `version`, and `source`.",
+                "invalid package manifest entry",
+                "write top-level string keys `name`, `version`, and `source`, plus optional `[dependencies]` string entries.",
                 NULL);
             failed = 1;
             free(code);
             break;
         }
-        failed = set_manifest_key(&info, manifest_path, (int)i + 1, line, key, value);
-        free(key);
+        if (section == 1) {
+            failed = add_manifest_dependency(info, manifest_path, (int)i + 1, line, key, value);
+        } else {
+            failed = set_manifest_key(info, manifest_path, (int)i + 1, line, key, value);
+            free(key);
+        }
         free(code);
     }
 
     const char *first_line = lines.len > 0 ? lines.items[0] : "";
     const char *missing_key = NULL;
-    if (!failed && info.name == NULL) missing_key = "name";
-    else if (!failed && info.version == NULL) missing_key = "version";
-    else if (!failed && info.source == NULL) missing_key = "source";
+    if (!failed && info->name == NULL) missing_key = "name";
+    else if (!failed && info->version == NULL) missing_key = "version";
+    else if (!failed && info->source == NULL) missing_key = "source";
     if (missing_key != NULL) {
         StrBuf msg;
         sb_init(&msg);
@@ -1641,56 +1758,17 @@ static char *parse_package_manifest_source_root(const char *manifest_path, const
         failed = 1;
     }
 
-    char *source_root = NULL;
-    if (!failed && !package_source_path_is_safe_c(info.source)) {
-        report_issue(manifest_path, info.source_line, 1, info.source_text,
+    if (!failed && !package_source_path_is_safe_c(info->source)) {
+        report_issue(manifest_path, info->source_line, 1, info->source_text,
             "package manifest source must be a local relative path",
             "use a source path such as `src`; absolute paths and `..` are not supported.",
             NULL);
         failed = 1;
     }
-    if (!failed) {
-        char *manifest_dir = dirname_copy(manifest_path);
-        char *raw_source_root = path_join2(manifest_dir, info.source);
-        source_root = canonical_existing_path(raw_source_root);
-        if (source_root == NULL) {
-            StrBuf help;
-            sb_init(&help);
-            sb_append(&help, "create the source directory at ");
-            sb_append(&help, raw_source_root);
-            sb_append(&help, " or update `source`.");
-            report_issue(manifest_path, info.source_line, 1, info.source_text,
-                "package manifest source directory not found", help.data, NULL);
-            free(help.data);
-            failed = 1;
-        }
-        free(raw_source_root);
-        free(manifest_dir);
-    }
-    if (!failed) {
-        char *entry_real = canonical_existing_path(entry_path);
-        if (entry_real == NULL || !canonical_path_is_under(entry_real, source_root)) {
-            StrBuf help;
-            sb_init(&help);
-            sb_append(&help, "compile a `.vais` file under ");
-            sb_append(&help, source_root);
-            sb_append(&help, " or update `source`.");
-            report_issue(manifest_path, info.source_line, 1, info.source_text,
-                "package entry is outside manifest source root", help.data, NULL);
-            free(help.data);
-            failed = 1;
-        }
-        free(entry_real);
-    }
 
-    package_manifest_info_free(&info);
     lines_free(&lines);
     free(raw);
-    if (failed) {
-        free(source_root);
-        return NULL;
-    }
-    return source_root;
+    return failed;
 }
 
 static char *find_package_manifest_path(const char *start_dir) {
@@ -1715,20 +1793,233 @@ static char *find_package_manifest_path(const char *start_dir) {
     }
 }
 
-static char *source_root_for_entry(const char *path) {
+static void linevec_pop(LineVec *lv) {
+    if (lv->len == 0) return;
+    lv->len--;
+    free(lv->items[lv->len]);
+    lv->items[lv->len] = NULL;
+}
+
+static int linevec_contains(LineVec *lv, const char *text);
+
+static char *package_manifest_source_root(const char *manifest_path, PackageManifestInfo *info) {
+    char *manifest_dir = dirname_copy(manifest_path);
+    char *raw_source_root = path_join2(manifest_dir, info->source);
+    char *source_root = canonical_existing_path(raw_source_root);
+    if (source_root == NULL) {
+        StrBuf help;
+        sb_init(&help);
+        sb_append(&help, "create the source directory at ");
+        sb_append(&help, raw_source_root);
+        sb_append(&help, " or update `source`.");
+        report_issue(manifest_path, info->source_line, 1, info->source_text,
+            "package manifest source directory not found", help.data, NULL);
+        free(help.data);
+    }
+    free(raw_source_root);
+    free(manifest_dir);
+    return source_root;
+}
+
+static int module_resolver_add_package_root(ModuleResolver *r, const char *alias, const char *source_root) {
+    for (int i = 0; i < r->package_count; i++) {
+        if (strcmp(r->packages[i].source_root, source_root) == 0) return 0;
+    }
+    if (r->package_count >= 64) {
+        fprintf(stderr, "error: too many local packages in module graph\n");
+        return 1;
+    }
+    PackageRootInfo *item = &r->packages[r->package_count++];
+    item->alias = strdup(alias);
+    item->source_root = strdup(source_root);
+    if (item->alias == NULL || item->source_root == NULL) die_oom();
+    return 0;
+}
+
+static int module_resolver_add_dependency_root(
+    ModuleResolver *r,
+    const char *issue_path,
+    int issue_line,
+    const char *issue_text,
+    const char *alias,
+    const char *source_root
+) {
+    for (int i = 0; i < r->dependency_count; i++) {
+        if (strcmp(r->dependencies[i].alias, alias) == 0) {
+            if (strcmp(r->dependencies[i].source_root, source_root) == 0) return 0;
+            StrBuf msg;
+            sb_init(&msg);
+            sb_append(&msg, "duplicate local dependency alias `");
+            sb_append(&msg, alias);
+            sb_append(&msg, "`");
+            report_issue(issue_path, issue_line > 0 ? issue_line : 1, 1, issue_text ? issue_text : "", msg.data,
+                "use distinct dependency aliases across the loaded package graph.",
+                NULL);
+            free(msg.data);
+            return 1;
+        }
+    }
+    if (r->dependency_count >= 64) {
+        report_issue(issue_path, issue_line > 0 ? issue_line : 1, 1, issue_text ? issue_text : "",
+            "too many local dependencies in module graph",
+            "reduce dependencies in this first package slice.",
+            NULL);
+        return 1;
+    }
+    PackageRootInfo *item = &r->dependencies[r->dependency_count++];
+    item->alias = strdup(alias);
+    item->source_root = strdup(source_root);
+    if (item->alias == NULL || item->source_root == NULL) die_oom();
+    return 0;
+}
+
+static char *package_dependency_cycle_help(LineVec *stack, const char *next_manifest) {
+    StrBuf help;
+    sb_init(&help);
+    sb_append(&help, "remove one dependency from the cycle: ");
+    for (size_t i = 0; i < stack->len; i++) {
+        if (i > 0) sb_append(&help, " -> ");
+        sb_append(&help, stack->items[i]);
+    }
+    sb_append(&help, " -> ");
+    sb_append(&help, next_manifest);
+    sb_append(&help, ".");
+    return sb_take(&help);
+}
+
+static int module_resolver_collect_manifest(
+    ModuleResolver *r,
+    const char *manifest_path,
+    const char *alias,
+    const char *entry_path,
+    const char *issue_path,
+    int issue_line,
+    const char *issue_text,
+    LineVec *stack
+) {
+    char *manifest_real = canonical_existing_path(manifest_path);
+    if (manifest_real == NULL) manifest_real = strdup(manifest_path);
+    if (manifest_real == NULL) die_oom();
+    lines_push(stack, strdup(manifest_real));
+    if (stack->items[stack->len - 1] == NULL) die_oom();
+
+    PackageManifestInfo info;
+    if (parse_package_manifest_info(manifest_real, &info) != 0) {
+        package_manifest_info_free(&info);
+        linevec_pop(stack);
+        free(manifest_real);
+        return 1;
+    }
+
+    int failed = 0;
+    char *source_root = package_manifest_source_root(manifest_real, &info);
+    if (source_root == NULL) {
+        failed = 1;
+    }
+    if (!failed && r->root == NULL) {
+        r->root = strdup(source_root);
+        if (r->root == NULL) die_oom();
+    }
+    if (!failed && entry_path != NULL) {
+        char *entry_real = canonical_existing_path(entry_path);
+        if (entry_real == NULL || !canonical_path_is_under(entry_real, source_root)) {
+            StrBuf help;
+            sb_init(&help);
+            sb_append(&help, "compile a `.vais` file under ");
+            sb_append(&help, source_root);
+            sb_append(&help, " or update `source`.");
+            report_issue(manifest_real, info.source_line, 1, info.source_text,
+                "package entry is outside manifest source root", help.data, NULL);
+            free(help.data);
+            failed = 1;
+        }
+        free(entry_real);
+    }
+    if (!failed) failed = module_resolver_add_package_root(r, alias, source_root);
+    if (!failed && alias[0] != '\0') {
+        failed = module_resolver_add_dependency_root(
+            r,
+            issue_path ? issue_path : manifest_real,
+            issue_line,
+            issue_text,
+            alias,
+            source_root);
+    }
+
+    char *manifest_dir = dirname_copy(manifest_real);
+    for (int i = 0; i < info.dependency_count && !failed; i++) {
+        PackageDependencyInfo *dep = &info.dependencies[i];
+        if (!package_dependency_path_is_safe_c(dep->path)) {
+            report_issue(manifest_real, dep->line_no, 1, dep->line,
+                "local dependency path must be a relative local path",
+                "use a path such as `../mathlib`; absolute paths, URLs, and empty segments are not supported.",
+                NULL);
+            failed = 1;
+            break;
+        }
+        char *dep_dir = path_join2(manifest_dir, dep->path);
+        char *dep_manifest_raw = path_join2(dep_dir, "vais.toml");
+        char *dep_manifest = canonical_existing_path(dep_manifest_raw);
+        if (dep_manifest == NULL) {
+            StrBuf help;
+            sb_init(&help);
+            sb_append(&help, "expected local dependency manifest at ");
+            sb_append(&help, dep_manifest_raw);
+            sb_append(&help, ".");
+            report_issue(manifest_real, dep->line_no, 1, dep->line,
+                "local dependency manifest not found", help.data, NULL);
+            free(help.data);
+            failed = 1;
+        } else if (linevec_contains(stack, dep_manifest)) {
+            char *help = package_dependency_cycle_help(stack, dep_manifest);
+            report_issue(manifest_real, dep->line_no, 1, dep->line,
+                "local dependency cycle detected", help, NULL);
+            free(help);
+            failed = 1;
+        } else {
+            failed = module_resolver_collect_manifest(
+                r,
+                dep_manifest,
+                dep->alias,
+                NULL,
+                manifest_real,
+                dep->line_no,
+                dep->line,
+                stack);
+        }
+        free(dep_manifest);
+        free(dep_manifest_raw);
+        free(dep_dir);
+    }
+    free(manifest_dir);
+    free(source_root);
+    package_manifest_info_free(&info);
+    linevec_pop(stack);
+    free(manifest_real);
+    return failed;
+}
+
+static int module_resolver_init_roots(ModuleResolver *r, const char *path) {
     char *dir = dirname_copy(path);
     char *manifest = find_package_manifest_path(dir);
     if (manifest == NULL) {
         char *root = canonical_existing_path(dir);
         if (root == NULL) root = strdup(dir);
         if (root == NULL) die_oom();
+        r->root = strdup(root);
+        if (r->root == NULL) die_oom();
+        int failed = module_resolver_add_package_root(r, "", root);
+        free(root);
         free(dir);
-        return root;
+        return failed;
     }
-    char *root = parse_package_manifest_source_root(manifest, path);
+    LineVec stack;
+    lines_init(&stack);
+    int failed = module_resolver_collect_manifest(r, manifest, "", path, NULL, 0, NULL, &stack);
+    lines_free(&stack);
     free(manifest);
     free(dir);
-    return root;
+    return failed;
 }
 
 static int linevec_contains(LineVec *lv, const char *text) {
@@ -1738,10 +2029,33 @@ static int linevec_contains(LineVec *lv, const char *text) {
     return 0;
 }
 
+static const char *module_resolver_root_for_path(ModuleResolver *r, const char *path) {
+    const char *root = r->root;
+    size_t best_len = root ? strlen(root) : 0;
+    for (int i = 0; i < r->package_count; i++) {
+        const char *candidate = r->packages[i].source_root;
+        size_t len = strlen(candidate);
+        if (len >= best_len && canonical_path_is_under(path, candidate)) {
+            root = candidate;
+            best_len = len;
+        }
+    }
+    return root;
+}
+
+static const char *module_resolver_alias_for_root(ModuleResolver *r, const char *root) {
+    for (int i = 0; i < r->package_count; i++) {
+        if (strcmp(r->packages[i].source_root, root) == 0) return r->packages[i].alias;
+    }
+    return "";
+}
+
 static char *module_name_for_path_c(ModuleResolver *r, const char *path) {
     const char *rel = path;
-    size_t root_len = strlen(r->root);
-    if (strncmp(path, r->root, root_len) == 0 && path[root_len] == '/') rel = path + root_len + 1;
+    const char *root = module_resolver_root_for_path(r, path);
+    size_t root_len = strlen(root);
+    if (strcmp(path, root) == 0) rel = "";
+    else if (strncmp(path, root, root_len) == 0 && path[root_len] == '/') rel = path + root_len + 1;
     char *out = strdup(rel);
     if (out == NULL) die_oom();
     size_t n = strlen(out);
@@ -1749,13 +2063,23 @@ static char *module_name_for_path_c(ModuleResolver *r, const char *path) {
     for (char *p = out; *p != '\0'; p++) {
         if (*p == '/') *p = '.';
     }
-    return out;
+    const char *alias = module_resolver_alias_for_root(r, root);
+    if (alias[0] == '\0') return out;
+    StrBuf prefixed;
+    sb_init(&prefixed);
+    sb_append(&prefixed, alias);
+    if (out[0] != '\0') {
+        sb_append(&prefixed, ".");
+        sb_append(&prefixed, out);
+    }
+    free(out);
+    return sb_take(&prefixed);
 }
 
-static char *module_path_for_import(ModuleResolver *r, const char *name) {
+static char *module_path_under_root(const char *root, const char *name) {
     StrBuf out;
     sb_init(&out);
-    sb_append(&out, r->root);
+    sb_append(&out, root);
     sb_append(&out, "/");
     for (const char *p = name; *p != '\0'; p++) {
         char ch = *p == '.' ? '/' : *p;
@@ -1763,6 +2087,28 @@ static char *module_path_for_import(ModuleResolver *r, const char *name) {
     }
     sb_append(&out, ".vais");
     return sb_take(&out);
+}
+
+static char *module_path_for_import(ModuleResolver *r, const char *current_path, const char *name) {
+    const char *current_root = module_resolver_root_for_path(r, current_path);
+    char *local = module_path_under_root(current_root, name);
+    if (access(local, R_OK) == 0) return local;
+
+    const char *dot = strchr(name, '.');
+    if (dot != NULL && dot != name && dot[1] != '\0') {
+        char *alias = substr_copy(name, (size_t)(dot - name));
+        const char *rest = dot + 1;
+        for (int i = 0; i < r->dependency_count; i++) {
+            if (strcmp(r->dependencies[i].alias, alias) == 0) {
+                free(local);
+                char *target = module_path_under_root(r->dependencies[i].source_root, rest);
+                free(alias);
+                return target;
+            }
+        }
+        free(alias);
+    }
+    return local;
 }
 
 static char *parse_import_name_c(const char *code) {
@@ -1979,7 +2325,7 @@ static char *module_resolver_load(ModuleResolver *r, const char *path, const cha
     if (!failed) {
         qsort(imports, (size_t)import_count, sizeof(ImportInfo), import_info_cmp);
         for (int i = 0; i < import_count; i++) {
-            char *target = module_path_for_import(r, imports[i].name);
+            char *target = module_path_for_import(r, real, imports[i].name);
             char *piece = module_resolver_load(r, target, real, imports[i].line_no, imports[i].line);
             free(target);
             if (piece == NULL) {
@@ -2021,6 +2367,14 @@ static char *module_resolver_load(ModuleResolver *r, const char *path, const cha
 
 static void module_resolver_free(ModuleResolver *r) {
     free(r->root);
+    for (int i = 0; i < r->package_count; i++) {
+        free(r->packages[i].alias);
+        free(r->packages[i].source_root);
+    }
+    for (int i = 0; i < r->dependency_count; i++) {
+        free(r->dependencies[i].alias);
+        free(r->dependencies[i].source_root);
+    }
     lines_free(&r->visited);
     for (int i = 0; i < r->symbol_count; i++) {
         free(r->symbols[i].name);
@@ -2029,14 +2383,13 @@ static void module_resolver_free(ModuleResolver *r) {
 }
 
 static char *resolve_module_graph_source(const char *path) {
-    char *root = source_root_for_entry(path);
-    if (root == NULL) return NULL;
-
     ModuleResolver r;
-    r.root = root;
+    memset(&r, 0, sizeof(r));
     lines_init(&r.visited);
-    r.stack_count = 0;
-    r.symbol_count = 0;
+    if (module_resolver_init_roots(&r, path) != 0) {
+        module_resolver_free(&r);
+        return NULL;
+    }
     char *merged = module_resolver_load(&r, path, NULL, 0, NULL);
     module_resolver_free(&r);
     return merged;

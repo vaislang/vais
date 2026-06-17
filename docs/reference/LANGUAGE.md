@@ -52,16 +52,25 @@ the manifest source root:
 name = "demo"
 version = "0.1.0"
 source = "src"
+
+[dependencies]
+mathlib = "../mathlib"
 ```
 
 For `source = "src"`, compile `src/main.vais`; `import math.add` resolves to
-`src/math/add.vais`. Imported files are merged in deterministic import-path
-order before compilation. Missing imports, duplicate top-level symbols, import
-cycles, and invalid manifests are front-contract errors.
+`src/math/add.vais`. A `[dependencies]` entry maps an import prefix to another
+local package directory with its own `vais.toml`; for example,
+`import mathlib.public` resolves to `public.vais` under the `mathlib` package's
+source root when no local `mathlib/public.vais` file exists. Files loaded from
+a dependency resolve plain imports under their own package source root.
+
+Imported files are merged in deterministic import-path order before
+compilation. Missing imports, duplicate top-level symbols, import cycles,
+missing dependency manifests, unsafe dependency paths, and invalid manifests are
+front-contract errors.
 
 Explicit `module` and `package` declarations are reserved for later Phase 2
-gates and are rejected for now. Local package dependencies are also reserved for
-a later Phase 2 gate. The direct engine remains single-file.
+gates and are rejected for now. The direct engine remains single-file.
 
 ## Functions
 

@@ -1,0 +1,5 @@
+import mathlib.public
+
+fn main() -> Int {
+    return add(20, 22)
+}

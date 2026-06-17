@@ -37,6 +37,9 @@
   import-cycle diagnostics.
 - Added source-root `vais.toml` package manifest support for the full engine,
   with required `name`, `version`, and `source` keys plus manifest diagnostics.
+- Added local dependency package paths in `vais.toml` `[dependencies]` for the
+  full engine, including native and Python fallback gates for dependency
+  imports and manifest diagnostics.
 
 ## v0.2.2 - 2026-06-15
 

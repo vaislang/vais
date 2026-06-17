@@ -4,9 +4,11 @@
 
 - Added the first `vais.toml` package manifest slice for `name`, `version`, and
   `source` source-root resolution.
-- Kept local package dependencies reserved for the next Phase 2 slice.
-- Added native and Python fallback gates for package manifest success and
-  manifest diagnostics.
+- Added local dependency package paths under `vais.toml` `[dependencies]`, with
+  dependency imports resolving through native public driver and Python fallback
+  paths.
+- Added native and Python fallback gates for package manifest success,
+  dependency imports, and manifest diagnostics.
 
 ## 2026-06-17
 
