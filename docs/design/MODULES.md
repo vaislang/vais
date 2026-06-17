@@ -1,11 +1,12 @@
 # Vais Module Model
 
-Status: first local-import slice implemented for the full `scripts/vaisc`
-engine.
+Status: first local-import and source-root manifest slices implemented for the
+full `scripts/vaisc` engine.
 
 Current verified builds can compile one entry `.vais` file plus local files
-reached through static dotted `import` declarations. Explicit `module` and
-`package` declarations are still reserved and rejected.
+reached through static dotted `import` declarations. A nearest `vais.toml`
+manifest can set the package source root. Explicit `module` and `package`
+declarations are still reserved and rejected.
 
 ## Goals
 
@@ -17,7 +18,10 @@ reached through static dotted `import` declarations. Explicit `module` and
 ## Source Files And Module Names
 
 - A module is one `.vais` file under a package source root.
-- The first source root is the directory containing the entry file.
+- Without `vais.toml`, the first source root is the directory containing the
+  entry file.
+- With `vais.toml`, the first source root is the manifest directory plus its
+  `source` value.
 - Module names are derived from the package-relative path without `.vais`.
 - Path separators become dots: `math/add.vais` is module `math.add`.
 - A file named `main.vais` has module name `main`.
@@ -35,7 +39,7 @@ import math.add
 `import math.add` resolves to `math/add.vais` under the current package source
 root. Import paths must be static dotted identifiers. Absolute paths, `..`,
 environment expansion, URLs, wildcard imports, and generated imports are not in
-the first slice.
+the first slices.
 
 ## Visibility And Symbols
 
@@ -65,8 +69,7 @@ main -> math.add -> main
 
 ## Package Manifest
 
-Package manifests are a later Phase 2 slice. The intended first manifest is
-`vais.toml` with only:
+The first package manifest is `vais.toml` with only:
 
 ```toml
 name = "demo"
@@ -74,16 +77,27 @@ version = "0.1.0"
 source = "src"
 ```
 
+`name`, `version`, and `source` are required top-level string keys. `source`
+must be a local relative path such as `src`; absolute paths and `..` are
+rejected. The compiled entry file must be under the resolved source root.
+
 No registry, semver solver, build scripts, features, binary targets, or external
-dependencies are part of the first module/package implementation.
+dependencies are part of the first module/package implementation. Local package
+dependencies are reserved for the next Phase 2 slice.
 
 ## Current Gates
 
 - `scripts/vaisc build examples/module_basic/main.vais` builds a multi-file
   local package.
 - `scripts/vaisc run examples/module_basic/main.vais` returns the expected value.
+- `scripts/vaisc build examples/package_basic/src/main.vais` builds a package
+  using `vais.toml`.
+- `scripts/vaisc run examples/package_basic/src/main.vais` returns the expected
+  value.
 - Duplicate top-level symbols produce a P4 diagnostic with both file paths.
 - Missing import paths produce a P4 diagnostic with the resolved path.
 - Import cycles produce a P4 diagnostic with the cycle path.
+- Invalid package manifests produce P4 diagnostics with source coordinates and
+  help text.
 - Existing single-file examples continue to pass `scripts/test-vaisc-parity.sh`
   and `scripts/test.sh`.

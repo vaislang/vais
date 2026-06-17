@@ -44,13 +44,24 @@ fn main() -> Int {
 }
 ```
 
-For an entry file `main.vais`, `import math.add` resolves to `math/add.vais`
-under the entry file's directory. Imported files are merged in deterministic
-import-path order before compilation. Missing imports, duplicate top-level
-symbols, and import cycles are front-contract errors.
+Without a package manifest, `import math.add` resolves to `math/add.vais` under
+the entry file's directory. With a nearest `vais.toml`, imports resolve under
+the manifest source root:
+
+```toml
+name = "demo"
+version = "0.1.0"
+source = "src"
+```
+
+For `source = "src"`, compile `src/main.vais`; `import math.add` resolves to
+`src/math/add.vais`. Imported files are merged in deterministic import-path
+order before compilation. Missing imports, duplicate top-level symbols, import
+cycles, and invalid manifests are front-contract errors.
 
 Explicit `module` and `package` declarations are reserved for later Phase 2
-gates and are rejected for now. The direct engine remains single-file.
+gates and are rejected for now. Local package dependencies are also reserved for
+a later Phase 2 gate. The direct engine remains single-file.
 
 ## Functions
 

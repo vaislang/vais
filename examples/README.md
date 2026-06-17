@@ -24,6 +24,12 @@ Run the multi-file import example:
 scripts/vaisc run examples/module_basic/main.vais
 ```
 
+Run the package-manifest example:
+
+```bash
+scripts/vaisc run examples/package_basic/src/main.vais
+```
+
 Compiler parity coverage is tracked in `tools/vaisc-parity.tsv`:
 
 ```bash

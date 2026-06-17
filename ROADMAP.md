@@ -69,6 +69,9 @@ This file tracks current work only.
 - The full compiler path supports single-package local dotted imports such as
   `import math.add`, with gates for multi-file success, missing imports,
   duplicate symbols, and import cycles.
+- The full compiler path supports the first `vais.toml` package manifest slice:
+  required `name`, `version`, and `source` keys, source-root import resolution,
+  and manifest diagnostics.
 
 ## Current Reality
 
@@ -113,7 +116,8 @@ This file tracks current work only.
 ## Next Work
 
 1. Expand the standard library only through gate-backed APIs.
-2. Add a minimal package manifest on top of the implemented local import model.
+2. Add local package dependency paths on top of the implemented source-root
+   manifest model.
 3. Add file and process primitives, then replace Python-only internal checks
    with Vais-backed tools where the language is strong enough.
 4. Broaden types, collections, and control syntax without publishing ungated
@@ -185,9 +189,11 @@ package manager too early.
 - [x] 2.2 Implement single-package multi-file compilation for `scripts/vaisc`.
 - [x] 2.3 Add `import` support for local package paths with deterministic
   ordering and stable diagnostics.
-- [ ] 2.4 Add package manifest support only for name/version/source roots and
-  local dependencies.
-- [ ] 2.5 Add package manifest examples, docs, gates, and package smoke builds.
+- [x] 2.4 Add package manifest support for name/version/source roots.
+- [ ] 2.5 Add local dependency package paths.
+- [x] 2.6 Add package manifest examples, docs, gates, and source-root package
+  smoke builds.
+- [ ] 2.7 Add local dependency examples, docs, gates, and package smoke builds.
 
 Done: a small multi-file Vais project builds with `scripts/vaisc build` and is
 covered by CI gates.
@@ -301,7 +307,20 @@ The current concrete slice is Phase 2 package structure:
 - [x] Implement single-package multi-file compilation for `scripts/vaisc`.
 - [x] Add local import support with missing-import, duplicate-symbol, and
   import-cycle diagnostics.
-- [ ] Add the minimal package manifest slice.
+- [x] Add the minimal package manifest slice.
+- [ ] Add local package dependency paths.
+
+## Completed Milestone: Package Manifest Source Roots
+
+Mode: sequential
+
+- [x] 1. Search for nearest `vais.toml` from the entry file directory upward.
+- [x] 2. Parse required `name`, `version`, and `source` string keys.
+- [x] 3. Resolve static dotted imports under the manifest source root.
+- [x] 4. Reject missing keys, unsafe source paths, missing source directories,
+  and entries outside the source root with P4 diagnostics.
+- [x] 5. Add package examples, canonical docs, website copy, and front-contract
+  gates for native and Python fallback paths.
 
 ## Completed Milestone: Single-Package Local Imports
 

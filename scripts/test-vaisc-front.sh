@@ -277,6 +277,46 @@ else
     fail=1
 fi
 
+package_root="$tmp/package_basic"
+mkdir -p "$package_root/src/math"
+cat > "$package_root/vais.toml" <<'SRC'
+name = "package_basic"
+version = "0.1.0"
+source = "src"
+SRC
+cat > "$package_root/src/math/add.vais" <<'SRC'
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+SRC
+cat > "$package_root/src/main.vais" <<'SRC'
+import math.add
+
+fn main() -> Int {
+    return add(20, 22)
+}
+SRC
+
+"$VAISC" run "$package_root/src/main.vais" >"$tmp/package_accept.out" 2>"$tmp/package_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS accepts package manifest source root full slice"
+else
+    echo "  FAIL accepts package manifest source root got=$got want=42"
+    cat "$tmp/package_accept.err"
+    fail=1
+fi
+
+VAISC_FORCE_PYTHON=1 "$VAISC" run "$package_root/src/main.vais" >"$tmp/package_py_accept.out" 2>"$tmp/package_py_accept.err"
+got=$?
+if [ "$got" = "42" ]; then
+    echo "  PASS Python fallback accepts package manifest source root"
+else
+    echo "  FAIL Python fallback package manifest got=$got want=42"
+    cat "$tmp/package_py_accept.err"
+    fail=1
+fi
+
 expect_reject() {
     local name="$1"
     local needle="$2"
@@ -295,6 +335,27 @@ expect_reject() {
     else
         echo "  FAIL rejects $name: missing expected diagnostic"
         cat "$tmp/$name.err"
+        fail=1
+    fi
+}
+
+expect_reject_path() {
+    local label="$1"
+    local src="$2"
+    local needle="$3"
+    local help_needle="$4"
+    "$VAISC" emit-ir "$src" -o "$tmp/$label.ll" >"$tmp/$label.out" 2>"$tmp/$label.err"
+    local rc=$?
+    if [ "$rc" = "0" ]; then
+        echo "  FAIL rejects $label: command unexpectedly succeeded"
+        fail=1
+        return
+    fi
+    if grep -q "$needle" "$tmp/$label.err" && grep -q "help:" "$tmp/$label.err" && grep -q "$help_needle" "$tmp/$label.err"; then
+        echo "  PASS rejects $label with P4 help"
+    else
+        echo "  FAIL rejects $label: missing expected diagnostic"
+        cat "$tmp/$label.err"
         fail=1
     fi
 }
@@ -420,6 +481,33 @@ fn main() -> Int {
     return 0
 }
 SRC
+
+bad_manifest_root="$tmp/bad_manifest"
+mkdir -p "$bad_manifest_root/src"
+cat > "$bad_manifest_root/vais.toml" <<'SRC'
+name = "bad_manifest"
+version = "0.1.0"
+SRC
+cat > "$bad_manifest_root/src/main.vais" <<'SRC'
+fn main() -> Int {
+    return 42
+}
+SRC
+expect_reject_path "bad_manifest" "$bad_manifest_root/src/main.vais" "package manifest is missing required key" "write .*source"
+
+bad_source_root="$tmp/bad_source_manifest"
+mkdir -p "$bad_source_root/src"
+cat > "$bad_source_root/vais.toml" <<'SRC'
+name = "bad_source"
+version = "0.1.0"
+source = "../src"
+SRC
+cat > "$bad_source_root/src/main.vais" <<'SRC'
+fn main() -> Int {
+    return 42
+}
+SRC
+expect_reject_path "bad_source_manifest" "$bad_source_root/src/main.vais" "package manifest source must be a local relative path" "absolute paths and .*\\.\\."
 
 dup_root="$tmp/duplicate_import"
 mkdir -p "$dup_root/a" "$dup_root/b"

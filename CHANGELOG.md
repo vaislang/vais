@@ -35,6 +35,8 @@
 - Added the first full-engine local import implementation for single-package
   multi-file builds, including missing-import, duplicate-symbol, and
   import-cycle diagnostics.
+- Added source-root `vais.toml` package manifest support for the full engine,
+  with required `name`, `version`, and `source` keys plus manifest diagnostics.
 
 ## v0.2.2 - 2026-06-15
 

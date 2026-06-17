@@ -1,5 +1,13 @@
 # Vais Worklog
 
+## 2026-06-18
+
+- Added the first `vais.toml` package manifest slice for `name`, `version`, and
+  `source` source-root resolution.
+- Kept local package dependencies reserved for the next Phase 2 slice.
+- Added native and Python fallback gates for package manifest success and
+  manifest diagnostics.
+
 ## 2026-06-17
 
 - Replaced the stale Map example with the verified local `Map<Int,Int>` API:

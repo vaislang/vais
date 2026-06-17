@@ -1081,6 +1081,17 @@ def lower_print_for_core_text(text: str) -> str:
 IMPORT_LINE = re.compile(r"^\s*import\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*;?\s*$")
 MODULE_DECL_LINE = re.compile(r"^\s*(module|package)\b")
 TOP_LEVEL_SYMBOL = re.compile(r"^\s*(fn|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)\b")
+MANIFEST_ASSIGNMENT = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\"([^\"]*)\"\s*$")
+
+
+@dataclass(frozen=True)
+class PackageManifest:
+    path: Path
+    root: Path
+    source_root: Path
+    name: str
+    version: str
+    source: str
 
 
 def format_source_issue(path: Path, line_no: int, col: int, line: str, message: str, help_text: str) -> str:
@@ -1108,6 +1119,155 @@ def module_name_for_path(path: Path, root: Path) -> str:
 
 def resolve_module_path(root: Path, module_name: str) -> Path:
     return root.joinpath(*module_name.split(".")).with_suffix(".vais")
+
+
+def strip_manifest_comment(line: str) -> str:
+    in_string = False
+    escaped = False
+    out: list[str] = []
+    for ch in line:
+        if escaped:
+            out.append(ch)
+            escaped = False
+            continue
+        if ch == "\\" and in_string:
+            out.append(ch)
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            out.append(ch)
+            continue
+        if ch == "#" and not in_string:
+            break
+        out.append(ch)
+    return "".join(out)
+
+
+def manifest_issue(path: Path, line_no: int, line: str, message: str, help_text: str) -> FrontContractError:
+    return FrontContractError(format_source_issue(path, line_no, 1, line, message, help_text))
+
+
+def find_package_manifest(source: Path) -> Path | None:
+    current = source.parent.resolve()
+    while True:
+        candidate = current / "vais.toml"
+        if candidate.is_file():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def source_path_is_safe(value: str) -> bool:
+    if not value or value.startswith("/") or "\\" in value:
+        return False
+    return all(part not in ("", "..") for part in value.split("/"))
+
+
+def parse_package_manifest(path: Path) -> PackageManifest:
+    raw_lines = path.read_text().splitlines()
+    values: dict[str, tuple[str, int, str]] = {}
+    allowed = {"name", "version", "source"}
+    for line_no, raw_line in enumerate(raw_lines, 1):
+        code = strip_manifest_comment(raw_line)
+        if not code.strip():
+            continue
+        match = MANIFEST_ASSIGNMENT.match(code)
+        if not match:
+            raise manifest_issue(
+                path,
+                line_no,
+                raw_line,
+                "package manifest supports only name, version, and source for now",
+                "write top-level string keys: `name`, `version`, and `source`.",
+            )
+        key, value = match.group(1), match.group(2)
+        if key not in allowed:
+            raise manifest_issue(
+                path,
+                line_no,
+                raw_line,
+                "package manifest supports only name, version, and source for now",
+                "remove unsupported keys until local dependency manifests are implemented.",
+            )
+        if key in values:
+            raise manifest_issue(
+                path,
+                line_no,
+                raw_line,
+                f"duplicate package manifest key `{key}`",
+                "keep exactly one `name`, one `version`, and one `source` key.",
+            )
+        values[key] = (value, line_no, raw_line)
+
+    first_line = raw_lines[0] if raw_lines else ""
+    for key in ("name", "version", "source"):
+        if key not in values:
+            raise manifest_issue(
+                path,
+                1,
+                first_line,
+                f"package manifest is missing required key `{key}`",
+                "write `name`, `version`, and `source` before compiling this package.",
+            )
+
+    source_value, source_line, source_raw = values["source"]
+    if not source_path_is_safe(source_value):
+        raise manifest_issue(
+            path,
+            source_line,
+            source_raw,
+            "package manifest source must be a local relative path",
+            "use a source path such as `src`; absolute paths and `..` are not supported.",
+        )
+
+    root = path.parent.resolve()
+    source_root = (root / source_value).resolve()
+    if not source_root.is_dir():
+        raise manifest_issue(
+            path,
+            source_line,
+            source_raw,
+            "package manifest source directory not found",
+            f"create the source directory at {source_root} or update `source`.",
+        )
+
+    return PackageManifest(
+        path=path,
+        root=root,
+        source_root=source_root,
+        name=values["name"][0],
+        version=values["version"][0],
+        source=source_value,
+    )
+
+
+def source_root_for_entry(source: Path) -> Path:
+    manifest_path = find_package_manifest(source)
+    if manifest_path is None:
+        return source.parent.resolve()
+    manifest = parse_package_manifest(manifest_path)
+    try:
+        source.resolve().relative_to(manifest.source_root)
+    except ValueError:
+        source_value, source_line, source_raw = manifest.source, 1, ""
+        raw_lines = manifest.path.read_text().splitlines()
+        for line_no, raw_line in enumerate(raw_lines, 1):
+            match = MANIFEST_ASSIGNMENT.match(strip_manifest_comment(raw_line))
+            if match and match.group(1) == "source":
+                source_line = line_no
+                source_raw = raw_line
+                break
+        raise manifest_issue(
+            manifest.path,
+            source_line,
+            source_raw,
+            "package entry is outside manifest source root",
+            f"compile a `.vais` file under {manifest.source_root} or update `source`.",
+        )
+    return manifest.source_root
 
 
 class ModuleResolver:
@@ -1226,7 +1386,7 @@ class ModuleResolver:
 def resolve_module_graph_source(source: Path) -> str:
     if not source.is_file():
         raise CompileError(f"source not found: {source}")
-    resolver = ModuleResolver(source.parent)
+    resolver = ModuleResolver(source_root_for_entry(source))
     return resolver.load(source)
 
 
