@@ -1225,6 +1225,32 @@ static char *parse_match_expr(const char *line) {
     return trim_copy(substr_copy(s, (size_t)(open - s)));
 }
 
+static int parse_inline_match_let(const char *line, char **name, char **match_expr, char **arms_text) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    s = skip_ws(s + 4);
+    if (starts_with(s, "mut") && !is_ident_continue(s[3])) {
+        s = skip_ws(s + 3);
+    }
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    s = skip_ws(s);
+    if (*s != '=') return 0;
+    s = skip_ws(s + 1);
+    if (!starts_with(s, "match ") || is_ident_continue(s[5])) return 0;
+    s = skip_ws(s + 6);
+    const char *open = strrchr(s, '{');
+    const char *close = open == NULL ? NULL : strrchr(open + 1, '}');
+    if (open == NULL || close == NULL || close <= open) return 0;
+    *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    *match_expr = trim_copy(substr_copy(s, (size_t)(open - s)));
+    *arms_text = substr_copy(open + 1, (size_t)(close - open - 1));
+    return 1;
+}
+
 static int parse_arm(const char *line, char **pattern, char **expr) {
     const char *arrow = strstr(line, "=>");
     if (arrow == NULL) return 0;
@@ -1351,6 +1377,116 @@ static char *lower_enum_text(const char *text) {
     for (size_t i = 0; i < lines.len; i++) {
         if (has_enum && (int)i == enum_line) continue;
         char *typed = has_enum ? replace_enum_types(lines.items[i], &info) : strdup(lines.items[i]);
+        char *inline_name = NULL;
+        char *inline_match_expr = NULL;
+        char *inline_arms = NULL;
+        if (has_enum && parse_inline_match_let(typed, &inline_name, &inline_match_expr, &inline_arms)) {
+            char *arm_parts[16] = {0};
+            char *patterns[16] = {0};
+            char *exprs[16] = {0};
+            int arm_count = split_top_level_commas_c(inline_arms, arm_parts, 16);
+            int inline_ok = arm_count > 0;
+            for (int a = 0; a < arm_count && a < 16; a++) {
+                if (!parse_arm(arm_parts[a], &patterns[a], &exprs[a])) inline_ok = 0;
+            }
+            if (inline_ok) {
+                StrBuf decl;
+                sb_init(&decl);
+                sb_append(&decl, "    let mut ");
+                sb_append(&decl, inline_name);
+                sb_append(&decl, " = 0");
+                lines_push(&out, sb_take(&decl));
+                for (int a = 0; a < arm_count && a < 16; a++) {
+                    char *pattern = patterns[a];
+                    char *expr = exprs[a];
+                    char *rewritten_pattern = rewrite_constructors(pattern, &info);
+                    VariantInfo *variant = NULL;
+                    char *binders[8] = {0};
+                    int binder_count = 0;
+                    int wildcard_pattern = is_wildcard_match_pattern(pattern);
+                    if (info.is_payload && !wildcard_pattern) {
+                        char *paren = strchr(pattern, '(');
+                        char *vname = NULL;
+                        if (paren != NULL) {
+                            vname = trim_copy(substr_copy(pattern, (size_t)(paren - pattern)));
+                            char *close = strrchr(paren, ')');
+                            if (close != NULL) {
+                                char *inside = substr_copy(paren + 1, (size_t)(close - paren - 1));
+                                binder_count = split_top_level_commas_c(inside, binders, 8);
+                                free(inside);
+                            }
+                        } else {
+                            vname = trim_copy(pattern);
+                        }
+                        variant = find_variant(&info, vname);
+                        free(vname);
+                    }
+                    char *struct_expr = (info.is_payload && variant != NULL)
+                        ? rewrite_struct_payload_binder_expr(expr, variant, binders, binder_count)
+                        : strdup(expr);
+                    char *rewritten_expr = rewrite_constructors(struct_expr, &info);
+                    free(struct_expr);
+                    StrBuf b;
+                    sb_init(&b);
+                    if (wildcard_pattern) {
+                        sb_append(&b, a == 0 ? "    if 1 == 1 {" : "    else {");
+                    } else {
+                        sb_append(&b, a == 0 ? "    if " : "    else if ");
+                    }
+                    if (!wildcard_pattern && info.is_payload && variant != NULL) {
+                        char tag_text[64];
+                        snprintf(tag_text, sizeof(tag_text), "%% %d == %d {", info.count, variant->tag);
+                        sb_append(&b, inline_match_expr);
+                        sb_append(&b, " ");
+                        sb_append(&b, tag_text);
+                    } else if (!wildcard_pattern) {
+                        sb_append(&b, inline_match_expr);
+                        sb_append(&b, " == ");
+                        sb_append(&b, rewritten_pattern);
+                        sb_append(&b, " {");
+                    }
+                    lines_push(&out, sb_take(&b));
+                    if (info.is_payload && variant != NULL) {
+                        for (int k = 0; k < binder_count; k++) {
+                            long long denom = info.count;
+                            for (int p = 0; p < k; p++) denom *= 1000000LL;
+                            StrBuf bind;
+                            sb_init(&bind);
+                            char denom_text[80];
+                            snprintf(denom_text, sizeof(denom_text), "        let %s = (%s / %lld) %% 1000000", binders[k], inline_match_expr, denom);
+                            sb_append(&bind, denom_text);
+                            lines_push(&out, sb_take(&bind));
+                            free(binders[k]);
+                        }
+                    }
+                    StrBuf assign;
+                    sb_init(&assign);
+                    sb_append(&assign, "        ");
+                    sb_append(&assign, inline_name);
+                    sb_append(&assign, " = ");
+                    sb_append(&assign, rewritten_expr);
+                    lines_push(&out, sb_take(&assign));
+                    lines_push(&out, strdup("    }"));
+                    free(rewritten_expr);
+                    free(rewritten_pattern);
+                }
+            } else {
+                lines_push(&out, strdup(typed));
+            }
+            for (int a = 0; a < 16; a++) {
+                free(arm_parts[a]);
+                free(patterns[a]);
+                free(exprs[a]);
+            }
+            free(inline_name);
+            free(inline_match_expr);
+            free(inline_arms);
+            free(typed);
+            continue;
+        }
+        free(inline_name);
+        free(inline_match_expr);
+        free(inline_arms);
         char *match_expr = parse_match_expr(typed);
         if (match_expr == NULL) {
             char *rewritten = has_enum && strstr(typed, "match ") == NULL ? rewrite_constructors(typed, &info) : strdup(typed);

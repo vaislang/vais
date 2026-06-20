@@ -33,6 +33,8 @@
 - Promoted the first `Result<Int,Int>` slice for `Ok(Int)`/`Err(Int)`, helper
   returns, and statement-form `match`, with `examples/e21_result_match.vais`
   added to the release corpus.
+- Promoted `Option<Int>` expression-form match binding, with
+  `examples/e23_option_flow.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

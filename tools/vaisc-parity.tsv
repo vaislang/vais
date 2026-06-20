@@ -19,6 +19,7 @@ examples/e18_while_accumulator.vais	native-supported	While loop with arithmetic 
 examples/e20_triangular.vais	native-supported	Recursive triangular number.
 examples/e21_result_match.vais	native-supported	Result<Int,Int> Ok/Err helper return and statement match.
 examples/e22_enum_dispatch.vais	native-supported	Payload-free enum dispatch helper.
+examples/e23_option_flow.vais	native-supported	Option<Int> expression-match binding flow.
 examples/e24_struct_enum_field.vais	native-supported	Payload-free enum stored in a struct field and matched through field access.
 examples/e26_pipeline.vais	native-supported	Plain function pipeline.
 examples/e29_gcd.vais	native-supported	Modulo recursion.

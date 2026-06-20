@@ -56,6 +56,7 @@ catch-all,
 statement-match slice,
 `examples/e21_result_match.vais` for the first `Result<Int,Int>`
 helper-return and statement-match slice,
+`examples/e23_option_flow.vais` for `Option<Int>` expression-match binding,
 `examples/e40_option_in_struct.vais` for `Option<Int>` stored in a struct field,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
