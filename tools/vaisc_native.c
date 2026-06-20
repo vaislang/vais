@@ -933,8 +933,7 @@ static int parse_arm(const char *line, char **pattern, char **expr) {
     *pattern = trim_copy(pat_raw);
     free(pat_raw);
     const char *body = skip_ws(arrow + 2);
-    if (!starts_with(body, "return ")) return 0;
-    body += 7;
+    if (starts_with(body, "return ")) body += 7;
     *expr = trim_copy(body);
     return 1;
 }

@@ -116,6 +116,10 @@ fn label_payload_small() -> Str {
     return str_concat("accepts small payload ", str_concat(kw_enum(), str_concat("/", str_concat(kw_match(), " slice"))))
 }
 
+fn label_match_expr_accept() -> Str {
+    return str_concat("accepts expression-arm ", str_concat(kw_match(), " slice"))
+}
+
 fn label_closure_accept() -> Str {
     return str_concat("accepts single-Int ", str_concat("clos", "ure return slice"))
 }
@@ -132,7 +136,7 @@ fn name_payload_bad() -> Str {
     return str_concat("payload_", str_concat(kw_enum(), "_struct"))
 }
 
-fn name_match_bad() -> Str {
+fn name_match_expr_accept() -> Str {
     return str_concat(kw_match(), "_expr_body")
 }
 
@@ -371,6 +375,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "struct") == 1 { return write_struct_accept(path) }
     if str_eq(name, "tag") == 1 { return write_enum_accept(path) }
     if str_eq(name, name_payload_accept()) == 1 { return write_payload_enum_accept(path) }
+    if str_eq(name, name_match_expr_accept()) == 1 { return write_match_expr_body(path) }
     if str_eq(name, "closure") == 1 { return write_closure_accept(path) }
     if str_eq(name, "list") == 1 { return write_list_accept(path) }
     if str_eq(name, "str") == 1 { return write_str_accept(path) }
@@ -601,7 +606,6 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "bad_main_signature") == 1 { return write_bad_main(path) }
     if str_eq(name, "helper_missing_return_type") == 1 { return write_helper_missing_return(path) }
     if str_eq(name, name_payload_bad()) == 1 { return write_payload_enum_struct(path) }
-    if str_eq(name, name_match_bad()) == 1 { return write_match_expr_body(path) }
     if str_eq(name, "closure_literal") == 1 { return write_closure_literal_bad(path) }
     if str_eq(name, "rust_and") == 1 { return write_rust_and_bad(path) }
     if str_eq(name, "unsupported_method") == 1 { return write_unsupported_method(path) }
@@ -805,6 +809,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "struct", "accepts struct literal and field access slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "tag", label_payload_free(), 2)
     fail = fail + expect_accept(vaisc, tmp, name_payload_accept(), label_payload_small(), 14)
+    fail = fail + expect_accept(vaisc, tmp, name_match_expr_accept(), label_match_expr_accept(), 2)
     fail = fail + expect_accept(vaisc, tmp, "closure", label_closure_accept(), 7)
     fail = fail + expect_accept(vaisc, tmp, "list", "accepts List push/len/is_empty/last/pop/index/sum slice", 23)
     fail = fail + expect_accept(vaisc, tmp, "str", "accepts Str parameter, Bool helper, len, index, and byte classification slice", 42)
@@ -817,7 +822,6 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "bad_main_signature", "requires", "fn main() -> Int", "write the entrypoint")
     fail = fail + expect_reject(vaisc, tmp, "helper_missing_return_type", "helper functions must return", "", "fn name")
     fail = fail + expect_reject(vaisc, tmp, name_payload_bad(), msg_enum_decl(), "", str_concat("broader payload ", str_concat(kw_enum(), "s")))
-    fail = fail + expect_reject(vaisc, tmp, name_match_bad(), msg_match(), msg_simple_enum_arms(), msg_match_help())
     fail = fail + expect_reject(vaisc, tmp, "closure_literal", msg_closure(), "", help_closure())
     fail = fail + expect_reject(vaisc, tmp, "rust_and", "logical AND uses the word", "", "and")
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/len/is_empty/last/pop/sum", "", "plain function call")

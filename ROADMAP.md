@@ -382,6 +382,9 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   native direct, full self-host, and parity gates.
 - [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
   simple return-arm shape is fully gated.
+- [x] 4.2a Promote simple expression-arm `match` lowering for multi-field `Int`
+  payload enum variants through public front, full self-host, parity, and value
+  gates.
 - [x] 4.3a Promote exclusive `..` and inclusive `..=` range `for` loops through
   public front, native direct, full self-host, and parity gates.
 - [x] 4.3b Decide `break` and `continue` semantics and lower them through both

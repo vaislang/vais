@@ -11,6 +11,9 @@
   reassignment, length, index, and equality through full self-host, native
   direct, parity, and value gates, with `examples/e89_str_type.vais` added to
   the release corpus.
+- Promoted simple enum expression-arm `match` lowering for multi-field `Int`
+  payload variants, with `examples/e02_enum_payload.vais` added to the release
+  corpus.
 
 ## v0.3.1 - 2026-06-20
 

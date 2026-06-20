@@ -273,8 +273,10 @@ fn eval(n: Node) -> Int {
 Verified today:
 
 - Payload-free enum tags with `Enum.Tag` spelling.
-- Simple return-arm `match`.
+- Simple return-arm and expression-arm `match`.
 - Small recursive `Int` payload enum/match lowering used by the parity corpus.
+- Multi-field `Int` payload enum expression-arm lowering, as covered by
+  `examples/e02_enum_payload.vais`.
 
 Broader payload shapes are not a release claim yet.
 

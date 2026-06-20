@@ -167,6 +167,10 @@
   reassignment, length, index, and equality through the native direct engine,
   full self-host compiler, front contract, and parity gates, and added
   `examples/e89_str_type.vais` to the release corpus.
+- Promoted simple expression-arm `match` lowering for multi-field `Int` payload
+  enum variants through the public front contract, full self-host compiler, and
+  parity gates, and added `examples/e02_enum_payload.vais` to the release
+  corpus.
 - Added `tools/vais_parity_check.vais` as the Vais-authored NV-C4 parity
   manifest harness and reduced `scripts/test-vaisc-parity.sh` to a bootstrap
   wrapper.

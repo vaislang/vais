@@ -7,6 +7,7 @@
 #
 # Keep this list small and intentional. Add examples here when their status is
 # clear enough to protect in scripts/test-vaisc-parity.sh.
+examples/e02_enum_payload.vais	native-supported	Int payload enum expression-arm match lowering.
 examples/e03_recursion.vais	native-supported	Int recursion.
 examples/e04_mutual_rec.vais	native-supported	Mutual recursion and branch return.
 examples/e05_multi_fn.vais	native-supported	Multiple Int helpers.
