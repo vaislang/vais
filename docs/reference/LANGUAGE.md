@@ -125,7 +125,7 @@ Verified release surface:
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, `contains`, and `len` |
-| `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, and expression-match binding |
+| `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
@@ -507,6 +507,9 @@ Verified behavior:
 - Statement-form `match` arms that return from the current function.
 - Expression-form `let x = match ...` bindings for `Option<Int>`, as covered by
   `examples/e23_option_flow.vais`.
+- Local-binding `?` propagation for `Option<Int>` helper calls: `None` returns
+  from the current `Option<Int>` function, and `Some` binds its payload, as
+  covered by `examples/e93_option_question.vais`.
 
 `Result<Int,Int>` has the same first statement-match shape:
 
@@ -533,10 +536,11 @@ and `examples/e92_result_question_success.vais`.
 
 Not included yet: generic `Option<T>` or `Result<T,E>`, broader expression-form
 `match` beyond the gate-backed `Option<Int>` and `Result<Int,Int>` binding
-shapes, `?` beyond the gate-backed `Result<Int,Int>` local-binding shape, Map
-APIs that return `Option`, direct-engine Option/Result-specific claims, and
-nested option/result payloads. Unsupported generic `Option`/`Result` forms are
-rejected by front diagnostics instead of being treated as verified language.
+shapes, `?` beyond the gate-backed `Option<Int>` and `Result<Int,Int>`
+local-binding shapes, Map APIs that return `Option`, direct-engine
+Option/Result-specific claims, and nested option/result payloads. Unsupported
+generic `Option`/`Result` forms are rejected by front diagnostics instead of
+being treated as verified language.
 
 ## Strings, Characters, And Output
 

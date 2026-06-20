@@ -1,0 +1,18 @@
+# expect: 42
+# The success and None paths of Option<Int> `?`: add_one binds Some(5) as 5,
+# while add_one(0) short-circuits to None.
+fn find(x: Int) -> Option<Int> {
+    if x > 0 { return Some(x) }
+    return None
+}
+
+fn add_one(x: Int) -> Option<Int> {
+    let v = find(x)?
+    return Some(v + 1)
+}
+
+fn main() -> Int {
+    let good = match add_one(5) { Some(v) => v, None => 0 }
+    let missing = match add_one(0) { Some(v) => v, None => 36 }
+    return good + missing
+}

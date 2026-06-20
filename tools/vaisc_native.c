@@ -1251,7 +1251,7 @@ static int parse_inline_match_let(const char *line, char **name, char **match_ex
     return 1;
 }
 
-static int parse_result_try_let(const char *line, char **name, char **expr) {
+static int parse_try_let(const char *line, char **name, char **expr) {
     const char *s = skip_ws(line);
     if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
     s = skip_ws(s + 4);
@@ -1399,15 +1399,15 @@ static char *lower_enum_text(const char *text) {
 
     LineVec out;
     lines_init(&out);
-    int result_try_count = 0;
+    int try_count = 0;
     for (size_t i = 0; i < lines.len; i++) {
         if (has_enum && (int)i == enum_line) continue;
         char *typed = has_enum ? replace_enum_types(lines.items[i], &info) : strdup(lines.items[i]);
         char *try_name = NULL;
         char *try_expr = NULL;
-        if (info.builtin_kind == 2 && parse_result_try_let(typed, &try_name, &try_expr)) {
+        if ((info.builtin_kind == 1 || info.builtin_kind == 2) && parse_try_let(typed, &try_name, &try_expr)) {
             char tmp_name[64];
-            snprintf(tmp_name, sizeof(tmp_name), "__vais_try%d", result_try_count++);
+            snprintf(tmp_name, sizeof(tmp_name), "__vais_try%d", try_count++);
             char *rewritten_try_expr = rewrite_constructors(try_expr, &info);
             StrBuf bind_tmp;
             sb_init(&bind_tmp);
@@ -1420,9 +1420,13 @@ static char *lower_enum_text(const char *text) {
             sb_init(&propagate);
             sb_append(&propagate, "    if ");
             sb_append(&propagate, tmp_name);
-            sb_append(&propagate, " % 2 != 0 { return ");
-            sb_append(&propagate, tmp_name);
-            sb_append(&propagate, " }");
+            if (info.builtin_kind == 1) {
+                sb_append(&propagate, " % 2 != 0 { return 1 }");
+            } else {
+                sb_append(&propagate, " % 2 != 0 { return ");
+                sb_append(&propagate, tmp_name);
+                sb_append(&propagate, " }");
+            }
             lines_push(&out, sb_take(&propagate));
             StrBuf bind_value;
             sb_init(&bind_value);

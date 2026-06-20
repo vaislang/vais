@@ -60,7 +60,7 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<T>` | Partial |
 | `Map<Int,Int>` | Verified for local values |
 | `Map<K,V>` | Specified beyond the local `Map<Int,Int>` slice |
-| `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, and expression-match binding |
+| `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Option<T>` | Specified beyond the `Option<Int>` slice |
 | `Result<Int,Int>` | Verified for `Ok(Int)`, `Err(Int)`, helper returns, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<T,E>` | Specified beyond the `Result<Int,Int>` slice |

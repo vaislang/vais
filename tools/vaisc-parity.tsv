@@ -55,6 +55,7 @@ examples/e89_str_type.vais	native-supported	Str annotations, helper parameters, 
 examples/e90_enum_wildcard.vais	native-supported	Payload-free enum match with wildcard catch-all.
 examples/e91_result_flow.vais	native-supported	Result<Int,Int> expression-match binding flow.
 examples/e92_result_question_success.vais	native-supported	Result<Int,Int> question propagation success path.
+examples/e93_option_question.vais	native-supported	Option<Int> question propagation success and None paths.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.
