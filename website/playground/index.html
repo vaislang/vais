@@ -4,12 +4,112 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vais Playground</title>
-  <meta name="description" content="Edit and run tutorial Vais examples in the browser subset playground.">
+  <meta name="description" content="Edit and run tutorial Vais examples in a coding workspace.">
   <link rel="canonical" href="https://vaislang.dev/playground/">
   <link rel="icon" type="image/png" href="/logo-icon.png">
-  <meta http-equiv="refresh" content="0; url=/#playground">
+  <link rel="stylesheet" href="/src/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 </head>
-<body>
-  <p><a href="/#playground">Open the Vais playground</a></p>
+<body class="playground-body">
+  <header class="playground-topbar">
+    <a href="/" class="nav-logo" aria-label="Vais home">
+      <img src="/logo-icon.png" alt="" class="logo-img">
+      <span>Vais Playground</span>
+    </a>
+    <div class="playground-top-actions">
+      <select id="pg-sample" class="sample-select" aria-label="Exercise"></select>
+      <div class="lang-toggle" aria-label="Language">
+        <button type="button" class="lang-btn active" data-lang="en">EN</button>
+        <button type="button" class="lang-btn" data-lang="ko">KO</button>
+      </div>
+      <a class="btn btn-secondary" href="/" data-i18n="top.home">Home</a>
+      <a class="btn btn-primary" href="https://github.com/vaislang/vais" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </header>
+
+  <main class="playground-workspace">
+    <aside class="problem-pane" aria-label="Problem">
+      <div class="pane-header">
+        <span data-i18n="problem.label">Problem</span>
+        <strong id="pg-problem-title">Return an Int</strong>
+      </div>
+      <div class="problem-content">
+        <p id="pg-problem-body"></p>
+        <dl class="problem-meta">
+          <div>
+            <dt data-i18n="problem.expected">Expected</dt>
+            <dd id="pg-expected">42</dd>
+          </div>
+          <div>
+            <dt data-i18n="problem.file">Local file</dt>
+            <dd id="pg-path">examples/t1.vais</dd>
+          </div>
+          <div>
+            <dt data-i18n="problem.runner">Runner</dt>
+            <dd data-i18n="problem.runnerValue">Browser tutorial subset</dd>
+          </div>
+        </dl>
+      </div>
+      <div class="problem-notes">
+        <h2 data-i18n="problem.supportedTitle">Supported here</h2>
+        <ul>
+          <li data-i18n="problem.supported1">Int arithmetic, comparisons, if, while, return</li>
+          <li data-i18n="problem.supported2">Functions, simple structs, payload-free enum match</li>
+          <li data-i18n="problem.supported3">List push, len, index, last, pop, sum</li>
+        </ul>
+      </div>
+    </aside>
+
+    <section class="editor-pane" aria-label="Editor">
+      <div class="pane-header">
+        <span>main.vais</span>
+        <strong data-i18n="editor.title">Editor</strong>
+      </div>
+      <textarea id="pg-editor" class="playground-editor" spellcheck="false"></textarea>
+      <div class="editor-actions">
+        <button type="button" class="btn btn-primary" id="pg-run" data-i18n="editor.run">Run</button>
+        <button type="button" class="btn btn-secondary" id="pg-reset" data-i18n="editor.reset">Reset</button>
+        <button type="button" class="btn btn-secondary" id="pg-copy" data-i18n="editor.copy">Copy</button>
+        <span class="shortcut-hint">Ctrl/⌘ + Enter</span>
+      </div>
+    </section>
+
+    <aside class="result-pane" aria-label="Result">
+      <div class="pane-header">
+        <span data-i18n="result.label">Result</span>
+        <strong id="pg-status" data-state="idle">Ready</strong>
+      </div>
+      <div class="test-list">
+        <div class="test-row">
+          <span data-i18n="result.case">Exit-code test</span>
+          <strong id="pg-test-state">-</strong>
+        </div>
+        <div class="test-row">
+          <span data-i18n="result.expected">Expected</span>
+          <strong id="pg-test-expected">42</strong>
+        </div>
+        <div class="test-row">
+          <span data-i18n="result.actual">Actual</span>
+          <strong id="pg-test-actual">-</strong>
+        </div>
+      </div>
+      <div class="output-panel playground-output" aria-live="polite">
+        <div class="output-topline">
+          <span data-i18n="result.output">Output</span>
+          <span>browser subset</span>
+        </div>
+        <pre id="pg-output"><code></code></pre>
+      </div>
+      <div class="local-command">
+        <span data-i18n="result.local">Full compiler</span>
+        <code id="pg-local-command">scripts/vaisc run examples/t1.vais</code>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="/src/playground.js"></script>
 </body>
 </html>

@@ -9,9 +9,9 @@ builds a native host driver, links the reusable self-host compiler core in
 
 Official site: [vaislang.dev](https://vaislang.dev/)
 
-The site includes a Korean/English homepage and an editable browser playground
-for tutorial examples. The browser runner executes a small Vais subset for fast
-feedback; compile full programs locally with `scripts/vaisc`.
+The site includes a Korean/English homepage and a separate coding-workspace
+playground for tutorial examples. The browser runner executes a small Vais
+subset for fast feedback; compile full programs locally with `scripts/vaisc`.
 
 ## Quick Start
 
@@ -64,7 +64,7 @@ to the matching GitHub Release. The release checklist is
 
 | Start here | Purpose |
 | --- | --- |
-| [https://vaislang.dev/](https://vaislang.dev/) | Korean/English public homepage and learning playground |
+| [https://vaislang.dev/](https://vaislang.dev/) | Korean/English public homepage and separate playground |
 | [docs/README.md](docs/README.md) | Documentation map and publication rules |
 | [CHANGELOG.md](CHANGELOG.md) | Current source release notes |
 | [docs/release/RELEASE_CHECKLIST.md](docs/release/RELEASE_CHECKLIST.md) | Pre-tag release checklist |
