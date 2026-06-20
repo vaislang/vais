@@ -1701,6 +1701,16 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     putchar(10)
                     return Op { kind: 1, val: pdest, next: pdest + 1 }
                 }
+                let pclose = paren_end(toks, i + 2)
+                let parg = gen_expr(toks, slots, fns, defs, src, i + 2, pclose, counter)
+                let pdest2 = parg.next
+                emit_str("  %t")
+                pint(pdest2)
+                emit_str(" = call i32 @puts(i8* ")
+                emit_op(parg)
+                emit_str(")")
+                putchar(10)
+                return Op { kind: 1, val: pdest2, next: pdest2 + 1 }
             }
             # call: name ( arg0 [, ... up to arg9] ) — 0..10 args.
             let close = paren_end(toks, i + 2)
