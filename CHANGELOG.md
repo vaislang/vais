@@ -37,6 +37,8 @@
   `examples/e23_option_flow.vais` added to the release corpus.
 - Promoted `Result<Int,Int>` expression-form match binding, with
   `examples/e91_result_flow.vais` added to the release corpus.
+- Promoted `Result<Int,Int>` local-binding `?` propagation, with
+  `examples/e39_error_propagate.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

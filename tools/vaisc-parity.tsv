@@ -29,6 +29,7 @@ examples/e33_guard_chain.vais	native-supported	Int guard chain.
 examples/e34_int_conversion.vais	native-supported	Int conversion call.
 examples/e35_calc_dispatch.vais	native-supported	Payload-free enum dispatch with bitwise builtin.
 examples/e38_negatives.vais	native-supported	Negative Int arithmetic.
+examples/e39_error_propagate.vais	native-supported	Result<Int,Int> question propagation error path.
 examples/e40_option_in_struct.vais	native-supported	Option<Int> stored in a struct field and matched through field access.
 examples/e42_while_call.vais	native-supported	While loop calling helper.
 examples/e43_generic_fn.vais	native-supported	Generic marker skipped for Int helper.

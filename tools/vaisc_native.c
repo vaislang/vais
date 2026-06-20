@@ -1251,6 +1251,31 @@ static int parse_inline_match_let(const char *line, char **name, char **match_ex
     return 1;
 }
 
+static int parse_result_try_let(const char *line, char **name, char **expr) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    s = skip_ws(s + 4);
+    if (starts_with(s, "mut") && !is_ident_continue(s[3])) {
+        s = skip_ws(s + 3);
+    }
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    s = skip_ws(s);
+    if (*s != '=') return 0;
+    s = skip_ws(s + 1);
+    const char *q = strrchr(s, '?');
+    if (q == NULL) return 0;
+    const char *tail = skip_ws(q + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') return 0;
+    *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    *expr = trim_copy(substr_copy(s, (size_t)(q - s)));
+    return 1;
+}
+
 static int parse_arm(const char *line, char **pattern, char **expr) {
     const char *arrow = strstr(line, "=>");
     if (arrow == NULL) return 0;
@@ -1374,9 +1399,47 @@ static char *lower_enum_text(const char *text) {
 
     LineVec out;
     lines_init(&out);
+    int result_try_count = 0;
     for (size_t i = 0; i < lines.len; i++) {
         if (has_enum && (int)i == enum_line) continue;
         char *typed = has_enum ? replace_enum_types(lines.items[i], &info) : strdup(lines.items[i]);
+        char *try_name = NULL;
+        char *try_expr = NULL;
+        if (info.builtin_kind == 2 && parse_result_try_let(typed, &try_name, &try_expr)) {
+            char tmp_name[64];
+            snprintf(tmp_name, sizeof(tmp_name), "__vais_try%d", result_try_count++);
+            char *rewritten_try_expr = rewrite_constructors(try_expr, &info);
+            StrBuf bind_tmp;
+            sb_init(&bind_tmp);
+            sb_append(&bind_tmp, "    let ");
+            sb_append(&bind_tmp, tmp_name);
+            sb_append(&bind_tmp, " = ");
+            sb_append(&bind_tmp, rewritten_try_expr);
+            lines_push(&out, sb_take(&bind_tmp));
+            StrBuf propagate;
+            sb_init(&propagate);
+            sb_append(&propagate, "    if ");
+            sb_append(&propagate, tmp_name);
+            sb_append(&propagate, " % 2 != 0 { return ");
+            sb_append(&propagate, tmp_name);
+            sb_append(&propagate, " }");
+            lines_push(&out, sb_take(&propagate));
+            StrBuf bind_value;
+            sb_init(&bind_value);
+            sb_append(&bind_value, "    let ");
+            sb_append(&bind_value, try_name);
+            sb_append(&bind_value, " = (");
+            sb_append(&bind_value, tmp_name);
+            sb_append(&bind_value, " / 2) % 1000000");
+            lines_push(&out, sb_take(&bind_value));
+            free(rewritten_try_expr);
+            free(try_name);
+            free(try_expr);
+            free(typed);
+            continue;
+        }
+        free(try_name);
+        free(try_expr);
         char *inline_name = NULL;
         char *inline_match_expr = NULL;
         char *inline_arms = NULL;

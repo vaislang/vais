@@ -160,6 +160,10 @@ fn label_result_expr_accept() -> Str {
     return "accepts Result<Int,Int> expression-match binding slice"
 }
 
+fn label_result_try_accept() -> Str {
+    return "accepts Result<Int,Int> question propagation slice"
+}
+
 fn name_payload_accept() -> Str {
     return str_concat("payload_", kw_enum())
 }
@@ -478,6 +482,26 @@ fn write_result_expr_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_result_try_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn check(x: Int) -> Result<Int, Int> {")
+    append_line(out, "    if x < 0 { return Err(99) }")
+    append_line(out, "    return Ok(x)")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn process(x: Int) -> Result<Int, Int> {")
+    append_line(out, "    let v = check(x)?")
+    append_line(out, "    return Ok(v + 1)")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let ok = match process(5) { Ok(v) => v, Err(e) => e }")
+    append_line(out, "    let bad = match process(0 - 5) { Ok(v) => v, Err(e) => 0 }")
+    append_line(out, "    return ok * 7 + bad")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "day1") == 1 { return write_day1(path) }
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
@@ -500,6 +524,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "option_expr") == 1 { return write_option_expr_accept(path) }
     if str_eq(name, "result") == 1 { return write_result_accept(path) }
     if str_eq(name, "result_expr") == 1 { return write_result_expr_accept(path) }
+    if str_eq(name, "result_try") == 1 { return write_result_try_accept(path) }
     return 1
 }
 
@@ -1005,6 +1030,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "option_expr", label_option_expr_accept(), 15)
     fail = fail + expect_accept(vaisc, tmp, "result", label_result_accept(), 7)
     fail = fail + expect_accept(vaisc, tmp, "result_expr", label_result_expr_accept(), 42)
+    fail = fail + expect_accept(vaisc, tmp, "result_try", label_result_try_accept(), 42)
     fail = fail + expect_accept_path(vaisc, write_module_accept(path_join(tmp, "module_basic")), "accepts local import multi-file full slice", 42)
     fail = fail + expect_accept_path(vaisc, write_package_accept(path_join(tmp, "package_basic")), "accepts package manifest source root full slice", 42)
     fail = fail + expect_accept_path(vaisc, write_dependency_accept(path_join(tmp, "dependency_basic")), "accepts local dependency package paths", 42)

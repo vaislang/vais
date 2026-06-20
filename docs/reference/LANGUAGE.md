@@ -526,11 +526,15 @@ fn main() -> Int {
 
 It also supports expression-form `let x = match ...` bindings for
 `Result<Int,Int>`, as covered by `examples/e91_result_flow.vais`.
+The `?` operator is verified for `Result<Int,Int>` helper calls assigned to a
+local: an `Err` value returns from the current `Result<Int,Int>` function, and an
+`Ok` value binds its payload, as covered by `examples/e39_error_propagate.vais`.
 
 Not included yet: generic `Option<T>` or `Result<T,E>`, broader expression-form
 `match` beyond the gate-backed `Option<Int>` and `Result<Int,Int>` binding
-shapes, Map APIs that return `Option`, direct-engine Option/Result-specific
-claims, and nested option/result payloads.
+shapes, `?` beyond the gate-backed `Result<Int,Int>` local-binding shape, Map
+APIs that return `Option`, direct-engine Option/Result-specific claims, and
+nested option/result payloads.
 
 ## Strings, Characters, And Output
 
