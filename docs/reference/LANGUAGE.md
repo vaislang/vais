@@ -126,7 +126,7 @@ Verified release surface:
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, and expression-match binding |
-| `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, and statement-form `match` |
+| `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, and expression-match binding |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
@@ -524,10 +524,13 @@ fn main() -> Int {
 }
 ```
 
+It also supports expression-form `let x = match ...` bindings for
+`Result<Int,Int>`, as covered by `examples/e91_result_flow.vais`.
+
 Not included yet: generic `Option<T>` or `Result<T,E>`, broader expression-form
-`match` beyond the gate-backed `Option<Int>` binding shape, Map APIs that return
-`Option`, direct-engine Option/Result-specific claims, and nested option/result
-payloads.
+`match` beyond the gate-backed `Option<Int>` and `Result<Int,Int>` binding
+shapes, Map APIs that return `Option`, direct-engine Option/Result-specific
+claims, and nested option/result payloads.
 
 ## Strings, Characters, And Output
 

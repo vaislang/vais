@@ -406,6 +406,7 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   - [x] Promote the first `Result<Int,Int>` `Ok`/`Err` helper-return and
     statement-match slice.
   - [x] Promote `Option<Int>` expression-form match binding.
+  - [x] Promote `Result<Int,Int>` expression-form match binding.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
   - [x] Add checker guidance for Rust-style top-level `use` and `pub` forms.

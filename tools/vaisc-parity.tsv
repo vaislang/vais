@@ -52,6 +52,7 @@ examples/e87_break_continue.vais	native-supported	Break and continue inside whil
 examples/e88_bool_type.vais	native-supported	Bool annotations, helper parameters, returns, and unary not.
 examples/e89_str_type.vais	native-supported	Str annotations, helper parameters, returns, reassignment, len, index, and equality.
 examples/e90_enum_wildcard.vais	native-supported	Payload-free enum match with wildcard catch-all.
+examples/e91_result_flow.vais	native-supported	Result<Int,Int> expression-match binding flow.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.

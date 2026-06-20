@@ -1,0 +1,12 @@
+# expect: 42
+# Result returned from a helper, matched into local values, and combined.
+fn div(a: Int, b: Int) -> Result<Int, Int> {
+    if b == 0 { return Err(5) }
+    return Ok(a / b)
+}
+
+fn main() -> Int {
+    let good = match div(21, 3) { Ok(v) => v, Err(e) => e }
+    let bad = match div(9, 0) { Ok(v) => v, Err(e) => e }
+    return good * 5 + bad + 2
+}
