@@ -67,7 +67,7 @@ This file tracks current work only.
   manifest, value corpus, and regenerated reusable core.
 - The first `Map` slice is verified in the full self-host compiler and native
   direct engine for local `Map<Int,Int>` values with `{}`, `insert`,
-  `get(key, default)`, `contains`, and `len`.
+  `get(key, default)`, `get_opt(key)`, `contains`, and `len`.
 - Promoted prelude APIs have value-corpus examples, including local
   `Map<Int,Int>` and `List<T>.is_empty()`, `last()`, and `pop()`.
 - The full compiler path supports single-package local dotted imports such as
@@ -143,10 +143,10 @@ This file tracks current work only.
   for `List<Int>` and `List<Struct>` locals and list parameters. Element
   assignment is supported for `List<Int>` and `List<Struct>`, including through
   list parameters. Local `Map<Int,Int>` values support `{}`, `insert`,
-  `get(key, default)`, `contains`, and `len` in both the full self-host compiler
-  path and native direct engine. The full compiler path also supports
-  `get_opt(key) -> Option<Int>` for local maps; Map function parameters, return
-  values, assignment, and generic key/value forms are not claimed yet.
+  `get(key, default)`, `get_opt(key) -> Option<Int>`, `contains`, and `len` in
+  both the full self-host compiler path and native direct engine. Map function
+  parameters, return values, assignment, and generic key/value forms are not
+  claimed yet.
 - The release compiler command uses a native host driver for `emit-ir`,
   `build`, and `run`; internal self-host helper gates use the same native
   compiler path.
@@ -227,7 +227,7 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
 - [x] 1.3a Specify the first `Map` slice and gate unsupported `Map` use with a
   clear front diagnostic.
 - [x] 1.3b Promote native direct local `Map<Int,Int>` for construction,
-  insert/replace, `get(key, default)`, `contains`, and `len`.
+  insert/replace, `get(key, default)`, `get_opt(key)`, `contains`, and `len`.
 - [x] 1.3c Promote full self-host local `Map<Int,Int>` for the same surface.
 - [ ] 1.3d Broaden `Map<K,V>` only after generic key/value lowering and ABI
   behavior are specified.
@@ -413,7 +413,7 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   - [x] Promote `Result<Int,Int>` local-binding `?` propagation for both
     success and error paths.
   - [x] Promote local `Map<Int,Int>.get_opt(key) -> Option<Int>` on the full
-    compiler path.
+    compiler path and native direct engine.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
@@ -603,8 +603,8 @@ Mode: sequential
 - [x] 2. Lower `let m: Map<Int,Int> = {}` to a native local map value.
 - [x] 3. Lower `m.insert(key, value)` statements with replace-on-existing-key
   behavior.
-- [x] 4. Lower `m.get(key, default)`, `m.contains(key)`, and `m.len()`
-  expressions.
+- [x] 4. Lower `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, and
+  `m.len()` expressions.
 - [x] 5. Gate direct emitted helper symbols and runtime value behavior.
 - [x] 6. Lower the same local surface in the full self-host compiler and
   regenerate the reusable compiler core.
@@ -652,8 +652,8 @@ Mode: sequential
 
 - Target files: `tools/vaisc_native.c`.
 - Requirements: local `Map<Int,Int>` values support `{}`, `insert`,
-  `get(key, default)`, `contains`, and `len` without publishing broader
-  generic or ABI claims.
+  `get(key, default)`, `get_opt(key)`, `contains`, and `len` without publishing
+  broader generic or ABI claims.
 - Done: native direct gates pass a local map example returning a deterministic
   value, and full self-host gates pass the same local map behavior.
 

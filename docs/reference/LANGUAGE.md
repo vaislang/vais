@@ -124,7 +124,7 @@ Verified release surface:
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
-| `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, full-path `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, and local field write |
@@ -450,8 +450,7 @@ release-surface claims yet.
 
 `Map<Int,Int>` has a verified local-value slice in the full self-host compiler
 path and native direct engine for `{}`, `insert`, `get(key, default)`,
-`contains`, and `len`. The full compiler path also verifies
-`get_opt(key) -> Option<Int>`.
+`get_opt(key) -> Option<Int>`, `contains`, and `len`.
 
 Verified example:
 
@@ -476,14 +475,14 @@ Verified behavior:
 - `insert(key, value)` inserts or replaces a value.
 - `get(key, default)` returns `default` when the key is absent.
 - `get_opt(key)` returns `Some(value)` when the key is present and `None` when
-  absent on the full compiler path, as covered by
-  `examples/e94_map_get_opt.vais`.
+  absent, as covered by `examples/e94_map_get_opt.vais`.
 - `contains(key)` returns whether a key is present.
 - `len()` returns the number of present keys.
 
 Not included in the current Map slice: generic key/value lowering, assignment,
-deletion, iteration, entry literals, direct-engine `get_opt`, `Result`, custom
-hashing, or public ABI claims for Map parameters and return values.
+deletion, iteration, entry literals, broader Map APIs that return `Option`,
+`Result`, custom hashing, or public ABI claims for Map parameters and return
+values.
 
 ## Option And Result
 
@@ -543,9 +542,9 @@ Not included yet: generic `Option<T>` or `Result<T,E>`, broader expression-form
 `match` beyond the gate-backed `Option<Int>` and `Result<Int,Int>` binding
 shapes, `?` beyond the gate-backed `Option<Int>` and `Result<Int,Int>`
 local-binding shapes, broader Map APIs that return `Option`, direct-engine
-Option/Result-specific claims, and nested option/result payloads. Unsupported
-generic `Option`/`Result` forms are rejected by front diagnostics instead of
-being treated as verified language.
+Option/Result-specific claims beyond `Map<Int,Int>.get_opt` match bindings, and
+nested option/result payloads. Unsupported generic `Option`/`Result` forms are
+rejected by front diagnostics instead of being treated as verified language.
 
 ## Strings, Characters, And Output
 

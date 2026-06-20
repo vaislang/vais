@@ -87,12 +87,12 @@ The verified Map surface is deliberately small:
 | `let m: Map<Int,Int> = {}` | Construct an empty integer map |
 | `m.insert(key, value)` | Insert or replace an integer value by integer key |
 | `m.get(key, default)` | Return the value for `key`, or `default` when absent |
-| `m.get_opt(key)` | Return `Some(value)` for a present key or `None` when absent on the full compiler path |
+| `m.get_opt(key)` | Return `Some(value)` for a present key or `None` when absent |
 | `m.contains(key)` | Return whether `key` is present |
 | `m.len()` | Return the number of present keys |
 
 This slice is currently available through the full self-host compiler path and
-`scripts/vaisc --engine direct` except for `get_opt`, which is full-path only.
+`scripts/vaisc --engine direct`.
 The slice does not include generic key/value lowering, function parameters,
 return values, assignment, iteration, deletion, `Result`, hashing controls, or
 map literals with entries.
