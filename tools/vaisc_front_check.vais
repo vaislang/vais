@@ -144,6 +144,10 @@ fn label_map_accept() -> Str {
     return str_concat("accepts local ", str_concat(map_int_compact(), " full slice"))
 }
 
+fn label_map_option_accept() -> Str {
+    return str_concat("accepts local ", str_concat(map_int_compact(), " get_opt Option slice"))
+}
+
 fn label_option_accept() -> Str {
     return "accepts Option<Int> statement-match slice"
 }
@@ -424,6 +428,19 @@ fn write_map_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_option_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let scores: ", map_int_spaced()), " = {}"))
+    append_line(out, "    scores.insert(4, 40)")
+    append_line(out, "    scores.insert(9, 2)")
+    append_line(out, "    let found = match scores.get_opt(4) { Some(v) => v, None => 0 }")
+    append_line(out, "    let missing = match scores.get_opt(5) { Some(v) => v, None => 2 }")
+    append_line(out, "    return found + missing")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_option_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn find(x: Int) -> Option<Int> {")
@@ -581,6 +598,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "char") == 1 { return write_char_accept(path) }
     if str_eq(name, "parse") == 1 { return write_parse_accept(path) }
     if str_eq(name, "map") == 1 { return write_map_accept(path) }
+    if str_eq(name, "map_option") == 1 { return write_map_option_accept(path) }
     if str_eq(name, "option") == 1 { return write_option_accept(path) }
     if str_eq(name, "option_expr") == 1 { return write_option_expr_accept(path) }
     if str_eq(name, "option_try") == 1 { return write_option_try_accept(path) }
@@ -1108,6 +1126,7 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "rust_and", "logical AND uses the word", "", "and")
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/len/is_empty/last/pop/sum", "", "plain function call")
     fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)
     fail = fail + expect_reject(vaisc, tmp, "map_generic_not_verified", msg_map_generic(), "", "generic key/value forms")
     fail = fail + expect_reject(vaisc, tmp, "option_generic_not_verified", "only Option<Int> is verified", "", "generic Option<T>")
     fail = fail + expect_reject(vaisc, tmp, "result_generic_not_verified", "only Result<Int,Int> is verified", "", "generic Result<T,E>")

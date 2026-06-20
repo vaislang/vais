@@ -144,8 +144,9 @@ This file tracks current work only.
   assignment is supported for `List<Int>` and `List<Struct>`, including through
   list parameters. Local `Map<Int,Int>` values support `{}`, `insert`,
   `get(key, default)`, `contains`, and `len` in both the full self-host compiler
-  path and native direct engine; Map function parameters, return values,
-  assignment, and generic key/value forms are not claimed yet.
+  path and native direct engine. The full compiler path also supports
+  `get_opt(key) -> Option<Int>` for local maps; Map function parameters, return
+  values, assignment, and generic key/value forms are not claimed yet.
 - The release compiler command uses a native host driver for `emit-ir`,
   `build`, and `run`; internal self-host helper gates use the same native
   compiler path.
@@ -411,6 +412,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
     and `None` paths.
   - [x] Promote `Result<Int,Int>` local-binding `?` propagation for both
     success and error paths.
+  - [x] Promote local `Map<Int,Int>.get_opt(key) -> Option<Int>` on the full
+    compiler path.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.

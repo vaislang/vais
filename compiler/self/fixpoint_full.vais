@@ -138,6 +138,17 @@ fn is_get(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 2] != 116 { return 0 }
     return 1
 }
+fn is_get_opt(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 7 { return 0 }
+    if src[a] != 103 { return 0 }
+    if src[a + 1] != 101 { return 0 }
+    if src[a + 2] != 116 { return 0 }
+    if src[a + 3] != 95 { return 0 }
+    if src[a + 4] != 111 { return 0 }
+    if src[a + 5] != 112 { return 0 }
+    if src[a + 6] != 116 { return 0 }
+    return 1
+}
 fn is_insert(src: Str, a: Int, alen: Int) -> Int {
     if alen != 6 { return 0 }
     if src[a] != 105 { return 0 }
@@ -2173,6 +2184,31 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         emit_op(key)
                         emit_str(", i64 ")
                         emit_op(fallback)
+                        emit_str(")")
+                        putchar(10)
+                        return Op { kind: 1, val: dest, next: dest + 1 }
+                    }
+                    if is_get_opt(src, meth.nstart, meth.nlen) == 1 {
+                        let a0stop = arg_comma_end(toks, i + 4, close)
+                        let key = gen_expr(toks, slots, fns, defs, src, i + 4, a0stop, counter)
+                        let base = key.next
+                        emit_str("  %t")
+                        pint(base)
+                        emit_str(" = getelementptr [")
+                        pint(map_bufsz())
+                        emit_str(" x i64], [")
+                        pint(map_bufsz())
+                        emit_str(" x i64]* %v")
+                        pint(mslot)
+                        emit_str(", i64 0, i64 0")
+                        putchar(10)
+                        let dest = base + 1
+                        emit_str("  %t")
+                        pint(dest)
+                        emit_str(" = call i64 @__vais_map_int_int_get_opt(i64* %t")
+                        pint(base)
+                        emit_str(", i64 ")
+                        emit_op(key)
                         emit_str(")")
                         putchar(10)
                         return Op { kind: 1, val: dest, next: dest + 1 }
@@ -6900,6 +6936,34 @@ fn emit_map_helpers() -> Int {
     emit_str("missing:")
     putchar(10)
     emit_str("  ret i64 %fallback")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    emit_str("define i64 @__vais_map_int_int_get_opt(i64* %m, i64 %key) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %idx = call i64 @__vais_map_int_int_find(i64* %m, i64 %key)")
+    putchar(10)
+    emit_str("  %exists = icmp sge i64 %idx, 0")
+    putchar(10)
+    emit_str("  br i1 %exists, label %found, label %missing")
+    putchar(10)
+    emit_str("found:")
+    putchar(10)
+    emit_str("  %voff = add i64 256, %idx")
+    putchar(10)
+    emit_str("  %vp = getelementptr i64, i64* %m, i64 %voff")
+    putchar(10)
+    emit_str("  %value = load i64, i64* %vp")
+    putchar(10)
+    emit_str("  %encoded = mul i64 2, %value")
+    putchar(10)
+    emit_str("  ret i64 %encoded")
+    putchar(10)
+    emit_str("missing:")
+    putchar(10)
+    emit_str("  ret i64 1")
     putchar(10)
     emit_str("}")
     putchar(10)
