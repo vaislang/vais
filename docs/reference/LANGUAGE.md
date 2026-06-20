@@ -126,7 +126,7 @@ Verified release surface:
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, `contains`, and `len` |
 | Simple `struct` | Literal construction, field access, and local field write |
-| Small `enum` | Payload-free enum/match and small recursive `Int` payload enum/match |
+| Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
 and `tools/vaisc-parity.tsv`.
@@ -279,8 +279,12 @@ Verified today:
   `examples/e02_enum_payload.vais`.
 - Payload-free enum values stored in simple struct fields and matched through
   field access, as covered by `examples/e24_struct_enum_field.vais`.
+- Single-field struct payload enum values constructed from a struct literal and
+  matched through payload field access, as covered by
+  `examples/e64_enum_struct_payload.vais`.
 
-Broader payload shapes are not a release claim yet.
+Broader payload shapes, including multi-field struct payloads, are not a release
+claim yet.
 
 ## Lists
 

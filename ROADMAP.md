@@ -388,6 +388,9 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
 - [x] 4.2b Promote payload-free enum values stored in simple struct fields and
   matched through field access through public front, full self-host, parity, and
   value gates.
+- [x] 4.2c Promote single-field struct payload enum lowering for constructor
+  literals and payload field access through public front, parity, and value
+  gates.
 - [x] 4.3a Promote exclusive `..` and inclusive `..=` range `for` loops through
   public front, native direct, full self-host, and parity gates.
 - [x] 4.3b Decide `break` and `continue` semantics and lower them through both

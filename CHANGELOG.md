@@ -17,6 +17,8 @@
 - Promoted payload-free enum values stored in simple struct fields and matched
   through field access, with `examples/e24_struct_enum_field.vais` added to the
   release corpus.
+- Promoted single-field struct payload enum lowering with payload field access,
+  with `examples/e64_enum_struct_payload.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

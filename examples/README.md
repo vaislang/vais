@@ -46,6 +46,8 @@ Representative promoted examples include `examples/e02_enum_payload.vais` for
 multi-field `Int` payload enum expression-arm match lowering,
 `examples/e24_struct_enum_field.vais` for payload-free enum values stored in
 struct fields and matched through field access,
+`examples/e64_enum_struct_payload.vais` for a single-field struct payload enum
+matched through payload field access,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and

@@ -82,12 +82,15 @@ typedef struct {
     char *name;
     int tag;
     int field_count;
+    int field_is_struct[8];
 } VariantInfo;
 
 typedef struct {
     char *name;
     int is_payload;
     int count;
+    char *struct_names[16];
+    int struct_count;
     VariantInfo variants[16];
 } EnumInfo;
 
@@ -683,6 +686,34 @@ static VariantInfo *find_variant(EnumInfo *info, const char *name) {
     return NULL;
 }
 
+static int parse_single_field_struct_line(const char *line, char **name_out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "struct ")) return 0;
+    s += 7;
+    const char *name_start = skip_ws(s);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *open = strchr(name_end, '{');
+    const char *close = open == NULL ? NULL : strrchr(open + 1, '}');
+    if (open == NULL || close == NULL || close <= open) return 0;
+    char *body = substr_copy(open + 1, (size_t)(close - open - 1));
+    char *parts[2] = {0};
+    int n = split_top_level_commas_c(body, parts, 2);
+    free(body);
+    for (int i = 0; i < n && i < 2; i++) free(parts[i]);
+    if (n != 1) return 0;
+    *name_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    return 1;
+}
+
+static int enum_known_single_field_struct(EnumInfo *info, const char *name) {
+    for (int i = 0; i < info->struct_count; i++) {
+        if (strcmp(info->struct_names[i], name) == 0) return 1;
+    }
+    return 0;
+}
+
 static int parse_enum_line(const char *line, EnumInfo *info) {
     const char *s = skip_ws(line);
     if (!starts_with(s, "enum ")) return 0;
@@ -716,8 +747,11 @@ static int parse_enum_line(const char *line, EnumInfo *info) {
                 char *field_parts[8] = {0};
                 fields = split_top_level_commas_c(inside, field_parts, 8);
                 for (int k = 0; k < fields; k++) {
-                    if (strcmp(field_parts[k], "Int") != 0 && strcmp(field_parts[k], info->name) != 0) {
+                    int is_struct = enum_known_single_field_struct(info, field_parts[k]);
+                    if (strcmp(field_parts[k], "Int") != 0 && strcmp(field_parts[k], info->name) != 0 && is_struct == 0) {
                         fields = -1;
+                    } else {
+                        info->variants[i].field_is_struct[k] = is_struct;
                     }
                     free(field_parts[k]);
                 }
@@ -744,6 +778,7 @@ static int parse_enum_line(const char *line, EnumInfo *info) {
 static void free_enum_info(EnumInfo *info) {
     free(info->name);
     for (int i = 0; i < info->count; i++) free(info->variants[i].name);
+    for (int i = 0; i < info->struct_count; i++) free(info->struct_names[i]);
     memset(info, 0, sizeof(*info));
 }
 
@@ -849,12 +884,51 @@ static int find_matching_bracket_c(const char *text, int open_index) {
 
 static char *rewrite_constructors(const char *line, EnumInfo *info);
 
+static void free_split_parts(char **parts, int count, int max_parts) {
+    int n = count;
+    if (n < 0 || n > max_parts) n = max_parts;
+    for (int i = 0; i < n; i++) {
+        free(parts[i]);
+        parts[i] = NULL;
+    }
+}
+
+static char *extract_single_field_struct_payload_value(const char *arg) {
+    char *trimmed = trim_copy(arg);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) return trimmed;
+    const char *p = s + 1;
+    while (is_ident_continue(*p)) p++;
+    p = skip_ws(p);
+    if (*p != '{') return trimmed;
+    const char *close = strrchr(p + 1, '}');
+    if (close == NULL || close <= p) return trimmed;
+    char *body = substr_copy(p + 1, (size_t)(close - p - 1));
+    char *parts[2] = {0};
+    int n = split_top_level_commas_c(body, parts, 2);
+    free(body);
+    if (n != 1) {
+        free_split_parts(parts, n, 2);
+        return trimmed;
+    }
+    char *colon = strchr(parts[0], ':');
+    if (colon == NULL) {
+        free_split_parts(parts, n, 2);
+        return trimmed;
+    }
+    char *value = trim_copy(colon + 1);
+    free_split_parts(parts, n, 2);
+    free(trimmed);
+    return value;
+}
+
 static char *encode_payload_call(VariantInfo *variant, char **args, int argc, EnumInfo *info) {
     if (argc != variant->field_count) return strdup("0");
     StrBuf payload;
     sb_init(&payload);
     for (int i = 0; i < argc; i++) {
-        char *rewritten = rewrite_constructors(args[i], info);
+        char *payload_arg = variant->field_is_struct[i] ? extract_single_field_struct_payload_value(args[i]) : strdup(args[i]);
+        char *rewritten = rewrite_constructors(payload_arg, info);
         if (i > 0) sb_append(&payload, " + ");
         long long factor = 1;
         for (int k = 0; k < i; k++) factor *= 1000000LL;
@@ -866,6 +940,7 @@ static char *encode_payload_call(VariantInfo *variant, char **args, int argc, En
         sb_append(&payload, "((");
         sb_append(&payload, rewritten);
         sb_append(&payload, "))");
+        free(payload_arg);
         free(rewritten);
     }
     char tag_text[64];
@@ -963,11 +1038,84 @@ static int parse_arm(const char *line, char **pattern, char **expr) {
     return 1;
 }
 
+static char *rewrite_struct_payload_binder_expr(const char *expr, VariantInfo *variant, char **binders, int binder_count) {
+    StrBuf out;
+    sb_init(&out);
+    int changed = 0;
+    for (int i = 0; expr[i] != '\0';) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) {
+                sb_append(&out, expr + i);
+                break;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) {
+                sb_append(&out, expr + i);
+                break;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (!is_ident_start(expr[i])) {
+            sb_append_n(&out, expr + i, 1);
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(expr[i])) i++;
+        char *name = substr_copy(expr + start, (size_t)(i - start));
+        int matched = 0;
+        for (int k = 0; k < binder_count && k < variant->field_count; k++) {
+            if (!variant->field_is_struct[k] || strcmp(name, binders[k]) != 0) continue;
+            int cursor = i;
+            while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
+            if (expr[cursor] != '.') continue;
+            int fstart = cursor + 1;
+            while (expr[fstart] == ' ' || expr[fstart] == '\t') fstart++;
+            if (!is_ident_start(expr[fstart])) continue;
+            int fend = fstart + 1;
+            while (is_ident_continue(expr[fend])) fend++;
+            sb_append(&out, name);
+            i = fend;
+            changed = 1;
+            matched = 1;
+            break;
+        }
+        if (!matched) {
+            sb_append_n(&out, expr + start, (size_t)(i - start));
+        }
+        free(name);
+    }
+    if (!changed) {
+        free(out.data);
+        return strdup(expr);
+    }
+    return sb_take(&out);
+}
+
 static char *lower_enum_text(const char *text) {
     LineVec lines = split_lines(text);
     EnumInfo info;
     memset(&info, 0, sizeof(info));
     int enum_line = -1;
+    for (size_t i = 0; i < lines.len; i++) {
+        char *struct_name = NULL;
+        if (parse_single_field_struct_line(lines.items[i], &struct_name)) {
+            if (info.struct_count < 16) {
+                info.struct_names[info.struct_count++] = struct_name;
+            } else {
+                free(struct_name);
+            }
+        }
+    }
     for (size_t i = 0; i < lines.len; i++) {
         if (parse_enum_line(lines.items[i], &info)) {
             enum_line = (int)i;
@@ -976,6 +1124,7 @@ static char *lower_enum_text(const char *text) {
     }
     if (enum_line < 0) {
         lines_free(&lines);
+        free_enum_info(&info);
         return strdup(text);
     }
 
@@ -1005,7 +1154,6 @@ static char *lower_enum_text(const char *text) {
                 free_enum_info(&info);
                 return strdup(text);
             }
-            char *rewritten_expr = rewrite_constructors(expr, &info);
             char *rewritten_pattern = rewrite_constructors(pattern, &info);
             VariantInfo *variant = NULL;
             char *binders[8] = {0};
@@ -1027,6 +1175,11 @@ static char *lower_enum_text(const char *text) {
                 variant = find_variant(&info, vname);
                 free(vname);
             }
+            char *struct_expr = (info.is_payload && variant != NULL)
+                ? rewrite_struct_payload_binder_expr(expr, variant, binders, binder_count)
+                : strdup(expr);
+            char *rewritten_expr = rewrite_constructors(struct_expr, &info);
+            free(struct_expr);
             StrBuf b;
             sb_init(&b);
             sb_append(&b, arm_index == 0 ? "    if " : "    else if ");

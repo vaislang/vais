@@ -174,6 +174,9 @@
 - Fixed enum type-token rewriting so struct literal values such as
   `c: Color.Green` are not mistaken for type annotations, then promoted
   payload-free enum struct-field matching with `examples/e24_struct_enum_field.vais`.
+- Promoted single-field struct payload enum lowering through the public front
+  contract and parity gates, with `examples/e64_enum_struct_payload.vais`
+  covering constructor literal extraction and payload field access.
 - Added `tools/vais_parity_check.vais` as the Vais-authored NV-C4 parity
   manifest harness and reduced `scripts/test-vaisc-parity.sh` to a bootstrap
   wrapper.
