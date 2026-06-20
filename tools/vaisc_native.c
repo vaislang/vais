@@ -1101,6 +1101,23 @@ static char *rewrite_struct_payload_binder_expr(const char *expr, VariantInfo *v
     return sb_take(&out);
 }
 
+static int is_int_match_pattern(const char *pattern) {
+    const char *p = skip_ws(pattern);
+    if (*p == '-' || *p == '+') p++;
+    if (*p < '0' || *p > '9') return 0;
+    while (*p >= '0' && *p <= '9') p++;
+    p = skip_ws(p);
+    return *p == '\0';
+}
+
+static int is_wildcard_match_pattern(const char *pattern) {
+    const char *p = skip_ws(pattern);
+    if (*p != '_') return 0;
+    p++;
+    p = skip_ws(p);
+    return *p == '\0';
+}
+
 static char *lower_enum_text(const char *text) {
     LineVec lines = split_lines(text);
     EnumInfo info;
@@ -1122,20 +1139,16 @@ static char *lower_enum_text(const char *text) {
             break;
         }
     }
-    if (enum_line < 0) {
-        lines_free(&lines);
-        free_enum_info(&info);
-        return strdup(text);
-    }
+    int has_enum = enum_line >= 0;
 
     LineVec out;
     lines_init(&out);
     for (size_t i = 0; i < lines.len; i++) {
-        if ((int)i == enum_line) continue;
-        char *typed = replace_enum_types(lines.items[i], &info);
+        if (has_enum && (int)i == enum_line) continue;
+        char *typed = has_enum ? replace_enum_types(lines.items[i], &info) : strdup(lines.items[i]);
         char *match_expr = parse_match_expr(typed);
         if (match_expr == NULL) {
-            char *rewritten = rewrite_constructors(typed, &info);
+            char *rewritten = has_enum ? rewrite_constructors(typed, &info) : strdup(typed);
             lines_push(&out, rewritten);
             free(typed);
             continue;
@@ -1154,11 +1167,23 @@ static char *lower_enum_text(const char *text) {
                 free_enum_info(&info);
                 return strdup(text);
             }
-            char *rewritten_pattern = rewrite_constructors(pattern, &info);
+            char *rewritten_pattern = has_enum ? rewrite_constructors(pattern, &info) : strdup(pattern);
             VariantInfo *variant = NULL;
             char *binders[8] = {0};
             int binder_count = 0;
-            if (info.is_payload) {
+            int wildcard_pattern = is_wildcard_match_pattern(pattern);
+            if (!has_enum && !wildcard_pattern && !is_int_match_pattern(pattern)) {
+                free(match_expr);
+                free(typed);
+                free(pattern);
+                free(expr);
+                free(rewritten_pattern);
+                lines_free(&lines);
+                lines_free(&out);
+                free_enum_info(&info);
+                return strdup(text);
+            }
+            if (has_enum && info.is_payload && !wildcard_pattern) {
                 char *paren = strchr(pattern, '(');
                 char *vname = NULL;
                 if (paren != NULL) {
@@ -1175,28 +1200,32 @@ static char *lower_enum_text(const char *text) {
                 variant = find_variant(&info, vname);
                 free(vname);
             }
-            char *struct_expr = (info.is_payload && variant != NULL)
+            char *struct_expr = (has_enum && info.is_payload && variant != NULL)
                 ? rewrite_struct_payload_binder_expr(expr, variant, binders, binder_count)
                 : strdup(expr);
-            char *rewritten_expr = rewrite_constructors(struct_expr, &info);
+            char *rewritten_expr = has_enum ? rewrite_constructors(struct_expr, &info) : strdup(struct_expr);
             free(struct_expr);
             StrBuf b;
             sb_init(&b);
-            sb_append(&b, arm_index == 0 ? "    if " : "    else if ");
-            if (info.is_payload && variant != NULL) {
+            if (wildcard_pattern) {
+                sb_append(&b, arm_index == 0 ? "    if 1 == 1 {" : "    else {");
+            } else {
+                sb_append(&b, arm_index == 0 ? "    if " : "    else if ");
+            }
+            if (!wildcard_pattern && has_enum && info.is_payload && variant != NULL) {
                 char tag_text[64];
                 snprintf(tag_text, sizeof(tag_text), "%% %d == %d {", info.count, variant->tag);
                 sb_append(&b, match_expr);
                 sb_append(&b, " ");
                 sb_append(&b, tag_text);
-            } else {
+            } else if (!wildcard_pattern) {
                 sb_append(&b, match_expr);
                 sb_append(&b, " == ");
                 sb_append(&b, rewritten_pattern);
                 sb_append(&b, " {");
             }
             lines_push(&out, sb_take(&b));
-            if (info.is_payload && variant != NULL) {
+            if (has_enum && info.is_payload && variant != NULL) {
                 for (int k = 0; k < binder_count; k++) {
                     long long denom = info.count;
                     for (int p = 0; p < k; p++) denom *= 1000000LL;
@@ -1227,7 +1256,8 @@ static char *lower_enum_text(const char *text) {
         free(typed);
     }
 
-    char *joined = join_lines(&out, text[strlen(text) - 1] == '\n');
+    size_t text_len = strlen(text);
+    char *joined = join_lines(&out, text_len > 0 && text[text_len - 1] == '\n');
     lines_free(&lines);
     lines_free(&out);
     free_enum_info(&info);

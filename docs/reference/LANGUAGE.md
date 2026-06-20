@@ -274,6 +274,8 @@ Verified today:
 
 - Payload-free enum tags with `Enum.Tag` spelling.
 - Simple return-arm and expression-arm `match`.
+- Int `match` with literal patterns and `_` catch-all, as covered by
+  `examples/e55_match_wildcard.vais`.
 - Small recursive `Int` payload enum/match lowering used by the parity corpus.
 - Multi-field `Int` payload enum expression-arm lowering, as covered by
   `examples/e02_enum_payload.vais`.

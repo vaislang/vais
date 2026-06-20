@@ -19,6 +19,8 @@
   release corpus.
 - Promoted single-field struct payload enum lowering with payload field access,
   with `examples/e64_enum_struct_payload.vais` added to the release corpus.
+- Promoted Int `match` literal arms with `_` catch-all lowering, with
+  `examples/e55_match_wildcard.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

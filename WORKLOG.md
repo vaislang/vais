@@ -177,6 +177,9 @@
 - Promoted single-field struct payload enum lowering through the public front
   contract and parity gates, with `examples/e64_enum_struct_payload.vais`
   covering constructor literal extraction and payload field access.
+- Promoted Int `match` literal arms with `_` catch-all lowering through the
+  public front contract and parity gates, with
+  `examples/e55_match_wildcard.vais` added to the release corpus.
 - Added `tools/vais_parity_check.vais` as the Vais-authored NV-C4 parity
   manifest harness and reduced `scripts/test-vaisc-parity.sh` to a bootstrap
   wrapper.
