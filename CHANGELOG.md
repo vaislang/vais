@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+No changes yet.
+
+## v0.3.0 - 2026-06-20
+
+Current Vais source release.
+
 ### Changed
 
 - Added verified `List<T>.is_empty()` support in the full self-host compiler and

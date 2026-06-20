@@ -1,5 +1,10 @@
 # Vais Worklog
 
+## 2026-06-20
+
+- Prepared the `v0.3.0` source release metadata across the native compiler
+  version, website package metadata, changelog, release checklist, and roadmap.
+
 ## 2026-06-19
 
 - Added `tools/vais_check_core.vais` as the first Vais-authored checker slice,
