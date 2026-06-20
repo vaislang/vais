@@ -1,0 +1,32 @@
+# expect: 42
+# Str annotations, helper parameters, returns, and reassignment are gate-backed.
+fn choose(flag: Bool) -> Str {
+    if flag {
+        return "vais"
+    }
+    return "no"
+}
+
+fn pick(flag: Bool, left: Str, right: Str) -> Str {
+    if flag {
+        return left
+    }
+    return right
+}
+
+fn score(text: Str) -> Int {
+    if text == "vais" {
+        return text.len() + text[0] - 80
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let mut name: Str = choose(false)
+    name = choose(true)
+    let alias: Str = pick(true, name, "bad")
+    if alias != "vais" {
+        return 0
+    }
+    return score(alias)
+}

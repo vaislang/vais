@@ -101,7 +101,7 @@ controls, or map literals with entries.
 | `UInt8`..`UInt128` | Specified |
 | `F32`, `F64` | Specified |
 | `Bool` | Verified for comparisons, boolean literals, local annotations, helper parameters, helper returns, and unary `not` |
-| `Str` | Verified for literals, scalar helper signatures and returns, length, index, equality, reassignment, and host-backed construction helpers |
+| `Str` | Verified for literals, local annotations, scalar helper parameters and returns, length, index, equality, reassignment, and host-backed construction helpers |
 | `Char` | Verified for single-byte literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
 | `Int(x)` | Verified |
 | `parse_uint(s)` | Verified for `Str`; parses a leading unsigned decimal run |

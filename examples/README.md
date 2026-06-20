@@ -50,7 +50,9 @@ the named `parse_uint(s)` and `parse_int(s)` prelude helpers,
 `Char` scalar slice, and `examples/e86_for_loop.vais` for exclusive and
 inclusive range `for` loops, and `examples/e87_break_continue.vais` for loop
 control flow, and `examples/e88_bool_type.vais` for explicit `Bool` locals,
-helper parameters/returns, and unary `not`.
+helper parameters/returns, and unary `not`, and `examples/e89_str_type.vais`
+for explicit `Str` locals, helper parameters/returns, reassignment, length,
+index, and equality.
 
 Files not listed as `native-supported` are retained as examples or future
 coverage candidates, but they are not public release claims until promoted into

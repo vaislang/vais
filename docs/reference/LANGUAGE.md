@@ -119,7 +119,7 @@ Verified release surface:
 | --- | --- |
 | `Int` | Primary scalar type |
 | `Bool` | Produced by comparisons and boolean expressions; verified for local annotations, helper parameters, and helper returns |
-| `Str` | String literals, helper signatures, length, index, and equality |
+| `Str` | String literals, local annotations, reassignment, helper parameters/returns, length, index, and equality |
 | `Char` | Single-byte character literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
@@ -480,7 +480,8 @@ fn main() -> Int {
 Verified today:
 
 - String literals with `"` or backtick delimiters.
-- `Str` helper parameters, local values, reassignment, and helper return values.
+- `Str` helper parameters, local values, reassignment, and helper return values,
+  as covered by `examples/e89_str_type.vais`.
 - `s.len()` and `s[i]` in the full self-host path and native direct engine.
 - `a == b` and `a != b` for `Str` in the full self-host path, native direct
   engine, and parity examples.

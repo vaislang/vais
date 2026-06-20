@@ -163,6 +163,10 @@
   `not` through the native direct engine, full self-host compiler, front
   contract, and parity gates, and added `examples/e88_bool_type.vais` to the
   release corpus.
+- Promoted explicit `Str` locals, helper parameters, helper returns,
+  reassignment, length, index, and equality through the native direct engine,
+  full self-host compiler, front contract, and parity gates, and added
+  `examples/e89_str_type.vais` to the release corpus.
 - Added `tools/vais_parity_check.vais` as the Vais-authored NV-C4 parity
   manifest harness and reduced `scripts/test-vaisc-parity.sh` to a bootstrap
   wrapper.

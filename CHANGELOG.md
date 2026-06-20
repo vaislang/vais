@@ -7,6 +7,10 @@
 - Promoted explicit `Bool` locals, helper parameters, helper returns, and unary
   `not` through full self-host, native direct, parity, and value gates, with
   `examples/e88_bool_type.vais` added to the release corpus.
+- Promoted explicit `Str` locals, helper parameters, helper returns,
+  reassignment, length, index, and equality through full self-host, native
+  direct, parity, and value gates, with `examples/e89_str_type.vais` added to
+  the release corpus.
 
 ## v0.3.1 - 2026-06-20
 
