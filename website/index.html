@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vais - Language, Compiler, Playground</title>
-  <meta name="description" content="Vais is a .vais language and self-host compiler workspace with a bilingual guide and verified-example playground.">
+  <meta name="description" content="Vais is a .vais language and self-host compiler workspace with a bilingual guide and editable browser playground.">
   <meta property="og:title" content="Vais - Language, Compiler, Playground">
   <meta property="og:description" content="Learn current Vais syntax, run verified examples, and follow the scripts/vaisc compiler workflow.">
   <meta property="og:type" content="website">
@@ -12,7 +12,7 @@
   <meta property="og:url" content="https://vaislang.dev/">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Vais - Language, Compiler, Playground">
-  <meta name="twitter:description" content="Bilingual Vais homepage with a verified-example playground and current compiler docs.">
+  <meta name="twitter:description" content="Bilingual Vais homepage with an editable browser playground and current compiler docs.">
   <meta name="twitter:image" content="/logo-icon.png">
   <link rel="canonical" href="https://vaislang.dev/">
   <link rel="icon" type="image/png" href="/logo-icon.png">
@@ -86,7 +86,7 @@
           <div class="tool-header">
             <div>
               <p class="eyebrow" data-i18n="playground.eyebrow">Playground</p>
-              <h2 id="playground-title" data-i18n="playground.title">Verified example runner</h2>
+              <h2 id="playground-title" data-i18n="playground.title">Editable browser runner</h2>
             </div>
             <select id="sample-select" class="sample-select" aria-label="Example"></select>
           </div>
@@ -97,7 +97,7 @@
           <textarea id="code-editor" class="code-editor" spellcheck="false"></textarea>
 
           <div class="tool-actions">
-            <button type="button" class="btn btn-primary" id="run-sample" data-i18n="playground.run">Run example</button>
+            <button type="button" class="btn btn-primary" id="run-sample" data-i18n="playground.run">Run code</button>
             <button type="button" class="btn btn-secondary" id="reset-sample" data-i18n="playground.reset">Reset</button>
             <button type="button" class="btn btn-secondary" data-copy-target="code-editor" data-i18n="playground.copy">Copy source</button>
           </div>
@@ -105,7 +105,7 @@
           <div class="output-panel" aria-live="polite">
             <div class="output-topline">
               <span data-i18n="playground.output">Output</span>
-              <span id="runner-mode" data-i18n="playground.mode">learning runner</span>
+              <span id="runner-mode" data-i18n="playground.mode">browser subset</span>
             </div>
             <pre id="playground-output"><code></code></pre>
           </div>

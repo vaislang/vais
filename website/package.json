@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:runner": "node scripts/test-vais-runner.mjs"
   },
   "devDependencies": {
     "vite": "^8.0.16"

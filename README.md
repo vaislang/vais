@@ -9,9 +9,9 @@ builds a native host driver, links the reusable self-host compiler core in
 
 Official site: [vaislang.dev](https://vaislang.dev/)
 
-The site includes a Korean/English homepage and a verified-example playground.
-The browser playground is a learning runner for curated release-corpus examples;
-compile edited programs locally with `scripts/vaisc`.
+The site includes a Korean/English homepage and an editable browser playground
+for tutorial examples. The browser runner executes a small Vais subset for fast
+feedback; compile full programs locally with `scripts/vaisc`.
 
 ## Quick Start
 

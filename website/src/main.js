@@ -1,3 +1,5 @@
+import { runVaisSubset } from './vais-runner.js';
+
 const samples = [
   {
     id: 'return',
@@ -93,13 +95,13 @@ const messages = {
     'signal.gate.label': 'Release corpus',
     'signal.gate.value': '49 verified examples',
     'playground.eyebrow': 'Playground',
-    'playground.title': 'Verified example runner',
+    'playground.title': 'Editable browser runner',
     'playground.editorLabel': 'Source',
-    'playground.run': 'Run example',
+    'playground.run': 'Run code',
     'playground.reset': 'Reset',
     'playground.copy': 'Copy source',
     'playground.output': 'Output',
-    'playground.mode': 'learning runner',
+    'playground.mode': 'browser subset',
     'learn.eyebrow': 'Learning path',
     'learn.title': 'A shorter path from GitHub to a running program.',
     'learn.body': 'The project has one public compiler path and one public checker path. These are the commands to keep in front of new readers.',
@@ -131,10 +133,15 @@ const messages = {
     copy: 'Copy',
     copied: 'Copied',
     copyFailed: 'Copy failed',
-    outputFor: 'selected verified example',
+    outputFor: 'source',
     expected: 'expected exit code',
+    exitCode: 'exit code',
+    sampleSource: 'selected sample',
+    editedSource: 'edited source',
+    ready: 'Edit the source, then run code.',
+    runnerError: 'runner error',
     command: 'local compiler command',
-    note: 'Browser output is a learning runner for curated gate-backed examples. To compile edited code, save it as a .vais file and run scripts/vaisc locally.',
+    note: 'The browser runner executes a small tutorial subset of Vais for immediate feedback. Use scripts/vaisc locally for the full compiler.',
   },
   ko: {
     'nav.playground': '플레이그라운드',
@@ -153,13 +160,13 @@ const messages = {
     'signal.gate.label': 'Release corpus',
     'signal.gate.value': '검증 예제 49개',
     'playground.eyebrow': '플레이그라운드',
-    'playground.title': '검증 예제 실행기',
+    'playground.title': '편집 가능한 브라우저 실행기',
     'playground.editorLabel': '소스',
-    'playground.run': '예제 실행',
+    'playground.run': '코드 실행',
     'playground.reset': '초기화',
     'playground.copy': '소스 복사',
     'playground.output': '출력',
-    'playground.mode': '학습 실행기',
+    'playground.mode': '브라우저 subset',
     'learn.eyebrow': '학습 흐름',
     'learn.title': 'GitHub에서 실행까지 더 짧게 갑니다.',
     'learn.body': '프로젝트의 공개 컴파일러 경로와 공개 checker 경로는 각각 하나입니다. 새 사용자가 먼저 볼 명령은 아래 정도로 충분합니다.',
@@ -191,10 +198,15 @@ const messages = {
     copy: '복사',
     copied: '복사됨',
     copyFailed: '복사 실패',
-    outputFor: '선택된 검증 예제',
+    outputFor: '소스',
     expected: '기대 종료 코드',
+    exitCode: '종료 코드',
+    sampleSource: '선택 예제',
+    editedSource: '수정한 소스',
+    ready: '소스를 수정한 뒤 코드를 실행하세요.',
+    runnerError: '실행 오류',
     command: '로컬 컴파일러 명령',
-    note: '브라우저 출력은 gate-backed 예제를 위한 학습 실행기입니다. 수정한 코드를 실제 컴파일하려면 .vais 파일로 저장한 뒤 scripts/vaisc를 로컬에서 실행하세요.',
+    note: '브라우저 실행기는 즉시 피드백을 위해 Vais 튜토리얼 subset을 실행합니다. 전체 컴파일러는 scripts/vaisc를 로컬에서 사용하세요.',
   },
 };
 
@@ -222,7 +234,7 @@ function renderI18n() {
     button.classList.toggle('active', button.dataset.lang === currentLang);
   });
   renderSamples();
-  renderLesson();
+  renderLesson(!editor || editor.value.trim() === '');
   renderOutput(false);
 }
 
@@ -238,7 +250,7 @@ function renderSamples() {
   sampleSelect.value = currentSample.id;
 }
 
-function renderLesson() {
+function renderLesson(resetEditor = true) {
   if (!lessonStrip || !editor) return;
   lessonStrip.innerHTML = '';
   const title = document.createElement('strong');
@@ -246,23 +258,44 @@ function renderLesson() {
   const text = document.createElement('span');
   text.textContent = currentSample.lesson[currentLang];
   lessonStrip.append(title, text);
-  editor.value = currentSample.code;
+  if (resetEditor) editor.value = currentSample.code;
 }
 
 function renderOutput(hasRun) {
   if (!output) return;
   if (!hasRun) {
-    output.textContent = `$ scripts/vaisc run ${currentSample.path}
-${t('expected')}: ${currentSample.expect}`;
+    output.textContent = `$ browser Vais runner
+${t('ready')}
+${t('expected')}: ${currentSample.expect}
+${t('command')}: scripts/vaisc run ${currentSample.path}`;
     return;
   }
-  output.textContent = `$ scripts/vaisc run ${currentSample.path}
-${t('outputFor')}: ${currentSample.title[currentLang]}
+
+  const result = runVaisSubset(editor.value);
+  const sourceKind = normalizeSource(editor.value) === normalizeSource(currentSample.code)
+    ? t('sampleSource')
+    : t('editedSource');
+
+  if (!result.ok) {
+    output.textContent = `$ browser Vais runner
+${t('outputFor')}: ${sourceKind}
+${t('runnerError')}: ${result.error}
+
+${t('note')}`;
+    return;
+  }
+
+  output.textContent = `$ browser Vais runner
+${t('outputFor')}: ${sourceKind}
+${t('exitCode')}: ${result.exitCode}
 ${t('expected')}: ${currentSample.expect}
-exit code: ${currentSample.expect}
 
 ${t('command')}: scripts/vaisc run ${currentSample.path}
 ${t('note')}`;
+}
+
+function normalizeSource(source) {
+  return source.replace(/\s+/g, ' ').trim();
 }
 
 if (toggle && navLinks) {
@@ -292,7 +325,7 @@ document.querySelectorAll('.lang-btn').forEach((button) => {
 if (sampleSelect) {
   sampleSelect.addEventListener('change', () => {
     currentSample = samples.find((sample) => sample.id === sampleSelect.value) || samples[0];
-    renderLesson();
+    renderLesson(true);
     renderOutput(false);
   });
 }
@@ -305,7 +338,7 @@ if (runButton) {
 const resetButton = document.getElementById('reset-sample');
 if (resetButton) {
   resetButton.addEventListener('click', () => {
-    renderLesson();
+    renderLesson(true);
     renderOutput(false);
   });
 }

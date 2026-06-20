@@ -3,9 +3,10 @@
 This site publishes the current Vais language and compiler baseline at
 `https://vaislang.dev`.
 
-The homepage is bilingual Korean/English and includes a static learning
-playground for verified examples. Keep the playground examples aligned with
-`tools/vaisc-parity.tsv`.
+The homepage is bilingual Korean/English and includes an editable browser
+playground for tutorial examples. Keep the playground examples aligned with
+`tools/vaisc-parity.tsv`, and keep the browser subset runner narrower than the
+native `scripts/vaisc` compiler unless a full hosted compiler path is added.
 
 ## Source Of Truth
 
