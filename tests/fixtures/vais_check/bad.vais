@@ -1,5 +1,7 @@
 module demo
 package demo
+use math.add
+pub fn exposed() -> Int { return 1 }
 
 fn f(s: String) -> Int {
     let xs: Vec<Int> = []

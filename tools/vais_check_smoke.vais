@@ -10,7 +10,7 @@ fn main() -> Int {
     let clean_count = check_file(clean_path)
     let mut failures = 0
 
-    if bad_count == 22 {
+    if bad_count == 24 {
         print("PASS Vais checker flags the bad fixture")
     } else {
         print("FAIL Vais checker bad fixture count")

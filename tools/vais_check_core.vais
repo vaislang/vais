@@ -342,6 +342,14 @@ fn check_text_at(path: Str, src: Str) -> Int {
                 issues = issues + report_issue_at(path, src, i, "error: package declarations are not implemented yet", "  help: omit this declaration now")
                 i = skip_to_line_end(src, i)
                 handled = 1
+            } else if word_token_at(src, i, 117, 115, 101, 0, 0, 0, 0, 3) == 1 {
+                issues = issues + report_issue_at(path, src, i, "error: use declarations are not Vais imports", "  help: use import path")
+                i = skip_to_line_end(src, i)
+                handled = 1
+            } else if word_token_at(src, i, 112, 117, 98, 0, 0, 0, 0, 3) == 1 {
+                issues = issues + report_issue_at(path, src, i, "error: pub visibility is not implemented yet", "  help: omit pub for now")
+                i = skip_to_line_end(src, i)
+                handled = 1
             } else {
                 at_line_start = 0
             }

@@ -623,6 +623,8 @@ Common corrections:
 | `a || b` | `a or b` |
 | `!x` | `not x` |
 | `x as Int` | `Int(x)` |
+| `use math.add` | `import math.add` |
+| `pub fn f` | `fn f` |
 | `Color::Red` | `Color.Red` |
 | `Vec<T>` | `List<T>` |
 | `String` | `Str` |

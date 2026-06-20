@@ -17,6 +17,9 @@
 - Promoted payload-free enum values stored in simple struct fields and matched
   through field access, with `examples/e24_struct_enum_field.vais` added to the
   release corpus.
+- Added `vais-check` guidance for Rust-style top-level `use` imports and `pub`
+  visibility so they fail with Vais replacements instead of blending into later
+  parser errors.
 - Promoted single-field struct payload enum lowering with payload field access,
   with `examples/e64_enum_struct_payload.vais` added to the release corpus.
 - Promoted Int `match` literal arms with `_` catch-all lowering, with
