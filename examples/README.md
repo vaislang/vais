@@ -46,7 +46,10 @@ Representative promoted examples include `examples/e83_parse_helpers.vais` for
 the named `parse_uint(s)` and `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and
 `examples/e84_list_methods.vais` for `List<T>.is_empty()`, `last()`, and
-`pop()`.
+`pop()`, and `examples/e85_char_type.vais` for the promoted Int-compatible
+`Char` scalar slice, and `examples/e86_for_loop.vais` for exclusive and
+inclusive range `for` loops, and `examples/e87_break_continue.vais` for loop
+control flow.
 
 Files not listed as `native-supported` are retained as examples or future
 coverage candidates, but they are not public release claims until promoted into

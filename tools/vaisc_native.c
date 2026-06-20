@@ -11,6 +11,32 @@
 
 extern int64_t compile(char *src);
 
+static const char *HOST_INTRINSIC_IR =
+    "declare i64 @fs_exists(i8*)\n"
+    "declare i8* @fs_read_text(i8*)\n"
+    "declare i8* @fs_cwd()\n"
+    "declare i8* @fs_temp_dir()\n"
+    "declare i8* @path_join(i8*, i8*)\n"
+    "declare i8* @path_basename(i8*)\n"
+    "declare i8* @path_dirname(i8*)\n"
+    "declare i8* @str_concat(i8*, i8*)\n"
+    "declare i8* @str_slice(i8*, i64, i64)\n"
+    "declare i8* @str_byte(i64)\n"
+    "declare i64 @str_builder_new()\n"
+    "declare i64 @str_builder_push(i64, i64)\n"
+    "declare i64 @str_builder_append(i64, i8*)\n"
+    "declare i8* @str_builder_finish(i64)\n"
+    "declare i64 @fs_write_text(i8*, i8*)\n"
+    "declare i64 @fs_mkdirs(i8*)\n"
+    "declare i64 @fs_remove(i8*)\n"
+    "declare i64 @proc_argc()\n"
+    "declare i8* @proc_arg(i64)\n"
+    "declare i8* @proc_capture_stdout(i64*)\n"
+    "declare i8* @proc_capture_stderr(i64*)\n"
+    "declare i64 @proc_capture_to(i64*, i8*, i8*)\n"
+    "declare i64 @proc_run(i64*)\n"
+    "declare i64 @proc_run_env(i64*, i64*)\n";
+
 typedef struct {
     char *data;
     size_t len;
@@ -245,6 +271,24 @@ static char *read_file(const char *path) {
     return buf;
 }
 
+static int write_file_text(const char *path, const char *text) {
+    FILE *fp = fopen(path, "wb");
+    if (fp == NULL) {
+        fprintf(stderr, "error: cannot write %s: %s\n", path, strerror(errno));
+        return 1;
+    }
+    if (fputs(text, fp) < 0) {
+        fprintf(stderr, "error: cannot write %s: %s\n", path, strerror(errno));
+        fclose(fp);
+        return 1;
+    }
+    if (fclose(fp) != 0) {
+        fprintf(stderr, "error: cannot close %s: %s\n", path, strerror(errno));
+        return 1;
+    }
+    return 0;
+}
+
 static int has_vais_suffix(const char *path) {
     size_t n = strlen(path);
     return n >= 5 && strcmp(path + n - 5, ".vais") == 0;
@@ -262,7 +306,7 @@ static char *strip_line_comment(const char *line, size_t n) {
             escaped = 0;
             continue;
         }
-        if (delim == '"' && ch == '\\') {
+        if ((delim == '"' || delim == '\'') && ch == '\\') {
             sb_append_n(&out, &ch, 1);
             escaped = 1;
             continue;
@@ -333,6 +377,10 @@ static char *lower_struct_field_line(const char *line) {
         q++;
     }
     if (!saw_type) return strdup(line);
+    if (*q == ',') {
+        const char *rest = skip_ws(q + 1);
+        if (*rest != '\0') return strdup(line);
+    }
     StrBuf out;
     sb_init(&out);
     sb_append_n(&out, line, (size_t)(name_start - line));
@@ -341,14 +389,119 @@ static char *lower_struct_field_line(const char *line) {
     return out.data;
 }
 
-static char *replace_print_token(const char *line) {
-    const char *p = strstr(line, "print(");
-    if (p == NULL) return strdup(line);
+static int append_lowered_struct_part(StrBuf *out, const char *start, const char *end) {
+    while (start < end && (*start == ' ' || *start == '\t' || *start == '\r')) start++;
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) end--;
+    if (start >= end) return 0;
+    const char *p = start;
+    if (!is_ident_start(*p)) {
+        sb_append_n(out, start, (size_t)(end - start));
+        return 0;
+    }
+    p++;
+    while (p < end && is_ident_continue(*p)) p++;
+    const char *after_name = skip_ws(p);
+    if (after_name >= end || *after_name != ':') {
+        sb_append_n(out, start, (size_t)(end - start));
+        return 0;
+    }
+    const char *type_start = skip_ws(after_name + 1);
+    if (type_start >= end) {
+        sb_append_n(out, start, (size_t)(end - start));
+        return 0;
+    }
+    sb_append_n(out, start, (size_t)(p - start));
+    return 1;
+}
+
+static char *lower_struct_one_line_fields(const char *line) {
+    const char *trim = skip_ws(line);
+    if (!starts_with(trim, "struct ")) return strdup(line);
+    const char *open = strchr(trim, '{');
+    const char *close = open == NULL ? NULL : strchr(open + 1, '}');
+    if (open == NULL || close == NULL) return strdup(line);
+
+    StrBuf body;
+    sb_init(&body);
+    int changed = 0;
+    int first = 1;
+    const char *part_start = open + 1;
+    int depth = 0;
+    char delim = '\0';
+    int escaped = 0;
+    for (const char *p = open + 1; p <= close; p++) {
+        char ch = *p;
+        if (p < close) {
+            if (escaped) {
+                escaped = 0;
+                continue;
+            }
+            if (delim == '"' && ch == '\\') {
+                escaped = 1;
+                continue;
+            }
+            if (ch == '"' || ch == '`') {
+                if (delim == '\0') delim = ch;
+                else if (delim == ch) delim = '\0';
+                continue;
+            }
+            if (delim == '\0') {
+                if (ch == '(' || ch == '[' || ch == '{' || ch == '<') depth++;
+                else if (ch == ')' || ch == ']' || ch == '}' || ch == '>') depth--;
+            }
+        }
+        if ((p == close || (ch == ',' && depth == 0 && delim == '\0'))) {
+            if (!first) sb_append(&body, ", ");
+            changed |= append_lowered_struct_part(&body, part_start, p);
+            first = 0;
+            part_start = p + 1;
+        }
+    }
+    if (!changed) {
+        free(body.data);
+        return strdup(line);
+    }
+
     StrBuf out;
     sb_init(&out);
-    sb_append_n(&out, line, (size_t)(p - line));
-    sb_append(&out, "puts(");
-    sb_append(&out, p + 6);
+    sb_append_n(&out, line, (size_t)(open + 1 - line));
+    sb_append(&out, body.data);
+    sb_append(&out, close);
+    free(body.data);
+    return out.data;
+}
+
+static char *replace_print_token(const char *line) {
+    StrBuf out;
+    sb_init(&out);
+    int in_dquote = 0;
+    int in_backtick = 0;
+    int escaped = 0;
+    for (size_t i = 0; line[i] != '\0';) {
+        if (!in_dquote && !in_backtick && strncmp(line + i, "print", 5) == 0) {
+            int before_ok = i == 0 || !is_ident_continue(line[i - 1]);
+            const char *after_name = line + i + 5;
+            const char *after_ws = skip_ws(after_name);
+            if (before_ok && *after_ws == '(') {
+                sb_append(&out, "puts(");
+                i = (size_t)(after_ws - line) + 1;
+                continue;
+            }
+        }
+
+        char c = line[i];
+        sb_append_n(&out, line + i, 1);
+        if (escaped) {
+            escaped = 0;
+        } else if (in_dquote && c == '\\') {
+            escaped = 1;
+        } else if (!in_backtick && c == '"') {
+            in_dquote = !in_dquote;
+        } else if (!in_dquote && c == '`') {
+            in_backtick = !in_backtick;
+        }
+        i++;
+    }
     return out.data;
 }
 
@@ -450,6 +603,17 @@ static int skip_string_literal_c(const char *text, int start) {
     return -1;
 }
 
+static int skip_char_literal_c(const char *text, int start) {
+    if (text[start] != '\'') return start + 1;
+    if (text[start + 1] == '\0') return -1;
+    if (text[start + 1] == '\\') {
+        if (text[start + 2] == '\0' || text[start + 3] != '\'') return -1;
+        return start + 4;
+    }
+    if (text[start + 2] == '\'') return start + 3;
+    return -1;
+}
+
 static void sb_append_c_escaped_byte(StrBuf *out, char ch) {
     unsigned char c = (unsigned char)ch;
     if (c == '\\') {
@@ -479,6 +643,16 @@ static int split_top_level_commas_c(const char *text, char **parts, int max_part
         char ch = *p;
         if (is_string_delim_c(ch)) {
             int end = skip_string_literal_c(text, (int)(p - text));
+            if (end < 0) {
+                p = text + strlen(text);
+                ch = *p;
+            } else {
+                p = text + end - 1;
+                continue;
+            }
+        }
+        if (ch == '\'') {
+            int end = skip_char_literal_c(text, (int)(p - text));
             if (end < 0) {
                 p = text + strlen(text);
                 ch = *p;
@@ -603,6 +777,12 @@ static int find_matching_paren_c(const char *text, int open_index) {
             i = end - 1;
             continue;
         }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
         if (text[i] == '(') depth++;
         if (text[i] == ')') {
             depth--;
@@ -619,6 +799,12 @@ static int find_matching_bracket_c(const char *text, int open_index) {
     for (int i = open_index; text[i] != '\0'; i++) {
         if (is_string_delim_c(text[i])) {
             int end = skip_string_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, i);
             if (end < 0) return -1;
             i = end - 1;
             continue;
@@ -886,6 +1072,16 @@ static char *replace_word_all(const char *text, const char *name, const char *re
             i = (size_t)end;
             continue;
         }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, (int)i);
+            if (end < 0) {
+                sb_append(&out, text + i);
+                break;
+            }
+            sb_append_n(&out, text + i, (size_t)end - i);
+            i = (size_t)end;
+            continue;
+        }
         int before_ok = i == 0 || !is_ident_continue(text[i - 1]);
         int after_ok = !is_ident_continue(text[i + name_len]);
         if (before_ok && after_ok && strncmp(text + i, name, name_len) == 0) {
@@ -1078,9 +1274,13 @@ static char *normalize_source_text(const char *raw, int core_lower) {
         char *step4 = NULL;
         const char *trim = skip_ws(stripped);
 
-        if (!in_struct && starts_with(trim, "struct ") && strchr(trim, '{') != NULL && strchr(trim, '}') == NULL) {
-            in_struct = 1;
-            struct_depth = 1;
+        if (!in_struct && starts_with(trim, "struct ") && strchr(trim, '{') != NULL) {
+            if (strchr(trim, '}') != NULL) {
+                step1 = lower_struct_one_line_fields(stripped);
+            } else {
+                in_struct = 1;
+                struct_depth = 1;
+            }
         } else if (in_struct) {
             if (strcmp(trim, "}") != 0) {
                 step1 = lower_struct_field_line(stripped);
@@ -1204,7 +1404,10 @@ static int is_valid_int_params(const char *params) {
             return 0;
         }
         char *ty = trim_copy(colon + 1);
-        int ok = strcmp(ty, "Int") == 0 || strcmp(ty, "Str") == 0 || strcmp(ty, "Bool") == 0;
+        int ok = strcmp(ty, "Int") == 0 ||
+            strcmp(ty, "Str") == 0 ||
+            strcmp(ty, "Bool") == 0 ||
+            strcmp(ty, "Char") == 0;
         free(ty);
         if (!ok) {
             for (int k = 0; k < n; k++) free(parts[k]);
@@ -1249,17 +1452,17 @@ static int check_fn_contract_line(
             *has_bad_main = 1;
         }
     } else {
-        if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0)) {
+        if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0 && strcmp(ret, "Char") != 0)) {
             report_issue(path, line_no, find_col(line, "fn "), line,
                 "Vais native helper functions must return a verified scalar type",
-                "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, or `-> Str`.",
+                "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, `-> Char`, or `-> Str`.",
                 NULL);
             issue = 1;
         }
         if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params)) {
             report_issue(path, line_no, find_col(line, params), line,
                 "Vais native helper parameters must use verified scalar types",
-                "use `Int`, `Str`, or `Bool` parameters in this slice.",
+                "use `Int`, `Str`, `Bool`, or `Char` parameters in this slice.",
                 NULL);
             issue = 1;
         }
@@ -1303,6 +1506,45 @@ static int front_supported_map_local_line(const char *line) {
     return *rhs == '\0' || *rhs == ';';
 }
 
+static char *front_probe_line(const char *line) {
+    StrBuf out;
+    sb_init(&out);
+    char delim = '\0';
+    int escaped = 0;
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char ch = line[i];
+        if (escaped) {
+            sb_append(&out, " ");
+            escaped = 0;
+            continue;
+        }
+        if (delim == '"' && ch == '\\') {
+            sb_append(&out, " ");
+            escaped = 1;
+            continue;
+        }
+        if (delim != '\0') {
+            sb_append(&out, " ");
+            if (ch == delim) delim = '\0';
+            continue;
+        }
+        if (ch == '#' ) {
+            while (line[i] != '\0') {
+                sb_append(&out, " ");
+                i++;
+            }
+            break;
+        }
+        if (ch == '"' || ch == '`' || ch == '\'') {
+            delim = ch;
+            sb_append(&out, " ");
+            continue;
+        }
+        sb_append_n(&out, &ch, 1);
+    }
+    return sb_take(&out);
+}
+
 static int check_front_contract_text(const char *text, const char *path) {
     LineVec lines = split_lines(text);
     int issues = 0;
@@ -1310,108 +1552,104 @@ static int check_front_contract_text(const char *text, const char *path) {
     int has_bad_main = 0;
     for (size_t i = 0; i < lines.len; i++) {
         const char *line = lines.items[i];
+        char *probe = front_probe_line(line);
         int line_no = (int)i + 1;
         issues += check_fn_contract_line(path, line_no, line, &has_main, &has_bad_main);
 
         char *fix = NULL;
-        const char *trim = skip_ws(line);
+        const char *trim = skip_ws(probe);
         const char *module_kw = NULL;
         if (starts_with(trim, "module") && !is_ident_continue(trim[6])) module_kw = "module";
         else if (starts_with(trim, "package") && !is_ident_continue(trim[7])) module_kw = "package";
         if (module_kw != NULL) {
-            report_issue(path, line_no, find_col(line, module_kw), line,
+            report_issue(path, line_no, find_col(probe, module_kw), line,
                 "module and package declarations are not implemented yet",
                 "omit the declaration; module names are derived from file paths in the first import slice.",
                 NULL);
             issues++;
-        } else if (strstr(line, "&&") != NULL) {
+        } else if (strstr(probe, "&&") != NULL) {
             fix = replace_once_for_fix(line, "&&", "and");
-            report_issue(path, line_no, find_col(line, "&&"), line,
+            report_issue(path, line_no, find_col(probe, "&&"), line,
                 "logical AND uses the word `and`, not `&&`",
                 "replace `&&` with `and`.", fix);
             free(fix);
             issues++;
-        } else if (strstr(line, "||") != NULL) {
+        } else if (strstr(probe, "||") != NULL) {
             fix = replace_once_for_fix(line, "||", "or");
-            report_issue(path, line_no, find_col(line, "||"), line,
+            report_issue(path, line_no, find_col(probe, "||"), line,
                 "logical OR uses the word `or`, not `||`",
                 "replace `||` with `or`.", fix);
             free(fix);
             issues++;
-        } else if (strstr(line, " as Int") != NULL) {
+        } else if (strstr(probe, " as Int") != NULL) {
             fix = fix_as_cast(line);
-            report_issue(path, line_no, find_col(line, " as Int"), line,
+            report_issue(path, line_no, find_col(probe, " as Int"), line,
                 "type conversion is explicit `Type(x)`, not `x as Type`",
                 "write `Type(expr)` instead of `expr as Type`.", fix);
             free(fix);
             issues++;
-        } else if (strstr(line, "Vec<") != NULL && strstr(line, "::new") != NULL) {
+        } else if (strstr(probe, "Vec<") != NULL && strstr(probe, "::new") != NULL) {
             fix = replace_once_for_fix(line, "Vec<Int>::new()", "[]");
-            report_issue(path, line_no, find_col(line, "Vec<"), line,
+            report_issue(path, line_no, find_col(probe, "Vec<"), line,
                 "no turbofish constructor; use a literal instead of `Type<...>::new()`",
                 "use a list/map literal such as `[]`, `[1, 2]`, or `{}`.", fix);
             free(fix);
             issues++;
-        } else if (strstr(line, "::") != NULL) {
+        } else if (strstr(probe, "::") != NULL) {
             fix = replace_once_for_fix(line, "::", ".");
-            report_issue(path, line_no, find_col(line, "::"), line,
+            report_issue(path, line_no, find_col(probe, "::"), line,
                 "enum/path access uses `.`, not `::`",
                 "replace `::` with `.`.", fix);
             free(fix);
             issues++;
-        } else if (strstr(line, "i32") != NULL) {
+        } else if (strstr(probe, "i32") != NULL) {
             fix = replace_once_for_fix(line, "i32", "Int");
-            report_issue(path, line_no, find_col(line, "i32"), line,
+            report_issue(path, line_no, find_col(probe, "i32"), line,
                 "Vais scalar types are capitalized, not Rust scalar names",
                 "use `Int` for the verified release scalar type.", fix);
             free(fix);
             issues++;
-        } else if (strstr(line, "enum ") != NULL) {
-            report_issue(path, line_no, find_col(line, "enum"), line,
+        } else if (strstr(probe, "enum ") != NULL) {
+            report_issue(path, line_no, find_col(probe, "enum"), line,
                 "enum declarations beyond payload-free tags or small Int-coded payload enums are not in the Vais native front subset yet",
                 "use payload-free enum tags or Int/self-recursive payload enums with simple return-arm match; keep broader payload enums on the full compiler path.",
                 NULL);
             issues++;
-        } else if (strstr(line, "match ") != NULL) {
-            report_issue(path, line_no, find_col(line, "match"), line,
+        } else if (strstr(probe, "match ") != NULL) {
+            report_issue(path, line_no, find_col(probe, "match"), line,
                 "`match` beyond simple enum return arms is not in the Vais native front subset yet",
                 "use if/else for native sources, or keep payload match code on the full compiler path.",
                 NULL);
             issues++;
-        } else if (strstr(line, "for ") != NULL) {
-            report_issue(path, line_no, find_col(line, "for"), line,
-                "`for` loops are not in the Vais native day-1 front subset yet",
-                "use `while` with an explicit mutable index for now.",
-                NULL);
-            issues++;
-        } else if (strstr(line, "Char") != NULL || strstr(line, "String") != NULL) {
+        } else if (strstr(probe, "String") != NULL) {
             report_issue(path, line_no, 1, line,
                 "this scalar type is not in the verified native front subset",
-                "use `Int`, `Str`, or `Bool` in this slice.",
+                "use `Int`, `Str`, `Bool`, or `Char` in this slice.",
                 NULL);
             issues++;
-        } else if (strstr(line, "Map<") != NULL || strstr(line, "Map <") != NULL) {
-            if (!front_supported_map_local_line(line)) {
-                int col = strstr(line, "Map<") != NULL ? find_col(line, "Map<") : find_col(line, "Map <");
+        } else if (strstr(probe, "Map<") != NULL || strstr(probe, "Map <") != NULL) {
+            if (!front_supported_map_local_line(probe)) {
+                int col = strstr(probe, "Map<") != NULL ? find_col(probe, "Map<") : find_col(probe, "Map <");
                 report_issue(path, line_no, col, line,
                     "only local Map<Int,Int> values are verified for now",
                     "write `let name: Map<Int,Int> = {}` and use `insert`, `get(key, default)`, `contains`, and `len`; Map parameters, returns, and generic key/value forms are not verified yet.",
                     NULL);
                 issues++;
             }
-        } else if (strstr(line, "|") != NULL) {
-            report_issue(path, line_no, find_col(line, "|"), line,
+        } else if (strstr(probe, "|") != NULL) {
+            report_issue(path, line_no, find_col(probe, "|"), line,
                 "closures beyond the single-Int closure-return slice are not in the Vais native front subset yet",
                 "use a single Int capture returning `fn(Int) -> Int`, or write a named function for broader closure cases.",
                 NULL);
             issues++;
-        } else if (strstr(line, ".clear(") != NULL) {
-            report_issue(path, line_no, find_col(line, ".clear("), line,
+        } else if (strstr(probe, ".clear(") != NULL) {
+            report_issue(path, line_no, find_col(probe, ".clear("), line,
                 "method calls beyond push/len/is_empty/last/pop/sum are not in the Vais native front subset yet",
                 "use a plain function call, or keep this source on the full compiler path until that method is promoted.",
                 NULL);
             issues++;
         }
+        free(probe);
     }
     if (has_bad_main && !has_main) {
         report_issue(path, 1, 1, lines.len ? lines.items[0] : "",
@@ -1477,6 +1715,69 @@ static char *path_join2(const char *base, const char *part) {
     if (base[0] != '\0' && base[strlen(base) - 1] != '/') sb_append(&out, "/");
     sb_append(&out, part);
     return sb_take(&out);
+}
+
+static const char *path_basename_ptr(const char *path) {
+    const char *slash = strrchr(path, '/');
+    return slash == NULL ? path : slash + 1;
+}
+
+static int str_ends_with(const char *s, const char *suffix) {
+    size_t slen = strlen(s);
+    size_t suffix_len = strlen(suffix);
+    return slen >= suffix_len && strcmp(s + slen - suffix_len, suffix) == 0;
+}
+
+static int is_repo_self_host_tier_path(const char *resolved) {
+    return str_ends_with(resolved, "/compiler/self/fixpoint.vais") ||
+        str_ends_with(resolved, "/compiler/self/fixpoint2.vais") ||
+        str_ends_with(resolved, "/compiler/self/fixpoint3.vais") ||
+        str_ends_with(resolved, "/compiler/self/fixpoint_full.vais");
+}
+
+static int trust_root_matches_source(const char *resolved, const char *source_name, const char *raw_root) {
+    if (raw_root == NULL || raw_root[0] == '\0') return 0;
+    char *compiler_dir = path_join2(raw_root, "compiler/self");
+    char *trusted_path = path_join2(compiler_dir, source_name);
+    char *trusted_real = canonical_existing_path(trusted_path);
+    int ok = trusted_real != NULL && strcmp(resolved, trusted_real) == 0;
+    free(compiler_dir);
+    free(trusted_path);
+    free(trusted_real);
+    return ok;
+}
+
+static int is_trusted_self_host_source(const char *path) {
+    char *resolved = canonical_existing_path(path);
+    if (resolved == NULL) return 0;
+    if (is_repo_self_host_tier_path(resolved)) {
+        free(resolved);
+        return 1;
+    }
+
+    const char *env = getenv("VAISC_SELF_HOST_TRUST_ROOTS");
+    if (env == NULL || env[0] == '\0') {
+        free(resolved);
+        return 0;
+    }
+
+    const char *source_name = path_basename_ptr(resolved);
+    char *roots = strdup(env);
+    if (roots == NULL) die_oom();
+    int ok = 0;
+    char *cursor = roots;
+    while (cursor != NULL && ok == 0) {
+        char *next = strchr(cursor, ':');
+        if (next != NULL) {
+            *next = '\0';
+            next++;
+        }
+        if (trust_root_matches_source(resolved, source_name, cursor)) ok = 1;
+        cursor = next;
+    }
+    free(roots);
+    free(resolved);
+    return ok;
 }
 
 static char *strip_manifest_comment_c(const char *line) {
@@ -2400,12 +2701,13 @@ static char *prepare_source_file(const char *path) {
         fprintf(stderr, "error: Vais source files must use the .vais extension: %s\n", path);
         return NULL;
     }
+    int trusted_self_host = is_trusted_self_host_source(path);
     char *merged = resolve_module_graph_source(path);
     if (merged == NULL) return NULL;
     char *normalized = normalize_source_text(merged, 0);
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
-    if (check_front_contract_text(closure_lowered, path) != 0) {
+    if (!trusted_self_host && check_front_contract_text(closure_lowered, path) != 0) {
         free(merged);
         free(normalized);
         free(enum_lowered);
@@ -2566,10 +2868,23 @@ static int direct_is_bool_type(const char *type) {
     return type != NULL && strcmp(type, "Bool") == 0;
 }
 
+static int direct_is_char_type(const char *type) {
+    return type != NULL && strcmp(type, "Char") == 0;
+}
+
+static int direct_is_intlike_scalar_type(const char *type) {
+    return type != NULL && (
+        strcmp(type, "Int") == 0 ||
+        direct_is_bool_type(type) ||
+        direct_is_char_type(type)
+    );
+}
+
 static int direct_fn_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
     return strcmp(type, "Int") == 0 ||
         direct_is_str_type(type) ||
         direct_is_bool_type(type) ||
+        direct_is_char_type(type) ||
         direct_is_list_int_type(type) ||
         direct_is_list_struct_type(structs, struct_count, type) ||
         direct_find_struct(structs, struct_count, type) != NULL;
@@ -2583,14 +2898,14 @@ static int direct_local_type_allowed(DirectStructInfo *structs, int struct_count
 
 static int direct_type_compatible(const char *expected, const char *actual) {
     if (expected == NULL || actual == NULL) return 1;
-    if ((strcmp(expected, "Int") == 0 || strcmp(expected, "Bool") == 0) &&
-        (strcmp(actual, "Int") == 0 || strcmp(actual, "Bool") == 0)) return 1;
+    if (direct_is_intlike_scalar_type(expected) && direct_is_intlike_scalar_type(actual)) return 1;
     return strcmp(expected, actual) == 0;
 }
 
 static const char *direct_c_type(const char *type) {
     if (direct_is_str_type(type)) return "Str";
     if (direct_is_bool_type(type)) return "Bool";
+    if (direct_is_char_type(type)) return "long";
     if (direct_is_list_int_type(type)) return "DirectListInt";
     if (direct_is_map_int_int_type(type)) return "DirectMapIntInt";
     if (direct_is_list_type(type)) {
@@ -2693,6 +3008,12 @@ static int find_matching_brace_c(const char *text, int open_index) {
     for (int i = open_index; text[i] != '\0'; i++) {
         if (is_string_delim_c(text[i])) {
             int end = skip_string_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, i);
             if (end < 0) return -1;
             i = end - 1;
             continue;
@@ -2982,7 +3303,7 @@ static int direct_validate_fn_types(
     if (!direct_fn_type_allowed(structs, struct_count, info->return_type)) {
         report_issue(path, info->line_no, find_col(line, info->return_type), line,
             "direct native emitter function return type is not available",
-            "use `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
+            "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
             NULL);
         issues++;
     }
@@ -2990,7 +3311,7 @@ static int direct_validate_fn_types(
         if (!direct_fn_type_allowed(structs, struct_count, info->param_types[p])) {
             report_issue(path, info->line_no, find_col(line, info->param_types[p]), line,
                 "direct native emitter function parameter type is not available",
-                "use `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
+                "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
                 NULL);
             issues++;
         }
@@ -3087,6 +3408,20 @@ static char *direct_rewrite_struct_literals(
                 report_issue(path, line_no, 1, line,
                     "direct native emitter found an unterminated string literal",
                     "close the string before the end of the line.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an invalid char literal",
+                    "write a single-byte character literal such as `'A'`.",
                     NULL);
                 free(out.data);
                 return NULL;
@@ -3411,6 +3746,20 @@ static char *direct_rewrite_parse_builtin_calls(
             i = end;
             continue;
         }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an invalid char literal",
+                    "write a single-byte character literal such as `'A'`.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
         if (!is_ident_start(expr[i])) {
             sb_append_n(&out, expr + i, 1);
             i++;
@@ -3475,6 +3824,12 @@ static int direct_find_top_level_eq_op(const char *expr, int *op_len) {
     for (int i = 0; expr[i] != '\0'; i++) {
         if (is_string_delim_c(expr[i])) {
             int end = skip_string_literal_c(expr, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
             if (end < 0) return -1;
             i = end - 1;
             continue;
@@ -3727,6 +4082,20 @@ static char *direct_rewrite_list_expr(
                 report_issue(path, line_no, 1, line,
                     "direct native emitter found an unterminated string literal",
                     "close the string before the end of the line.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an invalid char literal",
+                    "write a single-byte character literal such as `'A'`.",
                     NULL);
                 free(out.data);
                 return NULL;
@@ -4444,8 +4813,11 @@ static int direct_is_keyword(const char *name) {
     return strcmp(name, "fn") == 0 || strcmp(name, "return") == 0 ||
         strcmp(name, "let") == 0 || strcmp(name, "mut") == 0 ||
         strcmp(name, "if") == 0 || strcmp(name, "else") == 0 ||
-        strcmp(name, "while") == 0 || strcmp(name, "Int") == 0 ||
+        strcmp(name, "while") == 0 || strcmp(name, "for") == 0 ||
+        strcmp(name, "break") == 0 || strcmp(name, "continue") == 0 ||
+        strcmp(name, "in") == 0 || strcmp(name, "Int") == 0 ||
         strcmp(name, "Str") == 0 || strcmp(name, "Bool") == 0 ||
+        strcmp(name, "Char") == 0 ||
         strcmp(name, "true") == 0 || strcmp(name, "false") == 0 ||
         strcmp(name, "and") == 0 || strcmp(name, "or") == 0 ||
         strcmp(name, "not") == 0;
@@ -4511,6 +4883,18 @@ static int direct_check_expr_inner(
                 report_issue(path, line_no, 1, line,
                     "direct native emitter found an unterminated string literal",
                     "close the string before the end of the line.",
+                    NULL);
+                return 1;
+            }
+            i = end;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an invalid char literal",
+                    "write a single-byte character literal such as `'A'`.",
                     NULL);
                 return 1;
             }
@@ -5020,6 +5404,12 @@ static int direct_find_top_level_char(const char *text, char target) {
             i = end - 1;
             continue;
         }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
         if (text[i] == target && paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) return i;
         if (text[i] == '(') paren_depth++;
         else if (text[i] == ')') paren_depth--;
@@ -5029,6 +5419,93 @@ static int direct_find_top_level_char(const char *text, char target) {
         else if (text[i] == '}') brace_depth--;
     }
     return -1;
+}
+
+static int direct_find_top_level_range_op(const char *text, int *inclusive) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    for (int i = 0; text[i] != '\0'; i++) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 &&
+            text[i] == '.' && text[i + 1] == '.') {
+            *inclusive = text[i + 2] == '=';
+            return i;
+        }
+        if (text[i] == '(') paren_depth++;
+        else if (text[i] == ')') paren_depth--;
+        else if (text[i] == '[') bracket_depth++;
+        else if (text[i] == ']') bracket_depth--;
+        else if (text[i] == '{') brace_depth++;
+        else if (text[i] == '}') brace_depth--;
+    }
+    return -1;
+}
+
+static int direct_parse_for_header(
+    const char *s,
+    char **name_out,
+    char **lo_out,
+    char **hi_out,
+    int *inclusive_out
+) {
+    s = skip_ws(s);
+    if (!starts_with(s, "for") || is_ident_continue(s[3])) return 0;
+    const char *p = skip_ws(s + 3);
+    if (!is_ident_start(*p)) return -1;
+    const char *name_start = p;
+    p++;
+    while (is_ident_continue(*p)) p++;
+    char *name = substr_copy(name_start, (size_t)(p - name_start));
+    p = skip_ws(p);
+    if (!(p[0] == 'i' && p[1] == 'n' && !is_ident_continue(p[2]))) {
+        free(name);
+        return -1;
+    }
+    p = skip_ws(p + 2);
+    int open_rel = direct_find_top_level_char(p, '{');
+    if (open_rel < 0 || *skip_ws(p + open_rel + 1) != '\0') {
+        free(name);
+        return -1;
+    }
+    char *range = substr_copy(p, (size_t)open_rel);
+    int inclusive = 0;
+    int op = direct_find_top_level_range_op(range, &inclusive);
+    if (op < 0) {
+        free(range);
+        free(name);
+        return -1;
+    }
+    int op_len = inclusive ? 3 : 2;
+    char *lo_raw = substr_copy(range, (size_t)op);
+    char *hi_raw = substr_copy(range + op + op_len, strlen(range + op + op_len));
+    char *lo = trim_copy(lo_raw);
+    char *hi = trim_copy(hi_raw);
+    free(lo_raw);
+    free(hi_raw);
+    free(range);
+    if (lo[0] == '\0' || hi[0] == '\0') {
+        free(lo);
+        free(hi);
+        free(name);
+        return -1;
+    }
+    *name_out = name;
+    *lo_out = lo;
+    *hi_out = hi;
+    *inclusive_out = inclusive;
+    return 1;
 }
 
 static int direct_parse_inline_block(const char *s, const char *keyword, char **expr_out, char **body_out) {
@@ -5300,8 +5777,8 @@ static int direct_lower_line(
     }
     if (parsed_header < 0 || starts_with(s, "fn ")) {
         report_issue(path, line_no, find_col(line, "fn"), line,
-            "direct native emitter supports Int, Bool, Str, List<Int>, List<Struct>, and declared-struct function headers",
-            "write functions with `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
+            "direct native emitter supports Int, Bool, Char, Str, List<Int>, List<Struct>, and declared-struct function headers",
+            "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
             NULL);
         free(stripped);
         return 1;
@@ -5444,6 +5921,142 @@ static int direct_lower_line(
         free(stripped);
         return 0;
     }
+    char *for_name = NULL;
+    char *for_lo = NULL;
+    char *for_hi = NULL;
+    int for_inclusive = 0;
+    int parsed_for = direct_parse_for_header(s, &for_name, &for_lo, &for_hi, &for_inclusive);
+    if (parsed_for == 1) {
+        const char *existing_type = direct_names_type(locals, for_name);
+        if (existing_type != NULL && !direct_is_intlike_scalar_type(existing_type)) {
+            report_issue(path, line_no, find_col(line, for_name), line,
+                "direct native emitter for-loop variable must be an Int-compatible scalar",
+                "use a fresh loop variable name or an `Int` local.",
+                "for i in 0..n {");
+            free(for_name);
+            free(for_lo);
+            free(for_hi);
+            free(stripped);
+            return 1;
+        }
+        if (direct_check_expr(path, line_no, line, for_lo, locals, fns, fn_count, structs, struct_count)) {
+            free(for_name);
+            free(for_lo);
+            free(for_hi);
+            free(stripped);
+            return 1;
+        }
+        char *lo_type = direct_infer_expr_type(for_lo, locals, fns, fn_count, structs, struct_count);
+        if (!direct_type_compatible("Int", lo_type)) {
+            report_issue(path, line_no, find_col(line, "for"), line,
+                "direct native emitter for-loop lower bound must be Int-compatible",
+                "use an `Int`, `Bool`, or `Char` expression for the lower bound.",
+                "for i in 0..n {");
+            free(lo_type);
+            free(for_name);
+            free(for_lo);
+            free(for_hi);
+            free(stripped);
+            return 1;
+        }
+        free(lo_type);
+        int declare_loop_var = existing_type == NULL;
+        if (declare_loop_var) direct_names_add_typed(locals, for_name, "Int");
+        if (direct_check_expr(path, line_no, line, for_hi, locals, fns, fn_count, structs, struct_count)) {
+            free(for_name);
+            free(for_lo);
+            free(for_hi);
+            free(stripped);
+            return 1;
+        }
+        char *hi_type = direct_infer_expr_type(for_hi, locals, fns, fn_count, structs, struct_count);
+        if (!direct_type_compatible("Int", hi_type)) {
+            report_issue(path, line_no, find_col(line, "for"), line,
+                "direct native emitter for-loop upper bound must be Int-compatible",
+                "use an `Int`, `Bool`, or `Char` expression for the upper bound.",
+                "for i in 0..n {");
+            free(hi_type);
+            free(for_name);
+            free(for_lo);
+            free(for_hi);
+            free(stripped);
+            return 1;
+        }
+        free(hi_type);
+        StrBuf start_prelude;
+        StrBuf end_prelude;
+        sb_init(&start_prelude);
+        sb_init(&end_prelude);
+        direct_current_prelude = &start_prelude;
+        char *rewritten_lo = direct_rewrite_expr(path, line_no, line, for_lo, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = &end_prelude;
+        char *rewritten_hi = rewritten_lo == NULL ? NULL : direct_rewrite_expr(path, line_no, line, for_hi, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
+        if (rewritten_lo == NULL || rewritten_hi == NULL) {
+            free(start_prelude.data);
+            free(end_prelude.data);
+            free(rewritten_lo);
+            free(rewritten_hi);
+            free(for_name);
+            free(for_lo);
+            free(for_hi);
+            free(stripped);
+            return 1;
+        }
+        char *c_lo = direct_translate_expr(rewritten_lo);
+        char *c_hi = direct_translate_expr(rewritten_hi);
+        if (declare_loop_var) {
+            sb_append(out, "long ");
+            sb_append(out, for_name);
+            sb_append(out, ";\n");
+        }
+        sb_append(out, start_prelude.data);
+        sb_append(out, "for (");
+        sb_append(out, for_name);
+        sb_append(out, " = ");
+        sb_append(out, c_lo);
+        sb_append(out, "; ; ");
+        sb_append(out, for_name);
+        sb_append(out, "++) {\n");
+        sb_append(out, end_prelude.data);
+        sb_append(out, "if (!(");
+        sb_append(out, for_name);
+        sb_append(out, for_inclusive ? " <= " : " < ");
+        sb_append(out, c_hi);
+        sb_append(out, ")) break;\n");
+        free(start_prelude.data);
+        free(end_prelude.data);
+        free(c_lo);
+        free(c_hi);
+        free(rewritten_lo);
+        free(rewritten_hi);
+        free(for_name);
+        free(for_lo);
+        free(for_hi);
+        free(stripped);
+        return 0;
+    }
+    if (parsed_for < 0 || starts_with(s, "for")) {
+        report_issue(path, line_no, find_col(line, "for"), line,
+            "direct native emitter expected a for-loop range header",
+            "write `for i in 0..n {` or `for i in 0..=n {`.",
+            "for i in 0..n {");
+        free(for_name);
+        free(for_lo);
+        free(for_hi);
+        free(stripped);
+        return 1;
+    }
+    if (strcmp(s, "break") == 0 || strcmp(s, "break;") == 0) {
+        sb_append(out, "break;\n");
+        free(stripped);
+        return 0;
+    }
+    if (strcmp(s, "continue") == 0 || strcmp(s, "continue;") == 0) {
+        sb_append(out, "continue;\n");
+        free(stripped);
+        return 0;
+    }
     if (starts_with(s, "return ")) {
         char *expr = trim_copy(s + 7);
         size_t n = strlen(expr);
@@ -5517,7 +6130,7 @@ static int direct_lower_line(
             if (local_type == NULL) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter expected a local type",
-                    "use `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, or a declared struct type in this direct-engine slice.",
+                    "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, or a declared struct type in this direct-engine slice.",
                     NULL);
                 free(name);
                 free(stripped);
@@ -5526,8 +6139,8 @@ static int direct_lower_line(
             p = skip_ws(p);
             if (!direct_local_type_allowed(structs, struct_count, local_type)) {
                 report_issue(path, line_no, find_col(line, local_type), line,
-                    "direct native emitter supports Int, Bool, Str, List<Int>, List<Struct>, Map<Int,Int>, and declared struct locals only",
-                    "use `let name: Int = expr`, `let name: Bool = expr`, `let name: Str = expr`, `let name: List<Int> = []`, `let name: Map<Int,Int> = {}`, `let name: Struct = expr`, or omit the annotation.",
+                    "direct native emitter supports Int, Bool, Char, Str, List<Int>, List<Struct>, Map<Int,Int>, and declared struct locals only",
+                    "use `let name: Int = expr`, `let name: Bool = expr`, `let name: Char = expr`, `let name: Str = expr`, `let name: List<Int> = []`, `let name: Map<Int,Int> = {}`, `let name: Struct = expr`, or omit the annotation.",
                     NULL);
                 free(local_type);
                 free(name);
@@ -5758,11 +6371,8 @@ static int direct_lower_line(
         }
         char *c_expr = direct_translate_expr(rewritten);
         sb_append(out, prelude.data);
-        if (strcmp(local_type, "Int") == 0) sb_append(out, "long ");
-        else {
-            sb_append(out, local_type);
-            sb_append(out, " ");
-        }
+        sb_append(out, direct_c_type(local_type));
+        sb_append(out, " ");
         sb_append(out, name);
         sb_append(out, " = ");
         sb_append(out, c_expr);
@@ -6043,7 +6653,7 @@ static int direct_lower_line(
     }
 
     report_issue(path, line_no, 1, line,
-        "direct native emitter supports Int functions, struct locals, List locals, Map<Int,Int> locals, lets, assignment, if, while, calls, and return",
+        "direct native emitter supports Int functions, struct locals, List locals, Map<Int,Int> locals, lets, assignment, if, while, for, break, continue, calls, and return",
         "use the full engine for syntax outside the direct subset.",
         NULL);
     free(stripped);
@@ -6163,8 +6773,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             fns[fn_count++] = info;
         } else if (parsed < 0) {
             report_issue(path, (int)i + 1, 1, lines.items[i],
-                "direct native emitter supports Int, Bool, Str, List<Int>, List<Struct>, and declared-struct function headers",
-                "write functions with `Int`, `Bool`, `Str`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
+                "direct native emitter supports Int, Bool, Char, Str, List<Int>, List<Struct>, and declared-struct function headers",
+                "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
                 NULL);
             free(skip_lines);
             lines_free(&lines);
@@ -6368,6 +6978,7 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
 }
 
 static int compile_to_stream(char *prepared) {
+    fputs(HOST_INTRINSIC_IR, stdout);
     int64_t rc = compile(prepared);
     fflush(stdout);
     if (rc != 0) {
@@ -6403,6 +7014,656 @@ static int compile_to_file(char *prepared, const char *out_path) {
     return rc;
 }
 
+static int line_start_match(const char *text, const char *pos) {
+    return pos == text || pos[-1] == '\n';
+}
+
+static int write_link_ir_entrypoint(const char *ir_path, const char *link_ir_path) {
+    char *text = read_file(ir_path);
+    if (text == NULL) return 1;
+    const char *needle = "define i64 @main()";
+    const char *replace = "define i64 @vais_user_main()";
+    const char *target = NULL;
+    int count = 0;
+    const char *p = text;
+    while ((p = strstr(p, needle)) != NULL) {
+        if (line_start_match(text, p)) {
+            target = p;
+            count++;
+        }
+        p++;
+    }
+    if (count != 1 || target == NULL) {
+        fprintf(stderr, "error: invalid Vais build IR: expected one @main, found %d\n", count);
+        free(text);
+        return 1;
+    }
+
+    StrBuf out;
+    sb_init(&out);
+    sb_append_n(&out, text, (size_t)(target - text));
+    sb_append(&out, replace);
+    sb_append(&out, target + strlen(needle));
+    char *rewritten = sb_take(&out);
+    int rc = write_file_text(link_ir_path, rewritten);
+    free(rewritten);
+    free(text);
+    return rc;
+}
+
+static int write_host_runtime_c(const char *path) {
+    FILE *fp = fopen(path, "wb");
+    if (fp == NULL) {
+        fprintf(stderr, "error: cannot write %s: %s\n", path, strerror(errno));
+        return 1;
+    }
+    fputs(
+        "#include <errno.h>\n"
+        "#include <fcntl.h>\n"
+        "#include <stdint.h>\n"
+        "#include <stdio.h>\n"
+        "#include <string.h>\n"
+        "#include <stdlib.h>\n"
+        "#include <sys/stat.h>\n"
+        "#include <sys/wait.h>\n"
+        "#include <unistd.h>\n"
+        "\n"
+        "int64_t fs_exists(char *path) {\n"
+        "    if (path == 0) return 0;\n"
+        "    return access(path, F_OK) == 0 ? 1 : 0;\n"
+        "}\n"
+        "\n"
+        "static void fs_host_trap(const char *op, const char *path) {\n"
+        "    fprintf(stderr, \"vais host %s failed: %s: %s\\n\", op, path == 0 ? \"<null>\" : path, strerror(errno == 0 ? EIO : errno));\n"
+        "    abort();\n"
+        "}\n"
+        "\n"
+        "static char *fs_host_copy_n(const char *text, size_t len) {\n"
+        "    char *out = (char *)malloc(len + 1);\n"
+        "    if (out == 0) fs_host_trap(\"alloc\", text);\n"
+        "    memcpy(out, text, len);\n"
+        "    out[len] = '\\0';\n"
+        "    return out;\n"
+        "}\n"
+        "\n"
+        "static char *fs_host_copy(const char *text) {\n"
+        "    if (text == 0) fs_host_trap(\"copy\", text);\n"
+        "    return fs_host_copy_n(text, strlen(text));\n"
+        "}\n"
+        "\n"
+        "static int vais_host_argc = 0;\n"
+        "static char **vais_host_argv = 0;\n"
+        "\n"
+        "extern int64_t vais_user_main(void);\n"
+        "\n"
+        "int main(int argc, char **argv) {\n"
+        "    if (argc > 0) {\n"
+        "        vais_host_argc = argc - 1;\n"
+        "        vais_host_argv = argv + 1;\n"
+        "    } else {\n"
+        "        vais_host_argc = 0;\n"
+        "        vais_host_argv = argv;\n"
+        "    }\n"
+        "    return (int)vais_user_main();\n"
+        "}\n"
+        "\n"
+        "int64_t proc_argc(void) {\n"
+        "    if (vais_host_argv != 0) return (int64_t)vais_host_argc;\n"
+        "    const char *raw = getenv(\"VAIS_RUN_ARGC\");\n"
+        "    if (raw == 0 || raw[0] == '\\0') return 0;\n"
+        "    char *end = 0;\n"
+        "    long n = strtol(raw, &end, 10);\n"
+        "    if (end == raw || n < 0) return 0;\n"
+        "    return (int64_t)n;\n"
+        "}\n"
+        "\n"
+        "char *proc_arg(int64_t index) {\n"
+        "    int64_t count = proc_argc();\n"
+        "    if (index < 0 || index >= count) fs_host_trap(\"proc_arg\", \"\");\n"
+        "    if (vais_host_argv != 0) return fs_host_copy(vais_host_argv[index]);\n"
+        "    char name[64];\n"
+        "    snprintf(name, sizeof(name), \"VAIS_RUN_ARG_%lld\", (long long)index);\n"
+        "    const char *value = getenv(name);\n"
+        "    if (value == 0) fs_host_trap(\"proc_arg\", name);\n"
+        "    return fs_host_copy(value);\n"
+        "}\n"
+        "\n"
+        "static int path_is_absolute(const char *path) {\n"
+        "    if (path == 0 || path[0] == '\\0') return 0;\n"
+        "    return path[0] == '/';\n"
+        "}\n"
+        "\n"
+        "char *fs_read_text(char *path) {\n"
+        "    if (path == 0) fs_host_trap(\"read\", path);\n"
+        "    FILE *fp = fopen(path, \"rb\");\n"
+        "    if (fp == 0) fs_host_trap(\"read\", path);\n"
+        "    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); fs_host_trap(\"read\", path); }\n"
+        "    long size = ftell(fp);\n"
+        "    if (size < 0) { fclose(fp); fs_host_trap(\"read\", path); }\n"
+        "    if (fseek(fp, 0, SEEK_SET) != 0) { fclose(fp); fs_host_trap(\"read\", path); }\n"
+        "    char *buf = (char *)malloc((size_t)size + 1);\n"
+        "    if (buf == 0) { fclose(fp); fs_host_trap(\"read\", path); }\n"
+        "    size_t got = fread(buf, 1, (size_t)size, fp);\n"
+        "    if (got != (size_t)size) { free(buf); fclose(fp); fs_host_trap(\"read\", path); }\n"
+        "    buf[size] = '\\0';\n"
+        "    if (fclose(fp) != 0) { free(buf); fs_host_trap(\"read\", path); }\n"
+        "    return buf;\n"
+        "}\n"
+        "\n"
+        "char *fs_cwd(void) {\n"
+        "    char *cwd = getcwd(0, 0);\n"
+        "    if (cwd == 0) fs_host_trap(\"cwd\", \"\");\n"
+        "    return cwd;\n"
+        "}\n"
+        "\n"
+        "char *fs_temp_dir(void) {\n"
+        "    const char *tmp = getenv(\"TMPDIR\");\n"
+        "    if (tmp == 0 || tmp[0] == '\\0') tmp = getenv(\"TEMP\");\n"
+        "    if (tmp == 0 || tmp[0] == '\\0') tmp = getenv(\"TMP\");\n"
+        "    if (tmp == 0 || tmp[0] == '\\0') tmp = \"/tmp\";\n"
+        "    return fs_host_copy(tmp);\n"
+        "}\n"
+        "\n"
+        "char *path_join(char *base, char *child) {\n"
+        "    if (base == 0 || child == 0) fs_host_trap(\"path_join\", base == 0 ? base : child);\n"
+        "    if (child[0] == '\\0') return fs_host_copy(base);\n"
+        "    if (path_is_absolute(child)) return fs_host_copy(child);\n"
+        "    size_t blen = strlen(base);\n"
+        "    size_t clen = strlen(child);\n"
+        "    if (blen == 0) return fs_host_copy(child);\n"
+        "    int need_sep = base[blen - 1] != '/';\n"
+        "    char *out = (char *)malloc(blen + (size_t)need_sep + clen + 1);\n"
+        "    if (out == 0) fs_host_trap(\"path_join\", base);\n"
+        "    memcpy(out, base, blen);\n"
+        "    size_t pos = blen;\n"
+        "    if (need_sep) {\n"
+        "        out[pos] = '/';\n"
+        "        pos = pos + 1;\n"
+        "    }\n"
+        "    memcpy(out + pos, child, clen);\n"
+        "    out[pos + clen] = '\\0';\n"
+        "    return out;\n"
+        "}\n"
+        "\n"
+        "static size_t path_trim_trailing(const char *path, size_t len) {\n"
+        "    while (len > 1 && path[len - 1] == '/') len = len - 1;\n"
+        "    return len;\n"
+        "}\n"
+        "\n"
+        "char *path_basename(char *path) {\n"
+        "    if (path == 0) fs_host_trap(\"path_basename\", path);\n"
+        "    size_t len = path_trim_trailing(path, strlen(path));\n"
+        "    if (len == 0) return fs_host_copy(\"\");\n"
+        "    if (len == 1 && path[0] == '/') return fs_host_copy_n(path, 1);\n"
+        "    size_t start = len;\n"
+        "    while (start > 0 && path[start - 1] != '/') start = start - 1;\n"
+        "    return fs_host_copy_n(path + start, len - start);\n"
+        "}\n"
+        "\n"
+        "char *path_dirname(char *path) {\n"
+        "    if (path == 0) fs_host_trap(\"path_dirname\", path);\n"
+        "    size_t len = path_trim_trailing(path, strlen(path));\n"
+        "    if (len == 0) return fs_host_copy(\".\");\n"
+        "    if (len == 1 && path[0] == '/') return fs_host_copy(\"/\");\n"
+        "    size_t end = len;\n"
+        "    while (end > 0 && path[end - 1] != '/') end = end - 1;\n"
+        "    if (end == 0) return fs_host_copy(\".\");\n"
+        "    while (end > 1 && path[end - 1] == '/') end = end - 1;\n"
+        "    if (end == 0) return fs_host_copy(\".\");\n"
+        "    return fs_host_copy_n(path, end);\n"
+        "}\n"
+        "\n"
+        "char *str_concat(char *left, char *right) {\n"
+        "    if (left == 0 || right == 0) fs_host_trap(\"str_concat\", left == 0 ? left : right);\n"
+        "    size_t llen = strlen(left);\n"
+        "    size_t rlen = strlen(right);\n"
+        "    char *out = (char *)malloc(llen + rlen + 1);\n"
+        "    if (out == 0) fs_host_trap(\"str_concat\", left);\n"
+        "    memcpy(out, left, llen);\n"
+        "    memcpy(out + llen, right, rlen);\n"
+        "    out[llen + rlen] = '\\0';\n"
+        "    return out;\n"
+        "}\n"
+        "\n"
+        "char *str_slice(char *text, int64_t start, int64_t len) {\n"
+        "    if (text == 0) fs_host_trap(\"str_slice\", text);\n"
+        "    if (start < 0 || len < 0) fs_host_trap(\"str_slice\", text);\n"
+        "    size_t n = strlen(text);\n"
+        "    if ((size_t)start > n || (size_t)len > n - (size_t)start) fs_host_trap(\"str_slice\", text);\n"
+        "    return fs_host_copy_n(text + start, (size_t)len);\n"
+        "}\n"
+        "\n"
+        "char *str_byte(int64_t value) {\n"
+        "    if (value < 0 || value > 255) fs_host_trap(\"str_byte\", \"\");\n"
+        "    char tmp[2];\n"
+        "    tmp[0] = (char)value;\n"
+        "    tmp[1] = '\\0';\n"
+        "    return fs_host_copy_n(tmp, 1);\n"
+        "}\n"
+        "\n"
+        "typedef struct {\n"
+        "    char *data;\n"
+        "    size_t len;\n"
+        "    size_t cap;\n"
+        "} VaisStrBuilder;\n"
+        "\n"
+        "static VaisStrBuilder *str_builder_ptr(int64_t handle) {\n"
+        "    if (handle == 0) fs_host_trap(\"str_builder\", \"\");\n"
+        "    return (VaisStrBuilder *)(intptr_t)handle;\n"
+        "}\n"
+        "\n"
+        "static void str_builder_reserve(VaisStrBuilder *builder, size_t extra) {\n"
+        "    if (builder == 0) fs_host_trap(\"str_builder\", \"\");\n"
+        "    if (extra > (size_t)-1 - builder->len - 1) fs_host_trap(\"str_builder\", \"\");\n"
+        "    size_t need = builder->len + extra + 1;\n"
+        "    if (need <= builder->cap) return;\n"
+        "    size_t cap = builder->cap == 0 ? 64 : builder->cap;\n"
+        "    while (cap < need) {\n"
+        "        if (cap > (size_t)-1 / 2) {\n"
+        "            cap = need;\n"
+        "            break;\n"
+        "        }\n"
+        "        cap = cap * 2;\n"
+        "    }\n"
+        "    char *data = (char *)realloc(builder->data, cap);\n"
+        "    if (data == 0) fs_host_trap(\"str_builder_alloc\", \"\");\n"
+        "    builder->data = data;\n"
+        "    builder->cap = cap;\n"
+        "}\n"
+        "\n"
+        "int64_t str_builder_new(void) {\n"
+        "    VaisStrBuilder *builder = (VaisStrBuilder *)calloc(1, sizeof(VaisStrBuilder));\n"
+        "    if (builder == 0) fs_host_trap(\"str_builder_new\", \"\");\n"
+        "    str_builder_reserve(builder, 0);\n"
+        "    builder->data[0] = '\\0';\n"
+        "    return (int64_t)(intptr_t)builder;\n"
+        "}\n"
+        "\n"
+        "int64_t str_builder_push(int64_t handle, int64_t value) {\n"
+        "    if (value < 0 || value > 255) fs_host_trap(\"str_builder_push\", \"\");\n"
+        "    VaisStrBuilder *builder = str_builder_ptr(handle);\n"
+        "    str_builder_reserve(builder, 1);\n"
+        "    builder->data[builder->len] = (char)value;\n"
+        "    builder->len += 1;\n"
+        "    builder->data[builder->len] = '\\0';\n"
+        "    return 0;\n"
+        "}\n"
+        "\n"
+        "int64_t str_builder_append(int64_t handle, char *text) {\n"
+        "    if (text == 0) fs_host_trap(\"str_builder_append\", \"\");\n"
+        "    VaisStrBuilder *builder = str_builder_ptr(handle);\n"
+        "    size_t len = strlen(text);\n"
+        "    str_builder_reserve(builder, len);\n"
+        "    memcpy(builder->data + builder->len, text, len);\n"
+        "    builder->len += len;\n"
+        "    builder->data[builder->len] = '\\0';\n"
+        "    return 0;\n"
+        "}\n"
+        "\n"
+        "char *str_builder_finish(int64_t handle) {\n"
+        "    VaisStrBuilder *builder = str_builder_ptr(handle);\n"
+        "    return fs_host_copy_n(builder->data, builder->len);\n"
+        "}\n"
+        "\n"
+        "char *proc_capture_stdout(int64_t *argv_buf) {\n"
+        "    if (argv_buf == 0) return fs_host_copy(\"\");\n"
+        "    int64_t argc = argv_buf[4095];\n"
+        "    if (argc <= 0 || argc > 4095) return fs_host_copy(\"\");\n"
+        "    char **argv = (char **)malloc((size_t)(argc + 1) * sizeof(char *));\n"
+        "    if (argv == 0) fs_host_trap(\"proc_capture_stdout\", \"argv\");\n"
+        "    for (int64_t i = 0; i < argc; i++) {\n"
+        "        argv[i] = (char *)(intptr_t)argv_buf[i];\n"
+        "        if (argv[i] == 0) {\n"
+        "            free(argv);\n"
+        "            return fs_host_copy(\"\");\n"
+        "        }\n"
+        "    }\n"
+        "    argv[argc] = 0;\n"
+        "    int pipefd[2];\n"
+        "    if (pipe(pipefd) != 0) {\n"
+        "        free(argv);\n"
+        "        fs_host_trap(\"proc_capture_stdout\", \"pipe\");\n"
+        "    }\n"
+        "    pid_t pid = fork();\n"
+        "    if (pid < 0) {\n"
+        "        close(pipefd[0]);\n"
+        "        close(pipefd[1]);\n"
+        "        free(argv);\n"
+        "        fs_host_trap(\"proc_capture_stdout\", \"fork\");\n"
+        "    }\n"
+        "    if (pid == 0) {\n"
+        "        close(pipefd[0]);\n"
+        "        if (dup2(pipefd[1], STDOUT_FILENO) < 0) _exit(127);\n"
+        "        close(pipefd[1]);\n"
+        "        execvp(argv[0], argv);\n"
+        "        fprintf(stderr, \"vais host proc_capture_stdout failed: %s: %s\\n\", argv[0], strerror(errno == 0 ? EIO : errno));\n"
+        "        _exit(127);\n"
+        "    }\n"
+        "    close(pipefd[1]);\n"
+        "    size_t len = 0;\n"
+        "    size_t cap = 256;\n"
+        "    char *out = (char *)malloc(cap);\n"
+        "    if (out == 0) fs_host_trap(\"proc_capture_stdout\", \"alloc\");\n"
+        "    char buf[512];\n"
+        "    for (;;) {\n"
+        "        ssize_t n = read(pipefd[0], buf, sizeof(buf));\n"
+        "        if (n < 0 && errno == EINTR) continue;\n"
+        "        if (n < 0) {\n"
+        "            close(pipefd[0]);\n"
+        "            free(out);\n"
+        "            free(argv);\n"
+        "            fs_host_trap(\"proc_capture_stdout\", \"read\");\n"
+        "        }\n"
+        "        if (n == 0) break;\n"
+        "        if (len + (size_t)n + 1 > cap) {\n"
+        "            while (len + (size_t)n + 1 > cap) cap = cap * 2;\n"
+        "            char *next = (char *)realloc(out, cap);\n"
+        "            if (next == 0) {\n"
+        "                close(pipefd[0]);\n"
+        "                free(out);\n"
+        "                free(argv);\n"
+        "                fs_host_trap(\"proc_capture_stdout\", \"alloc\");\n"
+        "            }\n"
+        "            out = next;\n"
+        "        }\n"
+        "        memcpy(out + len, buf, (size_t)n);\n"
+        "        len = len + (size_t)n;\n"
+        "    }\n"
+        "    close(pipefd[0]);\n"
+        "    int status = 0;\n"
+        "    while (waitpid(pid, &status, 0) < 0) {\n"
+        "        if (errno == EINTR) continue;\n"
+        "        break;\n"
+        "    }\n"
+        "    free(argv);\n"
+        "    out[len] = '\\0';\n"
+        "    return out;\n"
+        "}\n"
+        "\n"
+        "char *proc_capture_stderr(int64_t *argv_buf) {\n"
+        "    if (argv_buf == 0) return fs_host_copy(\"\");\n"
+        "    int64_t argc = argv_buf[4095];\n"
+        "    if (argc <= 0 || argc > 4095) return fs_host_copy(\"\");\n"
+        "    char **argv = (char **)malloc((size_t)(argc + 1) * sizeof(char *));\n"
+        "    if (argv == 0) fs_host_trap(\"proc_capture_stderr\", \"argv\");\n"
+        "    for (int64_t i = 0; i < argc; i++) {\n"
+        "        argv[i] = (char *)(intptr_t)argv_buf[i];\n"
+        "        if (argv[i] == 0) {\n"
+        "            free(argv);\n"
+        "            return fs_host_copy(\"\");\n"
+        "        }\n"
+        "    }\n"
+        "    argv[argc] = 0;\n"
+        "    int pipefd[2];\n"
+        "    if (pipe(pipefd) != 0) {\n"
+        "        free(argv);\n"
+        "        fs_host_trap(\"proc_capture_stderr\", \"pipe\");\n"
+        "    }\n"
+        "    pid_t pid = fork();\n"
+        "    if (pid < 0) {\n"
+        "        close(pipefd[0]);\n"
+        "        close(pipefd[1]);\n"
+        "        free(argv);\n"
+        "        fs_host_trap(\"proc_capture_stderr\", \"fork\");\n"
+        "    }\n"
+        "    if (pid == 0) {\n"
+        "        close(pipefd[0]);\n"
+        "        if (dup2(pipefd[1], STDERR_FILENO) < 0) _exit(127);\n"
+        "        close(pipefd[1]);\n"
+        "        execvp(argv[0], argv);\n"
+        "        fprintf(stderr, \"vais host proc_capture_stderr failed: %s: %s\\n\", argv[0], strerror(errno == 0 ? EIO : errno));\n"
+        "        _exit(127);\n"
+        "    }\n"
+        "    close(pipefd[1]);\n"
+        "    size_t len = 0;\n"
+        "    size_t cap = 256;\n"
+        "    char *out = (char *)malloc(cap);\n"
+        "    if (out == 0) fs_host_trap(\"proc_capture_stderr\", \"alloc\");\n"
+        "    char buf[512];\n"
+        "    for (;;) {\n"
+        "        ssize_t n = read(pipefd[0], buf, sizeof(buf));\n"
+        "        if (n < 0 && errno == EINTR) continue;\n"
+        "        if (n < 0) {\n"
+        "            close(pipefd[0]);\n"
+        "            free(out);\n"
+        "            free(argv);\n"
+        "            fs_host_trap(\"proc_capture_stderr\", \"read\");\n"
+        "        }\n"
+        "        if (n == 0) break;\n"
+        "        if (len + (size_t)n + 1 > cap) {\n"
+        "            while (len + (size_t)n + 1 > cap) cap = cap * 2;\n"
+        "            char *next = (char *)realloc(out, cap);\n"
+        "            if (next == 0) {\n"
+        "                close(pipefd[0]);\n"
+        "                free(out);\n"
+        "                free(argv);\n"
+        "                fs_host_trap(\"proc_capture_stderr\", \"alloc\");\n"
+        "            }\n"
+        "            out = next;\n"
+        "        }\n"
+        "        memcpy(out + len, buf, (size_t)n);\n"
+        "        len = len + (size_t)n;\n"
+        "    }\n"
+        "    close(pipefd[0]);\n"
+        "    int status = 0;\n"
+        "    while (waitpid(pid, &status, 0) < 0) {\n"
+        "        if (errno == EINTR) continue;\n"
+        "        break;\n"
+        "    }\n"
+        "    free(argv);\n"
+        "    out[len] = '\\0';\n"
+        "    return out;\n"
+        "}\n"
+        "\n"
+        "static int proc_redirect_path(const char *path, int fd) {\n"
+        "    if (path == 0 || path[0] == '\\0') return 0;\n"
+        "    int out = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0666);\n"
+        "    if (out < 0) return 1;\n"
+        "    if (dup2(out, fd) < 0) { close(out); return 1; }\n"
+        "    close(out);\n"
+        "    return 0;\n"
+        "}\n"
+        "\n"
+        "int64_t proc_capture_to(int64_t *argv_buf, char *stdout_path, char *stderr_path) {\n"
+        "    if (argv_buf == 0) return 1;\n"
+        "    int64_t argc = argv_buf[4095];\n"
+        "    if (argc <= 0 || argc > 4095) return 1;\n"
+        "    char **argv = (char **)malloc((size_t)(argc + 1) * sizeof(char *));\n"
+        "    if (argv == 0) return errno == 0 ? 1 : errno;\n"
+        "    for (int64_t i = 0; i < argc; i++) {\n"
+        "        argv[i] = (char *)(intptr_t)argv_buf[i];\n"
+        "        if (argv[i] == 0) {\n"
+        "            free(argv);\n"
+        "            return 1;\n"
+        "        }\n"
+        "    }\n"
+        "    argv[argc] = 0;\n"
+        "    pid_t pid = fork();\n"
+        "    if (pid < 0) {\n"
+        "        int err = errno == 0 ? 1 : errno;\n"
+        "        free(argv);\n"
+        "        return err;\n"
+        "    }\n"
+        "    if (pid == 0) {\n"
+        "        if (proc_redirect_path(stdout_path, STDOUT_FILENO) != 0) _exit(127);\n"
+        "        if (proc_redirect_path(stderr_path, STDERR_FILENO) != 0) _exit(127);\n"
+        "        execvp(argv[0], argv);\n"
+        "        fprintf(stderr, \"vais host proc_capture_to failed: %s: %s\\n\", argv[0], strerror(errno == 0 ? EIO : errno));\n"
+        "        _exit(127);\n"
+        "    }\n"
+        "    int status = 0;\n"
+        "    while (waitpid(pid, &status, 0) < 0) {\n"
+        "        if (errno == EINTR) continue;\n"
+        "        int err = errno == 0 ? 1 : errno;\n"
+        "        free(argv);\n"
+        "        return err;\n"
+        "    }\n"
+        "    free(argv);\n"
+        "    if (WIFEXITED(status)) return WEXITSTATUS(status);\n"
+        "    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);\n"
+        "    return 1;\n"
+        "}\n"
+        "\n"
+        "static int proc_apply_env(int64_t *env_buf) {\n"
+        "    if (env_buf == 0) return 0;\n"
+        "    int64_t envc = env_buf[4095];\n"
+        "    if (envc < 0 || envc > 4095) return 1;\n"
+        "    for (int64_t i = 0; i < envc; i++) {\n"
+        "        char *entry = (char *)(intptr_t)env_buf[i];\n"
+        "        if (entry == 0) return 1;\n"
+        "        char *eq = strchr(entry, '=');\n"
+        "        if (eq == 0 || eq == entry) return 1;\n"
+        "        size_t key_len = (size_t)(eq - entry);\n"
+        "        char *key = (char *)malloc(key_len + 1);\n"
+        "        if (key == 0) return 1;\n"
+        "        memcpy(key, entry, key_len);\n"
+        "        key[key_len] = '\\0';\n"
+        "        if (setenv(key, eq + 1, 1) != 0) {\n"
+        "            free(key);\n"
+        "            return 1;\n"
+        "        }\n"
+        "        free(key);\n"
+        "    }\n"
+        "    return 0;\n"
+        "}\n"
+        "\n"
+        "int64_t proc_run(int64_t *argv_buf) {\n"
+        "    if (argv_buf == 0) return 1;\n"
+        "    int64_t argc = argv_buf[4095];\n"
+        "    if (argc <= 0 || argc > 4095) return 1;\n"
+        "    char **argv = (char **)malloc((size_t)(argc + 1) * sizeof(char *));\n"
+        "    if (argv == 0) return errno == 0 ? 1 : errno;\n"
+        "    for (int64_t i = 0; i < argc; i++) {\n"
+        "        argv[i] = (char *)(intptr_t)argv_buf[i];\n"
+        "        if (argv[i] == 0) {\n"
+        "            free(argv);\n"
+        "            return 1;\n"
+        "        }\n"
+        "    }\n"
+        "    argv[argc] = 0;\n"
+        "    pid_t pid = fork();\n"
+        "    if (pid < 0) {\n"
+        "        int err = errno == 0 ? 1 : errno;\n"
+        "        free(argv);\n"
+        "        return err;\n"
+        "    }\n"
+        "    if (pid == 0) {\n"
+        "        execvp(argv[0], argv);\n"
+        "        fprintf(stderr, \"vais host proc_run failed: %s: %s\\n\", argv[0], strerror(errno == 0 ? EIO : errno));\n"
+        "        _exit(127);\n"
+        "    }\n"
+        "    int status = 0;\n"
+        "    while (waitpid(pid, &status, 0) < 0) {\n"
+        "        if (errno == EINTR) continue;\n"
+        "        int err = errno == 0 ? 1 : errno;\n"
+        "        free(argv);\n"
+        "        return err;\n"
+        "    }\n"
+        "    free(argv);\n"
+        "    if (WIFEXITED(status)) return WEXITSTATUS(status);\n"
+        "    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);\n"
+        "    return 1;\n"
+        "}\n"
+        "\n"
+        "int64_t proc_run_env(int64_t *argv_buf, int64_t *env_buf) {\n"
+        "    if (argv_buf == 0) return 1;\n"
+        "    int64_t argc = argv_buf[4095];\n"
+        "    if (argc <= 0 || argc > 4095) return 1;\n"
+        "    char **argv = (char **)malloc((size_t)(argc + 1) * sizeof(char *));\n"
+        "    if (argv == 0) return errno == 0 ? 1 : errno;\n"
+        "    for (int64_t i = 0; i < argc; i++) {\n"
+        "        argv[i] = (char *)(intptr_t)argv_buf[i];\n"
+        "        if (argv[i] == 0) {\n"
+        "            free(argv);\n"
+        "            return 1;\n"
+        "        }\n"
+        "    }\n"
+        "    argv[argc] = 0;\n"
+        "    pid_t pid = fork();\n"
+        "    if (pid < 0) {\n"
+        "        int err = errno == 0 ? 1 : errno;\n"
+        "        free(argv);\n"
+        "        return err;\n"
+        "    }\n"
+        "    if (pid == 0) {\n"
+        "        if (proc_apply_env(env_buf) != 0) _exit(127);\n"
+        "        execvp(argv[0], argv);\n"
+        "        fprintf(stderr, \"vais host proc_run_env failed: %s: %s\\n\", argv[0], strerror(errno == 0 ? EIO : errno));\n"
+        "        _exit(127);\n"
+        "    }\n"
+        "    int status = 0;\n"
+        "    while (waitpid(pid, &status, 0) < 0) {\n"
+        "        if (errno == EINTR) continue;\n"
+        "        int err = errno == 0 ? 1 : errno;\n"
+        "        free(argv);\n"
+        "        return err;\n"
+        "    }\n"
+        "    free(argv);\n"
+        "    if (WIFEXITED(status)) return WEXITSTATUS(status);\n"
+        "    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);\n"
+        "    return 1;\n"
+        "}\n"
+        "\n"
+        "int64_t fs_write_text(char *path, char *text) {\n"
+        "    if (path == 0 || text == 0) return 1;\n"
+        "    FILE *fp = fopen(path, \"wb\");\n"
+        "    if (fp == 0) return errno == 0 ? 1 : errno;\n"
+        "    if (fputs(text, fp) < 0) {\n"
+        "        int err = errno == 0 ? 1 : errno;\n"
+        "        fclose(fp);\n"
+        "        return err;\n"
+        "    }\n"
+        "    if (fclose(fp) != 0) return errno == 0 ? 1 : errno;\n"
+        "    return 0;\n"
+        "}\n"
+        "\n"
+        "static int64_t fs_mkdir_one(const char *path) {\n"
+        "    if (path == 0 || path[0] == '\\0') return 0;\n"
+        "    if (mkdir(path, 0777) == 0) return 0;\n"
+        "    if (errno == EEXIST) {\n"
+        "        struct stat st;\n"
+        "        if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) return 0;\n"
+        "        return ENOTDIR;\n"
+        "    }\n"
+        "    return errno == 0 ? 1 : errno;\n"
+        "}\n"
+        "\n"
+        "int64_t fs_mkdirs(char *path) {\n"
+        "    if (path == 0 || path[0] == '\\0') return 1;\n"
+        "    char buf[4096];\n"
+        "    size_t len = strlen(path);\n"
+        "    if (len >= sizeof(buf)) return ENAMETOOLONG;\n"
+        "    memcpy(buf, path, len + 1);\n"
+        "    while (len > 1 && buf[len - 1] == '/') {\n"
+        "        buf[len - 1] = '\\0';\n"
+        "        len = len - 1;\n"
+        "    }\n"
+        "    for (char *p = buf + 1; *p != '\\0'; p++) {\n"
+        "        if (*p == '/') {\n"
+        "            *p = '\\0';\n"
+        "            int64_t rc = fs_mkdir_one(buf);\n"
+        "            *p = '/';\n"
+        "            if (rc != 0) return rc;\n"
+        "        }\n"
+        "    }\n"
+        "    return fs_mkdir_one(buf);\n"
+        "}\n"
+        "\n"
+        "int64_t fs_remove(char *path) {\n"
+        "    if (path == 0 || path[0] == '\\0') return 1;\n"
+        "    if (unlink(path) == 0) return 0;\n"
+        "    if (errno == ENOENT) return 0;\n"
+        "    return errno == 0 ? 1 : errno;\n"
+        "}\n",
+        fp
+    );
+    if (fclose(fp) != 0) {
+        fprintf(stderr, "error: cannot close %s: %s\n", path, strerror(errno));
+        return 1;
+    }
+    return 0;
+}
+
 static int run_program_wait(char *const argv[]) {
     pid_t pid = fork();
     if (pid < 0) {
@@ -6425,7 +7686,21 @@ static int run_program_wait(char *const argv[]) {
 }
 
 static int clang_build(const char *clang, const char *ir_path, const char *out_path) {
-    char *const argv[] = {(char *)clang, "-Wno-override-module", "-o", (char *)out_path, (char *)ir_path, NULL};
+    char runtime_path[512];
+    char link_ir_path[512];
+    if (make_tmp_path(runtime_path, sizeof(runtime_path), "host_runtime.c") != 0) return 1;
+    if (make_tmp_path(link_ir_path, sizeof(link_ir_path), "link.ll") != 0) return 1;
+    if (write_link_ir_entrypoint(ir_path, link_ir_path) != 0) return 1;
+    if (write_host_runtime_c(runtime_path) != 0) return 1;
+    char *const argv[] = {
+        (char *)clang,
+        "-Wno-override-module",
+        "-o",
+        (char *)out_path,
+        link_ir_path,
+        runtime_path,
+        NULL
+    };
     int rc = run_program_wait(argv);
     if (rc != 0) {
         fprintf(stderr, "error: clang failed with exit code %d\n", rc);
@@ -6570,9 +7845,20 @@ static int command_run(int argc, char **argv) {
     const char *source = NULL;
     const char *engine = "full";
     const char *clang = getenv("CLANG");
+    const char *program_args[256];
+    int program_argc = 0;
     if (clang == NULL || clang[0] == '\0') clang = "clang";
     for (int i = 2; i < argc; i++) {
-        if (strcmp(argv[i], "--clang") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--") == 0) {
+            for (int j = i + 1; j < argc; j++) {
+                if (program_argc >= 256) {
+                    fprintf(stderr, "error: too many program arguments\n");
+                    return 1;
+                }
+                program_args[program_argc++] = argv[j];
+            }
+            break;
+        } else if (strcmp(argv[i], "--clang") == 0 && i + 1 < argc) {
             clang = argv[++i];
         } else if (strcmp(argv[i], "--engine") == 0 && i + 1 < argc) {
             engine = argv[++i];
@@ -6597,7 +7883,12 @@ static int command_run(int argc, char **argv) {
     int build_argc = 9;
     int rc = command_build(build_argc, build_argv);
     if (rc != 0) return rc;
-    char *const run_argv[] = {bin_path, NULL};
+    char *run_argv[258];
+    run_argv[0] = bin_path;
+    for (int i = 0; i < program_argc; i++) {
+        run_argv[i + 1] = (char *)program_args[i];
+    }
+    run_argv[program_argc + 1] = NULL;
     return run_program_wait(run_argv);
 }
 

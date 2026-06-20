@@ -13,7 +13,7 @@
 
 # Token kinds: 0=num,1=ident,2='+',3='*',4='-',38='/',39='%',5='=',6=';',7=let,8=return,21=mut,
 #              18='<',19='>',20='==',22=while,11='{',12='}',9='(',10=')',13=fn,
-#              15=if,17=else,25=','
+#              15=if,17=else,25=',',40=break,41=continue
 struct Token { kind: Int, value: Int, nstart: Int, nlen: Int }
 # Operand: kind 0=literal(val), 1=temp(%t<val>). next = next free SSA temp.
 struct Op { kind: Int, val: Int, next: Int }
@@ -159,6 +159,228 @@ fn is_contains(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 6] != 110 { return 0 }
     if src[a + 7] != 115 { return 0 }
     return 1
+}
+fn is_fs_read_text(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 12 { return 0 }
+    if src[a] != 102 { return 0 }
+    if src[a + 1] != 115 { return 0 }
+    if src[a + 2] != 95 { return 0 }
+    if src[a + 3] != 114 { return 0 }
+    if src[a + 4] != 101 { return 0 }
+    if src[a + 5] != 97 { return 0 }
+    if src[a + 6] != 100 { return 0 }
+    if src[a + 7] != 95 { return 0 }
+    if src[a + 8] != 116 { return 0 }
+    if src[a + 9] != 101 { return 0 }
+    if src[a + 10] != 120 { return 0 }
+    if src[a + 11] != 116 { return 0 }
+    return 1
+}
+fn is_fs_cwd(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 6 { return 0 }
+    if src[a] != 102 { return 0 }
+    if src[a + 1] != 115 { return 0 }
+    if src[a + 2] != 95 { return 0 }
+    if src[a + 3] != 99 { return 0 }
+    if src[a + 4] != 119 { return 0 }
+    if src[a + 5] != 100 { return 0 }
+    return 1
+}
+fn is_fs_temp_dir(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 11 { return 0 }
+    if src[a] != 102 { return 0 }
+    if src[a + 1] != 115 { return 0 }
+    if src[a + 2] != 95 { return 0 }
+    if src[a + 3] != 116 { return 0 }
+    if src[a + 4] != 101 { return 0 }
+    if src[a + 5] != 109 { return 0 }
+    if src[a + 6] != 112 { return 0 }
+    if src[a + 7] != 95 { return 0 }
+    if src[a + 8] != 100 { return 0 }
+    if src[a + 9] != 105 { return 0 }
+    if src[a + 10] != 114 { return 0 }
+    return 1
+}
+fn is_path_join(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 9 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 97 { return 0 }
+    if src[a + 2] != 116 { return 0 }
+    if src[a + 3] != 104 { return 0 }
+    if src[a + 4] != 95 { return 0 }
+    if src[a + 5] != 106 { return 0 }
+    if src[a + 6] != 111 { return 0 }
+    if src[a + 7] != 105 { return 0 }
+    if src[a + 8] != 110 { return 0 }
+    return 1
+}
+fn is_path_basename(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 13 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 97 { return 0 }
+    if src[a + 2] != 116 { return 0 }
+    if src[a + 3] != 104 { return 0 }
+    if src[a + 4] != 95 { return 0 }
+    if src[a + 5] != 98 { return 0 }
+    if src[a + 6] != 97 { return 0 }
+    if src[a + 7] != 115 { return 0 }
+    if src[a + 8] != 101 { return 0 }
+    if src[a + 9] != 110 { return 0 }
+    if src[a + 10] != 97 { return 0 }
+    if src[a + 11] != 109 { return 0 }
+    if src[a + 12] != 101 { return 0 }
+    return 1
+}
+fn is_path_dirname(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 12 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 97 { return 0 }
+    if src[a + 2] != 116 { return 0 }
+    if src[a + 3] != 104 { return 0 }
+    if src[a + 4] != 95 { return 0 }
+    if src[a + 5] != 100 { return 0 }
+    if src[a + 6] != 105 { return 0 }
+    if src[a + 7] != 114 { return 0 }
+    if src[a + 8] != 110 { return 0 }
+    if src[a + 9] != 97 { return 0 }
+    if src[a + 10] != 109 { return 0 }
+    if src[a + 11] != 101 { return 0 }
+    return 1
+}
+fn is_str_concat(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 10 { return 0 }
+    if src[a] != 115 { return 0 }
+    if src[a + 1] != 116 { return 0 }
+    if src[a + 2] != 114 { return 0 }
+    if src[a + 3] != 95 { return 0 }
+    if src[a + 4] != 99 { return 0 }
+    if src[a + 5] != 111 { return 0 }
+    if src[a + 6] != 110 { return 0 }
+    if src[a + 7] != 99 { return 0 }
+    if src[a + 8] != 97 { return 0 }
+    if src[a + 9] != 116 { return 0 }
+    return 1
+}
+fn is_str_slice(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 9 { return 0 }
+    if src[a] != 115 { return 0 }
+    if src[a + 1] != 116 { return 0 }
+    if src[a + 2] != 114 { return 0 }
+    if src[a + 3] != 95 { return 0 }
+    if src[a + 4] != 115 { return 0 }
+    if src[a + 5] != 108 { return 0 }
+    if src[a + 6] != 105 { return 0 }
+    if src[a + 7] != 99 { return 0 }
+    if src[a + 8] != 101 { return 0 }
+    return 1
+}
+fn is_str_byte(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 8 { return 0 }
+    if src[a] != 115 { return 0 }
+    if src[a + 1] != 116 { return 0 }
+    if src[a + 2] != 114 { return 0 }
+    if src[a + 3] != 95 { return 0 }
+    if src[a + 4] != 98 { return 0 }
+    if src[a + 5] != 121 { return 0 }
+    if src[a + 6] != 116 { return 0 }
+    if src[a + 7] != 101 { return 0 }
+    return 1
+}
+fn is_str_builder_finish(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 18 { return 0 }
+    if src[a] != 115 { return 0 }
+    if src[a + 1] != 116 { return 0 }
+    if src[a + 2] != 114 { return 0 }
+    if src[a + 3] != 95 { return 0 }
+    if src[a + 4] != 98 { return 0 }
+    if src[a + 5] != 117 { return 0 }
+    if src[a + 6] != 105 { return 0 }
+    if src[a + 7] != 108 { return 0 }
+    if src[a + 8] != 100 { return 0 }
+    if src[a + 9] != 101 { return 0 }
+    if src[a + 10] != 114 { return 0 }
+    if src[a + 11] != 95 { return 0 }
+    if src[a + 12] != 102 { return 0 }
+    if src[a + 13] != 105 { return 0 }
+    if src[a + 14] != 110 { return 0 }
+    if src[a + 15] != 105 { return 0 }
+    if src[a + 16] != 115 { return 0 }
+    if src[a + 17] != 104 { return 0 }
+    return 1
+}
+fn is_proc_arg(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 8 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 114 { return 0 }
+    if src[a + 2] != 111 { return 0 }
+    if src[a + 3] != 99 { return 0 }
+    if src[a + 4] != 95 { return 0 }
+    if src[a + 5] != 97 { return 0 }
+    if src[a + 6] != 114 { return 0 }
+    if src[a + 7] != 103 { return 0 }
+    return 1
+}
+fn is_proc_capture_stdout(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 19 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 114 { return 0 }
+    if src[a + 2] != 111 { return 0 }
+    if src[a + 3] != 99 { return 0 }
+    if src[a + 4] != 95 { return 0 }
+    if src[a + 5] != 99 { return 0 }
+    if src[a + 6] != 97 { return 0 }
+    if src[a + 7] != 112 { return 0 }
+    if src[a + 8] != 116 { return 0 }
+    if src[a + 9] != 117 { return 0 }
+    if src[a + 10] != 114 { return 0 }
+    if src[a + 11] != 101 { return 0 }
+    if src[a + 12] != 95 { return 0 }
+    if src[a + 13] != 115 { return 0 }
+    if src[a + 14] != 116 { return 0 }
+    if src[a + 15] != 100 { return 0 }
+    if src[a + 16] != 111 { return 0 }
+    if src[a + 17] != 117 { return 0 }
+    if src[a + 18] != 116 { return 0 }
+    return 1
+}
+fn is_proc_capture_stderr(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 19 { return 0 }
+    if src[a] != 112 { return 0 }
+    if src[a + 1] != 114 { return 0 }
+    if src[a + 2] != 111 { return 0 }
+    if src[a + 3] != 99 { return 0 }
+    if src[a + 4] != 95 { return 0 }
+    if src[a + 5] != 99 { return 0 }
+    if src[a + 6] != 97 { return 0 }
+    if src[a + 7] != 112 { return 0 }
+    if src[a + 8] != 116 { return 0 }
+    if src[a + 9] != 117 { return 0 }
+    if src[a + 10] != 114 { return 0 }
+    if src[a + 11] != 101 { return 0 }
+    if src[a + 12] != 95 { return 0 }
+    if src[a + 13] != 115 { return 0 }
+    if src[a + 14] != 116 { return 0 }
+    if src[a + 15] != 100 { return 0 }
+    if src[a + 16] != 101 { return 0 }
+    if src[a + 17] != 114 { return 0 }
+    if src[a + 18] != 114 { return 0 }
+    return 1
+}
+fn is_host_str_return(src: Str, a: Int, alen: Int) -> Int {
+    if is_fs_read_text(src, a, alen) == 1 { return 1 }
+    if is_fs_cwd(src, a, alen) == 1 { return 1 }
+    if is_fs_temp_dir(src, a, alen) == 1 { return 1 }
+    if is_path_join(src, a, alen) == 1 { return 1 }
+    if is_path_basename(src, a, alen) == 1 { return 1 }
+    if is_path_dirname(src, a, alen) == 1 { return 1 }
+    if is_str_concat(src, a, alen) == 1 { return 1 }
+    if is_str_slice(src, a, alen) == 1 { return 1 }
+    if is_str_byte(src, a, alen) == 1 { return 1 }
+    if is_str_builder_finish(src, a, alen) == 1 { return 1 }
+    if is_proc_arg(src, a, alen) == 1 { return 1 }
+    if is_proc_capture_stdout(src, a, alen) == 1 { return 1 }
+    if is_proc_capture_stderr(src, a, alen) == 1 { return 1 }
+    return 0
 }
 
 # Builtin call ids used by the native parity surface:
@@ -326,6 +548,18 @@ fn kw6(src: Str, a: Int, alen: Int, w0: Int, w1: Int, w2: Int, w3: Int, w4: Int,
     if src[a + 5] != w5 { return 0 }
     return 1
 }
+fn is_continue_kw(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 8 { return 0 }
+    if src[a] != 99 { return 0 }
+    if src[a + 1] != 111 { return 0 }
+    if src[a + 2] != 110 { return 0 }
+    if src[a + 3] != 116 { return 0 }
+    if src[a + 4] != 105 { return 0 }
+    if src[a + 5] != 110 { return 0 }
+    if src[a + 6] != 117 { return 0 }
+    if src[a + 7] != 101 { return 0 }
+    return 1
+}
 
 fn string_lit_value_len(src: Str, start: Int, raw_len: Int, delim: Int) -> Int {
     if delim != 34 { return raw_len }
@@ -419,6 +653,10 @@ fn tokenize(src: Str) -> List<Token> {
                 toks.push(Token { kind: 34, value: 0, nstart: start, nlen: len })   # for
             } else if kw2(src, start, len, 105, 110) == 1 {
                 toks.push(Token { kind: 35, value: 0, nstart: start, nlen: len })   # in
+            } else if kw5(src, start, len, 98, 114, 101, 97, 107) == 1 {
+                toks.push(Token { kind: 40, value: 0, nstart: start, nlen: len })   # break
+            } else if is_continue_kw(src, start, len) == 1 {
+                toks.push(Token { kind: 41, value: 0, nstart: start, nlen: len })   # continue
             } else {
                 toks.push(Token { kind: 1, value: 0, nstart: start, nlen: len })
             }
@@ -801,6 +1039,20 @@ fn call_retsty(toks: &List<Token>, fns: &List<Fn>, src: Str, vp: Int) -> Int {
     }
     return 0 - 2
 }
+fn call_retstr(toks: &List<Token>, fns: &List<Fn>, src: Str, vp: Int) -> Int {
+    let r = toks[vp]
+    if r.kind == 1 {
+        let after = toks[vp + 1]
+        if after.kind == 9 {
+            let idx = find_fn(fns, src, r.nstart, r.nlen)
+            if idx >= 0 {
+                let f = fns[idx]
+                if f.retlist == 3 { return 1 }
+            }
+        }
+    }
+    return 0
+}
 
 # Build the function table by scanning for `fn name ( param ) { ... }`.
 fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> List<Fn> {
@@ -913,9 +1165,10 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                 let bt = toks[bo]
                 if bt.kind == 11 { gb = false } else { bo = bo + 1 }
             }
-            # Return type: `-> List<Type>` or `-> StructName` between ')' and
-            # '{'. Both use a hidden out-param: retlist=1 for List, retlist=2
-            # for struct; retty is the element/struct type index (or -1).
+            # Return type between ')' and '{':
+            #   retlist=1 for List, retlist=2 for struct (hidden out-param),
+            #   retlist=3 for Str (direct i8* return).
+            # retty is the element/struct type index (or -1).
             let mut retlist = 0
             let mut retty = 0 - 1
             let mut rq = q + 1
@@ -931,6 +1184,8 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                                 retty = struct_index_by_name(defs, src, et.nstart, et.nlen)
                             }
                         }
+                    } else if kw3(src, rt.nstart, rt.nlen, 83, 116, 114) == 1 {
+                        retlist = 3
                     } else if retlist == 0 {
                         let rst = struct_index_by_name(defs, src, rt.nstart, rt.nlen)
                         if rst >= 0 {
@@ -1758,9 +2013,12 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 }
             }
             let dest = cc
+            let mut retstr = is_host_str_return(src, t.nstart, t.nlen)
+            if call_retstr(toks, fns, src, i) == 1 { retstr = 1 }
             emit_str("  %t")
             pint(dest)
-            emit_str(" = call i64 @")
+            if retstr == 1 { emit_str(" = call i8* @") }
+            else { emit_str(" = call i64 @") }
             emit_name(src, t.nstart, t.nlen)
             emit_str("(")
             let mut ai = 0
@@ -1797,6 +2055,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             rc = sync_list_len(ls7, li7, lb7, rc)
             rc = sync_list_len(ls8, li8, lb8, rc)
             rc = sync_list_len(ls9, li9, lb9, rc)
+            if retstr == 1 { return Op { kind: 2, val: dest, next: rc } }
             return Op { kind: 1, val: dest, next: rc }
         }
         if nx.kind == 27 {
@@ -2703,6 +2962,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             # array/list index read: name [ <expr> ] -> GEP + load
             let slot = find_slot(slots, src, t.nstart, t.nlen)
             let alen = arrlen_of(slots, src, t.nstart, t.nlen)
+            let elem_sty = sty_of(slots, src, t.nstart, t.nlen)
             let bend = bracket_end(toks, i + 2)
             let idx = gen_expr(toks, slots, fns, defs, src, i + 2, bend, counter)
             let mut gepc = idx.next
@@ -2732,6 +2992,16 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             emit_str(" = load i64, i64* %t")
             pint(gepc)
             putchar(10)
+            if karr == 2 and elem_sty == 0 - 2 {
+                let ptrc = loadc + 1
+                emit_str("  %t")
+                pint(ptrc)
+                emit_str(" = inttoptr i64 %t")
+                pint(loadc)
+                emit_str(" to i8*")
+                putchar(10)
+                return Op { kind: 2, val: ptrc, next: ptrc + 1 }
+            }
             return Op { kind: 1, val: loadc, next: loadc + 1 }
         }
         let slot = find_slot(slots, src, t.nstart, t.nlen)
@@ -2942,6 +3212,33 @@ fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
         let rstop = next_logical(toks, i + 1, stop)
         let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, rstop, acc.next)
         let cnum = rhs.next
+        if op.kind == 20 or op.kind == 33 {
+            if acc.kind == 2 {
+                if rhs.kind == 2 {
+                    emit_str("  %t")
+                    pint(cnum)
+                    emit_str(" = call i64 @__vais_str_eq(i8* ")
+                    emit_op(acc)
+                    emit_str(", i8* ")
+                    emit_op(rhs)
+                    emit_str(")")
+                    putchar(10)
+                    if op.kind == 33 {
+                        let nnum = cnum + 1
+                        emit_str("  %t")
+                        pint(nnum)
+                        emit_str(" = xor i64 %t")
+                        pint(cnum)
+                        emit_str(", 1")
+                        putchar(10)
+                        let nacc = Op { kind: 1, val: nnum, next: nnum + 1 }
+                        return gen_fold(toks, slots, fns, defs, src, rstop, stop, nacc)
+                    }
+                    let sacc = Op { kind: 1, val: cnum, next: cnum + 1 }
+                    return gen_fold(toks, slots, fns, defs, src, rstop, stop, sacc)
+                }
+            }
+        }
         emit_str("  %t")
         pint(cnum)
         emit_str(" = icmp ")
@@ -3086,6 +3383,18 @@ fn rhs_is_list(toks: &List<Token>, src: Str, npos: Int) -> Int {
     }
     return 0
 }
+fn rhs_is_host_str_call(toks: &List<Token>, fns: &List<Fn>, src: Str, npos: Int) -> Int {
+    let vp = rhs_pos(toks, npos)
+    let rhs = toks[vp]
+    if rhs.kind == 1 {
+        let after = toks[vp + 1]
+        if after.kind == 9 {
+            if is_host_str_return(src, rhs.nstart, rhs.nlen) == 1 { return 1 }
+            return call_retstr(toks, fns, src, vp)
+        }
+    }
+    return 0
+}
 fn let_anno_is_map_int_int(toks: &List<Token>, src: Str, npos: Int) -> Int {
     let c1 = toks[npos + 1]
     if c1.kind != 16 { return 0 }
@@ -3161,10 +3470,10 @@ fn rhs_los_elem_sty(toks: &List<Token>, slots: &List<Slot>, src: Str, npos: Int)
     }
     return 0 - 1
 }
-# Element struct-type from a let's type annotation `name : List<Type> = ...`,
-# given `npos` = the name token. Returns the struct-type index, or -1 (no
-# annotation, or a non-struct element like List<Int>). This is the authoritative
-# element type for `let toks: List<Token> = []` where no push reveals it.
+# Element type from a let's type annotation `name : List<Type> = ...`, given
+# `npos` = the name token. Returns a struct-type index, -2 for List<Str>, or -1
+# for no annotation / scalar List<Int>. This is the authoritative element type
+# for `let toks: List<Token> = []` where no push reveals it.
 fn let_anno_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, npos: Int) -> Int {
     let c1 = toks[npos + 1]
     if c1.kind == 16 {
@@ -3175,6 +3484,7 @@ fn let_anno_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, npos:
             if lt.kind == 18 {
                 let et = toks[npos + 4]
                 if et.kind == 1 {
+                    if kw3(src, et.nstart, et.nlen, 83, 116, 114) == 1 { return 0 - 2 }
                     return struct_index_by_name(defs, src, et.nstart, et.nlen)
                 }
             }
@@ -3182,10 +3492,10 @@ fn let_anno_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, npos:
     }
     return 0 - 1
 }
-# Element struct-type of `let name = list()` by scanning [start,end) for the
-# first struct push `name . push ( Type ...`. Returns the struct-type index, or
-# -1 if the List holds scalars (no struct push found). This lets a List<Token>
-# allocate a contiguous [64*nfields x i64] buffer with element stride = nfields.
+# Element type of `let name = list()` by scanning [start,end) for the first push.
+# Returns a struct-type index, -2 for a string-literal push, or -1 for scalars /
+# no useful push found. This lets a List<Token> allocate a contiguous
+# [64*nfields x i64] buffer with element stride = nfields.
 fn list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, start: Int, end: Int, nstart: Int, nlen: Int) -> Int {
     let mut i = start
     while i < end {
@@ -3201,6 +3511,7 @@ fn list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, start: In
                             let op = toks[i + 3]
                             if op.kind == 9 {
                                 let ty = toks[i + 4]
+                                if ty.kind == 28 { return 0 - 2 }
                                 if ty.kind == 1 {
                                     let br = toks[i + 5]
                                     if br.kind == 11 {
@@ -3217,11 +3528,11 @@ fn list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, start: In
     }
     return 0 - 1
 }
-# Element struct-type of the param at position `argpos` of `fn <callee>`, if that
-# param is annotated `List<Struct>`. Scans the callee's signature in the token
-# stream (params separated by commas at paren depth 1). Returns -1 otherwise.
-# This lets a caller infer a local List's element type from the callee it is
-# passed to (the push happens in the callee body, not the caller's).
+# Element type of the param at position `argpos` of `fn <callee>`, if that param
+# is annotated `List<Struct>` or `List<Str>`. Scans the callee's signature in the
+# token stream (params separated by commas at paren depth 1). Returns -1
+# otherwise. This lets a caller infer a local List's element type from the callee
+# it is passed to (the push happens in the callee body, not the caller's).
 fn param_list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int, cns: Int, cnl: Int, argpos: Int) -> Int {
     let mut i = 0
     while i < n {
@@ -3252,6 +3563,7 @@ fn param_list_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: 
                                         # element type is the ident after '<' (q+4)
                                         let et = toks[q + 4]
                                         if et.kind == 1 {
+                                            if kw3(src, et.nstart, et.nlen, 83, 116, 114) == 1 { return 0 - 2 }
                                             return struct_index_by_name(defs, src, et.nstart, et.nlen)
                                         }
                                     }
@@ -3317,13 +3629,13 @@ fn call_arg_elem_sty(toks: &List<Token>, defs: &List<StructDef>, src: Str, start
                             if after.kind == 10 {
                                 if name_eq(src, qt.nstart, qt.nlen, nstart, nlen) == 1 {
                                     let r = param_list_elem_sty(toks, defs, src, n, t.nstart, t.nlen, pos)
-                                    if r >= 0 { return r }
+                                    if r != 0 - 1 { return r }
                                 }
                             }
                             if after.kind == 25 {
                                 if name_eq(src, qt.nstart, qt.nlen, nstart, nlen) == 1 {
                                     let r = param_list_elem_sty(toks, defs, src, n, t.nstart, t.nlen, pos)
-                                    if r >= 0 { return r }
+                                    if r != 0 - 1 { return r }
                                 }
                             }
                         }
@@ -3435,6 +3747,20 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
                 pint(next_slot + 1)
                 putchar(10)
                 next_slot = next_slot + 2
+            } else if rhs_is_host_str_call(toks, fns, src, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca i8*")
+                putchar(10)
+                next_slot = next_slot + 1
+            } else if rhs.kind == 1 and find_semi(toks, vp, end) == vp + 1 and isarr_of(&slots, src, rhs.nstart, rhs.nlen) == 3 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca i8*")
+                putchar(10)
+                next_slot = next_slot + 1
             } else if rhs.kind == 1 and find_semi(toks, vp, end) == vp + 1 and isarr_of(&slots, src, rhs.nstart, rhs.nlen) == 4 {
                 # `let mut xs = list_param` aliases an incoming List buffer pointer.
                 # This keeps self-host helper patterns like `let mut slots = base`
@@ -3452,8 +3778,8 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
                 # `let toks: List<Token> = []` where no push reveals it); else scan
                 # the body for the first push; else infer from a callee (out-param).
                 let mut lest = let_anno_elem_sty(toks, defs, src, npos)
-                if lest < 0 { lest = list_elem_sty(toks, defs, src, vp, end, name.nstart, name.nlen) }
-                if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, vp, end, name.nstart, name.nlen, n) }
+                if lest == 0 - 1 { lest = list_elem_sty(toks, defs, src, vp, end, name.nstart, name.nlen) }
+                if lest == 0 - 1 { lest = call_arg_elem_sty(toks, defs, src, vp, end, name.nstart, name.nlen, n) }
                 let mut lcap = list_cap()
                 let mut lbuf = list_cap()
                 # struct-element Lists: [64*nf + 1 x i64] -- the +1 reserves a length
@@ -3606,12 +3932,10 @@ fn if_stmt_end(toks: &List<Token>, ifpos: Int, n: Int) -> Int {
     }
     return cur
 }
-# Does the statement range [start, end) end such that control cannot fall through
-# (i.e. every path returns)? True if the range is a `return` statement, or an
-# if / else-if / else chain where the then-block and the whole else region both
-# end in a return (recursively). Used so the if-handler can mark a provably-dead
-# merge block with `unreachable` (LLVM requires every block to have a terminator;
-# an all-branches-return if otherwise leaves an empty trailing merge block).
+# Does the statement range [start, end) end such that control cannot fall through.
+# A `return`, `break`, or `continue` terminates the current block; an if /
+# else-if / else chain is conclusive when both sides terminate recursively.
+# Used so block emitters avoid adding an extra branch after a terminator.
 fn block_returns(toks: &List<Token>, start: Int, end: Int) -> Int {
     if start >= end { return 0 }
     let mut s = start
@@ -3630,6 +3954,8 @@ fn block_returns(toks: &List<Token>, start: Int, end: Int) -> Int {
         if semi + 1 >= end { return 1 }
         return 0
     }
+    if t.kind == 40 { return 1 }
+    if t.kind == 41 { return 1 }
     if t.kind == 15 {
         # an `if` chain. Conclusive only if it spans to `end` and all branches return.
         let chainend = if_stmt_end(toks, s, end)
@@ -3970,14 +4296,45 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
 }
 
 # Generate code for the statements in token range [i, end). Returns the next free
-# SSA temp. Handles `let`, assignment, `return`, and `while` (recursing for the
-# loop body). Labels reuse temp numbers to stay unique.
-fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i0: Int, end: Int, counter0: Int, retout: Int, retkind: Int) -> Int {
+# SSA temp. `retcfg` packs (retout + 1) * 10 + retkind. `loopcfg` packs
+# (loop_label + 1) * 10 + continue_kind, where continue_kind 0 targets the
+# loop condition and 1 targets a for-loop increment block.
+fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i0: Int, end: Int, counter0: Int, retcfg: Int, loopcfg: Int) -> Int {
     let mut i = i0
     let mut counter = counter0
+    let retbase = retcfg / 10
+    let retout = retbase - 1
+    let retkind = retcfg - (retbase * 10)
+    let loopbase = loopcfg / 10
+    let looplbl = loopbase - 1
+    let loopkind = loopcfg - (loopbase * 10)
     while i < end {
         let t = toks[i]
-        if t.kind == 7 {
+        if t.kind == 40 {
+            if looplbl >= 0 {
+                emit_str("  br label %done")
+                pint(looplbl)
+                putchar(10)
+            } else {
+                emit_str("  unreachable")
+                putchar(10)
+            }
+            i = end
+        } else if t.kind == 41 {
+            if looplbl >= 0 {
+                if loopkind == 1 {
+                    emit_str("  br label %cont")
+                } else {
+                    emit_str("  br label %loop")
+                }
+                pint(looplbl)
+                putchar(10)
+            } else {
+                emit_str("  unreachable")
+                putchar(10)
+            }
+            i = end
+        } else if t.kind == 7 {
             let nx = toks[i + 1]
             let mut npos = i + 1
             if nx.kind == 21 { npos = i + 2 }
@@ -4540,6 +4897,18 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 counter = counter + 1
                 let stop = find_semi(toks, cclose, end)
                 i = stop + 1
+            } else if isarr_of(slots, src, name.nstart, name.nlen) == 3 {
+                let stop = find_semi(toks, vp, end)
+                if rhs.kind != 28 {
+                    let e = gen_expr(toks, slots, fns, defs, src, vp, stop, counter)
+                    emit_str("  store i8* ")
+                    emit_op(e)
+                    emit_str(", i8** %v")
+                    pint(slot)
+                    putchar(10)
+                    counter = e.next
+                }
+                i = stop + 1
             } else if rhs_is_list(toks, src, npos) == 1 {
                 # let lst = list() / [];  — alloca/len already emitted in collect; skip
                 let stop = find_semi(toks, vp, end)
@@ -4823,6 +5192,19 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let pargstop = paren_end(toks, i + 4)
                 let pe = gen_expr(toks, slots, fns, defs, src, i + 4, pargstop, counter)
                 counter = pe.next
+                let mut pek = pe.kind
+                let mut pev = pe.val
+                if ppsty == 0 - 2 {
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = ptrtoint i8* ")
+                    emit_op(pe)
+                    emit_str(" to i64")
+                    putchar(10)
+                    pek = 1
+                    pev = counter
+                    counter = counter + 1
+                }
                 let pbp = counter
                 emit_str("  %t")
                 pint(pbp)
@@ -4852,7 +5234,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 pint(plen)
                 putchar(10)
                 emit_str("  store i64 ")
-                emit_op(pe)
+                emit_op(Op { kind: pek, val: pev, next: 0 })
                 emit_str(", i64* %t")
                 pint(pep)
                 putchar(10)
@@ -4965,6 +5347,19 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                   # scalar List push: store one value at buf[len]; len = len + 1
                   let e = gen_expr(toks, slots, fns, defs, src, i + 4, argstop, counter)
                   counter = e.next
+                  let mut epk = e.kind
+                  let mut epv = e.val
+                  if lsty == 0 - 2 {
+                      emit_str("  %t")
+                      pint(counter)
+                      emit_str(" = ptrtoint i8* ")
+                      emit_op(e)
+                      emit_str(" to i64")
+                      putchar(10)
+                      epk = 1
+                      epv = counter
+                      counter = counter + 1
+                  }
                   emit_str("  %t")
                   pint(counter)
                   emit_str(" = load i64, i64* %v")
@@ -4986,7 +5381,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                   let gepc = counter
                   counter = counter + 1
                   emit_str("  store i64 ")
-                  emit_op(e)
+                  emit_op(Op { kind: epk, val: epv, next: 0 })
                   emit_str(", i64* %t")
                   pint(gepc)
                   putchar(10)
@@ -5053,11 +5448,19 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
                 let stop = find_semi(toks, i + 2, end)
                 let e = gen_expr(toks, slots, fns, defs, src, i + 2, stop, counter)
-                emit_str("  store i64 ")
-                emit_op(e)
-                emit_str(", i64* %v")
-                pint(slot)
-                putchar(10)
+                if isarr_of(slots, src, t.nstart, t.nlen) == 3 {
+                    emit_str("  store i8* ")
+                    emit_op(e)
+                    emit_str(", i8** %v")
+                    pint(slot)
+                    putchar(10)
+                } else {
+                    emit_str("  store i64 ")
+                    emit_op(e)
+                    emit_str(", i64* %v")
+                    pint(slot)
+                    putchar(10)
+                }
                 counter = e.next
                 i = stop + 1
             } else {
@@ -5491,8 +5894,11 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             }
             if did_listret == 0 and did_structret == 0 {
                 let e = gen_expr(toks, slots, fns, defs, src, i + 1, stop, counter)
-                if retkind >= 1 {
+                if retkind == 1 or retkind == 2 {
                     emit_str("  ret void")
+                } else if retkind == 3 {
+                    emit_str("  ret i8* ")
+                    emit_op(e)
                 } else {
                     emit_str("  ret i64 ")
                     emit_op(e)
@@ -5580,7 +5986,17 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             pint(lbl)
             emit_str(":")
             putchar(10)
-            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, counter, retout, retkind)
+            let fbody_term = block_returns(toks, bopen + 1, bclose)
+            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, counter, retcfg, (lbl + 1) * 10 + 1)
+            if fbody_term == 0 {
+                emit_str("  br label %cont")
+                pint(lbl)
+                putchar(10)
+            }
+            emit_str("cont")
+            pint(lbl)
+            emit_str(":")
+            putchar(10)
             # increment: v = v + 1
             let incld = counter
             counter = counter + 1
@@ -5658,10 +6074,13 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             emit_str(":")
             putchar(10)
             # body statements are [bopen+1, bclose)
-            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, cnum + 1, retout, retkind)
-            emit_str("  br label %loop")
-            pint(lbl)
-            putchar(10)
+            let wbody_term = block_returns(toks, bopen + 1, bclose)
+            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, cnum + 1, retcfg, (lbl + 1) * 10)
+            if wbody_term == 0 {
+                emit_str("  br label %loop")
+                pint(lbl)
+                putchar(10)
+            }
             emit_str("done")
             pint(lbl)
             emit_str(":")
@@ -5744,7 +6163,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             pint(lbl)
             emit_str(":")
             putchar(10)
-            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, cnum + 1, retout, retkind)
+            counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, cnum + 1, retcfg, loopcfg)
             if then_ret == 0 {
                 emit_str("  br label %imerge")
                 pint(lbl)
@@ -5756,7 +6175,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             emit_str(":")
             putchar(10)
             if has_else == 1 {
-                counter = gen_stmts(toks, slots, fns, defs, src, ebody_start, ebody_end, counter, retout, retkind)
+                counter = gen_stmts(toks, slots, fns, defs, src, ebody_start, ebody_end, counter, retcfg, loopcfg)
             }
             if else_ret == 0 {
                 emit_str("  br label %imerge")
@@ -5861,8 +6280,8 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
                 # sty = element struct type (stride = nfields); scalar Lists [64 x i64].
                 # Element type: `: List<Type>` annotation first, else push-scan, else callee.
                 let mut lest = let_anno_elem_sty(toks, defs, src, npos)
-                if lest < 0 { lest = list_elem_sty(toks, defs, src, vp, n, name.nstart, name.nlen) }
-                if lest < 0 { lest = call_arg_elem_sty(toks, defs, src, vp, n, name.nstart, name.nlen, n) }
+                if lest == 0 - 1 { lest = list_elem_sty(toks, defs, src, vp, n, name.nstart, name.nlen) }
+                if lest == 0 - 1 { lest = call_arg_elem_sty(toks, defs, src, vp, n, name.nstart, name.nlen, n) }
                 let mut lcap = list_cap()
                 let mut lbuf = list_cap()
                 if lest >= 0 {
@@ -5885,6 +6304,20 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
                 pint(next_slot + 1)
                 putchar(10)
                 next_slot = next_slot + 2
+            } else if rhs_is_host_str_call(toks, fns, src, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca i8*")
+                putchar(10)
+                next_slot = next_slot + 1
+            } else if rhs.kind == 1 and find_semi(toks, vp, n) == vp + 1 and isarr_of(&slots, src, rhs.nstart, rhs.nlen) == 3 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca i8*")
+                putchar(10)
+                next_slot = next_slot + 1
             } else if rhs.kind == 28 {
                 # string var: is_arr=3, alen=length, sty=global key (literal nstart).
                 # alloca i8* + GEP the @.s<key> global's element 0 + store the ptr.
@@ -5985,7 +6418,7 @@ fn gen_top(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, slots: &L
                     else { j = j + 1 }
                 }
             }
-            counter = gen_stmts(toks, slots, fns, defs, src, i, j, counter, 0 - 1, 0)
+            counter = gen_stmts(toks, slots, fns, defs, src, i, j, counter, 0, 0)
             i = j
         }
     }
@@ -5995,7 +6428,9 @@ fn gen_top(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, slots: &L
 # Emit one user function: `define i64 @name(i64 %p_in) { <body> }`. The param is
 # copied to alloca %v0; body locals occupy slots 1+. Body = [bstart, bend).
 fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, f: Fn, n: Int) -> Int {
-    if f.retlist >= 1 { emit_str("define void @") } else { emit_str("define i64 @") }
+    if f.retlist == 1 or f.retlist == 2 { emit_str("define void @") }
+    else if f.retlist == 3 { emit_str("define i8* @") }
+    else { emit_str("define i64 @") }
     emit_name(src, f.nstart, f.nlen)
     emit_str("(")
     # incoming SSA params: %a0, %a1, ...  (Str params are i8*, others i64)
@@ -6013,7 +6448,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
     }
     # `-> List` and `-> Struct` functions take a hidden trailing out-param
     # `i64* %a<npar>`: the caller passes a buffer, and return copies into it.
-    if f.retlist >= 1 {
+    if f.retlist == 1 or f.retlist == 2 {
         if f.npar > 0 { emit_str(", ") }
         emit_str("i64* %a")
         pint(f.npar)
@@ -6058,7 +6493,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
             # read-only consumer like `eval(toks: List<Token>)` has no push to scan).
             # Fall back to a body push-scan if the annotation lacks a struct type.
             let mut pest = param_list_elem_sty(toks, defs, src, n, f.nstart, f.nlen, s2)
-            if pest < 0 { pest = list_elem_sty(toks, defs, src, f.bstart, f.bend, pns, pnl) }
+            if pest == 0 - 1 { pest = list_elem_sty(toks, defs, src, f.bstart, f.bend, pns, pnl) }
             slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 4, alen: 0 , sty: pest })
             emit_str("  %v")
             pint(s2)
@@ -6141,10 +6576,12 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
     }
     # body locals start at slot npar
     let allslots = add_local_slots(slots, toks, fns, defs, src, f.bstart, f.bend, f.npar, n)
-    # retout = the hidden out-param index for a `-> List` function, else -1.
+    # retout = the hidden out-param index for a `-> List` or `-> Struct`
+    # function, else -1.
     let mut retout = 0 - 1
-    if f.retlist >= 1 { retout = f.npar }
-    let last = gen_stmts(toks, &allslots, fns, defs, src, f.bstart, f.bend, 1, retout, f.retlist)
+    if f.retlist == 1 or f.retlist == 2 { retout = f.npar }
+    let retcfg = (retout + 1) * 10 + f.retlist
+    let last = gen_stmts(toks, &allslots, fns, defs, src, f.bstart, f.bend, 1, retcfg, 0)
     emit_str("}")
     putchar(10)
     return 0
@@ -6242,6 +6679,60 @@ fn emit_parse_helpers() -> Int {
     emit_str("  %u2 = call i64 @__vais_parse_uint(i8* %s)")
     putchar(10)
     emit_str("  ret i64 %u2")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    return 0
+}
+
+fn emit_str_helpers() -> Int {
+    emit_str("define i64 @__vais_str_eq(i8* %a, i8* %b) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %i = alloca i64")
+    putchar(10)
+    emit_str("  store i64 0, i64* %i")
+    putchar(10)
+    emit_str("  br label %loop")
+    putchar(10)
+    emit_str("loop:")
+    putchar(10)
+    emit_str("  %iv = load i64, i64* %i")
+    putchar(10)
+    emit_str("  %ap = getelementptr i8, i8* %a, i64 %iv")
+    putchar(10)
+    emit_str("  %bp = getelementptr i8, i8* %b, i64 %iv")
+    putchar(10)
+    emit_str("  %av = load i8, i8* %ap")
+    putchar(10)
+    emit_str("  %bv = load i8, i8* %bp")
+    putchar(10)
+    emit_str("  %same = icmp eq i8 %av, %bv")
+    putchar(10)
+    emit_str("  br i1 %same, label %maybe_done, label %noteq")
+    putchar(10)
+    emit_str("maybe_done:")
+    putchar(10)
+    emit_str("  %nul = icmp eq i8 %av, 0")
+    putchar(10)
+    emit_str("  br i1 %nul, label %eq, label %next")
+    putchar(10)
+    emit_str("next:")
+    putchar(10)
+    emit_str("  %inc = add i64 %iv, 1")
+    putchar(10)
+    emit_str("  store i64 %inc, i64* %i")
+    putchar(10)
+    emit_str("  br label %loop")
+    putchar(10)
+    emit_str("eq:")
+    putchar(10)
+    emit_str("  ret i64 1")
+    putchar(10)
+    emit_str("noteq:")
+    putchar(10)
+    emit_str("  ret i64 0")
     putchar(10)
     emit_str("}")
     putchar(10)
@@ -6426,6 +6917,7 @@ fn compile(src: Str) -> Int {
     emit_str("declare void @llvm.trap()")
     putchar(10)
     emit_parse_helpers()
+    emit_str_helpers()
     emit_map_helpers()
     let defs = build_defs(&toks, n)
     let fns = build_fns(&toks, &defs, src, n)

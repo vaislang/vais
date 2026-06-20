@@ -49,13 +49,14 @@ jobs:
         shell: bash
         run: scripts/package-vaisc-release.sh
 
-      - name: Smoke packaged compiler
+      - name: Smoke packaged compiler and checker
         shell: bash
         run: |
           archive="$(ls dist/vais-*.tar.gz | head -1)"
           tmp="$(mktemp -d)"
           tar -C "$tmp" -xzf "$archive"
           packaged="$(find "$tmp" -path '*/bin/vaisc' -type f | head -1)"
+          packaged_check="$(find "$tmp" -path '*/bin/vais-check' -type f | head -1)"
           "$packaged" --version
           cat > "$tmp/smoke.vais" <<'SRC'
           fn main() -> Int {
@@ -70,6 +71,7 @@ jobs:
             echo "expected run exit 42, got $rc" >&2
             exit 1
           fi
+          "$packaged_check" "$tmp/smoke.vais"
 
       - name: Ensure release exists
         env:

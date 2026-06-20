@@ -32,14 +32,14 @@ scripts/vaisc run examples/c4.vais --engine direct
   reads/writes, list/element assignment, parameter/return ABI, inline
   arguments, and returned-argument lowering in statements plus `if`, `else if`,
   and `while` conditions.
-- Front diagnostics: native `scripts/vaisc`, `tools/vaisc.py` for internal
-  repository checks, and `tools/vais-check.py`.
+- Front diagnostics: native `scripts/vaisc` and Vais-authored
+  `scripts/vais-check`.
 - Value corpus: release-subset `examples/*.vais` files tracked in `tools/vaisc-parity.tsv`.
 
 ## Gates
 
 ```bash
-python3 tests/vais_check_test.py
+bash scripts/test-vais-check-vais.sh
 bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc.sh
 bash scripts/test-vaisc-front.sh

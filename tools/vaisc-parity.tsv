@@ -38,6 +38,9 @@ examples/e72_identifier_scan.vais	native-supported	Identifier scan over Str with
 examples/e74_map_basic.vais	native-supported	Local Map<Int,Int> insert/get/contains/len.
 examples/e83_parse_helpers.vais	native-supported	Named parse_uint/parse_int Str helpers.
 examples/e84_list_methods.vais	native-supported	List is_empty/last/pop local methods.
+examples/e85_char_type.vais	native-supported	Char annotations, helper parameters, and helper returns.
+examples/e86_for_loop.vais	native-supported	Exclusive and inclusive range for-loops.
+examples/e87_break_continue.vais	native-supported	Break and continue inside while and range for-loops.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.

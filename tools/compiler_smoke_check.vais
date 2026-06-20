@@ -1,0 +1,203 @@
+fn str_eq(a: Str, b: Str) -> Int {
+    if a.len() != b.len() { return 0 }
+    let mut i = 0
+    while i < a.len() {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn find_text(src: Str, start: Int, word: Str) -> Int {
+    if word.len() == 0 { return start }
+    let mut i = start
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return i }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn find_byte(src: Str, start: Int, b: Int) -> Int {
+    let mut i = start
+    while i < src.len() {
+        if src[i] == b { return i }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn append_source_string(out: Int, value: Str) -> Int {
+    str_builder_push(out, 34)
+    let mut i = 0
+    while i < value.len() {
+        let c = value[i]
+        if c == 34 {
+            str_builder_push(out, 92)
+            str_builder_push(out, c)
+        } else if c == 92 {
+            str_builder_push(out, 92)
+            str_builder_push(out, c)
+        } else {
+            str_builder_push(out, c)
+        }
+        i = i + 1
+    }
+    str_builder_push(out, 34)
+    return 0
+}
+
+fn retarget_source(source: Str, program: Str) -> Str {
+    let call = find_text(source, 0, "let value = run_program(")
+    if call < 0 { return "" }
+    let quote = find_byte(source, call, 34)
+    if quote < 0 { return "" }
+    let end_quote = find_byte(source, quote + 1, 34)
+    if end_quote < 0 { return "" }
+
+    let out = str_builder_new()
+    str_builder_append(out, str_slice(source, 0, quote))
+    append_source_string(out, program)
+    str_builder_append(out, str_slice(source, end_quote + 1, source.len() - end_quote - 1))
+    return str_builder_finish(out)
+}
+
+fn run1(a: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    return proc_run(argv)
+}
+
+fn run5(a: Str, b: Str, c: Str, d: Str, e: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    argv.push(d)
+    argv.push(e)
+    return proc_run(argv)
+}
+
+fn capture1(a: Str) -> Str {
+    let argv: List<Str> = []
+    argv.push(a)
+    return proc_capture_stdout(argv)
+}
+
+fn check_one(vaisc: Str, template: Str, tmp: Str, index: Int, program: Str, want: Int) -> Int {
+    let case_dir = path_join(tmp, str_concat("case", uint_to_str(index)))
+    let compiler_dir = path_join(path_join(case_dir, "compiler"), "self")
+    if fs_mkdirs(compiler_dir) != 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': mkdir")))
+        return 1
+    }
+
+    let src = path_join(compiler_dir, "fixpoint_full.vais")
+    let retargeted = retarget_source(template, program)
+    if retargeted.len() == 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': retarget source")))
+        return 1
+    }
+    if fs_write_text(src, retargeted) != 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': write source")))
+        return 1
+    }
+
+    let compiler_bin = path_join(case_dir, "compiler_smoke")
+    if run5(vaisc, "build", src, "-o", compiler_bin) != 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': build")))
+        return 1
+    }
+
+    let ir = capture1(compiler_bin)
+    let ir_path = path_join(case_dir, "out.ll")
+    if fs_write_text(ir_path, ir) != 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': write IR")))
+        return 1
+    }
+
+    let bin = path_join(case_dir, "bin")
+    if run5("clang", "-Wno-override-module", "-o", bin, ir_path) != 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': IR invalid")))
+        return 1
+    }
+
+    let got = run1(bin)
+    if got == want {
+        print(str_concat("  PASS '", str_concat(program, str_concat("' -> ", uint_to_str(got)))))
+        return 0
+    }
+    print(str_concat("  FAIL '", str_concat(program, str_concat("': got=", str_concat(uint_to_str(got), str_concat(" want=", uint_to_str(want)))))))
+    return 1
+}
+
+fn usage() -> Int {
+    print("usage: compiler-smoke-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("error: could not create temp dir: ", tmp))
+        return 1
+    }
+
+    let vaisc = path_join(root, "scripts/vaisc")
+    let template_path = path_join(path_join(path_join(root, "compiler"), "self"), "compiler.vais")
+    if fs_exists(template_path) == 0 {
+        print(str_concat("error: compiler template not found: ", template_path))
+        return 1
+    }
+    let template = fs_read_text(template_path)
+
+    let mut fail = 0
+    fail = fail + check_one(vaisc, template, tmp, 1, "return 6 * 7", 42)
+    fail = fail + check_one(vaisc, template, tmp, 2, "return 1+2*3", 7)
+    fail = fail + check_one(vaisc, template, tmp, 3, "return 10-2-3", 5)
+    fail = fail + check_one(vaisc, template, tmp, 4, "let a = 2; let b = 3; return a + b * 4", 14)
+    fail = fail + check_one(vaisc, template, tmp, 5, "let x = 10; return x - 3", 7)
+    fail = fail + check_one(vaisc, template, tmp, 6, "let a = 5; let b = a * 2; return b + 1", 11)
+    fail = fail + check_one(vaisc, template, tmp, 7, "let n = 100; return n", 100)
+    fail = fail + check_one(vaisc, template, tmp, 8, "return if 7 > 4 then 11 else 99", 11)
+    fail = fail + check_one(vaisc, template, tmp, 9, "return if 2 > 4 then 11 else 99", 99)
+    fail = fail + check_one(vaisc, template, tmp, 10, "return if 3 < 5 then 100 else 200", 100)
+    fail = fail + check_one(vaisc, template, tmp, 11, "return if 5 == 5 then 7 else 8", 7)
+    fail = fail + check_one(vaisc, template, tmp, 12, "return if 5 == 6 then 7 else 8", 8)
+    fail = fail + check_one(vaisc, template, tmp, 13, "let a = 7; let b = 4; return if a > b then a + b else a - b", 11)
+    fail = fail + check_one(vaisc, template, tmp, 14, "let a = 2; let b = 4; return if a > b then a + b else b - a", 2)
+    fail = fail + check_one(vaisc, template, tmp, 15, "let x = 3; return if x < 5 then x * 2 else x", 6)
+
+    if fail == 0 {
+        print("RESULT: self-host compiler (vars+if) end-to-end OK")
+        return 0
+    }
+    print("RESULT: FAILURES")
+    return 1
+}

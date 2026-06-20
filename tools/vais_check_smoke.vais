@@ -1,0 +1,29 @@
+import vais_check_core
+
+fn main() -> Int {
+    let root = fs_cwd()
+    let fixture_dir = path_join(root, "tests/fixtures/vais_check")
+    let bad_path = path_join(fixture_dir, "bad.vais")
+    let clean_path = path_join(fixture_dir, "clean.vais")
+
+    let bad_count = check_file(bad_path)
+    let clean_count = check_file(clean_path)
+    let mut failures = 0
+
+    if bad_count == 22 {
+        print("PASS Vais checker flags the bad fixture")
+    } else {
+        print("FAIL Vais checker bad fixture count")
+        failures = failures + 1
+    }
+
+    if clean_count == 0 {
+        print("PASS Vais checker accepts the clean fixture")
+    } else {
+        print("FAIL Vais checker clean fixture count")
+        failures = failures + 1
+    }
+
+    if failures == 0 { return 42 }
+    return 1
+}

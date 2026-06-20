@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the Python-free native Vais compiler driver.
+# Build the native Vais compiler driver.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"

@@ -1,0 +1,733 @@
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn str_contains(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 1 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn append_line(out: Int, line: Str) -> Int {
+    str_builder_append(out, line)
+    str_builder_push(out, 10)
+    return 0
+}
+
+fn write_helper_control(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn add(a: Int, b: Int) -> Int {")
+    append_line(out, "    return a + b")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut i = 0")
+    append_line(out, "    let mut acc = 0")
+    append_line(out, "    while i < 6 {")
+    append_line(out, "        if i > 2 {")
+    append_line(out, "            acc = add(acc, i)")
+    append_line(out, "        }")
+    append_line(out, "        i = i + 1")
+    append_line(out, "    }")
+    append_line(out, "    return acc + 30")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_for_loop(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut s = 0")
+    append_line(out, "    for i in 0..6 {")
+    append_line(out, "        if i > 2 {")
+    append_line(out, "            s = s + i")
+    append_line(out, "        }")
+    append_line(out, "    }")
+    append_line(out, "    for j in 0..=3 {")
+    append_line(out, "        s = s + j")
+    append_line(out, "    }")
+    append_line(out, "    for k in 0..10 {")
+    append_line(out, "        if k == 3 { continue }")
+    append_line(out, "        if k == 6 { break }")
+    append_line(out, "        s = s + k")
+    append_line(out, "    }")
+    append_line(out, "    return s + 12")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_struct_local(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "    bonus: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn inc(n: Int) -> Int {")
+    append_line(out, "    return n + 1")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let b = Box { value: 39, bonus: inc(1) }")
+    append_line(out, "    b.value = b.value + b.bonus + 1")
+    append_line(out, "    return b.value")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_struct_abi(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Pair {")
+    append_line(out, "    a: Int,")
+    append_line(out, "    b: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn make(x: Int) -> Pair {")
+    append_line(out, "    return Pair { a: x, b: x + 1 }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn id(p: Pair) -> Pair {")
+    append_line(out, "    return p")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn sum(p: Pair) -> Int {")
+    append_line(out, "    return p.a + p.b")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let p = id(make(20))")
+    append_line(out, "    return sum(p) + sum(Pair { a: 0, b: 1 })")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_int(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = []")
+    append_line(out, "    let empty: List<Int> = []")
+    append_line(out, "    xs.push(10)")
+    append_line(out, "    xs.push(20)")
+    append_line(out, "    xs.push(30)")
+    append_line(out, "    let ys = [1, 2, xs.len()]")
+    append_line(out, "    let tail = xs.last()")
+    append_line(out, "    let popped = xs.pop()")
+    append_line(out, "    return xs.sum() - xs.len() - xs[1] + ys[2] + ys.sum() + 25 + empty.is_empty() - xs.is_empty() - 1 + tail - 30 + popped - 30")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_str_slice(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn is_digit(c: Int) -> Bool {")
+    append_line(out, "    return c >= 48 and c <= 57")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn same(a: Str, b: Str) -> Bool {")
+    append_line(out, "    return a == b")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn byte_at(s: Str, i: Int) -> Int {")
+    append_line(out, "    return s[i]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn count_digits(s: Str) -> Int {")
+    append_line(out, "    let mut i = 0")
+    append_line(out, "    let mut n = 0")
+    append_line(out, "    while i < s.len() {")
+    append_line(out, "        if is_digit(s[i]) {")
+    append_line(out, "            n = n + 1")
+    append_line(out, "        }")
+    append_line(out, "        i = i + 1")
+    append_line(out, "    }")
+    append_line(out, "    return n")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let a: Str = \"a1b2\"")
+    append_line(out, "    let b = `a1b2`")
+    append_line(out, "    if a != b {")
+    append_line(out, "        return 0")
+    append_line(out, "    }")
+    append_line(out, "    return count_digits(a) * 20 + byte_at(b, 0) - 96 + same(\"ok\", `ok`)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_char_literal(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn choose(flag: Bool) -> Char {")
+    append_line(out, "    if flag {")
+    append_line(out, "        return 'A'")
+    append_line(out, "    }")
+    append_line(out, "    return 'B'")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn same(c: Char) -> Bool {")
+    append_line(out, "    return c == 'A'")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let c: Char = choose(true)")
+    append_line(out, "    if same(c) and c != 'B' {")
+    append_line(out, "        return 42")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_parse_helpers(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let s: Str = \"16x\"")
+    append_line(out, "    let a = parse_uint(\"19\")")
+    append_line(out, "    let b = parse_uint(s)")
+    append_line(out, "    let c = parse_int(\"-5\")")
+    append_line(out, "    let d = parse_int(`12z`)")
+    append_line(out, "    return a + b + c + d")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_map_int_int(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let scores: Map<Int, Int> = {}")
+    append_line(out, "    scores.insert(4, 38)")
+    append_line(out, "    scores.insert(4, 40)")
+    append_line(out, "    scores.insert(9, 2)")
+    append_line(out, "    return scores.get(4, 0) + scores.get(5, 0 - 1) + scores.contains(4) + scores.contains(5) + scores.len()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_struct_local(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Box> = []")
+    append_line(out, "    let empty_boxes: List<Box> = []")
+    append_line(out, "    xs.push(Box { value: 10 })")
+    append_line(out, "    xs.push(Box { value: 30 })")
+    append_line(out, "    let ys: List<Box> = [Box { value: 1 }]")
+    append_line(out, "    let zs: List<Box> = list()")
+    append_line(out, "    zs.push(Box { value: 2 })")
+    append_line(out, "    let tail = xs.last()")
+    append_line(out, "    let popped = xs.pop()")
+    append_line(out, "    return xs[0].value + xs.len() + ys[0].value + zs[0].value + 28 + empty_boxes.is_empty() - xs.is_empty() - 1 + tail.value - 30 + popped.value - 30")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_struct_abi(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn make(v: Int) -> List<Box> {")
+    append_line(out, "    return [Box { value: v }, Box { value: v + 1 }]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn empty_box() -> List<Box> {")
+    append_line(out, "    return []")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn append(out: List<Box>, v: Int) -> Int {")
+    append_line(out, "    out.push(Box { value: v })")
+    append_line(out, "    return out.len()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn score(xs: List<Box>) -> Int {")
+    append_line(out, "    return xs[0].value + xs.len()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Box> = []")
+    append_line(out, "    let n = append(xs, 20)")
+    append_line(out, "    let ys: List<Box> = make(21)")
+    append_line(out, "    let zs: List<Box> = empty_box()")
+    append_line(out, "    zs.push(Box { value: 1 })")
+    append_line(out, "    let inline_score = score([Box { value: 17 }])")
+    append_line(out, "    let returned_score = score(make(2))")
+    append_line(out, "    let mut i = 0")
+    append_line(out, "    let mut total = 0")
+    append_line(out, "    while score(make(i)) < 5 {")
+    append_line(out, "        total = total + score(make(i))")
+    append_line(out, "        i = i + 1")
+    append_line(out, "    }")
+    append_line(out, "    return xs[0].value + ys[1].value + n + zs[0].value + inline_score + returned_score + total - 33")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_struct_field_write(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn bump(xs: List<Box>, i: Int, v: Int) -> Int {")
+    append_line(out, "    xs[i].value = v")
+    append_line(out, "    return xs[i].value")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Box> = [Box { value: 1 }, Box { value: 2 }]")
+    append_line(out, "    xs[0].value = 10")
+    append_line(out, "    let a = bump(xs, 1, 30)")
+    append_line(out, "    let b = Box { value: 3 }")
+    append_line(out, "    b.value = xs[0].value + a + 2")
+    append_line(out, "    return b.value")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_element_assignment(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn set_box(xs: List<Box>, i: Int, v: Int) -> Int {")
+    append_line(out, "    xs[i] = Box { value: v }")
+    append_line(out, "    return xs[i].value")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn set_int(xs: List<Int>, i: Int, v: Int) -> Int {")
+    append_line(out, "    xs[i] = v")
+    append_line(out, "    return xs[i]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let boxes: List<Box> = [Box { value: 1 }, Box { value: 2 }]")
+    append_line(out, "    boxes[0] = Box { value: 10 }")
+    append_line(out, "    boxes[1] = boxes[0]")
+    append_line(out, "    let a = set_box(boxes, 1, 20)")
+    append_line(out, "    let ints: List<Int> = [1, 2]")
+    append_line(out, "    ints[0] = 5")
+    append_line(out, "    ints[1] = ints[0]")
+    append_line(out, "    let b = set_int(ints, 1, 7)")
+    append_line(out, "    return boxes[0].value + boxes[1].value + a + ints[0] + ints[1] + b - 27")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_assignment(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn make(v: Int) -> List<Box> {")
+    append_line(out, "    return [Box { value: v }, Box { value: v + 1 }]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn replace(out: List<Box>, v: Int) -> Int {")
+    append_line(out, "    out = [Box { value: v }, Box { value: v + 1 }]")
+    append_line(out, "    out = make(v + 2)")
+    append_line(out, "    return out.len()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Box> = []")
+    append_line(out, "    xs = []")
+    append_line(out, "    xs.push(Box { value: 5 })")
+    append_line(out, "    xs = list()")
+    append_line(out, "    xs.push(Box { value: 7 })")
+    append_line(out, "    xs = make(20)")
+    append_line(out, "    let n = replace(xs, 30)")
+    append_line(out, "    let ints: List<Int> = []")
+    append_line(out, "    ints = [1, 2]")
+    append_line(out, "    ints = list()")
+    append_line(out, "    ints.push(4)")
+    append_line(out, "    ints = [5, 6]")
+    append_line(out, "    return xs[0].value + xs[1].value + n + ints.sum() - 36")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_int_abi(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn make(a: Int, b: Int, c: Int) -> List<Int> {")
+    append_line(out, "    let xs: List<Int> = []")
+    append_line(out, "    xs.push(a)")
+    append_line(out, "    xs.push(b)")
+    append_line(out, "    xs.push(c)")
+    append_line(out, "    return xs")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn pass(xs: List<Int>) -> List<Int> {")
+    append_line(out, "    return xs")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn score(xs: List<Int>) -> Int {")
+    append_line(out, "    let tail = xs.pop()")
+    append_line(out, "    return xs.sum() + xs.len() + xs[1] + tail + 1")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs = make(10, 20, 30)")
+    append_line(out, "    let ys: List<Int> = pass(xs)")
+    append_line(out, "    return score(ys) - 41")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_int_out_param(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn fill(out: List<Int>, n: Int) -> Int {")
+    append_line(out, "    out.push(n)")
+    append_line(out, "    out.push(n + 2)")
+    append_line(out, "    return out.len()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = []")
+    append_line(out, "    let count = fill(xs, 20)")
+    append_line(out, "    return count * 10 + xs[1]")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_int_inline_values(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn make(a: Int) -> List<Int> {")
+    append_line(out, "    return [a, a + 2]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn empty() -> List<Int> {")
+    append_line(out, "    return []")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn score(xs: List<Int>) -> Int {")
+    append_line(out, "    xs.push(10)")
+    append_line(out, "    return xs.sum() + xs.len()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs = make(20)")
+    append_line(out, "    let ys = empty()")
+    append_line(out, "    return score([5, 5]) + score(list()) + xs[1] + ys.len() - 14")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_int_return_call_args(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn make(a: Int) -> List<Int> {")
+    append_line(out, "    return [a, a + 1]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn pass(xs: List<Int>) -> List<Int> {")
+    append_line(out, "    xs.push(1)")
+    append_line(out, "    return xs")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn score(xs: List<Int>) -> Int {")
+    append_line(out, "    xs.push(10)")
+    append_line(out, "    return xs.sum() + xs.len()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let a = score(make(10))")
+    append_line(out, "    let b = score(pass(make(5)))")
+    append_line(out, "    let xs: List<Int> = [score(make(1))]")
+    append_line(out, "    xs.push(score(make(2)))")
+    append_line(out, "    a = score(make(0))")
+    append_line(out, "    return a + b + xs.len()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_int_while_hoist(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn make(n: Int) -> List<Int> {")
+    append_line(out, "    return [n]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn score(xs: List<Int>) -> Int {")
+    append_line(out, "    xs.push(1)")
+    append_line(out, "    return xs.sum()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut i = 0")
+    append_line(out, "    let mut total = 0")
+    append_line(out, "    while score(make(i)) < 4 {")
+    append_line(out, "        total = total + score(make(i))")
+    append_line(out, "        i = i + 1")
+    append_line(out, "    }")
+    append_line(out, "    return total * 6 + i * 2")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_if_hoist(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn make_int(n: Int) -> List<Int> {")
+    append_line(out, "    return [n, n + 1]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn score_int(xs: List<Int>) -> Int {")
+    append_line(out, "    return xs.sum()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn make_box(n: Int) -> List<Box> {")
+    append_line(out, "    return [Box { value: n }, Box { value: n + 1 }]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn score_box(xs: List<Box>) -> Int {")
+    append_line(out, "    return xs[0].value + xs[1].value")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut total = 0")
+    append_line(out, "    if score_int(make_int(20)) == 41 {")
+    append_line(out, "        total = total + 20")
+    append_line(out, "    }")
+    append_line(out, "    if score_box(make_box(10)) == 21 {")
+    append_line(out, "        total = total + 22")
+    append_line(out, "    }")
+    append_line(out, "    return total")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_else_if_hoist(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn make_int(n: Int) -> List<Int> {")
+    append_line(out, "    return [n, n + 1]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn score_int(xs: List<Int>) -> Int {")
+    append_line(out, "    return xs.sum()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn make_box(n: Int) -> List<Box> {")
+    append_line(out, "    return [Box { value: n }, Box { value: n + 1 }]")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn score_box(xs: List<Box>) -> Int {")
+    append_line(out, "    return xs[0].value + xs[1].value")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut total = 0")
+    append_line(out, "    if score_int([1, 1]) == 99 {")
+    append_line(out, "        total = total + 1")
+    append_line(out, "    } else if score_int(make_int(20)) == 41 {")
+    append_line(out, "        total = total + 20")
+    append_line(out, "    }")
+    append_line(out, "    if score_box([Box { value: 1 }, Box { value: 1 }]) == 99 {")
+    append_line(out, "        total = total + 1")
+    append_line(out, "    } else if score_box(make_box(10)) == 21 {")
+    append_line(out, "        total = total + 22")
+    append_line(out, "    }")
+    append_line(out, "    return total")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn capture_emit_direct(vaisc: Str, src: Str, ll: Str, out_path: Str, err_path: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("emit-ir")
+    argv.push(src)
+    argv.push("--engine")
+    argv.push("direct")
+    argv.push("-o")
+    argv.push(ll)
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn capture_run_direct(vaisc: Str, src: Str, out_path: Str, err_path: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("run")
+    argv.push(src)
+    argv.push("--engine")
+    argv.push("direct")
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn emit_failed(label: Str, err_path: Str) -> Int {
+    print(str_concat("  FAIL ", str_concat(label, " emission")))
+    if fs_exists(err_path) == 1 { print(fs_read_text(err_path)) }
+    return 1
+}
+
+fn run_failed(label: Str, got: Int, err_path: Str) -> Int {
+    print(str_concat("  FAIL ", str_concat(label, str_concat(" got=", str_concat(uint_to_str(got), " want=42")))))
+    if fs_exists(err_path) == 1 { print(fs_read_text(err_path)) }
+    return 1
+}
+
+fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> Int {
+    let src = path_join(tmp, str_concat(name, ".vais"))
+    let ir = path_join(tmp, str_concat(name, ".ll"))
+    let out_path = path_join(tmp, str_concat(name, ".out"))
+    let err_path = path_join(tmp, str_concat(name, ".err"))
+    let run_out = path_join(tmp, str_concat(name, "-run.out"))
+    let run_err = path_join(tmp, str_concat(name, "-run.err"))
+
+    let mut wrote = 1
+    if str_contains(name, "list_else_if_hoist") == 1 { wrote = write_list_else_if_hoist(src) }
+    else if str_contains(name, "list_if_hoist") == 1 { wrote = write_list_if_hoist(src) }
+    else if str_contains(name, "list_int_while_hoist") == 1 { wrote = write_list_int_while_hoist(src) }
+    else if str_contains(name, "list_int_return_call_args") == 1 { wrote = write_list_int_return_call_args(src) }
+    else if str_contains(name, "list_int_inline_values") == 1 { wrote = write_list_int_inline_values(src) }
+    else if str_contains(name, "list_int_out_param") == 1 { wrote = write_list_int_out_param(src) }
+    else if str_contains(name, "list_int_abi") == 1 { wrote = write_list_int_abi(src) }
+    else if str_contains(name, "list_assignment") == 1 { wrote = write_list_assignment(src) }
+    else if str_contains(name, "list_element_assignment") == 1 { wrote = write_list_element_assignment(src) }
+    else if str_contains(name, "list_struct_field_write") == 1 { wrote = write_list_struct_field_write(src) }
+    else if str_contains(name, "list_struct_abi") == 1 { wrote = write_list_struct_abi(src) }
+    else if str_contains(name, "parse_helpers") == 1 { wrote = write_parse_helpers(src) }
+    else if str_contains(name, "helper") == 1 { wrote = write_helper_control(src) }
+    else if str_contains(name, "for") == 1 { wrote = write_for_loop(src) }
+    else if str_contains(name, "list_struct_local") == 1 { wrote = write_list_struct_local(src) }
+    else if str_contains(name, "struct_local") == 1 { wrote = write_struct_local(src) }
+    else if str_contains(name, "struct_abi") == 1 { wrote = write_struct_abi(src) }
+    else if str_contains(name, "list_int") == 1 { wrote = write_list_int(src) }
+    else if str_contains(name, "str_slice") == 1 { wrote = write_str_slice(src) }
+    else if str_contains(name, "char_literal") == 1 { wrote = write_char_literal(src) }
+    else if str_contains(name, "map_int_int") == 1 { wrote = write_map_int_int(src) }
+    if wrote != 0 {
+        print(str_concat("  FAIL direct ", str_concat(name, " source write")))
+        return 1
+    }
+
+    if capture_emit_direct(vaisc, src, ir, out_path, err_path) != 0 {
+        return emit_failed(str_concat("direct ", name), err_path)
+    }
+    let text = fs_read_text(ir)
+    let mut ok = 0
+    if shape == 1 {
+        ok = str_contains(text, "define i64 @add") and str_contains(text, "call i64 @add") and str_contains(text, " br ")
+    } else if shape == 2 {
+        ok = str_contains(text, " br ")
+    } else if shape == 3 {
+        ok = str_contains(text, "%struct.Box = type") and str_contains(text, "getelementptr") and str_contains(text, "%struct.Box")
+    } else if shape == 4 {
+        ok = str_contains(text, "%struct.Pair = type") and str_contains(text, "@make") and str_contains(text, "@sum")
+    } else if shape == 5 {
+        ok = str_contains(text, "__vais_list_int_sum") and str_contains(text, "DirectListInt")
+    } else if shape == 6 {
+        ok = str_contains(text, "__vais_str_len") and str_contains(text, "__vais_str_byte") and str_contains(text, "__vais_str_eq")
+    } else if shape == 7 {
+        ok = str_contains(text, "store i64 65") and str_contains(text, "icmp eq i64")
+    } else if shape == 8 {
+        ok = str_contains(text, "__vais_parse_uint") and str_contains(text, "__vais_parse_int")
+    } else if shape == 9 {
+        ok = str_contains(text, "__vais_map_int_int_insert") and str_contains(text, "__vais_map_int_int_get") and str_contains(text, "__vais_map_int_int_contains") and str_contains(text, "__vais_map_int_int_len")
+    } else if shape == 10 {
+        ok = str_contains(text, "DirectList_Box") and str_contains(text, "getelementptr") and str_contains(text, "struct.Box")
+    } else if shape == 11 {
+        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "sret(%struct.DirectList_Box)") and str_contains(text, "define i64 @append(ptr") and str_contains(text, "define i64 @score(ptr")
+    } else if shape == 12 {
+        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "store i64 10") and str_contains(text, "define i64 @bump(ptr")
+    } else if shape == 13 {
+        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "define i64 @set_box(ptr") and str_contains(text, "llvm.memcpy") and str_contains(text, "store i64 5")
+    } else if shape == 14 {
+        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "sret(%struct.DirectList_Box)")
+    } else if shape == 15 {
+        ok = str_contains(text, "@make") and str_contains(text, "@score") and str_contains(text, "call")
+    } else if shape == 16 {
+        ok = str_contains(text, "@fill") and str_contains(text, "call")
+    } else if shape == 17 {
+        ok = str_contains(text, "@make") and str_contains(text, "@score") and str_contains(text, "call")
+    } else if shape == 18 {
+        ok = str_contains(text, "call void @make") and str_contains(text, "call void @pass") and str_contains(text, "@score")
+    } else if shape == 19 {
+        ok = str_contains(text, "br label") and str_contains(text, "call void @make") and str_contains(text, "@score")
+    } else if shape == 20 {
+        ok = str_contains(text, "call void @make_int") and str_contains(text, "@score_int") and str_contains(text, "call void @make_box") and str_contains(text, "@score_box")
+    } else if shape == 21 {
+        ok = str_contains(text, "call void @make_int") and str_contains(text, "@score_int") and str_contains(text, "call void @make_box") and str_contains(text, "@score_box")
+    }
+    if ok == 0 {
+        return emit_failed(str_concat("direct ", name), err_path)
+    }
+    let rc = capture_run_direct(vaisc, src, run_out, run_err)
+    if rc == 42 {
+        print(str_concat("  PASS ", pass_label))
+        return 0
+    }
+    return run_failed(str_concat("direct ", name), rc, run_err)
+}
+
+fn usage() -> Int {
+    print("usage: vaisc-direct-feature-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("  FAIL direct feature check cannot create ", tmp))
+        return 1
+    }
+    let vaisc = path_join(root, "scripts/vaisc")
+    let mut fail = 0
+    fail = fail + expect_case(vaisc, tmp, "helper_control", "direct helper calls, locals, if, and while run (=42)", 1)
+    fail = fail + expect_case(vaisc, tmp, "for_loop", "direct range for-loops and break/continue run (=42)", 2)
+    fail = fail + expect_case(vaisc, tmp, "struct_local", "direct struct local literal, field read, and field write run (=42)", 3)
+    fail = fail + expect_case(vaisc, tmp, "struct_abi", "direct struct parameter and return ABI runs (=42)", 4)
+    fail = fail + expect_case(vaisc, tmp, "list_int", "direct local List<Int> push, len, is_empty, last, pop, index, literal, and sum run (=42)", 5)
+    fail = fail + expect_case(vaisc, tmp, "str_slice", "direct Str len, index, equality, Bool helper, and byte classification run (=42)", 6)
+    fail = fail + expect_case(vaisc, tmp, "char_literal", "direct Char literal, type annotation, return, and Bool helper run (=42)", 7)
+    fail = fail + expect_case(vaisc, tmp, "parse_helpers", "direct parse_uint/parse_int Str helpers run (=42)", 8)
+    fail = fail + expect_case(vaisc, tmp, "map_int_int", "direct local Map<Int,Int> insert/get/contains/len run (=42)", 9)
+    fail = fail + expect_case(vaisc, tmp, "list_struct_local", "direct local List<Struct> push, len, is_empty, last, pop, index, and field read run (=42)", 10)
+    fail = fail + expect_case(vaisc, tmp, "list_struct_abi", "direct List<Struct> parameter, return, inline, and hoisted arguments run (=42)", 11)
+    fail = fail + expect_case(vaisc, tmp, "list_struct_field_write", "direct List<Struct> indexed field assignment runs (=42)", 12)
+    fail = fail + expect_case(vaisc, tmp, "list_element_assignment", "direct List<Int> and List<Struct> element assignments run (=42)", 13)
+    fail = fail + expect_case(vaisc, tmp, "list_assignment", "direct List<Int> and List<Struct> assignments run (=42)", 14)
+    fail = fail + expect_case(vaisc, tmp, "list_int_abi", "direct List<Int> parameter and return ABI runs (=42)", 15)
+    fail = fail + expect_case(vaisc, tmp, "list_int_out_param", "direct List<Int> parameter push mutates caller list (=42)", 16)
+    fail = fail + expect_case(vaisc, tmp, "list_int_inline_values", "direct inline List<Int> call and return values run (=42)", 17)
+    fail = fail + expect_case(vaisc, tmp, "list_int_return_call_args", "direct List<Int> return-call arguments hoist and run (=42)", 18)
+    fail = fail + expect_case(vaisc, tmp, "list_int_while_hoist", "direct List<Int> while-condition returned arguments hoist per iteration (=42)", 19)
+    fail = fail + expect_case(vaisc, tmp, "list_if_hoist", "direct List<Int> and List<Struct> if-condition returned arguments hoist (=42)", 20)
+    fail = fail + expect_case(vaisc, tmp, "list_else_if_hoist", "direct List<Int> and List<Struct> else-if returned arguments lower (=42)", 21)
+    return fail
+}

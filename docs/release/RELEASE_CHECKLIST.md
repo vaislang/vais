@@ -1,6 +1,9 @@
 # Vais Release Checklist
 
 This checklist is the pre-tag release contract for the Vais mainline.
+The standalone installer and release archive packager are Vais-authored tools
+behind thin shell entrypoints: `tools/install_vaisc.vais` and
+`tools/package_vaisc_release.vais`.
 
 ## Current Release Line
 
@@ -41,8 +44,11 @@ archives have been published.
 
 Source tags matching `v*` trigger `.github/workflows/release-archives.yml`.
 The workflow builds standalone archives on Linux x64, macOS arm64, and macOS
-x64, smoke-tests the packaged `vaisc`, creates the matching GitHub Release when
-needed, and uploads the archives.
+x64, smoke-tests the packaged `vaisc` and `vais-check`, creates the matching
+GitHub Release when needed, and uploads the archives.
+The local archive command is `scripts/package-vaisc-release.sh`; the wrapper
+delegates the packaging logic to the Vais-authored
+`tools/package_vaisc_release.vais` tool.
 
 To run the archive workflow manually for an existing tag:
 
@@ -74,10 +80,11 @@ release commit.
    gh run list --workflow "Deploy Website" --branch main --limit 5
    ```
 
-4. Verify the live site still describes the released compiler path:
+4. Verify the live site still describes the released compiler and checker paths:
 
    ```bash
    curl -fsSL https://vaislang.dev/ | grep -F "scripts/vaisc"
+   curl -fsSL https://vaislang.dev/ | grep -F "scripts/vais-check"
    ```
 
 ## Stop Conditions

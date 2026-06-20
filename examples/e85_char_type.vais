@@ -1,0 +1,20 @@
+# expect: 42
+# Char annotations, helper parameters, and helper returns are Int-compatible.
+fn choose(flag: Bool) -> Char {
+    if flag {
+        return 'A'
+    }
+    return 'B'
+}
+
+fn score(c: Char) -> Int {
+    if c == 'A' {
+        return 40
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let c: Char = choose(true)
+    return score(c) + (c != 'B') + (choose(false) == 'B')
+}

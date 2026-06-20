@@ -1,0 +1,20 @@
+import vais_check_core
+
+fn main() -> Int {
+    let argc = proc_argc()
+    if argc != 1 {
+        print("usage: vais-check <path>")
+        return 2
+    }
+    let path = proc_arg(0)
+    if path == "--help" or path == "-h" {
+        print("usage: vais-check <path>")
+        return 0
+    }
+    let issues = check_file(path)
+    if issues == 0 {
+        print(str_concat("vais-check: ", str_concat(path, " clean")))
+        return 0
+    }
+    return 1
+}

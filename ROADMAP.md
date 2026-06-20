@@ -7,22 +7,23 @@ This file tracks current work only.
 - Project path is `/Users/sswoo/study/projects/vais`.
 - Checked-in language sources use `.vais`.
 - `scripts/vaisc` is the canonical compiler command.
-- `tools/vais-check.py` is the canonical lint/error-help command.
+- `scripts/vais-check` is the canonical lint/error-help command, built from
+  Vais source and protected by fixture contract gates.
 - The workspace now exposes only Vais source and Vais commands.
 - The compiler gates cover CLI smoke, front-contract diagnostics, direct LLVM emission, parity, and the value corpus.
 - The trusted self-host tier is `compiler/self/fixpoint.vais`, `fixpoint2.vais`, `fixpoint3.vais`, and `fixpoint_full.vais`.
 - `compiler/self/vaisc_core.ll` is the reusable self-host compiler core used by `scripts/vaisc`.
 - The full compiler path reads `.vais` source files directly through the self-host core.
 - Pure regeneration of `compiler/self/vaisc_core.ll` from `compiler/self/fixpoint_full.vais` is green.
-- The native compiler can be installed as a standalone `vaisc` binary outside
-  the checkout and packaged as a release archive.
-- Source tag builds have a release archive workflow for standalone compiler
-  assets.
+- The native compiler and checker can be installed as standalone `vaisc` and
+  `vais-check` binaries outside the checkout and packaged as a release archive.
+- Source tag builds have a release archive workflow for standalone compiler and
+  checker assets.
 - The `v0.2.2` source tag produced a GitHub Release with Linux x64, macOS
   arm64, and macOS x64 standalone compiler archives.
 - The native direct engine covers Int helper calls, locals, assignment, `if`,
   `while`, returns, simple Int-field struct locals, and struct parameter/return
-  helpers without invoking Python.
+  helpers through the native direct path.
 - The native direct engine covers the first local `List<Int>` slice: `[]`,
   `list()`, small integer list literals, `push`, `len`/`len()`, index, and
   `sum()`.
@@ -56,8 +57,11 @@ This file tracks current work only.
 - Indexed `List` reads/writes plus `last()` and `pop()` now trap at runtime on
   negative indexes, out-of-range indexes, or empty-list access.
 - `Str` length, byte index, equality/inequality, `Bool` byte-classification
-  helpers, and user-defined integer parsing patterns are promoted through
-  public front, parity, and native direct gates.
+  helpers, and user-defined integer parsing patterns are promoted through the
+  full self-host compiler, public front, parity, and native direct gates.
+- Single-byte `Char` literals, equality, explicit annotations, helper
+  parameters, and helper returns are promoted through public front, full
+  self-host, parity, and native direct gates as Int-compatible scalar values.
 - Named integer parsing helpers `parse_uint(s)` and `parse_int(s)` are promoted
   through the full self-host compiler, native direct engine, front gate, parity
   manifest, value corpus, and regenerated reusable core.
@@ -73,25 +77,65 @@ This file tracks current work only.
   required `name`, `version`, and `source` keys, source-root import resolution,
   and manifest diagnostics.
 - The full compiler path supports local dependency package paths in `vais.toml`
-  `[dependencies]`, with native and Python fallback gates for dependency
-  imports and dependency manifest diagnostics.
-- Phase 3 host file/path/process APIs are specified in `docs/design/HOST_IO.md`
-  and listed as specified, not verified, in `std/PRELUDE.md`.
+  `[dependencies]`, with native gates for dependency imports and dependency
+  manifest diagnostics.
+- Phase 3 host file/path/process APIs are specified in `docs/design/HOST_IO.md`;
+  `fs_exists`, `fs_read_text`, `fs_write_text`, `fs_mkdirs`, `fs_remove`,
+  `fs_cwd`, `fs_temp_dir`, `path_join`, `path_basename`, and `path_dirname`
+  are the first verified full-engine host file/path intrinsics, and
+  `proc_argc() -> Int`, `proc_arg(index: Int) -> Str`,
+  `proc_run(argv: List<Str>) -> Int`,
+  `proc_run_env(argv: List<Str>, env: List<Str>) -> Int`,
+  `proc_capture_stdout(argv: List<Str>) -> Str`,
+  `proc_capture_stderr(argv: List<Str>) -> Str`, and
+  `proc_capture_to(argv: List<Str>, stdout_path: Str, stderr_path: Str) -> Int`
+  are the first verified process intrinsics. Program argv, child environment
+  overrides, captured stdout/stderr, and status-plus-file capture are verified
+  for full-engine `vaisc run` and binaries produced by `vaisc build`.
+- Host-backed `Str` construction helpers `str_concat`, `str_slice`, and
+  `str_byte` are verified through the same host gate so Vais-authored text
+  transformation tools can be ported incrementally.
+- Host-backed `Str` builder helpers `str_builder_new`, `str_builder_push`,
+  `str_builder_append`, and `str_builder_finish` are verified through the host
+  gate for large Vais-authored text transformation tools.
+- Full-engine `Str` reassignment and user-defined `-> Str` helper returns are
+  verified through the host gate.
+- `tools/vais_check_core.vais` and `tools/vais_check_cli.vais` are the
+  Vais-authored public checker sources. `scripts/vais-check` builds and runs
+  them as the canonical lint/error-help command, release archives include the
+  standalone `bin/vais-check` binary. `tools/vais_check_contract_check.vais`
+  drives the focused checker fixture, CLI, path, help, and public wrapper
+  contract gate; the shell entrypoint is only a bootstrap wrapper.
+- `tools/embed_self_source.vais` is the Vais-authored self-source embedding
+  helper. Its focused gate is driven by `tools/embed_self_source_check.vais`,
+  which writes the fixtures, runs normalized and raw embedding, builds the
+  generated compilers through the trust-root path, and verifies their emitted
+  IR/binary results; the shell entrypoint is only a bootstrap wrapper.
+- `tools/normalize_stage_ir.vais` is the Vais-authored stage IR normalizer.
+  Its focused gate checks the expected normalized IR shape directly through the
+  Vais helper, and the long full-source self-host gate uses it for stage1/stage2
+  compiler IR comparison.
+- Internal self-host helper builds now use the native `scripts/vaisc`
+  trust-root path.
 
 ## Current Reality
 
 - The full compiler path emits LLVM IR through the self-host compiler source in `compiler/self/fixpoint_full.vais`.
 - The direct engine is intentionally narrow and currently supports Int helpers,
   Bool/Str scalar helpers, locals, assignment, calls, `if`, inline
-  `if { return ... }`, `while`, returns, `Str` literals, `Str.len()`, `Str`
-  byte index, `Str` equality/inequality, named `parse_uint`/`parse_int`
+  `if { return ... }`, `while`, range `for`, `break`, `continue`, returns, `Str` literals, `Str.len()`, `Str`
+  byte index, `Str` equality/inequality, `Char` literal equality, annotations,
+  helper parameters, helper returns, named `parse_uint`/`parse_int`
   helpers, simple Int-field struct local literal/read/write, struct
   parameter/return helper ABI, and local
   `List<Int>` initialization plus `push`, `len`, `is_empty`, `last`, `pop`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
   literal/constructor call and return values. Statement contexts, `if`,
   `else if`, and `while` conditions also lower `List<Int>`-returning helper
-  calls before passing them to `List<Int>` parameters. Local `List<Struct>`
+  calls before passing them to `List<Int>` parameters. Range `for` supports
+  exclusive `..` and inclusive `..=` bounds through both full self-host and
+  native direct paths, with `break` and `continue` lowered inside `while` and
+  range `for` loops. Local `List<Struct>`
   values support typed `[]`, `list()`, list literal initialization, `push`,
   `len`, `is_empty`, `last`, `pop`, index, field reads/writes, parameter reference, return value ABI,
   inline list arguments, and returned-list argument lowering in statements plus
@@ -102,12 +146,19 @@ This file tracks current work only.
   `get(key, default)`, `contains`, and `len` in both the full self-host compiler
   path and native direct engine; Map function parameters, return values,
   assignment, and generic key/value forms are not claimed yet.
-- The release compiler command uses a native host driver for normal user
-  `emit-ir`, `build`, and `run`; Python remains for internal repository checks
-  and diagnostics only.
+- The release compiler command uses a native host driver for `emit-ir`,
+  `build`, and `run`; internal self-host helper gates use the same native
+  compiler path.
 - Standalone install, uninstall, package, and install/package verification
-  scripts exist for the native compiler binary.
+  scripts exist for the native compiler and checker binaries.
 - Internal compiler gates no longer depend on a source pass-through helper.
+- Full self-host lowering for runtime `Str` equality/inequality is gate-backed,
+  and Vais-authored tools can use idiomatic `a == b` / `a != b` string
+  comparisons.
+- The long full-source self-host gate retargets compiler sources with the
+  Vais-native embed helper.
+- The long full-source self-host gate normalizes stage comparison IR with the
+  Vais-native normalizer.
 - Public documentation now starts at `README.md` and `docs/README.md`.
 - `docs/reference/LANGUAGE.md` describes only the current gate-backed language surface.
 - Local official website source was refreshed and rebuilt from the canonical Vais docs.
@@ -121,10 +172,10 @@ This file tracks current work only.
 ## Next Work
 
 1. Expand the standard library only through gate-backed APIs.
-2. Specify and implement the first file and process primitives needed to move
-   repository checks into Vais.
-3. Replace Python-only internal checks incrementally
-   with Vais-backed tools where the language is strong enough.
+2. Specify and implement file and process primitives needed for Vais-authored
+   repository tools.
+3. Replace host-only internal checks incrementally with Vais-backed tools where
+   the language is strong enough.
 4. Broaden types, collections, and control syntax without publishing ungated
    claims.
 5. Move more compiler development and verification into the self-host tier while
@@ -205,22 +256,114 @@ Done: small multi-file and local dependency Vais projects build with
 
 ### Phase 3: File And Process Support
 
-Goal: give Vais enough host interaction to replace internal Python checks where
-practical.
+Goal: give Vais enough host interaction for repository tools and release
+validation.
 
 - [x] 3.1 Specify file read/write, path, temp directory, stdout/stderr, exit code,
   and process execution APIs.
-- [ ] 3.2 Implement host-backed intrinsics in the native driver without mixing
-  them into pure compiler-core logic.
-- [ ] 3.3 Port the simplest Python-only checker to Vais first, keeping Python as
-  a comparison oracle until parity is proven.
-- [ ] 3.4 Port additional internal scripts only when file/process APIs are
-  stable and tested.
-- [ ] 3.5 Remove Python from public/release gates before removing it from
-  development diagnostics.
+- [x] 3.2 Implement the first host-backed intrinsic in the native driver without
+  mixing it into pure compiler-core logic.
+- [x] 3.3 Extend host-backed file intrinsics to text writes and directory
+  creation.
+- [x] 3.4 Add the first `Str`-returning host intrinsic for text file reads.
+- [x] 3.5 Add `Str`-returning path helper intrinsics.
+- [x] 3.6 Add argv-based process intrinsics.
+- [x] 3.6a Add the first captured stdout process intrinsic.
+- [x] 3.6b Add captured stderr process support for Vais-authored diagnostics
+  harnesses.
+- [x] 3.6c Add child-process environment override support for Vais-authored
+  process checks.
+- [x] 3.6d Add status-plus-stdout/stderr file capture for Vais-authored
+  process checks without requiring a struct-returning host ABI.
+- [x] 3.7 Port the simplest checker to Vais first.
+- [x] 3.7a Add minimal `Str` construction helpers needed by Vais-authored
+  repository tools.
+- [x] 3.8 Port release archive packaging orchestration to Vais once the
+  file/process APIs can read paths, capture platform commands, stage text docs,
+  and run argv-based child processes.
+- [x] 3.8b Port standalone install orchestration to Vais while keeping the
+  initial uninstall path shell-native so removal does not require a compiler.
+- [x] 3.8c Move parity, value-corpus, and host smoke gate logic into
+  Vais-authored harnesses while preserving thin bootstrap wrappers.
+- [x] 3.8d Move the NV-C0 public compiler smoke gate into a Vais-authored
+  harness while preserving a thin bootstrap wrapper.
+- [x] 3.8e Move the native driver smoke gate into a Vais-authored harness while
+  preserving native C build script bootstrap.
+- [x] 3.8f Move the NV-C3 diagnostics gate into a Vais-authored harness after
+  adding captured stderr process support.
+- [x] 3.8g Move the legacy self-host compiler smoke gate into a Vais-authored
+  harness while preserving the shell bootstrap boundary.
+- [x] 3.8h Move the NV-C1 front contract gate into a Vais-authored harness while
+  preserving a thin bootstrap wrapper.
+- [x] 3.8i Move the direct-engine no-Python PATH check into a Vais-authored
+  harness after adding child environment process support.
+- [x] 3.8j Move the direct-engine arithmetic/build/run smoke checks into a
+  Vais-authored harness.
+- [x] 3.8k Move the direct-engine import reject and List bounds trap checks into
+  a Vais-authored harness using status-plus-file process capture.
+- [x] 3.8l Move the direct helper/control-flow, range `for`, struct-local, and
+  struct ABI success fixtures into a Vais-authored harness.
+- [x] 3.8m Move direct local `List<Int>`, `Str`, `Char`,
+  `parse_uint`/`parse_int`, local `Map<Int,Int>`, and local `List<Struct>`
+  success fixtures into the Vais-authored feature harness.
+- [x] 3.8n Move the remaining direct List ABI, assignment, and returned-list
+  hoist shell fixtures into the Vais-authored feature harness.
+- [x] 3.8o Audit remaining shell wrappers and keep only bootstrap, process
+  supervision, or platform-specific CI glue.
+- [x] 3.8p Move the stage IR normalizer focused gate sample/expected fixture and
+  shape checks into a Vais-authored check harness.
+- [x] 3.8q Move the self-source embedding focused gate fixture generation,
+  trust-root build/run checks, and generated compiler result assertions into a
+  Vais-authored check harness.
+- [x] 3.8r Move the checker focused gate output-count, diagnostic-pattern,
+  path, help, and public-wrapper assertions into a Vais-authored contract
+  harness.
+- [x] 3.8s Move the short `fixpoint.vais` and `fixpoint2.vais` tier fixture
+  lists, raw-call embedding, trust-root compiler builds, emitted-IR clang
+  checks, and result assertions into a Vais-authored harness.
+- [x] 3.8t Add verified `fs_remove(path)` and port standalone uninstall
+  orchestration to `tools/uninstall_vaisc.vais`.
+- [x] 3.8u Move standalone install/package verification assertions into
+  `tools/vaisc_install_check.vais`.
+- [x] 3.8v Move the NV-C2 direct-emitter gate orchestration into
+  `tools/vaisc_direct_gate.vais`, leaving the shell file as only the temp-dir
+  bootstrap wrapper.
+- [x] 3.8w Reduce single-tool focused shell wrappers to temp-dir bootstrap
+  wrappers that invoke their Vais-authored gates through `scripts/vaisc run`.
+- [x] 3.8x Move the long full-source self-host compiler orchestration into
+  `tools/fixpoint_full_self_check.vais`, leaving the shell file as a
+  temp-directory bootstrap wrapper.
+- [x] 3.8y Move the long full-codegen regression runner into
+  `tools/fixpoint_full_codegen_check.vais`, leaving the shell file as a
+  temp-directory bootstrap wrapper.
+- [x] 3.8z Audit the remaining host boundaries and leave native C build,
+  public command cache wrappers, release-gate/CI orchestration, website build,
+  tar/install/clang system tools, and temp-dir bootstrap wrappers explicit.
+- [x] 3.9 Keep public checker release gates on the Vais-authored checker.
 
-Done: at least one internal checker runs from Vais source, and release gates no
-longer require Python except where explicitly marked development-only.
+Done: the public checker, release archive packager, standalone installer,
+parity manifest validator, value-corpus validator, host smoke validator, NV-C0
+public compiler smoke validator, front contract validator, native driver smoke
+validator, NV-C3 diagnostics validator, legacy self-host compiler smoke
+validator, direct no-Python environment validator, direct arithmetic/build
+smoke validator, direct reject/trap validator, direct feature validator, and
+direct-emitter gate runner run from Vais source. The direct feature validator
+now covers the scalar,
+collection, struct, helper, list ABI, assignment, and returned-list hoist
+success fixture groups. The checker contract, stage IR normalizer, and
+self-source embed focused gates now use Vais-authored check harnesses. The
+short fixpoint tier gates also use a shared Vais-authored harness, the
+full-codegen regression runner executes its 200 fixture cases plus source-file
+and IR shape checks from a Vais-authored harness, and the full-source self-host
+gate retargets compiler sources, builds generated compilers, validates emitted
+IR, and compares normalized stage output from a Vais-authored harness.
+Standalone uninstall plus install/package verification are backed by Vais
+tools. The focused, full-codegen, and self-host shell entrypoints now use
+`scripts/vaisc run` directly and remain only as temp-directory bootstrap
+boundaries. The remaining host boundaries are audited and intentionally limited
+to native C bootstrap/driver code, public command cache wrappers,
+release-gate/CI orchestration, website build tooling, tar/install/clang system
+tools, and temporary directory setup.
 
 ### Phase 4: Broader Language Surface
 
@@ -228,13 +371,18 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
 
 - [ ] 4.1 Stabilize `Bool`, `Str`, and `Char` as first-class surface types across
   full and direct gates where feasible.
+- [x] 4.1a Promote single-byte `Char` literal equality plus explicit `Char`
+  local annotations, helper parameters, and helper returns through public
+  front, native direct, full self-host, and parity gates.
 - [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
   simple return-arm shape is fully gated.
-- [ ] 4.3 Decide `for`, `break`, and `continue` semantics and lower them through
-  both full and direct paths where claimed.
+- [x] 4.3a Promote exclusive `..` and inclusive `..=` range `for` loops through
+  public front, native direct, full self-host, and parity gates.
+- [x] 4.3b Decide `break` and `continue` semantics and lower them through both
+  full and direct paths where claimed.
 - [ ] 4.4 Expand collections with `Map`, `Option`, and `Result` only after syntax,
   ABI, and diagnostics are specified.
-- [ ] 4.5 Keep unsupported syntax behind `tools/vais-check.py` and front-contract
+- [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
 
 Done: `docs/reference/LANGUAGE.md` describes a coherent v1 surface, and every
@@ -249,7 +397,7 @@ time.
   regeneration green after each language expansion.
 - [ ] 5.2 Move front-contract validation that belongs to the compiler into
   self-host Vais code once the language can express it cleanly.
-- [ ] 5.3 Move more diagnostics and source preparation out of host C/Python while
+- [ ] 5.3 Move more diagnostics and source preparation out of the host driver while
   keeping OS-facing file/process work behind explicit host APIs.
 - [ ] 5.4 Add stage comparison gates for self-host output where deterministic IR
   is practical.
@@ -280,14 +428,15 @@ examples, and reproduce the release archive from source.
   website copy when public behavior changes.
 - Direct engine growth is valuable, but the full self-host path remains the
   language authority unless a direct slice is explicitly promoted.
-- Python removal is not an isolated cleanup task; it depends on file/process
-  support and Vais-backed replacement tools.
+- Host-tool reduction is not an isolated cleanup task; it depends on
+  file/process support and Vais-backed replacement tools.
 - Release tags are public state. Create or move tags only as a deliberate
   release milestone.
 
 ### Current First Executable Milestone
 
-The current concrete slice is Phase 2 package structure:
+The current concrete slice moves the Vais checker from a ported rule slice to a
+public command protected by its own fixture contract:
 
 - [x] Add a release checklist document and wire it to the current gate commands.
 - [x] Confirm the release archive workflow publishes archives for a chosen tag.
@@ -314,9 +463,28 @@ The current concrete slice is Phase 2 package structure:
   import-cycle diagnostics.
 - [x] Add the minimal package manifest slice.
 - [x] Add local package dependency paths.
-- [x] Specify the minimal Phase 3 file/process API needed to replace internal
-  Python repository checks.
-- [ ] Implement the first native-driver host I/O intrinsic smoke gate.
+- [x] Specify the minimal Phase 3 file/process API needed for repository
+  validation tools.
+- [x] Implement the first native-driver host I/O intrinsic smoke gate.
+- [x] Extend the host runtime beyond `fs_exists` to text writes and directory
+  creation.
+- [x] Extend host support to text reads.
+- [x] Extend host support to path helpers.
+- [x] Extend host support to argv-based process execution.
+- [x] Port the smallest checker slice to Vais.
+- [x] Expand the Vais checker slice to the current public checker fixture
+  catalog.
+- [x] Add line/column-aware Vais checker diagnostics.
+- [x] Add a Vais-backed checker CLI path that can receive a target file path,
+  return a normal issue/no-issue status, and remain gated by fixture contracts.
+- [x] Promote the Vais checker CLI to the public `scripts/vais-check` command
+  and package it as a standalone `bin/vais-check` binary.
+- [x] Keep public-facing docs and release gates on the Vais-authored checker.
+- [x] Add minimal host-backed `Str` construction helpers for future Vais tool
+  ports.
+- [x] Add full-engine `Str` reassignment and user-defined `-> Str` returns.
+- [x] Build the parity manifest and value-corpus validators in Vais so release
+  gates depend on Vais-native harnesses.
 
 ## Completed Milestone: Phase 3 Host API Specification
 
@@ -330,8 +498,8 @@ Mode: sequential
   basenames, and dirnames.
 - [x] 4. Specify argv-based process execution and captured process output without
   shell expansion.
-- [x] 5. Mark the APIs as specified, not verified, in canonical docs and identify
-  the first Python-checker port target.
+- [x] 5. Mark the broad APIs as specified in canonical docs and identify the
+  first checker port target.
 
 ## Completed Milestone: Local Dependency Package Paths
 
@@ -345,7 +513,7 @@ Mode: sequential
 - [x] 4. Reject missing dependency manifests, unsafe dependency paths, and
   dependency cycles with P4 diagnostics.
 - [x] 5. Add dependency examples, canonical docs, website copy, and
-  front-contract gates for native and Python fallback paths.
+  front-contract gates for native paths.
 
 ## Completed Milestone: Package Manifest Source Roots
 
@@ -357,7 +525,7 @@ Mode: sequential
 - [x] 4. Reject missing keys, unsafe source paths, missing source directories,
   and entries outside the source root with P4 diagnostics.
 - [x] 5. Add package examples, canonical docs, website copy, and front-contract
-  gates for native and Python fallback paths.
+  gates for native paths.
 
 ## Completed Milestone: Single-Package Local Imports
 
@@ -368,8 +536,7 @@ Mode: sequential
 - [x] 3. Keep direct-engine builds single-file.
 - [x] 4. Reject missing imports, duplicate top-level symbols, and import cycles
   with P4 diagnostics.
-- [x] 5. Add a multi-file example and front-contract gates for native and Python
-  fallback paths.
+- [x] 5. Add a multi-file example and front-contract gates for native paths.
 
 ## Completed Milestone: Minimal Module Model Specification
 
@@ -477,8 +644,7 @@ Mode: sequential
   decimal parsing behavior.
 - [x] 3. Lower both helpers through the full self-host compiler and regenerate
   `compiler/self/vaisc_core.ll`.
-- [x] 4. Lower both helpers through the native direct engine without invoking
-  Python.
+- [x] 4. Lower both helpers through the native direct engine.
 - [x] 5. Add front, direct, full self-host, parity, and value gates with
   `examples/e83_parse_helpers.vais`.
 - [x] 6. Sync `std/PRELUDE.md`, the language reference, changelog, roadmap,
@@ -527,12 +693,12 @@ Mode: sequential
 
 #### 1. Front and direct scalar surface
 
-- Target files: `tools/vaisc.py`, `tools/vaisc_native.c`,
-  `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-direct.sh`.
+- Target files: `tools/vaisc_native.c`, `scripts/test-vaisc-front.sh`,
+  `scripts/test-vaisc-direct.sh`.
 - Requirements: keep `fn main() -> Int`, but allow helper signatures and locals
   for `Int`, `Bool`, and `Str`; direct mode must stay native-only.
 - Done: front and direct gates cover `Str` params/locals, `Bool` classifier
-  helpers, and native direct lowering without Python.
+  helpers, and native direct lowering.
 
 #### 2. String operations and tool patterns
 
@@ -762,8 +928,8 @@ Mode: sequential
 - Target files: `scripts/test-release-gates.sh`.
 - Requirements: provide one command that runs the release-level gates before a
   public source tag is created.
-- Done: `bash scripts/test-release-gates.sh` runs Python syntax checks, shell
-  syntax checks, front/direct/error/parity/value/native/install gates,
+- Done: `bash scripts/test-release-gates.sh` runs shell syntax checks,
+  front/direct/error/parity/value/native/install gates,
   self-host regeneration gates, release archive packaging, website build, and
   `git diff --check`.
 
@@ -983,9 +1149,9 @@ Mode: sequential
 #### 1. Direct local List<Struct> lowering
 
 - Target files: `tools/vaisc_native.c`.
-- Requirements: direct mode accepts local `List<DeclaredStruct>` values without
-  invoking Python; `List<Struct>` function parameter/return ABI is handled by
-  the following milestone.
+- Requirements: direct mode accepts local `List<DeclaredStruct>` values through
+  the native direct engine; `List<Struct>` function parameter/return ABI is
+  handled by the following milestone.
 - Done: direct lowering emits `DirectList_<Struct>` locals for typed `[]`,
   `list()`, and small struct list literals, lowers `push`, `len`/`len()`, index
   reads, and field reads such as `xs[0].value`.
@@ -1006,7 +1172,7 @@ Mode: sequential
 Mode: sequential
 
 - [x] 1. Add release archive workflow for source tags.
-- [x] 2. Remove the public direct-engine Python fallback.
+- [x] 2. Remove the public direct-engine non-native fallback.
 - [x] 3. Expand the native direct engine through Int helper calls, locals, assignment, `if`, `while`, simple struct locals, and struct parameter/return helpers.
 - [x] 4. Sync README, language docs, website copy, changelog, and gates.
 
@@ -1015,14 +1181,16 @@ Mode: sequential
 #### 1. Release archive workflow
 
 - Target files: `.github/workflows/release-archives.yml`, `scripts/package-vaisc-release.sh`.
-- Requirements: tag builds package standalone compiler archives and upload them to the matching GitHub Release.
+- Requirements: tag builds package standalone compiler/checker archives and
+  upload them to the matching GitHub Release.
 - Done: workflow builds Linux/macOS archive jobs, smokes packaged `vaisc`, creates the release when needed, and uploads archives.
 
 #### 2. Native direct path
 
 - Target files: `scripts/vaisc`, `tools/vaisc_native.c`.
-- Requirements: `--engine direct` must stay on the native driver and must not invoke Python.
-- Done: `scripts/test-vaisc-direct.sh` proves direct mode still works with a failing `python3` shim first in `PATH`.
+- Requirements: `--engine direct` must stay on the native driver.
+- Done: `scripts/test-vaisc-direct.sh` proves direct mode stays native even
+  when an unrelated `python3` shim is first in `PATH`.
 
 #### 3. Direct Int control-flow and struct slice
 
@@ -1049,8 +1217,8 @@ Mode: sequential
 #### 1. Direct local List<Int> lowering
 
 - Target files: `tools/vaisc_native.c`.
-- Requirements: direct mode accepts local `List<Int>` values without invoking
-  Python; function parameter/return list ABI stays out of this slice.
+- Requirements: direct mode accepts local `List<Int>` values through the native
+  direct engine; function parameter/return list ABI stays out of this slice.
 - Done: direct lowering emits `DirectListInt` locals for `[]`, `list()`, and
   small integer list literals, lowers `push`, `len`/`len()`, index reads, and
   `sum()`.
@@ -1087,7 +1255,7 @@ Mode: sequential
 - Target files: `tools/vaisc_native.c`.
 - Requirements: direct mode can lower `return []`, `return [1, 2]`,
   `return list()`, `score([])`, `score([1, 2])`, and `score(list())` for
-  `List<Int>` signatures without invoking Python.
+  `List<Int>` signatures through the native direct engine.
 - Done: direct lowering emits `DirectListInt` compound literals for inline list
   return values and passes addresses of inline list compound literals to
   `List<Int>` parameters.
@@ -1237,9 +1405,12 @@ Mode: sequential
 
 Mode: sequential
 
-- [x] 1. Add install and uninstall scripts for standalone `vaisc`.
-- [x] 2. Add release archive packaging for the native binary and first-read docs.
-- [x] 3. Add an install/package gate that proves installed and packaged binaries run.
+- [x] 1. Add install and uninstall scripts for standalone `vaisc` and
+  `vais-check`.
+- [x] 2. Add release archive packaging for the native binaries and first-read
+  docs.
+- [x] 3. Add an install/package gate that proves installed and packaged
+  binaries run.
 - [x] 4. Sync docs/site/changelog and run release gates.
 
 ### Task Briefs
@@ -1247,19 +1418,26 @@ Mode: sequential
 #### 1. Standalone install and uninstall
 
 - Target files: `scripts/install-vaisc.sh`, `scripts/uninstall-vaisc.sh`.
-- Requirements: build the native compiler from the checked-in self-host core and install it as `PREFIX/bin/vaisc`; uninstall removes that binary.
-- Done: installing into a temporary prefix creates an executable `vaisc`, and uninstall removes it.
+- Requirements: build the native compiler from the checked-in self-host core and
+  install `PREFIX/bin/vaisc` plus the Vais-built checker as
+  `PREFIX/bin/vais-check`; uninstall removes those binaries.
+- Done: installing into a temporary prefix creates executable `vaisc` and
+  `vais-check`, and uninstall removes them.
 
 #### 2. Release archive packaging
 
 - Target files: `scripts/package-vaisc-release.sh`, `.gitignore`.
-- Requirements: build a standalone archive containing `bin/vaisc` and the current first-read docs; keep generated archives out of git.
+- Requirements: build a standalone archive containing `bin/vaisc`,
+  `bin/vais-check`, and the current first-read docs; keep generated archives out
+  of git.
 - Done: the package script creates `dist/vais-VERSION-OS-ARCH.tar.gz`.
 
 #### 3. Install/package gate
 
 - Target files: `scripts/test-vaisc-install.sh`, `AGENTS.md`, `README.md`.
-- Requirements: verify installed and packaged binaries can report version, run `doctor`, and compile/run a `.vais` smoke source.
+- Requirements: verify installed and packaged compiler binaries can report
+  version, run `doctor`, and compile/run a `.vais` smoke source, and verify the
+  installed and packaged checker accepts/flags fixture sources.
 - Done: `bash scripts/test-vaisc-install.sh` passes without writing outside a temporary directory.
 
 #### 4. Documentation, site, and gates
@@ -1268,12 +1446,12 @@ Mode: sequential
 - Requirements: public docs describe checkout use, standalone install, uninstall, package, and the gate protecting them.
 - Done: docs and site are synced, website builds, stale public-claim scan is clean, and release gates pass.
 
-## Completed Milestone: Python-Free Public `vaisc`
+## Completed Milestone: Native Public `vaisc`
 
 Mode: sequential
 
 - [x] 1. Native driver skeleton and build script.
-- [x] 2. Release source-preparation parity with the current Python path.
+- [x] 2. Release source-preparation parity with the retired prototype path.
 - [x] 3. `scripts/vaisc` default switch and install/doctor UX.
 - [x] 4. Documentation/site/changelog sync and release gates.
 
@@ -1283,34 +1461,79 @@ Mode: sequential
 
 - Target files: `tools/`, `scripts/`, `README.md`, `ROADMAP.md`.
 - Requirements: compile a native `vaisc` binary from a small host driver and `compiler/self/vaisc_core.ll`; support `emit-ir`, `build`, `run`, `--help`, `--version`, and `doctor` for the full engine path.
-- Done: a local native binary can compile and run `examples/c4.vais` without invoking Python.
+- Done: a local native binary can compile and run `examples/c4.vais`.
 
 #### 2. Release source-preparation parity
 
 - Target files: native driver/source-prep implementation and existing `scripts/test-vaisc*.sh` gates.
-- Requirements: match the release subset behavior currently implemented by `tools/vaisc.py`, including enum/match, payload enum, closure-return, typed `Int`, `print`, comments, and semicolon normalization.
+- Requirements: keep the native release source-preparation behavior for
+  enum/match, payload enum, closure-return, typed `Int`, `print`, comments, and
+  semicolon normalization.
 - Done: `bash scripts/test-vaisc.sh`, `bash scripts/test-vaisc-front.sh`, `bash scripts/test-vaisc-errors.sh`, `bash scripts/test-vaisc-parity.sh`, and `bash scripts/test.sh` pass through the native public command.
 
 #### 3. Public command switch and install UX
 
 - Target files: `scripts/vaisc`, packaging/install scripts, README docs.
-- Requirements: `scripts/vaisc` uses the native driver by default; Python is not required for normal user `emit-ir`, `build`, or `run`; `doctor` reports missing `clang` or missing native driver clearly.
+- Requirements: `scripts/vaisc` uses the native driver by default for normal user `emit-ir`, `build`, and `run`; `doctor` reports missing `clang` or missing native driver clearly.
 - Done: a fresh checkout can build the native driver and run `scripts/vaisc doctor`, `scripts/vaisc run examples/c4.vais`, and `scripts/vaisc build examples/c4.vais -o /tmp/c4`.
 
 #### 4. Documentation, release, and gates
 
 - Target files: `README.md`, `docs/README.md`, `docs/reference/LANGUAGE.md`, `compiler/self/SELF_HOST.md`, `website/`, `CHANGELOG.md`, `WORKLOG.md`.
-- Requirements: public docs describe the Python-free command path only after verification; internal Python tools remain documented as checks, not as user runtime prerequisites.
+- Requirements: public docs describe the native command path only after verification.
 - Done: verification baseline plus self-host gates pass, the website builds, stale public-claim scan is clean, and GitHub/site release notes are synced.
+
+## Completed Milestone: Vais-Native Self-Host Gate Helpers
+
+Mode: sequential
+
+- [x] 1. Port self-source embedding to `tools/embed_self_source.vais`.
+- [x] 2. Port stage IR normalization to `tools/normalize_stage_ir.vais`.
+- [x] 3. Move long self-host gates onto the Vais helpers.
+- [x] 4. Use Vais-only helper gates in the release baseline.
+
+### Task Briefs
+
+#### 1. Self-source embedding
+
+- Target files: `tools/embed_self_source.vais`,
+  `scripts/test-embed-self-source-vais.sh`, `scripts/test-fixpoint-full.sh`.
+- Requirements: support normalized `.vais` source-file retargeting, raw
+  compact-program embedding, and raw string-call retargeting in the fixpoint
+  gates.
+- Done: `scripts/test-fixpoint.sh`, `scripts/test-fixpoint2.sh`, and
+  `scripts/test-fixpoint-full.sh` build the Vais helper once and use it for all
+  harness inputs; `scripts/test-embed-self-source-vais.sh` exercises
+  normalized source-file retargeting, raw compile embedding, and raw
+  string-call retargeting through the Vais helper.
+
+#### 2. Stage IR normalization
+
+- Target files: `tools/normalize_stage_ir.vais`,
+  `scripts/test-normalize-stage-ir-vais.sh`,
+  `scripts/test-fixpoint-full-self.sh`.
+- Requirements: normalize generated stage IR names through a Vais-built helper
+  before comparing stage1/stage2 self-host output.
+- Done: the long self-host comparison uses the Vais normalizer; its focused
+  gate checks the expected normalized IR shape directly through the Vais
+  helper.
+
+#### 3. Gate integration
+
+- Target files: `scripts/test-release-gates.sh`, `AGENTS.md`,
+  `compiler/self/SELF_HOST.md`, `WORKLOG.md`.
+- Requirements: release gates build and exercise the Vais-native helpers before
+  self-host and archive checks.
+- Done: focused helper gates, full-codegen, full self-host, archive packaging,
+  and website build all run from `bash scripts/test-release-gates.sh`.
 
 ## Verification Baseline
 
 Run before closing compiler changes:
 
 ```bash
-python3 -m py_compile tools/vaisc.py tools/vais-check.py tools/embed_self_source.py tests/vais_check_test.py
 bash -n scripts/*.sh
-python3 tests/vais_check_test.py
+bash scripts/test-vais-check-vais.sh
 bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc.sh
@@ -1318,5 +1541,12 @@ bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-direct.sh
 bash scripts/test-vaisc-errors.sh
 bash scripts/test-vaisc-parity.sh
+bash scripts/test-vaisc-host.sh
+bash scripts/test-embed-self-source-vais.sh
+bash scripts/test-normalize-stage-ir-vais.sh
+bash scripts/test-fixpoint.sh
+bash scripts/test-fixpoint2.sh
 bash scripts/test.sh
+bash scripts/test-fixpoint-full.sh
+bash scripts/test-fixpoint-full-self.sh
 ```

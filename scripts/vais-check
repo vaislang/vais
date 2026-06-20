@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+checker="$HERE/build/vais-check"
+mkdir -p "$HERE/build"
+
+checker_needs_build() {
+    if [ ! -x "$checker" ]; then
+        return 0
+    fi
+    for dep in \
+        "$HERE/tools/vais_check_cli.vais" \
+        "$HERE/tools/vais_check_core.vais" \
+        "$HERE/compiler/self/vaisc_core.ll" \
+        "$HERE/tools/vaisc_native.c" \
+        "$HERE/scripts/vaisc"
+    do
+        if [ "$dep" -nt "$checker" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+if checker_needs_build; then
+    lock="$checker.lock"
+    while ! mkdir "$lock" 2>/dev/null; do
+        sleep 0.1
+    done
+    tmp_checker=""
+    cleanup_build_lock() {
+        if [ -n "$tmp_checker" ]; then
+            rm -f "$tmp_checker"
+        fi
+        rmdir "$lock" 2>/dev/null || true
+    }
+    trap cleanup_build_lock EXIT INT TERM
+    if checker_needs_build; then
+        tmp_checker="$checker.tmp.$$"
+        "$HERE/scripts/vaisc" build "$HERE/tools/vais_check_cli.vais" -o "$tmp_checker" >/dev/null
+        mv "$tmp_checker" "$checker"
+        tmp_checker=""
+    fi
+    cleanup_build_lock
+    trap - EXIT INT TERM
+fi
+
+exec "$checker" "$@"

@@ -1,0 +1,150 @@
+fn str_eq(a: Str, b: Str) -> Int {
+    if a.len() != b.len() { return 0 }
+    let mut i = 0
+    while i < a.len() {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn str_has_prefix(s: Str, prefix: Str) -> Int {
+    if s.len() < prefix.len() { return 0 }
+    return str_eq(str_slice(s, 0, prefix.len()), prefix)
+}
+
+fn fail(message: Str) -> Int {
+    print(str_concat("error: ", message))
+    return 1
+}
+
+fn usage() -> Int {
+    print("usage: scripts/install-vaisc.sh [--prefix DIR] [--destdir DIR] [--bindir DIR]")
+    print("")
+    print("Builds the native self-host-backed compiler and checker, then installs:")
+    print("")
+    print("  $PREFIX/bin/vaisc")
+    print("  $PREFIX/bin/vais-check")
+    print("")
+    print("Environment:")
+    print("  PREFIX   install prefix, defaults to /usr/local")
+    print("  DESTDIR  staging root prepended to the install path")
+    print("  CLANG    compiler used to build the native vaisc binary")
+    return 0
+}
+
+fn capture1(cmd: Str, arg0: Str) -> Str {
+    let argv: List<Str> = []
+    argv.push(cmd)
+    argv.push(arg0)
+    return proc_capture_stdout(argv)
+}
+
+fn run3(a: Str, b: Str, c: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    return proc_run(argv)
+}
+
+fn run5(a: Str, b: Str, c: Str, d: Str, e: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    argv.push(d)
+    argv.push(e)
+    return proc_run(argv)
+}
+
+fn main() -> Int {
+    if proc_argc() < 4 {
+        usage()
+        return 2
+    }
+
+    let root = proc_arg(0)
+    let env_prefix = proc_arg(1)
+    let env_destdir = proc_arg(2)
+    let env_bindir = proc_arg(3)
+    let mut prefix = "/usr/local"
+    let mut destdir = env_destdir
+    let mut bindir = env_bindir
+    if env_prefix.len() > 0 { prefix = env_prefix }
+
+    let mut i = 4
+    while i < proc_argc() {
+        let arg = proc_arg(i)
+        if str_eq(arg, "--prefix") == 1 {
+            if i + 1 >= proc_argc() { return fail("missing --prefix value") }
+            prefix = proc_arg(i + 1)
+            i = i + 2
+        } else if str_has_prefix(arg, "--prefix=") == 1 {
+            prefix = str_slice(arg, 9, arg.len() - 9)
+            i = i + 1
+        } else if str_eq(arg, "--destdir") == 1 {
+            if i + 1 >= proc_argc() { return fail("missing --destdir value") }
+            destdir = proc_arg(i + 1)
+            i = i + 2
+        } else if str_has_prefix(arg, "--destdir=") == 1 {
+            destdir = str_slice(arg, 10, arg.len() - 10)
+            i = i + 1
+        } else if str_eq(arg, "--bindir") == 1 {
+            if i + 1 >= proc_argc() { return fail("missing --bindir value") }
+            bindir = proc_arg(i + 1)
+            i = i + 2
+        } else if str_has_prefix(arg, "--bindir=") == 1 {
+            bindir = str_slice(arg, 9, arg.len() - 9)
+            i = i + 1
+        } else if str_eq(arg, "-h") == 1 {
+            usage()
+            return 0
+        } else if str_eq(arg, "--help") == 1 {
+            usage()
+            return 0
+        } else {
+            usage()
+            return fail(str_concat("unexpected argument: ", arg))
+        }
+    }
+
+    if bindir.len() == 0 { bindir = path_join(prefix, "bin") }
+
+    let tmp = path_join(fs_temp_dir(), "vais-install-tool")
+    let tmp_vaisc = path_join(tmp, "vaisc")
+    let tmp_check = path_join(tmp, "vais-check")
+    let install_dir = str_concat(destdir, bindir)
+    let target_vaisc = path_join(install_dir, "vaisc")
+    let target_check = path_join(install_dir, "vais-check")
+
+    run3("rm", "-rf", tmp)
+    if fs_mkdirs(tmp) != 0 { return fail(str_concat("cannot create temp directory: ", tmp)) }
+
+    capture1(path_join(root, "scripts/build-vaisc-native.sh"), tmp_vaisc)
+    if fs_exists(tmp_vaisc) == 0 {
+        run3("rm", "-rf", tmp)
+        return fail("native compiler build failed")
+    }
+    if run5(tmp_vaisc, "build", path_join(root, "tools/vais_check_cli.vais"), "-o", tmp_check) != 0 {
+        run3("rm", "-rf", tmp)
+        return fail("vais-check build failed")
+    }
+    if fs_mkdirs(install_dir) != 0 {
+        run3("rm", "-rf", tmp)
+        return fail(str_concat("cannot create install directory: ", install_dir))
+    }
+    if run5("install", "-m", "0755", tmp_vaisc, target_vaisc) != 0 {
+        run3("rm", "-rf", tmp)
+        return fail("installing vaisc failed")
+    }
+    if run5("install", "-m", "0755", tmp_check, target_check) != 0 {
+        run3("rm", "-rf", tmp)
+        return fail("installing vais-check failed")
+    }
+
+    run3("rm", "-rf", tmp)
+    print(str_concat("installed: ", target_vaisc))
+    print(str_concat("installed: ", target_check))
+    return 0
+}

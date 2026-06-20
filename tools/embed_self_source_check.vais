@@ -1,0 +1,250 @@
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn append_line(out: Int, line: Str) -> Int {
+    str_builder_append(out, line)
+    str_builder_push(out, 10)
+    return 0
+}
+
+fn print_log_if_exists(path: Str) -> Int {
+    if fs_exists(path) == 1 { print(fs_read_text(path)) }
+    return 0
+}
+
+fn write_normalized_source(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "# Default mode strips comments and Int annotations, then normalizes")
+    append_line(out, "# line-oriented source into the compact compile(...) form.")
+    append_line(out, "fn tok(d: Int) -> Int {")
+    append_line(out, "    let n: Int = 40 # drop this comment")
+    append_line(out, "    return n + d")
+    append_line(out, "}")
+    append_line(out, "return tok(2)")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_fixtures(tmp: Str) -> Int {
+    let normalized = path_join(tmp, "normalized_source.vais")
+    let raw_compile = path_join(tmp, "raw_compile.vais")
+    let raw_tokenize = path_join(tmp, "raw_tokenize.vais")
+    let raw_run_program = path_join(tmp, "raw_run_program.vais")
+    if write_normalized_source(normalized) != 0 { return 1 }
+    if fs_write_text(raw_compile, "return 42;") != 0 { return 1 }
+    if fs_write_text(raw_tokenize, "6 * 7") != 0 { return 1 }
+    if fs_write_text(raw_run_program, "let total = 10; let count = total * 4; return total + count;") != 0 { return 1 }
+    return 0
+}
+
+fn trust_copy_source(tmp: Str, label: Str, source: Str) -> Str {
+    let trust_root = path_join(tmp, str_concat(label, "_trust"))
+    let compiler_dir = path_join(path_join(trust_root, "compiler"), "self")
+    if fs_mkdirs(compiler_dir) != 0 { return "" }
+    let trusted = path_join(compiler_dir, path_basename(source))
+    if fs_write_text(trusted, fs_read_text(source)) != 0 { return "" }
+    return trusted
+}
+
+fn build_trusted(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) -> Int {
+    let trusted = trust_copy_source(tmp, label, source)
+    if trusted.len() == 0 { return 1 }
+    let trust_root = path_dirname(path_dirname(path_dirname(trusted)))
+    let out_path = path_join(tmp, str_concat(label, ".build.out"))
+    let err_path = path_join(tmp, str_concat(label, ".build.err"))
+    let argv: List<Str> = []
+    argv.push("/usr/bin/env")
+    argv.push(str_concat("VAISC_SELF_HOST_TRUST_ROOTS=", trust_root))
+    argv.push(vaisc)
+    argv.push("build")
+    argv.push(trusted)
+    argv.push("-o")
+    argv.push(out_bin)
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn run_embed_default(helper: Str, harness: Str, source: Str, out: Str, tmp: Str, label: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".embed.out"))
+    let err_path = path_join(tmp, str_concat(label, ".embed.err"))
+    let argv: List<Str> = []
+    argv.push(helper)
+    argv.push(harness)
+    argv.push(source)
+    argv.push(out)
+    let rc = proc_capture_to(argv, out_path, err_path)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL ", str_concat(label, ": default embed")))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn run_embed_raw(helper: Str, harness: Str, source: Str, out: Str, tmp: Str, label: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".embed.out"))
+    let err_path = path_join(tmp, str_concat(label, ".embed.err"))
+    let argv: List<Str> = []
+    argv.push(helper)
+    argv.push("--raw")
+    argv.push(harness)
+    argv.push(source)
+    argv.push(out)
+    let rc = proc_capture_to(argv, out_path, err_path)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL ", str_concat(label, ": raw embed")))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn run_embed_raw_call(helper: Str, call_name: Str, harness: Str, source: Str, out: Str, tmp: Str, label: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".embed.out"))
+    let err_path = path_join(tmp, str_concat(label, ".embed.err"))
+    let argv: List<Str> = []
+    argv.push(helper)
+    argv.push("--raw-call")
+    argv.push(call_name)
+    argv.push(harness)
+    argv.push(source)
+    argv.push(out)
+    let rc = proc_capture_to(argv, out_path, err_path)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL ", str_concat(label, ": raw-call embed")))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn build_embedded_compiler(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) -> Int {
+    let rc = build_trusted(vaisc, tmp, str_concat(label, "_compiler"), source, out_bin)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL ", str_concat(label, ": embedded compiler build")))
+    let err_path = path_join(tmp, str_concat(str_concat(label, "_compiler"), ".build.err"))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn run_generated_compiler(tmp: Str, label: Str, compiler_bin: Str, out_ll: Str) -> Int {
+    let run_out = out_ll
+    let run_err = path_join(tmp, str_concat(label, ".compiler.err"))
+    let argv: List<Str> = []
+    argv.push(compiler_bin)
+    let rc = proc_capture_to(argv, run_out, run_err)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL ", str_concat(label, ": embedded compiler run")))
+    print_log_if_exists(run_err)
+    return 1
+}
+
+fn compile_generated_ir(tmp: Str, label: Str, out_ll: Str, bin: Str) -> Int {
+    let clang_out = path_join(tmp, str_concat(label, ".clang.out"))
+    let clang_err = path_join(tmp, str_concat(label, ".clang.err"))
+    let argv: List<Str> = []
+    argv.push("clang")
+    argv.push("-Wno-override-module")
+    argv.push("-o")
+    argv.push(bin)
+    argv.push(out_ll)
+    let rc = proc_capture_to(argv, clang_out, clang_err)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL ", str_concat(label, ": generated IR invalid")))
+    print_log_if_exists(clang_err)
+    return 1
+}
+
+fn run_generated_binary(tmp: Str, label: Str, bin: Str, want: Int) -> Int {
+    let bin_out = path_join(tmp, str_concat(label, ".bin.out"))
+    let bin_err = path_join(tmp, str_concat(label, ".bin.err"))
+    let argv: List<Str> = []
+    argv.push(bin)
+    let got = proc_capture_to(argv, bin_out, bin_err)
+    if got == want {
+        print(str_concat(str_concat("  PASS ", label), str_concat(" -> ", uint_to_str(got))))
+        return 0
+    }
+    print(str_concat(str_concat("  FAIL ", label), str_concat(": got=", str_concat(uint_to_str(got), str_concat(" want=", uint_to_str(want))))))
+    print_log_if_exists(bin_err)
+    return 1
+}
+
+fn run_embedded(vaisc: Str, tmp: Str, label: Str, source: Str, want: Int) -> Int {
+    let out_ll = path_join(tmp, str_concat(label, ".ll"))
+    let bin = path_join(tmp, str_concat(label, ".bin"))
+    let compiler_bin = path_join(tmp, str_concat(label, ".compiler"))
+    if build_embedded_compiler(vaisc, tmp, label, source, compiler_bin) != 0 { return 1 }
+    if run_generated_compiler(tmp, label, compiler_bin, out_ll) != 0 { return 1 }
+    if compile_generated_ir(tmp, label, out_ll, bin) != 0 { return 1 }
+    return run_generated_binary(tmp, label, bin, want)
+}
+
+fn embed_default_and_run(helper: Str, vaisc: Str, tmp: Str, label: Str, harness: Str, source: Str, want: Int) -> Int {
+    let out = path_join(tmp, str_concat(label, ".vais"))
+    if run_embed_default(helper, harness, source, out, tmp, label) != 0 { return 1 }
+    return run_embedded(vaisc, tmp, label, out, want)
+}
+
+fn embed_raw_and_run(helper: Str, vaisc: Str, tmp: Str, label: Str, harness: Str, source: Str, want: Int) -> Int {
+    let out = path_join(tmp, str_concat(label, ".vais"))
+    if run_embed_raw(helper, harness, source, out, tmp, label) != 0 { return 1 }
+    return run_embedded(vaisc, tmp, label, out, want)
+}
+
+fn embed_raw_call_and_run(helper: Str, vaisc: Str, tmp: Str, label: Str, call_name: Str, harness: Str, source: Str, want: Int) -> Int {
+    let out = path_join(tmp, str_concat(label, ".vais"))
+    if run_embed_raw_call(helper, call_name, harness, source, out, tmp, label) != 0 { return 1 }
+    return run_embedded(vaisc, tmp, label, out, want)
+}
+
+fn usage() -> Int {
+    print("usage: embed-self-source-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("  FAIL Vais embed helper check cannot create ", tmp))
+        return 1
+    }
+    if write_fixtures(tmp) != 0 {
+        print("  FAIL Vais embed helper fixtures")
+        return 1
+    }
+
+    let vaisc = path_join(root, "scripts/vaisc")
+    let compiler_self = path_join(path_join(root, "compiler"), "self")
+    let full_harness = path_join(compiler_self, "fixpoint_full.vais")
+    let fixpoint_harness = path_join(compiler_self, "fixpoint.vais")
+    let fixpoint2_harness = path_join(compiler_self, "fixpoint2.vais")
+    let helper_src = path_join(path_join(root, "tools"), "embed_self_source.vais")
+    let helper_bin = path_join(tmp, "embed_self_source")
+
+    if build_trusted(vaisc, tmp, "embed_helper", helper_src, helper_bin) == 0 {
+        print("  PASS Vais embed helper builds")
+    } else {
+        print("  FAIL Vais embed helper build")
+        print_log_if_exists(path_join(tmp, "embed_helper.build.err"))
+        return 1
+    }
+
+    let normalized_source = path_join(tmp, "normalized_source.vais")
+    let raw_compile = path_join(tmp, "raw_compile.vais")
+    let raw_tokenize = path_join(tmp, "raw_tokenize.vais")
+    let raw_run_program = path_join(tmp, "raw_run_program.vais")
+    let mut fail = 0
+    fail = fail + embed_default_and_run(helper_bin, vaisc, tmp, "default_source_file", full_harness, normalized_source, 42)
+    fail = fail + embed_raw_and_run(helper_bin, vaisc, tmp, "raw_compile", full_harness, raw_compile, 42)
+    fail = fail + embed_raw_call_and_run(helper_bin, vaisc, tmp, "raw_call_tokenize", "tokenize", fixpoint_harness, raw_tokenize, 42)
+    fail = fail + embed_raw_call_and_run(helper_bin, vaisc, tmp, "raw_call_run_program", "run_program", fixpoint2_harness, raw_run_program, 50)
+
+    if fail == 0 { print("RESULT: Vais embed helper gate OK") }
+    else { print("RESULT: FAILURES") }
+    return fail
+}

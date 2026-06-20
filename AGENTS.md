@@ -4,7 +4,7 @@
 
 - This repo is the Vais mainline at `/Users/sswoo/study/projects/vais`.
 - Checked-in language sources use `.vais`.
-- Public commands are `scripts/vaisc` and `tools/vais-check.py`.
+- Public commands are `scripts/vaisc` and `scripts/vais-check`.
 - Do not add alternate source extensions.
 
 ## Compiler Paths
@@ -12,14 +12,21 @@
 - `scripts/vaisc` is the product-facing compiler CLI.
 - `tools/vaisc_native.c` implements the native public driver for `emit-ir`,
   `build`, `run`, `doctor`, `--version`, and the native direct engine.
-- `tools/vaisc.py` is the internal Python fallback for repository checks and
-  development diagnostics only; public direct mode stays native.
+- `scripts/vais-build-env.sh` builds trusted self-host helper sources through
+  the native `scripts/vaisc` trust-root path.
+- Retired checker helper prototypes are not public commands; public checker use
+  goes through `scripts/vais-check`.
+- `tools/embed_self_source.vais` is the Vais-native self-source embedding
+  helper used by self-host gates for source-file retargeting and raw compact
+  program/call embedding.
+- `tools/normalize_stage_ir.vais` is the Vais-native stage IR normalizer used
+  by self-host stage-comparison gates.
 - `compiler/self/fixpoint_full.vais` is the trusted full self-host compiler source.
 - `compiler/self/vaisc_core.ll` is the reusable self-host compiler core used by `scripts/vaisc`.
 - `scripts/build-vaisc-native.sh` builds the native public driver.
 - `scripts/install-vaisc.sh`, `scripts/uninstall-vaisc.sh`, and
-  `scripts/package-vaisc-release.sh` manage standalone native installs and
-  release archives.
+  `scripts/package-vaisc-release.sh` manage standalone native compiler/checker
+  installs and release archives.
 - `.github/workflows/release-archives.yml` publishes standalone archives for
   source tags.
 - `scripts/build.sh` and `scripts/vais-build-env.sh` are internal core-refresh tools.
@@ -36,9 +43,8 @@
 Use the smallest gate that covers the change, then broaden when touching shared compiler behavior.
 
 ```bash
-python3 -m py_compile tools/vaisc.py tools/vais-check.py tools/embed_self_source.py tests/vais_check_test.py
 bash -n scripts/*.sh
-python3 tests/vais_check_test.py
+bash scripts/test-vais-check-vais.sh
 bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc.sh
@@ -46,6 +52,11 @@ bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-direct.sh
 bash scripts/test-vaisc-errors.sh
 bash scripts/test-vaisc-parity.sh
+bash scripts/test-vaisc-host.sh
+bash scripts/test-embed-self-source-vais.sh
+bash scripts/test-normalize-stage-ir-vais.sh
+bash scripts/test-fixpoint.sh
+bash scripts/test-fixpoint2.sh
 bash scripts/test.sh
 ```
 

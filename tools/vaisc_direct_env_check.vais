@@ -1,0 +1,114 @@
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn append_line(out: Int, line: Str) -> Int {
+    str_builder_append(out, line)
+    str_builder_push(out, 10)
+    return 0
+}
+
+fn trim_trailing_newline(text: Str) -> Str {
+    if text.len() > 0 {
+        if text[text.len() - 1] == 10 {
+            return str_slice(text, 0, text.len() - 1)
+        }
+    }
+    return text
+}
+
+fn write_helper_source(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn add(a: Int, b: Int) -> Int {")
+    append_line(out, "    return a + b")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut i = 0")
+    append_line(out, "    let mut acc = 0")
+    append_line(out, "    while i < 6 {")
+    append_line(out, "        if i > 2 {")
+    append_line(out, "            acc = add(acc, i)")
+    append_line(out, "        }")
+    append_line(out, "        i = i + 1")
+    append_line(out, "    }")
+    append_line(out, "    return acc + 30")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn capture2(a: Str, b: Str) -> Str {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    return proc_capture_stdout(argv)
+}
+
+fn usage() -> Int {
+    print("usage: vaisc-direct-env-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("  FAIL direct env check cannot create ", tmp))
+        return 1
+    }
+
+    let helper_src = path_join(tmp, "direct_env_helper.vais")
+    if write_helper_source(helper_src) != 0 {
+        print("  FAIL direct env check cannot write helper source")
+        return 1
+    }
+
+    let fakebin = path_join(tmp, "fake-python")
+    if fs_mkdirs(fakebin) != 0 {
+        print("  FAIL direct env check cannot create fake PATH")
+        return 1
+    }
+    let fake_python = path_join(fakebin, "python3")
+    if fs_write_text(fake_python, "#!/usr/bin/env sh\nexit 99\n") != 0 {
+        print("  FAIL direct env check cannot write fake python3")
+        return 1
+    }
+    let chmod_argv: List<Str> = []
+    chmod_argv.push("/bin/chmod")
+    chmod_argv.push("+x")
+    chmod_argv.push(fake_python)
+    if proc_run(chmod_argv) != 0 {
+        print("  FAIL direct env check cannot chmod fake python3")
+        return 1
+    }
+
+    let old_path = trim_trailing_newline(capture2("/usr/bin/printenv", "PATH"))
+    let path_value = str_concat(str_concat(fakebin, ":"), old_path)
+    let env: List<Str> = []
+    env.push(str_concat("PATH=", path_value))
+
+    let vaisc = path_join(root, "scripts/vaisc")
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("run")
+    argv.push(helper_src)
+    argv.push("--engine")
+    argv.push("direct")
+    let got = proc_run_env(argv, env)
+    if got == 42 {
+        print("  PASS direct engine does not invoke python3")
+        return 0
+    }
+    print(str_concat("  FAIL direct engine used python3 or returned ", uint_to_str(got)))
+    return 1
+}

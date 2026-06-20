@@ -1,0 +1,25 @@
+module demo
+package demo
+
+fn f(s: String) -> Int {
+    let xs: Vec<Int> = []
+    let ys = List<Int>::new()
+    let zs = vec![1, 2, 3]
+    let map: HashMap<Int, Int> = {}
+    let casted = value as Int
+    let small: i32 = 5
+    let precise: f64 = 0
+    let label = 42.to_string()
+    let one = opt.unwrap()
+    let two = res.expect("value")
+    if !ready { return 3 }
+    if let Some(v) = opt { return v }
+    if a && b { return 1 }
+    if a || b { return 2 }
+    if a { return 3 } elsif b { return 4 }
+    match c { Color::Red => return 5 }
+    total += 1
+    total -= 1
+    total *= 2
+    return 0
+}

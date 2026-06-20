@@ -1,0 +1,504 @@
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn str_contains(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 1 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn count_occurs(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 0 }
+    let mut i = 0
+    let mut n = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 {
+            n = n + 1
+            i = i + word.len()
+        } else {
+            i = i + 1
+        }
+    }
+    return n
+}
+
+fn is_digit(c: Int) -> Int {
+    if c >= 48 and c <= 57 { return 1 }
+    return 0
+}
+
+fn parse_first_uint(s: Str) -> Int {
+    let mut i = 0
+    while i < s.len() {
+        if is_digit(s[i]) == 1 {
+            let mut value = 0
+            while i < s.len() {
+                if is_digit(s[i]) == 1 {
+                    value = value * 10 + (s[i] - 48)
+                    i = i + 1
+                } else {
+                    return value
+                }
+            }
+            return value
+        }
+        i = i + 1
+    }
+    return 0
+}
+
+fn grep_count(flag: Str, pattern: Str, path: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push("grep")
+    argv.push(flag)
+    argv.push(pattern)
+    argv.push(path)
+    return parse_first_uint(proc_capture_stdout(argv))
+}
+
+fn file_byte_count(path: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push("wc")
+    argv.push("-c")
+    argv.push(path)
+    return parse_first_uint(proc_capture_stdout(argv))
+}
+
+fn files_equal(left: Str, right: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push("cmp")
+    argv.push("-s")
+    argv.push(left)
+    argv.push(right)
+    let code = proc_run(argv)
+    if code == 0 { return 1 }
+    return 0
+}
+
+fn line_has_negative_gep(line: Str) -> Int {
+    if str_contains(line, "getelementptr") == 0 { return 0 }
+    if str_contains(line, "i32 -") == 1 { return 1 }
+    if str_contains(line, "i64 -") == 1 { return 1 }
+    return 0
+}
+
+fn count_negative_gep_lines(text: Str) -> Int {
+    let mut pos = 0
+    let mut count = 0
+    while pos < text.len() {
+        let start = pos
+        let mut end = pos
+        while end < text.len() {
+            if text[end] == 10 {
+                let line = str_slice(text, start, end - start)
+                if line_has_negative_gep(line) == 1 { count = count + 1 }
+                pos = end + 1
+                end = text.len() + 1
+            } else {
+                end = end + 1
+            }
+        }
+        if end == text.len() {
+            let line = str_slice(text, start, end - start)
+            if line_has_negative_gep(line) == 1 { count = count + 1 }
+            pos = text.len()
+        }
+    }
+    return count
+}
+
+fn prefix_text(text: Str) -> Str {
+    if text.len() <= 4000 { return text }
+    return str_slice(text, 0, 4000)
+}
+
+fn print_log_if_exists(path: Str) -> Int {
+    if fs_exists(path) == 1 {
+        let text = fs_read_text(path)
+        if text.len() > 0 { print(text) }
+    }
+    return 0
+}
+
+fn trust_copy_source(tmp: Str, label: Str, source: Str) -> Str {
+    let trust_root = path_join(tmp, str_concat(label, "_trust"))
+    let compiler_dir = path_join(path_join(trust_root, "compiler"), "self")
+    if fs_mkdirs(compiler_dir) != 0 { return "" }
+    let trusted = path_join(compiler_dir, path_basename(source))
+    if fs_write_text(trusted, fs_read_text(source)) != 0 { return "" }
+    return trusted
+}
+
+fn build_trusted(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) -> Int {
+    let trusted = trust_copy_source(tmp, label, source)
+    if trusted.len() == 0 { return 1 }
+    let trust_root = path_dirname(path_dirname(path_dirname(trusted)))
+    let out_path = path_join(tmp, str_concat(label, ".build.out"))
+    let err_path = path_join(tmp, str_concat(label, ".build.err"))
+    let argv: List<Str> = []
+    argv.push("/usr/bin/env")
+    argv.push(str_concat("VAISC_SELF_HOST_TRUST_ROOTS=", trust_root))
+    argv.push(vaisc)
+    argv.push("build")
+    argv.push(trusted)
+    argv.push("-o")
+    argv.push(out_bin)
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn run_embed(helper: Str, harness: Str, source: Str, out: Str, tmp: Str, label: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".embed.out"))
+    let err_path = path_join(tmp, str_concat(label, ".embed.err"))
+    let argv: List<Str> = []
+    argv.push(helper)
+    argv.push(harness)
+    argv.push(source)
+    argv.push(out)
+    let rc = proc_capture_to(argv, out_path, err_path)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL ", str_concat(label, ": embed")))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn run_normalizer(normalizer: Str, src: Str, dst: Str, tmp: Str, label: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".norm.out"))
+    let err_path = path_join(tmp, str_concat(label, ".norm.err"))
+    let argv: List<Str> = []
+    argv.push(normalizer)
+    argv.push(src)
+    argv.push(dst)
+    let rc = proc_capture_to(argv, out_path, err_path)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL ", str_concat(label, ": normalize")))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn compile_ir(tmp: Str, label: Str, ir_path: Str, bin: Str, message: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".clang.out"))
+    let err_path = path_join(tmp, str_concat(label, ".clang.err"))
+    let argv: List<Str> = []
+    argv.push("clang")
+    argv.push("-Wno-override-module")
+    argv.push("-o")
+    argv.push(bin)
+    argv.push(ir_path)
+    let rc = proc_capture_to(argv, out_path, err_path)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL ", str_concat(label, str_concat(": ", message))))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn run_to_file(bin: Str, out_file: Str, err_file: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(bin)
+    return proc_capture_to(argv, out_file, err_file)
+}
+
+fn run_binary_code(bin: Str, tmp: Str, label: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".bin.out"))
+    let err_path = path_join(tmp, str_concat(label, ".bin.err"))
+    let argv: List<Str> = []
+    argv.push(bin)
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn prepare_probe(vaisc: Str, helper: Str, harness: Str, source: Str, label: Str, case_name: Str, tmp: Str) -> Int {
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("  FAIL ", str_concat(label, ": mkdir")))
+        return 1
+    }
+    let input = path_join(tmp, "c.input.vais")
+    let source_path = path_join(tmp, "c.vais")
+    print(str_concat("  NOTE ", str_concat(label, ": embedding source")))
+    if run_embed(helper, harness, source, input, tmp, case_name) != 0 {
+        return 1
+    }
+    print(str_concat("  PASS ", str_concat(label, " embedded source")))
+    if fs_write_text(source_path, fs_read_text(input)) != 0 {
+        print(str_concat("  FAIL ", str_concat(label, ": prepare")))
+        return 1
+    }
+
+    let compiler_bin = path_join(tmp, "c")
+    print(str_concat("  NOTE ", str_concat(label, ": building embedded compiler")))
+    if build_trusted(vaisc, tmp, case_name, source_path, compiler_bin) != 0 {
+        print(str_concat("  FAIL ", str_concat(label, ": compiler build")))
+        print_log_if_exists(path_join(tmp, str_concat(case_name, ".build.err")))
+        return 1
+    }
+    print(str_concat("  PASS ", str_concat(label, " embedded compiler builds")))
+    return 0
+}
+
+fn check_source_ir(tmp: Str, label: Str, case_name: Str) -> Int {
+    let source_ll = path_join(tmp, "source_compiler.ll")
+    let compiler_bin = path_join(tmp, "c")
+    let source_err = path_join(tmp, "source_compiler.err")
+    let mut fail = 0
+    if run_to_file(compiler_bin, source_ll, source_err) != 0 {
+        print(str_concat("  FAIL ", str_concat(label, ": source compiler run")))
+        print_log_if_exists(source_err)
+        return 1
+    }
+
+    let main_count = grep_count("-Ec", "^define i64 @main[(][)]", source_ll)
+    let neg_gep_count = grep_count("-Ec", "^[[:space:]]+%[^=]+ = getelementptr .*i(32|64) -[0-9]", source_ll)
+    let ir_bytes = file_byte_count(source_ll)
+    if main_count == 1 {
+        let msg1 = str_concat(label, " emits one @main (")
+        let msg2 = str_concat(msg1, uint_to_str(ir_bytes))
+        print(str_concat("  PASS ", str_concat(msg2, " bytes)")))
+    } else {
+        let msg3 = str_concat(label, " main count=")
+        print(str_concat("  FAIL ", str_concat(msg3, uint_to_str(main_count))))
+        fail = fail + 1
+    }
+    if neg_gep_count == 0 {
+        print(str_concat("  PASS ", str_concat(label, " emits no negative GEP indexes")))
+    } else {
+        let msg4 = str_concat(label, " negative GEP count=")
+        print(str_concat("  FAIL ", str_concat(msg4, uint_to_str(neg_gep_count))))
+        fail = fail + 1
+    }
+
+    let source_compiler = path_join(tmp, "source_compiler")
+    if compile_ir(tmp, str_concat(case_name, ".source"), source_ll, source_compiler, "generated compiler IR invalid") != 0 {
+        return fail + 1
+    }
+    return fail
+}
+
+fn emit_second_stage(tmp: Str, label: Str, case_name: Str) -> Int {
+    let source_compiler = path_join(tmp, "source_compiler")
+    let emitted_ll = path_join(tmp, "emitted.ll")
+    let emitted_err = path_join(tmp, "emitted.err")
+    let source_rc = run_to_file(source_compiler, emitted_ll, emitted_err)
+    if source_rc == 0 {
+        print(str_concat("  PASS ", str_concat(label, " generated compiler runs")))
+    } else {
+        print(str_concat("  FAIL ", str_concat(label, str_concat(" generated compiler exit=", uint_to_str(source_rc)))))
+        print("  emitted IR prefix:")
+        if fs_exists(emitted_ll) == 1 { print(prefix_text(fs_read_text(emitted_ll))) }
+        return 1
+    }
+
+    let emitted_bin = path_join(tmp, "emitted_bin")
+    if compile_ir(tmp, str_concat(case_name, ".emitted"), emitted_ll, emitted_bin, "emitted IR invalid") != 0 {
+        return 1
+    }
+    return 0
+}
+
+fn validate_emitted_compiler(tmp: Str, label: Str, case_name: Str, want: Int) -> Int {
+    let emitted_bin = path_join(tmp, "emitted_bin")
+    let want_ret = str_concat("ret i64 ", uint_to_str(want))
+    let mut fail = 0
+    let final_ll = path_join(tmp, "final.ll")
+    let final_err = path_join(tmp, "final.err")
+    let compiler_rc = run_to_file(emitted_bin, final_ll, final_err)
+    if compiler_rc == 0 {
+        print(str_concat("  PASS ", str_concat(label, " emitted compiler runs")))
+    } else {
+        print(str_concat("  FAIL ", str_concat(label, str_concat(" emitted compiler exit=", uint_to_str(compiler_rc)))))
+        if fs_exists(final_ll) == 1 { print(prefix_text(fs_read_text(final_ll))) }
+        return 1
+    }
+    let final_ir = fs_read_text(final_ll)
+    if str_contains(final_ir, want_ret) == 1 {
+        print(str_concat("  PASS ", str_concat(label, str_concat(" final IR emits ", want_ret))))
+    } else {
+        print(str_concat("  FAIL ", str_concat(label, str_concat(" final IR missing ", want_ret))))
+        print(prefix_text(final_ir))
+        return 1
+    }
+    let final_bin = path_join(tmp, "final_bin")
+    if compile_ir(tmp, str_concat(case_name, ".final"), final_ll, final_bin, "final IR invalid") != 0 {
+        return 1
+    }
+    let got = run_binary_code(final_bin, tmp, str_concat(case_name, ".final"))
+    if got == want {
+        print(str_concat("  PASS ", str_concat(label, str_concat(" final binary runs (=", str_concat(uint_to_str(got), ")")))))
+    } else {
+        print(str_concat("  FAIL ", str_concat(label, str_concat(" final binary got=", str_concat(uint_to_str(got), str_concat(" want=", uint_to_str(want)))))))
+        fail = fail + 1
+    }
+    return fail
+}
+
+fn validate_emitted_program(tmp: Str, label: Str, case_name: Str, want: Int) -> Int {
+    let emitted_bin = path_join(tmp, "emitted_bin")
+    let emitted_ll = path_join(tmp, "emitted.ll")
+    let want_ret = str_concat("ret i64 ", uint_to_str(want))
+    let mut fail = 0
+    let emitted_ir = fs_read_text(emitted_ll)
+    if str_contains(emitted_ir, want_ret) == 1 {
+        print(str_concat("  PASS ", str_concat(label, str_concat(" emits ", want_ret))))
+    } else {
+        print(str_concat("  FAIL ", str_concat(label, str_concat(" emitted IR missing ", want_ret))))
+        print(prefix_text(emitted_ir))
+        fail = fail + 1
+    }
+    let got = run_binary_code(emitted_bin, tmp, str_concat(case_name, ".emitted"))
+    if got == want {
+        print(str_concat("  PASS ", str_concat(label, str_concat(" emitted binary runs (=", str_concat(uint_to_str(got), ")")))))
+    } else {
+        print(str_concat("  FAIL ", str_concat(label, str_concat(" emitted binary got=", str_concat(uint_to_str(got), str_concat(" want=", uint_to_str(want)))))))
+        fail = fail + 1
+    }
+    return fail
+}
+
+fn run_full_probe(vaisc: Str, helper: Str, harness: Str, source: Str, label: Str, case_name: Str, want: Int, mode: Str, parent_tmp: Str) -> Int {
+    let tmp = path_join(parent_tmp, case_name)
+    let mut fail = 0
+    if prepare_probe(vaisc, helper, harness, source, label, case_name, tmp) != 0 { return 1 }
+    fail = fail + check_source_ir(tmp, label, case_name)
+    if fail != 0 { return fail }
+    if emit_second_stage(tmp, label, case_name) != 0 { return fail + 1 }
+    if mode == "compiler" {
+        fail = fail + validate_emitted_compiler(tmp, label, case_name, want)
+    } else {
+        fail = fail + validate_emitted_program(tmp, label, case_name, want)
+    }
+    return fail
+}
+
+fn run_retarget_probe(vaisc: Str, helper: Str, harness: Str, target: Str, want: Int, label: Str, case_name: Str, parent_tmp: Str) -> Int {
+    let variant = path_join(parent_tmp, str_concat(case_name, "_variant"))
+    if fs_mkdirs(variant) != 0 {
+        print(str_concat("  FAIL full-source retarget: mkdir ", case_name))
+        return 1
+    }
+    let retargeted = path_join(variant, "retargeted_fixpoint_full.vais")
+    if run_embed(helper, harness, target, retargeted, variant, str_concat(case_name, ".retarget")) != 0 {
+        print(str_concat("  FAIL full-source retarget: embed ", str_concat(path_basename(target), " into compiler")))
+        return 1
+    }
+    return run_full_probe(vaisc, helper, harness, retargeted, label, case_name, want, "compiler", parent_tmp)
+}
+
+fn compare_stage_ir(normalizer: Str, left: Str, right: Str, label: Str, parent_tmp: Str) -> Int {
+    if left.len() == 0 {
+        print(str_concat("  FAIL ", str_concat(label, ": missing stage IR path")))
+        return 1
+    }
+    if right.len() == 0 {
+        print(str_concat("  FAIL ", str_concat(label, ": missing stage IR path")))
+        return 1
+    }
+    let tmp = path_join(parent_tmp, "stage_compare")
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("  FAIL ", str_concat(label, ": compare mkdir")))
+        return 1
+    }
+    let left_norm = path_join(tmp, "left.ll")
+    let right_norm = path_join(tmp, "right.ll")
+    if run_normalizer(normalizer, left, left_norm, tmp, "left") != 0 { return 1 }
+    if run_normalizer(normalizer, right, right_norm, tmp, "right") != 0 { return 1 }
+    if files_equal(left_norm, right_norm) == 1 {
+        let bytes = file_byte_count(left_norm)
+        let msg1 = str_concat(label, " normalized stage IR matches (")
+        let msg2 = str_concat(msg1, uint_to_str(bytes))
+        print(str_concat("  PASS ", str_concat(msg2, " bytes)")))
+        return 0
+    }
+    print(str_concat("  FAIL ", str_concat(label, " normalized stage IR differs")))
+    return 1
+}
+
+fn usage() -> Int {
+    print("usage: fixpoint-full-self-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("  FAIL fixpoint_full self-host gate cannot create ", tmp))
+        return 1
+    }
+
+    let vaisc = path_join(root, "scripts/vaisc")
+    let compiler_self = path_join(path_join(root, "compiler"), "self")
+    let tools_dir = path_join(root, "tools")
+    let src = path_join(compiler_self, "fixpoint_full.vais")
+    let embed_src = path_join(tools_dir, "embed_self_source.vais")
+    let norm_src = path_join(tools_dir, "normalize_stage_ir.vais")
+    let embed_bin = path_join(tmp, "embed_self_source")
+    let norm_bin = path_join(tmp, "normalize_stage_ir")
+
+    if build_trusted(vaisc, tmp, "embed_helper", embed_src, embed_bin) == 0 {
+        print("  PASS Vais embed helper builds")
+    } else {
+        print("  FAIL Vais embed helper build")
+        print_log_if_exists(path_join(tmp, "embed_helper.build.err"))
+        return 1
+    }
+
+    if build_trusted(vaisc, tmp, "stage_normalizer", norm_src, norm_bin) == 0 {
+        print("  PASS Vais stage IR normalizer builds")
+    } else {
+        print("  FAIL Vais stage IR normalizer build")
+        print_log_if_exists(path_join(tmp, "stage_normalizer.build.err"))
+        return 1
+    }
+
+    let mut fail = 0
+    fail = fail + run_full_probe(vaisc, embed_bin, src, src, "full-source fixpoint_full.vais self probe", "self_probe", 42, "program", tmp)
+    let mut stage1 = path_join(path_join(tmp, "self_probe"), "source_compiler.ll")
+    let mut stage2 = ""
+
+    if fail == 0 {
+        fail = fail + run_retarget_probe(vaisc, embed_bin, src, path_join(compiler_self, "fixpoint.vais"), 24, "first-generation compiler consumes fixpoint.vais", "retarget_fixpoint", tmp)
+    }
+    if fail == 0 {
+        fail = fail + run_retarget_probe(vaisc, embed_bin, src, path_join(compiler_self, "fixpoint2.vais"), 50, "first-generation compiler consumes fixpoint2.vais", "retarget_fixpoint2", tmp)
+    }
+    if fail == 0 {
+        fail = fail + run_retarget_probe(vaisc, embed_bin, src, path_join(compiler_self, "fixpoint3.vais"), 120, "first-generation compiler consumes fixpoint3.vais", "retarget_fixpoint3", tmp)
+    }
+    if fail == 0 {
+        fail = fail + run_retarget_probe(vaisc, embed_bin, src, src, 42, "first-generation compiler consumes fixpoint_full.vais", "retarget_fixpoint_full", tmp)
+        stage2 = path_join(path_join(tmp, "retarget_fixpoint_full"), "emitted.ll")
+    }
+    if fail == 0 {
+        fail = fail + compare_stage_ir(norm_bin, stage1, stage2, "fixpoint_full stage1/stage2 compiler output", tmp)
+    }
+
+    if fail == 0 {
+        print("RESULT: fixpoint_full full-source self-host gate OK")
+    } else {
+        print("RESULT: FAILURES")
+    }
+    return fail
+}

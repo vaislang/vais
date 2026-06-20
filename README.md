@@ -1,7 +1,7 @@
 # Vais
 
 Vais is a `.vais` language and self-host compiler workspace. The public compiler
-command is `scripts/vaisc`.
+and checker commands are `scripts/vaisc` and `scripts/vais-check`.
 
 The current mainline is intentionally small and gate-backed: `scripts/vaisc`
 builds a native host driver, links the reusable self-host compiler core in
@@ -16,18 +16,20 @@ scripts/vaisc doctor
 scripts/vaisc run examples/c4.vais
 scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
 scripts/vaisc build examples/c4.vais -o /tmp/c4
+scripts/vais-check examples/c4.vais
 ```
 
 The main command accepts `.vais` files only.
 
 ## Install
 
-For a standalone `vaisc` binary outside the checkout:
+For standalone `vaisc` and `vais-check` binaries outside the checkout:
 
 ```bash
 scripts/install-vaisc.sh --prefix "$HOME/.local"
 "$HOME/.local/bin/vaisc" doctor
 "$HOME/.local/bin/vaisc" run examples/c4.vais
+"$HOME/.local/bin/vais-check" examples/c4.vais
 ```
 
 To remove that install:
@@ -72,11 +74,12 @@ compiler/self/          self-host compiler sources and reusable core
 docs/                   canonical documentation
 examples/               .vais examples; release subset tracked by parity manifest
 scripts/vaisc           native public compiler command
-scripts/install*.sh     standalone compiler install/uninstall helpers
+scripts/vais-check      Vais-built public checker command
+scripts/install*.sh     standalone compiler/checker install/uninstall helpers
 scripts/package*.sh     standalone release archive helper
 scripts/test*.sh        compiler and value-correctness gates
 std/PRELUDE.md          prelude API status
-tools/                  native driver source, internal checks, parity manifest, source embedding tools
+tools/                  native driver source, Vais-authored internal tools, parity manifest
 website/                official vaislang.dev static site source
 ```
 
@@ -89,10 +92,12 @@ scripts/vaisc doctor
 bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc.sh
+bash scripts/test-vais-check-vais.sh
 bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-direct.sh
 bash scripts/test-vaisc-errors.sh
 bash scripts/test-vaisc-parity.sh
+bash scripts/test-vaisc-host.sh
 bash scripts/test.sh
 
 bash scripts/test-fixpoint-full-self.sh

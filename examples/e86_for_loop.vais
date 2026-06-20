@@ -1,0 +1,12 @@
+# expect: 42
+# Range for-loops support exclusive `..` and inclusive `..=` bounds.
+fn main() -> Int {
+    let mut total = 0
+    for i in 1..=5 {
+        total = total + i
+    }
+    for j in 0..4 {
+        total = total + j
+    }
+    return total * 2
+}

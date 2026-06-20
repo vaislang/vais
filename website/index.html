@@ -70,7 +70,8 @@
           <h2>Compile a verified <code>.vais</code> program.</h2>
           <p>
             The public compiler command builds a native host driver and uses
-            <code>clang</code> to link generated LLVM IR.
+            <code>clang</code> to link generated LLVM IR. The public checker is
+            built from Vais source.
           </p>
         </div>
         <div class="terminal" aria-label="Quick start commands">
@@ -82,9 +83,11 @@ scripts/vaisc doctor
 scripts/vaisc run examples/c4.vais
 scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
 scripts/vaisc build examples/c4.vais -o /tmp/c4
+scripts/vais-check examples/c4.vais
 
 scripts/install-vaisc.sh --prefix "$HOME/.local"
-"$HOME/.local/bin/vaisc" doctor</code></pre>
+"$HOME/.local/bin/vaisc" doctor
+"$HOME/.local/bin/vais-check" examples/c4.vais</code></pre>
         </div>
       </div>
     </section>
@@ -157,7 +160,8 @@ fn main() -> Int {
           <a href="https://github.com/vaislang/vais/blob/main/examples/README.md" target="_blank" rel="noopener">Open examples</a>
         </div>
         <p class="note">
-          The full compiler path and native direct engine verify local
+          The full compiler path and native direct engine verify <code>Str</code>
+          length, index, equality/inequality, and local
           <code>Map&lt;Int,Int&gt;</code> values with <code>{}</code>,
           <code>insert</code>, <code>get(key, default)</code>,
           <code>contains</code>, and <code>len</code>. Broader
@@ -198,11 +202,11 @@ fn main() -> Int {
           </article>
           <article class="panel">
             <h3>Standalone install</h3>
-            <p><code>scripts/install-vaisc.sh</code> installs a standalone <code>vaisc</code> binary outside the checkout.</p>
+            <p><code>scripts/install-vaisc.sh</code> installs standalone <code>vaisc</code> and <code>vais-check</code> binaries outside the checkout.</p>
           </article>
           <article class="panel">
             <h3>Release archives</h3>
-            <p>Tag builds publish standalone compiler archives through the release archive workflow after the pre-tag release gate is green.</p>
+            <p>Tag builds publish standalone compiler/checker archives through the release archive workflow after the pre-tag release gate is green.</p>
           </article>
           <article class="panel">
             <h3>Self-host status</h3>
@@ -220,8 +224,13 @@ fn main() -> Int {
           <p>
             Public language and compiler statements are limited to the checks below.
             New syntax or runtime claims belong in the public docs only after a gate
-            covers them. Phase 3 host file/path/process APIs are specified for
-            future gates but are not advertised as verified runtime surface yet.
+            covers them. The first Phase 3 host file/path intrinsics,
+            <code>fs_exists</code>, <code>fs_read_text</code>,
+            <code>fs_write_text</code>, <code>fs_mkdirs</code>,
+            <code>fs_cwd</code>, <code>fs_temp_dir</code>, and
+            <code>path_join</code>/<code>path_basename</code>/<code>path_dirname</code>,
+            plus <code>proc_run</code>, are verified for the full engine;
+            captured process output remains specified for a future gate.
           </p>
         </div>
         <div class="terminal" aria-label="Verification commands">
@@ -234,6 +243,7 @@ bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-direct.sh
 bash scripts/test-vaisc-errors.sh
 bash scripts/test-vaisc-parity.sh
+bash scripts/test-vaisc-host.sh
 bash scripts/test.sh
 
 bash scripts/test-fixpoint-full-self.sh

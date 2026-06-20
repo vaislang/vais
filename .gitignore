@@ -1,4 +1,3 @@
-*.vais
 *.ll
 !compiler/self/vaisc_core.ll
 *.warn
@@ -6,7 +5,3 @@
 a.out
 build/
 dist/
-
-# Python bytecode
-__pycache__/
-*.pyc

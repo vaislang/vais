@@ -1,0 +1,210 @@
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn print_log_if_exists(path: Str) -> Int {
+    if fs_exists(path) == 1 {
+        let text = fs_read_text(path)
+        if text.len() > 0 { print(text) }
+    }
+    return 0
+}
+
+fn trust_copy_source(tmp: Str, label: Str, source: Str) -> Str {
+    let trust_root = path_join(tmp, str_concat(label, "_trust"))
+    let compiler_dir = path_join(path_join(trust_root, "compiler"), "self")
+    if fs_mkdirs(compiler_dir) != 0 { return "" }
+    let trusted = path_join(compiler_dir, path_basename(source))
+    if fs_write_text(trusted, fs_read_text(source)) != 0 { return "" }
+    return trusted
+}
+
+fn build_trusted(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) -> Int {
+    let trusted = trust_copy_source(tmp, label, source)
+    if trusted.len() == 0 { return 1 }
+    let trust_root = path_dirname(path_dirname(path_dirname(trusted)))
+    let out_path = path_join(tmp, str_concat(label, ".build.out"))
+    let err_path = path_join(tmp, str_concat(label, ".build.err"))
+    let argv: List<Str> = []
+    argv.push("/usr/bin/env")
+    argv.push(str_concat("VAISC_SELF_HOST_TRUST_ROOTS=", trust_root))
+    argv.push(vaisc)
+    argv.push("build")
+    argv.push(trusted)
+    argv.push("-o")
+    argv.push(out_bin)
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn run_embed_raw_call(helper: Str, call_name: Str, harness: Str, source: Str, out: Str, tmp: Str, label: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".embed.out"))
+    let err_path = path_join(tmp, str_concat(label, ".embed.err"))
+    let argv: List<Str> = []
+    argv.push(helper)
+    argv.push("--raw-call")
+    argv.push(call_name)
+    argv.push(harness)
+    argv.push(source)
+    argv.push(out)
+    let rc = proc_capture_to(argv, out_path, err_path)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL '", str_concat(label, "': embed")))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn compile_ir(tmp: Str, label: Str, ir_path: Str, bin: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".clang.out"))
+    let err_path = path_join(tmp, str_concat(label, ".clang.err"))
+    let argv: List<Str> = []
+    argv.push("clang")
+    argv.push("-Wno-override-module")
+    argv.push("-o")
+    argv.push(bin)
+    argv.push(ir_path)
+    let rc = proc_capture_to(argv, out_path, err_path)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL '", str_concat(label, "': IR invalid")))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn run_compiler(tmp: Str, label: Str, compiler_bin: Str, ir_path: Str) -> Int {
+    let err_path = path_join(tmp, str_concat(label, ".compiler.err"))
+    let argv: List<Str> = []
+    argv.push(compiler_bin)
+    let rc = proc_capture_to(argv, ir_path, err_path)
+    if rc == 0 { return 0 }
+    print(str_concat("  FAIL '", str_concat(label, "': compiler run")))
+    print_log_if_exists(err_path)
+    return 1
+}
+
+fn run_bin(tmp: Str, label: Str, bin: Str) -> Int {
+    let out_path = path_join(tmp, str_concat(label, ".bin.out"))
+    let err_path = path_join(tmp, str_concat(label, ".bin.err"))
+    let argv: List<Str> = []
+    argv.push(bin)
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn check_one(vaisc: Str, helper: Str, harness: Str, call_name: Str, tmp: Str, index: Int, program: Str, want: Int) -> Int {
+    let label = str_concat("case", uint_to_str(index))
+    let case_dir = path_join(tmp, label)
+    if fs_mkdirs(case_dir) != 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': mkdir")))
+        return 1
+    }
+
+    let raw_source = path_join(case_dir, "program.vais")
+    let embedded = path_join(case_dir, "c.vais")
+    if fs_write_text(raw_source, program) != 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': source write")))
+        return 1
+    }
+    if run_embed_raw_call(helper, call_name, harness, raw_source, embedded, case_dir, label) != 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': embed")))
+        return 1
+    }
+
+    let compiler_bin = path_join(case_dir, "c")
+    if build_trusted(vaisc, case_dir, label, embedded, compiler_bin) != 0 {
+        print(str_concat("  FAIL '", str_concat(program, "': build")))
+        print_log_if_exists(path_join(case_dir, str_concat(label, ".build.err")))
+        return 1
+    }
+
+    let ir_path = path_join(case_dir, "out.ll")
+    if run_compiler(case_dir, label, compiler_bin, ir_path) != 0 { return 1 }
+
+    let bin = path_join(case_dir, "bin")
+    if compile_ir(case_dir, label, ir_path, bin) != 0 { return 1 }
+
+    let got = run_bin(case_dir, label, bin)
+    if got == want {
+        print(str_concat("  PASS '", str_concat(program, str_concat("' -> ", uint_to_str(got)))))
+        return 0
+    }
+    print(str_concat("  FAIL '", str_concat(program, str_concat("': got=", str_concat(uint_to_str(got), str_concat(" want=", uint_to_str(want)))))))
+    return 1
+}
+
+fn run_fixpoint(vaisc: Str, helper: Str, harness: Str, tmp: Str) -> Int {
+    let call_name = "tokenize"
+    let mut fail = 0
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 1, "100", 100)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 2, "2 + 3", 5)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 3, "6 * 7", 42)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 4, "12 + 3 * 4", 24)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 5, "2 + 3 * 4 - 1", 13)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 6, "10 - 2 - 3", 5)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 7, "20 - 5 + 2", 17)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 8, "100 - 50 - 25 - 10", 15)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 9, "2 * 3 * 4", 24)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 10, "1 + 2 + 3 + 4 + 5", 15)
+    if fail == 0 { print("RESULT: fixpoint compiler (tokenize -> List<Token> -> eval) end-to-end OK") }
+    else { print("RESULT: FAILURES") }
+    return fail
+}
+
+fn run_fixpoint2(vaisc: Str, helper: Str, harness: Str, tmp: Str) -> Int {
+    let call_name = "run_program"
+    let mut fail = 0
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 1, "let x = 5; return x;", 5)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 2, "let total = 10; let count = total * 4; return total + count;", 50)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 3, "let width = 4; let height = 5; return width * height;", 20)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 4, "let foo = 3; let bar = 7; return foo + bar;", 10)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 5, "let base = 10; let doubled = base * 2; let result = doubled + base; return result;", 30)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 6, "let foo = 1; let food = 100; return food;", 100)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 7, "let foo = 1; let food = 100; return foo;", 1)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 8, "let a = 2; let b = 3; let c = a * b; return c + 1;", 7)
+    fail = fail + check_one(vaisc, helper, harness, call_name, tmp, 9, "let n = 20; return n - 5 - 3;", 12)
+    if fail == 0 { print("RESULT: fixpoint2 compiler (multi-char identifiers) end-to-end OK") }
+    else { print("RESULT: FAILURES") }
+    return fail
+}
+
+fn usage() -> Int {
+    print("usage: fixpoint-tier-check <repo-root> <tmp-dir> <fixpoint|fixpoint2>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 3 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    let tier = proc_arg(2)
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("error: could not create temp dir: ", tmp))
+        return 1
+    }
+
+    let vaisc = path_join(root, "scripts/vaisc")
+    let helper_src = path_join(path_join(root, "tools"), "embed_self_source.vais")
+    let helper_bin = path_join(tmp, "embed_self_source")
+    if build_trusted(vaisc, tmp, "embed_helper", helper_src, helper_bin) == 0 {
+        print("  PASS Vais embed helper builds")
+    } else {
+        print("  FAIL Vais embed helper build")
+        print_log_if_exists(path_join(tmp, "embed_helper.build.err"))
+        return 1
+    }
+
+    let compiler_self = path_join(path_join(root, "compiler"), "self")
+    if tier == "fixpoint" {
+        return run_fixpoint(vaisc, helper_bin, path_join(compiler_self, "fixpoint.vais"), path_join(tmp, "fixpoint"))
+    }
+    if tier == "fixpoint2" {
+        return run_fixpoint2(vaisc, helper_bin, path_join(compiler_self, "fixpoint2.vais"), path_join(tmp, "fixpoint2"))
+    }
+    return usage()
+}

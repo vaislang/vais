@@ -18,12 +18,14 @@ compiler workspace.
 | [design/VAIS-DESIGN.md](design/VAIS-DESIGN.md) | Short design contract |
 | [design/vais-compiler-mainline-2026-06-13.md](design/vais-compiler-mainline-2026-06-13.md) | Compiler mainline contract |
 | [design/MODULES.md](design/MODULES.md) | Current Phase 2 module/package/import model |
-| [design/HOST_IO.md](design/HOST_IO.md) | Specified Phase 3 file/process host API model |
+| [design/HOST_IO.md](design/HOST_IO.md) | Phase 3 file/process host API model and file/path/process intrinsic gate |
+| [../tools/vais_check_core.vais](../tools/vais_check_core.vais) | Vais-authored checker rules, gated by fixture contract tests |
+| [../tools/vais_check_cli.vais](../tools/vais_check_cli.vais) | Source for the public `scripts/vais-check` checker command |
 
 ## Documentation Rules
 
-- Public docs must describe only the current `.vais` language and `scripts/vaisc`
-  compiler path.
+- Public docs must describe only the current `.vais` language, `scripts/vaisc`
+  compiler path, and `scripts/vais-check` checker path.
 - Claims marked as verified must be backed by a gate in `scripts/` or
   `tools/vaisc-parity.tsv`.
 - Release notes must be sourced from `CHANGELOG.md`.
@@ -40,7 +42,8 @@ source is `website/`, and the public entry point should contain only:
 
 1. What Vais is today.
 2. How to compile and run a `.vais` file.
-3. How to install or package the standalone native `vaisc` binary.
+3. How to install or package the standalone native `vaisc` and `vais-check`
+   binaries.
 4. Which release archives and automation publish standalone compiler assets.
 5. The current verified language surface.
 6. The self-host compiler status.

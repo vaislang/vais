@@ -1,17 +1,204 @@
 # Vais Worklog
 
+## 2026-06-19
+
+- Added `tools/vais_check_core.vais` as the first Vais-authored checker slice,
+  covering the public non-Vais spelling fixture catalog while reading fixture
+  files through verified host file APIs.
+- Added `tools/vais_check_smoke.vais`, checker fixtures, and
+  `scripts/test-vais-check-vais.sh` as the Vais checker contract gate.
+- Expanded the Vais checker slice to cover the main spelling catalog, added a
+  fixture count check, and made `.vais` source files visible to git by removing
+  the stale ignore rule.
+- Added line/column/help output to the Vais-authored checker slice and extended
+  the checker contract gate to require error, coordinate, and help counts.
+- Added `proc_argc()` and `proc_arg(index)` for `vaisc run -- ...` programs,
+  then added `tools/vais_check_cli.vais` as an argv-backed checker entrypoint
+  with bad/clean fixture gates.
+- Extended `proc_argc()` and `proc_arg(index)` to `vaisc build` binaries by
+  linking generated programs through a host runtime `main(argc, argv)` wrapper.
+- Added `proc_capture_stdout(argv: List<Str>) -> Str` as the first captured
+  process-output slice for Vais-authored repository tools.
+- Added `proc_capture_stderr(argv: List<Str>) -> Str` as the captured
+  diagnostics stream slice and regenerated `compiler/self/vaisc_core.ll`.
+- Promoted the Vais checker to `scripts/vais-check`, then installed and
+  packaged it as standalone `bin/vais-check` with install/package gate coverage.
+- Expanded the clean checker fixture to cover the former unit-test
+  false-positive catalog and removed that separate unit test from the release
+  gate.
+- Removed checker oracle use from the checker release gate; the public
+  `scripts/vais-check` command is now checked by Vais fixture contracts.
+- Added verified host-backed `Str` construction helpers `str_concat`,
+  `str_slice`, and `str_byte`, regenerated `compiler/self/vaisc_core.ll`, and
+  extended the host smoke gate to cover native build/run runtime support.
+- Added full-engine lowering for `Str` reassignment and user-defined
+  `-> Str` returns, then covered both through the host smoke gate.
+- Added full self-host runtime lowering for `Str` equality/inequality,
+  regenerated `compiler/self/vaisc_core.ll`, and restored the Vais checker CLI
+  to idiomatic `path == "--help" or path == "-h"` syntax.
+- Added `tools/package_vaisc_release.vais` as the Vais-authored release archive
+  packager and reduced `scripts/package-vaisc-release.sh` to a thin wrapper
+  that passes repo root, environment defaults, and CLI options into Vais.
+- Added `tools/install_vaisc.vais` as the Vais-authored standalone installer
+  and reduced `scripts/install-vaisc.sh` to a wrapper that passes repo root,
+  environment defaults, and CLI options into Vais.
+- Added verified `fs_remove(path)` and `tools/uninstall_vaisc.vais`, reducing
+  `scripts/uninstall-vaisc.sh` to the same Vais-tool bootstrap wrapper shape.
+- Added `tools/vaisc_install_check.vais` and reduced
+  `scripts/test-vaisc-install.sh` to a bootstrap wrapper; installed binary
+  smoke checks, checker fixture checks, archive extraction, packaged binary
+  checks, and uninstall assertions now run in Vais.
+- Added verified host-backed `Str` builder helpers for large text tools and
+  regenerated `compiler/self/vaisc_core.ll`.
+- Added `tools/embed_self_source.vais` as the Vais-authored self-source
+  embedding helper, with byte-for-byte parity against the previous helper for
+  checker fixtures and all self-host compiler tiers.
+- Switched `scripts/test-fixpoint-full-self.sh` to build and use the Vais
+  embed helper directly, and wired `scripts/test-embed-self-source-vais.sh`
+  into the release gate.
+- Added `tools/vaisc_errors_check.vais` as the Vais-authored NV-C3 diagnostics
+  validator behind `scripts/test-vaisc-errors.sh`, using captured stderr to
+  check coordinate, caret, help, and fix output.
+- Added `tools/vaisc_front_check.vais` as the Vais-authored NV-C1 front
+  contract validator behind `scripts/test-vaisc-front.sh`, including accepted
+  source fixtures, rejected diagnostics, and package/import temp trees.
+- Added `proc_run_env(argv, env)` for child-process environment overrides,
+  extended the host smoke gate, and moved the direct-engine no-Python PATH
+  check into `tools/vaisc_direct_env_check.vais`.
+- Added `tools/vaisc_direct_smoke_check.vais` and moved the NV-C2 direct
+  arithmetic/build/run smoke checks out of `scripts/test-vaisc-direct.sh`.
+- Added `proc_capture_to(argv, stdout_path, stderr_path)` for status-plus-file
+  process capture, extended the host smoke gate, and documented it as the
+  pragmatic step before in-memory `ProcessResult`.
+- Added `tools/vaisc_direct_error_check.vais` and moved the direct import
+  reject plus List bounds trap checks out of `scripts/test-vaisc-direct.sh`.
+- Added `tools/vaisc_direct_feature_check.vais` and moved the direct
+  helper/control-flow, range `for`, struct-local, and struct ABI success
+  fixtures out of `scripts/test-vaisc-direct.sh`.
+- Expanded `tools/vaisc_direct_feature_check.vais` to cover direct local
+  `List<Int>`, `Str`, `Char`, `parse_uint`/`parse_int`, local `Map<Int,Int>`,
+  and local `List<Struct>` success fixtures, and removed those cases from the
+  direct shell wrapper.
+- Moved the remaining direct List ABI, assignment, and returned-list hoist
+  fixtures into `tools/vaisc_direct_feature_check.vais`, reducing
+  `scripts/test-vaisc-direct.sh` to a bootstrap wrapper around Vais-authored
+  direct validators.
+- Added `tools/vaisc_direct_gate.vais` and reduced
+  `scripts/test-vaisc-direct.sh` again so the NV-C2 direct-emitter gate
+  orchestration itself runs from Vais; shell now only provides the temp-dir
+  bootstrap boundary.
+- Reduced the single-tool focused shell wrappers for checker contract, NV-C0,
+  NV-C1, NV-C3, host, native smoke, legacy compiler smoke, fixpoint tiers,
+  parity, value corpus, embed, and normalizer checks to invoke their
+  Vais-authored gates with `scripts/vaisc run`; the wrappers now only provide
+  temp directories and environment-specific bootstrap arguments.
+- Added `tools/normalize_stage_ir_check.vais` and reduced
+  `scripts/test-normalize-stage-ir-vais.sh` to a bootstrap wrapper; sample IR,
+  expected-output comparison, and replacement-shape assertions now run in Vais.
+- Added `tools/embed_self_source_check.vais` and reduced
+  `scripts/test-embed-self-source-vais.sh` to a bootstrap wrapper; fixture
+  writing, helper invocation, trust-root generated-compiler builds, clang IR
+  validation, and binary result assertions now run in Vais.
+- Added `tools/vais_check_contract_check.vais` and reduced
+  `scripts/test-vais-check-vais.sh` to a bootstrap wrapper; checker output
+  counts, diagnostic pattern assertions, real-path checks, help checks, and
+  public `scripts/vais-check` wrapper checks now run in Vais.
+- Added `tools/fixpoint_tier_check.vais` and reduced
+  `scripts/test-fixpoint.sh` plus `scripts/test-fixpoint2.sh` to bootstrap
+  wrappers; their compact-program fixtures, raw-call embedding, trust-root
+  compiler builds, emitted-IR clang validation, and result assertions now run
+  in Vais.
+- Added `tools/fixpoint_full_self_check.vais` and reduced
+  `scripts/test-fixpoint-full-self.sh` to a bootstrap wrapper; full-source
+  self-host retargeting, generated compiler builds/runs, emitted IR checks,
+  final binary assertions, and normalized stage comparison now run in Vais.
+- Added `tools/fixpoint_full_codegen_check.vais` and reduced
+  `scripts/test-fixpoint-full.sh` to a bootstrap wrapper; the long full-codegen
+  fixture catalog, stdout/trap cases, source-file checks, and IR shape
+  assertions now run in Vais.
+- Audited the remaining host boundaries after the full-codegen port; the
+  remaining shell is limited to native C bootstrap, public command cache
+  wrappers, release/CI orchestration, website build tooling, system tools, and
+  temp-dir bootstrap wrappers.
+- Fixed native front-contract probes to ignore unsupported-syntax markers inside
+  string, raw-string, character literal, and comment text.
+- Added `tools/compiler_smoke_check.vais` as the Vais-authored legacy
+  self-host compiler smoke validator behind `scripts/test-compiler.sh`,
+  replacing shell `sed` retargeting with Vais string rewriting and wiring the
+  smoke into `scripts/test-release-gates.sh`.
+- Added full-engine local `List<Str>` index reads, regenerated
+  `compiler/self/vaisc_core.ll`, and covered the path through a Vais-authored
+  stage IR normalizer.
+- Added `tools/normalize_stage_ir.vais`, parity-gated it against the previous
+  helper, and switched `scripts/test-fixpoint-full-self.sh` to use the Vais
+  normalizer for stage1/stage2 IR comparison.
+- Switched the focused self-source embedding and stage IR normalizer gates from
+  external parity oracles to Vais-only behavioral and expected-output checks,
+  and removed those helper checks from the release gate.
+- Added native self-host trust-root handling to `scripts/vaisc`.
+- Fixed native source-prep parity for one-line struct fields and multi-field
+  struct lines, removed the internal self-host compiler escape hatch, removed
+  the fallback branch from `scripts/vaisc`, and verified the embed, normalizer,
+  fixpoint, full-codegen, and full self-host gates through the native path.
+- Promoted single-byte `Char` literal equality plus explicit `Char` locals,
+  helper parameters, and helper returns through the native direct engine and
+  front contract as Int-compatible scalar values, and added
+  `examples/e85_char_type.vais` to the release corpus.
+- Promoted exclusive `..` and inclusive `..=` range `for` loops through the
+  native direct engine and front contract, and added
+  `examples/e86_for_loop.vais` to the release corpus.
+- Promoted `break` and `continue` inside `while` and range `for` loops through
+  the native direct engine, full self-host compiler, front contract, and parity
+  gates, and added `examples/e87_break_continue.vais` to the release corpus.
+- Added `tools/vais_parity_check.vais` as the Vais-authored NV-C4 parity
+  manifest harness and reduced `scripts/test-vaisc-parity.sh` to a bootstrap
+  wrapper.
+- Added `tools/vais_value_check.vais` as the Vais-authored value-corpus
+  build/run/exit-code harness and reduced `scripts/test.sh` to a bootstrap
+  wrapper.
+- Added `tools/vais_host_check.vais` as the Vais-authored host
+  file/path/string/process smoke harness and reduced `scripts/test-vaisc-host.sh`
+  to a bootstrap wrapper.
+- Added `tools/vaisc_smoke_check.vais` as the Vais-authored NV-C0 public
+  compiler smoke harness and reduced `scripts/test-vaisc.sh` to a bootstrap
+  wrapper.
+- Added `tools/vaisc_native_check.vais` as the Vais-authored native-driver
+  smoke harness and reduced `scripts/test-vaisc-native.sh` to a bootstrap
+  wrapper.
+- Strengthened the Vais checker contract gate to assert real file paths in
+  diagnostics and clean output, then fixed the checker CLI path output to use
+  explicit `Str` concatenation.
+
 ## 2026-06-18
 
 - Added the first `vais.toml` package manifest slice for `name`, `version`, and
   `source` source-root resolution.
 - Added local dependency package paths under `vais.toml` `[dependencies]`, with
-  dependency imports resolving through native public driver and Python fallback
-  paths.
-- Added native and Python fallback gates for package manifest success,
+  dependency imports resolving through native public driver paths.
+- Added native gates for package manifest success,
   dependency imports, and manifest diagnostics.
 - Specified the Phase 3 host file/path/process API boundary in
   `docs/design/HOST_IO.md` and listed the APIs as specified in
   `std/PRELUDE.md`.
+- Implemented `fs_exists(path: Str) -> Bool`, `fs_write_text(path: Str, text:
+  Str) -> Int`, and `fs_mkdirs(path: Str) -> Int` as the first host-backed file
+  intrinsics for full-engine builds, with the native public driver injecting
+  the LLVM declarations and linking a small host runtime.
+- Added `scripts/test-vaisc-host.sh` for native
+  temp-directory existence, directory creation, and text write checks, and wired
+  it into the release gate.
+- Added `fs_read_text(path: Str) -> Str` as the first `Str`-returning
+  host-backed intrinsic, regenerated `compiler/self/vaisc_core.ll`, and
+  extended `scripts/test-vaisc-host.sh` to verify text reads through full-engine
+  runs.
+- Added verified path helpers `fs_cwd()`, `fs_temp_dir()`, `path_join(...)`,
+  `path_basename(...)`, and `path_dirname(...)` as `Str`-returning host-backed
+  intrinsics, regenerated `compiler/self/vaisc_core.ll`, and extended the host
+  smoke gate to validate native path behavior.
+- Added verified `proc_run(argv: List<Str>) -> Int` as the first process
+  intrinsic, including full-engine `List<Str>` local `push` support for argv
+  construction, native-driver host runtime support, and host smoke coverage for
+  `emit-ir`, `build`, and `run`.
 
 ## 2026-06-17
 
@@ -25,7 +212,7 @@
 - Added front and `vais-check` diagnostics for reserved `module` and `package`
   declarations.
 - Implemented the first full-engine local import slice in the native public
-  driver and Python fallback.
+  driver.
 - Added gates for multi-file import success, missing imports, duplicate
   symbols, and import cycles.
 
@@ -133,7 +320,10 @@
 - Removed wrapper tools and non-Vais gates.
 - Updated README, ROADMAP, AGENTS, language reference, examples README, prelude notes, and self-host notes to current Vais status.
 - Renamed temporary test sources to `.vais`.
-- Added `.vais` suffix validation to `scripts/vaisc`, `scripts/build.sh`, and `tools/embed_self_source.py`.
+- Added `.vais` suffix validation to compiler and self-host helper paths.
+- Added `tools/embed_self_source.vais` raw compact-program/call embedding and
+  moved `scripts/test-fixpoint.sh`, `scripts/test-fixpoint2.sh`, and
+  `scripts/test-fixpoint-full.sh` input generation onto the Vais helper.
 - `scripts/vaisc --engine` now exposes `full` and `direct`.
 - `scripts/vaisc` full mode now uses `compiler/self/vaisc_core.ll` and reads `.vais` inputs directly.
 - Pure core regeneration from `compiler/self/fixpoint_full.vais` into `compiler/self/vaisc_core.ll` is green.
@@ -150,7 +340,7 @@
   GitHub Pages workflow.
 - Added `CHANGELOG.md` for the current source release baseline.
 - Added a native `vaisc` host driver and switched `scripts/vaisc` normal
-  `emit-ir`, `build`, and `run` to the Python-free public path.
+  `emit-ir`, `build`, and `run` to the native public path.
 - Added standalone native install, uninstall, package, and install/package gates.
 - Added release archive workflow for source tags.
 - Moved `--engine direct` onto the native driver and expanded it through Int

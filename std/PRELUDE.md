@@ -13,21 +13,41 @@ intended but not a public release claim yet.
 
 ## Host Files, Paths, And Processes
 
-The Phase 3 host API is specified but not verified yet. The planned surface is
-documented in [../docs/design/HOST_IO.md](../docs/design/HOST_IO.md).
+The Phase 3 host API is documented in
+[../docs/design/HOST_IO.md](../docs/design/HOST_IO.md). `fs_exists`,
+`fs_read_text`, `fs_write_text`, and `fs_mkdirs` are verified for the full
+engine, the first path and string helpers are verified, and `proc_argc() ->
+Int`, `proc_arg(index: Int) -> Str`, `proc_run(argv: List<Str>) -> Int`, and
+`proc_run_env(argv: List<Str>, env: List<Str>) -> Int`,
+`proc_capture_stdout(argv: List<Str>) -> Str`,
+`proc_capture_stderr(argv: List<Str>) -> Str`, and
+`proc_capture_to(argv: List<Str>, stdout_path: Str, stderr_path: Str) -> Int`
+are verified through the same host gate. `proc_argc` and `proc_arg` are
+verified for `vaisc run -- ...` and for binaries produced by `vaisc build`;
+full in-memory status/stdout/stderr capture is specified for a later gate.
 
 | API | Status |
 | --- | --- |
-| `fs_exists(path: Str) -> Bool` | Specified |
-| `fs_read_text(path: Str) -> Str` | Specified |
-| `fs_write_text(path: Str, text: Str) -> Int` | Specified |
-| `fs_mkdirs(path: Str) -> Int` | Specified |
-| `fs_cwd() -> Str` | Specified |
-| `fs_temp_dir() -> Str` | Specified |
-| `path_join(base: Str, child: Str) -> Str` | Specified |
-| `path_basename(path: Str) -> Str` | Specified |
-| `path_dirname(path: Str) -> Str` | Specified |
-| `proc_run(argv: List<Str>) -> Int` | Specified |
+| `fs_exists(path: Str) -> Bool` | Verified |
+| `fs_read_text(path: Str) -> Str` | Verified |
+| `fs_write_text(path: Str, text: Str) -> Int` | Verified |
+| `fs_mkdirs(path: Str) -> Int` | Verified |
+| `fs_remove(path: Str) -> Int` | Verified |
+| `fs_cwd() -> Str` | Verified |
+| `fs_temp_dir() -> Str` | Verified |
+| `path_join(base: Str, child: Str) -> Str` | Verified |
+| `path_basename(path: Str) -> Str` | Verified |
+| `path_dirname(path: Str) -> Str` | Verified |
+| `str_concat(left: Str, right: Str) -> Str` | Verified |
+| `str_slice(text: Str, start: Int, len: Int) -> Str` | Verified |
+| `str_byte(value: Int) -> Str` | Verified |
+| `proc_argc() -> Int` | Verified |
+| `proc_arg(index: Int) -> Str` | Verified |
+| `proc_run(argv: List<Str>) -> Int` | Verified |
+| `proc_run_env(argv: List<Str>, env: List<Str>) -> Int` | Verified |
+| `proc_capture_stdout(argv: List<Str>) -> Str` | Verified |
+| `proc_capture_stderr(argv: List<Str>) -> Str` | Verified |
+| `proc_capture_to(argv: List<Str>, stdout_path: Str, stderr_path: Str) -> Int` | Verified |
 | `proc_capture(argv: List<Str>) -> ProcessResult` | Specified |
 
 ## Collections
@@ -36,6 +56,7 @@ documented in [../docs/design/HOST_IO.md](../docs/design/HOST_IO.md).
 | --- | --- |
 | `[1, 2, 3]` | Verified for Int lists |
 | `List<Int>` | Verified |
+| `List<Str>` | Partial; verified for local `push`, local index read, and host process arguments |
 | `List<T>` | Partial |
 | `Map<Int,Int>` | Verified for local values |
 | `Map<K,V>` | Specified beyond the local `Map<Int,Int>` slice |
@@ -80,8 +101,8 @@ controls, or map literals with entries.
 | `UInt8`..`UInt128` | Specified |
 | `F32`, `F64` | Specified |
 | `Bool` | Verified for comparisons, boolean literals, and scalar helper signatures |
-| `Str` | Verified for literals, scalar helper signatures, length, index, and equality |
-| `Char` | Partial |
+| `Str` | Verified for literals, scalar helper signatures and returns, length, index, equality, reassignment, and host-backed construction helpers |
+| `Char` | Verified for single-byte literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
 | `Int(x)` | Verified |
 | `parse_uint(s)` | Verified for `Str`; parses a leading unsigned decimal run |
 | `parse_int(s)` | Verified for `Str`; accepts a leading `-` before the decimal run |
@@ -94,8 +115,12 @@ controls, or map literals with entries.
 | `"text"` and `` `text` `` | Verified |
 | `s.len()` | Verified |
 | `s[i]` | Verified |
-| `a == b`, `a != b` | Verified for `Str` |
+| `a == b`, `a != b` | Verified for `Str` in the full self-host path and native direct engine |
+| `str_concat(left, right)` | Verified |
+| `str_slice(text, start, len)` | Verified; invalid ranges trap |
+| `str_byte(value)` | Verified; values outside `0..255` trap |
 | byte-classification helpers such as `is_digit(c: Int) -> Bool` | Verified pattern |
+| single-byte `Char` literals such as `'A'` | Verified for equality, `Char` locals, helper parameters, and helper returns |
 | `parse_uint(s)`, `parse_int(s)` | Verified |
 
 `parse_uint` and `parse_int` stop at the first non-decimal byte. Empty input or

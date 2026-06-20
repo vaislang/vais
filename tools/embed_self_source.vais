@@ -1,0 +1,886 @@
+fn is_ident_char(c: Int) -> Int {
+    if c >= 48 and c <= 57 { return 1 }
+    if c >= 65 and c <= 90 { return 1 }
+    if c >= 97 and c <= 122 { return 1 }
+    if c == 95 { return 1 }
+    return 0
+}
+
+fn is_trim_space(c: Int) -> Int {
+    if c == 32 { return 1 }
+    if c == 9 { return 1 }
+    if c == 13 { return 1 }
+    return 0
+}
+
+fn text_at_len(src: Str, src_len: Int, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    let word_len = word.len()
+    if i + word_len > src_len { return 0 }
+    let mut k = 0
+    while k < word_len {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    return text_at_len(src, src.len(), i, word)
+}
+
+fn starts_with(src: Str, word: Str) -> Int {
+    return text_at(src, 0, word)
+}
+
+fn starts_with_for_space(src: Str) -> Int {
+    if src.len() < 4 { return 0 }
+    if src[0] != 102 { return 0 }
+    if src[1] != 111 { return 0 }
+    if src[2] != 114 { return 0 }
+    if src[3] != 32 { return 0 }
+    return 1
+}
+
+fn str_eq(a: Str, b: Str) -> Int {
+    if a.len() != b.len() { return 0 }
+    let mut i = 0
+    while i < a.len() {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn trim_start_index(s: Str) -> Int {
+    let mut i = 0
+    while i < s.len() {
+        if is_trim_space(s[i]) == 1 { i = i + 1 } else { return i }
+    }
+    return i
+}
+
+fn trim_end_index(s: Str) -> Int {
+    let mut end = s.len()
+    while end > 0 {
+        if is_trim_space(s[end - 1]) == 1 { end = end - 1 } else { return end }
+    }
+    return end
+}
+
+fn str_trim(s: Str) -> Str {
+    let start = trim_start_index(s)
+    let end = trim_end_index(s)
+    if end < start { return "" }
+    return str_slice(s, start, end - start)
+}
+
+fn str_rstrip(s: Str) -> Str {
+    let end = trim_end_index(s)
+    return str_slice(s, 0, end)
+}
+
+fn contains_byte(s: Str, b: Int) -> Int {
+    let mut i = 0
+    while i < s.len() {
+        if s[i] == b { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn first_byte(s: Str, b: Int) -> Int {
+    let mut i = 0
+    while i < s.len() {
+        if s[i] == b { return i }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn last_byte(s: Str, b: Int) -> Int {
+    let mut i = s.len() - 1
+    while i >= 0 {
+        if s[i] == b { return i }
+        i = i - 1
+    }
+    return 0 - 1
+}
+
+fn builder_append_slice(builder: Int, s: Str, start: Int, len: Int) -> Int {
+    if len <= 0 { return 0 }
+    return str_builder_append(builder, str_slice(s, start, len))
+}
+
+fn strip_comment(line: Str) -> Str {
+    let out = str_builder_new()
+    let mut in_dquote = 0
+    let mut in_backtick = 0
+    let mut escaped = 0
+    let mut i = 0
+    let mut go = 1
+    while i < line.len() and go == 1 {
+        let c = line[i]
+        if escaped == 1 {
+            str_builder_push(out, c)
+            escaped = 0
+            i = i + 1
+        } else if c == 92 and in_dquote == 1 {
+            str_builder_push(out, c)
+            escaped = 1
+            i = i + 1
+        } else if c == 34 and in_backtick == 0 {
+            if in_dquote == 0 { in_dquote = 1 } else { in_dquote = 0 }
+            str_builder_push(out, c)
+            i = i + 1
+        } else if c == 96 and in_dquote == 0 {
+            if in_backtick == 0 { in_backtick = 1 } else { in_backtick = 0 }
+            str_builder_push(out, c)
+            i = i + 1
+        } else if c == 35 and in_dquote == 0 and in_backtick == 0 {
+            go = 0
+        } else {
+            str_builder_push(out, c)
+            i = i + 1
+        }
+    }
+    return str_rstrip(str_builder_finish(out))
+}
+
+fn prefix_ends_emit_str_call(line: Str, pos: Int) -> Int {
+    let mut j = pos - 1
+    while j >= 0 and is_trim_space(line[j]) == 1 { j = j - 1 }
+    if j < 0 { return 0 }
+    if line[j] != 40 { return 0 }
+    j = j - 1
+    while j >= 0 and is_trim_space(line[j]) == 1 { j = j - 1 }
+    let start = j - 7
+    if start < 0 { return 0 }
+    if text_at(line, start, "emit_str") == 0 { return 0 }
+    if start > 0 {
+        if is_ident_char(line[start - 1]) == 1 { return 0 }
+    }
+    return 1
+}
+
+fn append_unescaped_emit_body(builder: Int, line: Str, start: Int, end: Int) -> Int {
+    let mut i = start
+    while i < end {
+        let c = line[i]
+        if c == 92 and i + 1 < end {
+            let nxt = line[i + 1]
+            if nxt == 92 or nxt == 34 {
+                str_builder_push(builder, nxt)
+                i = i + 2
+            } else {
+                str_builder_push(builder, c)
+                i = i + 1
+            }
+        } else {
+            str_builder_push(builder, c)
+            i = i + 1
+        }
+    }
+    return 0
+}
+
+fn double_strings_to_backticks(line: Str) -> Str {
+    let out = str_builder_new()
+    let mut i = 0
+    while i < line.len() {
+        let c = line[i]
+        if c == 34 {
+            let body_start = i + 1
+            let mut j = body_start
+            let mut escaped = 0
+            let mut has_backtick = 0
+            let mut done = 0
+            while j < line.len() and done == 0 {
+                let d = line[j]
+                if escaped == 1 {
+                    if d == 96 { has_backtick = 1 }
+                    escaped = 0
+                    j = j + 1
+                } else if d == 92 {
+                    escaped = 1
+                    j = j + 1
+                } else if d == 34 {
+                    done = 1
+                } else {
+                    if d == 96 { has_backtick = 1 }
+                    j = j + 1
+                }
+            }
+            if done == 0 {
+                builder_append_slice(out, line, i, line.len() - i)
+                i = line.len()
+            } else if has_backtick == 1 {
+                builder_append_slice(out, line, i, j - i + 1)
+                i = j + 1
+            } else {
+                str_builder_push(out, 96)
+                if prefix_ends_emit_str_call(line, i) == 1 {
+                    append_unescaped_emit_body(out, line, body_start, j)
+                } else {
+                    builder_append_slice(out, line, body_start, j - body_start)
+                }
+                str_builder_push(out, 96)
+                i = j + 1
+            }
+        } else {
+            str_builder_push(out, c)
+            i = i + 1
+        }
+    }
+    return str_builder_finish(out)
+}
+
+fn append_field_names(builder: Int, body: Str) -> Int {
+    let mut part_start = 0
+    let mut first = 1
+    let mut i = 0
+    while i <= body.len() {
+        let mut sep = 0
+        if i == body.len() { sep = 1 }
+        else if body[i] == 44 { sep = 1 }
+        if sep == 1 {
+            let part = str_trim(str_slice(body, part_start, i - part_start))
+            let colon = first_byte(part, 58)
+            let mut name = part
+            if colon >= 0 { name = str_trim(str_slice(part, 0, colon)) }
+            if name.len() > 0 {
+                if first == 0 { str_builder_append(builder, ", ") }
+                str_builder_append(builder, name)
+                first = 0
+            }
+            part_start = i + 1
+        }
+        i = i + 1
+    }
+    return 0
+}
+
+fn strip_one_line_struct_field_types(line: Str) -> Str {
+    let ls = trim_start_index(line)
+    if text_at(line, ls, "struct ") == 0 { return line }
+    let open = first_byte(line, 123)
+    let close = last_byte(line, 125)
+    if open < 0 or close < open { return line }
+    let out = str_builder_new()
+    builder_append_slice(out, line, 0, open)
+    str_builder_append(out, "{ ")
+    append_field_names(out, str_slice(line, open + 1, close - open - 1))
+    str_builder_append(out, " }")
+    builder_append_slice(out, line, close + 1, line.len() - close - 1)
+    return str_builder_finish(out)
+}
+
+fn strip_struct_field_types(program: Str) -> Str {
+    let out = str_builder_new()
+    let mut last = 0
+    let mut i = 0
+    let program_len = program.len()
+    while i < program_len {
+        if text_at_len(program, program_len, i, "struct ") == 1 {
+            let mut open = first_byte(str_slice(program, i, program_len - i), 123)
+            if open >= 0 {
+                open = open + i
+                let close_rel = first_byte(str_slice(program, open + 1, program_len - open - 1), 125)
+                if close_rel >= 0 {
+                    let close = open + 1 + close_rel
+                    builder_append_slice(out, program, last, open - last)
+                    str_builder_append(out, "{ ")
+                    append_field_names(out, str_slice(program, open + 1, close - open - 1))
+                    str_builder_append(out, " }")
+                    i = close + 1
+                    last = i
+                } else {
+                    i = i + 1
+                }
+            } else {
+                i = i + 1
+            }
+        } else {
+            i = i + 1
+        }
+    }
+    builder_append_slice(out, program, last, program_len - last)
+    return str_builder_finish(out)
+}
+
+fn strip_let_int_annotation(line: Str) -> Str {
+    let stripped = str_trim(line)
+    if starts_with(stripped, "let ") == 0 { return line }
+    let colon = first_byte(line, 58)
+    let eq = first_byte(line, 61)
+    if colon < 0 or eq < 0 or colon > eq { return line }
+    let mut j = colon + 1
+    while j < eq and is_trim_space(line[j]) == 1 { j = j + 1 }
+    if j + 3 > eq { return line }
+    if text_at(line, j, "Int") == 0 { return line }
+    j = j + 3
+    while j < eq and is_trim_space(line[j]) == 1 { j = j + 1 }
+    if j != eq { return line }
+    let out = str_builder_new()
+    builder_append_slice(out, line, 0, colon)
+    str_builder_append(out, " ")
+    builder_append_slice(out, line, eq, line.len() - eq)
+    return str_builder_finish(out)
+}
+
+fn strip_fn_int_param_annotations(line: Str) -> Str {
+    let stripped = str_trim(line)
+    if starts_with(stripped, "fn ") == 0 { return line }
+    let out = str_builder_new()
+    let mut in_params = 0
+    let mut i = 0
+    while i < line.len() {
+        let c = line[i]
+        if c == 40 {
+            in_params = 1
+            str_builder_push(out, c)
+            i = i + 1
+        } else if c == 41 {
+            in_params = 0
+            str_builder_push(out, c)
+            i = i + 1
+        } else if in_params == 1 and c == 58 {
+            let mut j = i + 1
+            while j < line.len() and is_trim_space(line[j]) == 1 { j = j + 1 }
+            if text_at(line, j, "Int") == 1 {
+                let mut k = j + 3
+                while k < line.len() and is_trim_space(line[k]) == 1 { k = k + 1 }
+                if k < line.len() {
+                    if line[k] == 44 or line[k] == 41 {
+                        i = k
+                    } else {
+                        str_builder_push(out, c)
+                        i = i + 1
+                    }
+                } else {
+                    str_builder_push(out, c)
+                    i = i + 1
+                }
+            } else {
+                str_builder_push(out, c)
+                i = i + 1
+            }
+        } else {
+            str_builder_push(out, c)
+            i = i + 1
+        }
+    }
+    return str_builder_finish(out)
+}
+
+fn strip_fn_int_return_annotation(line: Str) -> Str {
+    let stripped = str_trim(line)
+    if starts_with(stripped, "fn ") == 0 { return line }
+    let mut i = 0
+    while i + 2 < line.len() {
+        if line[i] == 45 and line[i + 1] == 62 {
+            let mut j = i + 2
+            while j < line.len() and is_trim_space(line[j]) == 1 { j = j + 1 }
+            if text_at(line, j, "Int") == 1 {
+                let mut k = j + 3
+                while k < line.len() and is_trim_space(line[k]) == 1 { k = k + 1 }
+                let out = str_builder_new()
+                str_builder_append(out, str_rstrip(str_slice(line, 0, i)))
+                if k < line.len() {
+                    str_builder_push(out, 32)
+                    builder_append_slice(out, line, k, line.len() - k)
+                }
+                return str_builder_finish(out)
+            }
+        }
+        i = i + 1
+    }
+    return line
+}
+
+fn strip_int_annotations(line: Str) -> Str {
+    let line1 = strip_fn_int_param_annotations(line)
+    let line2 = strip_fn_int_return_annotation(line1)
+    return strip_let_int_annotation(line2)
+}
+
+fn brace_delta(line: Str) -> Int {
+    let mut delta = 0
+    let mut delim = 0
+    let mut escaped = 0
+    let mut i = 0
+    while i < line.len() {
+        let c = line[i]
+        if escaped == 1 {
+            escaped = 0
+        } else if delim == 34 and c == 92 {
+            escaped = 1
+        } else if c == 34 or c == 96 {
+            if delim == 0 { delim = c }
+            else if delim == c { delim = 0 }
+        } else if delim == 0 and c == 123 {
+            delta = delta + 1
+        } else if delim == 0 and c == 125 {
+            delta = delta - 1
+        }
+        i = i + 1
+    }
+    return delta
+}
+
+fn collapse_string_brace_escapes(program: Str) -> Str {
+    let out = str_builder_new()
+    let mut delim = 0
+    let mut escaped = 0
+    let mut i = 0
+    let program_len = program.len()
+    while i < program_len {
+        let c = program[i]
+        if escaped == 1 {
+            str_builder_push(out, c)
+            escaped = 0
+            i = i + 1
+        } else if delim == 34 and c == 92 {
+            str_builder_push(out, c)
+            escaped = 1
+            i = i + 1
+        } else if c == 34 or c == 96 {
+            if delim == 0 { delim = c }
+            else if delim == c { delim = 0 }
+            str_builder_push(out, c)
+            i = i + 1
+        } else if delim != 0 and i + 1 < program_len and c == 123 and program[i + 1] == 123 {
+            str_builder_push(out, 123)
+            i = i + 2
+        } else if delim != 0 and i + 1 < program_len and c == 125 and program[i + 1] == 125 {
+            str_builder_push(out, 125)
+            i = i + 2
+        } else {
+            str_builder_push(out, c)
+            i = i + 1
+        }
+    }
+    return str_builder_finish(out)
+}
+
+fn stmt_like(stripped: Str) -> Int {
+    if starts_with(stripped, "let ") == 1 { return 1 }
+    if starts_with(stripped, "return ") == 1 { return 1 }
+    if starts_with(stripped, "print(") == 1 { return 1 }
+    if starts_with(stripped, "putchar(") == 1 { return 1 }
+    if stripped.len() == 0 { return 0 }
+    if is_ident_char(stripped[0]) == 0 { return 0 }
+    let mut i = 0
+    while i < stripped.len() {
+        let c = stripped[i]
+        if c == 61 { return 1 }
+        if c == 91 { return 1 }
+        if c == 46 { return 1 }
+        if c == 40 { return 1 }
+        if is_ident_char(c) == 0 and c != 32 and c != 9 { return 0 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn inline_body_needs_semi(body: Str) -> Int {
+    let stripped = str_trim(body)
+    if stripped.len() == 0 { return 0 }
+    if stripped[stripped.len() - 1] == 59 { return 0 }
+    if stripped[stripped.len() - 1] == 125 { return 0 }
+    if starts_with(stripped, "if ") == 1 { return 0 }
+    if starts_with(stripped, "else") == 1 { return 0 }
+    if starts_with(stripped, "while ") == 1 { return 0 }
+    if starts_with_for_space(stripped) == 1 { return 0 }
+    if starts_with(stripped, "fn ") == 1 { return 0 }
+    if starts_with(stripped, "struct ") == 1 { return 0 }
+    return stmt_like(stripped)
+}
+
+fn add_block_semis_once(line: Str) -> Str {
+    let out = str_builder_new()
+    let mut last = 0
+    let mut i = 0
+    while i < line.len() {
+        if line[i] == 123 {
+            let mut j = i + 1
+            let mut nested = 0
+            let mut found = 0
+            while j < line.len() and found == 0 {
+                if line[j] == 123 { nested = 1 }
+                if line[j] == 125 { found = 1 } else { j = j + 1 }
+            }
+            if found == 1 and nested == 0 {
+                let body = str_slice(line, i + 1, j - i - 1)
+                if inline_body_needs_semi(body) == 1 {
+                    builder_append_slice(out, line, last, i - last + 1)
+                    str_builder_append(out, str_rstrip(body))
+                    str_builder_append(out, "; }")
+                    i = j + 1
+                    last = i
+                } else {
+                    i = i + 1
+                }
+            } else {
+                i = i + 1
+            }
+        } else {
+            i = i + 1
+        }
+    }
+    builder_append_slice(out, line, last, line.len() - last)
+    return str_builder_finish(out)
+}
+
+fn add_tail_semis_once(line: Str) -> Str {
+    let out = str_builder_new()
+    let mut last = 0
+    let mut i = 0
+    while i < line.len() {
+        if line[i] == 59 {
+            let mut j = i + 1
+            let mut found = 0
+            let mut bad = 0
+            while j < line.len() and found == 0 and bad == 0 {
+                let c = line[j]
+                if c == 123 { bad = 1 }
+                else if c == 59 { bad = 1 }
+                else if c == 125 { found = 1 }
+                else { j = j + 1 }
+            }
+            if found == 1 and bad == 0 {
+                let body = str_slice(line, i + 1, j - i - 1)
+                if inline_body_needs_semi(body) == 1 {
+                    builder_append_slice(out, line, last, i - last + 1)
+                    str_builder_append(out, str_rstrip(body))
+                    str_builder_append(out, "; }")
+                    i = j + 1
+                    last = i
+                } else {
+                    i = i + 1
+                }
+            } else {
+                i = i + 1
+            }
+        } else {
+            i = i + 1
+        }
+    }
+    builder_append_slice(out, line, last, line.len() - last)
+    return str_builder_finish(out)
+}
+
+fn add_inline_semis(line: Str) -> Str {
+    let mut cur = line
+    let mut changed = 1
+    while changed == 1 {
+        let next = add_block_semis_once(cur)
+        if str_eq(next, cur) == 1 { changed = 0 } else { cur = next }
+    }
+    changed = 1
+    while changed == 1 {
+        let next2 = add_tail_semis_once(cur)
+        if str_eq(next2, cur) == 1 { changed = 0 } else { cur = next2 }
+    }
+    return cur
+}
+
+fn ident_assignment_like(stripped: Str) -> Int {
+    if stripped.len() == 0 { return 0 }
+    if is_ident_char(stripped[0]) == 0 { return 0 }
+    let mut i = 0
+    while i < stripped.len() {
+        let c = stripped[i]
+        if c == 46 { return 1 }
+        if c == 91 { return 1 }
+        if c == 61 { return 1 }
+        if c == 32 or c == 9 { return 0 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn needs_line_semi(line: Str) -> Int {
+    let stripped = str_trim(line)
+    if stripped.len() == 0 { return 0 }
+    if stripped[stripped.len() - 1] == 59 { return 0 }
+    if starts_with(stripped, "} else") == 1 { return 0 }
+    if starts_with(stripped, "struct ") == 1 { return 0 }
+    if starts_with(stripped, "import ") == 1 { return 0 }
+    if starts_with(stripped, "package ") == 1 { return 0 }
+    if stripped[stripped.len() - 1] == 123 { return 0 }
+    if str_eq(stripped, "else") == 1 { return 0 }
+    if starts_with(stripped, "else ") == 1 { return 0 }
+    if stripped[stripped.len() - 1] == 125 {
+        if starts_with(stripped, "let ") == 1 { return 1 }
+        if starts_with(stripped, "return ") == 1 { return 1 }
+        if ident_assignment_like(stripped) == 1 { return 1 }
+        return 0
+    }
+    if stripped[stripped.len() - 1] == 41 { return 1 }
+    if starts_with(stripped, "let ") == 1 { return 1 }
+    if starts_with(stripped, "return ") == 1 { return 1 }
+    if starts_with(stripped, "print(") == 1 { return 1 }
+    if stmt_like(stripped) == 1 { return 1 }
+    return 0
+}
+
+fn has_dquote_with_backtick(line: Str) -> Int {
+    let mut i = 0
+    while i < line.len() {
+        if line[i] == 34 {
+            let mut j = i + 1
+            let mut escaped = 0
+            let mut has_tick = 0
+            let mut done = 0
+            while j < line.len() and done == 0 {
+                let c = line[j]
+                if escaped == 1 {
+                    if c == 96 { has_tick = 1 }
+                    escaped = 0
+                    j = j + 1
+                } else if c == 92 {
+                    escaped = 1
+                    j = j + 1
+                } else if c == 34 {
+                    done = 1
+                } else {
+                    if c == 96 { has_tick = 1 }
+                    j = j + 1
+                }
+            }
+            if done == 1 and has_tick == 1 { return 1 }
+            i = j + 1
+        } else {
+            i = i + 1
+        }
+    }
+    return 0
+}
+
+fn escape_for_compile(program: Str) -> Str {
+    let out = str_builder_new()
+    let mut i = 0
+    let program_len = program.len()
+    while i < program_len {
+        let c = program[i]
+        if c == 92 {
+            str_builder_push(out, 92)
+            str_builder_push(out, 92)
+        } else if c == 34 {
+            str_builder_push(out, 92)
+            str_builder_push(out, 34)
+        } else {
+            str_builder_push(out, c)
+        }
+        i = i + 1
+    }
+    return str_builder_finish(out)
+}
+
+fn normalize_source_text(src: Str) -> Str {
+    let lines = str_builder_new()
+    let mut first = 1
+    let mut start = 0
+    let mut i = 0
+    let src_len = src.len()
+    let mut in_fn_block = 0
+    let mut fn_depth = 0
+    while i <= src_len {
+        let mut line_end = 0
+        if i == src_len { line_end = 1 }
+        else if src[i] == 10 { line_end = 1 }
+        if line_end == 1 {
+            let mut end = i
+            if end > start and src[end - 1] == 13 { end = end - 1 }
+            let raw = str_slice(src, start, end - start)
+            let mut line = strip_comment(raw)
+            let trimmed = str_trim(line)
+            if trimmed.len() > 0 {
+                line = double_strings_to_backticks(line)
+                line = strip_one_line_struct_field_types(line)
+                line = strip_int_annotations(line)
+                if has_dquote_with_backtick(line) == 0 {
+                    line = add_inline_semis(line)
+                }
+                if needs_line_semi(line) == 1 {
+                    line = str_concat(str_rstrip(line), ";")
+                }
+                let compact = str_trim(line)
+                if starts_with(compact, "fn ") == 1 and contains_byte(compact, 123) == 1 and in_fn_block == 0 {
+                    in_fn_block = 1
+                    fn_depth = 0
+                }
+                if in_fn_block == 1 {
+                    fn_depth = fn_depth + brace_delta(line)
+                    if fn_depth == 0 {
+                        let closed = str_trim(line)
+                        if closed.len() > 0 and closed[closed.len() - 1] == 125 {
+                            line = str_concat(str_rstrip(line), ";")
+                        }
+                        in_fn_block = 0
+                    }
+                }
+                if first == 0 { str_builder_push(lines, 32) }
+                str_builder_append(lines, str_trim(line))
+                first = 0
+            }
+            start = i + 1
+        }
+        i = i + 1
+    }
+    let program1 = str_builder_finish(lines)
+    let program2 = strip_struct_field_types(program1)
+    let program3 = collapse_string_brace_escapes(program2)
+    return escape_for_compile(program3)
+}
+
+fn find_compile_call(text: Str) -> Int {
+    let mut i = 0
+    let text_len = text.len()
+    while i + 9 <= text_len {
+        if text_at_len(text, text_len, i, "compile(\"") == 1 { return i }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn find_compile_call_end(text: Str, start: Int) -> Int {
+    let mut i = start + 9
+    let mut escaped = 0
+    let text_len = text.len()
+    while i < text_len {
+        let c = text[i]
+        if escaped == 1 {
+            escaped = 0
+            i = i + 1
+        } else if c == 92 {
+            escaped = 1
+            i = i + 1
+        } else if c == 34 {
+            if i + 1 < text_len and text[i + 1] == 41 { return i + 1 }
+            return 0 - 1
+        } else {
+            i = i + 1
+        }
+    }
+    return 0 - 1
+}
+
+fn embed_text(harness: Str, program: Str) -> Str {
+    return embed_call_text(harness, "compile", program)
+}
+
+fn find_string_call(text: Str, name: Str) -> Int {
+    let mut i = 0
+    let text_len = text.len()
+    let name_len = name.len()
+    while i + name_len + 2 <= text_len {
+        if text_at_len(text, text_len, i, name) == 1 {
+            if text[i + name_len] == 40 and text[i + name_len + 1] == 34 {
+                return i
+            }
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn find_string_call_end(text: Str, start: Int, name: Str) -> Int {
+    let mut i = start + name.len() + 2
+    let mut escaped = 0
+    let text_len = text.len()
+    while i < text_len {
+        let c = text[i]
+        if escaped == 1 {
+            escaped = 0
+            i = i + 1
+        } else if c == 92 {
+            escaped = 1
+            i = i + 1
+        } else if c == 34 {
+            if i + 1 < text_len and text[i + 1] == 41 { return i + 1 }
+            return 0 - 1
+        } else {
+            i = i + 1
+        }
+    }
+    return 0 - 1
+}
+
+fn embed_call_text(harness: Str, call_name: Str, program: Str) -> Str {
+    let harness_len = harness.len()
+    let start = find_string_call(harness, call_name)
+    if start < 0 { return "" }
+    let end = find_string_call_end(harness, start, call_name)
+    if end < 0 { return "" }
+    let out = str_builder_new()
+    builder_append_slice(out, harness, 0, start)
+    str_builder_append(out, call_name)
+    str_builder_append(out, "(\"")
+    str_builder_append(out, program)
+    str_builder_append(out, "\")")
+    builder_append_slice(out, harness, end + 1, harness_len - end - 1)
+    return str_builder_finish(out)
+}
+
+fn ends_with_vais(path: Str) -> Int {
+    if path.len() < 5 { return 0 }
+    return text_at(path, path.len() - 5, ".vais")
+}
+
+fn run_embed(harness_path: Str, source_path: Str, out_path: Str, raw: Int) -> Int {
+    return run_embed_call(harness_path, source_path, out_path, raw, "compile")
+}
+
+fn run_embed_call(harness_path: Str, source_path: Str, out_path: Str, raw: Int, call_name: Str) -> Int {
+    if ends_with_vais(harness_path) == 0 {
+        print("error: expected .vais harness path")
+        return 2
+    }
+    if ends_with_vais(source_path) == 0 {
+        print("error: expected .vais source path")
+        return 2
+    }
+    if ends_with_vais(out_path) == 0 {
+        print("error: expected .vais output path")
+        return 2
+    }
+    let mut program = ""
+    if raw == 1 {
+        program = escape_for_compile(fs_read_text(source_path))
+    } else {
+        program = normalize_source_text(fs_read_text(source_path))
+    }
+    let embedded = embed_call_text(fs_read_text(harness_path), call_name, program)
+    if embedded.len() == 0 {
+        print("error: could not find target string call to replace")
+        return 1
+    }
+    return fs_write_text(out_path, embedded)
+}
+
+fn main() -> Int {
+    if proc_argc() == 5 {
+        if str_eq(proc_arg(0), "--raw-call") == 0 {
+            print("usage: embed_self_source.vais [--raw] FIXPOINT_FULL.vais SOURCE.vais OUT.vais")
+            print("usage: embed_self_source.vais --raw-call CALL_NAME HARNESS.vais SOURCE.vais OUT.vais")
+            return 2
+        }
+        return run_embed_call(proc_arg(2), proc_arg(3), proc_arg(4), 1, proc_arg(1))
+    }
+    if proc_argc() == 4 {
+        if str_eq(proc_arg(0), "--raw") == 0 {
+            print("usage: embed_self_source.vais [--raw] FIXPOINT_FULL.vais SOURCE.vais OUT.vais")
+            print("usage: embed_self_source.vais --raw-call CALL_NAME HARNESS.vais SOURCE.vais OUT.vais")
+            return 2
+        }
+        return run_embed(proc_arg(1), proc_arg(2), proc_arg(3), 1)
+    }
+    if proc_argc() == 3 {
+        return run_embed(proc_arg(0), proc_arg(1), proc_arg(2), 0)
+    }
+    print("usage: embed_self_source.vais [--raw] FIXPOINT_FULL.vais SOURCE.vais OUT.vais")
+    print("usage: embed_self_source.vais --raw-call CALL_NAME HARNESS.vais SOURCE.vais OUT.vais")
+    return 2
+}

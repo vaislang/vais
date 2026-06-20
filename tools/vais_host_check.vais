@@ -1,0 +1,423 @@
+fn str_eq(a: Str, b: Str) -> Int {
+    if a.len() != b.len() { return 0 }
+    let mut i = 0
+    while i < a.len() {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn str_contains(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 1 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn append_line(out: Int, line: Str) -> Int {
+    str_builder_append(out, line)
+    str_builder_push(out, 10)
+    return 0
+}
+
+fn append_source_string(out: Int, value: Str) -> Int {
+    str_builder_push(out, 34)
+    let mut i = 0
+    while i < value.len() {
+        let c = value[i]
+        if c == 34 {
+            str_builder_push(out, 92)
+            str_builder_push(out, c)
+        } else if c == 92 {
+            str_builder_push(out, 92)
+            str_builder_push(out, c)
+        } else {
+            str_builder_push(out, c)
+        }
+        i = i + 1
+    }
+    str_builder_push(out, 34)
+    return 0
+}
+
+fn append_path_line(out: Int, prefix: Str, path: Str, suffix: Str) -> Int {
+    str_builder_append(out, prefix)
+    append_source_string(out, path)
+    append_line(out, suffix)
+    return 0
+}
+
+fn write_host_source(path: Str, existing: Str, missing: Str, nested: Str, written: Str, removable: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn add_marker(s: Str) -> Str {")
+    append_line(out, "    return str_concat(s, str_byte(33))")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_path_line(out, "    let existing = fs_exists(", existing, ")")
+    append_path_line(out, "    let missing = fs_exists(", missing, ")")
+    append_path_line(out, "    let made = fs_mkdirs(", nested, ")")
+    str_builder_append(out, "    let wrote = fs_write_text(")
+    append_source_string(out, written)
+    append_line(out, ", \"hello vais\")")
+    append_path_line(out, "    let output = fs_exists(", written, ")")
+    append_path_line(out, "    let text = fs_read_text(", written, ")")
+    append_path_line(out, "    let remove_before = fs_exists(", removable, ")")
+    append_path_line(out, "    let removed = fs_remove(", removable, ")")
+    append_path_line(out, "    let remove_after = fs_exists(", removable, ")")
+    append_line(out, "    let combined = add_marker(text)")
+    append_line(out, "    let middle = str_slice(combined, 6, 4)")
+    append_line(out, "    let head = str_slice(combined, 0, 5)")
+    append_line(out, "    let mut rebuilt = \"\"")
+    append_line(out, "    rebuilt = str_concat(rebuilt, head)")
+    append_line(out, "    rebuilt = str_concat(rebuilt, middle)")
+    append_line(out, "    let builder = str_builder_new()")
+    append_line(out, "    str_builder_append(builder, head)")
+    append_line(out, "    str_builder_push(builder, 45)")
+    append_line(out, "    str_builder_append(builder, middle)")
+    append_line(out, "    let built = str_builder_finish(builder)")
+    append_line(out, "    let cwd = fs_cwd()")
+    append_line(out, "    let temp = fs_temp_dir()")
+    append_path_line(out, "    let joined = path_join(", nested, ", \"joined.txt\")")
+    append_line(out, "    let wrote2 = fs_write_text(joined, \"path helper\")")
+    append_line(out, "    let base = path_basename(joined)")
+    append_line(out, "    let dir = path_dirname(joined)")
+    append_line(out, "    let argv: List<Str> = []")
+    append_line(out, "    argv.push(\"/bin/sh\")")
+    append_line(out, "    argv.push(\"-c\")")
+    append_line(out, "    argv.push(\"exit 7\")")
+    append_line(out, "    let proc = proc_run(argv)")
+    append_line(out, "    let cap_argv: List<Str> = []")
+    append_line(out, "    cap_argv.push(\"/bin/sh\")")
+    append_line(out, "    cap_argv.push(\"-c\")")
+    append_line(out, "    cap_argv.push(\"printf captured\")")
+    append_line(out, "    let captured = proc_capture_stdout(cap_argv)")
+    append_line(out, "    let cap_err_argv: List<Str> = []")
+    append_line(out, "    cap_err_argv.push(\"/bin/sh\")")
+    append_line(out, "    cap_err_argv.push(\"-c\")")
+    append_line(out, "    cap_err_argv.push(\"printf problem >&2\")")
+    append_line(out, "    let captured_err = proc_capture_stderr(cap_err_argv)")
+    append_path_line(out, "    let cap_to_out = path_join(", nested, ", \"capture.out\")")
+    append_path_line(out, "    let cap_to_err = path_join(", nested, ", \"capture.err\")")
+    append_line(out, "    let cap_to_argv: List<Str> = []")
+    append_line(out, "    cap_to_argv.push(\"/bin/sh\")")
+    append_line(out, "    cap_to_argv.push(\"-c\")")
+    append_line(out, "    cap_to_argv.push(\"printf fileout; printf fileerr >&2; exit 13\")")
+    append_line(out, "    let cap_to_status = proc_capture_to(cap_to_argv, cap_to_out, cap_to_err)")
+    append_line(out, "    let cap_to_stdout = fs_read_text(cap_to_out)")
+    append_line(out, "    let cap_to_stderr = fs_read_text(cap_to_err)")
+    append_line(out, "    let env_argv: List<Str> = []")
+    append_line(out, "    env_argv.push(\"/bin/sh\")")
+    append_line(out, "    env_argv.push(\"-c\")")
+    append_line(out, "    env_argv.push(\"case $VAIS_HOST_ENV_MARK in env-ok) exit 11 ;; *) exit 12 ;; esac\")")
+    append_line(out, "    let env: List<Str> = []")
+    append_line(out, "    env.push(\"VAIS_HOST_ENV_MARK=env-ok\")")
+    append_line(out, "    let env_proc = proc_run_env(env_argv, env)")
+    append_line(out, "    let argc = proc_argc()")
+    append_line(out, "    let mut arg_ok = argc == 0")
+    append_line(out, "    if argc == 2 {")
+    append_line(out, "        let arg0 = proc_arg(0)")
+    append_line(out, "        let arg1 = proc_arg(1)")
+    append_line(out, "        arg_ok = (arg0.len() == 5) and (arg0[0] == 97) and (arg1.len() == 4) and (arg1[0] == 98)")
+    append_line(out, "    }")
+    append_line(out, "    let read_ok = (text.len() == 10) + (text[0] == 104) + (text[6] == 118)")
+    append_line(out, "    let remove_ok = remove_before + (removed == 0) + (remove_after == 0)")
+    append_line(out, "    let str_ok = (combined.len() == 11) + (combined[10] == 33) + (middle.len() == 4) + (middle[0] == 118) + (middle[3] == 115) + (head[4] == 111) + (rebuilt.len() == 9) + (rebuilt[5] == 118) + (built.len() == 10) + (built[5] == 45) + (built[6] == 118)")
+    append_line(out, "    let path_ok = (cwd.len() > 0) + (temp.len() > 0) + fs_exists(joined) + fs_exists(dir) + (base.len() == 10) + (base[6] == 46)")
+    append_line(out, "    let proc_ok = proc == 7")
+    append_line(out, "    let stdout_ok = (captured.len() == 8) and (captured[0] == 99) and (captured[7] == 100)")
+    append_line(out, "    let stderr_ok = (captured_err.len() == 7) and (captured_err[0] == 112) and (captured_err[6] == 109)")
+    append_line(out, "    let capture_ok = stdout_ok and stderr_ok")
+    append_line(out, "    let capture_to_ok = (cap_to_status == 13) and (cap_to_stdout.len() == 7) and (cap_to_stdout[0] == 102) and (cap_to_stderr.len() == 7) and (cap_to_stderr[0] == 102)")
+    append_line(out, "    let env_ok = env_proc == 11")
+    append_line(out, "    return existing * 3 + missing + output * 10 + read_ok * 3 + remove_ok + (str_ok == 11) + path_ok * 2 + proc_ok * 3 + capture_ok + capture_to_ok + env_ok + arg_ok + made + wrote + wrote2")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn run1(a: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    return proc_run(argv)
+}
+
+fn run3(a: Str, b: Str, c: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    return proc_run(argv)
+}
+
+fn run4(a: Str, b: Str, c: Str, d: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    argv.push(d)
+    return proc_run(argv)
+}
+
+fn run5(a: Str, b: Str, c: Str, d: Str, e: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    argv.push(d)
+    argv.push(e)
+    return proc_run(argv)
+}
+
+fn run6(a: Str, b: Str, c: Str, d: Str, e: Str, f: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    argv.push(d)
+    argv.push(e)
+    argv.push(f)
+    return proc_run(argv)
+}
+
+fn run7(a: Str, b: Str, c: Str, d: Str, e: Str, f: Str, g: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    argv.push(d)
+    argv.push(e)
+    argv.push(f)
+    argv.push(g)
+    return proc_run(argv)
+}
+
+fn check_file(label: Str, path: Str, expected: Str) -> Int {
+    if fs_exists(path) == 0 {
+        print(str_concat("  FAIL ", str_concat(label, " did not write expected file")))
+        return 1
+    }
+    let content = fs_read_text(path)
+    if str_eq(content, expected) == 1 {
+        print(str_concat("  PASS ", str_concat(label, " wrote expected file content")))
+        return 0
+    }
+    print(str_concat("  FAIL ", str_concat(label, str_concat(" wrote [", str_concat(content, "]")))))
+    return 1
+}
+
+fn require_ir(ir: Str, pattern: Str) -> Int {
+    if str_contains(ir, pattern) == 1 { return 0 }
+    print(str_concat("  FAIL host emit-ir missing ", pattern))
+    return 1
+}
+
+fn check_ir_shape(ir_path: Str) -> Int {
+    if fs_exists(ir_path) == 0 {
+        print("  FAIL host emit-ir did not create IR")
+        return 1
+    }
+    let ir = fs_read_text(ir_path)
+    let mut fail = 0
+    fail = fail + require_ir(ir, "declare i64 @fs_exists(i8*)")
+    fail = fail + require_ir(ir, "declare i8* @fs_read_text(i8*)")
+    fail = fail + require_ir(ir, "declare i8* @fs_cwd()")
+    fail = fail + require_ir(ir, "declare i8* @fs_temp_dir()")
+    fail = fail + require_ir(ir, "declare i8* @path_join(i8*, i8*)")
+    fail = fail + require_ir(ir, "declare i8* @path_basename(i8*)")
+    fail = fail + require_ir(ir, "declare i8* @path_dirname(i8*)")
+    fail = fail + require_ir(ir, "declare i8* @str_concat(i8*, i8*)")
+    fail = fail + require_ir(ir, "declare i8* @str_slice(i8*, i64, i64)")
+    fail = fail + require_ir(ir, "declare i8* @str_byte(i64)")
+    fail = fail + require_ir(ir, "declare i64 @str_builder_new()")
+    fail = fail + require_ir(ir, "declare i64 @str_builder_push(i64, i64)")
+    fail = fail + require_ir(ir, "declare i64 @str_builder_append(i64, i8*)")
+    fail = fail + require_ir(ir, "declare i8* @str_builder_finish(i64)")
+    fail = fail + require_ir(ir, "declare i64 @fs_write_text(i8*, i8*)")
+    fail = fail + require_ir(ir, "declare i64 @fs_mkdirs(i8*)")
+    fail = fail + require_ir(ir, "declare i64 @fs_remove(i8*)")
+    fail = fail + require_ir(ir, "declare i64 @proc_argc()")
+    fail = fail + require_ir(ir, "declare i8* @proc_arg(i64)")
+    fail = fail + require_ir(ir, "declare i8* @proc_capture_stdout(i64*)")
+    fail = fail + require_ir(ir, "declare i8* @proc_capture_stderr(i64*)")
+    fail = fail + require_ir(ir, "declare i64 @proc_capture_to(i64*, i8*, i8*)")
+    fail = fail + require_ir(ir, "declare i64 @proc_run(i64*)")
+    fail = fail + require_ir(ir, "declare i64 @proc_run_env(i64*, i64*)")
+    fail = fail + require_ir(ir, "call i64 @fs_exists")
+    fail = fail + require_ir(ir, "call i8* @fs_read_text")
+    fail = fail + require_ir(ir, "call i8* @fs_cwd()")
+    fail = fail + require_ir(ir, "call i8* @fs_temp_dir()")
+    fail = fail + require_ir(ir, "call i8* @path_join")
+    fail = fail + require_ir(ir, "call i8* @path_basename")
+    fail = fail + require_ir(ir, "call i8* @path_dirname")
+    fail = fail + require_ir(ir, "call i8* @str_concat")
+    fail = fail + require_ir(ir, "call i8* @str_slice")
+    fail = fail + require_ir(ir, "call i8* @str_byte")
+    fail = fail + require_ir(ir, "call i64 @str_builder_new")
+    fail = fail + require_ir(ir, "call i64 @str_builder_push")
+    fail = fail + require_ir(ir, "call i64 @str_builder_append")
+    fail = fail + require_ir(ir, "call i8* @str_builder_finish")
+    fail = fail + require_ir(ir, "call i64 @fs_write_text")
+    fail = fail + require_ir(ir, "call i64 @fs_mkdirs")
+    fail = fail + require_ir(ir, "call i64 @fs_remove")
+    fail = fail + require_ir(ir, "call i64 @proc_argc()")
+    fail = fail + require_ir(ir, "call i8* @proc_arg")
+    fail = fail + require_ir(ir, "call i8* @proc_capture_stdout")
+    fail = fail + require_ir(ir, "call i8* @proc_capture_stderr")
+    fail = fail + require_ir(ir, "call i64 @proc_capture_to")
+    fail = fail + require_ir(ir, "call i64 @proc_run")
+    fail = fail + require_ir(ir, "call i64 @proc_run_env")
+    if fail == 0 {
+        print("  PASS host emit-ir declares and calls file/process intrinsics")
+        return 0
+    }
+    print("  FAIL host emit-ir file/process intrinsic shape")
+    return 1
+}
+
+fn make_case_source(tmp: Str, name: Str) -> Str {
+    let dir = path_join(tmp, name)
+    fs_mkdirs(dir)
+    let existing = path_join(dir, "existing.txt")
+    let missing = path_join(dir, "missing.txt")
+    let nested = path_join(path_join(path_join(dir, "nested"), "one"), "two")
+    let written = path_join(nested, "written.txt")
+    let removable = path_join(dir, "remove-me.txt")
+    let src = path_join(dir, "host_smoke.vais")
+    fs_write_text(existing, "vais\n")
+    fs_write_text(removable, "remove me")
+    write_host_source(src, existing, missing, nested, written, removable)
+    return src
+}
+
+fn case_joined(tmp: Str, name: Str) -> Str {
+    return path_join(path_join(path_join(path_join(path_join(tmp, name), "nested"), "one"), "two"), "joined.txt")
+}
+
+fn case_written(tmp: Str, name: Str) -> Str {
+    return path_join(path_join(path_join(path_join(path_join(tmp, name), "nested"), "one"), "two"), "written.txt")
+}
+
+fn case_removable(tmp: Str, name: Str) -> Str {
+    return path_join(path_join(tmp, name), "remove-me.txt")
+}
+
+fn check_exit(label: Str, got: Int, want: Int) -> Int {
+    if got == want {
+        print(str_concat("  PASS ", label))
+        return 0
+    }
+    print(str_concat("  FAIL ", str_concat(label, str_concat(" got=", str_concat(uint_to_str(got), str_concat(" want=", uint_to_str(want)))))))
+    return 1
+}
+
+fn usage() -> Int {
+    print("usage: vais-host-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    let vaisc = path_join(root, "scripts/vaisc")
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("error: could not create temp dir: ", tmp))
+        return 1
+    }
+
+    let mut fail = 0
+
+    let emit_src = make_case_source(tmp, "emit")
+    let emit_ir = path_join(tmp, "fs_exists.ll")
+    if run5(vaisc, "emit-ir", emit_src, "-o", emit_ir) == 0 {
+        fail = fail + check_ir_shape(emit_ir)
+    } else {
+        print("  FAIL host emit-ir file/process intrinsic shape")
+        fail = fail + 1
+    }
+
+    let build_src = make_case_source(tmp, "build")
+    let bin = path_join(tmp, "fs_exists_bin")
+    let build_ir = path_join(tmp, "fs_exists_build.ll")
+    if run7(vaisc, "build", build_src, "-o", bin, "--ir-out", build_ir) == 0 {
+        let got = run1(bin)
+        if got == 45 {
+            print("  PASS host file/process intrinsic build runs (=45)")
+        } else {
+            print(str_concat("  FAIL host file/process intrinsic build got=", str_concat(uint_to_str(got), " want=45")))
+            fail = fail + 1
+        }
+        fail = fail + check_file("host build", case_written(tmp, "build"), "hello vais")
+        fail = fail + check_file("host build path helper", case_joined(tmp, "build"), "path helper")
+        fs_write_text(case_removable(tmp, "build"), "remove me")
+        let got_args = run3(bin, "alpha", "beta")
+        if got_args == 45 {
+            print("  PASS host built binary receives OS args")
+        } else {
+            print(str_concat("  FAIL host built binary with args got=", str_concat(uint_to_str(got_args), " want=45")))
+            fail = fail + 1
+        }
+        fail = fail + check_file("host build args", case_written(tmp, "build"), "hello vais")
+        fail = fail + check_file("host build args path helper", case_joined(tmp, "build"), "path helper")
+    } else {
+        print("  FAIL host file/process intrinsic build")
+        fail = fail + 1
+    }
+
+    let run_src = make_case_source(tmp, "run")
+    let run_code = run3(vaisc, "run", run_src)
+    if run_code == 45 {
+        print("  PASS host file/process intrinsic run exits 45")
+    } else {
+        print(str_concat("  FAIL host file/process intrinsic run got=", str_concat(uint_to_str(run_code), " want=45")))
+        fail = fail + 1
+    }
+    fail = fail + check_file("host run", case_written(tmp, "run"), "hello vais")
+    fail = fail + check_file("host run path helper", case_joined(tmp, "run"), "path helper")
+
+    let run_args_src = make_case_source(tmp, "run_args")
+    let run_args_code = run6(vaisc, "run", run_args_src, "--", "alpha", "beta")
+    if run_args_code == 45 {
+        print("  PASS host run passes program args")
+    } else {
+        print(str_concat("  FAIL host run with args got=", str_concat(uint_to_str(run_args_code), " want=45")))
+        fail = fail + 1
+    }
+    fail = fail + check_file("host run args", case_written(tmp, "run_args"), "hello vais")
+    fail = fail + check_file("host run args path helper", case_joined(tmp, "run_args"), "path helper")
+
+    if fail == 0 {
+        print("RESULT: Vais host file/process intrinsic smoke OK")
+        return 0
+    }
+    print("RESULT: FAILURES")
+    return 1
+}

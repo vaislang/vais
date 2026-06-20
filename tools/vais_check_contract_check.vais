@@ -1,0 +1,263 @@
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn str_contains(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 1 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn count_line_prefix(text: Str, prefix: Str) -> Int {
+    let mut count = 0
+    let mut i = 0
+    let mut line_start = 1
+    while i < text.len() {
+        if line_start == 1 {
+            if text_at(text, i, prefix) == 1 { count = count + 1 }
+        }
+        if text[i] == 10 { line_start = 1 } else { line_start = 0 }
+        i = i + 1
+    }
+    return count
+}
+
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn print_capture(out_path: Str, err_path: Str) -> Int {
+    if fs_exists(out_path) == 1 {
+        let out = fs_read_text(out_path)
+        if out.len() > 0 { print(out) }
+    }
+    if fs_exists(err_path) == 1 {
+        let err = fs_read_text(err_path)
+        if err.len() > 0 { print(err) }
+    }
+    return 0
+}
+
+fn check_issue_shape(label: Str, output: Str, exit_code: Int, expected_count: Int) -> Int {
+    let error_count = count_line_prefix(output, "error:")
+    let coord_count = count_line_prefix(output, "  --> ")
+    let help_count = count_line_prefix(output, "  help:")
+    if exit_code == 1 and error_count == expected_count and coord_count == expected_count and help_count == expected_count {
+        print(str_concat("  PASS ", str_concat(label, " flags bad fixture")))
+        return 0
+    }
+    print(str_concat("  FAIL ", str_concat(label, str_concat(" got=", str_concat(uint_to_str(exit_code), str_concat(" count=", str_concat(uint_to_str(error_count), str_concat(" coord=", str_concat(uint_to_str(coord_count), str_concat(" help=", uint_to_str(help_count)))))))))))
+    print(output)
+    return 1
+}
+
+fn require_contains(label: Str, pattern: Str, output: Str) -> Int {
+    if str_contains(output, pattern) == 1 {
+        print(str_concat("  PASS ", label))
+        return 0
+    }
+    print(str_concat("  FAIL ", label))
+    print(output)
+    return 1
+}
+
+fn capture_vais_native(vaisc: Str, smoke: Str, out_path: Str, err_path: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("run")
+    argv.push(smoke)
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn capture_vais_cli(vaisc: Str, cli: Str, arg: Str, out_path: Str, err_path: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("run")
+    argv.push(cli)
+    argv.push("--")
+    argv.push(arg)
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn capture_script(script: Str, arg: Str, out_path: Str, err_path: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(script)
+    argv.push(arg)
+    return proc_capture_to(argv, out_path, err_path)
+}
+
+fn check_required_patterns(output: Str) -> Int {
+    let mut fail = 0
+    fail = fail + require_contains("Vais checker contract includes 'error: module declarations are not implemented yet'", "error: module declarations are not implemented yet", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: package declarations are not implemented yet'", "error: package declarations are not implemented yet", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: logical AND uses word and'", "error: logical AND uses word and", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: logical OR uses word or'", "error: logical OR uses word or", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: logical NOT uses word not'", "error: logical NOT uses word not", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: type conversion uses a constructor call'", "error: type conversion uses a constructor call", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: double colon path uses dot'", "error: double colon path uses dot", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: generic constructor uses a literal'", "error: generic constructor uses a literal", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: list macro spelling is not Vais'", "error: list macro spelling is not Vais", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: list type spelling is List'", "error: list type spelling is List", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: map type spelling is Map'", "error: map type spelling is Map", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: scalar type spelling is capitalized'", "error: scalar type spelling is capitalized", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: string type spelling is Str'", "error: string type spelling is Str", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: string conversion uses Str call'", "error: string conversion uses Str call", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: unchecked option access is not Vais'", "error: unchecked option access is not Vais", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: unchecked result access is not Vais'", "error: unchecked result access is not Vais", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: pattern conditional uses match'", "error: pattern conditional uses match", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: else if is two words'", "error: else if is two words", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: compound assignment is not supported'", "error: compound assignment is not supported", output)
+    return fail
+}
+
+fn check_vais_cli_bad(vaisc: Str, cli: Str, bad: Str, tmp: Str, expected_count: Int) -> Int {
+    let out_path = path_join(tmp, "vais-cli-bad.out")
+    let err_path = path_join(tmp, "vais-cli-bad.err")
+    let got = capture_vais_cli(vaisc, cli, bad, out_path, err_path)
+    let output = fs_read_text(out_path)
+    let mut fail = check_issue_shape("Vais checker CLI", output, got, expected_count)
+    fail = fail + require_contains("Vais checker CLI reports real bad path", str_concat("  --> ", str_concat(bad, ":")), output)
+    if fail != 0 { print_capture(out_path, err_path) }
+    return fail
+}
+
+fn check_vais_cli_help(vaisc: Str, cli: Str, tmp: Str) -> Int {
+    let out_path = path_join(tmp, "vais-cli-help.out")
+    let err_path = path_join(tmp, "vais-cli-help.err")
+    let got = capture_vais_cli(vaisc, cli, "--help", out_path, err_path)
+    let output = fs_read_text(out_path)
+    if got == 0 and str_contains(output, "usage: vais-check <path>") == 1 {
+        print("  PASS Vais checker CLI help")
+        return 0
+    }
+    print(str_concat("  FAIL Vais checker CLI help got=", str_concat(uint_to_str(got), " want=0")))
+    print_capture(out_path, err_path)
+    return 1
+}
+
+fn check_vais_cli_clean(vaisc: Str, cli: Str, clean: Str, tmp: Str) -> Int {
+    let out_path = path_join(tmp, "vais-cli-clean.out")
+    let err_path = path_join(tmp, "vais-cli-clean.err")
+    let got = capture_vais_cli(vaisc, cli, clean, out_path, err_path)
+    let output = fs_read_text(out_path)
+    let expected = str_concat("vais-check: ", str_concat(clean, " clean"))
+    if got == 0 and str_contains(output, expected) == 1 {
+        print("  PASS Vais checker CLI accepts clean fixture")
+        return 0
+    }
+    print(str_concat("  FAIL Vais checker CLI clean fixture got=", str_concat(uint_to_str(got), " want=0")))
+    print_capture(out_path, err_path)
+    return 1
+}
+
+fn check_script_bad(script: Str, bad: Str, tmp: Str, expected_count: Int) -> Int {
+    let out_path = path_join(tmp, "vais-check-script-bad.out")
+    let err_path = path_join(tmp, "vais-check-script-bad.err")
+    let got = capture_script(script, bad, out_path, err_path)
+    let output = fs_read_text(out_path)
+    let mut fail = check_issue_shape("scripts/vais-check", output, got, expected_count)
+    fail = fail + require_contains("scripts/vais-check reports real bad path", str_concat("  --> ", str_concat(bad, ":")), output)
+    if fail != 0 { print_capture(out_path, err_path) }
+    return fail
+}
+
+fn check_script_help(script: Str, tmp: Str) -> Int {
+    let out_path = path_join(tmp, "vais-check-script-help.out")
+    let err_path = path_join(tmp, "vais-check-script-help.err")
+    let got = capture_script(script, "--help", out_path, err_path)
+    let output = fs_read_text(out_path)
+    if got == 0 and str_contains(output, "usage: vais-check <path>") == 1 {
+        print("  PASS scripts/vais-check help")
+        return 0
+    }
+    print(str_concat("  FAIL scripts/vais-check help got=", str_concat(uint_to_str(got), " want=0")))
+    print_capture(out_path, err_path)
+    return 1
+}
+
+fn check_script_clean(script: Str, clean: Str, tmp: Str) -> Int {
+    let out_path = path_join(tmp, "vais-check-script-clean.out")
+    let err_path = path_join(tmp, "vais-check-script-clean.err")
+    let got = capture_script(script, clean, out_path, err_path)
+    let output = fs_read_text(out_path)
+    let expected = str_concat("vais-check: ", str_concat(clean, " clean"))
+    if got == 0 and str_contains(output, expected) == 1 {
+        print("  PASS scripts/vais-check accepts clean fixture")
+        return 0
+    }
+    print(str_concat("  FAIL scripts/vais-check clean fixture got=", str_concat(uint_to_str(got), " want=0")))
+    print_capture(out_path, err_path)
+    return 1
+}
+
+fn usage() -> Int {
+    print("usage: vais-check-contract-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("  FAIL Vais checker contract cannot create ", tmp))
+        return 1
+    }
+
+    let expected_count = 22
+    let vaisc = path_join(root, "scripts/vaisc")
+    let vais_check = path_join(root, "scripts/vais-check")
+    let fixture_dir = path_join(path_join(path_join(root, "tests"), "fixtures"), "vais_check")
+    let bad = path_join(fixture_dir, "bad.vais")
+    let clean = path_join(fixture_dir, "clean.vais")
+    let tools_dir = path_join(root, "tools")
+    let smoke = path_join(tools_dir, "vais_check_smoke.vais")
+    let cli = path_join(tools_dir, "vais_check_cli.vais")
+
+    let native_out = path_join(tmp, "vais-native.out")
+    let native_err = path_join(tmp, "vais-native.err")
+    let mut fail = 0
+    let native_status = capture_vais_native(vaisc, smoke, native_out, native_err)
+    let native_output = fs_read_text(native_out)
+    let bad_count = count_line_prefix(native_output, "error:")
+    let coord_count = count_line_prefix(native_output, "  --> ")
+    let help_count = count_line_prefix(native_output, "  help:")
+    if native_status == 42 and bad_count == expected_count and coord_count == expected_count and help_count == expected_count and str_contains(native_output, "error: module declarations are not implemented yet") == 1 and str_contains(native_output, "PASS Vais checker flags the bad fixture") == 1 and str_contains(native_output, "PASS Vais checker accepts the clean fixture") == 1 {
+        print("  PASS Vais checker native smoke matches expected fixtures")
+    } else {
+        print(str_concat("  FAIL Vais checker native smoke got=", str_concat(uint_to_str(native_status), " want=42")))
+        print_capture(native_out, native_err)
+        fail = fail + 1
+    }
+    fail = fail + check_required_patterns(native_output)
+    fail = fail + check_vais_cli_bad(vaisc, cli, bad, tmp, expected_count)
+    fail = fail + check_vais_cli_help(vaisc, cli, tmp)
+    fail = fail + check_vais_cli_clean(vaisc, cli, clean, tmp)
+    fail = fail + check_script_bad(vais_check, bad, tmp, expected_count)
+    fail = fail + check_script_help(vais_check, tmp)
+    fail = fail + check_script_clean(vais_check, clean, tmp)
+
+    if fail == 0 { print("RESULT: Vais checker contract smoke OK") }
+    else { print("RESULT: FAILURES") }
+    return fail
+}

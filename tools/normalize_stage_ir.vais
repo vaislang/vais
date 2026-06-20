@@ -1,0 +1,142 @@
+fn is_digit(c: Int) -> Int {
+    if c >= 48 and c <= 57 { return 1 }
+    return 0
+}
+
+fn str_eq(a: Str, b: Str) -> Int {
+    if a.len() != b.len() { return 0 }
+    let mut i = 0
+    while i < a.len() {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn builder_append_slice(builder: Int, s: Str, start: Int, len: Int) -> Int {
+    if len <= 0 { return 0 }
+    return str_builder_append(builder, str_slice(s, start, len))
+}
+
+fn int_to_str(value: Int) -> Str {
+    if value == 0 { return "0" }
+    let out = str_builder_new()
+    let mut divisor = 1
+    while divisor <= value / 10 {
+        divisor = divisor * 10
+    }
+    let mut n = value
+    while divisor > 0 {
+        let digit = n / divisor
+        str_builder_push(out, 48 + digit)
+        n = n - digit * divisor
+        divisor = divisor / 10
+    }
+    return str_builder_finish(out)
+}
+
+fn make_replacement(kind: Int, index: Int) -> Str {
+    let out = str_builder_new()
+    if kind == 1 {
+        str_builder_append(out, "@.fmt$N")
+    } else {
+        str_builder_append(out, "@.s$N")
+    }
+    str_builder_append(out, int_to_str(index))
+    return str_builder_finish(out)
+}
+
+fn match_s_global(text: Str, text_len: Int, i: Int) -> Int {
+    if i + 3 >= text_len { return 0 }
+    if text[i] != 64 { return 0 }
+    if text[i + 1] != 46 { return 0 }
+    if text[i + 2] != 115 { return 0 }
+    return is_digit(text[i + 3])
+}
+
+fn match_fmt_global(text: Str, text_len: Int, i: Int) -> Int {
+    if i + 5 >= text_len { return 0 }
+    if text[i] != 64 { return 0 }
+    if text[i + 1] != 46 { return 0 }
+    if text[i + 2] != 102 { return 0 }
+    if text[i + 3] != 109 { return 0 }
+    if text[i + 4] != 116 { return 0 }
+    return is_digit(text[i + 5])
+}
+
+fn digit_end(text: Str, text_len: Int, start: Int) -> Int {
+    let mut i = start
+    while i < text_len and is_digit(text[i]) == 1 {
+        i = i + 1
+    }
+    return i
+}
+
+fn normalize_stage_ir_text(text: Str) -> Str {
+    let keys: List<Str> = []
+    let values: List<Str> = []
+    let out = str_builder_new()
+    let text_len = text.len()
+    let mut s_count = 0
+    let mut fmt_count = 0
+    let mut last = 0
+    let mut i = 0
+    while i < text_len {
+        let mut kind = 0 - 1
+        let mut digit_start = 0
+        if match_fmt_global(text, text_len, i) == 1 {
+            kind = 1
+            digit_start = i + 5
+        } else if match_s_global(text, text_len, i) == 1 {
+            kind = 0
+            digit_start = i + 3
+        }
+        if kind >= 0 {
+            let end = digit_end(text, text_len, digit_start)
+            let key = str_slice(text, i, end - i)
+            let mut found = 0 - 1
+            let mut pos = 0
+            while pos < keys.len {
+                if str_eq(keys[pos], key) == 1 {
+                    found = pos
+                    pos = keys.len
+                } else {
+                    pos = pos + 1
+                }
+            }
+            let mut replacement = ""
+            if found >= 0 {
+                replacement = values[found]
+            } else {
+                if kind == 1 {
+                    replacement = make_replacement(kind, fmt_count)
+                    fmt_count = fmt_count + 1
+                } else {
+                    replacement = make_replacement(kind, s_count)
+                    s_count = s_count + 1
+                }
+                keys.push(key)
+                values.push(replacement)
+            }
+            builder_append_slice(out, text, last, i - last)
+            str_builder_append(out, replacement)
+            i = end
+            last = i
+        } else {
+            i = i + 1
+        }
+    }
+    builder_append_slice(out, text, last, text_len - last)
+    return str_builder_finish(out)
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 {
+        print("usage: normalize_stage_ir.vais IN.ll OUT.ll")
+        return 2
+    }
+    let src = proc_arg(0)
+    let dst = proc_arg(1)
+    let normalized = normalize_stage_ir_text(fs_read_text(src))
+    return fs_write_text(dst, normalized)
+}

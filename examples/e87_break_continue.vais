@@ -1,0 +1,19 @@
+# expect: 42
+
+fn main() -> Int {
+    let mut total = 0
+    for i in 0..10 {
+        if i == 3 { continue }
+        if i == 6 { break }
+        total = total + i
+    }
+
+    let mut j = 0
+    while j < 5 {
+        j = j + 1
+        if j == 2 { continue }
+        total = total + j
+    }
+
+    return total + 17
+}

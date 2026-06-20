@@ -1,0 +1,845 @@
+fn str_eq(a: Str, b: Str) -> Int {
+    if a.len() != b.len() { return 0 }
+    let mut i = 0
+    while i < a.len() {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn str_contains(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 1 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn append_line(out: Int, line: Str) -> Int {
+    str_builder_append(out, line)
+    str_builder_push(out, 10)
+    return 0
+}
+
+fn two_bytes(a: Int, b: Int) -> Str {
+    return str_concat(str_byte(a), str_byte(b))
+}
+
+fn bad_and_line() -> Str {
+    return str_concat(str_concat("    if 1 == 1 ", two_bytes(38, 38)), " 2 == 2 {")
+}
+
+fn bad_method_line() -> Str {
+    return str_concat(str_concat("    return xs.", "clear"), "()")
+}
+
+fn bad_module_line() -> Str {
+    return str_concat("mod", "ule math.add")
+}
+
+fn bad_package_line() -> Str {
+    return str_concat("pack", "age demo")
+}
+
+fn bad_string_type_line() -> Str {
+    return str_concat("fn len(s: ", str_concat("Str", "ing) -> Int {"))
+}
+
+fn bad_map_generic_line() -> Str {
+    return str_concat(str_concat("    let scores: ", str_concat("Ma", "p<")), "Str, Int> = {}")
+}
+
+fn bad_closure_line() -> Str {
+    return str_concat(str_concat("    let add1 = ", str_byte(124)), str_concat("x", str_concat(str_byte(124), " x + 1")))
+}
+
+fn kw_enum() -> Str {
+    return str_concat("en", "um")
+}
+
+fn kw_match() -> Str {
+    return str_concat("mat", "ch")
+}
+
+fn map_word() -> Str {
+    return str_concat("Ma", "p")
+}
+
+fn map_int_spaced() -> Str {
+    return str_concat(map_word(), "<Int, Int>")
+}
+
+fn map_int_compact() -> Str {
+    return str_concat(map_word(), "<Int,Int>")
+}
+
+fn enum_line(rest: Str) -> Str {
+    return str_concat(kw_enum(), rest)
+}
+
+fn match_line(rest: Str) -> Str {
+    return str_concat(str_concat("    ", kw_match()), rest)
+}
+
+fn label_payload_free() -> Str {
+    return str_concat("accepts payload-free ", str_concat(kw_enum(), str_concat("/", str_concat(kw_match(), " slice"))))
+}
+
+fn label_payload_small() -> Str {
+    return str_concat("accepts small payload ", str_concat(kw_enum(), str_concat("/", str_concat(kw_match(), " slice"))))
+}
+
+fn label_closure_accept() -> Str {
+    return str_concat("accepts single-Int ", str_concat("clos", "ure return slice"))
+}
+
+fn label_map_accept() -> Str {
+    return str_concat("accepts local ", str_concat(map_int_compact(), " full slice"))
+}
+
+fn name_payload_accept() -> Str {
+    return str_concat("payload_", kw_enum())
+}
+
+fn name_payload_bad() -> Str {
+    return str_concat("payload_", str_concat(kw_enum(), "_struct"))
+}
+
+fn name_match_bad() -> Str {
+    return str_concat(kw_match(), "_expr_body")
+}
+
+fn msg_enum_decl() -> Str {
+    return str_concat(kw_enum(), " declarations beyond payload-free tags")
+}
+
+fn msg_match() -> Str {
+    return kw_match()
+}
+
+fn msg_match_help() -> Str {
+    return str_concat("payload ", str_concat(kw_match(), " code"))
+}
+
+fn msg_simple_enum_arms() -> Str {
+    return str_concat("simple ", str_concat(kw_enum(), " return arms"))
+}
+
+fn msg_closure() -> Str {
+    return str_concat("clos", "ures beyond the single-Int closure-return")
+}
+
+fn help_closure() -> Str {
+    return str_concat("broader ", str_concat("clos", "ure cases"))
+}
+
+fn msg_map_generic() -> Str {
+    return str_concat("only local ", str_concat(map_int_compact(), " values are verified"))
+}
+
+fn write_day1(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn loop_sum(n: Int) -> Int {")
+    append_line(out, "    let mut s = 0")
+    append_line(out, "    let mut i = 0")
+    append_line(out, "    while i < n {")
+    append_line(out, "        s = s + 6")
+    append_line(out, "        i = i + 1")
+    append_line(out, "    }")
+    append_line(out, "    if s == 42 {")
+    append_line(out, "        return s")
+    append_line(out, "    } else {")
+    append_line(out, "        return 0")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return loop_sum(7)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_for_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut s = 0")
+    append_line(out, "    for i in 0..6 {")
+    append_line(out, "        if i > 2 {")
+    append_line(out, "            s = s + i")
+    append_line(out, "        }")
+    append_line(out, "    }")
+    append_line(out, "    for j in 0..=3 {")
+    append_line(out, "        s = s + j")
+    append_line(out, "    }")
+    append_line(out, "    for k in 0..10 {")
+    append_line(out, "        if k == 3 { continue }")
+    append_line(out, "        if k == 6 { break }")
+    append_line(out, "        s = s + k")
+    append_line(out, "    }")
+    append_line(out, "    return s + 12")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_io_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let x = 42")
+    append_line(out, "    print(\"the answer is {x}\")")
+    append_line(out, "    putchar(33)")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_struct_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let b = Box { value: 42 }")
+    append_line(out, "    return b.value")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_enum_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, enum_line(" Color { Red, Green, Blue }"))
+    append_line(out, "")
+    append_line(out, "fn color_number(c: Color) -> Int {")
+    append_line(out, match_line(" c {"))
+    append_line(out, "        Color.Red => return 1,")
+    append_line(out, "        Color.Green => return 2,")
+    append_line(out, "        Color.Blue => return 3,")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let c = Color.Green")
+    append_line(out, "    return color_number(c)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_payload_enum_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, enum_line(" Node { Lit(Int), Add(Node, Node), Mul(Node, Node) }"))
+    append_line(out, "")
+    append_line(out, "fn eval(n: Node) -> Int {")
+    append_line(out, match_line(" n {"))
+    append_line(out, "        Lit(v) => return v,")
+    append_line(out, "        Add(a, b) => return eval(a) + eval(b),")
+    append_line(out, "        Mul(a, b) => return eval(a) * eval(b),")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return eval(Add(Lit(12), Lit(2)))")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_closure_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn adder(n: Int) -> fn(Int) -> Int {")
+    append_line(out, str_concat(str_concat("    return ", str_byte(124)), str_concat("x", str_concat(str_byte(124), " x + n"))))
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let add3 = adder(3)")
+    append_line(out, "    return add3(4)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_list_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = []")
+    append_line(out, "    let empty: List<Int> = []")
+    append_line(out, "    xs.push(10)")
+    append_line(out, "    xs.push(20)")
+    append_line(out, "    xs.push(30)")
+    append_line(out, "    let popped = xs.pop()")
+    append_line(out, "    return xs.sum() - xs.len() - xs[1] - xs[0] + 25 + empty.is_empty() - xs.is_empty() - 1 + xs.last() - 20 + popped - 30")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_str_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn is_digit(c: Int) -> Bool {")
+    append_line(out, "    return c >= 48 and c <= 57")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn count_digits(s: Str) -> Int {")
+    append_line(out, "    let mut i = 0")
+    append_line(out, "    let mut n = 0")
+    append_line(out, "    while i < s.len() {")
+    append_line(out, "        if is_digit(s[i]) {")
+    append_line(out, "            n = n + 1")
+    append_line(out, "        }")
+    append_line(out, "        i = i + 1")
+    append_line(out, "    }")
+    append_line(out, "    return n")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return count_digits(\"a1b2\") * 21")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_char_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn choose(flag: Bool) -> Char {")
+    append_line(out, "    if flag {")
+    append_line(out, "        return 'A'")
+    append_line(out, "    }")
+    append_line(out, "    return 'B'")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn same(c: Char) -> Bool {")
+    append_line(out, "    return c == 'A'")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let c: Char = choose(true)")
+    append_line(out, "    if same(c) and c != 'B' {")
+    append_line(out, "        return 42")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_parse_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let s: Str = \"16x\"")
+    append_line(out, "    return parse_uint(\"19\") + parse_uint(s) + parse_int(\"-5\") + parse_int(`12z`)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_map_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let scores: ", map_int_spaced()), " = {}"))
+    append_line(out, "    scores.insert(4, 38)")
+    append_line(out, "    scores.insert(4, 40)")
+    append_line(out, "    scores.insert(9, 2)")
+    append_line(out, "    return scores.get(4, 0) + scores.get(5, 0 - 1) + scores.contains(4) + scores.contains(5) + scores.len()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_accept_source(name: Str, path: Str) -> Int {
+    if str_eq(name, "day1") == 1 { return write_day1(path) }
+    if str_eq(name, "for") == 1 { return write_for_accept(path) }
+    if str_eq(name, "io") == 1 { return write_io_accept(path) }
+    if str_eq(name, "struct") == 1 { return write_struct_accept(path) }
+    if str_eq(name, "tag") == 1 { return write_enum_accept(path) }
+    if str_eq(name, name_payload_accept()) == 1 { return write_payload_enum_accept(path) }
+    if str_eq(name, "closure") == 1 { return write_closure_accept(path) }
+    if str_eq(name, "list") == 1 { return write_list_accept(path) }
+    if str_eq(name, "str") == 1 { return write_str_accept(path) }
+    if str_eq(name, "char") == 1 { return write_char_accept(path) }
+    if str_eq(name, "parse") == 1 { return write_parse_accept(path) }
+    if str_eq(name, "map") == 1 { return write_map_accept(path) }
+    return 1
+}
+
+fn run_vaisc_run(vaisc: Str, src: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("run")
+    argv.push(src)
+    return proc_run(argv)
+}
+
+fn capture_vaisc_run(vaisc: Str, src: Str) -> Str {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("run")
+    argv.push(src)
+    return proc_capture_stdout(argv)
+}
+
+fn shell_status(cmd: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push("/bin/sh")
+    argv.push("-c")
+    argv.push(cmd)
+    return proc_run(argv)
+}
+
+fn run_vaisc_run_quiet(vaisc: Str, src: Str) -> Int {
+    return shell_status(str_concat(str_concat(str_concat(vaisc, " run "), src), " >/dev/null 2>/dev/null"))
+}
+
+fn expect_accept(vaisc: Str, tmp: Str, name: Str, label: Str, want: Int) -> Int {
+    let src = path_join(tmp, str_concat(name, ".vais"))
+    if write_accept_source(name, src) != 0 {
+        print(str_concat("  FAIL ", str_concat(label, ": write fixture")))
+        return 1
+    }
+    let got = run_vaisc_run(vaisc, src)
+    if got == want {
+        print(str_concat("  PASS ", label))
+        return 0
+    }
+    print(str_concat("  FAIL ", str_concat(label, str_concat(" got=", str_concat(uint_to_str(got), str_concat(" want=", uint_to_str(want)))))))
+    return 1
+}
+
+fn expect_io_accept(vaisc: Str, tmp: Str) -> Int {
+    let src = path_join(tmp, "io.vais")
+    if write_io_accept(src) != 0 {
+        print("  FAIL accepts print interpolation and putchar IO slice: write fixture")
+        return 1
+    }
+    let got = run_vaisc_run_quiet(vaisc, src)
+    let out = capture_vaisc_run(vaisc, src)
+    let want_out = str_concat("the answer is 42", str_concat(str_byte(10), "!"))
+    if got == 0 and str_eq(out, want_out) == 1 {
+        print("  PASS accepts print interpolation and putchar IO slice")
+        return 0
+    }
+    print(str_concat("  FAIL accepts IO slice got=", str_concat(uint_to_str(got), str_concat(" stdout=[", str_concat(out, "]")))))
+    return 1
+}
+
+fn capture_emit_stderr(vaisc: Str, src: Str, ll: Str) -> Str {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("emit-ir")
+    argv.push(src)
+    argv.push("-o")
+    argv.push(ll)
+    return proc_capture_stderr(argv)
+}
+
+fn has_diag(err: Str, needle: Str, needle2: Str, help_needle: Str) -> Int {
+    if err.len() == 0 { return 0 }
+    if str_contains(err, needle) == 0 { return 0 }
+    if needle2.len() > 0 {
+        if str_contains(err, needle2) == 0 { return 0 }
+    }
+    if str_contains(err, "help:") == 0 { return 0 }
+    if str_contains(err, help_needle) == 0 { return 0 }
+    return 1
+}
+
+fn expect_reject_path(vaisc: Str, tmp: Str, label: Str, src: Str, needle: Str, needle2: Str, help_needle: Str) -> Int {
+    let err = capture_emit_stderr(vaisc, src, path_join(tmp, str_concat(label, ".ll")))
+    if has_diag(err, needle, needle2, help_needle) == 1 {
+        print(str_concat("  PASS rejects ", str_concat(label, " with P4 help")))
+        return 0
+    }
+    print(str_concat("  FAIL rejects ", str_concat(label, ": missing expected diagnostic")))
+    print(err)
+    return 1
+}
+
+fn write_bad_main(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() {")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_helper_missing_return(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn add(a: Int, b: Int) {")
+    append_line(out, "    return a + b")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return add(20, 22)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_payload_enum_struct(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Pt { x: Int }")
+    append_line(out, str_concat(enum_line(" Node { Lit"), "(Pt) }"))
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_match_expr_body(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, enum_line(" Color { Red, Green }"))
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let c = Color.Green")
+    append_line(out, match_line(" c {"))
+    append_line(out, "        Color.Red => 1,")
+    append_line(out, "        Color.Green => 2,")
+    append_line(out, "    }")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_closure_literal_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, bad_closure_line())
+    append_line(out, "    return add1(2)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_rust_and_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, bad_and_line())
+    append_line(out, "        return 42")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_unsupported_method(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs = [20, 22]")
+    append_line(out, bad_method_line())
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_map_generic(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, bad_map_generic_line())
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_module_not(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, bad_module_line())
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_package_not(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, bad_package_line())
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_missing_import(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "import math.missing")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_string_type(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, bad_string_type_line())
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return len(`x`)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_reject_source(name: Str, path: Str) -> Int {
+    if str_eq(name, "bad_main_signature") == 1 { return write_bad_main(path) }
+    if str_eq(name, "helper_missing_return_type") == 1 { return write_helper_missing_return(path) }
+    if str_eq(name, name_payload_bad()) == 1 { return write_payload_enum_struct(path) }
+    if str_eq(name, name_match_bad()) == 1 { return write_match_expr_body(path) }
+    if str_eq(name, "closure_literal") == 1 { return write_closure_literal_bad(path) }
+    if str_eq(name, "rust_and") == 1 { return write_rust_and_bad(path) }
+    if str_eq(name, "unsupported_method") == 1 { return write_unsupported_method(path) }
+    if str_eq(name, "map_generic_not_verified") == 1 { return write_map_generic(path) }
+    if str_eq(name, "module_not_implemented") == 1 { return write_module_not(path) }
+    if str_eq(name, "package_not_implemented") == 1 { return write_package_not(path) }
+    if str_eq(name, "missing_import") == 1 { return write_missing_import(path) }
+    if str_eq(name, "string_type") == 1 { return write_string_type(path) }
+    return 1
+}
+
+fn expect_reject(vaisc: Str, tmp: Str, name: Str, needle: Str, needle2: Str, help_needle: Str) -> Int {
+    let src = path_join(tmp, str_concat(name, ".vais"))
+    if write_reject_source(name, src) != 0 {
+        print(str_concat("  FAIL rejects ", str_concat(name, ": write fixture")))
+        return 1
+    }
+    return expect_reject_path(vaisc, tmp, name, src, needle, needle2, help_needle)
+}
+
+fn write_text(path: Str, text: Str) -> Int {
+    return fs_write_text(path, text)
+}
+
+fn line(text: Str) -> Str {
+    return str_concat(text, str_byte(10))
+}
+
+fn write_module_accept(root: Str) -> Str {
+    let math_dir = path_join(root, "math")
+    fs_mkdirs(math_dir)
+    write_text(path_join(math_dir, "add.vais"), str_concat(line("fn add(a: Int, b: Int) -> Int {"), str_concat(line("    return a + b"), line("}"))))
+    let main_path = path_join(root, "main.vais")
+    let out = str_builder_new()
+    append_line(out, "import math.add")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return add(20, 22)")
+    append_line(out, "}")
+    fs_write_text(main_path, str_builder_finish(out))
+    return main_path
+}
+
+fn write_package_accept(root: Str) -> Str {
+    let src_dir = path_join(root, "src")
+    let math_dir = path_join(src_dir, "math")
+    fs_mkdirs(math_dir)
+    write_text(path_join(root, "vais.toml"), str_concat(line("name = \"package_basic\""), str_concat(line("version = \"0.1.0\""), line("source = \"src\""))))
+    write_text(path_join(math_dir, "add.vais"), str_concat(line("fn add(a: Int, b: Int) -> Int {"), str_concat(line("    return a + b"), line("}"))))
+    let main_path = path_join(src_dir, "main.vais")
+    let out = str_builder_new()
+    append_line(out, "import math.add")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return add(20, 22)")
+    append_line(out, "}")
+    fs_write_text(main_path, str_builder_finish(out))
+    return main_path
+}
+
+fn write_dependency_accept(root: Str) -> Str {
+    let app = path_join(root, "app")
+    let mathlib = path_join(root, "mathlib")
+    let app_src = path_join(app, "src")
+    let arith = path_join(path_join(mathlib, "src"), "arith")
+    fs_mkdirs(app_src)
+    fs_mkdirs(arith)
+    let app_manifest = str_concat(line("name = \"dependency_app\""), str_concat(line("version = \"0.1.0\""), str_concat(line("source = \"src\""), str_concat(line(""), str_concat(line("[dependencies]"), line("mathlib = \"../mathlib\""))))))
+    write_text(path_join(app, "vais.toml"), app_manifest)
+    write_text(path_join(mathlib, "vais.toml"), str_concat(line("name = \"mathlib\""), str_concat(line("version = \"0.1.0\""), line("source = \"src\""))))
+    write_text(path_join(arith, "add.vais"), str_concat(line("fn add(a: Int, b: Int) -> Int {"), str_concat(line("    return a + b"), line("}"))))
+    write_text(path_join(path_join(mathlib, "src"), "public.vais"), line("import arith.add"))
+    let main_path = path_join(app_src, "main.vais")
+    let out = str_builder_new()
+    append_line(out, "import mathlib.public")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return add(20, 22)")
+    append_line(out, "}")
+    fs_write_text(main_path, str_builder_finish(out))
+    return main_path
+}
+
+fn expect_accept_path(vaisc: Str, src: Str, label: Str, want: Int) -> Int {
+    let got = run_vaisc_run(vaisc, src)
+    if got == want {
+        print(str_concat("  PASS ", label))
+        return 0
+    }
+    print(str_concat("  FAIL ", str_concat(label, str_concat(" got=", str_concat(uint_to_str(got), str_concat(" want=", uint_to_str(want)))))))
+    return 1
+}
+
+fn setup_bad_manifest(root: Str) -> Str {
+    let src_dir = path_join(root, "src")
+    fs_mkdirs(src_dir)
+    write_text(path_join(root, "vais.toml"), str_concat(line("name = \"bad_manifest\""), line("version = \"0.1.0\"")))
+    let main_path = path_join(src_dir, "main.vais")
+    write_text(main_path, str_concat(line("fn main() -> Int {"), str_concat(line("    return 42"), line("}"))))
+    return main_path
+}
+
+fn setup_bad_source_manifest(root: Str) -> Str {
+    let src_dir = path_join(root, "src")
+    fs_mkdirs(src_dir)
+    write_text(path_join(root, "vais.toml"), str_concat(line("name = \"bad_source\""), str_concat(line("version = \"0.1.0\""), line("source = \"../src\""))))
+    let main_path = path_join(src_dir, "main.vais")
+    write_text(main_path, str_concat(line("fn main() -> Int {"), str_concat(line("    return 42"), line("}"))))
+    return main_path
+}
+
+fn setup_missing_dependency(root: Str) -> Str {
+    let src_dir = path_join(root, "src")
+    fs_mkdirs(src_dir)
+    let manifest = str_concat(line("name = \"missing_dep\""), str_concat(line("version = \"0.1.0\""), str_concat(line("source = \"src\""), str_concat(line(""), str_concat(line("[dependencies]"), line("missing = \"../missing\""))))))
+    write_text(path_join(root, "vais.toml"), manifest)
+    let main_path = path_join(src_dir, "main.vais")
+    write_text(main_path, str_concat(line("fn main() -> Int {"), str_concat(line("    return 42"), line("}"))))
+    return main_path
+}
+
+fn setup_bad_dependency_path(root: Str) -> Str {
+    let src_dir = path_join(root, "src")
+    fs_mkdirs(src_dir)
+    let manifest = str_concat(line("name = \"bad_dep_path\""), str_concat(line("version = \"0.1.0\""), str_concat(line("source = \"src\""), str_concat(line(""), str_concat(line("[dependencies]"), line("web = \"https://example.com/pkg\""))))))
+    write_text(path_join(root, "vais.toml"), manifest)
+    let main_path = path_join(src_dir, "main.vais")
+    write_text(main_path, str_concat(line("fn main() -> Int {"), str_concat(line("    return 42"), line("}"))))
+    return main_path
+}
+
+fn setup_dependency_cycle(root: Str) -> Str {
+    let a = path_join(root, "a")
+    let b = path_join(root, "b")
+    let a_src = path_join(a, "src")
+    let b_src = path_join(b, "src")
+    fs_mkdirs(a_src)
+    fs_mkdirs(b_src)
+    let a_manifest = str_concat(line("name = \"cycle_a\""), str_concat(line("version = \"0.1.0\""), str_concat(line("source = \"src\""), str_concat(line(""), str_concat(line("[dependencies]"), line("b = \"../b\""))))))
+    let b_manifest = str_concat(line("name = \"cycle_b\""), str_concat(line("version = \"0.1.0\""), str_concat(line("source = \"src\""), str_concat(line(""), str_concat(line("[dependencies]"), line("a = \"../a\""))))))
+    write_text(path_join(a, "vais.toml"), a_manifest)
+    write_text(path_join(b, "vais.toml"), b_manifest)
+    let main_path = path_join(a_src, "main.vais")
+    write_text(main_path, str_concat(line("fn main() -> Int {"), str_concat(line("    return 42"), line("}"))))
+    return main_path
+}
+
+fn setup_duplicate_import(root: Str) -> Str {
+    let adir = path_join(root, "a")
+    let bdir = path_join(root, "b")
+    fs_mkdirs(adir)
+    fs_mkdirs(bdir)
+    write_text(path_join(adir, "one.vais"), str_concat(line("fn helper() -> Int {"), str_concat(line("    return 1"), line("}"))))
+    write_text(path_join(bdir, "two.vais"), str_concat(line("fn helper() -> Int {"), str_concat(line("    return 2"), line("}"))))
+    let main_path = path_join(root, "main.vais")
+    let out = str_builder_new()
+    append_line(out, "import a.one")
+    append_line(out, "import b.two")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return helper()")
+    append_line(out, "}")
+    fs_write_text(main_path, str_builder_finish(out))
+    return main_path
+}
+
+fn setup_cycle_import(root: Str) -> Str {
+    fs_mkdirs(root)
+    write_text(path_join(root, "a.vais"), str_concat(line("import b"), str_concat(line(""), str_concat(line("fn a() -> Int {"), str_concat(line("    return 1"), line("}"))))))
+    write_text(path_join(root, "b.vais"), str_concat(line("import a"), str_concat(line(""), str_concat(line("fn b() -> Int {"), str_concat(line("    return 2"), line("}"))))))
+    let main_path = path_join(root, "main.vais")
+    let out = str_builder_new()
+    append_line(out, "import a")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return a()")
+    append_line(out, "}")
+    fs_write_text(main_path, str_builder_finish(out))
+    return main_path
+}
+
+fn usage() -> Int {
+    print("usage: vaisc-front-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("error: could not create temp dir: ", tmp))
+        return 1
+    }
+    let vaisc = path_join(root, "scripts/vaisc")
+    let mut fail = 0
+
+    fail = fail + expect_accept(vaisc, tmp, "day1", "accepts day-1 Int/let/while/if/function-call subset", 42)
+    fail = fail + expect_accept(vaisc, tmp, "for", "accepts range for-loop and break/continue subset", 42)
+    fail = fail + expect_io_accept(vaisc, tmp)
+    fail = fail + expect_accept(vaisc, tmp, "struct", "accepts struct literal and field access slice", 42)
+    fail = fail + expect_accept(vaisc, tmp, "tag", label_payload_free(), 2)
+    fail = fail + expect_accept(vaisc, tmp, name_payload_accept(), label_payload_small(), 14)
+    fail = fail + expect_accept(vaisc, tmp, "closure", label_closure_accept(), 7)
+    fail = fail + expect_accept(vaisc, tmp, "list", "accepts List push/len/is_empty/last/pop/index/sum slice", 23)
+    fail = fail + expect_accept(vaisc, tmp, "str", "accepts Str parameter, Bool helper, len, index, and byte classification slice", 42)
+    fail = fail + expect_accept(vaisc, tmp, "char", "accepts Char literal, type annotation, return, and Bool predicate slice", 42)
+    fail = fail + expect_accept(vaisc, tmp, "parse", "accepts named parse_uint/parse_int Str helpers", 42)
+    fail = fail + expect_accept_path(vaisc, write_module_accept(path_join(tmp, "module_basic")), "accepts local import multi-file full slice", 42)
+    fail = fail + expect_accept_path(vaisc, write_package_accept(path_join(tmp, "package_basic")), "accepts package manifest source root full slice", 42)
+    fail = fail + expect_accept_path(vaisc, write_dependency_accept(path_join(tmp, "dependency_basic")), "accepts local dependency package paths", 42)
+
+    fail = fail + expect_reject(vaisc, tmp, "bad_main_signature", "requires", "fn main() -> Int", "write the entrypoint")
+    fail = fail + expect_reject(vaisc, tmp, "helper_missing_return_type", "helper functions must return", "", "fn name")
+    fail = fail + expect_reject(vaisc, tmp, name_payload_bad(), msg_enum_decl(), "", str_concat("broader payload ", str_concat(kw_enum(), "s")))
+    fail = fail + expect_reject(vaisc, tmp, name_match_bad(), msg_match(), msg_simple_enum_arms(), msg_match_help())
+    fail = fail + expect_reject(vaisc, tmp, "closure_literal", msg_closure(), "", help_closure())
+    fail = fail + expect_reject(vaisc, tmp, "rust_and", "logical AND uses the word", "", "and")
+    fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/len/is_empty/last/pop/sum", "", "plain function call")
+    fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
+    fail = fail + expect_reject(vaisc, tmp, "map_generic_not_verified", msg_map_generic(), "", "generic key/value forms")
+    fail = fail + expect_reject(vaisc, tmp, "module_not_implemented", "module and package declarations are not implemented", "", "module names are derived from file paths")
+    fail = fail + expect_reject(vaisc, tmp, "package_not_implemented", "module and package declarations are not implemented", "", "module names are derived from file paths")
+    fail = fail + expect_reject(vaisc, tmp, "missing_import", "import path not found", "", "expected local module file")
+
+    fail = fail + expect_reject_path(vaisc, tmp, "bad_manifest", setup_bad_manifest(path_join(tmp, "bad_manifest")), "package manifest is missing required key", "", "source")
+    fail = fail + expect_reject_path(vaisc, tmp, "bad_source_manifest", setup_bad_source_manifest(path_join(tmp, "bad_source_manifest")), "package manifest source must be a local relative path", "", "absolute paths")
+    fail = fail + expect_reject_path(vaisc, tmp, "missing_dependency_manifest", setup_missing_dependency(path_join(tmp, "missing_dependency_manifest")), "local dependency manifest not found", "", "expected local dependency manifest")
+    fail = fail + expect_reject_path(vaisc, tmp, "bad_dependency_path", setup_bad_dependency_path(path_join(tmp, "bad_dependency_path")), "local dependency path must be a relative local path", "", "absolute paths")
+    fail = fail + expect_reject_path(vaisc, tmp, "dependency_cycle", setup_dependency_cycle(path_join(tmp, "dependency_cycle")), "local dependency cycle detected", "", "remove one dependency")
+    fail = fail + expect_reject_path(vaisc, tmp, "duplicate_import/main", setup_duplicate_import(path_join(tmp, "duplicate_import")), "duplicate top-level symbol", "", "first definition")
+    fail = fail + expect_reject_path(vaisc, tmp, "cycle_import/main", setup_cycle_import(path_join(tmp, "cycle_import")), "import cycle detected", "", "remove one import from the cycle")
+    fail = fail + expect_reject(vaisc, tmp, "string_type", "helper parameters must use verified scalar types", "", "Int")
+
+    if fail == 0 {
+        print("RESULT: Vais vaisc NV-C1 front contract OK")
+        return 0
+    }
+    print("RESULT: FAILURES")
+    return 1
+}

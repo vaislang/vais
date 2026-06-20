@@ -2,10 +2,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-
-if [ "${VAISC_FORCE_PYTHON:-}" = "1" ]; then
-    exec python3 "$HERE/tools/vaisc.py" "$@"
-fi
+mkdir -p "$HERE/build"
 
 native="$HERE/build/vaisc"
 native_needs_build() {

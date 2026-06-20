@@ -9,7 +9,7 @@ Vais documentation uses these terms:
 
 | Term | Meaning |
 | --- | --- |
-| Verified | Covered by `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-parity.sh`, `scripts/test.sh`, or a self-host gate |
+| Verified | Covered by `scripts/test-vaisc-front.sh`, `scripts/test-vaisc-parity.sh`, `scripts/test-vaisc-host.sh`, `scripts/test.sh`, or a self-host gate |
 | Full engine | Compiled by the native public driver linked with the reusable self-host compiler core |
 | Direct engine | Native promoted-slice LLVM path selected with `--engine direct` |
 | Specified | Intended surface, not yet protected as a release claim |
@@ -92,7 +92,7 @@ Verified today:
 - Generic marker syntax for simple `Int` helper cases, as tracked in the parity
   manifest.
 
-The direct engine gate covers Int, Bool, and Str helper calls in addition to the
+The direct engine gate covers Int, Bool, Char, and Str helper calls in addition to the
 full engine.
 
 ## Variables
@@ -106,8 +106,9 @@ let typed: Int = 42
 
 - `let` binds an immutable value.
 - `let mut` binds a mutable value.
-- `let name: Int = value`, `let name: Bool = value`, and
-  `let name: Str = value` are verified for scalar locals.
+- `let name: Int = value`, `let name: Bool = value`,
+  `let name: Char = value`, and `let name: Str = value` are verified for
+  scalar locals.
 - Compound assignment such as `+=` is not Vais syntax.
 
 ## Types
@@ -119,8 +120,9 @@ Verified release surface:
 | `Int` | Primary scalar type |
 | `Bool` | Produced by comparisons, boolean expressions, and helper signatures |
 | `Str` | String literals, helper signatures, length, index, and equality |
-| `Char` | Single-byte character literals in verified examples |
+| `Char` | Single-byte character literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
+| `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, `contains`, and `len` |
 | Simple `struct` | Literal construction, field access, and local field write |
@@ -168,11 +170,28 @@ while i < n {
     sum = sum + i
     i = i + 1
 }
+
+for j in 0..n {
+    sum = sum + j
+}
+
+for k in 0..=n {
+    sum = sum + k
+}
+
+for k in 0..10 {
+    if k == 3 { continue }
+    if k == 6 { break }
+    sum = sum + k
+}
 ```
 
-The direct engine gate covers `if`, `while`, local `let`, assignment, helper
-calls, `return`, simple inline `if { return ... }`, `Bool`/`Str` scalar helper
-signatures, `Str` literals/length/index/equality, simple Int-field struct
+The direct engine gate covers `if`, `while`, range `for`, `break`/`continue`
+inside loops, local `let`, assignment, helper
+calls, `return`, simple inline `if { return ... }`, `Bool`/`Char`/`Str` scalar helper
+signatures, `Str` literals/length/index/equality, `Char` literal equality and
+annotations,
+simple Int-field struct
 locals, struct parameter/return helpers, and `List<Int>` local operations plus
 parameter reference and return value ABI, local `Map<Int,Int>` construction and
 lookup/update helpers, plus `List<Struct>` construction with
@@ -183,9 +202,9 @@ Verified today:
 
 - `if`, `else if`, `else`
 - `while`
+- `for name in start..end` and `for name in start..=end`
+- `break` and `continue` inside `while` and range `for` loops
 - Early `return`
-
-`for`, `break`, and `continue` are not release-surface claims yet.
 
 ## Structs
 
@@ -377,6 +396,8 @@ Verified today:
   empty `xs.pop()` in the full self-host path and native direct engine.
 - Passing a local `List<Int>` to a `List<Int>` parameter.
 - Returning `List<Int>` from helper functions.
+- `List<Str>` locals with `push` and index reads in the full self-host path,
+  including host process arguments and Vais-authored text tools.
 - `List<Struct>` values with an explicit type, `[]`, `list()`, list literals,
   list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field reads/writes, parameter
   references, return values, inline call arguments, and returned-list call
@@ -459,10 +480,12 @@ fn main() -> Int {
 Verified today:
 
 - String literals with `"` or backtick delimiters.
-- `Str` helper parameters, local values, and helper return values.
+- `Str` helper parameters, local values, reassignment, and helper return values.
 - `s.len()` and `s[i]` in the full self-host path and native direct engine.
-- `a == b` and `a != b` for `Str` in the native direct engine and parity
-  examples.
+- `a == b` and `a != b` for `Str` in the full self-host path, native direct
+  engine, and parity examples.
+- `str_concat(left, right)`, `str_slice(text, start, len)`, and
+  `str_byte(value)` in the full engine host runtime.
 - `Bool` byte-classification helpers such as `is_digit(c: Int) -> Bool`.
 - Named integer parsing helpers `parse_uint(s)` and `parse_int(s)`, as covered
   by `examples/e83_parse_helpers.vais`.
@@ -470,7 +493,10 @@ Verified today:
   `examples/e70_parse_uint.vais`.
 - Identifier scanning over `Str`, as covered by
   `examples/e72_identifier_scan.vais`.
-- Single-byte character literal equality in parity examples.
+- Single-byte character literal equality plus `Char` locals, helper
+  parameters, and helper returns as Int-compatible scalar values in the front,
+  native direct, full, and parity gates, as covered by
+  `examples/e85_char_type.vais`.
 - `print("...{name}...")` interpolation for simple identifiers.
 - `putchar(Int)`.
 
@@ -480,26 +506,68 @@ decimal run. Empty input and input with no leading decimal digit return `0`.
 
 ## Host Files, Paths, And Processes
 
-Phase 3 host APIs are specified but not verified yet. The planned first surface
-is:
+Phase 3 host APIs start with verified full-engine file, path, and argv-based
+process intrinsics. The current and planned broader surface is:
 
 ```vais
 fs_exists(path: Str) -> Bool
 fs_read_text(path: Str) -> Str
 fs_write_text(path: Str, text: Str) -> Int
 fs_mkdirs(path: Str) -> Int
+fs_remove(path: Str) -> Int
 fs_cwd() -> Str
 fs_temp_dir() -> Str
 path_join(base: Str, child: Str) -> Str
 path_basename(path: Str) -> Str
 path_dirname(path: Str) -> Str
+str_concat(left: Str, right: Str) -> Str
+str_slice(text: Str, start: Int, len: Int) -> Str
+str_byte(value: Int) -> Str
 proc_run(argv: List<Str>) -> Int
+proc_run_env(argv: List<Str>, env: List<Str>) -> Int
+proc_capture_stdout(argv: List<Str>) -> Str
+proc_capture_stderr(argv: List<Str>) -> Str
+proc_capture_to(argv: List<Str>, stdout_path: Str, stderr_path: Str) -> Int
 proc_capture(argv: List<Str>) -> ProcessResult
 ```
 
+`fs_exists(path: Str) -> Bool`, `fs_read_text(path: Str) -> Str`,
+`fs_write_text(path: Str, text: Str) -> Int`, and
+`fs_mkdirs(path: Str) -> Int`, and `fs_remove(path: Str) -> Int`, plus `fs_cwd() -> Str`,
+`fs_temp_dir() -> Str`, `path_join(base: Str, child: Str) -> Str`,
+`path_basename(path: Str) -> Str`, `path_dirname(path: Str) -> Str`,
+`str_concat(left: Str, right: Str) -> Str`, `str_slice(text: Str, start: Int,
+len: Int) -> Str`, and `str_byte(value: Int) -> Str` are gate-backed by
+`scripts/test-vaisc-host.sh` for `scripts/vaisc build` and `scripts/vaisc run`.
+`proc_run(argv: List<Str>) -> Int` is covered by the same gate and returns the
+child process exit code while inheriting stdio.
+`proc_run_env(argv: List<Str>, env: List<Str>) -> Int` is also covered there
+and applies child-only `KEY=value` environment overrides before exec.
+`proc_capture_stdout(argv: List<Str>) -> Str` and
+`proc_capture_stderr(argv: List<Str>) -> Str` are covered by the same gate and
+return one captured child stream while inheriting the other.
+`proc_capture_to(argv: List<Str>, stdout_path: Str, stderr_path: Str) -> Int`
+is covered by the same gate and redirects stdout/stderr to explicit files while
+returning the child exit code.
+`fs_remove(path: Str) -> Int` removes an existing file path and also succeeds
+when the path is already missing; it is covered by the same host gate.
+
+```vais
+fn main() -> Int {
+    let argv: List<Str> = []
+    argv.push("/bin/sh")
+    argv.push("-c")
+    argv.push("exit 7")
+    return proc_run(argv)
+}
+```
+
+`proc_capture` remains specified for a later in-memory result-struct gate.
+
 The host API contract is maintained in
-[../design/HOST_IO.md](../design/HOST_IO.md). These names should not be treated
-as release-surface verified until gates are added.
+[../design/HOST_IO.md](../design/HOST_IO.md). Except for those verified file,
+path, and process intrinsics, these names should not be treated as
+release-surface verified until their gates are added.
 
 ## Closures
 
@@ -521,13 +589,16 @@ release-surface claims yet.
 
 ## Diagnostics
 
-`tools/vais-check.py` and `scripts/vaisc` front diagnostics catch common
-non-Vais spellings and print source coordinates, `help:`, and when available a
-concrete `fix:`.
+`scripts/vais-check` and `scripts/vaisc` front diagnostics catch common
+non-Vais spellings and print source coordinates and `help:`.
 
 ```bash
-python3 tools/vais-check.py examples/c4.vais
+scripts/vais-check examples/c4.vais
 ```
+
+The public checker is built from `tools/vais_check_cli.vais` and
+`tools/vais_check_core.vais`. Release gates check its fixture issue counts,
+coordinate/help output shape, clean-file behavior, and packaged command path.
 
 Common corrections:
 
@@ -554,6 +625,7 @@ bash scripts/test-vaisc-native.sh
 bash scripts/test-vaisc-install.sh
 bash scripts/test-vaisc-front.sh
 bash scripts/test-vaisc-parity.sh
+bash scripts/test-vaisc-host.sh
 bash scripts/test.sh
 ```
 

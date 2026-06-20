@@ -1,0 +1,185 @@
+fn str_eq(a: Str, b: Str) -> Int {
+    if a.len() != b.len() { return 0 }
+    let mut i = 0
+    while i < a.len() {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn count_line_prefix(text: Str, prefix: Str) -> Int {
+    let mut count = 0
+    let mut i = 0
+    let mut line_start = 1
+    while i < text.len() {
+        if line_start == 1 {
+            if text_at(text, i, prefix) == 1 { count = count + 1 }
+            line_start = 0
+        }
+        if text[i] == 10 { line_start = 1 }
+        i = i + 1
+    }
+    return count
+}
+
+fn append_line(out: Int, line: Str) -> Int {
+    str_builder_append(out, line)
+    str_builder_push(out, 10)
+    return 0
+}
+
+fn write_smoke_source(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn add(a: Int, b: Int) -> Int {")
+    append_line(out, "    return a + b")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let x = add(20, 22)")
+    append_line(out, "    return x")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn run1(a: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    return proc_run(argv)
+}
+
+fn run3(a: Str, b: Str, c: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    return proc_run(argv)
+}
+
+fn run5(a: Str, b: Str, c: Str, d: Str, e: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    argv.push(d)
+    argv.push(e)
+    return proc_run(argv)
+}
+
+fn run7(a: Str, b: Str, c: Str, d: Str, e: Str, f: Str, g: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    argv.push(d)
+    argv.push(e)
+    argv.push(f)
+    argv.push(g)
+    return proc_run(argv)
+}
+
+fn usage() -> Int {
+    print("usage: vaisc-smoke-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    let vaisc = path_join(root, "scripts/vaisc")
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("error: could not create temp dir: ", tmp))
+        return 1
+    }
+    let src = path_join(tmp, "nv_c0_smoke.vais")
+    if write_smoke_source(src) != 0 {
+        print(str_concat("error: could not write smoke source: ", src))
+        return 1
+    }
+
+    let mut fail = 0
+    let emit_ir = path_join(tmp, "native.ll")
+    if run5(vaisc, "emit-ir", src, "-o", emit_ir) == 0 {
+        let ir = fs_read_text(emit_ir)
+        let main_count = count_line_prefix(ir, "define i64 @main()")
+        let add_count = count_line_prefix(ir, "define i64 @add")
+        if main_count == 1 and add_count == 1 {
+            print("  PASS vaisc emit-ir emits @add and one @main")
+        } else {
+            print(str_concat("  FAIL vaisc emit-ir shape add=", str_concat(uint_to_str(add_count), str_concat(" main=", uint_to_str(main_count)))))
+            fail = fail + 1
+        }
+    } else {
+        print("  FAIL vaisc emit-ir")
+        fail = fail + 1
+    }
+
+    let native_from_ir = path_join(tmp, "native_from_ir")
+    if run5("clang", "-Wno-override-module", "-o", native_from_ir, emit_ir) == 0 {
+        let got_ir = run1(native_from_ir)
+        if got_ir == 42 {
+            print("  PASS emitted LLVM IR builds/runs (=42)")
+        } else {
+            print(str_concat("  FAIL emitted LLVM IR got=", str_concat(uint_to_str(got_ir), " want=42")))
+            fail = fail + 1
+        }
+    } else {
+        print("  FAIL emitted LLVM IR does not build")
+        fail = fail + 1
+    }
+
+    let bin = path_join(tmp, "native_bin")
+    let build_ir = path_join(tmp, "native_build.ll")
+    if run7(vaisc, "build", src, "-o", bin, "--ir-out", build_ir) == 0 {
+        let got_build = run1(bin)
+        if got_build == 42 {
+            print("  PASS vaisc build binary runs (=42)")
+        } else {
+            print(str_concat("  FAIL vaisc build got=", str_concat(uint_to_str(got_build), " want=42")))
+            fail = fail + 1
+        }
+    } else {
+        print("  FAIL vaisc build")
+        fail = fail + 1
+    }
+
+    let got_run = run3(vaisc, "run", src)
+    if got_run == 42 {
+        print("  PASS vaisc run exits 42")
+    } else {
+        print(str_concat("  FAIL vaisc run got=", str_concat(uint_to_str(got_run), " want=42")))
+        fail = fail + 1
+    }
+
+    if fail == 0 {
+        print("RESULT: Vais vaisc NV-C0 smoke OK")
+        return 0
+    }
+    print("RESULT: FAILURES")
+    return 1
+}

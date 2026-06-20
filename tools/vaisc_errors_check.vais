@@ -1,0 +1,358 @@
+fn str_eq(a: Str, b: Str) -> Int {
+    if a.len() != b.len() { return 0 }
+    let mut i = 0
+    while i < a.len() {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn str_contains(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 1 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn append_uint(out: Int, n: Int) -> Int {
+    if n >= 10 { append_uint(out, n / 10) }
+    str_builder_push(out, 48 + (n % 10))
+    return 0
+}
+
+fn uint_to_str(n: Int) -> Str {
+    if n == 0 { return "0" }
+    let out = str_builder_new()
+    append_uint(out, n)
+    return str_builder_finish(out)
+}
+
+fn append_line(out: Int, line: Str) -> Int {
+    str_builder_append(out, line)
+    str_builder_push(out, 10)
+    return 0
+}
+
+fn two_bytes(a: Int, b: Int) -> Str {
+    return str_concat(str_byte(a), str_byte(b))
+}
+
+fn bad_and_line() -> Str {
+    return str_concat(str_concat("    if 1 == 1 ", two_bytes(38, 38)), " 2 == 2 {")
+}
+
+fn bad_or_line() -> Str {
+    return str_concat(str_concat("    if 1 == 0 ", two_bytes(124, 124)), " 2 == 2 {")
+}
+
+fn bad_as_line() -> Str {
+    let sp = str_byte(32)
+    return str_concat(str_concat(str_concat("    return 1", sp), "as"), str_concat(sp, "Int"))
+}
+
+fn bad_as_phrase() -> Str {
+    let sp = str_byte(32)
+    return str_concat(str_concat(str_concat("x", sp), "as"), str_concat(sp, "Type"))
+}
+
+fn bad_path_line() -> Str {
+    return str_concat(str_concat("    return Foo", two_bytes(58, 58)), "Bar")
+}
+
+fn bad_scalar_line() -> Str {
+    return str_concat(str_concat("fn id(x: ", str_byte(105)), "32) -> Int {")
+}
+
+fn bad_turbofish_line() -> Str {
+    return str_concat(str_concat(str_concat("    let xs = ", "Vec"), str_concat("<Int>", two_bytes(58, 58))), "new()")
+}
+
+fn bad_method_line() -> Str {
+    return str_concat(str_concat("    return xs.", "clear"), "()")
+}
+
+fn write_rust_and(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, bad_and_line())
+    append_line(out, "        return 42")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_rust_or(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, bad_or_line())
+    append_line(out, "        return 42")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_as_cast(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, bad_as_line())
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_colon_path(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, bad_path_line())
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_rust_scalar_type(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, bad_scalar_line())
+    append_line(out, "    return x")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return id(42)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_turbofish_new(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, bad_turbofish_line())
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_direct_identifier(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return answer")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_direct_struct_field(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let b = Box { value: 42 }")
+    append_line(out, "    return b.missing")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_direct_list_struct_field_target(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Box {")
+    append_line(out, "    value: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Box> = [Box { value: 1 }]")
+    append_line(out, "    xs[0].missing = 42")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_direct_list_element_target(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let x = 1")
+    append_line(out, "    x[0] = 42")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_direct_list_constructor_expr(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return list()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_direct_list_method(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = []")
+    append_line(out, bad_method_line())
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_direct_list_value_expr(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = []")
+    append_line(out, "    return xs")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_direct_list_arg_type(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn id(n: Int) -> Int {")
+    append_line(out, "    return n")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = []")
+    append_line(out, "    return id(xs)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_direct_missing_return(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let x = 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_source(name: Str, path: Str) -> Int {
+    if str_eq(name, "rust_and") == 1 { return write_rust_and(path) }
+    if str_eq(name, "rust_or") == 1 { return write_rust_or(path) }
+    if str_eq(name, "as_cast") == 1 { return write_as_cast(path) }
+    if str_eq(name, "colon_path") == 1 { return write_colon_path(path) }
+    if str_eq(name, "rust_scalar_type") == 1 { return write_rust_scalar_type(path) }
+    if str_eq(name, "turbofish_new") == 1 { return write_turbofish_new(path) }
+    if str_eq(name, "direct_identifier") == 1 { return write_direct_identifier(path) }
+    if str_eq(name, "direct_struct_field") == 1 { return write_direct_struct_field(path) }
+    if str_eq(name, "direct_list_struct_field_target") == 1 { return write_direct_list_struct_field_target(path) }
+    if str_eq(name, "direct_list_element_target") == 1 { return write_direct_list_element_target(path) }
+    if str_eq(name, "direct_list_constructor_expr") == 1 { return write_direct_list_constructor_expr(path) }
+    if str_eq(name, "direct_list_method") == 1 { return write_direct_list_method(path) }
+    if str_eq(name, "direct_list_value_expr") == 1 { return write_direct_list_value_expr(path) }
+    if str_eq(name, "direct_list_arg_type") == 1 { return write_direct_list_arg_type(path) }
+    if str_eq(name, "direct_missing_return") == 1 { return write_direct_missing_return(path) }
+    print(str_concat("error: unknown diagnostic fixture: ", name))
+    return 1
+}
+
+fn capture_full(vaisc: Str, src: Str, ll: Str) -> Str {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("emit-ir")
+    argv.push(src)
+    argv.push("-o")
+    argv.push(ll)
+    return proc_capture_stderr(argv)
+}
+
+fn capture_direct(vaisc: Str, src: Str, ll: Str) -> Str {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("emit-ir")
+    argv.push(src)
+    argv.push("--engine")
+    argv.push("direct")
+    argv.push("-o")
+    argv.push(ll)
+    return proc_capture_stderr(argv)
+}
+
+fn has_expected_parts(err: Str, src: Str, msg1: Str, msg2: Str, fix: Str) -> Int {
+    if err.len() == 0 { return 0 }
+    if str_contains(err, msg1) == 0 { return 0 }
+    if msg2.len() > 0 {
+        if str_contains(err, msg2) == 0 { return 0 }
+    }
+    if str_contains(err, str_concat(src, ":")) == 0 { return 0 }
+    if str_contains(err, "^") == 0 { return 0 }
+    if str_contains(err, "help:") == 0 { return 0 }
+    if str_contains(err, "fix:") == 0 { return 0 }
+    if str_contains(err, fix) == 0 { return 0 }
+    return 1
+}
+
+fn expect_diag(vaisc: Str, tmp: Str, name: Str, direct: Int, msg1: Str, msg2: Str, fix: Str) -> Int {
+    let src = path_join(tmp, str_concat(name, ".vais"))
+    let ll = path_join(tmp, str_concat(name, ".ll"))
+    if write_source(name, src) != 0 {
+        print(str_concat("  FAIL ", str_concat(name, ": could not write fixture")))
+        return 1
+    }
+
+    let mut err = ""
+    if direct == 1 {
+        err = capture_direct(vaisc, src, ll)
+    } else {
+        err = capture_full(vaisc, src, ll)
+    }
+
+    if has_expected_parts(err, src, msg1, msg2, fix) == 1 {
+        print(str_concat("  PASS ", str_concat(name, " has P4 coordinate/help/fix diagnostic")))
+        return 0
+    }
+    print(str_concat("  FAIL ", str_concat(name, ": missing expected P4 diagnostic")))
+    print(err)
+    return 1
+}
+
+fn usage() -> Int {
+    print("usage: vaisc-errors-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    let vaisc = path_join(root, "scripts/vaisc")
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("error: could not create temp dir: ", tmp))
+        return 1
+    }
+
+    let mut fail = 0
+    fail = fail + expect_diag(vaisc, tmp, "rust_and", 0, "logical AND uses the word", "", "and")
+    fail = fail + expect_diag(vaisc, tmp, "rust_or", 0, "logical OR uses the word", "", "or")
+    fail = fail + expect_diag(vaisc, tmp, "as_cast", 0, "Type(x)", bad_as_phrase(), "Int(1)")
+    fail = fail + expect_diag(vaisc, tmp, "colon_path", 0, "enum/path access uses", "", "Foo.Bar")
+    fail = fail + expect_diag(vaisc, tmp, "rust_scalar_type", 0, "scalar types are capitalized", "", "fn id(x: Int)")
+    fail = fail + expect_diag(vaisc, tmp, "turbofish_new", 0, "no turbofish constructor", "", "let xs = []")
+    fail = fail + expect_diag(vaisc, tmp, "direct_identifier", 1, "unknown Int identifier", "", "return 40 + 2")
+    fail = fail + expect_diag(vaisc, tmp, "direct_struct_field", 1, "unknown struct field access", "", "return b.value")
+    fail = fail + expect_diag(vaisc, tmp, "direct_list_struct_field_target", 1, "assignment target is not a known List<Struct> field", "", "xs[0].value = 42")
+    fail = fail + expect_diag(vaisc, tmp, "direct_list_element_target", 1, "assignment target is not a known List element", "", "xs[0] = value")
+    fail = fail + expect_diag(vaisc, tmp, "direct_list_constructor_expr", 1, "return expression type does not match", "", "return 40 + 2")
+    fail = fail + expect_diag(vaisc, tmp, "direct_list_method", 1, "supports List push, len, is_empty, last, pop, index, and List<Int> sum", "", "xs.push(value)")
+    fail = fail + expect_diag(vaisc, tmp, "direct_list_value_expr", 1, "return expression type does not match", "", "return 40 + 2")
+    fail = fail + expect_diag(vaisc, tmp, "direct_list_arg_type", 1, "function call argument type does not match", "", "pass a matching argument")
+    fail = fail + expect_diag(vaisc, tmp, "direct_missing_return", 1, "requires at least one", "return", "fn main() -> Int")
+
+    if fail == 0 {
+        print("RESULT: Vais vaisc NV-C3 diagnostics OK")
+        return 0
+    }
+    print("RESULT: FAILURES")
+    return 1
+}
