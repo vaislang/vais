@@ -374,6 +374,9 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
 - [x] 4.1a Promote single-byte `Char` literal equality plus explicit `Char`
   local annotations, helper parameters, and helper returns through public
   front, native direct, full self-host, and parity gates.
+- [x] 4.1b Promote explicit `Bool` local annotations, helper parameters, helper
+  returns, and unary `not` through public front, native direct, full self-host,
+  and parity gates.
 - [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
   simple return-arm shape is fully gated.
 - [x] 4.3a Promote exclusive `..` and inclusive `..=` range `for` loops through

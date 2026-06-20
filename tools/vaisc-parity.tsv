@@ -41,6 +41,7 @@ examples/e84_list_methods.vais	native-supported	List is_empty/last/pop local met
 examples/e85_char_type.vais	native-supported	Char annotations, helper parameters, and helper returns.
 examples/e86_for_loop.vais	native-supported	Exclusive and inclusive range for-loops.
 examples/e87_break_continue.vais	native-supported	Break and continue inside while and range for-loops.
+examples/e88_bool_type.vais	native-supported	Bool annotations, helper parameters, returns, and unary not.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.

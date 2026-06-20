@@ -49,7 +49,8 @@ the named `parse_uint(s)` and `parse_int(s)` prelude helpers,
 `pop()`, and `examples/e85_char_type.vais` for the promoted Int-compatible
 `Char` scalar slice, and `examples/e86_for_loop.vais` for exclusive and
 inclusive range `for` loops, and `examples/e87_break_continue.vais` for loop
-control flow.
+control flow, and `examples/e88_bool_type.vais` for explicit `Bool` locals,
+helper parameters/returns, and unary `not`.
 
 Files not listed as `native-supported` are retained as examples or future
 coverage candidates, but they are not public release claims until promoted into

@@ -100,7 +100,7 @@ controls, or map literals with entries.
 | `Int8`..`Int128` | Specified |
 | `UInt8`..`UInt128` | Specified |
 | `F32`, `F64` | Specified |
-| `Bool` | Verified for comparisons, boolean literals, and scalar helper signatures |
+| `Bool` | Verified for comparisons, boolean literals, local annotations, helper parameters, helper returns, and unary `not` |
 | `Str` | Verified for literals, scalar helper signatures and returns, length, index, equality, reassignment, and host-backed construction helpers |
 | `Char` | Verified for single-byte literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
 | `Int(x)` | Verified |

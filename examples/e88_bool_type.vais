@@ -1,0 +1,21 @@
+# expect: 42
+# Bool annotations, helper parameters, returns, and unary not are gate-backed.
+fn keep(flag: Bool) -> Bool {
+    return flag and true
+}
+
+fn score(a: Bool, b: Bool) -> Int {
+    if a and not b {
+        return 40
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let ok: Bool = keep(true)
+    let no: Bool = keep(false)
+    if ok and not no {
+        return score(ok, no) + (ok == true) + (no == false)
+    }
+    return 0
+}

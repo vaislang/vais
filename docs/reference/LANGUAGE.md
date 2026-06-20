@@ -118,7 +118,7 @@ Verified release surface:
 | Type | Notes |
 | --- | --- |
 | `Int` | Primary scalar type |
-| `Bool` | Produced by comparisons, boolean expressions, and helper signatures |
+| `Bool` | Produced by comparisons and boolean expressions; verified for local annotations, helper parameters, and helper returns |
 | `Str` | String literals, helper signatures, length, index, and equality |
 | `Char` | Single-byte character literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
@@ -487,6 +487,8 @@ Verified today:
 - `str_concat(left, right)`, `str_slice(text, start, len)`, and
   `str_byte(value)` in the full engine host runtime.
 - `Bool` byte-classification helpers such as `is_digit(c: Int) -> Bool`.
+- Explicit `Bool` locals, helper parameters, helper returns, and unary `not`,
+  as covered by `examples/e88_bool_type.vais`.
 - Named integer parsing helpers `parse_uint(s)` and `parse_int(s)`, as covered
   by `examples/e83_parse_helpers.vais`.
 - User-defined integer parsing over `Str`, as covered by

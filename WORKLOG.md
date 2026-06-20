@@ -159,6 +159,10 @@
 - Promoted `break` and `continue` inside `while` and range `for` loops through
   the native direct engine, full self-host compiler, front contract, and parity
   gates, and added `examples/e87_break_continue.vais` to the release corpus.
+- Promoted explicit `Bool` locals, helper parameters, helper returns, and unary
+  `not` through the native direct engine, full self-host compiler, front
+  contract, and parity gates, and added `examples/e88_bool_type.vais` to the
+  release corpus.
 - Added `tools/vais_parity_check.vais` as the Vais-authored NV-C4 parity
   manifest harness and reduced `scripts/test-vaisc-parity.sh` to a bootstrap
   wrapper.

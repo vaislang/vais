@@ -641,6 +641,8 @@ fn tokenize(src: Str) -> List<Token> {
                 toks.push(Token { kind: 31, value: 0, nstart: start, nlen: len })   # and
             } else if kw2(src, start, len, 111, 114) == 1 {
                 toks.push(Token { kind: 32, value: 0, nstart: start, nlen: len })   # or
+            } else if kw3(src, start, len, 110, 111, 116) == 1 {
+                toks.push(Token { kind: 42, value: 0, nstart: start, nlen: len })   # not
             } else if kw2(src, start, len, 105, 102) == 1 {
                 toks.push(Token { kind: 15, value: 0, nstart: start, nlen: len })   # if
             } else if kw4(src, start, len, 101, 108, 115, 101) == 1 {
@@ -1567,6 +1569,24 @@ fn emit_list_nonempty_trap(len: Op, counter: Int) -> Int {
 fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, counter: Int) -> Op {
     let t = toks[i]
     if t.kind == 0 { return Op { kind: 0, val: t.value, next: counter } }
+    if t.kind == 42 {
+        let arg = gen_factor(toks, slots, fns, defs, src, i + 1, counter)
+        let cmp = arg.next
+        emit_str("  %t")
+        pint(cmp)
+        emit_str(" = icmp eq i64 ")
+        emit_op(arg)
+        emit_str(", 0")
+        putchar(10)
+        let zc = cmp + 1
+        emit_str("  %t")
+        pint(zc)
+        emit_str(" = zext i1 %t")
+        pint(cmp)
+        emit_str(" to i64")
+        putchar(10)
+        return Op { kind: 1, val: zc, next: zc + 1 }
+    }
     # boolean literals `true`/`false` are tokenized as identifiers (kind 1); treat
     # them as the integer constants 1/0 (Vais bools are i64). Used by the common
     # self-host `let mut go = true; ... go = false` loop-flag pattern.
@@ -3127,6 +3147,7 @@ fn arg_comma_end(toks: &List<Token>, i: Int, close: Int) -> Int {
 # array index = name '[' ... ']'.
 fn skip_factor(toks: &List<Token>, i: Int) -> Int {
     let t = toks[i]
+    if t.kind == 42 { return skip_factor(toks, i + 1) }
     if t.kind == 9 {
         # parenthesized group `( ... )` -> skip to just past the matching ')'.
         return paren_end(toks, i + 1) + 1

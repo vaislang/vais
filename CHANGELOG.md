@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-No changes yet.
+### Changed
+
+- Promoted explicit `Bool` locals, helper parameters, helper returns, and unary
+  `not` through full self-host, native direct, parity, and value gates, with
+  `examples/e88_bool_type.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 
