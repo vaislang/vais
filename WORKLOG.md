@@ -4,6 +4,10 @@
 
 - Prepared the `v0.3.0` source release metadata across the native compiler
   version, website package metadata, changelog, release checklist, and roadmap.
+- Fixed self-host `print`/`puts` lowering for string-expression arguments,
+  regenerated `compiler/self/vaisc_core.ll`, and promoted the fix as the
+  `v0.3.1` patch release line because `v0.3.0` release assets had already been
+  published before the darwin-arm64 archive failure was diagnosed.
 
 ## 2026-06-19
 

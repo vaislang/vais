@@ -165,7 +165,7 @@ This file tracks current work only.
 - Official site source now lives in `website/` in this repository.
 - GitHub Pages workflow was added for `website/` build and artifact deployment.
 - `vaislang.dev` deploys from the `website/` GitHub Pages workflow on `main`.
-- `CHANGELOG.md` records the current `v0.3.0` source release baseline.
+- `CHANGELOG.md` records the current `v0.3.1` source release baseline.
 - GitHub `main` now points to the current Vais-only history; old remote `main`
   is preserved at `archive/old-main-2026-06-14`.
 
@@ -939,8 +939,8 @@ Mode: sequential
   `docs/README.md`, `CHANGELOG.md`, `ROADMAP.md`.
 - Requirements: document the next planned release line, tag policy, pre-tag
   checks, manual archive workflow trigger, and post-tag verification.
-- Done: the current source release is `v0.3.0`, the next planned source
-  release is `v0.3.1`, and tag creation is explicitly deferred until release
+- Done: the current source release is `v0.3.1`, the next planned source
+  release is `v0.3.2`, and tag creation is explicitly deferred until release
   gates are green.
 
 ## Completed Milestone: Native Direct List Else-If Condition Arguments

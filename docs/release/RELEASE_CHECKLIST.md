@@ -7,8 +7,8 @@ behind thin shell entrypoints: `tools/install_vaisc.vais` and
 
 ## Current Release Line
 
-- Current source release: `v0.3.0`
-- Next planned source release: `v0.3.1`
+- Current source release: `v0.3.1`
+- Next planned source release: `v0.3.2`
 - Stable target: `v1.0.0` after the v1 completion roadmap is gate-backed
 
 Use `vMAJOR.MINOR.PATCH` source tags. Do not move a public tag after release

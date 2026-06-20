@@ -4,9 +4,19 @@
 
 No changes yet.
 
-## v0.3.0 - 2026-06-20
+## v0.3.1 - 2026-06-20
 
 Current Vais source release.
+
+### Fixed
+
+- Fixed self-host `print`/`puts` lowering for string-expression arguments so
+  generated LLVM IR calls `i32 @puts(i8*)` consistently across release archive
+  builders.
+
+## v0.3.0 - 2026-06-20
+
+Previous Vais source release.
 
 ### Changed
 
