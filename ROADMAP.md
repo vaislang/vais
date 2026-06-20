@@ -407,7 +407,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
     statement-match slice.
   - [x] Promote `Option<Int>` expression-form match binding.
   - [x] Promote `Result<Int,Int>` expression-form match binding.
-  - [x] Promote `Result<Int,Int>` local-binding `?` propagation.
+  - [x] Promote `Result<Int,Int>` local-binding `?` propagation for both
+    success and error paths.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.

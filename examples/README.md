@@ -59,6 +59,8 @@ helper-return and statement-match slice,
 `examples/e23_option_flow.vais` for `Option<Int>` expression-match binding,
 `examples/e39_error_propagate.vais` for `Result<Int,Int>` `?` propagation,
 `examples/e91_result_flow.vais` for `Result<Int,Int>` expression-match binding,
+`examples/e92_result_question_success.vais` for the `Result<Int,Int>` `?`
+success path,
 `examples/e40_option_in_struct.vais` for `Option<Int>` stored in a struct field,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,

@@ -1,10 +1,10 @@
-fn safe_div(a: Int, b: Int) -> Result<Int, Str> {
+fn safe_div(a: Int, b: Int) -> Result<Int, Int> {
     if b == 0 {
-        return Err("divide by zero")
+        return Err(1)
     }
     return Ok(a / b)
 }
-fn div_plus_one(a: Int, b: Int) -> Result<Int, Str> {
+fn div_plus_one(a: Int, b: Int) -> Result<Int, Int> {
     let r = safe_div(a, b)?
     return Ok(r + 1)
 }

@@ -126,7 +126,7 @@ Verified release surface:
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, and expression-match binding |
-| `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, and expression-match binding |
+| `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
@@ -528,7 +528,8 @@ It also supports expression-form `let x = match ...` bindings for
 `Result<Int,Int>`, as covered by `examples/e91_result_flow.vais`.
 The `?` operator is verified for `Result<Int,Int>` helper calls assigned to a
 local: an `Err` value returns from the current `Result<Int,Int>` function, and an
-`Ok` value binds its payload, as covered by `examples/e39_error_propagate.vais`.
+`Ok` value binds its payload, as covered by `examples/e39_error_propagate.vais`
+and `examples/e92_result_question_success.vais`.
 
 Not included yet: generic `Option<T>` or `Result<T,E>`, broader expression-form
 `match` beyond the gate-backed `Option<Int>` and `Result<Int,Int>` binding

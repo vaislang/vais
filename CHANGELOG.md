@@ -39,6 +39,8 @@
   `examples/e91_result_flow.vais` added to the release corpus.
 - Promoted `Result<Int,Int>` local-binding `?` propagation, with
   `examples/e39_error_propagate.vais` added to the release corpus.
+- Added `examples/e92_result_question_success.vais` to cover the
+  `Result<Int,Int>` `?` success path in the release corpus.
 - Added front diagnostics for `Option`/`Result` generic forms beyond the
   verified `Option<Int>` and `Result<Int,Int>` slices.
 

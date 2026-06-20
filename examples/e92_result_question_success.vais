@@ -1,17 +1,19 @@
 # expect: 6
+# The success path of Result<Int,Int> `?`: safe_div(10, 2) returns Ok(5), so
+# div_plus_one binds 5 and returns Ok(6).
 fn safe_div(a: Int, b: Int) -> Result<Int, Int> {
-    if b == 0 {
-        return Err(1)
-    }
+    if b == 0 { return Err(1) }
     return Ok(a / b)
 }
+
 fn div_plus_one(a: Int, b: Int) -> Result<Int, Int> {
     let r = safe_div(a, b)?
     return Ok(r + 1)
 }
+
 fn main() -> Int {
     match div_plus_one(10, 2) {
-        Ok(v) => v,
-        Err(e) => 0,
+        Ok(v) => return v,
+        Err(e) => return e,
     }
 }
