@@ -276,6 +276,8 @@ Verified today:
 - Simple return-arm and expression-arm `match`.
 - Int `match` with literal patterns and `_` catch-all, as covered by
   `examples/e55_match_wildcard.vais`.
+- Payload-free enum `match` with `_` catch-all, as covered by
+  `examples/e90_enum_wildcard.vais`.
 - Small recursive `Int` payload enum/match lowering used by the parity corpus.
 - Multi-field `Int` payload enum expression-arm lowering, as covered by
   `examples/e02_enum_payload.vais`.

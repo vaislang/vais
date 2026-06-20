@@ -393,6 +393,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   gates.
 - [x] 4.2d Promote Int `match` literal arms with `_` catch-all lowering through
   public front, parity, and value gates.
+- [x] 4.2e Promote payload-free enum `match` with `_` catch-all through public
+  front, parity, and value gates.
 - [x] 4.3a Promote exclusive `..` and inclusive `..=` range `for` loops through
   public front, native direct, full self-host, and parity gates.
 - [x] 4.3b Decide `break` and `continue` semantics and lower them through both

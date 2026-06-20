@@ -50,6 +50,8 @@ struct fields and matched through field access,
 matched through payload field access,
 `examples/e55_match_wildcard.vais` for Int match literal arms with a `_`
 catch-all,
+`examples/e90_enum_wildcard.vais` for payload-free enum match with a `_`
+catch-all,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and

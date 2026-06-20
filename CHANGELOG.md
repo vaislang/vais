@@ -21,6 +21,8 @@
   with `examples/e64_enum_struct_payload.vais` added to the release corpus.
 - Promoted Int `match` literal arms with `_` catch-all lowering, with
   `examples/e55_match_wildcard.vais` added to the release corpus.
+- Promoted payload-free enum `match` with `_` catch-all, with
+  `examples/e90_enum_wildcard.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

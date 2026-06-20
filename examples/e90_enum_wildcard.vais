@@ -1,0 +1,14 @@
+# expect: 7
+# Payload-free enum match with a `_` catch-all arm.
+enum Color { Red, Green, Blue }
+
+fn score(c: Color) -> Int {
+    match c {
+        Color.Red => return 1,
+        _ => return 7,
+    }
+}
+
+fn main() -> Int {
+    return score(Color.Blue)
+}
