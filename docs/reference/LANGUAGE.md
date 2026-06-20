@@ -534,7 +534,8 @@ Not included yet: generic `Option<T>` or `Result<T,E>`, broader expression-form
 `match` beyond the gate-backed `Option<Int>` and `Result<Int,Int>` binding
 shapes, `?` beyond the gate-backed `Result<Int,Int>` local-binding shape, Map
 APIs that return `Option`, direct-engine Option/Result-specific claims, and
-nested option/result payloads.
+nested option/result payloads. Unsupported generic `Option`/`Result` forms are
+rejected by front diagnostics instead of being treated as verified language.
 
 ## Strings, Characters, And Output
 

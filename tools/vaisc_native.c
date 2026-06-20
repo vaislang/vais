@@ -2156,6 +2156,65 @@ static char *front_probe_line(const char *line) {
     return sb_take(&out);
 }
 
+static int generic_named_type_at(const char *line, size_t i, const char *name, size_t *end_out) {
+    size_t name_len = strlen(name);
+    if (i > 0 && is_ident_continue(line[i - 1])) return 0;
+    if (strncmp(line + i, name, name_len) != 0) return 0;
+    if (is_ident_continue(line[i + name_len])) return 0;
+    size_t k = i + name_len;
+    while (line[k] == ' ' || line[k] == '\t') k++;
+    if (line[k] != '<') return 0;
+    int depth = 0;
+    for (; line[k] != '\0'; k++) {
+        if (line[k] == '<') {
+            depth++;
+        } else if (line[k] == '>') {
+            depth--;
+            if (depth == 0) {
+                *end_out = k + 1;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static int check_option_result_generic_surface_text(const char *text, const char *path) {
+    LineVec lines = split_lines(text);
+    int issues = 0;
+    for (size_t row = 0; row < lines.len; row++) {
+        const char *line = lines.items[row];
+        char *probe = front_probe_line(line);
+        for (size_t i = 0; probe[i] != '\0'; i++) {
+            size_t generic_end = 0;
+            if (generic_named_type_at(probe, i, "Option", &generic_end)) {
+                size_t supported_end = 0;
+                if (!generic_type_at(probe, i, "Option", "Int", NULL, &supported_end)) {
+                    report_issue(path, (int)row + 1, (int)i + 1, line,
+                        "only Option<Int> is verified for now",
+                        "use Option<Int> in this slice; generic Option<T> and nested Option/Result payloads are not verified yet.",
+                        NULL);
+                    issues++;
+                }
+                i = generic_end > i ? generic_end - 1 : i;
+            } else if (generic_named_type_at(probe, i, "Result", &generic_end)) {
+                size_t supported_end = 0;
+                if (!generic_type_at(probe, i, "Result", "Int", "Int", &supported_end)) {
+                    report_issue(path, (int)row + 1, (int)i + 1, line,
+                        "only Result<Int,Int> is verified for now",
+                        "use Result<Int,Int> in this slice; generic Result<T,E> and non-Int payloads are not verified yet.",
+                        NULL);
+                    issues++;
+                }
+                i = generic_end > i ? generic_end - 1 : i;
+            }
+        }
+        free(probe);
+    }
+    lines_free(&lines);
+    return issues == 0 ? 0 : 1;
+}
+
 static int check_front_contract_text(const char *text, const char *path) {
     LineVec lines = split_lines(text);
     int issues = 0;
@@ -3315,6 +3374,10 @@ static char *prepare_source_file(const char *path) {
     int trusted_self_host = is_trusted_self_host_source(path);
     char *merged = resolve_module_graph_source(path);
     if (merged == NULL) return NULL;
+    if (!trusted_self_host && check_option_result_generic_surface_text(merged, path) != 0) {
+        free(merged);
+        return NULL;
+    }
     char *normalized = normalize_source_text(merged, 0);
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
