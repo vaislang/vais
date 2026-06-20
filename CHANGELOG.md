@@ -48,6 +48,8 @@
   `Result<Int,Int>` `?` success path in the release corpus.
 - Added front diagnostics for `Option`/`Result` generic forms beyond the
   verified `Option<Int>` and `Result<Int,Int>` slices.
+- Added explicit front diagnostics for unverified `Map<Int,Int>` function
+  parameters and return values, keeping Map ABI claims behind future gates.
 
 ## v0.3.1 - 2026-06-20
 

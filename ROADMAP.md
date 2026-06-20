@@ -418,6 +418,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
   - [x] Add checker guidance for Rust-style top-level `use` and `pub` forms.
+  - [x] Add front diagnostics for unverified `Map<Int,Int>` function parameters
+    and return values.
 
 Done: `docs/reference/LANGUAGE.md` describes a coherent v1 surface, and every
 listed feature has examples plus compiler gates.

@@ -2033,6 +2033,10 @@ static int is_valid_int_params(const char *params) {
     return 1;
 }
 
+static int front_has_map_type(const char *text) {
+    return strstr(text, "Map<") != NULL || strstr(text, "Map <") != NULL;
+}
+
 static int check_fn_contract_line(
     const char *path,
     int line_no,
@@ -2067,14 +2071,26 @@ static int check_fn_contract_line(
             *has_bad_main = 1;
         }
     } else {
-        if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0 && strcmp(ret, "Char") != 0)) {
+        if (arrow != NULL && front_has_map_type(arrow + 2)) {
+            report_issue(path, line_no, find_col(line, "Map"), line,
+                "Map return values are not verified yet",
+                "keep Map<Int,Int> values local; Map function returns need an ABI specification before promotion.",
+                NULL);
+            issue = 1;
+        } else if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0 && strcmp(ret, "Char") != 0)) {
             report_issue(path, line_no, find_col(line, "fn "), line,
                 "Vais native helper functions must return a verified scalar type",
                 "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, `-> Char`, or `-> Str`.",
                 NULL);
             issue = 1;
         }
-        if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params)) {
+        if (params != NULL && strlen(skip_ws(params)) > 0 && front_has_map_type(params)) {
+            report_issue(path, line_no, find_col(line, "Map"), line,
+                "Map parameters are not verified yet",
+                "keep Map<Int,Int> values local; Map function parameters need an ABI specification before promotion.",
+                NULL);
+            issue = 1;
+        } else if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params)) {
             report_issue(path, line_no, find_col(line, params), line,
                 "Vais native helper parameters must use verified scalar types",
                 "use `Int`, `Str`, `Bool`, or `Char` parameters in this slice.",
