@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vais - Language and Self-Host Compiler</title>
-  <meta name="description" content="Vais is a .vais language and self-host compiler workspace. The public compiler command is scripts/vaisc.">
-  <meta property="og:title" content="Vais - Language and Self-Host Compiler">
-  <meta property="og:description" content="Current Vais syntax, compiler workflow, self-host status, and verification gates.">
+  <title>Vais - Language, Compiler, Playground</title>
+  <meta name="description" content="Vais is a .vais language and self-host compiler workspace with a bilingual guide and verified-example playground.">
+  <meta property="og:title" content="Vais - Language, Compiler, Playground">
+  <meta property="og:description" content="Learn current Vais syntax, run verified examples, and follow the scripts/vaisc compiler workflow.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="/logo-icon.png">
   <meta property="og:url" content="https://vaislang.dev/">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Vais - Language and Self-Host Compiler">
-  <meta name="twitter:description" content="Current Vais syntax, compiler workflow, self-host status, and verification gates.">
+  <meta name="twitter:title" content="Vais - Language, Compiler, Playground">
+  <meta name="twitter:description" content="Bilingual Vais homepage with a verified-example playground and current compiler docs.">
   <meta name="twitter:image" content="/logo-icon.png">
   <link rel="canonical" href="https://vaislang.dev/">
   <link rel="icon" type="image/png" href="/logo-icon.png">
@@ -31,63 +31,116 @@
         <span>Vais</span>
       </a>
       <div class="nav-links" id="nav-links">
-        <a href="#quick-start">Quick Start</a>
-        <a href="#language">Language</a>
-        <a href="#compiler">Compiler</a>
-        <a href="#verification">Verification</a>
-        <a href="/blog/">Notes</a>
+        <a href="#playground" data-i18n="nav.playground">Playground</a>
+        <a href="#learn" data-i18n="nav.learn">Learn</a>
+        <a href="#language" data-i18n="nav.language">Language</a>
+        <a href="#compiler" data-i18n="nav.compiler">Compiler</a>
+        <a href="#verification" data-i18n="nav.verification">Verification</a>
         <a href="https://github.com/vaislang/vais" target="_blank" rel="noopener">GitHub</a>
       </div>
-      <button class="nav-mobile-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
+      <div class="nav-actions">
+        <div class="lang-toggle" aria-label="Language">
+          <button type="button" class="lang-btn active" data-lang="en">EN</button>
+          <button type="button" class="lang-btn" data-lang="ko">KO</button>
+        </div>
+        <button class="nav-mobile-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
     </div>
   </nav>
 
-  <header class="hero">
-    <div class="container hero-inner">
-      <img src="/logo-icon.png" alt="" class="hero-mark">
-      <p class="eyebrow">Current public baseline</p>
-      <h1>Vais</h1>
-      <p class="hero-subtitle">
-        Vais is a <code>.vais</code> language and self-host compiler workspace.
-        The public compiler command is <code>scripts/vaisc</code>.
-      </p>
-      <div class="hero-actions">
-        <a class="btn btn-primary" href="#quick-start">Run Vais</a>
-        <a class="btn btn-secondary" href="https://github.com/vaislang/vais/blob/main/docs/README.md" target="_blank" rel="noopener">Read Docs</a>
-      </div>
-    </div>
-  </header>
-
   <main>
-    <section class="band band-light" id="quick-start">
-      <div class="container two-column">
-        <div>
-          <p class="eyebrow">Quick start</p>
-          <h2>Compile a verified <code>.vais</code> program.</h2>
-          <p>
-            The public compiler command builds a native host driver and uses
-            <code>clang</code> to link generated LLVM IR. The public checker is
-            built from Vais source.
+    <section class="workbench" id="playground">
+      <div class="container workbench-layout">
+        <div class="intro">
+          <img src="/logo-icon.png" alt="" class="product-mark">
+          <p class="eyebrow" data-i18n="hero.eyebrow">Current Vais</p>
+          <h1 data-i18n="hero.title">Learn Vais by running verified examples.</h1>
+          <p class="lead" data-i18n="hero.body">
+            Vais is a .vais language and self-host compiler workspace. The public compiler command is scripts/vaisc, and public claims are tied to repository gates.
           </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="https://github.com/vaislang/vais" target="_blank" rel="noopener" data-i18n="hero.github">Open GitHub</a>
+            <a class="btn btn-secondary" href="#learn" data-i18n="hero.start">Start learning</a>
+          </div>
+          <dl class="signal-list">
+            <div>
+              <dt data-i18n="signal.ext.label">Source</dt>
+              <dd data-i18n="signal.ext.value">.vais files only</dd>
+            </div>
+            <div>
+              <dt data-i18n="signal.cmd.label">Command</dt>
+              <dd>scripts/vaisc</dd>
+            </div>
+            <div>
+              <dt data-i18n="signal.gate.label">Release corpus</dt>
+              <dd data-i18n="signal.gate.value">49 verified examples</dd>
+            </div>
+          </dl>
         </div>
-        <div class="terminal" aria-label="Quick start commands">
-          <button class="copy-btn" data-copy-target="quick-code" aria-label="Copy quick start commands">Copy</button>
-          <pre id="quick-code"><code>git clone https://github.com/vaislang/vais
+
+        <section class="playground-shell" aria-labelledby="playground-title">
+          <div class="tool-header">
+            <div>
+              <p class="eyebrow" data-i18n="playground.eyebrow">Playground</p>
+              <h2 id="playground-title" data-i18n="playground.title">Verified example runner</h2>
+            </div>
+            <select id="sample-select" class="sample-select" aria-label="Example"></select>
+          </div>
+
+          <div class="lesson-strip" id="lesson-strip"></div>
+
+          <label class="editor-label" for="code-editor" data-i18n="playground.editorLabel">Source</label>
+          <textarea id="code-editor" class="code-editor" spellcheck="false"></textarea>
+
+          <div class="tool-actions">
+            <button type="button" class="btn btn-primary" id="run-sample" data-i18n="playground.run">Run example</button>
+            <button type="button" class="btn btn-secondary" id="reset-sample" data-i18n="playground.reset">Reset</button>
+            <button type="button" class="btn btn-secondary" data-copy-target="code-editor" data-i18n="playground.copy">Copy source</button>
+          </div>
+
+          <div class="output-panel" aria-live="polite">
+            <div class="output-topline">
+              <span data-i18n="playground.output">Output</span>
+              <span id="runner-mode" data-i18n="playground.mode">learning runner</span>
+            </div>
+            <pre id="playground-output"><code></code></pre>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="band band-light" id="learn">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow" data-i18n="learn.eyebrow">Learning path</p>
+          <h2 data-i18n="learn.title">A shorter path from GitHub to a running program.</h2>
+          <p data-i18n="learn.body">The project has one public compiler path and one public checker path. These are the commands to keep in front of new readers.</p>
+        </div>
+        <div class="step-grid">
+          <article class="step-card">
+            <span class="step-index">1</span>
+            <h3 data-i18n="learn.clone.title">Clone and check the toolchain</h3>
+            <pre><code>git clone https://github.com/vaislang/vais
 cd vais
-
-scripts/vaisc doctor
-scripts/vaisc run examples/c4.vais
-scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
+scripts/vaisc doctor</code></pre>
+          </article>
+          <article class="step-card">
+            <span class="step-index">2</span>
+            <h3 data-i18n="learn.run.title">Run a verified example</h3>
+            <pre><code>scripts/vaisc run examples/e90_enum_wildcard.vais
+scripts/vais-check examples/e90_enum_wildcard.vais</code></pre>
+          </article>
+          <article class="step-card">
+            <span class="step-index">3</span>
+            <h3 data-i18n="learn.build.title">Build native output</h3>
+            <pre><code>scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
 scripts/vaisc build examples/c4.vais -o /tmp/c4
-scripts/vais-check examples/c4.vais
-
-scripts/install-vaisc.sh --prefix "$HOME/.local"
-"$HOME/.local/bin/vaisc" doctor
-"$HOME/.local/bin/vais-check" examples/c4.vais</code></pre>
+/tmp/c4</code></pre>
+          </article>
         </div>
       </div>
     </section>
@@ -95,161 +148,68 @@ scripts/install-vaisc.sh --prefix "$HOME/.local"
     <section class="band" id="language">
       <div class="container">
         <div class="section-head">
-          <p class="eyebrow">Language surface</p>
-          <h2>Current Vais uses full-word syntax.</h2>
-          <p>
-            Public examples are limited to the syntax protected by the compiler gates.
-            The main scalar type is <code>Int</code>, variable binding uses <code>let</code>,
-            and control flow uses <code>if</code>, <code>else</code>, and <code>while</code>.
-          </p>
+          <p class="eyebrow" data-i18n="language.eyebrow">Language</p>
+          <h2 data-i18n="language.title">Current syntax is intentionally small and gate-backed.</h2>
+          <p data-i18n="language.body">The public surface uses full-word syntax: fn, let, if, while, for, struct, enum, match, and return. Older compact or Rust-like examples are stale for this mainline.</p>
         </div>
-        <div class="example-grid">
-          <article class="panel">
-            <h3>Structs</h3>
-            <pre><code># expect: 42
-struct Box {
-    value: Int,
-}
-
-fn main() -> Int {
-    let b = Box { value: 42 }
-    return b.value
-}</code></pre>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3 data-i18n="language.scalar.title">Scalars</h3>
+            <p data-i18n="language.scalar.body">Int, Bool, Char, and Str are verified across promoted paths where documented.</p>
           </article>
-          <article class="panel">
-            <h3>Enums and match</h3>
-            <pre><code># expect: 2
-enum Color { Red, Green, Blue }
-
-fn color_number(c: Color) -> Int {
-    match c {
-        Color.Red => return 1,
-        Color.Green => return 2,
-        Color.Blue => return 3,
-    }
-}
-
-fn main() -> Int {
-    let c = Color.Green
-    return color_number(c)
-}</code></pre>
+          <article class="feature-card">
+            <h3 data-i18n="language.collections.title">Collections</h3>
+            <p data-i18n="language.collections.body">List<Int>, List<Struct>, and local Map<Int,Int> slices are verified. Broader generics, Option, and Result remain future work.</p>
           </article>
-          <article class="panel">
-            <h3>Loops</h3>
-            <pre><code># expect: 10
-fn main() -> Int {
-    let mut s = 0
-    let mut i = 0
-    while i &lt; 5 {
-        s = s + i
-        i = i + 1
-    }
-    return s
-}</code></pre>
+          <article class="feature-card">
+            <h3 data-i18n="language.match.title">Enums and match</h3>
+            <p data-i18n="language.match.body">Payload-free enums, Int payload enums, wildcard match arms, and selected struct payload cases are protected by the release corpus.</p>
           </article>
-          <article class="panel">
-            <h3>Strings</h3>
-            <pre><code># expect: 42
-fn main() -> Int {
-    return parse_uint("16x") + parse_int("-5") + parse_int(`31`)
-}</code></pre>
+          <article class="feature-card">
+            <h3 data-i18n="language.modules.title">Imports</h3>
+            <p data-i18n="language.modules.body">The full engine supports local dotted imports and local dependency package paths through vais.toml.</p>
           </article>
         </div>
         <div class="link-row">
-          <a href="https://github.com/vaislang/vais/blob/main/docs/reference/LANGUAGE.md" target="_blank" rel="noopener">Open language reference</a>
-          <a href="https://github.com/vaislang/vais/blob/main/examples/README.md" target="_blank" rel="noopener">Open examples</a>
+          <a href="https://github.com/vaislang/vais/blob/main/docs/reference/LANGUAGE.md" target="_blank" rel="noopener" data-i18n="language.reference">Language reference</a>
+          <a href="https://github.com/vaislang/vais/blob/main/examples/README.md" target="_blank" rel="noopener" data-i18n="language.examples">Examples corpus</a>
         </div>
-        <p class="note">
-          The full compiler path and native direct engine verify <code>Str</code>
-          length, index, equality/inequality, and local
-          <code>Map&lt;Int,Int&gt;</code> values with <code>{}</code>,
-          <code>insert</code>, <code>get(key, default)</code>,
-          <code>contains</code>, and <code>len</code>. Broader
-          <code>Map&lt;K,V&gt;</code> behavior is still future work.
-          Full-engine builds also support local dotted imports such as
-          <code>import math.add</code> and source-root package manifests with
-          <code>vais.toml</code>, including local dependency package paths under
-          <code>[dependencies]</code>; explicit <code>module</code> and
-          <code>package</code> declarations are still reserved for later gates.
-        </p>
       </div>
     </section>
 
     <section class="band band-muted" id="compiler">
-      <div class="container">
-        <div class="section-head">
-          <p class="eyebrow">Compiler</p>
-          <h2>One public command: <code>scripts/vaisc</code>.</h2>
-          <p>
-            The compiler accepts <code>.vais</code> files, emits LLVM IR, and links
-            native binaries through <code>clang</code>. Normal <code>emit-ir</code>,
-            <code>build</code>, and <code>run</code> commands use the native public
-            driver.
-          </p>
+      <div class="container two-column">
+        <div>
+          <p class="eyebrow" data-i18n="compiler.eyebrow">Compiler</p>
+          <h2 data-i18n="compiler.title">The public compiler is scripts/vaisc.</h2>
+          <p data-i18n="compiler.body">The native public driver links the reusable self-host compiler core, emits LLVM IR, and uses clang for native binaries. Standalone installs are built from this repository.</p>
         </div>
-        <div class="status-grid">
-          <article class="panel">
-            <h3>Full engine</h3>
-            <p>Runs through a native host driver linked with the reusable self-host compiler core checked in at <code>compiler/self/vaisc_core.ll</code>.</p>
-          </article>
-          <article class="panel">
-            <h3>Native command</h3>
-            <p><code>scripts/vaisc doctor</code> checks the local compiler path and reports the linked self-host core.</p>
-          </article>
-          <article class="panel">
-            <h3>Direct path</h3>
-            <p><code>--engine direct</code> stays native for Int/Bool/Str helpers, explicit Bool locals and returns, unary <code>not</code>, calls, <code>if</code>, inline <code>if { return ... }</code>, <code>while</code>, simple struct helpers, explicit <code>Str</code> locals, returns, reassignment, <code>len</code>, index, equality, <code>parse_uint</code>, and <code>parse_int</code>, local <code>Map&lt;Int,Int&gt;</code> values with <code>{}</code>, <code>insert</code>, <code>get</code>, <code>contains</code>, and <code>len</code>, <code>List&lt;Int&gt;</code> local values with list/element assignment, <code>push</code>, <code>len</code>, <code>is_empty()</code>, <code>last()</code>, <code>pop()</code>, index, <code>sum</code>, parameter, inline, return, returned-argument, if/else-if condition, and loop-hoisted operations, plus <code>List&lt;Struct&gt;</code> construction with <code>[]</code>, <code>list()</code>, list literals, list/element assignment, <code>push</code>, <code>len</code>, <code>is_empty()</code>, <code>last()</code>, <code>pop()</code>, index, field reads/writes, parameter/return ABI, inline arguments, and returned-argument lowering in statements plus <code>if</code>, <code>else if</code>, and <code>while</code> conditions. Invalid list access traps at runtime.</p>
-          </article>
-          <article class="panel">
-            <h3>Standalone install</h3>
-            <p><code>scripts/install-vaisc.sh</code> installs standalone <code>vaisc</code> and <code>vais-check</code> binaries outside the checkout.</p>
-          </article>
-          <article class="panel">
-            <h3>Release archives</h3>
-            <p>Tag builds publish standalone compiler/checker archives through the release archive workflow after the pre-tag release gate is green.</p>
-          </article>
-          <article class="panel">
-            <h3>Self-host status</h3>
-            <p><code>compiler/self/*.vais</code> contains the compiler work written in Vais and is protected by self-host fixpoint gates.</p>
-          </article>
+        <div class="terminal" aria-label="Compiler commands">
+          <button type="button" class="copy-btn" data-copy-target="quick-code" data-i18n="copy">Copy</button>
+          <pre id="quick-code"><code>scripts/vaisc doctor
+scripts/vaisc run examples/c4.vais
+scripts/vaisc build examples/c4.vais -o /tmp/c4
+
+scripts/install-vaisc.sh --prefix "$HOME/.local"
+"$HOME/.local/bin/vaisc" doctor</code></pre>
         </div>
       </div>
     </section>
 
     <section class="band" id="verification">
-      <div class="container two-column">
-        <div>
-          <p class="eyebrow">Verification</p>
-          <h2>Claims are tied to gates.</h2>
-          <p>
-            Public language and compiler statements are limited to the checks below.
-            New syntax or runtime claims belong in the public docs only after a gate
-            covers them. The first Phase 3 host file/path intrinsics,
-            <code>fs_exists</code>, <code>fs_read_text</code>,
-            <code>fs_write_text</code>, <code>fs_mkdirs</code>,
-            <code>fs_cwd</code>, <code>fs_temp_dir</code>, and
-            <code>path_join</code>/<code>path_basename</code>/<code>path_dirname</code>,
-            plus <code>proc_run</code>, are verified for the full engine;
-            captured process output remains specified for a future gate.
-          </p>
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow" data-i18n="verification.eyebrow">Verification</p>
+          <h2 data-i18n="verification.title">Public claims come from gates, not promises.</h2>
+          <p data-i18n="verification.body">The site and GitHub README should stay synced to these checks. If a feature is not in the gates or parity manifest, it should not be advertised as current Vais.</p>
         </div>
-        <div class="terminal" aria-label="Verification commands">
-          <button class="copy-btn" data-copy-target="verify-code" aria-label="Copy verification commands">Copy</button>
-          <pre id="verify-code"><code>scripts/vaisc doctor
-bash scripts/test-vaisc-native.sh
-bash scripts/test-vaisc-install.sh
-bash scripts/test-vaisc.sh
-bash scripts/test-vaisc-front.sh
-bash scripts/test-vaisc-direct.sh
-bash scripts/test-vaisc-errors.sh
-bash scripts/test-vaisc-parity.sh
-bash scripts/test-vaisc-host.sh
-bash scripts/test.sh
-
-bash scripts/test-fixpoint-full-self.sh
-bash scripts/test-fixpoint-full.sh
-
-bash scripts/test-release-gates.sh</code></pre>
+        <div class="gate-grid">
+          <div class="gate-item"><span>NV-C1</span><strong>test-vaisc-front.sh</strong></div>
+          <div class="gate-item"><span>NV-C4</span><strong>test-vaisc-parity.sh</strong></div>
+          <div class="gate-item"><span>Value</span><strong>test.sh</strong></div>
+          <div class="gate-item"><span>Self-host</span><strong>test-fixpoint-full-self.sh</strong></div>
+          <div class="gate-item"><span>Codegen</span><strong>test-fixpoint-full.sh</strong></div>
+          <div class="gate-item"><span>Release</span><strong>test-release-gates.sh</strong></div>
         </div>
       </div>
     </section>
@@ -259,12 +219,12 @@ bash scripts/test-release-gates.sh</code></pre>
     <div class="container footer-inner">
       <div>
         <img src="/logo-icon.png" alt="" class="footer-logo">
-        <p>Vais language and compiler workspace.</p>
+        <p data-i18n="footer.summary">Vais language and self-host compiler workspace.</p>
       </div>
       <div class="footer-links">
         <a href="https://github.com/vaislang/vais" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://github.com/vaislang/vais/blob/main/docs/README.md" target="_blank" rel="noopener">Docs</a>
-        <a href="https://github.com/vaislang/vais/blob/main/compiler/self/SELF_HOST.md" target="_blank" rel="noopener">Self-host</a>
+        <a href="https://github.com/vaislang/vais/blob/main/docs/README.md" target="_blank" rel="noopener" data-i18n="footer.docs">Docs</a>
+        <a href="https://github.com/vaislang/vais/blob/main/compiler/self/SELF_HOST.md" target="_blank" rel="noopener" data-i18n="footer.selfhost">Self-host</a>
       </div>
     </div>
   </footer>

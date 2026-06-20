@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Vais - Language and Self-Host Compiler",
-    "description": "Current Vais language, compiler workflow, self-host status, and verification gates."
+    "title": "Vais - Language, Compiler, Playground",
+    "description": "Bilingual Vais homepage with a verified-example playground and current compiler docs."
   }
 }

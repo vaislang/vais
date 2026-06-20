@@ -7,6 +7,12 @@ The current mainline is intentionally small and gate-backed: `scripts/vaisc`
 builds a native host driver, links the reusable self-host compiler core in
 `compiler/self/vaisc_core.ll`, emits LLVM IR, and links programs with `clang`.
 
+Official site: [vaislang.dev](https://vaislang.dev/)
+
+The site includes a Korean/English homepage and a verified-example playground.
+The browser playground is a learning runner for curated release-corpus examples;
+compile edited programs locally with `scripts/vaisc`.
+
 ## Quick Start
 
 Requirement for the public compiler command: `clang`.
@@ -58,6 +64,7 @@ to the matching GitHub Release. The release checklist is
 
 | Start here | Purpose |
 | --- | --- |
+| [https://vaislang.dev/](https://vaislang.dev/) | Korean/English public homepage and learning playground |
 | [docs/README.md](docs/README.md) | Documentation map and publication rules |
 | [CHANGELOG.md](CHANGELOG.md) | Current source release notes |
 | [docs/release/RELEASE_CHECKLIST.md](docs/release/RELEASE_CHECKLIST.md) | Pre-tag release checklist |

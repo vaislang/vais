@@ -14,6 +14,7 @@ export default defineConfig({
         'blog-verification': resolve(__dirname, 'blog/performance-comparison.html'),
         'blog-self-host': resolve(__dirname, 'blog/self-hosting-journey.html'),
         'blog-language-reference': resolve(__dirname, 'blog/language-reference.html'),
+        playground: resolve(__dirname, 'playground/index.html'),
         vaisx: resolve(__dirname, 'vaisx/index.html'),
         ecosystem: resolve(__dirname, 'ecosystem/index.html'),
       },

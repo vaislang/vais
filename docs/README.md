@@ -7,6 +7,7 @@ compiler workspace.
 
 | Document | Purpose |
 | --- | --- |
+| [https://vaislang.dev/](https://vaislang.dev/) | Korean/English public homepage and verified-example learning playground |
 | [../README.md](../README.md) | Repository overview and quick commands |
 | [../CHANGELOG.md](../CHANGELOG.md) | Current source release notes |
 | [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) | Pre-tag release checklist |
@@ -48,6 +49,8 @@ source is `website/`, and the public entry point should contain only:
 5. The current verified language surface.
 6. The self-host compiler status.
 7. Links to the exact gates that protect those claims.
+8. The Korean/English learning playground for verified examples, clearly
+   labeled as a browser learning runner rather than a full hosted compiler.
 
 Any public site content that advertises a different language syntax or
 unverified ecosystem readiness is stale relative to this repository unless it is

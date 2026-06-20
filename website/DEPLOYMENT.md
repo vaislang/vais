@@ -3,9 +3,14 @@
 This site publishes the current Vais language and compiler baseline at
 `https://vaislang.dev`.
 
+The homepage is bilingual Korean/English and includes a static learning
+playground for verified examples. Keep the playground examples aligned with
+`tools/vaisc-parity.tsv`.
+
 ## Source Of Truth
 
 - Main source: `website/index.html`
+- Playground route: `website/playground/index.html`
 - Shared styles: `website/src/styles.css`
 - Shared script: `website/src/main.js`
 - Built output: `website/dist`
