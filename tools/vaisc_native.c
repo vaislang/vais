@@ -87,6 +87,7 @@ typedef struct {
 
 typedef struct {
     char *name;
+    int builtin_kind;
     int is_payload;
     int count;
     char *struct_names[16];
@@ -782,6 +783,178 @@ static void free_enum_info(EnumInfo *info) {
     memset(info, 0, sizeof(*info));
 }
 
+static int generic_type_at(
+    const char *line,
+    size_t i,
+    const char *name,
+    const char *arg1,
+    const char *arg2,
+    size_t *end_out
+) {
+    size_t name_len = strlen(name);
+    if (i > 0 && is_ident_continue(line[i - 1])) return 0;
+    if (strncmp(line + i, name, name_len) != 0) return 0;
+    if (is_ident_continue(line[i + name_len])) return 0;
+    size_t k = i + name_len;
+    while (line[k] == ' ' || line[k] == '\t') k++;
+    if (line[k] != '<') return 0;
+    k++;
+    while (line[k] == ' ' || line[k] == '\t') k++;
+    size_t arg1_len = strlen(arg1);
+    if (strncmp(line + k, arg1, arg1_len) != 0) return 0;
+    if (is_ident_continue(line[k + arg1_len])) return 0;
+    k += arg1_len;
+    while (line[k] == ' ' || line[k] == '\t') k++;
+    if (arg2 != NULL) {
+        if (line[k] != ',') return 0;
+        k++;
+        while (line[k] == ' ' || line[k] == '\t') k++;
+        size_t arg2_len = strlen(arg2);
+        if (strncmp(line + k, arg2, arg2_len) != 0) return 0;
+        if (is_ident_continue(line[k + arg2_len])) return 0;
+        k += arg2_len;
+        while (line[k] == ' ' || line[k] == '\t') k++;
+    }
+    if (line[k] != '>') return 0;
+    k++;
+    if (is_ident_continue(line[k])) return 0;
+    *end_out = k;
+    return 1;
+}
+
+static int contains_generic_type(const char *text, const char *name, const char *arg1, const char *arg2) {
+    for (size_t i = 0; text[i] != '\0'; i++) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end - 1;
+            continue;
+        }
+        size_t end = 0;
+        if (generic_type_at(text, i, name, arg1, arg2, &end)) return 1;
+    }
+    return 0;
+}
+
+static int option_constructor_marker_at(const char *text, size_t i) {
+    if (strncmp(text + i, "Some", 4) == 0) {
+        if (i > 0 && is_ident_continue(text[i - 1])) return 0;
+        if (is_ident_continue(text[i + 4])) return 0;
+        size_t k = i + 4;
+        while (text[k] == ' ' || text[k] == '\t') k++;
+        return text[k] == '(';
+    }
+    if (strncmp(text + i, "None", 4) == 0) {
+        if (i > 0 && is_ident_continue(text[i - 1])) return 0;
+        if (is_ident_continue(text[i + 4])) return 0;
+        return 1;
+    }
+    return 0;
+}
+
+static int contains_option_constructor_marker(const char *text) {
+    for (size_t i = 0; text[i] != '\0'; i++) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (option_constructor_marker_at(text, i)) return 1;
+    }
+    return 0;
+}
+
+static char *replace_generic_type(
+    const char *line,
+    const char *name,
+    const char *arg1,
+    const char *arg2,
+    const char *replacement
+) {
+    StrBuf out;
+    sb_init(&out);
+    int changed = 0;
+    for (size_t i = 0; line[i] != '\0';) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, (int)i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = (size_t)end;
+            continue;
+        }
+        if (line[i] == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = (size_t)end;
+            continue;
+        }
+        size_t end = 0;
+        if (generic_type_at(line, i, name, arg1, arg2, &end)) {
+            sb_append(&out, replacement);
+            i = end;
+            changed = 1;
+            continue;
+        }
+        sb_append_n(&out, line + i, 1);
+        i++;
+    }
+    if (!changed) {
+        free(out.data);
+        return strdup(line);
+    }
+    return sb_take(&out);
+}
+
+static void init_builtin_option_int(EnumInfo *info) {
+    info->name = strdup("Option");
+    if (info->name == NULL) die_oom();
+    info->builtin_kind = 1;
+    info->is_payload = 1;
+    info->count = 2;
+    info->variants[0].name = strdup("Some");
+    info->variants[0].tag = 0;
+    info->variants[0].field_count = 1;
+    info->variants[1].name = strdup("None");
+    info->variants[1].tag = 1;
+    info->variants[1].field_count = 0;
+    if (info->variants[0].name == NULL || info->variants[1].name == NULL) die_oom();
+}
+
+static void init_builtin_result_int_int(EnumInfo *info) {
+    info->name = strdup("Result");
+    if (info->name == NULL) die_oom();
+    info->builtin_kind = 2;
+    info->is_payload = 1;
+    info->count = 2;
+    info->variants[0].name = strdup("Ok");
+    info->variants[0].tag = 0;
+    info->variants[0].field_count = 1;
+    info->variants[1].name = strdup("Err");
+    info->variants[1].tag = 1;
+    info->variants[1].field_count = 1;
+    if (info->variants[0].name == NULL || info->variants[1].name == NULL) die_oom();
+}
+
 static char *replace_exact(const char *line, const char *needle, const char *replacement) {
     const char *p = strstr(line, needle);
     if (p == NULL) return strdup(line);
@@ -819,6 +992,12 @@ static char *replace_enum_type_token(const char *line, const char *needle, const
 }
 
 static char *replace_enum_types(const char *line, EnumInfo *info) {
+    if (info->builtin_kind == 1) {
+        return replace_generic_type(line, "Option", "Int", NULL, "Int");
+    }
+    if (info->builtin_kind == 2) {
+        return replace_generic_type(line, "Result", "Int", "Int", "Int");
+    }
     char needle[160];
     snprintf(needle, sizeof(needle), ": %s", info->name);
     char *step = replace_enum_type_token(line, needle, ": Int");
@@ -958,6 +1137,26 @@ static char *rewrite_constructors(const char *line, EnumInfo *info) {
     StrBuf out;
     sb_init(&out);
     for (int i = 0; line[i] != '\0';) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (line[i] == '\'') {
+            int end = skip_char_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
         if (!is_ident_start(line[i])) {
             sb_append_n(&out, line + i, 1);
             i++;
@@ -1139,7 +1338,13 @@ static char *lower_enum_text(const char *text) {
             break;
         }
     }
+    if (enum_line < 0 && (contains_generic_type(text, "Option", "Int", NULL) || contains_option_constructor_marker(text))) {
+        init_builtin_option_int(&info);
+    } else if (enum_line < 0 && contains_generic_type(text, "Result", "Int", "Int")) {
+        init_builtin_result_int_int(&info);
+    }
     int has_enum = enum_line >= 0;
+    if (info.builtin_kind != 0) has_enum = 1;
 
     LineVec out;
     lines_init(&out);
@@ -1148,7 +1353,7 @@ static char *lower_enum_text(const char *text) {
         char *typed = has_enum ? replace_enum_types(lines.items[i], &info) : strdup(lines.items[i]);
         char *match_expr = parse_match_expr(typed);
         if (match_expr == NULL) {
-            char *rewritten = has_enum ? rewrite_constructors(typed, &info) : strdup(typed);
+            char *rewritten = has_enum && strstr(typed, "match ") == NULL ? rewrite_constructors(typed, &info) : strdup(typed);
             lines_push(&out, rewritten);
             free(typed);
             continue;

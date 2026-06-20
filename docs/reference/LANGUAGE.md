@@ -125,6 +125,8 @@ Verified release surface:
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, `contains`, and `len` |
+| `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, and statement-form `match` |
+| `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, and statement-form `match` |
 | Simple `struct` | Literal construction, field access, and local field write |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
@@ -470,13 +472,59 @@ Verified behavior:
   `Map<Int,Int>`.
 - `insert(key, value)` inserts or replaces a value.
 - `get(key, default)` returns `default` when the key is absent. This avoids
-  publishing `Option` before `Option` itself is gate-backed.
+  adding a Map-returned `Option` shape to the minimal map slice.
 - `contains(key)` returns whether a key is present.
 - `len()` returns the number of present keys.
 
 Not included in the current Map slice: generic key/value lowering, assignment,
 deletion, iteration, entry literals, `Option`, `Result`, custom hashing, or
 public ABI claims for Map parameters and return values.
+
+## Option And Result
+
+`Option<Int>` has a first verified slice in the full compiler path:
+
+```vais
+fn find(x: Int) -> Option<Int> {
+    if x > 0 { return Some(x * 2) }
+    return None
+}
+
+fn main() -> Int {
+    match find(21) {
+        Some(v) => return v,
+        None => return 0,
+    }
+}
+```
+
+Verified behavior:
+
+- `Some(Int)` and `None` constructors.
+- `Option<Int>` helper return values.
+- `Option<Int>` stored in a simple struct field and matched through field
+  access, as covered by `examples/e40_option_in_struct.vais`.
+- Statement-form `match` arms that return from the current function.
+
+`Result<Int,Int>` has the same first statement-match shape:
+
+```vais
+fn div(a: Int, b: Int) -> Result<Int, Int> {
+    if b == 0 { return Err(0) }
+    return Ok(a / b)
+}
+
+fn main() -> Int {
+    match div(21, 3) {
+        Ok(v) => return v,
+        Err(e) => return e,
+    }
+}
+```
+
+Not included yet: generic `Option<T>` or `Result<T,E>`, expression-form
+`let x = match ...`, Map APIs that return `Option`, direct-engine
+Option/Result-specific claims, and nested option/result payloads.
 
 ## Strings, Characters, And Output
 

@@ -401,6 +401,10 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   full and direct paths where claimed.
 - [ ] 4.4 Expand collections with `Map`, `Option`, and `Result` only after syntax,
   ABI, and diagnostics are specified.
+  - [x] Promote the first `Option<Int>` `Some`/`None` helper-return and
+    statement-match slice.
+  - [x] Promote the first `Result<Int,Int>` `Ok`/`Err` helper-return and
+    statement-match slice.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
   - [x] Add checker guidance for Rust-style top-level `use` and `pub` forms.

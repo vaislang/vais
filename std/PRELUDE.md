@@ -60,6 +60,10 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<T>` | Partial |
 | `Map<Int,Int>` | Verified for local values |
 | `Map<K,V>` | Specified beyond the local `Map<Int,Int>` slice |
+| `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, and statement `match` |
+| `Option<T>` | Specified beyond the `Option<Int>` slice |
+| `Result<Int,Int>` | Verified for `Ok(Int)`, `Err(Int)`, helper returns, and statement `match` |
+| `Result<T,E>` | Specified beyond the `Result<Int,Int>` slice |
 | `v.len()` | Verified |
 | `v.is_empty()` | Verified |
 | `v.last()` | Verified |
@@ -89,8 +93,8 @@ The verified Map surface is deliberately small:
 This slice is currently available through the full self-host compiler path and
 `scripts/vaisc --engine direct`.
 The slice does not include generic key/value lowering, function parameters,
-return values, assignment, iteration, deletion, `Option`, `Result`, hashing
-controls, or map literals with entries.
+return values, assignment, iteration, deletion, Option-returning APIs,
+`Result`, hashing controls, or map literals with entries.
 
 ## Types And Conversion
 

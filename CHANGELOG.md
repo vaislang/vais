@@ -26,6 +26,13 @@
   `examples/e55_match_wildcard.vais` added to the release corpus.
 - Promoted payload-free enum `match` with `_` catch-all, with
   `examples/e90_enum_wildcard.vais` added to the release corpus.
+- Promoted the first `Option<Int>` slice for `Some(Int)`/`None`, helper returns,
+  struct/local storage, and statement-form `match`, with
+  `examples/e16_option_match.vais` and `examples/e40_option_in_struct.vais`
+  added to the release corpus.
+- Promoted the first `Result<Int,Int>` slice for `Ok(Int)`/`Err(Int)`, helper
+  returns, and statement-form `match`, with `examples/e21_result_match.vais`
+  added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

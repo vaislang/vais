@@ -14,8 +14,10 @@ examples/e05_multi_fn.vais	native-supported	Multiple Int helpers.
 examples/c3.vais	native-supported	Bitwise not builtin.
 examples/e07_nested_if.vais	native-supported	Nested if/else.
 examples/e11_while.vais	native-supported	While loop with mutable accumulator.
+examples/e16_option_match.vais	native-supported	Option<Int> Some/None helper return and statement match.
 examples/e18_while_accumulator.vais	native-supported	While loop with arithmetic update.
 examples/e20_triangular.vais	native-supported	Recursive triangular number.
+examples/e21_result_match.vais	native-supported	Result<Int,Int> Ok/Err helper return and statement match.
 examples/e22_enum_dispatch.vais	native-supported	Payload-free enum dispatch helper.
 examples/e24_struct_enum_field.vais	native-supported	Payload-free enum stored in a struct field and matched through field access.
 examples/e26_pipeline.vais	native-supported	Plain function pipeline.
@@ -26,6 +28,7 @@ examples/e33_guard_chain.vais	native-supported	Int guard chain.
 examples/e34_int_conversion.vais	native-supported	Int conversion call.
 examples/e35_calc_dispatch.vais	native-supported	Payload-free enum dispatch with bitwise builtin.
 examples/e38_negatives.vais	native-supported	Negative Int arithmetic.
+examples/e40_option_in_struct.vais	native-supported	Option<Int> stored in a struct field and matched through field access.
 examples/e42_while_call.vais	native-supported	While loop calling helper.
 examples/e43_generic_fn.vais	native-supported	Generic marker skipped for Int helper.
 examples/e45_string_eq.vais	native-supported	String literal equality.

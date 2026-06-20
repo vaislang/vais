@@ -52,6 +52,11 @@ matched through payload field access,
 catch-all,
 `examples/e90_enum_wildcard.vais` for payload-free enum match with a `_`
 catch-all,
+`examples/e16_option_match.vais` for the first `Option<Int>` helper-return and
+statement-match slice,
+`examples/e21_result_match.vais` for the first `Result<Int,Int>`
+helper-return and statement-match slice,
+`examples/e40_option_in_struct.vais` for `Option<Int>` stored in a struct field,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and
