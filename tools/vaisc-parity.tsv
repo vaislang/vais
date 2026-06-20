@@ -17,6 +17,7 @@ examples/e11_while.vais	native-supported	While loop with mutable accumulator.
 examples/e18_while_accumulator.vais	native-supported	While loop with arithmetic update.
 examples/e20_triangular.vais	native-supported	Recursive triangular number.
 examples/e22_enum_dispatch.vais	native-supported	Payload-free enum dispatch helper.
+examples/e24_struct_enum_field.vais	native-supported	Payload-free enum stored in a struct field and matched through field access.
 examples/e26_pipeline.vais	native-supported	Plain function pipeline.
 examples/e29_gcd.vais	native-supported	Modulo recursion.
 examples/e30_enum_payload_match.vais	native-supported	Int payload enum match lowering.

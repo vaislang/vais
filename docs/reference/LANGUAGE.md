@@ -277,6 +277,8 @@ Verified today:
 - Small recursive `Int` payload enum/match lowering used by the parity corpus.
 - Multi-field `Int` payload enum expression-arm lowering, as covered by
   `examples/e02_enum_payload.vais`.
+- Payload-free enum values stored in simple struct fields and matched through
+  field access, as covered by `examples/e24_struct_enum_field.vais`.
 
 Broader payload shapes are not a release claim yet.
 

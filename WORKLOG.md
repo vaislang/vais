@@ -171,6 +171,9 @@
   enum variants through the public front contract, full self-host compiler, and
   parity gates, and added `examples/e02_enum_payload.vais` to the release
   corpus.
+- Fixed enum type-token rewriting so struct literal values such as
+  `c: Color.Green` are not mistaken for type annotations, then promoted
+  payload-free enum struct-field matching with `examples/e24_struct_enum_field.vais`.
 - Added `tools/vais_parity_check.vais` as the Vais-authored NV-C4 parity
   manifest harness and reduced `scripts/test-vaisc-parity.sh` to a bootstrap
   wrapper.

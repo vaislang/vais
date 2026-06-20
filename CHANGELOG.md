@@ -14,6 +14,9 @@
 - Promoted simple enum expression-arm `match` lowering for multi-field `Int`
   payload variants, with `examples/e02_enum_payload.vais` added to the release
   corpus.
+- Promoted payload-free enum values stored in simple struct fields and matched
+  through field access, with `examples/e24_struct_enum_field.vais` added to the
+  release corpus.
 
 ## v0.3.1 - 2026-06-20
 

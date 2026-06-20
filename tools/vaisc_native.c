@@ -758,12 +758,37 @@ static char *replace_exact(const char *line, const char *needle, const char *rep
     return sb_take(&out);
 }
 
+static char *replace_enum_type_token(const char *line, const char *needle, const char *replacement) {
+    size_t needle_len = strlen(needle);
+    StrBuf out;
+    sb_init(&out);
+    int changed = 0;
+    for (size_t i = 0; line[i] != '\0';) {
+        if (strncmp(line + i, needle, needle_len) == 0) {
+            char after = line[i + needle_len];
+            if (!is_ident_continue(after) && after != '.') {
+                sb_append(&out, replacement);
+                i += needle_len;
+                changed = 1;
+                continue;
+            }
+        }
+        sb_append_n(&out, line + i, 1);
+        i++;
+    }
+    if (!changed) {
+        free(out.data);
+        return strdup(line);
+    }
+    return sb_take(&out);
+}
+
 static char *replace_enum_types(const char *line, EnumInfo *info) {
     char needle[160];
     snprintf(needle, sizeof(needle), ": %s", info->name);
-    char *step = replace_exact(line, needle, ": Int");
+    char *step = replace_enum_type_token(line, needle, ": Int");
     snprintf(needle, sizeof(needle), "-> %s", info->name);
-    char *out = replace_exact(step, needle, "-> Int");
+    char *out = replace_enum_type_token(step, needle, "-> Int");
     free(step);
     return out;
 }
