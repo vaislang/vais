@@ -680,6 +680,47 @@ static int split_top_level_commas_c(const char *text, char **parts, int max_part
     return count;
 }
 
+static int split_top_level_type_commas_c(const char *text, char **parts, int max_parts) {
+    int count = 0;
+    int depth = 0;
+    const char *start = text;
+    for (const char *p = text; ; p++) {
+        char ch = *p;
+        if (is_string_delim_c(ch)) {
+            int end = skip_string_literal_c(text, (int)(p - text));
+            if (end < 0) {
+                p = text + strlen(text);
+                ch = *p;
+            } else {
+                p = text + end - 1;
+                continue;
+            }
+        }
+        if (ch == '\'') {
+            int end = skip_char_literal_c(text, (int)(p - text));
+            if (end < 0) {
+                p = text + strlen(text);
+                ch = *p;
+            } else {
+                p = text + end - 1;
+                continue;
+            }
+        }
+        if (ch == '(' || ch == '[' || ch == '{' || ch == '<') depth++;
+        if (ch == ')' || ch == ']' || ch == '}' || ch == '>') depth--;
+        if ((ch == ',' && depth == 0) || ch == '\0') {
+            if (count >= max_parts) return -1;
+            char *raw = substr_copy(start, (size_t)(p - start));
+            parts[count++] = trim_copy(raw);
+            free(raw);
+            if (ch == '\0') break;
+            start = p + 1;
+        }
+        if (ch == '\0') break;
+    }
+    return count;
+}
+
 static VariantInfo *find_variant(EnumInfo *info, const char *name) {
     for (int i = 0; i < info->count; i++) {
         if (strcmp(info->variants[i].name, name) == 0) return &info->variants[i];
@@ -2005,11 +2046,13 @@ static char *fix_as_cast(const char *line) {
     return sb_take(&out);
 }
 
+static int front_type_is_map_int_int(const char *type);
+
 static int is_valid_int_params(const char *params) {
     char *copy = strdup(params);
     if (copy == NULL) die_oom();
     char *parts[16] = {0};
-    int n = split_top_level_commas_c(copy, parts, 16);
+    int n = split_top_level_type_commas_c(copy, parts, 16);
     free(copy);
     if (n < 0) return 0;
     for (int i = 0; i < n; i++) {
@@ -2022,7 +2065,8 @@ static int is_valid_int_params(const char *params) {
         int ok = strcmp(ty, "Int") == 0 ||
             strcmp(ty, "Str") == 0 ||
             strcmp(ty, "Bool") == 0 ||
-            strcmp(ty, "Char") == 0;
+            strcmp(ty, "Char") == 0 ||
+            front_type_is_map_int_int(ty);
         free(ty);
         if (!ok) {
             for (int k = 0; k < n; k++) free(parts[k]);
@@ -2035,6 +2079,46 @@ static int is_valid_int_params(const char *params) {
 
 static int front_has_map_type(const char *text) {
     return strstr(text, "Map<") != NULL || strstr(text, "Map <") != NULL;
+}
+
+static int front_type_is_map_int_int(const char *type) {
+    const char *p = skip_ws(type);
+    if (!starts_with(p, "Map") || is_ident_continue(p[3])) return 0;
+    const char *q = skip_ws(p + 3);
+    if (*q != '<') return 0;
+    q = skip_ws(q + 1);
+    if (!starts_with(q, "Int") || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
+    if (*q != ',') return 0;
+    q = skip_ws(q + 1);
+    if (!starts_with(q, "Int") || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
+    if (*q != '>') return 0;
+    q = skip_ws(q + 1);
+    return *q == '\0';
+}
+
+static int front_params_have_unsupported_map_type(const char *params) {
+    char *copy = strdup(params);
+    if (copy == NULL) die_oom();
+    char *parts[16] = {0};
+    int n = split_top_level_type_commas_c(copy, parts, 16);
+    free(copy);
+    if (n < 0) return 1;
+    for (int i = 0; i < n; i++) {
+        char *colon = strchr(parts[i], ':');
+        if (colon != NULL) {
+            char *ty = trim_copy(colon + 1);
+            int unsupported = front_has_map_type(ty) && !front_type_is_map_int_int(ty);
+            free(ty);
+            if (unsupported) {
+                for (int k = 0; k < n; k++) free(parts[k]);
+                return 1;
+            }
+        }
+    }
+    for (int i = 0; i < n; i++) free(parts[i]);
+    return 0;
 }
 
 static int check_fn_contract_line(
@@ -2084,16 +2168,16 @@ static int check_fn_contract_line(
                 NULL);
             issue = 1;
         }
-        if (params != NULL && strlen(skip_ws(params)) > 0 && front_has_map_type(params)) {
+        if (params != NULL && strlen(skip_ws(params)) > 0 && front_params_have_unsupported_map_type(params)) {
             report_issue(path, line_no, find_col(line, "Map"), line,
-                "Map parameters are not verified yet",
-                "keep Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char> values local; Map function parameters need an ABI specification before promotion.",
+                "only Map<Int,Int> parameters are verified yet",
+                "keep Map<Int,Bool>, Map<Int,Char>, and generic Map parameters local until their ABI slices are promoted.",
                 NULL);
             issue = 1;
         } else if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params)) {
             report_issue(path, line_no, find_col(line, params), line,
                 "Vais native helper parameters must use verified scalar types",
-                "use `Int`, `Str`, `Bool`, or `Char` parameters in this slice.",
+                "use `Int`, `Str`, `Bool`, `Char`, or `Map<Int,Int>` parameters in this slice.",
                 NULL);
             issue = 1;
         }
@@ -2463,12 +2547,12 @@ static int check_front_contract_text(const char *text, const char *path) {
                 "use `Int`, `Str`, `Bool`, or `Char` in this slice.",
                 NULL);
             issues++;
-        } else if (strstr(probe, "Map<") != NULL || strstr(probe, "Map <") != NULL) {
+        } else if ((strstr(probe, "Map<") != NULL || strstr(probe, "Map <") != NULL) && !starts_with(trim, "fn ")) {
             if (!front_supported_map_local_line(probe)) {
                 int col = strstr(probe, "Map<") != NULL ? find_col(probe, "Map<") : find_col(probe, "Map <");
                 report_issue(path, line_no, col, line,
                     "only local Map<Int,Int>, Map<Int,Bool>, and Map<Int,Char> values are verified for now",
-                    "write `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, or `let name: Map<Int,Char> = {}`; generic key/value forms, Map parameters, and Map returns are not verified yet.",
+                    "write `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, or `let name: Map<Int,Char> = {}`; generic key/value forms and Map returns are not verified yet.",
                     NULL);
                 issues++;
             }
@@ -3791,7 +3875,7 @@ static int direct_is_intlike_scalar_type(const char *type) {
     );
 }
 
-static int direct_fn_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
+static int direct_return_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
     return strcmp(type, "Int") == 0 ||
         direct_is_str_type(type) ||
         direct_is_bool_type(type) ||
@@ -3801,8 +3885,13 @@ static int direct_fn_type_allowed(DirectStructInfo *structs, int struct_count, c
         direct_find_struct(structs, struct_count, type) != NULL;
 }
 
+static int direct_param_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
+    return direct_return_type_allowed(structs, struct_count, type) ||
+        direct_is_map_int_int_type(type);
+}
+
 static int direct_local_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
-    return direct_fn_type_allowed(structs, struct_count, type) ||
+    return direct_return_type_allowed(structs, struct_count, type) ||
         direct_is_list_struct_type(structs, struct_count, type) ||
         direct_is_map_type(type);
 }
@@ -3832,6 +3921,7 @@ static const char *direct_c_type(const char *type) {
 }
 
 static const char *direct_c_param_type(const char *type) {
+    if (direct_is_map_type(type)) return "DirectMapIntInt *";
     if (direct_is_list_type(type)) {
         static char bufs[4][136];
         static int slot = 0;
@@ -4158,7 +4248,7 @@ static int parse_direct_fn_header(const char *line, DirectFnInfo *out) {
     out->return_type = return_type;
     char *params_text = substr_copy(open + 1, (size_t)(close - open - 1));
     char *parts[16] = {0};
-    int n = split_top_level_commas_c(params_text, parts, 16);
+    int n = split_top_level_type_commas_c(params_text, parts, 16);
     free(params_text);
     if (n < 0) {
         direct_fns_free(out, 1);
@@ -4211,19 +4301,19 @@ static int direct_validate_fn_types(
     int struct_count
 ) {
     int issues = 0;
-    if (!direct_fn_type_allowed(structs, struct_count, info->return_type)) {
+    if (!direct_return_type_allowed(structs, struct_count, info->return_type)) {
         report_issue(path, info->line_no, find_col(line, info->return_type), line,
             "direct native emitter function return type is not available",
             "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
-            NULL);
+            "fn f() -> Int");
         issues++;
     }
     for (int p = 0; p < info->param_count; p++) {
-        if (!direct_fn_type_allowed(structs, struct_count, info->param_types[p])) {
+        if (!direct_param_type_allowed(structs, struct_count, info->param_types[p])) {
             report_issue(path, info->line_no, find_col(line, info->param_types[p]), line,
                 "direct native emitter function parameter type is not available",
-                "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or a struct declared in this file.",
-                NULL);
+                "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, or a struct declared in this file.",
+                "fn f(x: Int) -> Int");
             issues++;
         }
     }
@@ -4461,6 +4551,31 @@ static int direct_expr_bare_list_local(DirectNameSet *locals, const char *expr, 
     return ok;
 }
 
+static int direct_expr_bare_map_local(DirectNameSet *locals, const char *expr, char **name_out) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return 0;
+    }
+    const char *start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    if (*skip_ws(s) != '\0') {
+        free(trimmed);
+        return 0;
+    }
+    char *name = substr_copy(start, (size_t)(s - start));
+    int ok = direct_is_map_type(direct_names_type(locals, name));
+    if (ok && name_out != NULL) {
+        *name_out = name;
+    } else {
+        free(name);
+    }
+    free(trimmed);
+    return ok;
+}
+
 static DirectFnInfo *direct_expr_exact_call_fn(const char *expr, DirectFnInfo *fns, int fn_count) {
     char *trimmed = trim_copy(expr);
     const char *s = skip_ws(trimmed);
@@ -4493,6 +4608,11 @@ static DirectFnInfo *direct_expr_exact_call_fn(const char *expr, DirectFnInfo *f
 static int direct_expr_exact_list_return_call(const char *expr, DirectFnInfo *fns, int fn_count) {
     DirectFnInfo *fn = direct_expr_exact_call_fn(expr, fns, fn_count);
     return fn != NULL && direct_is_list_type(fn->return_type);
+}
+
+static void direct_append_map_ptr_ref(StrBuf *out, const char *name, int is_ref) {
+    if (!is_ref) sb_append(out, "&");
+    sb_append(out, name);
 }
 
 static void direct_append_list_len_ref(StrBuf *out, const char *name, int is_ref) {
@@ -4958,6 +5078,28 @@ static char *direct_rewrite_list_arg_expr(
     return NULL;
 }
 
+static char *direct_rewrite_map_arg_expr(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    DirectNameSet *locals
+) {
+    char *name = NULL;
+    if (direct_expr_bare_map_local(locals, expr, &name)) {
+        StrBuf out;
+        sb_init(&out);
+        direct_append_map_ptr_ref(&out, name, direct_names_is_ref(locals, name));
+        free(name);
+        return sb_take(&out);
+    }
+    report_issue(path, line_no, find_col(line, expr), line,
+        "direct native emitter requires a local Map argument",
+        "bind the Map value to a local before passing it.",
+        "let m: Map<Int,Int> = {}");
+    return NULL;
+}
+
 static char *direct_rewrite_list_value_expr(
     const char *path,
     int line_no,
@@ -5077,6 +5219,8 @@ static char *direct_rewrite_list_expr(
                     char *rewritten_arg = NULL;
                     if (direct_is_list_type(fn->param_types[a])) {
                         rewritten_arg = direct_rewrite_list_arg_expr(path, line_no, line, args[a], fn->param_types[a], locals, fns, fn_count, structs, struct_count);
+                    } else if (direct_is_map_type(fn->param_types[a])) {
+                        rewritten_arg = direct_rewrite_map_arg_expr(path, line_no, line, args[a], locals);
                     } else {
                         rewritten_arg = direct_rewrite_expr(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count);
                     }
@@ -5217,8 +5361,8 @@ static char *direct_rewrite_list_expr(
                             free(out.data);
                             return NULL;
                         }
-                        sb_append(&out, "__vais_map_int_int_len(&");
-                        sb_append(&out, name);
+                        sb_append(&out, "__vais_map_int_int_len(");
+                        direct_append_map_ptr_ref(&out, name, direct_names_is_ref(locals, name));
                         sb_append(&out, ")");
                         free(field);
                         free(name);
@@ -5268,13 +5412,13 @@ static char *direct_rewrite_list_expr(
                             return NULL;
                         }
                         if (strcmp(field, "contains") == 0) {
-                            sb_append(&out, "__vais_map_int_int_contains(&");
+                            sb_append(&out, "__vais_map_int_int_contains(");
                         } else if (strcmp(field, "get_opt") == 0) {
-                            sb_append(&out, "__vais_map_int_int_get_opt(&");
+                            sb_append(&out, "__vais_map_int_int_get_opt(");
                         } else {
-                            sb_append(&out, "__vais_map_int_int_get(&");
+                            sb_append(&out, "__vais_map_int_int_get(");
                         }
-                        sb_append(&out, name);
+                        direct_append_map_ptr_ref(&out, name, direct_names_is_ref(locals, name));
                         for (int a = 0; a < argc; a++) {
                             char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count);
                             if (rewritten_arg == NULL) {
@@ -6244,6 +6388,7 @@ static int direct_check_expr_inner(
                 }
                 for (int a = 0; a < argc; a++) {
                     int allow_arg_list = direct_is_list_type(fn->param_types[a]);
+                    int allow_arg_map = direct_is_map_type(fn->param_types[a]);
                     int inline_list_arg = 0;
                     int returned_list_arg = 0;
                     if (allow_arg_list) {
@@ -6280,6 +6425,18 @@ static int direct_check_expr_inner(
                         return 1;
                     }
                     free(arg_type);
+                    if (allow_arg_map) {
+                        if (!direct_expr_bare_map_local(locals, args[a], NULL)) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter requires a local Map argument",
+                                "bind the Map value to a local before passing it.",
+                                "let m: Map<Int,Int> = {}");
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(name);
+                            return 1;
+                        }
+                        continue;
+                    }
                     if (allow_arg_list && returned_list_arg) {
                         if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, fn->param_types[a])) {
                             for (int k = 0; k < 16; k++) free(args[k]);
@@ -6981,7 +7138,7 @@ static int direct_lower_line(
         direct_names_free(locals);
         locals->current_return_type = strdup(header.return_type);
         for (int p = 0; p < header.param_count; p++) {
-            direct_names_add_typed_ref(locals, header.params[p], header.param_types[p], direct_is_list_type(header.param_types[p]));
+            direct_names_add_typed_ref(locals, header.params[p], header.param_types[p], direct_is_list_type(header.param_types[p]) || direct_is_map_type(header.param_types[p]));
         }
         sb_append(out, direct_c_type(header.return_type));
         sb_append(out, " ");
@@ -7000,8 +7157,8 @@ static int direct_lower_line(
     }
     if (parsed_header < 0 || starts_with(s, "fn ")) {
         report_issue(path, line_no, find_col(line, "fn"), line,
-            "direct native emitter supports Int, Bool, Char, Str, List<Int>, List<Struct>, and declared-struct function headers",
-            "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
+            "direct native emitter supports scalar/List/Struct function headers plus Map<Int,Int> parameters",
+            "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or declared struct return types; `Map<Int,Int>` is parameter-only.",
             NULL);
         free(stripped);
         return 1;
@@ -7703,8 +7860,8 @@ static int direct_lower_line(
             char *c_key = direct_translate_expr(rewritten_key);
             char *c_value = direct_translate_expr(rewritten_value);
             sb_append(out, prelude.data);
-            sb_append(out, "__vais_map_int_int_insert(&");
-            sb_append(out, method_base);
+            sb_append(out, "__vais_map_int_int_insert(");
+            direct_append_map_ptr_ref(out, method_base, direct_names_is_ref(locals, method_base));
             sb_append(out, ", ");
             sb_append(out, c_key);
             sb_append(out, ", ");
@@ -7850,10 +8007,10 @@ static int direct_lower_line(
                 free(stripped);
                 return 1;
             }
-            sb_append(out, "__vais_map_int_int_copy(&");
-            sb_append(out, lhs);
-            sb_append(out, ", &");
-            sb_append(out, rhs_name);
+            sb_append(out, "__vais_map_int_int_copy(");
+            direct_append_map_ptr_ref(out, lhs, direct_names_is_ref(locals, lhs));
+            sb_append(out, ", ");
+            direct_append_map_ptr_ref(out, rhs_name, direct_names_is_ref(locals, rhs_name));
             sb_append(out, ");\n");
             free(rhs_name);
             free(lhs);
@@ -8047,8 +8204,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             fns[fn_count++] = info;
         } else if (parsed < 0) {
             report_issue(path, (int)i + 1, 1, lines.items[i],
-                "direct native emitter supports Int, Bool, Char, Str, List<Int>, List<Struct>, and declared-struct function headers",
-                "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or declared struct parameter and return types.",
+                "direct native emitter supports scalar/List/Struct function headers plus Map<Int,Int> parameters",
+                "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, or declared struct return types; `Map<Int,Int>` is parameter-only.",
                 NULL);
             free(skip_lines);
             lines_free(&lines);

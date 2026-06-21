@@ -67,6 +67,10 @@
   native direct engine, with `examples/e97_map_char.vais` added to the release
   corpus. `Map<Int,Char>.get_opt` remains gated until the matching Option
   payload slice is verified.
+- Promoted `Map<Int,Int>` function parameters by reference through the full
+  compiler path and native direct engine, with `examples/e98_map_param.vais`
+  added to the release corpus. Map returns and non-`Map<Int,Int>` parameters
+  remain behind future ABI gates.
 
 ## v0.3.1 - 2026-06-20
 

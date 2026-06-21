@@ -18,7 +18,7 @@ struct Token { kind: Int, value: Int, nstart: Int, nlen: Int }
 # Operand: kind 0=literal(val), 1=temp(%t<val>). next = next free SSA temp.
 struct Op { kind: Int, val: Int, next: Int }
 # A declared variable: source name range -> it lives at alloca %v<slot>.
-# is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map<Int,scalar> local.
+# is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map<Int,scalar> local, 6=Map<Int,Int> param.
 struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: Int }
 # A function: name range, up to 10 params (p0s/p0l..p9s/p9l + p0ty..p9ty), param
 # count `npar`, and the body token range [bstart, bend). 10 params covers the
@@ -1119,13 +1119,26 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                     #   Str         -> 1  (string param, i8*)
                     #   List<...>   -> 2  (List param, buffer pointer; `&` already
                     #                      dropped by the tokenizer)
+                    #   Map<Int,Int> -> map_param_ty() (Map buffer pointer)
                     #   StructName  -> 3+struct_index  (struct by hidden pointer)
                     #   else        -> 0  (int)
                     let tyt = toks[q + 1]
                     let isstr = kw3(src, tyt.nstart, tyt.nlen, 83, 116, 114)
                     let islist = kw4(src, tyt.nstart, tyt.nlen, 76, 105, 115, 116)
+                    let mut ismap = 0
+                    if kw3(src, tyt.nstart, tyt.nlen, 77, 97, 112) == 1 {
+                        let mlt = toks[q + 2]
+                        let mkey = toks[q + 3]
+                        let mcomma = toks[q + 4]
+                        let mval = toks[q + 5]
+                        let mgt = toks[q + 6]
+                        if mlt.kind == 18 and mcomma.kind == 25 and mgt.kind == 19 {
+                            if kw3(src, mkey.nstart, mkey.nlen, 73, 110, 116) == 1 and kw3(src, mval.nstart, mval.nlen, 73, 110, 116) == 1 { ismap = 1 }
+                        }
+                    }
                     let mut pty = isstr
-                    if islist == 1 { pty = 2 }
+                    if ismap == 1 { pty = map_param_ty() }
+                    else if islist == 1 { pty = 2 }
                     else if isstr == 0 {
                         let pst = struct_index_by_name(defs, src, tyt.nstart, tyt.nlen)
                         if pst >= 0 { pty = 3 + pst }
@@ -1141,9 +1154,9 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                     else if npar == 8 { p7ty = pty }
                     else if npar == 9 { p8ty = pty }
                     else { p9ty = pty }
-                    # advance past the type. List<...> spans to the closing `>`
+                    # advance past the type. List<...> and Map<...> span to the closing `>`
                     # (kind 19); a plain type is a single ident.
-                    if islist == 1 {
+                    if islist == 1 or ismap == 1 {
                         let mut tq = q + 2
                         let mut tg = true
                         while tg {
@@ -1462,6 +1475,28 @@ fn map_cap() -> Int { return 256 }
 fn map_value_base() -> Int { return map_cap() }
 fn map_lenidx() -> Int { return map_cap() * 2 }
 fn map_bufsz() -> Int { return map_lenidx() + 1 }
+fn map_param_ty() -> Int { return 0 - 3 }
+
+fn emit_map_base_ptr(slots: &List<Slot>, src: Str, qs: Int, ql: Int, counter: Int) -> Int {
+    let mslot = find_slot(slots, src, qs, ql)
+    let karr = isarr_of(slots, src, qs, ql)
+    emit_str("  %t")
+    pint(counter)
+    if karr == 6 {
+        emit_str(" = load i64*, i64** %v")
+        pint(mslot)
+    } else {
+        emit_str(" = getelementptr [")
+        pint(map_bufsz())
+        emit_str(" x i64], [")
+        pint(map_bufsz())
+        emit_str(" x i64]* %v")
+        pint(mslot)
+        emit_str(", i64 0, i64 0")
+    }
+    putchar(10)
+    return counter
+}
 
 # After a call that passed List-local slot `lslot` by pointer, copy the length the
 # callee wrote into buf[63] back into the local's length slot (%v<lslot+1>), so the
@@ -1868,7 +1903,13 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         if astop == q + 1 {
                             let want_ty = call_param_ty(fns, src, t.nstart, t.nlen, nargs)
                             let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
-                            if aarr == 2 {
+                            if want_ty == map_param_ty() and (aarr == 5 or aarr == 6) {
+                                emit_map_base_ptr(slots, src, argt.nstart, argt.nlen, cc)
+                                ekind = 3
+                                eval2 = cc
+                                cc = cc + 1
+                                handled = 1
+                            } else if aarr == 2 {
                                 let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
                                 # length index + buffer size depend on element kind:
                                 #   scalar List  -> length at [list_lenidx()], buffer [list_cap() x i64]
@@ -2108,23 +2149,13 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             # sty, which would otherwise be misread as a struct index.
             let karr = isarr_of(slots, src, t.nstart, t.nlen)
             let meth = toks[i + 2]
-            if karr == 5 {
-                let mslot = find_slot(slots, src, t.nstart, t.nlen)
+            if karr == 5 or karr == 6 {
                 let opn = toks[i + 3]
                 if opn.kind == 9 {
                     let close = paren_end(toks, i + 4)
                     if kw3(src, meth.nstart, meth.nlen, 108, 101, 110) == 1 {
                         let base = counter
-                        emit_str("  %t")
-                        pint(base)
-                        emit_str(" = getelementptr [")
-                        pint(map_bufsz())
-                        emit_str(" x i64], [")
-                        pint(map_bufsz())
-                        emit_str(" x i64]* %v")
-                        pint(mslot)
-                        emit_str(", i64 0, i64 0")
-                        putchar(10)
+                        emit_map_base_ptr(slots, src, t.nstart, t.nlen, base)
                         let dest = base + 1
                         emit_str("  %t")
                         pint(dest)
@@ -2138,16 +2169,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         let a0stop = arg_comma_end(toks, i + 4, close)
                         let key = gen_expr(toks, slots, fns, defs, src, i + 4, a0stop, counter)
                         let base = key.next
-                        emit_str("  %t")
-                        pint(base)
-                        emit_str(" = getelementptr [")
-                        pint(map_bufsz())
-                        emit_str(" x i64], [")
-                        pint(map_bufsz())
-                        emit_str(" x i64]* %v")
-                        pint(mslot)
-                        emit_str(", i64 0, i64 0")
-                        putchar(10)
+                        emit_map_base_ptr(slots, src, t.nstart, t.nlen, base)
                         let dest = base + 1
                         emit_str("  %t")
                         pint(dest)
@@ -2165,16 +2187,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         let defstop = arg_comma_end(toks, a0stop + 1, close)
                         let fallback = gen_expr(toks, slots, fns, defs, src, a0stop + 1, defstop, key.next)
                         let base = fallback.next
-                        emit_str("  %t")
-                        pint(base)
-                        emit_str(" = getelementptr [")
-                        pint(map_bufsz())
-                        emit_str(" x i64], [")
-                        pint(map_bufsz())
-                        emit_str(" x i64]* %v")
-                        pint(mslot)
-                        emit_str(", i64 0, i64 0")
-                        putchar(10)
+                        emit_map_base_ptr(slots, src, t.nstart, t.nlen, base)
                         let dest = base + 1
                         emit_str("  %t")
                         pint(dest)
@@ -2192,16 +2205,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         let a0stop = arg_comma_end(toks, i + 4, close)
                         let key = gen_expr(toks, slots, fns, defs, src, i + 4, a0stop, counter)
                         let base = key.next
-                        emit_str("  %t")
-                        pint(base)
-                        emit_str(" = getelementptr [")
-                        pint(map_bufsz())
-                        emit_str(" x i64], [")
-                        pint(map_bufsz())
-                        emit_str(" x i64]* %v")
-                        pint(mslot)
-                        emit_str(", i64 0, i64 0")
-                        putchar(10)
+                        emit_map_base_ptr(slots, src, t.nstart, t.nlen, base)
                         let dest = base + 1
                         emit_str("  %t")
                         pint(dest)
@@ -4151,7 +4155,13 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
                     let cname_arg = toks[vp]
                     let want_ty = call_param_ty(fns, src, cname_arg.nstart, cname_arg.nlen, nargs)
                     let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
-                    if aarr == 2 {
+                    if want_ty == map_param_ty() and (aarr == 5 or aarr == 6) {
+                        emit_map_base_ptr(slots, src, argt.nstart, argt.nlen, cc)
+                        ekind = 3
+                        eval2 = cc
+                        cc = cc + 1
+                        handled = 1
+                    } else if aarr == 2 {
                         let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
                         let mut alsty = sty_of(slots, src, argt.nstart, argt.nlen)
                         let pst = param_list_elem_sty(toks, defs, src, toks.len(), cname_arg.nstart, cname_arg.nlen, nargs)
@@ -4735,7 +4745,13 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                             if astop == q + 1 {
                                 let want_ty = call_param_ty(fns, src, cname.nstart, cname.nlen, nca)
                                 let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
-                                if aarr == 2 {
+                                if want_ty == map_param_ty() and (aarr == 5 or aarr == 6) {
+                                    emit_map_base_ptr(slots, src, argt.nstart, argt.nlen, cc)
+                                    ek = 3
+                                    ev = cc
+                                    cc = cc + 1
+                                    handled = 1
+                                } else if aarr == 2 {
                                     # local List arg passed by pointer (write len->buf[63] then base)
                                     let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
                                     let mut alsty = sty_of(slots, src, argt.nstart, argt.nlen)
@@ -5086,7 +5102,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
               # struct field write requires a SCALAR struct var (is_arr=0). A
               # List-of-structs (sty>=0, is_arr=2) must skip this and reach the
               # push handler in the final else.
-              if astiarr == 5 {
+              if astiarr == 5 or astiarr == 6 {
                 let meth = toks[i + 2]
                 if is_insert(src, meth.nstart, meth.nlen) == 1 {
                     let close = paren_end(toks, i + 4)
@@ -5096,18 +5112,8 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     let vstop = arg_comma_end(toks, a0stop + 1, close)
                     let value = gen_expr(toks, slots, fns, defs, src, a0stop + 1, vstop, counter)
                     counter = value.next
-                    let mslot = find_slot(slots, src, t.nstart, t.nlen)
-                    emit_str("  %t")
-                    pint(counter)
-                    emit_str(" = getelementptr [")
-                    pint(map_bufsz())
-                    emit_str(" x i64], [")
-                    pint(map_bufsz())
-                    emit_str(" x i64]* %v")
-                    pint(mslot)
-                    emit_str(", i64 0, i64 0")
-                    putchar(10)
                     let base = counter
+                    emit_map_base_ptr(slots, src, t.nstart, t.nlen, base)
                     counter = counter + 1
                     emit_str("  call void @__vais_map_int_int_insert(i64* %t")
                     pint(base)
@@ -5517,32 +5523,13 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             } else if nx.kind == 5 {
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
                 let stop = find_semi(toks, i + 2, end)
-                if isarr_of(slots, src, t.nstart, t.nlen) == 5 {
+                if isarr_of(slots, src, t.nstart, t.nlen) == 5 or isarr_of(slots, src, t.nstart, t.nlen) == 6 {
                     let rhs = toks[i + 2]
-                    if rhs.kind == 1 and stop == i + 3 and isarr_of(slots, src, rhs.nstart, rhs.nlen) == 5 {
-                        let rslot = find_slot(slots, src, rhs.nstart, rhs.nlen)
-                        emit_str("  %t")
-                        pint(counter)
-                        emit_str(" = getelementptr [")
-                        pint(map_bufsz())
-                        emit_str(" x i64], [")
-                        pint(map_bufsz())
-                        emit_str(" x i64]* %v")
-                        pint(slot)
-                        emit_str(", i64 0, i64 0")
-                        putchar(10)
+                    if rhs.kind == 1 and stop == i + 3 and (isarr_of(slots, src, rhs.nstart, rhs.nlen) == 5 or isarr_of(slots, src, rhs.nstart, rhs.nlen) == 6) {
+                        emit_map_base_ptr(slots, src, t.nstart, t.nlen, counter)
                         let dstp = counter
                         counter = counter + 1
-                        emit_str("  %t")
-                        pint(counter)
-                        emit_str(" = getelementptr [")
-                        pint(map_bufsz())
-                        emit_str(" x i64], [")
-                        pint(map_bufsz())
-                        emit_str(" x i64]* %v")
-                        pint(rslot)
-                        emit_str(", i64 0, i64 0")
-                        putchar(10)
+                        emit_map_base_ptr(slots, src, rhs.nstart, rhs.nlen, counter)
                         let srcp = counter
                         counter = counter + 1
                         emit_str("  call void @__vais_map_int_int_copy(i64* %t")
@@ -6541,7 +6528,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
     else { emit_str("define i64 @") }
     emit_name(src, f.nstart, f.nlen)
     emit_str("(")
-    # incoming SSA params: %a0, %a1, ...  (Str params are i8*, others i64)
+    # incoming SSA params: %a0, %a1, ...  (Str params are i8*, List/Map/Struct are i64*, others i64)
     let mut pi = 0
     while pi < f.npar {
         if pi > 0 { emit_str(", ") }
@@ -6549,8 +6536,8 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         if pi == 1 { pty = f.p1ty } else if pi == 2 { pty = f.p2ty } else if pi == 3 { pty = f.p3ty }
         else if pi == 4 { pty = f.p4ty } else if pi == 5 { pty = f.p5ty } else if pi == 6 { pty = f.p6ty } else if pi == 7 { pty = f.p7ty }
         else if pi == 8 { pty = f.p8ty } else if pi == 9 { pty = f.p9ty }
-        # Str -> i8*, List/Struct -> i64* (buffer pointer), else i64.
-        if pty == 1 { emit_str("i8* %a") } else if pty == 2 { emit_str("i64* %a") } else if pty >= 3 { emit_str("i64* %a") } else { emit_str("i64 %a") }
+        # Str -> i8*, List/Map/Struct -> i64* (buffer pointer), else i64.
+        if pty == 1 { emit_str("i8* %a") } else if pty == 2 or pty == map_param_ty() { emit_str("i64* %a") } else if pty >= 3 { emit_str("i64* %a") } else { emit_str("i64 %a") }
         pint(pi)
         pi = pi + 1
     }
@@ -6603,6 +6590,19 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
             let mut pest = param_list_elem_sty(toks, defs, src, n, f.nstart, f.nlen, s2)
             if pest == 0 - 1 { pest = list_elem_sty(toks, defs, src, f.bstart, f.bend, pns, pnl) }
             slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 4, alen: 0 , sty: pest })
+            emit_str("  %v")
+            pint(s2)
+            emit_str(" = alloca i64*")
+            putchar(10)
+            emit_str("  store i64* %a")
+            pint(s2)
+            emit_str(", i64** %v")
+            pint(s2)
+            putchar(10)
+        } else if pty == map_param_ty() {
+            # Map<Int,Int> param: is_arr=6 (Map-by-pointer). The callee mutates
+            # the caller-visible map buffer directly.
+            slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 6, alen: 0 , sty: 0 - 1 })
             emit_str("  %v")
             pint(s2)
             emit_str(" = alloca i64*")

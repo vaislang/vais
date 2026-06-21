@@ -58,7 +58,7 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<Int>` | Verified |
 | `List<Str>` | Partial; verified for local `push`, local index read, and host process arguments |
 | `List<T>` | Partial |
-| `Map<Int,Int>` | Verified for local values, local assignment copy, and `get_opt` |
+| `Map<Int,Int>` | Verified for local values, local assignment copy, parameter reference/mutation, and `get_opt` |
 | `Map<Int,Bool>` | Verified for local values and local assignment copy; `get_opt` is not verified |
 | `Map<Int,Char>` | Verified for local values and local assignment copy; `get_opt` is not verified |
 | `Map<K,V>` | Design-specified beyond the verified concrete local Map slices; not verified |
@@ -87,6 +87,7 @@ The verified Map surface is deliberately small:
 | API | Verified behavior |
 | --- | --- |
 | `let m: Map<Int,Int> = {}` / `let m: Map<Int,Bool> = {}` / `let m: Map<Int,Char> = {}` | Construct an empty local map |
+| `fn f(m: Map<Int,Int>) -> Int` | Pass a Map by reference so the callee can read or mutate the caller-visible map |
 | `target = source` | Copy one local map into another local map with the same concrete type |
 | `m.insert(key, value)` | Insert or replace a value by integer key |
 | `m.get(key, default)` | Return the value for `key`, or `default` when absent |
@@ -96,10 +97,11 @@ The verified Map surface is deliberately small:
 
 This slice is currently available through the full self-host compiler path and
 `scripts/vaisc --engine direct`.
-The slice does not include generic key/value lowering, function parameters,
-return values, iteration, deletion, `Result`, hashing controls, or map literals
-with entries. Unverified Map function parameters, return values, and non-local
-assignment sources are rejected by front diagnostics.
+The slice does not include generic key/value lowering, non-`Map<Int,Int>`
+function parameters, return values, iteration, deletion, `Result`, hashing
+controls, or map literals with entries. Unverified non-`Map<Int,Int>` Map
+function parameters, return values, and non-local assignment sources are
+rejected by front diagnostics.
 Future Map ABI and generic expansion rules are design-specified in
 `docs/design/MAP_ABI.md`; they are not verified prelude APIs until compiler
 gates cover them.

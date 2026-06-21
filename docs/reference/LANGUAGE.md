@@ -124,7 +124,7 @@ Verified release surface:
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
-| `Map<Int,Int>` | Local `{}`, assignment copy, `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Int>` | Local `{}`, assignment copy, parameter reference/mutation, `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Map<Int,Bool>` | Local `{}`, assignment copy, `insert`, `get(key, default)`, `contains`, and `len` |
 | `Map<Int,Char>` | Local `{}`, assignment copy, `insert`, `get(key, default)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
@@ -199,7 +199,7 @@ simple Int-field struct
 locals, struct parameter/return helpers, and `List<Int>` local operations plus
 parameter reference and return value ABI, local `Map<Int,Int>`,
 `Map<Int,Bool>`, and `Map<Int,Char>` construction and lookup/update helpers,
-plus `List<Struct>` construction with
+`Map<Int,Int>` parameter reference/mutation, plus `List<Struct>` construction with
 `[]`, `list()`, list literals, list/element assignment, `push`, `len`, index,
 field read/write, parameter reference, and return value ABI.
 
@@ -455,7 +455,9 @@ release-surface claims yet.
 local-value slices in the full self-host compiler path and native direct engine.
 All three support `{}`, assignment copy, `insert`, `get(key, default)`,
 `contains`, and `len`.
-`Map<Int,Int>` also supports `get_opt(key) -> Option<Int>`.
+`Map<Int,Int>` also supports `get_opt(key) -> Option<Int>` and function
+parameters by reference; a callee can mutate the caller-visible Map with
+`insert`.
 
 Verified example:
 
@@ -472,6 +474,19 @@ fn main() -> Int {
     let missing = scores.get(5, 0 - 1)
     let maybe = match scores.get_opt(9) { Some(v) => v, None => 0 }
     return found + missing + maybe + scores.contains(4) + scores.contains(5) + scores.len()
+}
+```
+
+```vais
+fn put(scores: Map<Int,Int>, key: Int, value: Int) -> Int {
+    scores.insert(key, value)
+    return scores.len()
+}
+
+fn main() -> Int {
+    let scores: Map<Int,Int> = {}
+    let n = put(scores, 4, 40)
+    return scores.get(4, 0) + n + scores.contains(4)
 }
 ```
 
@@ -506,8 +521,9 @@ fn main() -> Int {
 
 Verified behavior:
 
-- Only local `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` values are
-  supported.
+- Local `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` values are
+  supported. `Map<Int,Int>` can also be passed as a function parameter by
+  reference.
 - `{}` constructs an empty map when the local type is explicitly one of the
   verified concrete Map types.
 - `target = source` copies one local Map into another local with the same
@@ -524,10 +540,10 @@ Not included in the current Map slice: `Map<Int,Bool>.get_opt`,
 `Map<Int,Char>.get_opt`,
 generic key/value lowering, deletion, iteration, entry literals,
 broader Map APIs that return `Option`, `Result`,
-custom hashing, or public ABI claims for Map parameters and return values.
-Unverified Map parameters, return values, and non-local assignment sources are
-rejected by front diagnostics instead of being treated as part of the release
-surface.
+custom hashing, non-`Map<Int,Int>` Map parameters, or public ABI claims for Map
+return values. Unverified non-`Map<Int,Int>` Map parameters, return values, and
+non-local assignment sources are rejected by front diagnostics instead of being
+treated as part of the release surface.
 The future Map ABI and generic expansion contract is specified in
 `docs/design/MAP_ABI.md`, but no broader Map behavior is verified until it has
 compiler gates.
