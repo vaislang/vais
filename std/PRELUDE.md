@@ -95,8 +95,8 @@ This slice is currently available through the full self-host compiler path and
 `scripts/vaisc --engine direct`.
 The slice does not include generic key/value lowering, function parameters,
 return values, assignment, iteration, deletion, `Result`, hashing controls, or
-map literals with entries. Unverified Map function parameters and return values
-are rejected by front diagnostics.
+map literals with entries. Unverified Map assignment, function parameters, and
+return values are rejected by front diagnostics.
 
 ## Types And Conversion
 

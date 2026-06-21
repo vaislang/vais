@@ -50,6 +50,8 @@
   verified `Option<Int>` and `Result<Int,Int>` slices.
 - Added explicit front diagnostics for unverified `Map<Int,Int>` function
   parameters and return values, keeping Map ABI claims behind future gates.
+- Added explicit front and direct diagnostics for unverified `Map<Int,Int>`
+  value assignment, keeping Map storage and ABI behavior behind future gates.
 
 ## v0.3.1 - 2026-06-20
 

@@ -482,8 +482,8 @@ Verified behavior:
 Not included in the current Map slice: generic key/value lowering, assignment,
 deletion, iteration, entry literals, broader Map APIs that return `Option`,
 `Result`, custom hashing, or public ABI claims for Map parameters and return
-values. Unverified Map parameters and return values are rejected by front
-diagnostics instead of being treated as part of the release surface.
+values. Unverified Map assignment, parameters, and return values are rejected by
+front diagnostics instead of being treated as part of the release surface.
 
 ## Option And Result
 

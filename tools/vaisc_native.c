@@ -2104,37 +2104,72 @@ static int check_fn_contract_line(
     return issue;
 }
 
-static int front_supported_map_local_line(const char *line) {
+static char *front_supported_map_local_name(const char *line) {
     const char *s = skip_ws(line);
-    if (!starts_with(s, "let") || is_ident_continue(s[3])) return 0;
+    if (!starts_with(s, "let") || is_ident_continue(s[3])) return NULL;
     s = skip_ws(s + 3);
     if (starts_with(s, "mut") && !is_ident_continue(s[3])) {
         s = skip_ws(s + 3);
     }
-    if (!is_ident_start(*s)) return 0;
+    if (!is_ident_start(*s)) return NULL;
+    const char *name_start = s;
     while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
     s = skip_ws(s);
-    if (*s != ':') return 0;
+    if (*s != ':') return NULL;
     const char *q = skip_ws(s + 1);
-    if (!starts_with(q, "Map") || is_ident_continue(q[3])) return 0;
+    if (!starts_with(q, "Map") || is_ident_continue(q[3])) return NULL;
     q = skip_ws(q + 3);
-    if (*q != '<') return 0;
+    if (*q != '<') return NULL;
     q = skip_ws(q + 1);
-    if (strncmp(q, "Int", 3) != 0 || is_ident_continue(q[3])) return 0;
+    if (strncmp(q, "Int", 3) != 0 || is_ident_continue(q[3])) return NULL;
     q = skip_ws(q + 3);
-    if (*q != ',') return 0;
+    if (*q != ',') return NULL;
     q = skip_ws(q + 1);
-    if (strncmp(q, "Int", 3) != 0 || is_ident_continue(q[3])) return 0;
+    if (strncmp(q, "Int", 3) != 0 || is_ident_continue(q[3])) return NULL;
     q = skip_ws(q + 3);
-    if (*q != '>') return 0;
+    if (*q != '>') return NULL;
     const char *eq = strchr(q, '=');
-    if (eq == NULL) return 0;
+    if (eq == NULL) return NULL;
     const char *rhs = skip_ws(eq + 1);
-    if (*rhs != '{') return 0;
+    if (*rhs != '{') return NULL;
     rhs = skip_ws(rhs + 1);
-    if (*rhs != '}') return 0;
+    if (*rhs != '}') return NULL;
     rhs = skip_ws(rhs + 1);
-    return *rhs == '\0' || *rhs == ';';
+    if (*rhs != '\0' && *rhs != ';') return NULL;
+    return substr_copy(name_start, (size_t)(name_end - name_start));
+}
+
+static int front_supported_map_local_line(const char *line) {
+    char *name = front_supported_map_local_name(line);
+    int ok = name != NULL;
+    free(name);
+    return ok;
+}
+
+static int front_name_in_list(char **names, int count, const char *name) {
+    for (int i = 0; i < count; i++) {
+        if (strcmp(names[i], name) == 0) return 1;
+    }
+    return 0;
+}
+
+static char *front_map_assignment_name(const char *line, char **map_locals, int map_local_count) {
+    const char *s = skip_ws(line);
+    if (starts_with(s, "let") && !is_ident_continue(s[3])) return NULL;
+    if (!is_ident_start(*s)) return NULL;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    const char *op = skip_ws(s);
+    if (*op != '=' || op[1] == '=') {
+        free(name);
+        return NULL;
+    }
+    if (front_name_in_list(map_locals, map_local_count, name)) return name;
+    free(name);
+    return NULL;
 }
 
 static char *front_probe_line(const char *line) {
@@ -2240,6 +2275,8 @@ static int check_front_contract_text(const char *text, const char *path) {
     int issues = 0;
     int has_main = 0;
     int has_bad_main = 0;
+    char *map_locals[128] = {0};
+    int map_local_count = 0;
     for (size_t i = 0; i < lines.len; i++) {
         const char *line = lines.items[i];
         char *probe = front_probe_line(line);
@@ -2251,7 +2288,15 @@ static int check_front_contract_text(const char *text, const char *path) {
         const char *module_kw = NULL;
         if (starts_with(trim, "module") && !is_ident_continue(trim[6])) module_kw = "module";
         else if (starts_with(trim, "package") && !is_ident_continue(trim[7])) module_kw = "package";
-        if (module_kw != NULL) {
+        char *map_assignment = front_map_assignment_name(probe, map_locals, map_local_count);
+        if (map_assignment != NULL) {
+            report_issue(path, line_no, find_col(line, map_assignment), line,
+                "Map assignment is not verified yet",
+                "mutate a local Map<Int,Int> with insert/get/get_opt/contains/len; Map value assignment needs a storage and ABI specification before promotion.",
+                NULL);
+            issues++;
+            free(map_assignment);
+        } else if (module_kw != NULL) {
             report_issue(path, line_no, find_col(probe, module_kw), line,
                 "module and package declarations are not implemented yet",
                 "omit the declaration; module names are derived from file paths in the first import slice.",
@@ -2339,6 +2384,14 @@ static int check_front_contract_text(const char *text, const char *path) {
                 NULL);
             issues++;
         }
+        char *map_local = front_supported_map_local_name(probe);
+        if (map_local != NULL) {
+            if (map_local_count < 128) {
+                map_locals[map_local_count++] = map_local;
+            } else {
+                free(map_local);
+            }
+        }
         free(probe);
     }
     if (has_bad_main && !has_main) {
@@ -2354,6 +2407,7 @@ static int check_front_contract_text(const char *text, const char *path) {
             NULL);
         issues++;
     }
+    for (int m = 0; m < map_local_count; m++) free(map_locals[m]);
     lines_free(&lines);
     return issues == 0 ? 0 : 1;
 }
@@ -7562,6 +7616,16 @@ static int direct_lower_line(
         }
         const char *target_type = direct_assignment_target_type(lhs, locals, structs, struct_count);
         int allow_list_assignment = direct_is_list_type(target_type);
+        if (direct_is_map_int_int_type(target_type)) {
+            report_issue(path, line_no, find_col(line, lhs), line,
+                "direct native emitter Map assignment is not verified yet",
+                "mutate a local Map<Int,Int> with `insert`; Map value assignment needs a storage and ABI specification before promotion.",
+                "scores.insert(key, value)");
+            free(lhs);
+            free(expr);
+            free(stripped);
+            return 1;
+        }
         if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, allow_list_assignment ? target_type : NULL)) {
             free(lhs);
             free(expr);
