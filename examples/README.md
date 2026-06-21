@@ -76,7 +76,8 @@ mutation by reference, `examples/e100_map_char_param.vais` for
 `examples/e101_map_return.vais` for a `Map<Int,Int>` return value initializing
 a local, `examples/e102_map_bool_return.vais` for a `Map<Int,Bool>` return
 value initializing a local, `examples/e103_map_char_return.vais` for a
-`Map<Int,Char>` return value initializing a local,
+`Map<Int,Char>` return value initializing a local, `examples/e104_map_remove.vais`
+for concrete Map key removal,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and

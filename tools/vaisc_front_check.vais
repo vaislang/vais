@@ -515,6 +515,33 @@ fn write_map_char_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_remove_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let scores: ", map_int_spaced()), " = {}"))
+    append_line(out, str_concat(str_concat("    let flags: ", map_bool_spaced()), " = {}"))
+    append_line(out, str_concat(str_concat("    let letters: ", map_char_spaced()), " = {}"))
+    append_line(out, "    scores.insert(4, 40)")
+    append_line(out, "    scores.insert(9, 2)")
+    append_line(out, "    scores.remove(9)")
+    append_line(out, "    flags.insert(4, true)")
+    append_line(out, "    flags.insert(9, false)")
+    append_line(out, "    flags.remove(9)")
+    append_line(out, "    letters.insert(4, 'A')")
+    append_line(out, "    letters.insert(9, 'B')")
+    append_line(out, "    letters.remove(9)")
+    append_line(out, "    if scores.get(4, 0) == 40 and not scores.contains(9) and scores.len() == 1 {")
+    append_line(out, "        if flags.get(4, false) and not flags.contains(9) and flags.len() == 1 {")
+    append_line(out, "            if letters.get(4, 'Z') == 'A' and not letters.contains(9) and letters.len() == 1 {")
+    append_line(out, "                return 42")
+    append_line(out, "            }")
+    append_line(out, "        }")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_option_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn find(x: Int) -> Option<Int> {")
@@ -675,6 +702,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_option") == 1 { return write_map_option_accept(path) }
     if str_eq(name, "map_bool") == 1 { return write_map_bool_accept(path) }
     if str_eq(name, "map_char") == 1 { return write_map_char_accept(path) }
+    if str_eq(name, "map_remove") == 1 { return write_map_remove_accept(path) }
     if str_eq(name, "map_param") == 1 { return write_map_param_accept(path) }
     if str_eq(name, "map_bool_param") == 1 { return write_map_bool_param_accept(path) }
     if str_eq(name, "map_char_param") == 1 { return write_map_char_param_accept(path) }
@@ -1402,6 +1430,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "map_assignment", "accepts local Map<Int,Int> assignment copy", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool", label_map_bool_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char", label_map_char_accept(), 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_remove", "accepts concrete Map remove slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_param", "accepts Map<Int,Int> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool_param", "accepts Map<Int,Bool> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char_param", "accepts Map<Int,Char> parameter mutation slice", 42)

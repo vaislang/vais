@@ -91,6 +91,9 @@
   initialization through the full compiler path and native direct engine, with
   `examples/e103_map_char_return.vais` added to the release corpus.
   Generic Map returns remain gated.
+- Promoted `remove(key)` for the concrete `Map<Int,Int>`, `Map<Int,Bool>`, and
+  `Map<Int,Char>` slices through the full compiler path and native direct
+  engine, with `examples/e104_map_remove.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

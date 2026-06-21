@@ -6467,8 +6467,8 @@ static int direct_check_expr_inner(
                     continue;
                 }
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter supports Map insert, get, get_opt, contains, and len",
-                    "write `m.insert(key, value)`, `m.get(key, default)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char>; get_opt is currently only verified for Map<Int,Int>.",
+                    "direct native emitter supports Map insert/remove statements and get/get_opt/contains/len expressions",
+                    "write `m.insert(key, value)`, `m.remove(key)`, `m.get(key, default)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char>; get_opt is currently only verified for Map<Int,Int>.",
                     NULL);
                 free(field);
                 free(name);
@@ -8015,10 +8015,12 @@ static int direct_lower_line(
     if (direct_parse_method_statement(s, &method_base, &method_name, &method_args)) {
         const char *base_type = direct_names_type(locals, method_base);
         if (direct_is_map_type(base_type)) {
-            if (strcmp(method_name, "insert") != 0) {
+            int is_insert = strcmp(method_name, "insert") == 0;
+            int is_remove = strcmp(method_name, "remove") == 0;
+            if (!is_insert && !is_remove) {
                 report_issue(path, line_no, find_col(line, method_base), line,
-                    "direct native emitter supports Map.insert statements only",
-                    "write `m.insert(key, value)` on a local Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char>.",
+                    "direct native emitter supports Map.insert and Map.remove statements only",
+                    "write `m.insert(key, value)` or `m.remove(key)` on a local Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char>.",
                     NULL);
                 free(method_base);
                 free(method_name);
@@ -8028,11 +8030,13 @@ static int direct_lower_line(
             }
             char *args[16] = {0};
             int argc = split_top_level_commas_c(method_args, args, 16);
-            if (argc != 2 || args[0] == NULL || args[1] == NULL ||
-                strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+            int expected_argc = is_insert ? 2 : 1;
+            int bad_args = argc != expected_argc || args[0] == NULL || strlen(skip_ws(args[0])) == 0;
+            if (is_insert && (args[1] == NULL || strlen(skip_ws(args[1])) == 0)) bad_args = 1;
+            if (bad_args) {
                 report_issue(path, line_no, find_col(line, method_name), line,
-                    "direct native emitter Map.insert expects key and value arguments",
-                    "write `m.insert(key, value)`.",
+                    is_insert ? "direct native emitter Map.insert expects key and value arguments" : "direct native emitter Map.remove expects one key argument",
+                    is_insert ? "write `m.insert(key, value)`." : "write `m.remove(key)`.",
                     NULL);
                 for (int k = 0; k < 16; k++) free(args[k]);
                 free(method_base);
@@ -8054,8 +8058,8 @@ static int direct_lower_line(
                 const char *expected_arg_type = a == 0 ? "Int" : direct_map_value_type(base_type);
                 if (!direct_map_arg_type_compatible(expected_arg_type, arg_type)) {
                     report_issue(path, line_no, find_col(line, method_name), line,
-                        "direct native emitter Map.insert arguments must match key/value types",
-                        "use an Int key and a value matching the Map's value type.",
+                        is_insert ? "direct native emitter Map.insert arguments must match key/value types" : "direct native emitter Map.remove key must be Int-compatible",
+                        is_insert ? "use an Int key and a value matching the Map's value type." : "use an Int key for Map.remove.",
                         NULL);
                     free(arg_type);
                     for (int k = 0; k < 16; k++) free(args[k]);
@@ -8071,9 +8075,9 @@ static int direct_lower_line(
             sb_init(&prelude);
             direct_current_prelude = &prelude;
             char *rewritten_key = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
-            char *rewritten_value = rewritten_key == NULL ? NULL : direct_rewrite_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count);
+            char *rewritten_value = (is_insert && rewritten_key != NULL) ? direct_rewrite_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count) : NULL;
             direct_current_prelude = NULL;
-            if (rewritten_key == NULL || rewritten_value == NULL) {
+            if (rewritten_key == NULL || (is_insert && rewritten_value == NULL)) {
                 free(prelude.data);
                 free(rewritten_key);
                 free(rewritten_value);
@@ -8085,14 +8089,16 @@ static int direct_lower_line(
                 return 1;
             }
             char *c_key = direct_translate_expr(rewritten_key);
-            char *c_value = direct_translate_expr(rewritten_value);
+            char *c_value = is_insert ? direct_translate_expr(rewritten_value) : NULL;
             sb_append(out, prelude.data);
-            sb_append(out, "__vais_map_int_int_insert(");
+            sb_append(out, is_insert ? "__vais_map_int_int_insert(" : "__vais_map_int_int_remove(");
             direct_append_map_ptr_ref(out, method_base, direct_names_is_ref(locals, method_base));
             sb_append(out, ", ");
             sb_append(out, c_key);
-            sb_append(out, ", ");
-            sb_append(out, c_value);
+            if (is_insert) {
+                sb_append(out, ", ");
+                sb_append(out, c_value);
+            }
             sb_append(out, ");\n");
             free(prelude.data);
             free(c_key);
@@ -8108,8 +8114,8 @@ static int direct_lower_line(
         }
         if (!direct_is_list_type(base_type) || strcmp(method_name, "push") != 0) {
             report_issue(path, line_no, find_col(line, method_base), line,
-                "direct native emitter supports List.push and Map.insert statements only",
-                "write `xs.push(value)` on a local list or `m.insert(key, value)` on a local Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char>.",
+                "direct native emitter supports List.push and Map.insert/Map.remove statements only",
+                "write `xs.push(value)`, `m.insert(key, value)`, or `m.remove(key)`.",
                 NULL);
             free(method_base);
             free(method_name);
@@ -8484,6 +8490,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "typedef struct { long keys[256]; long values[256]; unsigned char present[256]; long len; } DirectMapIntInt;\n");
     sb_append(&out, "static long __vais_map_int_int_find(DirectMapIntInt *m, long key) { for (long i = 0; i < m->len; i++) if (m->present[i] && m->keys[i] == key) return i; return -1; }\n");
     sb_append(&out, "static void __vais_map_int_int_insert(DirectMapIntInt *m, long key, long value) { long i = __vais_map_int_int_find(m, key); if (i >= 0) { m->values[i] = value; return; } if (m->len >= 256) __builtin_trap(); i = m->len++; m->present[i] = 1; m->keys[i] = key; m->values[i] = value; }\n");
+    sb_append(&out, "static void __vais_map_int_int_remove(DirectMapIntInt *m, long key) { long i = __vais_map_int_int_find(m, key); if (i < 0) return; long last = --m->len; if (i != last) { m->present[i] = m->present[last]; m->keys[i] = m->keys[last]; m->values[i] = m->values[last]; } m->present[last] = 0; }\n");
     sb_append(&out, "static void __vais_map_int_int_copy(DirectMapIntInt *dst, DirectMapIntInt *src) { *dst = *src; }\n");
     sb_append(&out, "static long __vais_map_int_int_get(DirectMapIntInt *m, long key, long fallback) { long i = __vais_map_int_int_find(m, key); return i >= 0 ? m->values[i] : fallback; }\n");
     sb_append(&out, "static long __vais_map_int_int_get_opt(DirectMapIntInt *m, long key) { long i = __vais_map_int_int_find(m, key); return i >= 0 ? (m->values[i] * 2) : 1; }\n");

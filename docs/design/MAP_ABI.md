@@ -2,9 +2,9 @@
 
 Status: design contract for future gates. The verified Map surface today is
 local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
-`get(key, default)`, `get_opt(key)`, `contains`, `len`, and parameter
+`remove`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and parameter
 reference/mutation, plus `Map<Int,Bool>` and `Map<Int,Char>` with local
-values, assignment copy, `insert`, `get(key, default)`, `contains`, `len`,
+values, assignment copy, `insert`, `remove`, `get(key, default)`, `contains`, `len`,
 parameter reference/mutation, and return-value local initialization. These
 slices are verified in the full self-host compiler path and native direct
 engine.
@@ -31,10 +31,12 @@ fn main() -> Int {
     let flags: Map<Int,Bool> = {}
     let letters: Map<Int,Char> = {}
     scores.insert(4, 40)
+    scores.insert(9, 2)
+    scores.remove(9)
     flags.insert(4, true)
     letters.insert(4, 'A')
     if flags.get(4, false) and letters.get(4, 'Z') == 'A' {
-        return scores.get(4, 0) + scores.contains(4) + scores.len()
+        return scores.get(4, 0) + scores.len() + scores.contains(9) + 1
     }
     return 0
 }
@@ -119,6 +121,8 @@ Verified behavior:
 - `target = source` copies one local Map into another local with the same
   concrete Map type without aliasing.
 - `insert(key, value)` inserts or replaces the key.
+- `remove(key)` removes the key if present and leaves the map unchanged if the
+  key is missing.
 - `get(key, default)` returns the stored value or the default.
 - `get_opt(key)` returns `Some(value)` or `None` for the local
   `Map<Int,Int>` and `Option<Int>` slice.
@@ -130,8 +134,8 @@ Verified behavior:
   returned contents into caller-owned local storage when initializing an
   explicitly annotated local.
 
-Not verified yet: generic key/value pairs, entry literals, deletion, iteration,
-custom hashing, and Map APIs that require broader `Option<T>` or `Result<T,E>`
+Not verified yet: generic key/value pairs, entry literals, iteration, custom
+hashing, and Map APIs that require broader `Option<T>` or `Result<T,E>`
 support.
 `Map<Int,Bool>.get_opt` and `Map<Int,Char>.get_opt` are intentionally excluded
 until their Option payload slices are verified.
@@ -141,7 +145,7 @@ until their Option payload slices are verified.
 Future Map ABI gates must use these semantics:
 
 - A local Map variable owns its storage.
-- `insert` mutates the receiver Map.
+- `insert` and `remove` mutate the receiver Map.
 - `a = b` copies the contents of `b` into `a`; it does not make `a` and `b`
   aliases.
 - Passing a Map to a function passes a mutable collection reference, matching
@@ -166,7 +170,7 @@ For a concrete `Map<K,V>`:
 - Return ABI uses caller-owned output storage, either as an explicit hidden
   out-parameter in LLVM lowering or an equivalent direct-engine strategy.
 - Assignment uses a concrete copy helper.
-- `insert`, `get`, `get_opt`, `contains`, and `len` call helpers specialized for
+- `insert`, `remove`, `get`, `get_opt`, `contains`, and `len` call helpers specialized for
   the concrete key/value pair.
 
 The current full self-host path uses a fixed-capacity integer buffer for local
@@ -205,6 +209,7 @@ The next promoted method set should remain the current small API:
 | Method | Future concrete signature |
 | --- | --- |
 | `m.insert(key, value)` | `Map<K,V>, K, V -> Unit` |
+| `m.remove(key)` | `Map<K,V>, K -> Unit` |
 | `m.get(key, default)` | `Map<K,V>, K, V -> V` |
 | `m.get_opt(key)` | `Map<K,V>, K -> Option<V>` |
 | `m.contains(key)` | `Map<K,V>, K -> Bool` |

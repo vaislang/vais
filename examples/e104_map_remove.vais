@@ -1,0 +1,27 @@
+# expect: 42
+
+fn main() -> Int {
+    let scores: Map<Int,Int> = {}
+    scores.insert(4, 40)
+    scores.insert(9, 2)
+    scores.remove(9)
+
+    let flags: Map<Int,Bool> = {}
+    flags.insert(4, true)
+    flags.insert(9, false)
+    flags.remove(9)
+
+    let letters: Map<Int,Char> = {}
+    letters.insert(4, 'A')
+    letters.insert(9, 'B')
+    letters.remove(9)
+
+    if scores.get(4, 0) == 40 and not scores.contains(9) and scores.len() == 1 {
+        if flags.get(4, false) and not flags.contains(9) and flags.len() == 1 {
+            if letters.get(4, 'Z') == 'A' and not letters.contains(9) and letters.len() == 1 {
+                return 42
+            }
+        }
+    }
+    return 0
+}

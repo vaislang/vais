@@ -124,9 +124,9 @@ Verified release surface:
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
-| `Map<Int,Int>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `get(key, default)`, `contains`, and `len` |
-| `Map<Int,Char>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `get(key, default)`, `contains`, and `len` |
+| `Map<Int,Int>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `contains`, and `len` |
+| `Map<Int,Char>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, and local field write |
@@ -455,11 +455,11 @@ release-surface claims yet.
 `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` have verified
 local-value slices in the full self-host compiler path and native direct engine.
 All three support `{}`, assignment copy, `insert`, `get(key, default)`,
-`contains`, and `len`.
+`remove`, `contains`, and `len`.
 `Map<Int,Int>` also supports `get_opt(key) -> Option<Int>`. All three concrete
 Map types support function return values that initialize an explicitly
 annotated local, and all three support function parameters by reference; a
-callee can mutate the caller-visible Map with `insert`.
+callee can mutate the caller-visible Map with `insert` or `remove`.
 
 Verified example:
 
@@ -469,6 +469,7 @@ fn main() -> Int {
     scores.insert(4, 38)
     scores.insert(4, 40)
     scores.insert(9, 2)
+    scores.remove(5)
     let copy: Map<Int,Int> = {}
     copy = scores
     scores.insert(4, 1)
@@ -623,6 +624,8 @@ Verified behavior:
 - `target = source` copies one local Map into another local with the same
   concrete Map type; later mutation of either map does not alias the other.
 - `insert(key, value)` inserts or replaces a value.
+- `remove(key)` removes a present key if it exists; removing a missing key is a
+  no-op.
 - `get(key, default)` returns `default` when the key is absent.
 - `get_opt(key)` is verified only for `Map<Int,Int>` and returns `Some(value)`
   when the key is present and `None` when absent, as covered by
@@ -632,7 +635,7 @@ Verified behavior:
 
 Not included in the current Map slice: `Map<Int,Bool>.get_opt`,
 `Map<Int,Char>.get_opt`,
-generic key/value lowering, deletion, iteration, entry literals,
+generic key/value lowering, iteration, entry literals,
 broader Map APIs that return `Option`, `Result`, custom hashing, or public ABI
 claims for generic Map return values. Unverified generic Map parameters,
 unverified return values, and
