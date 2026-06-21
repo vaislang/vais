@@ -69,16 +69,22 @@
   payload slice is verified.
 - Promoted `Map<Int,Int>` function parameters by reference through the full
   compiler path and native direct engine, with `examples/e98_map_param.vais`
-  added to the release corpus. Map returns and broader Map parameters
-  remain behind future ABI gates.
+  added to the release corpus. Non-`Map<Int,Int>` returns and broader Map
+  parameters remain behind future ABI gates.
 - Promoted `Map<Int,Bool>` function parameters by reference through the full
   compiler path and native direct engine, with
-  `examples/e99_map_bool_param.vais` added to the release corpus. Map returns
-  and broader Map parameters remain behind future ABI gates.
+  `examples/e99_map_bool_param.vais` added to the release corpus.
+  Non-`Map<Int,Int>` returns and broader Map parameters remain behind future
+  ABI gates.
 - Promoted `Map<Int,Char>` function parameters by reference through the full
   compiler path and native direct engine, with
-  `examples/e100_map_char_param.vais` added to the release corpus. Map returns
-  and generic Map parameters remain behind future ABI gates.
+  `examples/e100_map_char_param.vais` added to the release corpus.
+  Non-`Map<Int,Int>` returns and generic Map parameters remain behind future
+  ABI gates.
+- Promoted `Map<Int,Int>` return values for explicitly annotated local
+  initialization through the full compiler path and native direct engine, with
+  `examples/e101_map_return.vais` added to the release corpus.
+  `Map<Int,Bool>`, `Map<Int,Char>`, and generic Map returns remain gated.
 
 ## v0.3.1 - 2026-06-20
 

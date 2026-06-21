@@ -343,6 +343,25 @@ fn write_map_char_param(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_int_return(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn make_scores() -> Map<Int, Int> {")
+    append_line(out, "    let scores: Map<Int, Int> = {}")
+    append_line(out, "    scores.insert(4, 40)")
+    append_line(out, "    scores.insert(9, 2)")
+    append_line(out, "    return scores")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let scores: Map<Int, Int> = make_scores()")
+    append_line(out, "    if scores.contains(4) and scores.contains(9) {")
+    append_line(out, "        return scores.get(4, 0) + scores.get(9, 0)")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_list_struct_local(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "struct Box {")
@@ -745,6 +764,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "list_int") == 1 { wrote = write_list_int(src) }
     else if str_contains(name, "str_slice") == 1 { wrote = write_str_slice(src) }
     else if str_contains(name, "char_literal") == 1 { wrote = write_char_literal(src) }
+    else if str_contains(name, "map_int_return") == 1 { wrote = write_map_int_return(src) }
     else if str_contains(name, "map_char_param") == 1 { wrote = write_map_char_param(src) }
     else if str_contains(name, "map_bool_param") == 1 { wrote = write_map_bool_param(src) }
     else if str_contains(name, "map_int_param") == 1 { wrote = write_map_int_param(src) }
@@ -819,6 +839,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "define i64 @mark(ptr") and str_contains(text, "__vais_map_int_int_insert") and str_contains(text, "call i64 @mark(ptr")
     } else if shape == 28 {
         ok = str_contains(text, "define i64 @stamp(ptr") and str_contains(text, "__vais_map_int_int_insert") and str_contains(text, "call i64 @stamp(ptr")
+    } else if shape == 29 {
+        ok = str_contains(text, "sret(%struct.DirectMapIntInt)") and str_contains(text, "define void @make_scores") and str_contains(text, "call void @make_scores")
     }
     if ok == 0 {
         return emit_failed(str_concat("direct ", name), err_path)
@@ -862,6 +884,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "map_int_param", "direct Map<Int,Int> parameter mutation run (=42)", 26)
     fail = fail + expect_case(vaisc, tmp, "map_bool_param", "direct Map<Int,Bool> parameter mutation run (=42)", 27)
     fail = fail + expect_case(vaisc, tmp, "map_char_param", "direct Map<Int,Char> parameter mutation run (=42)", 28)
+    fail = fail + expect_case(vaisc, tmp, "map_int_return", "direct Map<Int,Int> return value initializes a local and runs (=42)", 29)
     fail = fail + expect_case(vaisc, tmp, "list_struct_local", "direct local List<Struct> push, len, is_empty, last, pop, index, and field read run (=42)", 10)
     fail = fail + expect_case(vaisc, tmp, "list_struct_abi", "direct List<Struct> parameter, return, inline, and hoisted arguments run (=42)", 11)
     fail = fail + expect_case(vaisc, tmp, "list_struct_field_write", "direct List<Struct> indexed field assignment runs (=42)", 12)

@@ -72,11 +72,13 @@ This file tracks current work only.
   `get(key, default)`, `contains`, and `len`, plus local `Map<Int,Char>` values
   with the same non-`get_opt` surface. `Map<Int,Int>`, `Map<Int,Bool>`, and
   `Map<Int,Char>` parameters are verified by reference, so callees can mutate
-  caller-visible maps.
+  caller-visible maps. `Map<Int,Int>` return values can initialize explicitly
+  annotated locals through caller-owned storage.
 - Promoted prelude APIs have value-corpus examples, including local
   `Map<Int,Int>`, local `Map<Int,Bool>`, local `Map<Int,Char>`,
-  `Map<Int,Bool>` parameter mutation, `Map<Int,Char>` parameter mutation, and
-  `List<T>.is_empty()`, `last()`, and `pop()`.
+  `Map<Int,Bool>` parameter mutation, `Map<Int,Char>` parameter mutation,
+  `Map<Int,Int>` return-value local initialization, and `List<T>.is_empty()`,
+  `last()`, and `pop()`.
 - The full compiler path supports single-package local dotted imports such as
   `import math.add`, with gates for multi-file success, missing imports,
   duplicate symbols, and import cycles.
@@ -158,8 +160,9 @@ This file tracks current work only.
   support `{}`, assignment copy, `insert`, `get(key, default)`, `contains`, and
   `len`; `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` parameters
   support reference mutation in both the full self-host compiler path and
-  native direct engine. Map function return values and generic key/value forms
-  are not claimed yet.
+  native direct engine. `Map<Int,Int>` return values can initialize explicitly
+  annotated locals. `Map<Int,Bool>` returns, `Map<Int,Char>` returns, and
+  generic key/value forms are not claimed yet.
   The future Map ABI and generic expansion contract is specified
   in `docs/design/MAP_ABI.md`.
 - The release compiler command uses a native host driver for `emit-ir`,
@@ -253,13 +256,19 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
 - [x] 1.3g Promote local `Map<Int,Char>` through concrete full/direct/front
   gates while keeping `get_opt` behind `Option<Char>`.
 - [x] 1.3h Promote `Map<Int,Int>` function parameters by reference through
-  concrete full/direct/front gates while keeping Map returns gated.
+  concrete full/direct/front gates while keeping Map returns gated until a
+  concrete return slice is promoted.
 - [x] 1.3i Promote `Map<Int,Bool>` function parameters by reference through
-  concrete full/direct/front gates while keeping Map returns and broader Map
-  parameters gated.
+  concrete full/direct/front gates while keeping non-`Map<Int,Int>` returns
+  and broader Map parameters gated.
 - [x] 1.3j Promote `Map<Int,Char>` function parameters by reference through
-  concrete full/direct/front gates while keeping Map returns gated.
-- [ ] 1.3k Broaden `Map<K,V>` only through concrete gate-backed slices.
+  concrete full/direct/front gates while keeping Map returns gated until the
+  next concrete slice.
+- [x] 1.3k Broaden `Map<K,V>` only through concrete gate-backed slices:
+  promote `Map<Int,Int>` return values for local initialization while keeping
+  `Map<Int,Bool>`, `Map<Int,Char>`, and generic Map returns gated.
+- [ ] 1.3l Continue `Map<K,V>` expansion only through the next concrete
+  gate-backed slice.
 - [x] 1.4 Add examples and value tests for every promoted prelude API.
 - [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
 
@@ -667,7 +676,7 @@ Mode: sequential
 - [x] 6. Lower the same local surface in the full self-host compiler and
   regenerate the reusable compiler core.
 - [x] 7. Keep front diagnostics explicit about verified concrete Map slices;
-  Map returns and generic key/value forms stay
+  non-`Map<Int,Int>` returns and generic key/value forms stay
   rejected.
 - [x] 8. Promote local `Map<Int,Int>` assignment copy while keeping Map
   returns and generic key/value forms rejected.
@@ -694,7 +703,8 @@ Mode: sequential
   parameter, return, monomorphic helper, and expansion-order rules. Local
   `Map<Int,Int>` assignment copy and the local `Map<Int,Bool>` and
   `Map<Int,Char>` scalar-value slices are verified; direct and full gates are
-  still required before Map returns or broader generic behavior are published.
+  still required before non-`Map<Int,Int>` returns or broader generic behavior
+  are published.
   `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` parameter reference
   mutation is verified.
 
@@ -738,7 +748,7 @@ Mode: sequential
   `Map<Int,Bool>` values support `{}`, assignment copy, `insert`,
   `get(key, default)`, `contains`, and `len`; local `Map<Int,Char>` values
   support the same non-`get_opt` surface without publishing broader generic or
-  return-value ABI claims. `Map<Int,Int>`, `Map<Int,Bool>`, and
+  non-`Map<Int,Int>` return-value ABI claims. `Map<Int,Int>`, `Map<Int,Bool>`, and
   `Map<Int,Char>` parameters are passed by reference and may be mutated by
   callees.
 - Done: native direct gates pass a local map example returning a deterministic
@@ -753,7 +763,8 @@ Mode: sequential
 - Done: `scripts/test-vaisc-front.sh` accepts local `Map<Int,Int>`,
   `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Int,Int>` parameters, and
   `Map<Int,Bool>` and `Map<Int,Char>` parameters while rejecting unsupported
-  generic `Map<K,V>` forms; docs/site do not imply a verified generic
+  generic `Map<K,V>` forms; `Map<Int,Int>` return values are accepted only for
+  the concrete gate-backed slice; docs/site do not imply a verified generic
   `Map<K,V>`.
 
 ## Completed Milestone: Named integer parsing prelude helpers

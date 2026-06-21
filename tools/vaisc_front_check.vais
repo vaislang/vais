@@ -257,7 +257,7 @@ fn msg_map_param() -> Str {
 }
 
 fn msg_map_return() -> Str {
-    return "Map return values are not verified yet"
+    return "only Map<Int,Int> return values are verified yet"
 }
 
 fn msg_map_bool_get_opt() -> Str {
@@ -678,6 +678,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_param") == 1 { return write_map_param_accept(path) }
     if str_eq(name, "map_bool_param") == 1 { return write_map_bool_param_accept(path) }
     if str_eq(name, "map_char_param") == 1 { return write_map_char_param_accept(path) }
+    if str_eq(name, "map_return") == 1 { return write_map_return(path) }
     if str_eq(name, "map_assignment") == 1 { return write_map_assignment(path) }
     if str_eq(name, "option") == 1 { return write_option_accept(path) }
     if str_eq(name, "option_expr") == 1 { return write_option_expr_accept(path) }
@@ -998,9 +999,28 @@ fn write_map_generic_param_bad(path: Str) -> Int {
 
 fn write_map_return(path: Str) -> Int {
     let out = str_builder_new()
-    append_line(out, str_concat("fn make() -> ", str_concat(map_int_spaced(), " {")))
+    append_line(out, str_concat("fn make_scores() -> ", str_concat(map_int_spaced(), " {")))
     append_line(out, str_concat(str_concat("    let scores: ", map_int_spaced()), " = {}"))
+    append_line(out, "    scores.insert(4, 40)")
+    append_line(out, "    scores.insert(9, 2)")
     append_line(out, "    return scores")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let scores: ", map_int_spaced()), " = make_scores()"))
+    append_line(out, "    if scores.contains(4) and scores.contains(9) {")
+    append_line(out, "        return scores.get(4, 0) + scores.get(9, 0)")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_map_bool_return_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, str_concat("fn make() -> ", str_concat(map_bool_spaced(), " {")))
+    append_line(out, str_concat(str_concat("    let flags: ", map_bool_spaced()), " = {}"))
+    append_line(out, "    return flags")
     append_line(out, "}")
     append_line(out, "")
     append_line(out, "fn main() -> Int {")
@@ -1106,7 +1126,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "unsupported_method") == 1 { return write_unsupported_method(path) }
     if str_eq(name, "map_generic_not_verified") == 1 { return write_map_generic(path) }
     if str_eq(name, "map_generic_param_not_verified") == 1 { return write_map_generic_param_bad(path) }
-    if str_eq(name, "map_return_not_verified") == 1 { return write_map_return(path) }
+    if str_eq(name, "map_bool_return_not_verified") == 1 { return write_map_bool_return_bad(path) }
     if str_eq(name, "map_assignment_type_mismatch") == 1 { return write_map_assignment_mismatch(path) }
     if str_eq(name, "map_bool_get_opt_not_verified") == 1 { return write_map_bool_get_opt_bad(path) }
     if str_eq(name, "map_char_get_opt_not_verified") == 1 { return write_map_char_get_opt_bad(path) }
@@ -1346,9 +1366,10 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "map_param", "accepts Map<Int,Int> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool_param", "accepts Map<Int,Bool> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char_param", "accepts Map<Int,Char> parameter mutation slice", 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_return", "accepts Map<Int,Int> return value slice", 42)
     fail = fail + expect_reject(vaisc, tmp, "map_generic_not_verified", msg_map_generic(), "", "generic key/value forms")
     fail = fail + expect_reject(vaisc, tmp, "map_generic_param_not_verified", msg_map_param(), "", "generic Map parameters local")
-    fail = fail + expect_reject(vaisc, tmp, "map_return_not_verified", msg_map_return(), "", "Map function returns need an ABI specification")
+    fail = fail + expect_reject(vaisc, tmp, "map_bool_return_not_verified", msg_map_return(), "", "generic Map returns local")
     fail = fail + expect_reject(vaisc, tmp, "map_assignment_type_mismatch", "Map assignment source type must match", "", "same concrete Map type")
     fail = fail + expect_reject(vaisc, tmp, "map_bool_get_opt_not_verified", msg_map_bool_get_opt(), "", "Option for Map<Int,Bool>")
     fail = fail + expect_reject(vaisc, tmp, "map_char_get_opt_not_verified", msg_map_char_get_opt(), "", "Option for Map<Int,Char>")

@@ -1052,6 +1052,20 @@ fn call_retsty(toks: &List<Token>, fns: &List<Fn>, src: Str, vp: Int) -> Int {
     }
     return 0 - 2
 }
+fn call_retmapty(toks: &List<Token>, fns: &List<Fn>, src: Str, vp: Int) -> Int {
+    let r = toks[vp]
+    if r.kind == 1 {
+        let after = toks[vp + 1]
+        if after.kind == 9 {
+            let idx = find_fn(fns, src, r.nstart, r.nlen)
+            if idx >= 0 {
+                let f = fns[idx]
+                if f.retlist == 4 { return f.retty }
+            }
+        }
+    }
+    return 0 - 2
+}
 fn call_retstr(toks: &List<Token>, fns: &List<Fn>, src: Str, vp: Int) -> Int {
     let r = toks[vp]
     if r.kind == 1 {
@@ -1199,7 +1213,8 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
             }
             # Return type between ')' and '{':
             #   retlist=1 for List, retlist=2 for struct (hidden out-param),
-            #   retlist=3 for Str (direct i8* return).
+            #   retlist=3 for Str (direct i8* return),
+            #   retlist=4 for Map<Int,Int> (hidden out-param).
             # retty is the element/struct type index (or -1).
             let mut retlist = 0
             let mut retty = 0 - 1
@@ -1214,6 +1229,20 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                             let et = toks[rq + 2]
                             if et.kind == 1 {
                                 retty = struct_index_by_name(defs, src, et.nstart, et.nlen)
+                            }
+                        }
+                    } else if kw3(src, rt.nstart, rt.nlen, 77, 97, 112) == 1 {
+                        let mlt = toks[rq + 1]
+                        let mkey = toks[rq + 2]
+                        let mcomma = toks[rq + 3]
+                        let mval = toks[rq + 4]
+                        let mgt = toks[rq + 5]
+                        if mlt.kind == 18 and mcomma.kind == 25 and mgt.kind == 19 {
+                            if kw3(src, mkey.nstart, mkey.nlen, 73, 110, 116) == 1 {
+                                if kw3(src, mval.nstart, mval.nlen, 73, 110, 116) == 1 {
+                                    retlist = 4
+                                    retty = map_value_int_ty()
+                                }
                             }
                         }
                     } else if kw3(src, rt.nstart, rt.nlen, 83, 116, 114) == 1 {
@@ -3769,7 +3798,7 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
             let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
             let map_vty = map_anno_value_ty(toks, src, npos)
-            if map_vty >= 0 and rhs_is_empty_map(toks, npos) == 1 {
+            if map_vty >= 0 {
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: map_vty })
                 emit_str("  %v")
                 pint(next_slot)
@@ -4458,7 +4487,44 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             let lsti = rhs_struct_type(toks, defs, src, npos)
             if isarr_of(slots, src, name.nstart, name.nlen) == 5 {
                 let stop = find_semi(toks, vp, end)
-                i = stop + 1
+                if rhs_is_empty_map(toks, npos) == 1 {
+                    i = stop + 1
+                } else if rhs.kind == 1 and stop == vp + 1 and (isarr_of(slots, src, rhs.nstart, rhs.nlen) == 5 or isarr_of(slots, src, rhs.nstart, rhs.nlen) == 6) {
+                    if sty_of(slots, src, rhs.nstart, rhs.nlen) == sty_of(slots, src, name.nstart, name.nlen) {
+                        emit_map_base_ptr(slots, src, name.nstart, name.nlen, counter)
+                        let dstp = counter
+                        counter = counter + 1
+                        emit_map_base_ptr(slots, src, rhs.nstart, rhs.nlen, counter)
+                        let srcp = counter
+                        counter = counter + 1
+                        emit_str("  call void @__vais_map_int_int_copy(i64* %t")
+                        pint(dstp)
+                        emit_str(", i64* %t")
+                        pint(srcp)
+                        emit_str(")")
+                        putchar(10)
+                    }
+                    i = stop + 1
+                } else if call_retmapty(toks, fns, src, vp) == sty_of(slots, src, name.nstart, name.nlen) {
+                    let cclose = paren_end(toks, vp + 2)
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = getelementptr [")
+                    pint(map_bufsz())
+                    emit_str(" x i64], [")
+                    pint(map_bufsz())
+                    emit_str(" x i64]* %v")
+                    pint(slot)
+                    emit_str(", i64 0, i64 0")
+                    putchar(10)
+                    let outp = counter
+                    counter = counter + 1
+                    counter = emit_struct_out_call(toks, slots, fns, defs, src, vp, vp + 2, cclose, counter, outp)
+                    let cstop = find_semi(toks, cclose, end)
+                    i = cstop + 1
+                } else {
+                    i = stop + 1
+                }
             } else if los_est >= 0 {
                 # `let t = toks[idx]`, `let t = toks.last()`, or
                 # `let t = toks.pop()` -> copy the struct element into t's
@@ -6018,9 +6084,48 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     }
                 }
             }
-            if did_listret == 0 and did_structret == 0 {
+            let mut did_mapret = 0
+            if retkind == 4 and retout >= 0 {
+                if rnext.kind == 1 {
+                    let rafterm = toks[i + 2]
+                    if stop == i + 2 {
+                        let rkmap = isarr_of(slots, src, rnext.nstart, rnext.nlen)
+                        if rkmap == 5 or rkmap == 6 {
+                            did_mapret = 1
+                            emit_map_base_ptr(slots, src, rnext.nstart, rnext.nlen, counter)
+                            let srcpm = counter
+                            counter = counter + 1
+                            emit_str("  call void @__vais_map_int_int_copy(i64* %a")
+                            pint(retout)
+                            emit_str(", i64* %t")
+                            pint(srcpm)
+                            emit_str(")")
+                            putchar(10)
+                            emit_str("  ret void")
+                            putchar(10)
+                        }
+                    } else if rafterm.kind == 9 {
+                        if call_retmapty(toks, fns, src, i + 1) >= 0 {
+                            did_mapret = 1
+                            let cclosem = paren_end(toks, i + 3)
+                            emit_str("  %t")
+                            pint(counter)
+                            emit_str(" = getelementptr i64, i64* %a")
+                            pint(retout)
+                            emit_str(", i64 0")
+                            putchar(10)
+                            let routpm = counter
+                            counter = counter + 1
+                            counter = emit_struct_out_call(toks, slots, fns, defs, src, i + 1, i + 3, cclosem, counter, routpm)
+                            emit_str("  ret void")
+                            putchar(10)
+                        }
+                    }
+                }
+            }
+            if did_listret == 0 and did_structret == 0 and did_mapret == 0 {
                 let e = gen_expr(toks, slots, fns, defs, src, i + 1, stop, counter)
-                if retkind == 1 or retkind == 2 {
+                if retkind == 1 or retkind == 2 or retkind == 4 {
                     emit_str("  ret void")
                 } else if retkind == 3 {
                     emit_str("  ret i8* ")
@@ -6368,7 +6473,7 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
             let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
             let map_vty = map_anno_value_ty(toks, src, npos)
-            if map_vty >= 0 and rhs_is_empty_map(toks, npos) == 1 {
+            if map_vty >= 0 {
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: map_vty })
                 emit_str("  %v")
                 pint(next_slot)
@@ -6555,7 +6660,7 @@ fn gen_top(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, slots: &L
 # Emit one user function: `define i64 @name(i64 %p_in) { <body> }`. The param is
 # copied to alloca %v0; body locals occupy slots 1+. Body = [bstart, bend).
 fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, f: Fn, n: Int) -> Int {
-    if f.retlist == 1 or f.retlist == 2 { emit_str("define void @") }
+    if f.retlist == 1 or f.retlist == 2 or f.retlist == 4 { emit_str("define void @") }
     else if f.retlist == 3 { emit_str("define i8* @") }
     else { emit_str("define i64 @") }
     emit_name(src, f.nstart, f.nlen)
@@ -6573,9 +6678,9 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         pint(pi)
         pi = pi + 1
     }
-    # `-> List` and `-> Struct` functions take a hidden trailing out-param
+    # `-> List`, `-> Struct`, and `-> Map<Int,Int>` functions take a hidden trailing out-param
     # `i64* %a<npar>`: the caller passes a buffer, and return copies into it.
-    if f.retlist == 1 or f.retlist == 2 {
+    if f.retlist == 1 or f.retlist == 2 or f.retlist == 4 {
         if f.npar > 0 { emit_str(", ") }
         emit_str("i64* %a")
         pint(f.npar)
@@ -6716,10 +6821,10 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
     }
     # body locals start at slot npar
     let allslots = add_local_slots(slots, toks, fns, defs, src, f.bstart, f.bend, f.npar, n)
-    # retout = the hidden out-param index for a `-> List` or `-> Struct`
+    # retout = the hidden out-param index for a `-> List`, `-> Struct`, or `-> Map<Int,Int>`
     # function, else -1.
     let mut retout = 0 - 1
-    if f.retlist == 1 or f.retlist == 2 { retout = f.npar }
+    if f.retlist == 1 or f.retlist == 2 or f.retlist == 4 { retout = f.npar }
     let retcfg = (retout + 1) * 10 + f.retlist
     let last = gen_stmts(toks, &allslots, fns, defs, src, f.bstart, f.bend, 1, retcfg, 0)
     emit_str("}")

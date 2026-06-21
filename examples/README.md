@@ -73,6 +73,8 @@ insert/get/contains/len and assignment-copy semantics,
 reference, `examples/e99_map_bool_param.vais` for `Map<Int,Bool>` parameter
 mutation by reference, `examples/e100_map_char_param.vais` for
 `Map<Int,Char>` parameter mutation by reference,
+`examples/e101_map_return.vais` for a `Map<Int,Int>` return value initializing
+a local,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and
