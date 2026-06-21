@@ -1,0 +1,17 @@
+# expect: 42
+fn mark(flags: Map<Int,Bool>, key: Int) -> Int {
+    flags.insert(key, true)
+    if flags.get(key, false) and flags.len() == 1 {
+        return 40
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let flags: Map<Int,Bool> = {}
+    let n = mark(flags, 4)
+    if flags.get(4, false) and flags.contains(4) {
+        return n + flags.len() + flags.contains(4)
+    }
+    return 0
+}

@@ -125,7 +125,7 @@ Verified release surface:
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, assignment copy, parameter reference/mutation, `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Int,Bool>` | Local `{}`, assignment copy, `insert`, `get(key, default)`, `contains`, and `len` |
+| `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, `insert`, `get(key, default)`, `contains`, and `len` |
 | `Map<Int,Char>` | Local `{}`, assignment copy, `insert`, `get(key, default)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
@@ -199,7 +199,7 @@ simple Int-field struct
 locals, struct parameter/return helpers, and `List<Int>` local operations plus
 parameter reference and return value ABI, local `Map<Int,Int>`,
 `Map<Int,Bool>`, and `Map<Int,Char>` construction and lookup/update helpers,
-`Map<Int,Int>` parameter reference/mutation, plus `List<Struct>` construction with
+`Map<Int,Int>` and `Map<Int,Bool>` parameter reference/mutation, plus `List<Struct>` construction with
 `[]`, `list()`, list literals, list/element assignment, `push`, `len`, index,
 field read/write, parameter reference, and return value ABI.
 
@@ -455,9 +455,9 @@ release-surface claims yet.
 local-value slices in the full self-host compiler path and native direct engine.
 All three support `{}`, assignment copy, `insert`, `get(key, default)`,
 `contains`, and `len`.
-`Map<Int,Int>` also supports `get_opt(key) -> Option<Int>` and function
-parameters by reference; a callee can mutate the caller-visible Map with
-`insert`.
+`Map<Int,Int>` also supports `get_opt(key) -> Option<Int>`. `Map<Int,Int>` and
+`Map<Int,Bool>` support function parameters by reference; a callee can mutate
+the caller-visible Map with `insert`.
 
 Verified example:
 
@@ -487,6 +487,25 @@ fn main() -> Int {
     let scores: Map<Int,Int> = {}
     let n = put(scores, 4, 40)
     return scores.get(4, 0) + n + scores.contains(4)
+}
+```
+
+```vais
+fn mark(flags: Map<Int,Bool>, key: Int) -> Int {
+    flags.insert(key, true)
+    if flags.get(key, false) and flags.len() == 1 {
+        return 40
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let flags: Map<Int,Bool> = {}
+    let n = mark(flags, 4)
+    if flags.get(4, false) and flags.contains(4) {
+        return n + flags.len() + flags.contains(4)
+    }
+    return 0
 }
 ```
 
@@ -522,8 +541,8 @@ fn main() -> Int {
 Verified behavior:
 
 - Local `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` values are
-  supported. `Map<Int,Int>` can also be passed as a function parameter by
-  reference.
+  supported. `Map<Int,Int>` and `Map<Int,Bool>` can also be passed as function
+  parameters by reference.
 - `{}` constructs an empty map when the local type is explicitly one of the
   verified concrete Map types.
 - `target = source` copies one local Map into another local with the same
@@ -540,8 +559,8 @@ Not included in the current Map slice: `Map<Int,Bool>.get_opt`,
 `Map<Int,Char>.get_opt`,
 generic key/value lowering, deletion, iteration, entry literals,
 broader Map APIs that return `Option`, `Result`,
-custom hashing, non-`Map<Int,Int>` Map parameters, or public ABI claims for Map
-return values. Unverified non-`Map<Int,Int>` Map parameters, return values, and
+custom hashing, `Map<Int,Char>` parameters, or public ABI claims for Map
+return values. Unverified `Map<Int,Char>` parameters, return values, and
 non-local assignment sources are rejected by front diagnostics instead of being
 treated as part of the release surface.
 The future Map ABI and generic expansion contract is specified in

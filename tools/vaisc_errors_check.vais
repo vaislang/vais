@@ -261,10 +261,10 @@ fn write_direct_map_char_get_opt(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
-fn write_direct_map_bool_param(path: Str) -> Int {
+fn write_direct_map_char_param(path: Str) -> Int {
     let out = str_builder_new()
-    append_line(out, "fn score(flags: Map<Int, Bool>) -> Int {")
-    append_line(out, "    return flags.len()")
+    append_line(out, "fn score(letters: Map<Int, Char>) -> Int {")
+    append_line(out, "    return letters.len()")
     append_line(out, "}")
     append_line(out, "")
     append_line(out, "fn main() -> Int {")
@@ -299,7 +299,7 @@ fn write_source(name: Str, path: Str) -> Int {
     if str_eq(name, "direct_map_assignment_type") == 1 { return write_direct_map_assignment_type(path) }
     if str_eq(name, "direct_map_bool_get_opt") == 1 { return write_direct_map_bool_get_opt(path) }
     if str_eq(name, "direct_map_char_get_opt") == 1 { return write_direct_map_char_get_opt(path) }
-    if str_eq(name, "direct_map_bool_param") == 1 { return write_direct_map_bool_param(path) }
+    if str_eq(name, "direct_map_char_param") == 1 { return write_direct_map_char_param(path) }
     if str_eq(name, "direct_missing_return") == 1 { return write_direct_missing_return(path) }
     print(str_concat("error: unknown diagnostic fixture: ", name))
     return 1
@@ -398,7 +398,7 @@ fn main() -> Int {
     fail = fail + expect_diag(vaisc, tmp, "direct_map_assignment_type", 1, "Map assignment requires another local Map", "", "")
     fail = fail + expect_diag(vaisc, tmp, "direct_map_bool_get_opt", 1, "Map<Int,Bool>.get_opt is not verified", "Option for Map<Int,Bool>", "m.get(key, default)")
     fail = fail + expect_diag(vaisc, tmp, "direct_map_char_get_opt", 1, "Map<Int,Char>.get_opt is not verified", "Option for Map<Int,Char>", "m.get(key, default)")
-    fail = fail + expect_diag(vaisc, tmp, "direct_map_bool_param", 1, "function parameter type is not available", "Map<Int,Int>", "fn f(x: Int) -> Int")
+    fail = fail + expect_diag(vaisc, tmp, "direct_map_char_param", 1, "function parameter type is not available", "Map<Int,Bool>", "fn f(x: Int) -> Int")
     fail = fail + expect_diag(vaisc, tmp, "direct_missing_return", 1, "requires at least one", "return", "fn main() -> Int")
 
     if fail == 0 {

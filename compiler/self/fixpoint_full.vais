@@ -18,7 +18,7 @@ struct Token { kind: Int, value: Int, nstart: Int, nlen: Int }
 # Operand: kind 0=literal(val), 1=temp(%t<val>). next = next free SSA temp.
 struct Op { kind: Int, val: Int, next: Int }
 # A declared variable: source name range -> it lives at alloca %v<slot>.
-# is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map<Int,scalar> local, 6=Map<Int,Int> param.
+# is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map<Int,scalar> local, 6=Map<Int,scalar> param.
 struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: Int }
 # A function: name range, up to 10 params (p0s/p0l..p9s/p9l + p0ty..p9ty), param
 # count `npar`, and the body token range [bstart, bend). 10 params covers the
@@ -1119,13 +1119,14 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                     #   Str         -> 1  (string param, i8*)
                     #   List<...>   -> 2  (List param, buffer pointer; `&` already
                     #                      dropped by the tokenizer)
-                    #   Map<Int,Int> -> map_param_ty() (Map buffer pointer)
+                    #   Map<Int,Int> -> map_int_param_ty()  (Map buffer pointer)
+                    #   Map<Int,Bool> -> map_bool_param_ty() (Map buffer pointer)
                     #   StructName  -> 3+struct_index  (struct by hidden pointer)
                     #   else        -> 0  (int)
                     let tyt = toks[q + 1]
                     let isstr = kw3(src, tyt.nstart, tyt.nlen, 83, 116, 114)
                     let islist = kw4(src, tyt.nstart, tyt.nlen, 76, 105, 115, 116)
-                    let mut ismap = 0
+                    let mut mpty = 0
                     if kw3(src, tyt.nstart, tyt.nlen, 77, 97, 112) == 1 {
                         let mlt = toks[q + 2]
                         let mkey = toks[q + 3]
@@ -1133,11 +1134,14 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                         let mval = toks[q + 5]
                         let mgt = toks[q + 6]
                         if mlt.kind == 18 and mcomma.kind == 25 and mgt.kind == 19 {
-                            if kw3(src, mkey.nstart, mkey.nlen, 73, 110, 116) == 1 and kw3(src, mval.nstart, mval.nlen, 73, 110, 116) == 1 { ismap = 1 }
+                            if kw3(src, mkey.nstart, mkey.nlen, 73, 110, 116) == 1 {
+                                if kw3(src, mval.nstart, mval.nlen, 73, 110, 116) == 1 { mpty = map_int_param_ty() }
+                                else if kw4(src, mval.nstart, mval.nlen, 66, 111, 111, 108) == 1 { mpty = map_bool_param_ty() }
+                            }
                         }
                     }
                     let mut pty = isstr
-                    if ismap == 1 { pty = map_param_ty() }
+                    if is_map_param_ty(mpty) { pty = mpty }
                     else if islist == 1 { pty = 2 }
                     else if isstr == 0 {
                         let pst = struct_index_by_name(defs, src, tyt.nstart, tyt.nlen)
@@ -1156,7 +1160,7 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                     else { p9ty = pty }
                     # advance past the type. List<...> and Map<...> span to the closing `>`
                     # (kind 19); a plain type is a single ident.
-                    if islist == 1 or ismap == 1 {
+                    if islist == 1 or is_map_param_ty(mpty) {
                         let mut tq = q + 2
                         let mut tg = true
                         while tg {
@@ -1475,7 +1479,23 @@ fn map_cap() -> Int { return 256 }
 fn map_value_base() -> Int { return map_cap() }
 fn map_lenidx() -> Int { return map_cap() * 2 }
 fn map_bufsz() -> Int { return map_lenidx() + 1 }
-fn map_param_ty() -> Int { return 0 - 3 }
+fn map_value_int_ty() -> Int { return 0 }
+fn map_value_bool_ty() -> Int { return 1 }
+fn map_value_char_ty() -> Int { return 2 }
+fn map_int_param_ty() -> Int { return 0 - 3 }
+fn map_bool_param_ty() -> Int { return 0 - 4 }
+fn map_param_ty() -> Int { return map_int_param_ty() }
+fn is_map_param_ty(pty: Int) -> Bool { return pty == map_int_param_ty() or pty == map_bool_param_ty() }
+fn map_param_value_ty(pty: Int) -> Int {
+    if pty == map_bool_param_ty() { return map_value_bool_ty() }
+    return map_value_int_ty()
+}
+fn map_arg_matches_param(slots: &List<Slot>, src: Str, qs: Int, ql: Int, want_ty: Int) -> Int {
+    let aarr = isarr_of(slots, src, qs, ql)
+    if aarr != 5 and aarr != 6 { return 0 }
+    if sty_of(slots, src, qs, ql) == map_param_value_ty(want_ty) { return 1 }
+    return 0
+}
 
 fn emit_map_base_ptr(slots: &List<Slot>, src: Str, qs: Int, ql: Int, counter: Int) -> Int {
     let mslot = find_slot(slots, src, qs, ql)
@@ -1903,7 +1923,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                         if astop == q + 1 {
                             let want_ty = call_param_ty(fns, src, t.nstart, t.nlen, nargs)
                             let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
-                            if want_ty == map_param_ty() and (aarr == 5 or aarr == 6) {
+                            if is_map_param_ty(want_ty) and map_arg_matches_param(slots, src, argt.nstart, argt.nlen, want_ty) == 1 {
                                 emit_map_base_ptr(slots, src, argt.nstart, argt.nlen, cc)
                                 ekind = 3
                                 eval2 = cc
@@ -3466,25 +3486,31 @@ fn rhs_is_host_str_call(toks: &List<Token>, fns: &List<Fn>, src: Str, npos: Int)
     }
     return 0
 }
-fn let_anno_is_map_int_scalar(toks: &List<Token>, src: Str, npos: Int) -> Int {
+fn map_anno_value_ty(toks: &List<Token>, src: Str, npos: Int) -> Int {
     let c1 = toks[npos + 1]
-    if c1.kind != 16 { return 0 }
+    if c1.kind != 16 { return 0 - 1 }
     let ty = toks[npos + 2]
-    if kw3(src, ty.nstart, ty.nlen, 77, 97, 112) != 1 { return 0 }
+    if kw3(src, ty.nstart, ty.nlen, 77, 97, 112) != 1 { return 0 - 1 }
     let lt = toks[npos + 3]
-    if lt.kind != 18 { return 0 }
+    if lt.kind != 18 { return 0 - 1 }
     let kt = toks[npos + 4]
-    if kw3(src, kt.nstart, kt.nlen, 73, 110, 116) != 1 { return 0 }
+    if kw3(src, kt.nstart, kt.nlen, 73, 110, 116) != 1 { return 0 - 1 }
     let comma = toks[npos + 5]
-    if comma.kind != 25 { return 0 }
+    if comma.kind != 25 { return 0 - 1 }
     let vt = toks[npos + 6]
     let is_int_value = kw3(src, vt.nstart, vt.nlen, 73, 110, 116)
     let is_bool_value = kw4(src, vt.nstart, vt.nlen, 66, 111, 111, 108)
     let is_char_value = kw4(src, vt.nstart, vt.nlen, 67, 104, 97, 114)
-    if is_int_value != 1 and is_bool_value != 1 and is_char_value != 1 { return 0 }
     let gt = toks[npos + 7]
-    if gt.kind != 19 { return 0 }
-    return 1
+    if gt.kind != 19 { return 0 - 1 }
+    if is_int_value == 1 { return map_value_int_ty() }
+    if is_bool_value == 1 { return map_value_bool_ty() }
+    if is_char_value == 1 { return map_value_char_ty() }
+    return 0 - 1
+}
+fn let_anno_is_map_int_scalar(toks: &List<Token>, src: Str, npos: Int) -> Int {
+    if map_anno_value_ty(toks, src, npos) >= 0 { return 1 }
+    return 0
 }
 fn rhs_is_empty_map(toks: &List<Token>, npos: Int) -> Int {
     let vp = rhs_pos(toks, npos)
@@ -3738,8 +3764,9 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
             let vp = rhs_pos(toks, npos)
             let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
-            if let_anno_is_map_int_scalar(toks, src, npos) == 1 and rhs_is_empty_map(toks, npos) == 1 {
-                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: 0 - 1 })
+            let map_vty = map_anno_value_ty(toks, src, npos)
+            if map_vty >= 0 and rhs_is_empty_map(toks, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: map_vty })
                 emit_str("  %v")
                 pint(next_slot)
                 emit_str(" = alloca [")
@@ -4155,7 +4182,7 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
                     let cname_arg = toks[vp]
                     let want_ty = call_param_ty(fns, src, cname_arg.nstart, cname_arg.nlen, nargs)
                     let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
-                    if want_ty == map_param_ty() and (aarr == 5 or aarr == 6) {
+                    if is_map_param_ty(want_ty) and map_arg_matches_param(slots, src, argt.nstart, argt.nlen, want_ty) == 1 {
                         emit_map_base_ptr(slots, src, argt.nstart, argt.nlen, cc)
                         ekind = 3
                         eval2 = cc
@@ -4745,7 +4772,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                             if astop == q + 1 {
                                 let want_ty = call_param_ty(fns, src, cname.nstart, cname.nlen, nca)
                                 let aarr = isarr_of(slots, src, argt.nstart, argt.nlen)
-                                if want_ty == map_param_ty() and (aarr == 5 or aarr == 6) {
+                                if is_map_param_ty(want_ty) and map_arg_matches_param(slots, src, argt.nstart, argt.nlen, want_ty) == 1 {
                                     emit_map_base_ptr(slots, src, argt.nstart, argt.nlen, cc)
                                     ek = 3
                                     ev = cc
@@ -6336,8 +6363,9 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
             let vp = rhs_pos(toks, npos)
             let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
-            if let_anno_is_map_int_scalar(toks, src, npos) == 1 and rhs_is_empty_map(toks, npos) == 1 {
-                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: 0 - 1 })
+            let map_vty = map_anno_value_ty(toks, src, npos)
+            if map_vty >= 0 and rhs_is_empty_map(toks, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: map_vty })
                 emit_str("  %v")
                 pint(next_slot)
                 emit_str(" = alloca [")
@@ -6537,7 +6565,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         else if pi == 4 { pty = f.p4ty } else if pi == 5 { pty = f.p5ty } else if pi == 6 { pty = f.p6ty } else if pi == 7 { pty = f.p7ty }
         else if pi == 8 { pty = f.p8ty } else if pi == 9 { pty = f.p9ty }
         # Str -> i8*, List/Map/Struct -> i64* (buffer pointer), else i64.
-        if pty == 1 { emit_str("i8* %a") } else if pty == 2 or pty == map_param_ty() { emit_str("i64* %a") } else if pty >= 3 { emit_str("i64* %a") } else { emit_str("i64 %a") }
+        if pty == 1 { emit_str("i8* %a") } else if pty == 2 or is_map_param_ty(pty) { emit_str("i64* %a") } else if pty >= 3 { emit_str("i64* %a") } else { emit_str("i64 %a") }
         pint(pi)
         pi = pi + 1
     }
@@ -6599,10 +6627,10 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
             emit_str(", i64** %v")
             pint(s2)
             putchar(10)
-        } else if pty == map_param_ty() {
-            # Map<Int,Int> param: is_arr=6 (Map-by-pointer). The callee mutates
+        } else if is_map_param_ty(pty) {
+            # Map<Int,scalar> param: is_arr=6 (Map-by-pointer). The callee mutates
             # the caller-visible map buffer directly.
-            slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 6, alen: 0 , sty: 0 - 1 })
+            slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 6, alen: 0 , sty: map_param_value_ty(pty) })
             emit_str("  %v")
             pint(s2)
             emit_str(" = alloca i64*")
