@@ -2141,7 +2141,7 @@ static int front_type_is_supported_map_param(const char *type) {
 }
 
 static int front_type_is_supported_map_return(const char *type) {
-    return front_type_is_map_int_int(type);
+    return front_type_is_map_int_int(type) || front_type_is_map_int_bool(type);
 }
 
 static char *front_return_type_text(const char *arrow) {
@@ -2215,14 +2215,14 @@ static int check_fn_contract_line(
     } else {
         if (arrow != NULL && front_has_map_type(arrow + 2) && !front_type_is_supported_map_return(ret)) {
             report_issue(path, line_no, find_col(line, "Map"), line,
-                "only Map<Int,Int> return values are verified yet",
-                "return Map<Int,Int> in this slice; keep Map<Int,Bool>, Map<Int,Char>, and generic Map returns local until their ABI slices are promoted.",
+                "only Map<Int,Int> and Map<Int,Bool> return values are verified yet",
+                "return Map<Int,Int> or Map<Int,Bool> in this slice; keep Map<Int,Char> and generic Map returns local until their ABI slices are promoted.",
                 NULL);
             issue = 1;
         } else if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0 && strcmp(ret, "Char") != 0 && !front_type_is_supported_map_return(ret))) {
             report_issue(path, line_no, find_col(line, "fn "), line,
                 "Vais native helper functions must return a verified scalar type",
-                "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, `-> Char`, `-> Str`, or `-> Map<Int,Int>`.",
+                "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, `-> Char`, `-> Str`, `-> Map<Int,Int>`, or `-> Map<Int,Bool>`.",
                 NULL);
             issue = 1;
         }
@@ -2283,7 +2283,7 @@ static char *front_supported_map_local_name(const char *line, char **type_out) {
         return NULL;
     }
     if (*q != '>') return NULL;
-    int value_is_int = strcmp(value_type, "Int") == 0;
+    int value_is_return_supported = strcmp(value_type, "Int") == 0 || strcmp(value_type, "Bool") == 0;
     const char *eq = strchr(q, '=');
     if (eq == NULL) return NULL;
     const char *rhs = skip_ws(eq + 1);
@@ -2294,7 +2294,7 @@ static char *front_supported_map_local_name(const char *line, char **type_out) {
             r = skip_ws(r + 1);
             ok_initializer = *r == '\0' || *r == ';';
         }
-    } else if (value_is_int && is_ident_start(*rhs)) {
+    } else if (value_is_return_supported && is_ident_start(*rhs)) {
         const char *r = rhs + 1;
         while (is_ident_continue(*r)) r++;
         r = skip_ws(r);
@@ -2626,7 +2626,7 @@ static int check_front_contract_text(const char *text, const char *path) {
                 int col = strstr(probe, "Map<") != NULL ? find_col(probe, "Map<") : find_col(probe, "Map <");
                 report_issue(path, line_no, col, line,
                     "only local Map<Int,Int>, Map<Int,Bool>, and Map<Int,Char> values are verified for now",
-                    "write `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, or `let name: Map<Int,Char> = {}`; `Map<Int,Int>` can also initialize from a Map-returning helper, while other Map returns and generic key/value forms are not verified yet.",
+                    "write `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, or `let name: Map<Int,Char> = {}`; `Map<Int,Int>` and `Map<Int,Bool>` can also initialize from a Map-returning helper, while other Map returns and generic key/value forms are not verified yet.",
                     NULL);
                 issues++;
             }
@@ -3880,6 +3880,10 @@ static int direct_is_map_type(const char *type) {
     return direct_is_map_int_int_type(type) || direct_is_map_int_bool_type(type) || direct_is_map_int_char_type(type);
 }
 
+static int direct_is_supported_map_return_type(const char *type) {
+    return direct_is_map_int_int_type(type) || direct_is_map_int_bool_type(type);
+}
+
 static const char *direct_map_value_type(const char *type) {
     if (direct_is_map_int_int_type(type)) return "Int";
     if (direct_is_map_int_bool_type(type)) return "Bool";
@@ -3956,7 +3960,7 @@ static int direct_return_type_allowed(DirectStructInfo *structs, int struct_coun
         direct_is_char_type(type) ||
         direct_is_list_int_type(type) ||
         direct_is_list_struct_type(structs, struct_count, type) ||
-        direct_is_map_int_int_type(type) ||
+        direct_is_supported_map_return_type(type) ||
         direct_find_struct(structs, struct_count, type) != NULL;
 }
 
@@ -4381,7 +4385,7 @@ static int direct_validate_fn_types(
     if (!direct_return_type_allowed(structs, struct_count, info->return_type)) {
         report_issue(path, info->line_no, find_col(line, info->return_type), line,
             "direct native emitter function return type is not available",
-            "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, or a struct declared in this file.",
+            "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, or a struct declared in this file.",
             "fn f() -> Int");
         issues++;
     }
@@ -4689,7 +4693,7 @@ static int direct_expr_exact_list_return_call(const char *expr, DirectFnInfo *fn
 
 static int direct_expr_exact_map_return_call(const char *expr, DirectFnInfo *fns, int fn_count) {
     DirectFnInfo *fn = direct_expr_exact_call_fn(expr, fns, fn_count);
-    return fn != NULL && direct_is_map_int_int_type(fn->return_type);
+    return fn != NULL && direct_is_supported_map_return_type(fn->return_type);
 }
 
 static void direct_append_map_ptr_ref(StrBuf *out, const char *name, int is_ref) {
@@ -5206,10 +5210,10 @@ static int direct_check_map_value_expr(
     DirectStructInfo *structs,
     int struct_count
 ) {
-    if (!direct_is_map_int_int_type(map_type)) {
+    if (!direct_is_supported_map_return_type(map_type)) {
         report_issue(path, line_no, find_col(line, expr), line,
-            "direct native emitter Map return values are verified only for Map<Int,Int>",
-            "use `Map<Int,Int>` for returned Map values; keep other Map values local.",
+            "direct native emitter Map return values are verified only for Map<Int,Int> and Map<Int,Bool>",
+            "use `Map<Int,Int>` or `Map<Int,Bool>` for returned Map values; keep other Map values local.",
             "fn make() -> Map<Int,Int>");
         return 1;
     }
@@ -5235,7 +5239,7 @@ static int direct_check_map_value_expr(
     }
     report_issue(path, line_no, find_col(line, expr), line,
         "direct native emitter Map value expression must be a local Map or Map-returning call",
-        "return a local `Map<Int,Int>` or initialize from a helper returning `Map<Int,Int>`.",
+        "return a local `Map<Int,Int>` or `Map<Int,Bool>`, or initialize from a helper returning the same Map type.",
         "let scores: Map<Int,Int> = make()");
     return 1;
 }
@@ -5252,7 +5256,7 @@ static char *direct_rewrite_map_value_expr(
     DirectStructInfo *structs,
     int struct_count
 ) {
-    if (!direct_is_map_int_int_type(map_type)) return NULL;
+    if (!direct_is_supported_map_return_type(map_type)) return NULL;
     char *name = NULL;
     if (direct_expr_bare_map_local(locals, expr, &name)) {
         const char *actual = direct_names_type(locals, name);
@@ -5271,7 +5275,7 @@ static char *direct_rewrite_map_value_expr(
     }
     report_issue(path, line_no, find_col(line, expr), line,
         "direct native emitter Map value expression must be a local Map or Map-returning call",
-        "return a local `Map<Int,Int>` or initialize from a helper returning `Map<Int,Int>`.",
+        "return a local `Map<Int,Int>` or `Map<Int,Bool>`, or initialize from a helper returning the same Map type.",
         "let scores: Map<Int,Int> = make()");
     return NULL;
 }
@@ -7333,8 +7337,8 @@ static int direct_lower_line(
     }
     if (parsed_header < 0 || starts_with(s, "fn ")) {
         report_issue(path, line_no, find_col(line, "fn"), line,
-            "direct native emitter supports scalar/List/Struct function headers, Map<Int,Int> returns, and verified Map parameters",
-            "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, or declared struct return types; `Map<Int,Bool>` and `Map<Int,Char>` are parameter-only.",
+            "direct native emitter supports scalar/List/Struct function headers, Map<Int,Int>/Map<Int,Bool> returns, and verified Map parameters",
+            "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, or declared struct return types; `Map<Int,Char>` is parameter-only.",
             NULL);
         free(stripped);
         return 1;
@@ -7619,7 +7623,7 @@ static int direct_lower_line(
         if (n > 0 && expr[n - 1] == ';') expr[n - 1] = '\0';
         const char *return_type = locals->current_return_type == NULL ? "Int" : locals->current_return_type;
         int allow_list_return = direct_is_list_type(return_type);
-        int allow_map_return = direct_is_map_int_int_type(return_type);
+        int allow_map_return = direct_is_supported_map_return_type(return_type);
         int inline_list_return = allow_list_return && direct_is_list_initializer_expr(expr);
         if (allow_map_return) {
             if (direct_check_map_value_expr(path, line_no, line, expr, return_type, locals, fns, fn_count, structs, struct_count)) {
@@ -7763,10 +7767,10 @@ static int direct_lower_line(
                 free(stripped);
                 return 0;
             }
-            if (!direct_is_map_int_int_type(local_type)) {
+            if (!direct_is_supported_map_return_type(local_type)) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter Map locals must start with `{}`",
-                    "initialize Map<Int,Bool> and Map<Int,Char> locals with `{}`; Map return initializers are verified only for Map<Int,Int>.",
+                    "initialize Map<Int,Char> locals with `{}`; Map return initializers are verified only for Map<Int,Int> and Map<Int,Bool>.",
                     "let m: Map<Int,Int> = {}");
                 free(expr);
                 free(local_type);
@@ -8427,8 +8431,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             fns[fn_count++] = info;
         } else if (parsed < 0) {
             report_issue(path, (int)i + 1, 1, lines.items[i],
-                "direct native emitter supports scalar/List/Struct function headers, Map<Int,Int> returns, and verified Map parameters",
-                "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, or declared struct return types; `Map<Int,Bool>` and `Map<Int,Char>` are parameter-only.",
+                "direct native emitter supports scalar/List/Struct function headers, Map<Int,Int>/Map<Int,Bool> returns, and verified Map parameters",
+                "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, or declared struct return types; `Map<Int,Char>` is parameter-only.",
                 NULL);
             free(skip_lines);
             lines_free(&lines);

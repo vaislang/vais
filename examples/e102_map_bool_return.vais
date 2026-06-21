@@ -1,0 +1,16 @@
+# expect: 42
+
+fn make_flags() -> Map<Int,Bool> {
+    let flags: Map<Int,Bool> = {}
+    flags.insert(4, true)
+    flags.insert(9, false)
+    return flags
+}
+
+fn main() -> Int {
+    let flags: Map<Int,Bool> = make_flags()
+    if flags.get(4, false) and not flags.get(9, true) and flags.contains(4) and flags.len() == 2 {
+        return 42
+    }
+    return 0
+}

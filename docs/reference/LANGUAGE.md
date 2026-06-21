@@ -125,7 +125,7 @@ Verified release surface:
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, `insert`, `get(key, default)`, `contains`, and `len` |
+| `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `get(key, default)`, `contains`, and `len` |
 | `Map<Int,Char>` | Local `{}`, assignment copy, parameter reference/mutation, `insert`, `get(key, default)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
@@ -199,6 +199,7 @@ simple Int-field struct
 locals, struct parameter/return helpers, and `List<Int>` local operations plus
 parameter reference and return value ABI, local `Map<Int,Int>`,
 `Map<Int,Bool>`, and `Map<Int,Char>` construction and lookup/update helpers,
+`Map<Int,Int>` and `Map<Int,Bool>` return-value local initialization,
 `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` parameter reference/mutation, plus `List<Struct>` construction with
 `[]`, `list()`, list literals, list/element assignment, `push`, `len`, index,
 field read/write, parameter reference, and return value ABI.
@@ -455,10 +456,11 @@ release-surface claims yet.
 local-value slices in the full self-host compiler path and native direct engine.
 All three support `{}`, assignment copy, `insert`, `get(key, default)`,
 `contains`, and `len`.
-`Map<Int,Int>` also supports `get_opt(key) -> Option<Int>` and function return
-values that initialize an explicitly annotated local. `Map<Int,Int>`,
-`Map<Int,Bool>`, and `Map<Int,Char>` support function parameters by reference;
-a callee can mutate the caller-visible Map with `insert`.
+`Map<Int,Int>` also supports `get_opt(key) -> Option<Int>`. `Map<Int,Int>` and
+`Map<Int,Bool>` support function return values that initialize an explicitly
+annotated local. `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` support
+function parameters by reference; a callee can mutate the caller-visible Map
+with `insert`.
 
 Verified example:
 
@@ -503,6 +505,23 @@ fn main() -> Int {
     let scores: Map<Int,Int> = make_scores()
     if scores.contains(4) and scores.contains(9) {
         return scores.get(4, 0) + scores.get(9, 0)
+    }
+    return 0
+}
+```
+
+```vais
+fn make_flags() -> Map<Int,Bool> {
+    let flags: Map<Int,Bool> = {}
+    flags.insert(4, true)
+    flags.insert(9, false)
+    return flags
+}
+
+fn main() -> Int {
+    let flags: Map<Int,Bool> = make_flags()
+    if flags.get(4, false) and not flags.get(9, true) and flags.contains(4) and flags.len() == 2 {
+        return 42
     }
     return 0
 }
@@ -580,8 +599,8 @@ Verified behavior:
 - Local `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` values are
   supported. All three concrete Map types can also be passed as function
   parameters by reference.
-- `Map<Int,Int>` return values can initialize an explicitly annotated local,
-  copying returned contents into caller-owned storage.
+- `Map<Int,Int>` and `Map<Int,Bool>` return values can initialize an explicitly
+  annotated local, copying returned contents into caller-owned storage.
 - `{}` constructs an empty map when the local type is explicitly one of the
   verified concrete Map types.
 - `target = source` copies one local Map into another local with the same
@@ -598,9 +617,9 @@ Not included in the current Map slice: `Map<Int,Bool>.get_opt`,
 `Map<Int,Char>.get_opt`,
 generic key/value lowering, deletion, iteration, entry literals,
 broader Map APIs that return `Option`, `Result`,
-custom hashing, or public ABI claims for `Map<Int,Bool>`, `Map<Int,Char>`, or
-generic Map return values. Unverified generic Map parameters, unverified return
-values, and non-local assignment sources are rejected by front diagnostics
+custom hashing, or public ABI claims for `Map<Int,Char>` or generic Map return
+values. Unverified generic Map parameters, unverified return values, and
+non-local assignment sources are rejected by front diagnostics
 instead of being treated as part of the release surface.
 The future Map ABI and generic expansion contract is specified in
 `docs/design/MAP_ABI.md`, but no broader Map behavior is verified until it has

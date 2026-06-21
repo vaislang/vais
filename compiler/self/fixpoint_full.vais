@@ -1214,7 +1214,7 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
             # Return type between ')' and '{':
             #   retlist=1 for List, retlist=2 for struct (hidden out-param),
             #   retlist=3 for Str (direct i8* return),
-            #   retlist=4 for Map<Int,Int> (hidden out-param).
+            #   retlist=4 for supported Map returns (hidden out-param).
             # retty is the element/struct type index (or -1).
             let mut retlist = 0
             let mut retty = 0 - 1
@@ -1242,6 +1242,9 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                                 if kw3(src, mval.nstart, mval.nlen, 73, 110, 116) == 1 {
                                     retlist = 4
                                     retty = map_value_int_ty()
+                                } else if kw4(src, mval.nstart, mval.nlen, 66, 111, 111, 108) == 1 {
+                                    retlist = 4
+                                    retty = map_value_bool_ty()
                                 }
                             }
                         }
@@ -6678,7 +6681,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         pint(pi)
         pi = pi + 1
     }
-    # `-> List`, `-> Struct`, and `-> Map<Int,Int>` functions take a hidden trailing out-param
+    # `-> List`, `-> Struct`, and supported `-> Map` functions take a hidden trailing out-param
     # `i64* %a<npar>`: the caller passes a buffer, and return copies into it.
     if f.retlist == 1 or f.retlist == 2 or f.retlist == 4 {
         if f.npar > 0 { emit_str(", ") }
@@ -6821,7 +6824,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
     }
     # body locals start at slot npar
     let allslots = add_local_slots(slots, toks, fns, defs, src, f.bstart, f.bend, f.npar, n)
-    # retout = the hidden out-param index for a `-> List`, `-> Struct`, or `-> Map<Int,Int>`
+    # retout = the hidden out-param index for a `-> List`, `-> Struct`, or supported `-> Map`
     # function, else -1.
     let mut retout = 0 - 1
     if f.retlist == 1 or f.retlist == 2 or f.retlist == 4 { retout = f.npar }
