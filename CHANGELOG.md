@@ -87,7 +87,10 @@
 - Promoted `Map<Int,Bool>` return values for explicitly annotated local
   initialization through the full compiler path and native direct engine, with
   `examples/e102_map_bool_return.vais` added to the release corpus.
-  `Map<Int,Char>` and generic Map returns remain gated.
+- Promoted `Map<Int,Char>` return values for explicitly annotated local
+  initialization through the full compiler path and native direct engine, with
+  `examples/e103_map_char_return.vais` added to the release corpus.
+  Generic Map returns remain gated.
 
 ## v0.3.1 - 2026-06-20
 

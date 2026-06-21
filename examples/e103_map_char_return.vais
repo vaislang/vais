@@ -1,0 +1,16 @@
+# expect: 42
+
+fn make_letters() -> Map<Int,Char> {
+    let letters: Map<Int,Char> = {}
+    letters.insert(4, 'A')
+    letters.insert(9, 'B')
+    return letters
+}
+
+fn main() -> Int {
+    let letters: Map<Int,Char> = make_letters()
+    if letters.get(4, 'Z') == 'A' and letters.get(9, 'Z') == 'B' and letters.contains(4) and letters.len() == 2 {
+        return 42
+    }
+    return 0
+}

@@ -65,6 +65,7 @@ examples/e99_map_bool_param.vais	native-supported	Map<Int,Bool> parameter mutati
 examples/e100_map_char_param.vais	native-supported	Map<Int,Char> parameter mutation by reference.
 examples/e101_map_return.vais	native-supported	Map<Int,Int> return value initializes a local.
 examples/e102_map_bool_return.vais	native-supported	Map<Int,Bool> return value initializes a local.
+examples/e103_map_char_return.vais	native-supported	Map<Int,Char> return value initializes a local.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.
