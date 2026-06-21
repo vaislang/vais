@@ -57,6 +57,11 @@
 - Promoted local `Map<Int,Int>` assignment copy through the full compiler path
   and native direct engine, with `examples/e95_map_assignment.vais` added to
   the release corpus.
+- Promoted local `Map<Int,Bool>` construction, assignment copy, `insert`,
+  `get(key, default)`, `contains`, and `len` through the full compiler path and
+  native direct engine, with `examples/e96_map_bool.vais` added to the release
+  corpus. `Map<Int,Bool>.get_opt` remains gated until `Option<Bool>` is
+  verified.
 
 ## v0.3.1 - 2026-06-20
 

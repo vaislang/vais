@@ -58,8 +58,9 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<Int>` | Verified |
 | `List<Str>` | Partial; verified for local `push`, local index read, and host process arguments |
 | `List<T>` | Partial |
-| `Map<Int,Int>` | Verified for local values and local assignment copy |
-| `Map<K,V>` | Design-specified beyond the local `Map<Int,Int>` slice; not verified |
+| `Map<Int,Int>` | Verified for local values, local assignment copy, and `get_opt` |
+| `Map<Int,Bool>` | Verified for local values and local assignment copy; `get_opt` is not verified |
+| `Map<K,V>` | Design-specified beyond the verified concrete local Map slices; not verified |
 | `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Option<T>` | Specified beyond the `Option<Int>` slice |
 | `Result<Int,Int>` | Verified for `Ok(Int)`, `Err(Int)`, helper returns, statement `match`, expression-match binding, and local-binding `?` propagation |
@@ -84,11 +85,11 @@ The verified Map surface is deliberately small:
 
 | API | Verified behavior |
 | --- | --- |
-| `let m: Map<Int,Int> = {}` | Construct an empty integer map |
-| `target = source` | Copy one local integer map into another local integer map |
-| `m.insert(key, value)` | Insert or replace an integer value by integer key |
+| `let m: Map<Int,Int> = {}` / `let m: Map<Int,Bool> = {}` | Construct an empty local map |
+| `target = source` | Copy one local map into another local map with the same concrete type |
+| `m.insert(key, value)` | Insert or replace a value by integer key |
 | `m.get(key, default)` | Return the value for `key`, or `default` when absent |
-| `m.get_opt(key)` | Return `Some(value)` for a present key or `None` when absent |
+| `m.get_opt(key)` | Return `Some(value)` for a present key or `None` when absent on `Map<Int,Int>` |
 | `m.contains(key)` | Return whether `key` is present |
 | `m.len()` | Return the number of present keys |
 

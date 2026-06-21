@@ -2074,7 +2074,7 @@ static int check_fn_contract_line(
         if (arrow != NULL && front_has_map_type(arrow + 2)) {
             report_issue(path, line_no, find_col(line, "Map"), line,
                 "Map return values are not verified yet",
-                "keep Map<Int,Int> values local; Map function returns need an ABI specification before promotion.",
+                "keep Map<Int,Int> or Map<Int,Bool> values local; Map function returns need an ABI specification before promotion.",
                 NULL);
             issue = 1;
         } else if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0 && strcmp(ret, "Char") != 0)) {
@@ -2087,7 +2087,7 @@ static int check_fn_contract_line(
         if (params != NULL && strlen(skip_ws(params)) > 0 && front_has_map_type(params)) {
             report_issue(path, line_no, find_col(line, "Map"), line,
                 "Map parameters are not verified yet",
-                "keep Map<Int,Int> values local; Map function parameters need an ABI specification before promotion.",
+                "keep Map<Int,Int> or Map<Int,Bool> values local; Map function parameters need an ABI specification before promotion.",
                 NULL);
             issue = 1;
         } else if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params)) {
@@ -2104,7 +2104,8 @@ static int check_fn_contract_line(
     return issue;
 }
 
-static char *front_supported_map_local_name(const char *line) {
+static char *front_supported_map_local_name(const char *line, char **type_out) {
+    if (type_out != NULL) *type_out = NULL;
     const char *s = skip_ws(line);
     if (!starts_with(s, "let") || is_ident_continue(s[3])) return NULL;
     s = skip_ws(s + 3);
@@ -2126,8 +2127,16 @@ static char *front_supported_map_local_name(const char *line) {
     q = skip_ws(q + 3);
     if (*q != ',') return NULL;
     q = skip_ws(q + 1);
-    if (strncmp(q, "Int", 3) != 0 || is_ident_continue(q[3])) return NULL;
-    q = skip_ws(q + 3);
+    const char *value_type = NULL;
+    if (strncmp(q, "Int", 3) == 0 && !is_ident_continue(q[3])) {
+        value_type = "Int";
+        q = skip_ws(q + 3);
+    } else if (strncmp(q, "Bool", 4) == 0 && !is_ident_continue(q[4])) {
+        value_type = "Bool";
+        q = skip_ws(q + 4);
+    } else {
+        return NULL;
+    }
     if (*q != '>') return NULL;
     const char *eq = strchr(q, '=');
     if (eq == NULL) return NULL;
@@ -2137,13 +2146,23 @@ static char *front_supported_map_local_name(const char *line) {
     if (*rhs != '}') return NULL;
     rhs = skip_ws(rhs + 1);
     if (*rhs != '\0' && *rhs != ';') return NULL;
+    if (type_out != NULL) {
+        StrBuf type;
+        sb_init(&type);
+        sb_append(&type, "Map<Int,");
+        sb_append(&type, value_type);
+        sb_append(&type, ">");
+        *type_out = sb_take(&type);
+    }
     return substr_copy(name_start, (size_t)(name_end - name_start));
 }
 
 static int front_supported_map_local_line(const char *line) {
-    char *name = front_supported_map_local_name(line);
+    char *type = NULL;
+    char *name = front_supported_map_local_name(line, &type);
     int ok = name != NULL;
     free(name);
+    free(type);
     return ok;
 }
 
@@ -2152,6 +2171,34 @@ static int front_name_in_list(char **names, int count, const char *name) {
         if (strcmp(names[i], name) == 0) return 1;
     }
     return 0;
+}
+
+static const char *front_map_type_for(char **names, char **types, int count, const char *name) {
+    if (name == NULL) return NULL;
+    for (int i = 0; i < count; i++) {
+        if (strcmp(names[i], name) == 0) return types[i];
+    }
+    return NULL;
+}
+
+static char *front_bool_map_get_opt_name(const char *line, char **map_locals, char **map_types, int map_local_count) {
+    for (int local = 0; local < map_local_count; local++) {
+        if (strcmp(map_types[local], "Map<Int,Bool>") != 0) continue;
+        const char *name = map_locals[local];
+        size_t name_len = strlen(name);
+        for (const char *p = line; *p != '\0'; p++) {
+            if (p != line && is_ident_continue(p[-1])) continue;
+            if (strncmp(p, name, name_len) != 0) continue;
+            if (is_ident_continue(p[name_len])) continue;
+            const char *q = skip_ws(p + name_len);
+            if (*q != '.') continue;
+            q = skip_ws(q + 1);
+            if (!starts_with(q, "get_opt") || is_ident_continue(q[7])) continue;
+            q = skip_ws(q + 7);
+            if (*q == '(') return strdup(name);
+        }
+    }
+    return NULL;
 }
 
 static char *front_map_assignment_name(const char *line, char **map_locals, int map_local_count, char **rhs_out) {
@@ -2289,6 +2336,7 @@ static int check_front_contract_text(const char *text, const char *path) {
     int has_main = 0;
     int has_bad_main = 0;
     char *map_locals[128] = {0};
+    char *map_types[128] = {0};
     int map_local_count = 0;
     for (size_t i = 0; i < lines.len; i++) {
         const char *line = lines.items[i];
@@ -2302,17 +2350,33 @@ static int check_front_contract_text(const char *text, const char *path) {
         if (starts_with(trim, "module") && !is_ident_continue(trim[6])) module_kw = "module";
         else if (starts_with(trim, "package") && !is_ident_continue(trim[7])) module_kw = "package";
         char *map_assignment_rhs = NULL;
+        char *bool_get_opt = NULL;
         char *map_assignment = front_map_assignment_name(probe, map_locals, map_local_count, &map_assignment_rhs);
         if (map_assignment != NULL) {
-            if (map_assignment_rhs == NULL || !front_name_in_list(map_locals, map_local_count, map_assignment_rhs)) {
+            const char *target_type = front_map_type_for(map_locals, map_types, map_local_count, map_assignment);
+            const char *source_type = front_map_type_for(map_locals, map_types, map_local_count, map_assignment_rhs);
+            if (map_assignment_rhs == NULL || source_type == NULL) {
                 report_issue(path, line_no, find_col(line, map_assignment), line,
-                    "Map assignment requires another local Map<Int,Int>",
-                    "assign from a local `Map<Int,Int>` value; Map parameters, returns, and generic key/value forms are not verified yet.",
+                    "Map assignment requires another local Map value",
+                    "assign from a local `Map<Int,Int>` or `Map<Int,Bool>` value; Map parameters, returns, and generic key/value forms are not verified yet.",
+                    NULL);
+                issues++;
+            } else if (target_type == NULL || strcmp(target_type, source_type) != 0) {
+                report_issue(path, line_no, find_col(line, map_assignment), line,
+                    "Map assignment source type must match the target Map type",
+                    "copy between locals with the same concrete Map type, such as `Map<Int,Int>` to `Map<Int,Int>` or `Map<Int,Bool>` to `Map<Int,Bool>`.",
                     NULL);
                 issues++;
             }
             free(map_assignment_rhs);
             free(map_assignment);
+        } else if ((bool_get_opt = front_bool_map_get_opt_name(probe, map_locals, map_types, map_local_count)) != NULL) {
+            report_issue(path, line_no, find_col(line, bool_get_opt), line,
+                "Map<Int,Bool>.get_opt is not verified yet",
+                "use `get(key, default)` until Option<Bool> is verified.",
+                "m.get(key, default)");
+            issues++;
+            free(bool_get_opt);
         } else if (module_kw != NULL) {
             report_issue(path, line_no, find_col(probe, module_kw), line,
                 "module and package declarations are not implemented yet",
@@ -2383,8 +2447,8 @@ static int check_front_contract_text(const char *text, const char *path) {
             if (!front_supported_map_local_line(probe)) {
                 int col = strstr(probe, "Map<") != NULL ? find_col(probe, "Map<") : find_col(probe, "Map <");
                 report_issue(path, line_no, col, line,
-                    "only local Map<Int,Int> values are verified for now",
-                    "write `let name: Map<Int,Int> = {}` and use `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len`; Map parameters, returns, and generic key/value forms are not verified yet.",
+                    "only local Map<Int,Int> and Map<Int,Bool> values are verified for now",
+                    "write `let name: Map<Int,Int> = {}` or `let name: Map<Int,Bool> = {}`; generic key/value forms, Map parameters, and Map returns are not verified yet.",
                     NULL);
                 issues++;
             }
@@ -2401,12 +2465,16 @@ static int check_front_contract_text(const char *text, const char *path) {
                 NULL);
             issues++;
         }
-        char *map_local = front_supported_map_local_name(probe);
+        char *map_local_type = NULL;
+        char *map_local = front_supported_map_local_name(probe, &map_local_type);
         if (map_local != NULL) {
             if (map_local_count < 128) {
-                map_locals[map_local_count++] = map_local;
+                map_locals[map_local_count] = map_local;
+                map_types[map_local_count] = map_local_type;
+                map_local_count++;
             } else {
                 free(map_local);
+                free(map_local_type);
             }
         }
         free(probe);
@@ -2424,7 +2492,10 @@ static int check_front_contract_text(const char *text, const char *path) {
             NULL);
         issues++;
     }
-    for (int m = 0; m < map_local_count; m++) free(map_locals[m]);
+    for (int m = 0; m < map_local_count; m++) {
+        free(map_locals[m]);
+        free(map_types[m]);
+    }
     lines_free(&lines);
     return issues == 0 ? 0 : 1;
 }
@@ -3619,6 +3690,25 @@ static int direct_is_map_int_int_type(const char *type) {
     return type != NULL && strcmp(type, "Map<Int,Int>") == 0;
 }
 
+static int direct_is_map_int_bool_type(const char *type) {
+    return type != NULL && strcmp(type, "Map<Int,Bool>") == 0;
+}
+
+static int direct_is_map_type(const char *type) {
+    return direct_is_map_int_int_type(type) || direct_is_map_int_bool_type(type);
+}
+
+static const char *direct_map_value_type(const char *type) {
+    if (direct_is_map_int_int_type(type)) return "Int";
+    if (direct_is_map_int_bool_type(type)) return "Bool";
+    return NULL;
+}
+
+static int direct_map_arg_type_compatible(const char *expected, const char *actual) {
+    if (expected == NULL || actual == NULL) return 0;
+    return strcmp(expected, actual) == 0;
+}
+
 static int direct_is_list_type(const char *type) {
     size_t n = type == NULL ? 0 : strlen(type);
     return n > 6 && starts_with(type, "List<") && type[n - 1] == '>';
@@ -3671,7 +3761,7 @@ static int direct_fn_type_allowed(DirectStructInfo *structs, int struct_count, c
 static int direct_local_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
     return direct_fn_type_allowed(structs, struct_count, type) ||
         direct_is_list_struct_type(structs, struct_count, type) ||
-        direct_is_map_int_int_type(type);
+        direct_is_map_type(type);
 }
 
 static int direct_type_compatible(const char *expected, const char *actual) {
@@ -3685,7 +3775,7 @@ static const char *direct_c_type(const char *type) {
     if (direct_is_bool_type(type)) return "Bool";
     if (direct_is_char_type(type)) return "long";
     if (direct_is_list_int_type(type)) return "DirectListInt";
-    if (direct_is_map_int_int_type(type)) return "DirectMapIntInt";
+    if (direct_is_map_type(type)) return "DirectMapIntInt";
     if (direct_is_list_type(type)) {
         static char bufs[4][128];
         static int slot = 0;
@@ -5042,7 +5132,7 @@ static char *direct_rewrite_list_expr(
             continue;
         }
         if (!direct_is_list_type(base_type)) {
-            if (direct_is_map_int_int_type(base_type)) {
+            if (direct_is_map_type(base_type)) {
                 if (expr[cursor] == '.') {
                     int field_start = cursor + 1;
                     while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
@@ -5081,6 +5171,16 @@ static char *direct_rewrite_list_expr(
                         continue;
                     }
                     if ((strcmp(field, "contains") == 0 || strcmp(field, "get") == 0 || strcmp(field, "get_opt") == 0) && *after == '(') {
+                        if (strcmp(field, "get_opt") == 0 && !direct_is_map_int_int_type(base_type)) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter Map<Int,Bool>.get_opt is not verified yet",
+                                "use `m.get(key, default)` until Option<Bool> is verified.",
+                                "m.get(key, default)");
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
                         int close = find_matching_paren_c(expr, (int)(after - expr));
                         if (close < 0) {
                             report_issue(path, line_no, find_col(line, name), line,
@@ -5138,7 +5238,7 @@ static char *direct_rewrite_list_expr(
                     }
                     report_issue(path, line_no, find_col(line, name), line,
                         "direct native emitter supports Map get, get_opt, contains, and len expressions",
-                        "write `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>.",
+                        "write `m.get(key, default)`, `m.contains(key)`, or `m.len()` for Map<Int,Int> or Map<Int,Bool>; get_opt is currently only verified for Map<Int,Int>.",
                         NULL);
                     free(field);
                     free(name);
@@ -5475,6 +5575,10 @@ static char *direct_infer_expr_type(
         free(trimmed);
         return strdup("List<Int>");
     }
+    if (strcmp(s, "true") == 0 || strcmp(s, "false") == 0) {
+        free(trimmed);
+        return strdup("Bool");
+    }
     if (is_ident_start(*s)) {
         const char *name_start = s;
         s++;
@@ -5542,8 +5646,18 @@ static char *direct_infer_expr_type(
                     return elem_type;
                 }
             }
-            if (direct_is_map_int_int_type(local_type)) {
-                if ((strcmp(field, "get") == 0 || strcmp(field, "get_opt") == 0 || strcmp(field, "len") == 0) && *after == '(') {
+            if (direct_is_map_type(local_type)) {
+                if (strcmp(field, "get") == 0 && *after == '(') {
+                    int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                    if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                        const char *value_type = direct_map_value_type(local_type);
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return strdup(value_type == NULL ? "Int" : value_type);
+                    }
+                }
+                if ((strcmp(field, "get_opt") == 0 || strcmp(field, "len") == 0) && *after == '(') {
                     int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
                     if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
                         free(field);
@@ -5847,7 +5961,7 @@ static int direct_check_expr_inner(
                 free(name);
                 return 1;
             }
-            if (direct_is_map_int_int_type(base_type)) {
+            if (direct_is_map_type(base_type)) {
                 const char *after = skip_ws(expr + field_end);
                 if (strcmp(field, "len") == 0) {
                     if (*after != '(') {
@@ -5889,6 +6003,15 @@ static int direct_check_expr_inner(
                     continue;
                 }
                 if ((strcmp(field, "contains") == 0 || strcmp(field, "get") == 0 || strcmp(field, "get_opt") == 0) && *after == '(') {
+                    if (strcmp(field, "get_opt") == 0 && !direct_is_map_int_int_type(base_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter Map<Int,Bool>.get_opt is not verified yet",
+                            "use `m.get(key, default)` until Option<Bool> is verified.",
+                            "m.get(key, default)");
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
                     int close = find_matching_paren_c(expr, (int)(after - expr));
                     if (close < 0) {
                         report_issue(path, line_no, find_col(line, name), line,
@@ -5918,7 +6041,7 @@ static int direct_check_expr_inner(
                         if (args[a] == NULL || strlen(skip_ws(args[a])) == 0) {
                             report_issue(path, line_no, find_col(line, name), line,
                                 "direct native emitter Map arguments cannot be empty",
-                                "pass Int expressions to the Map method.",
+                                "pass key/value expressions to the Map method.",
                                 NULL);
                             for (int k = 0; k < 16; k++) free(args[k]);
                             free(field);
@@ -5932,10 +6055,11 @@ static int direct_check_expr_inner(
                             return 1;
                         }
                         char *arg_type = direct_infer_expr_type(args[a], locals, fns, fn_count, structs, struct_count);
-                        if (!direct_type_compatible("Int", arg_type)) {
+                        const char *expected_arg_type = a == 0 ? "Int" : direct_map_value_type(base_type);
+                        if (!direct_map_arg_type_compatible(expected_arg_type, arg_type)) {
                             report_issue(path, line_no, find_col(line, name), line,
-                                "direct native emitter Map arguments must be Int values",
-                                "use `Map<Int,Int>` with Int keys and Int values in this slice.",
+                                "direct native emitter Map arguments must match key/value types",
+                                "use an Int key and a value matching the Map's value type.",
                                 NULL);
                             free(arg_type);
                             for (int k = 0; k < 16; k++) free(args[k]);
@@ -5953,7 +6077,7 @@ static int direct_check_expr_inner(
                 }
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter supports Map insert, get, get_opt, contains, and len",
-                    "write `m.insert(key, value)`, `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>.",
+                    "write `m.insert(key, value)`, `m.get(key, default)`, `m.contains(key)`, or `m.len()` for Map<Int,Int> or Map<Int,Bool>; get_opt is currently only verified for Map<Int,Int>.",
                     NULL);
                 free(field);
                 free(name);
@@ -6127,10 +6251,10 @@ static int direct_check_expr_inner(
             free(name);
             return 1;
         }
-        if (direct_is_map_int_int_type(local_type)) {
+        if (direct_is_map_type(local_type)) {
             report_issue(path, line_no, find_col(line, name), line,
                 "direct native emitter cannot use a Map value as an Int expression",
-                "read a map value with `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, or `m.len()`.",
+                "read a map value with `m.get(key, default)`, `m.contains(key)`, or `m.len()`; use `m.get_opt(key)` only for Map<Int,Int>.",
                 "m.get(key, 0)");
             free(name);
             return 1;
@@ -7176,7 +7300,7 @@ static int direct_lower_line(
             if (local_type == NULL) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter expected a local type",
-                    "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, or a declared struct type in this direct-engine slice.",
+                    "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, or a declared struct type in this direct-engine slice.",
                     NULL);
                 free(name);
                 free(stripped);
@@ -7185,8 +7309,8 @@ static int direct_lower_line(
             p = skip_ws(p);
             if (!direct_local_type_allowed(structs, struct_count, local_type)) {
                 report_issue(path, line_no, find_col(line, local_type), line,
-                    "direct native emitter supports Int, Bool, Char, Str, List<Int>, List<Struct>, Map<Int,Int>, and declared struct locals only",
-                    "use `let name: Int = expr`, `let name: Bool = expr`, `let name: Char = expr`, `let name: Str = expr`, `let name: List<Int> = []`, `let name: Map<Int,Int> = {}`, `let name: Struct = expr`, or omit the annotation.",
+                    "direct native emitter supports Int, Bool, Char, Str, List<Int>, List<Struct>, Map<Int,Int>, Map<Int,Bool>, and declared struct locals only",
+                    "use `let name: Int = expr`, `let name: Bool = expr`, `let name: Char = expr`, `let name: Str = expr`, `let name: List<Int> = []`, `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, `let name: Struct = expr`, or omit the annotation.",
                     NULL);
                 free(local_type);
                 free(name);
@@ -7210,7 +7334,7 @@ static int direct_lower_line(
         if (local_type == NULL && direct_is_map_empty_initializer_expr(expr)) {
             report_issue(path, line_no, find_col(line, name), line,
                 "direct native emitter requires a Map type annotation for `{}`",
-                "write `let name: Map<Int,Int> = {}` for the first Map slice.",
+                "write `let name: Map<Int,Int> = {}` or `let name: Map<Int,Bool> = {}` for the verified Map slices.",
                 "let m: Map<Int,Int> = {}");
             free(expr);
             free(name);
@@ -7218,11 +7342,11 @@ static int direct_lower_line(
             return 1;
         }
         if (local_type == NULL) local_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
-        if (direct_is_map_int_int_type(local_type)) {
+        if (direct_is_map_type(local_type)) {
             if (!direct_is_map_empty_initializer_expr(expr)) {
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter Map<Int,Int> locals must start with `{}`",
-                    "initialize the local with `let name: Map<Int,Int> = {}` and then call `insert`.",
+                    "direct native emitter Map locals must start with `{}`",
+                    "initialize the local with `let name: Map<Int,Int> = {}` or `let name: Map<Int,Bool> = {}` and then call `insert`.",
                     "let m: Map<Int,Int> = {}");
                 free(expr);
                 free(local_type);
@@ -7439,11 +7563,11 @@ static int direct_lower_line(
     char *method_args = NULL;
     if (direct_parse_method_statement(s, &method_base, &method_name, &method_args)) {
         const char *base_type = direct_names_type(locals, method_base);
-        if (direct_is_map_int_int_type(base_type)) {
+        if (direct_is_map_type(base_type)) {
             if (strcmp(method_name, "insert") != 0) {
                 report_issue(path, line_no, find_col(line, method_base), line,
                     "direct native emitter supports Map.insert statements only",
-                    "write `m.insert(key, value)` on a local Map<Int,Int>.",
+                    "write `m.insert(key, value)` on a local Map<Int,Int> or Map<Int,Bool>.",
                     NULL);
                 free(method_base);
                 free(method_name);
@@ -7476,10 +7600,11 @@ static int direct_lower_line(
                     return 1;
                 }
                 char *arg_type = direct_infer_expr_type(args[a], locals, fns, fn_count, structs, struct_count);
-                if (!direct_type_compatible("Int", arg_type)) {
+                const char *expected_arg_type = a == 0 ? "Int" : direct_map_value_type(base_type);
+                if (!direct_map_arg_type_compatible(expected_arg_type, arg_type)) {
                     report_issue(path, line_no, find_col(line, method_name), line,
-                        "direct native emitter Map.insert arguments must be Int values",
-                        "use `Map<Int,Int>` with Int keys and Int values in this slice.",
+                        "direct native emitter Map.insert arguments must match key/value types",
+                        "use an Int key and a value matching the Map's value type.",
                         NULL);
                     free(arg_type);
                     for (int k = 0; k < 16; k++) free(args[k]);
@@ -7533,7 +7658,7 @@ static int direct_lower_line(
         if (!direct_is_list_type(base_type) || strcmp(method_name, "push") != 0) {
             report_issue(path, line_no, find_col(line, method_base), line,
                 "direct native emitter supports List.push and Map.insert statements only",
-                "write `xs.push(value)` on a local list or `m.insert(key, value)` on a local Map<Int,Int>.",
+                "write `xs.push(value)` on a local list or `m.insert(key, value)` on a local Map<Int,Int> or Map<Int,Bool>.",
                 NULL);
             free(method_base);
             free(method_name);
@@ -7633,13 +7758,24 @@ static int direct_lower_line(
         }
         const char *target_type = direct_assignment_target_type(lhs, locals, structs, struct_count);
         int allow_list_assignment = direct_is_list_type(target_type);
-        if (direct_is_map_int_int_type(target_type)) {
+        if (direct_is_map_type(target_type)) {
             char *rhs_name = trim_copy(expr);
             const char *rhs_type = direct_is_plain_ident(rhs_name) ? direct_names_type(locals, rhs_name) : NULL;
-            if (!direct_is_map_int_int_type(rhs_type)) {
+            if (!direct_is_map_type(rhs_type)) {
                 report_issue(path, line_no, find_col(line, lhs), line,
-                    "direct native emitter Map assignment requires another local Map<Int,Int>",
-                    "assign from a local `Map<Int,Int>` value; Map parameters, returns, and generic key/value forms are not in this direct slice.",
+                    "direct native emitter Map assignment requires another local Map value",
+                    "assign from a local `Map<Int,Int>` or `Map<Int,Bool>` value; Map parameters, returns, and generic key/value forms are not in this direct slice.",
+                    "scores = other");
+                free(rhs_name);
+                free(lhs);
+                free(expr);
+                free(stripped);
+                return 1;
+            }
+            if (strcmp(target_type, rhs_type) != 0) {
+                report_issue(path, line_no, find_col(line, lhs), line,
+                    "direct native emitter Map assignment source type must match the target Map type",
+                    "copy between locals with the same concrete Map type.",
                     "scores = other");
                 free(rhs_name);
                 free(lhs);
@@ -7724,7 +7860,7 @@ static int direct_lower_line(
     }
 
     report_issue(path, line_no, 1, line,
-        "direct native emitter supports Int functions, struct locals, List locals, Map<Int,Int> locals, lets, assignment, if, while, for, break, continue, calls, and return",
+        "direct native emitter supports Int functions, struct locals, List locals, Map<Int,Int>/Map<Int,Bool> locals, lets, assignment, if, while, for, break, continue, calls, and return",
         "use the full engine for syntax outside the direct subset.",
         NULL);
     free(stripped);

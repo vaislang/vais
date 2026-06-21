@@ -2,15 +2,17 @@
 
 Status: design contract for future gates. The verified Map surface today is
 local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
-`get(key, default)`, `get_opt(key)`, `contains`, and `len` in the full
-self-host compiler path and native direct engine.
+`get(key, default)`, `get_opt(key)`, `contains`, and `len`, plus local
+`Map<Int,Bool>` with `{}`, assignment copy, `insert`, `get(key, default)`,
+`contains`, and `len`, in the full self-host compiler path and native direct
+engine.
 
 This document fixes the implementation contract required before `Map<K,V>` can
 be broadened. It does not publish new verified syntax by itself.
 
 ## Goals
 
-- Keep current local `Map<Int,Int>` behavior stable.
+- Keep current local `Map<Int,Int>` and `Map<Int,Bool>` behavior stable.
 - Add Map parameters and return values without hidden aliasing.
 - Broaden key and value types only as concrete, gate-backed instantiations.
 - Keep direct-engine and full self-host lowering behavior aligned.
@@ -23,27 +25,34 @@ The current slice is deliberately local:
 ```vais
 fn main() -> Int {
     let scores: Map<Int,Int> = {}
+    let flags: Map<Int,Bool> = {}
     scores.insert(4, 40)
-    return scores.get(4, 0) + scores.contains(4) + scores.len()
+    flags.insert(4, true)
+    if flags.get(4, false) {
+        return scores.get(4, 0) + scores.contains(4) + scores.len()
+    }
+    return 0
 }
 ```
 
 Verified behavior:
 
-- A Map local must be explicitly annotated as `Map<Int,Int>`.
+- A Map local must be explicitly annotated as `Map<Int,Int>` or
+  `Map<Int,Bool>`.
 - `{}` constructs an empty local map.
-- `target = source` copies one local `Map<Int,Int>` into another local
-  `Map<Int,Int>` without aliasing.
+- `target = source` copies one local Map into another local with the same
+  concrete Map type without aliasing.
 - `insert(key, value)` inserts or replaces the key.
 - `get(key, default)` returns the stored value or the default.
 - `get_opt(key)` returns `Some(value)` or `None` for the local
-  `Option<Int>` slice.
+  `Map<Int,Int>` and `Option<Int>` slice.
 - `contains(key)` returns a `Bool`.
 - `len()` returns the number of present keys.
 
 Not verified yet: Map function parameters, function returns, generic key/value
 pairs, entry literals, deletion, iteration, custom hashing, and Map APIs that
-require broader `Option<T>` or `Result<T,E>` support.
+require broader `Option<T>` or `Result<T,E>` support. `Map<Int,Bool>.get_opt`
+is intentionally excluded until `Option<Bool>` is verified.
 
 ## Ownership And Mutation Semantics
 
@@ -79,22 +88,25 @@ For a concrete `Map<K,V>`:
   the concrete key/value pair.
 
 The current full self-host path uses a fixed-capacity integer buffer for local
-`Map<Int,Int>`. Future gates may keep fixed-capacity storage for early concrete
-slices, but capacity and trap behavior must be documented and tested before
-being advertised.
+`Map<Int,Int>` and `Map<Int,Bool>`. Future gates may keep fixed-capacity storage
+for early concrete slices, but capacity and trap behavior must be documented and
+tested before being advertised.
 
 ## Generic Expansion Order
 
 Broaden Map support in this order:
 
 1. `Map<Int,Int>` ABI: parameters and returns.
-2. `Map<Int,V>` for already verified scalar values where `V` has a stable copy
-   ABI.
-3. `Map<Str,V>` only after string equality, hashing, copy, and lifetime rules
+2. More `Map<Int,V>` local slices for already verified scalar values where `V`
+   has a stable copy ABI; `Map<Int,Bool>` local values are the first completed
+   slice in this step.
+3. `Map<Int,V>` ABI: parameters and returns after the local concrete slices are
+   stable.
+4. `Map<Str,V>` only after string equality, hashing, copy, and lifetime rules
    are specified for Map keys.
-4. Struct values only after struct copy and return ABI behavior are already
+5. Struct values only after struct copy and return ABI behavior are already
    gate-backed for the chosen Map storage.
-5. Generic functions over `Map<K,V>` only after generic type checking can
+6. Generic functions over `Map<K,V>` only after generic type checking can
    constrain key equality and storage helpers deterministically.
 
 Do not publish a broad `Map<K,V>` claim until every accepted `K,V` pair has
@@ -122,7 +134,8 @@ and ordered maps are later APIs.
 
 Until each slice is implemented, the public front must reject unsupported forms:
 
-- Map assignment from anything other than another local `Map<Int,Int>`.
+- Map assignment from anything other than another local with the same verified
+  concrete Map type.
 - Map function parameters.
 - Map function returns.
 - Generic key/value forms outside verified concrete pairs.
@@ -130,7 +143,8 @@ Until each slice is implemented, the public front must reject unsupported forms:
 - Unsupported Map methods.
 
 Diagnostics must include a concrete rewrite or a short explanation that only
-local `Map<Int,Int>` is verified in the current slice.
+local `Map<Int,Int>` and `Map<Int,Bool>` values are verified in the current
+slice.
 
 ## Required Gates
 

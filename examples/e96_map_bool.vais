@@ -1,0 +1,15 @@
+# expect: 42
+# Local Map<Int,Bool> construction, insert/replace, get fallback, contains, len,
+# and assignment-copy semantics.
+fn main() -> Int {
+    let flags: Map<Int,Bool> = {}
+    let copy: Map<Int,Bool> = {}
+    flags.insert(4, true)
+    flags.insert(5, false)
+    copy = flags
+    flags.insert(4, false)
+    if copy.get(4, false) and not copy.get(5, true) and copy.contains(4) and copy.len() == 2 {
+        return 42
+    }
+    return 0
+}

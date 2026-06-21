@@ -18,7 +18,7 @@ struct Token { kind: Int, value: Int, nstart: Int, nlen: Int }
 # Operand: kind 0=literal(val), 1=temp(%t<val>). next = next free SSA temp.
 struct Op { kind: Int, val: Int, next: Int }
 # A declared variable: source name range -> it lives at alloca %v<slot>.
-# is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map<Int,Int> local.
+# is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map<Int,Int/Bool> local.
 struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: Int }
 # A function: name range, up to 10 params (p0s/p0l..p9s/p9l + p0ty..p9ty), param
 # count `npar`, and the body token range [bstart, bend). 10 params covers the
@@ -3462,7 +3462,7 @@ fn rhs_is_host_str_call(toks: &List<Token>, fns: &List<Fn>, src: Str, npos: Int)
     }
     return 0
 }
-fn let_anno_is_map_int_int(toks: &List<Token>, src: Str, npos: Int) -> Int {
+fn let_anno_is_map_int_scalar(toks: &List<Token>, src: Str, npos: Int) -> Int {
     let c1 = toks[npos + 1]
     if c1.kind != 16 { return 0 }
     let ty = toks[npos + 2]
@@ -3474,7 +3474,9 @@ fn let_anno_is_map_int_int(toks: &List<Token>, src: Str, npos: Int) -> Int {
     let comma = toks[npos + 5]
     if comma.kind != 25 { return 0 }
     let vt = toks[npos + 6]
-    if kw3(src, vt.nstart, vt.nlen, 73, 110, 116) != 1 { return 0 }
+    let is_int_value = kw3(src, vt.nstart, vt.nlen, 73, 110, 116)
+    let is_bool_value = kw4(src, vt.nstart, vt.nlen, 66, 111, 111, 108)
+    if is_int_value != 1 and is_bool_value != 1 { return 0 }
     let gt = toks[npos + 7]
     if gt.kind != 19 { return 0 }
     return 1
@@ -3731,7 +3733,7 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
             let vp = rhs_pos(toks, npos)
             let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
-            if let_anno_is_map_int_int(toks, src, npos) == 1 and rhs_is_empty_map(toks, npos) == 1 {
+            if let_anno_is_map_int_scalar(toks, src, npos) == 1 and rhs_is_empty_map(toks, npos) == 1 {
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: 0 - 1 })
                 emit_str("  %v")
                 pint(next_slot)
@@ -6346,7 +6348,7 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
             let vp = rhs_pos(toks, npos)
             let rhs = toks[vp]
             let sti = rhs_struct_type(toks, defs, src, npos)
-            if let_anno_is_map_int_int(toks, src, npos) == 1 and rhs_is_empty_map(toks, npos) == 1 {
+            if let_anno_is_map_int_scalar(toks, src, npos) == 1 and rhs_is_empty_map(toks, npos) == 1 {
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 5, alen: map_bufsz() , sty: 0 - 1 })
                 emit_str("  %v")
                 pint(next_slot)
