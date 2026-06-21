@@ -1,0 +1,13 @@
+# expect: 42
+fn main() -> Int {
+    let letters: Map<Int,Char> = {}
+    let copy: Map<Int,Char> = {}
+    letters.insert(4, 'A')
+    letters.insert(5, 'B')
+    copy = letters
+    letters.insert(4, 'Z')
+    if copy.get(4, 'Z') == 'A' and copy.get(5, 'Z') == 'B' and copy.contains(4) and copy.len() == 2 {
+        return 42
+    }
+    return 0
+}

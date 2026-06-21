@@ -69,10 +69,11 @@ This file tracks current work only.
   direct engine for local `Map<Int,Int>` values with `{}`, assignment copy,
   `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len`, and
   local `Map<Int,Bool>` values with `{}`, assignment copy, `insert`,
-  `get(key, default)`, `contains`, and `len`.
+  `get(key, default)`, `contains`, and `len`, plus local `Map<Int,Char>` values
+  with the same non-`get_opt` surface.
 - Promoted prelude APIs have value-corpus examples, including local
-  `Map<Int,Int>`, local `Map<Int,Bool>`, and `List<T>.is_empty()`, `last()`,
-  and `pop()`.
+  `Map<Int,Int>`, local `Map<Int,Bool>`, local `Map<Int,Char>`, and
+  `List<T>.is_empty()`, `last()`, and `pop()`.
 - The full compiler path supports single-package local dotted imports such as
   `import math.add`, with gates for multi-file success, missing imports,
   duplicate symbols, and import cycles.
@@ -150,8 +151,9 @@ This file tracks current work only.
   list parameters. Local `Map<Int,Int>` values support `{}`, assignment copy,
   `insert`, `get(key, default)`, `get_opt(key) -> Option<Int>`, `contains`, and
   `len`; local `Map<Int,Bool>` values support `{}`, assignment copy, `insert`,
-  `get(key, default)`, `contains`, and `len` in both the full self-host compiler
-  path and native direct engine. Map
+  `get(key, default)`, `contains`, and `len`; local `Map<Int,Char>` values
+  support `{}`, assignment copy, `insert`, `get(key, default)`, `contains`, and
+  `len` in both the full self-host compiler path and native direct engine. Map
   function parameters, return values, and generic key/value forms are not
   claimed yet. The future Map ABI and generic expansion contract is specified
   in `docs/design/MAP_ABI.md`.
@@ -243,7 +245,9 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
   gates.
 - [x] 1.3f Promote local `Map<Int,Bool>` through concrete full/direct/front
   gates while keeping `get_opt` behind `Option<Bool>`.
-- [ ] 1.3g Broaden `Map<K,V>` only through concrete gate-backed slices.
+- [x] 1.3g Promote local `Map<Int,Char>` through concrete full/direct/front
+  gates while keeping `get_opt` behind `Option<Char>`.
+- [ ] 1.3h Broaden `Map<K,V>` only through concrete gate-backed slices.
 - [x] 1.4 Add examples and value tests for every promoted prelude API.
 - [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
 
@@ -318,8 +322,9 @@ validation.
 - [x] 3.8l Move the direct helper/control-flow, range `for`, struct-local, and
   struct ABI success fixtures into a Vais-authored harness.
 - [x] 3.8m Move direct local `List<Int>`, `Str`, `Char`,
-  `parse_uint`/`parse_int`, local `Map<Int,Int>`, local `Map<Int,Bool>`, and
-  local `List<Struct>` success fixtures into the Vais-authored feature harness.
+  `parse_uint`/`parse_int`, local `Map<Int,Int>`, local `Map<Int,Bool>`, local
+  `Map<Int,Char>`, and local `List<Struct>` success fixtures into the
+  Vais-authored feature harness.
 - [x] 3.8n Move the remaining direct List ABI, assignment, and returned-list
   hoist shell fixtures into the Vais-authored feature harness.
 - [x] 3.8o Audit remaining shell wrappers and keep only bootstrap, process
@@ -432,6 +437,9 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   - [x] Promote local `Map<Int,Bool>` construction, assignment copy, `insert`,
     `get(key, default)`, `contains`, and `len` on the full compiler path and
     native direct engine.
+  - [x] Promote local `Map<Int,Char>` construction, assignment copy, `insert`,
+    `get(key, default)`, `contains`, and `len` on the full compiler path and
+    native direct engine.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
@@ -440,6 +448,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
     and return values.
   - [x] Add front and direct diagnostics for unverified `Map<Int,Int>` value
     assignment.
+  - [x] Add front and direct diagnostics for unverified non-`Map<Int,Int>`
+    `get_opt` until matching `Option` payload slices are verified.
 
 Done: `docs/reference/LANGUAGE.md` describes a coherent v1 surface, and every
 listed feature has examples plus compiler gates.
@@ -510,6 +520,7 @@ public command protected by its own fixture contract:
   operations.
 - [x] Promote the next Phase 1 slice: full self-host local `Map<Int,Int>`.
 - [x] Promote the next concrete local Map slice: `Map<Int,Bool>`.
+- [x] Promote the next concrete local Map slice: `Map<Int,Char>`.
 - [x] Add release-corpus examples for the promoted prelude API surface.
 - [x] Specify the next Phase 1 slice: Map ABI/generic expansion or defer to the
   Phase 2 module model.
@@ -656,9 +667,10 @@ Mode: sequential
   publishing broader claims.
 - Status: `docs/design/MAP_ABI.md` now specifies ownership, assignment,
   parameter, return, monomorphic helper, and expansion-order rules. Local
-  `Map<Int,Int>` assignment copy and the local `Map<Int,Bool>` scalar-value
-  slice are verified; direct and full gates are still required before Map
-  parameters, returns, or broader generic behavior are published.
+  `Map<Int,Int>` assignment copy and the local `Map<Int,Bool>` and
+  `Map<Int,Char>` scalar-value slices are verified; direct and full gates are
+  still required before Map parameters, returns, or broader generic behavior are
+  published.
 
 ## Completed Milestone: Map ABI and Generic Expansion Specification
 
@@ -698,8 +710,9 @@ Mode: sequential
 - Requirements: local `Map<Int,Int>` values support `{}`, assignment copy,
   `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len`; local
   `Map<Int,Bool>` values support `{}`, assignment copy, `insert`,
-  `get(key, default)`, `contains`, and `len` without publishing broader generic
-  or ABI claims.
+  `get(key, default)`, `contains`, and `len`; local `Map<Int,Char>` values
+  support the same non-`get_opt` surface without publishing broader generic or
+  ABI claims.
 - Done: native direct gates pass a local map example returning a deterministic
   value, and full self-host gates pass the same local map behavior.
 
@@ -709,9 +722,9 @@ Mode: sequential
   `scripts/test-vaisc-front.sh`, `website/index.html`.
 - Requirements: docs distinguish verified local concrete Map slices from
   unsupported generic and ABI Map behavior.
-- Done: `scripts/test-vaisc-front.sh` accepts local `Map<Int,Int>` and
-  `Map<Int,Bool>` while rejecting unsupported generic `Map<K,V>` forms; docs/site
-  do not imply a verified generic `Map<K,V>`.
+- Done: `scripts/test-vaisc-front.sh` accepts local `Map<Int,Int>`,
+  `Map<Int,Bool>`, and `Map<Int,Char>` while rejecting unsupported generic
+  `Map<K,V>` forms; docs/site do not imply a verified generic `Map<K,V>`.
 
 ## Completed Milestone: Named integer parsing prelude helpers
 

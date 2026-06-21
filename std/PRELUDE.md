@@ -60,6 +60,7 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<T>` | Partial |
 | `Map<Int,Int>` | Verified for local values, local assignment copy, and `get_opt` |
 | `Map<Int,Bool>` | Verified for local values and local assignment copy; `get_opt` is not verified |
+| `Map<Int,Char>` | Verified for local values and local assignment copy; `get_opt` is not verified |
 | `Map<K,V>` | Design-specified beyond the verified concrete local Map slices; not verified |
 | `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Option<T>` | Specified beyond the `Option<Int>` slice |
@@ -85,7 +86,7 @@ The verified Map surface is deliberately small:
 
 | API | Verified behavior |
 | --- | --- |
-| `let m: Map<Int,Int> = {}` / `let m: Map<Int,Bool> = {}` | Construct an empty local map |
+| `let m: Map<Int,Int> = {}` / `let m: Map<Int,Bool> = {}` / `let m: Map<Int,Char> = {}` | Construct an empty local map |
 | `target = source` | Copy one local map into another local map with the same concrete type |
 | `m.insert(key, value)` | Insert or replace a value by integer key |
 | `m.get(key, default)` | Return the value for `key`, or `default` when absent |

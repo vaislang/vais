@@ -62,6 +62,11 @@
   native direct engine, with `examples/e96_map_bool.vais` added to the release
   corpus. `Map<Int,Bool>.get_opt` remains gated until `Option<Bool>` is
   verified.
+- Promoted local `Map<Int,Char>` construction, assignment copy, `insert`,
+  `get(key, default)`, `contains`, and `len` through the full compiler path and
+  native direct engine, with `examples/e97_map_char.vais` added to the release
+  corpus. `Map<Int,Char>.get_opt` remains gated until the matching Option
+  payload slice is verified.
 
 ## v0.3.1 - 2026-06-20
 

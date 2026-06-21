@@ -67,6 +67,8 @@ success path,
 `Option<Int>`, `examples/e95_map_assignment.vais` for local `Map<Int,Int>`
 assignment copy semantics, `examples/e96_map_bool.vais` for local
 `Map<Int,Bool>` insert/get/contains/len and assignment-copy semantics,
+`examples/e97_map_char.vais` for local `Map<Int,Char>`
+insert/get/contains/len and assignment-copy semantics,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and

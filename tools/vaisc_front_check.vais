@@ -108,6 +108,14 @@ fn map_bool_compact() -> Str {
     return str_concat(map_word(), "<Int,Bool>")
 }
 
+fn map_char_spaced() -> Str {
+    return str_concat(map_word(), "<Int, Char>")
+}
+
+fn map_char_compact() -> Str {
+    return str_concat(map_word(), "<Int,Char>")
+}
+
 fn enum_line(rest: Str) -> Str {
     return str_concat(kw_enum(), rest)
 }
@@ -158,6 +166,10 @@ fn label_map_option_accept() -> Str {
 
 fn label_map_bool_accept() -> Str {
     return str_concat("accepts local ", str_concat(map_bool_compact(), " scalar slice"))
+}
+
+fn label_map_char_accept() -> Str {
+    return str_concat("accepts local ", str_concat(map_char_compact(), " scalar slice"))
 }
 
 fn label_option_accept() -> Str {
@@ -237,7 +249,7 @@ fn help_closure() -> Str {
 }
 
 fn msg_map_generic() -> Str {
-    return str_concat("only local ", str_concat(map_int_compact(), str_concat(" and ", str_concat(map_bool_compact(), " values are verified"))))
+    return str_concat("only local ", str_concat(map_int_compact(), str_concat(", ", str_concat(map_bool_compact(), str_concat(", and ", str_concat(map_char_compact(), " values are verified"))))))
 }
 
 fn msg_map_param() -> Str {
@@ -250,6 +262,10 @@ fn msg_map_return() -> Str {
 
 fn msg_map_bool_get_opt() -> Str {
     return str_concat(map_bool_compact(), ".get_opt is not verified yet")
+}
+
+fn msg_map_char_get_opt() -> Str {
+    return str_concat(map_char_compact(), ".get_opt is not verified yet")
 }
 
 fn write_day1(path: Str) -> Int {
@@ -482,6 +498,23 @@ fn write_map_bool_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_char_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let letters: ", map_char_spaced()), " = {}"))
+    append_line(out, str_concat(str_concat("    let copy: ", map_char_spaced()), " = {}"))
+    append_line(out, "    letters.insert(4, 'A')")
+    append_line(out, "    letters.insert(5, 'B')")
+    append_line(out, "    copy = letters")
+    append_line(out, "    letters.insert(4, 'Z')")
+    append_line(out, "    if copy.get(4, 'Z') == 'A' and copy.get(5, 'Z') == 'B' and copy.contains(4) and copy.len() == 2 {")
+    append_line(out, "        return 42")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_option_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn find(x: Int) -> Option<Int> {")
@@ -641,6 +674,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map") == 1 { return write_map_accept(path) }
     if str_eq(name, "map_option") == 1 { return write_map_option_accept(path) }
     if str_eq(name, "map_bool") == 1 { return write_map_bool_accept(path) }
+    if str_eq(name, "map_char") == 1 { return write_map_char_accept(path) }
     if str_eq(name, "map_assignment") == 1 { return write_map_assignment(path) }
     if str_eq(name, "option") == 1 { return write_option_accept(path) }
     if str_eq(name, "option_expr") == 1 { return write_option_expr_accept(path) }
@@ -950,6 +984,17 @@ fn write_map_bool_get_opt_bad(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_char_get_opt_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let letters: ", map_char_spaced()), " = {}"))
+    append_line(out, "    letters.insert(4, 'A')")
+    append_line(out, "    let found = letters.get_opt(4)")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_module_not(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, bad_module_line())
@@ -1004,6 +1049,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_return_not_verified") == 1 { return write_map_return(path) }
     if str_eq(name, "map_assignment_type_mismatch") == 1 { return write_map_assignment_mismatch(path) }
     if str_eq(name, "map_bool_get_opt_not_verified") == 1 { return write_map_bool_get_opt_bad(path) }
+    if str_eq(name, "map_char_get_opt_not_verified") == 1 { return write_map_char_get_opt_bad(path) }
     if str_eq(name, "option_generic_not_verified") == 1 { return write_option_generic(path) }
     if str_eq(name, "result_generic_not_verified") == 1 { return write_result_generic(path) }
     if str_eq(name, "option_nested_not_verified") == 1 { return write_option_nested(path) }
@@ -1236,11 +1282,13 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_assignment", "accepts local Map<Int,Int> assignment copy", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool", label_map_bool_accept(), 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_char", label_map_char_accept(), 42)
     fail = fail + expect_reject(vaisc, tmp, "map_generic_not_verified", msg_map_generic(), "", "generic key/value forms")
     fail = fail + expect_reject(vaisc, tmp, "map_param_not_verified", msg_map_param(), "", "Map function parameters need an ABI specification")
     fail = fail + expect_reject(vaisc, tmp, "map_return_not_verified", msg_map_return(), "", "Map function returns need an ABI specification")
     fail = fail + expect_reject(vaisc, tmp, "map_assignment_type_mismatch", "Map assignment source type must match", "", "same concrete Map type")
-    fail = fail + expect_reject(vaisc, tmp, "map_bool_get_opt_not_verified", msg_map_bool_get_opt(), "", "Option<Bool>")
+    fail = fail + expect_reject(vaisc, tmp, "map_bool_get_opt_not_verified", msg_map_bool_get_opt(), "", "Option for Map<Int,Bool>")
+    fail = fail + expect_reject(vaisc, tmp, "map_char_get_opt_not_verified", msg_map_char_get_opt(), "", "Option for Map<Int,Char>")
     fail = fail + expect_reject(vaisc, tmp, "option_generic_not_verified", "only Option<Int> is verified", "", "generic Option<T>")
     fail = fail + expect_reject(vaisc, tmp, "result_generic_not_verified", "only Result<Int,Int> is verified", "", "generic Result<T,E>")
     fail = fail + expect_reject(vaisc, tmp, "option_nested_not_verified", "only Option<Int> is verified", "", "nested Option/Result")
