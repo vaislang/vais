@@ -2,9 +2,9 @@
 
 Status: design contract for future gates. The verified Map surface today is
 local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
-`remove`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and parameter
+`remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and parameter
 reference/mutation, plus `Map<Int,Bool>` and `Map<Int,Char>` with local
-values, assignment copy, `insert`, `remove`, `get(key, default)`, `get_opt(key)`,
+values, assignment copy, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`,
 `contains`, `len`,
 parameter reference/mutation, and return-value local initialization. These
 slices are verified in the full self-host compiler path and native direct
@@ -34,6 +34,8 @@ fn main() -> Int {
     scores.insert(4, 40)
     scores.insert(9, 2)
     scores.remove(9)
+    scores.clear()
+    scores.insert(4, 40)
     flags.insert(4, true)
     letters.insert(4, 'A')
     let yes_value = match flags.get_opt(4) { Some(v) => v, None => 0 }
@@ -126,6 +128,7 @@ Verified behavior:
 - `insert(key, value)` inserts or replaces the key.
 - `remove(key)` removes the key if present and leaves the map unchanged if the
   key is missing.
+- `clear()` removes all keys and allows the map to be reused.
 - `get(key, default)` returns the stored value or the default.
 - `get_opt(key)` returns `Some(value)` or `None` for local `Map<Int,Int>`,
   `Map<Int,Bool>`, and `Map<Int,Char>` values.
@@ -146,7 +149,7 @@ beyond the current concrete `Map<Int,V>.get_opt` slices.
 Future Map ABI gates must use these semantics:
 
 - A local Map variable owns its storage.
-- `insert` and `remove` mutate the receiver Map.
+- `insert`, `remove`, and `clear` mutate the receiver Map.
 - `a = b` copies the contents of `b` into `a`; it does not make `a` and `b`
   aliases.
 - Passing a Map to a function passes a mutable collection reference, matching
@@ -171,7 +174,7 @@ For a concrete `Map<K,V>`:
 - Return ABI uses caller-owned output storage, either as an explicit hidden
   out-parameter in LLVM lowering or an equivalent direct-engine strategy.
 - Assignment uses a concrete copy helper.
-- `insert`, `remove`, `get`, `get_opt`, `contains`, and `len` call helpers specialized for
+- `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` call helpers specialized for
   the concrete key/value pair.
 
 The current full self-host path uses a fixed-capacity integer buffer for local
@@ -211,6 +214,7 @@ The next promoted method set should remain the current small API:
 | --- | --- |
 | `m.insert(key, value)` | `Map<K,V>, K, V -> Unit` |
 | `m.remove(key)` | `Map<K,V>, K -> Unit` |
+| `m.clear()` | `Map<K,V> -> Unit` |
 | `m.get(key, default)` | `Map<K,V>, K, V -> V` |
 | `m.get_opt(key)` | `Map<K,V>, K -> Option<V>` |
 | `m.contains(key)` | `Map<K,V>, K -> Bool` |
@@ -220,8 +224,8 @@ The next promoted method set should remain the current small API:
 `Map<Int,Bool>`, and `Map<Int,Char>` slices. For future value types, promote
 `get_opt` only when the corresponding `Option<V>` payload behavior has a gate.
 
-Deletion, iteration, entry literals, capacity configuration, custom hashing,
-and ordered maps are later APIs.
+Iteration, entry literals, capacity configuration, custom hashing, and ordered
+maps are later APIs.
 
 ## Diagnostics
 

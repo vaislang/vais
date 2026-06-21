@@ -169,6 +169,15 @@ fn is_remove(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 5] != 101 { return 0 }
     return 1
 }
+fn is_clear(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 5 { return 0 }
+    if src[a] != 99 { return 0 }
+    if src[a + 1] != 108 { return 0 }
+    if src[a + 2] != 101 { return 0 }
+    if src[a + 3] != 97 { return 0 }
+    if src[a + 4] != 114 { return 0 }
+    return 1
+}
 fn is_contains(src: Str, a: Int, alen: Int) -> Int {
     if alen != 8 { return 0 }
     if src[a] != 99 { return 0 }
@@ -5253,6 +5262,17 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     putchar(10)
                     let stop = find_semi(toks, close, end)
                     i = stop + 1
+                } else if is_clear(src, meth.nstart, meth.nlen) == 1 {
+                    let close = paren_end(toks, i + 4)
+                    let base = counter
+                    emit_map_base_ptr(slots, src, t.nstart, t.nlen, base)
+                    counter = counter + 1
+                    emit_str("  call void @__vais_map_int_int_clear(i64* %t")
+                    pint(base)
+                    emit_str(")")
+                    putchar(10)
+                    let stop = find_semi(toks, close, end)
+                    i = stop + 1
                 } else {
                     let stop = find_semi(toks, i, end)
                     let e = gen_expr(toks, slots, fns, defs, src, i, stop, counter)
@@ -7117,6 +7137,18 @@ fn emit_map_helpers() -> Int {
     emit_str("  %next = add i64 %len, 1")
     putchar(10)
     emit_str("  store i64 %next, i64* %lenp")
+    putchar(10)
+    emit_str("  ret void")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    emit_str("define void @__vais_map_int_int_clear(i64* %m) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %lenp = getelementptr i64, i64* %m, i64 512")
+    putchar(10)
+    emit_str("  store i64 0, i64* %lenp")
     putchar(10)
     emit_str("  ret void")
     putchar(10)

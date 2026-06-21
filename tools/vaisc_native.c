@@ -2342,6 +2342,31 @@ static const char *front_map_type_for(char **names, char **types, int count, con
     return NULL;
 }
 
+static int front_supported_map_clear_line(const char *line, char **map_locals, int map_local_count) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    int is_map = front_name_in_list(map_locals, map_local_count, name);
+    free(name);
+    if (!is_map) return 0;
+    s = skip_ws(s);
+    if (*s != '.') return 0;
+    s = skip_ws(s + 1);
+    if (!starts_with(s, "clear") || is_ident_continue(s[5])) return 0;
+    s = skip_ws(s + 5);
+    if (*s != '(') return 0;
+    int close = find_matching_paren_c(s, 0);
+    if (close < 0) return 0;
+    const char *args = s + 1;
+    while (args < s + close && (*args == ' ' || *args == '\t' || *args == '\n' || *args == '\r')) args++;
+    if (args < s + close) return 0;
+    const char *tail = skip_ws(s + close + 1);
+    return *tail == '\0' || *tail == ';';
+}
+
 static char *front_map_assignment_name(const char *line, char **map_locals, int map_local_count, char **rhs_out) {
     const char *s = skip_ws(line);
     if (starts_with(s, "let") && !is_ident_continue(s[3])) return NULL;
@@ -2591,7 +2616,7 @@ static int check_front_contract_text(const char *text, const char *path) {
                 "use a single Int capture returning `fn(Int) -> Int`, or write a named function for broader closure cases.",
                 NULL);
             issues++;
-        } else if (strstr(probe, ".clear(") != NULL) {
+        } else if (strstr(probe, ".clear(") != NULL && !front_supported_map_clear_line(probe, map_locals, map_local_count)) {
             report_issue(path, line_no, find_col(probe, ".clear("), line,
                 "method calls beyond push/len/is_empty/last/pop/sum are not in the Vais native front subset yet",
                 "use a plain function call, or keep this source on the full compiler path until that method is promoted.",
@@ -6377,8 +6402,8 @@ static int direct_check_expr_inner(
                     continue;
                 }
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter supports Map insert/remove statements and get/get_opt/contains/len expressions",
-                    "write `m.insert(key, value)`, `m.remove(key)`, `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char>.",
+                    "direct native emitter supports Map insert/remove/clear statements and get/get_opt/contains/len expressions",
+                    "write `m.insert(key, value)`, `m.remove(key)`, `m.clear()`, `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char>.",
                     NULL);
                 free(field);
                 free(name);
@@ -7927,10 +7952,11 @@ static int direct_lower_line(
         if (direct_is_map_type(base_type)) {
             int is_insert = strcmp(method_name, "insert") == 0;
             int is_remove = strcmp(method_name, "remove") == 0;
-            if (!is_insert && !is_remove) {
+            int is_clear = strcmp(method_name, "clear") == 0;
+            if (!is_insert && !is_remove && !is_clear) {
                 report_issue(path, line_no, find_col(line, method_base), line,
-                    "direct native emitter supports Map.insert and Map.remove statements only",
-                    "write `m.insert(key, value)` or `m.remove(key)` on a local Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char>.",
+                    "direct native emitter supports Map.insert, Map.remove, and Map.clear statements only",
+                    "write `m.insert(key, value)`, `m.remove(key)`, or `m.clear()` on a local Map<Int,Int>, Map<Int,Bool>, or Map<Int,Char>.",
                     NULL);
                 free(method_base);
                 free(method_name);
@@ -7940,13 +7966,15 @@ static int direct_lower_line(
             }
             char *args[16] = {0};
             int argc = split_top_level_commas_c(method_args, args, 16);
-            int expected_argc = is_insert ? 2 : 1;
-            int bad_args = argc != expected_argc || args[0] == NULL || strlen(skip_ws(args[0])) == 0;
+            if (is_clear && argc == 1 && args[0] != NULL && strlen(skip_ws(args[0])) == 0) argc = 0;
+            int expected_argc = is_insert ? 2 : (is_clear ? 0 : 1);
+            int bad_args = argc != expected_argc;
+            if (!is_clear && (args[0] == NULL || strlen(skip_ws(args[0])) == 0)) bad_args = 1;
             if (is_insert && (args[1] == NULL || strlen(skip_ws(args[1])) == 0)) bad_args = 1;
             if (bad_args) {
                 report_issue(path, line_no, find_col(line, method_name), line,
-                    is_insert ? "direct native emitter Map.insert expects key and value arguments" : "direct native emitter Map.remove expects one key argument",
-                    is_insert ? "write `m.insert(key, value)`." : "write `m.remove(key)`.",
+                    is_insert ? "direct native emitter Map.insert expects key and value arguments" : (is_clear ? "direct native emitter Map.clear expects no arguments" : "direct native emitter Map.remove expects one key argument"),
+                    is_insert ? "write `m.insert(key, value)`." : (is_clear ? "write `m.clear()`." : "write `m.remove(key)`."),
                     NULL);
                 for (int k = 0; k < 16; k++) free(args[k]);
                 free(method_base);
@@ -7984,10 +8012,10 @@ static int direct_lower_line(
             StrBuf prelude;
             sb_init(&prelude);
             direct_current_prelude = &prelude;
-            char *rewritten_key = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+            char *rewritten_key = is_clear ? NULL : direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
             char *rewritten_value = (is_insert && rewritten_key != NULL) ? direct_rewrite_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count) : NULL;
             direct_current_prelude = NULL;
-            if (rewritten_key == NULL || (is_insert && rewritten_value == NULL)) {
+            if ((!is_clear && rewritten_key == NULL) || (is_insert && rewritten_value == NULL)) {
                 free(prelude.data);
                 free(rewritten_key);
                 free(rewritten_value);
@@ -7998,13 +8026,15 @@ static int direct_lower_line(
                 free(stripped);
                 return 1;
             }
-            char *c_key = direct_translate_expr(rewritten_key);
+            char *c_key = is_clear ? NULL : direct_translate_expr(rewritten_key);
             char *c_value = is_insert ? direct_translate_expr(rewritten_value) : NULL;
             sb_append(out, prelude.data);
-            sb_append(out, is_insert ? "__vais_map_int_int_insert(" : "__vais_map_int_int_remove(");
+            sb_append(out, is_insert ? "__vais_map_int_int_insert(" : (is_clear ? "__vais_map_int_int_clear(" : "__vais_map_int_int_remove("));
             direct_append_map_ptr_ref(out, method_base, direct_names_is_ref(locals, method_base));
-            sb_append(out, ", ");
-            sb_append(out, c_key);
+            if (!is_clear) {
+                sb_append(out, ", ");
+                sb_append(out, c_key);
+            }
             if (is_insert) {
                 sb_append(out, ", ");
                 sb_append(out, c_value);
@@ -8024,8 +8054,8 @@ static int direct_lower_line(
         }
         if (!direct_is_list_type(base_type) || strcmp(method_name, "push") != 0) {
             report_issue(path, line_no, find_col(line, method_base), line,
-                "direct native emitter supports List.push and Map.insert/Map.remove statements only",
-                "write `xs.push(value)`, `m.insert(key, value)`, or `m.remove(key)`.",
+                "direct native emitter supports List.push and Map.insert/Map.remove/Map.clear statements only",
+                "write `xs.push(value)`, `m.insert(key, value)`, `m.remove(key)`, or `m.clear()`.",
                 NULL);
             free(method_base);
             free(method_name);
@@ -8401,6 +8431,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "static long __vais_map_int_int_find(DirectMapIntInt *m, long key) { for (long i = 0; i < m->len; i++) if (m->present[i] && m->keys[i] == key) return i; return -1; }\n");
     sb_append(&out, "static void __vais_map_int_int_insert(DirectMapIntInt *m, long key, long value) { long i = __vais_map_int_int_find(m, key); if (i >= 0) { m->values[i] = value; return; } if (m->len >= 256) __builtin_trap(); i = m->len++; m->present[i] = 1; m->keys[i] = key; m->values[i] = value; }\n");
     sb_append(&out, "static void __vais_map_int_int_remove(DirectMapIntInt *m, long key) { long i = __vais_map_int_int_find(m, key); if (i < 0) return; long last = --m->len; if (i != last) { m->present[i] = m->present[last]; m->keys[i] = m->keys[last]; m->values[i] = m->values[last]; } m->present[last] = 0; }\n");
+    sb_append(&out, "static void __vais_map_int_int_clear(DirectMapIntInt *m) { m->len = 0; }\n");
     sb_append(&out, "static void __vais_map_int_int_copy(DirectMapIntInt *dst, DirectMapIntInt *src) { *dst = *src; }\n");
     sb_append(&out, "static long __vais_map_int_int_get(DirectMapIntInt *m, long key, long fallback) { long i = __vais_map_int_int_find(m, key); return i >= 0 ? m->values[i] : fallback; }\n");
     sb_append(&out, "static long __vais_map_int_int_get_opt(DirectMapIntInt *m, long key) { long i = __vais_map_int_int_find(m, key); return i >= 0 ? (m->values[i] * 2) : 1; }\n");

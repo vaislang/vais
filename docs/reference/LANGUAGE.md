@@ -124,9 +124,9 @@ Verified release surface:
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
-| `Map<Int,Int>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Int,Char>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Int>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Char>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, and local field write |
@@ -455,10 +455,10 @@ release-surface claims yet.
 `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` have verified
 local-value slices in the full self-host compiler path and native direct engine.
 All three support `{}`, assignment copy, `insert`, `get(key, default)`,
-`remove`, `get_opt(key)`, `contains`, and `len`.
+`remove`, `clear`, `get_opt(key)`, `contains`, and `len`.
 All three concrete Map types support function return values that initialize an explicitly
 annotated local, and all three support function parameters by reference; a
-callee can mutate the caller-visible Map with `insert` or `remove`.
+callee can mutate the caller-visible Map with `insert`, `remove`, or `clear`.
 
 Verified example:
 
@@ -574,6 +574,19 @@ fn main() -> Int {
 ```
 
 ```vais
+fn main() -> Int {
+    let scores: Map<Int,Int> = {}
+    scores.insert(4, 1)
+    scores.clear()
+    scores.insert(9, 40)
+    if not scores.contains(4) and scores.get(9, 0) == 40 and scores.len() == 1 {
+        return 42
+    }
+    return 0
+}
+```
+
+```vais
 fn make_letters() -> Map<Int,Char> {
     let letters: Map<Int,Char> = {}
     letters.insert(4, 'A')
@@ -639,6 +652,8 @@ Verified behavior:
 - `insert(key, value)` inserts or replaces a value.
 - `remove(key)` removes a present key if it exists; removing a missing key is a
   no-op.
+- `clear()` removes all keys and allows the map to be reused, as covered by
+  `examples/e106_map_clear.vais`.
 - `get(key, default)` returns `default` when the key is absent.
 - `get_opt(key)` returns `Some(value)` when the key is present and `None` when
   absent for `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>`, as covered by

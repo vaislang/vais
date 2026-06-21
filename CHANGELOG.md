@@ -96,6 +96,9 @@
   `Map<Int,Char>` slices through the full compiler path and native direct
   engine, with `examples/e105_map_scalar_get_opt.vais` added to the release
   corpus.
+- Promoted `clear()` for the concrete `Map<Int,Int>`, `Map<Int,Bool>`, and
+  `Map<Int,Char>` slices through the full compiler path and native direct
+  engine, with `examples/e106_map_clear.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 
