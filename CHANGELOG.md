@@ -52,6 +52,8 @@
   parameters and return values, keeping Map ABI claims behind future gates.
 - Added explicit front and direct diagnostics for unverified `Map<Int,Int>`
   value assignment, keeping Map storage and ABI behavior behind future gates.
+- Added `docs/design/MAP_ABI.md` to specify future Map assignment, parameter,
+  return, and concrete generic-expansion rules before broader `Map<K,V>` gates.
 
 ## v0.3.1 - 2026-06-20
 

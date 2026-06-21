@@ -484,6 +484,9 @@ deletion, iteration, entry literals, broader Map APIs that return `Option`,
 `Result`, custom hashing, or public ABI claims for Map parameters and return
 values. Unverified Map assignment, parameters, and return values are rejected by
 front diagnostics instead of being treated as part of the release surface.
+The future Map ABI and generic expansion contract is specified in
+`docs/design/MAP_ABI.md`, but no broader Map behavior is verified until it has
+compiler gates.
 
 ## Option And Result
 

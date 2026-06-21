@@ -59,7 +59,7 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<Str>` | Partial; verified for local `push`, local index read, and host process arguments |
 | `List<T>` | Partial |
 | `Map<Int,Int>` | Verified for local values |
-| `Map<K,V>` | Specified beyond the local `Map<Int,Int>` slice |
+| `Map<K,V>` | Design-specified beyond the local `Map<Int,Int>` slice; not verified |
 | `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Option<T>` | Specified beyond the `Option<Int>` slice |
 | `Result<Int,Int>` | Verified for `Ok(Int)`, `Err(Int)`, helper returns, statement `match`, expression-match binding, and local-binding `?` propagation |
@@ -97,6 +97,9 @@ The slice does not include generic key/value lowering, function parameters,
 return values, assignment, iteration, deletion, `Result`, hashing controls, or
 map literals with entries. Unverified Map assignment, function parameters, and
 return values are rejected by front diagnostics.
+Future Map ABI and generic expansion rules are design-specified in
+`docs/design/MAP_ABI.md`; they are not verified prelude APIs until compiler
+gates cover them.
 
 ## Types And Conversion
 

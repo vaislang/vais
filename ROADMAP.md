@@ -117,6 +117,8 @@ This file tracks current work only.
   compiler IR comparison.
 - Internal self-host helper builds now use the native `scripts/vaisc`
   trust-root path.
+- `docs/design/MAP_ABI.md` specifies the future Map assignment, parameter,
+  return, and generic expansion contract without promoting broader Map behavior.
 
 ## Current Reality
 
@@ -146,7 +148,8 @@ This file tracks current work only.
   `get(key, default)`, `get_opt(key) -> Option<Int>`, `contains`, and `len` in
   both the full self-host compiler path and native direct engine. Map function
   parameters, return values, assignment, and generic key/value forms are not
-  claimed yet.
+  claimed yet. The future Map ABI and generic expansion contract is specified
+  in `docs/design/MAP_ABI.md`.
 - The release compiler command uses a native host driver for `emit-ir`,
   `build`, and `run`; internal self-host helper gates use the same native
   compiler path.
@@ -229,8 +232,9 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
 - [x] 1.3b Promote native direct local `Map<Int,Int>` for construction,
   insert/replace, `get(key, default)`, `get_opt(key)`, `contains`, and `len`.
 - [x] 1.3c Promote full self-host local `Map<Int,Int>` for the same surface.
-- [ ] 1.3d Broaden `Map<K,V>` only after generic key/value lowering and ABI
-  behavior are specified.
+- [x] 1.3d Specify `Map<K,V>` generic key/value lowering and ABI behavior before
+  broadening.
+- [ ] 1.3e Broaden `Map<K,V>` only through concrete gate-backed slices.
 - [x] 1.4 Add examples and value tests for every promoted prelude API.
 - [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
 
@@ -634,7 +638,24 @@ Mode: sequential
 - Requirements: specify and gate Map parameters, return values, assignment,
   generic key/value support, and any `Option`/`Result` integration before
   publishing broader claims.
-- Done when: direct and full gates cover each added ABI or generic behavior.
+- Status: `docs/design/MAP_ABI.md` now specifies ownership, assignment,
+  parameter, return, monomorphic helper, and expansion-order rules. Direct and
+  full gates are still required before any broader Map behavior is published.
+
+## Completed Milestone: Map ABI and Generic Expansion Specification
+
+Mode: sequential
+
+- [x] 1. Keep local `Map<Int,Int>` as the only verified Map surface.
+- [x] 2. Specify Map assignment as value-copy instead of aliasing.
+- [x] 3. Specify Map parameter mutation as reference-based, matching collection
+  parameter behavior.
+- [x] 4. Specify Map returns through caller-owned output storage or equivalent
+  direct-engine lowering.
+- [x] 5. Define monomorphic concrete helper families as the path for future
+  `Map<K,V>` slices.
+- [x] 6. Keep broader Map forms behind front/direct diagnostics until each slice
+  has full gates.
 
 ## Completed Milestone: Map design and front gate contract
 

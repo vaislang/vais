@@ -20,6 +20,7 @@ compiler workspace.
 | [design/vais-compiler-mainline-2026-06-13.md](design/vais-compiler-mainline-2026-06-13.md) | Compiler mainline contract |
 | [design/MODULES.md](design/MODULES.md) | Current Phase 2 module/package/import model |
 | [design/HOST_IO.md](design/HOST_IO.md) | Phase 3 file/process host API model and file/path/process intrinsic gate |
+| [design/MAP_ABI.md](design/MAP_ABI.md) | Map ABI and generic expansion contract before broader `Map<K,V>` gates |
 | [../tools/vais_check_core.vais](../tools/vais_check_core.vais) | Vais-authored checker rules, gated by fixture contract tests |
 | [../tools/vais_check_cli.vais](../tools/vais_check_cli.vais) | Source for the public `scripts/vais-check` checker command |
 
