@@ -58,7 +58,7 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<Int>` | Verified |
 | `List<Str>` | Partial; verified for local `push`, local index read, and host process arguments |
 | `List<T>` | Partial |
-| `Map<Int,Int>` | Verified for local values |
+| `Map<Int,Int>` | Verified for local values and local assignment copy |
 | `Map<K,V>` | Design-specified beyond the local `Map<Int,Int>` slice; not verified |
 | `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Option<T>` | Specified beyond the `Option<Int>` slice |
@@ -85,6 +85,7 @@ The verified Map surface is deliberately small:
 | API | Verified behavior |
 | --- | --- |
 | `let m: Map<Int,Int> = {}` | Construct an empty integer map |
+| `target = source` | Copy one local integer map into another local integer map |
 | `m.insert(key, value)` | Insert or replace an integer value by integer key |
 | `m.get(key, default)` | Return the value for `key`, or `default` when absent |
 | `m.get_opt(key)` | Return `Some(value)` for a present key or `None` when absent |
@@ -94,9 +95,9 @@ The verified Map surface is deliberately small:
 This slice is currently available through the full self-host compiler path and
 `scripts/vaisc --engine direct`.
 The slice does not include generic key/value lowering, function parameters,
-return values, assignment, iteration, deletion, `Result`, hashing controls, or
-map literals with entries. Unverified Map assignment, function parameters, and
-return values are rejected by front diagnostics.
+return values, iteration, deletion, `Result`, hashing controls, or map literals
+with entries. Unverified Map function parameters, return values, and non-local
+assignment sources are rejected by front diagnostics.
 Future Map ABI and generic expansion rules are design-specified in
 `docs/design/MAP_ABI.md`; they are not verified prelude APIs until compiler
 gates cover them.

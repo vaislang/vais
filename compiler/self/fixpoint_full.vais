@@ -5514,6 +5514,43 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             } else if nx.kind == 5 {
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
                 let stop = find_semi(toks, i + 2, end)
+                if isarr_of(slots, src, t.nstart, t.nlen) == 5 {
+                    let rhs = toks[i + 2]
+                    if rhs.kind == 1 and stop == i + 3 and isarr_of(slots, src, rhs.nstart, rhs.nlen) == 5 {
+                        let rslot = find_slot(slots, src, rhs.nstart, rhs.nlen)
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = getelementptr [")
+                        pint(map_bufsz())
+                        emit_str(" x i64], [")
+                        pint(map_bufsz())
+                        emit_str(" x i64]* %v")
+                        pint(slot)
+                        emit_str(", i64 0, i64 0")
+                        putchar(10)
+                        let dstp = counter
+                        counter = counter + 1
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = getelementptr [")
+                        pint(map_bufsz())
+                        emit_str(" x i64], [")
+                        pint(map_bufsz())
+                        emit_str(" x i64]* %v")
+                        pint(rslot)
+                        emit_str(", i64 0, i64 0")
+                        putchar(10)
+                        let srcp = counter
+                        counter = counter + 1
+                        emit_str("  call void @__vais_map_int_int_copy(i64* %t")
+                        pint(dstp)
+                        emit_str(", i64* %t")
+                        pint(srcp)
+                        emit_str(")")
+                        putchar(10)
+                    }
+                    i = stop + 1
+                } else {
                 let e = gen_expr(toks, slots, fns, defs, src, i + 2, stop, counter)
                 if isarr_of(slots, src, t.nstart, t.nlen) == 3 {
                     emit_str("  store i8* ")
@@ -5530,6 +5567,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 }
                 counter = e.next
                 i = stop + 1
+                }
             } else {
                 i = i + 1
             }
@@ -6908,6 +6946,46 @@ fn emit_map_helpers() -> Int {
     emit_str("  %next = add i64 %len, 1")
     putchar(10)
     emit_str("  store i64 %next, i64* %lenp")
+    putchar(10)
+    emit_str("  ret void")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    emit_str("define void @__vais_map_int_int_copy(i64* %dst, i64* %src) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %i = alloca i64")
+    putchar(10)
+    emit_str("  store i64 0, i64* %i")
+    putchar(10)
+    emit_str("  br label %loop")
+    putchar(10)
+    emit_str("loop:")
+    putchar(10)
+    emit_str("  %iv = load i64, i64* %i")
+    putchar(10)
+    emit_str("  %done = icmp sge i64 %iv, 513")
+    putchar(10)
+    emit_str("  br i1 %done, label %exit, label %body")
+    putchar(10)
+    emit_str("body:")
+    putchar(10)
+    emit_str("  %sp = getelementptr i64, i64* %src, i64 %iv")
+    putchar(10)
+    emit_str("  %value = load i64, i64* %sp")
+    putchar(10)
+    emit_str("  %dp = getelementptr i64, i64* %dst, i64 %iv")
+    putchar(10)
+    emit_str("  store i64 %value, i64* %dp")
+    putchar(10)
+    emit_str("  %inc = add i64 %iv, 1")
+    putchar(10)
+    emit_str("  store i64 %inc, i64* %i")
+    putchar(10)
+    emit_str("  br label %loop")
+    putchar(10)
+    emit_str("exit:")
     putchar(10)
     emit_str("  ret void")
     putchar(10)

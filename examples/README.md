@@ -64,7 +64,8 @@ helper-return and statement-match slice,
 success path,
 `examples/e40_option_in_struct.vais` for `Option<Int>` stored in a struct field,
 `examples/e94_map_get_opt.vais` for `Map<Int,Int>.get_opt(key)` returning
-`Option<Int>`,
+`Option<Int>`, `examples/e95_map_assignment.vais` for local `Map<Int,Int>`
+assignment copy semantics,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and

@@ -1,9 +1,9 @@
 # Vais Map ABI And Generic Expansion
 
-Status: design contract for future gates. The only verified Map surface today is
-local `Map<Int,Int>` with `{}`, `insert`, `get(key, default)`, `get_opt(key)`,
-`contains`, and `len` in the full self-host compiler path and native direct
-engine.
+Status: design contract for future gates. The verified Map surface today is
+local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
+`get(key, default)`, `get_opt(key)`, `contains`, and `len` in the full
+self-host compiler path and native direct engine.
 
 This document fixes the implementation contract required before `Map<K,V>` can
 be broadened. It does not publish new verified syntax by itself.
@@ -11,7 +11,7 @@ be broadened. It does not publish new verified syntax by itself.
 ## Goals
 
 - Keep current local `Map<Int,Int>` behavior stable.
-- Add Map parameters, return values, and assignment without hidden aliasing.
+- Add Map parameters and return values without hidden aliasing.
 - Broaden key and value types only as concrete, gate-backed instantiations.
 - Keep direct-engine and full self-host lowering behavior aligned.
 - Reject unsupported Map forms with P4 diagnostics until they pass gates.
@@ -32,6 +32,8 @@ Verified behavior:
 
 - A Map local must be explicitly annotated as `Map<Int,Int>`.
 - `{}` constructs an empty local map.
+- `target = source` copies one local `Map<Int,Int>` into another local
+  `Map<Int,Int>` without aliasing.
 - `insert(key, value)` inserts or replaces the key.
 - `get(key, default)` returns the stored value or the default.
 - `get_opt(key)` returns `Some(value)` or `None` for the local
@@ -39,9 +41,9 @@ Verified behavior:
 - `contains(key)` returns a `Bool`.
 - `len()` returns the number of present keys.
 
-Not verified yet: Map assignment, function parameters, function returns,
-generic key/value pairs, entry literals, deletion, iteration, custom hashing,
-and Map APIs that require broader `Option<T>` or `Result<T,E>` support.
+Not verified yet: Map function parameters, function returns, generic key/value
+pairs, entry literals, deletion, iteration, custom hashing, and Map APIs that
+require broader `Option<T>` or `Result<T,E>` support.
 
 ## Ownership And Mutation Semantics
 
@@ -85,7 +87,7 @@ being advertised.
 
 Broaden Map support in this order:
 
-1. `Map<Int,Int>` ABI: assignment, parameters, and returns.
+1. `Map<Int,Int>` ABI: parameters and returns.
 2. `Map<Int,V>` for already verified scalar values where `V` has a stable copy
    ABI.
 3. `Map<Str,V>` only after string equality, hashing, copy, and lifetime rules
@@ -120,7 +122,7 @@ and ordered maps are later APIs.
 
 Until each slice is implemented, the public front must reject unsupported forms:
 
-- Map assignment.
+- Map assignment from anything other than another local `Map<Int,Int>`.
 - Map function parameters.
 - Map function returns.
 - Generic key/value forms outside verified concrete pairs.

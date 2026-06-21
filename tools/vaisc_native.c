@@ -2154,7 +2154,7 @@ static int front_name_in_list(char **names, int count, const char *name) {
     return 0;
 }
 
-static char *front_map_assignment_name(const char *line, char **map_locals, int map_local_count) {
+static char *front_map_assignment_name(const char *line, char **map_locals, int map_local_count, char **rhs_out) {
     const char *s = skip_ws(line);
     if (starts_with(s, "let") && !is_ident_continue(s[3])) return NULL;
     if (!is_ident_start(*s)) return NULL;
@@ -2167,7 +2167,20 @@ static char *front_map_assignment_name(const char *line, char **map_locals, int 
         free(name);
         return NULL;
     }
-    if (front_name_in_list(map_locals, map_local_count, name)) return name;
+    if (front_name_in_list(map_locals, map_local_count, name)) {
+        const char *rhs = skip_ws(op + 1);
+        if (is_ident_start(*rhs)) {
+            const char *rhs_start = rhs;
+            rhs++;
+            while (is_ident_continue(*rhs)) rhs++;
+            const char *rhs_end = rhs;
+            rhs = skip_ws(rhs);
+            if (*rhs == '\0' || *rhs == ';') {
+                *rhs_out = substr_copy(rhs_start, (size_t)(rhs_end - rhs_start));
+            }
+        }
+        return name;
+    }
     free(name);
     return NULL;
 }
@@ -2288,13 +2301,17 @@ static int check_front_contract_text(const char *text, const char *path) {
         const char *module_kw = NULL;
         if (starts_with(trim, "module") && !is_ident_continue(trim[6])) module_kw = "module";
         else if (starts_with(trim, "package") && !is_ident_continue(trim[7])) module_kw = "package";
-        char *map_assignment = front_map_assignment_name(probe, map_locals, map_local_count);
+        char *map_assignment_rhs = NULL;
+        char *map_assignment = front_map_assignment_name(probe, map_locals, map_local_count, &map_assignment_rhs);
         if (map_assignment != NULL) {
-            report_issue(path, line_no, find_col(line, map_assignment), line,
-                "Map assignment is not verified yet",
-                "mutate a local Map<Int,Int> with insert/get/get_opt/contains/len; Map value assignment needs a storage and ABI specification before promotion.",
-                NULL);
-            issues++;
+            if (map_assignment_rhs == NULL || !front_name_in_list(map_locals, map_local_count, map_assignment_rhs)) {
+                report_issue(path, line_no, find_col(line, map_assignment), line,
+                    "Map assignment requires another local Map<Int,Int>",
+                    "assign from a local `Map<Int,Int>` value; Map parameters, returns, and generic key/value forms are not verified yet.",
+                    NULL);
+                issues++;
+            }
+            free(map_assignment_rhs);
             free(map_assignment);
         } else if (module_kw != NULL) {
             report_issue(path, line_no, find_col(probe, module_kw), line,
@@ -7617,14 +7634,29 @@ static int direct_lower_line(
         const char *target_type = direct_assignment_target_type(lhs, locals, structs, struct_count);
         int allow_list_assignment = direct_is_list_type(target_type);
         if (direct_is_map_int_int_type(target_type)) {
-            report_issue(path, line_no, find_col(line, lhs), line,
-                "direct native emitter Map assignment is not verified yet",
-                "mutate a local Map<Int,Int> with `insert`; Map value assignment needs a storage and ABI specification before promotion.",
-                "scores.insert(key, value)");
+            char *rhs_name = trim_copy(expr);
+            const char *rhs_type = direct_is_plain_ident(rhs_name) ? direct_names_type(locals, rhs_name) : NULL;
+            if (!direct_is_map_int_int_type(rhs_type)) {
+                report_issue(path, line_no, find_col(line, lhs), line,
+                    "direct native emitter Map assignment requires another local Map<Int,Int>",
+                    "assign from a local `Map<Int,Int>` value; Map parameters, returns, and generic key/value forms are not in this direct slice.",
+                    "scores = other");
+                free(rhs_name);
+                free(lhs);
+                free(expr);
+                free(stripped);
+                return 1;
+            }
+            sb_append(out, "__vais_map_int_int_copy(&");
+            sb_append(out, lhs);
+            sb_append(out, ", &");
+            sb_append(out, rhs_name);
+            sb_append(out, ");\n");
+            free(rhs_name);
             free(lhs);
             free(expr);
             free(stripped);
-            return 1;
+            return 0;
         }
         if (direct_check_expr_inner(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count, allow_list_assignment ? target_type : NULL)) {
             free(lhs);
@@ -7865,6 +7897,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "typedef struct { long keys[256]; long values[256]; unsigned char present[256]; long len; } DirectMapIntInt;\n");
     sb_append(&out, "static long __vais_map_int_int_find(DirectMapIntInt *m, long key) { for (long i = 0; i < m->len; i++) if (m->present[i] && m->keys[i] == key) return i; return -1; }\n");
     sb_append(&out, "static void __vais_map_int_int_insert(DirectMapIntInt *m, long key, long value) { long i = __vais_map_int_int_find(m, key); if (i >= 0) { m->values[i] = value; return; } if (m->len >= 256) __builtin_trap(); i = m->len++; m->present[i] = 1; m->keys[i] = key; m->values[i] = value; }\n");
+    sb_append(&out, "static void __vais_map_int_int_copy(DirectMapIntInt *dst, DirectMapIntInt *src) { *dst = *src; }\n");
     sb_append(&out, "static long __vais_map_int_int_get(DirectMapIntInt *m, long key, long fallback) { long i = __vais_map_int_int_find(m, key); return i >= 0 ? m->values[i] : fallback; }\n");
     sb_append(&out, "static long __vais_map_int_int_get_opt(DirectMapIntInt *m, long key) { long i = __vais_map_int_int_find(m, key); return i >= 0 ? (m->values[i] * 2) : 1; }\n");
     sb_append(&out, "static long __vais_map_int_int_contains(DirectMapIntInt *m, long key) { return __vais_map_int_int_find(m, key) >= 0 ? 1 : 0; }\n");

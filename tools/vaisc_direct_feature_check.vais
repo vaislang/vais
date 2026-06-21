@@ -239,6 +239,19 @@ fn write_map_get_opt(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_assignment(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let scores: Map<Int, Int> = {}")
+    append_line(out, "    let other: Map<Int, Int> = {}")
+    append_line(out, "    other.insert(4, 40)")
+    append_line(out, "    scores = other")
+    append_line(out, "    other.insert(4, 1)")
+    append_line(out, "    return scores.get(4, 0) + scores.len() + scores.contains(4)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_list_struct_local(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "struct Box {")
@@ -642,6 +655,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "str_slice") == 1 { wrote = write_str_slice(src) }
     else if str_contains(name, "char_literal") == 1 { wrote = write_char_literal(src) }
     else if str_contains(name, "map_get_opt") == 1 { wrote = write_map_get_opt(src) }
+    else if str_contains(name, "map_assignment") == 1 { wrote = write_map_assignment(src) }
     else if str_contains(name, "map_int_int") == 1 { wrote = write_map_int_int(src) }
     if wrote != 0 {
         print(str_concat("  FAIL direct ", str_concat(name, " source write")))
@@ -697,6 +711,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "call void @make_int") and str_contains(text, "@score_int") and str_contains(text, "call void @make_box") and str_contains(text, "@score_box")
     } else if shape == 22 {
         ok = str_contains(text, "__vais_map_int_int_get_opt") and str_contains(text, "srem i64") and str_contains(text, "sdiv i64")
+    } else if shape == 23 {
+        ok = str_contains(text, "__vais_map_int_int_copy") and str_contains(text, "__vais_map_int_int_get") and str_contains(text, "__vais_map_int_int_len")
     }
     if ok == 0 {
         return emit_failed(str_concat("direct ", name), err_path)
@@ -734,6 +750,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "parse_helpers", "direct parse_uint/parse_int Str helpers run (=42)", 8)
     fail = fail + expect_case(vaisc, tmp, "map_int_int", "direct local Map<Int,Int> insert/get/contains/len run (=42)", 9)
     fail = fail + expect_case(vaisc, tmp, "map_get_opt", "direct local Map<Int,Int> get_opt Option match run (=42)", 22)
+    fail = fail + expect_case(vaisc, tmp, "map_assignment", "direct local Map<Int,Int> assignment copy runs (=42)", 23)
     fail = fail + expect_case(vaisc, tmp, "list_struct_local", "direct local List<Struct> push, len, is_empty, last, pop, index, and field read run (=42)", 10)
     fail = fail + expect_case(vaisc, tmp, "list_struct_abi", "direct List<Struct> parameter, return, inline, and hoisted arguments run (=42)", 11)
     fail = fail + expect_case(vaisc, tmp, "list_struct_field_write", "direct List<Struct> indexed field assignment runs (=42)", 12)

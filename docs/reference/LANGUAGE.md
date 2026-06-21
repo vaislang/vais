@@ -124,7 +124,7 @@ Verified release surface:
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
-| `Map<Int,Int>` | Local `{}`, `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Int>` | Local `{}`, assignment copy, `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, and local field write |
@@ -449,8 +449,8 @@ release-surface claims yet.
 ## Maps
 
 `Map<Int,Int>` has a verified local-value slice in the full self-host compiler
-path and native direct engine for `{}`, `insert`, `get(key, default)`,
-`get_opt(key) -> Option<Int>`, `contains`, and `len`.
+path and native direct engine for `{}`, assignment copy, `insert`,
+`get(key, default)`, `get_opt(key) -> Option<Int>`, `contains`, and `len`.
 
 Verified example:
 
@@ -460,7 +460,10 @@ fn main() -> Int {
     scores.insert(4, 38)
     scores.insert(4, 40)
     scores.insert(9, 2)
-    let found = scores.get(4, 0)
+    let copy: Map<Int,Int> = {}
+    copy = scores
+    scores.insert(4, 1)
+    let found = copy.get(4, 0)
     let missing = scores.get(5, 0 - 1)
     let maybe = match scores.get_opt(9) { Some(v) => v, None => 0 }
     return found + missing + maybe + scores.contains(4) + scores.contains(5) + scores.len()
@@ -472,6 +475,8 @@ Verified behavior:
 - Only local `Map<Int,Int>` values are supported.
 - `{}` constructs an empty map when the local type is explicitly
   `Map<Int,Int>`.
+- `target = source` copies one local `Map<Int,Int>` into another local
+  `Map<Int,Int>`; later mutation of either map does not alias the other.
 - `insert(key, value)` inserts or replaces a value.
 - `get(key, default)` returns `default` when the key is absent.
 - `get_opt(key)` returns `Some(value)` when the key is present and `None` when
@@ -479,11 +484,12 @@ Verified behavior:
 - `contains(key)` returns whether a key is present.
 - `len()` returns the number of present keys.
 
-Not included in the current Map slice: generic key/value lowering, assignment,
-deletion, iteration, entry literals, broader Map APIs that return `Option`,
-`Result`, custom hashing, or public ABI claims for Map parameters and return
-values. Unverified Map assignment, parameters, and return values are rejected by
-front diagnostics instead of being treated as part of the release surface.
+Not included in the current Map slice: generic key/value lowering, deletion,
+iteration, entry literals, broader Map APIs that return `Option`, `Result`,
+custom hashing, or public ABI claims for Map parameters and return values.
+Unverified Map parameters, return values, and non-local assignment sources are
+rejected by front diagnostics instead of being treated as part of the release
+surface.
 The future Map ABI and generic expansion contract is specified in
 `docs/design/MAP_ABI.md`, but no broader Map behavior is verified until it has
 compiler gates.
