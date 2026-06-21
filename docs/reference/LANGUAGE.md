@@ -126,7 +126,7 @@ Verified release surface:
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, assignment copy, parameter reference/mutation, `insert`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, `insert`, `get(key, default)`, `contains`, and `len` |
-| `Map<Int,Char>` | Local `{}`, assignment copy, `insert`, `get(key, default)`, `contains`, and `len` |
+| `Map<Int,Char>` | Local `{}`, assignment copy, parameter reference/mutation, `insert`, `get(key, default)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, and local field write |
@@ -199,7 +199,7 @@ simple Int-field struct
 locals, struct parameter/return helpers, and `List<Int>` local operations plus
 parameter reference and return value ABI, local `Map<Int,Int>`,
 `Map<Int,Bool>`, and `Map<Int,Char>` construction and lookup/update helpers,
-`Map<Int,Int>` and `Map<Int,Bool>` parameter reference/mutation, plus `List<Struct>` construction with
+`Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` parameter reference/mutation, plus `List<Struct>` construction with
 `[]`, `list()`, list literals, list/element assignment, `push`, `len`, index,
 field read/write, parameter reference, and return value ABI.
 
@@ -455,9 +455,9 @@ release-surface claims yet.
 local-value slices in the full self-host compiler path and native direct engine.
 All three support `{}`, assignment copy, `insert`, `get(key, default)`,
 `contains`, and `len`.
-`Map<Int,Int>` also supports `get_opt(key) -> Option<Int>`. `Map<Int,Int>` and
-`Map<Int,Bool>` support function parameters by reference; a callee can mutate
-the caller-visible Map with `insert`.
+`Map<Int,Int>` also supports `get_opt(key) -> Option<Int>`. `Map<Int,Int>`,
+`Map<Int,Bool>`, and `Map<Int,Char>` support function parameters by reference;
+a callee can mutate the caller-visible Map with `insert`.
 
 Verified example:
 
@@ -524,6 +524,25 @@ fn main() -> Int {
 ```
 
 ```vais
+fn stamp(letters: Map<Int,Char>, key: Int) -> Int {
+    letters.insert(key, 'A')
+    if letters.get(key, 'Z') == 'A' and letters.len() == 1 {
+        return 40
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let letters: Map<Int,Char> = {}
+    let n = stamp(letters, 4)
+    if letters.get(4, 'Z') == 'A' and letters.contains(4) {
+        return n + letters.len() + letters.contains(4)
+    }
+    return 0
+}
+```
+
+```vais
 fn main() -> Int {
     let letters: Map<Int,Char> = {}
     let copy: Map<Int,Char> = {}
@@ -541,7 +560,7 @@ fn main() -> Int {
 Verified behavior:
 
 - Local `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` values are
-  supported. `Map<Int,Int>` and `Map<Int,Bool>` can also be passed as function
+  supported. All three concrete Map types can also be passed as function
   parameters by reference.
 - `{}` constructs an empty map when the local type is explicitly one of the
   verified concrete Map types.
@@ -559,10 +578,9 @@ Not included in the current Map slice: `Map<Int,Bool>.get_opt`,
 `Map<Int,Char>.get_opt`,
 generic key/value lowering, deletion, iteration, entry literals,
 broader Map APIs that return `Option`, `Result`,
-custom hashing, `Map<Int,Char>` parameters, or public ABI claims for Map
-return values. Unverified `Map<Int,Char>` parameters, return values, and
-non-local assignment sources are rejected by front diagnostics instead of being
-treated as part of the release surface.
+custom hashing, or public ABI claims for Map return values. Unverified generic
+Map parameters, return values, and non-local assignment sources are rejected by
+front diagnostics instead of being treated as part of the release surface.
 The future Map ABI and generic expansion contract is specified in
 `docs/design/MAP_ABI.md`, but no broader Map behavior is verified until it has
 compiler gates.

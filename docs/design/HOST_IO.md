@@ -214,8 +214,8 @@ stderr or keeping trap output out of the shell wrapper.
 `tools/vaisc_direct_feature_check.vais` continues the NV-C2 port by moving the
 direct helper/control-flow, range `for`, struct-local, struct ABI, local
 `List<Int>`, `Str`, `Char`, `parse_uint`/`parse_int`, local `Map<Int,Int>`,
-local `Map<Int,Bool>`, local `Map<Int,Char>`, `Map<Int,Int>` and
-`Map<Int,Bool>` parameters, local
+local `Map<Int,Bool>`, local `Map<Int,Char>`, `Map<Int,Int>`,
+`Map<Int,Bool>`, and `Map<Int,Char>` parameters, local
 `List<Struct>`, list ABI, list assignment, and returned-list argument hoisting
 success fixtures into Vais code with the same emitted-IR shape checks
 and exit-code assertions. `tools/vaisc_direct_gate.vais` orchestrates those

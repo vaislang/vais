@@ -3,10 +3,9 @@
 Status: design contract for future gates. The verified Map surface today is
 local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
 `get(key, default)`, `get_opt(key)`, `contains`, `len`, and parameter
-reference/mutation, plus `Map<Int,Bool>` with local values, assignment copy,
-`insert`, `get(key, default)`, `contains`, `len`, and parameter
-reference/mutation, plus local `Map<Int,Char>` with `{}`, assignment copy,
-`insert`, `get(key, default)`, `contains`, and `len`, in the
+reference/mutation, plus `Map<Int,Bool>` and `Map<Int,Char>` with local
+values, assignment copy, `insert`, `get(key, default)`, `contains`, `len`, and
+parameter reference/mutation, in the
 full self-host compiler path and native direct engine.
 
 This document fixes the implementation contract required before `Map<K,V>` can
@@ -53,6 +52,14 @@ fn mark(flags: Map<Int,Bool>, key: Int) -> Int {
     }
     return 0
 }
+
+fn stamp(letters: Map<Int,Char>, key: Int) -> Int {
+    letters.insert(key, 'A')
+    if letters.get(key, 'Z') == 'A' and letters.len() == 1 {
+        return 40
+    }
+    return 0
+}
 ```
 
 Verified behavior:
@@ -68,12 +75,12 @@ Verified behavior:
   `Map<Int,Int>` and `Option<Int>` slice.
 - `contains(key)` returns a `Bool`.
 - `len()` returns the number of present keys.
-- `Map<Int,Int>` and `Map<Int,Bool>` parameters are passed by reference; a
-  callee can mutate the caller-visible map.
+- `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` parameters are passed by
+  reference; a callee can mutate the caller-visible map.
 
-Not verified yet: Map function returns, `Map<Int,Char>` parameters, generic
-key/value pairs, entry literals, deletion, iteration, custom hashing, and Map
-APIs that require broader `Option<T>` or `Result<T,E>` support.
+Not verified yet: Map function returns, generic key/value pairs, entry
+literals, deletion, iteration, custom hashing, and Map APIs that require
+broader `Option<T>` or `Result<T,E>` support.
 `Map<Int,Bool>.get_opt` and `Map<Int,Char>.get_opt` are intentionally excluded
 until their Option payload slices are verified.
 
@@ -125,8 +132,8 @@ Broaden Map support in this order:
    has a stable copy ABI; `Map<Int,Bool>` and `Map<Int,Char>` local values are
    the first completed slices in this step.
 3. `Map<Int,V>` ABI: parameters and returns after the local concrete slices are
-   stable. `Map<Int,Bool>` parameters are the first completed non-Int value
-   parameter slice.
+   stable. Parameters for `Map<Int,Int>`, `Map<Int,Bool>`, and
+   `Map<Int,Char>` are complete; returns remain future work.
 4. `Map<Str,V>` only after string equality, hashing, copy, and lifetime rules
    are specified for Map keys.
 5. Struct values only after struct copy and return ABI behavior are already
@@ -161,7 +168,8 @@ Until each slice is implemented, the public front must reject unsupported forms:
 
 - Map assignment from anything other than another local with the same verified
   concrete Map type.
-- Map function parameters beyond `Map<Int,Int>` and `Map<Int,Bool>`.
+- Map function parameters beyond the verified `Map<Int,Int>`,
+  `Map<Int,Bool>`, and `Map<Int,Char>` slices.
 - Map function returns.
 - Generic key/value forms outside verified concrete pairs.
 - Map literals with entries.

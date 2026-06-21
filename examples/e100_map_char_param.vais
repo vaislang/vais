@@ -1,0 +1,17 @@
+# expect: 42
+fn stamp(letters: Map<Int,Char>, key: Int) -> Int {
+    letters.insert(key, 'A')
+    if letters.get(key, 'Z') == 'A' and letters.len() == 1 {
+        return 40
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let letters: Map<Int,Char> = {}
+    let n = stamp(letters, 4)
+    if letters.get(4, 'Z') == 'A' and letters.contains(4) {
+        return n + letters.len() + letters.contains(4)
+    }
+    return 0
+}

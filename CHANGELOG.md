@@ -74,7 +74,11 @@
 - Promoted `Map<Int,Bool>` function parameters by reference through the full
   compiler path and native direct engine, with
   `examples/e99_map_bool_param.vais` added to the release corpus. Map returns
-  and `Map<Int,Char>` parameters remain behind future ABI gates.
+  and broader Map parameters remain behind future ABI gates.
+- Promoted `Map<Int,Char>` function parameters by reference through the full
+  compiler path and native direct engine, with
+  `examples/e100_map_char_param.vais` added to the release corpus. Map returns
+  and generic Map parameters remain behind future ABI gates.
 
 ## v0.3.1 - 2026-06-20
 

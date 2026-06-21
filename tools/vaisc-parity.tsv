@@ -62,6 +62,7 @@ examples/e96_map_bool.vais	native-supported	Map<Int,Bool> local insert/get/conta
 examples/e97_map_char.vais	native-supported	Map<Int,Char> local insert/get/contains/len and assignment copy.
 examples/e98_map_param.vais	native-supported	Map<Int,Int> parameter mutation by reference.
 examples/e99_map_bool_param.vais	native-supported	Map<Int,Bool> parameter mutation by reference.
+examples/e100_map_char_param.vais	native-supported	Map<Int,Char> parameter mutation by reference.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.

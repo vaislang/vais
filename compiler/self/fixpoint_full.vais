@@ -1121,6 +1121,7 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                     #                      dropped by the tokenizer)
                     #   Map<Int,Int> -> map_int_param_ty()  (Map buffer pointer)
                     #   Map<Int,Bool> -> map_bool_param_ty() (Map buffer pointer)
+                    #   Map<Int,Char> -> map_char_param_ty() (Map buffer pointer)
                     #   StructName  -> 3+struct_index  (struct by hidden pointer)
                     #   else        -> 0  (int)
                     let tyt = toks[q + 1]
@@ -1137,6 +1138,7 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                             if kw3(src, mkey.nstart, mkey.nlen, 73, 110, 116) == 1 {
                                 if kw3(src, mval.nstart, mval.nlen, 73, 110, 116) == 1 { mpty = map_int_param_ty() }
                                 else if kw4(src, mval.nstart, mval.nlen, 66, 111, 111, 108) == 1 { mpty = map_bool_param_ty() }
+                                else if kw4(src, mval.nstart, mval.nlen, 67, 104, 97, 114) == 1 { mpty = map_char_param_ty() }
                             }
                         }
                     }
@@ -1484,9 +1486,11 @@ fn map_value_bool_ty() -> Int { return 1 }
 fn map_value_char_ty() -> Int { return 2 }
 fn map_int_param_ty() -> Int { return 0 - 3 }
 fn map_bool_param_ty() -> Int { return 0 - 4 }
+fn map_char_param_ty() -> Int { return 0 - 5 }
 fn map_param_ty() -> Int { return map_int_param_ty() }
-fn is_map_param_ty(pty: Int) -> Bool { return pty == map_int_param_ty() or pty == map_bool_param_ty() }
+fn is_map_param_ty(pty: Int) -> Bool { return pty == map_int_param_ty() or pty == map_bool_param_ty() or pty == map_char_param_ty() }
 fn map_param_value_ty(pty: Int) -> Int {
+    if pty == map_char_param_ty() { return map_value_char_ty() }
     if pty == map_bool_param_ty() { return map_value_bool_ty() }
     return map_value_int_ty()
 }
