@@ -60,13 +60,11 @@
 - Promoted local `Map<Int,Bool>` construction, assignment copy, `insert`,
   `get(key, default)`, `contains`, and `len` through the full compiler path and
   native direct engine, with `examples/e96_map_bool.vais` added to the release
-  corpus. `Map<Int,Bool>.get_opt` remains gated until `Option<Bool>` is
-  verified.
+  corpus.
 - Promoted local `Map<Int,Char>` construction, assignment copy, `insert`,
   `get(key, default)`, `contains`, and `len` through the full compiler path and
   native direct engine, with `examples/e97_map_char.vais` added to the release
-  corpus. `Map<Int,Char>.get_opt` remains gated until the matching Option
-  payload slice is verified.
+  corpus.
 - Promoted `Map<Int,Int>` function parameters by reference through the full
   compiler path and native direct engine, with `examples/e98_map_param.vais`
   added to the release corpus. Non-promoted Map returns and broader Map
@@ -94,6 +92,10 @@
 - Promoted `remove(key)` for the concrete `Map<Int,Int>`, `Map<Int,Bool>`, and
   `Map<Int,Char>` slices through the full compiler path and native direct
   engine, with `examples/e104_map_remove.vais` added to the release corpus.
+- Promoted `get_opt(key)` match payloads for the concrete `Map<Int,Bool>` and
+  `Map<Int,Char>` slices through the full compiler path and native direct
+  engine, with `examples/e105_map_scalar_get_opt.vais` added to the release
+  corpus.
 
 ## v0.3.1 - 2026-06-20
 

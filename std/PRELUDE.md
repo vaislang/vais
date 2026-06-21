@@ -59,8 +59,8 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<Str>` | Partial; verified for local `push`, local index read, and host process arguments |
 | `List<T>` | Partial |
 | `Map<Int,Int>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `remove`, and `get_opt` |
-| `Map<Int,Bool>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, and `remove`; `get_opt` is not verified |
-| `Map<Int,Char>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, and `remove`; `get_opt` is not verified |
+| `Map<Int,Bool>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `remove`, and `get_opt` |
+| `Map<Int,Char>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `remove`, and `get_opt` |
 | `Map<K,V>` | Design-specified beyond the verified concrete local Map slices; not verified |
 | `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Option<T>` | Specified beyond the `Option<Int>` slice |
@@ -93,7 +93,7 @@ The verified Map surface is deliberately small:
 | `m.insert(key, value)` | Insert or replace a value by integer key |
 | `m.remove(key)` | Remove a key if present; missing keys are ignored |
 | `m.get(key, default)` | Return the value for `key`, or `default` when absent |
-| `m.get_opt(key)` | Return `Some(value)` for a present key or `None` when absent on `Map<Int,Int>` |
+| `m.get_opt(key)` | Return `Some(value)` for a present key or `None` when absent on `Map<Int,Int>`, `Map<Int,Bool>`, or `Map<Int,Char>` |
 | `m.contains(key)` | Return whether `key` is present |
 | `m.len()` | Return the number of present keys |
 

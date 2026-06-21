@@ -1,0 +1,17 @@
+# expect: 42
+
+fn main() -> Int {
+    let flags: Map<Int,Bool> = {}
+    flags.insert(4, true)
+    flags.insert(5, false)
+
+    let yes_value = match flags.get_opt(4) { Some(v) => v, None => 0 }
+    let no_value = match flags.get_opt(5) { Some(v) => v, None => 1 }
+    let missing = match flags.get_opt(9) { Some(v) => 0, None => 5 }
+
+    let letters: Map<Int,Char> = {}
+    letters.insert(4, 'A')
+    let letter_value = match letters.get_opt(4) { Some(v) => v, None => 58 }
+
+    return yes_value * 20 + (1 - no_value) * 10 + missing + letter_value - 58
+}

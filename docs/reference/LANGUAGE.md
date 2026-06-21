@@ -125,8 +125,8 @@ Verified release surface:
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `contains`, and `len` |
-| `Map<Int,Char>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `contains`, and `len` |
+| `Map<Int,Bool>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Char>` | Local `{}`, assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, and local field write |
@@ -455,9 +455,8 @@ release-surface claims yet.
 `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` have verified
 local-value slices in the full self-host compiler path and native direct engine.
 All three support `{}`, assignment copy, `insert`, `get(key, default)`,
-`remove`, `contains`, and `len`.
-`Map<Int,Int>` also supports `get_opt(key) -> Option<Int>`. All three concrete
-Map types support function return values that initialize an explicitly
+`remove`, `get_opt(key)`, `contains`, and `len`.
+All three concrete Map types support function return values that initialize an explicitly
 annotated local, and all three support function parameters by reference; a
 callee can mutate the caller-visible Map with `insert` or `remove`.
 
@@ -561,6 +560,20 @@ fn main() -> Int {
 ```
 
 ```vais
+fn main() -> Int {
+    let flags: Map<Int,Bool> = {}
+    flags.insert(4, true)
+    let yes_value = match flags.get_opt(4) { Some(v) => v, None => 0 }
+
+    let letters: Map<Int,Char> = {}
+    letters.insert(4, 'A')
+    let letter_value = match letters.get_opt(4) { Some(v) => v, None => 58 }
+
+    return yes_value * 20 + letter_value - 43
+}
+```
+
+```vais
 fn make_letters() -> Map<Int,Char> {
     let letters: Map<Int,Char> = {}
     letters.insert(4, 'A')
@@ -627,18 +640,16 @@ Verified behavior:
 - `remove(key)` removes a present key if it exists; removing a missing key is a
   no-op.
 - `get(key, default)` returns `default` when the key is absent.
-- `get_opt(key)` is verified only for `Map<Int,Int>` and returns `Some(value)`
-  when the key is present and `None` when absent, as covered by
-  `examples/e94_map_get_opt.vais`.
+- `get_opt(key)` returns `Some(value)` when the key is present and `None` when
+  absent for `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>`, as covered by
+  `examples/e94_map_get_opt.vais` and `examples/e105_map_scalar_get_opt.vais`.
 - `contains(key)` returns whether a key is present.
 - `len()` returns the number of present keys.
 
-Not included in the current Map slice: `Map<Int,Bool>.get_opt`,
-`Map<Int,Char>.get_opt`,
-generic key/value lowering, iteration, entry literals,
-broader Map APIs that return `Option`, `Result`, custom hashing, or public ABI
-claims for generic Map return values. Unverified generic Map parameters,
-unverified return values, and
+Not included in the current Map slice: generic key/value lowering, iteration,
+entry literals, broader Map APIs that return `Option`, `Result`, custom
+hashing, or public ABI claims for generic Map return values. Unverified generic
+Map parameters, unverified return values, and
 non-local assignment sources are rejected by front diagnostics
 instead of being treated as part of the release surface.
 The future Map ABI and generic expansion contract is specified in
@@ -703,7 +714,7 @@ Not included yet: generic `Option<T>` or `Result<T,E>`, broader expression-form
 `match` beyond the gate-backed `Option<Int>` and `Result<Int,Int>` binding
 shapes, `?` beyond the gate-backed `Option<Int>` and `Result<Int,Int>`
 local-binding shapes, broader Map APIs that return `Option`, direct-engine
-Option/Result-specific claims beyond `Map<Int,Int>.get_opt` match bindings, and
+Option/Result-specific claims beyond concrete `Map<Int,V>.get_opt` match bindings, and
 nested option/result payloads. Unsupported generic `Option`/`Result` forms are
 rejected by front diagnostics instead of being treated as verified language.
 

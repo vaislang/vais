@@ -68,9 +68,9 @@ This file tracks current work only.
 - The first `Map` slices are verified in the full self-host compiler and native
   direct engine for local `Map<Int,Int>` values with `{}`, assignment copy,
   `insert`, `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and
-  `len`, and local `Map<Int,Bool>` values with `{}`, assignment copy,
-  `insert`, `remove`, `get(key, default)`, `contains`, and `len`, plus local
-  `Map<Int,Char>` values with the same non-`get_opt` surface.
+  `len`, and local `Map<Int,Bool>` and `Map<Int,Char>` values with `{}`,
+  assignment copy, `insert`, `remove`, `get(key, default)`, `get_opt(key)`,
+  `contains`, and `len`.
   `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>`
   parameters are verified by reference, so callees can mutate caller-visible
   maps. `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` return values can
@@ -80,8 +80,8 @@ This file tracks current work only.
   `Map<Int,Bool>` parameter mutation, `Map<Int,Char>` parameter mutation,
   `Map<Int,Int>` return-value local initialization, `Map<Int,Bool>`
   return-value local initialization, `Map<Int,Char>` return-value local
-  initialization, concrete Map key removal, and `List<T>.is_empty()`, `last()`,
-  and `pop()`.
+  initialization, concrete Map key removal, concrete Map scalar get_opt
+  payloads, and `List<T>.is_empty()`, `last()`, and `pop()`.
 - The full compiler path supports single-package local dotted imports such as
   `import math.add`, with gates for multi-file success, missing imports,
   duplicate symbols, and import cycles.
@@ -159,9 +159,10 @@ This file tracks current work only.
   list parameters. Local `Map<Int,Int>` values support `{}`, assignment copy,
   `insert`, `remove`, `get(key, default)`, `get_opt(key) -> Option<Int>`,
   `contains`, and `len`; local `Map<Int,Bool>` values support `{}`,
-  assignment copy, `insert`, `remove`, `get(key, default)`, `contains`, and
-  `len`; local `Map<Int,Char>` values support `{}`, assignment copy, `insert`,
-  `remove`, `get(key, default)`, `contains`, and `len`;
+  assignment copy, `insert`, `remove`, `get(key, default)`, `get_opt(key)`,
+  `contains`, and `len`; local `Map<Int,Char>` values support `{}`,
+  assignment copy, `insert`, `remove`, `get(key, default)`, `get_opt(key)`,
+  `contains`, and `len`;
   `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` parameters support
   reference mutation in both the full self-host compiler path and native direct
   engine. `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` return values
@@ -280,7 +281,10 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
 - [x] 1.3n Broaden `Map<K,V>` only through the next concrete gate-backed slice:
   promote `remove(key)` for concrete `Map<Int,Int>`, `Map<Int,Bool>`, and
   `Map<Int,Char>` values while keeping generic Map behavior gated.
-- [ ] 1.3o Continue `Map<K,V>` expansion only through the next concrete
+- [x] 1.3o Continue `Map<K,V>` expansion only through the next concrete
+  gate-backed slice: promote `get_opt(key)` for `Map<Int,Bool>` and
+  `Map<Int,Char>` match payloads while keeping generic Map behavior gated.
+- [ ] 1.3p Continue `Map<K,V>` expansion only through the next concrete
   gate-backed slice.
 - [x] 1.4 Add examples and value tests for every promoted prelude API.
 - [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
@@ -488,6 +492,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
     initialization on the full compiler path and native direct engine.
   - [x] Promote `remove(key)` for concrete `Map<Int,Int>`, `Map<Int,Bool>`, and
     `Map<Int,Char>` values on the full compiler path and native direct engine.
+  - [x] Promote `get_opt(key)` for `Map<Int,Bool>` and `Map<Int,Char>` match
+    payloads on the full compiler path and native direct engine.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
@@ -580,6 +586,8 @@ public command protected by its own fixture contract:
 - [x] Promote the next concrete Map ABI slice: `Map<Int,Char>` return values.
 - [x] Promote the next concrete Map method slice: `remove(key)` for concrete
   `Map<Int,V>` values.
+- [x] Promote the next concrete Map Option slice: `get_opt(key)` for
+  `Map<Int,Bool>` and `Map<Int,Char>` match payloads.
 - [x] Add release-corpus examples for the promoted prelude API surface.
 - [x] Specify the next Phase 1 slice: Map ABI/generic expansion or defer to the
   Phase 2 module model.
@@ -772,8 +780,8 @@ Mode: sequential
 - Requirements: local `Map<Int,Int>` values support `{}`, assignment copy,
   `insert`, `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and
   `len`; local `Map<Int,Bool>` values support `{}`, assignment copy, `insert`,
-  `remove`, `get(key, default)`, `contains`, and `len`; local `Map<Int,Char>`
-  values support the same non-`get_opt` surface without
+  `remove`, `get(key, default)`, `get_opt(key)`, `contains`, and `len`; local
+  `Map<Int,Char>` values support the same surface without
   publishing broader generic Map return-value ABI claims.
   `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` parameters are passed by
   reference and may be mutated by callees.

@@ -4,7 +4,8 @@ Status: design contract for future gates. The verified Map surface today is
 local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
 `remove`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and parameter
 reference/mutation, plus `Map<Int,Bool>` and `Map<Int,Char>` with local
-values, assignment copy, `insert`, `remove`, `get(key, default)`, `contains`, `len`,
+values, assignment copy, `insert`, `remove`, `get(key, default)`, `get_opt(key)`,
+`contains`, `len`,
 parameter reference/mutation, and return-value local initialization. These
 slices are verified in the full self-host compiler path and native direct
 engine.
@@ -35,8 +36,10 @@ fn main() -> Int {
     scores.remove(9)
     flags.insert(4, true)
     letters.insert(4, 'A')
+    let yes_value = match flags.get_opt(4) { Some(v) => v, None => 0 }
+    let letter_value = match letters.get_opt(4) { Some(v) => v, None => 58 }
     if flags.get(4, false) and letters.get(4, 'Z') == 'A' {
-        return scores.get(4, 0) + scores.len() + scores.contains(9) + 1
+        return scores.get(4, 0) + scores.len() + scores.contains(9) + yes_value * 20 + letter_value - 84
     }
     return 0
 }
@@ -124,8 +127,8 @@ Verified behavior:
 - `remove(key)` removes the key if present and leaves the map unchanged if the
   key is missing.
 - `get(key, default)` returns the stored value or the default.
-- `get_opt(key)` returns `Some(value)` or `None` for the local
-  `Map<Int,Int>` and `Option<Int>` slice.
+- `get_opt(key)` returns `Some(value)` or `None` for local `Map<Int,Int>`,
+  `Map<Int,Bool>`, and `Map<Int,Char>` values.
 - `contains(key)` returns a `Bool`.
 - `len()` returns the number of present keys.
 - `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` parameters are passed by
@@ -135,10 +138,8 @@ Verified behavior:
   explicitly annotated local.
 
 Not verified yet: generic key/value pairs, entry literals, iteration, custom
-hashing, and Map APIs that require broader `Option<T>` or `Result<T,E>`
-support.
-`Map<Int,Bool>.get_opt` and `Map<Int,Char>.get_opt` are intentionally excluded
-until their Option payload slices are verified.
+hashing, and broader Map APIs that require `Option<T>` or `Result<T,E>` support
+beyond the current concrete `Map<Int,V>.get_opt` slices.
 
 ## Ownership And Mutation Semantics
 
@@ -187,7 +188,7 @@ Broaden Map support in this order:
    for the concrete `Map<Int,Int>` slice.
 2. More `Map<Int,V>` local slices for already verified scalar values where `V`
    has a stable copy ABI; `Map<Int,Bool>` and `Map<Int,Char>` local values are
-   the first completed slices in this step.
+   the first completed slices in this step, including `get_opt` match payloads.
 3. `Map<Int,V>` ABI: parameters and returns after the local concrete slices are
    stable. Parameters for `Map<Int,Int>`, `Map<Int,Bool>`, and
    `Map<Int,Char>` are complete; returns for all three concrete slices are now
@@ -215,8 +216,9 @@ The next promoted method set should remain the current small API:
 | `m.contains(key)` | `Map<K,V>, K -> Bool` |
 | `m.len()` | `Map<K,V> -> Int` |
 
-`get_opt` can only be promoted for `V` once `Option<V>` is verified. Until then,
-use `get(key, default)` for new value types.
+`get_opt` is promoted for the current concrete `Map<Int,Int>`,
+`Map<Int,Bool>`, and `Map<Int,Char>` slices. For future value types, promote
+`get_opt` only when the corresponding `Option<V>` payload behavior has a gate.
 
 Deletion, iteration, entry literals, capacity configuration, custom hashing,
 and ordered maps are later APIs.
