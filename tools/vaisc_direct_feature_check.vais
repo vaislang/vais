@@ -349,6 +349,28 @@ fn write_map_clear(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_str_int(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let scores: Map<Str, Int> = {}")
+    append_line(out, "    let red: Str = \"red\"")
+    append_line(out, "    scores.insert(\"red\", 10)")
+    append_line(out, "    scores.insert(\"blue\", 20)")
+    append_line(out, "    scores.insert(red, 40)")
+    append_line(out, "    let copy: Map<Str, Int> = {}")
+    append_line(out, "    copy = scores")
+    append_line(out, "    scores.remove(\"blue\")")
+    append_line(out, "    scores.clear()")
+    append_line(out, "    scores.insert(\"green\", 1)")
+    append_line(out, "    let maybe = match copy.get_opt(\"red\") { Some(v) => v, None => 0 }")
+    append_line(out, "    if copy.contains(\"blue\") and not scores.contains(\"red\") and scores.get(\"green\", 0) == 1 and scores.len() == 1 {")
+    append_line(out, "        return maybe + copy.get(\"blue\", 0) - 18")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_map_int_param(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn put(scores: Map<Int, Int>, key: Int, value: Int) -> Int {")
@@ -867,6 +889,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "char_literal") == 1 { wrote = write_char_literal(src) }
     else if str_contains(name, "map_remove") == 1 { wrote = write_map_remove(src) }
     else if str_contains(name, "map_clear") == 1 { wrote = write_map_clear(src) }
+    else if str_contains(name, "map_str_int") == 1 { wrote = write_map_str_int(src) }
     else if str_contains(name, "map_char_return") == 1 { wrote = write_map_char_return(src) }
     else if str_contains(name, "map_bool_return") == 1 { wrote = write_map_bool_return(src) }
     else if str_contains(name, "map_int_return") == 1 { wrote = write_map_int_return(src) }
@@ -954,6 +977,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "__vais_map_int_int_remove") and str_contains(text, "__vais_map_int_int_len") and str_contains(text, "__vais_map_int_int_contains")
     } else if shape == 33 {
         ok = str_contains(text, "__vais_map_int_int_clear") and str_contains(text, "__vais_map_int_int_len") and str_contains(text, "__vais_map_int_int_contains")
+    } else if shape == 34 {
+        ok = str_contains(text, "__vais_map_str_int_insert") and str_contains(text, "__vais_map_str_int_get") and str_contains(text, "__vais_map_str_int_contains") and str_contains(text, "__vais_map_str_int_copy")
     }
     if ok == 0 {
         return emit_failed(str_concat("direct ", name), err_path)
@@ -996,6 +1021,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "map_int_char", "direct local Map<Int,Char> insert/get/contains/len and assignment copy run (=42)", 25)
     fail = fail + expect_case(vaisc, tmp, "map_remove", "direct concrete Map remove deletes keys and updates len (=42)", 32)
     fail = fail + expect_case(vaisc, tmp, "map_clear", "direct concrete Map clear empties maps and allows reuse (=42)", 33)
+    fail = fail + expect_case(vaisc, tmp, "map_str_int", "direct local Map<Str,Int> string-key operations run (=42)", 34)
     fail = fail + expect_case(vaisc, tmp, "map_int_param", "direct Map<Int,Int> parameter mutation run (=42)", 26)
     fail = fail + expect_case(vaisc, tmp, "map_bool_param", "direct Map<Int,Bool> parameter mutation run (=42)", 27)
     fail = fail + expect_case(vaisc, tmp, "map_char_param", "direct Map<Int,Char> parameter mutation run (=42)", 28)

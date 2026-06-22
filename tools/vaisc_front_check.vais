@@ -73,7 +73,7 @@ fn bad_string_type_line() -> Str {
 }
 
 fn bad_map_generic_line() -> Str {
-    return str_concat(str_concat("    let scores: ", str_concat("Ma", "p<")), "Str, Int> = {}")
+    return str_concat(str_concat("    let scores: ", str_concat("Ma", "p<")), "Str, Bool> = {}")
 }
 
 fn bad_closure_line() -> Str {
@@ -114,6 +114,14 @@ fn map_char_spaced() -> Str {
 
 fn map_char_compact() -> Str {
     return str_concat(map_word(), "<Int,Char>")
+}
+
+fn map_str_int_spaced() -> Str {
+    return str_concat(map_word(), "<Str, Int>")
+}
+
+fn map_str_int_compact() -> Str {
+    return str_concat(map_word(), "<Str,Int>")
 }
 
 fn enum_line(rest: Str) -> Str {
@@ -174,6 +182,10 @@ fn label_map_bool_accept() -> Str {
 
 fn label_map_char_accept() -> Str {
     return str_concat("accepts local ", str_concat(map_char_compact(), " scalar slice"))
+}
+
+fn label_map_str_int_accept() -> Str {
+    return str_concat("accepts local ", str_concat(map_str_int_compact(), " string-key slice"))
 }
 
 fn label_option_accept() -> Str {
@@ -253,7 +265,7 @@ fn help_closure() -> Str {
 }
 
 fn msg_map_generic() -> Str {
-    return str_concat("only local ", str_concat(map_int_compact(), str_concat(", ", str_concat(map_bool_compact(), str_concat(", and ", str_concat(map_char_compact(), " values are verified"))))))
+    return str_concat("only local ", str_concat(map_int_compact(), str_concat(", ", str_concat(map_bool_compact(), str_concat(", ", str_concat(map_char_compact(), str_concat(", and ", str_concat(map_str_int_compact(), " values are verified"))))))))
 }
 
 fn msg_map_param() -> Str {
@@ -582,6 +594,28 @@ fn write_map_clear_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_str_int_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let scores: ", map_str_int_spaced()), " = {}"))
+    append_line(out, "    let red: Str = \"red\"")
+    append_line(out, "    scores.insert(\"red\", 10)")
+    append_line(out, "    scores.insert(\"blue\", 20)")
+    append_line(out, "    scores.insert(red, 40)")
+    append_line(out, str_concat(str_concat("    let copy: ", map_str_int_spaced()), " = {}"))
+    append_line(out, "    copy = scores")
+    append_line(out, "    scores.remove(\"blue\")")
+    append_line(out, "    scores.clear()")
+    append_line(out, "    scores.insert(\"green\", 1)")
+    append_line(out, "    let maybe = match copy.get_opt(\"red\") { Some(v) => v, None => 0 }")
+    append_line(out, "    if copy.contains(\"blue\") and not scores.contains(\"red\") and scores.get(\"green\", 0) == 1 and scores.len() == 1 {")
+    append_line(out, "        return maybe + copy.get(\"blue\", 0) - 18")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_option_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn find(x: Int) -> Option<Int> {")
@@ -745,6 +779,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_char") == 1 { return write_map_char_accept(path) }
     if str_eq(name, "map_remove") == 1 { return write_map_remove_accept(path) }
     if str_eq(name, "map_clear") == 1 { return write_map_clear_accept(path) }
+    if str_eq(name, "map_str_int") == 1 { return write_map_str_int_accept(path) }
     if str_eq(name, "map_param") == 1 { return write_map_param_accept(path) }
     if str_eq(name, "map_bool_param") == 1 { return write_map_bool_param_accept(path) }
     if str_eq(name, "map_char_param") == 1 { return write_map_char_param_accept(path) }
@@ -1451,13 +1486,14 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "map_char", label_map_char_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_remove", "accepts concrete Map remove slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_clear", "accepts concrete Map clear slice", 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_str_int", label_map_str_int_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_param", "accepts Map<Int,Int> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool_param", "accepts Map<Int,Bool> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char_param", "accepts Map<Int,Char> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_return", "accepts Map<Int,Int> return value slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool_return", "accepts Map<Int,Bool> return value slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char_return", "accepts Map<Int,Char> return value slice", 42)
-    fail = fail + expect_reject(vaisc, tmp, "map_generic_not_verified", msg_map_generic(), "", "generic key/value forms")
+    fail = fail + expect_reject(vaisc, tmp, "map_generic_not_verified", msg_map_generic(), "", "Map<Str,Int>")
     fail = fail + expect_reject(vaisc, tmp, "map_generic_param_not_verified", msg_map_param(), "", "generic Map parameters local")
     fail = fail + expect_reject(vaisc, tmp, "map_generic_return_not_verified", msg_map_return(), "", "generic Map returns local")
     fail = fail + expect_reject(vaisc, tmp, "map_assignment_type_mismatch", "Map assignment source type must match", "", "same concrete Map type")

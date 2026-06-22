@@ -61,6 +61,7 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `Map<Int,Int>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
 | `Map<Int,Bool>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
 | `Map<Int,Char>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
+| `Map<Str,Int>` | Verified for local values, local assignment copy, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len`; function parameters and returns are not verified |
 | `Map<K,V>` | Design-specified beyond the verified concrete local Map slices; not verified |
 | `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Option<T>` | Specified beyond the `Option<Int>` slice |
@@ -86,22 +87,22 @@ The verified Map surface is deliberately small:
 
 | API | Verified behavior |
 | --- | --- |
-| `let m: Map<Int,Int> = {}` / `let m: Map<Int,Bool> = {}` / `let m: Map<Int,Char> = {}` | Construct an empty local map |
+| `let m: Map<Int,Int> = {}` / `let m: Map<Int,Bool> = {}` / `let m: Map<Int,Char> = {}` / `let m: Map<Str,Int> = {}` | Construct an empty local map |
 | `fn f(m: Map<Int,Int>) -> Int` / `fn f(m: Map<Int,Bool>) -> Int` / `fn f(m: Map<Int,Char>) -> Int` | Pass a Map by reference so the callee can read or mutate the caller-visible map |
 | `fn make() -> Map<Int,Int>` / `let m: Map<Int,Int> = make()` / `fn make() -> Map<Int,Bool>` / `let m: Map<Int,Bool> = make()` / `fn make() -> Map<Int,Char>` / `let m: Map<Int,Char> = make()` | Return a verified concrete Map into caller-owned local storage |
 | `target = source` | Copy one local map into another local map with the same concrete type |
-| `m.insert(key, value)` | Insert or replace a value by integer key |
+| `m.insert(key, value)` | Insert or replace a value by key; verified keys are `Int` for `Map<Int,V>` and `Str` for local `Map<Str,Int>` |
 | `m.remove(key)` | Remove a key if present; missing keys are ignored |
 | `m.clear()` | Remove all keys and allow the map to be reused |
 | `m.get(key, default)` | Return the value for `key`, or `default` when absent |
-| `m.get_opt(key)` | Return `Some(value)` for a present key or `None` when absent on `Map<Int,Int>`, `Map<Int,Bool>`, or `Map<Int,Char>` |
+| `m.get_opt(key)` | Return `Some(value)` for a present key or `None` when absent on `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, or local `Map<Str,Int>` |
 | `m.contains(key)` | Return whether `key` is present |
 | `m.len()` | Return the number of present keys |
 
 This slice is currently available through the full self-host compiler path and
 `scripts/vaisc --engine direct`.
-The slice does not include generic key/value lowering, generic Map return
-values, iteration,
+The slice does not include generic key/value lowering, `Map<Str,Int>` function
+parameters or returns, generic Map return values, iteration,
 `Result`, hashing controls, or map literals with entries.
 Unverified generic Map function parameters, unverified return values, and non-local assignment sources are
 rejected by front diagnostics.

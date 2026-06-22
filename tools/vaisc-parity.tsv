@@ -69,6 +69,7 @@ examples/e103_map_char_return.vais	native-supported	Map<Int,Char> return value i
 examples/e104_map_remove.vais	native-supported	Concrete Map<Int,V> remove deletes keys and updates length.
 examples/e105_map_scalar_get_opt.vais	native-supported	Map<Int,Bool> and Map<Int,Char> get_opt payloads match through Option.
 examples/e106_map_clear.vais	native-supported	Concrete Map<Int,V> clear empties maps and allows reuse.
+examples/e107_map_str_int.vais	native-supported	Map<Str,Int> local string-key operations and copy.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.

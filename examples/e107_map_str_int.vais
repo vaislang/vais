@@ -1,0 +1,22 @@
+# expect: 42
+
+fn main() -> Int {
+    let scores: Map<Str,Int> = {}
+    let red: Str = "red"
+    scores.insert("red", 10)
+    scores.insert("blue", 20)
+    scores.insert(red, 40)
+
+    let copy: Map<Str,Int> = {}
+    copy = scores
+
+    scores.remove("blue")
+    scores.clear()
+    scores.insert("green", 1)
+
+    let maybe = match copy.get_opt("red") { Some(v) => v, None => 0 }
+    if copy.contains("blue") and not scores.contains("red") and scores.get("green", 0) == 1 and scores.len() == 1 {
+        return maybe + copy.get("blue", 0) - 18
+    }
+    return 0
+}

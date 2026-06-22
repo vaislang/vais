@@ -99,6 +99,11 @@
 - Promoted `clear()` for the concrete `Map<Int,Int>`, `Map<Int,Bool>`, and
   `Map<Int,Char>` slices through the full compiler path and native direct
   engine, with `examples/e106_map_clear.vais` added to the release corpus.
+- Promoted local-only `Map<Str,Int>` construction, assignment copy, `insert`,
+  `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len`
+  through the full compiler path and native direct engine, with
+  `examples/e107_map_str_int.vais` added to the release corpus. Function
+  parameters and return values for `Map<Str,Int>` remain gated.
 
 ## v0.3.1 - 2026-06-20
 
