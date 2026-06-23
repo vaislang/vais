@@ -3,13 +3,14 @@
 Status: design contract for future gates. The verified Map surface today is
 local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
 `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and parameter
-reference/mutation, plus `Map<Int,Bool>` and `Map<Int,Char>` with local
+reference/mutation, and return-value local initialization, plus
+`Map<Int,Bool>` and `Map<Int,Char>` with local
 values, assignment copy, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`,
 `contains`, `len`,
 parameter reference/mutation, and return-value local initialization.
 `Map<Str,Int>` values support `{}`, assignment copy, `insert`, `remove`,
-`clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and function
-parameter reference/mutation; return values for `Map<Str,Int>` remain gated.
+`clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, function
+parameter reference/mutation, and return-value local initialization.
 These slices are verified in the full self-host compiler path and native direct
 engine.
 
@@ -98,6 +99,20 @@ fn main() -> Int {
 ```
 
 ```vais
+fn make_names() -> Map<Str,Int> {
+    let scores: Map<Str,Int> = {}
+    scores.insert("red", 40)
+    scores.insert("blue", 2)
+    return scores
+}
+
+fn main() -> Int {
+    let scores: Map<Str,Int> = make_names()
+    return scores.get("red", 0) + scores.get("blue", 0)
+}
+```
+
+```vais
 fn make_flags() -> Map<Int,Bool> {
     let flags: Map<Int,Bool> = {}
     flags.insert(4, true)
@@ -149,10 +164,9 @@ Verified behavior:
 - `len()` returns the number of present keys.
 - `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>`
   parameters are passed by reference; a callee can mutate the caller-visible map.
-- `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` return values copy
-  returned contents into caller-owned local storage when initializing an
-  explicitly annotated local.
-- `Map<Str,Int>` return values are not verified yet.
+- `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>` return
+  values copy returned contents into caller-owned local storage when
+  initializing an explicitly annotated local.
 
 Not verified yet: generic key/value pairs, entry literals, iteration, custom
 hashing, and broader Map APIs that require `Option<T>` or `Result<T,E>` support
@@ -213,8 +227,8 @@ Broaden Map support in this order:
    complete for explicitly annotated local initialization.
 4. `Map<Str,Int>` local values as the first string-key slice. This is complete
    for local construction, assignment copy, lookup/update helpers, `remove`,
-   `clear`, `get_opt`, and parameter reference/mutation; returns and broader
-   `Map<Str,V>` forms remain future gates.
+   `clear`, `get_opt`, parameter reference/mutation, and return-value local
+   initialization; broader `Map<Str,V>` forms remain future gates.
 5. Broader `Map<Str,V>` only after string equality, hashing, copy, and lifetime
    rules are specified for each value type and ABI boundary.
 6. Struct values only after struct copy and return ABI behavior are already
@@ -254,9 +268,8 @@ Until each slice is implemented, the public front must reject unsupported forms:
   concrete Map type.
 - Map function parameters beyond the verified `Map<Int,Int>`,
   `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>` slices.
-- Map function returns beyond the verified `Map<Int,Int>`, `Map<Int,Bool>`, and
-  `Map<Int,Char>` slices.
-- `Map<Str,Int>` function return values.
+- Map function returns beyond the verified `Map<Int,Int>`, `Map<Int,Bool>`,
+  `Map<Int,Char>`, and `Map<Str,Int>` slices.
 - Generic key/value forms outside verified concrete pairs.
 - Map literals with entries.
 - Unsupported Map methods.

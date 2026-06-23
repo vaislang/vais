@@ -106,7 +106,10 @@
 - Promoted `Map<Str,Int>` function parameters by reference through the full
   compiler path and native direct engine, with
   `examples/e108_map_str_int_param.vais` added to the release corpus.
-  Return values for `Map<Str,Int>` remain gated.
+- Promoted `Map<Str,Int>` return values for explicitly annotated local
+  initialization through the full compiler path and native direct engine, with
+  `examples/e109_map_str_int_return.vais` added to the release corpus.
+  Broader `Map<Str,V>` and generic Map returns remain gated.
 
 ## v0.3.1 - 2026-06-20
 

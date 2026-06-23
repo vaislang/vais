@@ -82,7 +82,8 @@ for concrete Map key removal, `examples/e105_map_scalar_get_opt.vais` for
 `examples/e106_map_clear.vais` for concrete Map clear and reuse,
 `examples/e107_map_str_int.vais` for `Map<Str,Int>` string-key operations and
 assignment copy, `examples/e108_map_str_int_param.vais` for `Map<Str,Int>`
-parameter mutation by reference,
+parameter mutation by reference, `examples/e109_map_str_int_return.vais` for a
+`Map<Str,Int>` return value initializing a local,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and

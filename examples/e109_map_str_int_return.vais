@@ -1,0 +1,19 @@
+# expect: 42
+
+fn make_scores() -> Map<Str,Int> {
+    let scores: Map<Str,Int> = {}
+    scores.insert("red", 40)
+    scores.insert("blue", 2)
+    return scores
+}
+
+fn main() -> Int {
+    let scores: Map<Str,Int> = make_scores()
+    let copy: Map<Str,Int> = {}
+    copy = scores
+    scores.remove("blue")
+    if copy.contains("blue") and scores.contains("red") and not scores.contains("blue") {
+        return scores.get("red", 0) + copy.get("blue", 0)
+    }
+    return 0
+}

@@ -1271,9 +1271,14 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                                     retlist = 4
                                     retty = map_value_char_ty()
                                 }
+                            } else if kw3(src, mkey.nstart, mkey.nlen, 83, 116, 114) == 1 {
+                                if kw3(src, mval.nstart, mval.nlen, 73, 110, 116) == 1 {
+                                    retlist = 4
+                                    retty = map_str_int_ty()
+                                }
                             }
                         }
-                    } else if kw3(src, rt.nstart, rt.nlen, 83, 116, 114) == 1 {
+                    } else if retlist == 0 and kw3(src, rt.nstart, rt.nlen, 83, 116, 114) == 1 {
                         retlist = 3
                     } else if retlist == 0 {
                         let rst = struct_index_by_name(defs, src, rt.nstart, rt.nlen)
