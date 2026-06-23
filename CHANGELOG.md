@@ -110,6 +110,9 @@
   initialization through the full compiler path and native direct engine, with
   `examples/e109_map_str_int_return.vais` added to the release corpus.
   Broader `Map<Str,V>` and generic Map returns remain gated.
+- Promoted local `Map<Str,Bool>` string-key operations through the full compiler
+  path and native direct engine, with `examples/e110_map_str_bool.vais` added to
+  the release corpus. `Map<Str,Bool>` parameters and return values remain gated.
 
 ## v0.3.1 - 2026-06-20
 

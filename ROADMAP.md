@@ -72,7 +72,8 @@ This file tracks current work only.
   assignment copy, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`,
   `contains`, and `len`, plus local `Map<Str,Int>` values with `{}`,
   assignment copy, `insert`, `remove`, `clear`, `get(key, default)`,
-  `get_opt(key)`, `contains`, and `len`.
+  `get_opt(key)`, `contains`, and `len`, and local `Map<Str,Bool>` values
+  with the same local string-key method surface.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>`
   parameters are verified by reference, so callees can mutate caller-visible
   maps. `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and
@@ -80,14 +81,15 @@ This file tracks current work only.
   through caller-owned storage.
 - Promoted prelude APIs have value-corpus examples, including local
   `Map<Int,Int>`, local `Map<Int,Bool>`, local `Map<Int,Char>`,
-  local `Map<Str,Int>`,
+  local `Map<Str,Int>`, local `Map<Str,Bool>`,
   `Map<Int,Bool>` parameter mutation, `Map<Int,Char>` parameter mutation,
   `Map<Str,Int>` parameter mutation,
   `Map<Int,Int>` return-value local initialization, `Map<Int,Bool>`
   return-value local initialization, `Map<Int,Char>` return-value local
-  initialization, `Map<Str,Int>` return-value local initialization, concrete
-  Map key removal, concrete Map scalar get_opt payloads, concrete Map clear
-  and reuse, and `List<T>.is_empty()`, `last()`, and `pop()`.
+  initialization, `Map<Str,Int>` return-value local initialization, local
+  `Map<Str,Bool>` string-key operations, concrete Map key removal, concrete
+  Map scalar get_opt payloads, concrete Map clear and reuse, and
+  `List<T>.is_empty()`, `last()`, and `pop()`.
 - The full compiler path supports single-package local dotted imports such as
   `import math.add`, with gates for multi-file success, missing imports,
   duplicate symbols, and import cycles.
@@ -170,7 +172,8 @@ This file tracks current work only.
   assignment copy, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`,
   `contains`, and `len`; local `Map<Str,Int>` values support `{}`,
   assignment copy, `insert`, `remove`, `clear`, `get(key, default)`,
-  `get_opt(key)`, `contains`, and `len`;
+  `get_opt(key)`, `contains`, and `len`; local `Map<Str,Bool>` values support
+  the same local string-key method surface;
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>` parameters support
   reference mutation in both the full self-host compiler path and native direct
   engine. `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and
@@ -306,7 +309,11 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
   gate-backed slice: promote `Map<Str,Int>` return values for explicitly
   annotated local initialization while keeping broader `Map<Str,V>` and
   generic Map returns gated.
-- [ ] 1.3t Continue `Map<K,V>` expansion only through the next concrete
+- [x] 1.3t Continue `Map<K,V>` expansion only through the next concrete
+  gate-backed slice: promote local `Map<Str,Bool>` string-key operations while
+  keeping `Map<Str,Bool>` parameters, returns, and broader generic Map behavior
+  gated.
+- [ ] 1.3u Continue `Map<K,V>` expansion only through the next concrete
   gate-backed slice.
 - [x] 1.4 Add examples and value tests for every promoted prelude API.
 - [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
@@ -523,6 +530,9 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
     compiler path and native direct engine.
   - [x] Promote `Map<Str,Int>` return values for explicitly annotated local
     initialization on the full compiler path and native direct engine.
+  - [x] Promote local `Map<Str,Bool>` construction, assignment copy,
+    `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`,
+    `contains`, and `len` on the full compiler path and native direct engine.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
@@ -623,6 +633,7 @@ public command protected by its own fixture contract:
 - [x] Promote the next concrete Map ABI slice: `Map<Str,Int>` parameters by
   reference.
 - [x] Promote the next concrete Map ABI slice: `Map<Str,Int>` return values.
+- [x] Promote the next concrete local Map value slice: `Map<Str,Bool>`.
 - [x] Add release-corpus examples for the promoted prelude API surface.
 - [x] Specify the next Phase 1 slice: Map ABI/generic expansion or defer to the
   Phase 2 module model.
@@ -773,8 +784,10 @@ Mode: sequential
   `Map<Int,Int>` assignment copy and the local `Map<Int,Bool>` and
   `Map<Int,Char>` scalar-value slices are verified. `Map<Str,Int>` is
   verified for string-key local operations, parameter reference mutation, and
-  return-value local initialization; broader `Map<Str,V>` and generic Map
-  behavior still require direct and full gates before publication.
+  return-value local initialization. Local `Map<Str,Bool>` string-key
+  operations are verified; `Map<Str,Bool>` parameters, returns, broader
+  `Map<Str,V>`, and generic Map behavior still require direct and full gates
+  before publication.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>`
   parameter reference mutation is verified.
 
@@ -820,8 +833,9 @@ Mode: sequential
   `len`; local `Map<Int,Char>` values support the same surface without
   publishing broader generic Map return-value ABI claims. Local `Map<Str,Int>`
   values support the same local method surface with string keys and
-  return-value local initialization while keeping broader `Map<Str,V>` and
-  generic Map returns gated.
+  return-value local initialization. Local `Map<Str,Bool>` values support the
+  same local method surface with string keys while keeping `Map<Str,Bool>`
+  parameters, returns, broader `Map<Str,V>`, and generic Map returns gated.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>` parameters are passed by
   reference and may be mutated by callees.
 - Done: native direct gates pass a local map example returning a deterministic
@@ -834,7 +848,8 @@ Mode: sequential
 - Requirements: docs distinguish verified local concrete Map slices from
   unsupported generic and ABI Map behavior.
 - Done: `scripts/test-vaisc-front.sh` accepts local `Map<Int,Int>`,
-  `Map<Int,Bool>`, `Map<Int,Char>`, local `Map<Str,Int>`,
+  `Map<Int,Bool>`, `Map<Int,Char>`, local `Map<Str,Int>`, local
+  `Map<Str,Bool>`,
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>`
   parameters while rejecting unsupported generic `Map<K,V>` forms;
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>` return

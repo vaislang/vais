@@ -1547,6 +1547,7 @@ fn map_value_int_ty() -> Int { return 0 }
 fn map_value_bool_ty() -> Int { return 1 }
 fn map_value_char_ty() -> Int { return 2 }
 fn map_str_int_ty() -> Int { return 3 }
+fn map_str_bool_ty() -> Int { return 4 }
 fn map_int_param_ty() -> Int { return 0 - 3 }
 fn map_bool_param_ty() -> Int { return 0 - 4 }
 fn map_char_param_ty() -> Int { return 0 - 5 }
@@ -1559,12 +1560,13 @@ fn map_param_value_ty(pty: Int) -> Int {
     if pty == map_bool_param_ty() { return map_value_bool_ty() }
     return map_value_int_ty()
 }
-fn map_is_str_int(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
-    if sty_of(slots, src, qs, ql) == map_str_int_ty() { return 1 }
+fn map_is_str_key(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
+    let msty = sty_of(slots, src, qs, ql)
+    if msty == map_str_int_ty() or msty == map_str_bool_ty() { return 1 }
     return 0
 }
 fn emit_map_helper_name(slots: &List<Slot>, src: Str, qs: Int, ql: Int, name: Str) -> Int {
-    if map_is_str_int(slots, src, qs, ql) == 1 {
+    if map_is_str_key(slots, src, qs, ql) == 1 {
         emit_str("__vais_map_str_int_")
     } else {
         emit_str("__vais_map_int_int_")
@@ -1573,12 +1575,12 @@ fn emit_map_helper_name(slots: &List<Slot>, src: Str, qs: Int, ql: Int, name: St
     return 0
 }
 fn emit_map_key_arg(slots: &List<Slot>, src: Str, qs: Int, ql: Int, key: Op) -> Int {
-    if map_is_str_int(slots, src, qs, ql) == 1 { emit_str("i8* ") } else { emit_str("i64 ") }
+    if map_is_str_key(slots, src, qs, ql) == 1 { emit_str("i8* ") } else { emit_str("i64 ") }
     emit_op(key)
     return 0
 }
 fn gen_map_key_expr(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, qs: Int, ql: Int, kstart: Int, kstop: Int, counter: Int) -> Op {
-    if map_is_str_int(slots, src, qs, ql) == 1 {
+    if map_is_str_key(slots, src, qs, ql) == 1 {
         let kt = toks[kstart]
         if kstart + 1 == kstop and kt.kind == 1 {
             let kslot = find_slot(slots, src, kt.nstart, kt.nlen)
@@ -3619,6 +3621,7 @@ fn map_anno_value_ty(toks: &List<Token>, src: Str, npos: Int) -> Int {
     if gt.kind != 19 { return 0 - 1 }
     if is_str_key == 1 {
         if is_int_value == 1 { return map_str_int_ty() }
+        if is_bool_value == 1 { return map_str_bool_ty() }
         return 0 - 1
     }
     if is_int_value == 1 { return map_value_int_ty() }

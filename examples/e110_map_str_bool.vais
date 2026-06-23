@@ -1,0 +1,25 @@
+# expect: 42
+
+fn main() -> Int {
+    let flags: Map<Str,Bool> = {}
+    let red: Str = "red"
+    flags.insert("red", true)
+    flags.insert("blue", false)
+    flags.insert(red, true)
+
+    let copy: Map<Str,Bool> = {}
+    copy = flags
+
+    flags.remove("blue")
+    flags.clear()
+    flags.insert("green", true)
+
+    let yes_value = match copy.get_opt("red") { Some(v) => v, None => 0 }
+    let no_value = match copy.get_opt("blue") { Some(v) => v, None => 1 }
+    let missing = match flags.get_opt("red") { Some(v) => 0, None => 5 }
+
+    if copy.contains("blue") and not flags.contains("red") and flags.get("green", false) and flags.len() == 1 {
+        return yes_value * 20 + (1 - no_value) * 10 + missing + flags.contains("green") + copy.len() * 3
+    }
+    return 0
+}

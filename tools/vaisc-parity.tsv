@@ -72,6 +72,7 @@ examples/e106_map_clear.vais	native-supported	Concrete Map<Int,V> clear empties 
 examples/e107_map_str_int.vais	native-supported	Map<Str,Int> local string-key operations and copy.
 examples/e108_map_str_int_param.vais	native-supported	Map<Str,Int> parameter mutation by reference.
 examples/e109_map_str_int_return.vais	native-supported	Map<Str,Int> return value initializes a local.
+examples/e110_map_str_bool.vais	native-supported	Map<Str,Bool> local string-key operations and copy.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.
