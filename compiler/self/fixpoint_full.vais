@@ -18,7 +18,7 @@ struct Token { kind: Int, value: Int, nstart: Int, nlen: Int }
 # Operand: kind 0=literal(val), 1=temp(%t<val>). next = next free SSA temp.
 struct Op { kind: Int, val: Int, next: Int }
 # A declared variable: source name range -> it lives at alloca %v<slot>.
-# is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map<Int,scalar> local, 6=Map<Int,scalar> param.
+# is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map concrete local, 6=Map concrete param.
 struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: Int }
 # A function: name range, up to 10 params (p0s/p0l..p9s/p9l + p0ty..p9ty), param
 # count `npar`, and the body token range [bstart, bend). 10 params covers the
@@ -1155,6 +1155,7 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                     #   Map<Int,Int> -> map_int_param_ty()  (Map buffer pointer)
                     #   Map<Int,Bool> -> map_bool_param_ty() (Map buffer pointer)
                     #   Map<Int,Char> -> map_char_param_ty() (Map buffer pointer)
+                    #   Map<Str,Int>  -> map_str_int_param_ty() (Map buffer pointer)
                     #   StructName  -> 3+struct_index  (struct by hidden pointer)
                     #   else        -> 0  (int)
                     let tyt = toks[q + 1]
@@ -1172,6 +1173,8 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                                 if kw3(src, mval.nstart, mval.nlen, 73, 110, 116) == 1 { mpty = map_int_param_ty() }
                                 else if kw4(src, mval.nstart, mval.nlen, 66, 111, 111, 108) == 1 { mpty = map_bool_param_ty() }
                                 else if kw4(src, mval.nstart, mval.nlen, 67, 104, 97, 114) == 1 { mpty = map_char_param_ty() }
+                            } else if kw3(src, mkey.nstart, mkey.nlen, 83, 116, 114) == 1 {
+                                if kw3(src, mval.nstart, mval.nlen, 73, 110, 116) == 1 { mpty = map_str_int_param_ty() }
                             }
                         }
                     }
@@ -1542,9 +1545,11 @@ fn map_str_int_ty() -> Int { return 3 }
 fn map_int_param_ty() -> Int { return 0 - 3 }
 fn map_bool_param_ty() -> Int { return 0 - 4 }
 fn map_char_param_ty() -> Int { return 0 - 5 }
+fn map_str_int_param_ty() -> Int { return 0 - 6 }
 fn map_param_ty() -> Int { return map_int_param_ty() }
-fn is_map_param_ty(pty: Int) -> Bool { return pty == map_int_param_ty() or pty == map_bool_param_ty() or pty == map_char_param_ty() }
+fn is_map_param_ty(pty: Int) -> Bool { return pty == map_int_param_ty() or pty == map_bool_param_ty() or pty == map_char_param_ty() or pty == map_str_int_param_ty() }
 fn map_param_value_ty(pty: Int) -> Int {
+    if pty == map_str_int_param_ty() { return map_str_int_ty() }
     if pty == map_char_param_ty() { return map_value_char_ty() }
     if pty == map_bool_param_ty() { return map_value_bool_ty() }
     return map_value_int_ty()
@@ -6850,7 +6855,7 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
             pint(s2)
             putchar(10)
         } else if is_map_param_ty(pty) {
-            # Map<Int,scalar> param: is_arr=6 (Map-by-pointer). The callee mutates
+            # Concrete Map param: is_arr=6 (Map-by-pointer). The callee mutates
             # the caller-visible map buffer directly.
             slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 6, alen: 0 , sty: map_param_value_ty(pty) })
             emit_str("  %v")

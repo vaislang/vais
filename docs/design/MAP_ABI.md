@@ -6,11 +6,12 @@ local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
 reference/mutation, plus `Map<Int,Bool>` and `Map<Int,Char>` with local
 values, assignment copy, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`,
 `contains`, `len`,
-parameter reference/mutation, and return-value local initialization. Local
+parameter reference/mutation, and return-value local initialization.
 `Map<Str,Int>` values support `{}`, assignment copy, `insert`, `remove`,
-`clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len`; function
-parameters and return values for `Map<Str,Int>` remain gated. These slices are
-verified in the full self-host compiler path and native direct engine.
+`clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and function
+parameter reference/mutation; return values for `Map<Str,Int>` remain gated.
+These slices are verified in the full self-host compiler path and native direct
+engine.
 
 This document fixes the implementation contract required before `Map<K,V>` can
 be broadened. It does not publish new verified syntax by itself.
@@ -73,6 +74,13 @@ fn stamp(letters: Map<Int,Char>, key: Int) -> Int {
     }
     return 0
 }
+
+fn put_name(scores: Map<Str,Int>, key: Str, value: Int) -> Int {
+    scores.insert(key, value)
+    scores.insert("blue", 2)
+    scores.remove("blue")
+    return scores.len()
+}
 ```
 
 ```vais
@@ -126,7 +134,7 @@ fn main() -> Int {
 Verified behavior:
 
 - A Map local must be explicitly annotated as `Map<Int,Int>`, `Map<Int,Bool>`,
-  `Map<Int,Char>`, or local-only `Map<Str,Int>`.
+  `Map<Int,Char>`, or `Map<Str,Int>`.
 - `{}` constructs an empty local map.
 - `target = source` copies one local Map into another local with the same
   concrete Map type without aliasing.
@@ -139,12 +147,12 @@ Verified behavior:
   `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>` values.
 - `contains(key)` returns a `Bool`.
 - `len()` returns the number of present keys.
-- `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` parameters are passed by
-  reference; a callee can mutate the caller-visible map.
+- `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>`
+  parameters are passed by reference; a callee can mutate the caller-visible map.
 - `Map<Int,Int>`, `Map<Int,Bool>`, and `Map<Int,Char>` return values copy
   returned contents into caller-owned local storage when initializing an
   explicitly annotated local.
-- `Map<Str,Int>` function parameters and return values are not verified yet.
+- `Map<Str,Int>` return values are not verified yet.
 
 Not verified yet: generic key/value pairs, entry literals, iteration, custom
 hashing, and broader Map APIs that require `Option<T>` or `Result<T,E>` support
@@ -205,8 +213,8 @@ Broaden Map support in this order:
    complete for explicitly annotated local initialization.
 4. `Map<Str,Int>` local values as the first string-key slice. This is complete
    for local construction, assignment copy, lookup/update helpers, `remove`,
-   `clear`, and `get_opt`; parameters, returns, and broader `Map<Str,V>` forms
-   remain future gates.
+   `clear`, `get_opt`, and parameter reference/mutation; returns and broader
+   `Map<Str,V>` forms remain future gates.
 5. Broader `Map<Str,V>` only after string equality, hashing, copy, and lifetime
    rules are specified for each value type and ABI boundary.
 6. Struct values only after struct copy and return ABI behavior are already
@@ -232,7 +240,7 @@ The next promoted method set should remain the current small API:
 | `m.len()` | `Map<K,V> -> Int` |
 
 `get_opt` is promoted for the current concrete `Map<Int,Int>`,
-`Map<Int,Bool>`, `Map<Int,Char>`, and local `Map<Str,Int>` slices. For future value types, promote
+`Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>` slices. For future value types, promote
 `get_opt` only when the corresponding `Option<V>` payload behavior has a gate.
 
 Iteration, entry literals, capacity configuration, custom hashing, and ordered
@@ -245,10 +253,10 @@ Until each slice is implemented, the public front must reject unsupported forms:
 - Map assignment from anything other than another local with the same verified
   concrete Map type.
 - Map function parameters beyond the verified `Map<Int,Int>`,
-  `Map<Int,Bool>`, and `Map<Int,Char>` slices.
+  `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>` slices.
 - Map function returns beyond the verified `Map<Int,Int>`, `Map<Int,Bool>`, and
   `Map<Int,Char>` slices.
-- `Map<Str,Int>` function parameters and return values.
+- `Map<Str,Int>` function return values.
 - Generic key/value forms outside verified concrete pairs.
 - Map literals with entries.
 - Unsupported Map methods.

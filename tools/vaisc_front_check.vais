@@ -188,6 +188,10 @@ fn label_map_str_int_accept() -> Str {
     return str_concat("accepts local ", str_concat(map_str_int_compact(), " string-key slice"))
 }
 
+fn label_map_str_int_param_accept() -> Str {
+    return str_concat("accepts ", str_concat(map_str_int_compact(), " parameter mutation slice"))
+}
+
 fn label_option_accept() -> Str {
     return "accepts Option<Int> statement-match slice"
 }
@@ -269,7 +273,7 @@ fn msg_map_generic() -> Str {
 }
 
 fn msg_map_param() -> Str {
-    return "only Map<Int,Int>, Map<Int,Bool>, and Map<Int,Char> parameters are verified yet"
+    return "only Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, and Map<Str,Int> parameters are verified yet"
 }
 
 fn msg_map_return() -> Str {
@@ -616,6 +620,27 @@ fn write_map_str_int_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_str_int_param_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, str_concat(str_concat("fn put(scores: ", map_str_int_spaced()), ", key: Str, value: Int) -> Int {"))
+    append_line(out, "    scores.insert(key, value)")
+    append_line(out, "    scores.insert(\"blue\", 2)")
+    append_line(out, "    scores.remove(\"blue\")")
+    append_line(out, "    return scores.len()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let scores: ", map_str_int_spaced()), " = {}"))
+    append_line(out, "    let red: Str = \"red\"")
+    append_line(out, "    let n = put(scores, red, 40)")
+    append_line(out, "    if scores.contains(\"red\") and not scores.contains(\"blue\") {")
+    append_line(out, "        return scores.get(\"red\", 0) + n + scores.len()")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_option_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn find(x: Int) -> Option<Int> {")
@@ -780,6 +805,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_remove") == 1 { return write_map_remove_accept(path) }
     if str_eq(name, "map_clear") == 1 { return write_map_clear_accept(path) }
     if str_eq(name, "map_str_int") == 1 { return write_map_str_int_accept(path) }
+    if str_eq(name, "map_str_int_param") == 1 { return write_map_str_int_param_accept(path) }
     if str_eq(name, "map_param") == 1 { return write_map_param_accept(path) }
     if str_eq(name, "map_bool_param") == 1 { return write_map_bool_param_accept(path) }
     if str_eq(name, "map_char_param") == 1 { return write_map_char_param_accept(path) }
@@ -1490,6 +1516,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "map_param", "accepts Map<Int,Int> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool_param", "accepts Map<Int,Bool> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char_param", "accepts Map<Int,Char> parameter mutation slice", 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_str_int_param", label_map_str_int_param_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_return", "accepts Map<Int,Int> return value slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool_return", "accepts Map<Int,Bool> return value slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char_return", "accepts Map<Int,Char> return value slice", 42)

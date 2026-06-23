@@ -1,0 +1,18 @@
+# expect: 42
+
+fn put(scores: Map<Str,Int>, key: Str, value: Int) -> Int {
+    scores.insert(key, value)
+    scores.insert("blue", 2)
+    scores.remove("blue")
+    return scores.len()
+}
+
+fn main() -> Int {
+    let scores: Map<Str,Int> = {}
+    let red: Str = "red"
+    let n = put(scores, red, 40)
+    if scores.contains("red") and not scores.contains("blue") {
+        return scores.get("red", 0) + n + scores.len()
+    }
+    return 0
+}
