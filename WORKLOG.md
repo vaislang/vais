@@ -1,5 +1,12 @@
 # Vais Worklog
 
+## 2026-06-24
+
+- Promoted `examples/e71_string_index_of.vais` into the release corpus as a
+  `Str` substring-search pattern with computed byte indexes, covering public
+  front, native direct, full self-host codegen, parity, value, docs, and site
+  count updates.
+
 ## 2026-06-20
 
 - Prepared the `v0.3.0` source release metadata across the native compiler

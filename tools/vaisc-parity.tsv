@@ -43,6 +43,7 @@ examples/e64_enum_struct_payload.vais	native-supported	Single-field struct paylo
 examples/e66_fibonacci.vais	native-supported	Recursive Fibonacci.
 examples/e67_power.vais	native-supported	Recursive power.
 examples/e70_parse_uint.vais	native-supported	Str len/index with Bool digit classifier.
+examples/e71_string_index_of.vais	native-supported	Str substring search with computed byte indexes.
 examples/e72_identifier_scan.vais	native-supported	Identifier scan over Str with byte classification.
 examples/e74_map_basic.vais	native-supported	Local Map<Int,Int> insert/get/contains/len.
 examples/e83_parse_helpers.vais	native-supported	Named parse_uint/parse_int Str helpers.

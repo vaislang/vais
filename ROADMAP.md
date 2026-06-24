@@ -986,8 +986,8 @@ Mode: sequential
 - [x] 3. Gate `Bool` byte-classification helpers and user-defined integer
   parsing over `Str`.
 - [x] 4. Promote `examples/e48_string_index.vais`,
-  `examples/e70_parse_uint.vais`, and `examples/e72_identifier_scan.vais` in
-  the parity manifest.
+  `examples/e70_parse_uint.vais`, `examples/e71_string_index_of.vais`, and
+  `examples/e72_identifier_scan.vais` in the parity manifest.
 - [x] 5. Sync `std/PRELUDE.md`, the language reference, changelog, roadmap,
   worklog, and website copy.
 
@@ -1006,11 +1006,12 @@ Mode: sequential
 
 - Target files: `tools/vaisc_native.c`, `tools/vaisc-parity.tsv`,
   `examples/e48_string_index.vais`, `examples/e70_parse_uint.vais`,
-  `examples/e72_identifier_scan.vais`.
+  `examples/e71_string_index_of.vais`, `examples/e72_identifier_scan.vais`.
 - Requirements: protect `s.len()`, `s[i]`, string equality/inequality,
-  byte-classification helpers, and parse/identifier-scan tool shapes.
+  byte-classification helpers, parse/identifier-scan tool shapes, and
+  computed byte-index substring search.
 - Done: direct and parity gates cover string index, string equality, parse_uint,
-  and identifier scanning.
+  substring search, and identifier scanning.
 
 #### 3. Documentation and roadmap sync
 

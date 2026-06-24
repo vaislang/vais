@@ -980,6 +980,8 @@ Verified today:
   by `examples/e83_parse_helpers.vais`.
 - User-defined integer parsing over `Str`, as covered by
   `examples/e70_parse_uint.vais`.
+- Substring search patterns over `Str` with computed byte indexes, as covered by
+  `examples/e71_string_index_of.vais`.
 - Identifier scanning over `Str`, as covered by
   `examples/e72_identifier_scan.vais`.
 - Single-byte character literal equality plus `Char` locals, helper

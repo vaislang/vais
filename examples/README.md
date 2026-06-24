@@ -99,6 +99,8 @@ assignment copies, `examples/e118_map_return_assignment_args.vais` for
 argument-bearing Map-returning call assignment copies,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
+`examples/e71_string_index_of.vais` for `Str` substring search with computed
+byte indexes,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and
 `examples/e84_list_methods.vais` for `List<T>.is_empty()`, `last()`, and
 `pop()`, and `examples/e85_char_type.vais` for the promoted Int-compatible
