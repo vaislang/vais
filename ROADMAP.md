@@ -78,7 +78,8 @@ This file tracks current work only.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
   `Map<Str,Bool>`
   parameters are verified by reference, so callees can mutate caller-visible
-  maps. `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
+  maps. `Map<Str,Char>` parameters are also verified by reference.
+  `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
   `Map<Str,Bool>` return values can initialize explicitly annotated locals
   through caller-owned storage.
 - Promoted prelude APIs have value-corpus examples, including local
@@ -86,6 +87,7 @@ This file tracks current work only.
   local `Map<Str,Int>`, local `Map<Str,Bool>`, local `Map<Str,Char>`,
   `Map<Int,Bool>` parameter mutation, `Map<Int,Char>` parameter mutation,
   `Map<Str,Int>` parameter mutation, `Map<Str,Bool>` parameter mutation,
+  `Map<Str,Char>` parameter mutation,
   `Map<Int,Int>` return-value local initialization, `Map<Int,Bool>`
   return-value local initialization, `Map<Int,Char>` return-value local
   initialization, `Map<Str,Int>` return-value local initialization, local
@@ -181,7 +183,8 @@ This file tracks current work only.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
   `Map<Str,Bool>` parameters support
   reference mutation in both the full self-host compiler path and native direct
-  engine. `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`,
+  engine. `Map<Str,Char>` parameters also support reference mutation.
+  `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`,
   and `Map<Str,Bool>` return values can initialize explicitly annotated locals.
   Generic key/value forms are not claimed yet.
   The future Map ABI and generic expansion contract is specified
@@ -327,7 +330,10 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
   gate-backed slice: promote local `Map<Str,Char>` string-key operations while
   keeping `Map<Str,Char>` parameters, returns, and broader generic Map behavior
   gated.
-- [ ] 1.3x Continue `Map<K,V>` expansion only through the next concrete
+- [x] 1.3x Continue `Map<K,V>` expansion only through the next concrete
+  gate-backed slice: promote `Map<Str,Char>` function parameters by reference
+  while keeping `Map<Str,Char>` returns and broader generic Map behavior gated.
+- [ ] 1.3y Continue `Map<K,V>` expansion only through the next concrete
   gate-backed slice.
 - [x] 1.4 Add examples and value tests for every promoted prelude API.
 - [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
@@ -554,6 +560,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   - [x] Promote local `Map<Str,Char>` construction, assignment copy,
     `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`,
     `contains`, and `len` on the full compiler path and native direct engine.
+  - [x] Promote `Map<Str,Char>` function parameters by reference on the full
+    compiler path and native direct engine.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
@@ -659,6 +667,8 @@ public command protected by its own fixture contract:
   reference.
 - [x] Promote the next concrete Map ABI slice: `Map<Str,Bool>` return values.
 - [x] Promote the next concrete local Map value slice: `Map<Str,Char>`.
+- [x] Promote the next concrete Map ABI slice: `Map<Str,Char>` parameters by
+  reference.
 - [x] Add release-corpus examples for the promoted prelude API surface.
 - [x] Specify the next Phase 1 slice: Map ABI/generic expansion or defer to the
   Phase 2 module model.
@@ -811,10 +821,10 @@ Mode: sequential
   verified for string-key local operations, parameter reference mutation, and
   return-value local initialization. Local `Map<Str,Bool>` string-key
   operations, parameter reference mutation, and return-value local
-  initialization are verified. Local `Map<Str,Char>` string-key operations are
-  verified while `Map<Str,Char>` parameter and return ABI support remains
-  gated; broader `Map<Str,V>` and generic Map behavior still require direct and
-  full gates before publication.
+  initialization are verified. Local `Map<Str,Char>` string-key operations and
+  parameter reference mutation are verified while `Map<Str,Char>` return ABI
+  support remains gated; broader `Map<Str,V>` and generic Map behavior still
+  require direct and full gates before publication.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>`
   parameter reference mutation is verified.
 
@@ -863,11 +873,12 @@ Mode: sequential
   return-value local initialization. Local `Map<Str,Bool>` values support the
   same local method surface with string keys, parameter reference mutation, and
   return-value local initialization. Local `Map<Str,Char>` values support the
-  same local method surface with string keys while keeping `Map<Str,Char>`
-  parameters, returns, broader `Map<Str,V>`, and generic Map returns gated.
+  same local method surface with string keys and parameter reference mutation
+  while keeping `Map<Str,Char>` returns, broader `Map<Str,V>`, and generic Map
+  returns gated.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`,
-  `Map<Str,Int>`, and `Map<Str,Bool>` parameters are passed by reference and
-  may be mutated by callees.
+  `Map<Str,Int>`, `Map<Str,Bool>`, and `Map<Str,Char>` parameters are passed by
+  reference and may be mutated by callees.
 - Done: native direct gates pass a local map example returning a deterministic
   value, and full self-host gates pass the same local map behavior.
 
@@ -881,7 +892,7 @@ Mode: sequential
   `Map<Int,Bool>`, `Map<Int,Char>`, local `Map<Str,Int>`, local
   `Map<Str,Bool>`, local `Map<Str,Char>`,
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
-  `Map<Str,Bool>`
+  `Map<Str,Bool>`, and `Map<Str,Char>`
   parameters while rejecting unsupported generic `Map<K,V>` forms;
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
   `Map<Str,Bool>` return values are accepted only for the concrete

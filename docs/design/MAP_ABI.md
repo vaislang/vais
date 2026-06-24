@@ -15,8 +15,8 @@ parameter reference/mutation, and return-value local initialization.
 `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and function
 parameter reference/mutation, and return-value local initialization.
 `Map<Str,Char>` values support local `{}`, assignment copy, `insert`,
-`remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len`;
-parameters and return values remain gated.
+`remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and
+function parameter reference/mutation; return values remain gated.
 These slices are verified in the full self-host compiler path and native direct
 engine.
 
@@ -182,8 +182,8 @@ Verified behavior:
 - `contains(key)` returns a `Bool`.
 - `len()` returns the number of present keys.
 - `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
-  `Map<Str,Bool>` parameters are passed by reference; a callee can mutate the
-  caller-visible map.
+  `Map<Str,Bool>`, and `Map<Str,Char>` parameters are passed by reference; a
+  callee can mutate the caller-visible map.
 - `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
   `Map<Str,Bool>` return values copy returned contents into caller-owned local
   storage when initializing an explicitly annotated local.
@@ -192,8 +192,7 @@ Not verified yet: generic key/value pairs, entry literals, iteration, custom
 hashing, and broader Map APIs that require `Option<T>` or `Result<T,E>` support
 beyond the current concrete `Map<Int,V>.get_opt` slices and local
 `Map<Str,Int>.get_opt`, `Map<Str,Bool>.get_opt`, and
-`Map<Str,Char>.get_opt`. `Map<Str,Char>` parameters and return values are not
-verified yet.
+`Map<Str,Char>.get_opt`. `Map<Str,Char>` return values are not verified yet.
 
 ## Ownership And Mutation Semantics
 
@@ -257,7 +256,8 @@ Broaden Map support in this order:
    `remove`, `clear`, `get_opt`, parameter reference/mutation, and
    return-value local initialization. `Map<Str,Char>` is complete for local
    construction, assignment copy, lookup/update helpers, `remove`, `clear`, and
-   `get_opt`; parameter and return ABI support remains future work.
+   `get_opt`, plus parameter reference/mutation; return ABI support remains
+   future work.
 6. Broader `Map<Str,V>` only after string equality, hashing, copy, and lifetime
    rules are specified for each value type and ABI boundary.
 7. Struct values only after struct copy and return ABI behavior are already
@@ -297,7 +297,8 @@ Until each slice is implemented, the public front must reject unsupported forms:
 - Map assignment from anything other than another local with the same verified
   concrete Map type.
 - Map function parameters beyond the verified `Map<Int,Int>`,
-  `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and `Map<Str,Bool>` slices.
+  `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, and
+  `Map<Str,Char>` slices.
 - Map function returns beyond the verified `Map<Int,Int>`, `Map<Int,Bool>`,
   `Map<Int,Char>`, `Map<Str,Int>`, and `Map<Str,Bool>` slices.
 - Generic key/value forms outside verified concrete pairs.
@@ -307,8 +308,8 @@ Until each slice is implemented, the public front must reject unsupported forms:
 Diagnostics must include a concrete rewrite or a short explanation that only
 local `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
 `Map<Str,Bool>`, and `Map<Str,Char>` values are verified in the current local
-slice; `Map<Str,Char>` parameter and return ABI support remains gated, while
-the other five have parameter and return ABI support.
+slice; all six have parameter ABI support, while `Map<Str,Char>` return ABI
+support remains gated and the other five have return ABI support.
 
 ## Required Gates
 

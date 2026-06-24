@@ -2051,6 +2051,7 @@ static int front_type_is_map_int_bool(const char *type);
 static int front_type_is_map_int_char(const char *type);
 static int front_type_is_map_str_int(const char *type);
 static int front_type_is_map_str_bool(const char *type);
+static int front_type_is_map_str_char(const char *type);
 static int front_type_is_supported_map_param(const char *type);
 static int front_type_is_supported_map_return(const char *type);
 
@@ -2172,8 +2173,25 @@ static int front_type_is_map_str_bool(const char *type) {
     return *q == '\0';
 }
 
+static int front_type_is_map_str_char(const char *type) {
+    const char *p = skip_ws(type);
+    if (!starts_with(p, "Map") || is_ident_continue(p[3])) return 0;
+    const char *q = skip_ws(p + 3);
+    if (*q != '<') return 0;
+    q = skip_ws(q + 1);
+    if (!starts_with(q, "Str") || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
+    if (*q != ',') return 0;
+    q = skip_ws(q + 1);
+    if (!starts_with(q, "Char") || is_ident_continue(q[4])) return 0;
+    q = skip_ws(q + 4);
+    if (*q != '>') return 0;
+    q = skip_ws(q + 1);
+    return *q == '\0';
+}
+
 static int front_type_is_supported_map_param(const char *type) {
-    return front_type_is_map_int_int(type) || front_type_is_map_int_bool(type) || front_type_is_map_int_char(type) || front_type_is_map_str_int(type) || front_type_is_map_str_bool(type);
+    return front_type_is_map_int_int(type) || front_type_is_map_int_bool(type) || front_type_is_map_int_char(type) || front_type_is_map_str_int(type) || front_type_is_map_str_bool(type) || front_type_is_map_str_char(type);
 }
 
 static int front_type_is_supported_map_return(const char *type) {
@@ -2264,14 +2282,14 @@ static int check_fn_contract_line(
         }
         if (params != NULL && strlen(skip_ws(params)) > 0 && front_params_have_unsupported_map_type(params)) {
             report_issue(path, line_no, find_col(line, "Map"), line,
-                "only Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, and Map<Str,Bool> parameters are verified yet",
+                "only Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, and Map<Str,Char> parameters are verified yet",
                 "keep generic Map parameters local until their ABI slices are promoted.",
                 NULL);
             issue = 1;
         } else if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params)) {
             report_issue(path, line_no, find_col(line, params), line,
                 "Vais native helper parameters must use verified scalar types",
-                "use `Int`, `Str`, `Bool`, `Char`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, or `Map<Str,Bool>` parameters in this slice.",
+                "use `Int`, `Str`, `Bool`, `Char`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` parameters in this slice.",
                 NULL);
             issue = 1;
         }
@@ -4028,7 +4046,8 @@ static int direct_param_type_allowed(DirectStructInfo *structs, int struct_count
         direct_is_map_int_bool_type(type) ||
         direct_is_map_int_char_type(type) ||
         direct_is_map_str_int_type(type) ||
-        direct_is_map_str_bool_type(type);
+        direct_is_map_str_bool_type(type) ||
+        direct_is_map_str_char_type(type);
 }
 
 static int direct_local_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
@@ -4455,7 +4474,7 @@ static int direct_validate_fn_types(
         if (!direct_param_type_allowed(structs, struct_count, info->param_types[p])) {
             report_issue(path, info->line_no, find_col(line, info->param_types[p]), line,
                 "direct native emitter function parameter type is not available",
-                "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or a struct declared in this file.",
+                "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or a struct declared in this file.",
                 "fn f(x: Int) -> Int");
             issues++;
         }

@@ -1,0 +1,20 @@
+# expect: 42
+
+fn stamp(letters: Map<Str,Char>, key: Str, value: Char) -> Int {
+    letters.insert(key, value)
+    letters.insert("blue", 'B')
+    letters.remove("blue")
+    letters.insert("green", 'C')
+    return letters.len()
+}
+
+fn main() -> Int {
+    let letters: Map<Str,Char> = {}
+    let red: Str = "red"
+    let n = stamp(letters, red, 'A')
+    let red_value = match letters.get_opt(red) { Some(v) => v, None => 0 }
+    if letters.contains("green") and not letters.contains("blue") and letters.get("green", 'Z') == 'C' {
+        return n * 20 + red_value - 65 + letters.contains("green") + letters.len() - 1
+    }
+    return 0
+}

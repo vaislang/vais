@@ -89,7 +89,8 @@ assignment copy, `examples/e111_map_str_bool_param.vais` for `Map<Str,Bool>`
 parameter mutation by reference, `examples/e112_map_str_bool_return.vais` for a
 `Map<Str,Bool>` return value initializing a local,
 `examples/e113_map_str_char.vais` for local `Map<Str,Char>` string-key
-operations and assignment copy,
+operations and assignment copy, `examples/e114_map_str_char_param.vais` for
+`Map<Str,Char>` parameter mutation by reference,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and

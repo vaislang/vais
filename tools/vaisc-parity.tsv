@@ -76,6 +76,7 @@ examples/e110_map_str_bool.vais	native-supported	Map<Str,Bool> local string-key 
 examples/e111_map_str_bool_param.vais	native-supported	Map<Str,Bool> parameter mutation by reference.
 examples/e112_map_str_bool_return.vais	native-supported	Map<Str,Bool> return value initializes a local.
 examples/e113_map_str_char.vais	native-supported	Map<Str,Char> local string-key operations and copy.
+examples/e114_map_str_char_param.vais	native-supported	Map<Str,Char> parameter mutation by reference.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.
