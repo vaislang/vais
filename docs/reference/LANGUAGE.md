@@ -855,7 +855,8 @@ Verified behavior:
   same-type Map-returning call into the target Map; later mutation of either
   map does not alias the other. Parameter-source/target copies are covered by
   `examples/e116_map_param_assignment.vais`, and Map-returning call assignment
-  copies are covered by `examples/e117_map_return_assignment.vais`.
+  copies are covered by `examples/e117_map_return_assignment.vais` and
+  `examples/e118_map_return_assignment_args.vais`.
 - `insert(key, value)` inserts or replaces a value.
 - `remove(key)` removes a present key if it exists; removing a missing key is a
   no-op.
@@ -873,7 +874,8 @@ Verified behavior:
   `examples/e113_map_str_char.vais`, `examples/e114_map_str_char_param.vais`,
   `examples/e115_map_str_char_return.vais`,
   `examples/e116_map_param_assignment.vais`, and
-  `examples/e117_map_return_assignment.vais`.
+  `examples/e117_map_return_assignment.vais`, plus
+  `examples/e118_map_return_assignment_args.vais`.
 - `contains(key)` returns whether a key is present.
 - `len()` returns the number of present keys.
 

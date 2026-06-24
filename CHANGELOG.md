@@ -134,6 +134,9 @@
 - Promoted concrete Map-returning call assignment copies through the full
   compiler path and native direct engine, with
   `examples/e117_map_return_assignment.vais` added to the release corpus.
+- Added argument-bearing Map-returning call assignment coverage through the full
+  compiler path and native direct engine, with
+  `examples/e118_map_return_assignment_args.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

@@ -1,0 +1,95 @@
+# expect: 42
+
+fn make_int_int(key: Int, value: Int) -> Map<Int,Int> {
+    let values: Map<Int,Int> = {}
+    values.insert(key, value)
+    return values
+}
+
+fn make_int_bool(key: Int, value: Bool) -> Map<Int,Bool> {
+    let values: Map<Int,Bool> = {}
+    values.insert(key, value)
+    return values
+}
+
+fn make_int_char(key: Int, value: Char) -> Map<Int,Char> {
+    let values: Map<Int,Char> = {}
+    values.insert(key, value)
+    return values
+}
+
+fn make_str_int(key: Str, value: Int) -> Map<Str,Int> {
+    let values: Map<Str,Int> = {}
+    values.insert(key, value)
+    return values
+}
+
+fn make_str_bool(key: Str, value: Bool) -> Map<Str,Bool> {
+    let values: Map<Str,Bool> = {}
+    values.insert(key, value)
+    return values
+}
+
+fn make_str_char(key: Str, value: Char) -> Map<Str,Char> {
+    let values: Map<Str,Char> = {}
+    values.insert(key, value)
+    return values
+}
+
+fn score_int_int() -> Int {
+    let values: Map<Int,Int> = {}
+    values = make_int_int(4, 5)
+    if values.get(4, 0) == 5 and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_int_bool() -> Int {
+    let values: Map<Int,Bool> = {}
+    values = make_int_bool(4, true)
+    if values.get(4, false) and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_int_char() -> Int {
+    let values: Map<Int,Char> = {}
+    values = make_int_char(4, 'A')
+    if values.get(4, 'Z') == 'A' and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_str_int() -> Int {
+    let values: Map<Str,Int> = {}
+    values = make_str_int("four", 5)
+    if values.get("four", 0) == 5 and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_str_bool() -> Int {
+    let values: Map<Str,Bool> = {}
+    values = make_str_bool("four", true)
+    if values.get("four", false) and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_str_char() -> Int {
+    let values: Map<Str,Char> = {}
+    values = make_str_char("four", 'A')
+    if values.get("four", 'Z') == 'A' and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn main() -> Int {
+    return score_int_int() + score_int_bool() + score_int_char() + score_str_int() + score_str_bool() + score_str_char()
+}

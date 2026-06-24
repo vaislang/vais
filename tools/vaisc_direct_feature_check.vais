@@ -301,6 +301,26 @@ fn write_map_return_assignment(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_return_assignment_args(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn make_letters(key: Str, value: Char) -> Map<Str, Char> {")
+    append_line(out, "    let letters: Map<Str, Char> = {}")
+    append_line(out, "    letters.insert(key, value)")
+    append_line(out, "    letters.insert(\"blue\", 'B')")
+    append_line(out, "    return letters")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let letters: Map<Str, Char> = {}")
+    append_line(out, "    letters = make_letters(\"red\", 'A')")
+    append_line(out, "    if letters.get(\"red\", 'Z') == 'A' and letters.get(\"blue\", 'Z') == 'B' {")
+    append_line(out, "        return 42")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_map_int_bool(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -1132,6 +1152,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "map_int_bool") == 1 { wrote = write_map_int_bool(src) }
     else if str_contains(name, "map_get_opt") == 1 { wrote = write_map_get_opt(src) }
     else if str_contains(name, "map_param_assignment") == 1 { wrote = write_map_param_assignment(src) }
+    else if str_contains(name, "map_return_assignment_args") == 1 { wrote = write_map_return_assignment_args(src) }
     else if str_contains(name, "map_return_assignment") == 1 { wrote = write_map_return_assignment(src) }
     else if str_contains(name, "map_assignment") == 1 { wrote = write_map_assignment(src) }
     else if str_contains(name, "map_int_int") == 1 { wrote = write_map_int_int(src) }
@@ -1233,6 +1254,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "define i64 @copy_in(ptr") and str_contains(text, "__vais_map_str_int_copy") and str_contains(text, "call i64 @copy_in(ptr")
     } else if shape == 44 {
         ok = str_contains(text, "sret(%struct.DirectMapStrInt)") and str_contains(text, "define void @make_letters") and str_contains(text, "call void @make_letters")
+    } else if shape == 45 {
+        ok = str_contains(text, "sret(%struct.DirectMapStrInt)") and str_contains(text, "define void @make_letters") and str_contains(text, "call void @make_letters") and str_contains(text, "noundef 65")
     }
     if ok == 0 {
         return emit_failed(str_concat("direct ", name), err_path)
@@ -1273,6 +1296,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "map_assignment", "direct local Map<Int,Int> assignment copy runs (=42)", 23)
     fail = fail + expect_case(vaisc, tmp, "map_param_assignment", "direct Map parameter assignment copy runs (=42)", 43)
     fail = fail + expect_case(vaisc, tmp, "map_return_assignment", "direct Map-returning call assignment copy runs (=42)", 44)
+    fail = fail + expect_case(vaisc, tmp, "map_return_assignment_args", "direct argument Map-returning call assignment copy runs (=42)", 45)
     fail = fail + expect_case(vaisc, tmp, "map_int_bool", "direct local Map<Int,Bool> insert/get/contains/len and assignment copy run (=42)", 24)
     fail = fail + expect_case(vaisc, tmp, "map_int_char", "direct local Map<Int,Char> insert/get/contains/len and assignment copy run (=42)", 25)
     fail = fail + expect_case(vaisc, tmp, "map_remove", "direct concrete Map remove deletes keys and updates len (=42)", 32)

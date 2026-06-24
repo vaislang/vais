@@ -96,9 +96,10 @@ This file tracks current work only.
   `Map<Str,Bool>` string-key operations, `Map<Str,Bool>` return-value local
   initialization, local `Map<Str,Char>` string-key operations,
   `Map<Str,Char>` return-value local initialization, concrete Map parameter
-  assignment copy, concrete Map-returning call assignment copy, concrete Map
-  key removal, concrete Map scalar get_opt payloads, concrete Map clear and
-  reuse, and
+  assignment copy, concrete Map-returning call assignment copy,
+  argument-bearing Map-returning call assignment copy, concrete Map key
+  removal, concrete Map scalar get_opt payloads, concrete Map clear and reuse,
+  and
   `List<T>.is_empty()`, `last()`, and `pop()`.
 - The full compiler path supports single-package local dotted imports such as
   `import math.add`, with gates for multi-file success, missing imports,
@@ -350,7 +351,10 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
 - [x] 1.3aa Continue `Map<K,V>` expansion only through the next concrete
   gate-backed slice: promote concrete Map-returning call assignment copies while
   keeping broader generic Map behavior gated.
-- [ ] 1.3ab Continue `Map<K,V>` expansion only through the next concrete
+- [x] 1.3ab Continue `Map<K,V>` expansion only through the next concrete
+  gate-backed slice: add argument-bearing Map-returning call assignment coverage
+  while keeping broader generic Map behavior gated.
+- [ ] 1.3ac Continue `Map<K,V>` expansion only through the next concrete
   gate-backed slice.
 - [x] 1.4 Add examples and value tests for every promoted prelude API.
 - [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
