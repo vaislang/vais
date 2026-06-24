@@ -2052,6 +2052,7 @@ static int front_type_is_map_int_char(const char *type);
 static int front_type_is_map_str_int(const char *type);
 static int front_type_is_map_str_bool(const char *type);
 static int front_type_is_map_str_char(const char *type);
+static int front_type_is_list_int(const char *type);
 static int front_type_is_supported_map_param(const char *type);
 static int front_type_is_supported_map_return(const char *type);
 static const char *front_map_type_for(char **names, char **types, int count, const char *name);
@@ -2074,6 +2075,7 @@ static int is_valid_int_params(const char *params) {
             strcmp(ty, "Str") == 0 ||
             strcmp(ty, "Bool") == 0 ||
             strcmp(ty, "Char") == 0 ||
+            front_type_is_list_int(ty) ||
             front_type_is_supported_map_param(ty);
         free(ty);
         if (!ok) {
@@ -2186,6 +2188,19 @@ static int front_type_is_map_str_char(const char *type) {
     q = skip_ws(q + 1);
     if (!starts_with(q, "Char") || is_ident_continue(q[4])) return 0;
     q = skip_ws(q + 4);
+    if (*q != '>') return 0;
+    q = skip_ws(q + 1);
+    return *q == '\0';
+}
+
+static int front_type_is_list_int(const char *type) {
+    const char *p = skip_ws(type);
+    if (!starts_with(p, "List") || is_ident_continue(p[4])) return 0;
+    const char *q = skip_ws(p + 4);
+    if (*q != '<') return 0;
+    q = skip_ws(q + 1);
+    if (!starts_with(q, "Int") || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
     if (*q != '>') return 0;
     q = skip_ws(q + 1);
     return *q == '\0';
@@ -2304,7 +2319,7 @@ static int check_fn_contract_line(
         } else if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params)) {
             report_issue(path, line_no, find_col(line, params), line,
                 "Vais native helper parameters must use verified scalar types",
-                "use `Int`, `Str`, `Bool`, `Char`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` parameters in this slice.",
+                "use `Int`, `Str`, `Bool`, `Char`, `List<Int>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` parameters in this slice.",
                 NULL);
             issue = 1;
         }

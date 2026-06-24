@@ -412,7 +412,7 @@ Verified today:
   as covered by `examples/e52_state_machine.vais`.
 - `for x in xs { ... }` over integer collections, as covered by
   `examples/e25_for_filter_sum.vais`. The full self-host path covers fixed
-  integer arrays and scalar `List<Int>` locals; the native direct engine covers
+  integer arrays and scalar `List<Int>` locals/parameters; the native direct engine covers
   named local or parameter `List<Int>` values.
 - Inline `[]`, `list()`, and integer list literals as `List<Int>` return values
   and call arguments in the direct engine.

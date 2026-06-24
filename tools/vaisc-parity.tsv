@@ -28,6 +28,7 @@ examples/e23_option_flow.vais	native-supported	Option<Int> expression-match bind
 examples/e24_struct_enum_field.vais	native-supported	Payload-free enum stored in a struct field and matched through field access.
 examples/e25_for_filter_sum.vais	native-supported	Collection for-each over integer values with conditional accumulation.
 examples/e26_pipeline.vais	native-supported	Plain function pipeline.
+examples/e27_list_max.vais	native-supported	List<Int> parameter for-each with running max.
 examples/e29_gcd.vais	native-supported	Modulo recursion.
 examples/e30_enum_payload_match.vais	native-supported	Int payload enum match lowering.
 examples/e31_bitwise.vais	native-supported	Bitwise builtin calls.
@@ -96,6 +97,7 @@ examples/e116_map_param_assignment.vais	native-supported	Concrete Map parameter-
 examples/e117_map_return_assignment.vais	native-supported	Concrete Map-returning call assignment copies.
 examples/e118_map_return_assignment_args.vais	native-supported	Concrete argument Map-returning call assignment copies.
 examples/fr1.vais	native-supported	Inclusive range for-loop summation smoke.
+examples/fr2.vais	native-supported	Collection for-each summation smoke.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/t4.vais	native-supported	Simple struct literal and field read smoke.
 examples/t6.vais	native-supported	Single-field struct literal and field read smoke.

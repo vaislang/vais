@@ -1,7 +1,7 @@
 # expect: 9
 # Find the max of a List passed as a parameter (loop + running max).
-# NOTE: pass the list via a bound variable (`let v = [...]; maxof(v)`) -- a list
-# literal given DIRECTLY as an argument is a tracked Vais coercion gap.
+# NOTE: build the list via a bound variable; inline list literals and typed
+# non-empty list literals remain tracked Vais coercion gaps in the full path.
 fn maxof(xs: List<Int>) -> Int {
     let mut m = 0
     for x in xs {
@@ -11,6 +11,10 @@ fn maxof(xs: List<Int>) -> Int {
 }
 
 fn main() -> Int {
-    let v = [3, 9, 2, 7]
+    let v = list()
+    v.push(3)
+    v.push(9)
+    v.push(2)
+    v.push(7)
     return maxof(v)
 }

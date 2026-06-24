@@ -66,6 +66,8 @@ success path,
 `examples/e19_interpolation_print.vais` for print interpolation and `putchar`
 output calls,
 `examples/e25_for_filter_sum.vais` for collection for-each over integer values,
+`examples/e27_list_max.vais` for `List<Int>` parameter for-each with a running
+max,
 `examples/e94_map_get_opt.vais` for `Map<Int,Int>.get_opt(key)` returning
 `Option<Int>`, `examples/e95_map_assignment.vais` for local `Map<Int,Int>`
 assignment copy semantics, `examples/e96_map_bool.vais` for local
@@ -123,7 +125,7 @@ The release corpus also includes smaller control-flow and scanner examples:
 `examples/e57_break.vais`, `examples/e58_continue.vais`,
 `examples/e61_array_index_expr.vais`, and
 `examples/e65_loop_break_acc.vais`, `examples/fr1.vais`,
-`examples/t4.vais`, and `examples/t6.vais`.
+`examples/fr2.vais`, `examples/t4.vais`, and `examples/t6.vais`.
 
 Files not listed as `native-supported` are retained as examples or future
 coverage candidates, but they are not public release claims until promoted into
