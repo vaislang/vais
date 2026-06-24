@@ -1378,10 +1378,15 @@ fn build_defs(toks: &List<Token>, n: Int) -> List<StructDef> {
             let mut f7s = 0
             let mut f7l = 0
             let mut cnt = 0
+            let mut skip_type = 0
             let mut q = bopen + 1
             while q < bclose {
                 let qt = toks[q]
-                if qt.kind == 1 {
+                if qt.kind == 16 {
+                    skip_type = 1
+                } else if qt.kind == 25 {
+                    skip_type = 0
+                } else if qt.kind == 1 and skip_type == 0 {
                     if cnt == 0 { f0s = qt.nstart; f0l = qt.nlen }
                     else if cnt == 1 { f1s = qt.nstart; f1l = qt.nlen }
                     else if cnt == 2 { f2s = qt.nstart; f2l = qt.nlen }
@@ -3434,13 +3439,19 @@ fn skip_factor(toks: &List<Token>, i: Int) -> Int {
             return be + 1
         }
         if nx.kind == 27 {
-            # name . field  = 3 tokens (struct field / List .len without parens).
-            # name . len ( ) = 5 tokens (string .len() — skip the empty parens).
-            let after = toks[i + 3]
-            if after.kind == 9 {
-                return paren_end(toks, i + 4) + 1
+            # name . field  = 3 tokens; nested scalar struct reads can chain
+            # additional `.field` pairs. name . len ( ) still skips the call.
+            let mut j = i + 3
+            let mut go = true
+            while go {
+                let maybe_dot = toks[j]
+                if maybe_dot.kind == 27 { j = j + 2 } else { go = false }
             }
-            return i + 3
+            let after = toks[j]
+            if after.kind == 9 {
+                return paren_end(toks, j + 1) + 1
+            }
+            return j
         }
     }
     return i + 1
@@ -4950,7 +4961,46 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     let mut vstart = q + 1
                     let colt = toks[q + 1]
                     if colt.kind == 16 { vstart = q + 2 }
-                    let vstop = arr_elem_end(toks, vstart, bclose)
+                    let vstop = arg_comma_end(toks, vstart, bclose)
+                    let mut used_nested = 0
+                    let nt = toks[vstart]
+                    let nb = toks[vstart + 1]
+                    if nt.kind == 1 and nb.kind == 11 {
+                        let nty = struct_index_by_name(defs, src, nt.nstart, nt.nlen)
+                        if nty >= 0 {
+                            if struct_nfields(defs, nty) == 1 {
+                                    let nbclose = match_brace(toks, vstart + 1, vstop)
+                                    let nfld = toks[vstart + 2]
+                                    if field_index(defs, nty, src, nfld.nstart, nfld.nlen) == 0 {
+                                        let mut nvstart = vstart + 3
+                                        let ncolon = toks[vstart + 3]
+                                        if ncolon.kind == 16 { nvstart = vstart + 4 }
+                                        let nvstop = arg_comma_end(toks, nvstart, nbclose)
+                                        let ne = gen_expr(toks, slots, fns, defs, src, nvstart, nvstop, counter)
+                                        counter = ne.next
+                                        emit_str("  %t")
+                                        pint(counter)
+                                        emit_str(" = getelementptr [")
+                                        pint(nf)
+                                        emit_str(" x i64], [")
+                                        pint(nf)
+                                        emit_str(" x i64]* %v")
+                                        pint(slot)
+                                        emit_str(", i64 0, i64 ")
+                                        pint(fi)
+                                        putchar(10)
+                                        emit_str("  store i64 ")
+                                        emit_op(ne)
+                                        emit_str(", i64* %t")
+                                        pint(counter)
+                                        putchar(10)
+                                        counter = counter + 1
+                                        used_nested = 1
+                                    }
+                            }
+                        }
+                    }
+                    if used_nested == 0 {
                     let e = gen_expr(toks, slots, fns, defs, src, vstart, vstop, counter)
                     counter = e.next
                     emit_str("  %t")
@@ -4970,6 +5020,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     pint(counter)
                     putchar(10)
                     counter = counter + 1
+                    }
                     q = vstop + 1
                 }
                 let stop = find_semi(toks, bclose, end)
@@ -5522,28 +5573,54 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let slot = find_slot(slots, src, t.nstart, t.nlen)
                 let nf = struct_nfields(defs, asti)
                 let fi = field_index(defs, asti, src, fld.nstart, fld.nlen)
-                # '=' at i+3; value from i+4
-                let stop = find_semi(toks, i + 4, end)
-                let e = gen_expr(toks, slots, fns, defs, src, i + 4, stop, counter)
-                counter = e.next
-                emit_str("  %t")
-                pint(counter)
-                emit_str(" = getelementptr [")
-                pint(nf)
-                emit_str(" x i64], [")
-                pint(nf)
-                emit_str(" x i64]* %v")
-                pint(slot)
-                emit_str(", i64 0, i64 ")
-                pint(fi)
-                putchar(10)
-                emit_str("  store i64 ")
-                emit_op(e)
-                emit_str(", i64* %t")
-                pint(counter)
-                putchar(10)
-                counter = counter + 1
-                i = stop + 1
+                let maybe_dot = toks[i + 3]
+                if maybe_dot.kind == 27 {
+                    # Single-field nested struct write: p.inner.v = expr.
+                    let stop = find_semi(toks, i + 6, end)
+                    let e = gen_expr(toks, slots, fns, defs, src, i + 6, stop, counter)
+                    counter = e.next
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = getelementptr [")
+                    pint(nf)
+                    emit_str(" x i64], [")
+                    pint(nf)
+                    emit_str(" x i64]* %v")
+                    pint(slot)
+                    emit_str(", i64 0, i64 ")
+                    pint(fi)
+                    putchar(10)
+                    emit_str("  store i64 ")
+                    emit_op(e)
+                    emit_str(", i64* %t")
+                    pint(counter)
+                    putchar(10)
+                    counter = counter + 1
+                    i = stop + 1
+                } else {
+                    # '=' at i+3; value from i+4
+                    let stop = find_semi(toks, i + 4, end)
+                    let e = gen_expr(toks, slots, fns, defs, src, i + 4, stop, counter)
+                    counter = e.next
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = getelementptr [")
+                    pint(nf)
+                    emit_str(" x i64], [")
+                    pint(nf)
+                    emit_str(" x i64]* %v")
+                    pint(slot)
+                    emit_str(", i64 0, i64 ")
+                    pint(fi)
+                    putchar(10)
+                    emit_str("  store i64 ")
+                    emit_op(e)
+                    emit_str(", i64* %t")
+                    pint(counter)
+                    putchar(10)
+                    counter = counter + 1
+                    i = stop + 1
+                }
               } else if isarr_of(slots, src, t.nstart, t.nlen) == 4 {
                let ppsty = sty_of(slots, src, t.nstart, t.nlen)
                if ppsty >= 0 {

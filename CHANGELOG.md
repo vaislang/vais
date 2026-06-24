@@ -31,6 +31,11 @@
   `examples/dependency_basic/app/src/main.vais` into the release corpus as the
   public local import, package source-root, and local dependency package smokes,
   raising it to 114 native-supported examples.
+- Promoted single-field nested struct literal/read/write lowering through the
+  full self-host compiler and release corpus, with
+  `examples/e01_nested_struct.vais` and
+  `examples/e32_nested_field_mut.vais` added to the corpus, raising it to 116
+  native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

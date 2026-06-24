@@ -136,7 +136,7 @@ Verified release surface:
 | `Map<Str,Char>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
-| Simple `struct` | Literal construction, field access, local field write, helper parameters, helper returns, helper-return assignment, and generic marker syntax used with `Int` values |
+| Simple `struct` | Literal construction, field access, local field write, single-field nested struct read/write, helper parameters, helper returns, helper-return assignment, and generic marker syntax used with `Int` values |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
@@ -270,6 +270,9 @@ Verified today:
 - Struct literals.
 - Field access.
 - Field write for direct-engine local struct values.
+- Single-field nested struct literals, reads, and writes in the full self-host
+  path, as covered by `examples/e01_nested_struct.vais` and
+  `examples/e32_nested_field_mut.vais`.
 - Struct parameters and return values in full self-host and direct-engine helper
   functions, including assignment from struct-returning calls.
 - Generic marker syntax on simple structs used with `Int` values, as covered by

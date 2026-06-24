@@ -81,6 +81,9 @@ This file tracks current work only.
   struct-returning calls are promoted through the full self-host path, native
   direct engine, public front, parity manifest, value corpus, and regenerated
   reusable core.
+- Single-field nested struct literals, nested field reads, and nested field
+  writes are promoted through the full self-host compiler path, public front,
+  parity manifest, value corpus, and regenerated reusable core.
 - Single-byte `Char` literals, equality, explicit annotations, helper
   parameters, and helper returns are promoted through public front, full
   self-host, parity, and native direct gates as Int-compatible scalar values.

@@ -395,6 +395,19 @@ fn write_struct_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_nested_struct_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Inner { v: Int }")
+    append_line(out, "struct Outer { inner: Inner }")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut o = Outer { inner: Inner { v: 3 } }")
+    append_line(out, "    o.inner.v = 7")
+    append_line(out, "    return o.inner.v")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_generic_struct_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "struct Box<T> { val: T }")
@@ -1092,6 +1105,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
     if str_eq(name, "io") == 1 { return write_io_accept(path) }
     if str_eq(name, "struct") == 1 { return write_struct_accept(path) }
+    if str_eq(name, "nested_struct") == 1 { return write_nested_struct_accept(path) }
     if str_eq(name, "generic_struct") == 1 { return write_generic_struct_accept(path) }
     if str_eq(name, "struct_helper") == 1 { return write_struct_helper_accept(path) }
     if str_eq(name, "tag") == 1 { return write_enum_accept(path) }
@@ -1857,6 +1871,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "for", "accepts range for-loop and break/continue subset", 42)
     fail = fail + expect_io_accept(vaisc, tmp)
     fail = fail + expect_accept(vaisc, tmp, "struct", "accepts struct literal and field access slice", 42)
+    fail = fail + expect_accept(vaisc, tmp, "nested_struct", "accepts single-field nested struct read/write slice", 7)
     fail = fail + expect_accept(vaisc, tmp, "generic_struct", "accepts generic marker struct field access slice", 7)
     fail = fail + expect_accept(vaisc, tmp, "struct_helper", "accepts struct helper parameter, return, and assignment slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "tag", label_payload_free(), 2)

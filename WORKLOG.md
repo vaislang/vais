@@ -18,6 +18,8 @@
   returns through full self-host and native direct gates.
 - Promoted the local module, package source-root, and local dependency package
   examples into the release corpus as value-gated import/package smokes.
+- Fixed and promoted single-field nested struct literal/read/write lowering in
+  the full self-host compiler, including regenerated reusable core coverage.
 
 ## 2026-06-24
 
