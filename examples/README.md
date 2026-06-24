@@ -94,6 +94,8 @@ operations and assignment copy, `examples/e114_map_str_char_param.vais` for
 `examples/e115_map_str_char_return.vais` for a `Map<Str,Char>` return value
 initializing a local, `examples/e116_map_param_assignment.vais` for concrete
 Map parameter-source and parameter-target assignment copies,
+`examples/e117_map_return_assignment.vais` for concrete Map-returning call
+assignment copies,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
 `examples/e74_map_basic.vais` for the verified local `Map<Int,Int>` slice, and

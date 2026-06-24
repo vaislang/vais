@@ -131,6 +131,9 @@
 - Promoted concrete Map parameter-source assignment copies through the full
   compiler path and native direct engine, with
   `examples/e116_map_param_assignment.vais` added to the release corpus.
+- Promoted concrete Map-returning call assignment copies through the full
+  compiler path and native direct engine, with
+  `examples/e117_map_return_assignment.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

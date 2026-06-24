@@ -79,6 +79,7 @@ examples/e113_map_str_char.vais	native-supported	Map<Str,Char> local string-key 
 examples/e114_map_str_char_param.vais	native-supported	Map<Str,Char> parameter mutation by reference.
 examples/e115_map_str_char_return.vais	native-supported	Map<Str,Char> return value initializes a local.
 examples/e116_map_param_assignment.vais	native-supported	Concrete Map parameter-source and parameter-target assignment copies.
+examples/e117_map_return_assignment.vais	native-supported	Concrete Map-returning call assignment copies.
 examples/t1.vais	native-supported	Simple typed helper smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.

@@ -2054,6 +2054,7 @@ static int front_type_is_map_str_bool(const char *type);
 static int front_type_is_map_str_char(const char *type);
 static int front_type_is_supported_map_param(const char *type);
 static int front_type_is_supported_map_return(const char *type);
+static const char *front_map_type_for(char **names, char **types, int count, const char *name);
 
 static int is_valid_int_params(const char *params) {
     char *copy = strdup(params);
@@ -2355,6 +2356,50 @@ static void front_register_map_params(const char *line, char **map_names, char *
     }
 }
 
+static void front_register_map_return_fn(const char *line, char **map_fn_names, char **map_fn_types, int *map_fn_count) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return;
+    const char *name_start = s + 3;
+    const char *name_end = name_start;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *open = strchr(name_end, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    const char *arrow = close == NULL ? NULL : strstr(close, "->");
+    char *ret = front_return_type_text(arrow);
+    char *type = front_canonical_supported_map_type(ret == NULL ? "" : ret);
+    free(ret);
+    if (type == NULL) return;
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    front_add_map_binding(map_fn_names, map_fn_types, map_fn_count, name, type);
+}
+
+static const char *front_map_return_call_type(const char *expr, char **map_fn_names, char **map_fn_types, int map_fn_count) {
+    const char *s = skip_ws(expr);
+    if (!is_ident_start(*s)) return NULL;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    s = skip_ws(s);
+    if (*s != '(') {
+        free(name);
+        return NULL;
+    }
+    int close = find_matching_paren_c(s, 0);
+    if (close < 0) {
+        free(name);
+        return NULL;
+    }
+    const char *tail = skip_ws(s + close + 1);
+    if (*tail != '\0' && *tail != ';') {
+        free(name);
+        return NULL;
+    }
+    const char *type = front_map_type_for(map_fn_names, map_fn_types, map_fn_count, name);
+    free(name);
+    return type;
+}
+
 static char *front_supported_map_local_name(const char *line, char **type_out) {
     if (type_out != NULL) *type_out = NULL;
     const char *s = skip_ws(line);
@@ -2507,15 +2552,14 @@ static char *front_map_assignment_name(const char *line, char **map_locals, int 
     }
     if (front_name_in_list(map_locals, map_local_count, name)) {
         const char *rhs = skip_ws(op + 1);
-        if (is_ident_start(*rhs)) {
-            const char *rhs_start = rhs;
-            rhs++;
-            while (is_ident_continue(*rhs)) rhs++;
-            const char *rhs_end = rhs;
-            rhs = skip_ws(rhs);
-            if (*rhs == '\0' || *rhs == ';') {
-                *rhs_out = substr_copy(rhs_start, (size_t)(rhs_end - rhs_start));
-            }
+        const char *rhs_end = rhs + strlen(rhs);
+        while (rhs_end > rhs && (rhs_end[-1] == ' ' || rhs_end[-1] == '\t' || rhs_end[-1] == '\n' || rhs_end[-1] == '\r')) rhs_end--;
+        if (rhs_end > rhs && rhs_end[-1] == ';') {
+            rhs_end--;
+            while (rhs_end > rhs && (rhs_end[-1] == ' ' || rhs_end[-1] == '\t' || rhs_end[-1] == '\n' || rhs_end[-1] == '\r')) rhs_end--;
+        }
+        if (rhs_end > rhs) {
+            *rhs_out = substr_copy(rhs, (size_t)(rhs_end - rhs));
         }
         return name;
     }
@@ -2629,6 +2673,14 @@ static int check_front_contract_text(const char *text, const char *path) {
     char *map_locals[128] = {0};
     char *map_types[128] = {0};
     int map_local_count = 0;
+    char *map_fns[128] = {0};
+    char *map_fn_types[128] = {0};
+    int map_fn_count = 0;
+    for (size_t i = 0; i < lines.len; i++) {
+        char *probe = front_probe_line(lines.items[i]);
+        front_register_map_return_fn(probe, map_fns, map_fn_types, &map_fn_count);
+        free(probe);
+    }
     for (size_t i = 0; i < lines.len; i++) {
         const char *line = lines.items[i];
         char *probe = front_probe_line(line);
@@ -2646,10 +2698,11 @@ static int check_front_contract_text(const char *text, const char *path) {
         if (map_assignment != NULL) {
             const char *target_type = front_map_type_for(map_locals, map_types, map_local_count, map_assignment);
             const char *source_type = front_map_type_for(map_locals, map_types, map_local_count, map_assignment_rhs);
+            if (source_type == NULL && map_assignment_rhs != NULL) source_type = front_map_return_call_type(map_assignment_rhs, map_fns, map_fn_types, map_fn_count);
             if (map_assignment_rhs == NULL || source_type == NULL) {
                 report_issue(path, line_no, find_col(line, map_assignment), line,
                     "Map assignment requires another local or parameter Map value",
-                    "assign from a local or same-type parameter `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` value; assignment from Map-returning calls and broader generic key/value forms is not verified yet.",
+                    "assign from a local, same-type parameter, or same-type Map-returning call for `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>`; broader generic key/value forms are not verified yet.",
                     NULL);
                 issues++;
             } else if (target_type == NULL || strcmp(target_type, source_type) != 0) {
@@ -2772,6 +2825,10 @@ static int check_front_contract_text(const char *text, const char *path) {
     for (int m = 0; m < map_local_count; m++) {
         free(map_locals[m]);
         free(map_types[m]);
+    }
+    for (int m = 0; m < map_fn_count; m++) {
+        free(map_fns[m]);
+        free(map_fn_types[m]);
     }
     lines_free(&lines);
     return issues == 0 ? 0 : 1;
@@ -8324,12 +8381,53 @@ static int direct_lower_line(
         const char *target_type = direct_assignment_target_type(lhs, locals, structs, struct_count);
         int allow_list_assignment = direct_is_list_type(target_type);
         if (direct_is_map_type(target_type)) {
+            if (direct_expr_exact_map_return_call(expr, fns, fn_count)) {
+                char *expr_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
+                int ok_type = expr_type != NULL && strcmp(target_type, expr_type) == 0;
+                free(expr_type);
+                if (!ok_type) {
+                    report_issue(path, line_no, find_col(line, lhs), line,
+                        "direct native emitter Map assignment source type must match the target Map type",
+                        "copy from a Map-returning call with the same concrete Map type.",
+                        "scores = make_scores()");
+                    free(lhs);
+                    free(expr);
+                    free(stripped);
+                    return 1;
+                }
+                StrBuf prelude;
+                sb_init(&prelude);
+                direct_current_prelude = &prelude;
+                char *rewritten = direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+                direct_current_prelude = NULL;
+                if (rewritten == NULL) {
+                    free(prelude.data);
+                    free(lhs);
+                    free(expr);
+                    free(stripped);
+                    return 1;
+                }
+                char *c_expr = direct_translate_expr(rewritten);
+                sb_append(out, prelude.data);
+                if (direct_names_is_ref(locals, lhs)) sb_append(out, "*");
+                sb_append(out, lhs);
+                sb_append(out, " = ");
+                sb_append(out, c_expr);
+                sb_append(out, ";\n");
+                free(prelude.data);
+                free(c_expr);
+                free(rewritten);
+                free(lhs);
+                free(expr);
+                free(stripped);
+                return 0;
+            }
             char *rhs_name = trim_copy(expr);
             const char *rhs_type = direct_is_plain_ident(rhs_name) ? direct_names_type(locals, rhs_name) : NULL;
             if (!direct_is_map_type(rhs_type)) {
                 report_issue(path, line_no, find_col(line, lhs), line,
                     "direct native emitter Map assignment requires another local or parameter Map value",
-                    "assign from a local or same-type parameter `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` value; assignment from Map-returning calls and broader generic key/value forms is not in this direct slice.",
+                    "assign from a local, same-type parameter, or same-type Map-returning call for `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>`; broader generic key/value forms are not in this direct slice.",
                     "scores = other");
                 free(rhs_name);
                 free(lhs);

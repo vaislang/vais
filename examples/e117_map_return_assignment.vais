@@ -1,0 +1,109 @@
+# expect: 42
+
+fn make_int_int() -> Map<Int,Int> {
+    let values: Map<Int,Int> = {}
+    values.insert(4, 5)
+    return values
+}
+
+fn make_int_bool() -> Map<Int,Bool> {
+    let values: Map<Int,Bool> = {}
+    values.insert(4, true)
+    return values
+}
+
+fn make_int_char() -> Map<Int,Char> {
+    let values: Map<Int,Char> = {}
+    values.insert(4, 'A')
+    return values
+}
+
+fn make_str_int() -> Map<Str,Int> {
+    let values: Map<Str,Int> = {}
+    values.insert("four", 5)
+    return values
+}
+
+fn make_str_bool() -> Map<Str,Bool> {
+    let values: Map<Str,Bool> = {}
+    values.insert("four", true)
+    return values
+}
+
+fn make_str_char() -> Map<Str,Char> {
+    let values: Map<Str,Char> = {}
+    values.insert("four", 'A')
+    return values
+}
+
+fn score_int_int() -> Int {
+    let values: Map<Int,Int> = {}
+    values = make_int_int()
+    if values.get(4, 0) == 5 and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_int_bool() -> Int {
+    let values: Map<Int,Bool> = {}
+    values = make_int_bool()
+    if values.get(4, false) and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_int_char() -> Int {
+    let values: Map<Int,Char> = {}
+    values = make_int_char()
+    if values.get(4, 'Z') == 'A' and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_str_int() -> Int {
+    let values: Map<Str,Int> = {}
+    values = make_str_int()
+    if values.get("four", 0) == 5 and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_str_bool() -> Int {
+    let values: Map<Str,Bool> = {}
+    values = make_str_bool()
+    if values.get("four", false) and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn score_str_char() -> Int {
+    let values: Map<Str,Char> = {}
+    values = make_str_char()
+    if values.get("four", 'Z') == 'A' and values.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn replace_target(dst: Map<Int,Int>) -> Int {
+    dst = make_int_int()
+    if dst.get(4, 0) == 5 and dst.len() == 1 {
+        return 42
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let total = score_int_int() + score_int_bool() + score_int_char() + score_str_int() + score_str_bool() + score_str_char()
+    let target: Map<Int,Int> = {}
+    let replaced = replace_target(target)
+    if total == 42 and replaced == 42 and target.get(4, 0) == 5 {
+        return 42
+    }
+    return 0
+}

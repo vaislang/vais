@@ -124,12 +124,12 @@ Verified release surface:
 | `List<Int>` | Empty/list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
-| `Map<Int,Int>` | Local `{}`, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Int,Bool>` | Local `{}`, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Int,Char>` | Local `{}`, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Str,Int>` | Local `{}`, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Str,Bool>` | Local `{}`, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Map<Str,Char>` | Local `{}`, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Int>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Bool>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Int,Char>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Str,Int>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Str,Bool>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
+| `Map<Str,Char>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, and local field write |
@@ -851,10 +851,11 @@ Verified behavior:
   annotated local, copying returned contents into caller-owned storage.
 - `{}` constructs an empty map when the local type is explicitly one of the
   verified concrete Map types.
-- `target = source` copies one local Map into another local with the same
-  concrete Map type; later mutation of either map does not alias the other.
-  A Map parameter can also be the assignment source or target when the concrete
-  Map type matches, as covered by `examples/e116_map_param_assignment.vais`.
+- `target = source` copies a same-type Map local, same-type Map parameter, or
+  same-type Map-returning call into the target Map; later mutation of either
+  map does not alias the other. Parameter-source/target copies are covered by
+  `examples/e116_map_param_assignment.vais`, and Map-returning call assignment
+  copies are covered by `examples/e117_map_return_assignment.vais`.
 - `insert(key, value)` inserts or replaces a value.
 - `remove(key)` removes a present key if it exists; removing a missing key is a
   no-op.
@@ -870,15 +871,16 @@ Verified behavior:
   `examples/e111_map_str_bool_param.vais`, and
   `examples/e112_map_str_bool_return.vais`, plus
   `examples/e113_map_str_char.vais`, `examples/e114_map_str_char_param.vais`,
-  `examples/e115_map_str_char_return.vais`, and
-  `examples/e116_map_param_assignment.vais`.
+  `examples/e115_map_str_char_return.vais`,
+  `examples/e116_map_param_assignment.vais`, and
+  `examples/e117_map_return_assignment.vais`.
 - `contains(key)` returns whether a key is present.
 - `len()` returns the number of present keys.
 
 Not included in the current Map slice: broader generic key/value lowering,
 iteration, entry literals, broader Map APIs that return `Option`, `Result`,
-custom hashing, broader `Map<Str,V>` return values, direct assignment from a
-Map-returning call, or public ABI claims for generic Map return values.
+custom hashing, broader `Map<Str,V>` return values, or public ABI claims for
+generic Map return values.
 Unverified generic Map parameters, unverified return values, and non-promoted
 assignment sources are rejected by front diagnostics instead of being treated as
 part of the release surface.

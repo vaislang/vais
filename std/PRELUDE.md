@@ -58,12 +58,12 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<Int>` | Verified |
 | `List<Str>` | Partial; verified for local `push`, local index read, and host process arguments |
 | `List<T>` | Partial |
-| `Map<Int,Int>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
-| `Map<Int,Bool>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
-| `Map<Int,Char>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
-| `Map<Str,Int>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
-| `Map<Str,Bool>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
-| `Map<Str,Char>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
+| `Map<Int,Int>` | Verified for local values, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
+| `Map<Int,Bool>` | Verified for local values, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
+| `Map<Int,Char>` | Verified for local values, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
+| `Map<Str,Int>` | Verified for local values, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
+| `Map<Str,Bool>` | Verified for local values, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
+| `Map<Str,Char>` | Verified for local values, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
 | `Map<K,V>` | Design-specified beyond the verified concrete local Map slices; not verified |
 | `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Option<T>` | Specified beyond the `Option<Int>` slice |
@@ -92,7 +92,7 @@ The verified Map surface is deliberately small:
 | `let m: Map<Int,Int> = {}` / `let m: Map<Int,Bool> = {}` / `let m: Map<Int,Char> = {}` / `let m: Map<Str,Int> = {}` / `let m: Map<Str,Bool> = {}` / `let m: Map<Str,Char> = {}` | Construct an empty local map |
 | `fn f(m: Map<Int,Int>) -> Int` / `fn f(m: Map<Int,Bool>) -> Int` / `fn f(m: Map<Int,Char>) -> Int` / `fn f(m: Map<Str,Int>) -> Int` / `fn f(m: Map<Str,Bool>) -> Int` / `fn f(m: Map<Str,Char>) -> Int` | Pass a Map by reference so the callee can read or mutate the caller-visible map |
 | `fn make() -> Map<Int,Int>` / `let m: Map<Int,Int> = make()` / `fn make() -> Map<Int,Bool>` / `let m: Map<Int,Bool> = make()` / `fn make() -> Map<Int,Char>` / `let m: Map<Int,Char> = make()` / `fn make() -> Map<Str,Int>` / `let m: Map<Str,Int> = make()` / `fn make() -> Map<Str,Bool>` / `let m: Map<Str,Bool> = make()` / `fn make() -> Map<Str,Char>` / `let m: Map<Str,Char> = make()` | Return a verified concrete Map into caller-owned local storage |
-| `target = source` | Copy one local map into another local map with the same concrete type |
+| `target = source` | Copy a same-type local map, same-type Map parameter, or same-type Map-returning call into a Map target |
 | `m.insert(key, value)` | Insert or replace a value by key; verified keys are `Int` for `Map<Int,V>` and `Str` for `Map<Str,Int>` / `Map<Str,Bool>` / `Map<Str,Char>` |
 | `m.remove(key)` | Remove a key if present; missing keys are ignored |
 | `m.clear()` | Remove all keys and allow the map to be reused |
@@ -106,8 +106,8 @@ This slice is currently available through the full self-host compiler path and
 The slice does not include broader generic key/value lowering, broader
 broader `Map<Str,V>` return values, generic Map return values, iteration,
 `Result`, hashing controls, or map literals with entries.
-Unverified generic Map function parameters, unverified return values, and direct
-assignment from Map-returning calls are rejected by front diagnostics.
+Unverified generic Map function parameters, unverified return values, and
+non-promoted assignment sources are rejected by front diagnostics.
 Future Map ABI and generic expansion rules are design-specified in
 `docs/design/MAP_ABI.md`; they are not verified prelude APIs until compiler
 gates cover them.

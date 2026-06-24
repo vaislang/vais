@@ -79,8 +79,8 @@ This file tracks current work only.
   `Map<Str,Bool>`
   parameters are verified by reference, so callees can mutate caller-visible
   maps. `Map<Str,Char>` parameters are also verified by reference. Concrete
-  Map assignment can copy between locals and same-type Map parameters without
-  aliasing.
+  Map assignment can copy between locals, same-type Map parameters, and
+  same-type Map-returning calls without aliasing.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`,
   `Map<Str,Bool>`, and `Map<Str,Char>` return values can initialize explicitly
   annotated locals through caller-owned storage.
@@ -96,8 +96,9 @@ This file tracks current work only.
   `Map<Str,Bool>` string-key operations, `Map<Str,Bool>` return-value local
   initialization, local `Map<Str,Char>` string-key operations,
   `Map<Str,Char>` return-value local initialization, concrete Map parameter
-  assignment copy, concrete Map key removal, concrete Map scalar get_opt
-  payloads, concrete Map clear and reuse, and
+  assignment copy, concrete Map-returning call assignment copy, concrete Map
+  key removal, concrete Map scalar get_opt payloads, concrete Map clear and
+  reuse, and
   `List<T>.is_empty()`, `last()`, and `pop()`.
 - The full compiler path supports single-package local dotted imports such as
   `import math.add`, with gates for multi-file success, missing imports,
@@ -345,9 +346,11 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
   gated.
 - [x] 1.3z Continue `Map<K,V>` expansion only through the next concrete
   gate-backed slice: promote concrete Map parameter-source and parameter-target
-  assignment copies while keeping direct assignment from Map-returning calls and
-  broader generic Map behavior gated.
-- [ ] 1.3aa Continue `Map<K,V>` expansion only through the next concrete
+  assignment copies while keeping broader generic Map behavior gated.
+- [x] 1.3aa Continue `Map<K,V>` expansion only through the next concrete
+  gate-backed slice: promote concrete Map-returning call assignment copies while
+  keeping broader generic Map behavior gated.
+- [ ] 1.3ab Continue `Map<K,V>` expansion only through the next concrete
   gate-backed slice.
 - [x] 1.4 Add examples and value tests for every promoted prelude API.
 - [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
@@ -842,10 +845,10 @@ Mode: sequential
   operations, parameter reference mutation, and return-value local
   initialization are verified. Local `Map<Str,Char>` string-key operations,
   parameter reference mutation, and return-value local initialization are
-  verified. Concrete Map parameter-source and parameter-target assignment
-  copies are verified for the promoted Map types; direct assignment from
-  Map-returning calls, broader `Map<Str,V>`, and generic Map behavior still
-  require direct and full gates before publication.
+  verified. Concrete Map parameter-source, parameter-target, and Map-returning
+  call assignment copies are verified for the promoted Map types; broader
+  `Map<Str,V>` and generic Map behavior still require direct and full gates
+  before publication.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>`
   parameter reference mutation is verified.
 

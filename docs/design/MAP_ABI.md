@@ -3,20 +3,20 @@
 Status: design contract for future gates. The verified Map surface today is
 local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
 `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and parameter
-reference/mutation, parameter assignment copy, and return-value local initialization, plus
+reference/mutation, parameter assignment copy, return-call assignment copy, and return-value local initialization, plus
 `Map<Int,Bool>` and `Map<Int,Char>` with local
 values, assignment copy, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`,
 `contains`, `len`,
-parameter reference/mutation, parameter assignment copy, and return-value local initialization.
+parameter reference/mutation, parameter assignment copy, return-call assignment copy, and return-value local initialization.
 `Map<Str,Int>` values support `{}`, assignment copy, `insert`, `remove`,
 `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, function
-parameter reference/mutation, parameter assignment copy, and return-value local initialization.
+parameter reference/mutation, parameter assignment copy, return-call assignment copy, and return-value local initialization.
 `Map<Str,Bool>` values support local `{}`, assignment copy, `insert`, `remove`,
 `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and function
-parameter reference/mutation, parameter assignment copy, and return-value local initialization.
+parameter reference/mutation, parameter assignment copy, return-call assignment copy, and return-value local initialization.
 `Map<Str,Char>` values support local `{}`, assignment copy, `insert`,
 `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and
-function parameter reference/mutation, parameter assignment copy, and return-value local initialization.
+function parameter reference/mutation, parameter assignment copy, return-call assignment copy, and return-value local initialization.
 These slices are verified in the full self-host compiler path and native direct
 engine.
 
@@ -169,8 +169,8 @@ Verified behavior:
 - A Map local must be explicitly annotated as `Map<Int,Int>`, `Map<Int,Bool>`,
   `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>`.
 - `{}` constructs an empty local map.
-- `target = source` copies one local Map into another local with the same
-  concrete Map type without aliasing.
+- `target = source` copies a same-type local Map, same-type Map parameter, or
+  same-type Map-returning call into the target Map without aliasing.
 - `insert(key, value)` inserts or replaces the key.
 - `remove(key)` removes the key if present and leaves the map unchanged if the
   key is missing.
@@ -256,12 +256,13 @@ Broaden Map support in this order:
    initialization.
 5. Broader `Map<Str,V>` local values only as concrete gates. `Map<Str,Bool>` is
    complete for local construction, assignment copy, lookup/update helpers,
-   `remove`, `clear`, `get_opt`, parameter reference/mutation, parameter-source
-   and parameter-target assignment copy, and
+   `remove`, `clear`, `get_opt`, parameter reference/mutation,
+   parameter-source, parameter-target, and return-call assignment copy, and
    return-value local initialization. `Map<Str,Char>` is complete for local
    construction, assignment copy, lookup/update helpers, `remove`, `clear`, and
-   `get_opt`, plus parameter reference/mutation, parameter-source and
-   parameter-target assignment copy, and return-value local initialization.
+   `get_opt`, plus parameter reference/mutation, parameter-source,
+   parameter-target, and return-call assignment copy, and return-value local
+   initialization.
 6. Broader `Map<Str,V>` only after string equality, hashing, copy, and lifetime
    rules are specified for each value type and ABI boundary.
 7. Struct values only after struct copy and return ABI behavior are already
@@ -298,9 +299,8 @@ maps are later APIs.
 
 Until each slice is implemented, the public front must reject unsupported forms:
 
-- Map assignment from anything other than another local or Map parameter with
-  the same verified concrete Map type, or direct assignment from a Map-returning
-  call.
+- Map assignment from anything other than a same-type local Map, same-type Map
+  parameter, or same-type Map-returning call with a verified concrete Map type.
 - Map function parameters beyond the verified `Map<Int,Int>`,
   `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, and
   `Map<Str,Char>` slices.
