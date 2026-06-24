@@ -2,6 +2,9 @@
 
 ## 2026-06-24
 
+- Promoted `examples/fr1.vais` into the release corpus as an inclusive range
+  for-loop summation smoke, raising the release corpus to 98 native-supported
+  examples.
 - Promoted `examples/e19_interpolation_print.vais` into the release corpus,
   adding native direct lowering for `print("...{name}...")` interpolation and
   `putchar(Int)` output calls.

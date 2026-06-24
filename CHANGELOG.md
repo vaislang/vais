@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,
+  raising the release corpus to 98 native-supported examples.
 - Promoted print interpolation and `putchar` output calls through native
   direct, parity, and value gates, with
   `examples/e19_interpolation_print.vais` added to the release corpus.
