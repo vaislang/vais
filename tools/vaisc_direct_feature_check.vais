@@ -75,7 +75,13 @@ fn write_for_loop(path: Str) -> Int {
     append_line(out, "        if k == 6 { break }")
     append_line(out, "        s = s + k")
     append_line(out, "    }")
-    append_line(out, "    return s + 12")
+    append_line(out, "    let xs = [1, 2, 3, 4, 5, 6]")
+    append_line(out, "    for x in xs {")
+    append_line(out, "        if x % 2 == 0 {")
+    append_line(out, "            s = s + x")
+    append_line(out, "        }")
+    append_line(out, "    }")
+    append_line(out, "    return s")
     append_line(out, "}")
     return fs_write_text(path, str_builder_finish(out))
 }
@@ -1361,7 +1367,7 @@ fn main() -> Int {
     let vaisc = path_join(root, "scripts/vaisc")
     let mut fail = 0
     fail = fail + expect_case(vaisc, tmp, "helper_control", "direct helper calls, locals, if, and while run (=42)", 1)
-    fail = fail + expect_case(vaisc, tmp, "for_loop", "direct range for-loops and break/continue run (=42)", 2)
+    fail = fail + expect_case(vaisc, tmp, "for_loop", "direct range for-loops, List<Int> for-each, and break/continue run (=42)", 2)
     fail = fail + expect_case(vaisc, tmp, "struct_local", "direct struct local literal, field read, and field write run (=42)", 3)
     fail = fail + expect_case(vaisc, tmp, "struct_abi", "direct struct parameter and return ABI runs (=42)", 4)
     fail = fail + expect_case(vaisc, tmp, "list_int", "direct local List<Int> push, len, is_empty, last, pop, index, literal, and sum run (=42)", 5)

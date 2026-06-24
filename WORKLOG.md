@@ -1,5 +1,12 @@
 # Vais Worklog
 
+## 2026-06-25
+
+- Promoted `examples/e25_for_filter_sum.vais` into the release corpus as the
+  first gate-backed collection for-each example, covering full self-host array
+  iteration, scalar `List<Int>` iteration, native direct `List<Int>` iteration,
+  parity, value, docs, and site count updates.
+
 ## 2026-06-24
 
 - Promoted `examples/t4.vais` and `examples/t6.vais` into the release corpus as

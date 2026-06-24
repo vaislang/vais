@@ -26,6 +26,7 @@ examples/e21_result_match.vais	native-supported	Result<Int,Int> Ok/Err helper re
 examples/e22_enum_dispatch.vais	native-supported	Payload-free enum dispatch helper.
 examples/e23_option_flow.vais	native-supported	Option<Int> expression-match binding flow.
 examples/e24_struct_enum_field.vais	native-supported	Payload-free enum stored in a struct field and matched through field access.
+examples/e25_for_filter_sum.vais	native-supported	Collection for-each over integer values with conditional accumulation.
 examples/e26_pipeline.vais	native-supported	Plain function pipeline.
 examples/e29_gcd.vais	native-supported	Modulo recursion.
 examples/e30_enum_payload_match.vais	native-supported	Int payload enum match lowering.

@@ -6316,8 +6316,197 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     if rt.kind == 36 { g2 = false } else { if rt.kind == 37 { g2 = false } else { rop = rop + 1 } }
                 }
             }
-            let inclusive = toks[rop].kind
             let bclose = match_brace(toks, bopen, end)
+            let mut has_range = 0
+            if rop < bopen {
+                let rt2 = toks[rop]
+                if rt2.kind == 36 { has_range = 1 } else { if rt2.kind == 37 { has_range = 1 } }
+            }
+            if has_range == 0 {
+                # for <var> in <collection> { <body> }
+                # Verified scalar slice: fixed integer arrays plus scalar List<Int>
+                # locals/params. The loop owns a hidden index alloca and stores each
+                # loaded element into the user-visible loop variable slot.
+                let iter = toks[i + 3]
+                let ikind = isarr_of(slots, src, iter.nstart, iter.nlen)
+                let isty = sty_of(slots, src, iter.nstart, iter.nlen)
+                let islot = find_slot(slots, src, iter.nstart, iter.nlen)
+                let mut ok_each = 0
+                if ikind == 1 { ok_each = 1 }
+                else if ikind == 2 and isty == 0 - 1 { ok_each = 1 }
+                else if ikind == 4 and isty == 0 - 1 { ok_each = 1 }
+                if ok_each == 0 {
+                    emit_str("  call void @llvm.trap()")
+                    putchar(10)
+                    emit_str("  unreachable")
+                    putchar(10)
+                    i = bclose + 1
+                } else {
+                    let lbl = counter
+                    counter = counter + 1
+                    emit_str("  %fi")
+                    pint(lbl)
+                    emit_str(" = alloca i64")
+                    putchar(10)
+                    emit_str("  store i64 0, i64* %fi")
+                    pint(lbl)
+                    putchar(10)
+                    emit_str("  br label %loop")
+                    pint(lbl)
+                    putchar(10)
+                    emit_str("loop")
+                    pint(lbl)
+                    emit_str(":")
+                    putchar(10)
+                    let ivnum = counter
+                    counter = counter + 1
+                    emit_str("  %t")
+                    pint(ivnum)
+                    emit_str(" = load i64, i64* %fi")
+                    pint(lbl)
+                    putchar(10)
+                    let mut len_kind = 0
+                    let mut len_val = 0
+                    let mut param_base = 0
+                    if ikind == 1 {
+                        len_kind = 0
+                        len_val = arrlen_of(slots, src, iter.nstart, iter.nlen)
+                    } else if ikind == 2 {
+                        let lnum = counter
+                        counter = counter + 1
+                        emit_str("  %t")
+                        pint(lnum)
+                        emit_str(" = load i64, i64* %v")
+                        pint(islot + 1)
+                        putchar(10)
+                        len_kind = 1
+                        len_val = lnum
+                    } else {
+                        let bp = counter
+                        counter = counter + 1
+                        param_base = bp
+                        emit_str("  %t")
+                        pint(bp)
+                        emit_str(" = load i64*, i64** %v")
+                        pint(islot)
+                        putchar(10)
+                        let lp = counter
+                        counter = counter + 1
+                        emit_str("  %t")
+                        pint(lp)
+                        emit_str(" = getelementptr i64, i64* %t")
+                        pint(bp)
+                        emit_str(", i64 ")
+                        pint(list_lenidx())
+                        putchar(10)
+                        let lv = counter
+                        counter = counter + 1
+                        emit_str("  %t")
+                        pint(lv)
+                        emit_str(" = load i64, i64* %t")
+                        pint(lp)
+                        putchar(10)
+                        len_kind = 1
+                        len_val = lv
+                    }
+                    let cnum = counter
+                    counter = counter + 1
+                    emit_str("  %t")
+                    pint(cnum)
+                    emit_str(" = icmp slt i64 %t")
+                    pint(ivnum)
+                    emit_str(", ")
+                    if len_kind == 0 { pint(len_val) } else { putchar(37); putchar(116); pint(len_val) }
+                    putchar(10)
+                    emit_str("  br i1 %t")
+                    pint(cnum)
+                    emit_str(", label %body")
+                    pint(lbl)
+                    emit_str(", label %done")
+                    pint(lbl)
+                    putchar(10)
+                    emit_str("body")
+                    pint(lbl)
+                    emit_str(":")
+                    putchar(10)
+                    let fslot_each = find_slot(slots, src, fvar.nstart, fvar.nlen)
+                    let ep = counter
+                    counter = counter + 1
+                    if ikind == 4 {
+                        emit_str("  %t")
+                        pint(ep)
+                        emit_str(" = getelementptr i64, i64* %t")
+                        pint(param_base)
+                        emit_str(", i64 %t")
+                        pint(ivnum)
+                        putchar(10)
+                    } else {
+                        emit_str("  %t")
+                        pint(ep)
+                        emit_str(" = getelementptr [")
+                        pint(arrlen_of(slots, src, iter.nstart, iter.nlen))
+                        emit_str(" x i64], [")
+                        pint(arrlen_of(slots, src, iter.nstart, iter.nlen))
+                        emit_str(" x i64]* %v")
+                        pint(islot)
+                        emit_str(", i64 0, i64 %t")
+                        pint(ivnum)
+                        putchar(10)
+                    }
+                    let ev = counter
+                    counter = counter + 1
+                    emit_str("  %t")
+                    pint(ev)
+                    emit_str(" = load i64, i64* %t")
+                    pint(ep)
+                    putchar(10)
+                    emit_str("  store i64 %t")
+                    pint(ev)
+                    emit_str(", i64* %v")
+                    pint(fslot_each)
+                    putchar(10)
+                    let fbody_term = block_returns(toks, bopen + 1, bclose)
+                    counter = gen_stmts(toks, slots, fns, defs, src, bopen + 1, bclose, counter, retcfg, (lbl + 1) * 10 + 1)
+                    if fbody_term == 0 {
+                        emit_str("  br label %cont")
+                        pint(lbl)
+                        putchar(10)
+                    }
+                    emit_str("cont")
+                    pint(lbl)
+                    emit_str(":")
+                    putchar(10)
+                    let iload = counter
+                    counter = counter + 1
+                    emit_str("  %t")
+                    pint(iload)
+                    emit_str(" = load i64, i64* %fi")
+                    pint(lbl)
+                    putchar(10)
+                    let inext = counter
+                    counter = counter + 1
+                    emit_str("  %t")
+                    pint(inext)
+                    emit_str(" = add i64 %t")
+                    pint(iload)
+                    emit_str(", 1")
+                    putchar(10)
+                    emit_str("  store i64 %t")
+                    pint(inext)
+                    emit_str(", i64* %fi")
+                    pint(lbl)
+                    putchar(10)
+                    emit_str("  br label %loop")
+                    pint(lbl)
+                    putchar(10)
+                    emit_str("done")
+                    pint(lbl)
+                    emit_str(":")
+                    putchar(10)
+                    i = bclose + 1
+                }
+            } else {
+            let inclusive = toks[rop].kind
             # lo-expr [i+3, rop): store into the induction var slot
             let lo = gen_expr(toks, slots, fns, defs, src, i + 3, rop, counter)
             counter = lo.next
@@ -6409,6 +6598,7 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
             emit_str(":")
             putchar(10)
             i = bclose + 1
+            }
         } else if t.kind == 22 {
             # while <lhs> <cmp> <rhs> { <body> }
             # find the open-brace after the condition

@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Promoted collection for-each over integer values through the full self-host
+  path, native direct engine, parity, and value gates, with
+  `examples/e25_for_filter_sum.vais` added to the release corpus, raising it to
+  101 native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

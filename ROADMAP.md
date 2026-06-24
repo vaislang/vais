@@ -66,6 +66,9 @@ This file tracks current work only.
 - Additional control-flow, inclusive range, simple struct, Bool predicate,
   integer-list indexing, and state-machine examples are promoted through the
   parity manifest and value corpus.
+- Collection for-each over integer values is promoted through the full self-host
+  path, native direct engine, parity manifest, value corpus, and regenerated
+  reusable core.
 - Single-byte `Char` literals, equality, explicit annotations, helper
   parameters, and helper returns are promoted through public front, full
   self-host, parity, and native direct gates as Int-compatible scalar values.

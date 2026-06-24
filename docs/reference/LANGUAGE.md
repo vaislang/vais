@@ -195,8 +195,8 @@ for k in 0..10 {
 }
 ```
 
-The direct engine gate covers `if`, `while`, range `for`, `break`/`continue`
-inside loops, local `let`, assignment, helper
+The direct engine gate covers `if`, `while`, range `for`, named `List<Int>`
+for-each loops, `break`/`continue` inside loops, local `let`, assignment, helper
 calls, `return`, simple inline `if { return ... }`, `Bool`/`Char`/`Str` scalar helper
 signatures, `Str` literals/length/index/equality, `Char` literal equality and
 annotations,
@@ -214,13 +214,14 @@ Verified today:
 - `if`, `else if`, `else`
 - `while`
 - `for name in start..end` and `for name in start..=end`
+- `for name in xs` over gate-backed integer collections
 - `break` and `continue` inside `while` and range `for` loops
 - Early `return`
 
 Representative gate-backed examples include `examples/e06_for_sum.vais`,
 `examples/e12_exclusive_range.vais`, `examples/e13_nested_for.vais`,
-`examples/e57_break.vais`, `examples/e58_continue.vais`, and
-`examples/e65_loop_break_acc.vais`.
+`examples/e25_for_filter_sum.vais`, `examples/e57_break.vais`,
+`examples/e58_continue.vais`, and `examples/e65_loop_break_acc.vais`.
 
 ## Structs
 
@@ -409,6 +410,10 @@ Verified today:
 - Computed index reads over integer list literals, as covered by
   `examples/e61_array_index_expr.vais`, and simple array-backed state machines,
   as covered by `examples/e52_state_machine.vais`.
+- `for x in xs { ... }` over integer collections, as covered by
+  `examples/e25_for_filter_sum.vais`. The full self-host path covers fixed
+  integer arrays and scalar `List<Int>` locals; the native direct engine covers
+  named local or parameter `List<Int>` values.
 - Inline `[]`, `list()`, and integer list literals as `List<Int>` return values
   and call arguments in the direct engine.
 - `List<Int>`-returning helper calls used directly as `List<Int>` call arguments
@@ -440,7 +445,7 @@ out-of-range indexes, `last()` on an empty list, and `pop()` on an empty list.
 
 The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
 small integer list literals, plus `push`, `len`/`len()`, `is_empty()`,
-`last()`, `pop()`, index, `sum()`, and function calls where `List<Int>` parameters are
+`last()`, `pop()`, index, `sum()`, named `for x in xs` iteration, and function calls where `List<Int>` parameters are
 local list names or inline list values. It also covers `List<Int>`-returning helper calls passed
 directly to `List<Int>` parameters in `return`, `let`, list-literal item, `push`, assignment
 statements, `if`, `else if`, and `while` conditions. In the direct engine

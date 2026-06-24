@@ -6977,6 +6977,49 @@ static int direct_parse_for_header(
     return 1;
 }
 
+static int direct_parse_for_each_header(
+    const char *s,
+    char **name_out,
+    char **iterable_out
+) {
+    s = skip_ws(s);
+    if (!starts_with(s, "for") || is_ident_continue(s[3])) return 0;
+    const char *p = skip_ws(s + 3);
+    if (!is_ident_start(*p)) return -1;
+    const char *name_start = p;
+    p++;
+    while (is_ident_continue(*p)) p++;
+    char *name = substr_copy(name_start, (size_t)(p - name_start));
+    p = skip_ws(p);
+    if (!(p[0] == 'i' && p[1] == 'n' && !is_ident_continue(p[2]))) {
+        free(name);
+        return -1;
+    }
+    p = skip_ws(p + 2);
+    int open_rel = direct_find_top_level_char(p, '{');
+    if (open_rel < 0 || *skip_ws(p + open_rel + 1) != '\0') {
+        free(name);
+        return -1;
+    }
+    char *iter_raw = substr_copy(p, (size_t)open_rel);
+    char *iterable = trim_copy(iter_raw);
+    free(iter_raw);
+    if (iterable[0] == '\0') {
+        free(iterable);
+        free(name);
+        return -1;
+    }
+    int inclusive = 0;
+    if (direct_find_top_level_range_op(iterable, &inclusive) >= 0) {
+        free(iterable);
+        free(name);
+        return -1;
+    }
+    *name_out = name;
+    *iterable_out = iterable;
+    return 1;
+}
+
 static int direct_parse_inline_block(const char *s, const char *keyword, char **expr_out, char **body_out) {
     s = skip_ws(s);
     size_t n = strlen(keyword);
@@ -8032,11 +8075,84 @@ static int direct_lower_line(
         free(stripped);
         return 0;
     }
+    char *each_name = NULL;
+    char *each_iterable = NULL;
+    int parsed_each = direct_parse_for_each_header(s, &each_name, &each_iterable);
+    if (parsed_each == 1) {
+        const char *existing_type = direct_names_type(locals, each_name);
+        if (existing_type != NULL && !direct_is_intlike_scalar_type(existing_type)) {
+            report_issue(path, line_no, find_col(line, each_name), line,
+                "direct native emitter for-each variable must be an Int-compatible scalar",
+                "use a fresh loop variable name or an `Int` local.",
+                "for x in xs {");
+            free(each_name);
+            free(each_iterable);
+            free(stripped);
+            return 1;
+        }
+        char *list_name = NULL;
+        if (!direct_expr_bare_list_local(locals, each_iterable, &list_name)) {
+            report_issue(path, line_no, find_col(line, each_iterable), line,
+                "direct native emitter for-each expects a local List<Int>",
+                "iterate a named local or parameter with type `List<Int>`.",
+                "for x in xs {");
+            free(each_name);
+            free(each_iterable);
+            free(stripped);
+            return 1;
+        }
+        const char *iter_type = direct_names_type(locals, list_name);
+        char *elem_type = direct_list_element_type(iter_type);
+        if (elem_type == NULL || strcmp(elem_type, "Int") != 0) {
+            report_issue(path, line_no, find_col(line, list_name), line,
+                "direct native emitter for-each currently supports List<Int>",
+                "iterate a `List<Int>` in this direct-engine slice.",
+                "for x in xs {");
+            free(elem_type);
+            free(list_name);
+            free(each_name);
+            free(each_iterable);
+            free(stripped);
+            return 1;
+        }
+        free(elem_type);
+        int declare_loop_var = existing_type == NULL;
+        if (declare_loop_var) direct_names_add_typed(locals, each_name, "Int");
+        char idx_name[64];
+        snprintf(idx_name, sizeof(idx_name), "__vais_for_each_%d", locals->temp_count++);
+        if (declare_loop_var) {
+            sb_append(out, "long ");
+            sb_append(out, each_name);
+            sb_append(out, ";\n");
+        }
+        sb_append(out, "for (long ");
+        sb_append(out, idx_name);
+        sb_append(out, " = 0; ");
+        sb_append(out, idx_name);
+        sb_append(out, " < ");
+        direct_append_list_len_ref(out, list_name, direct_names_is_ref(locals, list_name));
+        sb_append(out, "; ");
+        sb_append(out, idx_name);
+        sb_append(out, "++) {\n");
+        sb_append(out, each_name);
+        sb_append(out, " = ");
+        direct_append_list_data_ref(out, list_name, direct_names_is_ref(locals, list_name));
+        sb_append(out, "[");
+        sb_append(out, idx_name);
+        sb_append(out, "];\n");
+        free(list_name);
+        free(each_name);
+        free(each_iterable);
+        free(stripped);
+        return 0;
+    }
     if (parsed_for < 0 || starts_with(s, "for")) {
         report_issue(path, line_no, find_col(line, "for"), line,
-            "direct native emitter expected a for-loop range header",
-            "write `for i in 0..n {` or `for i in 0..=n {`.",
+            "direct native emitter expected a for-loop range or List<Int> header",
+            "write `for i in 0..n {`, `for i in 0..=n {`, or `for x in xs {` where `xs` is `List<Int>`.",
             "for i in 0..n {");
+        free(each_name);
+        free(each_iterable);
         free(for_name);
         free(for_lo);
         free(for_hi);
