@@ -121,7 +121,8 @@ The release corpus also includes smaller control-flow and scanner examples:
 `examples/e52_state_machine.vais`, `examples/e53_word_count.vais`,
 `examples/e57_break.vais`, `examples/e58_continue.vais`,
 `examples/e61_array_index_expr.vais`, and
-`examples/e65_loop_break_acc.vais`, and `examples/fr1.vais`.
+`examples/e65_loop_break_acc.vais`, `examples/fr1.vais`,
+`examples/t4.vais`, and `examples/t6.vais`.
 
 Files not listed as `native-supported` are retained as examples or future
 coverage candidates, but they are not public release claims until promoted into

@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
+  examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,
   raising the release corpus to 98 native-supported examples.
 - Promoted print interpolation and `putchar` output calls through native

@@ -96,6 +96,8 @@ examples/e117_map_return_assignment.vais	native-supported	Concrete Map-returning
 examples/e118_map_return_assignment_args.vais	native-supported	Concrete argument Map-returning call assignment copies.
 examples/fr1.vais	native-supported	Inclusive range for-loop summation smoke.
 examples/t1.vais	native-supported	Simple typed helper smoke.
+examples/t4.vais	native-supported	Simple struct literal and field read smoke.
+examples/t6.vais	native-supported	Single-field struct literal and field read smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.
 examples/c4.vais	native-supported	Struct literal and field access.

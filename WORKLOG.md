@@ -2,6 +2,9 @@
 
 ## 2026-06-24
 
+- Promoted `examples/t4.vais` and `examples/t6.vais` into the release corpus as
+  simple struct literal/field-read smoke examples, raising the release corpus
+  to 100 native-supported examples.
 - Promoted `examples/fr1.vais` into the release corpus as an inclusive range
   for-loop summation smoke, raising the release corpus to 98 native-supported
   examples.
