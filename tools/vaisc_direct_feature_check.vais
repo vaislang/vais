@@ -210,6 +210,28 @@ fn write_str_index_of(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_str_palindrome(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn is_palindrome(s: Str) -> Int {")
+    append_line(out, "    let mut left = 0")
+    append_line(out, "    let mut right = s.len() - 1")
+    append_line(out, "    while left < right {")
+    append_line(out, "        if s[left] != s[right] { return 0 }")
+    append_line(out, "        left = left + 1")
+    append_line(out, "        right = right - 1")
+    append_line(out, "    }")
+    append_line(out, "    return 1")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let odd = is_palindrome(\"level\")")
+    append_line(out, "    let even = is_palindrome(\"abba\")")
+    append_line(out, "    let miss = is_palindrome(\"robot\")")
+    append_line(out, "    return odd * 40 + even * 2 + miss")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_char_literal(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn choose(flag: Bool) -> Char {")
@@ -1162,6 +1184,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "struct_abi") == 1 { wrote = write_struct_abi(src) }
     else if str_contains(name, "list_int") == 1 { wrote = write_list_int(src) }
     else if str_contains(name, "str_index_of") == 1 { wrote = write_str_index_of(src) }
+    else if str_contains(name, "str_palindrome") == 1 { wrote = write_str_palindrome(src) }
     else if str_contains(name, "str_slice") == 1 { wrote = write_str_slice(src) }
     else if str_contains(name, "char_literal") == 1 { wrote = write_char_literal(src) }
     else if str_contains(name, "map_remove") == 1 { wrote = write_map_remove(src) }
@@ -1291,6 +1314,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "sret(%struct.DirectMapStrInt)") and str_contains(text, "define void @make_letters") and str_contains(text, "call void @make_letters") and str_contains(text, "noundef 65")
     } else if shape == 46 {
         ok = str_contains(text, "define i64 @index_of") and str_contains(text, "__vais_str_byte") and str_contains(text, "icmp ne i64")
+    } else if shape == 47 {
+        ok = str_contains(text, "define i64 @is_palindrome") and str_contains(text, "__vais_str_byte") and str_contains(text, "icmp ne i64")
     }
     if ok == 0 {
         return emit_failed(str_concat("direct ", name), err_path)
@@ -1325,6 +1350,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "list_int", "direct local List<Int> push, len, is_empty, last, pop, index, literal, and sum run (=42)", 5)
     fail = fail + expect_case(vaisc, tmp, "str_slice", "direct Str len, index, equality, Bool helper, and byte classification run (=42)", 6)
     fail = fail + expect_case(vaisc, tmp, "str_index_of", "direct Str substring search with computed byte indexes runs (=42)", 46)
+    fail = fail + expect_case(vaisc, tmp, "str_palindrome", "direct Str two-pointer palindrome search runs (=42)", 47)
     fail = fail + expect_case(vaisc, tmp, "char_literal", "direct Char literal, type annotation, return, and Bool helper run (=42)", 7)
     fail = fail + expect_case(vaisc, tmp, "parse_helpers", "direct parse_uint/parse_int Str helpers run (=42)", 8)
     fail = fail + expect_case(vaisc, tmp, "map_int_int", "direct local Map<Int,Int> insert/get/contains/len run (=42)", 9)

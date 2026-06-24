@@ -14,6 +14,9 @@
 - Promoted `Str` substring search with computed byte indexes through full
   self-host, native direct, parity, and value gates, with
   `examples/e71_string_index_of.vais` added to the release corpus.
+- Promoted two-pointer `Str` scans with computed byte indexes through full
+  self-host, native direct, parity, and value gates, with
+  `examples/e69_palindrome_string.vais` added to the release corpus.
 - Promoted simple enum expression-arm `match` lowering for multi-field `Int`
   payload variants, with `examples/e02_enum_payload.vais` added to the release
   corpus.

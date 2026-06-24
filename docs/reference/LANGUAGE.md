@@ -978,6 +978,8 @@ Verified today:
   as covered by `examples/e88_bool_type.vais`.
 - Named integer parsing helpers `parse_uint(s)` and `parse_int(s)`, as covered
   by `examples/e83_parse_helpers.vais`.
+- Two-pointer `Str` scans with computed byte indexes from both ends, as covered
+  by `examples/e69_palindrome_string.vais`.
 - User-defined integer parsing over `Str`, as covered by
   `examples/e70_parse_uint.vais`.
 - Substring search patterns over `Str` with computed byte indexes, as covered by

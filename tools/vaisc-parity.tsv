@@ -42,6 +42,7 @@ examples/e60_digit_sum.vais	native-supported	Modulo/division loop.
 examples/e64_enum_struct_payload.vais	native-supported	Single-field struct payload enum matched through payload field access.
 examples/e66_fibonacci.vais	native-supported	Recursive Fibonacci.
 examples/e67_power.vais	native-supported	Recursive power.
+examples/e69_palindrome_string.vais	native-supported	Str two-pointer palindrome scan with computed byte indexes.
 examples/e70_parse_uint.vais	native-supported	Str len/index with Bool digit classifier.
 examples/e71_string_index_of.vais	native-supported	Str substring search with computed byte indexes.
 examples/e72_identifier_scan.vais	native-supported	Identifier scan over Str with byte classification.

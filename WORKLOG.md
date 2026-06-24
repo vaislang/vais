@@ -6,6 +6,9 @@
   `Str` substring-search pattern with computed byte indexes, covering public
   front, native direct, full self-host codegen, parity, value, docs, and site
   count updates.
+- Promoted `examples/e69_palindrome_string.vais` into the release corpus as a
+  two-pointer `Str` scan with computed byte indexes from both ends, covering the
+  same front, direct, full self-host, parity, value, docs, and site gates.
 
 ## 2026-06-20
 
