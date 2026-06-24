@@ -122,11 +122,12 @@
 - Promoted local `Map<Str,Char>` string-key operations through the full
   compiler path and native direct engine, with
   `examples/e113_map_str_char.vais` added to the release corpus.
-  `Map<Str,Char>` parameters and return values remain gated.
 - Promoted `Map<Str,Char>` function parameters by reference through the full
   compiler path and native direct engine, with
   `examples/e114_map_str_char_param.vais` added to the release corpus.
-  `Map<Str,Char>` return values remain gated.
+- Promoted `Map<Str,Char>` return values for explicitly annotated local
+  initialization through the full compiler path and native direct engine, with
+  `examples/e115_map_str_char_return.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 

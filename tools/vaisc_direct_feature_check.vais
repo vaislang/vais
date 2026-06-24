@@ -442,6 +442,30 @@ fn write_map_str_char_param(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_str_char_return(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn make_letters() -> Map<Str, Char> {")
+    append_line(out, "    let letters: Map<Str, Char> = {}")
+    append_line(out, "    letters.insert(\"red\", 'A')")
+    append_line(out, "    letters.insert(\"blue\", 'B')")
+    append_line(out, "    return letters")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let letters: Map<Str, Char> = make_letters()")
+    append_line(out, "    let copy: Map<Str, Char> = {}")
+    append_line(out, "    copy = letters")
+    append_line(out, "    letters.remove(\"blue\")")
+    append_line(out, "    let red_value = match letters.get_opt(\"red\") { Some(v) => v, None => 0 }")
+    append_line(out, "    let blue_value = match copy.get_opt(\"blue\") { Some(v) => v, None => 0 }")
+    append_line(out, "    if copy.contains(\"blue\") and letters.contains(\"red\") and not letters.contains(\"blue\") {")
+    append_line(out, "        return red_value - 65 + blue_value - 66 + copy.len() * 20 + letters.len() + copy.contains(\"blue\")")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_map_str_bool_param(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn mark(flags: Map<Str, Bool>, key: Str, value: Bool) -> Int {")
@@ -1053,6 +1077,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "map_str_int_param") == 1 { wrote = write_map_str_int_param(src) }
     else if str_contains(name, "map_str_bool_return") == 1 { wrote = write_map_str_bool_return(src) }
     else if str_contains(name, "map_str_bool_param") == 1 { wrote = write_map_str_bool_param(src) }
+    else if str_contains(name, "map_str_char_return") == 1 { wrote = write_map_str_char_return(src) }
     else if str_contains(name, "map_str_char_param") == 1 { wrote = write_map_str_char_param(src) }
     else if str_contains(name, "map_str_char") == 1 { wrote = write_map_str_char(src) }
     else if str_contains(name, "map_str_bool") == 1 { wrote = write_map_str_bool(src) }
@@ -1160,6 +1185,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "%struct.DirectMapStrInt") and str_contains(text, "__vais_map_str_int_insert") and str_contains(text, "__vais_map_str_int_get") and str_contains(text, "__vais_map_str_int_get_opt")
     } else if shape == 41 {
         ok = str_contains(text, "define i64 @stamp(ptr") and str_contains(text, "__vais_map_str_int_insert") and str_contains(text, "__vais_map_str_int_remove") and str_contains(text, "call i64 @stamp(ptr")
+    } else if shape == 42 {
+        ok = str_contains(text, "sret(%struct.DirectMapStrInt)") and str_contains(text, "define void @make_letters") and str_contains(text, "call void @make_letters")
     }
     if ok == 0 {
         return emit_failed(str_concat("direct ", name), err_path)
@@ -1206,6 +1233,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "map_str_bool", "direct local Map<Str,Bool> string-key operations run (=42)", 37)
     fail = fail + expect_case(vaisc, tmp, "map_str_char", "direct local Map<Str,Char> string-key operations run (=42)", 40)
     fail = fail + expect_case(vaisc, tmp, "map_str_char_param", "direct Map<Str,Char> parameter mutation run (=42)", 41)
+    fail = fail + expect_case(vaisc, tmp, "map_str_char_return", "direct Map<Str,Char> return value initializes a local and runs (=42)", 42)
     fail = fail + expect_case(vaisc, tmp, "map_str_bool_param", "direct Map<Str,Bool> parameter mutation run (=42)", 38)
     fail = fail + expect_case(vaisc, tmp, "map_str_bool_return", "direct Map<Str,Bool> return value initializes a local and runs (=42)", 39)
     fail = fail + expect_case(vaisc, tmp, "map_str_int_param", "direct Map<Str,Int> parameter mutation run (=42)", 35)
