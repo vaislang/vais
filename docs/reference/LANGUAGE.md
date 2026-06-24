@@ -434,7 +434,8 @@ Verified today:
 
 - Empty `List<Int>` with an explicit type, typed non-empty local `List<Int>`
   literals such as `let xs: List<Int> = [10, 20, 30]`, and inline `List<Int>`
-  literals passed to `List<Int>` parameters.
+  literals passed to `List<Int>` parameters, as covered by
+  `examples/e82_list_literal_direct_arg.vais` and `examples/d4b.vais`.
 - Integer list literals such as `[10, 20, 30]`.
 - Computed index reads over integer list literals, as covered by
   `examples/e61_array_index_expr.vais`, and simple array-backed state machines,
@@ -966,6 +967,8 @@ Verified behavior:
 - Local-binding `?` propagation for `Option<Int>` helper calls: `None` returns
   from the current `Option<Int>` function, and `Some` binds its payload, as
   covered by `examples/e93_option_question.vais`.
+- Direct `Option<Int>` helper-return matching from `main`, as covered by
+  `examples/e08_option_chain.vais`.
 
 `Result<Int,Int>` has the same first statement-match shape:
 
@@ -989,6 +992,7 @@ The `?` operator is verified for `Result<Int,Int>` helper calls assigned to a
 local: an `Err` value returns from the current `Result<Int,Int>` function, and an
 `Ok` value binds its payload, as covered by `examples/e39_error_propagate.vais`
 and `examples/e92_result_question_success.vais`.
+Helper-chain `Result<Int,Int>` propagation is covered by `examples/d3run.vais`.
 
 Not included yet: generic `Option<T>` or `Result<T,E>`, broader expression-form
 `match` beyond the gate-backed `Option<Int>` and `Result<Int,Int>` binding

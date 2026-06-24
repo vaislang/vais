@@ -20,6 +20,9 @@
   examples into the release corpus as value-gated import/package smokes.
 - Fixed and promoted single-field nested struct literal/read/write lowering in
   the full self-host compiler, including regenerated reusable core coverage.
+- Promoted additional already-correct Result propagation, inline `List<Int>`
+  parameter iteration, and direct `Option<Int>` match examples into the release
+  corpus.
 
 ## 2026-06-24
 

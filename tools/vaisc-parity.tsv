@@ -120,6 +120,9 @@ examples/e80_closure_return.vais	native-supported	Single-Int closure return lowe
 examples/e82_list_literal_direct_arg.vais	native-supported	Inline List<Int> literal passed directly to a List<Int> parameter.
 examples/e01_nested_struct.vais	native-supported	Single-field nested struct literal and nested field read.
 examples/e32_nested_field_mut.vais	native-supported	Single-field nested struct field assignment and read.
+examples/d3run.vais	native-supported	Result<Int,Int> question propagation success path through a helper chain.
+examples/d4b.vais	native-supported	Inline List<Int> literal passed to a List<Int> parameter and iterated.
+examples/e08_option_chain.vais	native-supported	Option<Int> helper return matched directly in main.
 examples/module_basic/main.vais	native-supported	Local dotted import resolves a sibling module.
 examples/package_basic/src/main.vais	native-supported	vais.toml source-root package import resolves under src.
 examples/dependency_basic/app/src/main.vais	native-supported	vais.toml dependency import resolves through a local package path.

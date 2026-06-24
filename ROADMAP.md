@@ -74,6 +74,9 @@ This file tracks current work only.
   for-each over those values.
 - Inline integer list literals can be passed directly to `List<Int>` parameters
   through the full self-host path and native direct engine.
+- Additional release-corpus examples cover inline `List<Int>` parameter
+  iteration, direct `Option<Int>` helper-return matching, and chained
+  `Result<Int,Int>` `?` propagation.
 - Generic marker syntax on simple structs used with `Int` values is promoted
   through the full self-host path, public front, parity manifest, and value
   corpus.

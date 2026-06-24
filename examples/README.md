@@ -67,10 +67,13 @@ statement-match slice,
 helper-return and statement-match slice,
 `examples/e23_option_flow.vais` for `Option<Int>` expression-match binding,
 `examples/e93_option_question.vais` for `Option<Int>` `?` propagation,
+`examples/e08_option_chain.vais` for direct `Option<Int>` helper-return
+matching from `main`,
 `examples/e39_error_propagate.vais` for `Result<Int,Int>` `?` propagation,
 `examples/e91_result_flow.vais` for `Result<Int,Int>` expression-match binding,
 `examples/e92_result_question_success.vais` for the `Result<Int,Int>` `?`
 success path,
+`examples/d3run.vais` for a `Result<Int,Int>` helper propagation chain,
 `examples/e40_option_in_struct.vais` for `Option<Int>` stored in a struct field,
 `examples/e19_interpolation_print.vais` for print interpolation and `putchar`
 output calls,
@@ -79,6 +82,8 @@ output calls,
 max,
 `examples/e82_list_literal_direct_arg.vais` for an inline `List<Int>` literal
 passed directly to a `List<Int>` parameter,
+`examples/d4b.vais` for an inline `List<Int>` literal iterated through a
+`List<Int>` parameter,
 `examples/e94_map_get_opt.vais` for `Map<Int,Int>.get_opt(key)` returning
 `Option<Int>`, `examples/e95_map_assignment.vais` for local `Map<Int,Int>`
 assignment copy semantics, `examples/e96_map_bool.vais` for local
