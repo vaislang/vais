@@ -69,6 +69,9 @@ This file tracks current work only.
 - Collection for-each over integer values is promoted through the full self-host
   path, native direct engine, parity manifest, value corpus, and regenerated
   reusable core.
+- Typed non-empty local `List<Int>` literals are promoted through the full
+  self-host path, including calls to `List<Int>` parameters and collection
+  for-each over those values.
 - Single-byte `Char` literals, equality, explicit annotations, helper
   parameters, and helper returns are promoted through public front, full
   self-host, parity, and native direct gates as Int-compatible scalar values.
@@ -171,7 +174,8 @@ This file tracks current work only.
   helper parameters, helper returns, named `parse_uint`/`parse_int`
   helpers, simple Int-field struct local literal/read/write, struct
   parameter/return helper ABI, and local
-  `List<Int>` initialization plus `push`, `len`, `is_empty`, `last`, `pop`, index, `sum`, and
+  `List<Int>` initialization, typed non-empty local `List<Int>` literals,
+  plus `push`, `len`, `is_empty`, `last`, `pop`, index, `sum`, and
   `List<Int>` parameter reference, return value ABI, and inline list
   literal/constructor call and return values. Statement contexts, `if`,
   `else if`, and `while` conditions also lower `List<Int>`-returning helper

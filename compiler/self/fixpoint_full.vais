@@ -3603,6 +3603,19 @@ fn rhs_is_list(toks: &List<Token>, src: Str, npos: Int) -> Int {
     }
     return 0
 }
+fn let_anno_is_list_int(toks: &List<Token>, src: Str, npos: Int) -> Int {
+    let c1 = toks[npos + 1]
+    if c1.kind != 16 { return 0 }
+    let ty = toks[npos + 2]
+    if kw4(src, ty.nstart, ty.nlen, 76, 105, 115, 116) != 1 { return 0 }
+    let lt = toks[npos + 3]
+    if lt.kind != 18 { return 0 }
+    let et = toks[npos + 4]
+    if kw3(src, et.nstart, et.nlen, 73, 110, 116) != 1 { return 0 }
+    let gt = toks[npos + 5]
+    if gt.kind != 19 { return 0 }
+    return 1
+}
 fn rhs_is_host_str_call(toks: &List<Token>, fns: &List<Fn>, src: Str, npos: Int) -> Int {
     let vp = rhs_pos(toks, npos)
     let rhs = toks[vp]
@@ -4010,7 +4023,7 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
                 emit_str(" = alloca i64*")
                 putchar(10)
                 next_slot = next_slot + 1
-            } else if rhs_is_list(toks, src, npos) == 1 {
+            } else if rhs_is_list(toks, src, npos) == 1 or (let_anno_is_list_int(toks, src, npos) == 1 and rhs.kind == 23) {
                 # List: buffer at %v<slot>, length at %v<slot+1>=0.
                 # Element type: a `: List<Type>` annotation is authoritative (covers
                 # `let toks: List<Token> = []` where no push reveals it); else scan
@@ -5197,6 +5210,43 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     putchar(10)
                     counter = e.next
                 }
+                i = stop + 1
+            } else if isarr_of(slots, src, name.nstart, name.nlen) == 2 and rhs.kind == 23 and sty_of(slots, src, name.nstart, name.nlen) < 0 {
+                # Scalar List<Int> literal: materialize elements into the List
+                # buffer and store the logical length in the side length slot.
+                let bend = bracket_end(toks, vp + 1)
+                let mut q = vp + 1
+                let mut idx = 0
+                while q < bend {
+                    let estop = arr_elem_end(toks, q, bend)
+                    let e = gen_expr(toks, slots, fns, defs, src, q, estop, counter)
+                    counter = e.next
+                    emit_str("  %t")
+                    pint(counter)
+                    emit_str(" = getelementptr [")
+                    pint(list_cap())
+                    emit_str(" x i64], [")
+                    pint(list_cap())
+                    emit_str(" x i64]* %v")
+                    pint(slot)
+                    emit_str(", i64 0, i64 ")
+                    pint(idx)
+                    putchar(10)
+                    emit_str("  store i64 ")
+                    emit_op(e)
+                    emit_str(", i64* %t")
+                    pint(counter)
+                    putchar(10)
+                    counter = counter + 1
+                    idx = idx + 1
+                    q = estop + 1
+                }
+                emit_str("  store i64 ")
+                pint(idx)
+                emit_str(", i64* %v")
+                pint(slot + 1)
+                putchar(10)
+                let stop = find_semi(toks, bend, end)
                 i = stop + 1
             } else if rhs_is_list(toks, src, npos) == 1 {
                 # let lst = list() / [];  — alloca/len already emitted in collect; skip
@@ -6848,7 +6898,7 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
                 emit_str(" x i64]")
                 putchar(10)
                 next_slot = next_slot + 1
-            } else if rhs_is_list(toks, src, npos) == 1 {
+            } else if rhs_is_list(toks, src, npos) == 1 or (let_anno_is_list_int(toks, src, npos) == 1 and rhs.kind == 23) {
                 # List buffer: struct-element Lists get [64*nf+1 x i64] (the +1 is a
                 # length header at index 64*nf for by-pointer param passing) with
                 # sty = element struct type (stride = nfields); scalar Lists [64 x i64].
