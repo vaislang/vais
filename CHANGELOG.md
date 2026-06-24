@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Promoted print interpolation and `putchar` output calls through native
+  direct, parity, and value gates, with
+  `examples/e19_interpolation_print.vais` added to the release corpus.
 - Promoted explicit `Bool` locals, helper parameters, helper returns, and unary
   `not` through full self-host, native direct, parity, and value gates, with
   `examples/e88_bool_type.vais` added to the release corpus.

@@ -1003,8 +1003,9 @@ Verified today:
   parameters, and helper returns as Int-compatible scalar values in the front,
   native direct, full, and parity gates, as covered by
   `examples/e85_char_type.vais`.
-- `print("...{name}...")` interpolation for simple identifiers.
-- `putchar(Int)`.
+- `print("...{name}...")` interpolation for simple identifiers in the full
+  self-host path and native direct engine.
+- `putchar(Int)` in the full self-host path and native direct engine.
 
 `parse_uint` parses a leading unsigned decimal run and stops at the first
 non-decimal byte. `parse_int` accepts a leading `-` and then parses the same

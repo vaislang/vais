@@ -63,6 +63,8 @@ helper-return and statement-match slice,
 `examples/e92_result_question_success.vais` for the `Result<Int,Int>` `?`
 success path,
 `examples/e40_option_in_struct.vais` for `Option<Int>` stored in a struct field,
+`examples/e19_interpolation_print.vais` for print interpolation and `putchar`
+output calls,
 `examples/e94_map_get_opt.vais` for `Map<Int,Int>.get_opt(key)` returning
 `Option<Int>`, `examples/e95_map_assignment.vais` for local `Map<Int,Int>`
 assignment copy semantics, `examples/e96_map_bool.vais` for local

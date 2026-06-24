@@ -2,6 +2,9 @@
 
 ## 2026-06-24
 
+- Promoted `examples/e19_interpolation_print.vais` into the release corpus,
+  adding native direct lowering for `print("...{name}...")` interpolation and
+  `putchar(Int)` output calls.
 - Promoted `examples/e71_string_index_of.vais` into the release corpus as a
   `Str` substring-search pattern with computed byte indexes, covering public
   front, native direct, full self-host codegen, parity, value, docs, and site

@@ -7451,6 +7451,285 @@ static int direct_lower_option_match_let(
     return 0;
 }
 
+static int direct_parse_named_call_statement(const char *s, const char *name, char **args_out) {
+    size_t name_len = strlen(name);
+    if (strncmp(s, name, name_len) != 0 || is_ident_continue(s[name_len])) return 0;
+    const char *p = skip_ws(s + name_len);
+    if (*p != '(') return -1;
+    int close = find_matching_paren_c(s, (int)(p - s));
+    if (close < 0) return -1;
+    const char *after = skip_ws(s + close + 1);
+    if (*after == ';') after = skip_ws(after + 1);
+    if (*after != '\0') return -1;
+    *args_out = substr_copy(p + 1, (size_t)(close - (p - s) - 1));
+    return 1;
+}
+
+static void sb_append_printf_literal_byte(StrBuf *out, char ch) {
+    if (ch == '%') {
+        sb_append(out, "%%");
+    } else {
+        sb_append_c_escaped_byte(out, ch);
+    }
+}
+
+static int direct_append_print_interpolation(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *arg,
+    DirectNameSet *locals,
+    StrBuf *out,
+    int *handled
+) {
+    *handled = 0;
+    char *trimmed = trim_copy(arg);
+    const char *s = skip_ws(trimmed);
+    if (!direct_expr_is_string_literal(s)) {
+        free(trimmed);
+        return 0;
+    }
+    int end = skip_string_literal_c(s, 0);
+    int has_interpolation = 0;
+    for (int i = 1; i < end - 1; i++) {
+        if (s[0] == '"' && s[i] == '\\' && i + 1 < end - 1) {
+            i++;
+            continue;
+        }
+        if (s[i] == '{') {
+            has_interpolation = 1;
+            break;
+        }
+    }
+    if (!has_interpolation) {
+        free(trimmed);
+        return 0;
+    }
+
+    StrBuf fmt;
+    StrBuf args;
+    sb_init(&fmt);
+    sb_init(&args);
+    sb_append(&fmt, "\"");
+    for (int i = 1; i < end - 1;) {
+        if (s[0] == '"' && s[i] == '\\' && i + 1 < end - 1) {
+            i++;
+            sb_append_printf_literal_byte(&fmt, s[i]);
+            i++;
+            continue;
+        }
+        if (s[i] == '{') {
+            int close = i + 1;
+            while (close < end - 1 && s[close] != '}') close++;
+            if (close >= end - 1) {
+                report_issue(path, line_no, find_col(line, "{"), line,
+                    "direct native emitter print interpolation is missing `}`",
+                    "write placeholders as `{name}` inside the string literal.",
+                    NULL);
+                free(fmt.data);
+                free(args.data);
+                free(trimmed);
+                return 1;
+            }
+            char *raw = substr_copy(s + i + 1, (size_t)(close - i - 1));
+            char *name = trim_copy(raw);
+            free(raw);
+            if (!direct_is_plain_ident(name)) {
+                report_issue(path, line_no, find_col(line, "{"), line,
+                    "direct native emitter print interpolation supports simple identifiers",
+                    "write placeholders as `{name}` for a local Int, Bool, Char, or Str value.",
+                    NULL);
+                free(name);
+                free(fmt.data);
+                free(args.data);
+                free(trimmed);
+                return 1;
+            }
+            const char *ty = direct_names_type(locals, name);
+            if (ty == NULL) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter print interpolation name is not a known local",
+                    "define the value with `let` or pass it as a parameter before printing it.",
+                    NULL);
+                free(name);
+                free(fmt.data);
+                free(args.data);
+                free(trimmed);
+                return 1;
+            }
+            if (direct_is_str_type(ty)) {
+                sb_append(&fmt, "%s");
+            } else if (direct_is_intlike_scalar_type(ty)) {
+                sb_append(&fmt, "%ld");
+            } else {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter print interpolation supports scalar and Str values",
+                    "interpolate an Int, Bool, Char, or Str value.",
+                    NULL);
+                free(name);
+                free(fmt.data);
+                free(args.data);
+                free(trimmed);
+                return 1;
+            }
+            sb_append(&args, ", ");
+            sb_append(&args, name);
+            free(name);
+            i = close + 1;
+            continue;
+        }
+        if (s[i] == '}') {
+            report_issue(path, line_no, find_col(line, "}"), line,
+                "direct native emitter print interpolation found an unmatched `}`",
+                "write placeholders as `{name}` inside the string literal.",
+                NULL);
+            free(fmt.data);
+            free(args.data);
+            free(trimmed);
+            return 1;
+        }
+        sb_append_printf_literal_byte(&fmt, s[i]);
+        i++;
+    }
+    sb_append(&fmt, "\\n\"");
+    sb_append(out, "printf(");
+    sb_append(out, fmt.data);
+    sb_append(out, args.data);
+    sb_append(out, ");\n");
+    free(fmt.data);
+    free(args.data);
+    free(trimmed);
+    *handled = 1;
+    return 0;
+}
+
+static int direct_lower_print_statement(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *args_text,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count,
+    StrBuf *out
+) {
+    char *args[16] = {0};
+    int argc = split_top_level_commas_c(args_text, args, 16);
+    if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+        report_issue(path, line_no, find_col(line, "print"), line,
+            "direct native emitter print expects one Str argument",
+            "write `print(\"text\")` or `print(\"value={name}\")`.",
+            NULL);
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 1;
+    }
+    int handled = 0;
+    if (direct_append_print_interpolation(path, line_no, line, args[0], locals, out, &handled)) {
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 1;
+    }
+    if (handled) {
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 0;
+    }
+    if (direct_check_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count)) {
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 1;
+    }
+    char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+    if (!direct_is_str_type(arg_type)) {
+        report_issue(path, line_no, find_col(line, "print"), line,
+            "direct native emitter print expects a Str argument",
+            "print a string literal or Str value; use interpolation for scalar values.",
+            "print(\"value={x}\")");
+        free(arg_type);
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 1;
+    }
+    free(arg_type);
+    StrBuf prelude;
+    sb_init(&prelude);
+    direct_current_prelude = &prelude;
+    char *rewritten = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+    direct_current_prelude = NULL;
+    if (rewritten == NULL) {
+        free(prelude.data);
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 1;
+    }
+    char *c_arg = direct_translate_expr(rewritten);
+    sb_append(out, prelude.data);
+    sb_append(out, "puts(");
+    sb_append(out, c_arg);
+    sb_append(out, ");\n");
+    free(prelude.data);
+    free(c_arg);
+    free(rewritten);
+    for (int k = 0; k < 16; k++) free(args[k]);
+    return 0;
+}
+
+static int direct_lower_putchar_statement(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *args_text,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count,
+    StrBuf *out
+) {
+    char *args[16] = {0};
+    int argc = split_top_level_commas_c(args_text, args, 16);
+    if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+        report_issue(path, line_no, find_col(line, "putchar"), line,
+            "direct native emitter putchar expects one Int-compatible argument",
+            "write `putchar(33)` or pass an Int, Bool, or Char value.",
+            NULL);
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 1;
+    }
+    if (direct_check_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count)) {
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 1;
+    }
+    char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+    if (!direct_type_compatible("Int", arg_type)) {
+        report_issue(path, line_no, find_col(line, "putchar"), line,
+            "direct native emitter putchar expects an Int-compatible argument",
+            "pass an Int, Bool, or Char value.",
+            "putchar(33)");
+        free(arg_type);
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 1;
+    }
+    free(arg_type);
+    StrBuf prelude;
+    sb_init(&prelude);
+    direct_current_prelude = &prelude;
+    char *rewritten = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+    direct_current_prelude = NULL;
+    if (rewritten == NULL) {
+        free(prelude.data);
+        for (int k = 0; k < 16; k++) free(args[k]);
+        return 1;
+    }
+    char *c_arg = direct_translate_expr(rewritten);
+    sb_append(out, prelude.data);
+    sb_append(out, "putchar((int)(");
+    sb_append(out, c_arg);
+    sb_append(out, "));\n");
+    free(prelude.data);
+    free(c_arg);
+    free(rewritten);
+    for (int k = 0; k < 16; k++) free(args[k]);
+    return 0;
+}
+
 static int direct_lower_line(
     const char *path,
     int line_no,
@@ -8168,6 +8447,38 @@ static int direct_lower_line(
         return 0;
     }
 
+    char *call_args = NULL;
+    int parsed_print = direct_parse_named_call_statement(s, "print", &call_args);
+    if (parsed_print == 1) {
+        int rc = direct_lower_print_statement(path, line_no, line, call_args, locals, fns, fn_count, structs, struct_count, out);
+        free(call_args);
+        free(stripped);
+        return rc;
+    }
+    if (parsed_print < 0) {
+        report_issue(path, line_no, find_col(line, "print"), line,
+            "direct native emitter expected a valid print call statement",
+            "write `print(\"text\")` or `print(\"value={name}\")`.",
+            NULL);
+        free(stripped);
+        return 1;
+    }
+    int parsed_putchar = direct_parse_named_call_statement(s, "putchar", &call_args);
+    if (parsed_putchar == 1) {
+        int rc = direct_lower_putchar_statement(path, line_no, line, call_args, locals, fns, fn_count, structs, struct_count, out);
+        free(call_args);
+        free(stripped);
+        return rc;
+    }
+    if (parsed_putchar < 0) {
+        report_issue(path, line_no, find_col(line, "putchar"), line,
+            "direct native emitter expected a valid putchar call statement",
+            "write `putchar(33)` or pass an Int, Bool, or Char value.",
+            NULL);
+        free(stripped);
+        return 1;
+    }
+
     char *method_base = NULL;
     char *method_name = NULL;
     char *method_args = NULL;
@@ -8680,6 +8991,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     StrBuf out;
     sb_init(&out);
     sb_append(&out, "#include <stdbool.h>\n");
+    sb_append(&out, "#include <stdio.h>\n");
     sb_append(&out, "#include <string.h>\n");
     sb_append(&out, "typedef long Int;\n");
     sb_append(&out, "typedef long Bool;\n");

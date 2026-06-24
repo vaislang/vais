@@ -20,6 +20,7 @@ examples/e12_exclusive_range.vais	native-supported	Exclusive range for-loop summ
 examples/e13_nested_for.vais	native-supported	Nested range for-loops.
 examples/e16_option_match.vais	native-supported	Option<Int> Some/None helper return and statement match.
 examples/e18_while_accumulator.vais	native-supported	While loop with arithmetic update.
+examples/e19_interpolation_print.vais	native-supported	Print interpolation and putchar output calls.
 examples/e20_triangular.vais	native-supported	Recursive triangular number.
 examples/e21_result_match.vais	native-supported	Result<Int,Int> Ok/Err helper return and statement match.
 examples/e22_enum_dispatch.vais	native-supported	Payload-free enum dispatch helper.

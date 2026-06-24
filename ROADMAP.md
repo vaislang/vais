@@ -60,6 +60,9 @@ This file tracks current work only.
   helpers, user-defined integer parsing, word-count scanning, palindrome scans,
   and substring-search patterns are promoted through the full self-host
   compiler, public front, parity, and native direct gates.
+- Print interpolation for simple identifiers and `putchar(Int)` output calls
+  are promoted through the full self-host path, native direct engine, parity
+  manifest, and value corpus.
 - Additional control-flow, Bool predicate, integer-list indexing, and state
   machine examples are promoted through the parity manifest and value corpus.
 - Single-byte `Char` literals, equality, explicit annotations, helper
