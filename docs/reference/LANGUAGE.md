@@ -89,8 +89,8 @@ Verified today:
 - `Int` parameters and `Int` return values.
 - Multiple helper functions.
 - Recursive and mutually recursive `Int` functions.
-- Generic marker syntax for simple `Int` helper cases, as tracked in the parity
-  manifest.
+- Generic marker syntax for simple `Int` helper and struct cases, as tracked in
+  the parity manifest.
 
 The direct engine gate covers Int, Bool, Char, and Str helper calls in addition to the
 full engine.
@@ -132,7 +132,7 @@ Verified release surface:
 | `Map<Str,Char>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
-| Simple `struct` | Literal construction, field access, and local field write |
+| Simple `struct` | Literal construction, field access, local field write, and generic marker syntax used with `Int` values |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
@@ -248,6 +248,18 @@ fn read_box(b: Box) -> Int {
 }
 ```
 
+Generic marker syntax on simple structs is gate-backed when used with `Int`
+values:
+
+```vais
+struct Box<T> { val: T }
+
+fn main() -> Int {
+    let b = Box { val: 7 }
+    return b.val
+}
+```
+
 Verified today:
 
 - Simple struct declarations with `Int` fields.
@@ -255,6 +267,8 @@ Verified today:
 - Field access.
 - Field write for direct-engine local struct values.
 - Struct parameters and return values in direct-engine helper functions.
+- Generic marker syntax on simple structs used with `Int` values, as covered by
+  `examples/e63_generic_struct_def.vais`.
 - Selected struct/list combinations through self-host gates.
 
 ## Enums And Match

@@ -10,6 +10,8 @@
   `List<Int>` iteration, parity, value, docs, and site count updates.
 - Promoted `examples/e82_list_literal_direct_arg.vais` into the release corpus
   as the direct public smoke for inline `List<Int>` literal call arguments.
+- Promoted `examples/e63_generic_struct_def.vais` into the release corpus as a
+  front/parity/value-gated generic marker struct example used with `Int` values.
 
 ## 2026-06-24
 

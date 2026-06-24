@@ -1,5 +1,5 @@
 # expect: 7
-# A generic struct: Box<T> holds a value of any type (here Int).
+# Generic marker syntax on a simple struct used with an Int field.
 struct Box<T> { val: T }
 
 fn main() -> Int {
