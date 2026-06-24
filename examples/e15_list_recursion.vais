@@ -1,11 +1,7 @@
 # expect: 10
-# Recursion over a List by BORROW (`&List<Int>`). Summing a list recursively is
-# the canonical "walk a collection" shape — needed for interpreters/tree walkers.
-#
-# Vais Lists are move-by-value (passing one by value moves it), so recurse by
-# reference: `&List<Int>`. This compiles to Vais `&Vec<i64>` and now works
-# end-to-end (the Vais `&Vec` borrow codegen was fixed so a borrowed Vec passes
-# its address, not a slice fat pointer).
+# Recursion over a borrowed List (`&List<Int>`). Summing a list recursively is
+# the canonical "walk a collection" shape needed for interpreters and tree
+# walkers.
 
 fn sum_from(v: &List<Int>, i: Int, n: Int) -> Int {
     if i >= n { return 0 }

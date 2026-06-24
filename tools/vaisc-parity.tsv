@@ -123,6 +123,8 @@ examples/e32_nested_field_mut.vais	native-supported	Single-field nested struct f
 examples/d3run.vais	native-supported	Result<Int,Int> question propagation success path through a helper chain.
 examples/d4b.vais	native-supported	Inline List<Int> literal passed to a List<Int> parameter and iterated.
 examples/e08_option_chain.vais	native-supported	Option<Int> helper return matched directly in main.
+examples/e15_list_recursion.vais	native-supported	Borrowed List<Int> recursive helper walks a collection.
+examples/e68_binary_search.vais	native-supported	Borrowed List<Int> binary search with computed indexes and early returns.
 examples/module_basic/main.vais	native-supported	Local dotted import resolves a sibling module.
 examples/package_basic/src/main.vais	native-supported	vais.toml source-root package import resolves under src.
 examples/dependency_basic/app/src/main.vais	native-supported	vais.toml dependency import resolves through a local package path.

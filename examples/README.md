@@ -84,6 +84,8 @@ max,
 passed directly to a `List<Int>` parameter,
 `examples/d4b.vais` for an inline `List<Int>` literal iterated through a
 `List<Int>` parameter,
+`examples/e15_list_recursion.vais` and `examples/e68_binary_search.vais` for
+borrowed `&List<Int>` helper parameters,
 `examples/e94_map_get_opt.vais` for `Map<Int,Int>.get_opt(key)` returning
 `Option<Int>`, `examples/e95_map_assignment.vais` for local `Map<Int,Int>`
 assignment copy semantics, `examples/e96_map_bool.vais` for local

@@ -125,7 +125,7 @@ Verified release surface:
 | `Bool` | Produced by comparisons and boolean expressions; verified for local annotations, helper parameters, and helper returns |
 | `Str` | String literals, local annotations, reassignment, helper parameters/returns, length, index, and equality |
 | `Char` | Single-byte character literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
-| `List<Int>` | Empty/list literal, typed non-empty local literal, inline call argument, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
+| `List<Int>` | Empty/list literal, typed non-empty local literal, inline call argument, borrowed helper parameter, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
@@ -436,6 +436,9 @@ Verified today:
   literals such as `let xs: List<Int> = [10, 20, 30]`, and inline `List<Int>`
   literals passed to `List<Int>` parameters, as covered by
   `examples/e82_list_literal_direct_arg.vais` and `examples/d4b.vais`.
+- Borrowed `&List<Int>` helper parameters in the full self-host path, as
+  covered by `examples/e15_list_recursion.vais` and
+  `examples/e68_binary_search.vais`.
 - Integer list literals such as `[10, 20, 30]`.
 - Computed index reads over integer list literals, as covered by
   `examples/e61_array_index_expr.vais`, and simple array-backed state machines,

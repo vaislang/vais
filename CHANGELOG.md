@@ -40,6 +40,10 @@
   `examples/e08_option_chain.vais` into the release corpus as additional
   Result propagation, inline `List<Int>` parameter iteration, and direct
   `Option<Int>` match smokes, raising it to 119 native-supported examples.
+- Promoted borrowed `&List<Int>` helper parameters through the public front,
+  parity manifest, and value corpus, with `examples/e15_list_recursion.vais`
+  and `examples/e68_binary_search.vais` added to the corpus, raising it to 121
+  native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

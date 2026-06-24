@@ -1,7 +1,6 @@
 # expect: 42
-# Binary search over a sorted borrowed List. Lists move by value, so reusable
-# collection helpers should take `&List<T>`. This combines while loops, computed
-# indexing, early returns, and a negative not-found sentinel.
+# Binary search over a sorted borrowed List. This combines while loops,
+# computed indexing, early returns, and a negative not-found sentinel.
 fn binary_search(xs: &List<Int>, n: Int, target: Int) -> Int {
     let mut lo = 0
     let mut hi = n

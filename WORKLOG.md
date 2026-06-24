@@ -23,6 +23,8 @@
 - Promoted additional already-correct Result propagation, inline `List<Int>`
   parameter iteration, and direct `Option<Int>` match examples into the release
   corpus.
+- Promoted borrowed `&List<Int>` helper parameters through the public front and
+  release corpus with recursive traversal and binary-search examples.
 
 ## 2026-06-24
 

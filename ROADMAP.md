@@ -77,6 +77,8 @@ This file tracks current work only.
 - Additional release-corpus examples cover inline `List<Int>` parameter
   iteration, direct `Option<Int>` helper-return matching, and chained
   `Result<Int,Int>` `?` propagation.
+- Borrowed `&List<Int>` helper parameters are promoted through the full
+  self-host path, public front, parity manifest, and value corpus.
 - Generic marker syntax on simple structs used with `Int` values is promoted
   through the full self-host path, public front, parity manifest, and value
   corpus.

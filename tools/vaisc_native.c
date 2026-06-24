@@ -2072,13 +2072,22 @@ static int is_valid_int_params(const char *params, char **struct_names, int stru
             return 0;
         }
         char *ty = trim_copy(colon + 1);
-        int ok = strcmp(ty, "Int") == 0 ||
-            strcmp(ty, "Str") == 0 ||
-            strcmp(ty, "Bool") == 0 ||
-            strcmp(ty, "Char") == 0 ||
-            front_type_is_list_int(ty) ||
-            front_type_is_supported_map_param(ty) ||
-            front_type_is_known_struct(ty, struct_names, struct_count);
+        int borrowed = 0;
+        if (ty[0] == '&') {
+            char *inner = trim_copy(ty + 1);
+            free(ty);
+            ty = inner;
+            borrowed = 1;
+        }
+        int ok = borrowed
+            ? front_type_is_list_int(ty)
+            : (strcmp(ty, "Int") == 0 ||
+                strcmp(ty, "Str") == 0 ||
+                strcmp(ty, "Bool") == 0 ||
+                strcmp(ty, "Char") == 0 ||
+                front_type_is_list_int(ty) ||
+                front_type_is_supported_map_param(ty) ||
+                front_type_is_known_struct(ty, struct_names, struct_count));
         free(ty);
         if (!ok) {
             for (int k = 0; k < n; k++) free(parts[k]);
@@ -2336,7 +2345,7 @@ static int check_fn_contract_line(
         } else if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params, struct_names, struct_count)) {
             report_issue(path, line_no, find_col(line, params), line,
                 "Vais native helper parameters must use verified scalar types",
-                "use `Int`, `Str`, `Bool`, `Char`, `List<Int>`, declared struct types, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` parameters in this slice.",
+                "use `Int`, `Str`, `Bool`, `Char`, `List<Int>`, `&List<Int>`, declared struct types, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` parameters in this slice.",
                 NULL);
             issue = 1;
         }
