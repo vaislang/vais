@@ -68,6 +68,8 @@ output calls,
 `examples/e25_for_filter_sum.vais` for collection for-each over integer values,
 `examples/e27_list_max.vais` for `List<Int>` parameter for-each with a running
 max,
+`examples/e82_list_literal_direct_arg.vais` for an inline `List<Int>` literal
+passed directly to a `List<Int>` parameter,
 `examples/e94_map_get_opt.vais` for `Map<Int,Int>.get_opt(key)` returning
 `Option<Int>`, `examples/e95_map_assignment.vais` for local `Map<Int,Int>`
 assignment copy semantics, `examples/e96_map_bool.vais` for local

@@ -8,6 +8,8 @@
   `List<Int>` local/parameter iteration, typed non-empty local `List<Int>`
   literals, inline `List<Int>` literal call arguments, native direct
   `List<Int>` iteration, parity, value, docs, and site count updates.
+- Promoted `examples/e82_list_literal_direct_arg.vais` into the release corpus
+  as the direct public smoke for inline `List<Int>` literal call arguments.
 
 ## 2026-06-24
 
