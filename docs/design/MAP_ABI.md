@@ -3,20 +3,20 @@
 Status: design contract for future gates. The verified Map surface today is
 local `Map<Int,Int>` with `{}`, assignment copy, `insert`,
 `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and parameter
-reference/mutation, and return-value local initialization, plus
+reference/mutation, parameter assignment copy, and return-value local initialization, plus
 `Map<Int,Bool>` and `Map<Int,Char>` with local
 values, assignment copy, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`,
 `contains`, `len`,
-parameter reference/mutation, and return-value local initialization.
+parameter reference/mutation, parameter assignment copy, and return-value local initialization.
 `Map<Str,Int>` values support `{}`, assignment copy, `insert`, `remove`,
 `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, function
-parameter reference/mutation, and return-value local initialization.
+parameter reference/mutation, parameter assignment copy, and return-value local initialization.
 `Map<Str,Bool>` values support local `{}`, assignment copy, `insert`, `remove`,
 `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and function
-parameter reference/mutation, and return-value local initialization.
+parameter reference/mutation, parameter assignment copy, and return-value local initialization.
 `Map<Str,Char>` values support local `{}`, assignment copy, `insert`,
 `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and
-function parameter reference/mutation, and return-value local initialization.
+function parameter reference/mutation, parameter assignment copy, and return-value local initialization.
 These slices are verified in the full self-host compiler path and native direct
 engine.
 
@@ -205,7 +205,8 @@ Future Map ABI gates must use these semantics:
   aliases.
 - Passing a Map to a function passes a mutable collection reference, matching
   current collection-parameter behavior for `List`. If a function calls
-  `insert` on its Map parameter, the caller-visible Map is mutated.
+  `insert`, `remove`, `clear`, or same-type assignment on its Map parameter, the
+  caller-visible Map is mutated.
 - Returning a Map copies the returned contents into caller-owned storage.
 - `len`, `contains`, `get`, and `get_opt` do not mutate the Map.
 
@@ -224,7 +225,8 @@ For a concrete `Map<K,V>`:
 - Parameter ABI is a pointer/reference to the concrete storage object.
 - Return ABI uses caller-owned output storage, either as an explicit hidden
   out-parameter in LLVM lowering or an equivalent direct-engine strategy.
-- Assignment uses a concrete copy helper.
+- Assignment uses a concrete copy helper. The source and target can be locals or
+  Map parameters when both sides have the same verified concrete Map type.
 - `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` call helpers specialized for
   the concrete key/value pair.
 
@@ -254,11 +256,12 @@ Broaden Map support in this order:
    initialization.
 5. Broader `Map<Str,V>` local values only as concrete gates. `Map<Str,Bool>` is
    complete for local construction, assignment copy, lookup/update helpers,
-   `remove`, `clear`, `get_opt`, parameter reference/mutation, and
+   `remove`, `clear`, `get_opt`, parameter reference/mutation, parameter-source
+   and parameter-target assignment copy, and
    return-value local initialization. `Map<Str,Char>` is complete for local
    construction, assignment copy, lookup/update helpers, `remove`, `clear`, and
-   `get_opt`, plus parameter reference/mutation and return-value local
-   initialization.
+   `get_opt`, plus parameter reference/mutation, parameter-source and
+   parameter-target assignment copy, and return-value local initialization.
 6. Broader `Map<Str,V>` only after string equality, hashing, copy, and lifetime
    rules are specified for each value type and ABI boundary.
 7. Struct values only after struct copy and return ABI behavior are already
@@ -295,8 +298,9 @@ maps are later APIs.
 
 Until each slice is implemented, the public front must reject unsupported forms:
 
-- Map assignment from anything other than another local with the same verified
-  concrete Map type.
+- Map assignment from anything other than another local or Map parameter with
+  the same verified concrete Map type, or direct assignment from a Map-returning
+  call.
 - Map function parameters beyond the verified `Map<Int,Int>`,
   `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, and
   `Map<Str,Char>` slices.

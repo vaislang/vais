@@ -384,7 +384,7 @@ fn main() -> Int {
     fail = fail + expect_diag(vaisc, tmp, "direct_list_method", 1, "supports List push, len, is_empty, last, pop, index, and List<Int> sum", "", "xs.push(value)")
     fail = fail + expect_diag(vaisc, tmp, "direct_list_value_expr", 1, "return expression type does not match", "", "return 40 + 2")
     fail = fail + expect_diag(vaisc, tmp, "direct_list_arg_type", 1, "function call argument type does not match", "", "pass a matching argument")
-    fail = fail + expect_diag(vaisc, tmp, "direct_map_assignment_type", 1, "Map assignment requires another local Map", "", "")
+    fail = fail + expect_diag(vaisc, tmp, "direct_map_assignment_type", 1, "Map assignment requires another local or parameter Map", "", "")
     fail = fail + expect_diag(vaisc, tmp, "direct_map_str_param", 1, "function parameter type is not available", "Map<Int,Char>", "fn f(x: Int) -> Int")
     fail = fail + expect_diag(vaisc, tmp, "direct_map_str_return", 1, "function return type is not available", "Map<Int,Char>", "fn f() -> Int")
     fail = fail + expect_diag(vaisc, tmp, "direct_missing_return", 1, "requires at least one", "return", "fn main() -> Int")

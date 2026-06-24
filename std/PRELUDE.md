@@ -58,12 +58,12 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `List<Int>` | Verified |
 | `List<Str>` | Partial; verified for local `push`, local index read, and host process arguments |
 | `List<T>` | Partial |
-| `Map<Int,Int>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
-| `Map<Int,Bool>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
-| `Map<Int,Char>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
-| `Map<Str,Int>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
-| `Map<Str,Bool>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
-| `Map<Str,Char>` | Verified for local values, local assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
+| `Map<Int,Int>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
+| `Map<Int,Bool>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
+| `Map<Int,Char>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
+| `Map<Str,Int>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
+| `Map<Str,Bool>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
+| `Map<Str,Char>` | Verified for local values, local/parameter assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get`, `get_opt`, `contains`, and `len` |
 | `Map<K,V>` | Design-specified beyond the verified concrete local Map slices; not verified |
 | `Option<Int>` | Verified for `Some(Int)`, `None`, helper returns, struct/local storage, statement `match`, expression-match binding, and local-binding `?` propagation |
 | `Option<T>` | Specified beyond the `Option<Int>` slice |
@@ -106,8 +106,8 @@ This slice is currently available through the full self-host compiler path and
 The slice does not include broader generic key/value lowering, broader
 broader `Map<Str,V>` return values, generic Map return values, iteration,
 `Result`, hashing controls, or map literals with entries.
-Unverified generic Map function parameters, unverified return values, and
-non-local assignment sources are rejected by front diagnostics.
+Unverified generic Map function parameters, unverified return values, and direct
+assignment from Map-returning calls are rejected by front diagnostics.
 Future Map ABI and generic expansion rules are design-specified in
 `docs/design/MAP_ABI.md`; they are not verified prelude APIs until compiler
 gates cover them.

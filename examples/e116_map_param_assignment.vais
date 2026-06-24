@@ -1,0 +1,94 @@
+# expect: 42
+
+fn copy_int_int(src: Map<Int,Int>) -> Int {
+    let copy: Map<Int,Int> = {}
+    copy = src
+    src.insert(4, 1)
+    if copy.get(4, 0) == 5 and src.get(4, 0) == 1 and copy.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn copy_int_bool(src: Map<Int,Bool>) -> Int {
+    let copy: Map<Int,Bool> = {}
+    copy = src
+    src.insert(4, false)
+    if copy.get(4, false) and not src.get(4, true) and copy.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn copy_int_char(src: Map<Int,Char>) -> Int {
+    let copy: Map<Int,Char> = {}
+    copy = src
+    src.insert(4, 'B')
+    if copy.get(4, 'Z') == 'A' and src.get(4, 'Z') == 'B' and copy.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn copy_str_int(src: Map<Str,Int>) -> Int {
+    let copy: Map<Str,Int> = {}
+    copy = src
+    src.insert("four", 1)
+    if copy.get("four", 0) == 5 and src.get("four", 0) == 1 and copy.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn copy_str_bool(src: Map<Str,Bool>) -> Int {
+    let copy: Map<Str,Bool> = {}
+    copy = src
+    src.insert("four", false)
+    if copy.get("four", false) and not src.get("four", true) and copy.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn copy_str_char(src: Map<Str,Char>) -> Int {
+    let copy: Map<Str,Char> = {}
+    copy = src
+    src.insert("four", 'B')
+    if copy.get("four", 'Z') == 'A' and src.get("four", 'Z') == 'B' and copy.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn replace_int_int(dst: Map<Int,Int>, src: Map<Int,Int>) -> Int {
+    dst = src
+    src.insert(4, 1)
+    if dst.get(4, 0) == 5 and src.get(4, 0) == 1 and dst.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let ii: Map<Int,Int> = {}
+    let ib: Map<Int,Bool> = {}
+    let ic: Map<Int,Char> = {}
+    let si: Map<Str,Int> = {}
+    let sb: Map<Str,Bool> = {}
+    let sc: Map<Str,Char> = {}
+    ii.insert(4, 5)
+    ib.insert(4, true)
+    ic.insert(4, 'A')
+    si.insert("four", 5)
+    sb.insert("four", true)
+    sc.insert("four", 'A')
+    let total = copy_int_int(ii) + copy_int_bool(ib) + copy_int_char(ic) + copy_str_int(si) + copy_str_bool(sb) + copy_str_char(sc)
+    let target: Map<Int,Int> = {}
+    let source: Map<Int,Int> = {}
+    source.insert(4, 5)
+    let replaced = replace_int_int(target, source)
+    if total == 42 and replaced == 7 and target.get(4, 0) == 5 and source.get(4, 0) == 1 {
+        return 42
+    }
+    return 0
+}

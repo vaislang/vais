@@ -1030,6 +1030,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_bool_return") == 1 { return write_map_bool_return(path) }
     if str_eq(name, "map_char_return") == 1 { return write_map_char_return(path) }
     if str_eq(name, "map_assignment") == 1 { return write_map_assignment(path) }
+    if str_eq(name, "map_param_assignment") == 1 { return write_map_param_assignment(path) }
     if str_eq(name, "option") == 1 { return write_option_accept(path) }
     if str_eq(name, "option_expr") == 1 { return write_option_expr_accept(path) }
     if str_eq(name, "option_try") == 1 { return write_option_try_accept(path) }
@@ -1429,6 +1430,26 @@ fn write_map_assignment(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_param_assignment(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn copy_in(src: Map<Str, Char>) -> Int {")
+    append_line(out, "    let copy: Map<Str, Char> = {}")
+    append_line(out, "    copy = src")
+    append_line(out, "    src.insert(\"red\", 'B')")
+    append_line(out, "    if copy.get(\"red\", 'Z') == 'A' and src.get(\"red\", 'Z') == 'B' {")
+    append_line(out, "        return 42")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let letters: Map<Str, Char> = {}")
+    append_line(out, "    letters.insert(\"red\", 'A')")
+    append_line(out, "    return copy_in(letters)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_map_assignment_mismatch(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -1725,6 +1746,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_scalar_get_opt", label_map_scalar_get_opt_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_assignment", "accepts local Map<Int,Int> assignment copy", 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_param_assignment", "accepts Map parameter assignment copy", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool", label_map_bool_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char", label_map_char_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_remove", "accepts concrete Map remove slice", 42)

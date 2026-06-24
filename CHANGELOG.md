@@ -128,6 +128,9 @@
 - Promoted `Map<Str,Char>` return values for explicitly annotated local
   initialization through the full compiler path and native direct engine, with
   `examples/e115_map_str_char_return.vais` added to the release corpus.
+- Promoted concrete Map parameter-source assignment copies through the full
+  compiler path and native direct engine, with
+  `examples/e116_map_param_assignment.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 
