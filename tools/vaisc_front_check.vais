@@ -204,6 +204,10 @@ fn label_map_str_bool_param_accept() -> Str {
     return str_concat("accepts ", str_concat(map_str_bool_compact(), " parameter mutation slice"))
 }
 
+fn label_map_str_bool_return_accept() -> Str {
+    return str_concat("accepts ", str_concat(map_str_bool_compact(), " return value slice"))
+}
+
 fn label_map_str_int_param_accept() -> Str {
     return str_concat("accepts ", str_concat(map_str_int_compact(), " parameter mutation slice"))
 }
@@ -297,7 +301,7 @@ fn msg_map_param() -> Str {
 }
 
 fn msg_map_return() -> Str {
-    return "only Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, and Map<Str,Int> return values are verified yet"
+    return "only Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, and Map<Str,Bool> return values are verified yet"
 }
 
 fn write_day1(path: Str) -> Int {
@@ -687,6 +691,29 @@ fn write_map_str_bool_param_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_str_bool_return_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, str_concat("fn make_flags() -> ", str_concat(map_str_bool_spaced(), " {")))
+    append_line(out, str_concat(str_concat("    let flags: ", map_str_bool_spaced()), " = {}"))
+    append_line(out, "    flags.insert(\"red\", true)")
+    append_line(out, "    flags.insert(\"blue\", false)")
+    append_line(out, "    return flags")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let flags: ", map_str_bool_spaced()), " = make_flags()"))
+    append_line(out, str_concat(str_concat("    let copy: ", map_str_bool_spaced()), " = {}"))
+    append_line(out, "    copy = flags")
+    append_line(out, "    flags.remove(\"blue\")")
+    append_line(out, "    let red_value = match flags.get_opt(\"red\") { Some(v) => v, None => 0 }")
+    append_line(out, "    if copy.contains(\"blue\") and flags.contains(\"red\") and not flags.contains(\"blue\") {")
+    append_line(out, "        return red_value * 40 + copy.len()")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_map_str_int_param_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, str_concat(str_concat("fn put(scores: ", map_str_int_spaced()), ", key: Str, value: Int) -> Int {"))
@@ -896,6 +923,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_str_int") == 1 { return write_map_str_int_accept(path) }
     if str_eq(name, "map_str_bool") == 1 { return write_map_str_bool_accept(path) }
     if str_eq(name, "map_str_bool_param") == 1 { return write_map_str_bool_param_accept(path) }
+    if str_eq(name, "map_str_bool_return") == 1 { return write_map_str_bool_return_accept(path) }
     if str_eq(name, "map_str_int_param") == 1 { return write_map_str_int_param_accept(path) }
     if str_eq(name, "map_str_int_return") == 1 { return write_map_str_int_return_accept(path) }
     if str_eq(name, "map_param") == 1 { return write_map_param_accept(path) }
@@ -1607,6 +1635,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "map_str_int", label_map_str_int_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_str_bool", label_map_str_bool_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_str_bool_param", label_map_str_bool_param_accept(), 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_str_bool_return", label_map_str_bool_return_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_param", "accepts Map<Int,Int> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool_param", "accepts Map<Int,Bool> parameter mutation slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char_param", "accepts Map<Int,Char> parameter mutation slice", 42)

@@ -13,7 +13,7 @@ parameter reference/mutation, and return-value local initialization.
 parameter reference/mutation, and return-value local initialization.
 `Map<Str,Bool>` values support local `{}`, assignment copy, `insert`, `remove`,
 `clear`, `get(key, default)`, `get_opt(key)`, `contains`, `len`, and function
-parameter reference/mutation; return values remain gated.
+parameter reference/mutation, and return-value local initialization.
 These slices are verified in the full self-host compiler path and native direct
 engine.
 
@@ -179,9 +179,9 @@ Verified behavior:
 - `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
   `Map<Str,Bool>` parameters are passed by reference; a callee can mutate the
   caller-visible map.
-- `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>` return
-  values copy returned contents into caller-owned local storage when
-  initializing an explicitly annotated local.
+- `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
+  `Map<Str,Bool>` return values copy returned contents into caller-owned local
+  storage when initializing an explicitly annotated local.
 
 Not verified yet: generic key/value pairs, entry literals, iteration, custom
 hashing, and broader Map APIs that require `Option<T>` or `Result<T,E>` support
@@ -246,8 +246,8 @@ Broaden Map support in this order:
    initialization.
 5. Broader `Map<Str,V>` local values only as concrete gates. `Map<Str,Bool>` is
    complete for local construction, assignment copy, lookup/update helpers,
-   `remove`, `clear`, `get_opt`, and parameter reference/mutation; returns
-   remain future gates.
+   `remove`, `clear`, `get_opt`, parameter reference/mutation, and
+   return-value local initialization.
 6. Broader `Map<Str,V>` only after string equality, hashing, copy, and lifetime
    rules are specified for each value type and ABI boundary.
 7. Struct values only after struct copy and return ABI behavior are already
@@ -288,7 +288,7 @@ Until each slice is implemented, the public front must reject unsupported forms:
 - Map function parameters beyond the verified `Map<Int,Int>`,
   `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and `Map<Str,Bool>` slices.
 - Map function returns beyond the verified `Map<Int,Int>`, `Map<Int,Bool>`,
-  `Map<Int,Char>`, and `Map<Str,Int>` slices.
+  `Map<Int,Char>`, `Map<Str,Int>`, and `Map<Str,Bool>` slices.
 - Generic key/value forms outside verified concrete pairs.
 - Map literals with entries.
 - Unsupported Map methods.
@@ -296,8 +296,7 @@ Until each slice is implemented, the public front must reject unsupported forms:
 Diagnostics must include a concrete rewrite or a short explanation that only
 local `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, and
 `Map<Str,Bool>` values are verified in the current local slice, all five have
-parameter ABI support, and only the Int-key Map types plus `Map<Str,Int>` have
-return ABI support.
+parameter ABI support, and all five have return ABI support.
 
 ## Required Gates
 

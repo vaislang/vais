@@ -418,6 +418,29 @@ fn write_map_str_bool_param(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_str_bool_return(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn make_flags() -> Map<Str, Bool> {")
+    append_line(out, "    let flags: Map<Str, Bool> = {}")
+    append_line(out, "    flags.insert(\"red\", true)")
+    append_line(out, "    flags.insert(\"blue\", false)")
+    append_line(out, "    return flags")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let flags: Map<Str, Bool> = make_flags()")
+    append_line(out, "    let copy: Map<Str, Bool> = {}")
+    append_line(out, "    copy = flags")
+    append_line(out, "    flags.remove(\"blue\")")
+    append_line(out, "    let red_value = match flags.get_opt(\"red\") { Some(v) => v, None => 0 }")
+    append_line(out, "    if copy.contains(\"blue\") and flags.contains(\"red\") and not flags.contains(\"blue\") {")
+    append_line(out, "        return red_value * 40 + copy.len()")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_map_str_int_param(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn put(scores: Map<Str, Int>, key: Str, value: Int) -> Int {")
@@ -981,6 +1004,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "map_clear") == 1 { wrote = write_map_clear(src) }
     else if str_contains(name, "map_str_int_return") == 1 { wrote = write_map_str_int_return(src) }
     else if str_contains(name, "map_str_int_param") == 1 { wrote = write_map_str_int_param(src) }
+    else if str_contains(name, "map_str_bool_return") == 1 { wrote = write_map_str_bool_return(src) }
     else if str_contains(name, "map_str_bool_param") == 1 { wrote = write_map_str_bool_param(src) }
     else if str_contains(name, "map_str_bool") == 1 { wrote = write_map_str_bool(src) }
     else if str_contains(name, "map_str_int") == 1 { wrote = write_map_str_int(src) }
@@ -1081,6 +1105,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "%struct.DirectMapStrInt") and str_contains(text, "__vais_map_str_int_insert") and str_contains(text, "__vais_map_str_int_get") and str_contains(text, "__vais_map_str_int_get_opt")
     } else if shape == 38 {
         ok = str_contains(text, "define i64 @mark(ptr") and str_contains(text, "__vais_map_str_int_insert") and str_contains(text, "__vais_map_str_int_remove") and str_contains(text, "call i64 @mark(ptr")
+    } else if shape == 39 {
+        ok = str_contains(text, "sret(%struct.DirectMapStrInt)") and str_contains(text, "define void @make_flags") and str_contains(text, "call void @make_flags")
     }
     if ok == 0 {
         return emit_failed(str_concat("direct ", name), err_path)
@@ -1126,6 +1152,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "map_str_int", "direct local Map<Str,Int> string-key operations run (=42)", 34)
     fail = fail + expect_case(vaisc, tmp, "map_str_bool", "direct local Map<Str,Bool> string-key operations run (=42)", 37)
     fail = fail + expect_case(vaisc, tmp, "map_str_bool_param", "direct Map<Str,Bool> parameter mutation run (=42)", 38)
+    fail = fail + expect_case(vaisc, tmp, "map_str_bool_return", "direct Map<Str,Bool> return value initializes a local and runs (=42)", 39)
     fail = fail + expect_case(vaisc, tmp, "map_str_int_param", "direct Map<Str,Int> parameter mutation run (=42)", 35)
     fail = fail + expect_case(vaisc, tmp, "map_str_int_return", "direct Map<Str,Int> return value initializes a local and runs (=42)", 36)
     fail = fail + expect_case(vaisc, tmp, "map_int_param", "direct Map<Int,Int> parameter mutation run (=42)", 26)

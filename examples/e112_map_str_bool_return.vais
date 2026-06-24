@@ -1,0 +1,20 @@
+# expect: 42
+
+fn make_flags() -> Map<Str,Bool> {
+    let flags: Map<Str,Bool> = {}
+    flags.insert("red", true)
+    flags.insert("blue", false)
+    return flags
+}
+
+fn main() -> Int {
+    let flags: Map<Str,Bool> = make_flags()
+    let copy: Map<Str,Bool> = {}
+    copy = flags
+    flags.remove("blue")
+    let red_value = match flags.get_opt("red") { Some(v) => v, None => 0 }
+    if copy.contains("blue") and flags.contains("red") and not flags.contains("blue") {
+        return red_value * 40 + copy.len()
+    }
+    return 0
+}

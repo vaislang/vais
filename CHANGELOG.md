@@ -116,7 +116,9 @@
 - Promoted `Map<Str,Bool>` function parameters by reference through the full
   compiler path and native direct engine, with
   `examples/e111_map_str_bool_param.vais` added to the release corpus.
-  `Map<Str,Bool>` return values remain gated.
+- Promoted `Map<Str,Bool>` return values for explicitly annotated local
+  initialization through the full compiler path and native direct engine, with
+  `examples/e112_map_str_bool_return.vais` added to the release corpus.
 
 ## v0.3.1 - 2026-06-20
 
