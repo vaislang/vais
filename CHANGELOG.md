@@ -112,7 +112,11 @@
   Broader `Map<Str,V>` and generic Map returns remain gated.
 - Promoted local `Map<Str,Bool>` string-key operations through the full compiler
   path and native direct engine, with `examples/e110_map_str_bool.vais` added to
-  the release corpus. `Map<Str,Bool>` parameters and return values remain gated.
+  the release corpus.
+- Promoted `Map<Str,Bool>` function parameters by reference through the full
+  compiler path and native direct engine, with
+  `examples/e111_map_str_bool_param.vais` added to the release corpus.
+  `Map<Str,Bool>` return values remain gated.
 
 ## v0.3.1 - 2026-06-20
 

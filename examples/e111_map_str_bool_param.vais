@@ -1,0 +1,20 @@
+# expect: 42
+
+fn mark(flags: Map<Str,Bool>, key: Str, value: Bool) -> Int {
+    flags.insert(key, value)
+    flags.insert("blue", false)
+    flags.remove("blue")
+    flags.insert("green", true)
+    return flags.len()
+}
+
+fn main() -> Int {
+    let flags: Map<Str,Bool> = {}
+    let red: Str = "red"
+    let n = mark(flags, red, true)
+    let red_value = match flags.get_opt(red) { Some(v) => v, None => 0 }
+    if flags.contains("green") and not flags.contains("blue") and flags.get("green", false) {
+        return n * 20 + red_value + flags.contains("green")
+    }
+    return 0
+}
