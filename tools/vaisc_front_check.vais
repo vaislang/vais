@@ -1024,6 +1024,23 @@ fn write_option_expr_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_option_multiline_expr_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn check(n: Int) -> Option<Int> {")
+    append_line(out, "    if n > 0 { return Some(n) }")
+    append_line(out, "    return None")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let v = match check(5) {")
+    append_line(out, "        Some(x) => x,")
+    append_line(out, "        None => 0,")
+    append_line(out, "    }")
+    append_line(out, "    return v")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_option_try_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn find(x: Int) -> Option<Int> {")
@@ -1184,6 +1201,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_return_assignment_args") == 1 { return write_map_return_assignment_args(path) }
     if str_eq(name, "option") == 1 { return write_option_accept(path) }
     if str_eq(name, "option_expr") == 1 { return write_option_expr_accept(path) }
+    if str_eq(name, "option_multiline_expr") == 1 { return write_option_multiline_expr_accept(path) }
     if str_eq(name, "option_try") == 1 { return write_option_try_accept(path) }
     if str_eq(name, "result") == 1 { return write_result_accept(path) }
     if str_eq(name, "result_expr") == 1 { return write_result_expr_accept(path) }
@@ -1926,6 +1944,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "parse", "accepts named parse_uint/parse_int Str helpers", 42)
     fail = fail + expect_accept(vaisc, tmp, "option", label_option_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "option_expr", label_option_expr_accept(), 15)
+    fail = fail + expect_accept(vaisc, tmp, "option_multiline_expr", "accepts multiline Option<Int> expression-match binding slice", 5)
     fail = fail + expect_accept(vaisc, tmp, "option_try", label_option_try_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "result", label_result_accept(), 7)
     fail = fail + expect_accept(vaisc, tmp, "result_expr", label_result_expr_accept(), 42)

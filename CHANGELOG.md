@@ -54,6 +54,10 @@
   `examples/t5.vais` smoke files into the release corpus, covering
   payload-free enum dispatch, bitwise-not negative results, and `Option<Int>`
   matching, raising it to 125 native-supported examples.
+- Promoted multiline `Option<Int>` expression-match binding through the public
+  compiler driver, front fixture, parity manifest, and value corpus, with
+  `examples/d2.vais` added to the release corpus, raising it to 126
+  native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

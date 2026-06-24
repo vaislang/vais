@@ -1898,3 +1898,9 @@ bash scripts/test.sh
 bash scripts/test-fixpoint-full.sh
 bash scripts/test-fixpoint-full-self.sh
 ```
+
+## Current Progress
+
+- [x] Multiline `Option<Int>` expression-match bindings are promoted through
+  the public compiler driver, front fixture, parity manifest, and release
+  corpus with `examples/d2.vais`.

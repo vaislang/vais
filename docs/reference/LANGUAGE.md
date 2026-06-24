@@ -134,7 +134,7 @@ Verified release surface:
 | `Map<Str,Int>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Map<Str,Bool>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Map<Str,Char>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
+| `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, single-line and multiline expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | Simple `struct` | Literal construction, field access, local field write, single-field nested struct read/write, helper parameters, helper returns, helper-return assignment, and generic marker syntax used with `Int` values |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
@@ -969,8 +969,9 @@ Verified behavior:
 - `Option<Int>` stored in a simple struct field and matched through field
   access, as covered by `examples/e40_option_in_struct.vais`.
 - Statement-form `match` arms that return from the current function.
-- Expression-form `let x = match ...` bindings for `Option<Int>`, as covered by
-  `examples/e23_option_flow.vais`.
+- Expression-form `let x = match ...` bindings for `Option<Int>`, including
+  multiline arm blocks, as covered by `examples/e23_option_flow.vais` and
+  `examples/d2.vais`.
 - Local-binding `?` propagation for `Option<Int>` helper calls: `None` returns
   from the current `Option<Int>` function, and `Some` binds its payload, as
   covered by `examples/e93_option_question.vais`.

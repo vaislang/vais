@@ -67,6 +67,7 @@ statement-match slice,
 `examples/e21_result_match.vais` for the first `Result<Int,Int>`
 helper-return and statement-match slice,
 `examples/e23_option_flow.vais` for `Option<Int>` expression-match binding,
+`examples/d2.vais` for multiline `Option<Int>` expression-match binding,
 `examples/e93_option_question.vais` for `Option<Int>` `?` propagation,
 `examples/e08_option_chain.vais` for direct `Option<Int>` helper-return
 matching from `main`,

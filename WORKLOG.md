@@ -31,6 +31,9 @@
 - Promoted already-supported `examples/t2.vais`, `examples/t3.vais`, and
   `examples/t5.vais` into the release corpus as enum, bitwise, and Option smoke
   coverage.
+- Promoted `examples/d2.vais` into the release corpus by lowering multiline
+  `Option<Int>` expression-match bindings through the public compiler driver
+  before the self-host core receives the source.
 
 ## 2026-06-24
 
