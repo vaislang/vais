@@ -50,6 +50,10 @@
   native-supported examples. Struct literal lowering now stores `Str` fields
   through the same pointer-to-integer representation used by verified string-key
   collections.
+- Promoted the already-supported `examples/t2.vais`, `examples/t3.vais`, and
+  `examples/t5.vais` smoke files into the release corpus, covering
+  payload-free enum dispatch, bitwise-not negative results, and `Option<Int>`
+  matching, raising it to 125 native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

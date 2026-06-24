@@ -1,3 +1,4 @@
+# expect: 5
 fn find(k: Int) -> Option<Int> {
     if k > 0 {
         return Some(k)

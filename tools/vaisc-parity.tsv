@@ -106,7 +106,10 @@ examples/e118_map_return_assignment_args.vais	native-supported	Concrete argument
 examples/fr1.vais	native-supported	Inclusive range for-loop summation smoke.
 examples/fr2.vais	native-supported	Collection for-each summation smoke.
 examples/t1.vais	native-supported	Simple typed helper smoke.
+examples/t2.vais	native-supported	Payload-free enum dispatch smoke.
+examples/t3.vais	native-supported	Bitwise not negative-result smoke.
 examples/t4.vais	native-supported	Simple struct literal and field read smoke.
+examples/t5.vais	native-supported	Option<Int> match smoke.
 examples/t6.vais	native-supported	Single-field struct literal and field read smoke.
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.

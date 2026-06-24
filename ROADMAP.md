@@ -66,6 +66,8 @@ This file tracks current work only.
 - Additional control-flow, inclusive range, simple struct, Bool predicate,
   integer-list indexing, and state-machine examples are promoted through the
   parity manifest and value corpus.
+- Additional enum, bitwise, and Option smoke files are promoted through the
+  parity manifest and value corpus to keep older examples covered.
 - Collection for-each over integer values is promoted through the full self-host
   path, native direct engine, parity manifest, value corpus, and regenerated
   reusable core.

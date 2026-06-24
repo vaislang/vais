@@ -28,6 +28,9 @@
 - Promoted public struct/function modifiers and `Str` fields in struct literals
   through the checker, public front, full self-host compiler, regenerated core,
   and release corpus with `examples/d5run.vais`.
+- Promoted already-supported `examples/t2.vais`, `examples/t3.vais`, and
+  `examples/t5.vais` into the release corpus as enum, bitwise, and Option smoke
+  coverage.
 
 ## 2026-06-24
 
