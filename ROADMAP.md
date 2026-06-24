@@ -190,7 +190,9 @@ This file tracks current work only.
   `Map<Str,Bool>` parameters support
   reference mutation in both the full self-host compiler path and native direct
   engine. `Map<Str,Char>` parameters also support reference mutation.
-  Concrete Map assignment can copy between locals and same-type Map parameters.
+  Concrete Map assignment can copy between locals, same-type Map parameters,
+  and same-type Map-returning calls without aliasing; the release corpus covers
+  both no-argument and argument-bearing Map-returning call assignment.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`,
   `Map<Str,Bool>`, and `Map<Str,Char>` return values can initialize explicitly
   annotated locals.
@@ -587,6 +589,10 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
     initialization on the full compiler path and native direct engine.
   - [x] Promote concrete Map parameter-source and parameter-target assignment
     copies on the full compiler path and native direct engine.
+  - [x] Promote concrete Map-returning call assignment copies on the full
+    compiler path and native direct engine.
+  - [x] Add argument-bearing Map-returning call assignment coverage on the full
+    compiler path and native direct engine.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
@@ -850,9 +856,9 @@ Mode: sequential
   initialization are verified. Local `Map<Str,Char>` string-key operations,
   parameter reference mutation, and return-value local initialization are
   verified. Concrete Map parameter-source, parameter-target, and Map-returning
-  call assignment copies are verified for the promoted Map types; broader
-  `Map<Str,V>` and generic Map behavior still require direct and full gates
-  before publication.
+  call assignment copies are verified for the promoted Map types, including
+  no-argument and argument-bearing return calls; broader `Map<Str,V>` and
+  generic Map behavior still require direct and full gates before publication.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, and `Map<Str,Int>`
   parameter reference mutation is verified.
 
@@ -906,9 +912,11 @@ Mode: sequential
   generic Map returns gated.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`,
   `Map<Str,Int>`, `Map<Str,Bool>`, and `Map<Str,Char>` parameters are passed by
-  reference and may be mutated by callees.
-- Done: native direct gates pass a local map example returning a deterministic
-  value, and full self-host gates pass the same local map behavior.
+  reference and may be mutated by callees. Same-type assignment copies are
+  verified for local sources, parameter sources/targets, and Map-returning calls.
+- Done: native direct gates pass local, parameter, return, assignment, and
+  Map-returning call examples returning deterministic values, and full
+  self-host gates pass the same Map behavior.
 
 #### 2. Map docs and release claims
 
