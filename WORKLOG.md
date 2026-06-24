@@ -25,6 +25,9 @@
   corpus.
 - Promoted borrowed `&List<Int>` helper parameters through the public front and
   release corpus with recursive traversal and binary-search examples.
+- Promoted public struct/function modifiers and `Str` fields in struct literals
+  through the checker, public front, full self-host compiler, regenerated core,
+  and release corpus with `examples/d5run.vais`.
 
 ## 2026-06-24
 

@@ -111,7 +111,6 @@ fn check_required_patterns(output: Str) -> Int {
     fail = fail + require_contains("Vais checker contract includes 'error: module declarations are not implemented yet'", "error: module declarations are not implemented yet", output)
     fail = fail + require_contains("Vais checker contract includes 'error: package declarations are not implemented yet'", "error: package declarations are not implemented yet", output)
     fail = fail + require_contains("Vais checker contract includes 'error: use declarations are not Vais imports'", "error: use declarations are not Vais imports", output)
-    fail = fail + require_contains("Vais checker contract includes 'error: pub visibility is not implemented yet'", "error: pub visibility is not implemented yet", output)
     fail = fail + require_contains("Vais checker contract includes 'error: logical AND uses word and'", "error: logical AND uses word and", output)
     fail = fail + require_contains("Vais checker contract includes 'error: logical OR uses word or'", "error: logical OR uses word or", output)
     fail = fail + require_contains("Vais checker contract includes 'error: logical NOT uses word not'", "error: logical NOT uses word not", output)
@@ -226,7 +225,7 @@ fn main() -> Int {
         return 1
     }
 
-    let expected_count = 24
+    let expected_count = 23
     let vaisc = path_join(root, "scripts/vaisc")
     let vais_check = path_join(root, "scripts/vais-check")
     let fixture_dir = path_join(path_join(path_join(root, "tests"), "fixtures"), "vais_check")

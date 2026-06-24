@@ -89,6 +89,11 @@ This file tracks current work only.
 - Single-field nested struct literals, nested field reads, and nested field
   writes are promoted through the full self-host compiler path, public front,
   parity manifest, value corpus, and regenerated reusable core.
+- Public struct/function/field modifiers are accepted as metadata through the
+  checker, public front, full self-host compiler, parity manifest, value corpus,
+  and regenerated reusable core. Struct literal lowering stores `Str` fields
+  through the same pointer-to-integer representation used by string-key
+  collections.
 - Single-byte `Char` literals, equality, explicit annotations, helper
   parameters, and helper returns are promoted through public front, full
   self-host, parity, and native direct gates as Int-compatible scalar values.

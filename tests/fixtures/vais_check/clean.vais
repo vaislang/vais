@@ -1,5 +1,14 @@
 import math.add
 
+pub struct User {
+    pub name: Str,
+    id: Int,
+}
+
+pub fn make_user(name: Str, id: Int) -> User {
+    return User { name: name, id: id }
+}
+
 fn f(s: Str) -> Int {
     let text = "a && b"
     # Vec<String> and module syntax inside comments are ignored.

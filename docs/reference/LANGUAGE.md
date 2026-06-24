@@ -275,6 +275,10 @@ Verified today:
   `examples/e32_nested_field_mut.vais`.
 - Struct parameters and return values in full self-host and direct-engine helper
   functions, including assignment from struct-returning calls.
+- `pub` modifiers on struct declarations, struct fields, and helper functions
+  are accepted as source-level visibility markers. The current compiler treats
+  them as metadata rather than a separate ABI/export mechanism, as covered by
+  `examples/d5run.vais`.
 - Generic marker syntax on simple structs used with `Int` values, as covered by
   `examples/e63_generic_struct_def.vais`.
 - Selected struct/list combinations through self-host gates.
@@ -1159,7 +1163,6 @@ Common corrections:
 | `!x` | `not x` |
 | `x as Int` | `Int(x)` |
 | `use math.add` | `import math.add` |
-| `pub fn f` | `fn f` |
 | `Color::Red` | `Color.Red` |
 | `Vec<T>` | `List<T>` |
 | `String` | `Str` |

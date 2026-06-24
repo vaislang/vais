@@ -443,6 +443,24 @@ fn write_struct_helper_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_public_struct_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "pub struct User {")
+    append_line(out, "    pub name: Str,")
+    append_line(out, "    id: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "pub fn make_user(name: Str, id: Int) -> User {")
+    append_line(out, "    return User { name: name, id: id }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let u = make_user(\"x\", 42)")
+    append_line(out, "    return u.id")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_enum_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, enum_line(" Color { Red, Green, Blue }"))
@@ -1122,6 +1140,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "nested_struct") == 1 { return write_nested_struct_accept(path) }
     if str_eq(name, "generic_struct") == 1 { return write_generic_struct_accept(path) }
     if str_eq(name, "struct_helper") == 1 { return write_struct_helper_accept(path) }
+    if str_eq(name, "public_struct") == 1 { return write_public_struct_accept(path) }
     if str_eq(name, "tag") == 1 { return write_enum_accept(path) }
     if str_eq(name, name_payload_accept()) == 1 { return write_payload_enum_accept(path) }
     if str_eq(name, name_match_expr_accept()) == 1 { return write_match_expr_body(path) }
@@ -1889,6 +1908,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "nested_struct", "accepts single-field nested struct read/write slice", 7)
     fail = fail + expect_accept(vaisc, tmp, "generic_struct", "accepts generic marker struct field access slice", 7)
     fail = fail + expect_accept(vaisc, tmp, "struct_helper", "accepts struct helper parameter, return, and assignment slice", 42)
+    fail = fail + expect_accept(vaisc, tmp, "public_struct", "accepts public struct/function modifier slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "tag", label_payload_free(), 2)
     fail = fail + expect_accept(vaisc, tmp, name_payload_accept(), label_payload_small(), 14)
     fail = fail + expect_accept(vaisc, tmp, name_match_expr_accept(), label_match_expr_accept(), 2)

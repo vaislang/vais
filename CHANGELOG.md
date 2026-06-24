@@ -44,6 +44,12 @@
   parity manifest, and value corpus, with `examples/e15_list_recursion.vais`
   and `examples/e68_binary_search.vais` added to the corpus, raising it to 121
   native-supported examples.
+- Promoted public struct/function modifiers through the checker, public front,
+  full self-host compiler, parity manifest, and value corpus, with
+  `examples/d5run.vais` added to the corpus, raising it to 122
+  native-supported examples. Struct literal lowering now stores `Str` fields
+  through the same pointer-to-integer representation used by verified string-key
+  collections.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,
