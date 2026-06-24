@@ -132,7 +132,7 @@ Verified release surface:
 | `Map<Str,Char>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
-| Simple `struct` | Literal construction, field access, local field write, and generic marker syntax used with `Int` values |
+| Simple `struct` | Literal construction, field access, local field write, helper parameters, helper returns, helper-return assignment, and generic marker syntax used with `Int` values |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
@@ -236,7 +236,7 @@ fn main() -> Int {
 }
 ```
 
-Struct helper values are also gate-backed:
+Struct helper parameters and return values are also gate-backed:
 
 ```vais
 fn make_box(value: Int) -> Box {
@@ -266,10 +266,16 @@ Verified today:
 - Struct literals.
 - Field access.
 - Field write for direct-engine local struct values.
-- Struct parameters and return values in direct-engine helper functions.
+- Struct parameters and return values in full self-host and direct-engine helper
+  functions, including assignment from struct-returning calls.
 - Generic marker syntax on simple structs used with `Int` values, as covered by
   `examples/e63_generic_struct_def.vais`.
 - Selected struct/list combinations through self-host gates.
+
+Representative struct helper examples include `examples/e17_struct_return.vais`,
+`examples/e28_struct_rebuild.vais`, `examples/e37_struct_area.vais`,
+`examples/e41_recursion_struct.vais`, `examples/e54_inventory.vais`, and
+`examples/e62_struct_multi_return.vais`.
 
 ## Enums And Match
 

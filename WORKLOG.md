@@ -12,6 +12,10 @@
   as the direct public smoke for inline `List<Int>` literal call arguments.
 - Promoted `examples/e63_generic_struct_def.vais` into the release corpus as a
   front/parity/value-gated generic marker struct example used with `Int` values.
+- Promoted six struct helper examples into the release corpus, covering
+  struct-returning helpers, struct parameter helpers, assignment from
+  struct-returning calls, recursive struct accumulators, and multi-value struct
+  returns through full self-host and native direct gates.
 
 ## 2026-06-24
 

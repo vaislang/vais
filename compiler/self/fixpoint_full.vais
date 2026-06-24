@@ -5938,22 +5938,44 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                         i = stop + 1
                     }
                 } else {
-                let e = gen_expr(toks, slots, fns, defs, src, i + 2, stop, counter)
-                if isarr_of(slots, src, t.nstart, t.nlen) == 3 {
-                    emit_str("  store i8* ")
-                    emit_op(e)
-                    emit_str(", i8** %v")
-                    pint(slot)
-                    putchar(10)
-                } else {
-                    emit_str("  store i64 ")
-                    emit_op(e)
-                    emit_str(", i64* %v")
-                    pint(slot)
-                    putchar(10)
-                }
-                counter = e.next
-                i = stop + 1
+                    let ast = sty_of(slots, src, t.nstart, t.nlen)
+                    let crs = call_retsty(toks, fns, src, i + 2)
+                    if isarr_of(slots, src, t.nstart, t.nlen) == 0 and ast >= 0 and crs == ast {
+                        let anf = struct_nfields(defs, ast)
+                        let cclose2 = paren_end(toks, i + 4)
+                        emit_str("  %t")
+                        pint(counter)
+                        emit_str(" = getelementptr [")
+                        pint(anf)
+                        emit_str(" x i64], [")
+                        pint(anf)
+                        emit_str(" x i64]* %v")
+                        pint(slot)
+                        emit_str(", i64 0, i64 0")
+                        putchar(10)
+                        let outp2 = counter
+                        counter = counter + 1
+                        counter = emit_struct_out_call(toks, slots, fns, defs, src, i + 2, i + 4, cclose2, counter, outp2)
+                        let cstop2 = find_semi(toks, cclose2, end)
+                        i = cstop2 + 1
+                    } else {
+                        let e = gen_expr(toks, slots, fns, defs, src, i + 2, stop, counter)
+                        if isarr_of(slots, src, t.nstart, t.nlen) == 3 {
+                            emit_str("  store i8* ")
+                            emit_op(e)
+                            emit_str(", i8** %v")
+                            pint(slot)
+                            putchar(10)
+                        } else {
+                            emit_str("  store i64 ")
+                            emit_op(e)
+                            emit_str(", i64* %v")
+                            pint(slot)
+                            putchar(10)
+                        }
+                        counter = e.next
+                        i = stop + 1
+                    }
                 }
             } else {
                 i = i + 1

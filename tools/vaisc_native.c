@@ -2056,8 +2056,9 @@ static int front_type_is_list_int(const char *type);
 static int front_type_is_supported_map_param(const char *type);
 static int front_type_is_supported_map_return(const char *type);
 static const char *front_map_type_for(char **names, char **types, int count, const char *name);
+static int front_type_is_known_struct(const char *type, char **struct_names, int struct_count);
 
-static int is_valid_int_params(const char *params) {
+static int is_valid_int_params(const char *params, char **struct_names, int struct_count) {
     char *copy = strdup(params);
     if (copy == NULL) die_oom();
     char *parts[16] = {0};
@@ -2076,7 +2077,8 @@ static int is_valid_int_params(const char *params) {
             strcmp(ty, "Bool") == 0 ||
             strcmp(ty, "Char") == 0 ||
             front_type_is_list_int(ty) ||
-            front_type_is_supported_map_param(ty);
+            front_type_is_supported_map_param(ty) ||
+            front_type_is_known_struct(ty, struct_names, struct_count);
         free(ty);
         if (!ok) {
             for (int k = 0; k < n; k++) free(parts[k]);
@@ -2214,6 +2216,19 @@ static int front_type_is_supported_map_return(const char *type) {
     return front_type_is_map_int_int(type) || front_type_is_map_int_bool(type) || front_type_is_map_int_char(type) || front_type_is_map_str_int(type) || front_type_is_map_str_bool(type) || front_type_is_map_str_char(type);
 }
 
+static int front_type_is_known_struct(const char *type, char **struct_names, int struct_count) {
+    char *ty = trim_copy(type);
+    int ok = 0;
+    for (int i = 0; i < struct_count; i++) {
+        if (strcmp(ty, struct_names[i]) == 0) {
+            ok = 1;
+            break;
+        }
+    }
+    free(ty);
+    return ok;
+}
+
 static char *front_canonical_supported_map_type(const char *type) {
     const char *canonical = NULL;
     if (front_type_is_map_int_int(type)) canonical = "Map<Int,Int>";
@@ -2274,7 +2289,9 @@ static int check_fn_contract_line(
     int line_no,
     const char *line,
     int *has_main,
-    int *has_bad_main
+    int *has_bad_main,
+    char **struct_names,
+    int struct_count
 ) {
     const char *s = skip_ws(line);
     if (!starts_with(s, "fn ")) return 0;
@@ -2303,10 +2320,10 @@ static int check_fn_contract_line(
                 "return Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, or Map<Str,Char> in this slice; keep generic Map returns local until their ABI slices are promoted.",
                 NULL);
             issue = 1;
-        } else if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0 && strcmp(ret, "Char") != 0 && !front_type_is_supported_map_return(ret))) {
+        } else if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0 && strcmp(ret, "Char") != 0 && !front_type_is_supported_map_return(ret) && !front_type_is_known_struct(ret, struct_names, struct_count))) {
             report_issue(path, line_no, find_col(line, "fn "), line,
                 "Vais native helper functions must return a verified scalar type",
-                "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, `-> Char`, `-> Str`, `-> Map<Int,Int>`, `-> Map<Int,Bool>`, `-> Map<Int,Char>`, `-> Map<Str,Int>`, `-> Map<Str,Bool>`, or `-> Map<Str,Char>`.",
+                "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, `-> Char`, `-> Str`, a declared struct type, `-> Map<Int,Int>`, `-> Map<Int,Bool>`, `-> Map<Int,Char>`, `-> Map<Str,Int>`, `-> Map<Str,Bool>`, or `-> Map<Str,Char>`.",
                 NULL);
             issue = 1;
         }
@@ -2316,10 +2333,10 @@ static int check_fn_contract_line(
                 "keep generic Map parameters local until their ABI slices are promoted.",
                 NULL);
             issue = 1;
-        } else if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params)) {
+        } else if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params, struct_names, struct_count)) {
             report_issue(path, line_no, find_col(line, params), line,
                 "Vais native helper parameters must use verified scalar types",
-                "use `Int`, `Str`, `Bool`, `Char`, `List<Int>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` parameters in this slice.",
+                "use `Int`, `Str`, `Bool`, `Char`, `List<Int>`, declared struct types, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` parameters in this slice.",
                 NULL);
             issue = 1;
         }
@@ -2386,6 +2403,30 @@ static void front_register_map_return_fn(const char *line, char **map_fn_names, 
     if (type == NULL) return;
     char *name = substr_copy(name_start, (size_t)(name_end - name_start));
     front_add_map_binding(map_fn_names, map_fn_types, map_fn_count, name, type);
+}
+
+static void front_register_struct_name(const char *line, char **struct_names, int *struct_count) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "struct ") || is_ident_continue(s[6])) return;
+    s += 7;
+    s = skip_ws(s);
+    if (!is_ident_start(*s)) return;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    for (int i = 0; i < *struct_count; i++) {
+        if (strcmp(name, struct_names[i]) == 0) {
+            free(name);
+            return;
+        }
+    }
+    if (*struct_count < 128) {
+        struct_names[*struct_count] = name;
+        (*struct_count)++;
+    } else {
+        free(name);
+    }
 }
 
 static const char *front_map_return_call_type(const char *expr, char **map_fn_names, char **map_fn_types, int map_fn_count) {
@@ -2691,16 +2732,19 @@ static int check_front_contract_text(const char *text, const char *path) {
     char *map_fns[128] = {0};
     char *map_fn_types[128] = {0};
     int map_fn_count = 0;
+    char *struct_names[128] = {0};
+    int struct_count = 0;
     for (size_t i = 0; i < lines.len; i++) {
         char *probe = front_probe_line(lines.items[i]);
         front_register_map_return_fn(probe, map_fns, map_fn_types, &map_fn_count);
+        front_register_struct_name(probe, struct_names, &struct_count);
         free(probe);
     }
     for (size_t i = 0; i < lines.len; i++) {
         const char *line = lines.items[i];
         char *probe = front_probe_line(line);
         int line_no = (int)i + 1;
-        issues += check_fn_contract_line(path, line_no, line, &has_main, &has_bad_main);
+        issues += check_fn_contract_line(path, line_no, line, &has_main, &has_bad_main, struct_names, struct_count);
         front_register_map_params(probe, map_locals, map_types, &map_local_count);
 
         char *fix = NULL;
@@ -2845,6 +2889,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         free(map_fns[m]);
         free(map_fn_types[m]);
     }
+    for (int s = 0; s < struct_count; s++) free(struct_names[s]);
     lines_free(&lines);
     return issues == 0 ? 0 : 1;
 }

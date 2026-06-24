@@ -77,6 +77,10 @@ This file tracks current work only.
 - Generic marker syntax on simple structs used with `Int` values is promoted
   through the full self-host path, public front, parity manifest, and value
   corpus.
+- Struct helper parameters, struct helper returns, and assignment from
+  struct-returning calls are promoted through the full self-host path, native
+  direct engine, public front, parity manifest, value corpus, and regenerated
+  reusable core.
 - Single-byte `Char` literals, equality, explicit annotations, helper
   parameters, and helper returns are promoted through public front, full
   self-host, parity, and native direct gates as Int-compatible scalar values.

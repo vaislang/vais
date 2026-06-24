@@ -46,6 +46,10 @@ Representative promoted examples include `examples/e02_enum_payload.vais` for
 multi-field `Int` payload enum expression-arm match lowering,
 `examples/e24_struct_enum_field.vais` for payload-free enum values stored in
 struct fields and matched through field access,
+`examples/e17_struct_return.vais`, `examples/e28_struct_rebuild.vais`,
+`examples/e37_struct_area.vais`, `examples/e41_recursion_struct.vais`,
+`examples/e54_inventory.vais`, and `examples/e62_struct_multi_return.vais` for
+struct helper parameters, returns, reassignment, recursion, and aggregation,
 `examples/e63_generic_struct_def.vais` for generic marker syntax on a simple
 struct used with `Int` values,
 `examples/e64_enum_struct_payload.vais` for a single-field struct payload enum

@@ -18,6 +18,14 @@
 - Promoted `examples/e63_generic_struct_def.vais` as the release-corpus example
   for generic marker syntax on a simple struct used with `Int` values, raising
   the corpus to 105 native-supported examples.
+- Promoted struct helper parameter and return values through the public front,
+  full self-host compiler, native direct engine, parity, and value gates, with
+  `examples/e17_struct_return.vais`, `examples/e28_struct_rebuild.vais`,
+  `examples/e37_struct_area.vais`, `examples/e41_recursion_struct.vais`,
+  `examples/e54_inventory.vais`, and `examples/e62_struct_multi_return.vais`
+  added to the release corpus, raising it to 111 native-supported examples.
+  The full self-host path now also lowers assignment from struct-returning calls
+  into existing struct locals.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,
