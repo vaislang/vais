@@ -26,6 +26,11 @@
   added to the release corpus, raising it to 111 native-supported examples.
   The full self-host path now also lowers assignment from struct-returning calls
   into existing struct locals.
+- Promoted `examples/module_basic/main.vais`,
+  `examples/package_basic/src/main.vais`, and
+  `examples/dependency_basic/app/src/main.vais` into the release corpus as the
+  public local import, package source-root, and local dependency package smokes,
+  raising it to 114 native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

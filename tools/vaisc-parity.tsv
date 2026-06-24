@@ -118,3 +118,6 @@ examples/e53_word_count.vais	native-supported	Str word-count state machine with 
 examples/e75_list_push.vais	native-supported	List push/growth and index access.
 examples/e80_closure_return.vais	native-supported	Single-Int closure return lowered to Int env/apply helper.
 examples/e82_list_literal_direct_arg.vais	native-supported	Inline List<Int> literal passed directly to a List<Int> parameter.
+examples/module_basic/main.vais	native-supported	Local dotted import resolves a sibling module.
+examples/package_basic/src/main.vais	native-supported	vais.toml source-root package import resolves under src.
+examples/dependency_basic/app/src/main.vais	native-supported	vais.toml dependency import resolves through a local package path.

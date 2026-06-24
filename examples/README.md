@@ -36,6 +36,9 @@ Run the local dependency package example:
 scripts/vaisc run examples/dependency_basic/app/src/main.vais
 ```
 
+These module, package, and dependency examples are part of the release
+value-correctness corpus.
+
 Compiler parity coverage is tracked in `tools/vaisc-parity.tsv`:
 
 ```bash

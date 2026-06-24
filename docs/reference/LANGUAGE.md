@@ -69,6 +69,10 @@ compilation. Missing imports, duplicate top-level symbols, import cycles,
 missing dependency manifests, unsafe dependency paths, and invalid manifests are
 front-contract errors.
 
+Representative gate-backed examples are `examples/module_basic/main.vais`,
+`examples/package_basic/src/main.vais`, and
+`examples/dependency_basic/app/src/main.vais`.
+
 Explicit `module` and `package` declarations are reserved for later Phase 2
 gates and are rejected for now. The direct engine remains single-file.
 

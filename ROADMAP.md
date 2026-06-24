@@ -132,6 +132,8 @@ This file tracks current work only.
 - The full compiler path supports local dependency package paths in `vais.toml`
   `[dependencies]`, with native gates for dependency imports and dependency
   manifest diagnostics.
+- Local module imports, package source roots, and local dependency package
+  imports have release-corpus examples in addition to front-contract gates.
 - Phase 3 host file/path/process APIs are specified in `docs/design/HOST_IO.md`;
   `fs_exists`, `fs_read_text`, `fs_write_text`, `fs_mkdirs`, `fs_remove`,
   `fs_cwd`, `fs_temp_dir`, `path_join`, `path_basename`, and `path_dirname`

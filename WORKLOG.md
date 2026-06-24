@@ -16,6 +16,8 @@
   struct-returning helpers, struct parameter helpers, assignment from
   struct-returning calls, recursive struct accumulators, and multi-value struct
   returns through full self-host and native direct gates.
+- Promoted the local module, package source-root, and local dependency package
+  examples into the release corpus as value-gated import/package smokes.
 
 ## 2026-06-24
 

@@ -1,3 +1,4 @@
+# expect: 42
 import mathlib.public
 
 fn main() -> Int {
