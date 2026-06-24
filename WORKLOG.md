@@ -9,6 +9,9 @@
 - Promoted `examples/e69_palindrome_string.vais` into the release corpus as a
   two-pointer `Str` scan with computed byte indexes from both ends, covering the
   same front, direct, full self-host, parity, value, docs, and site gates.
+- Promoted 12 smaller control-flow, Bool predicate, integer-list, and `Str`
+  scanner examples into the parity manifest and value corpus, raising the
+  release corpus to 96 native-supported examples.
 
 ## 2026-06-20
 

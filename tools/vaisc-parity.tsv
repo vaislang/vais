@@ -11,9 +11,13 @@ examples/e02_enum_payload.vais	native-supported	Int payload enum expression-arm 
 examples/e03_recursion.vais	native-supported	Int recursion.
 examples/e04_mutual_rec.vais	native-supported	Mutual recursion and branch return.
 examples/e05_multi_fn.vais	native-supported	Multiple Int helpers.
+examples/e06_for_sum.vais	native-supported	Inclusive range for-loop summation.
 examples/c3.vais	native-supported	Bitwise not builtin.
 examples/e07_nested_if.vais	native-supported	Nested if/else.
+examples/e10_bool_logic.vais	native-supported	Bool locals with and/or/not expressions.
 examples/e11_while.vais	native-supported	While loop with mutable accumulator.
+examples/e12_exclusive_range.vais	native-supported	Exclusive range for-loop summation.
+examples/e13_nested_for.vais	native-supported	Nested range for-loops.
 examples/e16_option_match.vais	native-supported	Option<Int> Some/None helper return and statement match.
 examples/e18_while_accumulator.vais	native-supported	While loop with arithmetic update.
 examples/e20_triangular.vais	native-supported	Recursive triangular number.
@@ -28,18 +32,24 @@ examples/e31_bitwise.vais	native-supported	Bitwise builtin calls.
 examples/e33_guard_chain.vais	native-supported	Int guard chain.
 examples/e34_int_conversion.vais	native-supported	Int conversion call.
 examples/e35_calc_dispatch.vais	native-supported	Payload-free enum dispatch with bitwise builtin.
+examples/e36_bool_predicate.vais	native-supported	Bool-returning helper used as an if condition.
 examples/e38_negatives.vais	native-supported	Negative Int arithmetic.
 examples/e39_error_propagate.vais	native-supported	Result<Int,Int> question propagation error path.
 examples/e40_option_in_struct.vais	native-supported	Option<Int> stored in a struct field and matched through field access.
 examples/e42_while_call.vais	native-supported	While loop calling helper.
 examples/e43_generic_fn.vais	native-supported	Generic marker skipped for Int helper.
+examples/e44_string_len.vais	native-supported	String length on a literal local.
 examples/e45_string_eq.vais	native-supported	String literal equality.
 examples/e47_char_ops.vais	native-supported	Single-byte char literal equality.
 examples/e48_string_index.vais	native-supported	String byte indexing.
 examples/e55_match_wildcard.vais	native-supported	Int match with literal patterns and wildcard catch-all.
 examples/e56_collatz.vais	native-supported	Modulo/division recursion.
+examples/e57_break.vais	native-supported	While-loop break exits early.
+examples/e58_continue.vais	native-supported	While-loop continue skips an iteration.
 examples/e60_digit_sum.vais	native-supported	Modulo/division loop.
+examples/e61_array_index_expr.vais	native-supported	Computed array index expression reads.
 examples/e64_enum_struct_payload.vais	native-supported	Single-field struct payload enum matched through payload field access.
+examples/e65_loop_break_acc.vais	native-supported	Accumulator loop with threshold break.
 examples/e66_fibonacci.vais	native-supported	Recursive Fibonacci.
 examples/e67_power.vais	native-supported	Recursive power.
 examples/e69_palindrome_string.vais	native-supported	Str two-pointer palindrome scan with computed byte indexes.
@@ -89,5 +99,7 @@ examples/c2.vais	native-supported	List literal and sum support.
 examples/c4.vais	native-supported	Struct literal and field access.
 examples/e14_print.vais	native-supported	Print interpolation and IO call support.
 examples/e50_ast_eval.vais	native-supported	Small recursive payload enum lowered to Int-coded tags.
+examples/e52_state_machine.vais	native-supported	Array-backed in-run state machine over Int values.
+examples/e53_word_count.vais	native-supported	Str word-count state machine with byte scanning.
 examples/e75_list_push.vais	native-supported	List push/growth and index access.
 examples/e80_closure_return.vais	native-supported	Single-Int closure return lowered to Int env/apply helper.

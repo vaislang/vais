@@ -57,8 +57,11 @@ This file tracks current work only.
 - Indexed `List` reads/writes plus `last()` and `pop()` now trap at runtime on
   negative indexes, out-of-range indexes, or empty-list access.
 - `Str` length, byte index, equality/inequality, `Bool` byte-classification
-  helpers, and user-defined integer parsing patterns are promoted through the
-  full self-host compiler, public front, parity, and native direct gates.
+  helpers, user-defined integer parsing, word-count scanning, palindrome scans,
+  and substring-search patterns are promoted through the full self-host
+  compiler, public front, parity, and native direct gates.
+- Additional control-flow, Bool predicate, integer-list indexing, and state
+  machine examples are promoted through the parity manifest and value corpus.
 - Single-byte `Char` literals, equality, explicit annotations, helper
   parameters, and helper returns are promoted through public front, full
   self-host, parity, and native direct gates as Int-compatible scalar values.
@@ -985,7 +988,8 @@ Mode: sequential
   `s.len()`, `s[i]`, `a == b`, and `a != b`.
 - [x] 3. Gate `Bool` byte-classification helpers and user-defined integer
   parsing over `Str`.
-- [x] 4. Promote `examples/e48_string_index.vais`,
+- [x] 4. Promote `examples/e44_string_len.vais`,
+  `examples/e48_string_index.vais`, `examples/e53_word_count.vais`,
   `examples/e69_palindrome_string.vais`, `examples/e70_parse_uint.vais`,
   `examples/e71_string_index_of.vais`, and `examples/e72_identifier_scan.vais`
   in the parity manifest.
@@ -1006,14 +1010,15 @@ Mode: sequential
 #### 2. String operations and tool patterns
 
 - Target files: `tools/vaisc_native.c`, `tools/vaisc-parity.tsv`,
-  `examples/e48_string_index.vais`, `examples/e69_palindrome_string.vais`,
+  `examples/e44_string_len.vais`, `examples/e48_string_index.vais`,
+  `examples/e53_word_count.vais`, `examples/e69_palindrome_string.vais`,
   `examples/e70_parse_uint.vais`, `examples/e71_string_index_of.vais`,
   `examples/e72_identifier_scan.vais`.
 - Requirements: protect `s.len()`, `s[i]`, string equality/inequality,
   byte-classification helpers, parse/identifier-scan tool shapes, and
-  computed byte-index substring/palindrome searches.
+  computed byte-index word-count, substring, and palindrome searches.
 - Done: direct and parity gates cover string index, string equality, parse_uint,
-  substring search, palindrome scans, and identifier scanning.
+  word-count scans, substring search, palindrome scans, and identifier scanning.
 
 #### 3. Documentation and roadmap sync
 

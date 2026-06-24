@@ -152,6 +152,8 @@ Verified operators:
 - Arithmetic: `+`, `-`, `*`, `/`, `%`
 - Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
 - Boolean words: `and`, `or`, `not`
+- Bool expression locals and Bool-returning helper predicates are covered by
+  `examples/e10_bool_logic.vais` and `examples/e36_bool_predicate.vais`.
 - Bit helpers: `bitnot(x)`, `bitand(a, b)`, `bitor(a, b)`, `bitxor(a, b)`,
   `shl(x, n)`, `shr(x, n)`
 - Conversion call: `Int(x)` in verified examples
@@ -214,6 +216,11 @@ Verified today:
 - `for name in start..end` and `for name in start..=end`
 - `break` and `continue` inside `while` and range `for` loops
 - Early `return`
+
+Representative gate-backed examples include `examples/e06_for_sum.vais`,
+`examples/e12_exclusive_range.vais`, `examples/e13_nested_for.vais`,
+`examples/e57_break.vais`, `examples/e58_continue.vais`, and
+`examples/e65_loop_break_acc.vais`.
 
 ## Structs
 
@@ -399,6 +406,9 @@ Verified today:
 
 - Empty `List<Int>` with an explicit type.
 - Integer list literals such as `[10, 20, 30]`.
+- Computed index reads over integer list literals, as covered by
+  `examples/e61_array_index_expr.vais`, and simple array-backed state machines,
+  as covered by `examples/e52_state_machine.vais`.
 - Inline `[]`, `list()`, and integer list literals as `List<Int>` return values
   and call arguments in the direct engine.
 - `List<Int>`-returning helper calls used directly as `List<Int>` call arguments
@@ -978,6 +988,9 @@ Verified today:
   as covered by `examples/e88_bool_type.vais`.
 - Named integer parsing helpers `parse_uint(s)` and `parse_int(s)`, as covered
   by `examples/e83_parse_helpers.vais`.
+- Literal string length, as covered by `examples/e44_string_len.vais`.
+- Word-count state-machine scans over `Str`, as covered by
+  `examples/e53_word_count.vais`.
 - Two-pointer `Str` scans with computed byte indexes from both ends, as covered
   by `examples/e69_palindrome_string.vais`.
 - User-defined integer parsing over `Str`, as covered by

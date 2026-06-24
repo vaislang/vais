@@ -112,6 +112,14 @@ control flow, and `examples/e88_bool_type.vais` for explicit `Bool` locals,
 helper parameters/returns, and unary `not`, and `examples/e89_str_type.vais`
 for explicit `Str` locals, helper parameters/returns, reassignment, length,
 index, and equality.
+The release corpus also includes smaller control-flow and scanner examples:
+`examples/e06_for_sum.vais`, `examples/e10_bool_logic.vais`,
+`examples/e12_exclusive_range.vais`, `examples/e13_nested_for.vais`,
+`examples/e36_bool_predicate.vais`, `examples/e44_string_len.vais`,
+`examples/e52_state_machine.vais`, `examples/e53_word_count.vais`,
+`examples/e57_break.vais`, `examples/e58_continue.vais`,
+`examples/e61_array_index_expr.vais`, and
+`examples/e65_loop_break_acc.vais`.
 
 Files not listed as `native-supported` are retained as examples or future
 coverage candidates, but they are not public release claims until promoted into

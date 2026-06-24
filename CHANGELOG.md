@@ -17,6 +17,9 @@
 - Promoted two-pointer `Str` scans with computed byte indexes through full
   self-host, native direct, parity, and value gates, with
   `examples/e69_palindrome_string.vais` added to the release corpus.
+- Promoted 12 additional control-flow, Bool, integer-list, and `Str` scanner
+  examples through parity and value gates, raising the release corpus to 96
+  native-supported examples.
 - Promoted simple enum expression-arm `match` lowering for multi-field `Int`
   payload variants, with `examples/e02_enum_payload.vais` added to the release
   corpus.
