@@ -119,6 +119,10 @@
 - Promoted `Map<Str,Bool>` return values for explicitly annotated local
   initialization through the full compiler path and native direct engine, with
   `examples/e112_map_str_bool_return.vais` added to the release corpus.
+- Promoted local `Map<Str,Char>` string-key operations through the full
+  compiler path and native direct engine, with
+  `examples/e113_map_str_char.vais` added to the release corpus.
+  `Map<Str,Char>` parameters and return values remain gated.
 
 ## v0.3.1 - 2026-06-20
 

@@ -1,0 +1,25 @@
+# expect: 42
+
+fn main() -> Int {
+    let letters: Map<Str,Char> = {}
+    let red: Str = "red"
+    letters.insert("red", 'A')
+    letters.insert("blue", 'B')
+    letters.insert(red, 'A')
+
+    let copy: Map<Str,Char> = {}
+    copy = letters
+
+    letters.remove("blue")
+    letters.clear()
+    letters.insert("green", 'C')
+
+    let red_value = match copy.get_opt("red") { Some(v) => v, None => 0 }
+    let blue_value = match copy.get_opt("blue") { Some(v) => v, None => 0 }
+    let missing = match letters.get_opt("red") { Some(v) => 0, None => 5 }
+
+    if copy.contains("blue") and not letters.contains("red") and letters.get("green", 'Z') == 'C' and letters.len() == 1 {
+        return red_value - 65 + blue_value - 66 + missing + letters.contains("green") + copy.len() * 18
+    }
+    return 0
+}

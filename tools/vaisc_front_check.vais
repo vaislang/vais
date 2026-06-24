@@ -73,7 +73,7 @@ fn bad_string_type_line() -> Str {
 }
 
 fn bad_map_generic_line() -> Str {
-    return str_concat(str_concat("    let scores: ", str_concat("Ma", "p<")), "Str, Char> = {}")
+    return str_concat(str_concat("    let scores: ", str_concat("Ma", "p<")), "Str, Str> = {}")
 }
 
 fn bad_closure_line() -> Str {
@@ -130,6 +130,14 @@ fn map_str_bool_spaced() -> Str {
 
 fn map_str_bool_compact() -> Str {
     return str_concat(map_word(), "<Str,Bool>")
+}
+
+fn map_str_char_spaced() -> Str {
+    return str_concat(map_word(), "<Str, Char>")
+}
+
+fn map_str_char_compact() -> Str {
+    return str_concat(map_word(), "<Str,Char>")
 }
 
 fn enum_line(rest: Str) -> Str {
@@ -198,6 +206,10 @@ fn label_map_str_int_accept() -> Str {
 
 fn label_map_str_bool_accept() -> Str {
     return str_concat("accepts local ", str_concat(map_str_bool_compact(), " string-key Bool slice"))
+}
+
+fn label_map_str_char_accept() -> Str {
+    return str_concat("accepts local ", str_concat(map_str_char_compact(), " string-key Char slice"))
 }
 
 fn label_map_str_bool_param_accept() -> Str {
@@ -293,7 +305,10 @@ fn help_closure() -> Str {
 }
 
 fn msg_map_generic() -> Str {
-    return str_concat("only local ", str_concat(map_int_compact(), str_concat(", ", str_concat(map_bool_compact(), str_concat(", ", str_concat(map_char_compact(), str_concat(", ", str_concat(map_str_int_compact(), str_concat(", and ", str_concat(map_str_bool_compact(), " values are verified for now"))))))))))
+    let int_maps = str_concat(map_int_compact(), str_concat(", ", map_bool_compact()))
+    let int_and_str_int = str_concat(int_maps, str_concat(", ", str_concat(map_char_compact(), str_concat(", ", map_str_int_compact()))))
+    let str_maps = str_concat(map_str_bool_compact(), str_concat(", and ", map_str_char_compact()))
+    return str_concat("only local ", str_concat(int_and_str_int, str_concat(", ", str_concat(str_maps, " values are verified for now"))))
 }
 
 fn msg_map_param() -> Str {
@@ -668,6 +683,30 @@ fn write_map_str_bool_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_str_char_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, str_concat(str_concat("    let letters: ", map_str_char_spaced()), " = {}"))
+    append_line(out, "    let red: Str = \"red\"")
+    append_line(out, "    letters.insert(\"red\", 'A')")
+    append_line(out, "    letters.insert(\"blue\", 'B')")
+    append_line(out, "    letters.insert(red, 'A')")
+    append_line(out, str_concat(str_concat("    let copy: ", map_str_char_spaced()), " = {}"))
+    append_line(out, "    copy = letters")
+    append_line(out, "    letters.remove(\"blue\")")
+    append_line(out, "    letters.clear()")
+    append_line(out, "    letters.insert(\"green\", 'C')")
+    append_line(out, "    let red_value = match copy.get_opt(\"red\") { Some(v) => v, None => 0 }")
+    append_line(out, "    let blue_value = match copy.get_opt(\"blue\") { Some(v) => v, None => 0 }")
+    append_line(out, "    let missing = match letters.get_opt(\"red\") { Some(v) => 0, None => 5 }")
+    append_line(out, "    if copy.contains(\"blue\") and not letters.contains(\"red\") and letters.get(\"green\", 'Z') == 'C' and letters.len() == 1 {")
+    append_line(out, "        return red_value - 65 + blue_value - 66 + missing + letters.contains(\"green\") + copy.len() * 18")
+    append_line(out, "    }")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_map_str_bool_param_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, str_concat(str_concat("fn mark(flags: ", map_str_bool_spaced()), ", key: Str, value: Bool) -> Int {"))
@@ -922,6 +961,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_clear") == 1 { return write_map_clear_accept(path) }
     if str_eq(name, "map_str_int") == 1 { return write_map_str_int_accept(path) }
     if str_eq(name, "map_str_bool") == 1 { return write_map_str_bool_accept(path) }
+    if str_eq(name, "map_str_char") == 1 { return write_map_str_char_accept(path) }
     if str_eq(name, "map_str_bool_param") == 1 { return write_map_str_bool_param_accept(path) }
     if str_eq(name, "map_str_bool_return") == 1 { return write_map_str_bool_return_accept(path) }
     if str_eq(name, "map_str_int_param") == 1 { return write_map_str_int_param_accept(path) }
@@ -1634,6 +1674,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "map_clear", "accepts concrete Map clear slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_str_int", label_map_str_int_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_str_bool", label_map_str_bool_accept(), 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_str_char", label_map_str_char_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_str_bool_param", label_map_str_bool_param_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_str_bool_return", label_map_str_bool_return_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_param", "accepts Map<Int,Int> parameter mutation slice", 42)
