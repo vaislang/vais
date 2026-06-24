@@ -9,6 +9,5 @@ fn largest(items: List<Int>) -> Int {
     return max
 }
 fn main() -> Int {
-    let v: List<Int> = [3, 9, 2, 7]
-    return largest(v)
+    return largest([3, 9, 2, 7])
 }

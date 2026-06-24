@@ -1,7 +1,5 @@
 # expect: 9
 # Find the max of a List passed as a parameter (loop + running max).
-# NOTE: bind the typed list before passing it; inline list literals as full-path
-# call arguments remain a tracked Vais coercion gap.
 fn maxof(xs: List<Int>) -> Int {
     let mut m = 0
     for x in xs {
@@ -11,6 +9,5 @@ fn maxof(xs: List<Int>) -> Int {
 }
 
 fn main() -> Int {
-    let v: List<Int> = [3, 9, 2, 7]
-    return maxof(v)
+    return maxof([3, 9, 2, 7])
 }

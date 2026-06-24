@@ -10,7 +10,8 @@
   `examples/fr2.vais` added to the release corpus, raising it to 103
   native-supported examples. The full self-host path now also lowers typed
   non-empty local `List<Int>` literals for `List<Int>` parameter calls and
-  for-each iteration.
+  for-each iteration, plus inline integer list literals passed directly to
+  `List<Int>` parameters.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

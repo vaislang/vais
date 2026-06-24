@@ -6,8 +6,8 @@
   and `examples/fr2.vais` into the release corpus as gate-backed collection
   for-each examples, covering full self-host array iteration, scalar
   `List<Int>` local/parameter iteration, typed non-empty local `List<Int>`
-  literals, native direct `List<Int>` iteration, parity, value, docs, and site
-  count updates.
+  literals, inline `List<Int>` literal call arguments, native direct
+  `List<Int>` iteration, parity, value, docs, and site count updates.
 
 ## 2026-06-24
 

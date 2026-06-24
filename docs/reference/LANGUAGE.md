@@ -121,7 +121,7 @@ Verified release surface:
 | `Bool` | Produced by comparisons and boolean expressions; verified for local annotations, helper parameters, and helper returns |
 | `Str` | String literals, local annotations, reassignment, helper parameters/returns, length, index, and equality |
 | `Char` | Single-byte character literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
-| `List<Int>` | Empty/list literal, typed non-empty local literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
+| `List<Int>` | Empty/list literal, typed non-empty local literal, inline call argument, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
@@ -405,19 +405,21 @@ fn main() -> Int {
 
 Verified today:
 
-- Empty `List<Int>` with an explicit type and typed non-empty local
-  `List<Int>` literals such as `let xs: List<Int> = [10, 20, 30]`.
+- Empty `List<Int>` with an explicit type, typed non-empty local `List<Int>`
+  literals such as `let xs: List<Int> = [10, 20, 30]`, and inline `List<Int>`
+  literals passed to `List<Int>` parameters.
 - Integer list literals such as `[10, 20, 30]`.
 - Computed index reads over integer list literals, as covered by
   `examples/e61_array_index_expr.vais`, and simple array-backed state machines,
   as covered by `examples/e52_state_machine.vais`.
 - `for x in xs { ... }` over integer collections, as covered by
   `examples/e25_for_filter_sum.vais`. The full self-host path covers fixed
-  integer arrays, typed non-empty local `List<Int>` literals, and scalar
-  `List<Int>` locals/parameters; the native direct engine covers named local or
-  parameter `List<Int>` values.
+  integer arrays, typed non-empty local `List<Int>` literals, inline
+  `List<Int>` literal call arguments, and scalar `List<Int>` locals/parameters;
+  the native direct engine covers named local or parameter `List<Int>` values.
 - Inline `[]`, `list()`, and integer list literals as `List<Int>` return values
-  and call arguments in the direct engine.
+  in the direct engine, and inline integer list literals as `List<Int>` call
+  arguments in both the full self-host path and direct engine.
 - `List<Int>`-returning helper calls used directly as `List<Int>` call arguments
   in statement contexts plus `if`, `else if`, and `while` conditions.
 - `xs.push(value)`.

@@ -1639,6 +1639,72 @@ fn emit_map_base_ptr(slots: &List<Slot>, src: Str, qs: Int, ql: Int, counter: In
     return counter
 }
 
+fn emit_inline_list_int_arg(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, q: Int, counter: Int) -> Op {
+    let aid = counter
+    emit_str("  %la")
+    pint(aid)
+    emit_str(" = alloca [")
+    pint(list_cap())
+    emit_str(" x i64]")
+    putchar(10)
+    let bend = bracket_end(toks, q + 1)
+    let mut cc = counter + 1
+    let mut p = q + 1
+    let mut idx = 0
+    while p < bend {
+        let estop = arr_elem_end(toks, p, bend)
+        let e = gen_expr(toks, slots, fns, defs, src, p, estop, cc)
+        cc = e.next
+        emit_str("  %t")
+        pint(cc)
+        emit_str(" = getelementptr [")
+        pint(list_cap())
+        emit_str(" x i64], [")
+        pint(list_cap())
+        emit_str(" x i64]* %la")
+        pint(aid)
+        emit_str(", i64 0, i64 ")
+        pint(idx)
+        putchar(10)
+        emit_str("  store i64 ")
+        emit_op(e)
+        emit_str(", i64* %t")
+        pint(cc)
+        putchar(10)
+        cc = cc + 1
+        idx = idx + 1
+        p = estop + 1
+    }
+    emit_str("  %t")
+    pint(cc)
+    emit_str(" = getelementptr [")
+    pint(list_cap())
+    emit_str(" x i64], [")
+    pint(list_cap())
+    emit_str(" x i64]* %la")
+    pint(aid)
+    emit_str(", i64 0, i64 ")
+    pint(list_lenidx())
+    putchar(10)
+    emit_str("  store i64 ")
+    pint(idx)
+    emit_str(", i64* %t")
+    pint(cc)
+    putchar(10)
+    cc = cc + 1
+    emit_str("  %t")
+    pint(cc)
+    emit_str(" = getelementptr [")
+    pint(list_cap())
+    emit_str(" x i64], [")
+    pint(list_cap())
+    emit_str(" x i64]* %la")
+    pint(aid)
+    emit_str(", i64 0, i64 0")
+    putchar(10)
+    return Op { kind: 3, val: cc, next: cc + 1 }
+}
+
 # After a call that passed List-local slot `lslot` by pointer, copy the length the
 # callee wrote into buf[63] back into the local's length slot (%v<lslot+1>), so the
 # caller's xs.len / further passes see pushes. No-op if lslot < 0. Returns counter.
@@ -2213,6 +2279,17 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                                 cc = cc + 1
                                 handled = 1
                             }
+                        }
+                    }
+                    if handled == 0 and argt.kind == 23 {
+                        let want_ty2 = call_param_ty(fns, src, t.nstart, t.nlen, nargs)
+                        let pst2 = param_list_elem_sty(toks, defs, src, toks.len(), t.nstart, t.nlen, nargs)
+                        if want_ty2 == 2 and pst2 == 0 - 1 {
+                            let lop = emit_inline_list_int_arg(toks, slots, fns, defs, src, q, cc)
+                            ekind = lop.kind
+                            eval2 = lop.val
+                            cc = lop.next
+                            handled = 1
                         }
                     }
                     if handled == 0 {
@@ -4491,6 +4568,18 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
                     }
                 }
             }
+            if handled == 0 and argt.kind == 23 {
+                let cname_arg2 = toks[vp]
+                let want_ty2 = call_param_ty(fns, src, cname_arg2.nstart, cname_arg2.nlen, nargs)
+                let pst2 = param_list_elem_sty(toks, defs, src, toks.len(), cname_arg2.nstart, cname_arg2.nlen, nargs)
+                if want_ty2 == 2 and pst2 == 0 - 1 {
+                    let lop = emit_inline_list_int_arg(toks, slots, fns, defs, src, q, cc)
+                    ekind = lop.kind
+                    eval2 = lop.val
+                    cc = lop.next
+                    handled = 1
+                }
+            }
             if handled == 0 {
                 let e = gen_expr(toks, slots, fns, defs, src, q, astop, cc)
                 cc = e.next
@@ -5110,6 +5199,17 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                                     cc = cc + 1
                                     handled = 1
                                 }
+                            }
+                        }
+                        if handled == 0 and argt.kind == 23 {
+                            let want_ty2 = call_param_ty(fns, src, cname.nstart, cname.nlen, nca)
+                            let pst2 = param_list_elem_sty(toks, defs, src, toks.len(), cname.nstart, cname.nlen, nca)
+                            if want_ty2 == 2 and pst2 == 0 - 1 {
+                                let lop = emit_inline_list_int_arg(toks, slots, fns, defs, src, q, cc)
+                                ek = lop.kind
+                                ev = lop.val
+                                cc = lop.next
+                                handled = 1
                             }
                         }
                         if handled == 0 {
