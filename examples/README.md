@@ -124,6 +124,7 @@ assignment copies, `examples/e118_map_return_assignment_args.vais` for
 argument-bearing Map-returning call assignment copies,
 `examples/e83_parse_helpers.vais` for the named `parse_uint(s)` and
 `parse_int(s)` prelude helpers,
+`examples/e73_int_to_string.vais` for `Str(Int)` decimal conversion,
 `examples/e69_palindrome_string.vais` for two-pointer `Str` scans with
 computed byte indexes,
 `examples/e71_string_index_of.vais` for `Str` substring search with computed

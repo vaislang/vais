@@ -67,6 +67,22 @@ fn main() -> Int {
     return parse_uint("16x") + parse_int("-5") + parse_int(\`31\`)
 }`,
   },
+  {
+    name: 'Str conversion',
+    expect: 42,
+    source: `fn main() -> Int {
+    let a = Str(42)
+    let n = 0 - 7
+    let b = Str(n)
+    if a != "42" {
+        return 1
+    }
+    if b != "-7" {
+        return 2
+    }
+    return a.len() * 20 + b.len()
+}`,
+  },
 ];
 
 let failed = false;

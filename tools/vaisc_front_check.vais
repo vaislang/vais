@@ -657,6 +657,23 @@ fn write_parse_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_str_conversion_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let a = Str(42)")
+    append_line(out, "    let n = 0 - 7")
+    append_line(out, "    let b = Str(n)")
+    append_line(out, "    if a != \"42\" {")
+    append_line(out, "        return 1")
+    append_line(out, "    }")
+    append_line(out, "    if b != \"-7\" {")
+    append_line(out, "        return 2")
+    append_line(out, "    }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_map_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -1173,6 +1190,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "str_palindrome") == 1 { return write_str_palindrome_accept(path) }
     if str_eq(name, "char") == 1 { return write_char_accept(path) }
     if str_eq(name, "parse") == 1 { return write_parse_accept(path) }
+    if str_eq(name, "str_conversion") == 1 { return write_str_conversion_accept(path) }
     if str_eq(name, "map") == 1 { return write_map_accept(path) }
     if str_eq(name, "map_option") == 1 { return write_map_option_accept(path) }
     if str_eq(name, "map_scalar_get_opt") == 1 { return write_map_scalar_get_opt_accept(path) }
@@ -1942,6 +1960,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "str_palindrome", "accepts Str two-pointer palindrome search", 42)
     fail = fail + expect_accept(vaisc, tmp, "char", "accepts Char literal, type annotation, return, and Bool predicate slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "parse", "accepts named parse_uint/parse_int Str helpers", 42)
+    fail = fail + expect_accept(vaisc, tmp, "str_conversion", "accepts Str(Int) conversion and string comparison slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "option", label_option_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "option_expr", label_option_expr_accept(), 15)
     fail = fail + expect_accept(vaisc, tmp, "option_multiline_expr", "accepts multiline Option<Int> expression-match binding slice", 5)

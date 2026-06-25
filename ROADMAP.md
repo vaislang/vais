@@ -102,6 +102,9 @@ This file tracks current work only.
 - Named integer parsing helpers `parse_uint(s)` and `parse_int(s)` are promoted
   through the full self-host compiler, native direct engine, front gate, parity
   manifest, value corpus, and regenerated reusable core.
+- `Str(Int)` decimal conversion is promoted through the full self-host
+  compiler, native direct engine, front gate, parity manifest, value corpus,
+  and regenerated reusable core.
 - The first `Map` slices are verified in the full self-host compiler and native
   direct engine for local `Map<Int,Int>` values with `{}`, assignment copy,
   `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and
@@ -136,7 +139,7 @@ This file tracks current work only.
   assignment copy, concrete Map-returning call assignment copy,
   argument-bearing Map-returning call assignment copy, concrete Map key
   removal, concrete Map scalar get_opt payloads, concrete Map clear and reuse,
-  and
+  `Str(Int)` decimal conversion, and
   `List<T>.is_empty()`, `last()`, and `pop()`.
 - The full compiler path supports single-package local dotted imports such as
   `import math.add`, with gates for multi-file success, missing imports,
@@ -1055,8 +1058,9 @@ Mode: sequential
 - Requirements: protect `s.len()`, `s[i]`, string equality/inequality,
   byte-classification helpers, parse/identifier-scan tool shapes, and
   computed byte-index word-count, substring, and palindrome searches.
-- Done: direct and parity gates cover string index, string equality, parse_uint,
-  word-count scans, substring search, palindrome scans, and identifier scanning.
+- Done: direct and parity gates cover string index, string equality,
+  `Str(Int)` conversion, parse_uint, word-count scans, substring search,
+  palindrome scans, and identifier scanning.
 
 #### 3. Documentation and roadmap sync
 

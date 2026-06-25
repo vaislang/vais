@@ -693,6 +693,8 @@ class Runtime {
         return parseSignedInt(args[0]);
       case 'parse_uint':
         return Math.max(0, parseUnsignedInt(args[0]));
+      case 'Str':
+        return String(expectNumber(args[0], 'Str'));
       default:
         throw new RunnerError(`Unknown function '${name}'`);
     }

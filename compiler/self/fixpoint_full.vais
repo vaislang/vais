@@ -338,6 +338,13 @@ fn is_str_builder_finish(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 17] != 104 { return 0 }
     return 1
 }
+fn is_str_conversion(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 3 { return 0 }
+    if src[a] != 83 { return 0 }
+    if src[a + 1] != 116 { return 0 }
+    if src[a + 2] != 114 { return 0 }
+    return 1
+}
 fn is_proc_arg(src: Str, a: Int, alen: Int) -> Int {
     if alen != 8 { return 0 }
     if src[a] != 112 { return 0 }
@@ -407,6 +414,7 @@ fn is_host_str_return(src: Str, a: Int, alen: Int) -> Int {
     if is_str_slice(src, a, alen) == 1 { return 1 }
     if is_str_byte(src, a, alen) == 1 { return 1 }
     if is_str_builder_finish(src, a, alen) == 1 { return 1 }
+    if is_str_conversion(src, a, alen) == 1 { return 1 }
     if is_proc_arg(src, a, alen) == 1 { return 1 }
     if is_proc_capture_stdout(src, a, alen) == 1 { return 1 }
     if is_proc_capture_stderr(src, a, alen) == 1 { return 1 }
@@ -415,10 +423,12 @@ fn is_host_str_return(src: Str, a: Int, alen: Int) -> Int {
 
 # Builtin call ids used by the native parity surface:
 #   1=Int(x) identity/truncation, 2=bitnot(x), 3=bitand, 4=bitor,
-#   5=bitxor, 6=shl, 7=shr, 8=parse_uint(Str), 9=parse_int(Str).
+#   5=bitxor, 6=shl, 7=shr, 8=parse_uint(Str), 9=parse_int(Str),
+#   10=Str(Int).
 fn builtin_call_id(src: Str, a: Int, alen: Int) -> Int {
     if alen == 3 {
         if src[a] == 73 and src[a + 1] == 110 and src[a + 2] == 116 { return 1 }
+        if src[a] == 83 and src[a + 1] == 116 and src[a + 2] == 114 { return 10 }
         if src[a] == 115 and src[a + 1] == 104 and src[a + 2] == 108 { return 6 }
         if src[a] == 115 and src[a + 1] == 104 and src[a + 2] == 114 { return 7 }
     }
@@ -2014,6 +2024,17 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 # Int(x) conversion is identity for the current Int-native slice.
                 if bid == 1 {
                     return gen_expr(toks, slots, fns, defs, src, i + 2, close, counter)
+                }
+                if bid == 10 {
+                    let arg = gen_expr(toks, slots, fns, defs, src, i + 2, close, counter)
+                    let dests = arg.next
+                    emit_str("  %t")
+                    pint(dests)
+                    emit_str(" = call i8* @__vais_int_to_str(i64 ")
+                    emit_op(arg)
+                    emit_str(")")
+                    putchar(10)
+                    return Op { kind: 2, val: dests, next: dests + 1 }
                 }
                 if bid == 2 {
                     let arg = gen_expr(toks, slots, fns, defs, src, i + 2, close, counter)
@@ -7841,6 +7862,26 @@ fn emit_parse_helpers() -> Int {
     return 0
 }
 
+fn emit_int_to_str_helper() -> Int {
+    emit_str("@.__vais_int_fmt = private constant [5 x i8] c\"%lld\\00\"")
+    putchar(10)
+    emit_str("define i8* @__vais_int_to_str(i64 %value) {")
+    putchar(10)
+    emit_str("entry:")
+    putchar(10)
+    emit_str("  %buf = call i8* @malloc(i64 64)")
+    putchar(10)
+    emit_str("  %fmt = getelementptr [5 x i8], [5 x i8]* @.__vais_int_fmt, i64 0, i64 0")
+    putchar(10)
+    emit_str("  %written = call i32 (i8*, i64, i8*, ...) @snprintf(i8* %buf, i64 64, i8* %fmt, i64 %value)")
+    putchar(10)
+    emit_str("  ret i8* %buf")
+    putchar(10)
+    emit_str("}")
+    putchar(10)
+    return 0
+}
+
 fn emit_str_helpers() -> Int {
     emit_str("define i64 @__vais_str_eq(i8* %a, i8* %b) {")
     putchar(10)
@@ -8209,9 +8250,14 @@ fn compile(src: Str) -> Int {
     putchar(10)
     emit_str("declare i32 @printf(i8*, ...)")
     putchar(10)
+    emit_str("declare i8* @malloc(i64)")
+    putchar(10)
+    emit_str("declare i32 @snprintf(i8*, i64, i8*, ...)")
+    putchar(10)
     emit_str("declare void @llvm.trap()")
     putchar(10)
     emit_parse_helpers()
+    emit_int_to_str_helper()
     emit_str_helpers()
     emit_map_helpers()
     let defs = build_defs(&toks, n)

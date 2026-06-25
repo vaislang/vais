@@ -121,12 +121,13 @@ gates cover them.
 | `UInt8`..`UInt128` | Specified |
 | `F32`, `F64` | Specified |
 | `Bool` | Verified for comparisons, boolean literals, local annotations, helper parameters, helper returns, and unary `not` |
-| `Str` | Verified for literals, local annotations, scalar helper parameters and returns, length, index, equality, reassignment, and host-backed construction helpers |
+| `Str` | Verified for literals, local annotations, scalar helper parameters and returns, length, index, equality, reassignment, `Str(Int)` conversion, and host-backed construction helpers |
 | `Char` | Verified for single-byte literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
 | `Int(x)` | Verified |
+| `Str(x)` | Verified for Int-compatible scalar values |
 | `parse_uint(s)` | Verified for `Str`; parses a leading unsigned decimal run |
 | `parse_int(s)` | Verified for `Str`; accepts a leading `-` before the decimal run |
-| `F64(x)`, `UInt8(x)`, `Str(x)` | Specified |
+| `F64(x)`, `UInt8(x)` | Specified |
 
 ## Strings
 
@@ -139,6 +140,7 @@ gates cover them.
 | `str_concat(left, right)` | Verified |
 | `str_slice(text, start, len)` | Verified; invalid ranges trap |
 | `str_byte(value)` | Verified; values outside `0..255` trap |
+| `Str(x)` | Verified for Int-compatible scalar values |
 | byte-classification helpers such as `is_digit(c: Int) -> Bool` | Verified pattern |
 | single-byte `Char` literals such as `'A'` | Verified for equality, `Char` locals, helper parameters, and helper returns |
 | `parse_uint(s)`, `parse_int(s)` | Verified |

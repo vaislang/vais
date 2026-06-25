@@ -34,6 +34,9 @@
 - Promoted `examples/d2.vais` into the release corpus by lowering multiline
   `Option<Int>` expression-match bindings through the public compiler driver
   before the self-host core receives the source.
+- Promoted `examples/e73_int_to_string.vais` into the release corpus by adding
+  full self-host and native direct lowering for `Str(Int)` decimal conversion,
+  with regenerated reusable compiler core and front/direct/full gate fixtures.
 
 ## 2026-06-24
 

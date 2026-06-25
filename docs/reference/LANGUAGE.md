@@ -160,7 +160,8 @@ Verified operators:
   `examples/e10_bool_logic.vais` and `examples/e36_bool_predicate.vais`.
 - Bit helpers: `bitnot(x)`, `bitand(a, b)`, `bitor(a, b)`, `bitxor(a, b)`,
   `shl(x, n)`, `shr(x, n)`
-- Conversion call: `Int(x)` in verified examples
+- Conversion calls: `Int(x)` and `Str(x)` for Int-compatible scalar values in
+  verified examples
 - Parsing helpers: `parse_uint(s)` and `parse_int(s)` for `Str`
 
 Vais does not use Rust spellings such as `&&`, `||`, `!x`, `x as Int`, or
@@ -1058,6 +1059,8 @@ Verified today:
 `parse_uint` parses a leading unsigned decimal run and stops at the first
 non-decimal byte. `parse_int` accepts a leading `-` and then parses the same
 decimal run. Empty input and input with no leading decimal digit return `0`.
+`Str(x)` converts an Int-compatible scalar value into a decimal `Str`, as
+covered by `examples/e73_int_to_string.vais`.
 
 ## Host Files, Paths, And Processes
 
