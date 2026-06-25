@@ -130,6 +130,7 @@ examples/e32_nested_field_mut.vais	native-supported	Single-field nested struct f
 examples/d3run.vais	native-supported	Result<Int,Int> question propagation success path through a helper chain.
 examples/d4b.vais	native-supported	Inline List<Int> literal passed to a List<Int> parameter and iterated.
 examples/e08_option_chain.vais	native-supported	Option<Int> helper return matched directly in main.
+examples/e09_struct_method.vais	native-supported	Simple impl struct methods lowered to helper functions with a return-chain.
 examples/d2.vais	native-supported	Multiline Option<Int> expression-match binding from a helper return.
 examples/e73_int_to_string.vais	native-supported	Str(Int) conversion with string equality and length.
 examples/e15_list_recursion.vais	native-supported	Borrowed List<Int> recursive helper walks a collection.

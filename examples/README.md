@@ -53,6 +53,8 @@ struct fields and matched through field access,
 `examples/e37_struct_area.vais`, `examples/e41_recursion_struct.vais`,
 `examples/e54_inventory.vais`, and `examples/e62_struct_multi_return.vais` for
 struct helper parameters, returns, reassignment, recursion, and aggregation,
+`examples/e09_struct_method.vais` for simple `impl` methods lowered to helper
+functions through a return-chain,
 `examples/d5run.vais` for public struct/function modifiers with a `Str` field,
 `examples/e63_generic_struct_def.vais` for generic marker syntax on a simple
 struct used with `Int` values,

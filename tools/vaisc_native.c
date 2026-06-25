@@ -2596,6 +2596,295 @@ static char *lower_tuple_text(const char *text) {
 }
 
 typedef struct {
+    char *owner;
+    char *name;
+    char *lowered;
+} StructMethodInfo;
+
+typedef struct {
+    StructMethodInfo *method;
+    char *args;
+} StructMethodCall;
+
+static void struct_methods_free(StructMethodInfo *methods, int count) {
+    for (int i = 0; i < count; i++) {
+        free(methods[i].owner);
+        free(methods[i].name);
+        free(methods[i].lowered);
+    }
+}
+
+static StructMethodInfo *struct_method_find(StructMethodInfo *methods, int count, const char *name, size_t len) {
+    for (int i = 0; i < count; i++) {
+        if (strlen(methods[i].name) == len && strncmp(methods[i].name, name, len) == 0) return &methods[i];
+    }
+    return NULL;
+}
+
+static int parse_impl_start_line(const char *line, char **owner_out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "impl ") || is_ident_continue(s[4])) return 0;
+    const char *name_start = skip_ws(s + 5);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *after = skip_ws(name_end);
+    if (*after != '{') return 0;
+    *owner_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    return 1;
+}
+
+static char *lower_impl_method_header(
+    const char *line,
+    const char *owner,
+    StructMethodInfo *methods,
+    int *method_count
+) {
+    const char *s = skip_ws(line);
+    if (starts_with(s, "pub ") && !is_ident_continue(s[3])) s = skip_ws(s + 4);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return strdup(line);
+    const char *name_start = skip_ws(s + 3);
+    if (!is_ident_start(*name_start)) return strdup(line);
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *open = skip_ws(name_end);
+    if (*open != '(') return strdup(line);
+    int close = find_matching_paren_c(line, (int)(open - line));
+    if (close < 0) return strdup(line);
+
+    char *params_raw = substr_copy(open + 1, (size_t)(line + close - open - 1));
+    char *params[16] = {0};
+    int count = split_top_level_commas_c(params_raw, params, 16);
+    free(params_raw);
+    if (count < 1 || strcmp(params[0], "self") != 0) {
+        free_split_parts(params, count, 16);
+        return strdup(line);
+    }
+
+    char *method_name = substr_copy(name_start, (size_t)(name_end - name_start));
+    StrBuf lowered_name;
+    sb_init(&lowered_name);
+    sb_append(&lowered_name, owner);
+    sb_append(&lowered_name, "_");
+    sb_append(&lowered_name, method_name);
+    char *lowered = sb_take(&lowered_name);
+
+    if (*method_count < 32) {
+        methods[*method_count].owner = strdup(owner);
+        methods[*method_count].name = strdup(method_name);
+        methods[*method_count].lowered = strdup(lowered);
+        *method_count = *method_count + 1;
+    }
+
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, "fn ");
+    sb_append(&out, lowered);
+    sb_append(&out, "(self: ");
+    sb_append(&out, owner);
+    for (int i = 1; i < count; i++) {
+        sb_append(&out, ", ");
+        sb_append(&out, params[i]);
+    }
+    sb_append(&out, ")");
+    sb_append(&out, line + close + 1);
+
+    free(method_name);
+    free(lowered);
+    free_split_parts(params, count, 16);
+    return sb_take(&out);
+}
+
+static int parse_struct_method_chain_expr(
+    const char *expr,
+    StructMethodInfo *methods,
+    int method_count,
+    char **base_out,
+    StructMethodCall *calls,
+    int *call_count
+) {
+    const char *p = skip_ws(expr);
+    if (!is_ident_start(*p)) return 0;
+    const char *base_start = p;
+    p++;
+    while (is_ident_continue(*p)) p++;
+    char *base = substr_copy(base_start, (size_t)(p - base_start));
+    int count = 0;
+    while (1) {
+        p = skip_ws(p);
+        if (*p != '.') break;
+        p++;
+        const char *method_start = p;
+        if (!is_ident_start(*method_start)) {
+            free(base);
+            return 0;
+        }
+        p++;
+        while (is_ident_continue(*p)) p++;
+        StructMethodInfo *method = struct_method_find(methods, method_count, method_start, (size_t)(p - method_start));
+        if (method == NULL || count >= 16) {
+            free(base);
+            return 0;
+        }
+        p = skip_ws(p);
+        if (*p != '(') {
+            free(base);
+            return 0;
+        }
+        int close = find_matching_paren_c(expr, (int)(p - expr));
+        if (close < 0) {
+            free(base);
+            return 0;
+        }
+        char *args_raw = substr_copy(p + 1, (size_t)(expr + close - p - 1));
+        calls[count].method = method;
+        calls[count].args = trim_copy(args_raw);
+        free(args_raw);
+        count++;
+        p = expr + close + 1;
+    }
+    p = skip_ws(p);
+    if (*p != '\0' || count == 0) {
+        for (int i = 0; i < count; i++) free(calls[i].args);
+        free(base);
+        return 0;
+    }
+    *base_out = base;
+    *call_count = count;
+    return 1;
+}
+
+static char *struct_method_call_expr(StructMethodInfo *method, const char *receiver, const char *args) {
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, method->lowered);
+    sb_append(&out, "(");
+    sb_append(&out, receiver);
+    if (strlen(skip_ws(args)) > 0) {
+        sb_append(&out, ", ");
+        sb_append(&out, args);
+    }
+    sb_append(&out, ")");
+    return sb_take(&out);
+}
+
+static int lower_struct_method_return_line(
+    const char *line,
+    StructMethodInfo *methods,
+    int method_count,
+    int *temp_count,
+    LineVec *out
+) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    StructMethodCall calls[16];
+    memset(calls, 0, sizeof(calls));
+    char *current = NULL;
+    int call_count = 0;
+    if (!parse_struct_method_chain_expr(expr, methods, method_count, &current, calls, &call_count)) {
+        free(expr);
+        return 0;
+    }
+    size_t indent_len = (size_t)(s - line);
+    for (int i = 0; i < call_count; i++) {
+        char *call = struct_method_call_expr(calls[i].method, current, calls[i].args);
+        if (i == call_count - 1) {
+            StrBuf ret;
+            sb_init(&ret);
+            sb_append_n(&ret, line, indent_len);
+            sb_append(&ret, "return ");
+            sb_append(&ret, call);
+            lines_push(out, sb_take(&ret));
+        } else {
+            char tmp[64];
+            snprintf(tmp, sizeof(tmp), "vais_method_tmp%d", (*temp_count)++);
+            StrBuf bind;
+            sb_init(&bind);
+            sb_append_n(&bind, line, indent_len);
+            sb_append(&bind, "let ");
+            sb_append(&bind, tmp);
+            sb_append(&bind, " = ");
+            sb_append(&bind, call);
+            lines_push(out, sb_take(&bind));
+            free(current);
+            current = strdup(tmp);
+        }
+        free(call);
+    }
+    free(current);
+    for (int i = 0; i < call_count; i++) free(calls[i].args);
+    free(expr);
+    return 1;
+}
+
+static char *lower_struct_method_text(const char *text) {
+    LineVec lines = split_lines(text);
+    LineVec flattened;
+    lines_init(&flattened);
+    StructMethodInfo methods[32];
+    int method_count = 0;
+    memset(methods, 0, sizeof(methods));
+    int in_impl = 0;
+    int impl_depth = 0;
+    char *owner = NULL;
+
+    for (size_t i = 0; i < lines.len; i++) {
+        char *line = lines.items[i];
+        if (!in_impl) {
+            char *next_owner = NULL;
+            if (parse_impl_start_line(line, &next_owner)) {
+                in_impl = 1;
+                impl_depth = tuple_line_brace_delta(line);
+                owner = next_owner;
+                continue;
+            }
+            lines_push(&flattened, strdup(line));
+            continue;
+        }
+
+        const char *trim = skip_ws(line);
+        int before = impl_depth;
+        int delta = tuple_line_brace_delta(line);
+        if (before == 1 && strcmp(trim, "}") == 0 && delta < 0) {
+            in_impl = 0;
+            impl_depth = 0;
+            free(owner);
+            owner = NULL;
+            continue;
+        }
+        if (starts_with(trim, "fn ") || (starts_with(trim, "pub ") && strstr(trim, "fn ") != NULL)) {
+            lines_push(&flattened, lower_impl_method_header(line, owner, methods, &method_count));
+        } else {
+            lines_push(&flattened, strdup(line));
+        }
+        impl_depth += delta;
+        if (impl_depth <= 0) {
+            in_impl = 0;
+            impl_depth = 0;
+            free(owner);
+            owner = NULL;
+        }
+    }
+    free(owner);
+
+    LineVec out;
+    lines_init(&out);
+    int temp_count = 0;
+    for (size_t i = 0; i < flattened.len; i++) {
+        if (lower_struct_method_return_line(flattened.items[i], methods, method_count, &temp_count, &out)) continue;
+        lines_push(&out, strdup(flattened.items[i]));
+    }
+
+    char *joined = join_lines(&out, text[0] == '\0' || text[strlen(text) - 1] == '\n');
+    struct_methods_free(methods, method_count);
+    lines_free(&lines);
+    lines_free(&flattened);
+    lines_free(&out);
+    return joined;
+}
+
+typedef struct {
     char *items[128];
     int count;
 } SourceNameList;
@@ -2925,12 +3214,14 @@ static char *prepare_source_text(const char *raw) {
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
     char *tuple_lowered = lower_tuple_text(closure_lowered);
-    char *generic_lowered = lower_generic_identity_struct_text(tuple_lowered);
+    char *method_lowered = lower_struct_method_text(tuple_lowered);
+    char *generic_lowered = lower_generic_identity_struct_text(method_lowered);
     char *prepared = normalize_source_text(generic_lowered, 1);
     free(normalized);
     free(enum_lowered);
     free(closure_lowered);
     free(tuple_lowered);
+    free(method_lowered);
     free(generic_lowered);
     return prepared;
 }
@@ -4887,21 +5178,24 @@ static char *prepare_source_file(const char *path) {
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
     char *tuple_lowered = lower_tuple_text(closure_lowered);
-    if (!trusted_self_host && check_front_contract_text(tuple_lowered, path) != 0) {
+    char *method_lowered = lower_struct_method_text(tuple_lowered);
+    if (!trusted_self_host && check_front_contract_text(method_lowered, path) != 0) {
         free(merged);
         free(normalized);
         free(enum_lowered);
         free(closure_lowered);
         free(tuple_lowered);
+        free(method_lowered);
         return NULL;
     }
-    char *generic_lowered = lower_generic_identity_struct_text(tuple_lowered);
+    char *generic_lowered = lower_generic_identity_struct_text(method_lowered);
     char *prepared = normalize_source_text(generic_lowered, 1);
     free(merged);
     free(normalized);
     free(enum_lowered);
     free(closure_lowered);
     free(tuple_lowered);
+    free(method_lowered);
     free(generic_lowered);
     return prepared;
 }

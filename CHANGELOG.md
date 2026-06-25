@@ -78,6 +78,10 @@
   closure passed to an `Int` higher-order helper through public driver lowering,
   front contract, parity manifest, and value corpus, raising the release corpus
   to 131 native-supported examples.
+- Promoted `examples/e09_struct_method.vais` as the first simple `impl` struct
+  method return-chain slice through public driver lowering, front contract,
+  parity manifest, and value corpus, raising the release corpus to 132
+  native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

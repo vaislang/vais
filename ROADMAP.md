@@ -40,6 +40,9 @@ This file tracks current work only.
 - The public compiler driver covers returned single-`Int` closures passed to a
   single-closure `Int` higher-order helper by expanding calls to the generated
   closure apply helper.
+- The public compiler driver covers the first simple `impl` struct method
+  return-chain slice by lowering methods to helper functions with intermediate
+  struct locals.
 - The native direct engine hoists `List<Int>`-returning helper calls in `while`
   conditions and reevaluates them on each loop iteration.
 - The native direct engine lowers `List<Int>` and `List<Struct>` returned-list
@@ -572,6 +575,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
 - [x] 4.1g Promote returned single-`Int` closures passed to an `Int`
   higher-order helper through public driver lowering, front, parity, and value
   gates.
+- [x] 4.1h Promote simple `impl` struct method return chains through public
+  driver lowering, front, parity, and value gates.
 - [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
   simple return-arm shape is fully gated.
 - [x] 4.2a Promote simple expression-arm `match` lowering for multi-field `Int`
