@@ -1,0 +1,14 @@
+# expect: 7
+# Payload enum match with a `_` catch-all arm.
+enum Shape { Circle(Int), Rect(Int, Int) }
+
+fn score(s: Shape) -> Int {
+    match s {
+        Circle(r) => return r,
+        _ => return 7,
+    }
+}
+
+fn main() -> Int {
+    return score(Rect(3, 4))
+}

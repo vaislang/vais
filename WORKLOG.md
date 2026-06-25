@@ -2,6 +2,10 @@
 
 ## 2026-06-25
 
+- Promoted `examples/e120_enum_payload_wildcard.vais` into the release corpus
+  as the first payload enum `match` with `_` catch-all slice, with matching
+  public front fixture, parity entry, docs, site count, changelog, and roadmap
+  updates.
 - Added `examples/e119_map_param_target_assignment.vais` to cover
   parameter-target assignment copies for every verified concrete Map type,
   updated front and full self-host codegen coverage, docs, site count,
@@ -282,6 +286,9 @@
 - Promoted payload-free enum `match` with `_` catch-all through the public front
   contract and parity gates, with `examples/e90_enum_wildcard.vais` added to
   the release corpus.
+- Promoted payload enum `match` with `_` catch-all through the public front
+  contract and parity gates, with `examples/e120_enum_payload_wildcard.vais`
+  added to the release corpus.
 - Added `tools/vais_parity_check.vais` as the Vais-authored NV-C4 parity
   manifest harness and reduced `scripts/test-vaisc-parity.sh` to a bootstrap
   wrapper.

@@ -103,6 +103,10 @@
   parameter-target assignment copies for every verified concrete Map type,
   raising the release corpus to 140 native-supported examples and adding a
   matching full self-host codegen regression case.
+- Promoted `examples/e120_enum_payload_wildcard.vais` as the first payload
+  enum `match` with `_` catch-all slice through the public front, parity
+  manifest, and value corpus, raising the release corpus to 141
+  native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

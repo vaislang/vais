@@ -73,6 +73,8 @@ payload and matching that payload through a nested Option match arm,
 catch-all,
 `examples/e90_enum_wildcard.vais` for payload-free enum match with a `_`
 catch-all,
+`examples/e120_enum_payload_wildcard.vais` for payload enum match with a `_`
+catch-all,
 `examples/e80_closure_return.vais` and
 `examples/e81_closure_return_apply.vais` for the verified single-`Int` closure
 return and returned-closure higher-order helper slices,
@@ -99,6 +101,8 @@ success path,
 `examples/e40_option_in_struct.vais` for `Option<Int>` stored in a struct field,
 `examples/e79_nested_match.vais` for `Option<Int>` carried as an enum payload
 and matched in a nested statement arm,
+`examples/e120_enum_payload_wildcard.vais` for payload enum match with a `_`
+catch-all,
 `examples/e19_interpolation_print.vais` for print interpolation and `putchar`
 output calls,
 `examples/e25_for_filter_sum.vais` for collection for-each over integer values,

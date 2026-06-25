@@ -168,6 +168,10 @@ fn label_enum_match_wildcard_accept() -> Str {
     return str_concat("accepts payload-free ", str_concat(kw_enum(), str_concat(" ", str_concat(kw_match(), " wildcard slice"))))
 }
 
+fn label_payload_enum_wildcard_accept() -> Str {
+    return str_concat("accepts payload ", str_concat(kw_enum(), str_concat(" ", str_concat(kw_match(), " wildcard slice"))))
+}
+
 fn label_struct_enum_field_accept() -> Str {
     return str_concat("accepts struct field ", str_concat(kw_enum(), str_concat("/", str_concat(kw_match(), " slice"))))
 }
@@ -278,6 +282,10 @@ fn name_int_match_wildcard_accept() -> Str {
 
 fn name_enum_match_wildcard_accept() -> Str {
     return str_concat(kw_enum(), str_concat("_", str_concat(kw_match(), "_wildcard")))
+}
+
+fn name_payload_enum_wildcard_accept() -> Str {
+    return str_concat("payload_", str_concat(kw_enum(), str_concat("_", str_concat(kw_match(), "_wildcard"))))
 }
 
 fn name_struct_enum_field_accept() -> Str {
@@ -1324,6 +1332,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, name_match_expr_accept()) == 1 { return write_match_expr_body(path) }
     if str_eq(name, name_int_match_wildcard_accept()) == 1 { return write_int_match_wildcard_accept(path) }
     if str_eq(name, name_enum_match_wildcard_accept()) == 1 { return write_enum_match_wildcard_accept(path) }
+    if str_eq(name, name_payload_enum_wildcard_accept()) == 1 { return write_payload_enum_wildcard_accept(path) }
     if str_eq(name, name_struct_enum_field_accept()) == 1 { return write_struct_enum_field_accept(path) }
     if str_eq(name, name_payload_struct_accept()) == 1 { return write_payload_enum_struct_accept(path) }
     if str_eq(name, "nested_option_payload_match") == 1 { return write_nested_option_payload_match_accept(path) }
@@ -1580,6 +1589,23 @@ fn write_enum_match_wildcard_accept(path: Str) -> Int {
     append_line(out, "")
     append_line(out, "fn main() -> Int {")
     append_line(out, "    return score(Color.Blue)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_payload_enum_wildcard_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, enum_line(" Shape { Circle(Int), Rect(Int, Int) }"))
+    append_line(out, "")
+    append_line(out, "fn score(s: Shape) -> Int {")
+    append_line(out, match_line(" s {"))
+    append_line(out, "        Circle(r) => return r,")
+    append_line(out, "        _ => return 7,")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return score(Rect(3, 4))")
     append_line(out, "}")
     return fs_write_text(path, str_builder_finish(out))
 }
@@ -2129,6 +2155,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, name_match_expr_accept(), label_match_expr_accept(), 2)
     fail = fail + expect_accept(vaisc, tmp, name_int_match_wildcard_accept(), label_int_match_wildcard_accept(), 2)
     fail = fail + expect_accept(vaisc, tmp, name_enum_match_wildcard_accept(), label_enum_match_wildcard_accept(), 7)
+    fail = fail + expect_accept(vaisc, tmp, name_payload_enum_wildcard_accept(), label_payload_enum_wildcard_accept(), 7)
     fail = fail + expect_accept(vaisc, tmp, name_struct_enum_field_accept(), label_struct_enum_field_accept(), 1)
     fail = fail + expect_accept(vaisc, tmp, name_payload_struct_accept(), label_payload_struct_accept(), 5)
     fail = fail + expect_accept(vaisc, tmp, "nested_option_payload_match", "accepts nested Option<Int> payload match arm slice", 42)

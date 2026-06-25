@@ -138,7 +138,7 @@ Verified release surface:
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `(Int, Int)` tuple | Function return and local destructuring slice lowered through generated structs |
 | Simple `struct` | Literal construction, field access, local field write, single-field nested struct read/write, helper parameters, helper returns, helper-return assignment, generic marker syntax used with `Int` values, generic identity helpers applied to struct literals, simple `impl` method return chains, and simple `trait` plus `impl Trait for Struct` method calls |
-| Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, single-field struct payload enum/match, and single `Option<Int>` payload enum with a nested Option match arm |
+| Small `enum` | Payload-free enum/match, payload enum wildcard match, small recursive `Int` payload enum/match, single-field struct payload enum/match, and single `Option<Int>` payload enum with a nested Option match arm |
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
 and `tools/vaisc-parity.tsv`.
@@ -352,6 +352,8 @@ Verified today:
   `examples/e55_match_wildcard.vais`.
 - Payload-free enum `match` with `_` catch-all, as covered by
   `examples/e90_enum_wildcard.vais`.
+- Payload enum `match` with `_` catch-all, as covered by
+  `examples/e120_enum_payload_wildcard.vais`.
 - Small recursive `Int` payload enum/match lowering used by the parity corpus.
 - Multi-field `Int` payload enum expression-arm lowering, as covered by
   `examples/e02_enum_payload.vais`.

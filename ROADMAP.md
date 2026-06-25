@@ -58,6 +58,8 @@ This file tracks current work only.
   double-index read slice by lowering nested rows to `List<Int>` locals.
 - The public compiler driver covers the first enum `Option<Int>` payload slice
   by lowering a nested Option match arm to Int-coded branches.
+- The public compiler driver covers payload enum `match` with `_` catch-all
+  arms for the current Int-coded payload enum slice.
 - The native direct engine hoists `List<Int>`-returning helper calls in `while`
   conditions and reevaluates them on each loop iteration.
 - The native direct engine lowers `List<Int>` and `List<Struct>` returned-list
@@ -623,6 +625,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   front, parity, and value gates.
 - [x] 4.2f Promote a single enum `Option<Int>` payload with nested Option match
   arm lowering through public front, parity, and value gates.
+- [x] 4.2g Promote payload enum `match` with `_` catch-all lowering through
+  public front, parity, and value gates.
 - [x] 4.3a Promote exclusive `..` and inclusive `..=` range `for` loops through
   public front, native direct, full self-host, and parity gates.
 - [x] 4.3b Decide `break` and `continue` semantics and lower them through both
