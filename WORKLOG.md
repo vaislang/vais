@@ -6,6 +6,8 @@
   parameter-target assignment copies for every verified concrete Map type,
   updated front and full self-host codegen coverage, docs, site count,
   changelog, and roadmap while keeping generic Map behavior gated.
+- Reconciled Phase 4 parent roadmap checkboxes for the completed
+  Map/Option/Result and unsupported-syntax diagnostic slices.
 - Promoted `examples/e25_for_filter_sum.vais`, `examples/e27_list_max.vais`,
   and `examples/fr2.vais` into the release corpus as gate-backed collection
   for-each examples, covering full self-host array iteration, scalar

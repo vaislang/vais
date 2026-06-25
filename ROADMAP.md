@@ -627,7 +627,7 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   public front, native direct, full self-host, and parity gates.
 - [x] 4.3b Decide `break` and `continue` semantics and lower them through both
   full and direct paths where claimed.
-- [ ] 4.4 Expand collections with `Map`, `Option`, and `Result` only after syntax,
+- [x] 4.4 Expand collections with `Map`, `Option`, and `Result` only after syntax,
   ABI, and diagnostics are specified.
   - [x] Promote the first `Option<Int>` `Some`/`None` helper-return and
     statement-match slice.
@@ -695,7 +695,7 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   - [x] Add all-concrete Map parameter-target assignment coverage on the full
     compiler path and native direct engine.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
-- [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
+- [x] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
   diagnostics until promoted.
   - [x] Add checker guidance for Rust-style top-level `use` and `pub` forms.
   - [x] Add front diagnostics for unverified Map function parameters and return
