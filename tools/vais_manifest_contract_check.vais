@@ -87,6 +87,17 @@ fn setup_duplicate_key(root: Str) -> Str {
     return manifest
 }
 
+fn setup_duplicate_alias(root: Str) -> Str {
+    fs_mkdirs(root)
+    let dep = path_join(root, "../math")
+    fs_mkdirs(dep)
+    write_text(path_join(dep, "vais.toml"), manifest3("math", "0.1.0", "src"))
+    let manifest = path_join(root, "vais.toml")
+    let text = str_concat(manifest3("duplicate_alias", "0.1.0", "src"), str_concat(line("[dependencies]"), str_concat(line("math = \"../math\""), line("math = \"../math2\""))))
+    write_text(manifest, text)
+    return manifest
+}
+
 fn setup_unsupported_key(root: Str) -> Str {
     fs_mkdirs(root)
     let manifest = path_join(root, "vais.toml")
@@ -157,6 +168,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, checker, tmp, "bad_dep_path", setup_bad_dep_path(path_join(tmp, "bad_dep_path")), 1, "local dependency path must be a relative local path")
     fail = fail + expect_case(vaisc, checker, tmp, "missing_dep", setup_missing_dep(path_join(tmp, "missing_dep")), 1, "local dependency manifest not found")
     fail = fail + expect_case(vaisc, checker, tmp, "duplicate_key", setup_duplicate_key(path_join(tmp, "duplicate_key")), 1, "duplicate package manifest key `source`")
+    fail = fail + expect_case(vaisc, checker, tmp, "duplicate_alias", setup_duplicate_alias(path_join(tmp, "duplicate_alias")), 1, "duplicate local dependency alias `math`")
     fail = fail + expect_case(vaisc, checker, tmp, "unsupported_key", setup_unsupported_key(path_join(tmp, "unsupported_key")), 1, "unsupported package manifest key")
     fail = fail + expect_case(vaisc, checker, tmp, "unsupported_section", setup_unsupported_section(path_join(tmp, "unsupported_section")), 1, "unsupported package manifest section `[scripts]`")
     fail = fail + expect_case(vaisc, checker, tmp, "invalid_entry", setup_invalid_entry(path_join(tmp, "invalid_entry")), 1, "invalid package manifest entry")
