@@ -210,7 +210,9 @@ This file tracks current work only.
   them as the canonical lint/error-help command, release archives include the
   standalone `bin/vais-check` binary. `tools/vais_check_contract_check.vais`
   drives the focused checker fixture, CLI, path, help, and public wrapper
-  contract gate; the shell entrypoint is only a bootstrap wrapper.
+  contract gate; the shell entrypoint is only a bootstrap wrapper. The checker
+  owns the invalid static import path diagnostic, and the public front contract
+  keeps the same error shape gated.
 - `tools/embed_self_source.vais` is the Vais-authored self-source embedding
   helper. Its focused gate is driven by `tools/embed_self_source_check.vais`,
   which writes the fixtures, runs normalized and raw embedding, builds the
@@ -721,6 +723,8 @@ time.
   regeneration green after each language expansion.
 - [ ] 5.2 Move front-contract validation that belongs to the compiler into
   self-host Vais code once the language can express it cleanly.
+  - [x] Move invalid static import path checking into the Vais-authored checker
+    contract while keeping the public compiler front diagnostic aligned.
 - [ ] 5.3 Move more diagnostics and source preparation out of the host driver while
   keeping OS-facing file/process work behind explicit host APIs.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR

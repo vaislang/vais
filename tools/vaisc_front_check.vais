@@ -1920,6 +1920,16 @@ fn write_missing_import(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_invalid_import(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "import math::add")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_string_type(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, bad_string_type_line())
@@ -1949,6 +1959,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "module_not_implemented") == 1 { return write_module_not(path) }
     if str_eq(name, "package_not_implemented") == 1 { return write_package_not(path) }
     if str_eq(name, "missing_import") == 1 { return write_missing_import(path) }
+    if str_eq(name, "invalid_import") == 1 { return write_invalid_import(path) }
     if str_eq(name, "string_type") == 1 { return write_string_type(path) }
     return 1
 }
@@ -2228,6 +2239,7 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "module_not_implemented", "module and package declarations are not implemented", "", "module names are derived from file paths")
     fail = fail + expect_reject(vaisc, tmp, "package_not_implemented", "module and package declarations are not implemented", "", "module names are derived from file paths")
     fail = fail + expect_reject(vaisc, tmp, "missing_import", "import path not found", "", "expected local module file")
+    fail = fail + expect_reject(vaisc, tmp, "invalid_import", "invalid import path", "", "static dotted local import")
 
     fail = fail + expect_reject_path(vaisc, tmp, "bad_manifest", setup_bad_manifest(path_join(tmp, "bad_manifest")), "package manifest is missing required key", "", "source")
     fail = fail + expect_reject_path(vaisc, tmp, "bad_source_manifest", setup_bad_source_manifest(path_join(tmp, "bad_source_manifest")), "package manifest source must be a local relative path", "", "absolute paths")

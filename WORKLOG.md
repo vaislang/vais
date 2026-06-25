@@ -2,6 +2,10 @@
 
 ## 2026-06-25
 
+- Moved invalid static import path checking into the Vais-authored checker
+  contract, added the matching public front reject fixture, and updated the
+  checker fixture count to keep `scripts/vais-check` and `scripts/vaisc`
+  diagnostic shapes aligned.
 - Reconciled Phase 5 roadmap status for the existing stage comparison gate:
   `tools/normalize_stage_ir.vais` is already covered by a focused gate and by
   the full-source self-host stage1/stage2 comparison.
