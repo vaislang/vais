@@ -63,6 +63,13 @@ fn setup_bad_source(root: Str) -> Str {
     return manifest
 }
 
+fn setup_missing_source_dir(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    write_text(manifest, manifest3("missing_source_dir", "0.1.0", "src"))
+    return manifest
+}
+
 fn setup_bad_dep_path(root: Str) -> Str {
     fs_mkdirs(root)
     let manifest = path_join(root, "vais.toml")
@@ -165,6 +172,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, checker, tmp, "clean", setup_clean(path_join(tmp, "clean")), 0, "PASS package manifest clean")
     fail = fail + expect_case(vaisc, checker, tmp, "missing_source", setup_missing_source(path_join(tmp, "missing_source")), 1, "package manifest is missing required key `source`")
     fail = fail + expect_case(vaisc, checker, tmp, "bad_source", setup_bad_source(path_join(tmp, "bad_source")), 1, "package manifest source must be a local relative path")
+    fail = fail + expect_case(vaisc, checker, tmp, "missing_source_dir", setup_missing_source_dir(path_join(tmp, "missing_source_dir")), 1, "package manifest source directory not found")
     fail = fail + expect_case(vaisc, checker, tmp, "bad_dep_path", setup_bad_dep_path(path_join(tmp, "bad_dep_path")), 1, "local dependency path must be a relative local path")
     fail = fail + expect_case(vaisc, checker, tmp, "missing_dep", setup_missing_dep(path_join(tmp, "missing_dep")), 1, "local dependency manifest not found")
     fail = fail + expect_case(vaisc, checker, tmp, "duplicate_key", setup_duplicate_key(path_join(tmp, "duplicate_key")), 1, "duplicate package manifest key `source`")

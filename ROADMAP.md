@@ -746,7 +746,7 @@ time.
   - [x] Add a Vais-authored package manifest contract checker for the current
     manifest diagnostics: missing required keys, unsafe `source`, unsupported
     keys/sections, invalid entries, unsafe dependency paths, missing dependency
-    manifests, and duplicate keys/aliases.
+    manifests, duplicate keys/aliases, and missing source directories.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR
   is practical.
 

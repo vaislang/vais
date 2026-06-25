@@ -252,6 +252,10 @@ fn check_manifest(path: Str) -> Int {
     if path_is_safe(source_value, 1, 0) == 0 {
         return report_issue(path, source_line, "package manifest source must be a local relative path", "use a source path such as `src`; absolute paths and `..` are not supported")
     }
+    let source_root = path_join(manifest_dir, source_value)
+    if fs_exists(source_root) == 0 {
+        return report_issue(path, source_line, "package manifest source directory not found", str_concat("create the source directory at ", str_concat(source_root, " or update `source`.")))
+    }
     print("PASS package manifest clean")
     return 0
 }

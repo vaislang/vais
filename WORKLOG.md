@@ -2,6 +2,9 @@
 
 ## 2026-06-25
 
+- Moved the package manifest missing-source-directory diagnostic into the
+  Vais-authored manifest checker contract, matching the native driver error
+  while preserving the product driver's OS-facing package discovery boundary.
 - Added `tools/vais_manifest_check.vais` and
   `tools/vais_manifest_contract_check.vais` as a Vais-authored package manifest
   contract gate, then wired it into the release gate through

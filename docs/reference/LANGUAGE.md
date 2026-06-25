@@ -58,8 +58,9 @@ mathlib = "../mathlib"
 ```
 
 For `source = "src"`, compile `src/main.vais`; `import math.add` resolves to
-`src/math/add.vais`. A `[dependencies]` entry maps an import prefix to another
-local package directory with its own `vais.toml`; for example,
+`src/math/add.vais`. The source root must exist before compiling. A
+`[dependencies]` entry maps an import prefix to another local package directory
+with its own `vais.toml`; for example,
 `import mathlib.public` resolves to `public.vais` under the `mathlib` package's
 source root when no local `mathlib/public.vais` file exists. Files loaded from
 a dependency resolve plain imports under their own package source root.

@@ -95,7 +95,8 @@ mathlib = "../mathlib"
 
 `name`, `version`, and `source` are required top-level string keys. `source`
 must be a local relative path such as `src`; absolute paths and `..` are
-rejected. The compiled entry file must be under the resolved source root. The
+rejected, and the source root directory must exist. The compiled entry file must
+be under the resolved source root. The
 optional `[dependencies]` section maps dependency aliases to local relative
 package directories containing their own `vais.toml`. Dependency paths may use
 `..` for sibling packages, but absolute paths, URLs, backslashes, and empty path
