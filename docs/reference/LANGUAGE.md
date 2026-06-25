@@ -137,7 +137,7 @@ Verified release surface:
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, single-line and multiline expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `(Int, Int)` tuple | Function return and local destructuring slice lowered through generated structs |
-| Simple `struct` | Literal construction, field access, local field write, single-field nested struct read/write, helper parameters, helper returns, helper-return assignment, generic marker syntax used with `Int` values, generic identity helpers applied to struct literals, and simple `impl` method return chains |
+| Simple `struct` | Literal construction, field access, local field write, single-field nested struct read/write, helper parameters, helper returns, helper-return assignment, generic marker syntax used with `Int` values, generic identity helpers applied to struct literals, simple `impl` method return chains, and simple `trait` plus `impl Trait for Struct` method calls |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
@@ -303,13 +303,16 @@ Verified today:
   `examples/e46_generic_struct.vais`.
 - Simple `impl Struct { fn method(self, ...) ... }` methods used in a return
   expression chain, as covered by `examples/e09_struct_method.vais`.
+- Simple `trait` declarations paired with `impl Trait for Struct` methods, when
+  the method call is used in a return expression, as covered by
+  `examples/e78_trait_impl_for.vais`.
 - Selected struct/list combinations through self-host gates.
 
 Representative struct helper examples include `examples/e17_struct_return.vais`,
 `examples/e28_struct_rebuild.vais`, `examples/e37_struct_area.vais`,
 `examples/e41_recursion_struct.vais`, `examples/e54_inventory.vais`, and
-`examples/e62_struct_multi_return.vais`. The first promoted struct-method
-example is `examples/e09_struct_method.vais`.
+`examples/e62_struct_multi_return.vais`. Promoted struct-method examples are
+`examples/e09_struct_method.vais` and `examples/e78_trait_impl_for.vais`.
 
 ## Enums And Match
 
@@ -528,7 +531,8 @@ before reading fields.
 `sum()` on `List<Struct>` is not a direct-engine release claim.
 
 List methods such as `map` and `filter`, and method forms outside the verified
-simple struct `impl` return-chain slice, are not release-surface claims yet.
+simple struct `impl`/`impl Trait for Struct` return-expression slices, are not
+release-surface claims yet.
 
 ## Maps
 

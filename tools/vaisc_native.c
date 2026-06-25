@@ -2873,9 +2873,30 @@ static int parse_impl_start_line(const char *line, char **owner_out) {
     const char *name_end = name_start + 1;
     while (is_ident_continue(*name_end)) name_end++;
     const char *after = skip_ws(name_end);
+    if (starts_with(after, "for ") && !is_ident_continue(after[3])) {
+        const char *owner_start = skip_ws(after + 4);
+        if (!is_ident_start(*owner_start)) return 0;
+        const char *owner_end = owner_start + 1;
+        while (is_ident_continue(*owner_end)) owner_end++;
+        const char *tail = skip_ws(owner_end);
+        if (*tail != '{') return 0;
+        *owner_out = substr_copy(owner_start, (size_t)(owner_end - owner_start));
+        return 1;
+    }
     if (*after != '{') return 0;
     *owner_out = substr_copy(name_start, (size_t)(name_end - name_start));
     return 1;
+}
+
+static int parse_trait_start_line(const char *line) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "trait ") || is_ident_continue(s[5])) return 0;
+    const char *name_start = skip_ws(s + 6);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *after = skip_ws(name_end);
+    return *after == '{';
 }
 
 static char *lower_impl_method_header(
@@ -2939,13 +2960,14 @@ static char *lower_impl_method_header(
     return sb_take(&out);
 }
 
-static int parse_struct_method_chain_expr(
+static int parse_struct_method_chain_prefix_expr(
     const char *expr,
     StructMethodInfo *methods,
     int method_count,
     char **base_out,
     StructMethodCall *calls,
-    int *call_count
+    int *call_count,
+    char **suffix_out
 ) {
     const char *p = skip_ws(expr);
     if (!is_ident_start(*p)) return 0;
@@ -2987,14 +3009,14 @@ static int parse_struct_method_chain_expr(
         count++;
         p = expr + close + 1;
     }
-    p = skip_ws(p);
-    if (*p != '\0' || count == 0) {
+    if (count == 0) {
         for (int i = 0; i < count; i++) free(calls[i].args);
         free(base);
         return 0;
     }
     *base_out = base;
     *call_count = count;
+    *suffix_out = strdup(p);
     return 1;
 }
 
@@ -3025,8 +3047,9 @@ static int lower_struct_method_return_line(
     StructMethodCall calls[16];
     memset(calls, 0, sizeof(calls));
     char *current = NULL;
+    char *suffix = NULL;
     int call_count = 0;
-    if (!parse_struct_method_chain_expr(expr, methods, method_count, &current, calls, &call_count)) {
+    if (!parse_struct_method_chain_prefix_expr(expr, methods, method_count, &current, calls, &call_count, &suffix)) {
         free(expr);
         return 0;
     }
@@ -3039,6 +3062,7 @@ static int lower_struct_method_return_line(
             sb_append_n(&ret, line, indent_len);
             sb_append(&ret, "return ");
             sb_append(&ret, call);
+            sb_append(&ret, suffix);
             lines_push(out, sb_take(&ret));
         } else {
             char tmp[64];
@@ -3057,6 +3081,7 @@ static int lower_struct_method_return_line(
         free(call);
     }
     free(current);
+    free(suffix);
     for (int i = 0; i < call_count; i++) free(calls[i].args);
     free(expr);
     return 1;
@@ -3071,11 +3096,24 @@ static char *lower_struct_method_text(const char *text) {
     memset(methods, 0, sizeof(methods));
     int in_impl = 0;
     int impl_depth = 0;
+    int in_trait = 0;
+    int trait_depth = 0;
     char *owner = NULL;
 
     for (size_t i = 0; i < lines.len; i++) {
         char *line = lines.items[i];
+        if (in_trait) {
+            trait_depth += tuple_line_brace_delta(line);
+            if (trait_depth <= 0) in_trait = 0;
+            continue;
+        }
         if (!in_impl) {
+            if (parse_trait_start_line(line)) {
+                in_trait = 1;
+                trait_depth = tuple_line_brace_delta(line);
+                if (trait_depth <= 0) in_trait = 0;
+                continue;
+            }
             char *next_owner = NULL;
             if (parse_impl_start_line(line, &next_owner)) {
                 in_impl = 1;
@@ -5273,6 +5311,8 @@ static char *module_resolver_load(ModuleResolver *r, const char *path, const cha
     ImportInfo imports[64];
     int import_count = 0;
     int failed = 0;
+    int in_trait_decl = 0;
+    int trait_decl_depth = 0;
     for (size_t i = 0; i < lines.len && !failed; i++) {
         const char *line = lines.items[i];
         int line_no = (int)i + 1;
@@ -5316,6 +5356,23 @@ static char *module_resolver_load(ModuleResolver *r, const char *path, const cha
             failed = 1;
             free(code);
             break;
+        }
+        if (in_trait_decl) {
+            trait_decl_depth += tuple_line_brace_delta(line);
+            lines_push(&body, strdup(line));
+            if (body.items[body.len - 1] == NULL) die_oom();
+            if (trait_decl_depth <= 0) in_trait_decl = 0;
+            free(code);
+            continue;
+        }
+        if (parse_trait_start_line(code)) {
+            in_trait_decl = 1;
+            trait_decl_depth = tuple_line_brace_delta(line);
+            lines_push(&body, strdup(line));
+            if (body.items[body.len - 1] == NULL) die_oom();
+            if (trait_decl_depth <= 0) in_trait_decl = 0;
+            free(code);
+            continue;
         }
         char *symbol = parse_top_level_symbol_c(code);
         if (symbol != NULL) {

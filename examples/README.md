@@ -55,6 +55,8 @@ struct fields and matched through field access,
 struct helper parameters, returns, reassignment, recursion, and aggregation,
 `examples/e09_struct_method.vais` for simple `impl` methods lowered to helper
 functions through a return-chain,
+`examples/e78_trait_impl_for.vais` for a simple `trait` plus
+`impl Trait for Struct` method call lowered to a helper function,
 `examples/d5run.vais` for public struct/function modifiers with a `Str` field,
 `examples/e63_generic_struct_def.vais` for generic marker syntax on a simple
 struct used with `Int` values,

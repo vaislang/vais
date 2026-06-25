@@ -87,6 +87,9 @@
   raising the release corpus to 133 native-supported examples.
 - Promoted `examples/c5.vais` as the first local single-capture `Int` closure
   call slice, raising the release corpus to 134 native-supported examples.
+- Promoted `examples/e78_trait_impl_for.vais` as the first simple `trait` plus
+  `impl Trait for Struct` method call slice, raising the release corpus to 135
+  native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

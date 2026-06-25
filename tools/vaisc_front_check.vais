@@ -475,6 +475,29 @@ fn write_struct_method_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_trait_impl_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "trait Area {")
+    append_line(out, "    fn area(self) -> Int")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "struct Square {")
+    append_line(out, "    side: Int")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "impl Area for Square {")
+    append_line(out, "    fn area(self) -> Int {")
+    append_line(out, "        return self.side * self.side")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let s = Square { side: 6 }")
+    append_line(out, "    return s.area() + 6")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_public_struct_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "pub struct User {")
@@ -1263,6 +1286,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "generic_apply_struct") == 1 { return write_generic_apply_struct_accept(path) }
     if str_eq(name, "struct_helper") == 1 { return write_struct_helper_accept(path) }
     if str_eq(name, "struct_method") == 1 { return write_struct_method_accept(path) }
+    if str_eq(name, "trait_impl") == 1 { return write_trait_impl_accept(path) }
     if str_eq(name, "public_struct") == 1 { return write_public_struct_accept(path) }
     if str_eq(name, "tag") == 1 { return write_enum_accept(path) }
     if str_eq(name, name_payload_accept()) == 1 { return write_payload_enum_accept(path) }
@@ -2039,6 +2063,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "generic_apply_struct", "accepts generic identity function applied to struct literal slice", 7)
     fail = fail + expect_accept(vaisc, tmp, "struct_helper", "accepts struct helper parameter, return, and assignment slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "struct_method", "accepts impl struct method return-chain slice", 25)
+    fail = fail + expect_accept(vaisc, tmp, "trait_impl", "accepts simple trait impl method call expression slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "public_struct", "accepts public struct/function modifier slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "tag", label_payload_free(), 2)
     fail = fail + expect_accept(vaisc, tmp, name_payload_accept(), label_payload_small(), 14)

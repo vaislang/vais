@@ -58,6 +58,9 @@
 - Promoted `examples/c5.vais` into the release corpus by lowering a local
   closure with one `Int` capture to an apply helper and captured environment
   value.
+- Promoted `examples/e78_trait_impl_for.vais` into the release corpus by
+  treating a simple `trait` declaration as metadata and lowering
+  `impl Trait for Struct` methods to ordinary struct helper calls.
 
 ## 2026-06-24
 
