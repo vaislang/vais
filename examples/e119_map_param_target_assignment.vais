@@ -1,0 +1,83 @@
+# expect: 42
+
+fn replace_int_int(dst: Map<Int,Int>, src: Map<Int,Int>) -> Int {
+    dst = src
+    src.insert(4, 1)
+    if dst.get(4, 0) == 5 and src.get(4, 0) == 1 and dst.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn replace_int_bool(dst: Map<Int,Bool>, src: Map<Int,Bool>) -> Int {
+    dst = src
+    src.insert(4, false)
+    if dst.get(4, false) and not src.get(4, true) and dst.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn replace_int_char(dst: Map<Int,Char>, src: Map<Int,Char>) -> Int {
+    dst = src
+    src.insert(4, 'B')
+    if dst.get(4, 'Z') == 'A' and src.get(4, 'Z') == 'B' and dst.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn replace_str_int(dst: Map<Str,Int>, src: Map<Str,Int>) -> Int {
+    dst = src
+    src.insert("four", 1)
+    if dst.get("four", 0) == 5 and src.get("four", 0) == 1 and dst.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn replace_str_bool(dst: Map<Str,Bool>, src: Map<Str,Bool>) -> Int {
+    dst = src
+    src.insert("four", false)
+    if dst.get("four", false) and not src.get("four", true) and dst.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn replace_str_char(dst: Map<Str,Char>, src: Map<Str,Char>) -> Int {
+    dst = src
+    src.insert("four", 'B')
+    if dst.get("four", 'Z') == 'A' and src.get("four", 'Z') == 'B' and dst.len() == 1 {
+        return 7
+    }
+    return 0
+}
+
+fn main() -> Int {
+    let tii: Map<Int,Int> = {}
+    let sii: Map<Int,Int> = {}
+    let tib: Map<Int,Bool> = {}
+    let sib: Map<Int,Bool> = {}
+    let tic: Map<Int,Char> = {}
+    let sic: Map<Int,Char> = {}
+    let tsi: Map<Str,Int> = {}
+    let ssi: Map<Str,Int> = {}
+    let tsb: Map<Str,Bool> = {}
+    let ssb: Map<Str,Bool> = {}
+    let tsc: Map<Str,Char> = {}
+    let ssc: Map<Str,Char> = {}
+
+    sii.insert(4, 5)
+    sib.insert(4, true)
+    sic.insert(4, 'A')
+    ssi.insert("four", 5)
+    ssb.insert("four", true)
+    ssc.insert("four", 'A')
+
+    let total = replace_int_int(tii, sii) + replace_int_bool(tib, sib) + replace_int_char(tic, sic) + replace_str_int(tsi, ssi) + replace_str_bool(tsb, ssb) + replace_str_char(tsc, ssc)
+    if total == 42 and tii.get(4, 0) == 5 and sii.get(4, 0) == 1 and tib.get(4, false) and not sib.get(4, true) and tic.get(4, 'Z') == 'A' and sic.get(4, 'Z') == 'B' and tsi.get("four", 0) == 5 and ssi.get("four", 0) == 1 and tsb.get("four", false) and not ssb.get("four", true) and tsc.get("four", 'Z') == 'A' and ssc.get("four", 'Z') == 'B' {
+        return 42
+    }
+    return 0
+}

@@ -152,6 +152,8 @@ This file tracks current work only.
   `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`,
   `Map<Str,Bool>`, and `Map<Str,Char>` return values can initialize explicitly
   annotated locals through caller-owned storage.
+  Parameter-target assignment copies are covered for all six verified concrete
+  Map types in the release corpus.
 - Promoted prelude APIs have value-corpus examples, including local
   `Map<Int,Int>`, local `Map<Int,Bool>`, local `Map<Int,Char>`,
   local `Map<Str,Int>`, local `Map<Str,Bool>`, local `Map<Str,Char>`,
@@ -428,8 +430,9 @@ Goal: grow a small, reliable prelude instead of a large speculative API list.
 - [x] 1.3ab Continue `Map<K,V>` expansion only through the next concrete
   gate-backed slice: add argument-bearing Map-returning call assignment coverage
   while keeping broader generic Map behavior gated.
-- [ ] 1.3ac Continue `Map<K,V>` expansion only through the next concrete
-  gate-backed slice.
+- [x] 1.3ac Continue `Map<K,V>` expansion only through the next concrete
+  gate-backed slice: add all-concrete Map parameter-target assignment coverage
+  while keeping broader generic Map behavior gated.
 - [x] 1.4 Add examples and value tests for every promoted prelude API.
 - [x] 1.5 Update `std/PRELUDE.md` so "Verified" means compiler-gate protected.
 
@@ -688,6 +691,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   - [x] Promote concrete Map-returning call assignment copies on the full
     compiler path and native direct engine.
   - [x] Add argument-bearing Map-returning call assignment coverage on the full
+    compiler path and native direct engine.
+  - [x] Add all-concrete Map parameter-target assignment coverage on the full
     compiler path and native direct engine.
   - [x] Gate unsupported `Option`/`Result` generic forms with front diagnostics.
 - [ ] 4.5 Keep unsupported syntax behind `scripts/vais-check` and front-contract
