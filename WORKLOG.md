@@ -2,6 +2,8 @@
 
 ## 2026-06-25
 
+- Added invalid `main` entrypoint signature detection to the Vais-authored
+  checker contract while preserving function-type and closure examples.
 - Added missing helper return-type detection to the Vais-authored checker
   contract and kept function-type values out of that diagnostic path.
 - Added unsupported generic `Map<K,V>` detection to the Vais-authored checker

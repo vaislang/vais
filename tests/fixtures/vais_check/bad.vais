@@ -8,6 +8,8 @@ fn missing_return(a: Int, b: Int) {
     return a + b
 }
 
+fn main(argc: Int) -> Int { return argc }
+
 fn f(s: String) -> Int {
     let xs: Vec<Int> = []
     let ys = List<Int>::new()

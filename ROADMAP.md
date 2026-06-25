@@ -735,6 +735,8 @@ time.
     clean.
   - [x] Move missing helper return-type checking into the Vais-authored checker
     contract while keeping function-type values clean.
+  - [x] Move invalid `main` entrypoint signature checking into the
+    Vais-authored checker contract while keeping function-type values clean.
 - [ ] 5.3 Move more diagnostics and source preparation out of the host driver while
   keeping OS-facing file/process work behind explicit host APIs.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR

@@ -1230,9 +1230,9 @@ scripts/vais-check examples/c4.vais
 The public checker is built from `tools/vais_check_cli.vais` and
 `tools/vais_check_core.vais`. Release gates check its fixture issue counts,
 coordinate/help output shape, clean-file behavior, invalid static import path
-diagnostics, missing helper return-type diagnostics, unsupported generic
-`Option<T>`, `Result<T,E>`, and non-verified `Map<K,V>` diagnostics, and
-packaged command path.
+diagnostics, invalid `main` signature diagnostics, missing helper return-type
+diagnostics, unsupported generic `Option<T>`, `Result<T,E>`, and non-verified
+`Map<K,V>` diagnostics, and packaged command path.
 
 Common corrections:
 
@@ -1247,6 +1247,7 @@ Common corrections:
 | `Color::Red` | `Color.Red` |
 | `Vec<T>` | `List<T>` |
 | `String` | `Str` |
+| `fn main(argc: Int) -> Int { ... }` | `fn main() -> Int { ... }` |
 | `fn add(a: Int, b: Int) { ... }` | `fn add(a: Int, b: Int) -> Int { ... }` |
 | `x += 1` | `x = x + 1` |
 
