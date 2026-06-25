@@ -422,10 +422,10 @@ Previous Vais source release.
   gate.
 - Removed checker oracle use from the checker release gate; `scripts/vais-check`
   is now verified by Vais-authored fixture contract checks.
-- Moved invalid import path and unsupported generic `Option<T>`, `Result<T,E>`,
-  and non-verified `Map<K,V>` surface diagnostics into the Vais-authored checker
-  contract while keeping the public checker and install/package issue counts
-  aligned.
+- Moved invalid import path, missing helper return-type, unsupported generic
+  `Option<T>`/`Result<T,E>`, and non-verified `Map<K,V>` surface diagnostics
+  into the Vais-authored checker contract while keeping the public checker and
+  install/package issue counts aligned.
 - Moved the NV-C4 parity manifest gate into `tools/vais_parity_check.vais`, so
   release-corpus manifest parsing and native result comparison run through a
   Vais-authored harness.

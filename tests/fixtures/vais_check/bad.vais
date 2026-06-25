@@ -4,6 +4,10 @@ use math.add
 import math::add
 pub fn exposed() -> Int { return 1 }
 
+fn missing_return(a: Int, b: Int) {
+    return a + b
+}
+
 fn f(s: String) -> Int {
     let xs: Vec<Int> = []
     let ys = List<Int>::new()
