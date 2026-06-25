@@ -2,6 +2,9 @@
 
 ## 2026-06-25
 
+- Added a Vais-authored local import graph contract checker and release gate for
+  manifest-free missing import, duplicate top-level symbol, and import cycle
+  diagnostics.
 - Reconciled the Phase 4.2 parent roadmap checkbox now that the listed enum
   payload and pattern/match slices are all gate-backed.
 - Added optional entry-path source-root containment checking to the

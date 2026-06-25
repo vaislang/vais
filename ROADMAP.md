@@ -751,6 +751,9 @@ time.
   - [x] Add optional entry-path source-root containment checking to the
     Vais-authored package manifest checker for the native
     `package entry is outside manifest source root` diagnostic.
+  - [x] Add a Vais-authored local import graph contract checker for the current
+    manifest-free missing import, duplicate top-level symbol, and import cycle
+    diagnostics.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR
   is practical.
 

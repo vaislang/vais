@@ -18,6 +18,7 @@ done
 
 run bash "$ROOT/scripts/test-vais-check-vais.sh"
 run bash "$ROOT/scripts/test-vais-manifest-check-vais.sh"
+run bash "$ROOT/scripts/test-vais-import-graph-check-vais.sh"
 run bash "$ROOT/scripts/test-vaisc-native.sh"
 run bash "$ROOT/scripts/test-vaisc-install.sh"
 run bash "$ROOT/scripts/test-vaisc.sh"

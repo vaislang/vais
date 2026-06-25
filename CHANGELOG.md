@@ -11,6 +11,9 @@
   using normalized local manifest paths.
 - Added optional entry-path source-root containment checking to the
   Vais-authored package manifest checker contract.
+- Added a Vais-authored local import graph contract checker and release gate for
+  manifest-free missing import, duplicate top-level symbol, and import cycle
+  diagnostics.
 - Promoted collection for-each over integer values through the full self-host
   path, native direct engine, parity, and value gates, with
   `examples/e25_for_filter_sum.vais`, `examples/e27_list_max.vais`, and
