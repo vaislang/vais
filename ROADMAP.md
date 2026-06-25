@@ -84,6 +84,9 @@ This file tracks current work only.
 - Generic marker syntax on simple structs used with `Int` values is promoted
   through the full self-host path, public front, parity manifest, and value
   corpus.
+- Generic identity helpers applied directly to struct literals are promoted
+  through the public compiler driver, public front, parity manifest, and value
+  corpus.
 - Struct helper parameters, struct helper returns, and assignment from
   struct-returning calls are promoted through the full self-host path, native
   direct engine, public front, parity manifest, value corpus, and regenerated
@@ -553,6 +556,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
 - [x] 4.1c Promote explicit `Str` local annotations, helper parameters, helper
   returns, reassignment, length, index, and equality through public front,
   native direct, full self-host, and parity gates.
+- [x] 4.1d Promote generic identity helpers applied directly to struct literals
+  through public driver lowering, front, parity, and value gates.
 - [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
   simple return-arm shape is fully gated.
 - [x] 4.2a Promote simple expression-arm `match` lowering for multi-field `Int`

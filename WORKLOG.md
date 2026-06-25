@@ -37,6 +37,9 @@
 - Promoted `examples/e73_int_to_string.vais` into the release corpus by adding
   full self-host and native direct lowering for `Str(Int)` decimal conversion,
   with regenerated reusable compiler core and front/direct/full gate fixtures.
+- Promoted `examples/e46_generic_struct.vais` into the release corpus by
+  lowering generic identity helpers applied directly to struct literals before
+  the self-host core receives the source, with front/parity/value gate coverage.
 
 ## 2026-06-24
 

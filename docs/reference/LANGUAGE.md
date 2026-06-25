@@ -93,8 +93,8 @@ Verified today:
 - `Int` parameters and `Int` return values.
 - Multiple helper functions.
 - Recursive and mutually recursive `Int` functions.
-- Generic marker syntax for simple `Int` helper and struct cases, as tracked in
-  the parity manifest.
+- Generic marker syntax for simple `Int` helper cases and generic identity
+  helpers applied to struct literals, as tracked in the parity manifest.
 
 The direct engine gate covers Int, Bool, Char, and Str helper calls in addition to the
 full engine.
@@ -136,7 +136,7 @@ Verified release surface:
 | `Map<Str,Char>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, single-line and multiline expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
-| Simple `struct` | Literal construction, field access, local field write, single-field nested struct read/write, helper parameters, helper returns, helper-return assignment, and generic marker syntax used with `Int` values |
+| Simple `struct` | Literal construction, field access, local field write, single-field nested struct read/write, helper parameters, helper returns, helper-return assignment, generic marker syntax used with `Int` values, and generic identity helpers applied to struct literals |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
@@ -265,6 +265,20 @@ fn main() -> Int {
 }
 ```
 
+Generic identity helpers are also gate-backed when they pass through a struct
+literal directly:
+
+```vais
+struct Pair { a: Int, b: Int }
+fn first_field(p: Pair) -> Int { return p.a }
+fn apply<T>(x: T) -> T { return x }
+
+fn main() -> Int {
+    let p = apply(Pair { a: 7, b: 2 })
+    return first_field(p)
+}
+```
+
 Verified today:
 
 - Simple struct declarations with `Int` fields.
@@ -280,8 +294,10 @@ Verified today:
   are accepted as source-level visibility markers. The current compiler treats
   them as metadata rather than a separate ABI/export mechanism, as covered by
   `examples/d5run.vais`.
-- Generic marker syntax on simple structs used with `Int` values, as covered by
-  `examples/e63_generic_struct_def.vais`.
+- Generic marker syntax on simple structs used with `Int` values and generic
+  identity helpers applied directly to struct literals, as covered by
+  `examples/e63_generic_struct_def.vais` and
+  `examples/e46_generic_struct.vais`.
 - Selected struct/list combinations through self-host gates.
 
 Representative struct helper examples include `examples/e17_struct_return.vais`,

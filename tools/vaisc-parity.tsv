@@ -47,6 +47,7 @@ examples/e42_while_call.vais	native-supported	While loop calling helper.
 examples/e43_generic_fn.vais	native-supported	Generic marker skipped for Int helper.
 examples/e44_string_len.vais	native-supported	String length on a literal local.
 examples/e45_string_eq.vais	native-supported	String literal equality.
+examples/e46_generic_struct.vais	native-supported	Generic identity function applied to a struct literal.
 examples/e47_char_ops.vais	native-supported	Single-byte char literal equality.
 examples/e48_string_index.vais	native-supported	String byte indexing.
 examples/e54_inventory.vais	native-supported	Multiple struct instances passed to a struct parameter helper.

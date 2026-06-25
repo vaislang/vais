@@ -62,6 +62,10 @@
   front fixture, full self-host compiler, native direct engine, parity manifest,
   and value corpus, with `examples/e73_int_to_string.vais` added to the release
   corpus, raising it to 127 native-supported examples.
+- Promoted generic identity helpers applied directly to struct literals through
+  the public compiler driver, front fixture, parity manifest, and value corpus,
+  with `examples/e46_generic_struct.vais` added to the release corpus, raising
+  it to 128 native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

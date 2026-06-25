@@ -56,6 +56,8 @@ struct helper parameters, returns, reassignment, recursion, and aggregation,
 `examples/d5run.vais` for public struct/function modifiers with a `Str` field,
 `examples/e63_generic_struct_def.vais` for generic marker syntax on a simple
 struct used with `Int` values,
+`examples/e46_generic_struct.vais` for a generic identity helper applied
+directly to a struct literal,
 `examples/e64_enum_struct_payload.vais` for a single-field struct payload enum
 matched through payload field access,
 `examples/e55_match_wildcard.vais` for Int match literal arms with a `_`

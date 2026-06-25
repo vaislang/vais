@@ -2077,6 +2077,261 @@ static char *lower_closure_text(const char *text) {
     return joined;
 }
 
+typedef struct {
+    char *items[128];
+    int count;
+} SourceNameList;
+
+static void source_names_free(SourceNameList *list) {
+    for (int i = 0; i < list->count; i++) free(list->items[i]);
+    list->count = 0;
+}
+
+static int source_names_contains(SourceNameList *list, const char *name, size_t len) {
+    for (int i = 0; i < list->count; i++) {
+        if (strlen(list->items[i]) == len && strncmp(list->items[i], name, len) == 0) return 1;
+    }
+    return 0;
+}
+
+static void source_names_add(SourceNameList *list, const char *name, size_t len) {
+    if (list->count >= 128 || source_names_contains(list, name, len)) return;
+    list->items[list->count++] = substr_copy(name, len);
+}
+
+static void collect_struct_name_line(const char *line, SourceNameList *struct_names) {
+    char *code = strip_line_comment(line, strlen(line));
+    const char *s = skip_ws(code);
+    if (starts_with(s, "pub ") && !is_ident_continue(s[3])) s = skip_ws(s + 4);
+    if (!starts_with(s, "struct ") || is_ident_continue(s[6])) {
+        free(code);
+        return;
+    }
+    const char *name_start = skip_ws(s + 6);
+    if (!is_ident_start(*name_start)) {
+        free(code);
+        return;
+    }
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    source_names_add(struct_names, name_start, (size_t)(name_end - name_start));
+    free(code);
+}
+
+static void collect_generic_identity_line(const char *line, SourceNameList *identity_names) {
+    char *code = strip_line_comment(line, strlen(line));
+    char *trimmed = trim_copy(code);
+    const char *s = skip_ws(trimmed);
+    if (starts_with(s, "pub ") && !is_ident_continue(s[3])) s = skip_ws(s + 4);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) {
+        free(code);
+        free(trimmed);
+        return;
+    }
+
+    const char *name_start = skip_ws(s + 3);
+    if (!is_ident_start(*name_start)) {
+        free(code);
+        free(trimmed);
+        return;
+    }
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *generic_open = skip_ws(name_end);
+    if (*generic_open != '<') {
+        free(code);
+        free(trimmed);
+        return;
+    }
+    const char *generic_close = strchr(generic_open + 1, '>');
+    const char *param_open = strchr(generic_open + 1, '(');
+    if (generic_close == NULL || param_open == NULL || generic_close > param_open) {
+        free(code);
+        free(trimmed);
+        return;
+    }
+    char *generic_raw = substr_copy(generic_open + 1, (size_t)(generic_close - generic_open - 1));
+    char *generic_name = trim_copy(generic_raw);
+    if (!is_ident_start(generic_name[0])) {
+        free(generic_raw);
+        free(generic_name);
+        free(code);
+        free(trimmed);
+        return;
+    }
+    for (const char *g = generic_name + 1; *g != '\0'; g++) {
+        if (!is_ident_continue(*g)) {
+            free(generic_raw);
+            free(generic_name);
+            free(code);
+            free(trimmed);
+            return;
+        }
+    }
+
+    int param_close_idx = find_matching_paren_c(s, (int)(param_open - s));
+    if (param_close_idx < 0) {
+        free(generic_raw);
+        free(generic_name);
+        free(code);
+        free(trimmed);
+        return;
+    }
+    char *params = substr_copy(param_open + 1, (size_t)(param_close_idx - (int)(param_open - s) - 1));
+    char *param_trim = trim_copy(params);
+    const char *param_name_start = skip_ws(param_trim);
+    if (!is_ident_start(*param_name_start)) {
+        free(params);
+        free(param_trim);
+        free(generic_raw);
+        free(generic_name);
+        free(code);
+        free(trimmed);
+        return;
+    }
+    const char *param_name_end = param_name_start + 1;
+    while (is_ident_continue(*param_name_end)) param_name_end++;
+    const char *colon = skip_ws(param_name_end);
+    if (*colon != ':' || strchr(colon + 1, ',') != NULL) {
+        free(params);
+        free(param_trim);
+        free(generic_raw);
+        free(generic_name);
+        free(code);
+        free(trimmed);
+        return;
+    }
+    char *param_name = substr_copy(param_name_start, (size_t)(param_name_end - param_name_start));
+    char *param_ty = trim_copy(colon + 1);
+    if (strcmp(param_ty, generic_name) != 0) {
+        free(param_name);
+        free(param_ty);
+        free(params);
+        free(param_trim);
+        free(generic_raw);
+        free(generic_name);
+        free(code);
+        free(trimmed);
+        return;
+    }
+
+    const char *after_params = s + param_close_idx + 1;
+    const char *brace = strchr(after_params, '{');
+    const char *arrow = strstr(after_params, "->");
+    const char *close_brace = strrchr(after_params, '}');
+    if (brace == NULL || arrow == NULL || arrow > brace || close_brace == NULL || close_brace < brace) {
+        free(param_name);
+        free(param_ty);
+        free(params);
+        free(param_trim);
+        free(generic_raw);
+        free(generic_name);
+        free(code);
+        free(trimmed);
+        return;
+    }
+    char *return_raw = substr_copy(arrow + 2, (size_t)(brace - (arrow + 2)));
+    char *return_ty = trim_copy(return_raw);
+    char *body_raw = substr_copy(brace + 1, (size_t)(close_brace - brace - 1));
+    char *body = trim_copy(body_raw);
+    const char *ret = skip_ws(body);
+    int ok = 0;
+    if (starts_with(ret, "return") && !is_ident_continue(ret[6])) {
+        const char *value = skip_ws(ret + 6);
+        ok = strcmp(return_ty, generic_name) == 0 && strcmp(value, param_name) == 0;
+    }
+    if (ok) source_names_add(identity_names, name_start, (size_t)(name_end - name_start));
+
+    free(body_raw);
+    free(body);
+    free(return_raw);
+    free(return_ty);
+    free(param_name);
+    free(param_ty);
+    free(params);
+    free(param_trim);
+    free(generic_raw);
+    free(generic_name);
+    free(code);
+    free(trimmed);
+}
+
+static char *lower_generic_identity_struct_line(
+    const char *line,
+    SourceNameList *struct_names,
+    SourceNameList *identity_names
+) {
+    const char *stmt = skip_ws(line);
+    if (!starts_with(stmt, "let ") || is_ident_continue(stmt[3])) return strdup(line);
+    const char *eq = strchr(stmt, '=');
+    if (eq == NULL) return strdup(line);
+    const char *rhs = skip_ws(eq + 1);
+    if (!is_ident_start(*rhs)) return strdup(line);
+    const char *callee_end = rhs + 1;
+    while (is_ident_continue(*callee_end)) callee_end++;
+    if (!source_names_contains(identity_names, rhs, (size_t)(callee_end - rhs))) return strdup(line);
+    const char *open = skip_ws(callee_end);
+    if (*open != '(') return strdup(line);
+    int close = find_matching_paren_c(line, (int)(open - line));
+    if (close < 0) return strdup(line);
+
+    char *arg_raw = substr_copy(open + 1, (size_t)(close - (int)(open - line) - 1));
+    char *arg = trim_copy(arg_raw);
+    const char *a = skip_ws(arg);
+    if (!is_ident_start(*a)) {
+        free(arg_raw);
+        free(arg);
+        return strdup(line);
+    }
+    const char *struct_end = a + 1;
+    while (is_ident_continue(*struct_end)) struct_end++;
+    if (!source_names_contains(struct_names, a, (size_t)(struct_end - a))) {
+        free(arg_raw);
+        free(arg);
+        return strdup(line);
+    }
+    const char *after_struct = skip_ws(struct_end);
+    if (*after_struct != '{') {
+        free(arg_raw);
+        free(arg);
+        return strdup(line);
+    }
+
+    StrBuf out;
+    sb_init(&out);
+    sb_append_n(&out, line, (size_t)(eq - line + 1));
+    sb_append(&out, " ");
+    sb_append(&out, arg);
+    sb_append(&out, line + close + 1);
+    free(arg_raw);
+    free(arg);
+    return sb_take(&out);
+}
+
+static char *lower_generic_identity_struct_text(const char *text) {
+    LineVec lines = split_lines(text);
+    SourceNameList struct_names;
+    SourceNameList identity_names;
+    memset(&struct_names, 0, sizeof(struct_names));
+    memset(&identity_names, 0, sizeof(identity_names));
+
+    for (size_t i = 0; i < lines.len; i++) {
+        collect_struct_name_line(lines.items[i], &struct_names);
+        collect_generic_identity_line(lines.items[i], &identity_names);
+    }
+    for (size_t i = 0; i < lines.len; i++) {
+        char *lowered = lower_generic_identity_struct_line(lines.items[i], &struct_names, &identity_names);
+        free(lines.items[i]);
+        lines.items[i] = lowered;
+    }
+
+    char *result = join_lines(&lines, text[0] == '\0' || text[strlen(text) - 1] == '\n');
+    lines_free(&lines);
+    source_names_free(&struct_names);
+    source_names_free(&identity_names);
+    return result;
+}
+
 static char *normalize_source_text(const char *raw, int core_lower) {
     StrBuf out;
     sb_init(&out);
@@ -2151,10 +2406,12 @@ static char *prepare_source_text(const char *raw) {
     char *normalized = normalize_source_text(raw, 0);
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
-    char *prepared = normalize_source_text(closure_lowered, 1);
+    char *generic_lowered = lower_generic_identity_struct_text(closure_lowered);
+    char *prepared = normalize_source_text(generic_lowered, 1);
     free(normalized);
     free(enum_lowered);
     free(closure_lowered);
+    free(generic_lowered);
     return prepared;
 }
 
@@ -4116,11 +4373,13 @@ static char *prepare_source_file(const char *path) {
         free(closure_lowered);
         return NULL;
     }
-    char *prepared = normalize_source_text(closure_lowered, 1);
+    char *generic_lowered = lower_generic_identity_struct_text(closure_lowered);
+    char *prepared = normalize_source_text(generic_lowered, 1);
     free(merged);
     free(normalized);
     free(enum_lowered);
     free(closure_lowered);
+    free(generic_lowered);
     return prepared;
 }
 
