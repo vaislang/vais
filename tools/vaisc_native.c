@@ -83,6 +83,7 @@ typedef struct {
     int tag;
     int field_count;
     int field_is_struct[8];
+    int field_is_option_int[8];
 } VariantInfo;
 
 typedef struct {
@@ -763,6 +764,18 @@ static int enum_known_single_field_struct(EnumInfo *info, const char *name) {
     return 0;
 }
 
+static int type_text_equals_compact(const char *text, const char *expected) {
+    StrBuf compact;
+    sb_init(&compact);
+    for (const char *p = text; *p != '\0'; p++) {
+        if (*p != ' ' && *p != '\t' && *p != '\r') sb_append_n(&compact, p, 1);
+    }
+    char *actual = sb_take(&compact);
+    int ok = strcmp(actual, expected) == 0;
+    free(actual);
+    return ok;
+}
+
 static int parse_enum_line(const char *line, EnumInfo *info) {
     const char *s = skip_ws(line);
     if (!starts_with(s, "enum ")) return 0;
@@ -797,10 +810,12 @@ static int parse_enum_line(const char *line, EnumInfo *info) {
                 fields = split_top_level_commas_c(inside, field_parts, 8);
                 for (int k = 0; k < fields; k++) {
                     int is_struct = enum_known_single_field_struct(info, field_parts[k]);
-                    if (strcmp(field_parts[k], "Int") != 0 && strcmp(field_parts[k], info->name) != 0 && is_struct == 0) {
+                    int is_option_int = type_text_equals_compact(field_parts[k], "Option<Int>");
+                    if (strcmp(field_parts[k], "Int") != 0 && strcmp(field_parts[k], info->name) != 0 && is_struct == 0 && is_option_int == 0) {
                         fields = -1;
                     } else {
                         info->variants[i].field_is_struct[k] = is_struct;
+                        info->variants[i].field_is_option_int[k] = is_option_int;
                     }
                     free(field_parts[k]);
                 }
@@ -1111,6 +1126,15 @@ static int find_matching_bracket_c(const char *text, int open_index) {
 
 static char *rewrite_constructors(const char *line, EnumInfo *info);
 
+static char *rewrite_builtin_option_int_constructors(const char *line) {
+    EnumInfo option_info;
+    memset(&option_info, 0, sizeof(option_info));
+    init_builtin_option_int(&option_info);
+    char *out = rewrite_constructors(line, &option_info);
+    free_enum_info(&option_info);
+    return out;
+}
+
 static void free_split_parts(char **parts, int count, int max_parts) {
     int n = count;
     if (n < 0 || n > max_parts) n = max_parts;
@@ -1155,7 +1179,10 @@ static char *encode_payload_call(VariantInfo *variant, char **args, int argc, En
     sb_init(&payload);
     for (int i = 0; i < argc; i++) {
         char *payload_arg = variant->field_is_struct[i] ? extract_single_field_struct_payload_value(args[i]) : strdup(args[i]);
-        char *rewritten = rewrite_constructors(payload_arg, info);
+        char *option_rewritten = variant->field_is_option_int[i]
+            ? rewrite_builtin_option_int_constructors(payload_arg)
+            : strdup(payload_arg);
+        char *rewritten = rewrite_constructors(option_rewritten, info);
         if (i > 0) sb_append(&payload, " + ");
         long long factor = 1;
         for (int k = 0; k < i; k++) factor *= 1000000LL;
@@ -1168,6 +1195,7 @@ static char *encode_payload_call(VariantInfo *variant, char **args, int argc, En
         sb_append(&payload, rewritten);
         sb_append(&payload, "))");
         free(payload_arg);
+        free(option_rewritten);
         free(rewritten);
     }
     char tag_text[64];
@@ -1360,6 +1388,157 @@ static int parse_arm(const char *line, char **pattern, char **expr) {
     if (starts_with(body, "return ")) body += 7;
     *expr = trim_copy(body);
     return 1;
+}
+
+static char *parse_nested_match_head_expr(const char *expr) {
+    const char *s = skip_ws(expr);
+    if (!starts_with(s, "match ") || is_ident_continue(s[5])) return NULL;
+    s = skip_ws(s + 6);
+    const char *open = strrchr(s, '{');
+    if (open == NULL) return NULL;
+    const char *tail = skip_ws(open + 1);
+    if (*tail != '\0') return NULL;
+    return trim_copy(substr_copy(s, (size_t)(open - s)));
+}
+
+static int is_match_close_line_c(const char *line) {
+    const char *s = skip_ws(line);
+    if (*s != '}') return 0;
+    s = skip_ws(s + 1);
+    if (*s == ',') s = skip_ws(s + 1);
+    return *s == '\0';
+}
+
+static int collect_match_arms_text(LineVec *lines, size_t start, size_t *close_line_out, char **arms_text_out) {
+    StrBuf arms;
+    sb_init(&arms);
+    for (size_t i = start; i < lines->len; i++) {
+        if (is_match_close_line_c(lines->items[i])) {
+            *close_line_out = i;
+            *arms_text_out = sb_take(&arms);
+            return 1;
+        }
+        sb_append(&arms, lines->items[i]);
+        sb_append(&arms, " ");
+    }
+    free(arms.data);
+    return 0;
+}
+
+static char *strip_trailing_arm_comma_copy(const char *expr) {
+    char *out = trim_copy(expr);
+    size_t len = strlen(out);
+    while (len > 0 && (out[len - 1] == ' ' || out[len - 1] == '\t' || out[len - 1] == '\r')) {
+        out[--len] = '\0';
+    }
+    if (len > 0 && out[len - 1] == ',') {
+        out[--len] = '\0';
+        while (len > 0 && (out[len - 1] == ' ' || out[len - 1] == '\t' || out[len - 1] == '\r')) {
+            out[--len] = '\0';
+        }
+    }
+    return out;
+}
+
+static int parse_some_pattern_binder(const char *pattern, char **binder_out) {
+    const char *s = skip_ws(pattern);
+    if (!starts_with(s, "Some") || is_ident_continue(s[4])) return 0;
+    s = skip_ws(s + 4);
+    if (*s != '(') return 0;
+    int close = find_matching_paren_c(s, 0);
+    if (close < 0) return 0;
+    char *inside = trim_copy(substr_copy(s + 1, (size_t)close - 1));
+    const char *tail = skip_ws(s + close + 1);
+    if (*tail != '\0' || !is_ident_start(inside[0])) {
+        free(inside);
+        return 0;
+    }
+    for (const char *p = inside + 1; *p != '\0'; p++) {
+        if (!is_ident_continue(*p)) {
+            free(inside);
+            return 0;
+        }
+    }
+    *binder_out = inside;
+    return 1;
+}
+
+static int is_none_pattern_c(const char *pattern) {
+    const char *s = skip_ws(pattern);
+    if (!starts_with(s, "None") || is_ident_continue(s[4])) return 0;
+    s = skip_ws(s + 4);
+    return *s == '\0';
+}
+
+static int emit_option_int_match_return_lines(LineVec *out, const char *match_expr, const char *arms_text, const char *indent) {
+    char *arm_parts[16] = {0};
+    char *patterns[16] = {0};
+    char *exprs[16] = {0};
+    int arm_count = split_top_level_commas_c(arms_text, arm_parts, 16);
+    if (arm_count > 0 && arm_parts[arm_count - 1] != NULL && arm_parts[arm_count - 1][0] == '\0') {
+        free(arm_parts[arm_count - 1]);
+        arm_parts[arm_count - 1] = NULL;
+        arm_count--;
+    }
+    int ok = arm_count > 0;
+    for (int a = 0; a < arm_count && a < 16; a++) {
+        if (!parse_arm(arm_parts[a], &patterns[a], &exprs[a])) ok = 0;
+    }
+    int emitted = 0;
+    for (int a = 0; ok && a < arm_count && a < 16; a++) {
+        char *some_binder = NULL;
+        int is_some = parse_some_pattern_binder(patterns[a], &some_binder);
+        int is_none = is_none_pattern_c(patterns[a]);
+        if (!is_some && !is_none) {
+            ok = 0;
+            free(some_binder);
+            break;
+        }
+        char *clean_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        StrBuf head;
+        sb_init(&head);
+        sb_append(&head, indent);
+        sb_append(&head, emitted == 0 ? "if " : "else if ");
+        if (is_some) {
+            sb_append(&head, match_expr);
+            sb_append(&head, " % 2 == 0 {");
+        } else {
+            sb_append(&head, match_expr);
+            sb_append(&head, " == 1 {");
+        }
+        lines_push(out, sb_take(&head));
+        if (is_some) {
+            StrBuf bind;
+            sb_init(&bind);
+            sb_append(&bind, indent);
+            sb_append(&bind, "    let ");
+            sb_append(&bind, some_binder);
+            sb_append(&bind, " = (");
+            sb_append(&bind, match_expr);
+            sb_append(&bind, " / 2) % 1000000");
+            lines_push(out, sb_take(&bind));
+        }
+        StrBuf ret;
+        sb_init(&ret);
+        sb_append(&ret, indent);
+        sb_append(&ret, "    return ");
+        sb_append(&ret, clean_expr);
+        lines_push(out, sb_take(&ret));
+        StrBuf close;
+        sb_init(&close);
+        sb_append(&close, indent);
+        sb_append(&close, "}");
+        lines_push(out, sb_take(&close));
+        free(clean_expr);
+        free(some_binder);
+        emitted++;
+    }
+    for (int a = 0; a < 16; a++) {
+        free(arm_parts[a]);
+        free(patterns[a]);
+        free(exprs[a]);
+    }
+    return ok && emitted > 0;
 }
 
 static char *rewrite_struct_payload_binder_expr(const char *expr, VariantInfo *variant, char **binders, int binder_count) {
@@ -1819,6 +1998,77 @@ static char *lower_enum_text(const char *text) {
                 variant = find_variant(&info, vname);
                 free(vname);
             }
+            char *nested_match_expr = parse_nested_match_head_expr(expr);
+            if (nested_match_expr != NULL) {
+                size_t nested_close_line = i + 1;
+                char *nested_arms = NULL;
+                LineVec nested_lines;
+                lines_init(&nested_lines);
+                int nested_ok = collect_match_arms_text(&lines, i + 1, &nested_close_line, &nested_arms) &&
+                    emit_option_int_match_return_lines(&nested_lines, nested_match_expr, nested_arms, "        ");
+                free(nested_arms);
+                if (!nested_ok) {
+                    lines_free(&nested_lines);
+                    free(nested_match_expr);
+                    free(match_expr);
+                    free(typed);
+                    free(pattern);
+                    free(expr);
+                    free(rewritten_pattern);
+                    for (int k = 0; k < binder_count; k++) free(binders[k]);
+                    lines_free(&lines);
+                    lines_free(&out);
+                    free_enum_info(&info);
+                    return strdup(text);
+                }
+                StrBuf b;
+                sb_init(&b);
+                if (wildcard_pattern) {
+                    sb_append(&b, arm_index == 0 ? "    if 1 == 1 {" : "    else {");
+                } else {
+                    sb_append(&b, arm_index == 0 ? "    if " : "    else if ");
+                }
+                if (!wildcard_pattern && has_enum && info.is_payload && variant != NULL) {
+                    char tag_text[64];
+                    snprintf(tag_text, sizeof(tag_text), "%% %d == %d {", info.count, variant->tag);
+                    sb_append(&b, match_expr);
+                    sb_append(&b, " ");
+                    sb_append(&b, tag_text);
+                } else if (!wildcard_pattern) {
+                    sb_append(&b, match_expr);
+                    sb_append(&b, " == ");
+                    sb_append(&b, rewritten_pattern);
+                    sb_append(&b, " {");
+                }
+                lines_push(&out, sb_take(&b));
+                if (has_enum && info.is_payload && variant != NULL) {
+                    for (int k = 0; k < binder_count; k++) {
+                        long long denom = info.count;
+                        for (int p = 0; p < k; p++) denom *= 1000000LL;
+                        StrBuf bind;
+                        sb_init(&bind);
+                        char denom_text[80];
+                        snprintf(denom_text, sizeof(denom_text), "        let %s = (%s / %lld) %% 1000000", binders[k], match_expr, denom);
+                        sb_append(&bind, denom_text);
+                        lines_push(&out, sb_take(&bind));
+                        free(binders[k]);
+                    }
+                }
+                for (size_t n = 0; n < nested_lines.len; n++) {
+                    lines_push(&out, nested_lines.items[n]);
+                    nested_lines.items[n] = NULL;
+                }
+                lines_free(&nested_lines);
+                lines_push(&out, strdup("    }"));
+                free(pattern);
+                free(expr);
+                free(rewritten_pattern);
+                free(nested_match_expr);
+                arm_index++;
+                i = nested_close_line + 1;
+                continue;
+            }
+            free(nested_match_expr);
             char *struct_expr = (has_enum && info.is_payload && variant != NULL)
                 ? rewrite_struct_payload_binder_expr(expr, variant, binders, binder_count)
                 : strdup(expr);

@@ -56,6 +56,8 @@ This file tracks current work only.
   `filter(...).sum()` method slices by lowering them to explicit `for` loops.
 - The public compiler driver covers the first local `List<List<Int>>` literal
   double-index read slice by lowering nested rows to `List<Int>` locals.
+- The public compiler driver covers the first enum `Option<Int>` payload slice
+  by lowering a nested Option match arm to Int-coded branches.
 - The native direct engine hoists `List<Int>`-returning helper calls in `while`
   conditions and reevaluates them on each loop iteration.
 - The native direct engine lowers `List<Int>` and `List<Struct>` returned-list
@@ -616,6 +618,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   public front, parity, and value gates.
 - [x] 4.2e Promote payload-free enum `match` with `_` catch-all through public
   front, parity, and value gates.
+- [x] 4.2f Promote a single enum `Option<Int>` payload with nested Option match
+  arm lowering through public front, parity, and value gates.
 - [x] 4.3a Promote exclusive `..` and inclusive `..=` range `for` loops through
   public front, native direct, full self-host, and parity gates.
 - [x] 4.3b Decide `break` and `continue` semantics and lower them through both

@@ -1326,6 +1326,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, name_enum_match_wildcard_accept()) == 1 { return write_enum_match_wildcard_accept(path) }
     if str_eq(name, name_struct_enum_field_accept()) == 1 { return write_struct_enum_field_accept(path) }
     if str_eq(name, name_payload_struct_accept()) == 1 { return write_payload_enum_struct_accept(path) }
+    if str_eq(name, "nested_option_payload_match") == 1 { return write_nested_option_payload_match_accept(path) }
     if str_eq(name, "closure") == 1 { return write_closure_accept(path) }
     if str_eq(name, "closure_apply") == 1 { return write_closure_apply_accept(path) }
     if str_eq(name, "closure_inline_arg") == 1 { return write_closure_inline_arg_accept(path) }
@@ -1512,6 +1513,26 @@ fn write_payload_enum_struct_accept(path: Str) -> Int {
     append_line(out, "        Has(p) => return p.x,")
     append_line(out, "        Empty => return 0,")
     append_line(out, "    }")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_nested_option_payload_match_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, str_concat(enum_line(" Wrap { Empty, Has"), "(Option<Int>) }"))
+    append_line(out, "")
+    append_line(out, "fn pick(w: Wrap) -> Int {")
+    append_line(out, match_line(" w {"))
+    append_line(out, "        Has(o) => match o {")
+    append_line(out, "            Some(v) => return v,")
+    append_line(out, "            None => return 0,")
+    append_line(out, "        },")
+    append_line(out, "        Empty => return 0,")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return pick(Has(Some(42)))")
     append_line(out, "}")
     return fs_write_text(path, str_builder_finish(out))
 }
@@ -2106,6 +2127,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, name_enum_match_wildcard_accept(), label_enum_match_wildcard_accept(), 7)
     fail = fail + expect_accept(vaisc, tmp, name_struct_enum_field_accept(), label_struct_enum_field_accept(), 1)
     fail = fail + expect_accept(vaisc, tmp, name_payload_struct_accept(), label_payload_struct_accept(), 5)
+    fail = fail + expect_accept(vaisc, tmp, "nested_option_payload_match", "accepts nested Option<Int> payload match arm slice", 42)
     fail = fail + expect_accept(vaisc, tmp, "closure", label_closure_accept(), 7)
     fail = fail + expect_accept(vaisc, tmp, "closure_apply", "accepts returned closure passed to Int higher-order helper slice", 21)
     fail = fail + expect_accept(vaisc, tmp, "closure_inline_arg", "accepts non-capturing inline closure passed to Int higher-order helper slice", 12)

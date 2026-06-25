@@ -134,11 +134,11 @@ Verified release surface:
 | `Map<Str,Int>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Map<Str,Bool>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Map<Str,Char>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
-| `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, single-line and multiline expression-match binding, and local-binding `?` propagation |
+| `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, single-line and multiline expression-match binding, local-binding `?` propagation, and nested match through an enum payload |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
 | `(Int, Int)` tuple | Function return and local destructuring slice lowered through generated structs |
 | Simple `struct` | Literal construction, field access, local field write, single-field nested struct read/write, helper parameters, helper returns, helper-return assignment, generic marker syntax used with `Int` values, generic identity helpers applied to struct literals, simple `impl` method return chains, and simple `trait` plus `impl Trait for Struct` method calls |
-| Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
+| Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, single-field struct payload enum/match, and single `Option<Int>` payload enum with a nested Option match arm |
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
 and `tools/vaisc-parity.tsv`.
@@ -360,9 +360,11 @@ Verified today:
 - Single-field struct payload enum values constructed from a struct literal and
   matched through payload field access, as covered by
   `examples/e64_enum_struct_payload.vais`.
+- A single `Option<Int>` enum payload matched through a nested Option match arm,
+  as covered by `examples/e79_nested_match.vais`.
 
-Broader payload shapes, including multi-field struct payloads, are not a release
-claim yet.
+Broader payload shapes, including multi-field struct payloads and arbitrary
+nested enum payloads, are not a release claim yet.
 
 ## Lists
 
@@ -1010,6 +1012,8 @@ Verified behavior:
   covered by `examples/e93_option_question.vais`.
 - Direct `Option<Int>` helper-return matching from `main`, as covered by
   `examples/e08_option_chain.vais`.
+- `Option<Int>` carried as a single enum payload and matched in a nested
+  statement arm, as covered by `examples/e79_nested_match.vais`.
 
 `Result<Int,Int>` has the same first statement-match shape:
 

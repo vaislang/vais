@@ -67,6 +67,8 @@ with recursive evaluation,
 `examples/e59_tuple.vais` for `Int` tuple return and local destructuring,
 `examples/e64_enum_struct_payload.vais` for a single-field struct payload enum
 matched through payload field access,
+`examples/e79_nested_match.vais` for an enum carrying a single `Option<Int>`
+payload and matching that payload through a nested Option match arm,
 `examples/e55_match_wildcard.vais` for Int match literal arms with a `_`
 catch-all,
 `examples/e90_enum_wildcard.vais` for payload-free enum match with a `_`
@@ -95,6 +97,8 @@ matching from `main`,
 success path,
 `examples/d3run.vais` for a `Result<Int,Int>` helper propagation chain,
 `examples/e40_option_in_struct.vais` for `Option<Int>` stored in a struct field,
+`examples/e79_nested_match.vais` for `Option<Int>` carried as an enum payload
+and matched in a nested statement arm,
 `examples/e19_interpolation_print.vais` for print interpolation and `putchar`
 output calls,
 `examples/e25_for_filter_sum.vais` for collection for-each over integer values,

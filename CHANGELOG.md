@@ -96,6 +96,9 @@
 - Promoted `examples/e77_nested_list.vais` as the first local
   `List<List<Int>>` literal double-index slice, raising the release corpus to
   138 native-supported examples.
+- Promoted `examples/e79_nested_match.vais` as the first enum `Option<Int>`
+  payload with a nested Option match arm, raising the release corpus to 139
+  native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

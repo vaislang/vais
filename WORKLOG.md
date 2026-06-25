@@ -67,6 +67,9 @@
 - Promoted `examples/e77_nested_list.vais` into the release corpus by lowering
   a local `List<List<Int>>` literal to row `List<Int>` locals and rewriting the
   verified double-index read.
+- Promoted `examples/e79_nested_match.vais` into the release corpus by allowing
+  a single enum `Option<Int>` payload and lowering its nested Option match arm
+  to Int-coded branches.
 
 ## 2026-06-24
 
