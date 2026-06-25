@@ -82,6 +82,9 @@
   method return-chain slice through public driver lowering, front contract,
   parity manifest, and value corpus, raising the release corpus to 132
   native-supported examples.
+- Promoted `examples/e49_closure_arg.vais` as the first non-capturing inline
+  closure literal passed directly to a single-closure `Int` higher-order helper,
+  raising the release corpus to 133 native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

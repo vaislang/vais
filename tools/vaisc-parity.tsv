@@ -50,6 +50,7 @@ examples/e45_string_eq.vais	native-supported	String literal equality.
 examples/e46_generic_struct.vais	native-supported	Generic identity function applied to a struct literal.
 examples/e47_char_ops.vais	native-supported	Single-byte char literal equality.
 examples/e48_string_index.vais	native-supported	String byte indexing.
+examples/e49_closure_arg.vais	native-supported	Non-capturing inline closure literal passed to a single Int higher-order helper.
 examples/e54_inventory.vais	native-supported	Multiple struct instances passed to a struct parameter helper.
 examples/e55_match_wildcard.vais	native-supported	Int match with literal patterns and wildcard catch-all.
 examples/e56_collatz.vais	native-supported	Modulo/division recursion.

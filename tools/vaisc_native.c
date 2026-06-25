@@ -1992,6 +1992,64 @@ static char *trim_trailing_semicolon_copy(const char *text) {
     return trimmed;
 }
 
+static int parse_inline_int_closure(const char *arg, char **param_out, char **body_out) {
+    const char *s = skip_ws(arg);
+    if (*s != '|') return 0;
+    s++;
+    const char *bar = strchr(s, '|');
+    if (bar == NULL) return 0;
+    char *param_raw = substr_copy(s, (size_t)(bar - s));
+    char *param = trim_copy(param_raw);
+    free(param_raw);
+    if (!is_ident_start(param[0])) {
+        free(param);
+        return 0;
+    }
+    for (const char *p = param + 1; *p != '\0'; p++) {
+        if (!is_ident_continue(*p)) {
+            free(param);
+            return 0;
+        }
+    }
+    char *body = trim_copy(bar + 1);
+    if (body[0] == '\0') {
+        free(param);
+        free(body);
+        return 0;
+    }
+    *param_out = param;
+    *body_out = body;
+    return 1;
+}
+
+static int closure_body_uses_only_param(const char *body, const char *param) {
+    size_t param_len = strlen(param);
+    for (size_t i = 0; body[i] != '\0';) {
+        if (is_string_delim_c(body[i])) {
+            int end = skip_string_literal_c(body, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end;
+            continue;
+        }
+        if (body[i] == '\'') {
+            int end = skip_char_literal_c(body, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end;
+            continue;
+        }
+        if (is_ident_start(body[i])) {
+            const char *start = body + i;
+            i++;
+            while (is_ident_continue(body[i])) i++;
+            size_t len = (size_t)(body + i - start);
+            if (len != param_len || strncmp(start, param, len) != 0) return 0;
+            continue;
+        }
+        i++;
+    }
+    return 1;
+}
+
 static int parse_closure_higher_order_fn(
     const char *header,
     const char *body_line,
@@ -2157,6 +2215,82 @@ static char *rewrite_higher_order_call_line(
     return strdup(line);
 }
 
+static void push_inline_closure_apply_helper(LineVec *helpers, const char *apply, const char *param, const char *body) {
+    StrBuf fn;
+    sb_init(&fn);
+    sb_append(&fn, "fn ");
+    sb_append(&fn, apply);
+    sb_append(&fn, "(env: Int, ");
+    sb_append(&fn, param);
+    sb_append(&fn, ": Int) -> Int {");
+    lines_push(helpers, sb_take(&fn));
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append(&ret, "    return ");
+    sb_append(&ret, body);
+    lines_push(helpers, sb_take(&ret));
+    lines_push(helpers, strdup("}"));
+    lines_push(helpers, strdup(""));
+}
+
+static char *rewrite_inline_higher_order_call_line(
+    const char *line,
+    ClosureHigherOrder *higher,
+    int higher_count,
+    int *inline_count,
+    LineVec *helpers
+) {
+    for (int h = 0; h < higher_count; h++) {
+        const char *cursor = line;
+        size_t name_len = strlen(higher[h].name);
+        while ((cursor = strstr(cursor, higher[h].name)) != NULL) {
+            size_t pos = (size_t)(cursor - line);
+            int before_ok = pos == 0 || !is_ident_continue(line[pos - 1]);
+            int after_ok = !is_ident_continue(line[pos + name_len]);
+            if (!before_ok || !after_ok) {
+                cursor += name_len;
+                continue;
+            }
+            const char *open = skip_ws(cursor + name_len);
+            if (*open != '(') {
+                cursor += name_len;
+                continue;
+            }
+            int close = find_matching_paren_c(line, (int)(open - line));
+            if (close < 0) return strdup(line);
+            char *args_raw = substr_copy(open + 1, (size_t)(line + close - open - 1));
+            char *args[2] = {0};
+            int argc = split_top_level_commas_c(args_raw, args, 2);
+            free(args_raw);
+            char *param = NULL;
+            char *body = NULL;
+            if (argc == 2 && parse_inline_int_closure(args[0], &param, &body) && closure_body_uses_only_param(body, param)) {
+                char apply_name[160];
+                snprintf(apply_name, sizeof(apply_name), "__vais_inline_closure%d__apply", (*inline_count)++);
+                push_inline_closure_apply_helper(helpers, apply_name, param, body);
+                char *with_value = replace_word_all(higher[h].body, higher[h].value_param, args[1]);
+                char *expanded = rewrite_closure_param_calls(with_value, higher[h].fn_param, "0", apply_name);
+                StrBuf out;
+                sb_init(&out);
+                sb_append_n(&out, line, pos);
+                sb_append(&out, expanded);
+                sb_append(&out, line + close + 1);
+                free(with_value);
+                free(expanded);
+                free(param);
+                free(body);
+                free_split_parts(args, argc, 2);
+                return sb_take(&out);
+            }
+            free(param);
+            free(body);
+            free_split_parts(args, argc, 2);
+            cursor = line + close + 1;
+        }
+    }
+    return strdup(line);
+}
+
 static char *lower_closure_text(const char *text) {
     LineVec lines = split_lines(text);
     LineVec out;
@@ -2243,6 +2377,9 @@ static char *lower_closure_text(const char *text) {
 
     LineVec rewritten;
     lines_init(&rewritten);
+    LineVec inline_helpers;
+    lines_init(&inline_helpers);
+    int inline_count = 0;
     char *closure_var = NULL;
     char *closure_apply = NULL;
     for (size_t i = 0; i < out.len; i++) {
@@ -2272,16 +2409,22 @@ static char *lower_closure_text(const char *text) {
                 }
             }
         }
+        char *inline_rewritten = rewrite_inline_higher_order_call_line(line, higher, higher_count, &inline_count, &inline_helpers);
         if (closure_var != NULL && closure_apply != NULL) {
-            char *ho_rewritten = rewrite_higher_order_call_line(line, higher, higher_count, closure_var, closure_apply);
+            char *ho_rewritten = rewrite_higher_order_call_line(inline_rewritten, higher, higher_count, closure_var, closure_apply);
             char *direct_rewritten = rewrite_closure_call_line(ho_rewritten, closure_var, closure_apply);
             lines_push(&rewritten, direct_rewritten);
             free(ho_rewritten);
         } else {
-            lines_push(&rewritten, strdup(line));
+            lines_push(&rewritten, strdup(inline_rewritten));
         }
+        free(inline_rewritten);
     }
-    char *joined = join_lines(&rewritten, text[strlen(text) - 1] == '\n');
+    LineVec final_lines;
+    lines_init(&final_lines);
+    for (size_t i = 0; i < inline_helpers.len; i++) lines_push(&final_lines, strdup(inline_helpers.items[i]));
+    for (size_t i = 0; i < rewritten.len; i++) lines_push(&final_lines, strdup(rewritten.items[i]));
+    char *joined = join_lines(&final_lines, text[strlen(text) - 1] == '\n');
     for (int i = 0; i < maker_count; i++) {
         free(makers[i].maker);
         free(makers[i].apply);
@@ -2291,7 +2434,9 @@ static char *lower_closure_text(const char *text) {
     free(closure_apply);
     lines_free(&lines);
     lines_free(&out);
+    lines_free(&inline_helpers);
     lines_free(&rewritten);
+    lines_free(&final_lines);
     return joined;
 }
 

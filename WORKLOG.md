@@ -52,6 +52,9 @@
 - Promoted `examples/e09_struct_method.vais` into the release corpus by
   lowering simple `impl` struct methods and return-expression method chains to
   ordinary helper calls with intermediate struct locals.
+- Promoted `examples/e49_closure_arg.vais` into the release corpus by lowering
+  non-capturing inline closure literals passed to a single-closure `Int`
+  higher-order helper into generated apply helpers.
 
 ## 2026-06-24
 
