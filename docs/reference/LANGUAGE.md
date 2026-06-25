@@ -68,7 +68,8 @@ a dependency resolve plain imports under their own package source root.
 Imported files are merged in deterministic import-path order before
 compilation. Missing imports, duplicate top-level symbols, import cycles,
 missing dependency manifests, unsafe dependency paths, and invalid manifests are
-front-contract errors.
+front-contract errors. `scripts/vaisc` runs Vais-authored manifest and import
+graph preflight tools before native `emit-ir`, `build`, and `run`.
 
 Representative gate-backed examples are `examples/module_basic/main.vais`,
 `examples/package_basic/src/main.vais`, and

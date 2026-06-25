@@ -385,6 +385,21 @@ fn parse_top_symbol(line: Str) -> Str {
     return str_slice(code, begin, i - begin)
 }
 
+fn brace_delta(line: Str) -> Int {
+    let code = strip_comment(line)
+    let mut delta = 0
+    let mut i = 0
+    while i < code.len() {
+        if code[i] == 123 {
+            delta = delta + 1
+        } else if code[i] == 125 {
+            delta = delta - 1
+        }
+        i = i + 1
+    }
+    return delta
+}
+
 fn report_issue(path: Str, line_no: Int, message: Str, help: Str) -> Int {
     print(str_concat("error: ", message))
     print(`  --> {path}:{line_no}:1`)
@@ -428,6 +443,7 @@ fn check_file(path: Str, root: Str, dep_aliases: Str, dep_roots: Str, stack: Str
     let text = fs_read_text(path)
     let mut pos = 0
     let mut line_no = 1
+    let mut depth = 0
     while pos <= text.len() {
         let line_start = pos
         let mut line_end = pos
@@ -436,18 +452,23 @@ fn check_file(path: Str, root: Str, dep_aliases: Str, dep_roots: Str, stack: Str
             line_end = line_end + 1
         }
         let raw = line_without_cr(text, line_start, line_end)
-        let symbol = parse_top_symbol(raw)
-        if symbol.len() > 0 {
-            if symbols.contains(symbol) == 1 {
-                return report_issue(path, line_no, str_concat(str_concat("duplicate top-level symbol `", symbol), "`"), "first definition already loaded in the import graph")
+        if depth == 0 {
+            let symbol = parse_top_symbol(raw)
+            if symbol.len() > 0 {
+                if symbols.contains(symbol) == 1 {
+                    return report_issue(path, line_no, str_concat(str_concat("duplicate top-level symbol `", symbol), "`"), "first definition already loaded in the import graph")
+                }
+                symbols.insert(symbol, 1)
             }
-            symbols.insert(symbol, 1)
         }
+        depth = depth + brace_delta(raw)
+        if depth < 0 { depth = 0 }
         if line_end >= text.len() { pos = text.len() + 1 } else { pos = line_end + 1 }
         line_no = line_no + 1
     }
     pos = 0
     line_no = 1
+    depth = 0
     while pos <= text.len() {
         let line_start = pos
         let mut line_end = pos
@@ -456,15 +477,19 @@ fn check_file(path: Str, root: Str, dep_aliases: Str, dep_roots: Str, stack: Str
             line_end = line_end + 1
         }
         let raw = line_without_cr(text, line_start, line_end)
-        let import_name = parse_import_name(raw)
-        if import_name.len() > 0 {
-            let target = import_target(path, root, dep_aliases, dep_roots, import_name)
-            if fs_exists(target) == 0 {
-                return report_issue(path, line_no, "missing import path", str_concat("expected import at ", target))
+        if depth == 0 {
+            let import_name = parse_import_name(raw)
+            if import_name.len() > 0 {
+                let target = import_target(path, root, dep_aliases, dep_roots, import_name)
+                if fs_exists(target) == 0 {
+                    return report_issue(path, line_no, "missing import path", str_concat("expected import at ", target))
+                }
+                let status = check_file(target, root, dep_aliases, dep_roots, next_stack, visited, symbols)
+                if status != 0 { return status }
             }
-            let status = check_file(target, root, dep_aliases, dep_roots, next_stack, visited, symbols)
-            if status != 0 { return status }
         }
+        depth = depth + brace_delta(raw)
+        if depth < 0 { depth = 0 }
         if line_end >= text.len() { pos = text.len() + 1 } else { pos = line_end + 1 }
         line_no = line_no + 1
     }

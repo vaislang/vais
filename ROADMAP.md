@@ -759,6 +759,8 @@ time.
     imports.
   - [x] Extend the Vais-authored local import graph checker to follow all
     declared package manifest local dependency aliases from the entry package.
+  - [x] Wire `scripts/vaisc` to run cached Vais-authored package manifest and
+    import graph preflight tools before native `emit-ir`, `build`, and `run`.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR
   is practical.
 

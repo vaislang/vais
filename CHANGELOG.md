@@ -18,6 +18,8 @@
   dependency alias and dependency-internal plain imports.
 - Extended that import graph checker to follow all declared entry-package local
   dependency aliases.
+- Wired `scripts/vaisc` to run cached Vais-authored package manifest and import
+  graph preflight tools before native `emit-ir`, `build`, and `run`.
 - Promoted collection for-each over integer values through the full self-host
   path, native direct engine, parity, and value gates, with
   `examples/e25_for_filter_sum.vais`, `examples/e27_list_max.vais`, and

@@ -23,6 +23,11 @@ fn line(s: Str) -> Str {
     return str_concat(s, str_byte(10))
 }
 
+fn append_line(out: Int, text: Str) -> Int {
+    str_builder_append(out, text)
+    return str_builder_push(out, 10)
+}
+
 fn write_text(path: Str, text: Str) -> Int {
     return fs_write_text(path, text)
 }
@@ -84,6 +89,36 @@ fn setup_dependency_accept(root: Str) -> Str {
     return entry
 }
 
+fn setup_method_names_accept(root: Str) -> Str {
+    fs_mkdirs(root)
+    let entry = path_join(root, "main.vais")
+    let out = str_builder_new()
+    append_line(out, "trait Shape {")
+    append_line(out, "    fn area(self) -> Int")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "struct Square { size: Int }")
+    append_line(out, "struct Rect { width: Int }")
+    append_line(out, "")
+    append_line(out, "impl Shape for Square {")
+    append_line(out, "    fn area(self) -> Int {")
+    append_line(out, "        return self.size * self.size")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "impl Shape for Rect {")
+    append_line(out, "    fn area(self) -> Int {")
+    append_line(out, "        return self.width")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    write_text(entry, str_builder_finish(out))
+    return entry
+}
+
 fn capture_graph(vaisc: Str, checker: Str, entry: Str, out: Str, err: Str) -> Int {
     let argv: List<Str> = []
     argv.push(vaisc)
@@ -129,6 +164,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, checker, tmp, "duplicate_symbol", setup_duplicate_symbol(path_join(tmp, "duplicate_symbol")), 1, "duplicate top-level symbol `helper`")
     fail = fail + expect_case(vaisc, checker, tmp, "import_cycle", setup_import_cycle(path_join(tmp, "import_cycle")), 1, "import cycle detected")
     fail = fail + expect_case(vaisc, checker, tmp, "dependency_accept", setup_dependency_accept(path_join(tmp, "dependency_accept")), 0, "PASS import graph clean")
+    fail = fail + expect_case(vaisc, checker, tmp, "method_names_accept", setup_method_names_accept(path_join(tmp, "method_names_accept")), 0, "PASS import graph clean")
     if fail == 0 {
         print("RESULT: Vais import graph contract gate OK")
         return 0

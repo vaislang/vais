@@ -44,4 +44,159 @@ if native_needs_build; then
     trap - EXIT INT TERM
 fi
 
+find_source_arg() {
+    local cmd="${1:-}"
+    shift || true
+    case "$cmd" in
+        emit-ir|build|run) ;;
+        *) return 0 ;;
+    esac
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --)
+                return 0
+                ;;
+            -o|--output|--ir-out|--clang|--engine)
+                if [ "$#" -lt 2 ]; then
+                    return 0
+                fi
+                shift 2
+                ;;
+            --engine=*|--keep-tmp)
+                shift
+                ;;
+            *)
+                printf '%s\n' "$1"
+                return 0
+                ;;
+        esac
+    done
+}
+
+tool_needs_build() {
+    local src="$1"
+    local bin="$2"
+    if [ ! -x "$bin" ]; then
+        return 0
+    fi
+    for dep in \
+        "$src" \
+        "$native" \
+        "$HERE/compiler/self/vaisc_core.ll" \
+        "$HERE/tools/vaisc_native.c"
+    do
+        if [ "$dep" -nt "$bin" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+ensure_preflight_tool() {
+    local src="$1"
+    local bin="$2"
+    if ! tool_needs_build "$src" "$bin"; then
+        return 0
+    fi
+    local lock="$bin.lock"
+    while ! mkdir "$lock" 2>/dev/null; do
+        sleep 0.1
+    done
+    local tmp_bin=""
+    cleanup_tool_lock() {
+        if [ -n "$tmp_bin" ]; then
+            rm -f "$tmp_bin"
+        fi
+        rmdir "$lock" 2>/dev/null || true
+    }
+    trap cleanup_tool_lock EXIT INT TERM
+    if tool_needs_build "$src" "$bin"; then
+        tmp_bin="$bin.tmp.$$"
+        "$native" build "$src" -o "$tmp_bin" >/dev/null
+        mv "$tmp_bin" "$bin"
+        tmp_bin=""
+    fi
+    cleanup_tool_lock
+    trap - EXIT INT TERM
+}
+
+nearest_manifest() {
+    local source="$1"
+    local dir
+    dir="$(cd "$(dirname "$source")" 2>/dev/null && pwd -P)" || return 0
+    while [ -n "$dir" ]; do
+        if [ -f "$dir/vais.toml" ]; then
+            printf '%s\n' "$dir/vais.toml"
+            return 0
+        fi
+        local parent
+        parent="$(dirname "$dir")"
+        if [ "$parent" = "$dir" ]; then
+            return 0
+        fi
+        dir="$parent"
+    done
+}
+
+absolute_source_path() {
+    local source="$1"
+    local dir base
+    dir="$(cd "$(dirname "$source")" 2>/dev/null && pwd -P)" || return 1
+    base="$(basename "$source")"
+    printf '%s/%s\n' "$dir" "$base"
+}
+
+skip_preflight_source() {
+    local source="$1"
+    case "$source" in
+        "$HERE/compiler/self/"*|*/compiler/self/*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+run_preflight_command() {
+    local out err rc
+    out="$(mktemp)"
+    err="$(mktemp)"
+    if "$@" >"$out" 2>"$err"; then
+        rm -f "$out" "$err"
+        return 0
+    fi
+    rc=$?
+    cat "$out" >&2
+    cat "$err" >&2
+    rm -f "$out" "$err"
+    return "$rc"
+}
+
+run_vais_preflight() {
+    if [ "${VAISC_NO_PREFLIGHT:-}" = "1" ]; then
+        return 0
+    fi
+    local source="$1"
+    if [ -z "$source" ] || [ "${source##*.}" != "vais" ] || [ ! -f "$source" ]; then
+        return 0
+    fi
+    local checked_source
+    checked_source="$(absolute_source_path "$source")" || checked_source="$source"
+    if skip_preflight_source "$checked_source"; then
+        return 0
+    fi
+    local manifest_tool="$HERE/build/vais-manifest-check"
+    local graph_tool="$HERE/build/vais-import-graph-check"
+    ensure_preflight_tool "$HERE/tools/vais_manifest_check.vais" "$manifest_tool"
+    ensure_preflight_tool "$HERE/tools/vais_import_graph_check.vais" "$graph_tool"
+    local manifest
+    manifest="$(nearest_manifest "$checked_source")"
+    if [ -n "$manifest" ]; then
+        run_preflight_command "$manifest_tool" "$manifest" "$checked_source"
+    fi
+    run_preflight_command "$graph_tool" "$checked_source"
+}
+
+source_arg="$(find_source_arg "$@")"
+run_vais_preflight "$source_arg"
+
 exec "$native" "$@"

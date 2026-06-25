@@ -51,6 +51,11 @@ native `scripts/vaisc` public command. The core regenerates from
   contract checker for the manifest-free missing import, duplicate symbol, and
   import cycle diagnostics. It also follows declared package manifest local
   dependency aliases and dependency-internal plain imports.
+- `scripts/vaisc` runs cached Vais-authored manifest and import graph preflight
+  binaries before native `emit-ir`, `build`, and `run`; the native driver still
+  owns CLI parsing, OS-facing graph loading, LLVM emission, and linking. The
+  wrapper skips `compiler/self` generated/trusted sources because the self-host
+  gates validate those paths directly.
 - Lists, structs, string indexing, control flow, function calls, and print emission are covered by the release gates.
 
 ## Next Work
