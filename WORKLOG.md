@@ -10,6 +10,8 @@
   graph preflight tools before native `emit-ir`, `build`, and `run`.
 - Closed the Phase 5 self-host expansion checklist after release gates confirmed
   regenerated core, preflight, import graph, and self-host paths remain green.
+- Froze the v1-candidate language and prelude reference docs around the current
+  gate-backed surface.
 - Added a Vais-authored local import graph contract checker and release gate for
   manifest-free missing import, duplicate top-level symbol, and import cycle
   diagnostics.

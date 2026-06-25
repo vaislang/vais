@@ -1,7 +1,9 @@
 # Vais Language Reference
 
-This page describes the current gate-backed Vais source surface. Vais files use
-the `.vais` extension and are compiled with `scripts/vaisc`.
+This page describes the current gate-backed Vais source surface. Together with
+`std/PRELUDE.md`, it is the v1-candidate reference freeze for verified language
+claims. Vais files use the `.vais` extension and are compiled with
+`scripts/vaisc`.
 
 ## Status Model
 

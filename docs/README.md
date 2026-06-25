@@ -13,7 +13,7 @@ compiler workspace.
 | [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) | Pre-tag release checklist |
 | [reference/LANGUAGE.md](reference/LANGUAGE.md) | Current Vais syntax and verified language surface |
 | [../examples/README.md](../examples/README.md) | Value-checked example corpus |
-| [../std/PRELUDE.md](../std/PRELUDE.md) | Prelude APIs and their verification status |
+| [../std/PRELUDE.md](../std/PRELUDE.md) | v1-candidate prelude APIs and their verification status |
 | [../compiler/self/SELF_HOST.md](../compiler/self/SELF_HOST.md) | Self-host compiler notes |
 | [../website/DEPLOYMENT.md](../website/DEPLOYMENT.md) | Official site source and deployment notes |
 | [design/VAIS-DESIGN.md](design/VAIS-DESIGN.md) | Short design contract |

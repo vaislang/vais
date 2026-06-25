@@ -69,6 +69,7 @@ to the matching GitHub Release. The release checklist is
 | [CHANGELOG.md](CHANGELOG.md) | Current source release notes |
 | [docs/release/RELEASE_CHECKLIST.md](docs/release/RELEASE_CHECKLIST.md) | Pre-tag release checklist |
 | [docs/reference/LANGUAGE.md](docs/reference/LANGUAGE.md) | Current syntax and verified language surface |
+| [std/PRELUDE.md](std/PRELUDE.md) | v1-candidate prelude API reference |
 | [docs/design/MODULES.md](docs/design/MODULES.md) | Current module/package/import model |
 | [examples/README.md](examples/README.md) | Value-checked example corpus |
 | [compiler/self/SELF_HOST.md](compiler/self/SELF_HOST.md) | Self-host compiler status |

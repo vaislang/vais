@@ -771,7 +771,7 @@ native host driver is limited to CLI, OS integration, and linking duties.
 
 Goal: publish a coherent first stable Vais release.
 
-- [ ] 6.1 Freeze the v1 language reference and prelude reference.
+- [x] 6.1 Freeze the v1 language reference and prelude reference.
 - [ ] 6.2 Cut a release candidate tag and attach verified standalone archives.
 - [ ] 6.3 Run all release, direct/full, install/package, website, and self-host
   gates from a clean checkout.

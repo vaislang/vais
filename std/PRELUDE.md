@@ -1,8 +1,15 @@
-# Vais Prelude Status
+# Vais Prelude Reference
 
-This file records prelude-like APIs and whether they are currently verified by a
-gate. "Verified" means protected by a value or compiler gate. "Specified" means
-intended but not a public release claim yet.
+This file is the v1-candidate prelude reference for Vais. It records
+prelude-like APIs and whether they are currently verified by a gate.
+
+- "Verified" means protected by a value, compiler, parity, or release gate.
+- "Partial" means only the described concrete slice is a public claim.
+- "Specified" means intended or designed, but not a public release claim yet.
+
+The verified entries below are frozen for the current v1 candidate: changing a
+signature, behavior, or status requires an updated gate and synchronized
+documentation in `docs/reference/LANGUAGE.md`.
 
 ## Output
 
@@ -56,6 +63,7 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | --- | --- |
 | `[1, 2, 3]` | Verified for Int lists |
 | `List<Int>` | Verified |
+| `List<Struct>` | Verified for declared structs in the documented local, parameter, return, and assignment slices |
 | `List<Str>` | Partial; verified for local `push`, local index read, and host process arguments |
 | `List<T>` | Partial |
 | `Map<Int,Int>` | Verified for local values, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `remove`, `clear`, and `get_opt` |
@@ -76,8 +84,9 @@ full in-memory status/stdout/stderr capture is specified for a later gate.
 | `v[i]` | Verified |
 | `v.sum()` | Verified for Int lists |
 | `v.push(x)` | Verified for Int lists and selected self-host shapes |
-| `v.map(|x| ...)` | Specified |
-| `v.filter(|x| BOOL)` | Specified |
+| `v.map(|x| ...)` | Verified for non-capturing `List<Int>.map` |
+| `v.filter(|x| BOOL).sum()` | Verified for non-capturing `List<Int>` filter-sum |
+| `v.filter(|x| BOOL)` | Specified beyond the verified filter-sum slice |
 
 Invalid list access traps at runtime. This includes negative or out-of-range
 `v[i]`, `v.last()` on an empty list, and `v.pop()` on an empty list. `v.pop()`
@@ -156,9 +165,10 @@ input with no leading decimal digit returns `0`; `parse_int("-5")` returns `-5`.
 | `bitnot(x)` | Verified |
 | `bitand(a,b)`, `bitor(a,b)`, `bitxor(a,b)` | Verified |
 | `shl(x,n)`, `shr(x,n)` | Verified |
-| `break`, `continue` | Specified |
+| `break`, `continue` | Verified |
 
-## Current Work
+## Freeze Rules
 
-New prelude entries should land with examples and value-correctness tests before
-they are described as verified.
+New prelude entries must land with examples and value-correctness tests before
+they are described as verified. Broader generic collection or result APIs remain
+specified only until their concrete compiler and runtime gates exist.
