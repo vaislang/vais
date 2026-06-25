@@ -426,6 +426,10 @@ Previous Vais source release.
   return-type, unsupported generic `Option<T>`/`Result<T,E>`, and non-verified
   `Map<K,V>` surface diagnostics into the Vais-authored checker contract while
   keeping the public checker and install/package issue counts aligned.
+- Classified the remaining front-contract rejects so native-front-only
+  closure/enum/match limits stay out of the public checker, while
+  manifest/import graph/source-path diagnostics remain explicit host-boundary
+  work.
 - Moved the NV-C4 parity manifest gate into `tools/vais_parity_check.vais`, so
   release-corpus manifest parsing and native result comparison run through a
   Vais-authored harness.

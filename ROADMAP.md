@@ -721,7 +721,7 @@ time.
 
 - [ ] 5.1 Keep `compiler/self/fixpoint_full.vais` and `vaisc_core.ll`
   regeneration green after each language expansion.
-- [ ] 5.2 Move front-contract validation that belongs to the compiler into
+- [x] 5.2 Move front-contract validation that belongs to the compiler into
   self-host Vais code once the language can express it cleanly.
   - [x] Move invalid static import path checking into the Vais-authored checker
     contract while keeping the public compiler front diagnostic aligned.
@@ -737,6 +737,10 @@ time.
     contract while keeping function-type values clean.
   - [x] Move invalid `main` entrypoint signature checking into the
     Vais-authored checker contract while keeping function-type values clean.
+  - [x] Classify the remaining front-contract rejects: closure/enum/match
+    subset rejects are native-front-only limits for already verified full
+    language features, while manifest/import graph/source-path diagnostics stay
+    in the explicit host/driver boundary tracked by 5.3.
 - [ ] 5.3 Move more diagnostics and source preparation out of the host driver while
   keeping OS-facing file/process work behind explicit host APIs.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR

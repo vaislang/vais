@@ -2,6 +2,11 @@
 
 ## 2026-06-25
 
+- Closed Phase 5.2 for the current compiler-owned static source diagnostics:
+  remaining native-front-only closure/enum/match rejects are not public checker
+  rejects because the full language already verifies those features, and
+  manifest/import graph/source-path diagnostics remain explicit 5.3 host-boundary
+  work.
 - Added invalid `main` entrypoint signature detection to the Vais-authored
   checker contract while preserving function-type and closure examples.
 - Added missing helper return-type detection to the Vais-authored checker
