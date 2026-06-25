@@ -102,6 +102,13 @@ typedef struct {
 
 typedef struct {
     char *name;
+    char *fn_param;
+    char *value_param;
+    char *body;
+} ClosureHigherOrder;
+
+typedef struct {
+    char *name;
     char *params[16];
     char *param_types[16];
     int param_count;
@@ -1961,13 +1968,205 @@ static char *rewrite_closure_call_line(const char *line, const char *var, const 
     return sb_take(&out);
 }
 
+static int closure_type_is_fn_int(const char *type) {
+    StrBuf compact;
+    sb_init(&compact);
+    for (const char *p = type; *p != '\0'; p++) {
+        if (*p != ' ' && *p != '\t') sb_append_n(&compact, p, 1);
+    }
+    char *text = sb_take(&compact);
+    int ok = strcmp(text, "fn(Int)->Int") == 0;
+    free(text);
+    return ok;
+}
+
+static char *trim_trailing_semicolon_copy(const char *text) {
+    char *trimmed = trim_copy(text);
+    size_t len = strlen(trimmed);
+    if (len > 0 && trimmed[len - 1] == ';') {
+        trimmed[len - 1] = '\0';
+        char *again = trim_copy(trimmed);
+        free(trimmed);
+        return again;
+    }
+    return trimmed;
+}
+
+static int parse_closure_higher_order_fn(
+    const char *header,
+    const char *body_line,
+    const char *close_line,
+    char **name_out,
+    char **fn_param_out,
+    char **value_param_out,
+    char **body_out
+) {
+    if (strcmp(skip_ws(close_line), "}") != 0) return 0;
+    const char *s = skip_ws(header);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    const char *name_start = skip_ws(s + 3);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *open = skip_ws(name_end);
+    if (*open != '(') return 0;
+    int close_params = find_matching_paren_c(header, (int)(open - header));
+    if (close_params < 0) return 0;
+    const char *after_params = skip_ws(header + close_params + 1);
+    if (!starts_with(after_params, "->")) return 0;
+    const char *ret = skip_ws(after_params + 2);
+    if (!starts_with(ret, "Int") || is_ident_continue(ret[3])) return 0;
+    const char *brace = strchr(ret, '{');
+    if (brace == NULL) return 0;
+
+    char *params_raw = substr_copy(open + 1, (size_t)(header + close_params - open - 1));
+    char *params[2] = {0};
+    int count = split_top_level_commas_c(params_raw, params, 2);
+    free(params_raw);
+    if (count != 2) {
+        free_split_parts(params, count, 2);
+        return 0;
+    }
+
+    char *colon0 = strchr(params[0], ':');
+    char *colon1 = strchr(params[1], ':');
+    if (colon0 == NULL || colon1 == NULL) {
+        free_split_parts(params, count, 2);
+        return 0;
+    }
+    *colon0 = '\0';
+    *colon1 = '\0';
+    char *fn_param = trim_copy(params[0]);
+    char *fn_type = trim_copy(colon0 + 1);
+    char *value_param = trim_copy(params[1]);
+    char *value_type = trim_copy(colon1 + 1);
+    int ok = is_ident_start(fn_param[0]) && is_ident_start(value_param[0]) &&
+        closure_type_is_fn_int(fn_type) && strcmp(value_type, "Int") == 0;
+    for (const char *p = fn_param + 1; ok && *p != '\0'; p++) ok = is_ident_continue(*p);
+    for (const char *p = value_param + 1; ok && *p != '\0'; p++) ok = is_ident_continue(*p);
+    if (!ok) {
+        free(fn_param);
+        free(fn_type);
+        free(value_param);
+        free(value_type);
+        free_split_parts(params, count, 2);
+        return 0;
+    }
+
+    const char *body = skip_ws(body_line);
+    if (!starts_with(body, "return") || is_ident_continue(body[6])) {
+        free(fn_param);
+        free(fn_type);
+        free(value_param);
+        free(value_type);
+        free_split_parts(params, count, 2);
+        return 0;
+    }
+    char *body_expr = trim_trailing_semicolon_copy(skip_ws(body + 6));
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    *name_out = name;
+    *fn_param_out = fn_param;
+    *value_param_out = value_param;
+    *body_out = body_expr;
+    free(fn_type);
+    free(value_type);
+    free_split_parts(params, count, 2);
+    return 1;
+}
+
+static void closure_higher_order_free(ClosureHigherOrder *items, int count) {
+    for (int i = 0; i < count; i++) {
+        free(items[i].name);
+        free(items[i].fn_param);
+        free(items[i].value_param);
+        free(items[i].body);
+    }
+}
+
+static char *rewrite_closure_param_calls(
+    const char *expr,
+    const char *fn_param,
+    const char *closure_var,
+    const char *closure_apply
+) {
+    StrBuf out;
+    sb_init(&out);
+    size_t name_len = strlen(fn_param);
+    for (size_t i = 0; expr[i] != '\0';) {
+        int before_ok = i == 0 || !is_ident_continue(expr[i - 1]);
+        if (before_ok && strncmp(expr + i, fn_param, name_len) == 0 && expr[i + name_len] == '(') {
+            sb_append(&out, closure_apply);
+            sb_append(&out, "(");
+            sb_append(&out, closure_var);
+            sb_append(&out, ", ");
+            i += name_len + 1;
+        } else {
+            sb_append_n(&out, expr + i, 1);
+            i++;
+        }
+    }
+    return sb_take(&out);
+}
+
+static char *rewrite_higher_order_call_line(
+    const char *line,
+    ClosureHigherOrder *higher,
+    int higher_count,
+    const char *closure_var,
+    const char *closure_apply
+) {
+    for (int h = 0; h < higher_count; h++) {
+        const char *cursor = line;
+        size_t name_len = strlen(higher[h].name);
+        while ((cursor = strstr(cursor, higher[h].name)) != NULL) {
+            size_t pos = (size_t)(cursor - line);
+            int before_ok = pos == 0 || !is_ident_continue(line[pos - 1]);
+            int after_ok = !is_ident_continue(line[pos + name_len]);
+            if (!before_ok || !after_ok) {
+                cursor += name_len;
+                continue;
+            }
+            const char *open = skip_ws(cursor + name_len);
+            if (*open != '(') {
+                cursor += name_len;
+                continue;
+            }
+            int close = find_matching_paren_c(line, (int)(open - line));
+            if (close < 0) return strdup(line);
+            char *args_raw = substr_copy(open + 1, (size_t)(line + close - open - 1));
+            char *args[2] = {0};
+            int argc = split_top_level_commas_c(args_raw, args, 2);
+            free(args_raw);
+            if (argc == 2 && strcmp(args[0], closure_var) == 0) {
+                char *with_value = replace_word_all(higher[h].body, higher[h].value_param, args[1]);
+                char *expanded = rewrite_closure_param_calls(with_value, higher[h].fn_param, closure_var, closure_apply);
+                StrBuf out;
+                sb_init(&out);
+                sb_append_n(&out, line, pos);
+                sb_append(&out, expanded);
+                sb_append(&out, line + close + 1);
+                free(with_value);
+                free(expanded);
+                free_split_parts(args, argc, 2);
+                return sb_take(&out);
+            }
+            free_split_parts(args, argc, 2);
+            cursor = line + close + 1;
+        }
+    }
+    return strdup(line);
+}
+
 static char *lower_closure_text(const char *text) {
     LineVec lines = split_lines(text);
     LineVec out;
     lines_init(&out);
     ClosureMaker makers[8];
     int maker_count = 0;
+    ClosureHigherOrder higher[8];
+    int higher_count = 0;
     memset(makers, 0, sizeof(makers));
+    memset(higher, 0, sizeof(higher));
 
     for (size_t i = 0; i < lines.len; i++) {
         char *maker = NULL;
@@ -2024,6 +2223,21 @@ static char *lower_closure_text(const char *text) {
         }
         free(maker);
         free(capture);
+        if (i + 2 < lines.len && higher_count < 8) {
+            char *hname = NULL;
+            char *fn_param = NULL;
+            char *value_param = NULL;
+            char *body = NULL;
+            if (parse_closure_higher_order_fn(lines.items[i], lines.items[i + 1], lines.items[i + 2], &hname, &fn_param, &value_param, &body)) {
+                higher[higher_count].name = hname;
+                higher[higher_count].fn_param = fn_param;
+                higher[higher_count].value_param = value_param;
+                higher[higher_count].body = body;
+                higher_count++;
+                i += 2;
+                continue;
+            }
+        }
         lines_push(&out, strdup(lines.items[i]));
     }
 
@@ -2059,7 +2273,10 @@ static char *lower_closure_text(const char *text) {
             }
         }
         if (closure_var != NULL && closure_apply != NULL) {
-            lines_push(&rewritten, rewrite_closure_call_line(line, closure_var, closure_apply));
+            char *ho_rewritten = rewrite_higher_order_call_line(line, higher, higher_count, closure_var, closure_apply);
+            char *direct_rewritten = rewrite_closure_call_line(ho_rewritten, closure_var, closure_apply);
+            lines_push(&rewritten, direct_rewritten);
+            free(ho_rewritten);
         } else {
             lines_push(&rewritten, strdup(line));
         }
@@ -2069,6 +2286,7 @@ static char *lower_closure_text(const char *text) {
         free(makers[i].maker);
         free(makers[i].apply);
     }
+    closure_higher_order_free(higher, higher_count);
     free(closure_var);
     free(closure_apply);
     lines_free(&lines);

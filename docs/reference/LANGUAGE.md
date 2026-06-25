@@ -1182,8 +1182,13 @@ fn main() -> Int {
 }
 ```
 
-General closure literals and broader higher-order function patterns are not
-release-surface claims yet.
+Returned single-`Int` closures can also be passed to a single-closure
+higher-order helper that applies the closure to an `Int`, as covered by
+`examples/e81_closure_return_apply.vais`.
+
+General closure literals, inline closure arguments, multiple closure
+parameters, and broader higher-order function patterns are not release-surface
+claims yet.
 
 ## Diagnostics
 

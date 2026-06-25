@@ -123,6 +123,7 @@ examples/e52_state_machine.vais	native-supported	Array-backed in-run state machi
 examples/e53_word_count.vais	native-supported	Str word-count state machine with byte scanning.
 examples/e75_list_push.vais	native-supported	List push/growth and index access.
 examples/e80_closure_return.vais	native-supported	Single-Int closure return lowered to Int env/apply helper.
+examples/e81_closure_return_apply.vais	native-supported	Returned single-Int closure passed to an Int higher-order helper.
 examples/e82_list_literal_direct_arg.vais	native-supported	Inline List<Int> literal passed directly to a List<Int> parameter.
 examples/e01_nested_struct.vais	native-supported	Single-field nested struct literal and nested field read.
 examples/e32_nested_field_mut.vais	native-supported	Single-field nested struct field assignment and read.

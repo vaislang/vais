@@ -46,6 +46,9 @@
 - Promoted `examples/e59_tuple.vais` into the release corpus by lowering `Int`
   tuple function returns and local destructuring to generated struct storage in
   the public compiler driver.
+- Promoted `examples/e81_closure_return_apply.vais` into the release corpus by
+  lowering a returned single-`Int` closure passed to an `Int` higher-order
+  helper into the existing environment/apply helper representation.
 
 ## 2026-06-24
 

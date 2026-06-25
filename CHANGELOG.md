@@ -74,6 +74,10 @@
   destructuring slice through public driver lowering, front contract, parity
   manifest, and value corpus, raising the release corpus to 130
   native-supported examples.
+- Promoted `examples/e81_closure_return_apply.vais` as a returned single-`Int`
+  closure passed to an `Int` higher-order helper through public driver lowering,
+  front contract, parity manifest, and value corpus, raising the release corpus
+  to 131 native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,
