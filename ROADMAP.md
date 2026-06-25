@@ -754,6 +754,9 @@ time.
   - [x] Add a Vais-authored local import graph contract checker for the current
     manifest-free missing import, duplicate top-level symbol, and import cycle
     diagnostics.
+  - [x] Extend the Vais-authored local import graph checker to follow the first
+    package manifest local dependency alias and dependency-internal plain
+    imports.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR
   is practical.
 
