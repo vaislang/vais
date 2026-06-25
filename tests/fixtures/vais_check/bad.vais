@@ -10,6 +10,7 @@ fn f(s: String) -> Int {
     let zs = vec![1, 2, 3]
     let map: HashMap<Int, Int> = {}
     let maybe: Option<Str> = None
+    let result: Result<Int, Str> = Err("bad")
     let casted = value as Int
     let small: i32 = 5
     let precise: f64 = 0

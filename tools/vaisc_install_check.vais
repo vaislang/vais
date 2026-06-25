@@ -239,7 +239,7 @@ fn main() -> Int {
     let check_bad_out = path_join(tmp, "check-bad.out")
     let check_bad_err = path_join(tmp, "check-bad.err")
     let check_bad_rc = capture2(installed_check, bad_fixture, check_bad_out, check_bad_err)
-    if check_bad_rc == 1 and line_prefix_count(fs_read_text(check_bad_out), "error:") == 25 {
+    if check_bad_rc == 1 and line_prefix_count(fs_read_text(check_bad_out), "error:") == 26 {
         pass("installed vais-check flags bad fixture")
     } else {
         fail = fail + fail_with_files("installed vais-check bad", check_bad_out, check_bad_err)

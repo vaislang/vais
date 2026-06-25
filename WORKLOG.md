@@ -2,6 +2,9 @@
 
 ## 2026-06-25
 
+- Added unsupported generic `Result<T,E>` detection to the Vais-authored checker
+  contract, kept the standalone checker issue count aligned, and preserved
+  verified `Result<Int,Int>` as the only claimed Result shape.
 - Added unsupported generic `Option<T>` detection to the Vais-authored checker
   contract, kept verified `Option<Int>` examples clean, and updated the
   standalone install/package checker issue count.
