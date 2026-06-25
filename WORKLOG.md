@@ -2,6 +2,10 @@
 
 ## 2026-06-25
 
+- Added `tools/vais_manifest_check.vais` and
+  `tools/vais_manifest_contract_check.vais` as a Vais-authored package manifest
+  contract gate, then wired it into the release gate through
+  `scripts/test-vais-manifest-check-vais.sh`.
 - Closed Phase 5.2 for the current compiler-owned static source diagnostics:
   remaining native-front-only closure/enum/match rejects are not public checker
   rejects because the full language already verifies those features, and

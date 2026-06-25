@@ -1,0 +1,169 @@
+fn str_eq(a: Str, b: Str) -> Int {
+    if a.len() != b.len() { return 0 }
+    let mut i = 0
+    while i < a.len() {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn str_contains(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 1 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn line(s: Str) -> Str {
+    return str_concat(s, str_byte(10))
+}
+
+fn write_text(path: Str, text: Str) -> Int {
+    return fs_write_text(path, text)
+}
+
+fn manifest3(name: Str, version: Str, source: Str) -> Str {
+    return str_concat(line(str_concat("name = \"", str_concat(name, "\""))), str_concat(line(str_concat("version = \"", str_concat(version, "\""))), line(str_concat("source = \"", str_concat(source, "\"")))))
+}
+
+fn setup_clean(root: Str) -> Str {
+    let src = path_join(root, "src")
+    fs_mkdirs(src)
+    let manifest = path_join(root, "vais.toml")
+    write_text(manifest, manifest3("clean", "0.1.0", "src"))
+    return manifest
+}
+
+fn setup_missing_source(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    write_text(manifest, str_concat(line("name = \"missing_source\""), line("version = \"0.1.0\"")))
+    return manifest
+}
+
+fn setup_bad_source(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    write_text(manifest, manifest3("bad_source", "0.1.0", "../src"))
+    return manifest
+}
+
+fn setup_bad_dep_path(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    let text = str_concat(manifest3("bad_dep_path", "0.1.0", "src"), str_concat(line("[dependencies]"), line("web = \"https://example.com/pkg\"")))
+    write_text(manifest, text)
+    return manifest
+}
+
+fn setup_missing_dep(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    let text = str_concat(manifest3("missing_dep", "0.1.0", "src"), str_concat(line("[dependencies]"), line("missing = \"../missing\"")))
+    write_text(manifest, text)
+    return manifest
+}
+
+fn setup_duplicate_key(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    let text = str_concat(manifest3("duplicate", "0.1.0", "src"), line("source = \"other\""))
+    write_text(manifest, text)
+    return manifest
+}
+
+fn setup_unsupported_key(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    let text = str_concat(manifest3("unsupported", "0.1.0", "src"), line("license = \"MIT\""))
+    write_text(manifest, text)
+    return manifest
+}
+
+fn setup_unsupported_section(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    let text = str_concat(manifest3("section", "0.1.0", "src"), line("[scripts]"))
+    write_text(manifest, text)
+    return manifest
+}
+
+fn setup_invalid_entry(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    let text = str_concat(manifest3("invalid", "0.1.0", "src"), line("not valid"))
+    write_text(manifest, text)
+    return manifest
+}
+
+fn capture_manifest(vaisc: Str, checker: Str, manifest: Str, out: Str, err: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("run")
+    argv.push(checker)
+    argv.push("--")
+    argv.push(manifest)
+    return proc_capture_to(argv, out, err)
+}
+
+fn expect_case(vaisc: Str, checker: Str, tmp: Str, label: Str, manifest: Str, want: Int, needle: Str) -> Int {
+    let out = path_join(tmp, str_concat(label, ".out"))
+    let err = path_join(tmp, str_concat(label, ".err"))
+    let got = capture_manifest(vaisc, checker, manifest, out, err)
+    let output = str_concat(fs_read_text(out), fs_read_text(err))
+    if got == want and str_contains(output, needle) == 1 {
+        print(str_concat("  PASS manifest ", label))
+        return 0
+    }
+    print(str_concat("  FAIL manifest ", label))
+    print(output)
+    return 1
+}
+
+fn usage() -> Int {
+    print("usage: vais-manifest-contract-check <repo-root> <tmp-dir>")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() != 2 { return usage() }
+    let root = proc_arg(0)
+    let tmp = proc_arg(1)
+    if fs_mkdirs(tmp) != 0 {
+        print(str_concat("error: could not create temp dir: ", tmp))
+        return 1
+    }
+    let vaisc = path_join(root, "scripts/vaisc")
+    let checker = path_join(path_join(root, "tools"), "vais_manifest_check.vais")
+    let mut fail = 0
+    fail = fail + expect_case(vaisc, checker, tmp, "clean", setup_clean(path_join(tmp, "clean")), 0, "PASS package manifest clean")
+    fail = fail + expect_case(vaisc, checker, tmp, "missing_source", setup_missing_source(path_join(tmp, "missing_source")), 1, "package manifest is missing required key `source`")
+    fail = fail + expect_case(vaisc, checker, tmp, "bad_source", setup_bad_source(path_join(tmp, "bad_source")), 1, "package manifest source must be a local relative path")
+    fail = fail + expect_case(vaisc, checker, tmp, "bad_dep_path", setup_bad_dep_path(path_join(tmp, "bad_dep_path")), 1, "local dependency path must be a relative local path")
+    fail = fail + expect_case(vaisc, checker, tmp, "missing_dep", setup_missing_dep(path_join(tmp, "missing_dep")), 1, "local dependency manifest not found")
+    fail = fail + expect_case(vaisc, checker, tmp, "duplicate_key", setup_duplicate_key(path_join(tmp, "duplicate_key")), 1, "duplicate package manifest key `source`")
+    fail = fail + expect_case(vaisc, checker, tmp, "unsupported_key", setup_unsupported_key(path_join(tmp, "unsupported_key")), 1, "unsupported package manifest key")
+    fail = fail + expect_case(vaisc, checker, tmp, "unsupported_section", setup_unsupported_section(path_join(tmp, "unsupported_section")), 1, "unsupported package manifest section `[scripts]`")
+    fail = fail + expect_case(vaisc, checker, tmp, "invalid_entry", setup_invalid_entry(path_join(tmp, "invalid_entry")), 1, "invalid package manifest entry")
+    if fail == 0 {
+        print("RESULT: Vais manifest contract gate OK")
+        return 0
+    }
+    print("RESULT: FAILURES")
+    return 1
+}

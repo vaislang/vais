@@ -743,6 +743,10 @@ time.
     in the explicit host/driver boundary tracked by 5.3.
 - [ ] 5.3 Move more diagnostics and source preparation out of the host driver while
   keeping OS-facing file/process work behind explicit host APIs.
+  - [x] Add a Vais-authored package manifest contract checker for the current
+    manifest diagnostics: missing required keys, unsafe `source`, unsupported
+    keys/sections, invalid entries, unsafe dependency paths, missing dependency
+    manifests, and duplicate keys/aliases.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR
   is practical.
 

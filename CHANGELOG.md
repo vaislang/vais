@@ -430,6 +430,10 @@ Previous Vais source release.
   closure/enum/match limits stay out of the public checker, while
   manifest/import graph/source-path diagnostics remain explicit host-boundary
   work.
+- Added a Vais-authored package manifest contract gate that covers required
+  keys, safe `source` paths, unsupported keys/sections, invalid entries,
+  dependency path safety, missing dependency manifests, and duplicate
+  key/alias diagnostics.
 - Moved the NV-C4 parity manifest gate into `tools/vais_parity_check.vais`, so
   release-corpus manifest parsing and native result comparison run through a
   Vais-authored harness.
