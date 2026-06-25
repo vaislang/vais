@@ -7,7 +7,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define VAIS_VERSION "0.3.1"
+#define VAIS_VERSION "0.3.2"
 
 extern int64_t compile(char *src);
 

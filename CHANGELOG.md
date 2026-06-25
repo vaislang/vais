@@ -4,6 +4,14 @@
 
 ### Changed
 
+- No unreleased changes.
+
+## v0.3.2 - 2026-06-26
+
+Current Vais source release.
+
+### Changed
+
 - Extended the Vais-authored package manifest checker contract to reject
   missing manifest source directories, matching the native compiler diagnostic
   while keeping package discovery in the driver boundary.
@@ -279,7 +287,7 @@
 
 ## v0.3.1 - 2026-06-20
 
-Current Vais source release.
+Previous Vais source release.
 
 ### Fixed
 
