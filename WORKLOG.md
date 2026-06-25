@@ -2,6 +2,8 @@
 
 ## 2026-06-25
 
+- Added optional entry-path source-root containment checking to the
+  Vais-authored package manifest checker contract.
 - Added local dependency cycle detection to the Vais-authored package manifest
   checker contract using normalized local manifest paths.
 - Moved the package manifest missing-source-directory diagnostic into the

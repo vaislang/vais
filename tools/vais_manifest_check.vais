@@ -67,6 +67,15 @@ fn stack_entry(path: Str) -> Str {
     return str_concat(str_byte(10), str_concat(normalize_path(path), str_byte(10)))
 }
 
+fn path_is_under(path: Str, root: Str) -> Int {
+    let p = normalize_path(path)
+    let r = normalize_path(root)
+    if str_eq(p, r) == 1 { return 1 }
+    let prefix = str_concat(r, "/")
+    if p.len() < prefix.len() { return 0 }
+    return text_at(p, 0, prefix)
+}
+
 fn is_space(c: Int) -> Int {
     if c == 32 { return 1 }
     if c == 9 { return 1 }
@@ -234,7 +243,7 @@ fn report_issue(path: Str, line_no: Int, message: Str, help: Str) -> Int {
     return 1
 }
 
-fn check_manifest_with_stack(path: Str, stack: Str) -> Int {
+fn check_manifest_with_stack(path: Str, stack: Str, entry_path: Str) -> Int {
     if fs_exists(path) == 0 {
         print(str_concat("error: package manifest not found: ", path))
         return 1
@@ -292,7 +301,7 @@ fn check_manifest_with_stack(path: Str, stack: Str) -> Int {
                     if contains_text(next_stack, dep_entry) == 1 {
                         return report_issue(path, line_no, "local dependency cycle detected", str_concat("remove one dependency from the cycle ending at ", normalize_path(dep_manifest)))
                     }
-                    let dep_status = check_manifest_with_stack(dep_manifest, next_stack)
+                    let dep_status = check_manifest_with_stack(dep_manifest, next_stack, "")
                     if dep_status != 0 { return dep_status }
                 } else if str_eq(key, "name") == 1 {
                     if has_name == 1 { return report_issue(path, line_no, "duplicate package manifest key `name`", "keep exactly one `name`, one `version`, and one `source` key") }
@@ -323,20 +332,30 @@ fn check_manifest_with_stack(path: Str, stack: Str) -> Int {
     if fs_exists(source_root) == 0 {
         return report_issue(path, source_line, "package manifest source directory not found", str_concat("create the source directory at ", str_concat(source_root, " or update `source`.")))
     }
+    if stack.len() == 0 and entry_path.len() > 0 {
+        if path_is_under(entry_path, source_root) == 0 {
+            return report_issue(path, source_line, "package entry is outside manifest source root", str_concat("compile a `.vais` file under ", str_concat(normalize_path(source_root), " or update `source`.")))
+        }
+    }
     if stack.len() == 0 { print("PASS package manifest clean") }
     return 0
 }
 
 fn check_manifest(path: Str) -> Int {
-    return check_manifest_with_stack(path, "")
+    return check_manifest_with_stack(path, "", "")
+}
+
+fn check_manifest_entry(path: Str, entry_path: Str) -> Int {
+    return check_manifest_with_stack(path, "", entry_path)
 }
 
 fn usage() -> Int {
-    print("usage: vais-manifest-check <manifest-path>")
+    print("usage: vais-manifest-check <manifest-path> [entry-path]")
     return 2
 }
 
 fn main() -> Int {
-    if proc_argc() != 1 { return usage() }
-    return check_manifest(proc_arg(0))
+    if proc_argc() == 1 { return check_manifest(proc_arg(0)) }
+    if proc_argc() == 2 { return check_manifest_entry(proc_arg(0), proc_arg(1)) }
+    return usage()
 }

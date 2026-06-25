@@ -9,6 +9,8 @@
   while keeping package discovery in the driver boundary.
 - Extended the same manifest checker contract to reject local dependency cycles
   using normalized local manifest paths.
+- Added optional entry-path source-root containment checking to the
+  Vais-authored package manifest checker contract.
 - Promoted collection for-each over integer values through the full self-host
   path, native direct engine, parity, and value gates, with
   `examples/e25_for_filter_sum.vais`, `examples/e27_list_max.vais`, and

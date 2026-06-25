@@ -116,6 +116,15 @@ fn setup_dependency_cycle(root: Str) -> Str {
     return path_join(a, "vais.toml")
 }
 
+fn setup_entry_outside_source(root: Str) -> Str {
+    fs_mkdirs(path_join(root, "src"))
+    fs_mkdirs(path_join(root, "other"))
+    write_text(path_join(root, "vais.toml"), manifest3("entry_outside", "0.1.0", "src"))
+    let entry = path_join(path_join(root, "other"), "main.vais")
+    write_text(entry, line("fn main() -> Int { return 42 }"))
+    return entry
+}
+
 fn setup_unsupported_key(root: Str) -> Str {
     fs_mkdirs(root)
     let manifest = path_join(root, "vais.toml")
@@ -150,10 +159,35 @@ fn capture_manifest(vaisc: Str, checker: Str, manifest: Str, out: Str, err: Str)
     return proc_capture_to(argv, out, err)
 }
 
+fn capture_manifest_entry(vaisc: Str, checker: Str, manifest: Str, entry: Str, out: Str, err: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(vaisc)
+    argv.push("run")
+    argv.push(checker)
+    argv.push("--")
+    argv.push(manifest)
+    argv.push(entry)
+    return proc_capture_to(argv, out, err)
+}
+
 fn expect_case(vaisc: Str, checker: Str, tmp: Str, label: Str, manifest: Str, want: Int, needle: Str) -> Int {
     let out = path_join(tmp, str_concat(label, ".out"))
     let err = path_join(tmp, str_concat(label, ".err"))
     let got = capture_manifest(vaisc, checker, manifest, out, err)
+    let output = str_concat(fs_read_text(out), fs_read_text(err))
+    if got == want and str_contains(output, needle) == 1 {
+        print(str_concat("  PASS manifest ", label))
+        return 0
+    }
+    print(str_concat("  FAIL manifest ", label))
+    print(output)
+    return 1
+}
+
+fn expect_entry_case(vaisc: Str, checker: Str, tmp: Str, label: Str, manifest: Str, entry: Str, want: Int, needle: Str) -> Int {
+    let out = path_join(tmp, str_concat(label, ".out"))
+    let err = path_join(tmp, str_concat(label, ".err"))
+    let got = capture_manifest_entry(vaisc, checker, manifest, entry, out, err)
     let output = str_concat(fs_read_text(out), fs_read_text(err))
     if got == want and str_contains(output, needle) == 1 {
         print(str_concat("  PASS manifest ", label))
@@ -189,6 +223,8 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, checker, tmp, "duplicate_key", setup_duplicate_key(path_join(tmp, "duplicate_key")), 1, "duplicate package manifest key `source`")
     fail = fail + expect_case(vaisc, checker, tmp, "duplicate_alias", setup_duplicate_alias(path_join(tmp, "duplicate_alias")), 1, "duplicate local dependency alias `math`")
     fail = fail + expect_case(vaisc, checker, tmp, "dependency_cycle", setup_dependency_cycle(path_join(tmp, "dependency_cycle")), 1, "local dependency cycle detected")
+    let entry_outside = setup_entry_outside_source(path_join(tmp, "entry_outside"))
+    fail = fail + expect_entry_case(vaisc, checker, tmp, "entry_outside", path_join(path_join(tmp, "entry_outside"), "vais.toml"), entry_outside, 1, "package entry is outside manifest source root")
     fail = fail + expect_case(vaisc, checker, tmp, "unsupported_key", setup_unsupported_key(path_join(tmp, "unsupported_key")), 1, "unsupported package manifest key")
     fail = fail + expect_case(vaisc, checker, tmp, "unsupported_section", setup_unsupported_section(path_join(tmp, "unsupported_section")), 1, "unsupported package manifest section `[scripts]`")
     fail = fail + expect_case(vaisc, checker, tmp, "invalid_entry", setup_invalid_entry(path_join(tmp, "invalid_entry")), 1, "invalid package manifest entry")

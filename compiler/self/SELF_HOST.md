@@ -44,7 +44,8 @@ native `scripts/vaisc` public command. The core regenerates from
 - `tools/vais_manifest_check.vais` is the Vais-authored package manifest
   contract checker. `scripts/test-vais-manifest-check-vais.sh` exercises the
   current manifest diagnostic surface, including missing source directories and
-  local dependency cycles, while the product driver remains responsible for
+  local dependency cycles. It can also validate an optional entry path against
+  the manifest source root while the product driver remains responsible for
   OS-facing package discovery and module graph loading.
 - Lists, structs, string indexing, control flow, function calls, and print emission are covered by the release gates.
 
