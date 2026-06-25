@@ -730,6 +730,9 @@ time.
   - [x] Move unsupported `Result<T,E>` generic-surface checking into the
     Vais-authored checker contract while keeping verified `Result<Int,Int>`
     clean.
+  - [x] Move unsupported `Map<K,V>` generic-surface checking into the
+    Vais-authored checker contract while keeping verified concrete Map shapes
+    clean.
 - [ ] 5.3 Move more diagnostics and source preparation out of the host driver while
   keeping OS-facing file/process work behind explicit host APIs.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR

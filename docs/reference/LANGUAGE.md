@@ -1042,13 +1042,14 @@ local: an `Err` value returns from the current `Result<Int,Int>` function, and a
 and `examples/e92_result_question_success.vais`.
 Helper-chain `Result<Int,Int>` propagation is covered by `examples/d3run.vais`.
 
-Not included yet: generic `Option<T>` or `Result<T,E>`, broader expression-form
-`match` beyond the gate-backed `Option<Int>` and `Result<Int,Int>` binding
-shapes, `?` beyond the gate-backed `Option<Int>` and `Result<Int,Int>`
-local-binding shapes, broader Map APIs that return `Option`, direct-engine
-Option/Result-specific claims beyond concrete `Map<Int,V>.get_opt` match bindings, and
-nested option/result payloads. Unsupported generic `Option`/`Result` forms are
-rejected by front diagnostics instead of being treated as verified language.
+Not included yet: generic `Option<T>`, `Result<T,E>`, or `Map<K,V>` beyond the
+verified concrete Map shapes, broader expression-form `match` beyond the
+gate-backed `Option<Int>` and `Result<Int,Int>` binding shapes, `?` beyond the
+gate-backed `Option<Int>` and `Result<Int,Int>` local-binding shapes, broader
+Map APIs that return `Option`, direct-engine Option/Result-specific claims
+beyond concrete `Map<Int,V>.get_opt` match bindings, and nested option/result
+payloads. Unsupported generic `Option`, `Result`, and `Map` forms are rejected
+by front diagnostics instead of being treated as verified language.
 
 ## Strings, Characters, And Output
 

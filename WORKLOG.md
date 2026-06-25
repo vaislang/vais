@@ -2,6 +2,9 @@
 
 ## 2026-06-25
 
+- Added unsupported generic `Map<K,V>` detection to the Vais-authored checker
+  contract, kept verified concrete Map shapes clean, and updated the standalone
+  checker issue count.
 - Added unsupported generic `Result<T,E>` detection to the Vais-authored checker
   contract, kept the standalone checker issue count aligned, and preserved
   verified `Result<Int,Int>` as the only claimed Result shape.
