@@ -1229,7 +1229,8 @@ scripts/vais-check examples/c4.vais
 The public checker is built from `tools/vais_check_cli.vais` and
 `tools/vais_check_core.vais`. Release gates check its fixture issue counts,
 coordinate/help output shape, clean-file behavior, invalid static import path
-diagnostics, and packaged command path.
+diagnostics, unsupported generic `Option<T>` diagnostics, and packaged command
+path.
 
 Common corrections:
 

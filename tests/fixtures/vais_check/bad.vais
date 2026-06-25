@@ -9,6 +9,7 @@ fn f(s: String) -> Int {
     let ys = List<Int>::new()
     let zs = vec![1, 2, 3]
     let map: HashMap<Int, Int> = {}
+    let maybe: Option<Str> = None
     let casted = value as Int
     let small: i32 = 5
     let precise: f64 = 0

@@ -121,6 +121,7 @@ fn check_required_patterns(output: Str) -> Int {
     fail = fail + require_contains("Vais checker contract includes 'error: list macro spelling is not Vais'", "error: list macro spelling is not Vais", output)
     fail = fail + require_contains("Vais checker contract includes 'error: list type spelling is List'", "error: list type spelling is List", output)
     fail = fail + require_contains("Vais checker contract includes 'error: map type spelling is Map'", "error: map type spelling is Map", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: only Option<Int> is verified for now'", "error: only Option<Int> is verified for now", output)
     fail = fail + require_contains("Vais checker contract includes 'error: scalar type spelling is capitalized'", "error: scalar type spelling is capitalized", output)
     fail = fail + require_contains("Vais checker contract includes 'error: string type spelling is Str'", "error: string type spelling is Str", output)
     fail = fail + require_contains("Vais checker contract includes 'error: string conversion uses Str call'", "error: string conversion uses Str call", output)
@@ -226,7 +227,7 @@ fn main() -> Int {
         return 1
     }
 
-    let expected_count = 24
+    let expected_count = 25
     let vaisc = path_join(root, "scripts/vaisc")
     let vais_check = path_join(root, "scripts/vais-check")
     let fixture_dir = path_join(path_join(path_join(root, "tests"), "fixtures"), "vais_check")

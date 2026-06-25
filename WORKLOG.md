@@ -2,6 +2,9 @@
 
 ## 2026-06-25
 
+- Added unsupported generic `Option<T>` detection to the Vais-authored checker
+  contract, kept verified `Option<Int>` examples clean, and updated the
+  standalone install/package checker issue count.
 - Moved invalid static import path checking into the Vais-authored checker
   contract, added the matching public front reject fixture, and updated the
   checker fixture count to keep `scripts/vais-check` and `scripts/vaisc`
