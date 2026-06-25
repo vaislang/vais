@@ -20,6 +20,8 @@
   dependency aliases.
 - Wired `scripts/vaisc` to run cached Vais-authored package manifest and import
   graph preflight tools before native `emit-ir`, `build`, and `run`.
+- Closed the Phase 5 self-host expansion checklist after release gates confirmed
+  regenerated core, preflight, import graph, and self-host paths remain green.
 - Promoted collection for-each over integer values through the full self-host
   path, native direct engine, parity, and value gates, with
   `examples/e25_for_filter_sum.vais`, `examples/e27_list_max.vais`, and

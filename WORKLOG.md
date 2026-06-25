@@ -8,6 +8,8 @@
   entry-package local dependency aliases.
 - Wired `scripts/vaisc` to run cached Vais-authored package manifest and import
   graph preflight tools before native `emit-ir`, `build`, and `run`.
+- Closed the Phase 5 self-host expansion checklist after release gates confirmed
+  regenerated core, preflight, import graph, and self-host paths remain green.
 - Added a Vais-authored local import graph contract checker and release gate for
   manifest-free missing import, duplicate top-level symbol, and import cycle
   diagnostics.

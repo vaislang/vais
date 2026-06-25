@@ -719,7 +719,7 @@ listed feature has examples plus compiler gates.
 Goal: make the self-host compiler own more of the actual compiler behavior over
 time.
 
-- [ ] 5.1 Keep `compiler/self/fixpoint_full.vais` and `vaisc_core.ll`
+- [x] 5.1 Keep `compiler/self/fixpoint_full.vais` and `vaisc_core.ll`
   regeneration green after each language expansion.
 - [x] 5.2 Move front-contract validation that belongs to the compiler into
   self-host Vais code once the language can express it cleanly.
@@ -741,7 +741,7 @@ time.
     subset rejects are native-front-only limits for already verified full
     language features, while manifest/import graph/source-path diagnostics stay
     in the explicit host/driver boundary tracked by 5.3.
-- [ ] 5.3 Move more diagnostics and source preparation out of the host driver while
+- [x] 5.3 Move more diagnostics and source preparation out of the host driver while
   keeping OS-facing file/process work behind explicit host APIs.
   - [x] Add a Vais-authored package manifest contract checker for the current
     manifest diagnostics: missing required keys, unsafe `source`, unsupported
