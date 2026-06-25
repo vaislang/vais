@@ -117,6 +117,7 @@ examples/t6.vais	native-supported	Single-field struct literal and field read smo
 examples/c1.vais	native-supported	Payload-free enum tags and simple return-arm match.
 examples/c2.vais	native-supported	List literal and sum support.
 examples/c4.vais	native-supported	Struct literal and field access.
+examples/c5.vais	native-supported	Local single-capture Int closure lowered to an apply helper.
 examples/e14_print.vais	native-supported	Print interpolation and IO call support.
 examples/e50_ast_eval.vais	native-supported	Small recursive payload enum lowered to Int-coded tags.
 examples/e51_index_ast.vais	native-supported	Flat index AST encoded in a 20-field struct with recursive evaluation.

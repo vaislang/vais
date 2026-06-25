@@ -55,6 +55,9 @@
 - Promoted `examples/e49_closure_arg.vais` into the release corpus by lowering
   non-capturing inline closure literals passed to a single-closure `Int`
   higher-order helper into generated apply helpers.
+- Promoted `examples/c5.vais` into the release corpus by lowering a local
+  closure with one `Int` capture to an apply helper and captured environment
+  value.
 
 ## 2026-06-24
 

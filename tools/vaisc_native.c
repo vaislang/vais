@@ -2011,7 +2011,7 @@ static int parse_inline_int_closure(const char *arg, char **param_out, char **bo
             return 0;
         }
     }
-    char *body = trim_copy(bar + 1);
+    char *body = trim_trailing_semicolon_copy(bar + 1);
     if (body[0] == '\0') {
         free(param);
         free(body);
@@ -2047,6 +2047,67 @@ static int closure_body_uses_only_param(const char *body, const char *param) {
         }
         i++;
     }
+    return 1;
+}
+
+static int closure_body_single_capture(const char *body, const char *param, char **capture_out) {
+    char *capture = NULL;
+    size_t param_len = strlen(param);
+    for (size_t i = 0; body[i] != '\0';) {
+        if (is_string_delim_c(body[i])) {
+            int end = skip_string_literal_c(body, (int)i);
+            if (end < 0) {
+                free(capture);
+                return 0;
+            }
+            i = (size_t)end;
+            continue;
+        }
+        if (body[i] == '\'') {
+            int end = skip_char_literal_c(body, (int)i);
+            if (end < 0) {
+                free(capture);
+                return 0;
+            }
+            i = (size_t)end;
+            continue;
+        }
+        if (is_ident_start(body[i])) {
+            const char *start = body + i;
+            i++;
+            while (is_ident_continue(body[i])) i++;
+            size_t len = (size_t)(body + i - start);
+            if (len == param_len && strncmp(start, param, len) == 0) continue;
+            if (capture == NULL) {
+                capture = substr_copy(start, len);
+            } else if (strlen(capture) != len || strncmp(capture, start, len) != 0) {
+                free(capture);
+                return 0;
+            }
+            continue;
+        }
+        i++;
+    }
+    if (capture == NULL) return 0;
+    *capture_out = capture;
+    return 1;
+}
+
+static int parse_local_closure_let(const char *line, char **name_out, char **param_out, char **body_out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    char *param = NULL;
+    char *body = NULL;
+    if (!parse_inline_int_closure(eq + 1, &param, &body)) return 0;
+    *name_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    *param_out = param;
+    *body_out = body;
     return 1;
 }
 
@@ -2233,6 +2294,12 @@ static void push_inline_closure_apply_helper(LineVec *helpers, const char *apply
     lines_push(helpers, strdup(""));
 }
 
+static void push_local_closure_apply_helper(LineVec *helpers, const char *apply, const char *param, const char *capture, const char *body) {
+    char *env_body = replace_word_all(body, capture, "env");
+    push_inline_closure_apply_helper(helpers, apply, param, env_body);
+    free(env_body);
+}
+
 static char *rewrite_inline_higher_order_call_line(
     const char *line,
     ClosureHigherOrder *higher,
@@ -2409,6 +2476,38 @@ static char *lower_closure_text(const char *text) {
                 }
             }
         }
+        char *local_name = NULL;
+        char *local_param = NULL;
+        char *local_body = NULL;
+        char *local_capture = NULL;
+        if (parse_local_closure_let(line, &local_name, &local_param, &local_body) &&
+            closure_body_single_capture(local_body, local_param, &local_capture)) {
+            char apply_name[160];
+            snprintf(apply_name, sizeof(apply_name), "__vais_local_closure%d__apply", inline_count++);
+            push_local_closure_apply_helper(&inline_helpers, apply_name, local_param, local_capture, local_body);
+            size_t indent_len = (size_t)(s - line);
+            StrBuf lowered;
+            sb_init(&lowered);
+            sb_append_n(&lowered, line, indent_len);
+            sb_append(&lowered, "let ");
+            sb_append(&lowered, local_name);
+            sb_append(&lowered, " = ");
+            sb_append(&lowered, local_capture);
+            lines_push(&rewritten, sb_take(&lowered));
+            free(closure_var);
+            free(closure_apply);
+            closure_var = strdup(local_name);
+            closure_apply = strdup(apply_name);
+            free(local_name);
+            free(local_param);
+            free(local_body);
+            free(local_capture);
+            continue;
+        }
+        free(local_name);
+        free(local_param);
+        free(local_body);
+        free(local_capture);
         char *inline_rewritten = rewrite_inline_higher_order_call_line(line, higher, higher_count, &inline_count, &inline_helpers);
         if (closure_var != NULL && closure_apply != NULL) {
             char *ho_rewritten = rewrite_higher_order_call_line(inline_rewritten, higher, higher_count, closure_var, closure_apply);

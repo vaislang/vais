@@ -572,6 +572,19 @@ fn write_closure_inline_arg_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_closure_local_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn add_bonus(n: Int) -> Int {")
+    append_line(out, "    let bonus = 3")
+    append_line(out, str_concat(str_concat("    let f = ", str_byte(124)), str_concat("x", str_concat(str_byte(124), " x + bonus"))))
+    append_line(out, "    return f(n)")
+    append_line(out, "}")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return add_bonus(4)")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_tuple_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn pair() -> (Int, Int) {")
@@ -1261,6 +1274,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "closure") == 1 { return write_closure_accept(path) }
     if str_eq(name, "closure_apply") == 1 { return write_closure_apply_accept(path) }
     if str_eq(name, "closure_inline_arg") == 1 { return write_closure_inline_arg_accept(path) }
+    if str_eq(name, "closure_local") == 1 { return write_closure_local_accept(path) }
     if str_eq(name, "tuple") == 1 { return write_tuple_accept(path) }
     if str_eq(name, "list") == 1 { return write_list_accept(path) }
     if str_eq(name, "borrowed_list") == 1 { return write_borrowed_list_accept(path) }
@@ -2036,6 +2050,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "closure", label_closure_accept(), 7)
     fail = fail + expect_accept(vaisc, tmp, "closure_apply", "accepts returned closure passed to Int higher-order helper slice", 21)
     fail = fail + expect_accept(vaisc, tmp, "closure_inline_arg", "accepts non-capturing inline closure passed to Int higher-order helper slice", 12)
+    fail = fail + expect_accept(vaisc, tmp, "closure_local", "accepts local single-capture Int closure call slice", 7)
     fail = fail + expect_accept(vaisc, tmp, "tuple", "accepts Int tuple return and destructuring slice", 7)
     fail = fail + expect_accept(vaisc, tmp, "list", "accepts List push/len/is_empty/last/pop/index/sum slice", 23)
     fail = fail + expect_accept(vaisc, tmp, "borrowed_list", "accepts borrowed List<Int> parameter slice", 10)

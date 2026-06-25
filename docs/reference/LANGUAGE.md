@@ -1193,9 +1193,12 @@ Non-capturing inline closure literals can be passed directly to the same
 single-closure `Int` higher-order helper shape, as covered by
 `examples/e49_closure_arg.vais`.
 
-Captured inline closure literals, local closure assignments, multiple closure
-parameters, and broader higher-order function patterns are not release-surface
-claims yet.
+Local closures can capture one `Int` local and be called inside the same
+function, as covered by `examples/c5.vais`.
+
+Captured inline closure arguments, multiple captured values, multiple closure
+parameters, escaping local closure values, and broader higher-order function
+patterns are not release-surface claims yet.
 
 ## Diagnostics
 

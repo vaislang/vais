@@ -74,6 +74,8 @@ catch-all,
 return and returned-closure higher-order helper slices,
 `examples/e49_closure_arg.vais` for a non-capturing inline closure literal
 passed to the same single-closure `Int` helper shape,
+`examples/c5.vais` for a local closure with one `Int` capture called in the
+same function,
 `examples/e16_option_match.vais` for the first `Option<Int>` helper-return and
 statement-match slice,
 `examples/e21_result_match.vais` for the first `Result<Int,Int>`

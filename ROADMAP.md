@@ -43,6 +43,9 @@ This file tracks current work only.
 - The public compiler driver covers non-capturing inline closure literals
   passed directly to a single-closure `Int` higher-order helper by generating
   inline apply helpers.
+- The public compiler driver covers local closures with one `Int` capture
+  called inside the same function by lowering the capture to the apply-helper
+  environment value.
 - The public compiler driver covers the first simple `impl` struct method
   return-chain slice by lowering methods to helper functions with intermediate
   struct locals.
@@ -583,6 +586,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
 - [x] 4.1i Promote non-capturing inline closure literals passed to an `Int`
   higher-order helper through public driver lowering, front, parity, and value
   gates.
+- [x] 4.1j Promote local single-capture `Int` closure calls through public
+  driver lowering, front, parity, and value gates.
 - [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
   simple return-arm shape is fully gated.
 - [x] 4.2a Promote simple expression-arm `match` lowering for multi-field `Int`
