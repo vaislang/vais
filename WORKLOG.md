@@ -2,6 +2,8 @@
 
 ## 2026-06-25
 
+- Added local dependency cycle detection to the Vais-authored package manifest
+  checker contract using normalized local manifest paths.
 - Moved the package manifest missing-source-directory diagnostic into the
   Vais-authored manifest checker contract, matching the native driver error
   while preserving the product driver's OS-facing package discovery boundary.

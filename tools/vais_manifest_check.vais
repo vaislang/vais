@@ -8,6 +8,65 @@ fn str_eq(a: Str, b: Str) -> Int {
     return 1
 }
 
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn contains_text(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 1 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn find_text(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 0 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return i }
+        i = i + 1
+    }
+    return src.len()
+}
+
+fn normalize_path(path: Str) -> Str {
+    let mut out = path
+    let mut dot = find_text(out, "/./")
+    while dot < out.len() {
+        out = str_concat(str_slice(out, 0, dot), str_slice(out, dot + 2, out.len() - dot - 2))
+        dot = find_text(out, "/./")
+    }
+    let mut up = find_text(out, "/../")
+    while up < out.len() {
+        let mut start = up - 1
+        while start > 0 {
+            if out[start] == 47 { break }
+            start = start - 1
+        }
+        if start == 0 and out[0] != 47 {
+            out = str_slice(out, up + 4, out.len() - up - 4)
+        } else {
+            out = str_concat(str_slice(out, 0, start), str_slice(out, up + 3, out.len() - up - 3))
+        }
+        up = find_text(out, "/../")
+    }
+    return out
+}
+
+fn stack_entry(path: Str) -> Str {
+    return str_concat(str_byte(10), str_concat(normalize_path(path), str_byte(10)))
+}
+
 fn is_space(c: Int) -> Int {
     if c == 32 { return 1 }
     if c == 9 { return 1 }
@@ -175,11 +234,13 @@ fn report_issue(path: Str, line_no: Int, message: Str, help: Str) -> Int {
     return 1
 }
 
-fn check_manifest(path: Str) -> Int {
+fn check_manifest_with_stack(path: Str, stack: Str) -> Int {
     if fs_exists(path) == 0 {
         print(str_concat("error: package manifest not found: ", path))
         return 1
     }
+    let current_entry = stack_entry(path)
+    let next_stack = str_concat(stack, current_entry)
     let text = fs_read_text(path)
     let mut has_name = 0
     let mut has_version = 0
@@ -227,6 +288,12 @@ fn check_manifest(path: Str) -> Int {
                     if fs_exists(dep_manifest) == 0 {
                         return report_issue(path, line_no, "local dependency manifest not found", str_concat("expected local dependency manifest at ", dep_manifest))
                     }
+                    let dep_entry = stack_entry(dep_manifest)
+                    if contains_text(next_stack, dep_entry) == 1 {
+                        return report_issue(path, line_no, "local dependency cycle detected", str_concat("remove one dependency from the cycle ending at ", normalize_path(dep_manifest)))
+                    }
+                    let dep_status = check_manifest_with_stack(dep_manifest, next_stack)
+                    if dep_status != 0 { return dep_status }
                 } else if str_eq(key, "name") == 1 {
                     if has_name == 1 { return report_issue(path, line_no, "duplicate package manifest key `name`", "keep exactly one `name`, one `version`, and one `source` key") }
                     has_name = 1
@@ -256,8 +323,12 @@ fn check_manifest(path: Str) -> Int {
     if fs_exists(source_root) == 0 {
         return report_issue(path, source_line, "package manifest source directory not found", str_concat("create the source directory at ", str_concat(source_root, " or update `source`.")))
     }
-    print("PASS package manifest clean")
+    if stack.len() == 0 { print("PASS package manifest clean") }
     return 0
+}
+
+fn check_manifest(path: Str) -> Int {
+    return check_manifest_with_stack(path, "")
 }
 
 fn usage() -> Int {
