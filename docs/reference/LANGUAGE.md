@@ -510,7 +510,8 @@ out-of-range indexes, `last()` on an empty list, and `pop()` on an empty list.
 
 The direct engine gate covers `List<Int>` values created with `[]`, `list()`, or
 small integer list literals, plus `push`, `len`/`len()`, `is_empty()`,
-`last()`, `pop()`, index, `sum()`, named `for x in xs` iteration, and function calls where `List<Int>` parameters are
+`last()`, `pop()`, index, `sum()`, non-capturing `map(|x| expr)`,
+`filter(|x| predicate).sum()`, named `for x in xs` iteration, and function calls where `List<Int>` parameters are
 local list names or inline list values. It also covers `List<Int>`-returning helper calls passed
 directly to `List<Int>` parameters in `return`, `let`, list-literal item, `push`, assignment
 statements, `if`, `else if`, and `while` conditions. In the direct engine
@@ -530,7 +531,8 @@ with `xs[index].field = value`; both work through list parameters.
 before reading fields.
 `sum()` on `List<Struct>` is not a direct-engine release claim.
 
-List methods such as `map` and `filter`, and method forms outside the verified
+List method forms outside the verified non-capturing `List<Int>.map(...)` and
+`List<Int>.filter(...).sum()` slices, and method forms outside the verified
 simple struct `impl`/`impl Trait for Struct` return-expression slices, are not
 release-surface claims yet.
 

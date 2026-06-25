@@ -52,6 +52,8 @@ This file tracks current work only.
 - The public compiler driver covers the first simple `trait` plus
   `impl Trait for Struct` method-call expression slice by treating the trait
   declaration as metadata and lowering the impl method to a struct helper.
+- The public compiler driver covers non-capturing `List<Int>` `map` and
+  `filter(...).sum()` method slices by lowering them to explicit `for` loops.
 - The native direct engine hoists `List<Int>`-returning helper calls in `while`
   conditions and reevaluates them on each loop iteration.
 - The native direct engine lowers `List<Int>` and `List<Struct>` returned-list
@@ -593,6 +595,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   driver lowering, front, parity, and value gates.
 - [x] 4.1k Promote simple `trait` plus `impl Trait for Struct` method-call
   expressions through public driver lowering, front, parity, and value gates.
+- [x] 4.1l Promote non-capturing `List<Int>` map and filter-sum method slices
+  through public driver lowering, front, parity, and value gates.
 - [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
   simple return-arm shape is fully gated.
 - [x] 4.2a Promote simple expression-arm `match` lowering for multi-field `Int`

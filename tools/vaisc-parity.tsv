@@ -124,6 +124,7 @@ examples/e51_index_ast.vais	native-supported	Flat index AST encoded in a 20-fiel
 examples/e52_state_machine.vais	native-supported	Array-backed in-run state machine over Int values.
 examples/e53_word_count.vais	native-supported	Str word-count state machine with byte scanning.
 examples/e75_list_push.vais	native-supported	List push/growth and index access.
+examples/e76_list_map.vais	native-supported	List<Int>.map inline closure lowered to a for-loop with push.
 examples/e80_closure_return.vais	native-supported	Single-Int closure return lowered to Int env/apply helper.
 examples/e81_closure_return_apply.vais	native-supported	Returned single-Int closure passed to an Int higher-order helper.
 examples/e82_list_literal_direct_arg.vais	native-supported	Inline List<Int> literal passed directly to a List<Int> parameter.
@@ -139,6 +140,7 @@ examples/e73_int_to_string.vais	native-supported	Str(Int) conversion with string
 examples/e15_list_recursion.vais	native-supported	Borrowed List<Int> recursive helper walks a collection.
 examples/e68_binary_search.vais	native-supported	Borrowed List<Int> binary search with computed indexes and early returns.
 examples/d5run.vais	native-supported	Public struct/function modifiers with a Str field and Int field access.
+examples/d6run.vais	native-supported	List<Int>.filter inline closure followed by sum lowered to a guarded for-loop.
 examples/module_basic/main.vais	native-supported	Local dotted import resolves a sibling module.
 examples/package_basic/src/main.vais	native-supported	vais.toml source-root package import resolves under src.
 examples/dependency_basic/app/src/main.vais	native-supported	vais.toml dependency import resolves through a local package path.

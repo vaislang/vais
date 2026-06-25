@@ -2539,6 +2539,261 @@ static char *lower_closure_text(const char *text) {
     return joined;
 }
 
+static int parse_list_method_closure_call(
+    const char *expr,
+    const char *method,
+    char **receiver_out,
+    char **param_out,
+    char **body_out,
+    const char **after_out
+) {
+    const char *p = skip_ws(expr);
+    if (!is_ident_start(*p)) return 0;
+    const char *receiver_start = p;
+    p++;
+    while (is_ident_continue(*p)) p++;
+    char *receiver = substr_copy(receiver_start, (size_t)(p - receiver_start));
+    p = skip_ws(p);
+    if (*p != '.') {
+        free(receiver);
+        return 0;
+    }
+    p++;
+    size_t method_len = strlen(method);
+    if (strncmp(p, method, method_len) != 0 || is_ident_continue(p[method_len])) {
+        free(receiver);
+        return 0;
+    }
+    p = skip_ws(p + method_len);
+    if (*p != '(') {
+        free(receiver);
+        return 0;
+    }
+    int close = find_matching_paren_c(expr, (int)(p - expr));
+    if (close < 0) {
+        free(receiver);
+        return 0;
+    }
+    char *arg_raw = substr_copy(p + 1, (size_t)(expr + close - p - 1));
+    char *param = NULL;
+    char *body = NULL;
+    int ok = parse_inline_int_closure(arg_raw, &param, &body) && closure_body_uses_only_param(body, param);
+    free(arg_raw);
+    if (!ok) {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    *receiver_out = receiver;
+    *param_out = param;
+    *body_out = body;
+    *after_out = expr + close + 1;
+    return 1;
+}
+
+static int lower_list_map_assignment_line(const char *line, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(eq + 1, "map", &receiver, &param, &body, &after)) {
+        free(name);
+        return 0;
+    }
+    const char *tail = skip_ws(after);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(name);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    size_t indent_len = (size_t)(s - line);
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let ");
+    sb_append(&init, name);
+    sb_append(&init, ": List<Int> = []");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf push;
+    sb_init(&push);
+    sb_append_n(&push, line, indent_len);
+    sb_append(&push, "    ");
+    sb_append(&push, name);
+    sb_append(&push, ".push(");
+    sb_append(&push, body);
+    sb_append(&push, ")");
+    lines_push(out, sb_take(&push));
+
+    StrBuf close;
+    sb_init(&close);
+    sb_append_n(&close, line, indent_len);
+    sb_append(&close, "}");
+    lines_push(out, sb_take(&close));
+
+    free(name);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static int lower_list_filter_sum_return_line(const char *line, int *temp_count, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", &receiver, &param, &body, &after)) {
+        free(expr);
+        return 0;
+    }
+    const char *sum = skip_ws(after);
+    if (!starts_with(sum, ".sum") || is_ident_continue(sum[4])) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *open = skip_ws(sum + 4);
+    if (*open != '(') {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    int close_sum = find_matching_paren_c(expr, (int)(open - expr));
+    if (close_sum < 0) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    char *sum_args = substr_copy(open + 1, (size_t)(expr + close_sum - open - 1));
+    char *sum_args_trim = trim_copy(sum_args);
+    free(sum_args);
+    const char *tail = skip_ws(expr + close_sum + 1);
+    int ok = sum_args_trim[0] == '\0' && *tail == '\0';
+    free(sum_args_trim);
+    if (!ok) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    char temp[64];
+    snprintf(temp, sizeof(temp), "vais_filter_sum%d", (*temp_count)++);
+    size_t indent_len = (size_t)(s - line);
+
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let mut ");
+    sb_append(&init, temp);
+    sb_append(&init, " = 0");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf add;
+    sb_init(&add);
+    sb_append_n(&add, line, indent_len);
+    sb_append(&add, "        ");
+    sb_append(&add, temp);
+    sb_append(&add, " = ");
+    sb_append(&add, temp);
+    sb_append(&add, " + ");
+    sb_append(&add, param);
+    lines_push(out, sb_take(&add));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, temp);
+    lines_push(out, sb_take(&ret));
+
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static char *lower_list_method_text(const char *text) {
+    LineVec lines = split_lines(text);
+    LineVec out;
+    lines_init(&out);
+    int temp_count = 0;
+    for (size_t i = 0; i < lines.len; i++) {
+        if (lower_list_map_assignment_line(lines.items[i], &out)) continue;
+        if (lower_list_filter_sum_return_line(lines.items[i], &temp_count, &out)) continue;
+        lines_push(&out, strdup(lines.items[i]));
+    }
+    char *joined = join_lines(&out, text[0] == '\0' || text[strlen(text) - 1] == '\n');
+    lines_free(&lines);
+    lines_free(&out);
+    return joined;
+}
+
 typedef struct {
     char *name;
     char *struct_name;
@@ -3495,13 +3750,15 @@ static char *prepare_source_text(const char *raw) {
     char *normalized = normalize_source_text(raw, 0);
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
-    char *tuple_lowered = lower_tuple_text(closure_lowered);
+    char *list_method_lowered = lower_list_method_text(closure_lowered);
+    char *tuple_lowered = lower_tuple_text(list_method_lowered);
     char *method_lowered = lower_struct_method_text(tuple_lowered);
     char *generic_lowered = lower_generic_identity_struct_text(method_lowered);
     char *prepared = normalize_source_text(generic_lowered, 1);
     free(normalized);
     free(enum_lowered);
     free(closure_lowered);
+    free(list_method_lowered);
     free(tuple_lowered);
     free(method_lowered);
     free(generic_lowered);
@@ -5478,13 +5735,15 @@ static char *prepare_source_file(const char *path) {
     char *normalized = normalize_source_text(merged, 0);
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
-    char *tuple_lowered = lower_tuple_text(closure_lowered);
+    char *list_method_lowered = lower_list_method_text(closure_lowered);
+    char *tuple_lowered = lower_tuple_text(list_method_lowered);
     char *method_lowered = lower_struct_method_text(tuple_lowered);
     if (!trusted_self_host && check_front_contract_text(method_lowered, path) != 0) {
         free(merged);
         free(normalized);
         free(enum_lowered);
         free(closure_lowered);
+        free(list_method_lowered);
         free(tuple_lowered);
         free(method_lowered);
         return NULL;
@@ -5495,6 +5754,7 @@ static char *prepare_source_file(const char *path) {
     free(normalized);
     free(enum_lowered);
     free(closure_lowered);
+    free(list_method_lowered);
     free(tuple_lowered);
     free(method_lowered);
     free(generic_lowered);

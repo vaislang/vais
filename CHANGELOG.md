@@ -90,6 +90,9 @@
 - Promoted `examples/e78_trait_impl_for.vais` as the first simple `trait` plus
   `impl Trait for Struct` method call slice, raising the release corpus to 135
   native-supported examples.
+- Promoted `examples/e76_list_map.vais` and `examples/d6run.vais` as
+  non-capturing `List<Int>` map and filter-sum method slices, raising the
+  release corpus to 137 native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

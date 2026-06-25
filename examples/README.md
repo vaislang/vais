@@ -78,6 +78,8 @@ return and returned-closure higher-order helper slices,
 passed to the same single-closure `Int` helper shape,
 `examples/c5.vais` for a local closure with one `Int` capture called in the
 same function,
+`examples/e76_list_map.vais` and `examples/d6run.vais` for non-capturing
+`List<Int>` map and filter-sum method slices,
 `examples/e16_option_match.vais` for the first `Option<Int>` helper-return and
 statement-match slice,
 `examples/e21_result_match.vais` for the first `Result<Int,Int>`

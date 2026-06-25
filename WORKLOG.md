@@ -61,6 +61,9 @@
 - Promoted `examples/e78_trait_impl_for.vais` into the release corpus by
   treating a simple `trait` declaration as metadata and lowering
   `impl Trait for Struct` methods to ordinary struct helper calls.
+- Promoted `examples/e76_list_map.vais` and `examples/d6run.vais` into the
+  release corpus by lowering non-capturing `List<Int>` map and filter-sum
+  method slices to explicit `for` loops.
 
 ## 2026-06-24
 
