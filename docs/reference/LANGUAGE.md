@@ -125,7 +125,7 @@ Verified release surface:
 | `Bool` | Produced by comparisons and boolean expressions; verified for local annotations, helper parameters, and helper returns |
 | `Str` | String literals, local annotations, reassignment, helper parameters/returns, length, index, and equality |
 | `Char` | Single-byte character literals, equality, annotations, helper parameters, and helper returns as Int-compatible scalar values |
-| `List<Int>` | Empty/list literal, typed non-empty local literal, inline call argument, borrowed helper parameter, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum` |
+| `List<Int>` | Empty/list literal, typed non-empty local literal, inline call argument, borrowed helper parameter, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, `sum`, and local `List<List<Int>>` literal double-index reads |
 | `List<Str>` | Full-engine local `push`, local index read, and argv-based `proc_run` host arguments |
 | `List<Struct>` | Direct-engine `[]`, `list()`, list literal, list/element assignment, `push`, `len`, `is_empty`, `last`, `pop`, index, field read/write, parameter reference, return value |
 | `Map<Int,Int>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
@@ -481,6 +481,8 @@ Verified today:
 - Inline `[]`, `list()`, and integer list literals as `List<Int>` return values
   in the direct engine, and inline integer list literals as `List<Int>` call
   arguments in both the full self-host path and direct engine.
+- Local `List<List<Int>>` literals with constant row selection and `Int` column
+  indexing, as covered by `examples/e77_nested_list.vais`.
 - `List<Int>`-returning helper calls used directly as `List<Int>` call arguments
   in statement contexts plus `if`, `else if`, and `while` conditions.
 - `xs.push(value)`.
@@ -535,6 +537,8 @@ List method forms outside the verified non-capturing `List<Int>.map(...)` and
 `List<Int>.filter(...).sum()` slices, and method forms outside the verified
 simple struct `impl`/`impl Trait for Struct` return-expression slices, are not
 release-surface claims yet.
+Broader `List<List<T>>` mutation, parameter passing, returns, and dynamic row
+selection are not release-surface claims yet.
 
 ## Maps
 

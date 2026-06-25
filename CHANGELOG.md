@@ -93,6 +93,9 @@
 - Promoted `examples/e76_list_map.vais` and `examples/d6run.vais` as
   non-capturing `List<Int>` map and filter-sum method slices, raising the
   release corpus to 137 native-supported examples.
+- Promoted `examples/e77_nested_list.vais` as the first local
+  `List<List<Int>>` literal double-index slice, raising the release corpus to
+  138 native-supported examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

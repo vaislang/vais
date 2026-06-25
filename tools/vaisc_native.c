@@ -2796,6 +2796,241 @@ static char *lower_list_method_text(const char *text) {
 
 typedef struct {
     char *name;
+    char *rows[16];
+    int row_count;
+} NestedListInfo;
+
+static void nested_list_infos_free(NestedListInfo *items, int count) {
+    for (int i = 0; i < count; i++) {
+        free(items[i].name);
+        for (int r = 0; r < items[i].row_count; r++) free(items[i].rows[r]);
+    }
+}
+
+static NestedListInfo *nested_list_find(NestedListInfo *items, int count, const char *name, size_t len) {
+    for (int i = 0; i < count; i++) {
+        if (strlen(items[i].name) == len && strncmp(items[i].name, name, len) == 0) return &items[i];
+    }
+    return NULL;
+}
+
+static int compact_type_equals(const char *text, const char *expected) {
+    StrBuf compact;
+    sb_init(&compact);
+    for (const char *p = text; *p != '\0'; p++) {
+        if (*p != ' ' && *p != '\t' && *p != '\r') sb_append_n(&compact, p, 1);
+    }
+    char *actual = sb_take(&compact);
+    int ok = strcmp(actual, expected) == 0;
+    free(actual);
+    return ok;
+}
+
+static int parse_nonnegative_int_literal(const char *text, int *value_out) {
+    const char *s = skip_ws(text);
+    if (*s < '0' || *s > '9') return 0;
+    int value = 0;
+    while (*s >= '0' && *s <= '9') {
+        value = value * 10 + (*s - '0');
+        s++;
+    }
+    s = skip_ws(s);
+    if (*s != '\0') return 0;
+    *value_out = value;
+    return 1;
+}
+
+static int nested_list_assignment_line(
+    const char *line,
+    NestedListInfo *infos,
+    int *info_count,
+    LineVec *out
+) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *colon = skip_ws(name_end);
+    if (*colon != ':') return 0;
+    const char *eq = strchr(colon + 1, '=');
+    if (eq == NULL) return 0;
+    char *type_raw = substr_copy(colon + 1, (size_t)(eq - colon - 1));
+    int type_ok = compact_type_equals(type_raw, "List<List<Int>>");
+    free(type_raw);
+    if (!type_ok) return 0;
+    const char *rhs = skip_ws(eq + 1);
+    if (*rhs != '[') return 0;
+    int close = find_matching_bracket_c(line, (int)(rhs - line));
+    if (close < 0) return 0;
+    const char *tail = skip_ws(line + close + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') return 0;
+
+    char *inside = substr_copy(rhs + 1, (size_t)(line + close - rhs - 1));
+    char *rows[16] = {0};
+    int row_count = split_top_level_commas_c(inside, rows, 16);
+    free(inside);
+    if (row_count <= 0 || *info_count >= 16) {
+        free_split_parts(rows, row_count, 16);
+        return 0;
+    }
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    NestedListInfo *info = &infos[*info_count];
+    info->name = strdup(name);
+    info->row_count = 0;
+    if (info->name == NULL) die_oom();
+    size_t indent_len = (size_t)(s - line);
+    int ok = 1;
+    LineVec generated;
+    lines_init(&generated);
+    for (int r = 0; r < row_count; r++) {
+        const char *row = skip_ws(rows[r]);
+        if (*row != '[') {
+            ok = 0;
+            break;
+        }
+        int row_close = find_matching_bracket_c(rows[r], (int)(row - rows[r]));
+        if (row_close < 0) {
+            ok = 0;
+            break;
+        }
+        const char *row_tail = skip_ws(rows[r] + row_close + 1);
+        if (*row_tail != '\0') {
+            ok = 0;
+            break;
+        }
+        char *row_inside = substr_copy(row + 1, (size_t)(rows[r] + row_close - row - 1));
+        StrBuf row_name;
+        sb_init(&row_name);
+        sb_append(&row_name, "vais_nested_");
+        sb_append(&row_name, name);
+        char num[32];
+        snprintf(num, sizeof(num), "_row%d", r);
+        sb_append(&row_name, num);
+        char *row_name_text = sb_take(&row_name);
+        info->rows[info->row_count++] = strdup(row_name_text);
+        if (info->rows[info->row_count - 1] == NULL) die_oom();
+
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, row_name_text);
+        sb_append(&bind, ": List<Int> = [");
+        sb_append(&bind, row_inside);
+        sb_append(&bind, "]");
+        lines_push(&generated, sb_take(&bind));
+        free(row_name_text);
+        free(row_inside);
+    }
+    free_split_parts(rows, row_count, 16);
+    free(name);
+    if (!ok) {
+        lines_free(&generated);
+        free(info->name);
+        info->name = NULL;
+        for (int r = 0; r < info->row_count; r++) {
+            free(info->rows[r]);
+            info->rows[r] = NULL;
+        }
+        info->row_count = 0;
+        return 0;
+    }
+    for (size_t i = 0; i < generated.len; i++) {
+        lines_push(out, generated.items[i]);
+        generated.items[i] = NULL;
+    }
+    lines_free(&generated);
+    *info_count = *info_count + 1;
+    return 1;
+}
+
+static char *nested_list_index_expr(
+    const char *expr,
+    NestedListInfo *infos,
+    int info_count
+) {
+    const char *p = skip_ws(expr);
+    if (!is_ident_start(*p)) return NULL;
+    const char *name_start = p;
+    p++;
+    while (is_ident_continue(*p)) p++;
+    NestedListInfo *info = nested_list_find(infos, info_count, name_start, (size_t)(p - name_start));
+    if (info == NULL) return NULL;
+    p = skip_ws(p);
+    if (*p != '[') return NULL;
+    int row_close = find_matching_bracket_c(expr, (int)(p - expr));
+    if (row_close < 0) return NULL;
+    char *row_raw = substr_copy(p + 1, (size_t)(expr + row_close - p - 1));
+    int row_index = 0;
+    int row_ok = parse_nonnegative_int_literal(row_raw, &row_index);
+    free(row_raw);
+    if (!row_ok || row_index < 0 || row_index >= info->row_count) return NULL;
+    p = skip_ws(expr + row_close + 1);
+    if (*p != '[') return NULL;
+    int col_close = find_matching_bracket_c(expr, (int)(p - expr));
+    if (col_close < 0) return NULL;
+    const char *tail = skip_ws(expr + col_close + 1);
+    if (*tail != '\0') return NULL;
+    char *col_raw = substr_copy(p + 1, (size_t)(expr + col_close - p - 1));
+    char *col = trim_copy(col_raw);
+    free(col_raw);
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, info->rows[row_index]);
+    sb_append(&out, "[");
+    sb_append(&out, col);
+    sb_append(&out, "]");
+    free(col);
+    return sb_take(&out);
+}
+
+static int lower_nested_list_return_line(
+    const char *line,
+    NestedListInfo *infos,
+    int info_count,
+    LineVec *out
+) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *lowered = nested_list_index_expr(expr, infos, info_count);
+    free(expr);
+    if (lowered == NULL) return 0;
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, (size_t)(s - line));
+    sb_append(&ret, "return ");
+    sb_append(&ret, lowered);
+    lines_push(out, sb_take(&ret));
+    free(lowered);
+    return 1;
+}
+
+static char *lower_nested_list_text(const char *text) {
+    LineVec lines = split_lines(text);
+    LineVec out;
+    lines_init(&out);
+    NestedListInfo infos[16];
+    int info_count = 0;
+    memset(infos, 0, sizeof(infos));
+    for (size_t i = 0; i < lines.len; i++) {
+        if (nested_list_assignment_line(lines.items[i], infos, &info_count, &out)) continue;
+        if (lower_nested_list_return_line(lines.items[i], infos, info_count, &out)) continue;
+        lines_push(&out, strdup(lines.items[i]));
+    }
+    char *joined = join_lines(&out, text[0] == '\0' || text[strlen(text) - 1] == '\n');
+    nested_list_infos_free(infos, info_count);
+    lines_free(&lines);
+    lines_free(&out);
+    return joined;
+}
+
+typedef struct {
+    char *name;
     char *struct_name;
     int arity;
 } TupleFnInfo;
@@ -3751,7 +3986,8 @@ static char *prepare_source_text(const char *raw) {
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
     char *list_method_lowered = lower_list_method_text(closure_lowered);
-    char *tuple_lowered = lower_tuple_text(list_method_lowered);
+    char *nested_list_lowered = lower_nested_list_text(list_method_lowered);
+    char *tuple_lowered = lower_tuple_text(nested_list_lowered);
     char *method_lowered = lower_struct_method_text(tuple_lowered);
     char *generic_lowered = lower_generic_identity_struct_text(method_lowered);
     char *prepared = normalize_source_text(generic_lowered, 1);
@@ -3759,6 +3995,7 @@ static char *prepare_source_text(const char *raw) {
     free(enum_lowered);
     free(closure_lowered);
     free(list_method_lowered);
+    free(nested_list_lowered);
     free(tuple_lowered);
     free(method_lowered);
     free(generic_lowered);
@@ -5736,7 +5973,8 @@ static char *prepare_source_file(const char *path) {
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
     char *list_method_lowered = lower_list_method_text(closure_lowered);
-    char *tuple_lowered = lower_tuple_text(list_method_lowered);
+    char *nested_list_lowered = lower_nested_list_text(list_method_lowered);
+    char *tuple_lowered = lower_tuple_text(nested_list_lowered);
     char *method_lowered = lower_struct_method_text(tuple_lowered);
     if (!trusted_self_host && check_front_contract_text(method_lowered, path) != 0) {
         free(merged);
@@ -5744,6 +5982,7 @@ static char *prepare_source_file(const char *path) {
         free(enum_lowered);
         free(closure_lowered);
         free(list_method_lowered);
+        free(nested_list_lowered);
         free(tuple_lowered);
         free(method_lowered);
         return NULL;
@@ -5755,6 +5994,7 @@ static char *prepare_source_file(const char *path) {
     free(enum_lowered);
     free(closure_lowered);
     free(list_method_lowered);
+    free(nested_list_lowered);
     free(tuple_lowered);
     free(method_lowered);
     free(generic_lowered);

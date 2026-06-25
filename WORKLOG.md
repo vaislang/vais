@@ -64,6 +64,9 @@
 - Promoted `examples/e76_list_map.vais` and `examples/d6run.vais` into the
   release corpus by lowering non-capturing `List<Int>` map and filter-sum
   method slices to explicit `for` loops.
+- Promoted `examples/e77_nested_list.vais` into the release corpus by lowering
+  a local `List<List<Int>>` literal to row `List<Int>` locals and rewriting the
+  verified double-index read.
 
 ## 2026-06-24
 
