@@ -723,7 +723,7 @@ time.
   self-host Vais code once the language can express it cleanly.
 - [ ] 5.3 Move more diagnostics and source preparation out of the host driver while
   keeping OS-facing file/process work behind explicit host APIs.
-- [ ] 5.4 Add stage comparison gates for self-host output where deterministic IR
+- [x] 5.4 Add stage comparison gates for self-host output where deterministic IR
   is practical.
 
 Done: the compiler can rebuild its checked-in core from Vais source, and the

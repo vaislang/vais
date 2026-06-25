@@ -2,6 +2,9 @@
 
 ## 2026-06-25
 
+- Reconciled Phase 5 roadmap status for the existing stage comparison gate:
+  `tools/normalize_stage_ir.vais` is already covered by a focused gate and by
+  the full-source self-host stage1/stage2 comparison.
 - Promoted `examples/e120_enum_payload_wildcard.vais` into the release corpus
   as the first payload enum `match` with `_` catch-all slice, with matching
   public front fixture, parity entry, docs, site count, changelog, and roadmap
