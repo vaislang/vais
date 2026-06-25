@@ -58,6 +58,8 @@ struct helper parameters, returns, reassignment, recursion, and aggregation,
 struct used with `Int` values,
 `examples/e46_generic_struct.vais` for a generic identity helper applied
 directly to a struct literal,
+`examples/e51_index_ast.vais` for a flat index AST encoded in a 20-field struct
+with recursive evaluation,
 `examples/e64_enum_struct_payload.vais` for a single-field struct payload enum
 matched through payload field access,
 `examples/e55_match_wildcard.vais` for Int match literal arms with a `_`

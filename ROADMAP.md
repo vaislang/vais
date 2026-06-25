@@ -33,6 +33,8 @@ This file tracks current work only.
   values in call arguments and return expressions.
 - The native direct engine hoists `List<Int>`-returning helper calls used as
   `List<Int>` call arguments in statement contexts.
+- The full self-host path covers 20-field flat struct literals and field reads,
+  including recursive helper evaluation over an index-encoded AST.
 - The native direct engine hoists `List<Int>`-returning helper calls in `while`
   conditions and reevaluates them on each loop iteration.
 - The native direct engine lowers `List<Int>` and `List<Struct>` returned-list
@@ -558,6 +560,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   native direct, full self-host, and parity gates.
 - [x] 4.1d Promote generic identity helpers applied directly to struct literals
   through public driver lowering, front, parity, and value gates.
+- [x] 4.1e Promote 20-field flat struct literals and field reads through full
+  self-host, parity, and value gates.
 - [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
   simple return-arm shape is fully gated.
 - [x] 4.2a Promote simple expression-arm `match` lowering for multi-field `Int`

@@ -66,6 +66,10 @@
   the public compiler driver, front fixture, parity manifest, and value corpus,
   with `examples/e46_generic_struct.vais` added to the release corpus, raising
   it to 128 native-supported examples.
+- Promoted `examples/e51_index_ast.vais` as a 20-field flat-struct recursive
+  AST evaluation example through the full self-host compiler, parity manifest,
+  and value corpus, raising the release corpus to 129 native-supported
+  examples.
 - Promoted `examples/t4.vais` and `examples/t6.vais` as simple struct smoke
   examples, raising the release corpus to 100 native-supported examples.
 - Promoted `examples/fr1.vais` as an inclusive range for-loop summation smoke,

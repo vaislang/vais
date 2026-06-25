@@ -117,6 +117,7 @@ examples/c2.vais	native-supported	List literal and sum support.
 examples/c4.vais	native-supported	Struct literal and field access.
 examples/e14_print.vais	native-supported	Print interpolation and IO call support.
 examples/e50_ast_eval.vais	native-supported	Small recursive payload enum lowered to Int-coded tags.
+examples/e51_index_ast.vais	native-supported	Flat index AST encoded in a 20-field struct with recursive evaluation.
 examples/e52_state_machine.vais	native-supported	Array-backed in-run state machine over Int values.
 examples/e53_word_count.vais	native-supported	Str word-count state machine with byte scanning.
 examples/e75_list_push.vais	native-supported	List push/growth and index access.

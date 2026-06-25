@@ -40,6 +40,9 @@
 - Promoted `examples/e46_generic_struct.vais` into the release corpus by
   lowering generic identity helpers applied directly to struct literals before
   the self-host core receives the source, with front/parity/value gate coverage.
+- Promoted `examples/e51_index_ast.vais` into the release corpus by extending
+  self-host `StructDef` field metadata to 20 stored fields and regenerating the
+  reusable compiler core.
 
 ## 2026-06-24
 

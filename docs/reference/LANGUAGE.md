@@ -288,6 +288,8 @@ Verified today:
 - Single-field nested struct literals, reads, and writes in the full self-host
   path, as covered by `examples/e01_nested_struct.vais` and
   `examples/e32_nested_field_mut.vais`.
+- Twenty-field flat struct literals and field reads on the full self-host path,
+  as covered by `examples/e51_index_ast.vais`.
 - Struct parameters and return values in full self-host and direct-engine helper
   functions, including assignment from struct-returning calls.
 - `pub` modifiers on struct declarations, struct fields, and helper functions
