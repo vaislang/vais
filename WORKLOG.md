@@ -2,6 +2,8 @@
 
 ## 2026-06-25
 
+- Reconciled the Phase 4.2 parent roadmap checkbox now that the listed enum
+  payload and pattern/match slices are all gate-backed.
 - Added optional entry-path source-root containment checking to the
   Vais-authored package manifest checker contract.
 - Added local dependency cycle detection to the Vais-authored package manifest
