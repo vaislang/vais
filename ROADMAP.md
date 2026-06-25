@@ -153,7 +153,7 @@ This file tracks current work only.
   `Map<Str,Bool>`, and `Map<Str,Char>` return values can initialize explicitly
   annotated locals through caller-owned storage.
   Parameter-target assignment copies are covered for all six verified concrete
-  Map types in the release corpus.
+  Map types in the release corpus and full self-host codegen gate.
 - Promoted prelude APIs have value-corpus examples, including local
   `Map<Int,Int>`, local `Map<Int,Bool>`, local `Map<Int,Char>`,
   local `Map<Str,Int>`, local `Map<Str,Bool>`, local `Map<Str,Char>`,
