@@ -43,6 +43,9 @@
 - Promoted `examples/e51_index_ast.vais` into the release corpus by extending
   self-host `StructDef` field metadata to 20 stored fields and regenerating the
   reusable compiler core.
+- Promoted `examples/e59_tuple.vais` into the release corpus by lowering `Int`
+  tuple function returns and local destructuring to generated struct storage in
+  the public compiler driver.
 
 ## 2026-06-24
 

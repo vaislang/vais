@@ -35,6 +35,8 @@ This file tracks current work only.
   `List<Int>` call arguments in statement contexts.
 - The full self-host path covers 20-field flat struct literals and field reads,
   including recursive helper evaluation over an index-encoded AST.
+- The public compiler driver covers the first `Int` tuple return and local
+  destructuring slice through generated struct lowering.
 - The native direct engine hoists `List<Int>`-returning helper calls in `while`
   conditions and reevaluates them on each loop iteration.
 - The native direct engine lowers `List<Int>` and `List<Struct>` returned-list
@@ -562,6 +564,8 @@ Goal: expand the language deliberately while avoiding unsupported public claims.
   through public driver lowering, front, parity, and value gates.
 - [x] 4.1e Promote 20-field flat struct literals and field reads through full
   self-host, parity, and value gates.
+- [x] 4.1f Promote `Int` tuple returns and local destructuring through public
+  driver lowering, front, parity, and value gates.
 - [ ] 4.2 Add broader enum payloads and pattern/match forms after the current
   simple return-arm shape is fully gated.
 - [x] 4.2a Promote simple expression-arm `match` lowering for multi-field `Int`

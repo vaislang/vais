@@ -2078,6 +2078,306 @@ static char *lower_closure_text(const char *text) {
 }
 
 typedef struct {
+    char *name;
+    char *struct_name;
+    int arity;
+} TupleFnInfo;
+
+typedef struct {
+    TupleFnInfo items[16];
+    int count;
+    int temp_count;
+} TupleLowerInfo;
+
+static void tuple_info_free(TupleLowerInfo *info) {
+    for (int i = 0; i < info->count; i++) {
+        free(info->items[i].name);
+        free(info->items[i].struct_name);
+    }
+    info->count = 0;
+    info->temp_count = 0;
+}
+
+static TupleFnInfo *tuple_info_find(TupleLowerInfo *info, const char *name, size_t len) {
+    for (int i = 0; i < info->count; i++) {
+        if (strlen(info->items[i].name) == len && strncmp(info->items[i].name, name, len) == 0) {
+            return &info->items[i];
+        }
+    }
+    return NULL;
+}
+
+static int tuple_line_brace_delta(const char *line) {
+    int delta = 0;
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (line[i] == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (line[i] == '{') delta++;
+        if (line[i] == '}') delta--;
+    }
+    return delta;
+}
+
+static int parse_tuple_fn_signature(
+    const char *line,
+    char **name_out,
+    char **struct_name_out,
+    char **rewritten_out,
+    int *arity_out
+) {
+    const char *s = skip_ws(line);
+    if (starts_with(s, "pub ") && !is_ident_continue(s[3])) s = skip_ws(s + 4);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    const char *name_start = skip_ws(s + 3);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *open = skip_ws(name_end);
+    if (*open != '(') return 0;
+    int close_params = find_matching_paren_c(line, (int)(open - line));
+    if (close_params < 0) return 0;
+    const char *after_params = skip_ws(line + close_params + 1);
+    if (!starts_with(after_params, "->")) return 0;
+    const char *ret = skip_ws(after_params + 2);
+    if (*ret != '(') return 0;
+    int close_ret = find_matching_paren_c(line, (int)(ret - line));
+    if (close_ret < 0) return 0;
+    const char *after_ret = skip_ws(line + close_ret + 1);
+    if (*after_ret != '{') return 0;
+
+    char *types_raw = substr_copy(ret + 1, (size_t)(line + close_ret - ret - 1));
+    char *types[8] = {0};
+    int arity = split_top_level_type_commas_c(types_raw, types, 8);
+    free(types_raw);
+    if (arity < 2) {
+        free_split_parts(types, arity, 8);
+        return 0;
+    }
+    for (int i = 0; i < arity; i++) {
+        if (strcmp(types[i], "Int") != 0) {
+            free_split_parts(types, arity, 8);
+            return 0;
+        }
+    }
+    free_split_parts(types, arity, 8);
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    StrBuf struct_name;
+    sb_init(&struct_name);
+    sb_append(&struct_name, "VaisTuple_");
+    sb_append(&struct_name, name);
+    char *struct_name_text = sb_take(&struct_name);
+
+    StrBuf rewritten;
+    sb_init(&rewritten);
+    sb_append_n(&rewritten, line, (size_t)(ret - line));
+    sb_append(&rewritten, struct_name_text);
+    sb_append(&rewritten, line + close_ret + 1);
+
+    *name_out = name;
+    *struct_name_out = struct_name_text;
+    *rewritten_out = sb_take(&rewritten);
+    *arity_out = arity;
+    return 1;
+}
+
+static char *tuple_struct_line(const char *struct_name, int arity) {
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, "struct ");
+    sb_append(&out, struct_name);
+    sb_append(&out, " { ");
+    for (int i = 0; i < arity; i++) {
+        if (i > 0) sb_append(&out, ", ");
+        char field[32];
+        snprintf(field, sizeof(field), "item%d: Int", i);
+        sb_append(&out, field);
+    }
+    sb_append(&out, " }");
+    return sb_take(&out);
+}
+
+static char *lower_tuple_return_line(const char *line, const char *struct_name, int arity) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return strdup(line);
+    const char *value = skip_ws(s + 6);
+    if (*value != '(') return strdup(line);
+    int close = find_matching_paren_c(line, (int)(value - line));
+    if (close < 0) return strdup(line);
+    const char *tail = skip_ws(line + close + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') return strdup(line);
+
+    char *inside = substr_copy(value + 1, (size_t)(line + close - value - 1));
+    char *parts[8] = {0};
+    int count = split_top_level_commas_c(inside, parts, 8);
+    free(inside);
+    if (count != arity) {
+        free_split_parts(parts, count, 8);
+        return strdup(line);
+    }
+
+    StrBuf out;
+    sb_init(&out);
+    sb_append_n(&out, line, (size_t)(s - line));
+    sb_append(&out, "return ");
+    sb_append(&out, struct_name);
+    sb_append(&out, " { ");
+    for (int i = 0; i < arity; i++) {
+        if (i > 0) sb_append(&out, ", ");
+        char field[32];
+        snprintf(field, sizeof(field), "item%d: ", i);
+        sb_append(&out, field);
+        sb_append(&out, parts[i]);
+    }
+    sb_append(&out, " }");
+    free_split_parts(parts, count, 8);
+    return sb_take(&out);
+}
+
+static int lower_tuple_destructure_line(const char *line, TupleLowerInfo *info, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *open = skip_ws(s + 4);
+    if (*open != '(') return 0;
+    int close = find_matching_paren_c(line, (int)(open - line));
+    if (close < 0) return 0;
+    const char *after = skip_ws(line + close + 1);
+    if (*after != '=') return 0;
+    const char *rhs = skip_ws(after + 1);
+    if (!is_ident_start(*rhs)) return 0;
+    const char *callee_end = rhs + 1;
+    while (is_ident_continue(*callee_end)) callee_end++;
+    TupleFnInfo *fn = tuple_info_find(info, rhs, (size_t)(callee_end - rhs));
+    if (fn == NULL) return 0;
+    const char *call_open = skip_ws(callee_end);
+    if (*call_open != '(') return 0;
+    int call_close = find_matching_paren_c(line, (int)(call_open - line));
+    if (call_close < 0) return 0;
+    const char *tail = skip_ws(line + call_close + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') return 0;
+
+    char *vars_raw = substr_copy(open + 1, (size_t)(line + close - open - 1));
+    char *vars[8] = {0};
+    int count = split_top_level_commas_c(vars_raw, vars, 8);
+    free(vars_raw);
+    if (count != fn->arity) {
+        free_split_parts(vars, count, 8);
+        return 0;
+    }
+    for (int i = 0; i < count; i++) {
+        if (!is_ident_start(vars[i][0])) {
+            free_split_parts(vars, count, 8);
+            return 0;
+        }
+        for (const char *p = vars[i] + 1; *p != '\0'; p++) {
+            if (!is_ident_continue(*p)) {
+                free_split_parts(vars, count, 8);
+                return 0;
+            }
+        }
+    }
+
+    char temp[64];
+    snprintf(temp, sizeof(temp), "vais_tuple_tmp%d", info->temp_count++);
+    size_t indent_len = (size_t)(s - line);
+
+    StrBuf first;
+    sb_init(&first);
+    sb_append_n(&first, line, indent_len);
+    sb_append(&first, "let ");
+    sb_append(&first, temp);
+    sb_append(&first, " = ");
+    sb_append(&first, rhs);
+    lines_push(out, sb_take(&first));
+
+    for (int i = 0; i < count; i++) {
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, vars[i]);
+        sb_append(&bind, " = ");
+        sb_append(&bind, temp);
+        char field[32];
+        snprintf(field, sizeof(field), ".item%d", i);
+        sb_append(&bind, field);
+        lines_push(out, sb_take(&bind));
+    }
+    free_split_parts(vars, count, 8);
+    return 1;
+}
+
+static char *lower_tuple_text(const char *text) {
+    LineVec lines = split_lines(text);
+    LineVec out;
+    lines_init(&out);
+    TupleLowerInfo info;
+    memset(&info, 0, sizeof(info));
+    const char *active_struct = NULL;
+    int active_arity = 0;
+    int active_depth = 0;
+
+    for (size_t i = 0; i < lines.len; i++) {
+        char *line = lines.items[i];
+        char *name = NULL;
+        char *struct_name = NULL;
+        char *rewritten = NULL;
+        int arity = 0;
+
+        if (parse_tuple_fn_signature(line, &name, &struct_name, &rewritten, &arity)) {
+            if (info.count < 16) {
+                info.items[info.count].name = name;
+                info.items[info.count].struct_name = struct_name;
+                info.items[info.count].arity = arity;
+                char *struct_line = tuple_struct_line(struct_name, arity);
+                lines_push(&out, struct_line);
+                lines_push(&out, rewritten);
+                active_struct = info.items[info.count].struct_name;
+                active_arity = arity;
+                active_depth = tuple_line_brace_delta(rewritten);
+                info.count++;
+                continue;
+            }
+            free(name);
+            free(struct_name);
+            free(rewritten);
+        }
+
+        if (active_struct != NULL && active_depth > 0) {
+            char *lowered = lower_tuple_return_line(line, active_struct, active_arity);
+            lines_push(&out, lowered);
+            active_depth += tuple_line_brace_delta(line);
+            if (active_depth <= 0) {
+                active_struct = NULL;
+                active_arity = 0;
+            }
+            continue;
+        }
+
+        if (lower_tuple_destructure_line(line, &info, &out)) continue;
+        lines_push(&out, strdup(line));
+    }
+
+    char *joined = join_lines(&out, text[0] == '\0' || text[strlen(text) - 1] == '\n');
+    tuple_info_free(&info);
+    lines_free(&lines);
+    lines_free(&out);
+    return joined;
+}
+
+typedef struct {
     char *items[128];
     int count;
 } SourceNameList;
@@ -2406,11 +2706,13 @@ static char *prepare_source_text(const char *raw) {
     char *normalized = normalize_source_text(raw, 0);
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
-    char *generic_lowered = lower_generic_identity_struct_text(closure_lowered);
+    char *tuple_lowered = lower_tuple_text(closure_lowered);
+    char *generic_lowered = lower_generic_identity_struct_text(tuple_lowered);
     char *prepared = normalize_source_text(generic_lowered, 1);
     free(normalized);
     free(enum_lowered);
     free(closure_lowered);
+    free(tuple_lowered);
     free(generic_lowered);
     return prepared;
 }
@@ -4366,19 +4668,22 @@ static char *prepare_source_file(const char *path) {
     char *normalized = normalize_source_text(merged, 0);
     char *enum_lowered = lower_enum_text(normalized);
     char *closure_lowered = lower_closure_text(enum_lowered);
-    if (!trusted_self_host && check_front_contract_text(closure_lowered, path) != 0) {
+    char *tuple_lowered = lower_tuple_text(closure_lowered);
+    if (!trusted_self_host && check_front_contract_text(tuple_lowered, path) != 0) {
         free(merged);
         free(normalized);
         free(enum_lowered);
         free(closure_lowered);
+        free(tuple_lowered);
         return NULL;
     }
-    char *generic_lowered = lower_generic_identity_struct_text(closure_lowered);
+    char *generic_lowered = lower_generic_identity_struct_text(tuple_lowered);
     char *prepared = normalize_source_text(generic_lowered, 1);
     free(merged);
     free(normalized);
     free(enum_lowered);
     free(closure_lowered);
+    free(tuple_lowered);
     free(generic_lowered);
     return prepared;
 }

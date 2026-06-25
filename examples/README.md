@@ -60,6 +60,7 @@ struct used with `Int` values,
 directly to a struct literal,
 `examples/e51_index_ast.vais` for a flat index AST encoded in a 20-field struct
 with recursive evaluation,
+`examples/e59_tuple.vais` for `Int` tuple return and local destructuring,
 `examples/e64_enum_struct_payload.vais` for a single-field struct payload enum
 matched through payload field access,
 `examples/e55_match_wildcard.vais` for Int match literal arms with a `_`

@@ -136,6 +136,7 @@ Verified release surface:
 | `Map<Str,Char>` | Local `{}`, local/parameter/return-call assignment copy, parameter reference/mutation, return-value local initialization, `insert`, `remove`, `clear`, `get(key, default)`, `get_opt(key)`, `contains`, and `len` |
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, single-line and multiline expression-match binding, and local-binding `?` propagation |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, and local-binding `?` propagation |
+| `(Int, Int)` tuple | Function return and local destructuring slice lowered through generated structs |
 | Simple `struct` | Literal construction, field access, local field write, single-field nested struct read/write, helper parameters, helper returns, helper-return assignment, generic marker syntax used with `Int` values, and generic identity helpers applied to struct literals |
 | Small `enum` | Payload-free enum/match, small recursive `Int` payload enum/match, and single-field struct payload enum/match |
 
@@ -1144,6 +1145,27 @@ The host API contract is maintained in
 [../design/HOST_IO.md](../design/HOST_IO.md). Except for those verified file,
 path, and process intrinsics, these names should not be treated as
 release-surface verified until their gates are added.
+
+## Tuples
+
+The verified tuple slice covers function return and immediate local
+destructuring for `Int` tuples:
+
+```vais
+fn pair() -> (Int, Int) {
+    return (3, 4)
+}
+
+fn main() -> Int {
+    let (a, b) = pair()
+    return a + b
+}
+```
+
+This slice is covered by `examples/e59_tuple.vais`. The public driver lowers it
+to generated struct storage before the self-host core receives the source.
+Nested tuples, tuple parameters, tuple mutation, and non-`Int` tuple fields are
+not release-surface claims yet.
 
 ## Closures
 
