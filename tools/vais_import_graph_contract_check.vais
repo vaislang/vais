@@ -64,17 +64,23 @@ fn setup_import_cycle(root: Str) -> Str {
 fn setup_dependency_accept(root: Str) -> Str {
     let app = path_join(root, "app")
     let mathlib = path_join(root, "mathlib")
+    let textlib = path_join(root, "textlib")
     let app_src = path_join(app, "src")
     let arith = path_join(path_join(mathlib, "src"), "arith")
+    let text_src = path_join(textlib, "src")
     fs_mkdirs(app_src)
     fs_mkdirs(arith)
-    let app_manifest = str_concat(line("name = \"dependency_app\""), str_concat(line("version = \"0.1.0\""), str_concat(line("source = \"src\""), str_concat(line(""), str_concat(line("[dependencies]"), line("mathlib = \"../mathlib\""))))))
+    fs_mkdirs(text_src)
+    let deps = str_concat(line("[dependencies]"), str_concat(line("mathlib = \"../mathlib\""), line("textlib = \"../textlib\"")))
+    let app_manifest = str_concat(line("name = \"dependency_app\""), str_concat(line("version = \"0.1.0\""), str_concat(line("source = \"src\""), str_concat(line(""), deps))))
     write_text(path_join(app, "vais.toml"), app_manifest)
     write_text(path_join(mathlib, "vais.toml"), str_concat(line("name = \"mathlib\""), str_concat(line("version = \"0.1.0\""), line("source = \"src\""))))
+    write_text(path_join(textlib, "vais.toml"), str_concat(line("name = \"textlib\""), str_concat(line("version = \"0.1.0\""), line("source = \"src\""))))
     write_text(path_join(arith, "add.vais"), str_concat(line("fn add(a: Int, b: Int) -> Int {"), str_concat(line("    return a + b"), line("}"))))
     write_text(path_join(path_join(mathlib, "src"), "public.vais"), line("import arith.add"))
+    write_text(path_join(text_src, "words.vais"), str_concat(line("fn word_score() -> Int {"), str_concat(line("    return 22"), line("}"))))
     let entry = path_join(app_src, "main.vais")
-    write_text(entry, str_concat(line("import mathlib.public"), str_concat(line(""), str_concat(line("fn main() -> Int {"), str_concat(line("    return add(20, 22)"), line("}"))))))
+    write_text(entry, str_concat(line("import mathlib.public"), str_concat(line("import textlib.words"), str_concat(line(""), str_concat(line("fn main() -> Int {"), str_concat(line("    return add(20, word_score())"), line("}")))))))
     return entry
 }
 

@@ -4,6 +4,8 @@
 
 - Extended the Vais-authored local import graph checker to follow the first
   package manifest local dependency alias and dependency-internal plain imports.
+- Extended the Vais-authored local import graph checker to follow all declared
+  entry-package local dependency aliases.
 - Added a Vais-authored local import graph contract checker and release gate for
   manifest-free missing import, duplicate top-level symbol, and import cycle
   diagnostics.

@@ -16,6 +16,8 @@
   diagnostics.
 - Extended that import graph checker to follow the first package manifest local
   dependency alias and dependency-internal plain imports.
+- Extended that import graph checker to follow all declared entry-package local
+  dependency aliases.
 - Promoted collection for-each over integer values through the full self-host
   path, native direct engine, parity, and value gates, with
   `examples/e25_for_filter_sum.vais`, `examples/e27_list_max.vais`, and

@@ -131,6 +131,19 @@ fn find_manifest(start_dir: Str) -> Str {
     return ""
 }
 
+fn table_push(table: Str, item: Str) -> Str {
+    return str_concat(table, str_concat(item, str_byte(10)))
+}
+
+fn line_end_at(text: Str, pos: Int) -> Int {
+    let mut i = pos
+    while i < text.len() {
+        if text[i] == 10 { return i }
+        i = i + 1
+    }
+    return text.len()
+}
+
 fn valid_dotted_name(name: Str) -> Int {
     if name.len() == 0 { return 0 }
     let mut need_start = 1
@@ -241,9 +254,10 @@ fn manifest_source(manifest: Str) -> Str {
     return ""
 }
 
-fn manifest_first_dependency_alias(manifest: Str) -> Str {
+fn manifest_dependency_aliases(manifest: Str) -> Str {
     let text = fs_read_text(manifest)
     let mut in_dependencies = 0
+    let mut out = ""
     let mut pos = 0
     while pos <= text.len() {
         let line_start = pos
@@ -258,17 +272,18 @@ fn manifest_first_dependency_alias(manifest: Str) -> Str {
             if code[0] == 91 {
                 if str_eq(code, "[dependencies]") == 1 { in_dependencies = 1 } else { in_dependencies = 0 }
             } else if in_dependencies == 1 {
-                return assignment_key(code)
+                out = table_push(out, assignment_key(code))
             }
         }
         if line_end >= text.len() { pos = text.len() + 1 } else { pos = line_end + 1 }
     }
-    return ""
+    return out
 }
 
-fn manifest_first_dependency_path(manifest: Str) -> Str {
+fn manifest_dependency_paths(manifest: Str) -> Str {
     let text = fs_read_text(manifest)
     let mut in_dependencies = 0
+    let mut out = ""
     let mut pos = 0
     while pos <= text.len() {
         let line_start = pos
@@ -283,10 +298,55 @@ fn manifest_first_dependency_path(manifest: Str) -> Str {
             if code[0] == 91 {
                 if str_eq(code, "[dependencies]") == 1 { in_dependencies = 1 } else { in_dependencies = 0 }
             } else if in_dependencies == 1 {
-                return assignment_value(code)
+                out = table_push(out, assignment_value(code))
             }
         }
         if line_end >= text.len() { pos = text.len() + 1 } else { pos = line_end + 1 }
+    }
+    return out
+}
+
+fn dependency_source_roots(manifest_dir: Str, dep_paths: Str) -> Str {
+    let mut out = ""
+    let mut pos = 0
+    while pos < dep_paths.len() {
+        let end = line_end_at(dep_paths, pos)
+        let dep_path = str_slice(dep_paths, pos, end - pos)
+        let dep_manifest = path_join(path_join(manifest_dir, dep_path), "vais.toml")
+        let dep_source = manifest_source(dep_manifest)
+        let mut dep_root = ""
+        if dep_source.len() > 0 { dep_root = path_join(path_dirname(dep_manifest), dep_source) }
+        out = table_push(out, dep_root)
+        pos = end + 1
+    }
+    return out
+}
+
+fn dependency_root_for_alias(dep_aliases: Str, dep_roots: Str, alias: Str) -> Str {
+    let mut apos = 0
+    let mut rpos = 0
+    while apos < dep_aliases.len() and rpos < dep_roots.len() {
+        let aend = line_end_at(dep_aliases, apos)
+        let rend = line_end_at(dep_roots, rpos)
+        let current_alias = str_slice(dep_aliases, apos, aend - apos)
+        if str_eq(current_alias, alias) == 1 {
+            return str_slice(dep_roots, rpos, rend - rpos)
+        }
+        apos = aend + 1
+        rpos = rend + 1
+    }
+    return ""
+}
+
+fn dependency_root_for_path(path: Str, dep_roots: Str) -> Str {
+    let mut pos = 0
+    while pos < dep_roots.len() {
+        let end = line_end_at(dep_roots, pos)
+        let root = str_slice(dep_roots, pos, end - pos)
+        if root.len() > 0 {
+            if path_is_under(path, root) == 1 { return root }
+        }
+        pos = end + 1
     }
     return ""
 }
@@ -336,25 +396,23 @@ fn module_path(root: Str, name: Str) -> Str {
     return path_join(root, dotted_to_rel_path(name))
 }
 
-fn import_target(current_path: Str, root: Str, dep_alias: Str, dep_root: Str, import_name: Str) -> Str {
+fn import_target(current_path: Str, root: Str, dep_aliases: Str, dep_roots: Str, import_name: Str) -> Str {
     let mut current_root = root
-    if dep_root.len() > 0 {
-        if path_is_under(current_path, dep_root) == 1 { current_root = dep_root }
-    }
+    let current_dep_root = dependency_root_for_path(current_path, dep_roots)
+    if current_dep_root.len() > 0 { current_root = current_dep_root }
     let local = module_path(current_root, import_name)
     if fs_exists(local) == 1 { return local }
-    if dep_alias.len() > 0 and dep_root.len() > 0 {
-        if str_eq(current_root, root) == 1 {
-            if str_eq(first_segment(import_name), dep_alias) == 1 {
-                let rest = rest_after_first_dot(import_name)
-                if rest.len() > 0 { return module_path(dep_root, rest) }
-            }
+    if str_eq(current_root, root) == 1 {
+        let dep_root = dependency_root_for_alias(dep_aliases, dep_roots, first_segment(import_name))
+        if dep_root.len() > 0 {
+            let rest = rest_after_first_dot(import_name)
+            if rest.len() > 0 { return module_path(dep_root, rest) }
         }
     }
     return local
 }
 
-fn check_file(path: Str, root: Str, dep_alias: Str, dep_root: Str, stack: Str, visited: Map<Str,Int>, symbols: Map<Str,Int>) -> Int {
+fn check_file(path: Str, root: Str, dep_aliases: Str, dep_roots: Str, stack: Str, visited: Map<Str,Int>, symbols: Map<Str,Int>) -> Int {
     if fs_exists(path) == 0 {
         print(str_concat("error: source file not found: ", path))
         return 1
@@ -400,11 +458,11 @@ fn check_file(path: Str, root: Str, dep_alias: Str, dep_root: Str, stack: Str, v
         let raw = line_without_cr(text, line_start, line_end)
         let import_name = parse_import_name(raw)
         if import_name.len() > 0 {
-            let target = import_target(path, root, dep_alias, dep_root, import_name)
+            let target = import_target(path, root, dep_aliases, dep_roots, import_name)
             if fs_exists(target) == 0 {
                 return report_issue(path, line_no, "missing import path", str_concat("expected import at ", target))
             }
-            let status = check_file(target, root, dep_alias, dep_root, next_stack, visited, symbols)
+            let status = check_file(target, root, dep_aliases, dep_roots, next_stack, visited, symbols)
             if status != 0 { return status }
         }
         if line_end >= text.len() { pos = text.len() + 1 } else { pos = line_end + 1 }
@@ -417,23 +475,18 @@ fn check_import_graph(entry: Str) -> Int {
     let entry_dir = path_dirname(entry)
     let manifest = find_manifest(entry_dir)
     let mut root = entry_dir
-    let mut dep_alias = ""
-    let mut dep_root = ""
+    let mut dep_aliases = ""
+    let mut dep_roots = ""
     if manifest.len() > 0 {
         let manifest_dir = path_dirname(manifest)
         let source = manifest_source(manifest)
         if source.len() > 0 { root = path_join(manifest_dir, source) }
-        dep_alias = manifest_first_dependency_alias(manifest)
-        let dep_path = manifest_first_dependency_path(manifest)
-        if dep_alias.len() > 0 and dep_path.len() > 0 {
-            let dep_manifest = path_join(path_join(manifest_dir, dep_path), "vais.toml")
-            let dep_source = manifest_source(dep_manifest)
-            if dep_source.len() > 0 { dep_root = path_join(path_dirname(dep_manifest), dep_source) }
-        }
+        dep_aliases = manifest_dependency_aliases(manifest)
+        dep_roots = dependency_source_roots(manifest_dir, manifest_dependency_paths(manifest))
     }
     let visited: Map<Str,Int> = {}
     let symbols: Map<Str,Int> = {}
-    let status = check_file(entry, root, dep_alias, dep_root, "", visited, symbols)
+    let status = check_file(entry, root, dep_aliases, dep_roots, "", visited, symbols)
     if status != 0 { return status }
     print("PASS import graph clean")
     return 0

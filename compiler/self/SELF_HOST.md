@@ -49,8 +49,8 @@ native `scripts/vaisc` public command. The core regenerates from
   OS-facing package discovery and module graph loading.
 - `tools/vais_import_graph_check.vais` is the Vais-authored local import graph
   contract checker for the manifest-free missing import, duplicate symbol, and
-  import cycle diagnostics. It also follows the first package manifest local
-  dependency alias and dependency-internal plain imports.
+  import cycle diagnostics. It also follows declared package manifest local
+  dependency aliases and dependency-internal plain imports.
 - Lists, structs, string indexing, control flow, function calls, and print emission are covered by the release gates.
 
 ## Next Work

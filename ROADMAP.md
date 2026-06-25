@@ -757,6 +757,8 @@ time.
   - [x] Extend the Vais-authored local import graph checker to follow the first
     package manifest local dependency alias and dependency-internal plain
     imports.
+  - [x] Extend the Vais-authored local import graph checker to follow all
+    declared package manifest local dependency aliases from the entry package.
 - [x] 5.4 Add stage comparison gates for self-host output where deterministic IR
   is practical.
 
