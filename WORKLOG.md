@@ -1,5 +1,13 @@
 # Vais Worklog
 
+## 2026-06-26
+
+- Prepared and published the `v0.3.2` release-candidate tag from clean mainline:
+  updated compiler/site version metadata, cut the annotated tag, verified the
+  GitHub Release archives for Linux x64, macOS arm64, and macOS x64, verified
+  the GitHub Pages deploy, and reran `bash scripts/test-release-gates.sh` from
+  the clean tagged checkout.
+
 ## 2026-06-25
 
 - Extended the Vais-authored local import graph checker to follow the first

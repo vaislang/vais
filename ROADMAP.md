@@ -772,12 +772,19 @@ native host driver is limited to CLI, OS integration, and linking duties.
 Goal: publish a coherent first stable Vais release.
 
 - [x] 6.1 Freeze the v1 language reference and prelude reference.
-- [ ] 6.2 Cut a release candidate tag and attach verified standalone archives.
-- [ ] 6.3 Run all release, direct/full, install/package, website, and self-host
+- [x] 6.2 Cut a release candidate tag and attach verified standalone archives.
+- [x] 6.3 Run all release, direct/full, install/package, website, and self-host
   gates from a clean checkout.
 - [ ] 6.4 Publish final docs/site copy from repository canonical docs.
 - [ ] 6.5 Cut the final v1 tag and verify the GitHub Release assets and
   `vaislang.dev` content.
+
+Status: `v0.3.2` is the gate-backed release-candidate tag. GitHub Release
+archives exist for Linux x64, macOS arm64, and macOS x64, `vaislang.dev`
+deployed from the same mainline push, and `bash scripts/test-release-gates.sh`
+passes from the clean `v0.3.2` checkout. The final stable tag still needs a
+tag-policy decision because public tag `v1.0.0` already points at older commit
+`33dfc6ab`; do not move that tag.
 
 Done: users can install `vaisc`, read the v1 docs, compile the gate-backed
 examples, and reproduce the release archive from source.

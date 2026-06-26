@@ -9,7 +9,8 @@ behind thin shell entrypoints: `tools/install_vaisc.vais` and
 
 - Current source release: `v0.3.2`
 - Next planned source release: `v0.3.3`
-- Stable target: `v1.0.0` after the v1 completion roadmap is gate-backed
+- Stable target: requires a tag-policy decision because public tag `v1.0.0`
+  already exists; do not move that tag.
 
 Use `vMAJOR.MINOR.PATCH` source tags. Do not move a public tag after release
 archives have been published.
