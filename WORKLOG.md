@@ -7,6 +7,9 @@
   GitHub Release archives for Linux x64, macOS arm64, and macOS x64, verified
   the GitHub Pages deploy, and reran `bash scripts/test-release-gates.sh` from
   the clean tagged checkout.
+- Published the `v0.3.2` docs/site copy from canonical repository docs and
+  verified the live `vaislang.dev` homepage exposes the current release and
+  release archive link.
 
 ## 2026-06-25
 
