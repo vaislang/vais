@@ -3,6 +3,9 @@
 This directory is the canonical documentation source for the current Vais
 compiler workspace.
 
+Current source release: `v0.3.2`, with standalone compiler/checker archives
+published by the release workflow for Linux x64, macOS arm64, and macOS x64.
+
 ## Start Here
 
 | Document | Purpose |

@@ -9,6 +9,9 @@ builds a native host driver, links the reusable self-host compiler core in
 
 Official site: [vaislang.dev](https://vaislang.dev/)
 
+Current source release: `v0.3.2`. The GitHub Release provides standalone
+`vaisc` and `vais-check` archives for Linux x64, macOS arm64, and macOS x64.
+
 The site includes a Korean/English homepage and a separate coding-workspace
 playground for tutorial examples. The browser runner executes a small Vais
 subset for fast feedback; compile full programs locally with `scripts/vaisc`.
