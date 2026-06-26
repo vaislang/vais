@@ -6,6 +6,9 @@
   public `v1.0.0` tag: bumped compiler/site version metadata, updated
   changelog, release checklist, README/docs, site copy, and ROADMAP from the
   verified `v0.3.2` release-candidate surface.
+- Cut and verified the final stable `v1.0.1` tag: release archive workflow
+  passed for Linux x64, macOS arm64, and macOS x64; the GitHub Release is
+  published; and the live `vaislang.dev` homepage links `v1.0.1`.
 - Prepared and published the `v0.3.2` release-candidate tag from clean mainline:
   updated compiler/site version metadata, cut the annotated tag, verified the
   GitHub Release archives for Linux x64, macOS arm64, and macOS x64, verified

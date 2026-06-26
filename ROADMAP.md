@@ -776,14 +776,15 @@ Goal: publish a coherent first stable Vais release.
 - [x] 6.3 Run all release, direct/full, install/package, website, and self-host
   gates from a clean checkout.
 - [x] 6.4 Publish final docs/site copy from repository canonical docs.
-- [ ] 6.5 Cut the final v1 tag and verify the GitHub Release assets and
+- [x] 6.5 Cut the final v1 tag and verify the GitHub Release assets and
   `vaislang.dev` content.
 
 Status: `v0.3.2` was the gate-backed release-candidate tag. The stable release
 line uses `v1.0.1` because public tag `v1.0.0` already points at older commit
 `33dfc6ab` and must not be moved. The `v1.0.1` release commit carries the same
-verified language surface plus stable-version docs/site copy before the final
-tag is cut.
+verified language surface plus stable-version docs/site copy. The `v1.0.1`
+GitHub Release has Linux x64, macOS arm64, and macOS x64 standalone archives,
+and the live `vaislang.dev` homepage links the current stable release.
 
 Done: users can install `vaisc`, read the v1 docs, compile the gate-backed
 examples, and reproduce the release archive from source.
