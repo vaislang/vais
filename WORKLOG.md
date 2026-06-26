@@ -2,6 +2,10 @@
 
 ## 2026-06-26
 
+- Prepared the final stable `v1.0.1` release line while preserving the archived
+  public `v1.0.0` tag: bumped compiler/site version metadata, updated
+  changelog, release checklist, README/docs, site copy, and ROADMAP from the
+  verified `v0.3.2` release-candidate surface.
 - Prepared and published the `v0.3.2` release-candidate tag from clean mainline:
   updated compiler/site version metadata, cut the annotated tag, verified the
   GitHub Release archives for Linux x64, macOS arm64, and macOS x64, verified

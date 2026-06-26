@@ -7,10 +7,10 @@ behind thin shell entrypoints: `tools/install_vaisc.vais` and
 
 ## Current Release Line
 
-- Current source release: `v0.3.2`
-- Next planned source release: `v0.3.3`
-- Stable target: requires a tag-policy decision because public tag `v1.0.0`
-  already exists; do not move that tag.
+- Current source release: `v1.0.1`
+- Next planned source release: `v1.0.2`
+- Stable release line: `v1.0.1` is current because public tag `v1.0.0` is an
+  archived historical record; do not move `v1.0.0`.
 
 Use `vMAJOR.MINOR.PATCH` source tags. Do not move a public tag after release
 archives have been published.

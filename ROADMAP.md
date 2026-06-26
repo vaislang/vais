@@ -296,7 +296,7 @@ This file tracks current work only.
 - Official site source now lives in `website/` in this repository.
 - GitHub Pages workflow was added for `website/` build and artifact deployment.
 - `vaislang.dev` deploys from the `website/` GitHub Pages workflow on `main`.
-- `CHANGELOG.md` records the current `v0.3.2` source release baseline.
+- `CHANGELOG.md` records the current `v1.0.1` stable source release baseline.
 - GitHub `main` now points to the current Vais-only history; old remote `main`
   is preserved at `archive/old-main-2026-06-14`.
 
@@ -779,14 +779,11 @@ Goal: publish a coherent first stable Vais release.
 - [ ] 6.5 Cut the final v1 tag and verify the GitHub Release assets and
   `vaislang.dev` content.
 
-Status: `v0.3.2` is the gate-backed release-candidate tag. GitHub Release
-archives exist for Linux x64, macOS arm64, and macOS x64, `vaislang.dev`
-deployed from the same mainline push, and `bash scripts/test-release-gates.sh`
-passes from the clean `v0.3.2` checkout. Canonical README/docs and the live
-site now identify `v0.3.2` as the current source release and link the verified
-release archives. The final stable tag still needs a tag-policy decision
-because public tag `v1.0.0` already points at older commit `33dfc6ab`; do not
-move that tag.
+Status: `v0.3.2` was the gate-backed release-candidate tag. The stable release
+line uses `v1.0.1` because public tag `v1.0.0` already points at older commit
+`33dfc6ab` and must not be moved. The `v1.0.1` release commit carries the same
+verified language surface plus stable-version docs/site copy before the final
+tag is cut.
 
 Done: users can install `vaisc`, read the v1 docs, compile the gate-backed
 examples, and reproduce the release archive from source.
@@ -1399,8 +1396,8 @@ Mode: sequential
   `docs/README.md`, `CHANGELOG.md`, `ROADMAP.md`.
 - Requirements: document the next planned release line, tag policy, pre-tag
   checks, manual archive workflow trigger, and post-tag verification.
-- Done: the current source release is `v0.3.2`, the next planned source
-  release is `v0.3.3`, and tag creation is explicitly deferred until release
+- Done: the current source release is `v1.0.1`, the next planned source
+  release is `v1.0.2`, and tag creation is explicitly deferred until release
   gates are green.
 
 ## Completed Milestone: Native Direct List Else-If Condition Arguments

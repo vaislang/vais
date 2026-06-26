@@ -6,9 +6,22 @@
 
 - No unreleased changes.
 
+## v1.0.1 - 2026-06-26
+
+Current stable Vais source release.
+
+### Changed
+
+- Promoted the gate-backed `v0.3.2` release-candidate surface to the first
+  current stable release line without changing the verified language surface.
+- Published current docs and site copy for the stable release, including
+  standalone archive links for Linux x64, macOS arm64, and macOS x64.
+- Kept the historical public `v1.0.0` tag archived and unmoved; `v1.0.1` is
+  the current stable tag for this mainline.
+
 ## v0.3.2 - 2026-06-26
 
-Current Vais source release.
+Previous Vais source release candidate.
 
 ### Changed
 
