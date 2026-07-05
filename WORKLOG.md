@@ -1,5 +1,25 @@
 # Vais Worklog
 
+## 2026-07-05 (resume + commit)
+
+Resumed a Codex session that had stopped mid-work with ~10 days of uncommitted
+progress: the whole e121~e328 example corpus (205 new examples) plus the
+compiler changes behind it (`fixpoint_full.vais`, `vaisc_core.ll`,
+`vaisc_native.c`, tools/*check*, parity manifest) — 221 added + 35 modified,
+all in the working tree, last commit was 2026-06-26.
+
+Ran the full validation ladder before committing: front, direct,
+fixpoint-full, value corpus (pass=347/0/0), parity (native=347),
+full self-host fixpoint (stage1==stage2 IR bit-identical, 4.4MB),
+`git diff --check`, and `test-release-gates.sh` — all green.
+
+Committed the lot on branch `work/vaisdb-result-package-surface-2026-07-05`
+(0479d5f8) rather than directly on `main` (main tracks origin/main, shared
+public repo). Not pushed — waiting on user decision to merge/push.
+
+**다음 세션:** push/merge 결정 대기. ROADMAP 현재 스프린트는 5/5 완료 상태이므로,
+"다음 후보 작업"(richer package layout / Result 구조화 diagnostics 확장) 중 선택 필요.
+
 ## 2026-07-05
 
 - Added e328 package static assets: package manifests can set optional
