@@ -1,0 +1,10 @@
+# expect: 42
+# Map<Str,Str>.get_opt match arms can take .len() after str_trim/str_lower transforms.
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", " VaisDB ")
+    let title_len = match docs.get_opt("title") { Some(v) => str_lower(str_trim(v)).len(), None => 0 }
+    let fallback_len = match docs.get_opt("missing") { Some(v) => str_lower(v).len(), None => str_lower(str_trim(" CACHE ")).len() }
+    return title_len * 6 + fallback_len + 1
+}

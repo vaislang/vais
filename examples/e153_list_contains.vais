@@ -1,0 +1,23 @@
+# expect: 42
+
+fn score_has(xs: List<Int>, value: Int) -> Int {
+    if xs.contains(value) { return 40 }
+    return 0
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(3)
+    xs.push(42)
+    xs.push(7)
+
+    let found: Bool = xs.contains(42)
+    if not found { return 1 }
+    if xs.contains(9) { return 2 }
+    if score_has(xs, 42) != 40 { return 3 }
+
+    xs.clear()
+    if xs.contains(42) { return 4 }
+    xs.push(2)
+    return score_has(xs, 2) + xs.contains(2) + xs.contains(9) + 1
+}

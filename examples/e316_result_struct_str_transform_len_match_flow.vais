@@ -1,0 +1,29 @@
+# expect: 42
+# Result<Struct,Int> matches can score normalized Str fields with .len().
+
+struct DocArtifact { id: Str, title: Str, body: Str, terms: Int, score: Int }
+
+fn build_doc_artifact(id: Str, title: Str, body: Str, terms: Int, score: Int) -> Result<DocArtifact, Int> {
+    if id.len() == 0 { return Err(10) }
+    if title.len() == 0 { return Err(11) }
+    if body.len() == 0 { return Err(12) }
+    if terms < 1 { return Err(13) }
+    let artifact = DocArtifact { id: id, title: title, body: body, terms: terms, score: score }
+    return Ok(artifact)
+}
+
+fn normalized_score_or_code(flow: Result<DocArtifact, Int>) -> Int {
+    let prefix = "doc:"
+    let value = match flow { Ok(artifact) => str_trim(artifact.title).len() + str_concat(prefix, str_lower(str_trim(artifact.id))).len() + str_replace(artifact.body, "cache", "store").len() + artifact.terms + artifact.score, Err(code) => code }
+    return value
+}
+
+fn main() -> Int {
+    let good = build_doc_artifact(" D1 ", "  VaisDB guide  ", "AI cache", 3, 13)
+    let bad = build_doc_artifact("", "  VaisDB guide  ", "AI cache", 3, 13)
+    let score = normalized_score_or_code(good)
+    let code = normalized_score_or_code(bad)
+    if score != 42 { return 1 }
+    if code != 10 { return 2 }
+    return score
+}

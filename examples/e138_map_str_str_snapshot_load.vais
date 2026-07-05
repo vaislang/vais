@@ -1,0 +1,70 @@
+# expect: 42
+
+fn snapshot(docs: Map<Str,Str>) -> Str {
+    let out = str_builder_new()
+    let mut i = 0
+    while i < docs.len() {
+        str_builder_append(out, docs.key_at(i))
+        str_builder_push(out, 61)
+        str_builder_append(out, docs.value_at(i))
+        str_builder_push(out, 10)
+        i = i + 1
+    }
+    return str_builder_finish(out)
+}
+
+fn load_snapshot(text: Str) -> Map<Str,Str> {
+    let docs: Map<Str,Str> = {}
+    let mut key = str_builder_new()
+    let mut value = str_builder_new()
+    let mut in_value = 0
+    let mut key_len = 0
+    let mut value_len = 0
+    let mut i = 0
+
+    while i < text.len() {
+        let c = text[i]
+        if c == 10 {
+            if key_len > 0 {
+                docs.insert(str_builder_finish(key), str_builder_finish(value))
+            }
+            key = str_builder_new()
+            value = str_builder_new()
+            in_value = 0
+            key_len = 0
+            value_len = 0
+        } else if c == 61 {
+            in_value = 1
+        } else if in_value == 0 {
+            str_builder_push(key, c)
+            key_len = key_len + 1
+        } else {
+            str_builder_push(value, c)
+            value_len = value_len + 1
+        }
+        i = i + 1
+    }
+
+    if key_len > 0 {
+        docs.insert(str_builder_finish(key), str_builder_finish(value))
+    }
+    return docs
+}
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "VaisDB")
+    docs.insert("body", "cache")
+    docs.insert("model", "local")
+
+    let path = path_join(fs_temp_dir(), "vais-e138-map-str-str-snapshot-load.txt")
+    if fs_write_text(path, snapshot(docs)) != 0 { return 1 }
+
+    let loaded = load_snapshot(fs_read_text(path))
+    if loaded.len() != 3 { return 2 }
+    if loaded.get("title", "") != "VaisDB" { return 3 }
+    if loaded.get("body", "") != "cache" { return 4 }
+    if loaded.get("model", "") != "local" { return 5 }
+    if loaded.get("missing", "fallback") != "fallback" { return 6 }
+    return 42
+}

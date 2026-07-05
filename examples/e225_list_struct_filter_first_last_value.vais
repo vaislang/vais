@@ -1,0 +1,29 @@
+# expect: 42
+# List<Struct>.filter(...).first()/last() selects matched records directly.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn first_matching_doc(docs: List<Doc>, needle: Str) -> Doc {
+    return docs.filter(|doc| str_contains(doc.body, needle) == 1).first()
+}
+
+fn last_high_doc(docs: List<Doc>, min_score: Int) -> Doc {
+    let hit: Doc = docs.filter(|doc| doc.score > min_score).last()
+    return hit
+}
+
+fn first_high_doc_local(docs: List<Doc>, min_score: Int) -> Doc {
+    let hit = docs.filter(|doc| doc.score > min_score).first()
+    return hit
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    let first = first_matching_doc(docs, "tokens")
+    let last = last_high_doc(docs, 10)
+    let local = first_high_doc_local(docs, 10)
+    return first.score + last.title.len() + local.score + 1
+}

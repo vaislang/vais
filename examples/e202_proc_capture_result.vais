@@ -1,0 +1,18 @@
+# expect: 42
+
+# Full stdout/stderr/status process capture into a standard result struct.
+struct ProcessResult { code: Int, stdout: Str, stderr: Str }
+
+fn main() -> Int {
+    let argv: List<Str> = []
+    argv.push("/bin/sh")
+    argv.push("-c")
+    argv.push("printf allout; printf allerr >&2; exit 17")
+    let got = proc_capture(argv)
+    if got.code != 17 { return 1 }
+    if got.stdout.len() != 6 { return 2 }
+    if str_starts_with(got.stdout, "all") != 1 { return 3 }
+    if got.stderr.len() != 6 { return 4 }
+    if str_contains(got.stderr, "err") != 1 { return 5 }
+    return 42
+}

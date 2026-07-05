@@ -1,0 +1,30 @@
+# expect: 42
+
+fn main() -> Int {
+    let fields: List<Str> = []
+    let n = str_split_into("title=VaisDB=cache", "=", fields)
+    if n != 3 { return 1 }
+    if fields.len() != 3 { return 2 }
+    if fields[0] != "title" { return 3 }
+    if fields[1] != "VaisDB" { return 4 }
+    if str_lower(fields[2]) != "cache" { return 5 }
+
+    let csv: List<Str> = []
+    let n2 = str_split_into(",alpha,,beta,", ",", csv)
+    if n2 != 5 { return 6 }
+    if csv[0] != "" { return 7 }
+    if csv[2] != "" { return 8 }
+    if csv[4] != "" { return 9 }
+
+    let docs: Map<Str,Str> = {}
+    docs.insert("path", "docs/veriqel/vais")
+    let path_parts: List<Str> = []
+    if str_split_into(docs.get("path", ""), "/", path_parts) != 3 { return 10 }
+    if path_parts[1] != "veriqel" { return 11 }
+
+    let one: List<Str> = []
+    if str_split_into("abc", "", one) != 1 { return 12 }
+    if one[0] != "abc" { return 13 }
+
+    return n * n2 + path_parts[1].len() * 4 - 1
+}

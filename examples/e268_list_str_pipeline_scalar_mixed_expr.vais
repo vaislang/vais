@@ -1,0 +1,60 @@
+# expect: 42
+# List<Str>.map-filter and filter-map scalar calls can mix inside one expression.
+
+fn weigh(n: Int) -> Int {
+    return n
+}
+
+fn mixed_pair(words: List<Str>, needle: Str) -> Int {
+    return words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len() + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).count("ai")
+}
+
+fn mixed_score(words: List<Str>, needle: Str) -> Int {
+    if mixed_pair(words, needle) != 5 { return 1 }
+
+    let pair = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len() + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).count("ai")
+    if pair != 5 { return 2 }
+
+    let mut total = pair
+    total = total + weigh(words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("vais") + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).index_of("ai"))
+
+    let values: List<Int> = []
+    values.push(words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len() + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).count("ai"))
+    values.insert_at(0, words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).index_of("vais") + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("ai"))
+
+    if words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("vais") and words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("ai") {
+        total = total + 10
+    }
+
+    let mut guard = 0
+    while words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai") + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).index_of("ai") > guard {
+        guard = guard + 2
+    }
+
+    if words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("missing") and words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("ai") {
+        return 3
+    }
+
+    return total + values[0] + values[1] + guard
+}
+
+fn reverse_mixed_score(words: List<Str>, needle: Str) -> Int {
+    let pair = words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).len() + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai")
+    let mut total = pair
+    total = total + weigh(words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).index_of("vais") + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("ai"))
+    if words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("vais") and words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("ai") {
+        total = total + 7
+    }
+    let values: List<Int> = []
+    values.push(words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).count("ai") + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("ai"))
+    return total + values[0]
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  Vais")
+    words.push("AI")
+    words.push("db")
+    words.push("ai  ")
+    return mixed_score(words, "ai") + reverse_mixed_score(words, "ai")
+}

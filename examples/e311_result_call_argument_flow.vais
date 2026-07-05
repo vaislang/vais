@@ -1,0 +1,53 @@
+# expect: 42
+# Result-returning helpers can be passed directly as function arguments.
+
+struct DocArtifact { title: Str, score: Int }
+
+fn build_doc_artifact(title: Str, score: Int) -> Result<DocArtifact, Int> {
+    if title.len() == 0 { return Err(20) }
+    if score < 1 { return Err(21) }
+    let artifact = DocArtifact { title: title, score: score }
+    return Ok(artifact)
+}
+
+fn read_checked(path: Str) -> Result<Str, Int> {
+    if fs_exists(path) != 1 { return Err(10) }
+    let text = fs_read_text(path)
+    if text.len() == 0 { return Err(11) }
+    return Ok(text)
+}
+
+fn result_text(flow: Result<Str, Int>) -> Str {
+    let value = match flow { Ok(text) => text, Err(code) => Str(code) }
+    return value
+}
+
+fn result_code(flow: Result<Str, Int>) -> Int {
+    let value = match flow { Ok(text) => text.len(), Err(code) => code }
+    return value
+}
+
+fn artifact_score(flow: Result<DocArtifact, Int>) -> Int {
+    let value = match flow { Ok(artifact) => artifact.title.len() + artifact.score, Err(code) => code }
+    return value
+}
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let path = path_join(root, "vais-e311-result-call-argument.txt")
+    if fs_write_text(path, "VaisDB") != 0 { return 1 }
+
+    let text = result_text(read_checked(path))
+    if text != "VaisDB" { return 2 }
+    if result_code(read_checked(path)) != 6 { return 3 }
+
+    let missing = path_join(root, "vais-e311-missing.txt")
+    if result_code(read_checked(missing)) != 10 { return 4 }
+
+    let good_score = artifact_score(build_doc_artifact("VaisDB", 36))
+    if good_score != 42 { return 5 }
+    let bad_title = artifact_score(build_doc_artifact("", 36))
+    if bad_title != 20 { return 6 }
+
+    return good_score
+}

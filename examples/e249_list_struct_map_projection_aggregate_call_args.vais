@@ -1,0 +1,51 @@
+# expect: 42
+# List<Struct>.map(...) Int projection aggregates can feed helper-call arguments.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn mix(total: Int, best: Int, lowest: Int) -> Int {
+    return total + best - lowest - 16
+}
+
+fn id_score(score: Int) -> Int {
+    return score
+}
+
+fn combined(docs: List<Doc>) -> Int {
+    return mix(docs.map(|doc| doc.score).sum(), docs.map(|doc| doc.score).max(), docs.map(|doc| doc.score).min())
+}
+
+fn score_flow(docs: List<Doc>) -> Int {
+    let direct = mix(docs.map(|doc| doc.score).sum(), docs.map(|doc| doc.score).max(), docs.map(|doc| doc.score).min())
+    if direct != combined(docs) { return 1 }
+
+    let mut score = 0
+    if id_score(docs.map(|doc| doc.score).sum()) == 43 {
+        score = score + 10
+    }
+
+    let mut limit = 40
+    while id_score(docs.map(|doc| doc.score).sum()) > limit {
+        score = score + 20
+        limit = limit + 100
+    }
+
+    if id_score(docs.map(|doc| doc.score).min()) == 0 {
+        return 2
+    } else if id_score(docs.map(|doc| doc.score).max()) == 20 {
+        score = score + 12
+    }
+    return direct + score - 42
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return score_flow(docs)
+}

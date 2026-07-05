@@ -1,0 +1,27 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn make_box() -> Box {
+    return Box {
+        value: 7,
+        tag: 5,
+    }
+}
+
+fn replace(xs: List<Box>) -> Int {
+    xs[0] = Box {
+        value: 30,
+        tag: 4,
+    }
+    xs[1] = make_box()
+    return xs[0].value + xs[0].tag + xs[1].value + xs[1].tag - xs.len() - 2
+}
+
+fn main() -> Int {
+    let xs: List<Box> = [Box { value: 1, tag: 1 }, Box { value: 2, tag: 2 }]
+    return replace(xs)
+}

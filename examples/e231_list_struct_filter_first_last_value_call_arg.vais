@@ -1,0 +1,20 @@
+# expect: 42
+# List<Struct>.filter(...).first()/last() whole-record selections can feed helper calls directly.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn combine_docs(first_doc: Doc, last_doc: Doc) -> Int {
+    return first_doc.score + last_doc.score + last_doc.title.len() + 8
+}
+
+fn score_match(docs: List<Doc>, needle: Str, min_score: Int) -> Int {
+    return combine_docs(docs.filter(|doc| str_contains(doc.body, needle) == 1).first(), docs.filter(|doc| doc.score > min_score).last())
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 9 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return score_match(docs, "tokens", 10)
+}

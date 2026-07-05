@@ -1,0 +1,29 @@
+# expect: 42
+# Composite List<Str> pipeline scalar Bool locals infer Bool and allow exact Bool reassignment.
+
+fn bool_score(flag: Bool, yes: Int, no: Int) -> Int {
+    if flag { return yes }
+    return no
+}
+
+fn score(words: List<Str>, needle: Str) -> Int {
+    let mut ok = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("vais") and words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("ai")
+    ok = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("ai")
+
+    let mut seen = words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).len() > 0
+    seen = words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("missing")
+
+    let mut total = bool_score(ok, 10, 0)
+    total = total + bool_score(seen, 0, 12)
+    let count = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len() + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).count("ai")
+    return total + count + 15
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  Vais")
+    words.push("AI")
+    words.push("db")
+    words.push("ai  ")
+    return score(words, "ai")
+}

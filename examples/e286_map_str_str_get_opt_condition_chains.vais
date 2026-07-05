@@ -1,0 +1,24 @@
+# expect: 42
+# Map<Str,Str>.get_opt string payload matches work in while and else-if conditions.
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", " VaisDB Vector Cache ")
+
+    let mut ticks = 0
+    while str_contains(match docs.get_opt("title") { Some(v) => str_lower(str_trim(v)), None => "" }, "vector") == 1 and ticks < 2 {
+        ticks = ticks + 1
+    }
+    if ticks != 2 { return 1 }
+
+    let mut score = 0
+    if str_contains(match docs.get_opt("missing") { Some(v) => str_lower(v), None => "fallback cache" }, "vector") == 1 {
+        return 2
+    } else if str_starts_with(match docs.get_opt("title") { Some(v) => str_lower(str_trim(v)), None => "" }, "vais") == 1 {
+        score = 40
+    } else {
+        return 3
+    }
+    if score != 40 { return 4 }
+    return score + ticks
+}

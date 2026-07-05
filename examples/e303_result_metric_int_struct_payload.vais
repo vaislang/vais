@@ -1,0 +1,34 @@
+# expect: 42
+# Result<Metric,Int> structured payload forwarding and field recovery.
+
+struct Metric { docs: Int, terms: Int }
+
+fn parse_metric(docs: Int, terms: Int) -> Result<Metric, Int> {
+    if docs < 1 { return Err(10) }
+    let metric = Metric { docs: docs, terms: terms }
+    return Ok(metric)
+}
+
+fn metric_score(flow: Result<Metric, Int>, fallback: Int) -> Int {
+    let value = match flow { Ok(metric) => metric.docs + metric.terms, Err(code) => fallback + code }
+    return value
+}
+
+fn choose_metric(left: Result<Metric, Int>, right: Result<Metric, Int>) -> Int {
+    let left_score = metric_score(left, 0)
+    let right_score = metric_score(right, 0)
+    if left_score > right_score { return left_score }
+    return right_score
+}
+
+fn main() -> Int {
+    let ok = parse_metric(14, 18)
+    let missing = parse_metric(0, 5)
+    let ok_score = metric_score(ok, 0)
+    let missing_score = metric_score(missing, 0)
+    let chosen = choose_metric(ok, missing)
+    if ok_score != 32 { return 1 }
+    if missing_score != 10 { return 2 }
+    if chosen != 32 { return 3 }
+    return ok_score + missing_score
+}

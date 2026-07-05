@@ -1,0 +1,31 @@
+# expect: 42
+
+fn best_adjusted(scores: List<Int>, min: Int, boost: Int) -> Int {
+    return scores.filter(|score| score > min).map(|score| score + boost).max()
+}
+
+fn lowest_scaled(scores: List<Int>, cap: Int, factor: Int) -> Int {
+    let low: Int = scores.filter(|score| score < cap).map(|score| score * factor).min()
+    return low
+}
+
+fn best_with_local_bonus(scores: List<Int>, min: Int) -> Int {
+    let bonus = 4
+    let best = scores.filter(|score| score > min).map(|score| score + bonus).max()
+    return best
+}
+
+fn main() -> Int {
+    let scores: List<Int> = []
+    scores.push(7)
+    scores.push(42)
+    scores.push(18)
+    scores.push(3)
+    let adjusted = best_adjusted(scores, 10, 1)
+    let low = lowest_scaled(scores, 20, 2)
+    let local_best = best_with_local_bonus(scores, 10)
+    if adjusted != 43 { return 1 }
+    if low != 6 { return 2 }
+    if local_best != 46 { return 3 }
+    return adjusted + low - local_best + 39
+}

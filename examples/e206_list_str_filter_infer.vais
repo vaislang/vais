@@ -1,0 +1,20 @@
+# expect: 42
+# List<Str>.filter can infer the result type from a known List<Str> receiver.
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("vais")
+    words.push("db")
+    words.push("ai")
+
+    let selected = words.filter(|w| str_contains(w, "ai") == 1)
+    if selected.len() != 2 {
+        return 1
+    }
+    if selected.contains("vais") != 1 {
+        return 2
+    }
+    if selected.contains("ai") != 1 {
+        return 3
+    }
+    return selected.len() * 20 + selected.contains("vais") + selected.contains("ai")
+}

@@ -1,0 +1,29 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn make_more(base: Int) -> List<Box> {
+    let out: List<Box> = []
+    out.push(Box { value: base, tag: 2 })
+    out.push(Box { value: base + 10, tag: 3 })
+    return out
+}
+
+fn add_generated(xs: List<Box>, base: Int) -> Int {
+    xs.extend(make_more(base))
+    let tail = xs.last()
+    return xs.len() + tail.value + tail.tag
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 5, tag: 1 })
+    xs.extend(make_more(10))
+    let score = add_generated(xs, 30)
+    let mid = xs[1]
+    let tail = xs.last()
+    return mid.value + tail.tag + xs.len() + score - 24
+}

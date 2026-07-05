@@ -1,0 +1,36 @@
+# expect: 42
+
+fn make_words() -> List<Str> {
+    let words: List<Str> = []
+    words.push("alpha")
+    words.push("beta")
+    words.push("gamma")
+    words.push("delta")
+    return words
+}
+
+fn main() -> Int {
+    let words = make_words()
+    if words[0] != "alpha" {
+        return 0
+    }
+    if words.last() != "delta" {
+        return 1
+    }
+    let first_len = words[0].len()
+    let last_len = words.last().len()
+    if words.pop() != "delta" {
+        return 2
+    }
+    let tail_len = words.pop().len()
+    if first_len != 5 {
+        return 3
+    }
+    if last_len != 5 {
+        return 4
+    }
+    if tail_len != 5 {
+        return 5
+    }
+    return words.len() * 16 + words.is_empty() + first_len + last_len
+}

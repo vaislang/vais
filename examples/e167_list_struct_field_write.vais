@@ -1,0 +1,26 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn bump(xs: List<Box>, i: Int, delta: Int) -> Int {
+    xs[i].value = xs[i].value + delta
+    xs[i].tag = xs[i].tag + 1
+    return xs[i].value + xs[i].tag
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 10, tag: 1 })
+    xs.push(Box { value: 20, tag: 2 })
+
+    xs[0].value = 15
+    xs[1].tag = xs[0].value - 10
+    if xs[0].value != 15 { return 1 }
+    if xs[1].tag != 5 { return 2 }
+
+    let score = bump(xs, 1, 20)
+    return score - xs[0].tag - xs.len() - 1
+}

@@ -1,0 +1,23 @@
+# expect: 42
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "Vais DB")
+    docs.insert("body", "AI_AI_cache")
+
+    let words: List<Str> = ["notes-v1.md", "alpha_beta"]
+    let slug = str_replace(str_lower(docs.get("title", "")), " ", "-")
+    if slug != "vais-db" { return 1 }
+    if str_replace("vaisdb vector cache", " ", "_") != "vaisdb_vector_cache" { return 2 }
+    if str_replace("aaaa", "aa", "b") != "bb" { return 3 }
+    if str_replace("abc", "", "x") != "abc" { return 4 }
+    if str_replace(docs.value_at(1), "_", " ") != "AI AI cache" { return 5 }
+    if str_replace(words[1], "_", "-") != "alpha-beta" { return 6 }
+
+    let mut from_match: Str = ""
+    from_match = match docs.get_opt("body") { Some(v) => str_replace(str_lower(v), "_", " "), None => "" }
+    if from_match != "ai ai cache" { return 7 }
+    if str_replace(match docs.get_opt("title") { Some(v) => str_lower(v), None => "" }, " ", "") != "vaisdb" { return 8 }
+
+    return slug.len() * 6
+}

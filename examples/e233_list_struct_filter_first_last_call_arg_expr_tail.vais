@@ -1,0 +1,21 @@
+# expect: 42
+# Filtered first/last helper-call arguments can appear inside a larger expression.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn score_match(docs: List<Doc>, needle: Str, min_score: Int) -> Int {
+    let total = combine_later(docs.filter(|doc| str_contains(doc.body, needle) == 1).first().score, docs.filter(|doc| doc.score > min_score).last(), docs.filter(|doc| doc.score > min_score).last().title.len()) + 1
+    return total
+}
+
+fn combine_later(first_score: Int, last_doc: Doc, last_title_len: Int) -> Int {
+    return first_score + last_doc.score + last_title_len + 7
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 9 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return score_match(docs, "tokens", 10)
+}

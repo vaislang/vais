@@ -1,0 +1,30 @@
+# expect: 42
+# Filter-map Int aggregates can appear inside broader condition expressions.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn condition_flow(docs: List<Doc>) -> Int {
+    let mut score = 0
+    if docs.filter(|doc| str_contains(doc.body, "tokens") == 1).map(|doc| doc.score).sum() + 4 == 42 {
+        score = score + 10
+    }
+    let mut limit = 20
+    while docs.filter(|doc| doc.score > 6).map(|doc| doc.score + 1).max() + score > limit {
+        score = score + 20
+        limit = limit + 100
+    }
+    if docs.filter(|doc| str_contains(doc.body, "none") == 1).map(|doc| doc.score).sum() + score == 0 {
+        return 1
+    } else if 25 + docs.filter(|doc| doc.score > 6).map(|doc| doc.score - 1).min() == 42 {
+        score = score + 12
+    }
+    return score
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return condition_flow(docs)
+}

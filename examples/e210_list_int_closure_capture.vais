@@ -1,0 +1,24 @@
+# expect: 42
+# List<Int>.filter/map/filter-sum closures can capture known Int parameters and locals.
+fn tail_sum(nums: List<Int>, min: Int) -> Int {
+    return nums.filter(|n| n > min).sum()
+}
+
+fn score(nums: List<Int>, min: Int) -> Int {
+    let selected = nums.filter(|n| n > min)
+    if selected.len() != 3 { return 1 }
+    let offset = 1
+    let bumped = selected.map(|n| n + offset)
+    if bumped.sum() != 15 { return 2 }
+    return bumped.sum() + tail_sum(nums, min) + selected.len() * 5
+}
+
+fn main() -> Int {
+    let nums: List<Int> = []
+    nums.push(1)
+    nums.push(2)
+    nums.push(3)
+    nums.push(4)
+    nums.push(5)
+    return score(nums, 2)
+}

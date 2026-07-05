@@ -1,0 +1,35 @@
+# expect: 42
+
+fn make_words() -> List<Str> {
+    let words: List<Str> = ["alpha", "beta", "gamma"]
+    return words
+}
+
+fn replace(out: List<Str>) -> Int {
+    out = make_words()
+    let first = out[0]
+    let last = out.last()
+    let tail = out.pop()
+    if first != "alpha" {
+        return 0
+    }
+    if last != "gamma" {
+        return 1
+    }
+    if tail != "gamma" {
+        return 2
+    }
+    return out.len() * 20 + out.is_empty() + tail.len() - 3
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    let score = replace(words)
+    if words.len() != 2 {
+        return 3
+    }
+    if words[0] != "alpha" {
+        return 4
+    }
+    return score
+}

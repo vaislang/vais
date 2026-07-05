@@ -1,0 +1,23 @@
+# expect: 42
+
+struct Inner {
+    v: Int,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn read(xs: List<Outer>) -> Int {
+    return xs[0].inner.v + xs.len() + 1
+}
+
+fn main() -> Int {
+    let xs: List<Outer> = []
+    xs.push(Outer {
+        inner: Inner {
+            v: 40,
+        },
+    })
+    return read(xs)
+}

@@ -9,9 +9,27 @@ string-construction helpers, argv helpers, `proc_run(argv: List<Str>) -> Int`,
 `proc_capture_stdout(argv: List<Str>) -> Str`, and
 `proc_capture_stderr(argv: List<Str>) -> Str`, plus
 `proc_capture_to(argv: List<Str>, stdout_path: Str, stderr_path: Str) -> Int`,
+and `proc_capture(argv: List<Str>) -> ProcessResult`,
+and `time_millis() -> Int`,
 are verified for full-engine `scripts/vaisc build` and `scripts/vaisc run`;
-full in-memory `ProcessResult` capture remains specified for a later Phase 3
-gate.
+the native direct engine also covers the standard in-memory capture shape and
+the e297 file/argv ingest workflow over `fs_read_text`, `fs_write_text`,
+`fs_temp_dir`, `path_join`, `proc_argc`, and `proc_arg`, plus the e298
+`fs_exists` guarded `Result<Int,Int>` file-ingest error flow, the e301
+`Result<Str,Int>` guarded file-read payload flow, the e302
+`Result<Str,Int>` helper parameter flow, the e303 `Result<Metric,Int>`
+structured payload helper flow, the e304 `Result<DeclaredStruct,Int>`
+structured payload helper flow, the e305 multiline declared-struct Result
+payload helper flow, the e306 declared-struct Result payload flow with `Str`
+fields, the e307 declared-struct Result payload flow with local-binding `?`,
+the e308 VaisDB artifact record flow with `Result<DocArtifact,Int>` payloads
+stored in `List<DocArtifact>` outputs, the e309 artifact-store snapshot flow
+that writes and reads persisted `List<DocArtifact>` records, and the e299
+`time_millis` benchmark-report workflow. The e300 workflow additionally covers
+the direct path for `fs_cwd`, `path_dirname`, `path_basename`, `proc_capture`,
+and elapsed-time CLI report persistence. `tools/vaisdb_benchmark_report.vais`
+adds the reusable tool path that parses saved metric lines and writes a summary
+report from Vais code.
 
 This document fixes the first file, path, and process APIs Vais should grow so
 repository checks can run as Vais-authored tools without mixing host I/O into
@@ -38,7 +56,7 @@ The first file API is text-only and UTF-8 oriented:
 | API | Status | Behavior |
 | --- | --- | --- |
 | `fs_exists(path: Str) -> Bool` | Verified | Return whether a file or directory exists. |
-| `fs_read_text(path: Str) -> Str` | Verified | Read a whole text file. Missing or unreadable files trap with a host diagnostic until `Result` exists. |
+| `fs_read_text(path: Str) -> Str` | Verified | Read a whole text file. Missing or unreadable files still trap in the raw API; use the gate-backed e298 `fs_exists` + `Result<Int,Int>` recipe for status-only flows or the e301/e302 `fs_exists` + `Result<Str,Int>` recipes when the success payload is the file text and helper parameter forwarding is needed. |
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified | Write text, replacing the file. Return `0` on success and a non-zero host status on failure. |
 | `fs_mkdirs(path: Str) -> Int` | Verified | Create a directory and missing parents. Return `0` on success. |
 | `fs_remove(path: Str) -> Int` | Verified | Remove a file path. Missing paths return `0`; recursive directory removal is not part of this slice. |
@@ -76,6 +94,19 @@ that transform file text:
 These helpers are intentionally byte-oriented until Vais has a fuller Unicode
 string model.
 
+## Time API
+
+The first time helper is for elapsed-time reporting in developer tools, not
+calendar or scheduling logic:
+
+| API | Status | Behavior |
+| --- | --- | --- |
+| `time_millis() -> Int` | Verified | Return a non-negative millisecond counter. Values are monotonic within a process when the host provides a monotonic clock; otherwise the native runtime falls back to host wall-clock milliseconds. |
+
+Use `time_millis()` to compare two readings from the same run, as in the e299
+and e300 benchmark-report fixtures. Do not treat it as a wall-clock timestamp,
+time zone, date, or persistent ordering value.
+
 ## Process API
 
 Process execution must be argv-based rather than shell-string based:
@@ -89,7 +120,7 @@ Process execution must be argv-based rather than shell-string based:
 | `proc_capture_stdout(argv: List<Str>) -> Str` | Verified | Run `argv[0]` with the remaining arguments and return captured stdout as `Str`; stderr is inherited. |
 | `proc_capture_stderr(argv: List<Str>) -> Str` | Verified | Run `argv[0]` with the remaining arguments and return captured stderr as `Str`; stdout is inherited. |
 | `proc_capture_to(argv: List<Str>, stdout_path: Str, stderr_path: Str) -> Int` | Verified | Run `argv`, redirect stdout/stderr to explicit files when paths are non-empty, and return the process exit code. |
-| `proc_capture(argv: List<Str>) -> ProcessResult` | Specified | Run the process, capture stdout and stderr, and return a result struct. |
+| `proc_capture(argv: List<Str>) -> ProcessResult` | Verified | Run the process, capture stdout and stderr, and return the exit code plus both streams in the standard result struct. |
 
 `ProcessResult` is specified as:
 
@@ -102,15 +133,19 @@ struct ProcessResult {
 ```
 
 `proc_argc`, `proc_arg`, `proc_run`, `proc_run_env`, `proc_capture_stdout`,
-`proc_capture_stderr`, and `proc_capture_to` are the first verified process
-slices. Argv access is guaranteed through
+`proc_capture_stderr`, `proc_capture_to`, and `proc_capture` are the first
+verified process slices. Argv access is guaranteed through
 `scripts/vaisc run file.vais -- ...` and through directly built binaries
 produced by `scripts/vaisc build`. `proc_capture_to` covers status-sensitive
-repository tools without requiring a struct-returning host ABI. Full
-`proc_capture` is deferred because it requires a result struct with status,
-stdout, and stderr fields.
-Shell execution, stdin piping, timeouts, and working-directory overrides are
-later slices.
+repository tools that prefer file-backed output, while `proc_capture` covers
+in-memory status/stdout/stderr workflows using the standard `ProcessResult`
+shape. `examples/e300_vaisdb_benchmark_cli_report.vais` is the first
+Vais-authored fixture that uses this shape to run the compiler/indexer from
+Vais code and persist a combined report. `tools/vaisdb_benchmark_report.vais`
+uses the same process-capture shape as a reusable developer command and then
+summarizes the saved metrics.
+Shell execution, stdin piping, timeouts, working-directory overrides, and
+calendar/time-zone APIs are later slices.
 
 ## stdout, stderr, And Exit Codes
 
@@ -120,7 +155,8 @@ later slices.
 - `proc_run` reports child exit codes exactly when the host can provide them.
   `proc_capture_stdout` and `proc_capture_stderr` return one captured stream.
   `proc_capture_to` returns the child exit code and writes both output streams
-  to caller-provided files for status-sensitive workflows.
+  to caller-provided files for status-sensitive workflows. `proc_capture`
+  returns the child exit code, stdout, and stderr together.
 
 ## First Internal Port Target
 
@@ -206,8 +242,8 @@ canonical direct arithmetic program, checks emitted IR shape, invokes `clang`
 through argv-based `proc_run`, verifies direct `build` and `run`, and compares
 the full engine result from Vais code.
 
-`tools/vaisc_direct_error_check.vais` moves the direct import reject check and
-List bounds trap checks into the NV-C2 Vais-authored gate. It uses
+`tools/vaisc_direct_error_check.vais` keeps direct import handling and List
+bounds trap checks inside the NV-C2 Vais-authored gate. It uses
 `proc_capture_to` so the harness can assert process status while inspecting
 stderr or keeping trap output out of the shell wrapper.
 

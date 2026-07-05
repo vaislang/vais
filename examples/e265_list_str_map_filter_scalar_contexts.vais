@@ -1,0 +1,62 @@
+# expect: 42
+# List<Str>.map(...).filter(...).len/contains/index_of/count can feed scalar contexts directly.
+
+fn weigh(n: Int) -> Int {
+    return n
+}
+
+fn bool_score(flag: Bool) -> Int {
+    if flag { return 3 }
+    return 0
+}
+
+fn normalized_count(words: List<Str>, needle: Str) -> Int {
+    return words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len()
+}
+
+fn score_words(words: List<Str>, needle: Str) -> Int {
+    let hits: Int = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len()
+    if hits != 3 { return 1 }
+
+    let found: Bool = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("vais")
+    if not found { return 2 }
+
+    let first_ai = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("ai")
+    let ai_count = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai")
+
+    let mut total = 0
+    total = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len() + 1
+
+    let values: List<Int> = []
+    values.push(words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai"))
+    values.insert_at(0, words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("vais"))
+
+    if weigh(words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len() + 2) == 5 {
+        total = total + 10
+    }
+    if bool_score(words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("ai")) == 3 {
+        total = total + 10
+    }
+
+    let mut guard = 0
+    while words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai") > guard {
+        guard = guard + 2
+    }
+
+    if words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("missing") {
+        return 3
+    } else if words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("vais") == 0 {
+        total = total + 10
+    }
+
+    return total + values[0] + values[1] + first_ai + ai_count + guard + normalized_count(words, needle) + hits - 5
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  Vais")
+    words.push("AI")
+    words.push("db")
+    words.push("ai  ")
+    return score_words(words, "ai")
+}

@@ -1,0 +1,26 @@
+# expect: 42
+
+fn count_word(words: List<Str>, value: Str) -> Int {
+    return words.count(value)
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("vaisdb")
+    words.push("cache")
+    words.push("vector")
+    words.push("cache")
+
+    let n: Int = words.count("cache")
+    if n != 2 { return 1 }
+    if words.count("missing") != 0 { return 2 }
+    if count_word(words, "vector") != 1 { return 3 }
+    if words.index_of("cache") != 1 { return 4 }
+
+    words.clear()
+    if words.count("cache") != 0 { return 5 }
+    words.push(str_lower("AI"))
+    words.push("cache")
+    words.push("ai")
+    return count_word(words, "ai") * 20 + words.count("cache") + words.contains("ai")
+}

@@ -1,0 +1,23 @@
+# expect: 42
+# Result<Int,Int> helper flow over Map<Str,Str> parameters.
+
+fn require_meta_len(meta: Map<Str,Str>, key: Str) -> Result<Int, Int> {
+    let length = match meta.get_opt(key) { Some(value) => str_trim(value).len(), None => 0 }
+    if length == 0 { return Err(20) }
+    return Ok(length)
+}
+
+fn score_meta(meta: Map<Str,Str>) -> Result<Int, Int> {
+    let title_len = require_meta_len(meta, "title")?
+    let body_len = require_meta_len(meta, "body")?
+    return Ok(title_len + body_len)
+}
+
+fn main() -> Int {
+    let meta: Map<Str,Str> = {}
+    meta.insert("title", "VaisDB")
+    meta.insert("body", "ai cache")
+    let good = match score_meta(meta) { Ok(value) => value, Err(code) => code }
+    let missing = match require_meta_len(meta, "missing") { Ok(value) => value, Err(code) => code }
+    return good + missing + 8
+}

@@ -1,0 +1,29 @@
+# expect: 42
+
+struct Inner {
+    a: Int,
+    b: Int,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn make(v: Int) -> Outer {
+    return Outer {
+        inner: Inner {
+            a: v,
+            b: 22,
+        },
+    }
+}
+
+fn main() -> Int {
+    let o = Outer {
+        inner: Inner {
+            a: 20,
+            b: 22,
+        },
+    }
+    return o.inner.a + make(20).inner.b
+}

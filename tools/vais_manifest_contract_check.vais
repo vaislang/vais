@@ -41,11 +41,37 @@ fn manifest3(name: Str, version: Str, source: Str) -> Str {
     return str_concat(line(str_concat("name = \"", str_concat(name, "\""))), str_concat(line(str_concat("version = \"", str_concat(version, "\""))), line(str_concat("source = \"", str_concat(source, "\"")))))
 }
 
+fn manifest4(name: Str, version: Str, source: Str, binary: Str) -> Str {
+    return str_concat(manifest3(name, version, source), line(str_concat("binary = \"", str_concat(binary, "\""))))
+}
+
+fn manifest_assets(name: Str, version: Str, source: Str, assets: Str) -> Str {
+    return str_concat(manifest3(name, version, source), line(str_concat("assets = \"", str_concat(assets, "\""))))
+}
+
 fn setup_clean(root: Str) -> Str {
     let src = path_join(root, "src")
     fs_mkdirs(src)
     let manifest = path_join(root, "vais.toml")
     write_text(manifest, manifest3("clean", "0.1.0", "src"))
+    return manifest
+}
+
+fn setup_clean_binary(root: Str) -> Str {
+    let src = path_join(root, "src")
+    fs_mkdirs(src)
+    let manifest = path_join(root, "vais.toml")
+    write_text(manifest, manifest4("clean_binary", "0.1.0", "src", "clean-bin"))
+    return manifest
+}
+
+fn setup_clean_assets(root: Str) -> Str {
+    let src = path_join(root, "src")
+    let assets = path_join(root, "assets")
+    fs_mkdirs(src)
+    fs_mkdirs(assets)
+    let manifest = path_join(root, "vais.toml")
+    write_text(manifest, manifest_assets("clean_assets", "0.1.0", "src", "assets"))
     return manifest
 }
 
@@ -63,10 +89,24 @@ fn setup_bad_source(root: Str) -> Str {
     return manifest
 }
 
+fn setup_bad_assets(root: Str) -> Str {
+    fs_mkdirs(path_join(root, "src"))
+    let manifest = path_join(root, "vais.toml")
+    write_text(manifest, manifest_assets("bad_assets", "0.1.0", "src", "../assets"))
+    return manifest
+}
+
 fn setup_missing_source_dir(root: Str) -> Str {
     fs_mkdirs(root)
     let manifest = path_join(root, "vais.toml")
     write_text(manifest, manifest3("missing_source_dir", "0.1.0", "src"))
+    return manifest
+}
+
+fn setup_missing_assets_dir(root: Str) -> Str {
+    fs_mkdirs(path_join(root, "src"))
+    let manifest = path_join(root, "vais.toml")
+    write_text(manifest, manifest_assets("missing_assets_dir", "0.1.0", "src", "assets"))
     return manifest
 }
 
@@ -90,6 +130,22 @@ fn setup_duplicate_key(root: Str) -> Str {
     fs_mkdirs(root)
     let manifest = path_join(root, "vais.toml")
     let text = str_concat(manifest3("duplicate", "0.1.0", "src"), line("source = \"other\""))
+    write_text(manifest, text)
+    return manifest
+}
+
+fn setup_duplicate_binary(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    let text = str_concat(manifest4("duplicate_binary", "0.1.0", "src", "one"), line("binary = \"two\""))
+    write_text(manifest, text)
+    return manifest
+}
+
+fn setup_duplicate_assets(root: Str) -> Str {
+    fs_mkdirs(root)
+    let manifest = path_join(root, "vais.toml")
+    let text = str_concat(manifest_assets("duplicate_assets", "0.1.0", "src", "assets"), line("assets = \"public\""))
     write_text(manifest, text)
     return manifest
 }
@@ -215,12 +271,18 @@ fn main() -> Int {
     let checker = path_join(path_join(root, "tools"), "vais_manifest_check.vais")
     let mut fail = 0
     fail = fail + expect_case(vaisc, checker, tmp, "clean", setup_clean(path_join(tmp, "clean")), 0, "PASS package manifest clean")
+    fail = fail + expect_case(vaisc, checker, tmp, "clean_binary", setup_clean_binary(path_join(tmp, "clean_binary")), 0, "PASS package manifest clean")
+    fail = fail + expect_case(vaisc, checker, tmp, "clean_assets", setup_clean_assets(path_join(tmp, "clean_assets")), 0, "PASS package manifest clean")
     fail = fail + expect_case(vaisc, checker, tmp, "missing_source", setup_missing_source(path_join(tmp, "missing_source")), 1, "package manifest is missing required key `source`")
     fail = fail + expect_case(vaisc, checker, tmp, "bad_source", setup_bad_source(path_join(tmp, "bad_source")), 1, "package manifest source must be a local relative path")
+    fail = fail + expect_case(vaisc, checker, tmp, "bad_assets", setup_bad_assets(path_join(tmp, "bad_assets")), 1, "package manifest assets must be a local relative path")
     fail = fail + expect_case(vaisc, checker, tmp, "missing_source_dir", setup_missing_source_dir(path_join(tmp, "missing_source_dir")), 1, "package manifest source directory not found")
+    fail = fail + expect_case(vaisc, checker, tmp, "missing_assets_dir", setup_missing_assets_dir(path_join(tmp, "missing_assets_dir")), 1, "package manifest assets directory not found")
     fail = fail + expect_case(vaisc, checker, tmp, "bad_dep_path", setup_bad_dep_path(path_join(tmp, "bad_dep_path")), 1, "local dependency path must be a relative local path")
     fail = fail + expect_case(vaisc, checker, tmp, "missing_dep", setup_missing_dep(path_join(tmp, "missing_dep")), 1, "local dependency manifest not found")
     fail = fail + expect_case(vaisc, checker, tmp, "duplicate_key", setup_duplicate_key(path_join(tmp, "duplicate_key")), 1, "duplicate package manifest key `source`")
+    fail = fail + expect_case(vaisc, checker, tmp, "duplicate_binary", setup_duplicate_binary(path_join(tmp, "duplicate_binary")), 1, "duplicate package manifest key `binary`")
+    fail = fail + expect_case(vaisc, checker, tmp, "duplicate_assets", setup_duplicate_assets(path_join(tmp, "duplicate_assets")), 1, "duplicate package manifest key `assets`")
     fail = fail + expect_case(vaisc, checker, tmp, "duplicate_alias", setup_duplicate_alias(path_join(tmp, "duplicate_alias")), 1, "duplicate local dependency alias `math`")
     fail = fail + expect_case(vaisc, checker, tmp, "dependency_cycle", setup_dependency_cycle(path_join(tmp, "dependency_cycle")), 1, "local dependency cycle detected")
     let entry_outside = setup_entry_outside_source(path_join(tmp, "entry_outside"))

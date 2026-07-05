@@ -1,0 +1,36 @@
+# expect: 42
+
+fn main() -> Int {
+    let query: Map<Str,Int> = {}
+    let doc_a: Map<Str,Int> = {}
+    let doc_b: Map<Str,Int> = {}
+
+    let q_total = doc_term_counts_into("ai cache ai", query)
+    let a_total = doc_term_counts_into("AI cache ai CACHE vector ai", doc_a)
+    let b_total = doc_term_counts_into("cache cache vector vector", doc_b)
+
+    if q_total != 3 {
+        return 1
+    }
+    if a_total != 6 {
+        return 2
+    }
+    if b_total != 4 {
+        return 3
+    }
+
+    let a_score = doc_term_overlap_score(query, doc_a)
+    let b_score = doc_term_overlap_score(query, doc_b)
+
+    if a_score != 3 {
+        return 4
+    }
+    if b_score != 1 {
+        return 5
+    }
+    if a_score <= b_score {
+        return 6
+    }
+
+    return a_score * 10 + b_score * 9 + q_total
+}

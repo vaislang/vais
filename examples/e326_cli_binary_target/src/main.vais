@@ -1,0 +1,14 @@
+# expect: 42
+import cli.report
+
+fn main() -> Int {
+    if proc_argc() == 0 {
+        return package_score("veriqel", "package")
+    }
+    if proc_argc() != 2 { return 1 }
+    let product = proc_arg(0)
+    let mode = proc_arg(1)
+    if product != "veriqel" { return 2 }
+    if mode != "package" { return 3 }
+    return package_score(product, mode)
+}

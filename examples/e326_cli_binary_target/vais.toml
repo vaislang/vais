@@ -1,0 +1,4 @@
+name = "e326_cli_binary_target"
+version = "0.1.0"
+source = "src"
+binary = "veriqel-demo"

@@ -1,0 +1,41 @@
+# expect: 42
+# List<Struct>.map(...) Int projections can aggregate with sum/max/min directly.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn total_score(docs: List<Doc>) -> Int {
+    return docs.map(|doc| doc.score).sum()
+}
+
+fn best_score(docs: List<Doc>) -> Int {
+    return docs.map(|doc| doc.score).max()
+}
+
+fn lowest_score(docs: List<Doc>) -> Int {
+    return docs.map(|doc| doc.score).min()
+}
+
+fn score_flow(docs: List<Doc>) -> Int {
+    let total = docs.map(|doc| doc.score).sum()
+    let best: Int = docs.map(|doc| doc.score).max()
+    let lowest = docs.map(|doc| doc.score).min()
+    if total != 43 { return 1 }
+    if best != 20 { return 2 }
+    if lowest != 5 { return 3 }
+    return total + best - lowest - 16
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    if total_score(docs) != 43 { return 4 }
+    if best_score(docs) != 20 { return 5 }
+    if lowest_score(docs) != 5 { return 6 }
+    return score_flow(docs)
+}

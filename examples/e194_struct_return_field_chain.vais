@@ -1,0 +1,30 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+}
+
+struct Inner {
+    v: Int,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn make_box(v: Int) -> Box {
+    return Box { value: v }
+}
+
+fn make_outer(v: Int) -> Outer {
+    let out = Outer {
+        inner: Inner {
+            v: v,
+        },
+    }
+    return out
+}
+
+fn main() -> Int {
+    return make_box(20).value + make_outer(22).inner.v
+}

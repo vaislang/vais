@@ -1,0 +1,23 @@
+# expect: 42
+# Scalar value if-expressions work in locals, reassignments, helper-call arguments, and returns without pipeline-specific lowering.
+
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+
+fn choose(flag: Bool, yes: Int, no: Int) -> Int {
+    if flag { return yes }
+    return no
+}
+
+fn score(a: Int, b: Int) -> Int {
+    let mut total = if a > b then 10 else 0
+    total = if a == b then total else total + 10
+    total = total + add(if total == 20 then 10 else 0, 0)
+    total = total + choose(if total == 30 then true else false, 12, 0)
+    return if total == 42 then total else 0
+}
+
+fn main() -> Int {
+    return score(3, 1)
+}

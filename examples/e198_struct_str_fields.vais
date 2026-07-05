@@ -1,0 +1,23 @@
+# expect: 42
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn make_doc(title: Str, body: Str, score: Int) -> Doc {
+    return Doc {
+        title: title,
+        body: body,
+        score: score,
+    }
+}
+
+fn main() -> Int {
+    let doc = make_doc("Vais", "cache learn", 40)
+    if doc.title == "Vais" and str_contains(doc.body, "learn") {
+        return doc.score + doc.title.len() - 2
+    }
+    return 0
+}

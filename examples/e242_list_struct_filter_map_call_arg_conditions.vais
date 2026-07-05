@@ -1,0 +1,45 @@
+# expect: 42
+# List<Struct>.filter(...).map(...) projected scalar lists can feed helper arguments in conditions.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn total_scores(scores: List<Int>) -> Int {
+    return scores.sum()
+}
+
+fn has_title(titles: List<Str>, target: Str) -> Int {
+    if titles.contains(target) == 1 { return 1 }
+    return 0
+}
+
+fn score_flow(docs: List<Doc>) -> Int {
+    let mut score = 0
+    if has_title(docs.filter(|doc| doc.score > 10).map(|doc| doc.title), "gamma") == 1 {
+        score = score + 10
+    }
+
+    let mut limit = 30
+    while total_scores(docs.filter(|doc| str_contains(doc.body, "tokens") == 1).map(|doc| doc.score)) > limit {
+        score = score + 20
+        limit = limit + 100
+    }
+
+    if has_title(docs.filter(|doc| doc.score > 100).map(|doc| doc.title), "none") == 1 {
+        return 1
+    } else if total_scores(docs.filter(|doc| doc.score > 10).map(|doc| doc.score)) == 38 {
+        score = score + 12
+    }
+    return score
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return score_flow(docs)
+}

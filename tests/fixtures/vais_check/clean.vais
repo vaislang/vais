@@ -5,8 +5,34 @@ pub struct User {
     id: Int,
 }
 
+struct Metric {
+    docs: Int,
+    terms: Int,
+}
+
+struct Record {
+    title_len: Int,
+    body_terms: Int,
+    score: Int,
+}
+
 pub fn make_user(name: Str, id: Int) -> User {
     return User { name: name, id: id }
+}
+
+fn result_title_len(flow: Result<Str, Int>) -> Int {
+    let n = match flow { Ok(title) => title.len(), Err(code) => code }
+    return n
+}
+
+fn result_metric_score(flow: Result<Metric, Int>) -> Int {
+    let n = match flow { Ok(metric) => metric.docs + metric.terms, Err(code) => code }
+    return n
+}
+
+fn result_record_score(flow: Result<Record, Int>) -> Int {
+    let n = match flow { Ok(record) => record.title_len + record.body_terms + record.score, Err(code) => code }
+    return n
 }
 
 fn f(s: Str) -> Int {
@@ -21,6 +47,13 @@ fn f(s: Str) -> Int {
     x = 0 - 5
     let xs: List<Int> = []
     let m: Map<Int, Int> = Map.new()
+    let title: Result<Str, Int> = Ok("ready")
+    let metric = Metric { docs: 1, terms: 2 }
+    let metric_result: Result<Metric, Int> = Ok(metric)
+    let metric_n = result_metric_score(metric_result)
+    let record = Record { title_len: 1, body_terms: 2, score: 3 }
+    let record_result: Result<Record, Int> = Ok(record)
+    let record_n = result_record_score(record_result)
     let ys = [1, 2, 3]
     let n: Int = 5
     let pi32 = 5

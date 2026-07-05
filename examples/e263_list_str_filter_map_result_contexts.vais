@@ -1,0 +1,44 @@
+# expect: 42
+# List<Str> filter-map result lists can feed direct contexts without a named filtered list.
+
+fn count_hits(words: List<Str>, target: Str) -> Int {
+    return words.contains(target) + words.len()
+}
+
+fn normalized_hits(words: List<Str>, needle: Str) -> List<Str> {
+    return words.filter(|word| str_contains(word, needle) == 1).map(|word| str_lower(str_trim(word)))
+}
+
+fn score_words(words: List<Str>, needle: Str) -> Int {
+    let mut score = 0
+    let normalized: List<Str> = words.filter(|word| str_contains(word, needle) == 1).map(|word| str_lower(str_trim(word)))
+    if normalized.len() != 2 { return 1 }
+    if normalized.contains("vais") != 1 { return 2 }
+    let suffixed = words.filter(|word| str_contains(word, needle) == 1).map(|word| str_concat(str_lower(str_trim(word)), "!"))
+    let from_return = normalized_hits(words, needle)
+    let collected: List<Str> = []
+    collected.extend(words.filter(|word| str_contains(word, needle) == 1).map(|word| str_lower(str_trim(word))))
+    let replaced: List<Str> = []
+    replaced.push("old")
+    replaced = words.filter(|word| str_contains(word, needle) == 1).map(|word| str_lower(str_trim(word)))
+    if count_hits(words.filter(|word| str_contains(word, needle) == 1).map(|word| str_lower(str_trim(word))), "vais") == 3 {
+        score = score + 10
+    }
+    let mut limit = 2
+    while count_hits(words.filter(|word| str_contains(word, needle) == 1).map(|word| str_lower(str_trim(word))), "ai") > limit {
+        score = score + 10
+        limit = limit + 100
+    }
+    if count_hits(suffixed, "ai!") == 3 and from_return.contains("vais") == 1 and collected.contains("ai") == 1 and replaced.index_of("vais") == 0 {
+        score = score + 22
+    }
+    return score
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  vais")
+    words.push("db")
+    words.push("ai  ")
+    return score_words(words, "ai")
+}

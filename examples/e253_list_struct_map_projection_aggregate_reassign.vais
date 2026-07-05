@@ -1,0 +1,32 @@
+# expect: 42
+# List<Struct>.map(...) Int projection aggregate expressions can reassign known Int variables.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn local_flow(docs: List<Doc>) -> Int {
+    let mut total = 0
+    total = docs.map(|doc| doc.score).sum() + 1
+    let mut best: Int = 0
+    best = docs.map(|doc| doc.score).max() - 1
+    let mut low = 100
+    low = docs.map(|doc| doc.score).min() * 2
+    return total + best - low - 11
+}
+
+fn parameter_flow(score: Int, docs: List<Doc>) -> Int {
+    score = docs.map(|doc| doc.score).max() + 22
+    return score
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    if local_flow(docs) != 42 { return 1 }
+    return parameter_flow(0, docs)
+}

@@ -1,0 +1,24 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn reset_boxes(xs: List<Box>) -> Int {
+    xs = [Box { value: 20, tag: 2 }, Box { value: 30, tag: 3 }]
+    let head = xs[0]
+    let tail = xs.last()
+    return xs.len() + head.value + tail.tag
+}
+
+fn main() -> Int {
+    let xs: List<Box> = [Box { value: 5, tag: 1 }, Box { value: 7, tag: 2 }]
+    let first = xs.first()
+    let before = xs.len() + xs[1].value + first.tag
+    xs = [Box { value: 8, tag: 3 }]
+    let mid = xs[0]
+    let score = reset_boxes(xs)
+    let after = xs.last()
+    return before + mid.value + mid.tag + score + after.value + xs.len() - 36
+}

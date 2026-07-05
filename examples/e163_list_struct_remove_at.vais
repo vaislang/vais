@@ -1,0 +1,25 @@
+# expect: 42
+
+struct Box { value: Int, tag: Int }
+
+fn remove_value(xs: List<Box>, idx: Int) -> Int {
+    let removed = xs.remove_at(idx)
+    return removed.value + xs.len()
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 10, tag: 1 })
+    xs.push(Box { value: 20, tag: 2 })
+    xs.push(Box { value: 30, tag: 3 })
+    let mid = xs.remove_at(1)
+    if mid.value != 20 { return 1 }
+    if mid.tag != 2 { return 2 }
+    if xs.len() != 2 { return 3 }
+    let shifted = xs[1]
+    if shifted.value != 30 { return 4 }
+    let score = remove_value(xs, 0)
+    if score != 11 { return 5 }
+    let head = xs.first()
+    return head.value + score + mid.tag - 1
+}

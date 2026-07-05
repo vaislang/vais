@@ -1,0 +1,40 @@
+# expect: 42
+# Result<Str,Int> file-read flow with Str payload `?` and match recovery.
+
+fn read_text_checked(path: Str) -> Result<Str, Int> {
+    if fs_exists(path) != 1 { return Err(10) }
+    let text = fs_read_text(path)
+    if text.len() == 0 { return Err(11) }
+    return Ok(text)
+}
+
+fn read_first_line(path: Str) -> Result<Str, Int> {
+    let text = read_text_checked(path)?
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n == 0 { return Err(12) }
+    let first = str_trim(lines[0])
+    if first.len() == 0 { return Err(13) }
+    return Ok(first)
+}
+
+fn run_doc(path: Str, missing: Str) -> Int {
+    let title_flow = read_first_line(path)
+    let title_len = match title_flow { Ok(title) => title.len(), Err(code) => code }
+    let normalized = match title_flow { Ok(title) => str_lower(title), Err(code) => Str(code) }
+    let missing_flow = read_first_line(missing)
+    let missing_code = match missing_flow { Ok(title) => title.len(), Err(code) => code }
+    if title_len != 12 { return 1 }
+    if normalized != "vaisdb guide" { return 2 }
+    if missing_code != 10 { return 3 }
+    return title_len * 2 + missing_code + 8
+}
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let doc = path_join(root, "vais-e301-doc.txt")
+    let missing = path_join(root, "vais-e301-missing/no-doc.txt")
+    let text = str_concat("VaisDB Guide", str_concat(str_byte(10), "AI cache"))
+    if fs_write_text(doc, text) != 0 { return 4 }
+    return run_doc(doc, missing)
+}

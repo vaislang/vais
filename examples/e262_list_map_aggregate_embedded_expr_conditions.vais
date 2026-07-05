@@ -1,0 +1,42 @@
+# expect: 42
+# List<Int> map aggregates can appear inside broader expressions and conditions.
+
+fn weigh(value: Int) -> Int {
+    return value
+}
+
+fn tail_flow(scores: List<Int>) -> Int {
+    return 1 + scores.map(|value| value + 2).max()
+}
+
+fn score_flow(scores: List<Int>, boost: Int) -> Int {
+    let mut score = 0
+    let mut total = 1 + scores.map(|value| value + boost).sum()
+    let via_call = weigh(1 + scores.map(|value| value + 2).max())
+    let values: List<Int> = []
+    values.push(scores.map(|value| value - 1).sum() + 3)
+    values.insert_at(0, scores.map(|value| value * 2).min() + 1)
+    total = total + via_call + scores.map(|value| value).min() - values[0] - 3
+    if total + scores.map(|value| value + boost).sum() + 2 == 42 {
+        score = score + 10
+    }
+    let mut limit = 15
+    while scores.map(|value| value + 2).max() + score > limit {
+        score = score + 20
+        limit = limit + 100
+    }
+    if scores.map(|value| value + 100).min() + score == 0 {
+        return 1
+    } else if 6 + scores.map(|value| value * 2).min() == 12 {
+        score = score + 12
+    }
+    return score
+}
+
+fn main() -> Int {
+    let scores: List<Int> = []
+    scores.push(3)
+    scores.push(5)
+    scores.push(7)
+    return score_flow(scores, 1) + tail_flow(scores) - 10
+}

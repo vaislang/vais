@@ -1,0 +1,53 @@
+# expect: 42
+# List<Struct>.map(...) projected scalar lists can feed direct return, call, extend, and reassignment contexts.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn all_scores(docs: List<Doc>) -> List<Int> {
+    return docs.map(|doc| doc.score)
+}
+
+fn all_titles(docs: List<Doc>) -> List<Str> {
+    return docs.map(|doc| doc.title)
+}
+
+fn total_scores(scores: List<Int>) -> Int {
+    return scores.sum()
+}
+
+fn has_title(titles: List<Str>, target: Str) -> Int {
+    if titles.contains(target) == 1 { return 1 }
+    return 0
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+
+    let returned_scores = all_scores(docs)
+    let returned_titles = all_titles(docs)
+    let direct_total = total_scores(docs.map(|doc| doc.score))
+    let found_beta = has_title(docs.map(|doc| doc.title), "beta")
+
+    let titles: List<Str> = []
+    titles.extend(docs.map(|doc| doc.title))
+
+    let scores: List<Int> = []
+    scores.push(99)
+    scores = docs.map(|doc| doc.score)
+
+    if returned_scores.len() != 3 { return 1 }
+    if returned_titles.contains("gamma") != 1 { return 2 }
+    if direct_total != 43 { return 3 }
+    if found_beta != 1 { return 4 }
+    if titles.len() != 3 { return 5 }
+    if scores.sum() != 43 { return 6 }
+
+    return direct_total + scores.sum() + titles.len() + returned_scores.len() + returned_titles.len() + found_beta - 54
+}

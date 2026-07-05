@@ -1,0 +1,38 @@
+# expect: 42
+
+fn is_space(c: Int) -> Int {
+    if c == 32 { return 1 }
+    if c == 9 { return 1 }
+    if c == 10 { return 1 }
+    if c == 13 { return 1 }
+    return 0
+}
+
+fn split_words(text: Str) -> List<Str> {
+    let words: List<Str> = []
+    let mut i = 0
+    while i < text.len() {
+        while i < text.len() and is_space(text[i]) == 1 {
+            i = i + 1
+        }
+        let start = i
+        while i < text.len() and is_space(text[i]) == 0 {
+            i = i + 1
+        }
+        if i > start {
+            let token = str_lower(str_trim(str_slice(text, start, i - start)))
+            words.push(token)
+        }
+    }
+    return words
+}
+
+fn main() -> Int {
+    let words = split_words("  VaisDB   Vector CACHE  ")
+    if words.len() != 3 { return 1 }
+    if words[0] != "vaisdb" { return 2 }
+    if words[1] != "vector" { return 3 }
+    if words.last() != "cache" { return 4 }
+    if str_contains(words[1], "ctor") != 1 { return 5 }
+    return words.len() * 10 + words[0].len() * 2
+}

@@ -1,0 +1,35 @@
+# expect: 42
+# Result<DocSummary,Int> declared struct payload with Str fields.
+
+struct DocSummary { title: Str, summary: Str, terms: Int }
+
+fn build_doc_summary(title: Str, summary: Str, terms: Int) -> Result<DocSummary, Int> {
+    if title.len() == 0 { return Err(10) }
+    if summary.len() == 0 { return Err(11) }
+    let doc = DocSummary { title: title, summary: summary, terms: terms }
+    return Ok(doc)
+}
+
+fn doc_summary_score(flow: Result<DocSummary, Int>, fallback: Int) -> Int {
+    let value = match flow { Ok(doc) => doc.title.len() + doc.summary.len() + doc.terms, Err(code) => fallback + code }
+    return value
+}
+
+fn choose_doc_summary(left: Result<DocSummary, Int>, right: Result<DocSummary, Int>) -> Int {
+    let left_score = doc_summary_score(left, 0)
+    let right_score = doc_summary_score(right, 0)
+    if left_score > right_score { return left_score }
+    return right_score
+}
+
+fn main() -> Int {
+    let ok = build_doc_summary(`vais`, `ai db`, 23)
+    let missing = build_doc_summary(``, `ai db`, 8)
+    let ok_score = doc_summary_score(ok, 0)
+    let missing_score = doc_summary_score(missing, 0)
+    let chosen = choose_doc_summary(ok, missing)
+    if ok_score != 32 { return 1 }
+    if missing_score != 10 { return 2 }
+    if chosen != 32 { return 3 }
+    return ok_score + missing_score
+}

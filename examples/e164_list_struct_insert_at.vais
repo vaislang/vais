@@ -1,0 +1,31 @@
+# expect: 42
+
+struct Box { value: Int, tag: Int }
+
+fn insert_box(xs: List<Box>, idx: Int, value: Box) -> Int {
+    xs.insert_at(idx, value)
+    return xs.len()
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 10, tag: 1 })
+    xs.push(Box { value: 30, tag: 3 })
+
+    xs.insert_at(1, Box { value: 20, tag: 2 })
+    if xs.len() != 3 { return 1 }
+
+    let mid = xs[1]
+    if mid.value != 20 { return 2 }
+
+    let saved = Box { value: 5, tag: 0 }
+    xs.insert_at(0, saved)
+    if xs[0].value != 5 { return 3 }
+    if xs[2].tag != 2 { return 4 }
+
+    let tail_value = Box { value: 40, tag: 4 }
+    if insert_box(xs, xs.len(), tail_value) != 5 { return 5 }
+    let tail = xs.last()
+    let shifted = xs[2]
+    return tail.value + shifted.tag
+}

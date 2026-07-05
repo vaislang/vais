@@ -1,0 +1,36 @@
+# expect: 42
+# List<Struct>.map(...) Int projection aggregates can drive if/while/else-if conditions.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn score_flow(docs: List<Doc>) -> Int {
+    let mut score = 0
+    if docs.map(|doc| doc.score).sum() == 43 {
+        score = score + 10
+    }
+
+    let mut limit = 40
+    while docs.map(|doc| doc.score).sum() > limit {
+        score = score + 20
+        limit = limit + 100
+    }
+
+    if docs.map(|doc| doc.score).min() == 0 {
+        return 1
+    } else if docs.map(|doc| doc.score).max() == 20 {
+        score = score + 12
+    }
+    return score
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return score_flow(docs)
+}

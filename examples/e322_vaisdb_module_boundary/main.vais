@@ -1,0 +1,25 @@
+# expect: 42
+# Reusable VaisDB-style modules can share structs, Result helpers, Lists, and Maps.
+
+import vaisdb.artifact
+
+fn main() -> Int {
+    let artifacts: List<DocArtifact> = []
+    let seeded = seed_artifacts("ai cache ai", artifacts)
+    let seeded_count = match seeded { Ok(value) => value, Err(code) => code }
+    if seeded_count != 2 { return 1 }
+
+    let best = best_artifact_score(artifacts)
+    if best != 26 { return 2 }
+
+    let good = build_doc_artifact("D3", "  VaisDB guide  ", "AI cache ai", "ai cache ai")
+    if usable_or_missing(good) != true { return 3 }
+
+    let missing = build_doc_artifact("", "  VaisDB guide  ", "AI cache ai", "ai cache ai")
+    if usable_or_missing(missing) != true { return 4 }
+
+    let weak = build_doc_artifact("D4", " x ", "cache", "ai ai")
+    if usable_or_missing(weak) != false { return 5 }
+
+    return best + seeded_count * 8
+}

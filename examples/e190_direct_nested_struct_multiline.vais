@@ -1,0 +1,23 @@
+# expect: 42
+
+struct Inner {
+    v: Int,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn score(o: Outer) -> Int {
+    return o.inner.v
+}
+
+fn main() -> Int {
+    let o = Outer {
+        inner: Inner {
+            v: 40,
+        },
+    }
+    o.inner.v = o.inner.v + 2
+    return score(o)
+}

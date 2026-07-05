@@ -1,0 +1,15 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box {
+        value: 30,
+        tag: 10,
+    })
+    return xs[0].value + xs[0].tag + xs.len() + 1
+}

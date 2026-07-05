@@ -1,0 +1,3 @@
+fn package_score(product: Str, mode: Str) -> Int {
+    return product.len() * 6 + mode.len() + 1
+}

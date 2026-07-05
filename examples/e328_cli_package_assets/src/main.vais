@@ -1,0 +1,9 @@
+# expect: 42
+
+fn main() -> Int {
+    if proc_argc() == 0 { return 42 }
+    if proc_argc() != 2 { return 1 }
+    if proc_arg(0) != "assets" { return 2 }
+    if proc_arg(1) != "package" { return 3 }
+    return 42
+}

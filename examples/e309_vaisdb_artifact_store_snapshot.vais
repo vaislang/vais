@@ -1,0 +1,156 @@
+# expect: 42
+# VaisDB artifact store snapshot workflow over persisted DocArtifact records.
+
+struct DocArtifact { id: Str, title: Str, body: Str, terms: Int, score: Int }
+
+fn build_doc_artifact(id: Str, title: Str, body: Str, terms: Int, score: Int) -> Result<DocArtifact, Int> {
+    if id.len() == 0 { return Err(10) }
+    if title.len() == 0 { return Err(11) }
+    if body.len() == 0 { return Err(12) }
+    if terms < 1 { return Err(13) }
+    let artifact = DocArtifact { id: id, title: title, body: body, terms: terms, score: score }
+    return Ok(artifact)
+}
+
+fn build_ranked_artifact(id: Str, title: Str, body: Str, terms: Int, score: Int) -> Result<DocArtifact, Int> {
+    let artifact: DocArtifact = build_doc_artifact(id, title, body, terms, score)?
+    if artifact.score < 1 { return Err(14) }
+    let ranked = DocArtifact { id: artifact.id, title: artifact.title, body: artifact.body, terms: artifact.terms, score: artifact.score + artifact.title.len() }
+    return Ok(ranked)
+}
+
+fn index_artifacts(query_text: Str, out: List<DocArtifact>) -> Result<Int, Int> {
+    if query_text.len() == 0 { return Err(20) }
+    let query: Map<Str,Int> = {}
+    let q_total = doc_term_counts_into(query_text, query)
+    if q_total != 3 { return Err(21) }
+
+    let doc_a_terms: Map<Str,Int> = {}
+    let doc_b_terms: Map<Str,Int> = {}
+    let a_terms = doc_term_counts_into("AI cache ai CACHE vector ai", doc_a_terms)
+    let b_terms = doc_term_counts_into("cache cache vector vector", doc_b_terms)
+    let a_score = doc_term_weighted_score(query, doc_a_terms)
+    let b_score = doc_term_weighted_score(query, doc_b_terms)
+    if a_score != 8 { return Err(22) }
+    if b_score != 2 { return Err(23) }
+
+    let a: DocArtifact = build_ranked_artifact("d1", "VaisDB Guide", "AI cache ai CACHE vector ai", a_terms, a_score)?
+    let b: DocArtifact = build_ranked_artifact("d2", "Cache Notes", "cache cache vector vector", b_terms, b_score)?
+    out.push(a)
+    out.push(b)
+    return Ok(a.score + b.score + out.len() + q_total + 4)
+}
+
+fn artifact_line(artifact: DocArtifact) -> Str {
+    let tab = str_byte(9)
+    let left = str_concat(artifact.id, str_concat(tab, artifact.title))
+    let middle = str_concat(Str(artifact.terms), str_concat(tab, Str(artifact.score)))
+    return str_concat(left, str_concat(tab, str_concat(middle, str_concat(tab, artifact.body))))
+}
+
+fn artifact_store_snapshot(artifacts: List<DocArtifact>) -> Str {
+    let mut out = ""
+    for artifact in artifacts {
+        out = str_concat(out, str_concat(artifact_line(artifact), str_byte(10)))
+    }
+    return out
+}
+
+fn parse_artifact_line(line: Str) -> Result<DocArtifact, Int> {
+    let fields: List<Str> = []
+    let tab = str_byte(9)
+    let field_count = str_split_into(line, tab, fields)
+    if field_count != 5 { return Err(30) }
+    let terms = parse_int(fields[2])
+    let score = parse_int(fields[3])
+    if terms < 1 { return Err(31) }
+    if score < 1 { return Err(32) }
+    let artifact: DocArtifact = build_doc_artifact(fields[0], fields[1], fields[4], terms, score)?
+    return Ok(artifact)
+}
+
+fn load_artifact_store(snapshot: Str, out: List<DocArtifact>) -> Result<Int, Int> {
+    let lines: List<Str> = []
+    let line_count = str_split_lines_into(snapshot, lines)
+    if line_count == 0 { return Err(33) }
+    let mut loaded = 0
+    for line in lines {
+        let trimmed = str_trim(line)
+        if trimmed.len() > 0 {
+            let artifact: DocArtifact = parse_artifact_line(line)?
+            out.push(artifact)
+            loaded = loaded + 1
+        }
+    }
+    if loaded == 0 { return Err(34) }
+    return Ok(loaded)
+}
+
+fn save_artifact_store(path: Str, artifacts: List<DocArtifact>) -> Result<Int, Int> {
+    let snapshot = artifact_store_snapshot(artifacts)
+    if fs_write_text(path, snapshot) != 0 { return Err(40) }
+    return Ok(snapshot.len())
+}
+
+fn read_artifact_store(path: Str, out: List<DocArtifact>) -> Result<Int, Int> {
+    if fs_exists(path) != 1 { return Err(41) }
+    let snapshot = fs_read_text(path)
+    let loaded = load_artifact_store(snapshot, out)?
+    return Ok(loaded)
+}
+
+fn best_artifact(artifacts: List<DocArtifact>) -> Result<DocArtifact, Int> {
+    if artifacts.len() == 0 { return Err(50) }
+    let mut best = artifacts[0]
+    for artifact in artifacts {
+        if artifact.score > best.score {
+            best = artifact
+        }
+    }
+    return Ok(best)
+}
+
+fn query_loaded_store(artifacts: List<DocArtifact>) -> Result<Int, Int> {
+    let best: DocArtifact = best_artifact(artifacts)?
+    if best.id != "d1" { return Err(51) }
+    return Ok(best.score + artifacts.len() + best.title.len() + 8)
+}
+
+fn result_value(flow: Result<Int, Int>) -> Int {
+    let value = match flow { Ok(score) => score, Err(code) => code }
+    return value
+}
+
+fn main() -> Int {
+    let artifacts: List<DocArtifact> = []
+    let indexed = result_value(index_artifacts("ai cache ai", artifacts))
+    if indexed != 42 { return 1 }
+    if artifacts.len() != 2 { return 2 }
+
+    let snapshot = artifact_store_snapshot(artifacts)
+    if str_contains(snapshot, "d1") != 1 { return 3 }
+    if str_contains(snapshot, "VaisDB Guide") != 1 { return 4 }
+
+    let loaded: List<DocArtifact> = []
+    if result_value(load_artifact_store(snapshot, loaded)) != 2 { return 5 }
+    if loaded[0].title != artifacts[0].title { return 6 }
+    if loaded[1].body.len() != artifacts[1].body.len() { return 7 }
+
+    let path = path_join(fs_temp_dir(), "vais-e309-artifact-store.tsv")
+    let saved_len = result_value(save_artifact_store(path, artifacts))
+    if saved_len <= 0 { return 8 }
+
+    let from_file: List<DocArtifact> = []
+    if result_value(read_artifact_store(path, from_file)) != 2 { return 9 }
+    if result_value(query_loaded_store(from_file)) != 42 { return 10 }
+
+    let bad: List<DocArtifact> = []
+    if result_value(load_artifact_store("broken", bad)) != 30 { return 11 }
+    if bad.len() != 0 { return 12 }
+
+    let missing: List<DocArtifact> = []
+    let missing_path = path_join(fs_temp_dir(), "vais-e309-missing-artifact-store.tsv")
+    if result_value(read_artifact_store(missing_path, missing)) != 41 { return 13 }
+
+    return 42
+}

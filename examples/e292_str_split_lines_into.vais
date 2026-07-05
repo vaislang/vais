@@ -1,0 +1,32 @@
+# expect: 42
+
+fn main() -> Int {
+    let lf = str_byte(10)
+    let cr = str_byte(13)
+    let crlf = str_concat(cr, lf)
+    let text = str_concat(str_concat("title=VaisDB", lf), str_concat("body=AI cache", str_concat(lf, "score=42")))
+    let win_text = str_concat(str_concat("alpha", crlf), str_concat(crlf, str_concat("beta", crlf)))
+
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n != 3 { return 1 }
+    if lines.len() != 3 { return 2 }
+    if lines[0] != "title=VaisDB" { return 3 }
+    if lines[1] != "body=AI cache" { return 4 }
+    if lines[2] != "score=42" { return 5 }
+
+    let win: List<Str> = []
+    if str_split_lines_into(win_text, win) != 3 { return 6 }
+    if win[0] != "alpha" { return 7 }
+    if win[1] != "" { return 8 }
+    if win[2] != "beta" { return 9 }
+
+    let empty: List<Str> = []
+    if str_split_lines_into("", empty) != 0 { return 10 }
+    if empty.len() != 0 { return 11 }
+
+    let joined = str_join(lines, "|")
+    if joined != "title=VaisDB|body=AI cache|score=42" { return 12 }
+
+    return n * 10 + win.len() * 4
+}

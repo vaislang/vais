@@ -4,7 +4,226 @@
 
 ### Changed
 
-- No unreleased changes.
+- Added optional package static assets: `assets = "assets"` in `vais.toml`
+  makes `scripts/vaisc package` copy regular files/directories to
+  `<dist-dir>/assets`; `--archive` includes the same payload as
+  `<binary-or-name>-<version>/assets/`. Native, direct, manifest-contract, and
+  VaisDB workflow gates now cover the asset package example and diagnostics for
+  unsafe or missing asset directories.
+- Added package release archives: `scripts/vaisc package <package-dir> -o
+  <dist-dir> --archive` now also writes
+  `<dist-dir>/<binary-or-name>-<version>.tar.gz`, containing the packaged
+  binary under `bin/` and the copied `vais.toml`. Native, direct, and VaisDB
+  workflow gates extract the archive and run the packaged command, and unsafe
+  manifest versions are rejected before they can become archive filenames.
+- Added optional package binary target metadata: `binary = "cmd-name"` in
+  `vais.toml` lets `scripts/vaisc package` write
+  `dist/bin/<cmd-name>` while `emit-ir`, `build`, and `run` still resolve the
+  package entry through `source/main.vais`.
+- Hardened installable package output gates: packaged
+  `examples/e323_cli_package` binaries are now verified with real CLI argv in
+  native, direct, and VaisDB workflow checks, and `vaisc package` rejects
+  manifest names that cannot be used safely as binary filenames.
+- Added installable package output: `scripts/vaisc package <package-dir> -o
+  <dist-dir>` now resolves a manifest-backed package directory, builds
+  `dist/bin/<package-name>`, copies `vais.toml` to `dist/vais.toml`, and is
+  covered in full/default and direct package workflow gates.
+- Added `examples/e323_cli_package`; `scripts/vaisc emit-ir`, `build`, and
+  `run` now accept a package directory as well as an explicit `.vais` entry
+  file. A directory with `vais.toml` resolves to `source/main.vais`, direct and
+  full/default engines share that entry resolution, and the workflow gates
+  cover package-directory execution with CLI argv forwarding.
+- Added `examples/e322_vaisdb_module_boundary/main.vais`; direct/default,
+  front, workflow, and parity gates now protect imported VaisDB-style modules
+  sharing `DocArtifact` structs, `Result<DocArtifact,Int>` helpers,
+  `List<DocArtifact>` outputs, and `Map<Str,Int>` scoring helpers. The direct
+  native engine now resolves the same static dotted local imports as the full
+  engine before lowering.
+- Added `examples/e321_result_struct_payload_bool_match_condition.vais`;
+  direct/default, front, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` matches that return `Bool` conditions from
+  `Ok` payload helper terms and `Err(Int)` code comparisons.
+- Added `examples/e320_result_struct_payload_int_field_helper_call_arithmetic.vais`;
+  direct/default, front, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` matches that pass `Ok` payload `Int` fields to
+  reusable `Int` helpers and compose those helper-call terms with normal struct
+  field terms while preserving `Err(Int)` recovery.
+- Added `examples/e319_result_struct_payload_field_helper_call_arithmetic.vais`;
+  direct/default, front, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` matches that pass `Ok` payload `Str` fields to
+  reusable `Int` helpers and compose those helper-call terms with normal struct
+  field terms while preserving `Err(Int)` recovery.
+- Added `examples/e318_result_struct_payload_helper_call_arithmetic.vais`;
+  direct/default, front, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` matches that compose reusable `Ok` payload
+  helper-call terms with normal struct field terms while preserving
+  `Err(Int)` recovery.
+- Added `examples/e317_result_struct_payload_helper_call_score.vais`;
+  direct/default, front, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` matches that pass `Ok` payload structs directly
+  to reusable `Int` scoring helpers while preserving `Err(Int)` recovery.
+- Added `examples/e316_result_struct_str_transform_len_match_flow.vais`;
+  direct/default, front, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` matches that compute `Int` scores from
+  transformed `Str` payload fields with chained `.len()` calls while preserving
+  `Err(Int)` recovery.
+- Added `examples/e315_result_struct_str_transform_match_flow.vais`; direct/default,
+  front, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` matches that normalize `Str` payload fields with
+  `str_replace`, `str_trim`, `str_upper`, `str_lower`, and local-prefix
+  `str_concat(...)` while converting `Err(Int)` codes to strings.
+- Added `examples/e314_result_struct_str_concat_match_flow.vais`; direct/default,
+  front, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` matches that compose `Str` payload fields with
+  `str_concat(...)` while converting `Err(Int)` codes to strings. Full
+  self-host lowering now treats struct Result string arms as recursive string
+  expressions rather than single-field-only arms.
+- Added `examples/e313_result_struct_str_match_flow.vais`; direct/default,
+  front, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` matches that recover `Str` fields from
+  struct payloads and convert `Err(Int)` codes to strings. Native lowering now
+  reuses payload-local copies for struct Result match binders, and full
+  self-host lowering emits i8* stores for matched struct string fields.
+- Added `examples/e312_result_struct_local_wrapper_flow.vais`; direct/default,
+  front, workflow, parity, and full codegen gates now protect copying
+  declared-struct Result wrapper payloads through local struct variables and
+  returning those locals without losing nested fields. Full self-host lowering
+  now recognizes struct-typed field-chain lets such as `let artifact =
+  flow.value` and copies nested struct locals field-by-field into wrapper
+  literals.
+- Added `examples/e311_result_call_argument_flow.vais`; direct/default,
+  front, workflow, parity, and full codegen gates now protect passing
+  `Result<Str,Int>` and `Result<DeclaredStruct,Int>` returning helpers directly
+  as helper-call arguments without first binding manual locals. Native lowering
+  now hoists Result-returning call arguments and clears Result local-name caches
+  at function boundaries so same-named parameters in later helpers do not leak
+  stale payload lowering state.
+- Hardened native `vaisc` temporary-file handling: generated native driver
+  intermediates now live under a per-run temp root, are removed on normal
+  exit, and have a smoke-test regression guard while `--keep-tmp` still
+  preserves artifacts for debugging.
+- Added `examples/e310_vaisdb_artifact_query_report.vais`; direct/default,
+  front, workflow, parity, and full codegen gates now protect a reusable
+  persisted artifact-store query/report workflow that loads
+  `List<DocArtifact>` records, ranks them through term scoring, composes
+  `Result<Str,Int>` report payloads, and preserves missing-store/empty-query
+  integer errors. Native and full lowering now handle `Result<Int,Int>?` and
+  `Result<DeclaredStruct,Int>?` propagation inside `Result<Str,Int>` functions.
+- Added `examples/e309_vaisdb_artifact_store_snapshot.vais`; direct/default,
+  front, workflow, parity, and full codegen gates now protect a persistable
+  VaisDB artifact store workflow that serializes `List<DocArtifact>` records,
+  reloads them through `Result<DocArtifact,Int>` parsing helpers, queries the
+  best loaded record, and reports malformed/missing store errors.
+- Added `examples/e308_vaisdb_artifact_record_workflow.vais`; direct/default,
+  front/checker, workflow, parity, and full codegen gates now protect a
+  VaisDB-style artifact record workflow that builds
+  `Result<DeclaredStruct,Int>` document payloads, stores them in
+  `List<Struct>` outputs, snapshots `Map<Str,Str>` metadata, and propagates
+  integer errors.
+- Added `examples/e307_result_struct_try_payload.vais`; direct/default,
+  front/checker, workflow, parity, and full codegen gates now protect
+  local-binding `?` propagation for `Result<DeclaredStruct,Int>` payload
+  structs, including reuse of extracted `Str` and `Int` fields.
+- Added `examples/e306_result_struct_str_fields.vais`; direct/default,
+  front/checker, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` payload structs with `Str` fields, including
+  inline recovery of string field lengths plus integer fields.
+- Added `examples/e305_result_multiline_struct_payload.vais`; direct/default,
+  front/checker, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` payloads declared with multiline Int-field
+  structs, including 4-field inline recovery.
+- Added `examples/e304_result_record_int_struct_payload.vais`; direct/default,
+  front/checker, workflow, parity, and full codegen gates now protect
+  `Result<DeclaredStruct,Int>` structured payload forwarding beyond the
+  previous `Metric`-only slice, including 3-field inline recovery.
+- Added `examples/e303_result_metric_int_struct_payload.vais`; direct/default,
+  front/checker, workflow, parity, and full codegen gates now protect the first
+  concrete `Result<Metric,Int>` structured payload slice, including helper
+  returns, helper parameters, forwarding, and inline recovery of struct fields
+  or integer error values.
+- Added `examples/e302_result_str_int_param_flow.vais`; direct/default/full,
+  front/checker, workflow, and parity gates now protect `Result<Str,Int>`
+  helper parameters, forwarding between helpers, and inline recovery of
+  string payloads or integer error values.
+- Added `examples/e301_result_str_int_file_read.vais`; direct/default/full,
+  front/checker, workflow, and parity gates now protect the first
+  `Result<Str,Int>` file-read slice with `Ok(Str)`, `Err(Int)`,
+  local-binding `?`, and inline match recovery to both `Int` and `Str` values.
+- Added `tools/vaisdb_benchmark_report.vais` and
+  `scripts/vaisdb-benchmark-report.sh`; Vais now has a reusable benchmark
+  report command that runs the e295 indexer, parses raw metric lines with
+  `str_split_lines_into`/`str_starts_with`/`str_slice`/`parse_int`, and writes
+  a direct/default summary. Front/direct/full/workflow/parity gates cover the
+  new tool path.
+- Added `examples/e300_vaisdb_benchmark_cli_report.vais`; direct/default/full
+  and parity gates now protect a Vais-authored CLI-style benchmark report that
+  discovers the repo root with `fs_cwd`/`path_dirname`/`path_basename`, invokes
+  the e295 indexer through `proc_capture`, records direct/default elapsed
+  milliseconds, and persists status metrics.
+- Added `time_millis() -> Int` to the verified host intrinsic surface and
+  `examples/e299_vaisdb_benchmark_report.vais`; direct/default/full/parity
+  gates now protect a Vais-authored benchmark report workflow that times term
+  counting/scoring and persists the report through `fs_write_text`/`fs_read_text`.
+- Added `examples/e298_vaisdb_file_ingest_result_flow.vais`; the native direct
+  emitter now lowers `fs_exists(path)`, the focused VaisDB gate checks
+  generated-file, argv-file, and missing-document `Err(10)` modes, and the
+  full codegen gate protects the standalone `fs_exists` + `Result<Int,Int>`
+  file-ingest shape.
+- Added `examples/e297_vaisdb_file_ingest_workflow.vais`; the native direct
+  emitter now lowers the minimal file/argv host helpers needed for the
+  workflow (`fs_read_text`, `fs_write_text`, `fs_temp_dir`, `path_join`,
+  `proc_argc`, and `proc_arg`), the focused VaisDB gate checks generated-file
+  and argv-file ingest modes, and the full codegen gate links a host runtime
+  for standalone generated-IR file workflows.
+- Promoted `examples/e296_result_map_param_flow.vais`; full self-host
+  `fixpoint_full.vais` now lowers `Ok`/`Err`, local-binding `?`, and
+  payload-only `match Result` shapes needed for `Result<Int,Int>` helper flows
+  over `Map<Str,Str>` parameters, then regenerated
+  `compiler/self/vaisc_core.ll`.
+- Added `docs/design/VAISDB_DX_BASELINE.md`,
+  `scripts/test-vaisdb-workflow.sh`, and
+  `scripts/bench-vaisdb-indexer.sh` so the document/VaisDB workflow has a
+  focused direct/default reproducibility gate and a local performance baseline
+  protocol.
+- Added `examples/e295_vaisdb_indexer_prototype.vais`, a gate-backed
+  Vais-authored document indexer prototype that combines ingest, metadata
+  snapshot round trips, term-frequency maps, and weighted query scoring.
+- Promoted concrete native direct `Option<Int>`/`Result<Int,Int>` value
+  lowering for helper return/parameter/local types, constructors, inline
+  expression-match bindings, and local-binding `?`; added
+  `examples/e294_result_try_parse_error_flow.vais` to lock a document-style
+  parse/error flow without opening generic `Option<T>`/`Result<T,E>`.
+- Added gate-backed `map_str_str_snapshot(docs)` and
+  `map_str_str_load_snapshot(text, out)` support across the full self-host and
+  native direct paths for small `Map<Str,Str>` line snapshots used by VaisDB
+  metadata round trips.
+- Added gate-backed `str_split_lines_into(text, out)` support across the full
+  self-host and native direct paths for LF/CRLF line tokenization into
+  `List<Str>` out-params, including interior blank lines, empty input, and
+  trailing-line-break handling.
+- Promoted full self-host lowering for `str_concat(left, right)` and
+  `str_byte(value)` to self-contained runtime helpers so standalone generated
+  IR no longer depends on external host string-construction calls for those
+  helpers.
+- Added gate-backed `str_join(parts, sep)` support across the full self-host
+  and native direct paths for reconstructing `List<Str>` values with a
+  separator, including empty-list handling and split/join delimiter round trips.
+- Added gate-backed `str_split_into(text, sep, out)` support across the full
+  self-host and native direct paths for delimiter tokenization into `List<Str>`
+  out-params, including empty-field preservation.
+- Added gate-backed ASCII `str_upper(text)` support across the full self-host
+  and native direct paths, including Map/List string reads and
+  `Map<Str,Str>.get_opt` match payload transforms.
+- Added gate-backed `str_ends_with(text, suffix)` support across the full
+  self-host and native direct paths, including normalized strings, Map/List
+  string reads, and `Map<Str,Str>.get_opt` match values.
+- Added gate-backed `str_replace(text, needle, replacement)` support across the
+  full self-host and native direct paths for all-occurrence string rewriting
+  over literals, Map/List string reads, and `Map<Str,Str>.get_opt` match values.
+- Raised the self-host `List<Token>` retarget capacity to keep the enlarged
+  `fixpoint_full.vais` stage1/stage2 bootstrap path green.
+- Tightened native front keyword diagnostics so identifiers containing
+  `match` or `enum` are not mistaken for unsupported syntax.
 
 ## v1.0.1 - 2026-06-26
 
@@ -395,7 +614,7 @@ Previous Vais source release.
 - Moved the direct-engine arithmetic/build/run smoke checks into
   `tools/vaisc_direct_smoke_check.vais`, further reducing the NV-C2 shell
   fixture.
-- Moved the direct-engine import reject and List bounds trap checks into
+- Moved the direct-engine import handling and List bounds trap checks into
   `tools/vaisc_direct_error_check.vais`, using `proc_capture_to` to keep status
   and stderr/trap output handling in Vais code.
 - Moved the direct helper/control-flow, range `for`, struct-local, and struct

@@ -1,0 +1,19 @@
+# expect: 42
+# List<Struct>.filter(...).first()/last().field locals can infer Int/Str types.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn score_match(docs: List<Doc>, needle: Str, min_score: Int) -> Int {
+    let first_score = docs.filter(|doc| str_contains(doc.body, needle) == 1).first().score
+    let last_title = docs.filter(|doc| doc.score > min_score).last().title
+    let last_title_len = docs.filter(|doc| doc.score > min_score).last().title.len()
+    return first_score + last_title.len() + last_title_len + 23
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 9 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return score_match(docs, "tokens", 10)
+}

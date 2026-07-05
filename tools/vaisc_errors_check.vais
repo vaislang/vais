@@ -381,7 +381,7 @@ fn main() -> Int {
     fail = fail + expect_diag(vaisc, tmp, "direct_list_struct_field_target", 1, "assignment target is not a known List<Struct> field", "", "xs[0].value = 42")
     fail = fail + expect_diag(vaisc, tmp, "direct_list_element_target", 1, "assignment target is not a known List element", "", "xs[0] = value")
     fail = fail + expect_diag(vaisc, tmp, "direct_list_constructor_expr", 1, "return expression type does not match", "", "return 40 + 2")
-    fail = fail + expect_diag(vaisc, tmp, "direct_list_method", 1, "supports List push, len, is_empty, last, pop, index, and List<Int> sum", "", "xs.push(value)")
+    fail = fail + expect_diag(vaisc, tmp, "direct_list_method", 1, "supports List push, len, is_empty, first, last, pop, remove_at, index, List<Int>/List<Str> contains/index_of/count, and List<Int> sum", "", "xs.push(value)")
     fail = fail + expect_diag(vaisc, tmp, "direct_list_value_expr", 1, "return expression type does not match", "", "return 40 + 2")
     fail = fail + expect_diag(vaisc, tmp, "direct_list_arg_type", 1, "function call argument type does not match", "", "pass a matching argument")
     fail = fail + expect_diag(vaisc, tmp, "direct_map_assignment_type", 1, "Map assignment requires another local or parameter Map", "", "")

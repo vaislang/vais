@@ -1,0 +1,22 @@
+# expect: 42
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "VaisDB")
+    docs.insert("body", "cache")
+
+    let title = match docs.get_opt("title") { Some(v) => v, None => "" }
+    let missing = match docs.get_opt("missing") { Some(v) => "bad", None => "fallback" }
+    let title_len = match docs.get_opt("title") { Some(v) => v.len(), None => 0 }
+
+    if title != "VaisDB" {
+        return 1
+    }
+    if missing != "fallback" {
+        return 2
+    }
+    if title_len != 6 {
+        return 3
+    }
+    return title_len * 7
+}

@@ -1,0 +1,35 @@
+# expect: 42
+
+struct Inner {
+    v: Int,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn score(xs: List<Outer>) -> Int {
+    return xs.first().inner.v + xs.last().inner.v
+}
+
+fn main() -> Int {
+    let xs: List<Outer> = []
+    xs.push(Outer {
+        inner: Inner {
+            v: 10,
+        },
+    })
+    xs.push(Outer {
+        inner: Inner {
+            v: 20,
+        },
+    })
+    xs.push(Outer {
+        inner: Inner {
+            v: 30,
+        },
+    })
+    let removed = xs.remove_at(1).inner.v
+    let popped = xs.pop().inner.v
+    return score(xs) + removed + popped - 28
+}

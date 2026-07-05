@@ -1,0 +1,186 @@
+# expect: 42
+# Reusable VaisDB artifact-store query/report workflow.
+
+struct DocArtifact { id: Str, title: Str, body: Str, terms: Int, score: Int }
+
+fn build_doc_artifact(id: Str, title: Str, body: Str, terms: Int, score: Int) -> Result<DocArtifact, Int> {
+    if id.len() == 0 { return Err(10) }
+    if title.len() == 0 { return Err(11) }
+    if body.len() == 0 { return Err(12) }
+    if terms < 1 { return Err(13) }
+    let artifact = DocArtifact { id: id, title: title, body: body, terms: terms, score: score }
+    return Ok(artifact)
+}
+
+fn artifact_line(artifact: DocArtifact) -> Str {
+    let tab = str_byte(9)
+    let left = str_concat(artifact.id, str_concat(tab, artifact.title))
+    let middle = str_concat(Str(artifact.terms), str_concat(tab, Str(artifact.score)))
+    return str_concat(left, str_concat(tab, str_concat(middle, str_concat(tab, artifact.body))))
+}
+
+fn artifact_store_snapshot(artifacts: List<DocArtifact>) -> Str {
+    let mut out = ""
+    for artifact in artifacts {
+        out = str_concat(out, str_concat(artifact_line(artifact), str_byte(10)))
+    }
+    return out
+}
+
+fn parse_artifact_line(line: Str) -> Result<DocArtifact, Int> {
+    let fields: List<Str> = []
+    let tab = str_byte(9)
+    let field_count = str_split_into(line, tab, fields)
+    if field_count != 5 { return Err(30) }
+    let terms = parse_int(fields[2])
+    let score = parse_int(fields[3])
+    if terms < 1 { return Err(31) }
+    if score < 1 { return Err(32) }
+    let artifact: DocArtifact = build_doc_artifact(fields[0], fields[1], fields[4], terms, score)?
+    return Ok(artifact)
+}
+
+fn load_artifact_store(snapshot: Str, out: List<DocArtifact>) -> Result<Int, Int> {
+    let lines: List<Str> = []
+    let line_count = str_split_lines_into(snapshot, lines)
+    if line_count == 0 { return Err(33) }
+    let mut loaded = 0
+    for line in lines {
+        let trimmed = str_trim(line)
+        if trimmed.len() > 0 {
+            let artifact: DocArtifact = parse_artifact_line(line)?
+            out.push(artifact)
+            loaded = loaded + 1
+        }
+    }
+    if loaded == 0 { return Err(34) }
+    return Ok(loaded)
+}
+
+fn save_artifact_store(path: Str, artifacts: List<DocArtifact>) -> Result<Int, Int> {
+    let snapshot = artifact_store_snapshot(artifacts)
+    if fs_write_text(path, snapshot) != 0 { return Err(40) }
+    return Ok(snapshot.len())
+}
+
+fn read_artifact_store(path: Str, out: List<DocArtifact>) -> Result<Int, Int> {
+    if fs_exists(path) != 1 { return Err(41) }
+    let snapshot = fs_read_text(path)
+    let loaded = load_artifact_store(snapshot, out)?
+    return Ok(loaded)
+}
+
+fn artifact_query_score(query: Map<Str,Int>, artifact: DocArtifact) -> Int {
+    let doc_terms: Map<Str,Int> = {}
+    let doc_total = doc_term_counts_into(artifact.body, doc_terms)
+    let score = doc_term_weighted_score(query, doc_terms)
+    return score + artifact.title.len() + doc_total - artifact.terms
+}
+
+fn best_artifact_for_query(artifacts: List<DocArtifact>, query_text: Str) -> Result<DocArtifact, Int> {
+    if artifacts.len() == 0 { return Err(50) }
+    if query_text.len() == 0 { return Err(51) }
+    let query: Map<Str,Int> = {}
+    let query_total = doc_term_counts_into(query_text, query)
+    if query_total == 0 { return Err(52) }
+
+    let mut best = artifacts[0]
+    let mut best_score = artifact_query_score(query, best)
+    for artifact in artifacts {
+        let score = artifact_query_score(query, artifact)
+        if score > best_score {
+            best = artifact
+            best_score = score
+        }
+    }
+    if best_score < 1 { return Err(53) }
+    return Ok(best)
+}
+
+fn artifact_query_report(best: DocArtifact, query_text: Str, loaded: Int, query_total: Int, score: Int) -> Str {
+    let newline = str_byte(10)
+    let mut report = str_concat("VaisDB artifact query report", newline)
+    report = str_concat(report, str_concat("query=", str_concat(query_text, newline)))
+    report = str_concat(report, str_concat("best_id=", str_concat(best.id, newline)))
+    report = str_concat(report, str_concat("best_title=", str_concat(best.title, newline)))
+    report = str_concat(report, str_concat("loaded=", str_concat(Str(loaded), newline)))
+    report = str_concat(report, str_concat("query_terms=", str_concat(Str(query_total), newline)))
+    report = str_concat(report, str_concat("score=", str_concat(Str(score), newline)))
+    return report
+}
+
+fn query_artifact_store_report(path: Str, query_text: Str) -> Result<Str, Int> {
+    let loaded: List<DocArtifact> = []
+    let loaded_count = read_artifact_store(path, loaded)?
+    let best: DocArtifact = best_artifact_for_query(loaded, query_text)?
+    let query: Map<Str,Int> = {}
+    let query_total = doc_term_counts_into(query_text, query)
+    let score = artifact_query_score(query, best)
+    let report = artifact_query_report(best, query_text, loaded_count, query_total, score)
+    return Ok(report)
+}
+
+fn seed_store(out: List<DocArtifact>) -> Result<Int, Int> {
+    let query: Map<Str,Int> = {}
+    if doc_term_counts_into("ai cache ai", query) != 3 { return Err(60) }
+    let doc_a: Map<Str,Int> = {}
+    let doc_b: Map<Str,Int> = {}
+    let a_body = "AI cache ai CACHE vector ai"
+    let b_body = "cache cache vector vector"
+    let a_terms = doc_term_counts_into(a_body, doc_a)
+    let b_terms = doc_term_counts_into(b_body, doc_b)
+    let a_score = doc_term_weighted_score(query, doc_a)
+    let b_score = doc_term_weighted_score(query, doc_b)
+    let a: DocArtifact = build_doc_artifact("d1", "VaisDB Guide", a_body, a_terms, a_score)?
+    let b: DocArtifact = build_doc_artifact("d2", "Cache Notes", b_body, b_terms, b_score)?
+    out.push(a)
+    out.push(b)
+    return Ok(out.len())
+}
+
+fn result_value(flow: Result<Int, Int>) -> Int {
+    let value = match flow { Ok(score) => score, Err(code) => code }
+    return value
+}
+
+fn result_text(flow: Result<Str, Int>) -> Str {
+    let value = match flow { Ok(text) => text, Err(code) => Str(code) }
+    return value
+}
+
+fn result_code(flow: Result<Str, Int>) -> Int {
+    let value = match flow { Ok(text) => text.len(), Err(code) => code }
+    return value
+}
+
+fn main() -> Int {
+    let artifacts: List<DocArtifact> = []
+    if result_value(seed_store(artifacts)) != 2 { return 1 }
+
+    let root = fs_temp_dir()
+    let store_path = path_join(root, "vais-e310-artifact-store.tsv")
+    if result_value(save_artifact_store(store_path, artifacts)) <= 0 { return 2 }
+
+    let report_flow = query_artifact_store_report(store_path, "ai cache ai")
+    let report = result_text(report_flow)
+    if str_contains(report, "VaisDB artifact query report") != 1 { return 3 }
+    if str_contains(report, "best_id=d1") != 1 { return 4 }
+    if str_contains(report, "best_title=VaisDB Guide") != 1 { return 5 }
+    if str_contains(report, "loaded=2") != 1 { return 6 }
+    if str_contains(report, "query_terms=3") != 1 { return 7 }
+    if str_contains(report, "score=20") != 1 { return 8 }
+
+    let report_path = path_join(root, "vais-e310-query-report.txt")
+    if fs_write_text(report_path, report) != 0 { return 9 }
+    let saved_report = fs_read_text(report_path)
+    if str_contains(saved_report, "query=ai cache ai") != 1 { return 10 }
+    if str_contains(saved_report, "score=20") != 1 { return 11 }
+
+    let missing_path = path_join(root, "vais-e310-missing-store.tsv")
+    let missing_flow = query_artifact_store_report(missing_path, "ai cache ai")
+    if result_code(missing_flow) != 41 { return 12 }
+    let empty_query_flow = query_artifact_store_report(store_path, "")
+    if result_code(empty_query_flow) != 51 { return 13 }
+
+    return 42
+}

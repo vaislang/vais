@@ -1,0 +1,25 @@
+# expect: 42
+
+fn add_nums(xs: List<Int>) -> Int {
+    xs.extend([20, 21])
+    return xs.sum() + xs.len()
+}
+
+fn add_words(words: List<Str>) -> Int {
+    words.extend(["doc", "cache"])
+    return words.len() + words.last().len()
+}
+
+fn main() -> Int {
+    let nums: List<Int> = []
+    nums.push(1)
+    nums.extend([10, 11])
+    let num_score = add_nums(nums)
+
+    let words: List<Str> = []
+    words.push("ai")
+    words.extend(["vector", "rank"])
+    let word_score = add_words(words)
+
+    return num_score + word_score + nums[2] + words[1].len() + words.len() - 58
+}

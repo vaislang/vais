@@ -1,0 +1,24 @@
+# expect: 42
+# Map<Str,Str>.get_opt string payload match expressions allow str_concat/str_trim/str_lower transforms in Str contexts.
+
+fn score(text: Str) -> Int {
+    if text == "vaisdb-ready" { return 40 }
+    return 0
+}
+
+fn normalize(docs: Map<Str,Str>, key: Str) -> Str {
+    return match docs.get_opt(key) { Some(v) => str_lower(str_trim(v)), None => str_concat("missing", "") }
+}
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", " VaisDB ")
+    docs.insert("suffix", "READY")
+    let mut selected: Str = "bad"
+    selected = match docs.get_opt("title") { Some(v) => str_lower(str_trim(v)), None => str_concat("fallback", "") }
+    let from_call = score(str_concat(match docs.get_opt("title") { Some(v) => str_lower(str_trim(v)), None => str_concat("missing", "") }, str_concat("-", match docs.get_opt("suffix") { Some(v) => str_lower(v), None => str_concat("none", "") })))
+    let normalized = normalize(docs, "title")
+    if selected != "vaisdb" { return 1 }
+    if normalized != "vaisdb" { return 2 }
+    return from_call + 2
+}

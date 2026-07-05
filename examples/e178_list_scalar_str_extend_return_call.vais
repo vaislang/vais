@@ -1,0 +1,39 @@
+# expect: 42
+
+fn make_nums(base: Int) -> List<Int> {
+    let xs: List<Int> = []
+    xs.push(base)
+    xs.push(base + 1)
+    return xs
+}
+
+fn add_nums(xs: List<Int>, base: Int) -> Int {
+    xs.extend(make_nums(base))
+    return xs.sum() + xs.len()
+}
+
+fn make_words(prefix: Str) -> List<Str> {
+    let words: List<Str> = []
+    words.push(str_lower(prefix))
+    words.push("cache")
+    return words
+}
+
+fn add_words(words: List<Str>, prefix: Str) -> Int {
+    words.extend(make_words(prefix))
+    return words.len() + words.last().len()
+}
+
+fn main() -> Int {
+    let nums: List<Int> = []
+    nums.push(1)
+    nums.extend(make_nums(10))
+    let num_score = add_nums(nums, 20)
+
+    let words: List<Str> = []
+    words.push("ai")
+    words.extend(make_words("VECTOR"))
+    let word_score = add_words(words, "DOC")
+
+    return num_score + word_score + nums[1] + words.last().len() + words.len() - 56
+}

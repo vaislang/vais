@@ -1,0 +1,33 @@
+# expect: 42
+
+fn first_pos(xs: List<Int>, value: Int) -> Int {
+    return xs.index_of(value)
+}
+
+fn count_value(xs: List<Int>, value: Int) -> Int {
+    return xs.count(value)
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(7)
+    xs.push(42)
+    xs.push(7)
+    xs.push(3)
+    xs.push(7)
+
+    let pos: Int = xs.index_of(42)
+    if pos != 1 { return 1 }
+    if xs.index_of(9) != 0 - 1 { return 2 }
+    if xs.count(7) != 3 { return 3 }
+    if count_value(xs, 9) != 0 { return 4 }
+    if first_pos(xs, 3) != 3 { return 5 }
+
+    xs.clear()
+    if xs.index_of(7) != 0 - 1 { return 6 }
+    if xs.count(7) != 0 { return 7 }
+    xs.push(2)
+    xs.push(2)
+    xs.push(40)
+    return count_value(xs, 2) * 20 + first_pos(xs, 40) + xs.contains(9)
+}

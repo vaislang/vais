@@ -1,0 +1,39 @@
+# expect: 42
+
+# Minimal Vais-authored benchmark/report workflow for the document indexer slice.
+
+fn append_metric(report: Str, name: Str, value: Int) -> Str {
+    return str_concat(report, str_concat(name, str_concat(Str(value), "\n")))
+}
+
+fn timed_score_report(doc_text: Str, query_text: Str, out_path: Str) -> Int {
+    let start = time_millis()
+    let doc: Map<Str,Int> = {}
+    let query: Map<Str,Int> = {}
+    let doc_total = doc_term_counts_into(doc_text, doc)
+    let query_total = doc_term_counts_into(query_text, query)
+    let score = doc_term_weighted_score(query, doc)
+    let stop = time_millis()
+    if stop < start { return 1 }
+
+    let mut report = "VaisDB benchmark report\n"
+    report = append_metric(report, "doc_terms=", doc_total)
+    report = append_metric(report, "query_terms=", query_total)
+    report = append_metric(report, "score=", score)
+    report = append_metric(report, "elapsed_ms=", stop - start)
+
+    if fs_write_text(out_path, report) != 0 { return 2 }
+    let saved = fs_read_text(out_path)
+    if str_contains(saved, "VaisDB benchmark report") != 1 { return 3 }
+    if str_contains(saved, "doc_terms=5") != 1 { return 4 }
+    if str_contains(saved, "query_terms=3") != 1 { return 5 }
+    if str_contains(saved, "score=6") != 1 { return 6 }
+    if str_contains(saved, "elapsed_ms=") != 1 { return 7 }
+    return score * 7
+}
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let out = path_join(root, "vais-e299-benchmark-report.txt")
+    return timed_score_report("ai cache ai cache vector", "ai cache ai", out)
+}

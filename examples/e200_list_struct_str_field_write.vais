@@ -1,0 +1,27 @@
+# expect: 42
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn retitle(docs: List<Doc>, index: Int, title: Str, body: Str) -> Int {
+    docs[index].title = title
+    docs[index].body = body
+    docs[index].score = docs[index].score + docs[index].title.len()
+    return docs[index].body.len()
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "draft", body: "old", score: 10 })
+    docs.push(Doc { title: "tmp", body: "cache", score: 20 })
+    docs[0].title = "alpha"
+    docs[0].body = "Vais cache"
+    let n = retitle(docs, 1, "beta", "learn tokens")
+    if docs[0].title == "alpha" and docs[1].body.len() == 12 {
+        return docs[0].body.len() + docs[1].score + docs[1].title.len() + n - 8
+    }
+    return 0
+}

@@ -1,0 +1,22 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn score_edges(xs: List<Box>) -> Int {
+    let removed_value = xs.remove_at(1).value
+    let last_tag = xs.last().tag
+    let popped_tag = xs.pop().tag
+    let first_value = xs.first().value
+    return removed_value + last_tag + popped_tag + first_value + xs.len()
+}
+
+fn main() -> Int {
+    let xs: List<Box> = [Box { value: 5, tag: 1 }, Box { value: 10, tag: 2 }, Box { value: 20, tag: 3 }, Box { value: 30, tag: 4 }]
+    let a = xs.first().tag
+    let b = xs.last().value
+    let c = score_edges(xs)
+    return a + b + c + xs.len() - 16
+}

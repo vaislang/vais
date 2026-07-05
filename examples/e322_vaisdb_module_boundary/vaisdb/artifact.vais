@@ -1,0 +1,35 @@
+import vaisdb.scoring
+
+struct DocArtifact { id: Str, title: Str, body: Str, terms: Int, score: Int }
+
+fn build_doc_artifact(id: Str, title: Str, body: Str, query: Str) -> Result<DocArtifact, Int> {
+    if id.len() == 0 { return Err(10) }
+    if title.len() == 0 { return Err(11) }
+    if body.len() == 0 { return Err(12) }
+    let terms = count_terms(body)
+    if terms < 1 { return Err(13) }
+    let score = score_body(query, body) + cleaned_len(title)
+    let artifact = DocArtifact { id: id, title: title, body: body, terms: terms, score: score }
+    return Ok(artifact)
+}
+
+fn seed_artifacts(query: Str, out: List<DocArtifact>) -> Result<Int, Int> {
+    let a = build_doc_artifact("D1", "  VaisDB guide  ", "AI cache ai CACHE vector ai", query)?
+    let b = build_doc_artifact("D2", " Cache notes ", "cache cache vector vector", query)?
+    out.push(a)
+    out.push(b)
+    return Ok(out.len())
+}
+
+fn best_artifact_score(artifacts: List<DocArtifact>) -> Int {
+    let mut best = 0
+    for artifact in artifacts {
+        let score = artifact.score + artifact.terms
+        if score > best { best = score }
+    }
+    return best
+}
+
+fn usable_or_missing(flow: Result<DocArtifact, Int>) -> Bool {
+    return match flow { Ok(artifact) => cleaned_len(artifact.title) + artifact.score + artifact.terms >= 18, Err(code) => code == 10 }
+}

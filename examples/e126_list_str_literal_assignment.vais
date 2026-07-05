@@ -1,0 +1,19 @@
+# expect: 42
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words = ["alpha", "beta", "gamma"]
+    let first = words[0]
+    let last = words.last()
+    let tail = words.pop()
+    if first != "alpha" {
+        return 0
+    }
+    if last != "gamma" {
+        return 1
+    }
+    if tail != "gamma" {
+        return 2
+    }
+    return words.len() * 20 + words.is_empty() + tail.len() - 3
+}

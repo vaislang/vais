@@ -1,0 +1,32 @@
+# expect: 42
+
+fn first_num(xs: List<Int>) -> Int {
+    return xs.first()
+}
+
+fn first_word(words: List<Str>) -> Str {
+    return words.first()
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(10)
+    xs.push(20)
+    if xs.first() != 10 { return 1 }
+    if first_num(xs) != 10 { return 2 }
+    let removed = xs.remove_at(0)
+    if removed != 10 { return 8 }
+    if xs.first() != 20 { return 3 }
+
+    let words: List<Str> = []
+    words.push(str_lower("ROOT"))
+    words.push("cache")
+    let head = words.first()
+    if head != "root" { return 4 }
+    if words.first().len() != 4 { return 5 }
+    if first_word(words) != "root" { return 6 }
+    let removed_word = words.remove_at(0)
+    if removed_word != "root" { return 9 }
+    if words.first() != "cache" { return 7 }
+    return 42
+}

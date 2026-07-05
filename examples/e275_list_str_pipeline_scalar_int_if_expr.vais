@@ -1,0 +1,26 @@
+# expect: 42
+# Int if-expressions built from List<Str> pipeline scalar conditions work in locals, reassignments, helper-call arguments, and returns.
+
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+
+fn has_ai(words: List<Str>, needle: Str) -> Bool {
+    return if words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("ai") then true else false
+}
+
+fn score(words: List<Str>, needle: Str) -> Int {
+    let mut total = if words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("vais") then 10 else 0
+    total = if words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("missing") then total else total + 10
+    total = total + add(if has_ai(words, needle) and words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("ai") then 10 else 0, 0)
+    return if total == 30 then total + 12 else 0
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  Vais")
+    words.push("AI")
+    words.push("db")
+    words.push("ai  ")
+    return score(words, "ai")
+}

@@ -1,0 +1,31 @@
+# expect: 42
+
+fn adjusted_sum(scores: List<Int>, min: Int, boost: Int) -> Int {
+    return scores.filter(|score| score > min).map(|score| score + boost).sum()
+}
+
+fn scaled_under_sum(scores: List<Int>, cap: Int, factor: Int) -> Int {
+    let total: Int = scores.filter(|score| score < cap).map(|score| score * factor).sum()
+    return total
+}
+
+fn local_shift_sum(scores: List<Int>, min: Int) -> Int {
+    let shift = 2
+    let total = scores.filter(|score| score > min).map(|score| score - shift).sum()
+    return total
+}
+
+fn main() -> Int {
+    let scores: List<Int> = []
+    scores.push(7)
+    scores.push(42)
+    scores.push(18)
+    scores.push(3)
+    let adjusted = adjusted_sum(scores, 10, 1)
+    let scaled = scaled_under_sum(scores, 20, 2)
+    let shifted = local_shift_sum(scores, 10)
+    if adjusted != 62 { return 1 }
+    if scaled != 56 { return 2 }
+    if shifted != 56 { return 3 }
+    return adjusted + scaled - shifted - 20
+}

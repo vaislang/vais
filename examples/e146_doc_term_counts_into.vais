@@ -1,0 +1,22 @@
+# expect: 42
+
+fn main() -> Int {
+    let counts: Map<Str,Int> = {}
+    let total = doc_term_counts_into("AI cache ai CACHE vector ai", counts)
+    if total != 6 {
+        return 1
+    }
+    if counts.len() != 3 {
+        return 2
+    }
+    if counts.get("ai", 0) != 3 {
+        return 3
+    }
+    if counts.get("cache", 0) != 2 {
+        return 4
+    }
+    if counts.get("vector", 0) != 1 {
+        return 5
+    }
+    return counts.get("ai", 0) * 10 + counts.get("cache", 0) * 5 + counts.get("vector", 0) * 2
+}

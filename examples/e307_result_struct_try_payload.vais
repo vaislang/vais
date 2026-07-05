@@ -1,0 +1,36 @@
+# expect: 42
+# Result<DocSummary,Int> local-binding `?` with declared struct payload.
+
+struct DocSummary { title: Str, summary: Str, terms: Int }
+
+fn build_doc_summary(title: Str, summary: Str, terms: Int) -> Result<DocSummary, Int> {
+    if title.len() == 0 { return Err(10) }
+    if summary.len() == 0 { return Err(11) }
+    let doc = DocSummary { title: title, summary: summary, terms: terms }
+    return Ok(doc)
+}
+
+fn normalize_doc_summary(title: Str, summary: Str, terms: Int, boost: Int) -> Result<DocSummary, Int> {
+    let doc = build_doc_summary(title, summary, terms)?
+    if doc.terms < 1 { return Err(12) }
+    let adjusted = DocSummary { title: doc.title, summary: doc.summary, terms: doc.terms + boost }
+    return Ok(adjusted)
+}
+
+fn doc_summary_score(flow: Result<DocSummary, Int>, fallback: Int) -> Int {
+    let value = match flow { Ok(doc) => doc.title.len() + doc.summary.len() + doc.terms, Err(code) => fallback + code }
+    return value
+}
+
+fn main() -> Int {
+    let ok = normalize_doc_summary(`vais`, `ai db`, 20, 3)
+    let missing_title = normalize_doc_summary(``, `ai db`, 20, 3)
+    let empty_terms = normalize_doc_summary(`vais`, `ai db`, 0, 3)
+    let ok_score = doc_summary_score(ok, 0)
+    let missing_score = doc_summary_score(missing_title, 0)
+    let empty_score = doc_summary_score(empty_terms, 0)
+    if ok_score != 32 { return 1 }
+    if missing_score != 10 { return 2 }
+    if empty_score != 12 { return 3 }
+    return ok_score + missing_score
+}

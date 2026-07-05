@@ -1,0 +1,22 @@
+# expect: 42
+# Result<Int,Int> parse/error flow for document-style positive numeric fields.
+fn parse_required_count(raw: Str, label: Str) -> Result<Int, Int> {
+    if raw.len() == 0 { return Err(10) }
+    if label.len() == 0 { return Err(11) }
+    let value = parse_int(raw)
+    if value <= 0 { return Err(12) }
+    return Ok(value)
+}
+
+fn score_doc(raw_terms: Str, raw_boost: Str) -> Result<Int, Int> {
+    let terms = parse_required_count(raw_terms, "terms")?
+    let boost = parse_required_count(raw_boost, "boost")?
+    return Ok(terms * boost)
+}
+
+fn main() -> Int {
+    let good = match score_doc("6", "7") { Ok(good_value) => good_value, Err(good_error) => good_error }
+    let empty = match score_doc("", "7") { Ok(empty_value) => empty_value, Err(empty_error) => empty_error }
+    let bad_parse = match score_doc("6", "no") { Ok(parse_value) => parse_value, Err(parse_error) => parse_error }
+    return good - empty - bad_parse + 22
+}

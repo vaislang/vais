@@ -1,0 +1,17 @@
+# expect: 42
+
+fn main() -> Int {
+    let text = "selfhost compiler"
+    let a = str_starts_with(text, "self")
+    let b = str_starts_with(text, "host")
+    let c = str_starts_with("abc", "")
+    let d = str_starts_with(str_lower("VaisDB"), "vais")
+
+    if a != 1 { return 1 }
+    if b != 0 { return 2 }
+    if c != 1 { return 3 }
+    if d != 1 { return 4 }
+    if str_starts_with("abc", "abcd") != 0 { return 5 }
+
+    return a * 20 + c * 10 + d * 12
+}

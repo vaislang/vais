@@ -1,0 +1,39 @@
+# expect: 42
+
+struct Inner {
+    a: Int,
+    b: Int,
+}
+
+struct Outer {
+    inner: Inner,
+    tag: Int,
+}
+
+fn make(a: Int, b: Int, tag: Int) -> Outer {
+    return Outer {
+        inner: Inner {
+            a: a,
+            b: b,
+        },
+        tag: tag,
+    }
+}
+
+fn update(xs: List<Outer>, idx: Int) -> Int {
+    xs[idx].inner.a = xs[idx].inner.a + xs[idx].tag
+    return xs[idx].inner.a
+}
+
+fn main() -> Int {
+    let xs: List<Outer> = []
+    let one = make(10, 20, 1)
+    let two = make(3, 4, 2)
+    xs.push(one)
+    xs.push(two)
+    xs[0].inner.b = 30
+    let copied = xs[0]
+    xs[1] = copied
+    let p = update(xs, 1)
+    return xs[0].inner.b + p + xs.last().inner.a - xs[0].inner.a
+}

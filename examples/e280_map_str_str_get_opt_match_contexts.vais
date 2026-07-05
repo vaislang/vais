@@ -1,0 +1,24 @@
+# expect: 42
+# Map<Str,Str>.get_opt string match expressions work in returns, reassignments, helper-call arguments, and embedded Int returns.
+
+fn score(text: Str) -> Int {
+    if text == "VaisDB" { return 40 }
+    return 0
+}
+
+fn pick(docs: Map<Str,Str>, key: Str) -> Str {
+    return match docs.get_opt(key) { Some(v) => v, None => "missing" }
+}
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "VaisDB")
+    docs.insert("body", "cache")
+    let mut selected: Str = "bad"
+    selected = match docs.get_opt("missing") { Some(v) => v, None => "fallback" }
+    let from_call = score(match docs.get_opt("title") { Some(v) => v, None => "" })
+    let from_return = pick(docs, "title")
+    if selected != "fallback" { return 1 }
+    if from_return != "VaisDB" { return 2 }
+    return from_call + match docs.get_opt("body") { Some(v) => v.len(), None => 0 } - 3
+}

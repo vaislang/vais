@@ -55,7 +55,7 @@ fn trust_copy_source(tmp: Str, label: Str, source: Str) -> Str {
     return trusted
 }
 
-fn build_trusted(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) -> Int {
+fn build_trusted_with_engine(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str, engine: Str) -> Int {
     let trusted = trust_copy_source(tmp, label, source)
     if trusted.len() == 0 { return 1 }
     let trust_root = path_dirname(path_dirname(path_dirname(trusted)))
@@ -69,7 +69,15 @@ fn build_trusted(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) ->
     argv.push(trusted)
     argv.push("-o")
     argv.push(out_bin)
+    if engine.len() > 0 {
+        argv.push("--engine")
+        argv.push(engine)
+    }
     return proc_capture_to(argv, out_path, err_path)
+}
+
+fn build_trusted(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) -> Int {
+    return build_trusted_with_engine(vaisc, tmp, label, source, out_bin, "")
 }
 
 fn run_embed_default(helper: Str, harness: Str, source: Str, out: Str, tmp: Str, label: Str) -> Int {
@@ -120,8 +128,8 @@ fn run_embed_raw_call(helper: Str, call_name: Str, harness: Str, source: Str, ou
     return 1
 }
 
-fn build_embedded_compiler(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) -> Int {
-    let rc = build_trusted(vaisc, tmp, str_concat(label, "_compiler"), source, out_bin)
+fn build_embedded_compiler(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str, engine: Str) -> Int {
+    let rc = build_trusted_with_engine(vaisc, tmp, str_concat(label, "_compiler"), source, out_bin, engine)
     if rc == 0 { return 0 }
     print(str_concat("  FAIL ", str_concat(label, ": embedded compiler build")))
     let err_path = path_join(tmp, str_concat(str_concat(label, "_compiler"), ".build.err"))
@@ -172,11 +180,11 @@ fn run_generated_binary(tmp: Str, label: Str, bin: Str, want: Int) -> Int {
     return 1
 }
 
-fn run_embedded(vaisc: Str, tmp: Str, label: Str, source: Str, want: Int) -> Int {
+fn run_embedded(vaisc: Str, tmp: Str, label: Str, source: Str, want: Int, engine: Str) -> Int {
     let out_ll = path_join(tmp, str_concat(label, ".ll"))
     let bin = path_join(tmp, str_concat(label, ".bin"))
     let compiler_bin = path_join(tmp, str_concat(label, ".compiler"))
-    if build_embedded_compiler(vaisc, tmp, label, source, compiler_bin) != 0 { return 1 }
+    if build_embedded_compiler(vaisc, tmp, label, source, compiler_bin, engine) != 0 { return 1 }
     if run_generated_compiler(tmp, label, compiler_bin, out_ll) != 0 { return 1 }
     if compile_generated_ir(tmp, label, out_ll, bin) != 0 { return 1 }
     return run_generated_binary(tmp, label, bin, want)
@@ -185,19 +193,19 @@ fn run_embedded(vaisc: Str, tmp: Str, label: Str, source: Str, want: Int) -> Int
 fn embed_default_and_run(helper: Str, vaisc: Str, tmp: Str, label: Str, harness: Str, source: Str, want: Int) -> Int {
     let out = path_join(tmp, str_concat(label, ".vais"))
     if run_embed_default(helper, harness, source, out, tmp, label) != 0 { return 1 }
-    return run_embedded(vaisc, tmp, label, out, want)
+    return run_embedded(vaisc, tmp, label, out, want, "direct")
 }
 
 fn embed_raw_and_run(helper: Str, vaisc: Str, tmp: Str, label: Str, harness: Str, source: Str, want: Int) -> Int {
     let out = path_join(tmp, str_concat(label, ".vais"))
     if run_embed_raw(helper, harness, source, out, tmp, label) != 0 { return 1 }
-    return run_embedded(vaisc, tmp, label, out, want)
+    return run_embedded(vaisc, tmp, label, out, want, "direct")
 }
 
 fn embed_raw_call_and_run(helper: Str, vaisc: Str, tmp: Str, label: Str, call_name: Str, harness: Str, source: Str, want: Int) -> Int {
     let out = path_join(tmp, str_concat(label, ".vais"))
     if run_embed_raw_call(helper, call_name, harness, source, out, tmp, label) != 0 { return 1 }
-    return run_embedded(vaisc, tmp, label, out, want)
+    return run_embedded(vaisc, tmp, label, out, want, "")
 }
 
 fn usage() -> Int {

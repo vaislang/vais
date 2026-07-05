@@ -1,0 +1,38 @@
+# expect: 42
+
+fn insert_mid(xs: List<Int>, idx: Int, value: Int) -> Int {
+    xs.insert_at(idx, value)
+    return xs.len()
+}
+
+fn insert_word(words: List<Str>, idx: Int, value: Str) -> Int {
+    words.insert_at(idx, value)
+    return words.len()
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(10)
+    xs.push(30)
+    xs.insert_at(1, 20)
+    if xs.len() != 3 { return 1 }
+    if xs[1] != 20 { return 2 }
+    if xs[2] != 30 { return 3 }
+    xs.insert_at(0, 5)
+    if xs[0] != 5 { return 4 }
+    if insert_mid(xs, xs.len(), 40) != 5 { return 5 }
+    if xs[4] != 40 { return 6 }
+    if xs.sum() != 105 { return 7 }
+
+    let words: List<Str> = []
+    words.push("ai")
+    words.push("vector")
+    words.insert_at(1, "cache")
+    if words.len() != 3 { return 8 }
+    if words[1] != "cache" { return 9 }
+    if words[2] != "vector" { return 10 }
+    if insert_word(words, 0, str_lower("ROOT")) != 4 { return 11 }
+    if words[0] != "root" { return 12 }
+    if words.remove_at(2) != "cache" { return 13 }
+    return xs.len() * 8 + words.len() - 1
+}

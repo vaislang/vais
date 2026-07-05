@@ -68,6 +68,101 @@ examples/e67_power.vais	native-supported	Recursive power.
 examples/e69_palindrome_string.vais	native-supported	Str two-pointer palindrome scan with computed byte indexes.
 examples/e70_parse_uint.vais	native-supported	Str len/index with Bool digit classifier.
 examples/e71_string_index_of.vais	native-supported	Str substring search with computed byte indexes.
+examples/e140_str_contains.vais	native-supported	Built-in str_contains over literals, Map<Str,Str> document fields, and List<Str> elements.
+examples/e141_str_trim.vais	native-supported	Built-in str_trim over literals, Map<Str,Str> document fields, and List<Str> elements.
+examples/e142_str_lower.vais	native-supported	Built-in str_lower over literals, trimmed document fields, Map<Str,Str> document fields, and List<Str> elements.
+examples/e287_str_upper.vais	native-supported	Built-in str_upper over literals, trimmed document fields, Map<Str,Str> document fields, List<Str> elements, and get_opt match payloads.
+examples/e143_doc_tokenize.vais	native-supported	Document tokenization with str_slice, str_trim, str_lower, str_contains, and List<Str> return values.
+examples/e144_doc_score_for_each.vais	native-supported	Document token scoring with List<Str> for-each over normalized tokens.
+examples/e145_str_split_ws_into.vais	native-supported	Built-in whitespace tokenization fills a List<Str> out-param and returns token count.
+examples/e146_doc_term_counts_into.vais	native-supported	Built-in document term-frequency indexing fills a Map<Str,Int> out-param.
+examples/e147_doc_term_overlap_score.vais	native-supported	Built-in term-frequency overlap scoring ranks Map<Str,Int> query/document counts.
+examples/e148_doc_term_weighted_score.vais	native-supported	Built-in weighted term-frequency scoring ranks repeated Map<Str,Int> query/document hits.
+examples/e149_str_index_of_builtin.vais	native-supported	Built-in str_index_of returns the first substring byte index or -1 when absent.
+examples/e150_str_starts_with_builtin.vais	native-supported	Built-in str_starts_with checks string prefixes including empty prefixes.
+examples/e288_str_ends_with.vais	native-supported	Built-in str_ends_with checks suffixes over literals, normalized strings, Map<Str,Str> fields, List<Str> elements, and get_opt match values.
+examples/e289_str_replace.vais	native-supported	Built-in str_replace rewrites literal strings, normalized Map<Str,Str> fields, List<Str> elements, and get_opt match values.
+examples/e290_str_split_into.vais	native-supported	Built-in str_split_into fills a List<Str> out-param from delimiter-separated fields while preserving empty fields.
+examples/e291_str_join.vais	native-supported	Built-in str_join rebuilds a Str from List<Str> elements with a separator, including empty fields and empty lists.
+examples/e292_str_split_lines_into.vais	native-supported	Built-in str_split_lines_into fills a List<Str> out-param from LF/CRLF line text while omitting a trailing empty line.
+examples/e293_map_str_str_snapshot_builtin.vais	native-supported	Built-in Map<Str,Str> line snapshot helpers write and load key-value metadata round trips.
+examples/e294_result_try_parse_error_flow.vais	native-supported	Result<Int,Int> parse/error flow with direct constructor encoding, question propagation, and inline match.
+examples/e295_vaisdb_indexer_prototype.vais	native-supported	Vais-authored document indexer prototype combines ingest, metadata snapshot, term counts, and weighted query scoring.
+examples/e296_result_map_param_flow.vais	native-supported	Result<Int,Int> helper flow over Map<Str,Str> parameters, get_opt matching, question propagation, and inline recovery.
+examples/e297_vaisdb_file_ingest_workflow.vais	native-supported	File-backed VaisDB workflow reads document/query files, splits lines, snapshots metadata, indexes terms, and scores a query.
+examples/e298_vaisdb_file_ingest_result_flow.vais	native-supported	File-backed VaisDB workflow checks file existence and reports missing/malformed ingest paths through Result<Int,Int>.
+examples/e301_result_str_int_file_read.vais	native-supported	Result<Str,Int> file-read flow binds Str payloads with question propagation and recovers missing-file error codes.
+examples/e302_result_str_int_param_flow.vais	native-supported	Result<Str,Int> values flow through helper parameters and inline matches for payload/error recovery.
+examples/e303_result_metric_int_struct_payload.vais	native-supported	Result<Metric,Int> struct payload values flow through helper parameters and recover fields through inline matches.
+examples/e304_result_record_int_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> struct payload values flow through helper parameters and recover three fields through inline matches.
+examples/e305_result_multiline_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> multiline struct payload values flow through helper parameters and recover four fields through inline matches.
+examples/e306_result_struct_str_fields.vais	native-supported	Result<DeclaredStruct,Int> struct payload values can include Str fields and recover their lengths through inline matches.
+examples/e307_result_struct_try_payload.vais	native-supported	Result<DeclaredStruct,Int> struct payload values can be bound with question propagation and reused through fields.
+examples/e308_vaisdb_artifact_record_workflow.vais	native-supported	VaisDB artifact record workflow builds Result<DeclaredStruct,Int> document artifacts, stores them in List<Struct>, snapshots metadata, and propagates errors into Result<Int,Int>.
+examples/e309_vaisdb_artifact_store_snapshot.vais	native-supported	VaisDB artifact store workflow persists List<Struct> document artifacts as a text snapshot, reloads them, queries the best record, and reports Result<Int,Int> errors.
+examples/e310_vaisdb_artifact_query_report.vais	native-supported	VaisDB artifact query workflow loads persisted List<Struct> document artifacts and composes reusable Result<Str,Int> reports with missing-store and empty-query error codes.
+examples/e311_result_call_argument_flow.vais	native-supported	Result<Str,Int> and Result<DeclaredStruct,Int> returning helpers can be passed directly as call arguments without manual local binding.
+examples/e312_result_struct_local_wrapper_flow.vais	native-supported	Result wrapper structs can copy nested struct payloads through locals and return them without losing fields.
+examples/e313_result_struct_str_match_flow.vais	native-supported	Result struct matches can recover Str fields from declared struct payloads and convert Err codes to strings.
+examples/e314_result_struct_str_concat_match_flow.vais	native-supported	Result struct matches can compose Str fields from declared struct payloads and convert Err codes to strings.
+examples/e315_result_struct_str_transform_match_flow.vais	native-supported	Result struct matches can normalize and transform Str fields from declared struct payloads and convert Err codes to strings.
+examples/e316_result_struct_str_transform_len_match_flow.vais	native-supported	Result struct matches can score normalized Str field lengths from declared struct payloads and recover Err codes.
+examples/e317_result_struct_payload_helper_call_score.vais	native-supported	Result struct matches can pass declared struct payloads to reusable scoring helpers and recover Err codes.
+examples/e318_result_struct_payload_helper_call_arithmetic.vais	native-supported	Result struct matches can compose reusable payload helper-call terms with declared struct fields and recover Err codes.
+examples/e319_result_struct_payload_field_helper_call_arithmetic.vais	native-supported	Result struct matches can pass declared struct string fields to reusable Int helpers and compose the result with payload fields.
+examples/e320_result_struct_payload_int_field_helper_call_arithmetic.vais	native-supported	Result struct matches can pass declared struct integer fields to reusable Int helpers and compose the result with payload fields.
+examples/e321_result_struct_payload_bool_match_condition.vais	native-supported	Result struct matches can return Bool conditions from declared struct payload helper terms and Err code comparisons.
+examples/e322_vaisdb_module_boundary/main.vais	native-supported	Imported VaisDB modules can share DocArtifact structs, Result helpers, List outputs, and Map-backed scoring helpers in direct/default runs.
+examples/e299_vaisdb_benchmark_report.vais	native-supported	Vais-authored benchmark report uses time_millis, document term counts, weighted scoring, and file-backed report persistence.
+examples/e300_vaisdb_benchmark_cli_report.vais	native-supported	Vais-authored benchmark CLI report runs the indexer through proc_capture, records elapsed time, and persists direct/default status metrics.
+tools/vaisdb_benchmark_report.vais	native-supported	Reusable Vais-authored benchmark report tool runs the indexer, parses report metrics, and writes a direct/default summary.
+examples/e151_line_comment_skip.vais	native-supported	Line comments after expressions are skipped while string-literal hash bytes remain intact.
+examples/e152_list_clear.vais	native-supported	List<Int> and List<Struct> clear reset length and allow caller-visible reuse.
+examples/e153_list_contains.vais	native-supported	List<Int>.contains checks local and parameter lists and returns Bool-like membership.
+examples/e157_list_int_index_count.vais	native-supported	List<Int>.index_of/count return first match index and duplicate count for local and parameter lists.
+examples/e158_list_remove_at.vais	native-supported	List<Int>/List<Str>.remove_at returns the removed element and shifts following elements for local and parameter lists.
+examples/e159_list_insert_at.vais	native-supported	List<Int>/List<Str>.insert_at shifts following elements right for local and parameter lists.
+examples/e160_list_extend.vais	native-supported	List<Int>/List<Str>.extend appends same-type named list sources for local and parameter lists.
+examples/e161_list_first.vais	native-supported	List<Int>/List<Str>.first returns the first element for local and parameter lists.
+examples/e162_list_struct_first.vais	native-supported	List<Struct>.first returns the first element copied into a struct local for local and parameter lists.
+examples/e163_list_struct_remove_at.vais	native-supported	List<Struct>.remove_at returns the removed struct and shifts following struct elements left.
+examples/e164_list_struct_insert_at.vais	native-supported	List<Struct>.insert_at shifts following struct elements right for local and parameter lists.
+examples/e165_list_struct_extend.vais	native-supported	List<Struct>.extend appends same-type named struct list sources for local and parameter lists.
+examples/e166_list_struct_for_each.vais	native-supported	List<Struct> for-each copies local and parameter list elements into struct loop variables.
+examples/e167_list_struct_field_write.vais	native-supported	List<Struct> indexed field assignment mutates local and parameter list element fields.
+examples/e168_list_index_assignment.vais	native-supported	Semicolon-free List<Int> indexed element assignment mutates local list elements.
+examples/e169_list_struct_element_assignment.vais	native-supported	List<Struct> indexed whole-element assignment copies struct literals, locals, and list elements.
+examples/e170_list_struct_element_return_call.vais	native-supported	List<Struct> indexed whole-element assignment accepts struct-returning helper calls.
+examples/e171_list_struct_push_return_call.vais	native-supported	List<Struct>.push accepts struct-returning helper calls for local and parameter lists.
+examples/e172_list_struct_insert_return_call.vais	native-supported	List<Struct>.insert_at accepts struct-returning helper calls for local and parameter lists.
+examples/e173_list_struct_push_struct_value.vais	native-supported	List<Struct>.push accepts struct local and parameter values for local and parameter lists.
+examples/e174_list_struct_push_insert_element_value.vais	native-supported	List<Struct>.push and insert_at accept same-type list element values for local and parameter lists.
+examples/e175_list_struct_push_insert_method_value.vais	native-supported	List<Struct>.push and insert_at accept same-type list method return values for local and parameter lists.
+examples/e176_list_struct_push_insert_first_last_value.vais	native-supported	List<Struct>.push and insert_at accept first/last method return values, including same-list insert materialization.
+examples/e177_list_struct_extend_return_call.vais	native-supported	List<Struct>.extend accepts same-type list-returning helper calls for local and parameter lists.
+examples/e178_list_scalar_str_extend_return_call.vais	native-supported	List<Int>/List<Str>.extend accepts same-type list-returning helper calls for local and parameter lists.
+examples/e179_list_extend_inline_literal_source.vais	native-supported	List<Int>/List<Str>.extend accepts inline list literal sources for local and parameter lists.
+examples/e180_list_struct_extend_inline_literal_source.vais	native-supported	List<Struct>.extend accepts inline struct list literal sources for local and parameter lists.
+examples/e181_list_struct_literal_assignment.vais	native-supported	List<Struct> accepts inline struct list literals for typed locals and local/parameter assignment.
+examples/e182_list_struct_method_field_chain.vais	native-supported	List<Struct> method results allow direct field chains for first/last/pop/remove_at on local and parameter lists.
+examples/e183_list_struct_multiline_literal.vais	native-supported	Multiline typed List<Struct> literals accept trailing commas and preserve the following statement in full/direct.
+examples/e184_list_struct_multiline_inline_arg.vais	native-supported	Multiline inline List<Struct> literal arguments accept trailing commas in full/direct.
+examples/e185_list_struct_multiline_inline_arg_statement.vais	native-supported	Multiline inline List<Struct> literal arguments work in standalone call statements in full/direct.
+examples/e186_list_struct_push_multiline_literal.vais	native-supported	List<Struct>.push accepts multiline struct literals with trailing commas in full/direct.
+examples/e187_list_struct_multiline_assignment_return.vais	native-supported	Multiline struct literals work in List<Struct> element assignment and struct returns in full/direct.
+examples/e188_struct_multiline_local_assignment_call.vais	native-supported	Multiline struct literals work in local initialization, local assignment, and call arguments in full/direct.
+examples/e189_list_struct_multiline_insert_extend.vais	native-supported	List<Struct>.insert_at and extend accept multiline struct literal sources in full/direct.
+examples/e190_direct_nested_struct_multiline.vais	native-supported	Single-field nested struct literals, reads, and writes work through full and direct flattening.
+examples/e191_list_nested_struct_field_chain.vais	native-supported	List<single-field nested struct> elements support nested field-chain reads in full and direct.
+examples/e192_list_nested_struct_field_chain_write.vais	native-supported	List<single-field nested struct> elements support nested field-chain writes in full and direct.
+examples/e193_list_nested_struct_method_field_chain.vais	native-supported	List<single-field nested struct> method results support nested field-chain reads in full and direct.
+examples/e194_struct_return_field_chain.vais	native-supported	Struct-returning helper results support top-level and single-field nested field-chain reads in full and direct.
+examples/e195_nested_struct_literal_return.vais	native-supported	Struct-returning helpers can return single-field nested struct literals directly in full and direct.
+examples/e196_multi_field_nested_struct.vais	native-supported	Scalar nested structs can contain multiple Int fields and support local literals, direct returns, and field-chain reads in full and direct.
+examples/e197_list_multi_field_nested_struct.vais	native-supported	List<Struct> elements can contain multi-field nested structs and support push, element copy, indexed nested reads/writes, parameter mutation, and method-result nested field chains in full and direct.
+examples/e154_list_str_contains.vais	native-supported	List<Str>.contains checks local and parameter lists with string equality.
+examples/e155_list_str_index_of.vais	native-supported	List<Str>.index_of returns first match index or -1 for local and parameter lists.
+examples/e156_list_str_count.vais	native-supported	List<Str>.count returns matching string count for local and parameter lists.
 examples/e72_identifier_scan.vais	native-supported	Identifier scan over Str with byte classification.
 examples/e74_map_basic.vais	native-supported	Local Map<Int,Int> insert/get/contains/len.
 examples/e83_parse_helpers.vais	native-supported	Named parse_uint/parse_int Str helpers.
@@ -108,6 +203,25 @@ examples/e117_map_return_assignment.vais	native-supported	Concrete Map-returning
 examples/e118_map_return_assignment_args.vais	native-supported	Concrete argument Map-returning call assignment copies.
 examples/e119_map_param_target_assignment.vais	native-supported	All concrete Map parameter-target assignment copies.
 examples/e120_enum_payload_wildcard.vais	native-supported	Payload enum match with wildcard catch-all.
+examples/e121_list_str_methods.vais	native-supported	Local List<Str> push plus string equality and chained len on index, last, and pop results.
+examples/e122_list_str_param.vais	native-supported	List<Str> helper parameter index, last, pop, len, and is_empty bindings.
+examples/e123_list_str_return.vais	native-supported	List<Str> helper return with string equality and chained len on index, last, and pop results.
+examples/e124_list_str_literal.vais	native-supported	Typed local List<Str> literal with index, last, pop, len, and is_empty bindings.
+examples/e125_list_str_assignment.vais	native-supported	List<Str> local assignment copy preserves source and copied string elements.
+examples/e126_list_str_literal_assignment.vais	native-supported	List<Str> literal assignment materializes string elements into an existing local.
+examples/e127_list_str_return_assignment.vais	native-supported	List<Str> return-call assignment copies into an existing local.
+examples/e128_list_str_param_target_assignment.vais	native-supported	List<Str> parameter-target assignment copies local/parameter source buffers.
+examples/e129_list_str_param_literal_assignment.vais	native-supported	List<Str> parameter-target literal assignment materializes string elements.
+examples/e130_list_str_param_return_assignment.vais	native-supported	List<Str> parameter-target return-call assignment copies into caller storage.
+examples/e131_list_str_inline_literal_arg.vais	native-supported	List<Str> inline literal arguments materialize string elements for helper parameters.
+examples/e132_map_str_str.vais	native-supported	Map<Str,Str> local string-key string-value operations and copy.
+examples/e133_map_str_str_param.vais	native-supported	Map<Str,Str> parameter mutation by reference.
+examples/e134_map_str_str_return.vais	native-supported	Map<Str,Str> return value initializes a local.
+examples/e135_map_str_str_get_opt.vais	native-supported	Map<Str,Str>.get_opt string payload match and fallback.
+examples/e136_map_entries.vais	native-supported	Concrete Map key_at/value_at entry reads for string and scalar maps.
+examples/e137_map_str_str_snapshot.vais	native-supported	Map<Str,Str> key/value entry snapshot writes and reads a host text file.
+examples/e138_map_str_str_snapshot_load.vais	native-supported	Map<Str,Str> text snapshot writes, reads, parses, and rebuilds a map.
+examples/e139_map_return_infer.vais	native-supported	Map-returning calls infer local Map types without explicit annotations.
 examples/fr1.vais	native-supported	Inclusive range for-loop summation smoke.
 examples/fr2.vais	native-supported	Collection for-each summation smoke.
 examples/t1.vais	native-supported	Simple typed helper smoke.
@@ -144,7 +258,99 @@ examples/e73_int_to_string.vais	native-supported	Str(Int) conversion with string
 examples/e15_list_recursion.vais	native-supported	Borrowed List<Int> recursive helper walks a collection.
 examples/e68_binary_search.vais	native-supported	Borrowed List<Int> binary search with computed indexes and early returns.
 examples/d5run.vais	native-supported	Public struct/function modifiers with a Str field and Int field access.
+examples/e198_struct_str_fields.vais	native-supported	Struct Str fields with equality, string helper calls, and direct .len chains.
+examples/e199_list_struct_str_fields.vais	native-supported	List<Struct> records with Str fields, for-each, index reads, and method-result .len chains.
+examples/e200_list_struct_str_field_write.vais	native-supported	List<Struct> records with Str field writes through local indexes and parameter helpers.
+examples/e201_list_struct_str_method_fields.vais	native-supported	List<Struct> records with Str field reads through pop/remove_at method results.
+examples/e202_proc_capture_result.vais	native-supported	proc_capture returns ProcessResult with exit code, stdout, and stderr fields.
+examples/e203_list_filter_result.vais	native-supported	List<Int>.filter inline closure returns a reusable List<Int> result.
+examples/e204_list_str_map.vais	native-supported	List<Str>.map inline closure returns a reusable normalized List<Str> result.
+examples/e205_list_str_filter.vais	native-supported	List<Str>.filter inline closure returns a reusable List<Str> result.
+examples/e206_list_str_filter_infer.vais	native-supported	List<Str>.filter infers a reusable List<Str> result from a known receiver.
+examples/e207_list_str_param_map_filter.vais	native-supported	List<Str> function parameters drive map/filter result type inference.
+examples/e208_list_str_map_concat.vais	native-supported	List<Str>.map accepts str_concat in a non-capturing closure body.
+examples/e209_list_str_closure_capture.vais	native-supported	List<Str>.filter/map closures capture known Str parameters and locals.
+examples/e263_list_str_filter_map_result_contexts.vais	native-supported	List<Str>.filter-map result lists can feed local, return, helper-call, extend, reassignment, and condition contexts directly.
+examples/e264_list_str_map_filter_result_contexts.vais	native-supported	List<Str>.map-filter result lists can feed local, return, helper-call, extend, reassignment, and condition contexts directly.
+examples/e265_list_str_map_filter_scalar_contexts.vais	native-supported	List<Str>.map-filter scalar len/contains/index_of/count results can feed local, return, helper-call, mutation, reassignment, and condition contexts directly.
+examples/e266_list_str_filter_map_scalar_contexts.vais	native-supported	List<Str>.filter-map scalar len/contains/index_of/count results can feed local, return, helper-call, mutation, reassignment, and condition contexts directly.
+examples/e267_list_str_pipeline_scalar_multi_expr.vais	native-supported	List<Str>.map-filter and filter-map scalar len/contains/index_of/count calls from the same family can appear multiple times in one expression.
+examples/e268_list_str_pipeline_scalar_mixed_expr.vais	native-supported	List<Str>.map-filter and filter-map scalar len/contains/index_of/count calls can mix inside one expression.
+examples/e269_list_str_pipeline_scalar_bool_infer.vais	native-supported	Composite Bool locals from List<Str> pipeline scalar contains/comparison expressions infer Bool and allow exact Bool reassignment.
+examples/e270_list_str_pipeline_scalar_reassign_arithmetic_tail.vais	native-supported	List<Str>.map-filter and filter-map scalar len/index_of/count calls can appear after existing arithmetic terms in reassignments.
+examples/e271_list_str_pipeline_scalar_bool_negation.vais	native-supported	Negated List<Str> pipeline scalar contains expressions work in Bool locals, reassignments, if, and while conditions.
+examples/e272_list_str_pipeline_scalar_bool_if_expr.vais	native-supported	Bool if-expressions built from List<Str> pipeline scalar conditions infer Bool and support direct reassignments.
+examples/e273_list_str_pipeline_scalar_bool_if_expr_call_return.vais	native-supported	Bool if-expressions built from List<Str> pipeline scalar conditions work in helper-call arguments and Bool returns.
+examples/e274_list_str_pipeline_scalar_bool_if_expr_nested_call_reassign.vais	native-supported	Bool if-expressions built from List<Str> pipeline scalar conditions work inside helper-call arguments nested in reassignments.
+examples/e275_list_str_pipeline_scalar_int_if_expr.vais	native-supported	Int if-expressions built from List<Str> pipeline scalar conditions work in locals, reassignments, helper-call arguments, and returns.
+examples/e276_scalar_value_if_expr_embedded_call_args.vais	native-supported	Scalar value if-expressions work in locals, reassignments, helper-call arguments, and returns without pipeline-specific lowering.
+examples/e277_scalar_bool_value_if_expr.vais	native-supported	Scalar Bool value if-expressions work in locals, reassignments, helper-call arguments, and returns without pipeline-specific lowering.
+examples/e278_scalar_str_value_if_expr.vais	native-supported	Scalar Str value if-expressions work in locals, reassignments, helper-call arguments, and Str returns without pipeline-specific lowering.
+examples/e279_scalar_char_value_if_expr.vais	native-supported	Scalar Char value if-expressions work in locals, reassignments, helper-call arguments, and Char returns without pipeline-specific lowering.
+examples/e280_map_str_str_get_opt_match_contexts.vais	native-supported	Map<Str,Str>.get_opt string payload match expressions work in returns, reassignments, helper-call arguments, and embedded Int returns.
+examples/e281_map_str_str_return_infer_get_opt_match_contexts.vais	native-supported	Map<Str,Str> return-inferred locals feed get_opt string payload match expressions in returns, reassignments, and helper-call arguments.
+examples/e282_map_str_str_get_opt_match_str_transforms.vais	native-supported	Map<Str,Str>.get_opt string payload match expressions allow str_concat, str_trim, and str_lower transforms in Str contexts.
+examples/e283_str_len_reassigned_match_transform.vais	native-supported	Str.len reads the current runtime pointer after reassignment from Map<Str,Str>.get_opt match transforms.
+examples/e284_map_str_str_get_opt_match_transform_len.vais	native-supported	Map<Str,Str>.get_opt match arms can take .len() after str_trim and str_lower transforms.
+examples/e285_map_str_str_get_opt_str_payload_stability.vais	native-supported	Map<Str,Str>.get_opt string payload matches do not depend on pointer tag bits.
+examples/e286_map_str_str_get_opt_condition_chains.vais	native-supported	Map<Str,Str>.get_opt string payload matches work in while and else-if conditions with stable per-iteration lowering.
+examples/e210_list_int_closure_capture.vais	native-supported	List<Int>.filter/map/filter-sum closures capture known Int parameters and locals.
+examples/e211_list_filter_sum_assignment.vais	native-supported	List<Int>.filter-sum results can be stored in reusable Int locals.
+examples/e212_list_filter_len_count.vais	native-supported	List<Int>/List<Str>.filter-len counts can be stored or returned as Int values.
+examples/e213_list_struct_filter_result.vais	native-supported	List<Struct>.filter result lists can be reused and returned for record predicates.
+examples/e214_list_struct_map_projection.vais	native-supported	List<Struct>.map field projection produces reusable List<Int> and List<Str> results.
+examples/e245_list_struct_map_projection_direct_contexts.vais	native-supported	List<Struct>.map projected fields can feed direct return, helper-call, extend, and reassignment contexts.
+examples/e246_list_struct_map_projection_call_arg_conditions.vais	native-supported	List<Struct>.map projected fields can feed helper-call arguments in if/while/else-if conditions.
+examples/e247_list_struct_map_projection_aggregates.vais	native-supported	List<Struct>.map projected Int fields can aggregate directly with sum, max, and min.
+examples/e248_list_struct_map_projection_aggregate_conditions.vais	native-supported	List<Struct>.map projected Int field aggregates can drive if, while, and else-if conditions.
+examples/e249_list_struct_map_projection_aggregate_call_args.vais	native-supported	List<Struct>.map projected Int field aggregates can feed helper-call arguments directly.
+examples/e250_list_struct_map_projection_aggregate_arithmetic_tail.vais	native-supported	List<Struct>.map projected Int field aggregates can keep simple arithmetic tails.
+examples/e251_list_struct_map_projection_aggregate_call_arg_arithmetic_tail.vais	native-supported	List<Struct>.map projected Int field aggregate helper-call arguments can keep simple arithmetic tails.
+examples/e252_list_struct_map_projection_aggregate_mutation_args.vais	native-supported	List<Struct>.map projected Int field aggregates can feed List<Int> push and insert_at arguments directly.
+examples/e253_list_struct_map_projection_aggregate_reassign.vais	native-supported	List<Struct>.map projected Int field aggregate expressions can reassign known Int variables.
+examples/e254_list_struct_map_projection_aggregate_embedded_expr.vais	native-supported	List<Struct>.map projected Int field aggregates can appear inside broader Int expressions.
+examples/e255_list_struct_map_projection_aggregate_embedded_conditions.vais	native-supported	List<Struct>.map projected Int field aggregates can appear inside broader condition expressions.
+examples/e215_list_struct_filter_len_count.vais	native-supported	List<Struct>.filter-len counts can be stored or returned as Int values for record predicates.
+examples/e216_list_struct_filter_map_sum.vais	native-supported	List<Struct>.filter-map-sum aggregates record Int fields without an intermediate score list.
+examples/e217_list_int_max.vais	native-supported	List<Int>.max returns the largest Int from local and parameter lists and traps on empty lists.
+examples/e218_list_int_min.vais	native-supported	List<Int>.min returns the smallest Int from local and parameter lists and traps on empty lists.
+examples/e219_list_filter_max_min.vais	native-supported	List<Int>.filter-max/min returns filtered extrema for assignments and returns without an intermediate list.
+examples/e220_list_struct_filter_map_max_min.vais	native-supported	List<Struct>.filter-map-max/min ranks projected Int fields without an intermediate list.
+examples/e256_list_struct_filter_map_aggregate_call_args.vais	native-supported	List<Struct>.filter-map Int aggregates can feed helper-call arguments directly.
+examples/e257_list_struct_filter_map_aggregate_call_arg_conditions.vais	native-supported	List<Struct>.filter-map Int aggregate helper-call arguments can drive if, while, and else-if conditions.
+examples/e258_list_struct_filter_map_aggregate_embedded_expr.vais	native-supported	List<Struct>.filter-map Int aggregates can appear inside broader Int expressions.
+examples/e259_list_struct_filter_map_aggregate_embedded_conditions.vais	native-supported	List<Struct>.filter-map Int aggregates can appear inside broader condition expressions.
+examples/e239_list_struct_filter_map_result_chain.vais	native-supported	List<Struct>.filter-map projected fields can produce reusable scalar result lists directly.
+examples/e240_list_struct_filter_map_return_chain.vais	native-supported	List<Struct>.filter-map projected fields can return reusable scalar result lists directly.
+examples/e241_list_struct_filter_map_call_arg.vais	native-supported	List<Struct>.filter-map projected fields can feed scalar list helper arguments directly.
+examples/e242_list_struct_filter_map_call_arg_conditions.vais	native-supported	List<Struct>.filter-map projected fields can feed scalar list helper arguments in conditions.
+examples/e243_list_struct_filter_map_extend_arg.vais	native-supported	List<Struct>.filter-map projected fields can feed scalar list extend arguments directly.
+examples/e244_list_struct_filter_map_reassign.vais	native-supported	List<Struct>.filter-map projected fields can reassign existing scalar list variables directly.
+examples/e221_list_filter_map_max_min.vais	native-supported	List<Int>.filter-map-max/min ranks transformed scalar scores without an intermediate list.
+examples/e222_list_filter_map_sum.vais	native-supported	List<Int>.filter-map-sum aggregates transformed scalar scores without an intermediate list.
+examples/e260_list_filter_map_aggregate_embedded_expr.vais	native-supported	List<Int>.filter-map Int aggregates can appear inside broader Int expressions.
+examples/e261_list_filter_map_aggregate_embedded_conditions.vais	native-supported	List<Int>.filter-map Int aggregates can appear inside broader condition expressions.
+examples/e262_list_map_aggregate_embedded_expr_conditions.vais	native-supported	List<Int>.map Int aggregates can appear inside broader expressions and conditions.
+examples/e223_list_struct_filter_first_last_field.vais	native-supported	List<Struct>.filter-first/last field projection selects record fields without an intermediate list.
+examples/e224_list_struct_filter_first_last_field_len.vais	native-supported	List<Struct>.filter-first/last string field length projection reads record fields without an intermediate list.
+examples/e225_list_struct_filter_first_last_value.vais	native-supported	List<Struct>.filter-first/last selects matched records directly without an intermediate list.
+examples/e226_list_struct_filter_first_last_multiline_value.vais	native-supported	List<Struct>.filter-first/last selects matched records declared with multiline struct syntax.
+examples/e227_list_struct_filter_first_last_push_insert.vais	native-supported	List<Struct>.filter-first/last record selections can feed push/insert_at directly.
+examples/e228_list_struct_filter_first_last_field_push_insert.vais	native-supported	List<Struct>.filter-first/last field selections can feed scalar push/insert_at directly.
+examples/e229_list_struct_filter_first_last_field_infer.vais	native-supported	List<Struct>.filter-first/last field selections infer Int/Str local types.
+examples/e230_list_struct_filter_first_last_field_call_arg.vais	native-supported	List<Struct>.filter-first/last field selections can feed helper-call arguments directly.
+examples/e231_list_struct_filter_first_last_value_call_arg.vais	native-supported	List<Struct>.filter-first/last whole-record selections can feed helper-call arguments directly.
+examples/e232_list_struct_filter_first_last_late_helper_call_arg.vais	native-supported	List<Struct>.filter-first/last helper-call argument lowering can use helper signatures declared later.
+examples/e233_list_struct_filter_first_last_call_arg_expr_tail.vais	native-supported	List<Struct>.filter-first/last helper-call argument lowering preserves simple expression tails.
+examples/e234_list_struct_filter_first_last_call_arg_if_condition.vais	native-supported	List<Struct>.filter-first/last helper-call argument lowering supports if-condition expressions.
+examples/e235_list_struct_filter_first_last_call_arg_while_condition.vais	native-supported	List<Struct>.filter-first/last helper-call argument lowering supports while-condition expressions.
+examples/e236_list_struct_filter_first_last_call_arg_else_if_condition.vais	native-supported	List<Struct>.filter-first/last helper-call argument lowering supports else-if condition expressions.
+examples/e237_list_struct_filter_first_last_call_arg_else_if_chain.vais	native-supported	List<Struct>.filter-first/last helper-call argument lowering supports chained else-if condition expressions.
+examples/e238_list_struct_filter_first_last_call_arg_else_if_chain_return.vais	native-supported	List<Struct>.filter-first/last helper-call argument lowering supports all-return chained else-if expressions.
 examples/d6run.vais	native-supported	List<Int>.filter inline closure followed by sum lowered to a guarded for-loop.
 examples/module_basic/main.vais	native-supported	Local dotted import resolves a sibling module.
 examples/package_basic/src/main.vais	native-supported	vais.toml source-root package import resolves under src.
 examples/dependency_basic/app/src/main.vais	native-supported	vais.toml dependency import resolves through a local package path.
+examples/e323_cli_package/src/main.vais	native-supported	Package CLI example keeps the file-entry release subset aligned with package-directory execution.
+examples/e326_cli_binary_target/src/main.vais	native-supported	Package binary target example keeps optional manifest binary metadata aligned with file-entry execution.
+examples/e328_cli_package_assets/src/main.vais	native-supported	Package assets example keeps optional manifest assets metadata aligned with file-entry execution.

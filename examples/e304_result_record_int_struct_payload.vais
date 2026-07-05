@@ -1,0 +1,35 @@
+# expect: 42
+# Result<Record,Int> declared struct payload forwarding and field recovery.
+
+struct Record { title_len: Int, body_terms: Int, score: Int }
+
+fn build_record(title_len: Int, body_terms: Int, score: Int) -> Result<Record, Int> {
+    if title_len < 1 { return Err(10) }
+    if body_terms < 1 { return Err(11) }
+    let record = Record { title_len: title_len, body_terms: body_terms, score: score }
+    return Ok(record)
+}
+
+fn record_score(flow: Result<Record, Int>, fallback: Int) -> Int {
+    let value = match flow { Ok(record) => record.title_len + record.body_terms + record.score, Err(code) => fallback + code }
+    return value
+}
+
+fn choose_record(left: Result<Record, Int>, right: Result<Record, Int>) -> Int {
+    let left_score = record_score(left, 0)
+    let right_score = record_score(right, 0)
+    if left_score > right_score { return left_score }
+    return right_score
+}
+
+fn main() -> Int {
+    let ok = build_record(7, 15, 9)
+    let missing = build_record(0, 5, 3)
+    let ok_score = record_score(ok, 0)
+    let missing_score = record_score(missing, 0)
+    let chosen = choose_record(ok, missing)
+    if ok_score != 31 { return 1 }
+    if missing_score != 10 { return 2 }
+    if chosen != 31 { return 3 }
+    return ok_score + missing_score + 1
+}

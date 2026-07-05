@@ -1,0 +1,27 @@
+# expect: 42
+# Bool if-expressions built from List<Str> pipeline scalar conditions work inside helper-call arguments nested in reassignments.
+
+fn bool_score(flag: Bool, yes: Int, no: Int) -> Int {
+    if flag { return yes }
+    return no
+}
+
+fn has_ai(words: List<Str>, needle: Str) -> Bool {
+    return if words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("ai") then true else false
+}
+
+fn score(words: List<Str>, needle: Str) -> Int {
+    let mut total = bool_score(if words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("vais") then true else false, 10, 0)
+    total = total + bool_score(if words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("missing") then true else false, 0, 10)
+    total = total + bool_score(if has_ai(words, needle) and words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("ai") then true else false, 10, 0)
+    return total + 12
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  Vais")
+    words.push("AI")
+    words.push("db")
+    words.push("ai  ")
+    return score(words, "ai")
+}

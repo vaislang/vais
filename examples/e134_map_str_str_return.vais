@@ -1,0 +1,26 @@
+# expect: 42
+
+fn make_docs() -> Map<Str,Str> {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "VaisDB")
+    docs.insert("body", "cache")
+    return docs
+}
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = make_docs()
+    let copy: Map<Str,Str> = {}
+    copy = docs
+    docs.remove("body")
+
+    if docs.contains("body") {
+        return 1
+    }
+    if copy.get("title", "") != "VaisDB" {
+        return 2
+    }
+    if copy.get("body", "") != "cache" {
+        return 3
+    }
+    return copy.len() * 20 + docs.len() + 1
+}

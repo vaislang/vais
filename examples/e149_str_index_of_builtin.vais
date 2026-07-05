@@ -1,0 +1,17 @@
+# expect: 42
+
+fn main() -> Int {
+    let text = "selfhost compiler"
+    let a = str_index_of(text, "host")
+    let b = str_index_of("xxxt", "t")
+    let empty = str_index_of("abc", "")
+    let miss = str_index_of("abc", "z")
+
+    if a != 4 { return 1 }
+    if b != 3 { return 2 }
+    if empty != 0 { return 3 }
+    if miss != 0 - 1 { return 4 }
+    if str_index_of(str_lower("VaisDB"), "db") != 4 { return 5 }
+
+    return a * 10 + b + empty + miss
+}

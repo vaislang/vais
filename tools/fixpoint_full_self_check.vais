@@ -89,6 +89,14 @@ fn file_byte_count(path: Str) -> Int {
     return parse_first_uint(proc_capture_stdout(argv))
 }
 
+fn host_is_darwin() -> Int {
+    let argv: List<Str> = []
+    argv.push("uname")
+    argv.push("-s")
+    if str_contains(proc_capture_stdout(argv), "Darwin") == 1 { return 1 }
+    return 0
+}
+
 fn files_equal(left: Str, right: Str) -> Int {
     let argv: List<Str> = []
     argv.push("cmp")
@@ -154,7 +162,7 @@ fn trust_copy_source(tmp: Str, label: Str, source: Str) -> Str {
     return trusted
 }
 
-fn build_trusted(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) -> Int {
+fn build_trusted_with_engine(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str, engine: Str) -> Int {
     let trusted = trust_copy_source(tmp, label, source)
     if trusted.len() == 0 { return 1 }
     let trust_root = path_dirname(path_dirname(path_dirname(trusted)))
@@ -168,7 +176,15 @@ fn build_trusted(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) ->
     argv.push(trusted)
     argv.push("-o")
     argv.push(out_bin)
+    if engine.len() > 0 {
+        argv.push("--engine")
+        argv.push(engine)
+    }
     return proc_capture_to(argv, out_path, err_path)
+}
+
+fn build_trusted(vaisc: Str, tmp: Str, label: Str, source: Str, out_bin: Str) -> Int {
+    return build_trusted_with_engine(vaisc, tmp, label, source, out_bin, "")
 }
 
 fn run_embed(helper: Str, harness: Str, source: Str, out: Str, tmp: Str, label: Str) -> Int {
@@ -206,6 +222,7 @@ fn compile_ir(tmp: Str, label: Str, ir_path: Str, bin: Str, message: Str) -> Int
     let argv: List<Str> = []
     argv.push("clang")
     argv.push("-Wno-override-module")
+    if host_is_darwin() == 1 { argv.push("-Wl,-stack_size,0x4000000") }
     argv.push("-o")
     argv.push(bin)
     argv.push(ir_path)
@@ -249,7 +266,7 @@ fn prepare_probe(vaisc: Str, helper: Str, harness: Str, source: Str, label: Str,
 
     let compiler_bin = path_join(tmp, "c")
     print(str_concat("  NOTE ", str_concat(label, ": building embedded compiler")))
-    if build_trusted(vaisc, tmp, case_name, source_path, compiler_bin) != 0 {
+    if build_trusted_with_engine(vaisc, tmp, case_name, source_path, compiler_bin, "direct") != 0 {
         print(str_concat("  FAIL ", str_concat(label, ": compiler build")))
         print_log_if_exists(path_join(tmp, str_concat(case_name, ".build.err")))
         return 1

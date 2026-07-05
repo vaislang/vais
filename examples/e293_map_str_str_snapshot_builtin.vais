@@ -1,0 +1,37 @@
+# expect: 42
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "VaisDB")
+    docs.insert("body", "AI cache")
+    docs.insert("model", "local")
+    docs.insert("empty", "")
+    docs.insert("expr", "a=b=c")
+
+    let snapshot = map_str_str_snapshot(docs)
+    let loaded: Map<Str,Str> = {}
+    loaded.insert("stale", "drop")
+    let lf = str_byte(10)
+    let cr = str_byte(13)
+    let crlf = str_concat(cr, lf)
+    let extra = str_concat(str_concat("ignored", lf), str_concat("win=ok", crlf))
+    let count = map_str_str_load_snapshot(str_concat(snapshot, extra), loaded)
+
+    if count != 6 { return 2 }
+    if loaded.len() != 6 { return 3 }
+    if loaded.get("stale", "gone") != "gone" { return 4 }
+    if loaded.get("title", "") != "VaisDB" { return 5 }
+    if loaded.get("body", "") != "AI cache" { return 6 }
+    if loaded.get("model", "") != "local" { return 7 }
+    if loaded.get("empty", "fallback") != "" { return 8 }
+    if loaded.get("expr", "") != "a=b=c" { return 9 }
+    if loaded.get("win", "") != "ok" { return 10 }
+
+    let roundtrip = map_str_str_snapshot(loaded)
+    let again: Map<Str,Str> = {}
+    if map_str_str_load_snapshot(roundtrip, again) != 6 { return 11 }
+    if again.get("expr", "") != "a=b=c" { return 12 }
+    if again.get("win", "") != "ok" { return 13 }
+
+    return count * 7
+}

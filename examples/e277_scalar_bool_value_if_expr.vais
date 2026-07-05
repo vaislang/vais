@@ -1,0 +1,19 @@
+# expect: 42
+# Scalar Bool value if-expressions work in locals, reassignments, helper-call arguments, and returns without pipeline-specific lowering.
+
+fn bool_score(flag: Bool, yes: Int, no: Int) -> Int {
+    if flag { return yes }
+    return no
+}
+
+fn decide(a: Int, b: Int) -> Bool {
+    let mut high: Bool = if a > b then true else false
+    high = if a == b then false else high
+    let checked = if bool_score(if high then true else false, 1, 0) == 1 then true else false
+    return if checked and high then true else false
+}
+
+fn main() -> Int {
+    if decide(5, 2) { return 42 }
+    return 0
+}

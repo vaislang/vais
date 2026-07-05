@@ -1,0 +1,30 @@
+# expect: 42
+# Map<Str,Str> return-inferred locals also feed get_opt string match expressions in return, reassignment, and helper-call contexts.
+
+fn make_docs() -> Map<Str,Str> {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "VaisDB")
+    docs.insert("body", "cache")
+    return docs
+}
+
+fn score(text: Str) -> Int {
+    if text == "VaisDB" { return 40 }
+    return 0
+}
+
+fn pick_body() -> Str {
+    let docs = make_docs()
+    return match docs.get_opt("body") { Some(v) => v, None => "missing" }
+}
+
+fn main() -> Int {
+    let docs = make_docs()
+    let mut fallback: Str = "bad"
+    fallback = match docs.get_opt("missing") { Some(v) => v, None => "fallback" }
+    let from_call = score(match docs.get_opt("title") { Some(v) => v, None => "" })
+    let body = pick_body()
+    if fallback != "fallback" { return 1 }
+    if body != "cache" { return 2 }
+    return from_call + body.len() - 3
+}

@@ -1,0 +1,17 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn score(xs: List<Box>) -> Int {
+    return xs[0].value + xs[1].tag + xs.len()
+}
+
+fn main() -> Int {
+    return score([
+        Box { value: 30, tag: 1 },
+        Box { value: 5, tag: 10 },
+    ])
+}

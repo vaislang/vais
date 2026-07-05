@@ -1,0 +1,29 @@
+# expect: 42
+# List<Struct>.filter(...) can return reusable record lists with field predicates.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn high_matches(docs: List<Doc>, needle: Str, min: Int) -> List<Doc> {
+    let selected = docs.filter(|doc| str_contains(doc.body, needle) == 1)
+    let high: List<Doc> = selected.filter(|doc| doc.score > min)
+    return high
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+
+    let matches = high_matches(docs, "tokens", 10)
+    let cache_docs = docs.filter(|doc| str_contains(doc.body, "cache") == 1)
+    if matches.len() != 2 { return 1 }
+    if cache_docs.len() != 2 { return 2 }
+    if matches[0].title != "beta" { return 3 }
+    if matches[1].title != "gamma" { return 4 }
+    return matches[0].score + matches[1].score + matches.len() + cache_docs.len()
+}

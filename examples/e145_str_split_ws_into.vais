@@ -1,0 +1,32 @@
+# expect: 42
+
+fn score_tokens(words: List<Str>) -> Int {
+    let mut score = 0
+    for word in words {
+        let token = str_lower(word)
+        if str_contains(token, "ai") == 1 {
+            score = score + token.len()
+        } else if str_contains(token, "cache") == 1 {
+            score = score + 10
+        }
+    }
+    return score
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    let n = str_split_ws_into("  VaisDB   AI cache Vector  ", words)
+    if n != 4 {
+        return 1
+    }
+    if words.len() != 4 {
+        return 2
+    }
+    if str_lower(words[0]) != "vaisdb" {
+        return 3
+    }
+    if str_lower(words.last()) != "vector" {
+        return 4
+    }
+    return score_tokens(words) + n * 6
+}

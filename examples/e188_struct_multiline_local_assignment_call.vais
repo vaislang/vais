@@ -1,0 +1,29 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn score(box: Box) -> Int {
+    return box.value + box.tag
+}
+
+fn main() -> Int {
+    let a = Box {
+        value: 10,
+        tag: 5,
+    }
+    let b: Box = Box {
+        value: 20,
+        tag: 3,
+    }
+    b = Box {
+        value: 7,
+        tag: 4,
+    }
+    return score(a) + score(b) + score(Box {
+        value: 12,
+        tag: 4,
+    })
+}

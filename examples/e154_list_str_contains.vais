@@ -1,0 +1,23 @@
+# expect: 42
+
+fn score_word(words: List<Str>, value: Str) -> Int {
+    if words.contains(value) { return 40 }
+    return 0
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("vaisdb")
+    words.push("cache")
+    words.push("vector")
+
+    let found: Bool = words.contains("cache")
+    if not found { return 1 }
+    if words.contains("missing") { return 2 }
+    if score_word(words, "vector") != 40 { return 3 }
+
+    words.clear()
+    if words.contains("cache") { return 4 }
+    words.push(str_lower("AI"))
+    return score_word(words, "ai") + words.contains("ai") + words.contains("cache") + 1
+}

@@ -23,12 +23,22 @@ Requirement for the public compiler command: `clang`.
 ```bash
 scripts/vaisc doctor
 scripts/vaisc run examples/c4.vais
+scripts/vaisc run examples/e323_cli_package
+scripts/vaisc package examples/e323_cli_package -o /tmp/e323-dist
+scripts/vaisc package examples/e326_cli_binary_target -o /tmp/e326-dist
+scripts/vaisc package examples/e326_cli_binary_target -o /tmp/e326-dist --archive
+scripts/vaisc package examples/e328_cli_package_assets -o /tmp/e328-dist --archive
 scripts/vaisc emit-ir examples/c4.vais -o /tmp/c4.ll
 scripts/vaisc build examples/c4.vais -o /tmp/c4
 scripts/vais-check examples/c4.vais
 ```
 
-The main command accepts `.vais` files only.
+The main command accepts `.vais` entry files and manifest-backed package
+directories, and can package a manifest-backed directory as
+`dist/bin/<package-name>` plus `dist/vais.toml`. Add `--archive` to also
+produce a redistributable `<binary-or-name>-<version>.tar.gz` payload. If the
+manifest includes `assets = "assets"`, that directory is copied to
+`dist/assets` and included as `assets/` in the archive payload.
 
 ## Install
 
@@ -75,6 +85,7 @@ to the matching GitHub Release. The release checklist is
 | [std/PRELUDE.md](std/PRELUDE.md) | v1-candidate prelude API reference |
 | [docs/design/MODULES.md](docs/design/MODULES.md) | Current module/package/import model |
 | [examples/README.md](examples/README.md) | Value-checked example corpus |
+| [docs/design/VAISDB_DX_BASELINE.md](docs/design/VAISDB_DX_BASELINE.md) | Reproducible document/VaisDB workflow, diagnostics, formatting direction, and benchmark baseline |
 | [compiler/self/SELF_HOST.md](compiler/self/SELF_HOST.md) | Self-host compiler status |
 | [website/DEPLOYMENT.md](website/DEPLOYMENT.md) | Official site source and deployment notes |
 
@@ -88,6 +99,7 @@ scripts/vaisc           native public compiler command
 scripts/vais-check      Vais-built public checker command
 scripts/install*.sh     standalone compiler/checker install/uninstall helpers
 scripts/package*.sh     standalone release archive helper
+scripts/bench*.sh       local developer benchmark helpers
 scripts/test*.sh        compiler and value-correctness gates
 std/PRELUDE.md          prelude API status
 tools/                  native driver source, Vais-authored internal tools, parity manifest
@@ -109,6 +121,7 @@ bash scripts/test-vaisc-direct.sh
 bash scripts/test-vaisc-errors.sh
 bash scripts/test-vaisc-parity.sh
 bash scripts/test-vaisc-host.sh
+bash scripts/test-vaisdb-workflow.sh
 bash scripts/test.sh
 
 bash scripts/test-fixpoint-full-self.sh
@@ -119,3 +132,10 @@ bash scripts/test-release-gates.sh
 
 The public language and compiler claims in this repository are limited to what
 these gates protect.
+
+For the current document-indexing workflow baseline:
+
+```bash
+bash scripts/test-vaisdb-workflow.sh
+bash scripts/bench-vaisdb-indexer.sh
+```

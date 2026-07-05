@@ -1,0 +1,24 @@
+# expect: 42
+# Scalar Char value if-expressions work in locals, reassignments, helper-call arguments, and Char returns.
+
+fn score(value: Char) -> Int {
+    if value == 'V' { return 42 }
+    return 0
+}
+
+fn choose(flag: Bool, yes: Char, no: Char) -> Char {
+    return if flag then yes else no
+}
+
+fn run(a: Int, b: Int) -> Int {
+    let good: Char = 'V'
+    let bad: Char = 'X'
+    let mut mark: Char = if a > b then good else bad
+    mark = if mark == 'V' then mark else bad
+    let picked = choose(if mark == 'V' then true else false, if a > b then mark else bad, bad)
+    return score(if picked == 'V' then picked else bad)
+}
+
+fn main() -> Int {
+    return run(5, 2)
+}

@@ -1,0 +1,54 @@
+# expect: 42
+
+fn text_at(src: Str, i: Int, word: Str) -> Int {
+    if i < 0 { return 0 }
+    if i + word.len() > src.len() { return 0 }
+    let mut k = 0
+    while k < word.len() {
+        if src[i + k] != word[k] { return 0 }
+        k = k + 1
+    }
+    return 1
+}
+
+fn str_contains(src: Str, word: Str) -> Int {
+    if word.len() == 0 { return 1 }
+    let mut i = 0
+    while i + word.len() <= src.len() {
+        if text_at(src, i, word) == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+fn snapshot(docs: Map<Str,Str>) -> Str {
+    let out = str_builder_new()
+    let mut i = 0
+    while i < docs.len() {
+        str_builder_append(out, docs.key_at(i))
+        str_builder_push(out, 61)
+        str_builder_append(out, docs.value_at(i))
+        str_builder_push(out, 10)
+        i = i + 1
+    }
+    return str_builder_finish(out)
+}
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "VaisDB")
+    docs.insert("body", "cache")
+    docs.insert("model", "local")
+
+    let text = snapshot(docs)
+    let path = path_join(fs_temp_dir(), "vais-e137-map-str-str-snapshot.txt")
+    if fs_write_text(path, text) != 0 { return 1 }
+
+    let loaded = fs_read_text(path)
+    if loaded != text { return 2 }
+    if loaded.len() != 36 { return 3 }
+    if str_contains(loaded, "title=VaisDB") != 1 { return 4 }
+    if str_contains(loaded, "body=cache") != 1 { return 5 }
+    if str_contains(loaded, "model=local") != 1 { return 6 }
+    return 42
+}

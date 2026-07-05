@@ -72,6 +72,65 @@ fn write_smoke_source(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_bad_package_name_package(dir: Str) -> Int {
+    let src_dir = path_join(dir, "src")
+    if fs_mkdirs(src_dir) != 0 { return 1 }
+
+    let manifest = str_builder_new()
+    append_line(manifest, "name = \"bad/name\"")
+    append_line(manifest, "version = \"0.1.0\"")
+    append_line(manifest, "source = \"src\"")
+    if fs_write_text(path_join(dir, "vais.toml"), str_builder_finish(manifest)) != 0 {
+        return 1
+    }
+
+    let main = str_builder_new()
+    append_line(main, "fn main() -> Int {")
+    append_line(main, "    return 42")
+    append_line(main, "}")
+    return fs_write_text(path_join(src_dir, "main.vais"), str_builder_finish(main))
+}
+
+fn write_bad_package_binary_package(dir: Str) -> Int {
+    let src_dir = path_join(dir, "src")
+    if fs_mkdirs(src_dir) != 0 { return 1 }
+
+    let manifest = str_builder_new()
+    append_line(manifest, "name = \"safe-package\"")
+    append_line(manifest, "version = \"0.1.0\"")
+    append_line(manifest, "source = \"src\"")
+    append_line(manifest, "binary = \"bad/name\"")
+    if fs_write_text(path_join(dir, "vais.toml"), str_builder_finish(manifest)) != 0 {
+        return 1
+    }
+
+    let main = str_builder_new()
+    append_line(main, "fn main() -> Int {")
+    append_line(main, "    return 42")
+    append_line(main, "}")
+    return fs_write_text(path_join(src_dir, "main.vais"), str_builder_finish(main))
+}
+
+fn write_bad_package_version_package(dir: Str) -> Int {
+    let src_dir = path_join(dir, "src")
+    if fs_mkdirs(src_dir) != 0 { return 1 }
+
+    let manifest = str_builder_new()
+    append_line(manifest, "name = \"safe-package\"")
+    append_line(manifest, "version = \"bad/version\"")
+    append_line(manifest, "source = \"src\"")
+    append_line(manifest, "binary = \"safe-bin\"")
+    if fs_write_text(path_join(dir, "vais.toml"), str_builder_finish(manifest)) != 0 {
+        return 1
+    }
+
+    let main = str_builder_new()
+    append_line(main, "fn main() -> Int {")
+    append_line(main, "    return 42")
+    append_line(main, "}")
+    return fs_write_text(path_join(src_dir, "main.vais"), str_builder_finish(main))
+}
+
 fn quoted_after(text: Str, marker: Str) -> Str {
     let mut i = 0
     while i + marker.len() <= text.len() {
@@ -130,6 +189,17 @@ fn run5(a: Str, b: Str, c: Str, d: Str, e: Str) -> Int {
     argv.push(c)
     argv.push(d)
     argv.push(e)
+    return proc_run(argv)
+}
+
+fn run6(a: Str, b: Str, c: Str, d: Str, e: Str, f: Str) -> Int {
+    let argv: List<Str> = []
+    argv.push(a)
+    argv.push(b)
+    argv.push(c)
+    argv.push(d)
+    argv.push(e)
+    argv.push(f)
     return proc_run(argv)
 }
 
@@ -233,6 +303,200 @@ fn main() -> Int {
     } else {
         print(str_concat("  FAIL native run got=", str_concat(uint_to_str(run_code), " want=42")))
         fail = fail + 1
+    }
+
+    let package_dir = path_join(path_join(root, "examples"), "e323_cli_package")
+    let package_bin = path_join(tmp, "package_bin")
+    let package_ir = path_join(tmp, "package.ll")
+    if run7(native, "build", package_dir, "-o", package_bin, "--ir-out", package_ir) == 0 {
+        let got_package = run1(package_bin)
+        if got_package == 42 {
+            print("  PASS native package-directory build binary runs (=42)")
+        } else {
+            print(str_concat("  FAIL native package-directory build got=", str_concat(uint_to_str(got_package), " want=42")))
+            fail = fail + 1
+        }
+    } else {
+        print("  FAIL native package-directory build")
+        fail = fail + 1
+    }
+
+    let package_run_code = run3(native, "run", package_dir)
+    if package_run_code == 42 {
+        print("  PASS native package-directory run exits 42")
+    } else {
+        print(str_concat("  FAIL native package-directory run got=", str_concat(uint_to_str(package_run_code), " want=42")))
+        fail = fail + 1
+    }
+
+    let package_dist = path_join(tmp, "package-dist")
+    let package_dist_bin = path_join(path_join(package_dist, "bin"), "e323_cli_package")
+    if run5(native, "package", package_dir, "-o", package_dist) == 0 {
+        let got_packaged = run1(package_dist_bin)
+        let got_packaged_args = run3(package_dist_bin, "vaisdb", "cache")
+        if got_packaged == 42 and got_packaged_args == 42 and fs_exists(path_join(package_dist, "vais.toml")) == 1 {
+            print("  PASS native package output binary and argv run (=42)")
+        } else {
+            print(str_concat("  FAIL native package output got=", str_concat(uint_to_str(got_packaged), " want=42")))
+            fail = fail + 1
+        }
+    } else {
+        print("  FAIL native package output")
+        fail = fail + 1
+    }
+
+    let package_dist_direct = path_join(tmp, "package-dist-direct")
+    let package_dist_direct_bin = path_join(path_join(package_dist_direct, "bin"), "e323_cli_package")
+    if run7(native, "package", package_dir, "-o", package_dist_direct, "--engine", "direct") == 0 {
+        let got_packaged_direct = run1(package_dist_direct_bin)
+        let got_packaged_direct_args = run3(package_dist_direct_bin, "vaisdb", "cache")
+        if got_packaged_direct == 42 and got_packaged_direct_args == 42 and fs_exists(path_join(package_dist_direct, "vais.toml")) == 1 {
+            print("  PASS native direct package output binary and argv run (=42)")
+        } else {
+            print(str_concat("  FAIL native direct package output got=", str_concat(uint_to_str(got_packaged_direct), " want=42")))
+            fail = fail + 1
+        }
+    } else {
+        print("  FAIL native direct package output")
+        fail = fail + 1
+    }
+
+    let target_package_dir = path_join(path_join(root, "examples"), "e326_cli_binary_target")
+    let target_dist = path_join(tmp, "package-binary-target")
+    let target_bin = path_join(path_join(target_dist, "bin"), "veriqel-demo")
+    if run5(native, "package", target_package_dir, "-o", target_dist) == 0 {
+        let got_target = run1(target_bin)
+        let got_target_args = run3(target_bin, "veriqel", "package")
+        if got_target == 42 and got_target_args == 42 and fs_exists(path_join(target_dist, "vais.toml")) == 1 and fs_exists(path_join(path_join(target_dist, "bin"), "e326_cli_binary_target")) == 0 {
+            print("  PASS native package binary target output runs (=42)")
+        } else {
+            print(str_concat("  FAIL native package binary target got=", str_concat(uint_to_str(got_target), " want=42")))
+            fail = fail + 1
+        }
+    } else {
+        print("  FAIL native package binary target output")
+        fail = fail + 1
+    }
+
+    let archive_dist = path_join(tmp, "package-binary-target-archive")
+    let archive_path = path_join(archive_dist, "veriqel-demo-0.1.0.tar.gz")
+    if run6(native, "package", target_package_dir, "-o", archive_dist, "--archive") == 0 and fs_exists(archive_path) == 1 {
+        let archive_extract = path_join(tmp, "package-binary-target-extract")
+        if fs_mkdirs(archive_extract) == 0 and run5("tar", "-C", archive_extract, "-xzf", archive_path) == 0 {
+            let archived_bin = path_join(path_join(path_join(archive_extract, "veriqel-demo-0.1.0"), "bin"), "veriqel-demo")
+            let archived_manifest = path_join(path_join(archive_extract, "veriqel-demo-0.1.0"), "vais.toml")
+            if fs_exists(archived_manifest) == 1 and run3(archived_bin, "veriqel", "package") == 42 {
+                print("  PASS native package archive extracts and runs (=42)")
+            } else {
+                print("  FAIL native package archive extracted payload")
+                fail = fail + 1
+            }
+        } else {
+            print("  FAIL native package archive extraction")
+            fail = fail + 1
+        }
+    } else {
+        print("  FAIL native package archive creation")
+        fail = fail + 1
+    }
+
+    let assets_package_dir = path_join(path_join(root, "examples"), "e328_cli_package_assets")
+    let assets_dist = path_join(tmp, "package-assets")
+    let assets_archive = path_join(assets_dist, "veriqel-assets-0.1.0.tar.gz")
+    let assets_file = path_join(path_join(path_join(assets_dist, "assets"), "docs"), "guide.txt")
+    if run6(native, "package", assets_package_dir, "-o", assets_dist, "--archive") == 0 and fs_exists(assets_archive) == 1 and fs_exists(assets_file) == 1 {
+        let assets_bin = path_join(path_join(assets_dist, "bin"), "veriqel-assets")
+        let got_assets = run3(assets_bin, "assets", "package")
+        let assets_extract = path_join(tmp, "package-assets-extract")
+        if got_assets == 42 and fs_mkdirs(assets_extract) == 0 and run5("tar", "-C", assets_extract, "-xzf", assets_archive) == 0 {
+            let archived_assets_file = path_join(path_join(path_join(path_join(assets_extract, "veriqel-assets-0.1.0"), "assets"), "docs"), "guide.txt")
+            let archived_assets_bin = path_join(path_join(path_join(assets_extract, "veriqel-assets-0.1.0"), "bin"), "veriqel-assets")
+            if fs_exists(archived_assets_file) == 1 and run3(archived_assets_bin, "assets", "package") == 42 and str_contains(fs_read_text(archived_assets_file), "veriqel packaged assets") == 1 {
+                print("  PASS native package assets archive extracts and runs (=42)")
+            } else {
+                print("  FAIL native package assets archive payload")
+                fail = fail + 1
+            }
+        } else {
+            print("  FAIL native package assets output")
+            fail = fail + 1
+        }
+    } else {
+        print("  FAIL native package assets archive creation")
+        fail = fail + 1
+    }
+
+    let bad_package = path_join(tmp, "bad-package-name")
+    if write_bad_package_name_package(bad_package) != 0 {
+        print("  FAIL native bad package-name setup")
+        fail = fail + 1
+    } else {
+        let bad_dist = path_join(tmp, "bad-package-dist")
+        let bad_out = path_join(tmp, "bad-package.out")
+        let bad_err = path_join(tmp, "bad-package.err")
+        let bad_argv: List<Str> = []
+        bad_argv.push(native)
+        bad_argv.push("package")
+        bad_argv.push(bad_package)
+        bad_argv.push("-o")
+        bad_argv.push(bad_dist)
+        let bad_rc = proc_capture_to(bad_argv, bad_out, bad_err)
+        let bad_text = fs_read_text(bad_err)
+        if bad_rc != 0 and str_contains(bad_text, "package manifest name cannot be used as a binary name") == 1 and str_contains(bad_text, "use letters, digits") == 1 {
+            print("  PASS native package rejects unsafe manifest binary name")
+        } else {
+            print("  FAIL native package unsafe name diagnostic")
+            fail = fail + 1
+        }
+    }
+
+    let bad_binary_package = path_join(tmp, "bad-package-binary")
+    if write_bad_package_binary_package(bad_binary_package) != 0 {
+        print("  FAIL native bad package-binary setup")
+        fail = fail + 1
+    } else {
+        let bad_binary_dist = path_join(tmp, "bad-package-binary-dist")
+        let bad_binary_out = path_join(tmp, "bad-package-binary.out")
+        let bad_binary_err = path_join(tmp, "bad-package-binary.err")
+        let bad_binary_argv: List<Str> = []
+        bad_binary_argv.push(native)
+        bad_binary_argv.push("package")
+        bad_binary_argv.push(bad_binary_package)
+        bad_binary_argv.push("-o")
+        bad_binary_argv.push(bad_binary_dist)
+        let bad_binary_rc = proc_capture_to(bad_binary_argv, bad_binary_out, bad_binary_err)
+        let bad_binary_text = fs_read_text(bad_binary_err)
+        if bad_binary_rc != 0 and str_contains(bad_binary_text, "package manifest binary cannot be used as a binary name") == 1 and str_contains(bad_binary_text, "use letters, digits") == 1 {
+            print("  PASS native package rejects unsafe manifest binary target")
+        } else {
+            print("  FAIL native package unsafe binary target diagnostic")
+            fail = fail + 1
+        }
+    }
+
+    let bad_version_package = path_join(tmp, "bad-package-version")
+    if write_bad_package_version_package(bad_version_package) != 0 {
+        print("  FAIL native bad package-version setup")
+        fail = fail + 1
+    } else {
+        let bad_version_dist = path_join(tmp, "bad-package-version-dist")
+        let bad_version_out = path_join(tmp, "bad-package-version.out")
+        let bad_version_err = path_join(tmp, "bad-package-version.err")
+        let bad_version_argv: List<Str> = []
+        bad_version_argv.push(native)
+        bad_version_argv.push("package")
+        bad_version_argv.push(bad_version_package)
+        bad_version_argv.push("-o")
+        bad_version_argv.push(bad_version_dist)
+        bad_version_argv.push("--archive")
+        let bad_version_rc = proc_capture_to(bad_version_argv, bad_version_out, bad_version_err)
+        let bad_version_text = fs_read_text(bad_version_err)
+        if bad_version_rc != 0 and str_contains(bad_version_text, "package manifest version cannot be used in an archive filename") == 1 and str_contains(bad_version_text, "use letters, digits") == 1 {
+            print("  PASS native package archive rejects unsafe manifest version")
+        } else {
+            print("  FAIL native package unsafe version diagnostic")
+            fail = fail + 1
+        }
     }
 
     if fail == 0 {

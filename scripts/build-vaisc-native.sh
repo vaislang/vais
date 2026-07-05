@@ -13,7 +13,7 @@ CORE_NATIVE="$BUILD_DIR/vaisc_core_native.$(basename "$OUT").$$.ll"
 mkdir -p "$BUILD_DIR"
 trap 'rm -f "$CORE_NATIVE"' EXIT
 
-main_count="$(grep -c '^define i64 @main() {$' "$CORE" || true)"
+main_count="$(grep -Ec '^define i64 @main\(\)( #[0-9]+)? \{$' "$CORE" || true)"
 if [ "$main_count" != "1" ]; then
     echo "error: expected one @main in $CORE, found $main_count" >&2
     exit 1
@@ -21,8 +21,9 @@ fi
 
 awk '
     BEGIN { replaced = 0 }
-    /^define i64 @main\(\) \{$/ && replaced == 0 {
-        print "define i64 @vais_selftest_main() {"
+    /^define i64 @main\(\)( #[0-9]+)? \{$/ && replaced == 0 {
+        sub("@main", "@vais_selftest_main")
+        print
         replaced = 1
         next
     }
@@ -34,5 +35,9 @@ awk '
     }
 ' "$CORE" > "$CORE_NATIVE"
 
-"$CLANG" -Wno-override-module -O2 -o "$OUT" "$CORE_NATIVE" "$DRIVER"
+if [ "$(uname -s)" = "Darwin" ]; then
+    "$CLANG" -Wno-override-module -O2 -Wl,-stack_size,0x4000000 -o "$OUT" "$CORE_NATIVE" "$DRIVER"
+else
+    "$CLANG" -Wno-override-module -O2 -o "$OUT" "$CORE_NATIVE" "$DRIVER"
+fi
 echo "built: $OUT"

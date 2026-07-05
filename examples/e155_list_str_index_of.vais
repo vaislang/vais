@@ -1,0 +1,24 @@
+# expect: 42
+
+fn score_pos(words: List<Str>, value: Str) -> Int {
+    return words.index_of(value)
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("vaisdb")
+    words.push("cache")
+    words.push("vector")
+    words.push("cache")
+
+    let pos: Int = words.index_of("cache")
+    if pos != 1 { return 1 }
+    if words.index_of("missing") != 0 - 1 { return 2 }
+    if score_pos(words, "vector") != 2 { return 3 }
+
+    words.clear()
+    if words.index_of("cache") != 0 - 1 { return 4 }
+    words.push(str_lower("AI"))
+    words.push("cache")
+    return score_pos(words, "cache") * 30 + words.index_of("ai") + words.contains("ai") + 11
+}

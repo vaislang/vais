@@ -1,0 +1,12 @@
+# expect: 42
+# Map<Str,Str>.get_opt string payload matches do not depend on pointer tag bits.
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", " VaisDB Vector Cache ")
+    let normalized = match docs.get_opt("title") { Some(v) => str_lower(str_trim(v)), None => "" }
+    if str_contains(match docs.get_opt("title") { Some(v) => str_lower(str_trim(v)), None => "" }, "vector") != 1 { return 1 }
+    if str_starts_with(match docs.get_opt("title") { Some(v) => str_lower(str_trim(v)), None => "" }, "vais") != 1 { return 2 }
+    if normalized.len() != 19 { return 3 }
+    return 42
+}

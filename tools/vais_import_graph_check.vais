@@ -386,18 +386,84 @@ fn parse_top_symbol(line: Str) -> Str {
 }
 
 fn brace_delta(line: Str) -> Int {
-    let code = strip_comment(line)
     let mut delta = 0
     let mut i = 0
-    while i < code.len() {
-        if code[i] == 123 {
+    let mut in_str = 0
+    let mut in_char = 0
+    let mut in_backtick = 0
+    let mut escaped = 0
+    while i < line.len() {
+        if in_str == 1 {
+            if escaped == 1 {
+                escaped = 0
+            } else if line[i] == 92 {
+                escaped = 1
+            } else if line[i] == 34 {
+                in_str = 0
+            }
+        } else if in_char == 1 {
+            if escaped == 1 {
+                escaped = 0
+            } else if line[i] == 92 {
+                escaped = 1
+            } else if line[i] == 39 {
+                in_char = 0
+            }
+        } else if in_backtick == 1 {
+            if escaped == 1 {
+                escaped = 0
+            } else if line[i] == 92 {
+                escaped = 1
+            } else if line[i] == 96 {
+                in_backtick = 0
+            }
+        } else if line[i] == 35 {
+            return delta
+        } else if line[i] == 34 {
+            in_str = 1
+            escaped = 0
+        } else if line[i] == 39 {
+            in_char = 1
+            escaped = 0
+        } else if line[i] == 96 {
+            in_backtick = 1
+            escaped = 0
+        } else if line[i] == 123 {
             delta = delta + 1
-        } else if code[i] == 125 {
+        } else if line[i] == 125 {
             delta = delta - 1
         }
         i = i + 1
     }
     return delta
+}
+
+fn has_top_level_import_text(text: Str) -> Int {
+    let mut pos = 0
+    let mut depth = 0
+    while pos <= text.len() {
+        let line_start = pos
+        let mut line_end = pos
+        while line_end < text.len() {
+            if text[line_end] == 10 { break }
+            line_end = line_end + 1
+        }
+        let raw = line_without_cr(text, line_start, line_end)
+        if depth == 0 {
+            let import_name = parse_import_name(raw)
+            if import_name.len() > 0 { return 1 }
+        }
+        depth = depth + brace_delta(raw)
+        if depth < 0 { depth = 0 }
+        if line_end >= text.len() { pos = text.len() + 1 } else { pos = line_end + 1 }
+    }
+    return 0
+}
+
+fn has_import_line_marker(text: Str) -> Int {
+    if text_at(text, 0, "import ") == 1 { return 1 }
+    if str_contains(text, str_concat(str_byte(10), "import ")) == 1 { return 1 }
+    return 0
 }
 
 fn report_issue(path: Str, line_no: Int, message: Str, help: Str) -> Int {
@@ -508,6 +574,19 @@ fn check_import_graph(entry: Str) -> Int {
         if source.len() > 0 { root = path_join(manifest_dir, source) }
         dep_aliases = manifest_dependency_aliases(manifest)
         dep_roots = dependency_source_roots(manifest_dir, manifest_dependency_paths(manifest))
+    }
+    if fs_exists(entry) == 0 {
+        print(str_concat("error: source file not found: ", entry))
+        return 1
+    }
+    let entry_text = fs_read_text(entry)
+    if has_import_line_marker(entry_text) == 0 {
+        print("PASS import graph clean")
+        return 0
+    }
+    if has_top_level_import_text(entry_text) == 0 {
+        print("PASS import graph clean")
+        return 0
     }
     let visited: Map<Str,Int> = {}
     let symbols: Map<Str,Int> = {}

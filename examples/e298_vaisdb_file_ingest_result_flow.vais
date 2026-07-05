@@ -1,0 +1,99 @@
+# expect: 42
+# File-backed VaisDB workflow with explicit Result<Int,Int> error paths.
+
+fn ingest_file_checked(meta: Map<Str,Str>, title_key: Str, body_key: Str, path: Str, terms: Map<Str,Int>) -> Result<Int, Int> {
+    if fs_exists(path) != 1 { return Err(10) }
+    let text = fs_read_text(path)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n < 2 { return Err(11) }
+    let title = str_trim(lines[0])
+    let body = str_trim(lines[1])
+    if title.len() == 0 { return Err(12) }
+    if body.len() == 0 { return Err(13) }
+    meta.insert(title_key, title)
+    meta.insert(body_key, body)
+    return Ok(doc_term_counts_into(body, terms))
+}
+
+fn read_query_file_checked(path: Str, query: Map<Str,Int>) -> Result<Int, Int> {
+    if fs_exists(path) != 1 { return Err(14) }
+    let text = fs_read_text(path)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n == 0 { return Err(15) }
+    let query_text = str_trim(lines[0])
+    if query_text.len() == 0 { return Err(16) }
+    return Ok(doc_term_counts_into(query_text, query))
+}
+
+fn run_files_checked(doc_a_path: Str, doc_b_path: Str, query_path: Str) -> Result<Int, Int> {
+    let meta: Map<Str,Str> = {}
+    let doc_a: Map<Str,Int> = {}
+    let doc_b: Map<Str,Int> = {}
+
+    let a_total = ingest_file_checked(meta, "d1.title", "d1.body", doc_a_path, doc_a)?
+    let b_total = ingest_file_checked(meta, "d2.title", "d2.body", doc_b_path, doc_b)?
+    if a_total != 6 { return Err(20) }
+    if b_total != 4 { return Err(21) }
+
+    let snapshot = map_str_str_snapshot(meta)
+    let loaded: Map<Str,Str> = {}
+    if map_str_str_load_snapshot(snapshot, loaded) != 4 { return Err(22) }
+    if loaded.get("d1.title", "") != "VaisDB Guide" { return Err(23) }
+    if loaded.get("d2.title", "") != "Cache Notes" { return Err(24) }
+    if loaded.get("d1.body", "").len() == 0 { return Err(25) }
+    if loaded.get("d2.body", "").len() == 0 { return Err(26) }
+
+    let query: Map<Str,Int> = {}
+    let q_total = read_query_file_checked(query_path, query)?
+    if q_total != 3 { return Err(27) }
+
+    let a_score = doc_term_weighted_score(query, doc_a)
+    let b_score = doc_term_weighted_score(query, doc_b)
+    if a_score != 8 { return Err(28) }
+    if b_score != 2 { return Err(29) }
+    if a_score <= b_score { return Err(30) }
+
+    return Ok(a_score * 5 + b_score)
+}
+
+fn run_generated_files_checked() -> Result<Int, Int> {
+    let root = fs_temp_dir()
+    let doc_a = path_join(root, "vais-e298-doc-a.txt")
+    let doc_b = path_join(root, "vais-e298-doc-b.txt")
+    let query = path_join(root, "vais-e298-query.txt")
+    let missing = path_join(root, "vais-e298-missing/no-doc.txt")
+    let lf = str_byte(10)
+
+    let doc_a_text = str_concat("VaisDB Guide", str_concat(lf, str_concat("AI cache ai CACHE vector ai", lf)))
+    let doc_b_text = str_concat("Cache Notes", str_concat(lf, str_concat("cache cache vector vector", lf)))
+    let query_text = str_concat("ai cache ai", lf)
+
+    if fs_write_text(doc_a, doc_a_text) != 0 { return Err(2) }
+    if fs_write_text(doc_b, doc_b_text) != 0 { return Err(3) }
+    if fs_write_text(query, query_text) != 0 { return Err(4) }
+
+    let score = run_files_checked(doc_a, doc_b, query)?
+    let missing_meta: Map<Str,Str> = {}
+    let missing_terms: Map<Str,Int> = {}
+    let missing_result = ingest_file_checked(missing_meta, "bad.title", "bad.body", missing, missing_terms)
+    let missing_code = match missing_result { Ok(value) => value, Err(code) => code }
+    if missing_code != 10 { return Err(31) }
+    return Ok(score + missing_code - 10)
+}
+
+fn main() -> Int {
+    if proc_argc() == 3 {
+        let arg_doc_a = proc_arg(0)
+        let arg_doc_b = proc_arg(1)
+        let arg_query = proc_arg(2)
+        let argv_flow = run_files_checked(arg_doc_a, arg_doc_b, arg_query)
+        let argv_result = match argv_flow { Ok(value) => value, Err(code) => code }
+        return argv_result
+    }
+    if proc_argc() != 0 { return 1 }
+    let generated_flow = run_generated_files_checked()
+    let generated_result = match generated_flow { Ok(value) => value, Err(code) => code }
+    return generated_result
+}

@@ -1,0 +1,24 @@
+# expect: 42
+
+fn main() -> Int {
+    let source: List<Str> = ["alpha", "beta", "gamma"]
+    let target: List<Str> = []
+    target = source
+    target.push("delta")
+    let first = target[0]
+    let last = target.last()
+    let tail = target.pop()
+    if first != "alpha" {
+        return 0
+    }
+    if last != "delta" {
+        return 1
+    }
+    if tail != "delta" {
+        return 2
+    }
+    if source.len() != 3 {
+        return 3
+    }
+    return target.len() * 12 + target.is_empty() + source.len() + tail.len() - 2
+}

@@ -1,0 +1,36 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn copy_into(src: List<Box>, dst: List<Box>) -> Int {
+    dst.push(src[0])
+    dst.insert_at(1, src[1])
+    let mid = dst[1]
+    let tail = dst.last()
+    return mid.value + tail.tag + dst.len()
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 10, tag: 1 })
+    xs.push(Box { value: 20, tag: 2 })
+    xs.push(Box { value: 30, tag: 3 })
+
+    let ys: List<Box> = []
+    ys.push(Box { value: 1, tag: 4 })
+    ys.push(xs[2])
+    ys.insert_at(1, xs[0])
+
+    let score = copy_into(xs, ys)
+    ys.insert_at(0, ys[1])
+    ys.push(ys[2])
+
+    let inserted = ys[0]
+    let copied = ys[2]
+    let shifted = ys[3]
+    let tail = ys.last()
+    return inserted.value + inserted.tag + copied.value + shifted.value + tail.tag + ys.len() + score - 45
+}

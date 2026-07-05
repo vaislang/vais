@@ -1,0 +1,23 @@
+# expect: 0
+# List<Int>.min() returns the smallest Int from local and parameter lists.
+
+fn lowest_score(scores: List<Int>) -> Int {
+    return scores.min()
+}
+
+fn main() -> Int {
+    let scores: List<Int> = []
+    scores.push(7)
+    scores.push(42)
+    scores.push(18)
+
+    let penalties: List<Int> = []
+    penalties.push(0 - 10)
+    penalties.push(0 - 3)
+    penalties.push(0 - 8)
+
+    if scores.min() != 7 { return 1 }
+    if lowest_score(scores) != 7 { return 2 }
+    if penalties.min() != 0 - 10 { return 3 }
+    return scores.min() - 7
+}

@@ -1,0 +1,36 @@
+# expect: 42
+# List<Struct>.map(...) Int projection aggregates can appear inside broader conditions.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn condition_flow(docs: List<Doc>, base: Int) -> Int {
+    let mut score = 0
+    if base + docs.map(|doc| doc.score).sum() > 27 {
+        score = score + 10
+    }
+    let mut rounds = 0
+    while rounds + docs.map(|doc| doc.score).max() > 12 {
+        score = score + 7
+        docs[2].score = docs[2].score - 3
+        rounds = rounds + 1
+        if rounds > 2 {
+            return 1
+        }
+    }
+    if base < 0 {
+        return 2
+    } else if base + docs.map(|doc| doc.score).min() > 5 {
+        score = score + 18
+    } else {
+        return 3
+    }
+    return score
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 8 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 16 })
+    return condition_flow(docs, 1)
+}

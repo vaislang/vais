@@ -1,0 +1,69 @@
+# expect: 42
+# Multiple List<Str> pipeline scalar calls from the same family can appear in one expression.
+
+fn weigh(n: Int) -> Int {
+    return n
+}
+
+fn map_filter_pair(words: List<Str>, needle: Str) -> Int {
+    return words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len() + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai")
+}
+
+fn filter_map_pair(words: List<Str>, needle: Str) -> Int {
+    return words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).len() + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).count("ai")
+}
+
+fn map_filter_score(words: List<Str>, needle: Str) -> Int {
+    if map_filter_pair(words, needle) != 5 { return 1 }
+
+    let pair = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len() + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai")
+    if pair != 5 { return 2 }
+
+    let mut total = pair
+    total = total + weigh(words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("vais") + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("ai"))
+
+    let values: List<Int> = []
+    values.push(words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len() + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai"))
+
+    if words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("vais") and words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("ai") {
+        total = total + 10
+    }
+
+    let mut guard = 0
+    while words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai") + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("ai") > guard {
+        guard = guard + 2
+    }
+
+    return total + values[0] + guard
+}
+
+fn filter_map_score(words: List<Str>, needle: Str) -> Int {
+    if filter_map_pair(words, needle) != 5 { return 3 }
+
+    let pair = words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).len() + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).count("ai")
+    if pair != 5 { return 4 }
+
+    let mut total = pair
+    total = total + weigh(words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).index_of("vais") + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).index_of("ai"))
+
+    let values: List<Int> = []
+    values.insert_at(0, words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).len() + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).count("ai"))
+
+    if words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("missing") and words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("ai") {
+        return 5
+    }
+    if words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("vais") and words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("ai") {
+        total = total + 7
+    }
+
+    return total + values[0] - 1
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  Vais")
+    words.push("AI")
+    words.push("db")
+    words.push("ai  ")
+    return map_filter_score(words, "ai") + filter_map_score(words, "ai")
+}

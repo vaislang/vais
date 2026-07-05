@@ -1,0 +1,43 @@
+# expect: 42
+
+struct Pair { a: Int, b: Int }
+
+fn reset_ints(xs: List<Int>) -> Int {
+    xs.clear()
+    xs.push(40)
+    xs.push(2)
+    return xs.len() + xs[0]
+}
+
+fn reset_pairs(xs: List<Pair>) -> Int {
+    xs.clear()
+    xs.push(Pair { a: 20, b: 22 })
+    let p = xs[0]
+    return xs.len() + p.a + p.b - 1
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(1)
+    xs.push(2)
+    xs.clear()
+    if xs.len() != 0 { return 1 }
+    xs.push(42)
+    if xs.last() != 42 { return 2 }
+
+    let ys: List<Int> = []
+    ys.push(9)
+    if reset_ints(ys) != 42 { return 3 }
+    if ys.len() != 2 { return 4 }
+
+    let pairs: List<Pair> = []
+    pairs.push(Pair { a: 1, b: 2 })
+    pairs.clear()
+    if pairs.len() != 0 { return 5 }
+    pairs.push(Pair { a: 40, b: 2 })
+    let pair_check = pairs[0]
+    if pair_check.a + pair_check.b != 42 { return 6 }
+    if reset_pairs(pairs) != 42 { return 7 }
+    if pairs.len() != 1 { return 8 }
+    return 42
+}

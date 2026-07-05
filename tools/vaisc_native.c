@@ -1,13 +1,21 @@
 #include <errno.h>
+#include <ctype.h>
+#include <dirent.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #define VAIS_VERSION "1.0.1"
+#define DIRECT_MAX_STRUCT_FIELDS 64
+#define DIRECT_MAX_STRUCT_LITERAL_FIELDS 64
+#define DIRECT_MAX_FNS 512
+#define DIRECT_MAX_LOCALS 4096
 
 extern int64_t compile(char *src);
 
@@ -19,6 +27,7 @@ static const char *HOST_INTRINSIC_IR =
     "declare i8* @path_join(i8*, i8*)\n"
     "declare i8* @path_basename(i8*)\n"
     "declare i8* @path_dirname(i8*)\n"
+    "declare i64 @time_millis()\n"
     "declare i8* @str_concat(i8*, i8*)\n"
     "declare i8* @str_slice(i8*, i64, i64)\n"
     "declare i8* @str_byte(i64)\n"
@@ -34,6 +43,7 @@ static const char *HOST_INTRINSIC_IR =
     "declare i8* @proc_capture_stdout(i64*)\n"
     "declare i8* @proc_capture_stderr(i64*)\n"
     "declare i64 @proc_capture_to(i64*, i8*, i8*)\n"
+    "declare void @proc_capture(i64*, i64*)\n"
     "declare i64 @proc_run(i64*)\n"
     "declare i64 @proc_run_env(i64*, i64*)\n";
 
@@ -124,23 +134,32 @@ typedef struct {
 } DirectLocalInfo;
 
 typedef struct {
-    DirectLocalInfo items[128];
+    DirectLocalInfo items[DIRECT_MAX_LOCALS];
     int count;
     char *current_return_type;
     int temp_count;
+    StrBuf *hoist_decls;
 } DirectNameSet;
 
 typedef struct {
     char *name;
-    char *fields[16];
+    char *fields[DIRECT_MAX_STRUCT_FIELDS];
+    char *field_types[DIRECT_MAX_STRUCT_FIELDS];
     int field_count;
     int line_no;
 } DirectStructInfo;
 
 static int run_program_wait(char *const argv[]);
 static int make_tmp_path(char *buf, size_t buflen, const char *suffix);
+static void cleanup_tmp_root(void);
+static void register_tmp_cleanup(void);
+static void set_keep_tmp(void);
 
 static StrBuf *direct_current_prelude = NULL;
+static char vaisc_tmp_root[512];
+static int vaisc_tmp_root_ready = 0;
+static int vaisc_tmp_counter = 0;
+static int vaisc_keep_tmp = 0;
 
 static void die_oom(void) {
     fprintf(stderr, "error: out of memory\n");
@@ -340,7 +359,7 @@ static char *strip_line_comment(const char *line, size_t n) {
 }
 
 static const char *skip_ws(const char *p) {
-    while (*p == ' ' || *p == '\t' || *p == '\r') p++;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
     return p;
 }
 
@@ -350,6 +369,51 @@ static int line_starts_stmt(const char *s, const char *word) {
     if (strncmp(s, word, n) != 0) return 0;
     char next = s[n];
     return next == '\0' || next == ' ' || next == '\t' || next == '(';
+}
+
+static const char *skip_index_brackets_for_stmt(const char *p) {
+    int depth = 0;
+    char delim = '\0';
+    int escaped = 0;
+    while (*p != '\0') {
+        char ch = *p;
+        if (escaped) {
+            escaped = 0;
+        } else if ((delim == '"' || delim == '\'') && ch == '\\') {
+            escaped = 1;
+        } else if (ch == '"' || ch == '\'' || ch == '`') {
+            if (delim == '\0') delim = ch;
+            else if (delim == ch) delim = '\0';
+        } else if (delim == '\0') {
+            if (ch == '[') depth++;
+            else if (ch == ']') {
+                depth--;
+                if (depth == 0) return p + 1;
+            }
+        }
+        p++;
+    }
+    return NULL;
+}
+
+static int indexed_lvalue_needs_semicolon(const char *p) {
+    int saw_index = 0;
+    while (1) {
+        p = skip_ws(p);
+        if (*p == '[') {
+            p = skip_index_brackets_for_stmt(p);
+            if (p == NULL) return 0;
+            saw_index = 1;
+        } else if (*p == '.') {
+            p++;
+            p = skip_ws(p);
+            if (!is_ident_start(*p)) return 0;
+            while (is_ident_continue(*p)) p++;
+        } else {
+            break;
+        }
+    }
+    return saw_index && *p == '=' && p[1] != '=' && p[1] != '>';
 }
 
 static int statement_needs_semicolon(const char *line) {
@@ -369,9 +433,60 @@ static int statement_needs_semicolon(const char *line) {
         const char *p = s;
         while (is_ident_continue(*p) || *p == '.') p++;
         p = skip_ws(p);
-        if (*p == '=' || *p == '(') return 1;
+        if ((*p == '=' && p[1] != '=' && p[1] != '>') || *p == '(') return 1;
+        if (indexed_lvalue_needs_semicolon(p)) return 1;
     }
     return 0;
+}
+
+static int square_depth_after_text(const char *text, int depth) {
+    char delim = '\0';
+    int escaped = 0;
+    for (int i = 0; text[i] != '\0'; i++) {
+        char ch = text[i];
+        if (escaped) {
+            escaped = 0;
+        } else if ((delim == '"' || delim == '\'') && ch == '\\') {
+            escaped = 1;
+        } else if (ch == '"' || ch == '\'' || ch == '`') {
+            if (delim == '\0') delim = ch;
+            else if (delim == ch) delim = '\0';
+        } else if (delim == '\0') {
+            if (ch == '[') depth++;
+            else if (ch == ']' && depth > 0) depth--;
+        }
+    }
+    return depth;
+}
+
+static void paren_square_depth_after_text(const char *text, int *paren_depth, int *square_depth) {
+    char delim = '\0';
+    int escaped = 0;
+    for (int i = 0; text[i] != '\0'; i++) {
+        char ch = text[i];
+        if (escaped) {
+            escaped = 0;
+        } else if ((delim == '"' || delim == '\'') && ch == '\\') {
+            escaped = 1;
+        } else if (ch == '"' || ch == '\'' || ch == '`') {
+            if (delim == '\0') delim = ch;
+            else if (delim == ch) delim = '\0';
+        } else if (delim == '\0') {
+            if (ch == '(') (*paren_depth)++;
+            else if (ch == ')' && *paren_depth > 0) (*paren_depth)--;
+            else if (ch == '[') (*square_depth)++;
+            else if (ch == ']' && *square_depth > 0) (*square_depth)--;
+        }
+    }
+}
+
+static int should_strip_struct_field_type(const char *start, const char *end) {
+    while (start < end && (*start == ' ' || *start == '\t' || *start == '\r')) start++;
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) end--;
+    size_t n = (size_t)(end - start);
+    return (n == 3 && strncmp(start, "Int", 3) == 0) ||
+        (n == 4 && strncmp(start, "Bool", 4) == 0) ||
+        (n == 4 && strncmp(start, "Char", 4) == 0);
 }
 
 static char *lower_struct_field_line(const char *line) {
@@ -393,6 +508,7 @@ static char *lower_struct_field_line(const char *line) {
         const char *rest = skip_ws(q + 1);
         if (*rest != '\0') return strdup(line);
     }
+    if (!should_strip_struct_field_type(after_name + 1, q)) return strdup(line);
     StrBuf out;
     sb_init(&out);
     sb_append_n(&out, line, (size_t)(name_start - line));
@@ -419,6 +535,10 @@ static int append_lowered_struct_part(StrBuf *out, const char *start, const char
     }
     const char *type_start = skip_ws(after_name + 1);
     if (type_start >= end) {
+        sb_append_n(out, start, (size_t)(end - start));
+        return 0;
+    }
+    if (!should_strip_struct_field_type(type_start, end)) {
         sb_append_n(out, start, (size_t)(end - start));
         return 0;
     }
@@ -582,7 +702,7 @@ static char *lower_let_int_annotation(const char *line) {
 static char *trim_copy(const char *text) {
     const char *start = skip_ws(text);
     const char *end = start + strlen(start);
-    while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == ',' || end[-1] == ';')) end--;
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n' || end[-1] == ',' || end[-1] == ';')) end--;
     char *out = (char *)malloc((size_t)(end - start) + 1);
     if (out == NULL) die_oom();
     memcpy(out, start, (size_t)(end - start));
@@ -791,8 +911,8 @@ static int parse_enum_line(const char *line, EnumInfo *info) {
     info->count = 0;
     info->is_payload = strchr(open, '(') != NULL;
     char *body = substr_copy(open + 1, (size_t)(close - open - 1));
-    char *parts[16] = {0};
-    int n = split_top_level_commas_c(body, parts, 16);
+    char *parts[DIRECT_MAX_STRUCT_LITERAL_FIELDS] = {0};
+    int n = split_top_level_commas_c(body, parts, DIRECT_MAX_STRUCT_LITERAL_FIELDS);
     free(body);
     if (n <= 0) return 0;
     for (int i = 0; i < n; i++) {
@@ -901,6 +1021,49 @@ static int contains_generic_type(const char *text, const char *name, const char 
         }
         size_t end = 0;
         if (generic_type_at(text, i, name, arg1, arg2, &end)) return 1;
+    }
+    return 0;
+}
+
+static int contains_result_type_other_than_int_int(const char *text) {
+    for (size_t i = 0; text[i] != '\0'; i++) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (strncmp(text + i, "Result", 6) != 0) continue;
+        if (i > 0 && is_ident_continue(text[i - 1])) continue;
+        if (is_ident_continue(text[i + 6])) continue;
+        size_t k = i + 6;
+        while (text[k] == ' ' || text[k] == '\t') k++;
+        if (text[k] != '<') continue;
+        size_t start = k + 1;
+        int depth = 1;
+        size_t p = start;
+        while (text[p] != '\0' && depth > 0) {
+            if (text[p] == '<') depth++;
+            else if (text[p] == '>') depth--;
+            if (depth > 0) p++;
+        }
+        if (depth != 0) return 1;
+        char *inside = substr_copy(text + start, p - start);
+        char *parts[2] = {0};
+        int n = split_top_level_type_commas_c(inside, parts, 2);
+        int is_int_int = n == 2 &&
+            type_text_equals_compact(parts[0], "Int") &&
+            type_text_equals_compact(parts[1], "Int");
+        for (int j = 0; j < 2; j++) free(parts[j]);
+        free(inside);
+        if (!is_int_int) return 1;
+        i = p;
     }
     return 0;
 }
@@ -1314,6 +1477,20 @@ static int parse_inline_match_let(const char *line, char **name, char **match_ex
     while (is_ident_continue(*s)) s++;
     const char *name_end = s;
     s = skip_ws(s);
+    if (*s == ':') {
+        s++;
+        int depth = 0;
+        while (*s != '\0') {
+            if (*s == '<') depth++;
+            else if (*s == '>') {
+                if (depth > 0) depth--;
+            } else if (depth == 0 && *s == '=') {
+                break;
+            }
+            s++;
+        }
+        s = skip_ws(s);
+    }
     if (*s != '=') return 0;
     s = skip_ws(s + 1);
     if (!starts_with(s, "match ") || is_ident_continue(s[5])) return 0;
@@ -1322,6 +1499,23 @@ static int parse_inline_match_let(const char *line, char **name, char **match_ex
     const char *close = open == NULL ? NULL : strrchr(open + 1, '}');
     if (open == NULL || close == NULL || close <= open) return 0;
     *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    *match_expr = trim_copy(substr_copy(s, (size_t)(open - s)));
+    *arms_text = substr_copy(open + 1, (size_t)(close - open - 1));
+    return 1;
+}
+
+static int parse_inline_match_return(const char *line, char **match_expr, char **arms_text) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    s = skip_ws(s + 6);
+    if (!starts_with(s, "match ") || is_ident_continue(s[5])) return 0;
+    s = skip_ws(s + 6);
+    const char *open = strrchr(s, '{');
+    const char *close = open == NULL ? NULL : strrchr(open + 1, '}');
+    if (open == NULL || close == NULL || close <= open) return 0;
+    const char *tail = skip_ws(close + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') return 0;
     *match_expr = trim_copy(substr_copy(s, (size_t)(open - s)));
     *arms_text = substr_copy(open + 1, (size_t)(close - open - 1));
     return 1;
@@ -1340,6 +1534,20 @@ static int parse_multiline_match_let_head(const char *line, char **name, char **
     while (is_ident_continue(*s)) s++;
     const char *name_end = s;
     s = skip_ws(s);
+    if (*s == ':') {
+        s++;
+        int depth = 0;
+        while (*s != '\0') {
+            if (*s == '<') depth++;
+            else if (*s == '>') {
+                if (depth > 0) depth--;
+            } else if (depth == 0 && *s == '=') {
+                break;
+            }
+            s++;
+        }
+        s = skip_ws(s);
+    }
     if (*s != '=') return 0;
     s = skip_ws(s + 1);
     if (!starts_with(s, "match ") || is_ident_continue(s[5])) return 0;
@@ -1366,6 +1574,20 @@ static int parse_try_let(const char *line, char **name, char **expr) {
     while (is_ident_continue(*s)) s++;
     const char *name_end = s;
     s = skip_ws(s);
+    if (*s == ':') {
+        s++;
+        int depth = 0;
+        while (*s != '\0') {
+            if (*s == '<') depth++;
+            else if (*s == '>') {
+                if (depth > 0) depth--;
+            } else if (depth == 0 && *s == '=') {
+                break;
+            }
+            s++;
+        }
+        s = skip_ws(s);
+    }
     if (*s != '=') return 0;
     s = skip_ws(s + 1);
     const char *q = strrchr(s, '?');
@@ -1388,6 +1610,2535 @@ static int parse_arm(const char *line, char **pattern, char **expr) {
     if (starts_with(body, "return ")) body += 7;
     *expr = trim_copy(body);
     return 1;
+}
+
+static char *strip_trailing_arm_comma_copy(const char *expr);
+
+static int result_str_int_parse_fn_name(const char *line, char **name_out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    const char *arrow = close == NULL ? NULL : strstr(close, "->");
+    if (arrow == NULL) return 0;
+    const char *ret_start = skip_ws(arrow + 2);
+    const char *ret_end = ret_start;
+    int depth = 0;
+    while (*ret_end != '\0') {
+        if (*ret_end == '<') depth++;
+        else if (*ret_end == '>') {
+            if (depth > 0) depth--;
+        } else if (depth == 0 && *ret_end == '{') {
+            break;
+        }
+        ret_end++;
+    }
+    while (ret_end > ret_start && (ret_end[-1] == ' ' || ret_end[-1] == '\t' || ret_end[-1] == '\r')) ret_end--;
+    char *ret = substr_copy(ret_start, (size_t)(ret_end - ret_start));
+    int ok = type_text_equals_compact(ret, "Result<Str,Int>") || type_text_equals_compact(ret, "VaisResultStrInt");
+    free(ret);
+    if (!ok) return 0;
+    *name_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    return 1;
+}
+
+static int result_str_int_name_in(char **names, int count, const char *name) {
+    for (int i = 0; i < count; i++) {
+        if (names[i] != NULL && strcmp(names[i], name) == 0) return 1;
+    }
+    return 0;
+}
+
+static void result_str_int_add_name(char **names, int *count, const char *name) {
+    if (name == NULL || result_str_int_name_in(names, *count, name)) return;
+    if (*count >= 128) return;
+    names[*count] = strdup(name);
+    if (names[*count] == NULL) die_oom();
+    *count = *count + 1;
+}
+
+static void result_str_int_clear_names(char **names, int *count) {
+    for (int i = 0; i < *count; i++) {
+        free(names[i]);
+        names[i] = NULL;
+    }
+    *count = 0;
+}
+
+static int line_starts_fn_decl(const char *line) {
+    const char *s = skip_ws(line);
+    return starts_with(s, "fn ") && !is_ident_continue(s[2]);
+}
+
+static void result_str_int_collect_param_names(const char *line, char **names, int *count) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *open = strchr(s, '(');
+    if (open == NULL) return;
+    int close = find_matching_paren_c(line, (int)(open - line));
+    if (close < 0) return;
+
+    char *params = substr_copy(open + 1, (size_t)(line + close - open - 1));
+    char *parts[16] = {0};
+    int n = split_top_level_commas_c(params, parts, 16);
+    for (int i = 0; i < n && i < 16; i++) {
+        char *part = trim_copy(parts[i]);
+        const char *p = skip_ws(part);
+        if (!is_ident_start(*p)) {
+            free(part);
+            continue;
+        }
+        const char *name_start = p;
+        p++;
+        while (is_ident_continue(*p)) p++;
+        const char *name_end = p;
+        p = skip_ws(p);
+        if (*p != ':') {
+            free(part);
+            continue;
+        }
+        char *type_text = trim_copy(p + 1);
+        if (type_text_equals_compact(type_text, "Result<Str,Int>") ||
+            type_text_equals_compact(type_text, "VaisResultStrInt")) {
+            char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+            result_str_int_add_name(names, count, name);
+            free(name);
+        }
+        free(type_text);
+        free(part);
+    }
+    for (int i = 0; i < 16; i++) free(parts[i]);
+    free(params);
+}
+
+static int result_str_int_expr_is_result(const char *expr, char **fn_names, int fn_count, char **local_names, int local_count) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return 0;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    const char *rest = skip_ws(s);
+    int ok = 0;
+    if (*rest == '\0') {
+        ok = result_str_int_name_in(local_names, local_count, name);
+    } else if (*rest == '(') {
+        int close = find_matching_paren_c(trimmed, (int)(rest - trimmed));
+        if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+            ok = result_str_int_name_in(fn_names, fn_count, name);
+        }
+    }
+    free(name);
+    free(trimmed);
+    return ok;
+}
+
+static int result_int_int_expr_is_result(const char *expr, char **fn_names, int fn_count, char **local_names, int local_count) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return 0;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    const char *rest = skip_ws(s);
+    int ok = 0;
+    if (*rest == '\0') {
+        ok = result_str_int_name_in(local_names, local_count, name);
+    } else if (*rest == '(') {
+        int close = find_matching_paren_c(trimmed, (int)(rest - trimmed));
+        if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+            ok = result_str_int_name_in(fn_names, fn_count, name);
+        }
+    }
+    free(name);
+    free(trimmed);
+    return ok;
+}
+
+static int option_int_parse_fn_name(const char *line, char **name_out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    const char *arrow = close == NULL ? NULL : strstr(close, "->");
+    if (arrow == NULL) return 0;
+    const char *ret_start = skip_ws(arrow + 2);
+    const char *ret_end = ret_start;
+    int depth = 0;
+    while (*ret_end != '\0') {
+        if (*ret_end == '<') depth++;
+        else if (*ret_end == '>') {
+            if (depth > 0) depth--;
+        } else if (depth == 0 && *ret_end == '{') {
+            break;
+        }
+        ret_end++;
+    }
+    while (ret_end > ret_start && (ret_end[-1] == ' ' || ret_end[-1] == '\t' || ret_end[-1] == '\r')) ret_end--;
+    char *ret = substr_copy(ret_start, (size_t)(ret_end - ret_start));
+    int ok = type_text_equals_compact(ret, "Option<Int>");
+    free(ret);
+    if (!ok) return 0;
+    *name_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    return 1;
+}
+
+static int result_int_int_parse_fn_name(const char *line, char **name_out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    const char *arrow = close == NULL ? NULL : strstr(close, "->");
+    if (arrow == NULL) return 0;
+    const char *ret_start = skip_ws(arrow + 2);
+    const char *ret_end = ret_start;
+    int depth = 0;
+    while (*ret_end != '\0') {
+        if (*ret_end == '<') depth++;
+        else if (*ret_end == '>') {
+            if (depth > 0) depth--;
+        } else if (depth == 0 && *ret_end == '{') {
+            break;
+        }
+        ret_end++;
+    }
+    while (ret_end > ret_start && (ret_end[-1] == ' ' || ret_end[-1] == '\t' || ret_end[-1] == '\r')) ret_end--;
+    char *ret = substr_copy(ret_start, (size_t)(ret_end - ret_start));
+    int ok = type_text_equals_compact(ret, "Result<Int,Int>");
+    free(ret);
+    if (!ok) return 0;
+    *name_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    return 1;
+}
+
+static int option_int_expr_is_option(const char *expr, char **fn_names, int fn_count) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return 0;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    const char *rest = skip_ws(s);
+    int ok = 0;
+    if (*rest == '(') {
+        int close = find_matching_paren_c(trimmed, (int)(rest - trimmed));
+        if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+            ok = result_str_int_name_in(fn_names, fn_count, name);
+        }
+    }
+    free(name);
+    free(trimmed);
+    return ok;
+}
+
+static char *result_str_int_expr_local_name(const char *expr, char **local_names, int local_count) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return NULL;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    const char *rest = skip_ws(s);
+    if (*rest != '\0' || !result_str_int_name_in(local_names, local_count, name)) {
+        free(trimmed);
+        free(name);
+        return NULL;
+    }
+    free(trimmed);
+    return name;
+}
+
+static int result_call_arg_prev_is_arg_delim(const char *line, int pos) {
+    int j = pos - 1;
+    while (j >= 0 && (line[j] == ' ' || line[j] == '\t' || line[j] == '\r')) j--;
+    if (j < 0) return 0;
+    return line[j] == '(' || line[j] == ',';
+}
+
+static char *lower_result_call_args_line(
+    LineVec *out,
+    const char *line,
+    char **fn_names,
+    int fn_count,
+    const char *prefix,
+    int *temp_count
+) {
+    StrBuf rewritten;
+    sb_init(&rewritten);
+    int changed = 0;
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    for (int i = 0; line[i] != '\0';) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&rewritten, line + i);
+                break;
+            }
+            sb_append_n(&rewritten, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if (line[i] == '\'') {
+            int end = skip_char_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&rewritten, line + i);
+                break;
+            }
+            sb_append_n(&rewritten, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if (is_ident_start(line[i]) && result_call_arg_prev_is_arg_delim(line, i)) {
+            int name_start = i;
+            i++;
+            while (is_ident_continue(line[i])) i++;
+            char *name = substr_copy(line + name_start, (size_t)(i - name_start));
+            const char *rest = skip_ws(line + i);
+            if (*rest == '(' && result_str_int_name_in(fn_names, fn_count, name)) {
+                int open = (int)(rest - line);
+                int close = find_matching_paren_c(line, open);
+                if (close >= 0) {
+                    char tmp[96];
+                    snprintf(tmp, sizeof(tmp), "%s%d", prefix, (*temp_count)++);
+                    char *call = substr_copy(line + name_start, (size_t)(close - name_start + 1));
+                    StrBuf hoist;
+                    sb_init(&hoist);
+                    sb_append_n(&hoist, line, indent_len);
+                    sb_append(&hoist, "let ");
+                    sb_append(&hoist, tmp);
+                    sb_append(&hoist, " = ");
+                    sb_append(&hoist, call);
+                    lines_push(out, sb_take(&hoist));
+                    sb_append(&rewritten, tmp);
+                    free(call);
+                    free(name);
+                    i = close + 1;
+                    changed = 1;
+                    continue;
+                }
+            }
+            sb_append_n(&rewritten, line + name_start, (size_t)(i - name_start));
+            free(name);
+            continue;
+        }
+        sb_append_n(&rewritten, line + i, 1);
+        i++;
+    }
+    if (!changed) {
+        free(rewritten.data);
+        return strdup(line);
+    }
+    return sb_take(&rewritten);
+}
+
+static int result_str_int_parse_pattern_binder(const char *pattern, const char *variant, char **binder_out) {
+    const char *s = skip_ws(pattern);
+    size_t n = strlen(variant);
+    if (strncmp(s, variant, n) != 0 || is_ident_continue(s[n])) return 0;
+    s = skip_ws(s + n);
+    if (*s != '(') return 0;
+    int close = find_matching_paren_c(s, 0);
+    if (close < 0) return 0;
+    char *inside = trim_copy(substr_copy(s + 1, (size_t)close - 1));
+    const char *tail = skip_ws(s + close + 1);
+    if (*tail != '\0' || !is_ident_start(inside[0])) {
+        free(inside);
+        return 0;
+    }
+    for (const char *p = inside + 1; *p != '\0'; p++) {
+        if (!is_ident_continue(*p)) {
+            free(inside);
+            return 0;
+        }
+    }
+    *binder_out = inside;
+    return 1;
+}
+
+static int direct_parse_trailing_str_len(const char *expr, int pos, int *next_i, int *has_len);
+
+static int result_expr_has_top_level_plus(const char *expr) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    for (int i = 0; expr[i] != '\0';) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) return 0;
+            i = end;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) return 0;
+            i = end;
+            continue;
+        }
+        if (expr[i] == '(') paren_depth++;
+        else if (expr[i] == ')') {
+            if (paren_depth > 0) paren_depth--;
+        } else if (expr[i] == '[') bracket_depth++;
+        else if (expr[i] == ']') {
+            if (bracket_depth > 0) bracket_depth--;
+        } else if (expr[i] == '{') brace_depth++;
+        else if (expr[i] == '}') {
+            if (brace_depth > 0) brace_depth--;
+        } else if (expr[i] == '+' && paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+            return 1;
+        }
+        i++;
+    }
+    return 0;
+}
+
+static int result_expr_starts_with_name(const char *expr, const char *name) {
+    size_t n = strlen(name);
+    return strncmp(expr, name, n) == 0 && !is_ident_continue(expr[n]);
+}
+
+static int result_expr_starts_with_str_returning_helper(const char *expr) {
+    const char *s = skip_ws(expr);
+    return
+        result_expr_starts_with_name(s, "str_concat") ||
+        result_expr_starts_with_name(s, "str_lower") ||
+        result_expr_starts_with_name(s, "str_upper") ||
+        result_expr_starts_with_name(s, "str_trim") ||
+        result_expr_starts_with_name(s, "str_slice") ||
+        result_expr_starts_with_name(s, "str_join") ||
+        result_expr_starts_with_name(s, "str_replace") ||
+        result_expr_starts_with_name(s, "str_byte");
+}
+
+static int result_expr_starts_with_str_helper_len(const char *expr) {
+    const char *s = skip_ws(expr);
+    if (!result_expr_starts_with_str_returning_helper(s)) return 0;
+    const char *p = s;
+    while (is_ident_continue(*p)) p++;
+    p = skip_ws(p);
+    if (*p != '(') return 0;
+    int close = find_matching_paren_c(s, (int)(p - s));
+    if (close < 0) return 0;
+    int next_i = close + 1;
+    int has_len = 0;
+    return direct_parse_trailing_str_len(s, close + 1, &next_i, &has_len) && has_len;
+}
+
+static int result_str_int_expr_result_is_str(const char *expr, const char *ok_binder) {
+    char *clean = strip_trailing_arm_comma_copy(expr);
+    const char *s = skip_ws(clean);
+    int ok = 0;
+    if (ok_binder != NULL && strcmp(s, ok_binder) == 0) ok = 1;
+    else if (is_string_delim_c(*s)) ok = 1;
+    else if (starts_with(s, "Str") && !is_ident_continue(s[3])) ok = 1;
+    else if (result_expr_starts_with_str_returning_helper(s)) {
+        ok = result_expr_has_top_level_plus(s) || result_expr_starts_with_str_helper_len(s) ? 0 : 1;
+    }
+    free(clean);
+    return ok;
+}
+
+static int result_str_int_parse_let_binding_expr(const char *line, char **name_out, char **expr_out, char **type_out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    s = skip_ws(s + 4);
+    if (starts_with(s, "mut") && !is_ident_continue(s[3])) s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    s = skip_ws(s);
+    char *type_text = NULL;
+    if (*s == ':') {
+        const char *type_start = skip_ws(s + 1);
+        const char *type_end = type_start;
+        int depth = 0;
+        while (*type_end != '\0') {
+            if (*type_end == '<') depth++;
+            else if (*type_end == '>') {
+                if (depth > 0) depth--;
+            } else if (depth == 0 && *type_end == '=') {
+                break;
+            }
+            type_end++;
+        }
+        if (*type_end != '=') return 0;
+        while (type_end > type_start && (type_end[-1] == ' ' || type_end[-1] == '\t' || type_end[-1] == '\r')) type_end--;
+        type_text = substr_copy(type_start, (size_t)(type_end - type_start));
+        s = skip_ws(type_end);
+    }
+    if (*s != '=') {
+        free(type_text);
+        return 0;
+    }
+    s = skip_ws(s + 1);
+    const char *end = s + strlen(s);
+    while (end > s && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) end--;
+    if (end > s && end[-1] == ';') {
+        end--;
+        while (end > s && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) end--;
+    }
+    *name_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    *expr_out = trim_copy(substr_copy(s, (size_t)(end - s)));
+    *type_out = type_text;
+    return 1;
+}
+
+static int result_str_int_brace_delta(const char *line) {
+    int delta = 0;
+    for (int i = 0; line[i] != '\0'; i++) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, i);
+            if (end < 0) break;
+            i = end - 1;
+            continue;
+        }
+        if (line[i] == '\'') {
+            int end = skip_char_literal_c(line, i);
+            if (end < 0) break;
+            i = end - 1;
+            continue;
+        }
+        if (line[i] == '{') delta++;
+        else if (line[i] == '}') delta--;
+    }
+    return delta;
+}
+
+static void result_str_int_append_indent(StrBuf *out, size_t n) {
+    for (size_t i = 0; i < n; i++) sb_append(out, " ");
+}
+
+static char *result_str_int_rewrite_return_constructors(const char *line) {
+    StrBuf out;
+    sb_init(&out);
+    int changed = 0;
+    for (int i = 0; line[i] != '\0';) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if (line[i] == '\'' ) {
+            int end = skip_char_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if ((i == 0 || !is_ident_continue(line[i - 1])) &&
+            strncmp(line + i, "return", 6) == 0 &&
+            !is_ident_continue(line[i + 6])) {
+            int cursor = i + 6;
+            while (line[cursor] == ' ' || line[cursor] == '\t') cursor++;
+            int is_ok = 0;
+            int is_err = 0;
+            if (strncmp(line + cursor, "Ok", 2) == 0 && !is_ident_continue(line[cursor + 2])) is_ok = 1;
+            else if (strncmp(line + cursor, "Err", 3) == 0 && !is_ident_continue(line[cursor + 3])) is_err = 1;
+            if (is_ok || is_err) {
+                int name_len = is_ok ? 2 : 3;
+                int open = cursor + name_len;
+                while (line[open] == ' ' || line[open] == '\t') open++;
+                if (line[open] == '(') {
+                    int close = find_matching_paren_c(line, open);
+                    if (close >= 0) {
+                        char *arg = trim_copy(substr_copy(line + open + 1, (size_t)(close - open - 1)));
+                        sb_append(&out, "return VaisResultStrInt { tag: ");
+                        sb_append(&out, is_ok ? "0, value: " : "1, value: \"\", error: ");
+                        sb_append(&out, arg);
+                        if (is_ok) sb_append(&out, ", error: 0");
+                        sb_append(&out, " }");
+                        free(arg);
+                        i = close + 1;
+                        changed = 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        sb_append_n(&out, line + i, 1);
+        i++;
+    }
+    if (!changed) {
+        free(out.data);
+        return strdup(line);
+    }
+    return sb_take(&out);
+}
+
+static int lower_result_str_int_try_let_line(
+    LineVec *out,
+    const char *line,
+    char **fn_names,
+    int fn_count,
+    char **local_names,
+    int local_count,
+    int *temp_count
+) {
+    char *name = NULL;
+    char *expr = NULL;
+    if (!parse_try_let(line, &name, &expr)) return 0;
+    if (!result_str_int_expr_is_result(expr, fn_names, fn_count, local_names, local_count)) {
+        free(name);
+        free(expr);
+        return 0;
+    }
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    char tmp[80];
+    snprintf(tmp, sizeof(tmp), "__vais_result_str_try%d", (*temp_count)++);
+    char *local_ref = result_str_int_expr_local_name(expr, local_names, local_count);
+    const char *result_ref = local_ref == NULL ? tmp : local_ref;
+
+    if (local_ref == NULL) {
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, tmp);
+        sb_append(&bind, " = ");
+        sb_append(&bind, expr);
+        lines_push(out, sb_take(&bind));
+    }
+
+    StrBuf guard;
+    sb_init(&guard);
+    sb_append_n(&guard, line, indent_len);
+    sb_append(&guard, "if ");
+    sb_append(&guard, result_ref);
+    sb_append(&guard, ".tag != 0 { return VaisResultStrInt { tag: 1, value: \"\", error: ");
+    sb_append(&guard, result_ref);
+    sb_append(&guard, ".error } }");
+    lines_push(out, sb_take(&guard));
+
+    StrBuf payload_decl;
+    sb_init(&payload_decl);
+    sb_append_n(&payload_decl, line, indent_len);
+    sb_append(&payload_decl, "let mut ");
+    sb_append(&payload_decl, name);
+    sb_append(&payload_decl, " = \"\"");
+    lines_push(out, sb_take(&payload_decl));
+
+    StrBuf payload_assign;
+    sb_init(&payload_assign);
+    sb_append_n(&payload_assign, line, indent_len);
+    sb_append(&payload_assign, name);
+    sb_append(&payload_assign, " = ");
+    sb_append(&payload_assign, result_ref);
+    sb_append(&payload_assign, ".value");
+    lines_push(out, sb_take(&payload_assign));
+
+    free(local_ref);
+    free(name);
+    free(expr);
+    return 1;
+}
+
+static int lower_result_str_int_result_int_try_let_line(
+    LineVec *out,
+    const char *line,
+    char **fn_names,
+    int fn_count,
+    char **local_names,
+    int local_count,
+    int *temp_count
+) {
+    char *name = NULL;
+    char *expr = NULL;
+    if (!parse_try_let(line, &name, &expr)) return 0;
+    if (!result_int_int_expr_is_result(expr, fn_names, fn_count, local_names, local_count)) {
+        free(name);
+        free(expr);
+        return 0;
+    }
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    char tmp[80];
+    snprintf(tmp, sizeof(tmp), "__vais_result_str_int_try%d", (*temp_count)++);
+
+    StrBuf bind;
+    sb_init(&bind);
+    sb_append_n(&bind, line, indent_len);
+    sb_append(&bind, "let ");
+    sb_append(&bind, tmp);
+    sb_append(&bind, " = ");
+    sb_append(&bind, expr);
+    lines_push(out, sb_take(&bind));
+
+    StrBuf guard;
+    sb_init(&guard);
+    sb_append_n(&guard, line, indent_len);
+    sb_append(&guard, "if ");
+    sb_append(&guard, tmp);
+    sb_append(&guard, " % 2 != 0 { return VaisResultStrInt { tag: 1, value: \"\", error: (");
+    sb_append(&guard, tmp);
+    sb_append(&guard, " / 2) % 1000000 } }");
+    lines_push(out, sb_take(&guard));
+
+    StrBuf payload_decl;
+    sb_init(&payload_decl);
+    sb_append_n(&payload_decl, line, indent_len);
+    sb_append(&payload_decl, "let ");
+    sb_append(&payload_decl, name);
+    sb_append(&payload_decl, " = (");
+    sb_append(&payload_decl, tmp);
+    sb_append(&payload_decl, " / 2) % 1000000");
+    lines_push(out, sb_take(&payload_decl));
+
+    free(name);
+    free(expr);
+    return 1;
+}
+
+static int lower_result_str_int_inline_match_let_line(
+    LineVec *out,
+    const char *line,
+    char **fn_names,
+    int fn_count,
+    char **local_names,
+    int local_count,
+    int *temp_count
+) {
+    char *name = NULL;
+    char *match_expr = NULL;
+    char *arms_text = NULL;
+    if (!parse_inline_match_let(line, &name, &match_expr, &arms_text)) return 0;
+    if (!result_str_int_expr_is_result(match_expr, fn_names, fn_count, local_names, local_count)) {
+        free(name);
+        free(match_expr);
+        free(arms_text);
+        return 0;
+    }
+
+    char *arm_parts[16] = {0};
+    char *patterns[16] = {0};
+    char *exprs[16] = {0};
+    int arm_count = split_top_level_commas_c(arms_text, arm_parts, 16);
+    char *ok_binder = NULL;
+    char *err_binder = NULL;
+    char *ok_expr = NULL;
+    char *err_expr = NULL;
+    int failed = arm_count != 2;
+    for (int a = 0; a < arm_count && a < 16 && failed == 0; a++) {
+        if (!parse_arm(arm_parts[a], &patterns[a], &exprs[a])) {
+            failed = 1;
+            break;
+        }
+        char *binder = NULL;
+        if (result_str_int_parse_pattern_binder(patterns[a], "Ok", &binder)) {
+            ok_binder = binder;
+            ok_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else if (result_str_int_parse_pattern_binder(patterns[a], "Err", &binder)) {
+            err_binder = binder;
+            err_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else {
+            failed = 1;
+        }
+    }
+    if (ok_binder == NULL || err_binder == NULL || ok_expr == NULL || err_expr == NULL) failed = 1;
+    if (failed) {
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(name);
+        free(match_expr);
+        free(arms_text);
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        return 0;
+    }
+
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    char tmp[80];
+    snprintf(tmp, sizeof(tmp), "__vais_result_str_match%d", (*temp_count)++);
+    char *local_ref = result_str_int_expr_local_name(match_expr, local_names, local_count);
+    const char *result_ref = local_ref == NULL ? tmp : local_ref;
+    int result_is_str = result_str_int_expr_result_is_str(ok_expr, ok_binder) ||
+        result_str_int_expr_result_is_str(err_expr, ok_binder);
+
+    if (local_ref == NULL) {
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, tmp);
+        sb_append(&bind, " = ");
+        sb_append(&bind, match_expr);
+        lines_push(out, sb_take(&bind));
+    }
+
+    StrBuf decl;
+    sb_init(&decl);
+    sb_append_n(&decl, line, indent_len);
+    sb_append(&decl, "let mut ");
+    sb_append(&decl, name);
+    sb_append(&decl, result_is_str ? " = \"\"" : " = 0");
+    lines_push(out, sb_take(&decl));
+
+    StrBuf head;
+    sb_init(&head);
+    sb_append_n(&head, line, indent_len);
+    sb_append(&head, "if ");
+    sb_append(&head, result_ref);
+    sb_append(&head, ".tag == 0 {");
+    lines_push(out, sb_take(&head));
+
+    StrBuf ok_bind;
+    sb_init(&ok_bind);
+    result_str_int_append_indent(&ok_bind, indent_len + 4);
+    sb_append(&ok_bind, "let mut ");
+    sb_append(&ok_bind, ok_binder);
+    sb_append(&ok_bind, " = \"\"");
+    lines_push(out, sb_take(&ok_bind));
+
+    StrBuf ok_bind_assign;
+    sb_init(&ok_bind_assign);
+    result_str_int_append_indent(&ok_bind_assign, indent_len + 4);
+    sb_append(&ok_bind_assign, ok_binder);
+    sb_append(&ok_bind_assign, " = ");
+    sb_append(&ok_bind_assign, result_ref);
+    sb_append(&ok_bind_assign, ".value");
+    lines_push(out, sb_take(&ok_bind_assign));
+
+    StrBuf ok_assign;
+    sb_init(&ok_assign);
+    result_str_int_append_indent(&ok_assign, indent_len + 4);
+    sb_append(&ok_assign, name);
+    sb_append(&ok_assign, " = ");
+    sb_append(&ok_assign, ok_expr);
+    lines_push(out, sb_take(&ok_assign));
+
+    StrBuf else_head;
+    sb_init(&else_head);
+    sb_append_n(&else_head, line, indent_len);
+    sb_append(&else_head, "} else {");
+    lines_push(out, sb_take(&else_head));
+
+    StrBuf err_bind;
+    sb_init(&err_bind);
+    result_str_int_append_indent(&err_bind, indent_len + 4);
+    sb_append(&err_bind, "let ");
+    sb_append(&err_bind, err_binder);
+    sb_append(&err_bind, " = ");
+    sb_append(&err_bind, result_ref);
+    sb_append(&err_bind, ".error");
+    lines_push(out, sb_take(&err_bind));
+
+    StrBuf err_assign;
+    sb_init(&err_assign);
+    result_str_int_append_indent(&err_assign, indent_len + 4);
+    sb_append(&err_assign, name);
+    sb_append(&err_assign, " = ");
+    sb_append(&err_assign, err_expr);
+    lines_push(out, sb_take(&err_assign));
+
+    StrBuf close;
+    sb_init(&close);
+    sb_append_n(&close, line, indent_len);
+    sb_append(&close, "}");
+    lines_push(out, sb_take(&close));
+
+    for (int k = 0; k < 16; k++) {
+        free(arm_parts[k]);
+        free(patterns[k]);
+        free(exprs[k]);
+    }
+    free(name);
+    free(match_expr);
+    free(arms_text);
+    free(local_ref);
+    free(ok_binder);
+    free(err_binder);
+    free(ok_expr);
+    free(err_expr);
+    return 1;
+}
+
+static char *lower_result_str_int_text(const char *text) {
+    if (!contains_generic_type(text, "Result", "Str", "Int")) return strdup(text);
+
+    LineVec lines = split_lines(text);
+    char *fn_names[128] = {0};
+    int fn_count = 0;
+    char *result_int_fn_names[128] = {0};
+    int result_int_fn_count = 0;
+    for (size_t i = 0; i < lines.len; i++) {
+        char *fname = NULL;
+        if (result_str_int_parse_fn_name(lines.items[i], &fname)) {
+            result_str_int_add_name(fn_names, &fn_count, fname);
+            free(fname);
+        }
+        fname = NULL;
+        if (result_int_int_parse_fn_name(lines.items[i], &fname)) {
+            result_str_int_add_name(result_int_fn_names, &result_int_fn_count, fname);
+            free(fname);
+        }
+    }
+
+    LineVec out;
+    lines_init(&out);
+    lines_push(&out, strdup("struct VaisResultStrInt { tag: Int, value: Str, error: Int }"));
+
+    char *local_names[128] = {0};
+    int local_count = 0;
+    char *result_int_local_names[128] = {0};
+    int result_int_local_count = 0;
+    int in_result_fn = 0;
+    int fn_depth = 0;
+    int temp_count = 0;
+
+    for (size_t i = 0; i < lines.len; i++) {
+        char *typed = replace_generic_type(lines.items[i], "Result", "Str", "Int", "VaisResultStrInt");
+        if (line_starts_fn_decl(typed)) {
+            result_str_int_clear_names(local_names, &local_count);
+            result_str_int_clear_names(result_int_local_names, &result_int_local_count);
+        }
+        result_str_int_collect_param_names(typed, local_names, &local_count);
+        char *fname = NULL;
+        int starts_result_fn = result_str_int_parse_fn_name(typed, &fname);
+        if (starts_result_fn) {
+            in_result_fn = 1;
+            fn_depth = 0;
+        }
+        free(fname);
+
+        char *work = lower_result_call_args_line(&out, typed, fn_names, fn_count, "__vais_result_str_arg", &temp_count);
+        int emitted = 0;
+        if (in_result_fn) {
+            emitted = lower_result_str_int_try_let_line(&out, work, fn_names, fn_count, local_names, local_count, &temp_count);
+            if (!emitted) {
+                emitted = lower_result_str_int_result_int_try_let_line(
+                    &out,
+                    work,
+                    result_int_fn_names,
+                    result_int_fn_count,
+                    result_int_local_names,
+                    result_int_local_count,
+                    &temp_count);
+            }
+        }
+        if (!emitted) {
+            emitted = lower_result_str_int_inline_match_let_line(&out, work, fn_names, fn_count, local_names, local_count, &temp_count);
+        }
+        if (!emitted) {
+            char *ctor_rewritten = in_result_fn ? result_str_int_rewrite_return_constructors(work) : strdup(work);
+            lines_push(&out, ctor_rewritten);
+        }
+
+        char *lname = NULL;
+        char *lexpr = NULL;
+        char *ltype = NULL;
+        if (result_str_int_parse_let_binding_expr(typed, &lname, &lexpr, &ltype)) {
+            if ((ltype != NULL && type_text_equals_compact(ltype, "VaisResultStrInt")) ||
+                result_str_int_expr_is_result(lexpr, fn_names, fn_count, local_names, local_count)) {
+                result_str_int_add_name(local_names, &local_count, lname);
+            }
+            if ((ltype != NULL && type_text_equals_compact(ltype, "Result<Int,Int>")) ||
+                result_int_int_expr_is_result(lexpr, result_int_fn_names, result_int_fn_count, result_int_local_names, result_int_local_count)) {
+                result_str_int_add_name(result_int_local_names, &result_int_local_count, lname);
+            }
+        }
+        free(lname);
+        free(lexpr);
+        free(ltype);
+
+        if (in_result_fn) {
+            fn_depth += result_str_int_brace_delta(typed);
+            if (fn_depth <= 0 && starts_result_fn) in_result_fn = 0;
+            else if (fn_depth <= 0 && !starts_result_fn) in_result_fn = 0;
+        }
+        free(work);
+        free(typed);
+    }
+
+    for (int i = 0; i < fn_count; i++) free(fn_names[i]);
+    for (int i = 0; i < result_int_fn_count; i++) free(result_int_fn_names[i]);
+    for (int i = 0; i < local_count; i++) free(local_names[i]);
+    for (int i = 0; i < result_int_local_count; i++) free(result_int_local_names[i]);
+    char *joined = join_lines(&out, 1);
+    lines_free(&out);
+    lines_free(&lines);
+    return joined;
+}
+
+static int result_metric_int_parse_fn_name(const char *line, char **name_out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    const char *arrow = close == NULL ? NULL : strstr(close, "->");
+    if (arrow == NULL) return 0;
+    const char *ret_start = skip_ws(arrow + 2);
+    const char *ret_end = ret_start;
+    int depth = 0;
+    while (*ret_end != '\0') {
+        if (*ret_end == '<') depth++;
+        else if (*ret_end == '>') {
+            if (depth > 0) depth--;
+        } else if (depth == 0 && *ret_end == '{') {
+            break;
+        }
+        ret_end++;
+    }
+    while (ret_end > ret_start && (ret_end[-1] == ' ' || ret_end[-1] == '\t' || ret_end[-1] == '\r')) ret_end--;
+    char *ret = substr_copy(ret_start, (size_t)(ret_end - ret_start));
+    int ok = type_text_equals_compact(ret, "Result<Metric,Int>") || type_text_equals_compact(ret, "VaisResultMetricInt");
+    free(ret);
+    if (!ok) return 0;
+    *name_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    return 1;
+}
+
+static void result_metric_int_collect_param_names(const char *line, char **names, int *count) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *open = strchr(s, '(');
+    if (open == NULL) return;
+    int close = find_matching_paren_c(line, (int)(open - line));
+    if (close < 0) return;
+
+    char *params = substr_copy(open + 1, (size_t)(line + close - open - 1));
+    char *parts[16] = {0};
+    int n = split_top_level_commas_c(params, parts, 16);
+    for (int i = 0; i < n && i < 16; i++) {
+        char *part = trim_copy(parts[i]);
+        const char *p = skip_ws(part);
+        if (!is_ident_start(*p)) {
+            free(part);
+            continue;
+        }
+        const char *name_start = p;
+        p++;
+        while (is_ident_continue(*p)) p++;
+        const char *name_end = p;
+        p = skip_ws(p);
+        if (*p != ':') {
+            free(part);
+            continue;
+        }
+        char *type_text = trim_copy(p + 1);
+        if (type_text_equals_compact(type_text, "Result<Metric,Int>") ||
+            type_text_equals_compact(type_text, "VaisResultMetricInt")) {
+            char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+            result_str_int_add_name(names, count, name);
+            free(name);
+        }
+        free(type_text);
+        free(part);
+    }
+    for (int i = 0; i < 16; i++) free(parts[i]);
+    free(params);
+}
+
+static char *result_metric_int_rewrite_return_constructors(const char *line) {
+    StrBuf out;
+    sb_init(&out);
+    int changed = 0;
+    for (int i = 0; line[i] != '\0';) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if (line[i] == '\'') {
+            int end = skip_char_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if ((i == 0 || !is_ident_continue(line[i - 1])) &&
+            strncmp(line + i, "return", 6) == 0 &&
+            !is_ident_continue(line[i + 6])) {
+            int cursor = i + 6;
+            while (line[cursor] == ' ' || line[cursor] == '\t') cursor++;
+            int is_ok = 0;
+            int is_err = 0;
+            if (strncmp(line + cursor, "Ok", 2) == 0 && !is_ident_continue(line[cursor + 2])) is_ok = 1;
+            else if (strncmp(line + cursor, "Err", 3) == 0 && !is_ident_continue(line[cursor + 3])) is_err = 1;
+            if (is_ok || is_err) {
+                int name_len = is_ok ? 2 : 3;
+                int open = cursor + name_len;
+                while (line[open] == ' ' || line[open] == '\t') open++;
+                if (line[open] == '(') {
+                    int close = find_matching_paren_c(line, open);
+                    if (close >= 0) {
+                        char *arg = trim_copy(substr_copy(line + open + 1, (size_t)(close - open - 1)));
+                        sb_append(&out, "return VaisResultMetricInt { tag: ");
+                        if (is_ok) {
+                            sb_append(&out, "0, value: ");
+                            sb_append(&out, arg);
+                            sb_append(&out, ", error: 0");
+                        } else {
+                            sb_append(&out, "1, value: Metric { docs: 0, terms: 0 }, error: ");
+                            sb_append(&out, arg);
+                        }
+                        sb_append(&out, " }");
+                        free(arg);
+                        i = close + 1;
+                        changed = 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        sb_append_n(&out, line + i, 1);
+        i++;
+    }
+    if (!changed) {
+        free(out.data);
+        return strdup(line);
+    }
+    return sb_take(&out);
+}
+
+static int lower_result_metric_int_inline_match_let_line(
+    LineVec *out,
+    const char *line,
+    char **fn_names,
+    int fn_count,
+    char **local_names,
+    int local_count,
+    int *temp_count
+) {
+    char *name = NULL;
+    char *match_expr = NULL;
+    char *arms_text = NULL;
+    if (!parse_inline_match_let(line, &name, &match_expr, &arms_text)) return 0;
+    if (!result_str_int_expr_is_result(match_expr, fn_names, fn_count, local_names, local_count)) {
+        free(name);
+        free(match_expr);
+        free(arms_text);
+        return 0;
+    }
+
+    char *arm_parts[16] = {0};
+    char *patterns[16] = {0};
+    char *exprs[16] = {0};
+    int arm_count = split_top_level_commas_c(arms_text, arm_parts, 16);
+    char *ok_binder = NULL;
+    char *err_binder = NULL;
+    char *ok_expr = NULL;
+    char *err_expr = NULL;
+    int failed = arm_count != 2;
+    for (int a = 0; a < arm_count && a < 16 && failed == 0; a++) {
+        if (!parse_arm(arm_parts[a], &patterns[a], &exprs[a])) {
+            failed = 1;
+            break;
+        }
+        char *binder = NULL;
+        if (result_str_int_parse_pattern_binder(patterns[a], "Ok", &binder)) {
+            ok_binder = binder;
+            ok_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else if (result_str_int_parse_pattern_binder(patterns[a], "Err", &binder)) {
+            err_binder = binder;
+            err_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else {
+            failed = 1;
+        }
+    }
+    if (ok_binder == NULL || err_binder == NULL || ok_expr == NULL || err_expr == NULL) failed = 1;
+    if (failed) {
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(name);
+        free(match_expr);
+        free(arms_text);
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        return 0;
+    }
+
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    char tmp[80];
+    snprintf(tmp, sizeof(tmp), "__vais_result_metric_match%d", (*temp_count)++);
+    char *local_ref = result_str_int_expr_local_name(match_expr, local_names, local_count);
+    const char *result_ref = local_ref == NULL ? tmp : local_ref;
+
+    if (local_ref == NULL) {
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, tmp);
+        sb_append(&bind, " = ");
+        sb_append(&bind, match_expr);
+        lines_push(out, sb_take(&bind));
+    }
+
+    StrBuf decl;
+    sb_init(&decl);
+    sb_append_n(&decl, line, indent_len);
+    sb_append(&decl, "let mut ");
+    sb_append(&decl, name);
+    sb_append(&decl, " = 0");
+    lines_push(out, sb_take(&decl));
+
+    StrBuf head;
+    sb_init(&head);
+    sb_append_n(&head, line, indent_len);
+    sb_append(&head, "if ");
+    sb_append(&head, result_ref);
+    sb_append(&head, ".tag == 0 {");
+    lines_push(out, sb_take(&head));
+
+    StrBuf ok_bind;
+    sb_init(&ok_bind);
+    result_str_int_append_indent(&ok_bind, indent_len + 4);
+    sb_append(&ok_bind, "let ");
+    sb_append(&ok_bind, ok_binder);
+    sb_append(&ok_bind, " = Metric { docs: ");
+    sb_append(&ok_bind, result_ref);
+    sb_append(&ok_bind, ".value.docs, terms: ");
+    sb_append(&ok_bind, result_ref);
+    sb_append(&ok_bind, ".value.terms }");
+    lines_push(out, sb_take(&ok_bind));
+
+    StrBuf ok_assign;
+    sb_init(&ok_assign);
+    result_str_int_append_indent(&ok_assign, indent_len + 4);
+    sb_append(&ok_assign, name);
+    sb_append(&ok_assign, " = ");
+    sb_append(&ok_assign, ok_expr);
+    lines_push(out, sb_take(&ok_assign));
+
+    StrBuf else_head;
+    sb_init(&else_head);
+    sb_append_n(&else_head, line, indent_len);
+    sb_append(&else_head, "} else {");
+    lines_push(out, sb_take(&else_head));
+
+    StrBuf err_bind;
+    sb_init(&err_bind);
+    result_str_int_append_indent(&err_bind, indent_len + 4);
+    sb_append(&err_bind, "let ");
+    sb_append(&err_bind, err_binder);
+    sb_append(&err_bind, " = ");
+    sb_append(&err_bind, result_ref);
+    sb_append(&err_bind, ".error");
+    lines_push(out, sb_take(&err_bind));
+
+    StrBuf err_assign;
+    sb_init(&err_assign);
+    result_str_int_append_indent(&err_assign, indent_len + 4);
+    sb_append(&err_assign, name);
+    sb_append(&err_assign, " = ");
+    sb_append(&err_assign, err_expr);
+    lines_push(out, sb_take(&err_assign));
+
+    StrBuf close;
+    sb_init(&close);
+    sb_append_n(&close, line, indent_len);
+    sb_append(&close, "}");
+    lines_push(out, sb_take(&close));
+
+    for (int k = 0; k < 16; k++) {
+        free(arm_parts[k]);
+        free(patterns[k]);
+        free(exprs[k]);
+    }
+    free(name);
+    free(match_expr);
+    free(arms_text);
+    free(local_ref);
+    free(ok_binder);
+    free(err_binder);
+    free(ok_expr);
+    free(err_expr);
+    return 1;
+}
+
+static char *lower_result_metric_int_text(const char *text) {
+    if (!contains_generic_type(text, "Result", "Metric", "Int")) return strdup(text);
+
+    LineVec lines = split_lines(text);
+    char *fn_names[128] = {0};
+    int fn_count = 0;
+    for (size_t i = 0; i < lines.len; i++) {
+        char *fname = NULL;
+        if (result_metric_int_parse_fn_name(lines.items[i], &fname)) {
+            result_str_int_add_name(fn_names, &fn_count, fname);
+            free(fname);
+        }
+    }
+
+    LineVec out;
+    lines_init(&out);
+
+    char *local_names[128] = {0};
+    int local_count = 0;
+    int in_result_fn = 0;
+    int fn_depth = 0;
+    int temp_count = 0;
+    int wrapper_emitted = 0;
+
+    for (size_t i = 0; i < lines.len; i++) {
+        char *typed = replace_generic_type(lines.items[i], "Result", "Metric", "Int", "VaisResultMetricInt");
+        if (line_starts_fn_decl(typed)) {
+            result_str_int_clear_names(local_names, &local_count);
+        }
+        result_metric_int_collect_param_names(typed, local_names, &local_count);
+        char *fname = NULL;
+        int starts_result_fn = result_metric_int_parse_fn_name(typed, &fname);
+        if (starts_result_fn) {
+            in_result_fn = 1;
+            fn_depth = 0;
+        }
+        free(fname);
+
+        int emitted = lower_result_metric_int_inline_match_let_line(&out, typed, fn_names, fn_count, local_names, local_count, &temp_count);
+        if (!emitted) {
+            char *ctor_rewritten = in_result_fn ? result_metric_int_rewrite_return_constructors(typed) : strdup(typed);
+            lines_push(&out, ctor_rewritten);
+        }
+        const char *metric_decl = skip_ws(typed);
+        if (!wrapper_emitted && starts_with(metric_decl, "struct Metric") && !is_ident_continue(metric_decl[13])) {
+            lines_push(&out, strdup("struct VaisResultMetricInt { tag: Int, value: Metric, error: Int }"));
+            wrapper_emitted = 1;
+        }
+
+        char *lname = NULL;
+        char *lexpr = NULL;
+        char *ltype = NULL;
+        if (result_str_int_parse_let_binding_expr(typed, &lname, &lexpr, &ltype)) {
+            if ((ltype != NULL && type_text_equals_compact(ltype, "VaisResultMetricInt")) ||
+                result_str_int_expr_is_result(lexpr, fn_names, fn_count, local_names, local_count)) {
+                result_str_int_add_name(local_names, &local_count, lname);
+            }
+        }
+        free(lname);
+        free(lexpr);
+        free(ltype);
+
+        if (in_result_fn) {
+            fn_depth += result_str_int_brace_delta(typed);
+            if (fn_depth <= 0 && starts_result_fn) in_result_fn = 0;
+            else if (fn_depth <= 0 && !starts_result_fn) in_result_fn = 0;
+        }
+        free(typed);
+    }
+
+    if (!wrapper_emitted) {
+        LineVec with_wrapper;
+        lines_init(&with_wrapper);
+        lines_push(&with_wrapper, strdup("struct VaisResultMetricInt { tag: Int, value: Metric, error: Int }"));
+        for (size_t i = 0; i < out.len; i++) lines_push(&with_wrapper, strdup(out.items[i]));
+        lines_free(&out);
+        out = with_wrapper;
+    }
+
+    for (int i = 0; i < fn_count; i++) free(fn_names[i]);
+    for (int i = 0; i < local_count; i++) free(local_names[i]);
+    char *joined = join_lines(&out, 1);
+    lines_free(&out);
+    lines_free(&lines);
+    return joined;
+}
+
+typedef struct {
+    char *name;
+    char *wrapper;
+    char *fields[DIRECT_MAX_STRUCT_FIELDS];
+    char *field_types[DIRECT_MAX_STRUCT_FIELDS];
+    int field_count;
+    int decl_start_line;
+    int decl_end_line;
+    int used;
+    int wrapper_emitted;
+} ResultStructIntInfo;
+
+static int result_struct_int_expr_result_is_str(const char *expr, const char *ok_binder, ResultStructIntInfo *info) {
+    char *clean = strip_trailing_arm_comma_copy(expr);
+    const char *s = skip_ws(clean);
+    int ok = 0;
+    if (is_string_delim_c(*s)) {
+        ok = 1;
+    } else if (starts_with(s, "Str") && !is_ident_continue(s[3])) {
+        ok = 1;
+    } else if (result_expr_starts_with_str_returning_helper(s)) {
+        ok = result_expr_has_top_level_plus(s) || result_expr_starts_with_str_helper_len(s) ? 0 : 1;
+    } else if (ok_binder != NULL && info != NULL) {
+        size_t binder_len = strlen(ok_binder);
+        if (strncmp(s, ok_binder, binder_len) == 0 && !is_ident_continue(s[binder_len])) {
+            const char *p = skip_ws(s + binder_len);
+            if (*p == '.') {
+                p = skip_ws(p + 1);
+                const char *field_start = p;
+                while (is_ident_continue(*p)) p++;
+                char *field = substr_copy(field_start, (size_t)(p - field_start));
+                if (*skip_ws(p) == '\0') {
+                    for (int i = 0; i < info->field_count; i++) {
+                        if (strcmp(info->fields[i], field) == 0 && strcmp(info->field_types[i], "Str") == 0) {
+                            ok = 1;
+                            break;
+                        }
+                    }
+                }
+                free(field);
+            }
+        }
+    }
+    free(clean);
+    return ok;
+}
+
+static void result_struct_int_free_infos(ResultStructIntInfo *infos, int count) {
+    for (int i = 0; i < count; i++) {
+        free(infos[i].name);
+        free(infos[i].wrapper);
+        for (int f = 0; f < infos[i].field_count; f++) {
+            free(infos[i].fields[f]);
+            free(infos[i].field_types[f]);
+        }
+    }
+}
+
+static char *result_struct_int_wrapper_name(const char *payload) {
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, "VaisResult");
+    sb_append(&out, payload);
+    sb_append(&out, "Int");
+    return sb_take(&out);
+}
+
+static int result_struct_int_find_info_by_name(ResultStructIntInfo *infos, int count, const char *name) {
+    for (int i = 0; i < count; i++) {
+        if (strcmp(infos[i].name, name) == 0) return i;
+    }
+    return -1;
+}
+
+static int result_struct_int_type_info_index(const char *type, ResultStructIntInfo *infos, int count) {
+    for (int i = 0; i < count; i++) {
+        StrBuf expected;
+        sb_init(&expected);
+        sb_append(&expected, "Result<");
+        sb_append(&expected, infos[i].name);
+        sb_append(&expected, ",Int>");
+        char *result_type = sb_take(&expected);
+        int ok = type_text_equals_compact(type, result_type) ||
+            type_text_equals_compact(type, infos[i].wrapper);
+        free(result_type);
+        if (ok) return i;
+    }
+    return -1;
+}
+
+static int result_struct_int_collect_struct_at(LineVec *lines, size_t start, ResultStructIntInfo *infos, int *count, size_t *end_out) {
+    const char *line = lines->items[start];
+    char *code = strip_line_comment(line, strlen(line));
+    const char *s = skip_ws(code);
+    if (!starts_with(s, "struct ") || is_ident_continue(s[6])) {
+        free(code);
+        return 0;
+    }
+    s = skip_ws(s + 7);
+    if (!is_ident_start(*s)) {
+        free(code);
+        return 0;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    const char *open = strchr(s, '{');
+    if (open == NULL) {
+        free(code);
+        return 0;
+    }
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    if (result_struct_int_find_info_by_name(infos, *count, name) >= 0) {
+        free(name);
+        free(code);
+        return 0;
+    }
+
+    StrBuf body_buf;
+    sb_init(&body_buf);
+    size_t end_line = start;
+    const char *cursor = open + 1;
+    while (1) {
+        const char *close = strchr(cursor, '}');
+        if (close != NULL) {
+            sb_append_n(&body_buf, cursor, (size_t)(close - cursor));
+            break;
+        }
+        sb_append(&body_buf, cursor);
+        sb_append(&body_buf, " ");
+        free(code);
+        end_line++;
+        if (end_line >= lines->len) {
+            free(body_buf.data);
+            free(name);
+            return 0;
+        }
+        code = strip_line_comment(lines->items[end_line], strlen(lines->items[end_line]));
+        cursor = code;
+    }
+
+    char *body = sb_take(&body_buf);
+    char *parts[DIRECT_MAX_STRUCT_FIELDS] = {0};
+    int n = split_top_level_commas_c(body, parts, DIRECT_MAX_STRUCT_FIELDS);
+    free(body);
+    if (n <= 0 || *count >= 64) {
+        for (int i = 0; i < DIRECT_MAX_STRUCT_FIELDS; i++) free(parts[i]);
+        free(name);
+        free(code);
+        return 0;
+    }
+    ResultStructIntInfo info;
+    memset(&info, 0, sizeof(info));
+    info.name = name;
+    info.wrapper = result_struct_int_wrapper_name(name);
+    info.decl_start_line = (int)start;
+    info.decl_end_line = (int)end_line;
+    int ok = 1;
+    for (int i = 0; i < n; i++) {
+        char *part = trim_copy(parts[i]);
+        char *colon = strchr(part, ':');
+        if (colon == NULL) {
+            ok = 0;
+        } else {
+            const char *p = skip_ws(part);
+            if (!is_ident_start(*p)) {
+                ok = 0;
+            } else {
+                const char *field_start = p;
+                p++;
+                while (is_ident_continue(*p)) p++;
+                char *field = substr_copy(field_start, (size_t)(p - field_start));
+                char *ty = trim_copy(colon + 1);
+                if (!type_text_equals_compact(ty, "Int") && !type_text_equals_compact(ty, "Str")) {
+                    free(field);
+                    ok = 0;
+                } else if (info.field_count < DIRECT_MAX_STRUCT_FIELDS) {
+                    info.fields[info.field_count] = field;
+                    info.field_types[info.field_count] = type_text_equals_compact(ty, "Str") ? strdup("Str") : strdup("Int");
+                    if (info.field_types[info.field_count] == NULL) die_oom();
+                    info.field_count++;
+                } else {
+                    free(field);
+                    ok = 0;
+                }
+                free(ty);
+            }
+        }
+        free(part);
+        free(parts[i]);
+    }
+    if (!ok || info.field_count <= 0) {
+        for (int i = 0; i < info.field_count; i++) {
+            free(info.fields[i]);
+            free(info.field_types[i]);
+        }
+        free(info.name);
+        free(info.wrapper);
+        free(code);
+        return 0;
+    }
+    infos[*count] = info;
+    (*count)++;
+    if (end_out != NULL) *end_out = end_line;
+    free(code);
+    return 1;
+}
+
+static int result_struct_int_parse_fn_info(
+    const char *line,
+    ResultStructIntInfo *infos,
+    int info_count,
+    char **name_out,
+    int *info_index_out
+) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    const char *arrow = close == NULL ? NULL : strstr(close, "->");
+    if (arrow == NULL) return 0;
+    const char *ret_start = skip_ws(arrow + 2);
+    const char *ret_end = ret_start;
+    int depth = 0;
+    while (*ret_end != '\0') {
+        if (*ret_end == '<') depth++;
+        else if (*ret_end == '>') {
+            if (depth > 0) depth--;
+        } else if (depth == 0 && *ret_end == '{') {
+            break;
+        }
+        ret_end++;
+    }
+    while (ret_end > ret_start && (ret_end[-1] == ' ' || ret_end[-1] == '\t' || ret_end[-1] == '\r')) ret_end--;
+    char *ret = substr_copy(ret_start, (size_t)(ret_end - ret_start));
+    int idx = result_struct_int_type_info_index(ret, infos, info_count);
+    free(ret);
+    if (idx < 0) return 0;
+    if (name_out != NULL) *name_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    if (info_index_out != NULL) *info_index_out = idx;
+    return 1;
+}
+
+static int result_struct_int_parse_result_int_fn(const char *line) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return 0;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    const char *arrow = close == NULL ? NULL : strstr(close, "->");
+    if (arrow == NULL) return 0;
+    const char *ret_start = skip_ws(arrow + 2);
+    const char *ret_end = ret_start;
+    int depth = 0;
+    while (*ret_end != '\0') {
+        if (*ret_end == '<') depth++;
+        else if (*ret_end == '>') {
+            if (depth > 0) depth--;
+        } else if (depth == 0 && *ret_end == '{') {
+            break;
+        }
+        ret_end++;
+    }
+    while (ret_end > ret_start && (ret_end[-1] == ' ' || ret_end[-1] == '\t' || ret_end[-1] == '\r')) ret_end--;
+    char *ret = substr_copy(ret_start, (size_t)(ret_end - ret_start));
+    int ok = type_text_equals_compact(ret, "Result<Int,Int>");
+    free(ret);
+    return ok;
+}
+
+static void result_struct_int_add_name(char **names, int *info_indices, int *count, const char *name, int info_index) {
+    if (*count >= 128) return;
+    names[*count] = strdup(name);
+    if (names[*count] == NULL) die_oom();
+    info_indices[*count] = info_index;
+    (*count)++;
+}
+
+static int result_struct_int_lookup_name(char **names, int *info_indices, int count, const char *name) {
+    for (int i = count - 1; i >= 0; i--) {
+        if (strcmp(names[i], name) == 0) return info_indices[i];
+    }
+    return -1;
+}
+
+static int result_struct_int_expr_info_index(
+    const char *expr,
+    char **fn_names,
+    int *fn_info_indices,
+    int fn_count,
+    char **local_names,
+    int *local_info_indices,
+    int local_count
+) {
+    const char *s = skip_ws(expr);
+    if (!is_ident_start(*s)) return -1;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    const char *tail = skip_ws(s);
+    int idx = -1;
+    if (*tail == '(') {
+        int close = find_matching_paren_c(expr, (int)(tail - expr));
+        if (close >= 0) {
+            const char *after = skip_ws(expr + close + 1);
+            if (*after == '\0' || *after == ';') {
+                idx = result_struct_int_lookup_name(fn_names, fn_info_indices, fn_count, name);
+            }
+        }
+    } else if (*tail == '\0' || *tail == ';') {
+        idx = result_struct_int_lookup_name(local_names, local_info_indices, local_count, name);
+    }
+    free(name);
+    return idx;
+}
+
+static void result_struct_int_collect_param_names(
+    const char *line,
+    ResultStructIntInfo *infos,
+    int info_count,
+    char **names,
+    int *info_indices,
+    int *count
+) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *open = strchr(s, '(');
+    if (open == NULL) return;
+    int close = find_matching_paren_c(line, (int)(open - line));
+    if (close < 0) return;
+
+    char *params = substr_copy(open + 1, (size_t)(line + close - open - 1));
+    char *parts[16] = {0};
+    int n = split_top_level_commas_c(params, parts, 16);
+    for (int i = 0; i < n && i < 16; i++) {
+        char *part = trim_copy(parts[i]);
+        const char *p = skip_ws(part);
+        if (!is_ident_start(*p)) {
+            free(part);
+            continue;
+        }
+        const char *name_start = p;
+        p++;
+        while (is_ident_continue(*p)) p++;
+        const char *name_end = p;
+        p = skip_ws(p);
+        if (*p != ':') {
+            free(part);
+            continue;
+        }
+        char *type_text = trim_copy(p + 1);
+        int idx = result_struct_int_type_info_index(type_text, infos, info_count);
+        if (idx >= 0) {
+            char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+            result_struct_int_add_name(names, info_indices, count, name, idx);
+            free(name);
+        }
+        free(type_text);
+        free(part);
+    }
+    for (int i = 0; i < 16; i++) free(parts[i]);
+    free(params);
+}
+
+static char *result_struct_int_rewrite_return_constructors(const char *line, ResultStructIntInfo *info) {
+    StrBuf out;
+    sb_init(&out);
+    int changed = 0;
+    for (int i = 0; line[i] != '\0';) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if (line[i] == '\'') {
+            int end = skip_char_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if ((i == 0 || !is_ident_continue(line[i - 1])) &&
+            strncmp(line + i, "return", 6) == 0 &&
+            !is_ident_continue(line[i + 6])) {
+            int cursor = i + 6;
+            while (line[cursor] == ' ' || line[cursor] == '\t') cursor++;
+            int is_ok = 0;
+            int is_err = 0;
+            if (strncmp(line + cursor, "Ok", 2) == 0 && !is_ident_continue(line[cursor + 2])) is_ok = 1;
+            else if (strncmp(line + cursor, "Err", 3) == 0 && !is_ident_continue(line[cursor + 3])) is_err = 1;
+            if (is_ok || is_err) {
+                int name_len = is_ok ? 2 : 3;
+                int open = cursor + name_len;
+                while (line[open] == ' ' || line[open] == '\t') open++;
+                if (line[open] == '(') {
+                    int close = find_matching_paren_c(line, open);
+                    if (close >= 0) {
+                        char *raw_arg = substr_copy(line + open + 1, (size_t)(close - open - 1));
+                        char *arg = trim_copy(raw_arg);
+                        free(raw_arg);
+                        sb_append(&out, "return ");
+                        sb_append(&out, info->wrapper);
+                        sb_append(&out, " { tag: ");
+                        if (is_ok) {
+                            sb_append(&out, "0, value: ");
+                            sb_append(&out, arg);
+                            sb_append(&out, ", error: 0");
+                        } else {
+                            sb_append(&out, "1, value: ");
+                            sb_append(&out, info->name);
+                            sb_append(&out, " { ");
+                            for (int f = 0; f < info->field_count; f++) {
+                                if (f > 0) sb_append(&out, ", ");
+                                sb_append(&out, info->fields[f]);
+                                sb_append(&out, ": ");
+                                if (info->field_types[f] != NULL && strcmp(info->field_types[f], "Str") == 0) {
+                                    sb_append(&out, "\"\"");
+                                } else {
+                                    sb_append(&out, "0");
+                                }
+                            }
+                            sb_append(&out, " }, error: ");
+                            sb_append(&out, arg);
+                        }
+                        sb_append(&out, " }");
+                        free(arg);
+                        i = close + 1;
+                        changed = 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        sb_append_n(&out, line + i, 1);
+        i++;
+    }
+    if (!changed) {
+        free(out.data);
+        return strdup(line);
+    }
+    return sb_take(&out);
+}
+
+static void result_struct_int_append_default_value(StrBuf *out, ResultStructIntInfo *info) {
+    sb_append(out, info->name);
+    sb_append(out, " { ");
+    for (int f = 0; f < info->field_count; f++) {
+        if (f > 0) sb_append(out, ", ");
+        sb_append(out, info->fields[f]);
+        sb_append(out, ": ");
+        if (info->field_types[f] != NULL && strcmp(info->field_types[f], "Str") == 0) {
+            sb_append(out, "\"\"");
+        } else {
+            sb_append(out, "0");
+        }
+    }
+    sb_append(out, " }");
+}
+
+static int lower_result_struct_int_try_let_line(
+    LineVec *out,
+    const char *line,
+    ResultStructIntInfo *infos,
+    int info_count,
+    char **fn_names,
+    int *fn_info_indices,
+    int fn_count,
+    char **local_names,
+    int *local_info_indices,
+    int local_count,
+    int current_result_info,
+    int current_result_int,
+    int current_result_str_int,
+    int *temp_count
+) {
+    char *name = NULL;
+    char *expr = NULL;
+    if (!parse_try_let(line, &name, &expr)) return 0;
+    int info_index = result_struct_int_expr_info_index(expr, fn_names, fn_info_indices, fn_count, local_names, local_info_indices, local_count);
+    if (info_index < 0 || info_index >= info_count ||
+        ((current_result_info < 0 || current_result_info >= info_count) && !current_result_int && !current_result_str_int)) {
+        free(name);
+        free(expr);
+        return 0;
+    }
+    ResultStructIntInfo *payload_info = &infos[info_index];
+
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    char tmp[80];
+    snprintf(tmp, sizeof(tmp), "__vais_result_struct_try%d", (*temp_count)++);
+    char *local_ref = result_str_int_expr_local_name(expr, local_names, local_count);
+    const char *result_ref = local_ref == NULL ? tmp : local_ref;
+
+    if (local_ref == NULL) {
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, tmp);
+        sb_append(&bind, " = ");
+        sb_append(&bind, expr);
+        lines_push(out, sb_take(&bind));
+    }
+
+    StrBuf guard;
+    sb_init(&guard);
+    sb_append_n(&guard, line, indent_len);
+    sb_append(&guard, "if ");
+    sb_append(&guard, result_ref);
+    if (current_result_int) {
+        sb_append(&guard, ".tag != 0 { return Err(");
+        sb_append(&guard, result_ref);
+        sb_append(&guard, ".error) }");
+    } else if (current_result_str_int) {
+        sb_append(&guard, ".tag != 0 { return VaisResultStrInt { tag: 1, value: \"\", error: ");
+        sb_append(&guard, result_ref);
+        sb_append(&guard, ".error } }");
+    } else {
+        ResultStructIntInfo *return_info = &infos[current_result_info];
+        sb_append(&guard, ".tag != 0 { return ");
+        sb_append(&guard, return_info->wrapper);
+        sb_append(&guard, " { tag: 1, value: ");
+        result_struct_int_append_default_value(&guard, return_info);
+        sb_append(&guard, ", error: ");
+        sb_append(&guard, result_ref);
+        sb_append(&guard, ".error } }");
+    }
+    lines_push(out, sb_take(&guard));
+
+    StrBuf payload_bind;
+    sb_init(&payload_bind);
+    sb_append_n(&payload_bind, line, indent_len);
+    sb_append(&payload_bind, "let ");
+    sb_append(&payload_bind, name);
+    sb_append(&payload_bind, " = ");
+    sb_append(&payload_bind, payload_info->name);
+    sb_append(&payload_bind, " { ");
+    for (int f = 0; f < payload_info->field_count; f++) {
+        if (f > 0) sb_append(&payload_bind, ", ");
+        sb_append(&payload_bind, payload_info->fields[f]);
+        sb_append(&payload_bind, ": ");
+        sb_append(&payload_bind, result_ref);
+        sb_append(&payload_bind, ".value.");
+        sb_append(&payload_bind, payload_info->fields[f]);
+    }
+    sb_append(&payload_bind, " }");
+    lines_push(out, sb_take(&payload_bind));
+
+    free(local_ref);
+    free(name);
+    free(expr);
+    return 1;
+}
+
+static int lower_result_struct_int_inline_match_let_line(
+    LineVec *out,
+    const char *line,
+    ResultStructIntInfo *infos,
+    int info_count,
+    char **fn_names,
+    int *fn_info_indices,
+    int fn_count,
+    char **local_names,
+    int *local_info_indices,
+    int local_count,
+    int *temp_count
+) {
+    char *name = NULL;
+    char *match_expr = NULL;
+    char *arms_text = NULL;
+    if (!parse_inline_match_let(line, &name, &match_expr, &arms_text)) return 0;
+    int info_index = result_struct_int_expr_info_index(match_expr, fn_names, fn_info_indices, fn_count, local_names, local_info_indices, local_count);
+    if (info_index < 0 || info_index >= info_count) {
+        free(name);
+        free(match_expr);
+        free(arms_text);
+        return 0;
+    }
+    ResultStructIntInfo *info = &infos[info_index];
+
+    char *arm_parts[16] = {0};
+    char *patterns[16] = {0};
+    char *exprs[16] = {0};
+    int arm_count = split_top_level_commas_c(arms_text, arm_parts, 16);
+    char *ok_binder = NULL;
+    char *err_binder = NULL;
+    char *ok_expr = NULL;
+    char *err_expr = NULL;
+    int failed = arm_count != 2;
+    for (int a = 0; a < arm_count && a < 16 && failed == 0; a++) {
+        if (!parse_arm(arm_parts[a], &patterns[a], &exprs[a])) {
+            failed = 1;
+            break;
+        }
+        char *binder = NULL;
+        if (result_str_int_parse_pattern_binder(patterns[a], "Ok", &binder)) {
+            ok_binder = binder;
+            ok_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else if (result_str_int_parse_pattern_binder(patterns[a], "Err", &binder)) {
+            err_binder = binder;
+            err_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else {
+            failed = 1;
+        }
+    }
+    if (ok_binder == NULL || err_binder == NULL || ok_expr == NULL || err_expr == NULL) failed = 1;
+    if (failed) {
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(name);
+        free(match_expr);
+        free(arms_text);
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        return 0;
+    }
+
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    char tmp[80];
+    snprintf(tmp, sizeof(tmp), "__vais_result_struct_match%d", (*temp_count)++);
+    char *local_ref = result_str_int_expr_local_name(match_expr, local_names, local_count);
+    const char *result_ref = local_ref == NULL ? tmp : local_ref;
+    int result_is_str = result_struct_int_expr_result_is_str(ok_expr, ok_binder, info) ||
+        result_struct_int_expr_result_is_str(err_expr, err_binder, info);
+
+    if (local_ref == NULL) {
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, tmp);
+        sb_append(&bind, " = ");
+        sb_append(&bind, match_expr);
+        lines_push(out, sb_take(&bind));
+    }
+
+    StrBuf decl;
+    sb_init(&decl);
+    sb_append_n(&decl, line, indent_len);
+    sb_append(&decl, "let mut ");
+    sb_append(&decl, name);
+    sb_append(&decl, result_is_str ? " = \"\"" : " = 0");
+    lines_push(out, sb_take(&decl));
+
+    StrBuf head;
+    sb_init(&head);
+    sb_append_n(&head, line, indent_len);
+    sb_append(&head, "if ");
+    sb_append(&head, result_ref);
+    sb_append(&head, ".tag == 0 {");
+    lines_push(out, sb_take(&head));
+
+    StrBuf ok_bind;
+    sb_init(&ok_bind);
+    result_str_int_append_indent(&ok_bind, indent_len + 4);
+    sb_append(&ok_bind, "let ");
+    sb_append(&ok_bind, ok_binder);
+    sb_append(&ok_bind, " = ");
+    sb_append(&ok_bind, result_ref);
+    sb_append(&ok_bind, ".value");
+    lines_push(out, sb_take(&ok_bind));
+
+    StrBuf ok_assign;
+    sb_init(&ok_assign);
+    result_str_int_append_indent(&ok_assign, indent_len + 4);
+    sb_append(&ok_assign, name);
+    sb_append(&ok_assign, " = ");
+    sb_append(&ok_assign, ok_expr);
+    lines_push(out, sb_take(&ok_assign));
+
+    StrBuf else_head;
+    sb_init(&else_head);
+    sb_append_n(&else_head, line, indent_len);
+    sb_append(&else_head, "} else {");
+    lines_push(out, sb_take(&else_head));
+
+    StrBuf err_bind;
+    sb_init(&err_bind);
+    result_str_int_append_indent(&err_bind, indent_len + 4);
+    sb_append(&err_bind, "let ");
+    sb_append(&err_bind, err_binder);
+    sb_append(&err_bind, " = ");
+    sb_append(&err_bind, result_ref);
+    sb_append(&err_bind, ".error");
+    lines_push(out, sb_take(&err_bind));
+
+    StrBuf err_assign;
+    sb_init(&err_assign);
+    result_str_int_append_indent(&err_assign, indent_len + 4);
+    sb_append(&err_assign, name);
+    sb_append(&err_assign, " = ");
+    sb_append(&err_assign, err_expr);
+    lines_push(out, sb_take(&err_assign));
+
+    StrBuf close;
+    sb_init(&close);
+    sb_append_n(&close, line, indent_len);
+    sb_append(&close, "}");
+    lines_push(out, sb_take(&close));
+
+    for (int k = 0; k < 16; k++) {
+        free(arm_parts[k]);
+        free(patterns[k]);
+        free(exprs[k]);
+    }
+    free(name);
+    free(match_expr);
+    free(arms_text);
+    free(local_ref);
+    free(ok_binder);
+    free(err_binder);
+    free(ok_expr);
+    free(err_expr);
+    return 1;
+}
+
+static int lower_result_struct_int_inline_match_return_line(
+    LineVec *out,
+    const char *line,
+    ResultStructIntInfo *infos,
+    int info_count,
+    char **fn_names,
+    int *fn_info_indices,
+    int fn_count,
+    char **local_names,
+    int *local_info_indices,
+    int local_count,
+    int *temp_count
+) {
+    char *match_expr = NULL;
+    char *arms_text = NULL;
+    if (!parse_inline_match_return(line, &match_expr, &arms_text)) return 0;
+    int info_index = result_struct_int_expr_info_index(match_expr, fn_names, fn_info_indices, fn_count, local_names, local_info_indices, local_count);
+    if (info_index < 0 || info_index >= info_count) {
+        free(match_expr);
+        free(arms_text);
+        return 0;
+    }
+
+    char *arm_parts[16] = {0};
+    char *patterns[16] = {0};
+    char *exprs[16] = {0};
+    int arm_count = split_top_level_commas_c(arms_text, arm_parts, 16);
+    char *ok_binder = NULL;
+    char *err_binder = NULL;
+    char *ok_expr = NULL;
+    char *err_expr = NULL;
+    int failed = arm_count != 2;
+    for (int a = 0; a < arm_count && a < 16 && failed == 0; a++) {
+        if (!parse_arm(arm_parts[a], &patterns[a], &exprs[a])) {
+            failed = 1;
+            break;
+        }
+        char *binder = NULL;
+        if (result_str_int_parse_pattern_binder(patterns[a], "Ok", &binder)) {
+            ok_binder = binder;
+            ok_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else if (result_str_int_parse_pattern_binder(patterns[a], "Err", &binder)) {
+            err_binder = binder;
+            err_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else {
+            failed = 1;
+        }
+    }
+    if (ok_binder == NULL || err_binder == NULL || ok_expr == NULL || err_expr == NULL) failed = 1;
+    if (failed) {
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(match_expr);
+        free(arms_text);
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        return 0;
+    }
+
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    char tmp[80];
+    snprintf(tmp, sizeof(tmp), "__vais_result_struct_return%d", (*temp_count)++);
+    char *local_ref = result_str_int_expr_local_name(match_expr, local_names, local_count);
+    const char *result_ref = local_ref == NULL ? tmp : local_ref;
+
+    if (local_ref == NULL) {
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, tmp);
+        sb_append(&bind, " = ");
+        sb_append(&bind, match_expr);
+        lines_push(out, sb_take(&bind));
+    }
+
+    StrBuf head;
+    sb_init(&head);
+    sb_append_n(&head, line, indent_len);
+    sb_append(&head, "if ");
+    sb_append(&head, result_ref);
+    sb_append(&head, ".tag == 0 {");
+    lines_push(out, sb_take(&head));
+
+    StrBuf ok_bind;
+    sb_init(&ok_bind);
+    result_str_int_append_indent(&ok_bind, indent_len + 4);
+    sb_append(&ok_bind, "let ");
+    sb_append(&ok_bind, ok_binder);
+    sb_append(&ok_bind, " = ");
+    sb_append(&ok_bind, result_ref);
+    sb_append(&ok_bind, ".value");
+    lines_push(out, sb_take(&ok_bind));
+
+    StrBuf ok_return;
+    sb_init(&ok_return);
+    result_str_int_append_indent(&ok_return, indent_len + 4);
+    sb_append(&ok_return, "return ");
+    sb_append(&ok_return, ok_expr);
+    lines_push(out, sb_take(&ok_return));
+
+    StrBuf else_head;
+    sb_init(&else_head);
+    sb_append_n(&else_head, line, indent_len);
+    sb_append(&else_head, "} else {");
+    lines_push(out, sb_take(&else_head));
+
+    StrBuf err_bind;
+    sb_init(&err_bind);
+    result_str_int_append_indent(&err_bind, indent_len + 4);
+    sb_append(&err_bind, "let ");
+    sb_append(&err_bind, err_binder);
+    sb_append(&err_bind, " = ");
+    sb_append(&err_bind, result_ref);
+    sb_append(&err_bind, ".error");
+    lines_push(out, sb_take(&err_bind));
+
+    StrBuf err_return;
+    sb_init(&err_return);
+    result_str_int_append_indent(&err_return, indent_len + 4);
+    sb_append(&err_return, "return ");
+    sb_append(&err_return, err_expr);
+    lines_push(out, sb_take(&err_return));
+
+    StrBuf close;
+    sb_init(&close);
+    sb_append_n(&close, line, indent_len);
+    sb_append(&close, "}");
+    lines_push(out, sb_take(&close));
+
+    for (int k = 0; k < 16; k++) {
+        free(arm_parts[k]);
+        free(patterns[k]);
+        free(exprs[k]);
+    }
+    free(match_expr);
+    free(arms_text);
+    free(local_ref);
+    free(ok_binder);
+    free(err_binder);
+    free(ok_expr);
+    free(err_expr);
+    return 1;
+}
+
+static char *result_struct_int_replace_types_line(const char *line, ResultStructIntInfo *infos, int info_count) {
+    char *typed = strdup(line);
+    if (typed == NULL) die_oom();
+    for (int i = 0; i < info_count; i++) {
+        if (!infos[i].used) continue;
+        char *next = replace_generic_type(typed, "Result", infos[i].name, "Int", infos[i].wrapper);
+        free(typed);
+        typed = next;
+    }
+    return typed;
+}
+
+static int result_struct_int_decl_info_index(const char *line, ResultStructIntInfo *infos, int info_count) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "struct ") || is_ident_continue(s[6])) return -1;
+    s = skip_ws(s + 7);
+    if (!is_ident_start(*s)) return -1;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    int idx = result_struct_int_find_info_by_name(infos, info_count, name);
+    free(name);
+    return idx;
+}
+
+static void result_struct_int_push_wrapper(LineVec *out, ResultStructIntInfo *info) {
+    StrBuf wrapper;
+    sb_init(&wrapper);
+    sb_append(&wrapper, "struct ");
+    sb_append(&wrapper, info->wrapper);
+    sb_append(&wrapper, " { tag: Int, value: ");
+    sb_append(&wrapper, info->name);
+    sb_append(&wrapper, ", error: Int }");
+    lines_push(out, sb_take(&wrapper));
+    info->wrapper_emitted = 1;
+}
+
+static char *lower_result_struct_int_text(const char *text) {
+    LineVec lines = split_lines(text);
+    ResultStructIntInfo infos[64];
+    memset(infos, 0, sizeof(infos));
+    int info_count = 0;
+    for (size_t i = 0; i < lines.len; i++) {
+        size_t end_line = i;
+        if (result_struct_int_collect_struct_at(&lines, i, infos, &info_count, &end_line)) {
+            i = end_line;
+        }
+    }
+    int used_count = 0;
+    for (int i = 0; i < info_count; i++) {
+        if (contains_generic_type(text, "Result", infos[i].name, "Int")) {
+            infos[i].used = 1;
+            used_count++;
+        }
+    }
+    if (used_count == 0) {
+        result_struct_int_free_infos(infos, info_count);
+        lines_free(&lines);
+        return strdup(text);
+    }
+
+    char *fn_names[128] = {0};
+    int fn_info_indices[128] = {0};
+    int fn_count = 0;
+    for (size_t i = 0; i < lines.len; i++) {
+        char *fname = NULL;
+        int info_index = -1;
+        if (result_struct_int_parse_fn_info(lines.items[i], infos, info_count, &fname, &info_index)) {
+            result_struct_int_add_name(fn_names, fn_info_indices, &fn_count, fname, info_index);
+            free(fname);
+        }
+    }
+
+    LineVec out;
+    lines_init(&out);
+
+    char *local_names[128] = {0};
+    int local_info_indices[128] = {0};
+    int local_count = 0;
+    int in_result_fn = 0;
+    int current_result_info = -1;
+    int current_result_int = 0;
+    int current_result_str_int = 0;
+    int fn_depth = 0;
+    int temp_count = 0;
+
+    for (size_t i = 0; i < lines.len; i++) {
+        char *typed = result_struct_int_replace_types_line(lines.items[i], infos, info_count);
+        if (line_starts_fn_decl(typed)) {
+            result_str_int_clear_names(local_names, &local_count);
+        }
+        result_struct_int_collect_param_names(typed, infos, info_count, local_names, local_info_indices, &local_count);
+        char *fname = NULL;
+        int starts_info = -1;
+        int starts_result_fn = result_struct_int_parse_fn_info(typed, infos, info_count, &fname, &starts_info);
+        if (starts_result_fn) {
+            in_result_fn = 1;
+            current_result_info = starts_info;
+            current_result_int = 0;
+            current_result_str_int = 0;
+            fn_depth = 0;
+        } else if (result_struct_int_parse_result_int_fn(typed)) {
+            in_result_fn = 1;
+            current_result_info = -1;
+            current_result_int = 1;
+            current_result_str_int = 0;
+            fn_depth = 0;
+        } else if (result_str_int_parse_fn_name(typed, &fname)) {
+            in_result_fn = 1;
+            current_result_info = -1;
+            current_result_int = 0;
+            current_result_str_int = 1;
+            fn_depth = 0;
+        }
+        free(fname);
+
+        char *work = lower_result_call_args_line(&out, typed, fn_names, fn_count, "__vais_result_struct_arg", &temp_count);
+        int emitted = 0;
+        if (in_result_fn) {
+            emitted = lower_result_struct_int_try_let_line(
+                &out,
+                work,
+                infos,
+                info_count,
+                fn_names,
+                fn_info_indices,
+                fn_count,
+                local_names,
+                local_info_indices,
+                local_count,
+                current_result_info,
+                current_result_int,
+                current_result_str_int,
+                &temp_count);
+        }
+        if (!emitted) {
+            emitted = lower_result_struct_int_inline_match_let_line(
+                &out,
+                work,
+                infos,
+                info_count,
+                fn_names,
+                fn_info_indices,
+                fn_count,
+                local_names,
+                local_info_indices,
+                local_count,
+                &temp_count);
+        }
+        if (!emitted) {
+            emitted = lower_result_struct_int_inline_match_return_line(
+                &out,
+                work,
+                infos,
+                info_count,
+                fn_names,
+                fn_info_indices,
+                fn_count,
+                local_names,
+                local_info_indices,
+                local_count,
+                &temp_count);
+        }
+        if (!emitted) {
+            char *ctor_rewritten = (in_result_fn && current_result_info >= 0)
+                ? result_struct_int_rewrite_return_constructors(work, &infos[current_result_info])
+                : strdup(work);
+            lines_push(&out, ctor_rewritten);
+        }
+
+        for (int decl_info = 0; decl_info < info_count; decl_info++) {
+            if ((int)i == infos[decl_info].decl_end_line && infos[decl_info].used && !infos[decl_info].wrapper_emitted) {
+                result_struct_int_push_wrapper(&out, &infos[decl_info]);
+            }
+        }
+
+        char *lname = NULL;
+        char *lexpr = NULL;
+        char *ltype = NULL;
+        if (result_str_int_parse_let_binding_expr(typed, &lname, &lexpr, &ltype)) {
+            int info_index = -1;
+            if (ltype != NULL) info_index = result_struct_int_type_info_index(ltype, infos, info_count);
+            if (info_index < 0 && lexpr != NULL) {
+                info_index = result_struct_int_expr_info_index(lexpr, fn_names, fn_info_indices, fn_count, local_names, local_info_indices, local_count);
+            }
+            if (info_index >= 0) {
+                result_struct_int_add_name(local_names, local_info_indices, &local_count, lname, info_index);
+            }
+        }
+        free(lname);
+        free(lexpr);
+        free(ltype);
+
+        if (in_result_fn) {
+            fn_depth += result_str_int_brace_delta(typed);
+            if (fn_depth <= 0) {
+                in_result_fn = 0;
+                current_result_info = -1;
+                current_result_int = 0;
+                current_result_str_int = 0;
+            }
+        }
+        free(work);
+        free(typed);
+    }
+
+    int missing_wrapper = 0;
+    for (int i = 0; i < info_count; i++) {
+        if (infos[i].used && !infos[i].wrapper_emitted) missing_wrapper = 1;
+    }
+    if (missing_wrapper) {
+        LineVec with_wrappers;
+        lines_init(&with_wrappers);
+        for (int i = 0; i < info_count; i++) {
+            if (infos[i].used && !infos[i].wrapper_emitted) {
+                result_struct_int_push_wrapper(&with_wrappers, &infos[i]);
+            }
+        }
+        for (size_t i = 0; i < out.len; i++) lines_push(&with_wrappers, strdup(out.items[i]));
+        lines_free(&out);
+        out = with_wrappers;
+    }
+
+    for (int i = 0; i < fn_count; i++) free(fn_names[i]);
+    for (int i = 0; i < local_count; i++) free(local_names[i]);
+    result_struct_int_free_infos(infos, info_count);
+    char *joined = join_lines(&out, 1);
+    lines_free(&out);
+    lines_free(&lines);
+    return joined;
 }
 
 static char *parse_nested_match_head_expr(const char *expr) {
@@ -1468,6 +4219,843 @@ static int is_none_pattern_c(const char *pattern) {
     if (!starts_with(s, "None") || is_ident_continue(s[4])) return 0;
     s = skip_ws(s + 4);
     return *s == '\0';
+}
+
+static int lower_type_is_map_str_str(const char *type) {
+    const char *p = skip_ws(type);
+    if (!starts_with(p, "Map") || is_ident_continue(p[3])) return 0;
+    p = skip_ws(p + 3);
+    if (*p != '<') return 0;
+    p = skip_ws(p + 1);
+    if (!starts_with(p, "Str") || is_ident_continue(p[3])) return 0;
+    p = skip_ws(p + 3);
+    if (*p != ',') return 0;
+    p = skip_ws(p + 1);
+    if (!starts_with(p, "Str") || is_ident_continue(p[3])) return 0;
+    p = skip_ws(p + 3);
+    if (*p != '>') return 0;
+    p = skip_ws(p + 1);
+    return *p == '\0';
+}
+
+static void lower_add_map_str_str_name(char **names, int *count, char *name) {
+    int plain = name != NULL && is_ident_start(name[0]);
+    for (int i = 1; plain && name[i] != '\0'; i++) {
+        if (!is_ident_continue(name[i])) plain = 0;
+    }
+    if (name == NULL || !plain) {
+        free(name);
+        return;
+    }
+    for (int i = 0; i < *count; i++) {
+        if (strcmp(names[i], name) == 0) {
+            free(name);
+            return;
+        }
+    }
+    if (*count < 128) {
+        names[*count] = name;
+        (*count)++;
+    } else {
+        free(name);
+    }
+}
+
+static int lower_name_in_list(char **names, int count, const char *name) {
+    for (int i = 0; i < count; i++) {
+        if (strcmp(names[i], name) == 0) return 1;
+    }
+    return 0;
+}
+
+static int lower_expr_is_call_to_known_map_str_str_return_fn(const char *expr, char **fn_names, int fn_count) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return 0;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    int known = lower_name_in_list(fn_names, fn_count, name);
+    free(name);
+    if (!known) {
+        free(trimmed);
+        return 0;
+    }
+    s = skip_ws(s);
+    if (*s != '(') {
+        free(trimmed);
+        return 0;
+    }
+    int close = find_matching_paren_c(trimmed, (int)(s - trimmed));
+    int ok = close >= 0 && *skip_ws(trimmed + close + 1) == '\0';
+    free(trimmed);
+    return ok;
+}
+
+static void collect_map_str_str_return_fns(LineVec *lines, char **fn_names, int *fn_count) {
+    for (size_t row = 0; row < lines->len; row++) {
+        const char *line = lines->items[row];
+        const char *s = skip_ws(line);
+        if (!starts_with(s, "fn ") || is_ident_continue(s[2])) continue;
+        s = skip_ws(s + 3);
+        if (!is_ident_start(*s)) continue;
+        const char *name_start = s;
+        s++;
+        while (is_ident_continue(*s)) s++;
+        char *name = substr_copy(name_start, (size_t)(s - name_start));
+        const char *open = strchr(s, '(');
+        const char *close = open == NULL ? NULL : strchr(open, ')');
+        const char *arrow = close == NULL ? NULL : strstr(close, "->");
+        const char *brace = close == NULL ? NULL : strchr(close, '{');
+        if (arrow != NULL && (brace == NULL || arrow < brace)) {
+            const char *type_start = skip_ws(arrow + 2);
+            const char *type_end = brace == NULL ? type_start + strlen(type_start) : brace;
+            while (type_end > type_start && (type_end[-1] == ' ' || type_end[-1] == '\t')) type_end--;
+            char *type = substr_copy(type_start, (size_t)(type_end - type_start));
+            if (lower_type_is_map_str_str(type)) {
+                lower_add_map_str_str_name(fn_names, fn_count, name);
+                name = NULL;
+            }
+            free(type);
+        }
+        free(name);
+    }
+}
+
+static void collect_map_str_str_bindings(LineVec *lines, char **names, int *count) {
+    char *return_fns[128] = {0};
+    int return_fn_count = 0;
+    collect_map_str_str_return_fns(lines, return_fns, &return_fn_count);
+    for (size_t row = 0; row < lines->len; row++) {
+        const char *line = lines->items[row];
+        const char *s = skip_ws(line);
+        if (starts_with(s, "let ") && !is_ident_continue(s[3])) {
+            s = skip_ws(s + 4);
+            if (starts_with(s, "mut") && !is_ident_continue(s[3])) s = skip_ws(s + 3);
+            if (is_ident_start(*s)) {
+                const char *name_start = s;
+                s++;
+                while (is_ident_continue(*s)) s++;
+                char *name = substr_copy(name_start, (size_t)(s - name_start));
+                s = skip_ws(s);
+                if (*s == ':') {
+                    const char *type_start = skip_ws(s + 1);
+                    const char *type_end = strchr(type_start, '=');
+                    if (type_end == NULL) type_end = type_start + strlen(type_start);
+                    while (type_end > type_start && (type_end[-1] == ' ' || type_end[-1] == '\t')) type_end--;
+                    char *type = substr_copy(type_start, (size_t)(type_end - type_start));
+                    if (lower_type_is_map_str_str(type)) {
+                        lower_add_map_str_str_name(names, count, name);
+                        name = NULL;
+                    }
+                    free(type);
+                } else if (*s == '=') {
+                    char *expr = trim_copy(s + 1);
+                    if (lower_expr_is_call_to_known_map_str_str_return_fn(expr, return_fns, return_fn_count)) {
+                        lower_add_map_str_str_name(names, count, name);
+                        name = NULL;
+                    }
+                    free(expr);
+                }
+                free(name);
+            }
+        } else if (starts_with(s, "fn ") && !is_ident_continue(s[2])) {
+            const char *open = strchr(s, '(');
+            const char *close = open == NULL ? NULL : strchr(open, ')');
+            if (open != NULL && close != NULL && close > open) {
+                char *params = substr_copy(open + 1, (size_t)(close - open - 1));
+                char *parts[32] = {0};
+                int n = split_top_level_commas_c(params, parts, 32);
+                for (int i = 0; i < n && i < 32; i++) {
+                    char *colon = strchr(parts[i], ':');
+                    if (colon != NULL) {
+                        char *name = trim_copy(substr_copy(parts[i], (size_t)(colon - parts[i])));
+                        char *type = trim_copy(colon + 1);
+                        if (lower_type_is_map_str_str(type)) {
+                            lower_add_map_str_str_name(names, count, name);
+                            name = NULL;
+                        }
+                        free(name);
+                        free(type);
+                    }
+                    free(parts[i]);
+                }
+                free(params);
+            }
+        }
+    }
+    for (int i = 0; i < return_fn_count; i++) free(return_fns[i]);
+}
+
+static int lower_name_is_map_str_str(char **names, int count, const char *name) {
+    return lower_name_in_list(names, count, name);
+}
+
+static int parse_map_str_str_get_opt_expr(const char *expr, char **names, int count, char **base_out, char **key_out) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return 0;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    if (!lower_name_is_map_str_str(names, count, name)) {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    s = skip_ws(s + 1);
+    if (!starts_with(s, "get_opt") || is_ident_continue(s[7])) {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    s = skip_ws(s + 7);
+    if (*s != '(') {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    int close = find_matching_paren_c(trimmed, (int)(s - trimmed));
+    if (close < 0 || *skip_ws(trimmed + close + 1) != '\0') {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    char *inside = substr_copy(s + 1, (size_t)(close - (s - trimmed) - 1));
+    char *args[4] = {0};
+    int argc = split_top_level_commas_c(inside, args, 4);
+    free(inside);
+    if (argc != 1 || args[0] == NULL) {
+        for (int i = 0; i < 4; i++) free(args[i]);
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    *base_out = name;
+    *key_out = trim_copy(args[0]);
+    for (int i = 0; i < 4; i++) free(args[i]);
+    free(trimmed);
+    return 1;
+}
+
+static int lower_expr_is_bare_name(const char *expr, const char *name) {
+    char *trimmed = trim_copy(expr);
+    int ok = strcmp(trimmed, name) == 0;
+    free(trimmed);
+    return ok;
+}
+
+static int lower_expr_is_strlike_for_str_binder_inner(const char *expr, const char *binder, int allow_binder, int depth) {
+    if (depth > 4) return 0;
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int ok = 0;
+    if (is_string_delim_c(*s)) {
+        int end = skip_string_literal_c(s, 0);
+        ok = end >= 0 && *skip_ws(s + end) == '\0';
+    }
+    if (!ok && allow_binder && binder != NULL && lower_expr_is_bare_name(s, binder)) {
+        ok = 1;
+    }
+    if (!ok && is_ident_start(*s)) {
+        const char *name_start = s;
+        s++;
+        while (is_ident_continue(*s)) s++;
+        char *name = substr_copy(name_start, (size_t)(s - name_start));
+        s = skip_ws(s);
+        if (*s == '(') {
+            int close = find_matching_paren_c(trimmed, (int)(s - trimmed));
+            if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                char *inside = substr_copy(s + 1, (size_t)(close - (int)(s - trimmed) - 1));
+                char *args[4] = {0};
+                int argc = split_top_level_commas_c(inside, args, 4);
+                free(inside);
+                if ((strcmp(name, "str_trim") == 0 || strcmp(name, "str_lower") == 0 || strcmp(name, "str_upper") == 0) && argc == 1 && args[0] != NULL) {
+                    ok = lower_expr_is_strlike_for_str_binder_inner(args[0], binder, allow_binder, depth + 1);
+                } else if (strcmp(name, "str_concat") == 0 && argc == 2 && args[0] != NULL && args[1] != NULL) {
+                    ok = lower_expr_is_strlike_for_str_binder_inner(args[0], binder, allow_binder, depth + 1) &&
+                        lower_expr_is_strlike_for_str_binder_inner(args[1], binder, allow_binder, depth + 1);
+                } else if (strcmp(name, "str_replace") == 0 && argc == 3 && args[0] != NULL && args[1] != NULL && args[2] != NULL) {
+                    ok = lower_expr_is_strlike_for_str_binder_inner(args[0], binder, allow_binder, depth + 1) &&
+                        lower_expr_is_strlike_for_str_binder_inner(args[1], binder, allow_binder, depth + 1) &&
+                        lower_expr_is_strlike_for_str_binder_inner(args[2], binder, allow_binder, depth + 1);
+                }
+                for (int i = 0; i < 4; i++) free(args[i]);
+            }
+        }
+        free(name);
+    }
+    free(trimmed);
+    return ok;
+}
+
+static int lower_expr_is_strlike_for_str_binder(const char *expr, const char *binder, int allow_binder) {
+    return lower_expr_is_strlike_for_str_binder_inner(expr, binder, allow_binder, 0);
+}
+
+static int lower_split_trailing_len_call(const char *expr, char **prefix_out) {
+    char *trimmed = trim_copy(expr);
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    int dot_index = -1;
+    for (int i = 0; trimmed[i] != '\0'; i++) {
+        if (is_string_delim_c(trimmed[i])) {
+            int end = skip_string_literal_c(trimmed, i);
+            if (end < 0) break;
+            i = end - 1;
+            continue;
+        }
+        if (trimmed[i] == '\'') {
+            int end = skip_char_literal_c(trimmed, i);
+            if (end < 0) break;
+            i = end - 1;
+            continue;
+        }
+        if (trimmed[i] == '(') paren_depth++;
+        else if (trimmed[i] == ')' && paren_depth > 0) paren_depth--;
+        else if (trimmed[i] == '[') bracket_depth++;
+        else if (trimmed[i] == ']' && bracket_depth > 0) bracket_depth--;
+        else if (trimmed[i] == '{') brace_depth++;
+        else if (trimmed[i] == '}' && brace_depth > 0) brace_depth--;
+        else if (trimmed[i] == '.' && paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+            const char *p = skip_ws(trimmed + i + 1);
+            if (starts_with(p, "len") && !is_ident_continue(p[3])) {
+                const char *q = skip_ws(p + 3);
+                if (*q == '(') {
+                    int close = find_matching_paren_c(trimmed, (int)(q - trimmed));
+                    if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                        dot_index = i;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (dot_index < 0) {
+        free(trimmed);
+        return 0;
+    }
+    char *raw = substr_copy(trimmed, (size_t)dot_index);
+    *prefix_out = trim_copy(raw);
+    int ok = **prefix_out != '\0';
+    free(raw);
+    free(trimmed);
+    if (!ok) {
+        free(*prefix_out);
+        *prefix_out = NULL;
+    }
+    return ok;
+}
+
+static int lower_expr_is_intlike_for_str_binder(const char *expr, const char *binder, int allow_binder) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int ok = 0;
+    if ((*s >= '0' && *s <= '9') || *s == '-') ok = 1;
+    char *len_prefix = NULL;
+    if (!ok && lower_split_trailing_len_call(s, &len_prefix)) {
+        ok = lower_expr_is_strlike_for_str_binder(len_prefix, binder, allow_binder);
+        free(len_prefix);
+    }
+    free(trimmed);
+    return ok;
+}
+
+static void lower_append_indent(StrBuf *out, const char *line, size_t indent_len, int extra_spaces) {
+    sb_append_n(out, line, indent_len);
+    for (int i = 0; i < extra_spaces; i++) sb_append(out, " ");
+}
+
+static void emit_map_str_str_match_assignment(LineVec *out, const char *line, size_t indent_len, const char *target, const char *expr, int result_is_int, const char *binder, int allow_binder, int *temp_count) {
+    char *len_prefix = NULL;
+    if (result_is_int && lower_split_trailing_len_call(expr, &len_prefix) &&
+        lower_expr_is_strlike_for_str_binder(len_prefix, binder, allow_binder)) {
+        char temp_name[128];
+        snprintf(temp_name, sizeof(temp_name), "__vais_map_str_str_len_str%d", (*temp_count)++);
+        StrBuf decl;
+        sb_init(&decl);
+        lower_append_indent(&decl, line, indent_len, 4);
+        sb_append(&decl, "let mut ");
+        sb_append(&decl, temp_name);
+        sb_append(&decl, ": Str = \"\"");
+        lines_push(out, sb_take(&decl));
+
+        StrBuf assign_str;
+        sb_init(&assign_str);
+        lower_append_indent(&assign_str, line, indent_len, 4);
+        sb_append(&assign_str, temp_name);
+        sb_append(&assign_str, " = ");
+        sb_append(&assign_str, len_prefix);
+        lines_push(out, sb_take(&assign_str));
+
+        StrBuf assign_len;
+        sb_init(&assign_len);
+        lower_append_indent(&assign_len, line, indent_len, 4);
+        sb_append(&assign_len, target);
+        sb_append(&assign_len, " = ");
+        sb_append(&assign_len, temp_name);
+        sb_append(&assign_len, ".len()");
+        lines_push(out, sb_take(&assign_len));
+        free(len_prefix);
+        return;
+    }
+    free(len_prefix);
+    StrBuf assign;
+    sb_init(&assign);
+    lower_append_indent(&assign, line, indent_len, 4);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, expr);
+    lines_push(out, sb_take(&assign));
+}
+
+static int emit_map_str_str_get_opt_inline_match(LineVec *out, const char *line, size_t indent_len, const char *name, const char *match_expr, const char *arms_text, char **map_names, int map_count, int *temp_count) {
+    char *base = NULL;
+    char *key = NULL;
+    if (!parse_map_str_str_get_opt_expr(match_expr, map_names, map_count, &base, &key)) return 0;
+    char *arm_parts[16] = {0};
+    char *patterns[16] = {0};
+    char *exprs[16] = {0};
+    int arm_count = split_top_level_commas_c(arms_text, arm_parts, 16);
+    char *some_binder = NULL;
+    char *some_expr = NULL;
+    char *none_expr = NULL;
+    int ok = arm_count == 2;
+    for (int a = 0; ok && a < arm_count && a < 16; a++) {
+        if (!parse_arm(arm_parts[a], &patterns[a], &exprs[a])) {
+            ok = 0;
+            break;
+        }
+        char *binder = NULL;
+        if (parse_some_pattern_binder(patterns[a], &binder)) {
+            if (some_binder != NULL || some_expr != NULL) {
+                free(binder);
+                ok = 0;
+                break;
+            }
+            some_binder = binder;
+            some_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else if (is_none_pattern_c(patterns[a])) {
+            if (none_expr != NULL) {
+                ok = 0;
+                break;
+            }
+            none_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else {
+            ok = 0;
+            break;
+        }
+    }
+    if (some_binder == NULL || some_expr == NULL || none_expr == NULL) ok = 0;
+    int some_str = ok && lower_expr_is_strlike_for_str_binder(some_expr, some_binder, 1);
+    int none_str = ok && lower_expr_is_strlike_for_str_binder(none_expr, some_binder, 0);
+    int some_int = ok && lower_expr_is_intlike_for_str_binder(some_expr, some_binder, 1);
+    int none_int = ok && lower_expr_is_intlike_for_str_binder(none_expr, some_binder, 0);
+    int result_is_str = some_str && none_str;
+    int result_is_int = some_int && none_int;
+    if (!ok || (!result_is_str && !result_is_int)) {
+        for (int i = 0; i < 16; i++) {
+            free(arm_parts[i]);
+            free(patterns[i]);
+            free(exprs[i]);
+        }
+        free(base);
+        free(key);
+        free(some_binder);
+        free(some_expr);
+        free(none_expr);
+        return 0;
+    }
+    StrBuf decl;
+    sb_init(&decl);
+    lower_append_indent(&decl, line, indent_len, 0);
+    sb_append(&decl, "let mut ");
+    sb_append(&decl, name);
+    if (result_is_str) {
+        sb_append(&decl, ": Str = \"\"");
+    } else {
+        sb_append(&decl, " = 0");
+    }
+    lines_push(out, sb_take(&decl));
+
+    StrBuf head;
+    sb_init(&head);
+    lower_append_indent(&head, line, indent_len, 0);
+    sb_append(&head, "if ");
+    sb_append(&head, base);
+    sb_append(&head, ".contains(");
+    sb_append(&head, key);
+    sb_append(&head, ") {");
+    lines_push(out, sb_take(&head));
+
+    StrBuf bind;
+    sb_init(&bind);
+    lower_append_indent(&bind, line, indent_len, 4);
+    sb_append(&bind, "let ");
+    sb_append(&bind, some_binder);
+    sb_append(&bind, ": Str = \"\"");
+    lines_push(out, sb_take(&bind));
+
+    StrBuf bind_assign;
+    sb_init(&bind_assign);
+    lower_append_indent(&bind_assign, line, indent_len, 4);
+    sb_append(&bind_assign, some_binder);
+    sb_append(&bind_assign, " = ");
+    sb_append(&bind_assign, base);
+    sb_append(&bind_assign, ".get(");
+    sb_append(&bind_assign, key);
+    sb_append(&bind_assign, ", \"\")");
+    lines_push(out, sb_take(&bind_assign));
+
+    emit_map_str_str_match_assignment(out, line, indent_len, name, some_expr, result_is_int, some_binder, 1, temp_count);
+    StrBuf else_head;
+    sb_init(&else_head);
+    lower_append_indent(&else_head, line, indent_len, 0);
+    sb_append(&else_head, "} else {");
+    lines_push(out, sb_take(&else_head));
+
+    emit_map_str_str_match_assignment(out, line, indent_len, name, none_expr, result_is_int, some_binder, 0, temp_count);
+    StrBuf close_line;
+    sb_init(&close_line);
+    lower_append_indent(&close_line, line, indent_len, 0);
+    sb_append(&close_line, "}");
+    lines_push(out, sb_take(&close_line));
+
+    for (int i = 0; i < 16; i++) {
+        free(arm_parts[i]);
+        free(patterns[i]);
+        free(exprs[i]);
+    }
+    free(base);
+    free(key);
+    free(some_binder);
+    free(some_expr);
+    free(none_expr);
+    return 1;
+}
+
+static int find_matching_brace_c(const char *text, int open_index);
+
+static int parse_inline_match_expr_at(const char *expr, size_t start, char **match_expr_out, char **arms_text_out, size_t *end_out) {
+    if (!starts_with(expr + start, "match") ||
+        (start > 0 && is_ident_continue(expr[start - 1])) ||
+        is_ident_continue(expr[start + 5])) {
+        return 0;
+    }
+    const char *s = skip_ws(expr + start + 5);
+    if (s == expr + start + 5) return 0;
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int open = -1;
+    for (int i = (int)(s - expr); expr[i] != '\0'; i++) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) return 0;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) return 0;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '(') paren_depth++;
+        else if (expr[i] == ')' && paren_depth > 0) paren_depth--;
+        else if (expr[i] == '[') bracket_depth++;
+        else if (expr[i] == ']' && bracket_depth > 0) bracket_depth--;
+        else if (expr[i] == '{' && paren_depth == 0 && bracket_depth == 0) {
+            open = i;
+            break;
+        }
+    }
+    if (open < 0) return 0;
+    int close = find_matching_brace_c(expr, open);
+    if (close < 0) return 0;
+    char *match_raw = substr_copy(s, (size_t)(open - (int)(s - expr)));
+    *match_expr_out = trim_copy(match_raw);
+    free(match_raw);
+    *arms_text_out = substr_copy(expr + open + 1, (size_t)(close - open - 1));
+    *end_out = (size_t)close + 1;
+    return 1;
+}
+
+static int lower_map_str_str_get_opt_match_embedded_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *temp_prefix,
+    int *temp_count,
+    char **map_names,
+    int map_count,
+    LineVec *out,
+    char **rewritten_out
+) {
+    StrBuf rewritten;
+    sb_init(&rewritten);
+    size_t last_copy = 0;
+    int changed = 0;
+
+    for (size_t i = 0; expr[i] != '\0'; i++) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (!starts_with(expr + i, "match")) continue;
+
+        char *match_expr = NULL;
+        char *arms_text = NULL;
+        size_t match_end = 0;
+        if (!parse_inline_match_expr_at(expr, i, &match_expr, &arms_text, &match_end)) continue;
+
+        int id = (*temp_count)++;
+        char temp_name[128];
+        snprintf(temp_name, sizeof(temp_name), "%s%d", temp_prefix, id);
+        if (!emit_map_str_str_get_opt_inline_match(out, line, indent_len, temp_name, match_expr, arms_text, map_names, map_count, temp_count)) {
+            (*temp_count)--;
+            free(match_expr);
+            free(arms_text);
+            continue;
+        }
+
+        sb_append_n(&rewritten, expr + last_copy, i - last_copy);
+        sb_append(&rewritten, temp_name);
+        last_copy = match_end;
+        changed = 1;
+        free(match_expr);
+        free(arms_text);
+        i = match_end == 0 ? i : match_end - 1;
+    }
+
+    if (!changed) {
+        free(rewritten.data);
+        return 0;
+    }
+    sb_append(&rewritten, expr + last_copy);
+    *rewritten_out = sb_take(&rewritten);
+    return 1;
+}
+
+static int lower_map_str_str_get_opt_match_condition_line(
+    const char *line,
+    int *temp_count,
+    char **map_names,
+    int map_count,
+    LineVec *out,
+    int *extra_else_close_indent_out
+) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    const char *expr_start = NULL;
+    int is_while = 0;
+    int is_else_if = 0;
+    int has_leading_close = 0;
+    if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = -1;
+    if (starts_with(s, "if ") && !is_ident_continue(s[2])) {
+        expr_start = skip_ws(s + 3);
+    } else if (starts_with(s, "} else if ")) {
+        expr_start = skip_ws(s + 10);
+        is_else_if = 1;
+        has_leading_close = 1;
+    } else if (starts_with(s, "else if ") && !is_ident_continue(s[7])) {
+        expr_start = skip_ws(s + 8);
+        is_else_if = 1;
+    } else if (starts_with(s, "while ") && !is_ident_continue(s[5])) {
+        expr_start = skip_ws(s + 6);
+        is_while = 1;
+    } else {
+        return 0;
+    }
+    if (strstr(expr_start, "match") == NULL || strstr(expr_start, "get_opt") == NULL) return 0;
+
+    char *expr = trim_copy(expr_start);
+    size_t expr_len = strlen(expr);
+    while (expr_len > 0 && isspace((unsigned char)expr[expr_len - 1])) expr_len--;
+    if (expr_len > 0 && expr[expr_len - 1] == ';') {
+        expr_len--;
+        while (expr_len > 0 && isspace((unsigned char)expr[expr_len - 1])) expr_len--;
+    }
+    if (expr_len == 0 || expr[expr_len - 1] != '{') {
+        free(expr);
+        return 0;
+    }
+    size_t expr_without_open_len = expr_len - 1;
+    while (expr_without_open_len > 0 && isspace((unsigned char)expr[expr_without_open_len - 1])) expr_without_open_len--;
+    char *condition_expr = substr_copy(expr, expr_without_open_len);
+    char *condition_rewritten = NULL;
+
+    LineVec condition_temps;
+    LineVec *emit_out = out;
+    const char *emit_line = line;
+    char *nested_emit_line = NULL;
+    size_t emit_indent_len = indent_len;
+    if (is_while || is_else_if) {
+        lines_init(&condition_temps);
+        emit_out = &condition_temps;
+        emit_indent_len = indent_len + 4;
+        nested_emit_line = (char *)malloc(emit_indent_len + 1);
+        if (nested_emit_line == NULL) die_oom();
+        memset(nested_emit_line, ' ', emit_indent_len);
+        nested_emit_line[emit_indent_len] = '\0';
+        emit_line = nested_emit_line;
+    }
+
+    if (!lower_map_str_str_get_opt_match_embedded_expr(
+            emit_line,
+            emit_indent_len,
+            condition_expr,
+            "__vais_map_str_str_match",
+            temp_count,
+            map_names,
+            map_count,
+            emit_out,
+            &condition_rewritten)) {
+        if (is_while || is_else_if) lines_free(&condition_temps);
+        free(nested_emit_line);
+        free(condition_expr);
+        free(expr);
+        return 0;
+    }
+
+    if (is_else_if) {
+        StrBuf else_head;
+        sb_init(&else_head);
+        sb_append_n(&else_head, line, indent_len);
+        sb_append(&else_head, has_leading_close ? "} else {" : "else {");
+        lines_push(out, sb_take(&else_head));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf inner_if;
+        sb_init(&inner_if);
+        sb_append_n(&inner_if, line, indent_len);
+        sb_append(&inner_if, "    if ");
+        sb_append(&inner_if, condition_rewritten);
+        sb_append(&inner_if, " {");
+        lines_push(out, sb_take(&inner_if));
+        if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = (int)indent_len;
+    } else if (is_while) {
+        StrBuf loop;
+        sb_init(&loop);
+        sb_append_n(&loop, line, indent_len);
+        sb_append(&loop, "while 1 {");
+        lines_push(out, sb_take(&loop));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf guard;
+        sb_init(&guard);
+        sb_append_n(&guard, line, indent_len);
+        sb_append(&guard, "    if (");
+        sb_append(&guard, condition_rewritten);
+        sb_append(&guard, ") == 0 { break }");
+        lines_push(out, sb_take(&guard));
+    } else {
+        StrBuf cond;
+        sb_init(&cond);
+        sb_append_n(&cond, line, indent_len);
+        sb_append(&cond, "if ");
+        sb_append(&cond, condition_rewritten);
+        sb_append(&cond, " {");
+        lines_push(out, sb_take(&cond));
+    }
+
+    free(condition_rewritten);
+    free(nested_emit_line);
+    free(condition_expr);
+    free(expr);
+    return 1;
+}
+
+static char *lower_map_str_str_get_opt_embedded_match_text(const char *text) {
+    LineVec lines = split_lines(text);
+    LineVec out;
+    lines_init(&out);
+    char *map_str_str_names[128] = {0};
+    int map_str_str_count = 0;
+    collect_map_str_str_bindings(&lines, map_str_str_names, &map_str_str_count);
+    int temp_count = 0;
+    int extra_else_close_indents[32] = {0};
+    int extra_else_close_count = 0;
+
+    for (size_t i = 0; i < lines.len; i++) {
+        const char *line = lines.items[i];
+        const char *s = skip_ws(line);
+        int indent = (int)(s - line);
+        if (strcmp(s, "}") == 0 &&
+            extra_else_close_count > 0 &&
+            extra_else_close_indents[extra_else_close_count - 1] == indent) {
+            lines_push(&out, strdup(line));
+            while (extra_else_close_count > 0 &&
+                   extra_else_close_indents[extra_else_close_count - 1] == indent) {
+                StrBuf close_extra;
+                sb_init(&close_extra);
+                sb_append_n(&close_extra, line, (size_t)indent);
+                sb_append(&close_extra, "}");
+                lines_push(&out, sb_take(&close_extra));
+                extra_else_close_count--;
+            }
+            continue;
+        }
+        char *inline_name = NULL;
+        char *inline_match_expr = NULL;
+        char *inline_arms = NULL;
+        int plain_match_let = parse_inline_match_let(line, &inline_name, &inline_match_expr, &inline_arms);
+        free(inline_name);
+        free(inline_match_expr);
+        free(inline_arms);
+        if (plain_match_let || (starts_with(s, "match") && !is_ident_continue(s[5]))) {
+            lines_push(&out, strdup(line));
+            continue;
+        }
+
+        int extra_else_close_indent = -1;
+        if (map_str_str_count > 0 &&
+            lower_map_str_str_get_opt_match_condition_line(line, &temp_count, map_str_str_names, map_str_str_count, &out, &extra_else_close_indent)) {
+            if (extra_else_close_indent >= 0 && extra_else_close_count < 32) {
+                extra_else_close_indents[extra_else_close_count++] = extra_else_close_indent;
+            }
+            continue;
+        }
+
+        char *rewritten = NULL;
+        size_t indent_len = (size_t)(s - line);
+        if (map_str_str_count > 0 &&
+            lower_map_str_str_get_opt_match_embedded_expr(line, indent_len, line, "__vais_map_str_str_match", &temp_count, map_str_str_names, map_str_str_count, &out, &rewritten)) {
+            lines_push(&out, rewritten);
+        } else {
+            lines_push(&out, strdup(line));
+        }
+    }
+
+    for (int i = 0; i < map_str_str_count; i++) free(map_str_str_names[i]);
+    char *joined = join_lines(&out, 1);
+    lines_free(&out);
+    lines_free(&lines);
+    return joined;
 }
 
 static int emit_option_int_match_return_lines(LineVec *out, const char *match_expr, const char *arms_text, const char *indent) {
@@ -1644,21 +5232,59 @@ static char *lower_enum_text(const char *text) {
     }
     if (enum_line < 0 && (contains_generic_type(text, "Option", "Int", NULL) || contains_option_constructor_marker(text))) {
         init_builtin_option_int(&info);
-    } else if (enum_line < 0 && contains_generic_type(text, "Result", "Int", "Int")) {
+    }
+    if (enum_line < 0 && info.builtin_kind == 0 &&
+        contains_generic_type(text, "Result", "Int", "Int") &&
+        !contains_result_type_other_than_int_int(text)) {
         init_builtin_result_int_int(&info);
     }
     int has_enum = enum_line >= 0;
     if (info.builtin_kind != 0) has_enum = 1;
+    char *option_fn_names[128] = {0};
+    int option_fn_count = 0;
+    char *result_int_fn_names[128] = {0};
+    int result_int_fn_count = 0;
+    if (info.builtin_kind == 1) {
+        for (size_t i = 0; i < lines.len; i++) {
+            char *fname = NULL;
+            if (option_int_parse_fn_name(lines.items[i], &fname)) {
+                result_str_int_add_name(option_fn_names, &option_fn_count, fname);
+                free(fname);
+            }
+        }
+    } else if (info.builtin_kind == 2) {
+        for (size_t i = 0; i < lines.len; i++) {
+            char *fname = NULL;
+            if (result_int_int_parse_fn_name(lines.items[i], &fname)) {
+                result_str_int_add_name(result_int_fn_names, &result_int_fn_count, fname);
+                free(fname);
+            }
+        }
+    }
 
     LineVec out;
     lines_init(&out);
+    char *map_str_str_names[128] = {0};
+    int map_str_str_count = 0;
+    collect_map_str_str_bindings(&lines, map_str_str_names, &map_str_str_count);
     int try_count = 0;
+    int map_match_temp_count = 0;
     for (size_t i = 0; i < lines.len; i++) {
         if (has_enum && (int)i == enum_line) continue;
         char *typed = has_enum ? replace_enum_types(lines.items[i], &info) : strdup(lines.items[i]);
         char *try_name = NULL;
         char *try_expr = NULL;
-        if ((info.builtin_kind == 1 || info.builtin_kind == 2) && parse_try_let(typed, &try_name, &try_expr)) {
+        int lower_try = 0;
+        if (parse_try_let(typed, &try_name, &try_expr)) {
+            if (info.builtin_kind == 1 &&
+                option_int_expr_is_option(try_expr, option_fn_names, option_fn_count)) {
+                lower_try = 1;
+            } else if (info.builtin_kind == 2 &&
+                option_int_expr_is_option(try_expr, result_int_fn_names, result_int_fn_count)) {
+                lower_try = 1;
+            }
+        }
+        if (lower_try) {
             char tmp_name[64];
             snprintf(tmp_name, sizeof(tmp_name), "__vais_try%d", try_count++);
             char *rewritten_try_expr = rewrite_constructors(try_expr, &info);
@@ -1701,6 +5327,34 @@ static char *lower_enum_text(const char *text) {
         char *inline_match_expr = NULL;
         char *inline_arms = NULL;
         if (has_enum && parse_inline_match_let(typed, &inline_name, &inline_match_expr, &inline_arms)) {
+            size_t inline_indent_len = (size_t)(skip_ws(typed) - typed);
+            if (emit_map_str_str_get_opt_inline_match(&out, typed, inline_indent_len, inline_name, inline_match_expr, inline_arms, map_str_str_names, map_str_str_count, &map_match_temp_count)) {
+                free(inline_name);
+                free(inline_match_expr);
+                free(inline_arms);
+                free(typed);
+                continue;
+            }
+            if (info.builtin_kind == 1 &&
+                strstr(inline_arms, "Some") == NULL &&
+                strstr(inline_arms, "None") == NULL) {
+                lines_push(&out, strdup(typed));
+                free(inline_name);
+                free(inline_match_expr);
+                free(inline_arms);
+                free(typed);
+                continue;
+            }
+            if (info.builtin_kind == 2 &&
+                strstr(inline_arms, "Ok") == NULL &&
+                strstr(inline_arms, "Err") == NULL) {
+                lines_push(&out, strdup(typed));
+                free(inline_name);
+                free(inline_match_expr);
+                free(inline_arms);
+                free(typed);
+                continue;
+            }
             char *arm_parts[16] = {0};
             char *patterns[16] = {0};
             char *exprs[16] = {0};
@@ -2129,6 +5783,9 @@ static char *lower_enum_text(const char *text) {
     char *joined = join_lines(&out, text_len > 0 && text[text_len - 1] == '\n');
     lines_free(&lines);
     lines_free(&out);
+    for (int i = 0; i < map_str_str_count; i++) free(map_str_str_names[i]);
+    for (int i = 0; i < option_fn_count; i++) free(option_fn_names[i]);
+    for (int i = 0; i < result_int_fn_count; i++) free(result_int_fn_names[i]);
     free_enum_info(&info);
     return joined;
 }
@@ -2272,6 +5929,28 @@ static int parse_inline_int_closure(const char *arg, char **param_out, char **bo
     return 1;
 }
 
+static int closure_body_ident_is_bool_or_verified_builtin(const char *start, size_t len) {
+    return
+        (len == 3 && strncmp(start, "and", len) == 0) ||
+        (len == 2 && strncmp(start, "or", len) == 0) ||
+        (len == 3 && strncmp(start, "not", len) == 0) ||
+        (len == 4 && strncmp(start, "true", len) == 0) ||
+        (len == 5 && strncmp(start, "false", len) == 0) ||
+        (len == 10 && strncmp(start, "str_concat", len) == 0) ||
+        (len == 9 && strncmp(start, "str_lower", len) == 0) ||
+        (len == 9 && strncmp(start, "str_upper", len) == 0) ||
+        (len == 8 && strncmp(start, "str_trim", len) == 0) ||
+        (len == 9 && strncmp(start, "str_slice", len) == 0) ||
+        (len == 12 && strncmp(start, "str_contains", len) == 0) ||
+        (len == 12 && strncmp(start, "str_index_of", len) == 0) ||
+        (len == 11 && strncmp(start, "str_replace", len) == 0) ||
+        (len == 13 && strncmp(start, "str_ends_with", len) == 0) ||
+        (len == 15 && strncmp(start, "str_starts_with", len) == 0) ||
+        (len == 10 && strncmp(start, "parse_uint", len) == 0) ||
+        (len == 9 && strncmp(start, "parse_int", len) == 0) ||
+        (len == 3 && strncmp(start, "Str", len) == 0);
+}
+
 static int closure_body_uses_only_param(const char *body, const char *param) {
     size_t param_len = strlen(param);
     for (size_t i = 0; body[i] != '\0';) {
@@ -2292,12 +5971,409 @@ static int closure_body_uses_only_param(const char *body, const char *param) {
             i++;
             while (is_ident_continue(body[i])) i++;
             size_t len = (size_t)(body + i - start);
-            if (len != param_len || strncmp(start, param, len) != 0) return 0;
+            int is_param = len == param_len && strncmp(start, param, len) == 0;
+            if (!is_param && !closure_body_ident_is_bool_or_verified_builtin(start, len)) return 0;
             continue;
         }
         i++;
     }
     return 1;
+}
+
+static int expr_starts_with_call_name(const char *expr, const char *name) {
+    const char *s = skip_ws(expr);
+    size_t n = strlen(name);
+    if (strncmp(s, name, n) != 0 || is_ident_continue(s[n])) return 0;
+    s = skip_ws(s + n);
+    return *s == '(';
+}
+
+static int closure_body_returns_str(const char *body) {
+    return
+        expr_starts_with_call_name(body, "str_concat") ||
+        expr_starts_with_call_name(body, "str_lower") ||
+        expr_starts_with_call_name(body, "str_upper") ||
+        expr_starts_with_call_name(body, "str_trim") ||
+        expr_starts_with_call_name(body, "str_slice") ||
+        expr_starts_with_call_name(body, "str_replace") ||
+        expr_starts_with_call_name(body, "Str");
+}
+
+static int closure_body_is_param_only(const char *body, const char *param) {
+    char *trimmed = trim_copy(body);
+    int ok = strcmp(trimmed, param) == 0;
+    free(trimmed);
+    return ok;
+}
+
+typedef struct {
+    char *name;
+    char *type;
+} ListMethodLocal;
+
+typedef struct {
+    char *name;
+    char *fields[64];
+    char *field_types[64];
+    int field_count;
+} ListMethodStruct;
+
+typedef struct {
+    char *name;
+    char *param_types[16];
+    int param_count;
+    char *return_type;
+} ListMethodFnSig;
+
+typedef struct {
+    ListMethodLocal items[256];
+    int count;
+    char current_return_type[64];
+    ListMethodStruct structs[64];
+    int struct_count;
+    ListMethodFnSig fns[128];
+    int fn_count;
+} ListMethodEnv;
+
+static void list_method_env_clear_locals(ListMethodEnv *env) {
+    for (int i = 0; i < env->count; i++) {
+        free(env->items[i].name);
+        free(env->items[i].type);
+    }
+    env->count = 0;
+    env->current_return_type[0] = '\0';
+}
+
+static void list_method_env_free(ListMethodEnv *env) {
+    list_method_env_clear_locals(env);
+    for (int i = 0; i < env->struct_count; i++) {
+        free(env->structs[i].name);
+        for (int f = 0; f < env->structs[i].field_count; f++) {
+            free(env->structs[i].fields[f]);
+            free(env->structs[i].field_types[f]);
+        }
+    }
+    env->struct_count = 0;
+    for (int i = 0; i < env->fn_count; i++) {
+        free(env->fns[i].name);
+        for (int p = 0; p < env->fns[i].param_count; p++) {
+            free(env->fns[i].param_types[p]);
+        }
+        free(env->fns[i].return_type);
+    }
+    env->fn_count = 0;
+}
+
+static const char *list_method_env_type(ListMethodEnv *env, const char *name) {
+    for (int i = env->count - 1; i >= 0; i--) {
+        if (strcmp(env->items[i].name, name) == 0) return env->items[i].type;
+    }
+    return NULL;
+}
+
+static ListMethodStruct *list_method_env_struct(ListMethodEnv *env, const char *name) {
+    if (env == NULL || name == NULL) return NULL;
+    for (int i = env->struct_count - 1; i >= 0; i--) {
+        if (strcmp(env->structs[i].name, name) == 0) return &env->structs[i];
+    }
+    return NULL;
+}
+
+static void list_method_env_set(ListMethodEnv *env, const char *name, const char *type) {
+    for (int i = env->count - 1; i >= 0; i--) {
+        if (strcmp(env->items[i].name, name) == 0) {
+            free(env->items[i].type);
+            env->items[i].type = strdup(type);
+            return;
+        }
+    }
+    if (env->count >= 256) return;
+    env->items[env->count].name = strdup(name);
+    env->items[env->count].type = strdup(type);
+    env->count++;
+}
+
+static void list_method_struct_clear(ListMethodStruct *info) {
+    free(info->name);
+    info->name = NULL;
+    for (int f = 0; f < info->field_count; f++) {
+        free(info->fields[f]);
+        info->fields[f] = NULL;
+        free(info->field_types[f]);
+        info->field_types[f] = NULL;
+    }
+    info->field_count = 0;
+}
+
+static void list_method_env_set_struct(ListMethodEnv *env, const char *name, char **fields, char **field_types, int field_count) {
+    ListMethodStruct *info = list_method_env_struct(env, name);
+    if (info == NULL) {
+        if (env->struct_count >= 64) return;
+        info = &env->structs[env->struct_count++];
+        memset(info, 0, sizeof(*info));
+    } else {
+        list_method_struct_clear(info);
+    }
+    info->name = strdup(name);
+    for (int i = 0; i < field_count && i < 64; i++) {
+        int slot = info->field_count++;
+        info->fields[slot] = strdup(fields[i]);
+        info->field_types[slot] = field_types != NULL && field_types[i] != NULL ? strdup(field_types[i]) : NULL;
+    }
+}
+
+static const char *list_method_struct_field_type(ListMethodEnv *env, const char *struct_name, const char *field) {
+    ListMethodStruct *info = list_method_env_struct(env, struct_name);
+    if (info == NULL || field == NULL) return NULL;
+    for (int i = 0; i < info->field_count; i++) {
+        if (strcmp(info->fields[i], field) == 0) return info->field_types[i];
+    }
+    return NULL;
+}
+
+static ListMethodFnSig *list_method_env_fn(ListMethodEnv *env, const char *name) {
+    if (env == NULL || name == NULL) return NULL;
+    for (int i = env->fn_count - 1; i >= 0; i--) {
+        if (strcmp(env->fns[i].name, name) == 0) return &env->fns[i];
+    }
+    return NULL;
+}
+
+static void list_method_fn_clear(ListMethodFnSig *fn) {
+    free(fn->name);
+    fn->name = NULL;
+    for (int p = 0; p < fn->param_count; p++) {
+        free(fn->param_types[p]);
+        fn->param_types[p] = NULL;
+    }
+    fn->param_count = 0;
+    free(fn->return_type);
+    fn->return_type = NULL;
+}
+
+static void list_method_env_set_fn(
+    ListMethodEnv *env,
+    const char *name,
+    char **param_types,
+    int param_count,
+    const char *return_type
+) {
+    if (env == NULL || name == NULL) return;
+    ListMethodFnSig *fn = list_method_env_fn(env, name);
+    if (fn == NULL) {
+        if (env->fn_count >= 128) return;
+        fn = &env->fns[env->fn_count++];
+        memset(fn, 0, sizeof(*fn));
+    } else {
+        list_method_fn_clear(fn);
+    }
+    fn->name = strdup(name);
+    for (int i = 0; i < param_count && i < 16; i++) {
+        if (param_types[i] == NULL) continue;
+        fn->param_types[fn->param_count++] = strdup(param_types[i]);
+    }
+    fn->return_type = return_type == NULL ? NULL : strdup(return_type);
+}
+
+static char *list_method_compact_type_copy(const char *type) {
+    StrBuf compact;
+    sb_init(&compact);
+    for (const char *p = type; *p != '\0'; p++) {
+        if (*p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') sb_append_n(&compact, p, 1);
+    }
+    return sb_take(&compact);
+}
+
+static int list_method_compact_type_is_list(const char *type) {
+    size_t n = type == NULL ? 0 : strlen(type);
+    if (n <= 6 || !starts_with(type, "List<") || type[n - 1] != '>') return 0;
+    const char *inner = type + 5;
+    size_t inner_len = n - 6;
+    if (inner_len == 0 || !is_ident_start(inner[0])) return 0;
+    for (size_t i = 1; i < inner_len; i++) {
+        if (!is_ident_continue(inner[i])) return 0;
+    }
+    return 1;
+}
+
+static int list_method_compact_type_is_ident(const char *type) {
+    if (type == NULL || !is_ident_start(type[0])) return 0;
+    for (size_t i = 1; type[i] != '\0'; i++) {
+        if (!is_ident_continue(type[i])) return 0;
+    }
+    return 1;
+}
+
+static char *list_method_canonical_type(const char *type) {
+    char *compact = list_method_compact_type_copy(type);
+    if (!list_method_compact_type_is_list(compact)) {
+        free(compact);
+        return NULL;
+    }
+    return compact;
+}
+
+static int list_method_type_is_list(const char *type) {
+    return list_method_compact_type_is_list(type);
+}
+
+static char *list_method_list_element_type_copy(const char *list_type) {
+    if (!list_method_type_is_list(list_type)) return NULL;
+    size_t n = strlen(list_type);
+    return substr_copy(list_type + 5, n - 6);
+}
+
+static char *list_method_param_field_type_copy(ListMethodEnv *env, const char *receiver_type, const char *param, const char *body) {
+    if (env == NULL || receiver_type == NULL || param == NULL || body == NULL) return NULL;
+    char *trimmed = trim_copy(body);
+    size_t param_len = strlen(param);
+    const char *s = trimmed;
+    if (strncmp(s, param, param_len) != 0 || is_ident_continue(s[param_len])) {
+        free(trimmed);
+        return NULL;
+    }
+    s = skip_ws(s + param_len);
+    if (*s != '.') {
+        free(trimmed);
+        return NULL;
+    }
+    s = skip_ws(s + 1);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return NULL;
+    }
+    const char *field_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *field = substr_copy(field_start, (size_t)(s - field_start));
+    s = skip_ws(s);
+    if (*s != '\0') {
+        free(field);
+        free(trimmed);
+        return NULL;
+    }
+    char *elem_type = list_method_list_element_type_copy(receiver_type);
+    const char *field_type = elem_type == NULL ? NULL : list_method_struct_field_type(env, elem_type, field);
+    char *out = field_type == NULL ? NULL : strdup(field_type);
+    free(elem_type);
+    free(field);
+    free(trimmed);
+    return out;
+}
+
+static char *list_method_map_result_list_type(
+    ListMethodEnv *env,
+    const char *receiver_type,
+    const char *param,
+    const char *body,
+    const char *preferred_type
+) {
+    if (preferred_type != NULL) return strdup(preferred_type);
+    char *field_type = list_method_param_field_type_copy(env, receiver_type, param, body);
+    if (field_type != NULL) {
+        char *out = NULL;
+        if (strcmp(field_type, "Str") == 0) out = strdup("List<Str>");
+        else if (strcmp(field_type, "Int") == 0) out = strdup("List<Int>");
+        free(field_type);
+        if (out != NULL) return out;
+    }
+    if (closure_body_returns_str(body)) return strdup("List<Str>");
+    if (receiver_type != NULL && list_method_type_is_list(receiver_type) && closure_body_is_param_only(body, param)) {
+        return strdup(receiver_type);
+    }
+    return strdup("List<Int>");
+}
+
+static int list_method_closure_ident_is_member_name(const char *body, const char *start) {
+    const char *p = start;
+    while (p > body && (p[-1] == ' ' || p[-1] == '\t' || p[-1] == '\r' || p[-1] == '\n')) p--;
+    return p > body && p[-1] == '.';
+}
+
+static char *list_method_canonical_env_type(const char *type) {
+    if (type == NULL) return NULL;
+    char *list_type = list_method_canonical_type(type);
+    if (list_type != NULL) return list_type;
+    if (type_text_equals_compact(type, "Int")) return strdup("Int");
+    if (type_text_equals_compact(type, "Str")) return strdup("Str");
+    if (type_text_equals_compact(type, "Bool")) return strdup("Bool");
+    char *compact = list_method_compact_type_copy(type);
+    if (list_method_compact_type_is_ident(compact)) return compact;
+    free(compact);
+    return NULL;
+}
+
+static int list_method_env_has_ident(ListMethodEnv *env, const char *start, size_t len) {
+    if (env == NULL) return 0;
+    for (int i = env->count - 1; i >= 0; i--) {
+        if (strlen(env->items[i].name) == len && strncmp(env->items[i].name, start, len) == 0) return 1;
+    }
+    return 0;
+}
+
+static int closure_body_uses_param_or_list_method_env(const char *body, const char *param, ListMethodEnv *env) {
+    size_t param_len = strlen(param);
+    for (size_t i = 0; body[i] != '\0';) {
+        if (is_string_delim_c(body[i])) {
+            int end = skip_string_literal_c(body, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end;
+            continue;
+        }
+        if (body[i] == '\'') {
+            int end = skip_char_literal_c(body, (int)i);
+            if (end < 0) return 0;
+            i = (size_t)end;
+            continue;
+        }
+        if (is_ident_start(body[i])) {
+            const char *start = body + i;
+            i++;
+            while (is_ident_continue(body[i])) i++;
+            size_t len = (size_t)(body + i - start);
+            int is_param = len == param_len && strncmp(start, param, len) == 0;
+            if (!is_param &&
+                !list_method_closure_ident_is_member_name(body, start) &&
+                !closure_body_ident_is_bool_or_verified_builtin(start, len) &&
+                !list_method_env_has_ident(env, start, len)) {
+                return 0;
+            }
+            continue;
+        }
+        i++;
+    }
+    return 1;
+}
+
+static int list_method_expr_is_string_literal(const char *expr) {
+    const char *s = skip_ws(expr);
+    if (!is_string_delim_c(*s)) return 0;
+    int end = skip_string_literal_c(s, 0);
+    if (end < 0) return 0;
+    const char *tail = skip_ws(s + end);
+    return *tail == '\0' || *tail == ';';
+}
+
+static int list_method_expr_is_int_literal(const char *expr) {
+    const char *s = skip_ws(expr);
+    if (*s == '-') s++;
+    if (*s < '0' || *s > '9') return 0;
+    while (*s >= '0' && *s <= '9') s++;
+    s = skip_ws(s);
+    return *s == '\0' || *s == ';';
+}
+
+static int list_method_expr_is_bool_literal(const char *expr) {
+    const char *s = skip_ws(expr);
+    if (starts_with(s, "true") && !is_ident_continue(s[4])) {
+        s = skip_ws(s + 4);
+        return *s == '\0' || *s == ';';
+    }
+    if (starts_with(s, "false") && !is_ident_continue(s[5])) {
+        s = skip_ws(s + 5);
+        return *s == '\0' || *s == ';';
+    }
+    return 0;
 }
 
 static int closure_body_single_capture(const char *body, const char *param, char **capture_out) {
@@ -2792,6 +6868,7 @@ static char *lower_closure_text(const char *text) {
 static int parse_list_method_closure_call(
     const char *expr,
     const char *method,
+    ListMethodEnv *env,
     char **receiver_out,
     char **param_out,
     char **body_out,
@@ -2827,7 +6904,8 @@ static int parse_list_method_closure_call(
     char *arg_raw = substr_copy(p + 1, (size_t)(expr + close - p - 1));
     char *param = NULL;
     char *body = NULL;
-    int ok = parse_inline_int_closure(arg_raw, &param, &body) && closure_body_uses_only_param(body, param);
+    int ok = parse_inline_int_closure(arg_raw, &param, &body) &&
+        closure_body_uses_param_or_list_method_env(body, param, env);
     free(arg_raw);
     if (!ok) {
         free(receiver);
@@ -2842,40 +6920,273 @@ static int parse_list_method_closure_call(
     return 1;
 }
 
-static int lower_list_map_assignment_line(const char *line, LineVec *out) {
+static char *parse_list_method_lhs_type(const char *name_end, const char *eq, int *had_annotation) {
+    *had_annotation = 0;
+    const char *p = skip_ws(name_end);
+    if (*p != ':') return NULL;
+    *had_annotation = 1;
+    char *raw = substr_copy(p + 1, (size_t)(eq - p - 1));
+    char *type = trim_copy(raw);
+    free(raw);
+    char *out = list_method_canonical_type(type);
+    free(type);
+    return out;
+}
+
+static char *parse_list_method_env_decl_type(const char *name_end, const char *eq, int *had_annotation) {
+    *had_annotation = 0;
+    const char *p = skip_ws(name_end);
+    if (*p != ':') return NULL;
+    *had_annotation = 1;
+    char *raw = substr_copy(p + 1, (size_t)(eq - p - 1));
+    char *type = trim_copy(raw);
+    free(raw);
+    char *out = list_method_canonical_env_type(type);
+    free(type);
+    return out;
+}
+
+static void list_method_env_track_struct_body(ListMethodEnv *env, const char *name, const char *body) {
+    char *parts[64] = {0};
+    char *fields[64] = {0};
+    char *field_types[64] = {0};
+    int n = split_top_level_type_commas_c(body, parts, 64);
+    int field_count = 0;
+    for (int i = 0; i < n && i < 64; i++) {
+        char *part = trim_copy(parts[i]);
+        const char *p = skip_ws(part);
+        if (is_ident_start(*p)) {
+            const char *field_start = p;
+            p++;
+            while (is_ident_continue(*p)) p++;
+            char *field = substr_copy(field_start, (size_t)(p - field_start));
+            char *field_type = NULL;
+            const char *colon = skip_ws(p);
+            if (*colon == ':') {
+                char *type_raw = trim_copy(colon + 1);
+                field_type = list_method_canonical_env_type(type_raw);
+                free(type_raw);
+            }
+            fields[field_count] = field;
+            field_types[field_count] = field_type;
+            field_count++;
+        }
+        free(part);
+        free(parts[i]);
+    }
+    if (field_count > 0) list_method_env_set_struct(env, name, fields, field_types, field_count);
+    for (int i = 0; i < field_count; i++) {
+        free(fields[i]);
+        free(field_types[i]);
+    }
+}
+
+static int list_method_env_track_struct_block(LineVec *lines, size_t *index, ListMethodEnv *env, LineVec *out) {
+    const char *line = lines->items[*index];
     const char *s = skip_ws(line);
-    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
-    const char *name_start = skip_ws(s + 4);
+    if (!starts_with(s, "struct ") || is_ident_continue(s[6])) return 0;
+    const char *name_start = skip_ws(s + 7);
     if (!is_ident_start(*name_start)) return 0;
     const char *name_end = name_start + 1;
     while (is_ident_continue(*name_end)) name_end++;
-    const char *eq = strchr(name_end, '=');
-    if (eq == NULL) return 0;
+    const char *open = strchr(name_end, '{');
+    if (open == NULL) return 0;
     char *name = substr_copy(name_start, (size_t)(name_end - name_start));
-    char *receiver = NULL;
-    char *param = NULL;
-    char *body = NULL;
-    const char *after = NULL;
-    if (!parse_list_method_closure_call(eq + 1, "map", &receiver, &param, &body, &after)) {
-        free(name);
-        return 0;
+    StrBuf body;
+    sb_init(&body);
+    size_t end = *index;
+    int found_close = 0;
+    for (size_t row = *index; row < lines->len; row++) {
+        const char *part_start = row == *index ? open + 1 : lines->items[row];
+        const char *close = strchr(part_start, '}');
+        if (close != NULL) {
+            sb_append_n(&body, part_start, (size_t)(close - part_start));
+            end = row;
+            found_close = 1;
+            break;
+        }
+        sb_append(&body, part_start);
+        sb_append(&body, "\n");
     }
-    const char *tail = skip_ws(after);
-    if (*tail == ';') tail = skip_ws(tail + 1);
-    if (*tail != '\0') {
-        free(name);
-        free(receiver);
-        free(param);
-        free(body);
-        return 0;
+    if (found_close) {
+        char *body_text = sb_take(&body);
+        list_method_env_track_struct_body(env, name, body_text);
+        free(body_text);
+        for (size_t row = *index; row <= end; row++) lines_push(out, strdup(lines->items[row]));
+        *index = end;
+    } else {
+        free(body.data);
     }
-    size_t indent_len = (size_t)(s - line);
+    free(name);
+    return found_close;
+}
+
+static int list_method_env_track_fn_signature_line(const char *line, ListMethodEnv *env, int track_current_fn_state) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    const char *fn_name_start = skip_ws(s + 3);
+    char *fn_name = NULL;
+    if (is_ident_start(*fn_name_start)) {
+        const char *fn_name_end = fn_name_start + 1;
+        while (is_ident_continue(*fn_name_end)) fn_name_end++;
+        fn_name = substr_copy(fn_name_start, (size_t)(fn_name_end - fn_name_start));
+    }
+    const char *open = strchr(s, '(');
+    if (open == NULL) {
+        free(fn_name);
+        return 1;
+    }
+    int close = find_matching_paren_c(s, (int)(open - s));
+    if (close < 0) {
+        free(fn_name);
+        return 1;
+    }
+    char *params = substr_copy(open + 1, (size_t)(s + close - open - 1));
+    char *parts[32] = {0};
+    int n = split_top_level_type_commas_c(params, parts, 32);
+    free(params);
+    if (n < 0) {
+        for (int i = 0; i < 32; i++) free(parts[i]);
+        free(fn_name);
+        return 1;
+    }
+    char *sig_param_types[16] = {0};
+    int sig_param_count = 0;
+    for (int i = 0; i < n; i++) {
+        if (parts[i] == NULL) continue;
+        char *colon = strchr(parts[i], ':');
+        if (colon != NULL) {
+            char *raw_name = substr_copy(parts[i], (size_t)(colon - parts[i]));
+            char *name = trim_copy(raw_name);
+            char *raw_type = trim_copy(colon + 1);
+            char *type = list_method_canonical_env_type(raw_type);
+            if (track_current_fn_state && type != NULL && is_ident_start(name[0])) list_method_env_set(env, name, type);
+            if (type != NULL && sig_param_count < 16) sig_param_types[sig_param_count++] = strdup(type);
+            free(raw_name);
+            free(name);
+            free(raw_type);
+            free(type);
+        }
+        free(parts[i]);
+    }
+    char *sig_return_type = NULL;
+    const char *after_params = skip_ws(s + close + 1);
+    if (starts_with(after_params, "->")) {
+        const char *ret_start = skip_ws(after_params + 2);
+        const char *ret_end = ret_start;
+        while (*ret_end != '\0' && *ret_end != '{') ret_end++;
+        char *raw_ret = substr_copy(ret_start, (size_t)(ret_end - ret_start));
+        char *ret = trim_copy(raw_ret);
+        char *type = list_method_canonical_env_type(ret);
+        if (track_current_fn_state && type != NULL && strlen(type) < sizeof(env->current_return_type)) {
+            strcpy(env->current_return_type, type);
+        }
+        if (type != NULL) {
+            sig_return_type = strdup(type);
+        }
+        free(raw_ret);
+        free(ret);
+        free(type);
+    }
+    if (fn_name != NULL) {
+        list_method_env_set_fn(env, fn_name, sig_param_types, sig_param_count, sig_return_type);
+    }
+    for (int i = 0; i < sig_param_count; i++) free(sig_param_types[i]);
+    free(sig_return_type);
+    free(fn_name);
+    return 1;
+}
+
+static int list_method_env_track_fn_line(const char *line, ListMethodEnv *env) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    list_method_env_clear_locals(env);
+    return list_method_env_track_fn_signature_line(line, env, 1);
+}
+
+static const char *list_method_env_exact_call_return_type(ListMethodEnv *env, const char *expr) {
+    char *trimmed = trim_trailing_semicolon_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return NULL;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *open = skip_ws(s);
+    if (*open != '(') {
+        free(trimmed);
+        return NULL;
+    }
+    int close = find_matching_paren_c(trimmed, (int)(open - trimmed));
+    if (close < 0 || *skip_ws(trimmed + close + 1) != '\0') {
+        free(trimmed);
+        return NULL;
+    }
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    ListMethodFnSig *fn = list_method_env_fn(env, name);
+    const char *type = fn == NULL ? NULL : fn->return_type;
+    free(name);
+    free(trimmed);
+    return type;
+}
+
+static void list_method_env_track_decl_line(const char *line, ListMethodEnv *env) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return;
+    const char *name_start = skip_ws(s + 4);
+    if (starts_with(name_start, "mut") && !is_ident_continue(name_start[3])) {
+        name_start = skip_ws(name_start + 3);
+    }
+    if (!is_ident_start(*name_start)) return;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    if (lhs_type != NULL) {
+        list_method_env_set(env, name, lhs_type);
+        free(lhs_type);
+        free(name);
+        return;
+    }
+    if (!had_annotation) {
+        char *rhs = trim_trailing_semicolon_copy(eq + 1);
+        const char *copy_type = list_method_env_type(env, rhs);
+        if (copy_type != NULL) list_method_env_set(env, name, copy_type);
+        else if (list_method_expr_is_string_literal(rhs)) list_method_env_set(env, name, "Str");
+        else if (list_method_expr_is_int_literal(rhs)) list_method_env_set(env, name, "Int");
+        else if (list_method_expr_is_bool_literal(rhs)) list_method_env_set(env, name, "Bool");
+        else {
+            const char *call_return_type = list_method_env_exact_call_return_type(env, rhs);
+            if (call_return_type != NULL) list_method_env_set(env, name, call_return_type);
+        }
+        free(rhs);
+    }
+    free(name);
+}
+
+static void lower_list_map_result_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *param,
+    const char *body,
+    const char *result_type,
+    const char *name,
+    LineVec *out
+) {
     StrBuf init;
     sb_init(&init);
     sb_append_n(&init, line, indent_len);
     sb_append(&init, "let ");
     sb_append(&init, name);
-    sb_append(&init, ": List<Int> = []");
+    sb_append(&init, ": ");
+    sb_append(&init, result_type);
+    sb_append(&init, " = []");
     lines_push(out, sb_take(&init));
 
     StrBuf loop;
@@ -2903,15 +7214,7406 @@ static int lower_list_map_assignment_line(const char *line, LineVec *out) {
     sb_append_n(&close, line, indent_len);
     sb_append(&close, "}");
     lines_push(out, sb_take(&close));
+}
 
+static int lower_list_map_assignment_line(const char *line, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_lhs_type(name_end, eq, &had_annotation);
+    if (had_annotation && lhs_type == NULL) {
+        free(name);
+        return 0;
+    }
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    if (!parse_list_method_closure_call(expr, "map", env, &receiver, &param, &body, &after)) {
+        free(expr);
+        free(lhs_type);
+        free(name);
+        return 0;
+    }
+    const char *tail = skip_ws(after);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, body, lhs_type);
+    size_t indent_len = (size_t)(s - line);
+    lower_list_map_result_emit(line, indent_len, receiver, param, body, result_type, name, out);
+
+    list_method_env_set(env, name, result_type);
     free(name);
+    free(lhs_type);
+    free(result_type);
+    free(expr);
     free(receiver);
     free(param);
     free(body);
     return 1;
 }
 
-static int lower_list_filter_sum_return_line(const char *line, int *temp_count, LineVec *out) {
+static int lower_list_filter_assignment_line(const char *line, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_lhs_type(name_end, eq, &had_annotation);
+    if (had_annotation && lhs_type == NULL) {
+        free(name);
+        return 0;
+    }
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(eq + 1, "filter", env, &receiver, &param, &body, &after)) {
+        free(lhs_type);
+        free(name);
+        return 0;
+    }
+    const char *tail = skip_ws(after);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(lhs_type);
+        free(name);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *result_type = lhs_type != NULL ? strdup(lhs_type) :
+        strdup(list_method_type_is_list(receiver_type) ? receiver_type : "List<Int>");
+    size_t indent_len = (size_t)(s - line);
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let ");
+    sb_append(&init, name);
+    sb_append(&init, ": ");
+    sb_append(&init, result_type);
+    sb_append(&init, " = []");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf push;
+    sb_init(&push);
+    sb_append_n(&push, line, indent_len);
+    sb_append(&push, "        ");
+    sb_append(&push, name);
+    sb_append(&push, ".push(");
+    sb_append(&push, param);
+    sb_append(&push, ")");
+    lines_push(out, sb_take(&push));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    list_method_env_set(env, name, result_type);
+    free(name);
+    free(lhs_type);
+    free(result_type);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static int parse_list_filter_map_sum_tail(
+    const char *expr,
+    const char *after_filter,
+    ListMethodEnv *env,
+    const char *filter_param,
+    char **map_body_out
+) {
+    const char *map = skip_ws(after_filter);
+    if (!starts_with(map, ".map") || is_ident_continue(map[4])) return 0;
+    const char *map_open = skip_ws(map + 4);
+    if (*map_open != '(') return 0;
+    int close_map = find_matching_paren_c(expr, (int)(map_open - expr));
+    if (close_map < 0) return 0;
+    char *arg_raw = substr_copy(map_open + 1, (size_t)(expr + close_map - map_open - 1));
+    char *map_param = NULL;
+    char *map_body = NULL;
+    int ok = parse_inline_int_closure(arg_raw, &map_param, &map_body) &&
+        strcmp(map_param, filter_param) == 0 &&
+        closure_body_uses_param_or_list_method_env(map_body, map_param, env) &&
+        !closure_body_returns_str(map_body);
+    free(arg_raw);
+    if (!ok) {
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+
+    const char *sum = skip_ws(expr + close_map + 1);
+    if (!starts_with(sum, ".sum") || is_ident_continue(sum[4])) {
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    const char *sum_open = skip_ws(sum + 4);
+    if (*sum_open != '(') {
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    int close_sum = find_matching_paren_c(expr, (int)(sum_open - expr));
+    if (close_sum < 0) {
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    char *sum_args = substr_copy(sum_open + 1, (size_t)(expr + close_sum - sum_open - 1));
+    char *sum_args_trim = trim_copy(sum_args);
+    free(sum_args);
+    const char *tail = skip_ws(expr + close_sum + 1);
+    ok = sum_args_trim[0] == '\0' && *tail == '\0';
+    free(sum_args_trim);
+    if (!ok) {
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    free(map_param);
+    *map_body_out = map_body;
+    return 1;
+}
+
+static int parse_list_filter_map_result_tail(
+    const char *expr,
+    const char *after_filter,
+    ListMethodEnv *env,
+    const char *filter_param,
+    char **map_body_out
+) {
+    const char *map = skip_ws(after_filter);
+    if (!starts_with(map, ".map") || is_ident_continue(map[4])) return 0;
+    const char *map_open = skip_ws(map + 4);
+    if (*map_open != '(') return 0;
+    int close_map = find_matching_paren_c(expr, (int)(map_open - expr));
+    if (close_map < 0) return 0;
+    char *arg_raw = substr_copy(map_open + 1, (size_t)(expr + close_map - map_open - 1));
+    char *map_param = NULL;
+    char *map_body = NULL;
+    int ok = parse_inline_int_closure(arg_raw, &map_param, &map_body) &&
+        strcmp(map_param, filter_param) == 0 &&
+        closure_body_uses_param_or_list_method_env(map_body, map_param, env);
+    free(arg_raw);
+    if (!ok) {
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    const char *tail = skip_ws(expr + close_map + 1);
+    ok = *tail == '\0';
+    free(map_param);
+    if (!ok) {
+        free(map_body);
+        return 0;
+    }
+    *map_body_out = map_body;
+    return 1;
+}
+
+static int parse_list_map_filter_result_expr_exact(
+    const char *expr,
+    ListMethodEnv *env,
+    char **receiver_out,
+    char **map_param_out,
+    char **map_body_out,
+    char **filter_param_out,
+    char **filter_body_out,
+    char **result_type_out
+) {
+    char *receiver = NULL;
+    char *map_param = NULL;
+    char *map_body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "map", env, &receiver, &map_param, &map_body, &after)) {
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    if (receiver_type == NULL || !list_method_type_is_list(receiver_type)) {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    char *result_type = list_method_map_result_list_type(env, receiver_type, map_param, map_body, NULL);
+    char *result_elem = result_type == NULL ? NULL : list_method_list_element_type_copy(result_type);
+    if (result_elem == NULL || (strcmp(result_elem, "Int") != 0 && strcmp(result_elem, "Str") != 0)) {
+        free(result_elem);
+        free(result_type);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    free(result_elem);
+
+    const char *filter = skip_ws(after);
+    if (!starts_with(filter, ".filter") || is_ident_continue(filter[7])) {
+        free(result_type);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    const char *filter_open = skip_ws(filter + 7);
+    if (*filter_open != '(') {
+        free(result_type);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    int close_filter = find_matching_paren_c(expr, (int)(filter_open - expr));
+    if (close_filter < 0) {
+        free(result_type);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    char *arg_raw = substr_copy(filter_open + 1, (size_t)(expr + close_filter - filter_open - 1));
+    char *filter_param = NULL;
+    char *filter_body = NULL;
+    int ok = parse_inline_int_closure(arg_raw, &filter_param, &filter_body) &&
+        closure_body_uses_param_or_list_method_env(filter_body, filter_param, env);
+    free(arg_raw);
+    if (!ok) {
+        free(result_type);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        return 0;
+    }
+
+    const char *tail = skip_ws(expr + close_filter + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(result_type);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        return 0;
+    }
+
+    *receiver_out = receiver;
+    *map_param_out = map_param;
+    *map_body_out = map_body;
+    *filter_param_out = filter_param;
+    *filter_body_out = filter_body;
+    *result_type_out = result_type;
+    return 1;
+}
+
+static int parse_list_filter_extreme_tail(const char *expr, const char *after_filter, int *use_min_out) {
+    const char *method = skip_ws(after_filter);
+    int use_min = 0;
+    if (starts_with(method, ".max") && !is_ident_continue(method[4])) {
+        use_min = 0;
+    } else if (starts_with(method, ".min") && !is_ident_continue(method[4])) {
+        use_min = 1;
+    } else {
+        return 0;
+    }
+    const char *open = skip_ws(method + 4);
+    if (*open != '(') return 0;
+    int close_method = find_matching_paren_c(expr, (int)(open - expr));
+    if (close_method < 0) return 0;
+    char *args = substr_copy(open + 1, (size_t)(expr + close_method - open - 1));
+    char *args_trim = trim_copy(args);
+    free(args);
+    const char *tail = skip_ws(expr + close_method + 1);
+    int ok = args_trim[0] == '\0' && *tail == '\0';
+    free(args_trim);
+    if (!ok) return 0;
+    *use_min_out = use_min;
+    return 1;
+}
+
+static int parse_list_filter_pick_field_tail(
+    const char *expr,
+    const char *after_filter,
+    int *use_last_out,
+    int *len_chain_out,
+    char **field_out
+) {
+    const char *method = skip_ws(after_filter);
+    int use_last = 0;
+    int method_len = 0;
+    if (starts_with(method, ".first") && !is_ident_continue(method[6])) {
+        use_last = 0;
+        method_len = 6;
+    } else if (starts_with(method, ".last") && !is_ident_continue(method[5])) {
+        use_last = 1;
+        method_len = 5;
+    } else {
+        return 0;
+    }
+    const char *open = skip_ws(method + method_len);
+    if (*open != '(') return 0;
+    int close_method = find_matching_paren_c(expr, (int)(open - expr));
+    if (close_method < 0) return 0;
+    char *args = substr_copy(open + 1, (size_t)(expr + close_method - open - 1));
+    char *args_trim = trim_copy(args);
+    free(args);
+    if (args_trim[0] != '\0') {
+        free(args_trim);
+        return 0;
+    }
+    free(args_trim);
+
+    const char *field_dot = skip_ws(expr + close_method + 1);
+    if (*field_dot != '.') return 0;
+    const char *field_start = skip_ws(field_dot + 1);
+    if (!is_ident_start(*field_start)) return 0;
+    const char *field_end = field_start + 1;
+    while (is_ident_continue(*field_end)) field_end++;
+    const char *tail = skip_ws(field_end);
+    int len_chain = 0;
+    if (starts_with(tail, ".len") && !is_ident_continue(tail[4])) {
+        const char *open_len = skip_ws(tail + 4);
+        if (*open_len != '(') return 0;
+        int close_len = find_matching_paren_c(expr, (int)(open_len - expr));
+        if (close_len < 0) return 0;
+        char *len_args = substr_copy(open_len + 1, (size_t)(expr + close_len - open_len - 1));
+        char *len_args_trim = trim_copy(len_args);
+        free(len_args);
+        if (len_args_trim[0] != '\0') {
+            free(len_args_trim);
+            return 0;
+        }
+        free(len_args_trim);
+        tail = skip_ws(expr + close_len + 1);
+        len_chain = 1;
+    }
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') return 0;
+
+    *use_last_out = use_last;
+    *len_chain_out = len_chain;
+    *field_out = substr_copy(field_start, (size_t)(field_end - field_start));
+    return 1;
+}
+
+static int parse_list_filter_pick_struct_tail(
+    const char *expr,
+    const char *after_filter,
+    int *use_last_out
+) {
+    const char *method = skip_ws(after_filter);
+    int use_last = 0;
+    int method_len = 0;
+    if (starts_with(method, ".first") && !is_ident_continue(method[6])) {
+        use_last = 0;
+        method_len = 6;
+    } else if (starts_with(method, ".last") && !is_ident_continue(method[5])) {
+        use_last = 1;
+        method_len = 5;
+    } else {
+        return 0;
+    }
+    const char *open = skip_ws(method + method_len);
+    if (*open != '(') return 0;
+    int close_method = find_matching_paren_c(expr, (int)(open - expr));
+    if (close_method < 0) return 0;
+    char *args = substr_copy(open + 1, (size_t)(expr + close_method - open - 1));
+    char *args_trim = trim_copy(args);
+    free(args);
+    if (args_trim[0] != '\0') {
+        free(args_trim);
+        return 0;
+    }
+    free(args_trim);
+    const char *tail = skip_ws(expr + close_method + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') return 0;
+    *use_last_out = use_last;
+    return 1;
+}
+
+static int list_filter_pick_field_result_type_supported(const char *type) {
+    return type != NULL && (strcmp(type, "Int") == 0 || strcmp(type, "Str") == 0);
+}
+
+static const char *list_filter_pick_field_default_value(const char *type) {
+    if (strcmp(type, "Str") == 0) return "\"\"";
+    return "0";
+}
+
+static void lower_list_filter_pick_field_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *receiver_type,
+    const char *param,
+    const char *body,
+    const char *field,
+    const char *result_type,
+    const char *target_name,
+    int use_last,
+    int len_chain,
+    int is_return,
+    int id,
+    LineVec *out
+) {
+    char seen[64];
+    char value[64];
+    char empty[64];
+    snprintf(seen, sizeof(seen), "vais_filter_pick_seen%d", id);
+    snprintf(value, sizeof(value), "vais_filter_pick_value%d", id);
+    snprintf(empty, sizeof(empty), "vais_filter_pick_empty%d", id);
+    const char *method = use_last ? "last" : "first";
+    const char *value_type = len_chain ? "Str" : result_type;
+
+    StrBuf init_seen;
+    sb_init(&init_seen);
+    sb_append_n(&init_seen, line, indent_len);
+    sb_append(&init_seen, "let mut ");
+    sb_append(&init_seen, seen);
+    sb_append(&init_seen, " = 0");
+    lines_push(out, sb_take(&init_seen));
+
+    StrBuf init_value;
+    sb_init(&init_value);
+    sb_append_n(&init_value, line, indent_len);
+    sb_append(&init_value, "let mut ");
+    sb_append(&init_value, value);
+    sb_append(&init_value, ": ");
+    sb_append(&init_value, value_type);
+    sb_append(&init_value, " = ");
+    sb_append(&init_value, list_filter_pick_field_default_value(value_type));
+    lines_push(out, sb_take(&init_value));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    if (!use_last) {
+        StrBuf first_if;
+        sb_init(&first_if);
+        sb_append_n(&first_if, line, indent_len);
+        sb_append(&first_if, "        if ");
+        sb_append(&first_if, seen);
+        sb_append(&first_if, " == 0 {");
+        lines_push(out, sb_take(&first_if));
+    }
+
+    StrBuf set_value;
+    sb_init(&set_value);
+    sb_append_n(&set_value, line, indent_len);
+    sb_append(&set_value, use_last ? "        " : "            ");
+    sb_append(&set_value, value);
+    sb_append(&set_value, " = ");
+    sb_append(&set_value, param);
+    sb_append(&set_value, ".");
+    sb_append(&set_value, field);
+    lines_push(out, sb_take(&set_value));
+
+    StrBuf set_seen;
+    sb_init(&set_seen);
+    sb_append_n(&set_seen, line, indent_len);
+    sb_append(&set_seen, use_last ? "        " : "            ");
+    sb_append(&set_seen, seen);
+    sb_append(&set_seen, " = 1");
+    lines_push(out, sb_take(&set_seen));
+
+    if (!use_last) {
+        StrBuf close_first;
+        sb_init(&close_first);
+        sb_append_n(&close_first, line, indent_len);
+        sb_append(&close_first, "        }");
+        lines_push(out, sb_take(&close_first));
+    }
+
+    StrBuf close_cond;
+    sb_init(&close_cond);
+    sb_append_n(&close_cond, line, indent_len);
+    sb_append(&close_cond, "    }");
+    lines_push(out, sb_take(&close_cond));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf empty_if;
+    sb_init(&empty_if);
+    sb_append_n(&empty_if, line, indent_len);
+    sb_append(&empty_if, "if ");
+    sb_append(&empty_if, seen);
+    sb_append(&empty_if, " == 0 {");
+    lines_push(out, sb_take(&empty_if));
+
+    StrBuf empty_decl;
+    sb_init(&empty_decl);
+    sb_append_n(&empty_decl, line, indent_len);
+    sb_append(&empty_decl, "    let ");
+    sb_append(&empty_decl, empty);
+    sb_append(&empty_decl, ": ");
+    sb_append(&empty_decl, receiver_type);
+    sb_append(&empty_decl, " = []");
+    lines_push(out, sb_take(&empty_decl));
+
+    StrBuf empty_call;
+    sb_init(&empty_call);
+    sb_append_n(&empty_call, line, indent_len);
+    sb_append(&empty_call, "    ");
+    sb_append(&empty_call, value);
+    sb_append(&empty_call, " = ");
+    sb_append(&empty_call, empty);
+    sb_append(&empty_call, ".");
+    sb_append(&empty_call, method);
+    sb_append(&empty_call, "().");
+    sb_append(&empty_call, field);
+    lines_push(out, sb_take(&empty_call));
+
+    StrBuf close_empty;
+    sb_init(&close_empty);
+    sb_append_n(&close_empty, line, indent_len);
+    sb_append(&close_empty, "}");
+    lines_push(out, sb_take(&close_empty));
+
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    if (is_return) {
+        sb_append(&final_line, "return ");
+    } else {
+        sb_append(&final_line, "let ");
+        sb_append(&final_line, target_name);
+        sb_append(&final_line, " = ");
+    }
+    sb_append(&final_line, value);
+    if (len_chain) sb_append(&final_line, ".len()");
+    lines_push(out, sb_take(&final_line));
+}
+
+static int list_method_append_struct_copy_literal(
+    StrBuf *out,
+    ListMethodEnv *env,
+    const char *value_type,
+    const char *source
+) {
+    ListMethodStruct *info = list_method_env_struct(env, value_type);
+    if (info == NULL || info->field_count <= 0) return 0;
+    sb_append(out, value_type);
+    sb_append(out, " { ");
+    for (int i = 0; i < info->field_count; i++) {
+        if (i > 0) sb_append(out, ", ");
+        sb_append(out, info->fields[i]);
+        sb_append(out, ": ");
+        sb_append(out, source);
+        sb_append(out, ".");
+        sb_append(out, info->fields[i]);
+    }
+    sb_append(out, " }");
+    return 1;
+}
+
+static void lower_list_filter_pick_struct_emit(
+    const char *line,
+    size_t indent_len,
+    ListMethodEnv *env,
+    const char *receiver,
+    const char *receiver_type,
+    const char *param,
+    const char *body,
+    const char *value_type,
+    const char *target_name,
+    int use_last,
+    int is_return,
+    int id,
+    LineVec *out
+) {
+    char seen[64];
+    char value[64];
+    char empty[64];
+    char empty_value[64];
+    snprintf(seen, sizeof(seen), "vais_filter_pick_seen%d", id);
+    snprintf(value, sizeof(value), "vais_filter_pick_value%d", id);
+    snprintf(empty, sizeof(empty), "vais_filter_pick_empty%d", id);
+    snprintf(empty_value, sizeof(empty_value), "vais_filter_pick_empty_value%d", id);
+    const char *method = use_last ? "last" : "first";
+
+    StrBuf init_seen;
+    sb_init(&init_seen);
+    sb_append_n(&init_seen, line, indent_len);
+    sb_append(&init_seen, "let mut ");
+    sb_append(&init_seen, seen);
+    sb_append(&init_seen, " = 0");
+    lines_push(out, sb_take(&init_seen));
+
+    StrBuf init_value;
+    sb_init(&init_value);
+    sb_append_n(&init_value, line, indent_len);
+    sb_append(&init_value, "let mut ");
+    sb_append(&init_value, value);
+    sb_append(&init_value, ": ");
+    sb_append(&init_value, value_type);
+    sb_append(&init_value, " = ");
+    sb_append(&init_value, receiver);
+    sb_append(&init_value, ".");
+    sb_append(&init_value, method);
+    sb_append(&init_value, "()");
+    lines_push(out, sb_take(&init_value));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    if (!use_last) {
+        StrBuf first_if;
+        sb_init(&first_if);
+        sb_append_n(&first_if, line, indent_len);
+        sb_append(&first_if, "        if ");
+        sb_append(&first_if, seen);
+        sb_append(&first_if, " == 0 {");
+        lines_push(out, sb_take(&first_if));
+    }
+
+    StrBuf set_value;
+    sb_init(&set_value);
+    sb_append_n(&set_value, line, indent_len);
+    sb_append(&set_value, use_last ? "        " : "            ");
+    sb_append(&set_value, value);
+    sb_append(&set_value, " = ");
+    if (!list_method_append_struct_copy_literal(&set_value, env, value_type, param)) {
+        sb_append(&set_value, param);
+    }
+    lines_push(out, sb_take(&set_value));
+
+    StrBuf set_seen;
+    sb_init(&set_seen);
+    sb_append_n(&set_seen, line, indent_len);
+    sb_append(&set_seen, use_last ? "        " : "            ");
+    sb_append(&set_seen, seen);
+    sb_append(&set_seen, " = 1");
+    lines_push(out, sb_take(&set_seen));
+
+    if (!use_last) {
+        StrBuf close_first;
+        sb_init(&close_first);
+        sb_append_n(&close_first, line, indent_len);
+        sb_append(&close_first, "        }");
+        lines_push(out, sb_take(&close_first));
+    }
+
+    StrBuf close_cond;
+    sb_init(&close_cond);
+    sb_append_n(&close_cond, line, indent_len);
+    sb_append(&close_cond, "    }");
+    lines_push(out, sb_take(&close_cond));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf empty_if;
+    sb_init(&empty_if);
+    sb_append_n(&empty_if, line, indent_len);
+    sb_append(&empty_if, "if ");
+    sb_append(&empty_if, seen);
+    sb_append(&empty_if, " == 0 {");
+    lines_push(out, sb_take(&empty_if));
+
+    StrBuf empty_decl;
+    sb_init(&empty_decl);
+    sb_append_n(&empty_decl, line, indent_len);
+    sb_append(&empty_decl, "    let ");
+    sb_append(&empty_decl, empty);
+    sb_append(&empty_decl, ": ");
+    sb_append(&empty_decl, receiver_type);
+    sb_append(&empty_decl, " = []");
+    lines_push(out, sb_take(&empty_decl));
+
+    ListMethodStruct *info = list_method_env_struct(env, value_type);
+    if (info != NULL && info->field_count > 0) {
+        StrBuf empty_get;
+        sb_init(&empty_get);
+        sb_append_n(&empty_get, line, indent_len);
+        sb_append(&empty_get, "    let ");
+        sb_append(&empty_get, empty_value);
+        sb_append(&empty_get, ": ");
+        sb_append(&empty_get, value_type);
+        sb_append(&empty_get, " = ");
+        sb_append(&empty_get, empty);
+        sb_append(&empty_get, ".");
+        sb_append(&empty_get, method);
+        sb_append(&empty_get, "()");
+        lines_push(out, sb_take(&empty_get));
+
+        StrBuf empty_call;
+        sb_init(&empty_call);
+        sb_append_n(&empty_call, line, indent_len);
+        sb_append(&empty_call, "    ");
+        sb_append(&empty_call, value);
+        sb_append(&empty_call, " = ");
+        list_method_append_struct_copy_literal(&empty_call, env, value_type, empty_value);
+        lines_push(out, sb_take(&empty_call));
+    } else {
+        StrBuf empty_call;
+        sb_init(&empty_call);
+        sb_append_n(&empty_call, line, indent_len);
+        sb_append(&empty_call, "    ");
+        sb_append(&empty_call, value);
+        sb_append(&empty_call, " = ");
+        sb_append(&empty_call, empty);
+        sb_append(&empty_call, ".");
+        sb_append(&empty_call, method);
+        sb_append(&empty_call, "()");
+        lines_push(out, sb_take(&empty_call));
+    }
+
+    StrBuf close_empty;
+    sb_init(&close_empty);
+    sb_append_n(&close_empty, line, indent_len);
+    sb_append(&close_empty, "}");
+    lines_push(out, sb_take(&close_empty));
+
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    if (is_return) {
+        sb_append(&final_line, "return ");
+    } else {
+        sb_append(&final_line, "let ");
+        sb_append(&final_line, target_name);
+        sb_append(&final_line, ": ");
+        sb_append(&final_line, value_type);
+        sb_append(&final_line, " = ");
+    }
+    if (!is_return && list_method_append_struct_copy_literal(&final_line, env, value_type, value)) {
+    } else {
+        sb_append(&final_line, value);
+    }
+    lines_push(out, sb_take(&final_line));
+}
+
+static int parse_list_filter_map_extreme_tail(
+    const char *expr,
+    const char *after_filter,
+    ListMethodEnv *env,
+    const char *filter_param,
+    char **map_body_out,
+    int *use_min_out
+) {
+    const char *map = skip_ws(after_filter);
+    if (!starts_with(map, ".map") || is_ident_continue(map[4])) return 0;
+    const char *map_open = skip_ws(map + 4);
+    if (*map_open != '(') return 0;
+    int close_map = find_matching_paren_c(expr, (int)(map_open - expr));
+    if (close_map < 0) return 0;
+    char *arg_raw = substr_copy(map_open + 1, (size_t)(expr + close_map - map_open - 1));
+    char *map_param = NULL;
+    char *map_body = NULL;
+    int ok = parse_inline_int_closure(arg_raw, &map_param, &map_body) &&
+        strcmp(map_param, filter_param) == 0 &&
+        closure_body_uses_param_or_list_method_env(map_body, map_param, env) &&
+        !closure_body_returns_str(map_body);
+    free(arg_raw);
+    if (!ok) {
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+
+    int use_min = 0;
+    if (!parse_list_filter_extreme_tail(expr, expr + close_map + 1, &use_min)) {
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    free(map_param);
+    *map_body_out = map_body;
+    *use_min_out = use_min;
+    return 1;
+}
+
+static void lower_list_filter_extreme_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *param,
+    const char *body,
+    const char *value_expr,
+    const char *target_name,
+    int use_min,
+    int is_return,
+    int id,
+    LineVec *out
+) {
+    char best[64];
+    char seen[64];
+    char value[64];
+    char empty[64];
+    snprintf(best, sizeof(best), "vais_filter_extreme%d", id);
+    snprintf(seen, sizeof(seen), "vais_filter_seen%d", id);
+    snprintf(value, sizeof(value), "vais_filter_value%d", id);
+    snprintf(empty, sizeof(empty), "vais_filter_empty%d", id);
+    const char *method = use_min ? "min" : "max";
+    const char *cmp = use_min ? " < " : " > ";
+
+    StrBuf init_best;
+    sb_init(&init_best);
+    sb_append_n(&init_best, line, indent_len);
+    sb_append(&init_best, "let mut ");
+    sb_append(&init_best, best);
+    sb_append(&init_best, " = 0");
+    lines_push(out, sb_take(&init_best));
+
+    StrBuf init_seen;
+    sb_init(&init_seen);
+    sb_append_n(&init_seen, line, indent_len);
+    sb_append(&init_seen, "let mut ");
+    sb_append(&init_seen, seen);
+    sb_append(&init_seen, " = 0");
+    lines_push(out, sb_take(&init_seen));
+
+    StrBuf init_value;
+    sb_init(&init_value);
+    sb_append_n(&init_value, line, indent_len);
+    sb_append(&init_value, "let mut ");
+    sb_append(&init_value, value);
+    sb_append(&init_value, " = 0");
+    lines_push(out, sb_take(&init_value));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf set_value;
+    sb_init(&set_value);
+    sb_append_n(&set_value, line, indent_len);
+    sb_append(&set_value, "        ");
+    sb_append(&set_value, value);
+    sb_append(&set_value, " = ");
+    sb_append(&set_value, value_expr);
+    lines_push(out, sb_take(&set_value));
+
+    StrBuf first_if;
+    sb_init(&first_if);
+    sb_append_n(&first_if, line, indent_len);
+    sb_append(&first_if, "        if ");
+    sb_append(&first_if, seen);
+    sb_append(&first_if, " == 0 {");
+    lines_push(out, sb_take(&first_if));
+
+    StrBuf set_first;
+    sb_init(&set_first);
+    sb_append_n(&set_first, line, indent_len);
+    sb_append(&set_first, "            ");
+    sb_append(&set_first, best);
+    sb_append(&set_first, " = ");
+    sb_append(&set_first, value);
+    lines_push(out, sb_take(&set_first));
+
+    StrBuf set_seen;
+    sb_init(&set_seen);
+    sb_append_n(&set_seen, line, indent_len);
+    sb_append(&set_seen, "            ");
+    sb_append(&set_seen, seen);
+    sb_append(&set_seen, " = 1");
+    lines_push(out, sb_take(&set_seen));
+
+    StrBuf else_line;
+    sb_init(&else_line);
+    sb_append_n(&else_line, line, indent_len);
+    sb_append(&else_line, "        } else {");
+    lines_push(out, sb_take(&else_line));
+
+    StrBuf cmp_if;
+    sb_init(&cmp_if);
+    sb_append_n(&cmp_if, line, indent_len);
+    sb_append(&cmp_if, "            if ");
+    sb_append(&cmp_if, value);
+    sb_append(&cmp_if, cmp);
+    sb_append(&cmp_if, best);
+    sb_append(&cmp_if, " {");
+    lines_push(out, sb_take(&cmp_if));
+
+    StrBuf set_best;
+    sb_init(&set_best);
+    sb_append_n(&set_best, line, indent_len);
+    sb_append(&set_best, "                ");
+    sb_append(&set_best, best);
+    sb_append(&set_best, " = ");
+    sb_append(&set_best, value);
+    lines_push(out, sb_take(&set_best));
+
+    StrBuf close_cmp;
+    sb_init(&close_cmp);
+    sb_append_n(&close_cmp, line, indent_len);
+    sb_append(&close_cmp, "            }");
+    lines_push(out, sb_take(&close_cmp));
+
+    StrBuf close_first;
+    sb_init(&close_first);
+    sb_append_n(&close_first, line, indent_len);
+    sb_append(&close_first, "        }");
+    lines_push(out, sb_take(&close_first));
+
+    StrBuf close_cond;
+    sb_init(&close_cond);
+    sb_append_n(&close_cond, line, indent_len);
+    sb_append(&close_cond, "    }");
+    lines_push(out, sb_take(&close_cond));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf empty_if;
+    sb_init(&empty_if);
+    sb_append_n(&empty_if, line, indent_len);
+    sb_append(&empty_if, "if ");
+    sb_append(&empty_if, seen);
+    sb_append(&empty_if, " == 0 {");
+    lines_push(out, sb_take(&empty_if));
+
+    StrBuf empty_decl;
+    sb_init(&empty_decl);
+    sb_append_n(&empty_decl, line, indent_len);
+    sb_append(&empty_decl, "    let ");
+    sb_append(&empty_decl, empty);
+    sb_append(&empty_decl, ": List<Int> = []");
+    lines_push(out, sb_take(&empty_decl));
+
+    StrBuf empty_call;
+    sb_init(&empty_call);
+    sb_append_n(&empty_call, line, indent_len);
+    sb_append(&empty_call, "    ");
+    sb_append(&empty_call, best);
+    sb_append(&empty_call, " = ");
+    sb_append(&empty_call, empty);
+    sb_append(&empty_call, ".");
+    sb_append(&empty_call, method);
+    sb_append(&empty_call, "()");
+    lines_push(out, sb_take(&empty_call));
+
+    StrBuf close_empty;
+    sb_init(&close_empty);
+    sb_append_n(&close_empty, line, indent_len);
+    sb_append(&close_empty, "}");
+    lines_push(out, sb_take(&close_empty));
+
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    if (is_return) {
+        sb_append(&final_line, "return ");
+    } else {
+        sb_append(&final_line, "let ");
+        sb_append(&final_line, target_name);
+        sb_append(&final_line, " = ");
+    }
+    sb_append(&final_line, best);
+    lines_push(out, sb_take(&final_line));
+}
+
+static int lower_list_filter_pick_struct_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && lhs_type == NULL) {
+        free(lhs_type);
+        return 0;
+    }
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    int use_last = 0;
+    char *elem_type = receiver_type == NULL ? NULL : list_method_list_element_type_copy(receiver_type);
+    if (receiver_type == NULL ||
+        elem_type == NULL ||
+        strcmp(elem_type, "Int") == 0 ||
+        strcmp(elem_type, "Str") == 0 ||
+        strcmp(elem_type, "Bool") == 0 ||
+        !parse_list_filter_pick_struct_tail(expr, after, &use_last) ||
+        (had_annotation && strcmp(lhs_type, elem_type) != 0)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(elem_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_pick_struct_emit(line, indent_len, env, receiver, receiver_type, param, body, elem_type, name, use_last, 0, id, out);
+    list_method_env_set(env, name, elem_type);
+    free(lhs_type);
+    free(name);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(elem_type);
+    return 1;
+}
+
+static int lower_list_filter_pick_struct_list_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(target);
+        return 0;
+    }
+    s++;
+    int is_insert = 0;
+    int method_len = 0;
+    if (starts_with(s, "push") && !is_ident_continue(s[4])) {
+        is_insert = 0;
+        method_len = 4;
+    } else if (starts_with(s, "insert_at") && !is_ident_continue(s[9])) {
+        is_insert = 1;
+        method_len = 9;
+    } else {
+        free(target);
+        return 0;
+    }
+    s = skip_ws(s + method_len);
+    if (*s != '(') {
+        free(target);
+        return 0;
+    }
+    int close = find_matching_paren_c(line, (int)(s - line));
+    if (close < 0) {
+        free(target);
+        return 0;
+    }
+    const char *tail = skip_ws(line + close + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(target);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(s + 1, (size_t)(line + close - s - 1));
+    char *parts[2] = {0};
+    int part_count = split_top_level_commas_c(args_raw, parts, 2);
+    free(args_raw);
+    if ((!is_insert && part_count != 1) || (is_insert && part_count != 2)) {
+        for (int i = 0; i < 2; i++) free(parts[i]);
+        free(target);
+        return 0;
+    }
+    char *index_arg = is_insert ? parts[0] : NULL;
+    char *expr = trim_trailing_semicolon_copy(is_insert ? parts[1] : parts[0]);
+
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(index_arg);
+        free(parts[is_insert ? 1 : 0]);
+        free(expr);
+        free(target);
+        return 0;
+    }
+
+    const char *target_type = list_method_env_type(env, target);
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *target_elem_type = target_type == NULL ? NULL : list_method_list_element_type_copy(target_type);
+    char *receiver_elem_type = receiver_type == NULL ? NULL : list_method_list_element_type_copy(receiver_type);
+    int use_last = 0;
+    if (target_type == NULL ||
+        receiver_type == NULL ||
+        target_elem_type == NULL ||
+        receiver_elem_type == NULL ||
+        strcmp(target_elem_type, receiver_elem_type) != 0 ||
+        strcmp(receiver_elem_type, "Int") == 0 ||
+        strcmp(receiver_elem_type, "Str") == 0 ||
+        strcmp(receiver_elem_type, "Bool") == 0 ||
+        !parse_list_filter_pick_struct_tail(expr, after, &use_last)) {
+        free(target_elem_type);
+        free(receiver_elem_type);
+        free(index_arg);
+        free(parts[is_insert ? 1 : 0]);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[64];
+    snprintf(temp_name, sizeof(temp_name), "vais_filter_pick_arg%d", id);
+    size_t indent_len = (size_t)(target_start - line);
+    lower_list_filter_pick_struct_emit(line, indent_len, env, receiver, receiver_type, param, body, receiver_elem_type, temp_name, use_last, 0, id, out);
+
+    StrBuf call;
+    sb_init(&call);
+    sb_append_n(&call, line, indent_len);
+    sb_append(&call, target);
+    if (is_insert) {
+        sb_append(&call, ".insert_at(");
+        sb_append(&call, index_arg);
+        sb_append(&call, ", ");
+        sb_append(&call, temp_name);
+        sb_append(&call, ")");
+    } else {
+        sb_append(&call, ".push(");
+        sb_append(&call, temp_name);
+        sb_append(&call, ")");
+    }
+    lines_push(out, sb_take(&call));
+
+    free(target_elem_type);
+    free(receiver_elem_type);
+    free(index_arg);
+    free(parts[is_insert ? 1 : 0]);
+    free(expr);
+    free(target);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static int lower_list_filter_pick_field_list_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(target);
+        return 0;
+    }
+    s++;
+    int is_insert = 0;
+    int method_len = 0;
+    if (starts_with(s, "push") && !is_ident_continue(s[4])) {
+        is_insert = 0;
+        method_len = 4;
+    } else if (starts_with(s, "insert_at") && !is_ident_continue(s[9])) {
+        is_insert = 1;
+        method_len = 9;
+    } else {
+        free(target);
+        return 0;
+    }
+    s = skip_ws(s + method_len);
+    if (*s != '(') {
+        free(target);
+        return 0;
+    }
+    int close = find_matching_paren_c(line, (int)(s - line));
+    if (close < 0) {
+        free(target);
+        return 0;
+    }
+    const char *tail = skip_ws(line + close + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(target);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(s + 1, (size_t)(line + close - s - 1));
+    char *parts[2] = {0};
+    int part_count = split_top_level_commas_c(args_raw, parts, 2);
+    free(args_raw);
+    if ((!is_insert && part_count != 1) || (is_insert && part_count != 2)) {
+        for (int i = 0; i < 2; i++) free(parts[i]);
+        free(target);
+        return 0;
+    }
+    char *index_arg = is_insert ? parts[0] : NULL;
+    char *expr = trim_trailing_semicolon_copy(is_insert ? parts[1] : parts[0]);
+
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(index_arg);
+        free(parts[is_insert ? 1 : 0]);
+        free(expr);
+        free(target);
+        return 0;
+    }
+
+    const char *target_type = list_method_env_type(env, target);
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *target_elem_type = target_type == NULL ? NULL : list_method_list_element_type_copy(target_type);
+    int use_last = 0;
+    int len_chain = 0;
+    char *field = NULL;
+    if (target_type == NULL ||
+        receiver_type == NULL ||
+        target_elem_type == NULL ||
+        !list_filter_pick_field_result_type_supported(target_elem_type) ||
+        !list_method_type_is_list(receiver_type) ||
+        strcmp(receiver_type, "List<Int>") == 0 ||
+        strcmp(receiver_type, "List<Str>") == 0 ||
+        !parse_list_filter_pick_field_tail(expr, after, &use_last, &len_chain, &field) ||
+        (len_chain && strcmp(target_elem_type, "Int") != 0)) {
+        free(target_elem_type);
+        free(field);
+        free(index_arg);
+        free(parts[is_insert ? 1 : 0]);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[64];
+    snprintf(temp_name, sizeof(temp_name), "vais_filter_pick_arg%d", id);
+    size_t indent_len = (size_t)(target_start - line);
+    lower_list_filter_pick_field_emit(line, indent_len, receiver, receiver_type, param, body, field, target_elem_type, temp_name, use_last, len_chain, 0, id, out);
+
+    StrBuf call;
+    sb_init(&call);
+    sb_append_n(&call, line, indent_len);
+    sb_append(&call, target);
+    if (is_insert) {
+        sb_append(&call, ".insert_at(");
+        sb_append(&call, index_arg);
+        sb_append(&call, ", ");
+        sb_append(&call, temp_name);
+        sb_append(&call, ")");
+    } else {
+        sb_append(&call, ".push(");
+        sb_append(&call, temp_name);
+        sb_append(&call, ")");
+    }
+    lines_push(out, sb_take(&call));
+
+    free(target_elem_type);
+    free(field);
+    free(index_arg);
+    free(parts[is_insert ? 1 : 0]);
+    free(expr);
+    free(target);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static int lower_list_filter_pick_field_call_arg_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *expected_type,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **arg_out
+) {
+    if (!list_filter_pick_field_result_type_supported(expected_type)) return 0;
+    char *arg_expr = trim_trailing_semicolon_copy(expr);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(arg_expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(arg_expr);
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *elem_type = receiver_type == NULL ? NULL : list_method_list_element_type_copy(receiver_type);
+    int use_last = 0;
+    int len_chain = 0;
+    char *field = NULL;
+    if (receiver_type == NULL ||
+        elem_type == NULL ||
+        !list_method_type_is_list(receiver_type) ||
+        strcmp(receiver_type, "List<Int>") == 0 ||
+        strcmp(receiver_type, "List<Str>") == 0 ||
+        !parse_list_filter_pick_field_tail(arg_expr, after, &use_last, &len_chain, &field)) {
+        free(arg_expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(elem_type);
+        free(field);
+        return 0;
+    }
+
+    const char *field_type = list_method_struct_field_type(env, elem_type, field);
+    int ok = 0;
+    if (len_chain) {
+        ok = strcmp(expected_type, "Int") == 0 && field_type != NULL && strcmp(field_type, "Str") == 0;
+    } else {
+        ok = field_type != NULL && strcmp(expected_type, field_type) == 0;
+    }
+    if (!ok) {
+        free(arg_expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(elem_type);
+        free(field);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_filter_pick_call_arg%d", id);
+    lower_list_filter_pick_field_emit(line, indent_len, receiver, receiver_type, param, body, field, expected_type, temp_name, use_last, len_chain, 0, id, out);
+    *arg_out = strdup(temp_name);
+
+    free(arg_expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(elem_type);
+    free(field);
+    return 1;
+}
+
+static int lower_list_filter_pick_struct_call_arg_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *expected_type,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **arg_out
+) {
+    if (expected_type == NULL ||
+        strcmp(expected_type, "Int") == 0 ||
+        strcmp(expected_type, "Str") == 0 ||
+        strcmp(expected_type, "Bool") == 0 ||
+        list_method_type_is_list(expected_type)) {
+        return 0;
+    }
+    char *arg_expr = trim_trailing_semicolon_copy(expr);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(arg_expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(arg_expr);
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *elem_type = receiver_type == NULL ? NULL : list_method_list_element_type_copy(receiver_type);
+    int use_last = 0;
+    if (receiver_type == NULL ||
+        elem_type == NULL ||
+        strcmp(elem_type, expected_type) != 0 ||
+        strcmp(elem_type, "Int") == 0 ||
+        strcmp(elem_type, "Str") == 0 ||
+        strcmp(elem_type, "Bool") == 0 ||
+        !parse_list_filter_pick_struct_tail(arg_expr, after, &use_last)) {
+        free(arg_expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(elem_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_filter_pick_call_arg%d", id);
+    lower_list_filter_pick_struct_emit(line, indent_len, env, receiver, receiver_type, param, body, expected_type, temp_name, use_last, 0, id, out);
+    *arg_out = strdup(temp_name);
+
+    free(arg_expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(elem_type);
+    return 1;
+}
+
+static void lower_list_filter_map_result_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *param,
+    const char *body,
+    const char *map_body,
+    const char *result_type,
+    const char *name,
+    LineVec *out
+);
+
+static void lower_list_filter_map_sum_temp_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *param,
+    const char *body,
+    const char *map_body,
+    const char *temp_name,
+    LineVec *out
+) {
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let mut ");
+    sb_append(&init, temp_name);
+    sb_append(&init, " = 0");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf add;
+    sb_init(&add);
+    sb_append_n(&add, line, indent_len);
+    sb_append(&add, "        ");
+    sb_append(&add, temp_name);
+    sb_append(&add, " = ");
+    sb_append(&add, temp_name);
+    sb_append(&add, " + ");
+    sb_append(&add, map_body);
+    lines_push(out, sb_take(&add));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+}
+
+static void lower_list_filter_map_aggregate_temp_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *param,
+    const char *filter_body,
+    const char *map_body,
+    const char *temp_name,
+    int is_sum,
+    int use_min,
+    int id,
+    LineVec *out
+) {
+    if (is_sum) {
+        lower_list_filter_map_sum_temp_emit(line, indent_len, receiver, param, filter_body, map_body, temp_name, out);
+    } else {
+        lower_list_filter_extreme_emit(line, indent_len, receiver, param, filter_body, map_body, temp_name, use_min, 0, id, out);
+    }
+}
+
+static int parse_list_filter_map_int_aggregate_at_expr(
+    const char *expr,
+    size_t start,
+    ListMethodEnv *env,
+    char **receiver_out,
+    char **param_out,
+    char **filter_body_out,
+    char **map_body_out,
+    int *is_sum_out,
+    int *use_min_out,
+    size_t *aggregate_end_out
+) {
+    const char *sub = expr + start;
+    char *receiver = NULL;
+    char *param = NULL;
+    char *filter_body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(sub, "filter", env, &receiver, &param, &filter_body, &after)) {
+        return 0;
+    }
+
+    const char *map = skip_ws(after);
+    if (!starts_with(map, ".map") || is_ident_continue(map[4])) {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        return 0;
+    }
+    const char *map_open = skip_ws(map + 4);
+    if (*map_open != '(') {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        return 0;
+    }
+    int close_map = find_matching_paren_c(sub, (int)(map_open - sub));
+    if (close_map < 0) {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        return 0;
+    }
+    char *arg_raw = substr_copy(map_open + 1, (size_t)(sub + close_map - map_open - 1));
+    char *map_param = NULL;
+    char *map_body = NULL;
+    int ok = parse_inline_int_closure(arg_raw, &map_param, &map_body) &&
+        strcmp(map_param, param) == 0 &&
+        closure_body_uses_param_or_list_method_env(map_body, param, env) &&
+        !closure_body_returns_str(map_body);
+    free(arg_raw);
+    if (!ok) {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    free(map_param);
+
+    const char *method = skip_ws(sub + close_map + 1);
+    int is_sum = 0;
+    int use_min = 0;
+    if (starts_with(method, ".sum") && !is_ident_continue(method[4])) {
+        is_sum = 1;
+    } else if (starts_with(method, ".max") && !is_ident_continue(method[4])) {
+        use_min = 0;
+    } else if (starts_with(method, ".min") && !is_ident_continue(method[4])) {
+        use_min = 1;
+    } else {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_body);
+        return 0;
+    }
+    const char *open = skip_ws(method + 4);
+    if (*open != '(') {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_body);
+        return 0;
+    }
+    int close_method = find_matching_paren_c(sub, (int)(open - sub));
+    if (close_method < 0) {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_body);
+        return 0;
+    }
+    char *args = substr_copy(open + 1, (size_t)(sub + close_method - open - 1));
+    char *args_trim = trim_copy(args);
+    free(args);
+    if (args_trim[0] != '\0') {
+        free(args_trim);
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_body);
+        return 0;
+    }
+    free(args_trim);
+
+    *receiver_out = receiver;
+    *param_out = param;
+    *filter_body_out = filter_body;
+    *map_body_out = map_body;
+    *is_sum_out = is_sum;
+    *use_min_out = use_min;
+    *aggregate_end_out = start + (size_t)close_method + 1;
+    return 1;
+}
+
+static int lower_list_filter_map_aggregate_embedded_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *temp_prefix,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **rewritten_out
+) {
+    char *expr_copy = trim_trailing_semicolon_copy(expr);
+    size_t aggregate_start = 0;
+    size_t aggregate_end = 0;
+    char *receiver = NULL;
+    char *param = NULL;
+    char *filter_body = NULL;
+    char *map_body = NULL;
+    int is_sum = 0;
+    int use_min = 0;
+    int found = 0;
+
+    for (size_t i = 0; expr_copy[i] != '\0'; i++) {
+        if (is_string_delim_c(expr_copy[i])) {
+            int end = skip_string_literal_c(expr_copy, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (expr_copy[i] == '\'') {
+            int end = skip_char_literal_c(expr_copy, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (!is_ident_start(expr_copy[i])) continue;
+
+        char *local_receiver = NULL;
+        char *local_param = NULL;
+        char *local_filter_body = NULL;
+        char *local_map_body = NULL;
+        int local_is_sum = 0;
+        int local_use_min = 0;
+        size_t local_end = 0;
+        if (parse_list_filter_map_int_aggregate_at_expr(expr_copy, i, env, &local_receiver, &local_param, &local_filter_body, &local_map_body, &local_is_sum, &local_use_min, &local_end)) {
+            const char *after = skip_ws(expr_copy + local_end);
+            if (*after == '.') {
+                free(local_receiver);
+                free(local_param);
+                free(local_filter_body);
+                free(local_map_body);
+                free(expr_copy);
+                return 0;
+            }
+            if (found) {
+                free(local_receiver);
+                free(local_param);
+                free(local_filter_body);
+                free(local_map_body);
+                free(receiver);
+                free(param);
+                free(filter_body);
+                free(map_body);
+                free(expr_copy);
+                return 0;
+            }
+            found = 1;
+            aggregate_start = i;
+            aggregate_end = local_end;
+            receiver = local_receiver;
+            param = local_param;
+            filter_body = local_filter_body;
+            map_body = local_map_body;
+            is_sum = local_is_sum;
+            use_min = local_use_min;
+            i = local_end == 0 ? i : local_end - 1;
+            continue;
+        }
+        while (expr_copy[i + 1] != '\0' && is_ident_continue(expr_copy[i + 1])) i++;
+    }
+
+    if (!found) {
+        free(expr_copy);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "%s%d", temp_prefix, id);
+    lower_list_filter_map_aggregate_temp_emit(line, indent_len, receiver, param, filter_body, map_body, temp_name, is_sum, use_min, id, out);
+
+    StrBuf rewritten;
+    sb_init(&rewritten);
+    sb_append_n(&rewritten, expr_copy, aggregate_start);
+    sb_append(&rewritten, temp_name);
+    sb_append(&rewritten, expr_copy + aggregate_end);
+    *rewritten_out = sb_take(&rewritten);
+
+    free(expr_copy);
+    free(receiver);
+    free(param);
+    free(filter_body);
+    free(map_body);
+    return 1;
+}
+
+static int lower_list_filter_map_aggregate_call_arg_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *expected_type,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **arg_out
+) {
+    if (expected_type == NULL || strcmp(expected_type, "Int") != 0) return 0;
+    char *rewritten = NULL;
+    if (lower_list_filter_map_aggregate_embedded_expr(line, indent_len, expr, "vais_filter_map_agg_call_arg", temp_count, env, out, &rewritten)) {
+        *arg_out = rewritten;
+        return 1;
+    }
+    char *arg_expr = trim_trailing_semicolon_copy(expr);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(arg_expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(arg_expr);
+        return 0;
+    }
+
+    char *map_body = NULL;
+    if (parse_list_filter_map_sum_tail(arg_expr, after, env, param, &map_body)) {
+        int id = (*temp_count)++;
+        char temp_name[96];
+        snprintf(temp_name, sizeof(temp_name), "vais_filter_map_agg_call_arg%d", id);
+        lower_list_filter_map_sum_temp_emit(line, indent_len, receiver, param, body, map_body, temp_name, out);
+        *arg_out = strdup(temp_name);
+
+        free(arg_expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(map_body);
+        return 1;
+    }
+
+    int use_min = 0;
+    if (!parse_list_filter_map_extreme_tail(arg_expr, after, env, param, &map_body, &use_min)) {
+        free(arg_expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_filter_map_agg_call_arg%d", id);
+    lower_list_filter_extreme_emit(line, indent_len, receiver, param, body, map_body, temp_name, use_min, 0, id, out);
+    *arg_out = strdup(temp_name);
+
+    free(arg_expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static int lower_list_filter_map_result_call_arg_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *expected_type,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **arg_out
+) {
+    if (expected_type == NULL || !list_method_type_is_list(expected_type)) return 0;
+    char *expected_elem = list_method_list_element_type_copy(expected_type);
+    if (expected_elem == NULL ||
+        (strcmp(expected_elem, "Int") != 0 && strcmp(expected_elem, "Str") != 0)) {
+        free(expected_elem);
+        return 0;
+    }
+    char *arg_expr = trim_trailing_semicolon_copy(expr);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(arg_expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(expected_elem);
+        free(arg_expr);
+        return 0;
+    }
+
+    char *map_body = NULL;
+    if (!parse_list_filter_map_result_tail(arg_expr, after, env, param, &map_body)) {
+        free(expected_elem);
+        free(arg_expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, map_body, NULL);
+    if (strcmp(result_type, expected_type) != 0) {
+        free(expected_elem);
+        free(result_type);
+        free(arg_expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(map_body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_filter_map_call_arg%d", id);
+    lower_list_filter_map_result_emit(line, indent_len, receiver, param, body, map_body, result_type, temp_name, out);
+    *arg_out = strdup(temp_name);
+
+    free(expected_elem);
+    free(result_type);
+    free(arg_expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static int lower_list_filter_map_result_extend_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(target);
+        return 0;
+    }
+    s++;
+    if (!starts_with(s, "extend") || is_ident_continue(s[6])) {
+        free(target);
+        return 0;
+    }
+    s = skip_ws(s + 6);
+    if (*s != '(') {
+        free(target);
+        return 0;
+    }
+    int close = find_matching_paren_c(line, (int)(s - line));
+    if (close < 0) {
+        free(target);
+        return 0;
+    }
+    const char *tail = skip_ws(line + close + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(target);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(s + 1, (size_t)(line + close - s - 1));
+    char *parts[2] = {0};
+    int part_count = split_top_level_commas_c(args_raw, parts, 2);
+    free(args_raw);
+    if (part_count != 1) {
+        for (int i = 0; i < 2; i++) free(parts[i]);
+        free(target);
+        return 0;
+    }
+    char *expr = trim_trailing_semicolon_copy(parts[0]);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(parts[0]);
+        free(expr);
+        free(target);
+        return 0;
+    }
+
+    char *map_body = NULL;
+    const char *target_type = list_method_env_type(env, target);
+    char *target_elem = target_type == NULL ? NULL : list_method_list_element_type_copy(target_type);
+    if (target_type == NULL ||
+        target_elem == NULL ||
+        (strcmp(target_elem, "Int") != 0 && strcmp(target_elem, "Str") != 0) ||
+        !parse_list_filter_map_result_tail(expr, after, env, param, &map_body)) {
+        free(target_elem);
+        free(parts[0]);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, map_body, NULL);
+    if (strcmp(result_type, target_type) != 0) {
+        free(result_type);
+        free(target_elem);
+        free(parts[0]);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(param);
+        free(body);
+        free(map_body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_filter_map_extend_arg%d", id);
+    size_t indent_len = (size_t)(target_start - line);
+    lower_list_filter_map_result_emit(line, indent_len, receiver, param, body, map_body, result_type, temp_name, out);
+
+    StrBuf call;
+    sb_init(&call);
+    sb_append_n(&call, line, indent_len);
+    sb_append(&call, target);
+    sb_append(&call, ".extend(");
+    sb_append(&call, temp_name);
+    sb_append(&call, ")");
+    lines_push(out, sb_take(&call));
+
+    free(result_type);
+    free(target_elem);
+    free(parts[0]);
+    free(expr);
+    free(target);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static int lower_list_filter_map_result_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+
+    const char *target_type = list_method_env_type(env, target);
+    char *target_elem = target_type == NULL ? NULL : list_method_list_element_type_copy(target_type);
+    if (target_type == NULL ||
+        target_elem == NULL ||
+        (strcmp(target_elem, "Int") != 0 && strcmp(target_elem, "Str") != 0)) {
+        free(target_elem);
+        free(target);
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(s + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(target_elem);
+        free(expr);
+        free(target);
+        return 0;
+    }
+
+    char *map_body = NULL;
+    if (!parse_list_filter_map_result_tail(expr, after, env, param, &map_body)) {
+        free(target_elem);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, map_body, NULL);
+    if (strcmp(result_type, target_type) != 0) {
+        free(result_type);
+        free(target_elem);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(param);
+        free(body);
+        free(map_body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_filter_map_reassign%d", id);
+    size_t indent_len = (size_t)(target_start - line);
+    lower_list_filter_map_result_emit(line, indent_len, receiver, param, body, map_body, result_type, temp_name, out);
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, temp_name);
+    lines_push(out, sb_take(&assign));
+
+    free(result_type);
+    free(target_elem);
+    free(expr);
+    free(target);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static void lower_list_map_filter_result_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *map_param,
+    const char *map_body,
+    const char *filter_param,
+    const char *filter_body,
+    const char *result_type,
+    const char *name,
+    int id,
+    LineVec *out
+) {
+    char *filter_cond = replace_word_all(filter_body, filter_param, map_body);
+
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let ");
+    sb_append(&init, name);
+    sb_append(&init, ": ");
+    sb_append(&init, result_type);
+    sb_append(&init, " = []");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, map_param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, filter_cond);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf push;
+    sb_init(&push);
+    sb_append_n(&push, line, indent_len);
+    sb_append(&push, "        ");
+    sb_append(&push, name);
+    sb_append(&push, ".push(");
+    sb_append(&push, map_body);
+    sb_append(&push, ")");
+    lines_push(out, sb_take(&push));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    free(filter_cond);
+}
+
+static int lower_list_map_filter_result_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_lhs_type(name_end, eq, &had_annotation);
+    if (had_annotation && lhs_type == NULL) {
+        free(name);
+        return 0;
+    }
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *map_param = NULL;
+    char *map_body = NULL;
+    char *filter_param = NULL;
+    char *filter_body = NULL;
+    char *result_type = NULL;
+    if (!parse_list_map_filter_result_expr_exact(expr, env, &receiver, &map_param, &map_body, &filter_param, &filter_body, &result_type) ||
+        (lhs_type != NULL && strcmp(lhs_type, result_type) != 0)) {
+        free(name);
+        free(lhs_type);
+        free(expr);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    size_t indent_len = (size_t)(s - line);
+    lower_list_map_filter_result_emit(line, indent_len, receiver, map_param, map_body, filter_param, filter_body, result_type, name, id, out);
+
+    list_method_env_set(env, name, result_type);
+    free(name);
+    free(lhs_type);
+    free(expr);
+    free(receiver);
+    free(map_param);
+    free(map_body);
+    free(filter_param);
+    free(filter_body);
+    free(result_type);
+    return 1;
+}
+
+static int lower_list_map_filter_result_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    if (env->current_return_type[0] == '\0' || !list_method_type_is_list(env->current_return_type)) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *map_param = NULL;
+    char *map_body = NULL;
+    char *filter_param = NULL;
+    char *filter_body = NULL;
+    char *result_type = NULL;
+    if (!parse_list_map_filter_result_expr_exact(expr, env, &receiver, &map_param, &map_body, &filter_param, &filter_body, &result_type) ||
+        strcmp(result_type, env->current_return_type) != 0) {
+        free(expr);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_filter_result%d", id);
+    size_t indent_len = (size_t)(s - line);
+    lower_list_map_filter_result_emit(line, indent_len, receiver, map_param, map_body, filter_param, filter_body, result_type, temp_name, id, out);
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, temp_name);
+    lines_push(out, sb_take(&ret));
+
+    free(expr);
+    free(receiver);
+    free(map_param);
+    free(map_body);
+    free(filter_param);
+    free(filter_body);
+    free(result_type);
+    return 1;
+}
+
+static int lower_list_map_filter_result_call_arg_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *expected_type,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **arg_out
+) {
+    if (expected_type == NULL || !list_method_type_is_list(expected_type)) return 0;
+    char *expected_elem = list_method_list_element_type_copy(expected_type);
+    if (expected_elem == NULL ||
+        (strcmp(expected_elem, "Int") != 0 && strcmp(expected_elem, "Str") != 0)) {
+        free(expected_elem);
+        return 0;
+    }
+    char *arg_expr = trim_trailing_semicolon_copy(expr);
+    char *receiver = NULL;
+    char *map_param = NULL;
+    char *map_body = NULL;
+    char *filter_param = NULL;
+    char *filter_body = NULL;
+    char *result_type = NULL;
+    if (!parse_list_map_filter_result_expr_exact(arg_expr, env, &receiver, &map_param, &map_body, &filter_param, &filter_body, &result_type) ||
+        strcmp(result_type, expected_type) != 0) {
+        free(expected_elem);
+        free(arg_expr);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_filter_call_arg%d", id);
+    lower_list_map_filter_result_emit(line, indent_len, receiver, map_param, map_body, filter_param, filter_body, result_type, temp_name, id, out);
+    *arg_out = strdup(temp_name);
+
+    free(expected_elem);
+    free(arg_expr);
+    free(receiver);
+    free(map_param);
+    free(map_body);
+    free(filter_param);
+    free(filter_body);
+    free(result_type);
+    return 1;
+}
+
+static int lower_list_map_filter_result_extend_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(target);
+        return 0;
+    }
+    s++;
+    if (!starts_with(s, "extend") || is_ident_continue(s[6])) {
+        free(target);
+        return 0;
+    }
+    s = skip_ws(s + 6);
+    if (*s != '(') {
+        free(target);
+        return 0;
+    }
+    int close = find_matching_paren_c(line, (int)(s - line));
+    if (close < 0) {
+        free(target);
+        return 0;
+    }
+    const char *tail = skip_ws(line + close + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(target);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(s + 1, (size_t)(line + close - s - 1));
+    char *parts[2] = {0};
+    int part_count = split_top_level_commas_c(args_raw, parts, 2);
+    free(args_raw);
+    if (part_count != 1) {
+        for (int i = 0; i < 2; i++) free(parts[i]);
+        free(target);
+        return 0;
+    }
+    const char *target_type = list_method_env_type(env, target);
+    char *target_elem = target_type == NULL ? NULL : list_method_list_element_type_copy(target_type);
+    char *expr = trim_trailing_semicolon_copy(parts[0]);
+    char *receiver = NULL;
+    char *map_param = NULL;
+    char *map_body = NULL;
+    char *filter_param = NULL;
+    char *filter_body = NULL;
+    char *result_type = NULL;
+    if (target_type == NULL ||
+        target_elem == NULL ||
+        (strcmp(target_elem, "Int") != 0 && strcmp(target_elem, "Str") != 0) ||
+        !parse_list_map_filter_result_expr_exact(expr, env, &receiver, &map_param, &map_body, &filter_param, &filter_body, &result_type) ||
+        strcmp(result_type, target_type) != 0) {
+        free(target_elem);
+        free(parts[0]);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_filter_extend_arg%d", id);
+    size_t indent_len = (size_t)(target_start - line);
+    lower_list_map_filter_result_emit(line, indent_len, receiver, map_param, map_body, filter_param, filter_body, result_type, temp_name, id, out);
+
+    StrBuf call;
+    sb_init(&call);
+    sb_append_n(&call, line, indent_len);
+    sb_append(&call, target);
+    sb_append(&call, ".extend(");
+    sb_append(&call, temp_name);
+    sb_append(&call, ")");
+    lines_push(out, sb_take(&call));
+
+    free(target_elem);
+    free(parts[0]);
+    free(expr);
+    free(target);
+    free(receiver);
+    free(map_param);
+    free(map_body);
+    free(filter_param);
+    free(filter_body);
+    free(result_type);
+    return 1;
+}
+
+static int lower_list_map_filter_result_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+
+    const char *target_type = list_method_env_type(env, target);
+    char *target_elem = target_type == NULL ? NULL : list_method_list_element_type_copy(target_type);
+    char *expr = trim_trailing_semicolon_copy(s + 1);
+    char *receiver = NULL;
+    char *map_param = NULL;
+    char *map_body = NULL;
+    char *filter_param = NULL;
+    char *filter_body = NULL;
+    char *result_type = NULL;
+    if (target_type == NULL ||
+        target_elem == NULL ||
+        (strcmp(target_elem, "Int") != 0 && strcmp(target_elem, "Str") != 0) ||
+        !parse_list_map_filter_result_expr_exact(expr, env, &receiver, &map_param, &map_body, &filter_param, &filter_body, &result_type) ||
+        strcmp(result_type, target_type) != 0) {
+        free(target_elem);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_filter_reassign%d", id);
+    size_t indent_len = (size_t)(target_start - line);
+    lower_list_map_filter_result_emit(line, indent_len, receiver, map_param, map_body, filter_param, filter_body, result_type, temp_name, id, out);
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, temp_name);
+    lines_push(out, sb_take(&assign));
+
+    free(target_elem);
+    free(expr);
+    free(target);
+    free(receiver);
+    free(map_param);
+    free(map_body);
+    free(filter_param);
+    free(filter_body);
+    free(result_type);
+    return 1;
+}
+
+typedef enum {
+    LIST_MAP_FILTER_SCALAR_LEN = 0,
+    LIST_MAP_FILTER_SCALAR_CONTAINS = 1,
+    LIST_MAP_FILTER_SCALAR_INDEX_OF = 2,
+    LIST_MAP_FILTER_SCALAR_COUNT = 3
+} ListMapFilterScalarKind;
+
+static const char *list_map_filter_scalar_result_type(ListMapFilterScalarKind kind) {
+    return kind == LIST_MAP_FILTER_SCALAR_CONTAINS ? "Bool" : "Int";
+}
+
+static int parse_list_map_filter_scalar_at_expr(
+    const char *expr,
+    size_t start,
+    ListMethodEnv *env,
+    char **receiver_out,
+    char **map_param_out,
+    char **map_body_out,
+    char **filter_param_out,
+    char **filter_body_out,
+    ListMapFilterScalarKind *kind_out,
+    char **method_arg_out,
+    size_t *scalar_end_out
+) {
+    const char *sub = expr + start;
+    char *receiver = NULL;
+    char *map_param = NULL;
+    char *map_body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(sub, "map", env, &receiver, &map_param, &map_body, &after)) {
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    if (receiver_type == NULL || !list_method_type_is_list(receiver_type)) {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    char *result_type = list_method_map_result_list_type(env, receiver_type, map_param, map_body, NULL);
+    char *result_elem = result_type == NULL ? NULL : list_method_list_element_type_copy(result_type);
+    if (result_elem == NULL || (strcmp(result_elem, "Int") != 0 && strcmp(result_elem, "Str") != 0)) {
+        free(result_elem);
+        free(result_type);
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    free(result_elem);
+    free(result_type);
+
+    const char *filter = skip_ws(after);
+    if (!starts_with(filter, ".filter") || is_ident_continue(filter[7])) {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    const char *filter_open = skip_ws(filter + 7);
+    if (*filter_open != '(') {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    int close_filter = find_matching_paren_c(sub, (int)(filter_open - sub));
+    if (close_filter < 0) {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    char *arg_raw = substr_copy(filter_open + 1, (size_t)(sub + close_filter - filter_open - 1));
+    char *filter_param = NULL;
+    char *filter_body = NULL;
+    int ok = parse_inline_int_closure(arg_raw, &filter_param, &filter_body) &&
+        closure_body_uses_param_or_list_method_env(filter_body, filter_param, env);
+    free(arg_raw);
+    if (!ok) {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        return 0;
+    }
+
+    const char *method = skip_ws(sub + close_filter + 1);
+    ListMapFilterScalarKind kind = LIST_MAP_FILTER_SCALAR_LEN;
+    int method_len = 0;
+    if (starts_with(method, ".len") && !is_ident_continue(method[4])) {
+        kind = LIST_MAP_FILTER_SCALAR_LEN;
+        method_len = 4;
+    } else if (starts_with(method, ".contains") && !is_ident_continue(method[9])) {
+        kind = LIST_MAP_FILTER_SCALAR_CONTAINS;
+        method_len = 9;
+    } else if (starts_with(method, ".index_of") && !is_ident_continue(method[9])) {
+        kind = LIST_MAP_FILTER_SCALAR_INDEX_OF;
+        method_len = 9;
+    } else if (starts_with(method, ".count") && !is_ident_continue(method[6])) {
+        kind = LIST_MAP_FILTER_SCALAR_COUNT;
+        method_len = 6;
+    } else {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        return 0;
+    }
+    const char *open = skip_ws(method + method_len);
+    if (*open != '(') {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        return 0;
+    }
+    int close_method = find_matching_paren_c(sub, (int)(open - sub));
+    if (close_method < 0) {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        return 0;
+    }
+    char *method_arg = NULL;
+    char *method_args = substr_copy(open + 1, (size_t)(sub + close_method - open - 1));
+    if (kind == LIST_MAP_FILTER_SCALAR_LEN) {
+        char *trimmed = trim_copy(method_args);
+        ok = trimmed[0] == '\0';
+        free(trimmed);
+    } else {
+        char *parts[2] = {0};
+        int part_count = split_top_level_commas_c(method_args, parts, 2);
+        ok = part_count == 1;
+        if (ok) {
+            method_arg = trim_copy(parts[0]);
+            ok = method_arg[0] != '\0';
+        }
+        for (int i = 0; i < 2; i++) free(parts[i]);
+    }
+    free(method_args);
+    if (!ok) {
+        free(receiver);
+        free(map_param);
+        free(map_body);
+        free(filter_param);
+        free(filter_body);
+        free(method_arg);
+        return 0;
+    }
+
+    *receiver_out = receiver;
+    *map_param_out = map_param;
+    *map_body_out = map_body;
+    *filter_param_out = filter_param;
+    *filter_body_out = filter_body;
+    *kind_out = kind;
+    *method_arg_out = method_arg;
+    *scalar_end_out = start + (size_t)close_method + 1;
+    return 1;
+}
+
+static void lower_list_map_filter_scalar_temp_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *map_param,
+    const char *map_body,
+    const char *filter_param,
+    const char *filter_body,
+    ListMapFilterScalarKind kind,
+    const char *method_arg,
+    const char *temp_name,
+    int id,
+    LineVec *out
+) {
+    char *filter_cond = replace_word_all(filter_body, filter_param, map_body);
+    char pos_name[96];
+    snprintf(pos_name, sizeof(pos_name), "vais_map_filter_scalar_pos%d", id);
+
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let mut ");
+    sb_append(&init, temp_name);
+    sb_append(&init, " = ");
+    sb_append(&init, kind == LIST_MAP_FILTER_SCALAR_INDEX_OF ? "0 - 1" : "0");
+    lines_push(out, sb_take(&init));
+
+    if (kind == LIST_MAP_FILTER_SCALAR_INDEX_OF) {
+        StrBuf pos_init;
+        sb_init(&pos_init);
+        sb_append_n(&pos_init, line, indent_len);
+        sb_append(&pos_init, "let mut ");
+        sb_append(&pos_init, pos_name);
+        sb_append(&pos_init, " = 0");
+        lines_push(out, sb_take(&pos_init));
+    }
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, map_param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, filter_cond);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    if (kind == LIST_MAP_FILTER_SCALAR_LEN) {
+        StrBuf add;
+        sb_init(&add);
+        sb_append_n(&add, line, indent_len);
+        sb_append(&add, "        ");
+        sb_append(&add, temp_name);
+        sb_append(&add, " = ");
+        sb_append(&add, temp_name);
+        sb_append(&add, " + 1");
+        lines_push(out, sb_take(&add));
+    } else {
+        StrBuf match;
+        sb_init(&match);
+        sb_append_n(&match, line, indent_len);
+        sb_append(&match, "        if ");
+        if (kind == LIST_MAP_FILTER_SCALAR_INDEX_OF) {
+            sb_append(&match, temp_name);
+            sb_append(&match, " == 0 - 1 and ");
+        }
+        sb_append(&match, map_body);
+        sb_append(&match, " == ");
+        sb_append(&match, method_arg);
+        sb_append(&match, " {");
+        lines_push(out, sb_take(&match));
+
+        StrBuf set;
+        sb_init(&set);
+        sb_append_n(&set, line, indent_len);
+        sb_append(&set, "            ");
+        sb_append(&set, temp_name);
+        sb_append(&set, " = ");
+        if (kind == LIST_MAP_FILTER_SCALAR_INDEX_OF) {
+            sb_append(&set, pos_name);
+        } else if (kind == LIST_MAP_FILTER_SCALAR_CONTAINS) {
+            sb_append(&set, "1");
+        } else {
+            sb_append(&set, temp_name);
+            sb_append(&set, " + 1");
+        }
+        lines_push(out, sb_take(&set));
+
+        StrBuf close_match;
+        sb_init(&close_match);
+        sb_append_n(&close_match, line, indent_len);
+        sb_append(&close_match, "        }");
+        lines_push(out, sb_take(&close_match));
+
+        if (kind == LIST_MAP_FILTER_SCALAR_INDEX_OF) {
+            StrBuf inc_pos;
+            sb_init(&inc_pos);
+            sb_append_n(&inc_pos, line, indent_len);
+            sb_append(&inc_pos, "        ");
+            sb_append(&inc_pos, pos_name);
+            sb_append(&inc_pos, " = ");
+            sb_append(&inc_pos, pos_name);
+            sb_append(&inc_pos, " + 1");
+            lines_push(out, sb_take(&inc_pos));
+        }
+    }
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    free(filter_cond);
+}
+
+static int lower_list_map_filter_scalar_embedded_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *temp_prefix,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **rewritten_out,
+    char **scalar_type_out,
+    int *is_exact_out
+) {
+    char *expr_copy = trim_trailing_semicolon_copy(expr);
+    int original_temp_count = *temp_count;
+    LineVec temps;
+    lines_init(&temps);
+    StrBuf rewritten;
+    sb_init(&rewritten);
+    size_t last_copy_pos = 0;
+    size_t first_scalar_start = 0;
+    size_t first_scalar_end = 0;
+    char *first_scalar_type = NULL;
+    int found_count = 0;
+
+    for (size_t i = 0; expr_copy[i] != '\0'; i++) {
+        if (is_string_delim_c(expr_copy[i])) {
+            int end = skip_string_literal_c(expr_copy, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (expr_copy[i] == '\'') {
+            int end = skip_char_literal_c(expr_copy, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (!is_ident_start(expr_copy[i])) continue;
+
+        char *local_receiver = NULL;
+        char *local_map_param = NULL;
+        char *local_map_body = NULL;
+        char *local_filter_param = NULL;
+        char *local_filter_body = NULL;
+        char *local_method_arg = NULL;
+        ListMapFilterScalarKind local_kind = LIST_MAP_FILTER_SCALAR_LEN;
+        size_t local_end = 0;
+        if (parse_list_map_filter_scalar_at_expr(expr_copy, i, env, &local_receiver, &local_map_param, &local_map_body, &local_filter_param, &local_filter_body, &local_kind, &local_method_arg, &local_end)) {
+            const char *after = skip_ws(expr_copy + local_end);
+            if (*after == '.') {
+                free(local_receiver);
+                free(local_map_param);
+                free(local_map_body);
+                free(local_filter_param);
+                free(local_filter_body);
+                free(local_method_arg);
+                *temp_count = original_temp_count;
+                lines_free(&temps);
+                free(rewritten.data);
+                free(first_scalar_type);
+                free(expr_copy);
+                return 0;
+            }
+
+            int id = (*temp_count)++;
+            char temp_name[96];
+            snprintf(temp_name, sizeof(temp_name), "%s%d", temp_prefix, id);
+            lower_list_map_filter_scalar_temp_emit(line, indent_len, local_receiver, local_map_param, local_map_body, local_filter_param, local_filter_body, local_kind, local_method_arg, temp_name, id, &temps);
+
+            sb_append_n(&rewritten, expr_copy + last_copy_pos, i - last_copy_pos);
+            sb_append(&rewritten, temp_name);
+            last_copy_pos = local_end;
+            if (found_count == 0) {
+                first_scalar_start = i;
+                first_scalar_end = local_end;
+                first_scalar_type = strdup(list_map_filter_scalar_result_type(local_kind));
+                if (first_scalar_type == NULL) die_oom();
+            }
+            found_count++;
+
+            free(local_receiver);
+            free(local_map_param);
+            free(local_map_body);
+            free(local_filter_param);
+            free(local_filter_body);
+            free(local_method_arg);
+            i = local_end == 0 ? i : local_end - 1;
+            continue;
+        }
+        while (expr_copy[i + 1] != '\0' && is_ident_continue(expr_copy[i + 1])) i++;
+    }
+
+    if (found_count == 0) {
+        *temp_count = original_temp_count;
+        lines_free(&temps);
+        free(rewritten.data);
+        free(expr_copy);
+        return 0;
+    }
+
+    sb_append(&rewritten, expr_copy + last_copy_pos);
+    for (size_t i = 0; i < temps.len; i++) {
+        lines_push(out, temps.items[i]);
+    }
+    free(temps.items);
+    *rewritten_out = sb_take(&rewritten);
+
+    if (scalar_type_out != NULL) *scalar_type_out = strdup(first_scalar_type);
+    if (is_exact_out != NULL) {
+        const char *before = skip_ws(expr_copy);
+        const char *after = skip_ws(expr_copy + first_scalar_end);
+        *is_exact_out = found_count == 1 && before == expr_copy + first_scalar_start && *after == '\0';
+    }
+
+    free(expr_copy);
+    free(first_scalar_type);
+    return 1;
+}
+
+static int lower_list_str_pipeline_scalar_embedded_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *temp_prefix,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **rewritten_out,
+    char **scalar_type_out,
+    int *is_exact_out
+);
+
+static int list_str_pipeline_scalar_find_top_level_word_op(const char *expr, const char *word) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    size_t word_len = strlen(word);
+    for (int i = 0; expr[i] != '\0'; i++) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '(') paren_depth++;
+        else if (expr[i] == ')') paren_depth--;
+        else if (expr[i] == '[') bracket_depth++;
+        else if (expr[i] == ']') bracket_depth--;
+        else if (expr[i] == '{') brace_depth++;
+        else if (expr[i] == '}') brace_depth--;
+        else if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+            if (strncmp(expr + i, word, word_len) == 0 &&
+                (i == 0 || !is_ident_continue(expr[i - 1])) &&
+                !is_ident_continue(expr[i + word_len])) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+static int list_str_pipeline_scalar_parse_if_expr_parts(const char *expr, char **cond_out, char **then_out, char **else_out) {
+    *cond_out = NULL;
+    *then_out = NULL;
+    *else_out = NULL;
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!starts_with(s, "if") || is_ident_continue(s[2])) {
+        free(trimmed);
+        return 0;
+    }
+    int then_pos = list_str_pipeline_scalar_find_top_level_word_op(s, "then");
+    int else_pos = list_str_pipeline_scalar_find_top_level_word_op(s, "else");
+    if (then_pos <= 0 || else_pos <= then_pos) {
+        free(trimmed);
+        return 0;
+    }
+    char *cond_raw = substr_copy(s + 2, (size_t)(then_pos - 2));
+    char *then_raw = substr_copy(s + then_pos + 4, (size_t)(else_pos - then_pos - 4));
+    char *else_raw = trim_copy(s + else_pos + 4);
+    *cond_out = trim_copy(cond_raw);
+    *then_out = trim_copy(then_raw);
+    *else_out = trim_copy(else_raw);
+    free(cond_raw);
+    free(then_raw);
+    free(else_raw);
+    int ok = (*cond_out)[0] != '\0' && (*then_out)[0] != '\0' && (*else_out)[0] != '\0';
+    if (!ok) {
+        free(*cond_out);
+        free(*then_out);
+        free(*else_out);
+        *cond_out = NULL;
+        *then_out = NULL;
+        *else_out = NULL;
+    }
+    free(trimmed);
+    return ok;
+}
+
+static char *list_str_pipeline_scalar_fold_bool_identity_if_expr(const char *expr) {
+    char *cond = NULL;
+    char *then_expr = NULL;
+    char *else_expr = NULL;
+    if (!list_str_pipeline_scalar_parse_if_expr_parts(expr, &cond, &then_expr, &else_expr)) {
+        return NULL;
+    }
+
+    char *folded = NULL;
+    if (strcmp(then_expr, "true") == 0 && strcmp(else_expr, "false") == 0) {
+        folded = strdup(cond);
+        if (folded == NULL) die_oom();
+    } else if (strcmp(then_expr, "false") == 0 && strcmp(else_expr, "true") == 0) {
+        StrBuf negated;
+        sb_init(&negated);
+        sb_append(&negated, "not (");
+        sb_append(&negated, cond);
+        sb_append(&negated, ")");
+        folded = sb_take(&negated);
+    }
+
+    free(cond);
+    free(then_expr);
+    free(else_expr);
+    return folded;
+}
+
+static int list_str_pipeline_scalar_bool_token_len(const char *s, int *truthy_out) {
+    if (starts_with(s, "true") && !is_ident_continue(s[4])) {
+        *truthy_out = 1;
+        return 4;
+    }
+    if (starts_with(s, "false") && !is_ident_continue(s[5])) {
+        *truthy_out = 0;
+        return 5;
+    }
+    return 0;
+}
+
+static int list_str_pipeline_scalar_is_fold_boundary(char ch) {
+    return ch == '\0' || ch == ',' || ch == ')' || ch == ']' || ch == '}' || ch == ';';
+}
+
+static char *list_str_pipeline_scalar_fold_nested_bool_identity_if_exprs(const char *expr) {
+    StrBuf out;
+    sb_init(&out);
+    size_t last_copy = 0;
+    int changed = 0;
+    for (size_t i = 0; expr[i] != '\0'; i++) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (!starts_with(expr + i, "if") ||
+            (i > 0 && is_ident_continue(expr[i - 1])) ||
+            is_ident_continue(expr[i + 2])) {
+            continue;
+        }
+
+        const char *sub = expr + i;
+        int then_pos = list_str_pipeline_scalar_find_top_level_word_op(sub, "then");
+        int else_pos = list_str_pipeline_scalar_find_top_level_word_op(sub, "else");
+        if (then_pos <= 0 || else_pos <= then_pos) continue;
+
+        char *then_raw = substr_copy(sub + then_pos + 4, (size_t)(else_pos - then_pos - 4));
+        char *then_trimmed = trim_copy(then_raw);
+        int then_truthy = 0;
+        int then_len = list_str_pipeline_scalar_bool_token_len(then_trimmed, &then_truthy);
+        int then_ok = then_len > 0 && then_trimmed[then_len] == '\0';
+        free(then_raw);
+        free(then_trimmed);
+        if (!then_ok) continue;
+
+        const char *else_start = skip_ws(sub + else_pos + 4);
+        int else_truthy = 0;
+        int else_len = list_str_pipeline_scalar_bool_token_len(else_start, &else_truthy);
+        if (else_len == 0 || then_truthy == else_truthy) continue;
+        const char *after_else = skip_ws(else_start + else_len);
+        if (!list_str_pipeline_scalar_is_fold_boundary(*after_else)) continue;
+
+        char *cond_raw = substr_copy(sub + 2, (size_t)(then_pos - 2));
+        char *cond = trim_copy(cond_raw);
+        free(cond_raw);
+        if (cond[0] == '\0') {
+            free(cond);
+            continue;
+        }
+
+        sb_append_n(&out, expr + last_copy, i - last_copy);
+        if (then_truthy) {
+            sb_append(&out, cond);
+        } else {
+            sb_append(&out, "not (");
+            sb_append(&out, cond);
+            sb_append(&out, ")");
+        }
+        free(cond);
+        last_copy = (size_t)(else_start - expr) + (size_t)else_len;
+        i = last_copy == 0 ? i : last_copy - 1;
+        changed = 1;
+    }
+
+    if (!changed) {
+        free(out.data);
+        return NULL;
+    }
+    sb_append(&out, expr + last_copy);
+    return sb_take(&out);
+}
+
+static int list_str_pipeline_scalar_find_top_level_compare_op(const char *expr) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    for (int i = 0; expr[i] != '\0'; i++) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '(') paren_depth++;
+        else if (expr[i] == ')') paren_depth--;
+        else if (expr[i] == '[') bracket_depth++;
+        else if (expr[i] == ']') bracket_depth--;
+        else if (expr[i] == '{') brace_depth++;
+        else if (expr[i] == '}') brace_depth--;
+        else if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+            if ((expr[i] == '=' && expr[i + 1] == '=') ||
+                (expr[i] == '!' && expr[i + 1] == '=') ||
+                (expr[i] == '<' && expr[i + 1] == '=') ||
+                (expr[i] == '>' && expr[i + 1] == '=') ||
+                expr[i] == '<' ||
+                expr[i] == '>') {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+static int list_str_pipeline_scalar_expr_is_boolish(const char *expr) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int result = 0;
+    if (strcmp(s, "true") == 0 || strcmp(s, "false") == 0) {
+        result = 1;
+    } else if (starts_with(s, "not") && !is_ident_continue(s[3])) {
+        result = 1;
+    } else if (starts_with(s, "if") && !is_ident_continue(s[2])) {
+        int then_pos = list_str_pipeline_scalar_find_top_level_word_op(s, "then");
+        int else_pos = list_str_pipeline_scalar_find_top_level_word_op(s, "else");
+        if (then_pos > 0 && else_pos > then_pos) {
+            char *then_expr = substr_copy(s + then_pos + 4, (size_t)(else_pos - then_pos - 4));
+            char *else_expr = trim_copy(s + else_pos + 4);
+            result = list_str_pipeline_scalar_expr_is_boolish(then_expr) &&
+                list_str_pipeline_scalar_expr_is_boolish(else_expr);
+            free(then_expr);
+            free(else_expr);
+        }
+    } else if (*s == '(') {
+        int close = find_matching_paren_c(s, 0);
+        if (close > 0 && *skip_ws(s + close + 1) == '\0') {
+            char *inner = substr_copy(s + 1, (size_t)close - 1);
+            result = list_str_pipeline_scalar_expr_is_boolish(inner);
+            free(inner);
+        }
+    }
+    if (!result &&
+        (list_str_pipeline_scalar_find_top_level_word_op(s, "and") >= 0 ||
+         list_str_pipeline_scalar_find_top_level_word_op(s, "or") >= 0 ||
+         list_str_pipeline_scalar_find_top_level_compare_op(s) >= 0)) {
+        result = 1;
+    }
+    free(trimmed);
+    return result;
+}
+
+static int list_str_pipeline_scalar_expr_is_boolish_with_env(const char *expr, ListMethodEnv *env) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int result = list_str_pipeline_scalar_expr_is_boolish(s);
+    if (!result && env != NULL && is_ident_start(*s)) {
+        const char *end = s + 1;
+        while (is_ident_continue(*end)) end++;
+        if (*skip_ws(end) == '\0') {
+            char *name = substr_copy(s, (size_t)(end - s));
+            const char *type = list_method_env_type(env, name);
+            result = type != NULL && strcmp(type, "Bool") == 0;
+            free(name);
+        }
+    }
+    if (!result && starts_with(s, "if") && !is_ident_continue(s[2])) {
+        int then_pos = list_str_pipeline_scalar_find_top_level_word_op(s, "then");
+        int else_pos = list_str_pipeline_scalar_find_top_level_word_op(s, "else");
+        if (then_pos > 0 && else_pos > then_pos) {
+            char *then_expr = substr_copy(s + then_pos + 4, (size_t)(else_pos - then_pos - 4));
+            char *else_expr = trim_copy(s + else_pos + 4);
+            result = list_str_pipeline_scalar_expr_is_boolish_with_env(then_expr, env) &&
+                list_str_pipeline_scalar_expr_is_boolish_with_env(else_expr, env);
+            free(then_expr);
+            free(else_expr);
+        }
+    }
+    if (!result && *s == '(') {
+        int close = find_matching_paren_c(s, 0);
+        if (close > 0 && *skip_ws(s + close + 1) == '\0') {
+            char *inner = substr_copy(s + 1, (size_t)close - 1);
+            result = list_str_pipeline_scalar_expr_is_boolish_with_env(inner, env);
+            free(inner);
+        }
+    }
+    free(trimmed);
+    return result;
+}
+
+static int list_str_pipeline_scalar_expr_is_string_literalish(const char *expr) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int ok = 0;
+    if (is_string_delim_c(*s)) {
+        int end = skip_string_literal_c(s, 0);
+        ok = end > 0 && *skip_ws(s + end) == '\0';
+    }
+    free(trimmed);
+    return ok;
+}
+
+static int list_str_pipeline_scalar_expr_is_stringish_with_env(const char *expr, ListMethodEnv *env) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int result = list_str_pipeline_scalar_expr_is_string_literalish(s);
+    if (!result && env != NULL && is_ident_start(*s)) {
+        const char *end = s + 1;
+        while (is_ident_continue(*end)) end++;
+        if (*skip_ws(end) == '\0') {
+            char *name = substr_copy(s, (size_t)(end - s));
+            const char *type = list_method_env_type(env, name);
+            result = type != NULL && strcmp(type, "Str") == 0;
+            free(name);
+        }
+    }
+    if (!result && *s == '(') {
+        int close = find_matching_paren_c(s, 0);
+        if (close > 0 && *skip_ws(s + close + 1) == '\0') {
+            char *inner = substr_copy(s + 1, (size_t)close - 1);
+            result = list_str_pipeline_scalar_expr_is_stringish_with_env(inner, env);
+            free(inner);
+        }
+    }
+    free(trimmed);
+    return result;
+}
+
+static int list_str_pipeline_scalar_expr_is_char_literalish(const char *expr) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int ok = 0;
+    if (*s == '\'') {
+        int end = skip_char_literal_c(s, 0);
+        ok = end > 0 && *skip_ws(s + end) == '\0';
+    }
+    free(trimmed);
+    return ok;
+}
+
+static int list_str_pipeline_scalar_expr_is_charish_with_env(const char *expr, ListMethodEnv *env) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int result = list_str_pipeline_scalar_expr_is_char_literalish(s);
+    if (!result && env != NULL && is_ident_start(*s)) {
+        const char *end = s + 1;
+        while (is_ident_continue(*end)) end++;
+        if (*skip_ws(end) == '\0') {
+            char *name = substr_copy(s, (size_t)(end - s));
+            const char *type = list_method_env_type(env, name);
+            result = type != NULL && strcmp(type, "Char") == 0;
+            free(name);
+        }
+    }
+    if (!result && *s == '(') {
+        int close = find_matching_paren_c(s, 0);
+        if (close > 0 && *skip_ws(s + close + 1) == '\0') {
+            char *inner = substr_copy(s + 1, (size_t)close - 1);
+            result = list_str_pipeline_scalar_expr_is_charish_with_env(inner, env);
+            free(inner);
+        }
+    }
+    free(trimmed);
+    return result;
+}
+
+static const char *list_str_pipeline_scalar_if_value_type(const char *then_expr, const char *else_expr) {
+    if (list_str_pipeline_scalar_expr_is_boolish(then_expr) &&
+        list_str_pipeline_scalar_expr_is_boolish(else_expr)) {
+        return "Bool";
+    }
+    int then_char = list_str_pipeline_scalar_expr_is_char_literalish(then_expr);
+    int else_char = list_str_pipeline_scalar_expr_is_char_literalish(else_expr);
+    if (then_char && else_char) return "Char";
+    if (then_char || else_char) {
+        return NULL;
+    }
+    int then_str = list_str_pipeline_scalar_expr_is_string_literalish(then_expr);
+    int else_str = list_str_pipeline_scalar_expr_is_string_literalish(else_expr);
+    if (then_str && else_str) return "Str";
+    if (then_str || else_str) {
+        return NULL;
+    }
+    return "Int";
+}
+
+static const char *list_str_pipeline_scalar_if_value_type_with_env(const char *then_expr, const char *else_expr, ListMethodEnv *env) {
+    if (list_str_pipeline_scalar_expr_is_boolish_with_env(then_expr, env) &&
+        list_str_pipeline_scalar_expr_is_boolish_with_env(else_expr, env)) {
+        return "Bool";
+    }
+    int then_char = list_str_pipeline_scalar_expr_is_charish_with_env(then_expr, env);
+    int else_char = list_str_pipeline_scalar_expr_is_charish_with_env(else_expr, env);
+    if (then_char && else_char) return "Char";
+    if (then_char || else_char) {
+        return NULL;
+    }
+    int then_str = list_str_pipeline_scalar_expr_is_stringish_with_env(then_expr, env);
+    int else_str = list_str_pipeline_scalar_expr_is_stringish_with_env(else_expr, env);
+    if (then_str && else_str) return "Str";
+    if (then_str || else_str) {
+        return NULL;
+    }
+    return "Int";
+}
+
+static const char *list_str_pipeline_scalar_default_for_type(const char *type) {
+    if (strcmp(type, "Bool") == 0) return "false";
+    if (strcmp(type, "Str") == 0) return "\"\"";
+    if (strcmp(type, "Char") == 0) return "'\\0'";
+    return "0";
+}
+
+static int list_str_pipeline_scalar_expr_mentions_pipeline(const char *expr) {
+    return strstr(expr, ".map") != NULL || strstr(expr, ".filter") != NULL;
+}
+
+static int list_str_pipeline_scalar_else_branch_end(const char *sub, int else_start) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    for (int i = else_start; sub[i] != '\0'; i++) {
+        if (is_string_delim_c(sub[i])) {
+            int end = skip_string_literal_c(sub, i);
+            if (end < 0) return i;
+            i = end - 1;
+            continue;
+        }
+        if (sub[i] == '\'') {
+            int end = skip_char_literal_c(sub, i);
+            if (end < 0) return i;
+            i = end - 1;
+            continue;
+        }
+        if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 &&
+            (sub[i] == ',' || sub[i] == ')' || sub[i] == ']' || sub[i] == '}' || sub[i] == ';')) {
+            return i;
+        }
+        if (sub[i] == '(') paren_depth++;
+        else if (sub[i] == '[') bracket_depth++;
+        else if (sub[i] == '{') brace_depth++;
+        else if (sub[i] == ')' && paren_depth > 0) paren_depth--;
+        else if (sub[i] == ']' && bracket_depth > 0) bracket_depth--;
+        else if (sub[i] == '}' && brace_depth > 0) brace_depth--;
+    }
+    return (int)strlen(sub);
+}
+
+static void list_str_pipeline_scalar_emit_if_assignment(
+    LineVec *out,
+    const char *line,
+    size_t indent_len,
+    const char *target,
+    const char *cond,
+    const char *then_expr,
+    const char *else_expr
+) {
+    StrBuf head;
+    sb_init(&head);
+    sb_append_n(&head, line, indent_len);
+    sb_append(&head, "if ");
+    sb_append(&head, cond);
+    sb_append(&head, " {");
+    lines_push(out, sb_take(&head));
+
+    StrBuf then_line;
+    sb_init(&then_line);
+    sb_append_n(&then_line, line, indent_len);
+    sb_append(&then_line, "    ");
+    sb_append(&then_line, target);
+    sb_append(&then_line, " = ");
+    sb_append(&then_line, then_expr);
+    lines_push(out, sb_take(&then_line));
+
+    StrBuf else_head;
+    sb_init(&else_head);
+    sb_append_n(&else_head, line, indent_len);
+    sb_append(&else_head, "} else {");
+    lines_push(out, sb_take(&else_head));
+
+    StrBuf else_line;
+    sb_init(&else_line);
+    sb_append_n(&else_line, line, indent_len);
+    sb_append(&else_line, "    ");
+    sb_append(&else_line, target);
+    sb_append(&else_line, " = ");
+    sb_append(&else_line, else_expr);
+    lines_push(out, sb_take(&else_line));
+
+    StrBuf close;
+    sb_init(&close);
+    sb_append_n(&close, line, indent_len);
+    sb_append(&close, "}");
+    lines_push(out, sb_take(&close));
+}
+
+static int list_str_pipeline_scalar_lower_value_if_exprs(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *temp_prefix,
+    int *temp_count,
+    LineVec *out,
+    char **rewritten_out,
+    char **exact_type_out,
+    int *is_exact_out,
+    ListMethodEnv *env
+) {
+    StrBuf rewritten;
+    sb_init(&rewritten);
+    size_t last_copy = 0;
+    int changed = 0;
+    size_t first_start = 0;
+    size_t first_end = 0;
+    char *first_type = NULL;
+
+    for (size_t i = 0; expr[i] != '\0'; i++) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (!starts_with(expr + i, "if") ||
+            (i > 0 && is_ident_continue(expr[i - 1])) ||
+            is_ident_continue(expr[i + 2])) {
+            continue;
+        }
+
+        const char *sub = expr + i;
+        int then_pos = list_str_pipeline_scalar_find_top_level_word_op(sub, "then");
+        int else_pos = list_str_pipeline_scalar_find_top_level_word_op(sub, "else");
+        if (then_pos <= 0 || else_pos <= then_pos) continue;
+
+        int else_start = (int)(skip_ws(sub + else_pos + 4) - sub);
+        int else_end = list_str_pipeline_scalar_else_branch_end(sub, else_start);
+        if (else_end <= else_start) continue;
+
+        char *cond_raw = substr_copy(sub + 2, (size_t)(then_pos - 2));
+        char *then_raw = substr_copy(sub + then_pos + 4, (size_t)(else_pos - then_pos - 4));
+        char *else_raw = substr_copy(sub + else_start, (size_t)(else_end - else_start));
+        char *cond = trim_copy(cond_raw);
+        char *then_expr = trim_copy(then_raw);
+        char *else_expr = trim_copy(else_raw);
+        free(cond_raw);
+        free(then_raw);
+        free(else_raw);
+
+        const char *value_type = NULL;
+        if (cond[0] != '\0' && then_expr[0] != '\0' && else_expr[0] != '\0') {
+            value_type = env == NULL ?
+                list_str_pipeline_scalar_if_value_type(then_expr, else_expr) :
+                list_str_pipeline_scalar_if_value_type_with_env(then_expr, else_expr, env);
+        }
+        if (value_type == NULL) {
+            free(cond);
+            free(then_expr);
+            free(else_expr);
+            continue;
+        }
+
+        int id = (*temp_count)++;
+        char temp_name[128];
+        snprintf(temp_name, sizeof(temp_name), "%s_if%d", temp_prefix, id);
+
+        StrBuf decl;
+        sb_init(&decl);
+        sb_append_n(&decl, line, indent_len);
+        sb_append(&decl, "let mut ");
+        sb_append(&decl, temp_name);
+        sb_append(&decl, " = ");
+        sb_append(&decl, list_str_pipeline_scalar_default_for_type(value_type));
+        lines_push(out, sb_take(&decl));
+        list_str_pipeline_scalar_emit_if_assignment(out, line, indent_len, temp_name, cond, then_expr, else_expr);
+
+        sb_append_n(&rewritten, expr + last_copy, i - last_copy);
+        sb_append(&rewritten, temp_name);
+        last_copy = i + (size_t)else_end;
+        if (!changed) {
+            first_start = i;
+            first_end = last_copy;
+            first_type = strdup(value_type);
+            if (first_type == NULL) die_oom();
+        }
+        changed = 1;
+
+        free(cond);
+        free(then_expr);
+        free(else_expr);
+        i = last_copy == 0 ? i : last_copy - 1;
+    }
+
+    if (!changed) {
+        free(rewritten.data);
+        return 0;
+    }
+
+    sb_append(&rewritten, expr + last_copy);
+    *rewritten_out = sb_take(&rewritten);
+    if (exact_type_out != NULL) *exact_type_out = first_type == NULL ? NULL : strdup(first_type);
+    if (is_exact_out != NULL) {
+        const char *before = skip_ws(expr);
+        const char *after = skip_ws(expr + first_end);
+        *is_exact_out = before == expr + first_start && *after == '\0';
+    }
+    free(first_type);
+    return 1;
+}
+
+static const char *list_str_pipeline_scalar_assignment_type(
+    const char *lhs_type,
+    int is_exact,
+    const char *scalar_type,
+    const char *rewritten,
+    ListMethodEnv *env
+) {
+    if (lhs_type != NULL) return lhs_type;
+    if (is_exact && scalar_type != NULL) return scalar_type;
+    const char *call_return_type = list_method_env_exact_call_return_type(env, rewritten);
+    if (call_return_type != NULL) return call_return_type;
+    if (list_str_pipeline_scalar_expr_is_boolish(rewritten)) return "Bool";
+    return "Int";
+}
+
+static int lower_list_map_filter_scalar_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    int is_mut = 0;
+    if (starts_with(name_start, "mut") && !is_ident_continue(name_start[3])) {
+        is_mut = 1;
+        name_start = skip_ws(name_start + 3);
+    }
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || (strcmp(lhs_type, "Int") != 0 && strcmp(lhs_type, "Bool") != 0 && strcmp(lhs_type, "Str") != 0 && strcmp(lhs_type, "Char") != 0))) {
+        free(lhs_type);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    char *scalar_type = NULL;
+    int is_exact = 0;
+    size_t indent_len = (size_t)(s - line);
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, eq + 1, "vais_map_filter_scalar_expr", temp_count, env, out, &rewritten, &scalar_type, &is_exact)) {
+        free(lhs_type);
+        return 0;
+    }
+    if (had_annotation && is_exact && strcmp(lhs_type, scalar_type) != 0) {
+        free(lhs_type);
+        free(rewritten);
+        free(scalar_type);
+        return 0;
+    }
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    sb_append(&final_line, "let ");
+    if (is_mut) sb_append(&final_line, "mut ");
+    sb_append(&final_line, name);
+    sb_append(&final_line, " = ");
+    sb_append(&final_line, rewritten);
+    lines_push(out, sb_take(&final_line));
+    list_method_env_set(env, name, list_str_pipeline_scalar_assignment_type(lhs_type, is_exact, scalar_type, rewritten, env));
+
+    free(lhs_type);
+    free(name);
+    free(rewritten);
+    free(scalar_type);
+    return 1;
+}
+
+static int lower_list_map_filter_scalar_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || (strcmp(target_type, "Int") != 0 && strcmp(target_type, "Bool") != 0 && strcmp(target_type, "Str") != 0 && strcmp(target_type, "Char") != 0)) {
+        free(target);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    char *scalar_type = NULL;
+    int is_exact = 0;
+    size_t indent_len = (size_t)(target_start - line);
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, s + 1, "vais_map_filter_scalar_reassign", temp_count, env, out, &rewritten, &scalar_type, &is_exact)) {
+        free(target);
+        return 0;
+    }
+    if (is_exact && strcmp(target_type, scalar_type) != 0) {
+        free(target);
+        free(rewritten);
+        free(scalar_type);
+        return 0;
+    }
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, rewritten);
+    lines_push(out, sb_take(&assign));
+
+    free(target);
+    free(rewritten);
+    free(scalar_type);
+    return 1;
+}
+
+static int lower_list_map_filter_scalar_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    if (env->current_return_type[0] != '\0' &&
+        strcmp(env->current_return_type, "Int") != 0 &&
+        strcmp(env->current_return_type, "Bool") != 0) {
+        return 0;
+    }
+    char *rewritten = NULL;
+    char *scalar_type = NULL;
+    int is_exact = 0;
+    size_t indent_len = (size_t)(s - line);
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, skip_ws(s + 6), "vais_map_filter_scalar_return", temp_count, env, out, &rewritten, &scalar_type, &is_exact)) {
+        return 0;
+    }
+    if (env->current_return_type[0] != '\0' && is_exact && strcmp(env->current_return_type, scalar_type) != 0) {
+        free(rewritten);
+        free(scalar_type);
+        return 0;
+    }
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, rewritten);
+    lines_push(out, sb_take(&ret));
+
+    free(rewritten);
+    free(scalar_type);
+    return 1;
+}
+
+static int lower_list_map_filter_scalar_call_arg_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *expected_type,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **arg_out
+) {
+    if (expected_type == NULL || (strcmp(expected_type, "Int") != 0 && strcmp(expected_type, "Bool") != 0)) return 0;
+    char *rewritten = NULL;
+    char *scalar_type = NULL;
+    int is_exact = 0;
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, expr, "vais_map_filter_scalar_call_arg", temp_count, env, out, &rewritten, &scalar_type, &is_exact)) {
+        return 0;
+    }
+    if (is_exact && strcmp(expected_type, scalar_type) != 0) {
+        free(rewritten);
+        free(scalar_type);
+        return 0;
+    }
+    *arg_out = rewritten;
+    free(scalar_type);
+    return 1;
+}
+
+static int lower_list_map_filter_scalar_list_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(target);
+        return 0;
+    }
+    s++;
+    int is_insert = 0;
+    int method_len = 0;
+    if (starts_with(s, "push") && !is_ident_continue(s[4])) {
+        is_insert = 0;
+        method_len = 4;
+    } else if (starts_with(s, "insert_at") && !is_ident_continue(s[9])) {
+        is_insert = 1;
+        method_len = 9;
+    } else {
+        free(target);
+        return 0;
+    }
+    s = skip_ws(s + method_len);
+    if (*s != '(') {
+        free(target);
+        return 0;
+    }
+    int close = find_matching_paren_c(line, (int)(s - line));
+    if (close < 0) {
+        free(target);
+        return 0;
+    }
+    const char *line_tail = skip_ws(line + close + 1);
+    if (*line_tail == ';') line_tail = skip_ws(line_tail + 1);
+    if (*line_tail != '\0') {
+        free(target);
+        return 0;
+    }
+
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || strcmp(target_type, "List<Int>") != 0) {
+        free(target);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(s + 1, (size_t)(line + close - s - 1));
+    char *parts[2] = {0};
+    int part_count = split_top_level_commas_c(args_raw, parts, 2);
+    free(args_raw);
+    if ((!is_insert && part_count != 1) || (is_insert && part_count != 2)) {
+        for (int i = 0; i < 2; i++) free(parts[i]);
+        free(target);
+        return 0;
+    }
+    char *index_arg = is_insert ? parts[0] : NULL;
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(target_start - line);
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, is_insert ? parts[1] : parts[0], "vais_map_filter_scalar_list_arg", temp_count, env, out, &rewritten, NULL, NULL)) {
+        free(index_arg);
+        free(parts[is_insert ? 1 : 0]);
+        free(target);
+        return 0;
+    }
+
+    StrBuf call;
+    sb_init(&call);
+    sb_append_n(&call, line, indent_len);
+    sb_append(&call, target);
+    if (is_insert) {
+        sb_append(&call, ".insert_at(");
+        sb_append(&call, index_arg);
+        sb_append(&call, ", ");
+        sb_append(&call, rewritten);
+        sb_append(&call, ")");
+    } else {
+        sb_append(&call, ".push(");
+        sb_append(&call, rewritten);
+        sb_append(&call, ")");
+    }
+    lines_push(out, sb_take(&call));
+
+    free(index_arg);
+    free(parts[is_insert ? 1 : 0]);
+    free(target);
+    free(rewritten);
+    return 1;
+}
+
+static int lower_list_map_filter_scalar_condition_line(
+    const char *line,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    int *extra_else_close_indent_out
+) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    const char *expr_start = NULL;
+    int is_while = 0;
+    int is_else_if = 0;
+    int has_leading_close = 0;
+    if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = -1;
+    if (starts_with(s, "if ") && !is_ident_continue(s[2])) {
+        expr_start = skip_ws(s + 3);
+    } else if (starts_with(s, "} else if ")) {
+        expr_start = skip_ws(s + 10);
+        is_else_if = 1;
+        has_leading_close = 1;
+    } else if (starts_with(s, "else if ") && !is_ident_continue(s[7])) {
+        expr_start = skip_ws(s + 8);
+        is_else_if = 1;
+    } else if (starts_with(s, "while ") && !is_ident_continue(s[5])) {
+        expr_start = skip_ws(s + 6);
+        is_while = 1;
+    } else {
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(expr_start);
+    size_t expr_len = strlen(expr);
+    while (expr_len > 0 && isspace((unsigned char)expr[expr_len - 1])) expr_len--;
+    if (expr_len == 0 || expr[expr_len - 1] != '{') {
+        free(expr);
+        return 0;
+    }
+    size_t expr_without_open_len = expr_len - 1;
+    while (expr_without_open_len > 0 && isspace((unsigned char)expr[expr_without_open_len - 1])) expr_without_open_len--;
+    char *condition_expr = substr_copy(expr, expr_without_open_len);
+    char *condition_rewritten = NULL;
+
+    LineVec condition_temps;
+    LineVec *emit_out = out;
+    const char *emit_line = line;
+    char *nested_emit_line = NULL;
+    size_t emit_indent_len = indent_len;
+    if (is_while || is_else_if) {
+        lines_init(&condition_temps);
+        emit_out = &condition_temps;
+        emit_indent_len = indent_len + 4;
+        nested_emit_line = (char *)malloc(emit_indent_len + 1);
+        if (nested_emit_line == NULL) die_oom();
+        memset(nested_emit_line, ' ', emit_indent_len);
+        nested_emit_line[emit_indent_len] = '\0';
+        emit_line = nested_emit_line;
+    }
+
+    if (!lower_list_str_pipeline_scalar_embedded_expr(emit_line, emit_indent_len, condition_expr, "vais_map_filter_scalar_cond", temp_count, env, emit_out, &condition_rewritten, NULL, NULL)) {
+        if (is_while || is_else_if) lines_free(&condition_temps);
+        free(nested_emit_line);
+        free(condition_expr);
+        free(expr);
+        return 0;
+    }
+
+    if (is_else_if) {
+        StrBuf else_head;
+        sb_init(&else_head);
+        sb_append_n(&else_head, line, indent_len);
+        sb_append(&else_head, has_leading_close ? "} else {" : "else {");
+        lines_push(out, sb_take(&else_head));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf inner_if;
+        sb_init(&inner_if);
+        sb_append_n(&inner_if, line, indent_len);
+        sb_append(&inner_if, "    if ");
+        sb_append(&inner_if, condition_rewritten);
+        sb_append(&inner_if, " {");
+        lines_push(out, sb_take(&inner_if));
+        if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = (int)indent_len;
+    } else if (is_while) {
+        StrBuf loop;
+        sb_init(&loop);
+        sb_append_n(&loop, line, indent_len);
+        sb_append(&loop, "while 1 {");
+        lines_push(out, sb_take(&loop));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf guard;
+        sb_init(&guard);
+        sb_append_n(&guard, line, indent_len);
+        sb_append(&guard, "    if (");
+        sb_append(&guard, condition_rewritten);
+        sb_append(&guard, ") == 0 { break }");
+        lines_push(out, sb_take(&guard));
+    } else {
+        StrBuf cond;
+        sb_init(&cond);
+        sb_append_n(&cond, line, indent_len);
+        sb_append(&cond, "if ");
+        sb_append(&cond, condition_rewritten);
+        sb_append(&cond, " {");
+        lines_push(out, sb_take(&cond));
+    }
+
+    free(condition_rewritten);
+    free(nested_emit_line);
+    free(condition_expr);
+    free(expr);
+    return 1;
+}
+
+static int parse_list_filter_map_scalar_at_expr(
+    const char *expr,
+    size_t start,
+    ListMethodEnv *env,
+    char **receiver_out,
+    char **param_out,
+    char **filter_body_out,
+    char **map_body_out,
+    char **result_type_out,
+    char **method_suffix_out,
+    char **scalar_type_out,
+    size_t *scalar_end_out
+) {
+    const char *sub = expr + start;
+    char *receiver = NULL;
+    char *param = NULL;
+    char *filter_body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(sub, "filter", env, &receiver, &param, &filter_body, &after)) {
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    if (receiver_type == NULL || !list_method_type_is_list(receiver_type)) {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        return 0;
+    }
+
+    const char *map = skip_ws(after);
+    if (!starts_with(map, ".map") || is_ident_continue(map[4])) {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        return 0;
+    }
+    const char *map_open = skip_ws(map + 4);
+    if (*map_open != '(') {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        return 0;
+    }
+    int close_map = find_matching_paren_c(sub, (int)(map_open - sub));
+    if (close_map < 0) {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        return 0;
+    }
+    char *arg_raw = substr_copy(map_open + 1, (size_t)(sub + close_map - map_open - 1));
+    char *map_param = NULL;
+    char *map_body = NULL;
+    int ok = parse_inline_int_closure(arg_raw, &map_param, &map_body) &&
+        strcmp(map_param, param) == 0 &&
+        closure_body_uses_param_or_list_method_env(map_body, map_param, env);
+    free(arg_raw);
+    if (!ok) {
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_param);
+        free(map_body);
+        return 0;
+    }
+    free(map_param);
+
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, map_body, NULL);
+    char *result_elem = result_type == NULL ? NULL : list_method_list_element_type_copy(result_type);
+    if (result_elem == NULL || (strcmp(result_elem, "Int") != 0 && strcmp(result_elem, "Str") != 0)) {
+        free(result_elem);
+        free(result_type);
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_body);
+        return 0;
+    }
+    free(result_elem);
+
+    const char *method = skip_ws(sub + close_map + 1);
+    const char *scalar_type = NULL;
+    int method_len = 0;
+    int needs_one_arg = 0;
+    if (starts_with(method, ".len") && !is_ident_continue(method[4])) {
+        scalar_type = "Int";
+        method_len = 4;
+    } else if (starts_with(method, ".contains") && !is_ident_continue(method[9])) {
+        scalar_type = "Bool";
+        method_len = 9;
+        needs_one_arg = 1;
+    } else if (starts_with(method, ".index_of") && !is_ident_continue(method[9])) {
+        scalar_type = "Int";
+        method_len = 9;
+        needs_one_arg = 1;
+    } else if (starts_with(method, ".count") && !is_ident_continue(method[6])) {
+        scalar_type = "Int";
+        method_len = 6;
+        needs_one_arg = 1;
+    } else {
+        free(result_type);
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_body);
+        return 0;
+    }
+    const char *open = skip_ws(method + method_len);
+    if (*open != '(') {
+        free(result_type);
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_body);
+        return 0;
+    }
+    int close_method = find_matching_paren_c(sub, (int)(open - sub));
+    if (close_method < 0) {
+        free(result_type);
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_body);
+        return 0;
+    }
+    char *method_args = substr_copy(open + 1, (size_t)(sub + close_method - open - 1));
+    if (needs_one_arg) {
+        char *parts[2] = {0};
+        int part_count = split_top_level_commas_c(method_args, parts, 2);
+        ok = part_count == 1;
+        if (ok) {
+            char *trimmed = trim_copy(parts[0]);
+            ok = trimmed[0] != '\0';
+            free(trimmed);
+        }
+        for (int i = 0; i < 2; i++) free(parts[i]);
+    } else {
+        char *trimmed = trim_copy(method_args);
+        ok = trimmed[0] == '\0';
+        free(trimmed);
+    }
+    free(method_args);
+    if (!ok) {
+        free(result_type);
+        free(receiver);
+        free(param);
+        free(filter_body);
+        free(map_body);
+        return 0;
+    }
+
+    *receiver_out = receiver;
+    *param_out = param;
+    *filter_body_out = filter_body;
+    *map_body_out = map_body;
+    *result_type_out = result_type;
+    *method_suffix_out = substr_copy(method, (size_t)(sub + close_method + 1 - method));
+    *scalar_type_out = strdup(scalar_type);
+    *scalar_end_out = start + (size_t)close_method + 1;
+    return 1;
+}
+
+static int lower_list_filter_map_scalar_embedded_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *temp_prefix,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **rewritten_out,
+    char **scalar_type_out,
+    int *is_exact_out
+) {
+    char *expr_copy = trim_trailing_semicolon_copy(expr);
+    int original_temp_count = *temp_count;
+    LineVec temps;
+    lines_init(&temps);
+    StrBuf rewritten;
+    sb_init(&rewritten);
+    size_t last_copy_pos = 0;
+    size_t first_scalar_start = 0;
+    size_t first_scalar_end = 0;
+    char *first_scalar_type = NULL;
+    int found_count = 0;
+
+    for (size_t i = 0; expr_copy[i] != '\0'; i++) {
+        if (is_string_delim_c(expr_copy[i])) {
+            int end = skip_string_literal_c(expr_copy, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (expr_copy[i] == '\'') {
+            int end = skip_char_literal_c(expr_copy, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (!is_ident_start(expr_copy[i])) continue;
+
+        char *local_receiver = NULL;
+        char *local_param = NULL;
+        char *local_filter_body = NULL;
+        char *local_map_body = NULL;
+        char *local_result_type = NULL;
+        char *local_method_suffix = NULL;
+        char *local_scalar_type = NULL;
+        size_t local_end = 0;
+        if (parse_list_filter_map_scalar_at_expr(expr_copy, i, env, &local_receiver, &local_param, &local_filter_body, &local_map_body, &local_result_type, &local_method_suffix, &local_scalar_type, &local_end)) {
+            const char *after = skip_ws(expr_copy + local_end);
+            if (*after == '.') {
+                free(local_receiver);
+                free(local_param);
+                free(local_filter_body);
+                free(local_map_body);
+                free(local_result_type);
+                free(local_method_suffix);
+                free(local_scalar_type);
+                *temp_count = original_temp_count;
+                lines_free(&temps);
+                free(rewritten.data);
+                free(first_scalar_type);
+                free(expr_copy);
+                return 0;
+            }
+
+            int id = (*temp_count)++;
+            char temp_name[96];
+            snprintf(temp_name, sizeof(temp_name), "%s%d", temp_prefix, id);
+            lower_list_filter_map_result_emit(line, indent_len, local_receiver, local_param, local_filter_body, local_map_body, local_result_type, temp_name, &temps);
+
+            sb_append_n(&rewritten, expr_copy + last_copy_pos, i - last_copy_pos);
+            sb_append(&rewritten, temp_name);
+            sb_append(&rewritten, local_method_suffix);
+            last_copy_pos = local_end;
+            if (found_count == 0) {
+                first_scalar_start = i;
+                first_scalar_end = local_end;
+                first_scalar_type = strdup(local_scalar_type);
+                if (first_scalar_type == NULL) die_oom();
+            }
+            found_count++;
+
+            free(local_receiver);
+            free(local_param);
+            free(local_filter_body);
+            free(local_map_body);
+            free(local_result_type);
+            free(local_method_suffix);
+            free(local_scalar_type);
+            i = local_end == 0 ? i : local_end - 1;
+            continue;
+        }
+        while (expr_copy[i + 1] != '\0' && is_ident_continue(expr_copy[i + 1])) i++;
+    }
+
+    if (found_count == 0) {
+        *temp_count = original_temp_count;
+        lines_free(&temps);
+        free(rewritten.data);
+        free(expr_copy);
+        return 0;
+    }
+
+    sb_append(&rewritten, expr_copy + last_copy_pos);
+    for (size_t i = 0; i < temps.len; i++) {
+        lines_push(out, temps.items[i]);
+    }
+    free(temps.items);
+    *rewritten_out = sb_take(&rewritten);
+
+    if (scalar_type_out != NULL) *scalar_type_out = strdup(first_scalar_type);
+    if (is_exact_out != NULL) {
+        const char *before = skip_ws(expr_copy);
+        const char *after = skip_ws(expr_copy + first_scalar_end);
+        *is_exact_out = found_count == 1 && before == expr_copy + first_scalar_start && *after == '\0';
+    }
+
+    free(expr_copy);
+    free(first_scalar_type);
+    return 1;
+}
+
+static int lower_list_str_pipeline_scalar_embedded_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *temp_prefix,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **rewritten_out,
+    char **scalar_type_out,
+    int *is_exact_out
+) {
+    char *current = trim_trailing_semicolon_copy(expr);
+    char *exact_type = NULL;
+    int changed_any = 0;
+    int is_exact = 0;
+
+    char *rewritten = NULL;
+    char *stage_type = NULL;
+    int stage_exact = 0;
+    if (lower_list_map_filter_scalar_embedded_expr(line, indent_len, current, temp_prefix, temp_count, env, out, &rewritten, &stage_type, &stage_exact)) {
+        changed_any = 1;
+        if (stage_exact) {
+            is_exact = 1;
+            exact_type = strdup(stage_type);
+            if (exact_type == NULL) die_oom();
+        }
+        free(current);
+        current = rewritten;
+        free(stage_type);
+    }
+
+    rewritten = NULL;
+    stage_type = NULL;
+    stage_exact = 0;
+    int changed_before_filter_map = changed_any;
+    if (lower_list_filter_map_scalar_embedded_expr(line, indent_len, current, temp_prefix, temp_count, env, out, &rewritten, &stage_type, &stage_exact)) {
+        if (!changed_before_filter_map && stage_exact) {
+            is_exact = 1;
+            free(exact_type);
+            exact_type = strdup(stage_type);
+            if (exact_type == NULL) die_oom();
+        } else {
+            is_exact = 0;
+        }
+        changed_any = 1;
+        free(current);
+        current = rewritten;
+        free(stage_type);
+    }
+
+    if (!changed_any) {
+        free(current);
+        return 0;
+    }
+
+    char *folded_if = list_str_pipeline_scalar_fold_bool_identity_if_expr(current);
+    if (folded_if != NULL) {
+        free(current);
+        current = folded_if;
+        is_exact = 1;
+        free(exact_type);
+        exact_type = strdup("Bool");
+        if (exact_type == NULL) die_oom();
+    } else {
+        char *folded_nested_if = list_str_pipeline_scalar_fold_nested_bool_identity_if_exprs(current);
+        if (folded_nested_if != NULL) {
+            free(current);
+            current = folded_nested_if;
+        }
+    }
+
+    char *value_if_rewritten = NULL;
+    char *value_if_type = NULL;
+    int value_if_exact = 0;
+    if (list_str_pipeline_scalar_lower_value_if_exprs(line, indent_len, current, temp_prefix, temp_count, out, &value_if_rewritten, &value_if_type, &value_if_exact, env)) {
+        free(current);
+        current = value_if_rewritten;
+        if (value_if_exact) {
+            is_exact = 1;
+            free(exact_type);
+            exact_type = value_if_type == NULL ? NULL : strdup(value_if_type);
+            if (value_if_type != NULL && exact_type == NULL) die_oom();
+        } else {
+            is_exact = 0;
+        }
+        free(value_if_type);
+    }
+
+    *rewritten_out = current;
+    if (scalar_type_out != NULL) {
+        *scalar_type_out = exact_type == NULL ? NULL : strdup(exact_type);
+    }
+    if (is_exact_out != NULL) *is_exact_out = is_exact;
+    free(exact_type);
+    return 1;
+}
+
+static int lower_list_filter_map_scalar_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    int is_mut = 0;
+    if (starts_with(name_start, "mut") && !is_ident_continue(name_start[3])) {
+        is_mut = 1;
+        name_start = skip_ws(name_start + 3);
+    }
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || (strcmp(lhs_type, "Int") != 0 && strcmp(lhs_type, "Bool") != 0 && strcmp(lhs_type, "Str") != 0 && strcmp(lhs_type, "Char") != 0))) {
+        free(lhs_type);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    char *scalar_type = NULL;
+    int is_exact = 0;
+    size_t indent_len = (size_t)(s - line);
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, eq + 1, "vais_filter_map_scalar_expr", temp_count, env, out, &rewritten, &scalar_type, &is_exact)) {
+        free(lhs_type);
+        return 0;
+    }
+    if (had_annotation && is_exact && strcmp(lhs_type, scalar_type) != 0) {
+        free(lhs_type);
+        free(rewritten);
+        free(scalar_type);
+        return 0;
+    }
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    sb_append(&final_line, "let ");
+    if (is_mut) sb_append(&final_line, "mut ");
+    sb_append(&final_line, name);
+    sb_append(&final_line, " = ");
+    sb_append(&final_line, rewritten);
+    lines_push(out, sb_take(&final_line));
+    list_method_env_set(env, name, list_str_pipeline_scalar_assignment_type(lhs_type, is_exact, scalar_type, rewritten, env));
+
+    free(lhs_type);
+    free(name);
+    free(rewritten);
+    free(scalar_type);
+    return 1;
+}
+
+static int lower_list_filter_map_scalar_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || (strcmp(target_type, "Int") != 0 && strcmp(target_type, "Bool") != 0 && strcmp(target_type, "Str") != 0 && strcmp(target_type, "Char") != 0)) {
+        free(target);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    char *scalar_type = NULL;
+    int is_exact = 0;
+    size_t indent_len = (size_t)(target_start - line);
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, s + 1, "vais_filter_map_scalar_reassign", temp_count, env, out, &rewritten, &scalar_type, &is_exact)) {
+        free(target);
+        return 0;
+    }
+    if (is_exact && strcmp(target_type, scalar_type) != 0) {
+        free(target);
+        free(rewritten);
+        free(scalar_type);
+        return 0;
+    }
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, rewritten);
+    lines_push(out, sb_take(&assign));
+
+    free(target);
+    free(rewritten);
+    free(scalar_type);
+    return 1;
+}
+
+static int lower_list_filter_map_scalar_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    if (env->current_return_type[0] != '\0' &&
+        strcmp(env->current_return_type, "Int") != 0 &&
+        strcmp(env->current_return_type, "Bool") != 0) {
+        return 0;
+    }
+    char *rewritten = NULL;
+    char *scalar_type = NULL;
+    int is_exact = 0;
+    size_t indent_len = (size_t)(s - line);
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, skip_ws(s + 6), "vais_filter_map_scalar_return", temp_count, env, out, &rewritten, &scalar_type, &is_exact)) {
+        return 0;
+    }
+    if (env->current_return_type[0] != '\0' && is_exact && strcmp(env->current_return_type, scalar_type) != 0) {
+        free(rewritten);
+        free(scalar_type);
+        return 0;
+    }
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, rewritten);
+    lines_push(out, sb_take(&ret));
+
+    free(rewritten);
+    free(scalar_type);
+    return 1;
+}
+
+static int lower_list_filter_map_scalar_call_arg_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *expected_type,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **arg_out
+) {
+    if (expected_type == NULL || (strcmp(expected_type, "Int") != 0 && strcmp(expected_type, "Bool") != 0)) return 0;
+    char *rewritten = NULL;
+    char *scalar_type = NULL;
+    int is_exact = 0;
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, expr, "vais_filter_map_scalar_call_arg", temp_count, env, out, &rewritten, &scalar_type, &is_exact)) {
+        return 0;
+    }
+    if (is_exact && strcmp(expected_type, scalar_type) != 0) {
+        free(rewritten);
+        free(scalar_type);
+        return 0;
+    }
+    *arg_out = rewritten;
+    free(scalar_type);
+    return 1;
+}
+
+static int lower_list_filter_map_scalar_list_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(target);
+        return 0;
+    }
+    s++;
+    int is_insert = 0;
+    int method_len = 0;
+    if (starts_with(s, "push") && !is_ident_continue(s[4])) {
+        is_insert = 0;
+        method_len = 4;
+    } else if (starts_with(s, "insert_at") && !is_ident_continue(s[9])) {
+        is_insert = 1;
+        method_len = 9;
+    } else {
+        free(target);
+        return 0;
+    }
+    s = skip_ws(s + method_len);
+    if (*s != '(') {
+        free(target);
+        return 0;
+    }
+    int close = find_matching_paren_c(line, (int)(s - line));
+    if (close < 0) {
+        free(target);
+        return 0;
+    }
+    const char *line_tail = skip_ws(line + close + 1);
+    if (*line_tail == ';') line_tail = skip_ws(line_tail + 1);
+    if (*line_tail != '\0') {
+        free(target);
+        return 0;
+    }
+
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || strcmp(target_type, "List<Int>") != 0) {
+        free(target);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(s + 1, (size_t)(line + close - s - 1));
+    char *parts[2] = {0};
+    int part_count = split_top_level_commas_c(args_raw, parts, 2);
+    free(args_raw);
+    if ((!is_insert && part_count != 1) || (is_insert && part_count != 2)) {
+        for (int i = 0; i < 2; i++) free(parts[i]);
+        free(target);
+        return 0;
+    }
+    char *index_arg = is_insert ? parts[0] : NULL;
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(target_start - line);
+    if (!lower_list_str_pipeline_scalar_embedded_expr(line, indent_len, is_insert ? parts[1] : parts[0], "vais_filter_map_scalar_list_arg", temp_count, env, out, &rewritten, NULL, NULL)) {
+        free(index_arg);
+        free(parts[is_insert ? 1 : 0]);
+        free(target);
+        return 0;
+    }
+
+    StrBuf call;
+    sb_init(&call);
+    sb_append_n(&call, line, indent_len);
+    sb_append(&call, target);
+    if (is_insert) {
+        sb_append(&call, ".insert_at(");
+        sb_append(&call, index_arg);
+        sb_append(&call, ", ");
+        sb_append(&call, rewritten);
+        sb_append(&call, ")");
+    } else {
+        sb_append(&call, ".push(");
+        sb_append(&call, rewritten);
+        sb_append(&call, ")");
+    }
+    lines_push(out, sb_take(&call));
+
+    free(index_arg);
+    free(parts[is_insert ? 1 : 0]);
+    free(target);
+    free(rewritten);
+    return 1;
+}
+
+static int lower_list_filter_map_scalar_condition_line(
+    const char *line,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    int *extra_else_close_indent_out
+) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    const char *expr_start = NULL;
+    int is_while = 0;
+    int is_else_if = 0;
+    int has_leading_close = 0;
+    if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = -1;
+    if (starts_with(s, "if ") && !is_ident_continue(s[2])) {
+        expr_start = skip_ws(s + 3);
+    } else if (starts_with(s, "} else if ")) {
+        expr_start = skip_ws(s + 10);
+        is_else_if = 1;
+        has_leading_close = 1;
+    } else if (starts_with(s, "else if ") && !is_ident_continue(s[7])) {
+        expr_start = skip_ws(s + 8);
+        is_else_if = 1;
+    } else if (starts_with(s, "while ") && !is_ident_continue(s[5])) {
+        expr_start = skip_ws(s + 6);
+        is_while = 1;
+    } else {
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(expr_start);
+    size_t expr_len = strlen(expr);
+    while (expr_len > 0 && isspace((unsigned char)expr[expr_len - 1])) expr_len--;
+    if (expr_len == 0 || expr[expr_len - 1] != '{') {
+        free(expr);
+        return 0;
+    }
+    size_t expr_without_open_len = expr_len - 1;
+    while (expr_without_open_len > 0 && isspace((unsigned char)expr[expr_without_open_len - 1])) expr_without_open_len--;
+    char *condition_expr = substr_copy(expr, expr_without_open_len);
+    char *condition_rewritten = NULL;
+
+    LineVec condition_temps;
+    LineVec *emit_out = out;
+    const char *emit_line = line;
+    char *nested_emit_line = NULL;
+    size_t emit_indent_len = indent_len;
+    if (is_while || is_else_if) {
+        lines_init(&condition_temps);
+        emit_out = &condition_temps;
+        emit_indent_len = indent_len + 4;
+        nested_emit_line = (char *)malloc(emit_indent_len + 1);
+        if (nested_emit_line == NULL) die_oom();
+        memset(nested_emit_line, ' ', emit_indent_len);
+        nested_emit_line[emit_indent_len] = '\0';
+        emit_line = nested_emit_line;
+    }
+
+    if (!lower_list_str_pipeline_scalar_embedded_expr(emit_line, emit_indent_len, condition_expr, "vais_filter_map_scalar_cond", temp_count, env, emit_out, &condition_rewritten, NULL, NULL)) {
+        if (is_while || is_else_if) lines_free(&condition_temps);
+        free(nested_emit_line);
+        free(condition_expr);
+        free(expr);
+        return 0;
+    }
+
+    if (is_else_if) {
+        StrBuf else_head;
+        sb_init(&else_head);
+        sb_append_n(&else_head, line, indent_len);
+        sb_append(&else_head, has_leading_close ? "} else {" : "else {");
+        lines_push(out, sb_take(&else_head));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf inner_if;
+        sb_init(&inner_if);
+        sb_append_n(&inner_if, line, indent_len);
+        sb_append(&inner_if, "    if ");
+        sb_append(&inner_if, condition_rewritten);
+        sb_append(&inner_if, " {");
+        lines_push(out, sb_take(&inner_if));
+        if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = (int)indent_len;
+    } else if (is_while) {
+        StrBuf loop;
+        sb_init(&loop);
+        sb_append_n(&loop, line, indent_len);
+        sb_append(&loop, "while 1 {");
+        lines_push(out, sb_take(&loop));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf guard;
+        sb_init(&guard);
+        sb_append_n(&guard, line, indent_len);
+        sb_append(&guard, "    if (");
+        sb_append(&guard, condition_rewritten);
+        sb_append(&guard, ") == 0 { break }");
+        lines_push(out, sb_take(&guard));
+    } else {
+        StrBuf cond;
+        sb_init(&cond);
+        sb_append_n(&cond, line, indent_len);
+        sb_append(&cond, "if ");
+        sb_append(&cond, condition_rewritten);
+        sb_append(&cond, " {");
+        lines_push(out, sb_take(&cond));
+    }
+
+    free(condition_rewritten);
+    free(nested_emit_line);
+    free(condition_expr);
+    free(expr);
+    return 1;
+}
+
+static int parse_list_map_result_expr_exact(
+    const char *expr,
+    ListMethodEnv *env,
+    char **receiver_out,
+    char **param_out,
+    char **body_out,
+    char **result_type_out
+) {
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "map", env, &receiver, &param, &body, &after)) {
+        return 0;
+    }
+    const char *tail = skip_ws(after);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    if (receiver_type == NULL || !list_method_type_is_list(receiver_type)) {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, body, NULL);
+    *receiver_out = receiver;
+    *param_out = param;
+    *body_out = body;
+    *result_type_out = result_type;
+    return 1;
+}
+
+static int lower_list_map_result_call_arg_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *expected_type,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **arg_out
+) {
+    if (expected_type == NULL || !list_method_type_is_list(expected_type)) return 0;
+    char *expected_elem = list_method_list_element_type_copy(expected_type);
+    if (expected_elem == NULL ||
+        (strcmp(expected_elem, "Int") != 0 && strcmp(expected_elem, "Str") != 0)) {
+        free(expected_elem);
+        return 0;
+    }
+    char *arg_expr = trim_trailing_semicolon_copy(expr);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    char *result_type = NULL;
+    if (!parse_list_map_result_expr_exact(arg_expr, env, &receiver, &param, &body, &result_type) ||
+        strcmp(result_type, expected_type) != 0) {
+        free(expected_elem);
+        free(arg_expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_call_arg%d", id);
+    lower_list_map_result_emit(line, indent_len, receiver, param, body, result_type, temp_name, out);
+    *arg_out = strdup(temp_name);
+
+    free(expected_elem);
+    free(arg_expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(result_type);
+    return 1;
+}
+
+static int lower_list_map_result_extend_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(target);
+        return 0;
+    }
+    s++;
+    if (!starts_with(s, "extend") || is_ident_continue(s[6])) {
+        free(target);
+        return 0;
+    }
+    s = skip_ws(s + 6);
+    if (*s != '(') {
+        free(target);
+        return 0;
+    }
+    int close = find_matching_paren_c(line, (int)(s - line));
+    if (close < 0) {
+        free(target);
+        return 0;
+    }
+    const char *tail = skip_ws(line + close + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') {
+        free(target);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(s + 1, (size_t)(line + close - s - 1));
+    char *parts[2] = {0};
+    int part_count = split_top_level_commas_c(args_raw, parts, 2);
+    free(args_raw);
+    if (part_count != 1) {
+        for (int i = 0; i < 2; i++) free(parts[i]);
+        free(target);
+        return 0;
+    }
+    const char *target_type = list_method_env_type(env, target);
+    char *target_elem = target_type == NULL ? NULL : list_method_list_element_type_copy(target_type);
+    char *expr = trim_trailing_semicolon_copy(parts[0]);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    char *result_type = NULL;
+    if (target_type == NULL ||
+        target_elem == NULL ||
+        (strcmp(target_elem, "Int") != 0 && strcmp(target_elem, "Str") != 0) ||
+        !parse_list_map_result_expr_exact(expr, env, &receiver, &param, &body, &result_type) ||
+        strcmp(result_type, target_type) != 0) {
+        free(target_elem);
+        free(parts[0]);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(param);
+        free(body);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_extend_arg%d", id);
+    size_t indent_len = (size_t)(target_start - line);
+    lower_list_map_result_emit(line, indent_len, receiver, param, body, result_type, temp_name, out);
+
+    StrBuf call;
+    sb_init(&call);
+    sb_append_n(&call, line, indent_len);
+    sb_append(&call, target);
+    sb_append(&call, ".extend(");
+    sb_append(&call, temp_name);
+    sb_append(&call, ")");
+    lines_push(out, sb_take(&call));
+
+    free(target_elem);
+    free(parts[0]);
+    free(expr);
+    free(target);
+    free(receiver);
+    free(param);
+    free(body);
+    free(result_type);
+    return 1;
+}
+
+static int lower_list_map_result_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+
+    const char *target_type = list_method_env_type(env, target);
+    char *target_elem = target_type == NULL ? NULL : list_method_list_element_type_copy(target_type);
+    char *expr = trim_trailing_semicolon_copy(s + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    char *result_type = NULL;
+    if (target_type == NULL ||
+        target_elem == NULL ||
+        (strcmp(target_elem, "Int") != 0 && strcmp(target_elem, "Str") != 0) ||
+        !parse_list_map_result_expr_exact(expr, env, &receiver, &param, &body, &result_type) ||
+        strcmp(result_type, target_type) != 0) {
+        free(target_elem);
+        free(expr);
+        free(target);
+        free(receiver);
+        free(param);
+        free(body);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_reassign%d", id);
+    size_t indent_len = (size_t)(target_start - line);
+    lower_list_map_result_emit(line, indent_len, receiver, param, body, result_type, temp_name, out);
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, temp_name);
+    lines_push(out, sb_take(&assign));
+
+    free(target_elem);
+    free(expr);
+    free(target);
+    free(receiver);
+    free(param);
+    free(body);
+    free(result_type);
+    return 1;
+}
+
+static int lower_list_map_result_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    if (env->current_return_type[0] == '\0' || !list_method_type_is_list(env->current_return_type)) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    char *result_type = NULL;
+    if (!parse_list_map_result_expr_exact(expr, env, &receiver, &param, &body, &result_type) ||
+        strcmp(result_type, env->current_return_type) != 0) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_result%d", id);
+    size_t indent_len = (size_t)(s - line);
+    lower_list_map_result_emit(line, indent_len, receiver, param, body, result_type, temp_name, out);
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, temp_name);
+    lines_push(out, sb_take(&ret));
+
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(result_type);
+    return 1;
+}
+
+static void lower_list_map_sum_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *param,
+    const char *body,
+    const char *target_name,
+    int is_return,
+    int id,
+    LineVec *out
+) {
+    char temp[64];
+    snprintf(temp, sizeof(temp), "vais_map_sum%d", id);
+
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let mut ");
+    sb_append(&init, temp);
+    sb_append(&init, " = 0");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf add;
+    sb_init(&add);
+    sb_append_n(&add, line, indent_len);
+    sb_append(&add, "    ");
+    sb_append(&add, temp);
+    sb_append(&add, " = ");
+    sb_append(&add, temp);
+    sb_append(&add, " + ");
+    sb_append(&add, body);
+    lines_push(out, sb_take(&add));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    if (is_return) {
+        sb_append(&final_line, "return ");
+    } else {
+        sb_append(&final_line, "let ");
+        sb_append(&final_line, target_name);
+        sb_append(&final_line, " = ");
+    }
+    sb_append(&final_line, temp);
+    lines_push(out, sb_take(&final_line));
+}
+
+static int parse_list_map_int_aggregate_prefix_expr(
+    const char *expr,
+    ListMethodEnv *env,
+    char **receiver_out,
+    char **param_out,
+    char **body_out,
+    int *is_sum_out,
+    int *use_min_out,
+    char **tail_out
+);
+
+static void lower_list_map_aggregate_temp_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *param,
+    const char *body,
+    const char *temp_name,
+    int is_sum,
+    int use_min,
+    int id,
+    LineVec *out
+);
+
+static int list_map_aggregate_tail_is_supported(const char *tail);
+static int lower_list_map_aggregate_embedded_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *temp_prefix,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **rewritten_out
+);
+
+static int lower_list_map_aggregate_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    int is_mut = 0;
+    if (starts_with(name_start, "mut") && !is_ident_continue(name_start[3])) {
+        is_mut = 1;
+        name_start = skip_ws(name_start + 3);
+    }
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || strcmp(lhs_type, "Int") != 0)) {
+        free(lhs_type);
+        return 0;
+    }
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    char *tail = NULL;
+    int is_sum = 0;
+    int use_min = 0;
+    if (!parse_list_map_int_aggregate_prefix_expr(expr, env, &receiver, &param, &body, &is_sum, &use_min, &tail) ||
+        !list_map_aggregate_tail_is_supported(tail)) {
+        free(lhs_type);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(tail);
+        return 0;
+    }
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_agg_expr%d", id);
+    size_t indent_len = (size_t)(s - line);
+    lower_list_map_aggregate_temp_emit(line, indent_len, receiver, param, body, temp_name, is_sum, use_min, id, out);
+
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    sb_append(&final_line, "let ");
+    if (is_mut) sb_append(&final_line, "mut ");
+    sb_append(&final_line, name);
+    sb_append(&final_line, " = ");
+    sb_append(&final_line, temp_name);
+    sb_append(&final_line, tail);
+    lines_push(out, sb_take(&final_line));
+    list_method_env_set(env, name, "Int");
+
+    free(lhs_type);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(tail);
+    free(name);
+    return 1;
+}
+
+static int lower_list_map_aggregate_embedded_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    int is_mut = 0;
+    if (starts_with(name_start, "mut") && !is_ident_continue(name_start[3])) {
+        is_mut = 1;
+        name_start = skip_ws(name_start + 3);
+    }
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || strcmp(lhs_type, "Int") != 0)) {
+        free(lhs_type);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(s - line);
+    if (!lower_list_map_aggregate_embedded_expr(line, indent_len, eq + 1, "vais_map_agg_expr", temp_count, env, out, &rewritten)) {
+        free(lhs_type);
+        return 0;
+    }
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    sb_append(&final_line, "let ");
+    if (is_mut) sb_append(&final_line, "mut ");
+    sb_append(&final_line, name);
+    sb_append(&final_line, " = ");
+    sb_append(&final_line, rewritten);
+    lines_push(out, sb_take(&final_line));
+    list_method_env_set(env, name, "Int");
+
+    free(lhs_type);
+    free(name);
+    free(rewritten);
+    return 1;
+}
+
+static int lower_list_map_aggregate_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || strcmp(target_type, "Int") != 0) {
+        free(target);
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(s + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    char *tail = NULL;
+    int is_sum = 0;
+    int use_min = 0;
+    if (!parse_list_map_int_aggregate_prefix_expr(expr, env, &receiver, &param, &body, &is_sum, &use_min, &tail) ||
+        !list_map_aggregate_tail_is_supported(tail)) {
+        free(expr);
+        free(target);
+        free(receiver);
+        free(param);
+        free(body);
+        free(tail);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_agg_reassign%d", id);
+    size_t indent_len = (size_t)(target_start - line);
+    lower_list_map_aggregate_temp_emit(line, indent_len, receiver, param, body, temp_name, is_sum, use_min, id, out);
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, temp_name);
+    sb_append(&assign, tail);
+    lines_push(out, sb_take(&assign));
+
+    free(expr);
+    free(target);
+    free(receiver);
+    free(param);
+    free(body);
+    free(tail);
+    return 1;
+}
+
+static int lower_list_map_aggregate_embedded_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || strcmp(target_type, "Int") != 0) {
+        free(target);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(target_start - line);
+    if (!lower_list_map_aggregate_embedded_expr(line, indent_len, s + 1, "vais_map_agg_reassign", temp_count, env, out, &rewritten)) {
+        free(target);
+        return 0;
+    }
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, rewritten);
+    lines_push(out, sb_take(&assign));
+
+    free(target);
+    free(rewritten);
+    return 1;
+}
+
+static int lower_list_map_aggregate_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    char *tail = NULL;
+    int is_sum = 0;
+    int use_min = 0;
+    if ((env->current_return_type[0] != '\0' && strcmp(env->current_return_type, "Int") != 0) ||
+        !parse_list_map_int_aggregate_prefix_expr(expr, env, &receiver, &param, &body, &is_sum, &use_min, &tail) ||
+        !list_map_aggregate_tail_is_supported(tail)) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(tail);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_agg_expr%d", id);
+    size_t indent_len = (size_t)(s - line);
+    lower_list_map_aggregate_temp_emit(line, indent_len, receiver, param, body, temp_name, is_sum, use_min, id, out);
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, temp_name);
+    sb_append(&ret, tail);
+    lines_push(out, sb_take(&ret));
+
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(tail);
+    return 1;
+}
+
+static int lower_list_map_aggregate_embedded_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    if (env->current_return_type[0] != '\0' && strcmp(env->current_return_type, "Int") != 0) return 0;
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(s - line);
+    if (!lower_list_map_aggregate_embedded_expr(line, indent_len, skip_ws(s + 6), "vais_map_agg_return", temp_count, env, out, &rewritten)) {
+        return 0;
+    }
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, rewritten);
+    lines_push(out, sb_take(&ret));
+
+    free(rewritten);
+    return 1;
+}
+
+static int parse_list_map_int_aggregate_prefix_expr(
+    const char *expr,
+    ListMethodEnv *env,
+    char **receiver_out,
+    char **param_out,
+    char **body_out,
+    int *is_sum_out,
+    int *use_min_out,
+    char **tail_out
+) {
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "map", env, &receiver, &param, &body, &after)) {
+        return 0;
+    }
+    if (!closure_body_uses_param_or_list_method_env(body, param, env)) {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    if (receiver_type == NULL || !list_method_type_is_list(receiver_type)) {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, body, NULL);
+    if (strcmp(result_type, "List<Int>") != 0) {
+        free(result_type);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    free(result_type);
+
+    const char *method = skip_ws(after);
+    int is_sum = 0;
+    int use_min = 0;
+    if (starts_with(method, ".sum") && !is_ident_continue(method[4])) {
+        is_sum = 1;
+    } else if (starts_with(method, ".max") && !is_ident_continue(method[4])) {
+        use_min = 0;
+    } else if (starts_with(method, ".min") && !is_ident_continue(method[4])) {
+        use_min = 1;
+    } else {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *open = skip_ws(method + 4);
+    if (*open != '(') {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    int close_method = find_matching_paren_c(expr, (int)(open - expr));
+    if (close_method < 0) {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    char *args = substr_copy(open + 1, (size_t)(expr + close_method - open - 1));
+    char *args_trim = trim_copy(args);
+    free(args);
+    if (args_trim[0] != '\0') {
+        free(args_trim);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    free(args_trim);
+
+    *receiver_out = receiver;
+    *param_out = param;
+    *body_out = body;
+    *is_sum_out = is_sum;
+    *use_min_out = use_min;
+    *tail_out = strdup(skip_ws(expr + close_method + 1));
+    return 1;
+}
+
+static void lower_list_map_aggregate_temp_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *param,
+    const char *body,
+    const char *temp_name,
+    int is_sum,
+    int use_min,
+    int id,
+    LineVec *out
+) {
+    if (is_sum) {
+        lower_list_map_sum_emit(line, indent_len, receiver, param, body, temp_name, 0, id, out);
+    } else {
+        lower_list_filter_extreme_emit(line, indent_len, receiver, param, "1 == 1", body, temp_name, use_min, 0, id, out);
+    }
+}
+
+static int list_map_aggregate_tail_is_supported(const char *tail) {
+    const char *t = skip_ws(tail);
+    if (*t == '\0') return 1;
+    if (strstr(t, ".map") != NULL || strstr(t, ".filter") != NULL) return 0;
+    return *t == '+' || *t == '-' || *t == '*' || *t == '/' || *t == '%';
+}
+
+static int parse_list_map_int_aggregate_at_expr(
+    const char *expr,
+    size_t start,
+    ListMethodEnv *env,
+    char **receiver_out,
+    char **param_out,
+    char **body_out,
+    int *is_sum_out,
+    int *use_min_out,
+    size_t *aggregate_end_out
+) {
+    const char *sub = expr + start;
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(sub, "map", env, &receiver, &param, &body, &after)) {
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    if (receiver_type == NULL || !list_method_type_is_list(receiver_type)) {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, body, NULL);
+    if (strcmp(result_type, "List<Int>") != 0) {
+        free(result_type);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    free(result_type);
+
+    const char *method = skip_ws(after);
+    int is_sum = 0;
+    int use_min = 0;
+    if (starts_with(method, ".sum") && !is_ident_continue(method[4])) {
+        is_sum = 1;
+    } else if (starts_with(method, ".max") && !is_ident_continue(method[4])) {
+        use_min = 0;
+    } else if (starts_with(method, ".min") && !is_ident_continue(method[4])) {
+        use_min = 1;
+    } else {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *open = skip_ws(method + 4);
+    if (*open != '(') {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    int close_method = find_matching_paren_c(sub, (int)(open - sub));
+    if (close_method < 0) {
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    char *args = substr_copy(open + 1, (size_t)(sub + close_method - open - 1));
+    char *args_trim = trim_copy(args);
+    free(args);
+    if (args_trim[0] != '\0') {
+        free(args_trim);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    free(args_trim);
+
+    *receiver_out = receiver;
+    *param_out = param;
+    *body_out = body;
+    *is_sum_out = is_sum;
+    *use_min_out = use_min;
+    *aggregate_end_out = start + (size_t)close_method + 1;
+    return 1;
+}
+
+static int lower_list_map_aggregate_embedded_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *temp_prefix,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **rewritten_out
+) {
+    char *expr_copy = trim_trailing_semicolon_copy(expr);
+    size_t aggregate_start = 0;
+    size_t aggregate_end = 0;
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    int is_sum = 0;
+    int use_min = 0;
+    int found = 0;
+
+    for (size_t i = 0; expr_copy[i] != '\0'; i++) {
+        if (is_string_delim_c(expr_copy[i])) {
+            int end = skip_string_literal_c(expr_copy, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (expr_copy[i] == '\'') {
+            int end = skip_char_literal_c(expr_copy, (int)i);
+            if (end < 0) break;
+            i = (size_t)end - 1;
+            continue;
+        }
+        if (!is_ident_start(expr_copy[i])) continue;
+
+        char *local_receiver = NULL;
+        char *local_param = NULL;
+        char *local_body = NULL;
+        int local_is_sum = 0;
+        int local_use_min = 0;
+        size_t local_end = 0;
+        if (parse_list_map_int_aggregate_at_expr(expr_copy, i, env, &local_receiver, &local_param, &local_body, &local_is_sum, &local_use_min, &local_end)) {
+            const char *after = skip_ws(expr_copy + local_end);
+            if (*after == '.') {
+                free(local_receiver);
+                free(local_param);
+                free(local_body);
+                free(expr_copy);
+                return 0;
+            }
+            if (found) {
+                free(local_receiver);
+                free(local_param);
+                free(local_body);
+                free(receiver);
+                free(param);
+                free(body);
+                free(expr_copy);
+                return 0;
+            }
+            found = 1;
+            aggregate_start = i;
+            aggregate_end = local_end;
+            receiver = local_receiver;
+            param = local_param;
+            body = local_body;
+            is_sum = local_is_sum;
+            use_min = local_use_min;
+            i = local_end == 0 ? i : local_end - 1;
+            continue;
+        }
+        while (expr_copy[i + 1] != '\0' && is_ident_continue(expr_copy[i + 1])) i++;
+    }
+
+    if (!found) {
+        free(expr_copy);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "%s%d", temp_prefix, id);
+    lower_list_map_aggregate_temp_emit(line, indent_len, receiver, param, body, temp_name, is_sum, use_min, id, out);
+
+    StrBuf rewritten;
+    sb_init(&rewritten);
+    sb_append_n(&rewritten, expr_copy, aggregate_start);
+    sb_append(&rewritten, temp_name);
+    sb_append(&rewritten, expr_copy + aggregate_end);
+    *rewritten_out = sb_take(&rewritten);
+
+    free(expr_copy);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static int lower_list_map_aggregate_call_arg_expr(
+    const char *line,
+    size_t indent_len,
+    const char *expr,
+    const char *expected_type,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    char **arg_out
+) {
+    if (expected_type == NULL || strcmp(expected_type, "Int") != 0) return 0;
+    return lower_list_map_aggregate_embedded_expr(line, indent_len, expr, "vais_map_agg_call_arg", temp_count, env, out, arg_out);
+}
+
+static int lower_list_map_aggregate_condition_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out, int *extra_else_close_indent_out) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    const char *expr_start = NULL;
+    int is_while = 0;
+    int is_else_if = 0;
+    int has_leading_close = 0;
+    if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = -1;
+    if (starts_with(s, "if ") && !is_ident_continue(s[2])) {
+        expr_start = skip_ws(s + 3);
+    } else if (starts_with(s, "} else if ")) {
+        expr_start = skip_ws(s + 10);
+        is_else_if = 1;
+        has_leading_close = 1;
+    } else if (starts_with(s, "else if ") && !is_ident_continue(s[7])) {
+        expr_start = skip_ws(s + 8);
+        is_else_if = 1;
+    } else if (starts_with(s, "while ") && !is_ident_continue(s[5])) {
+        expr_start = skip_ws(s + 6);
+        is_while = 1;
+    } else {
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(expr_start);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    char *tail = NULL;
+    int is_sum = 0;
+    int use_min = 0;
+    if (!parse_list_map_int_aggregate_prefix_expr(expr, env, &receiver, &param, &body, &is_sum, &use_min, &tail)) {
+        free(expr);
+        return 0;
+    }
+
+    size_t tail_len = strlen(tail);
+    while (tail_len > 0 && isspace((unsigned char)tail[tail_len - 1])) tail_len--;
+    if (tail_len == 0 || tail[tail_len - 1] != '{') {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(tail);
+        return 0;
+    }
+    size_t tail_without_open_len = tail_len - 1;
+    while (tail_without_open_len > 0 && isspace((unsigned char)tail[tail_without_open_len - 1])) tail_without_open_len--;
+
+    int id = (*temp_count)++;
+    char temp_name[96];
+    snprintf(temp_name, sizeof(temp_name), "vais_map_agg_cond%d", id);
+
+    LineVec condition_temps;
+    LineVec *emit_out = out;
+    const char *emit_line = line;
+    char *nested_emit_line = NULL;
+    size_t emit_indent_len = indent_len;
+    if (is_while || is_else_if) {
+        lines_init(&condition_temps);
+        emit_out = &condition_temps;
+        emit_indent_len = indent_len + 4;
+        nested_emit_line = (char *)malloc(emit_indent_len + 1);
+        if (nested_emit_line == NULL) die_oom();
+        memset(nested_emit_line, ' ', emit_indent_len);
+        nested_emit_line[emit_indent_len] = '\0';
+        emit_line = nested_emit_line;
+    }
+    lower_list_map_aggregate_temp_emit(emit_line, emit_indent_len, receiver, param, body, temp_name, is_sum, use_min, id, emit_out);
+
+    if (is_else_if) {
+        StrBuf else_head;
+        sb_init(&else_head);
+        sb_append_n(&else_head, line, indent_len);
+        sb_append(&else_head, has_leading_close ? "} else {" : "else {");
+        lines_push(out, sb_take(&else_head));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf inner_if;
+        sb_init(&inner_if);
+        sb_append_n(&inner_if, line, indent_len);
+        sb_append(&inner_if, "    if ");
+        sb_append(&inner_if, temp_name);
+        sb_append(&inner_if, tail);
+        lines_push(out, sb_take(&inner_if));
+        if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = (int)indent_len;
+    } else if (is_while) {
+        StrBuf loop;
+        sb_init(&loop);
+        sb_append_n(&loop, line, indent_len);
+        sb_append(&loop, "while 1 {");
+        lines_push(out, sb_take(&loop));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf guard;
+        sb_init(&guard);
+        sb_append_n(&guard, line, indent_len);
+        sb_append(&guard, "    if (");
+        sb_append(&guard, temp_name);
+        if (tail_without_open_len > 0) sb_append_n(&guard, tail, tail_without_open_len);
+        sb_append(&guard, ") == 0 { break }");
+        lines_push(out, sb_take(&guard));
+    } else {
+        StrBuf cond;
+        sb_init(&cond);
+        sb_append_n(&cond, line, indent_len);
+        sb_append(&cond, "if ");
+        sb_append(&cond, temp_name);
+        sb_append(&cond, tail);
+        lines_push(out, sb_take(&cond));
+    }
+
+    free(nested_emit_line);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(tail);
+    return 1;
+}
+
+static int lower_list_map_aggregate_embedded_condition_line(
+    const char *line,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    int *extra_else_close_indent_out
+) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    const char *expr_start = NULL;
+    int is_while = 0;
+    int is_else_if = 0;
+    int has_leading_close = 0;
+    if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = -1;
+    if (starts_with(s, "if ") && !is_ident_continue(s[2])) {
+        expr_start = skip_ws(s + 3);
+    } else if (starts_with(s, "} else if ")) {
+        expr_start = skip_ws(s + 10);
+        is_else_if = 1;
+        has_leading_close = 1;
+    } else if (starts_with(s, "else if ") && !is_ident_continue(s[7])) {
+        expr_start = skip_ws(s + 8);
+        is_else_if = 1;
+    } else if (starts_with(s, "while ") && !is_ident_continue(s[5])) {
+        expr_start = skip_ws(s + 6);
+        is_while = 1;
+    } else {
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(expr_start);
+    size_t expr_len = strlen(expr);
+    while (expr_len > 0 && isspace((unsigned char)expr[expr_len - 1])) expr_len--;
+    if (expr_len == 0 || expr[expr_len - 1] != '{') {
+        free(expr);
+        return 0;
+    }
+    size_t expr_without_open_len = expr_len - 1;
+    while (expr_without_open_len > 0 && isspace((unsigned char)expr[expr_without_open_len - 1])) expr_without_open_len--;
+    char *condition_expr = substr_copy(expr, expr_without_open_len);
+    char *condition_rewritten = NULL;
+
+    LineVec condition_temps;
+    LineVec *emit_out = out;
+    const char *emit_line = line;
+    char *nested_emit_line = NULL;
+    size_t emit_indent_len = indent_len;
+    if (is_while || is_else_if) {
+        lines_init(&condition_temps);
+        emit_out = &condition_temps;
+        emit_indent_len = indent_len + 4;
+        nested_emit_line = (char *)malloc(emit_indent_len + 1);
+        if (nested_emit_line == NULL) die_oom();
+        memset(nested_emit_line, ' ', emit_indent_len);
+        nested_emit_line[emit_indent_len] = '\0';
+        emit_line = nested_emit_line;
+    }
+
+    if (!lower_list_map_aggregate_embedded_expr(emit_line, emit_indent_len, condition_expr, "vais_map_agg_cond", temp_count, env, emit_out, &condition_rewritten)) {
+        if (is_while || is_else_if) lines_free(&condition_temps);
+        free(nested_emit_line);
+        free(condition_expr);
+        free(expr);
+        return 0;
+    }
+
+    if (is_else_if) {
+        StrBuf else_head;
+        sb_init(&else_head);
+        sb_append_n(&else_head, line, indent_len);
+        sb_append(&else_head, has_leading_close ? "} else {" : "else {");
+        lines_push(out, sb_take(&else_head));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf inner_if;
+        sb_init(&inner_if);
+        sb_append_n(&inner_if, line, indent_len);
+        sb_append(&inner_if, "    if ");
+        sb_append(&inner_if, condition_rewritten);
+        sb_append(&inner_if, " {");
+        lines_push(out, sb_take(&inner_if));
+        if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = (int)indent_len;
+    } else if (is_while) {
+        StrBuf loop;
+        sb_init(&loop);
+        sb_append_n(&loop, line, indent_len);
+        sb_append(&loop, "while 1 {");
+        lines_push(out, sb_take(&loop));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf guard;
+        sb_init(&guard);
+        sb_append_n(&guard, line, indent_len);
+        sb_append(&guard, "    if (");
+        sb_append(&guard, condition_rewritten);
+        sb_append(&guard, ") == 0 { break }");
+        lines_push(out, sb_take(&guard));
+    } else {
+        StrBuf cond;
+        sb_init(&cond);
+        sb_append_n(&cond, line, indent_len);
+        sb_append(&cond, "if ");
+        sb_append(&cond, condition_rewritten);
+        sb_append(&cond, " {");
+        lines_push(out, sb_take(&cond));
+    }
+
+    free(condition_rewritten);
+    free(nested_emit_line);
+    free(condition_expr);
+    free(expr);
+    return 1;
+}
+
+static int lower_list_map_aggregate_list_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(target);
+        return 0;
+    }
+    s++;
+    int is_insert = 0;
+    int method_len = 0;
+    if (starts_with(s, "push") && !is_ident_continue(s[4])) {
+        is_insert = 0;
+        method_len = 4;
+    } else if (starts_with(s, "insert_at") && !is_ident_continue(s[9])) {
+        is_insert = 1;
+        method_len = 9;
+    } else {
+        free(target);
+        return 0;
+    }
+    s = skip_ws(s + method_len);
+    if (*s != '(') {
+        free(target);
+        return 0;
+    }
+    int close = find_matching_paren_c(line, (int)(s - line));
+    if (close < 0) {
+        free(target);
+        return 0;
+    }
+    const char *line_tail = skip_ws(line + close + 1);
+    if (*line_tail == ';') line_tail = skip_ws(line_tail + 1);
+    if (*line_tail != '\0') {
+        free(target);
+        return 0;
+    }
+
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || strcmp(target_type, "List<Int>") != 0) {
+        free(target);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(s + 1, (size_t)(line + close - s - 1));
+    char *parts[2] = {0};
+    int part_count = split_top_level_commas_c(args_raw, parts, 2);
+    free(args_raw);
+    if ((!is_insert && part_count != 1) || (is_insert && part_count != 2)) {
+        for (int i = 0; i < 2; i++) free(parts[i]);
+        free(target);
+        return 0;
+    }
+    char *index_arg = is_insert ? parts[0] : NULL;
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(target_start - line);
+    if (!lower_list_map_aggregate_embedded_expr(line, indent_len, is_insert ? parts[1] : parts[0], "vais_map_agg_list_arg", temp_count, env, out, &rewritten)) {
+        free(index_arg);
+        free(parts[is_insert ? 1 : 0]);
+        free(target);
+        return 0;
+    }
+
+    StrBuf call;
+    sb_init(&call);
+    sb_append_n(&call, line, indent_len);
+    sb_append(&call, target);
+    if (is_insert) {
+        sb_append(&call, ".insert_at(");
+        sb_append(&call, index_arg);
+        sb_append(&call, ", ");
+        sb_append(&call, rewritten);
+        sb_append(&call, ")");
+    } else {
+        sb_append(&call, ".push(");
+        sb_append(&call, rewritten);
+        sb_append(&call, ")");
+    }
+    lines_push(out, sb_take(&call));
+
+    free(index_arg);
+    free(parts[is_insert ? 1 : 0]);
+    free(target);
+    free(rewritten);
+    return 1;
+}
+
+static int lower_list_filter_map_aggregate_embedded_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    int is_mut = 0;
+    if (starts_with(name_start, "mut") && !is_ident_continue(name_start[3])) {
+        is_mut = 1;
+        name_start = skip_ws(name_start + 3);
+    }
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || strcmp(lhs_type, "Int") != 0)) {
+        free(lhs_type);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(s - line);
+    if (!lower_list_filter_map_aggregate_embedded_expr(line, indent_len, eq + 1, "vais_filter_map_agg_expr", temp_count, env, out, &rewritten)) {
+        free(lhs_type);
+        return 0;
+    }
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    sb_append(&final_line, "let ");
+    if (is_mut) sb_append(&final_line, "mut ");
+    sb_append(&final_line, name);
+    sb_append(&final_line, " = ");
+    sb_append(&final_line, rewritten);
+    lines_push(out, sb_take(&final_line));
+    list_method_env_set(env, name, "Int");
+
+    free(lhs_type);
+    free(name);
+    free(rewritten);
+    return 1;
+}
+
+static int lower_list_filter_map_aggregate_embedded_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || strcmp(target_type, "Int") != 0) {
+        free(target);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(target_start - line);
+    if (!lower_list_filter_map_aggregate_embedded_expr(line, indent_len, s + 1, "vais_filter_map_agg_reassign", temp_count, env, out, &rewritten)) {
+        free(target);
+        return 0;
+    }
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, rewritten);
+    lines_push(out, sb_take(&assign));
+
+    free(target);
+    free(rewritten);
+    return 1;
+}
+
+static int lower_list_filter_map_aggregate_embedded_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    if (env->current_return_type[0] != '\0' && strcmp(env->current_return_type, "Int") != 0) return 0;
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(s - line);
+    if (!lower_list_filter_map_aggregate_embedded_expr(line, indent_len, skip_ws(s + 6), "vais_filter_map_agg_return", temp_count, env, out, &rewritten)) {
+        return 0;
+    }
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, rewritten);
+    lines_push(out, sb_take(&ret));
+
+    free(rewritten);
+    return 1;
+}
+
+static int lower_list_filter_map_aggregate_list_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(target);
+        return 0;
+    }
+    s++;
+    int is_insert = 0;
+    int method_len = 0;
+    if (starts_with(s, "push") && !is_ident_continue(s[4])) {
+        is_insert = 0;
+        method_len = 4;
+    } else if (starts_with(s, "insert_at") && !is_ident_continue(s[9])) {
+        is_insert = 1;
+        method_len = 9;
+    } else {
+        free(target);
+        return 0;
+    }
+    s = skip_ws(s + method_len);
+    if (*s != '(') {
+        free(target);
+        return 0;
+    }
+    int close = find_matching_paren_c(line, (int)(s - line));
+    if (close < 0) {
+        free(target);
+        return 0;
+    }
+    const char *line_tail = skip_ws(line + close + 1);
+    if (*line_tail == ';') line_tail = skip_ws(line_tail + 1);
+    if (*line_tail != '\0') {
+        free(target);
+        return 0;
+    }
+
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || strcmp(target_type, "List<Int>") != 0) {
+        free(target);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(s + 1, (size_t)(line + close - s - 1));
+    char *parts[2] = {0};
+    int part_count = split_top_level_commas_c(args_raw, parts, 2);
+    free(args_raw);
+    if ((!is_insert && part_count != 1) || (is_insert && part_count != 2)) {
+        for (int i = 0; i < 2; i++) free(parts[i]);
+        free(target);
+        return 0;
+    }
+    char *index_arg = is_insert ? parts[0] : NULL;
+    char *rewritten = NULL;
+    size_t indent_len = (size_t)(target_start - line);
+    if (!lower_list_filter_map_aggregate_embedded_expr(line, indent_len, is_insert ? parts[1] : parts[0], "vais_filter_map_agg_list_arg", temp_count, env, out, &rewritten)) {
+        free(index_arg);
+        free(parts[is_insert ? 1 : 0]);
+        free(target);
+        return 0;
+    }
+
+    StrBuf call;
+    sb_init(&call);
+    sb_append_n(&call, line, indent_len);
+    sb_append(&call, target);
+    if (is_insert) {
+        sb_append(&call, ".insert_at(");
+        sb_append(&call, index_arg);
+        sb_append(&call, ", ");
+        sb_append(&call, rewritten);
+        sb_append(&call, ")");
+    } else {
+        sb_append(&call, ".push(");
+        sb_append(&call, rewritten);
+        sb_append(&call, ")");
+    }
+    lines_push(out, sb_take(&call));
+
+    free(index_arg);
+    free(parts[is_insert ? 1 : 0]);
+    free(target);
+    free(rewritten);
+    return 1;
+}
+
+static int lower_list_filter_map_aggregate_embedded_condition_line(
+    const char *line,
+    int *temp_count,
+    ListMethodEnv *env,
+    LineVec *out,
+    int *extra_else_close_indent_out
+) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    const char *expr_start = NULL;
+    int is_while = 0;
+    int is_else_if = 0;
+    int has_leading_close = 0;
+    if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = -1;
+    if (starts_with(s, "if ") && !is_ident_continue(s[2])) {
+        expr_start = skip_ws(s + 3);
+    } else if (starts_with(s, "} else if ")) {
+        expr_start = skip_ws(s + 10);
+        is_else_if = 1;
+        has_leading_close = 1;
+    } else if (starts_with(s, "else if ") && !is_ident_continue(s[7])) {
+        expr_start = skip_ws(s + 8);
+        is_else_if = 1;
+    } else if (starts_with(s, "while ") && !is_ident_continue(s[5])) {
+        expr_start = skip_ws(s + 6);
+        is_while = 1;
+    } else {
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(expr_start);
+    size_t expr_len = strlen(expr);
+    while (expr_len > 0 && isspace((unsigned char)expr[expr_len - 1])) expr_len--;
+    if (expr_len == 0 || expr[expr_len - 1] != '{') {
+        free(expr);
+        return 0;
+    }
+    size_t expr_without_open_len = expr_len - 1;
+    while (expr_without_open_len > 0 && isspace((unsigned char)expr[expr_without_open_len - 1])) expr_without_open_len--;
+    char *condition_expr = substr_copy(expr, expr_without_open_len);
+    char *condition_rewritten = NULL;
+
+    LineVec condition_temps;
+    LineVec *emit_out = out;
+    const char *emit_line = line;
+    char *nested_emit_line = NULL;
+    size_t emit_indent_len = indent_len;
+    if (is_while || is_else_if) {
+        lines_init(&condition_temps);
+        emit_out = &condition_temps;
+        emit_indent_len = indent_len + 4;
+        nested_emit_line = (char *)malloc(emit_indent_len + 1);
+        if (nested_emit_line == NULL) die_oom();
+        memset(nested_emit_line, ' ', emit_indent_len);
+        nested_emit_line[emit_indent_len] = '\0';
+        emit_line = nested_emit_line;
+    }
+
+    if (!lower_list_filter_map_aggregate_embedded_expr(emit_line, emit_indent_len, condition_expr, "vais_filter_map_agg_cond", temp_count, env, emit_out, &condition_rewritten)) {
+        if (is_while || is_else_if) lines_free(&condition_temps);
+        free(nested_emit_line);
+        free(condition_expr);
+        free(expr);
+        return 0;
+    }
+
+    if (is_else_if) {
+        StrBuf else_head;
+        sb_init(&else_head);
+        sb_append_n(&else_head, line, indent_len);
+        sb_append(&else_head, has_leading_close ? "} else {" : "else {");
+        lines_push(out, sb_take(&else_head));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf inner_if;
+        sb_init(&inner_if);
+        sb_append_n(&inner_if, line, indent_len);
+        sb_append(&inner_if, "    if ");
+        sb_append(&inner_if, condition_rewritten);
+        sb_append(&inner_if, " {");
+        lines_push(out, sb_take(&inner_if));
+        if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = (int)indent_len;
+    } else if (is_while) {
+        StrBuf loop;
+        sb_init(&loop);
+        sb_append_n(&loop, line, indent_len);
+        sb_append(&loop, "while 1 {");
+        lines_push(out, sb_take(&loop));
+        for (size_t i = 0; i < condition_temps.len; i++) lines_push(out, condition_temps.items[i]);
+        free(condition_temps.items);
+
+        StrBuf guard;
+        sb_init(&guard);
+        sb_append_n(&guard, line, indent_len);
+        sb_append(&guard, "    if (");
+        sb_append(&guard, condition_rewritten);
+        sb_append(&guard, ") == 0 { break }");
+        lines_push(out, sb_take(&guard));
+    } else {
+        StrBuf cond;
+        sb_init(&cond);
+        sb_append_n(&cond, line, indent_len);
+        sb_append(&cond, "if ");
+        sb_append(&cond, condition_rewritten);
+        sb_append(&cond, " {");
+        lines_push(out, sb_take(&cond));
+    }
+
+    free(condition_rewritten);
+    free(nested_emit_line);
+    free(condition_expr);
+    free(expr);
+    return 1;
+}
+
+static int lower_list_filter_pick_field_call_arg_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out, int *extra_else_close_indent_out) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    const char *expr_start = NULL;
+    char *let_name = NULL;
+    int is_let = 0;
+    int is_while = 0;
+    int is_else_if = 0;
+    int has_leading_close = 0;
+    if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = -1;
+    if (starts_with(s, "return ") && !is_ident_continue(s[6])) {
+        expr_start = skip_ws(s + 7);
+    } else if (starts_with(s, "let ") && !is_ident_continue(s[3])) {
+        const char *name_start = skip_ws(s + 4);
+        if (starts_with(name_start, "mut") && !is_ident_continue(name_start[3])) {
+            name_start = skip_ws(name_start + 3);
+        }
+        if (!is_ident_start(*name_start)) return 0;
+        const char *name_end = name_start + 1;
+        while (is_ident_continue(*name_end)) name_end++;
+        const char *eq = strchr(name_end, '=');
+        if (eq == NULL) return 0;
+        let_name = substr_copy(name_start, (size_t)(name_end - name_start));
+        expr_start = skip_ws(eq + 1);
+        is_let = 1;
+    } else if (starts_with(s, "if ") && !is_ident_continue(s[2])) {
+        expr_start = skip_ws(s + 3);
+    } else if (starts_with(s, "} else if ")) {
+        expr_start = skip_ws(s + 10);
+        is_else_if = 1;
+        has_leading_close = 1;
+    } else if (starts_with(s, "else if ") && !is_ident_continue(s[7])) {
+        expr_start = skip_ws(s + 8);
+        is_else_if = 1;
+    } else if (starts_with(s, "while ") && !is_ident_continue(s[5])) {
+        expr_start = skip_ws(s + 6);
+        is_while = 1;
+    } else {
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(expr_start);
+    const char *callee_start = skip_ws(expr);
+    if (!is_ident_start(*callee_start)) {
+        free(expr);
+        free(let_name);
+        return 0;
+    }
+    const char *callee_end = callee_start + 1;
+    while (is_ident_continue(*callee_end)) callee_end++;
+    const char *open = skip_ws(callee_end);
+    if (*open != '(') {
+        free(expr);
+        free(let_name);
+        return 0;
+    }
+    int close = find_matching_paren_c(expr, (int)(open - expr));
+    if (close < 0) {
+        free(expr);
+        free(let_name);
+        return 0;
+    }
+    const char *tail = skip_ws(expr + close + 1);
+    size_t while_tail_len = strlen(tail);
+    if (is_while) {
+        while (while_tail_len > 0 && isspace((unsigned char)tail[while_tail_len - 1])) while_tail_len--;
+        if (while_tail_len == 0 || tail[while_tail_len - 1] != '{') {
+            free(expr);
+            free(let_name);
+            return 0;
+        }
+        while_tail_len--;
+        while (while_tail_len > 0 && isspace((unsigned char)tail[while_tail_len - 1])) while_tail_len--;
+    }
+    if (is_else_if) {
+        size_t else_tail_len = strlen(tail);
+        while (else_tail_len > 0 && isspace((unsigned char)tail[else_tail_len - 1])) else_tail_len--;
+        if (else_tail_len == 0 || tail[else_tail_len - 1] != '{') {
+            free(expr);
+            free(let_name);
+            return 0;
+        }
+    }
+
+    char *callee = substr_copy(callee_start, (size_t)(callee_end - callee_start));
+    ListMethodFnSig *fn = list_method_env_fn(env, callee);
+    if (fn == NULL) {
+        free(callee);
+        free(expr);
+        free(let_name);
+        return 0;
+    }
+
+    char *args_raw = substr_copy(open + 1, (size_t)(expr + close - open - 1));
+    char *args[16] = {0};
+    int argc = split_top_level_commas_c(args_raw, args, 16);
+    free(args_raw);
+    if (argc < 0 || argc != fn->param_count) {
+        for (int i = 0; i < 16; i++) free(args[i]);
+        free(callee);
+        free(expr);
+        free(let_name);
+        return 0;
+    }
+
+    char *rewritten[16] = {0};
+    LineVec while_temps;
+    LineVec *emit_out = out;
+    const char *emit_line = line;
+    char *while_emit_line = NULL;
+    size_t emit_indent_len = indent_len;
+    if (is_while || is_else_if) {
+        lines_init(&while_temps);
+        emit_out = &while_temps;
+        emit_indent_len = indent_len + 4;
+        while_emit_line = (char *)malloc(emit_indent_len + 1);
+        if (while_emit_line == NULL) die_oom();
+        memset(while_emit_line, ' ', emit_indent_len);
+        while_emit_line[emit_indent_len] = '\0';
+        emit_line = while_emit_line;
+    }
+    int lowered_any = 0;
+    int ok = 1;
+    for (int i = 0; i < argc; i++) {
+        if (strstr(args[i], ".map") != NULL &&
+            lower_list_map_aggregate_call_arg_expr(emit_line, emit_indent_len, args[i], fn->param_types[i], temp_count, env, emit_out, &rewritten[i])) {
+            lowered_any = 1;
+        } else if (strstr(args[i], ".filter") != NULL && strstr(args[i], ".map") != NULL &&
+            lower_list_filter_map_aggregate_call_arg_expr(emit_line, emit_indent_len, args[i], fn->param_types[i], temp_count, env, emit_out, &rewritten[i])) {
+            lowered_any = 1;
+        } else if (strstr(args[i], ".filter") != NULL && strstr(args[i], ".map") != NULL &&
+            lower_list_filter_map_scalar_call_arg_expr(emit_line, emit_indent_len, args[i], fn->param_types[i], temp_count, env, emit_out, &rewritten[i])) {
+            lowered_any = 1;
+        } else if (strstr(args[i], ".map") != NULL && strstr(args[i], ".filter") != NULL &&
+            lower_list_map_filter_scalar_call_arg_expr(emit_line, emit_indent_len, args[i], fn->param_types[i], temp_count, env, emit_out, &rewritten[i])) {
+            lowered_any = 1;
+        } else if (strstr(args[i], ".map") != NULL &&
+            lower_list_map_result_call_arg_expr(emit_line, emit_indent_len, args[i], fn->param_types[i], temp_count, env, emit_out, &rewritten[i])) {
+            lowered_any = 1;
+        } else if (strstr(args[i], ".map") != NULL && strstr(args[i], ".filter") != NULL &&
+            lower_list_map_filter_result_call_arg_expr(emit_line, emit_indent_len, args[i], fn->param_types[i], temp_count, env, emit_out, &rewritten[i])) {
+            lowered_any = 1;
+        } else if (strstr(args[i], ".filter") != NULL && strstr(args[i], ".map") != NULL &&
+            lower_list_filter_map_result_call_arg_expr(emit_line, emit_indent_len, args[i], fn->param_types[i], temp_count, env, emit_out, &rewritten[i])) {
+            lowered_any = 1;
+        } else if (strstr(args[i], ".filter") != NULL &&
+            lower_list_filter_pick_field_call_arg_expr(emit_line, emit_indent_len, args[i], fn->param_types[i], temp_count, env, emit_out, &rewritten[i])) {
+            lowered_any = 1;
+        } else if (strstr(args[i], ".filter") != NULL &&
+            lower_list_filter_pick_struct_call_arg_expr(emit_line, emit_indent_len, args[i], fn->param_types[i], temp_count, env, emit_out, &rewritten[i])) {
+            lowered_any = 1;
+        } else if (strstr(args[i], ".filter") != NULL) {
+            ok = 0;
+            break;
+        } else if (strstr(args[i], ".map") != NULL) {
+            ok = 0;
+            break;
+        } else {
+            rewritten[i] = strdup(args[i]);
+        }
+    }
+    if (!ok || !lowered_any) {
+        for (int i = 0; i < 16; i++) {
+            free(args[i]);
+            free(rewritten[i]);
+        }
+        if (is_while || is_else_if) lines_free(&while_temps);
+        free(while_emit_line);
+        free(callee);
+        free(expr);
+        free(let_name);
+        return 0;
+    }
+
+    if (is_else_if) {
+        StrBuf else_head;
+        sb_init(&else_head);
+        sb_append_n(&else_head, line, indent_len);
+        sb_append(&else_head, has_leading_close ? "} else {" : "else {");
+        lines_push(out, sb_take(&else_head));
+        for (size_t i = 0; i < while_temps.len; i++) lines_push(out, while_temps.items[i]);
+        free(while_temps.items);
+
+        StrBuf inner_if;
+        sb_init(&inner_if);
+        sb_append_n(&inner_if, line, indent_len);
+        sb_append(&inner_if, "    if ");
+        sb_append(&inner_if, callee);
+        sb_append(&inner_if, "(");
+        for (int i = 0; i < argc; i++) {
+            if (i > 0) sb_append(&inner_if, ", ");
+            sb_append(&inner_if, rewritten[i]);
+        }
+        sb_append(&inner_if, ")");
+        sb_append(&inner_if, tail);
+        lines_push(out, sb_take(&inner_if));
+        if (extra_else_close_indent_out != NULL) *extra_else_close_indent_out = (int)indent_len;
+    } else if (is_while) {
+        StrBuf loop;
+        sb_init(&loop);
+        sb_append_n(&loop, line, indent_len);
+        sb_append(&loop, "while 1 {");
+        lines_push(out, sb_take(&loop));
+        for (size_t i = 0; i < while_temps.len; i++) lines_push(out, while_temps.items[i]);
+        free(while_temps.items);
+
+        StrBuf guard;
+        sb_init(&guard);
+        sb_append_n(&guard, line, indent_len);
+        sb_append(&guard, "    if (");
+        sb_append(&guard, callee);
+        sb_append(&guard, "(");
+        for (int i = 0; i < argc; i++) {
+            if (i > 0) sb_append(&guard, ", ");
+            sb_append(&guard, rewritten[i]);
+        }
+        sb_append(&guard, ")");
+        if (while_tail_len > 0) sb_append_n(&guard, tail, while_tail_len);
+        sb_append(&guard, ") == 0 { break }");
+        lines_push(out, sb_take(&guard));
+    } else {
+        StrBuf call;
+        sb_init(&call);
+        sb_append_n(&call, line, (size_t)(expr_start - line));
+        sb_append(&call, callee);
+        sb_append(&call, "(");
+        for (int i = 0; i < argc; i++) {
+            if (i > 0) sb_append(&call, ", ");
+            sb_append(&call, rewritten[i]);
+        }
+        sb_append(&call, ")");
+        sb_append(&call, tail);
+        lines_push(out, sb_take(&call));
+    }
+    if (is_let && let_name != NULL && fn->return_type != NULL) {
+        const char *tail_op = skip_ws(tail);
+        int int_arith_tail = strcmp(fn->return_type, "Int") == 0 &&
+            (*tail_op == '+' || *tail_op == '-' || *tail_op == '*' || *tail_op == '/' || *tail_op == '%');
+        if (*tail_op == '\0' || int_arith_tail) {
+            list_method_env_set(env, let_name, fn->return_type);
+        }
+    }
+
+    for (int i = 0; i < 16; i++) {
+        free(args[i]);
+        free(rewritten[i]);
+    }
+    free(while_emit_line);
+    free(callee);
+    free(expr);
+    free(let_name);
+    return 1;
+}
+
+static int lower_list_filter_pick_field_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || !list_filter_pick_field_result_type_supported(lhs_type))) {
+        free(lhs_type);
+        return 0;
+    }
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    int use_last = 0;
+    int len_chain = 0;
+    char *field = NULL;
+    char *elem_type = receiver_type == NULL ? NULL : list_method_list_element_type_copy(receiver_type);
+    char *result_type = NULL;
+    if (receiver_type == NULL ||
+        elem_type == NULL ||
+        !list_method_type_is_list(receiver_type) ||
+        strcmp(receiver_type, "List<Int>") == 0 ||
+        strcmp(receiver_type, "List<Str>") == 0 ||
+        !parse_list_filter_pick_field_tail(expr, after, &use_last, &len_chain, &field)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(field);
+        free(elem_type);
+        return 0;
+    }
+    if (had_annotation) {
+        result_type = strdup(lhs_type);
+    } else if (len_chain) {
+        result_type = strdup("Int");
+    } else {
+        const char *field_type = list_method_struct_field_type(env, elem_type, field);
+        if (field_type != NULL) result_type = strdup(field_type);
+    }
+    if (result_type == NULL ||
+        !list_filter_pick_field_result_type_supported(result_type) ||
+        (len_chain && strcmp(result_type, "Int") != 0)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(field);
+        free(elem_type);
+        free(result_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_pick_field_emit(line, indent_len, receiver, receiver_type, param, body, field, result_type, name, use_last, len_chain, 0, id, out);
+    list_method_env_set(env, name, result_type);
+    free(lhs_type);
+    free(result_type);
+    free(elem_type);
+    free(name);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(field);
+    return 1;
+}
+
+static int lower_list_filter_map_sum_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || strcmp(lhs_type, "Int") != 0)) {
+        free(lhs_type);
+        return 0;
+    }
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        return 0;
+    }
+    char *map_body = NULL;
+    if (!parse_list_filter_map_sum_tail(expr, after, env, param, &map_body)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    char temp[64];
+    snprintf(temp, sizeof(temp), "vais_filter_map_sum%d", (*temp_count)++);
+    size_t indent_len = (size_t)(s - line);
+
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let mut ");
+    sb_append(&init, temp);
+    sb_append(&init, " = 0");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf add;
+    sb_init(&add);
+    sb_append_n(&add, line, indent_len);
+    sb_append(&add, "        ");
+    sb_append(&add, temp);
+    sb_append(&add, " = ");
+    sb_append(&add, temp);
+    sb_append(&add, " + ");
+    sb_append(&add, map_body);
+    lines_push(out, sb_take(&add));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, "let ");
+    sb_append(&assign, name);
+    sb_append(&assign, " = ");
+    sb_append(&assign, temp);
+    lines_push(out, sb_take(&assign));
+
+    list_method_env_set(env, name, "Int");
+    free(lhs_type);
+    free(name);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static void lower_list_filter_map_result_emit(
+    const char *line,
+    size_t indent_len,
+    const char *receiver,
+    const char *param,
+    const char *body,
+    const char *map_body,
+    const char *result_type,
+    const char *name,
+    LineVec *out
+) {
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let ");
+    sb_append(&init, name);
+    sb_append(&init, ": ");
+    sb_append(&init, result_type);
+    sb_append(&init, " = []");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf push;
+    sb_init(&push);
+    sb_append_n(&push, line, indent_len);
+    sb_append(&push, "        ");
+    sb_append(&push, name);
+    sb_append(&push, ".push(");
+    sb_append(&push, map_body);
+    sb_append(&push, ")");
+    lines_push(out, sb_take(&push));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+}
+
+static int lower_list_filter_map_result_assignment_line(const char *line, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_lhs_type(name_end, eq, &had_annotation);
+    if (had_annotation && lhs_type == NULL) {
+        free(name);
+        return 0;
+    }
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        return 0;
+    }
+    char *map_body = NULL;
+    if (!parse_list_filter_map_result_tail(expr, after, env, param, &map_body)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, map_body, lhs_type);
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_map_result_emit(line, indent_len, receiver, param, body, map_body, result_type, name, out);
+
+    list_method_env_set(env, name, result_type);
+    free(name);
+    free(lhs_type);
+    free(result_type);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static int lower_list_filter_map_result_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    if (env->current_return_type[0] == '\0' || !list_method_type_is_list(env->current_return_type)) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(expr);
+        return 0;
+    }
+    char *map_body = NULL;
+    if (!parse_list_filter_map_result_tail(expr, after, env, param, &map_body)) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    char *result_type = list_method_map_result_list_type(env, receiver_type, param, map_body, NULL);
+    if (strcmp(result_type, env->current_return_type) != 0) {
+        free(result_type);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(map_body);
+        return 0;
+    }
+
+    char temp[64];
+    snprintf(temp, sizeof(temp), "vais_filter_map_result%d", (*temp_count)++);
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_map_result_emit(line, indent_len, receiver, param, body, map_body, env->current_return_type, temp, out);
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, temp);
+    lines_push(out, sb_take(&ret));
+
+    free(result_type);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static int lower_list_filter_sum_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || strcmp(lhs_type, "Int") != 0)) {
+        free(lhs_type);
+        return 0;
+    }
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        return 0;
+    }
+    const char *sum = skip_ws(after);
+    if (!starts_with(sum, ".sum") || is_ident_continue(sum[4])) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *open = skip_ws(sum + 4);
+    if (*open != '(') {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    int close_sum = find_matching_paren_c(expr, (int)(open - expr));
+    if (close_sum < 0) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    char *sum_args = substr_copy(open + 1, (size_t)(expr + close_sum - open - 1));
+    char *sum_args_trim = trim_copy(sum_args);
+    free(sum_args);
+    const char *tail = skip_ws(expr + close_sum + 1);
+    int ok = sum_args_trim[0] == '\0' && *tail == '\0';
+    free(sum_args_trim);
+    if (!ok) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    char temp[64];
+    snprintf(temp, sizeof(temp), "vais_filter_sum%d", (*temp_count)++);
+    size_t indent_len = (size_t)(s - line);
+
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let mut ");
+    sb_append(&init, temp);
+    sb_append(&init, " = 0");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf add;
+    sb_init(&add);
+    sb_append_n(&add, line, indent_len);
+    sb_append(&add, "        ");
+    sb_append(&add, temp);
+    sb_append(&add, " = ");
+    sb_append(&add, temp);
+    sb_append(&add, " + ");
+    sb_append(&add, param);
+    lines_push(out, sb_take(&add));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, "let ");
+    sb_append(&assign, name);
+    sb_append(&assign, " = ");
+    sb_append(&assign, temp);
+    lines_push(out, sb_take(&assign));
+
+    list_method_env_set(env, name, "Int");
+    free(lhs_type);
+    free(name);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static int lower_list_filter_extreme_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || strcmp(lhs_type, "Int") != 0)) {
+        free(lhs_type);
+        return 0;
+    }
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    int use_min = 0;
+    if ((receiver_type != NULL && strcmp(receiver_type, "List<Int>") != 0) ||
+        !parse_list_filter_extreme_tail(expr, after, &use_min)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_extreme_emit(line, indent_len, receiver, param, body, param, name, use_min, 0, id, out);
+    list_method_env_set(env, name, "Int");
+    free(lhs_type);
+    free(name);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static int lower_list_filter_map_extreme_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || strcmp(lhs_type, "Int") != 0)) {
+        free(lhs_type);
+        return 0;
+    }
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        return 0;
+    }
+    char *map_body = NULL;
+    int use_min = 0;
+    if (!parse_list_filter_map_extreme_tail(expr, after, env, param, &map_body, &use_min)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_extreme_emit(line, indent_len, receiver, param, body, map_body, name, use_min, 0, id, out);
+    list_method_env_set(env, name, "Int");
+    free(lhs_type);
+    free(name);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static int lower_list_filter_len_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || strcmp(lhs_type, "Int") != 0)) {
+        free(lhs_type);
+        return 0;
+    }
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        return 0;
+    }
+    const char *len = skip_ws(after);
+    if (!starts_with(len, ".len") || is_ident_continue(len[4])) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *open = skip_ws(len + 4);
+    if (*open != '(') {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    int close_len = find_matching_paren_c(expr, (int)(open - expr));
+    if (close_len < 0) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    char *len_args = substr_copy(open + 1, (size_t)(expr + close_len - open - 1));
+    char *len_args_trim = trim_copy(len_args);
+    free(len_args);
+    const char *tail = skip_ws(expr + close_len + 1);
+    int ok = len_args_trim[0] == '\0' && *tail == '\0';
+    free(len_args_trim);
+    if (!ok) {
+        free(lhs_type);
+        free(name);
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    char temp[64];
+    snprintf(temp, sizeof(temp), "vais_filter_len%d", (*temp_count)++);
+    size_t indent_len = (size_t)(s - line);
+
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let mut ");
+    sb_append(&init, temp);
+    sb_append(&init, " = 0");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf add;
+    sb_init(&add);
+    sb_append_n(&add, line, indent_len);
+    sb_append(&add, "        ");
+    sb_append(&add, temp);
+    sb_append(&add, " = ");
+    sb_append(&add, temp);
+    sb_append(&add, " + 1");
+    lines_push(out, sb_take(&add));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, "let ");
+    sb_append(&assign, name);
+    sb_append(&assign, " = ");
+    sb_append(&assign, temp);
+    lines_push(out, sb_take(&assign));
+
+    list_method_env_set(env, name, "Int");
+    free(lhs_type);
+    free(name);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static int lower_list_filter_extreme_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
     const char *s = skip_ws(line);
     if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
     char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
@@ -2919,7 +14621,157 @@ static int lower_list_filter_sum_return_line(const char *line, int *temp_count, 
     char *param = NULL;
     char *body = NULL;
     const char *after = NULL;
-    if (!parse_list_method_closure_call(expr, "filter", &receiver, &param, &body, &after)) {
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(expr);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    int use_min = 0;
+    if ((receiver_type != NULL && strcmp(receiver_type, "List<Int>") != 0) ||
+        !parse_list_filter_extreme_tail(expr, after, &use_min)) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_extreme_emit(line, indent_len, receiver, param, body, param, NULL, use_min, 1, id, out);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static int lower_list_filter_pick_struct_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    if (env->current_return_type[0] == '\0') return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(expr);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    int use_last = 0;
+    char *elem_type = receiver_type == NULL ? NULL : list_method_list_element_type_copy(receiver_type);
+    if (receiver_type == NULL ||
+        elem_type == NULL ||
+        strcmp(elem_type, "Int") == 0 ||
+        strcmp(elem_type, "Str") == 0 ||
+        strcmp(elem_type, "Bool") == 0 ||
+        strcmp(env->current_return_type, elem_type) != 0 ||
+        !parse_list_filter_pick_struct_tail(expr, after, &use_last)) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(elem_type);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_pick_struct_emit(line, indent_len, env, receiver, receiver_type, param, body, elem_type, NULL, use_last, 1, id, out);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(elem_type);
+    return 1;
+}
+
+static int lower_list_filter_pick_field_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    if (!list_filter_pick_field_result_type_supported(env->current_return_type)) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(expr);
+        return 0;
+    }
+    const char *receiver_type = list_method_env_type(env, receiver);
+    int use_last = 0;
+    int len_chain = 0;
+    char *field = NULL;
+    if (receiver_type == NULL ||
+        !list_method_type_is_list(receiver_type) ||
+        strcmp(receiver_type, "List<Int>") == 0 ||
+        strcmp(receiver_type, "List<Str>") == 0 ||
+        !parse_list_filter_pick_field_tail(expr, after, &use_last, &len_chain, &field) ||
+        (len_chain && strcmp(env->current_return_type, "Int") != 0)) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        free(field);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_pick_field_emit(line, indent_len, receiver, receiver_type, param, body, field, env->current_return_type, NULL, use_last, len_chain, 1, id, out);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(field);
+    return 1;
+}
+
+static int lower_list_filter_map_extreme_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(expr);
+        return 0;
+    }
+    char *map_body = NULL;
+    int use_min = 0;
+    if (!parse_list_filter_map_extreme_tail(expr, after, env, param, &map_body, &use_min)) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    int id = (*temp_count)++;
+    size_t indent_len = (size_t)(s - line);
+    lower_list_filter_extreme_emit(line, indent_len, receiver, param, body, map_body, NULL, use_min, 1, id, out);
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static int lower_list_filter_sum_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
         free(expr);
         return 0;
     }
@@ -3028,17 +14880,715 @@ static int lower_list_filter_sum_return_line(const char *line, int *temp_count, 
     return 1;
 }
 
+static int lower_list_filter_map_sum_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(expr);
+        return 0;
+    }
+    char *map_body = NULL;
+    if (!parse_list_filter_map_sum_tail(expr, after, env, param, &map_body)) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    char temp[64];
+    snprintf(temp, sizeof(temp), "vais_filter_map_sum%d", (*temp_count)++);
+    size_t indent_len = (size_t)(s - line);
+
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let mut ");
+    sb_append(&init, temp);
+    sb_append(&init, " = 0");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf add;
+    sb_init(&add);
+    sb_append_n(&add, line, indent_len);
+    sb_append(&add, "        ");
+    sb_append(&add, temp);
+    sb_append(&add, " = ");
+    sb_append(&add, temp);
+    sb_append(&add, " + ");
+    sb_append(&add, map_body);
+    lines_push(out, sb_take(&add));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, temp);
+    lines_push(out, sb_take(&ret));
+
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    free(map_body);
+    return 1;
+}
+
+static int lower_list_filter_len_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *receiver = NULL;
+    char *param = NULL;
+    char *body = NULL;
+    const char *after = NULL;
+    if (!parse_list_method_closure_call(expr, "filter", env, &receiver, &param, &body, &after)) {
+        free(expr);
+        return 0;
+    }
+    const char *len = skip_ws(after);
+    if (!starts_with(len, ".len") || is_ident_continue(len[4])) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    const char *open = skip_ws(len + 4);
+    if (*open != '(') {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    int close_len = find_matching_paren_c(expr, (int)(open - expr));
+    if (close_len < 0) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+    char *len_args = substr_copy(open + 1, (size_t)(expr + close_len - open - 1));
+    char *len_args_trim = trim_copy(len_args);
+    free(len_args);
+    const char *tail = skip_ws(expr + close_len + 1);
+    int ok = len_args_trim[0] == '\0' && *tail == '\0';
+    free(len_args_trim);
+    if (!ok) {
+        free(expr);
+        free(receiver);
+        free(param);
+        free(body);
+        return 0;
+    }
+
+    char temp[64];
+    snprintf(temp, sizeof(temp), "vais_filter_len%d", (*temp_count)++);
+    size_t indent_len = (size_t)(s - line);
+
+    StrBuf init;
+    sb_init(&init);
+    sb_append_n(&init, line, indent_len);
+    sb_append(&init, "let mut ");
+    sb_append(&init, temp);
+    sb_append(&init, " = 0");
+    lines_push(out, sb_take(&init));
+
+    StrBuf loop;
+    sb_init(&loop);
+    sb_append_n(&loop, line, indent_len);
+    sb_append(&loop, "for ");
+    sb_append(&loop, param);
+    sb_append(&loop, " in ");
+    sb_append(&loop, receiver);
+    sb_append(&loop, " {");
+    lines_push(out, sb_take(&loop));
+
+    StrBuf cond;
+    sb_init(&cond);
+    sb_append_n(&cond, line, indent_len);
+    sb_append(&cond, "    if ");
+    sb_append(&cond, body);
+    sb_append(&cond, " {");
+    lines_push(out, sb_take(&cond));
+
+    StrBuf add;
+    sb_init(&add);
+    sb_append_n(&add, line, indent_len);
+    sb_append(&add, "        ");
+    sb_append(&add, temp);
+    sb_append(&add, " = ");
+    sb_append(&add, temp);
+    sb_append(&add, " + 1");
+    lines_push(out, sb_take(&add));
+
+    StrBuf close_if;
+    sb_init(&close_if);
+    sb_append_n(&close_if, line, indent_len);
+    sb_append(&close_if, "    }");
+    lines_push(out, sb_take(&close_if));
+
+    StrBuf close_loop;
+    sb_init(&close_loop);
+    sb_append_n(&close_loop, line, indent_len);
+    sb_append(&close_loop, "}");
+    lines_push(out, sb_take(&close_loop));
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, temp);
+    lines_push(out, sb_take(&ret));
+
+    free(expr);
+    free(receiver);
+    free(param);
+    free(body);
+    return 1;
+}
+
+static char *lower_scalar_value_if_prepare_condition(
+    const char *line,
+    size_t indent_len,
+    const char *cond,
+    const char *temp_prefix,
+    int *temp_count,
+    LineVec *out,
+    ListMethodEnv *env
+) {
+    char *rewritten = NULL;
+    char *if_type = NULL;
+    int is_exact = 0;
+    if (list_str_pipeline_scalar_lower_value_if_exprs(line, indent_len, cond, temp_prefix, temp_count, out, &rewritten, &if_type, &is_exact, env)) {
+        free(if_type);
+        return rewritten;
+    }
+    return strdup(cond);
+}
+
+static int lower_scalar_value_if_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    if (starts_with(name_start, "mut") && !is_ident_continue(name_start[3])) {
+        name_start = skip_ws(name_start + 3);
+    }
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || (strcmp(lhs_type, "Int") != 0 && strcmp(lhs_type, "Bool") != 0 && strcmp(lhs_type, "Str") != 0 && strcmp(lhs_type, "Char") != 0))) {
+        free(lhs_type);
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    char *cond = NULL;
+    char *then_expr = NULL;
+    char *else_expr = NULL;
+    if (!list_str_pipeline_scalar_parse_if_expr_parts(expr, &cond, &then_expr, &else_expr) ||
+        list_str_pipeline_scalar_expr_mentions_pipeline(cond)) {
+        free(lhs_type);
+        free(expr);
+        free(cond);
+        free(then_expr);
+        free(else_expr);
+        return 0;
+    }
+
+    const char *value_type = list_str_pipeline_scalar_if_value_type_with_env(then_expr, else_expr, env);
+    if (value_type == NULL || (had_annotation && strcmp(lhs_type, value_type) != 0)) {
+        free(lhs_type);
+        free(expr);
+        free(cond);
+        free(then_expr);
+        free(else_expr);
+        return 0;
+    }
+
+    size_t indent_len = (size_t)(s - line);
+    char *cond_expr = lower_scalar_value_if_prepare_condition(line, indent_len, cond, "vais_scalar_if_cond", temp_count, out, env);
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    StrBuf decl;
+    sb_init(&decl);
+    sb_append_n(&decl, line, indent_len);
+    sb_append(&decl, "let mut ");
+    sb_append(&decl, name);
+    sb_append(&decl, " = ");
+    sb_append(&decl, list_str_pipeline_scalar_default_for_type(value_type));
+    lines_push(out, sb_take(&decl));
+    list_str_pipeline_scalar_emit_if_assignment(out, line, indent_len, name, cond_expr, then_expr, else_expr);
+    list_method_env_set(env, name, value_type);
+
+    free(name);
+    free(cond_expr);
+    free(lhs_type);
+    free(expr);
+    free(cond);
+    free(then_expr);
+    free(else_expr);
+    return 1;
+}
+
+static int lower_scalar_value_if_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || (strcmp(target_type, "Int") != 0 && strcmp(target_type, "Bool") != 0 && strcmp(target_type, "Str") != 0 && strcmp(target_type, "Char") != 0)) {
+        free(target);
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(s + 1);
+    char *cond = NULL;
+    char *then_expr = NULL;
+    char *else_expr = NULL;
+    if (!list_str_pipeline_scalar_parse_if_expr_parts(expr, &cond, &then_expr, &else_expr) ||
+        list_str_pipeline_scalar_expr_mentions_pipeline(cond)) {
+        free(target);
+        free(expr);
+        free(cond);
+        free(then_expr);
+        free(else_expr);
+        return 0;
+    }
+
+    const char *value_type = list_str_pipeline_scalar_if_value_type_with_env(then_expr, else_expr, env);
+    if (value_type == NULL || strcmp(target_type, value_type) != 0) {
+        free(target);
+        free(expr);
+        free(cond);
+        free(then_expr);
+        free(else_expr);
+        return 0;
+    }
+
+    size_t indent_len = (size_t)(target_start - line);
+    char *cond_expr = lower_scalar_value_if_prepare_condition(line, indent_len, cond, "vais_scalar_if_cond", temp_count, out, env);
+    list_str_pipeline_scalar_emit_if_assignment(out, line, indent_len, target, cond_expr, then_expr, else_expr);
+
+    free(cond_expr);
+    free(target);
+    free(expr);
+    free(cond);
+    free(then_expr);
+    free(else_expr);
+    return 1;
+}
+
+static int lower_scalar_value_if_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    char *cond = NULL;
+    char *then_expr = NULL;
+    char *else_expr = NULL;
+    if (!list_str_pipeline_scalar_parse_if_expr_parts(expr, &cond, &then_expr, &else_expr) ||
+        list_str_pipeline_scalar_expr_mentions_pipeline(cond)) {
+        free(expr);
+        free(cond);
+        free(then_expr);
+        free(else_expr);
+        return 0;
+    }
+
+    const char *value_type = list_str_pipeline_scalar_if_value_type_with_env(then_expr, else_expr, env);
+    if (value_type == NULL ||
+        (env->current_return_type[0] != '\0' && strcmp(env->current_return_type, value_type) != 0)) {
+        free(expr);
+        free(cond);
+        free(then_expr);
+        free(else_expr);
+        return 0;
+    }
+
+    size_t indent_len = (size_t)(s - line);
+    char *cond_expr = lower_scalar_value_if_prepare_condition(line, indent_len, cond, "vais_scalar_if_cond", temp_count, out, env);
+    StrBuf head;
+    sb_init(&head);
+    sb_append_n(&head, line, indent_len);
+    sb_append(&head, "if ");
+    sb_append(&head, cond_expr);
+    sb_append(&head, " {");
+    lines_push(out, sb_take(&head));
+
+    StrBuf then_line;
+    sb_init(&then_line);
+    sb_append_n(&then_line, line, indent_len);
+    sb_append(&then_line, "    return ");
+    sb_append(&then_line, then_expr);
+    lines_push(out, sb_take(&then_line));
+
+    StrBuf else_head;
+    sb_init(&else_head);
+    sb_append_n(&else_head, line, indent_len);
+    sb_append(&else_head, "} else {");
+    lines_push(out, sb_take(&else_head));
+
+    StrBuf else_line;
+    sb_init(&else_line);
+    sb_append_n(&else_line, line, indent_len);
+    sb_append(&else_line, "    return ");
+    sb_append(&else_line, else_expr);
+    lines_push(out, sb_take(&else_line));
+
+    StrBuf close;
+    sb_init(&close);
+    sb_append_n(&close, line, indent_len);
+    sb_append(&close, "}");
+    lines_push(out, sb_take(&close));
+
+    free(cond_expr);
+    free(expr);
+    free(cond);
+    free(then_expr);
+    free(else_expr);
+    return 1;
+}
+
+static int lower_scalar_value_if_embedded_assignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let ") || is_ident_continue(s[3])) return 0;
+    const char *name_start = skip_ws(s + 4);
+    int is_mut = 0;
+    if (starts_with(name_start, "mut") && !is_ident_continue(name_start[3])) {
+        is_mut = 1;
+        name_start = skip_ws(name_start + 3);
+    }
+    if (!is_ident_start(*name_start)) return 0;
+    const char *name_end = name_start + 1;
+    while (is_ident_continue(*name_end)) name_end++;
+    const char *eq = strchr(name_end, '=');
+    if (eq == NULL) return 0;
+
+    int had_annotation = 0;
+    char *lhs_type = parse_list_method_env_decl_type(name_end, eq, &had_annotation);
+    if (had_annotation && (lhs_type == NULL || (strcmp(lhs_type, "Int") != 0 && strcmp(lhs_type, "Bool") != 0 && strcmp(lhs_type, "Str") != 0 && strcmp(lhs_type, "Char") != 0))) {
+        free(lhs_type);
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(eq + 1);
+    if (list_str_pipeline_scalar_expr_mentions_pipeline(expr)) {
+        free(lhs_type);
+        free(expr);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    char *if_type = NULL;
+    int is_exact = 0;
+    size_t indent_len = (size_t)(s - line);
+    if (!list_str_pipeline_scalar_lower_value_if_exprs(line, indent_len, expr, "vais_scalar_if_expr", temp_count, out, &rewritten, &if_type, &is_exact, env)) {
+        free(lhs_type);
+        free(expr);
+        return 0;
+    }
+    if (had_annotation && is_exact && if_type != NULL && strcmp(lhs_type, if_type) != 0) {
+        free(lhs_type);
+        free(expr);
+        free(rewritten);
+        free(if_type);
+        return 0;
+    }
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    StrBuf final_line;
+    sb_init(&final_line);
+    sb_append_n(&final_line, line, indent_len);
+    sb_append(&final_line, "let ");
+    if (is_mut) sb_append(&final_line, "mut ");
+    sb_append(&final_line, name);
+    sb_append(&final_line, " = ");
+    sb_append(&final_line, rewritten);
+    lines_push(out, sb_take(&final_line));
+    list_method_env_set(env, name, list_str_pipeline_scalar_assignment_type(lhs_type, is_exact, if_type, rewritten, env));
+
+    free(name);
+    free(lhs_type);
+    free(expr);
+    free(rewritten);
+    free(if_type);
+    return 1;
+}
+
+static int lower_scalar_value_if_embedded_reassignment_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *target_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *target = substr_copy(target_start, (size_t)(s - target_start));
+    s = skip_ws(s);
+    if (*s != '=' || s[1] == '=') {
+        free(target);
+        return 0;
+    }
+    const char *target_type = list_method_env_type(env, target);
+    if (target_type == NULL || (strcmp(target_type, "Int") != 0 && strcmp(target_type, "Bool") != 0 && strcmp(target_type, "Str") != 0 && strcmp(target_type, "Char") != 0)) {
+        free(target);
+        return 0;
+    }
+
+    char *expr = trim_trailing_semicolon_copy(s + 1);
+    if (list_str_pipeline_scalar_expr_mentions_pipeline(expr)) {
+        free(target);
+        free(expr);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    char *if_type = NULL;
+    int is_exact = 0;
+    size_t indent_len = (size_t)(target_start - line);
+    if (!list_str_pipeline_scalar_lower_value_if_exprs(line, indent_len, expr, "vais_scalar_if_reassign", temp_count, out, &rewritten, &if_type, &is_exact, env)) {
+        free(target);
+        free(expr);
+        return 0;
+    }
+    if (is_exact && if_type != NULL && strcmp(target_type, if_type) != 0) {
+        free(target);
+        free(expr);
+        free(rewritten);
+        free(if_type);
+        return 0;
+    }
+
+    StrBuf assign;
+    sb_init(&assign);
+    sb_append_n(&assign, line, indent_len);
+    sb_append(&assign, target);
+    sb_append(&assign, " = ");
+    sb_append(&assign, rewritten);
+    lines_push(out, sb_take(&assign));
+
+    free(target);
+    free(expr);
+    free(rewritten);
+    free(if_type);
+    return 1;
+}
+
+static int lower_scalar_value_if_embedded_return_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "return") || is_ident_continue(s[6])) return 0;
+    char *expr = trim_trailing_semicolon_copy(skip_ws(s + 6));
+    if (list_str_pipeline_scalar_expr_mentions_pipeline(expr)) {
+        free(expr);
+        return 0;
+    }
+
+    char *rewritten = NULL;
+    char *if_type = NULL;
+    int is_exact = 0;
+    size_t indent_len = (size_t)(s - line);
+    if (!list_str_pipeline_scalar_lower_value_if_exprs(line, indent_len, expr, "vais_scalar_if_return", temp_count, out, &rewritten, &if_type, &is_exact, env)) {
+        free(expr);
+        return 0;
+    }
+    if (env->current_return_type[0] != '\0' && is_exact && if_type != NULL && strcmp(env->current_return_type, if_type) != 0) {
+        free(expr);
+        free(rewritten);
+        free(if_type);
+        return 0;
+    }
+
+    StrBuf ret;
+    sb_init(&ret);
+    sb_append_n(&ret, line, indent_len);
+    sb_append(&ret, "return ");
+    sb_append(&ret, rewritten);
+    lines_push(out, sb_take(&ret));
+
+    free(expr);
+    free(rewritten);
+    free(if_type);
+    return 1;
+}
+
 static char *lower_list_method_text(const char *text) {
     LineVec lines = split_lines(text);
     LineVec out;
     lines_init(&out);
+    ListMethodEnv env = {0};
     int temp_count = 0;
+    int extra_else_close_indents[32] = {0};
+    int extra_else_close_count = 0;
     for (size_t i = 0; i < lines.len; i++) {
-        if (lower_list_map_assignment_line(lines.items[i], &out)) continue;
-        if (lower_list_filter_sum_return_line(lines.items[i], &temp_count, &out)) continue;
+        list_method_env_track_fn_signature_line(lines.items[i], &env, 0);
+    }
+    for (size_t i = 0; i < lines.len; i++) {
+        if (list_method_env_track_struct_block(&lines, &i, &env, &out)) {
+            continue;
+        }
+        if (list_method_env_track_fn_line(lines.items[i], &env)) {
+            lines_push(&out, strdup(lines.items[i]));
+            continue;
+        }
+        const char *trim = skip_ws(lines.items[i]);
+        int indent = (int)(trim - lines.items[i]);
+        if (strcmp(trim, "}") == 0 &&
+            extra_else_close_count > 0 &&
+            extra_else_close_indents[extra_else_close_count - 1] == indent) {
+            lines_push(&out, strdup(lines.items[i]));
+            while (extra_else_close_count > 0 &&
+                   extra_else_close_indents[extra_else_close_count - 1] == indent) {
+                StrBuf close_extra;
+                sb_init(&close_extra);
+                sb_append_n(&close_extra, lines.items[i], (size_t)indent);
+                sb_append(&close_extra, "}");
+                lines_push(&out, sb_take(&close_extra));
+                extra_else_close_count--;
+            }
+            continue;
+        }
+        if (lower_list_filter_pick_struct_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_pick_field_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_aggregate_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_aggregate_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_scalar_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_filter_scalar_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_result_extend_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_result_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_scalar_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_filter_result_extend_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_filter_scalar_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_filter_result_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_result_extend_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_result_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_scalar_value_if_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_scalar_value_if_embedded_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_aggregate_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_aggregate_embedded_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_aggregate_embedded_reassignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        int extra_else_close_indent = -1;
+        if (lower_list_map_aggregate_condition_line(lines.items[i], &temp_count, &env, &out, &extra_else_close_indent)) {
+            if (extra_else_close_indent >= 0 && extra_else_close_count < 32) {
+                extra_else_close_indents[extra_else_close_count++] = extra_else_close_indent;
+            }
+            continue;
+        }
+        if (lower_list_map_aggregate_embedded_condition_line(lines.items[i], &temp_count, &env, &out, &extra_else_close_indent)) {
+            if (extra_else_close_indent >= 0 && extra_else_close_count < 32) {
+                extra_else_close_indents[extra_else_close_count++] = extra_else_close_indent;
+            }
+            continue;
+        }
+        if (lower_list_filter_map_aggregate_embedded_condition_line(lines.items[i], &temp_count, &env, &out, &extra_else_close_indent)) {
+            if (extra_else_close_indent >= 0 && extra_else_close_count < 32) {
+                extra_else_close_indents[extra_else_close_count++] = extra_else_close_indent;
+            }
+            continue;
+        }
+        if (lower_list_filter_map_scalar_condition_line(lines.items[i], &temp_count, &env, &out, &extra_else_close_indent)) {
+            if (extra_else_close_indent >= 0 && extra_else_close_count < 32) {
+                extra_else_close_indents[extra_else_close_count++] = extra_else_close_indent;
+            }
+            continue;
+        }
+        if (lower_list_map_filter_scalar_condition_line(lines.items[i], &temp_count, &env, &out, &extra_else_close_indent)) {
+            if (extra_else_close_indent >= 0 && extra_else_close_count < 32) {
+                extra_else_close_indents[extra_else_close_count++] = extra_else_close_indent;
+            }
+            continue;
+        }
+        if (lower_list_filter_pick_field_call_arg_line(lines.items[i], &temp_count, &env, &out, &extra_else_close_indent)) {
+            if (extra_else_close_indent >= 0 && extra_else_close_count < 32) {
+                extra_else_close_indents[extra_else_close_count++] = extra_else_close_indent;
+            }
+            continue;
+        }
+        if (lower_list_filter_map_result_assignment_line(lines.items[i], &env, &out)) continue;
+        if (lower_list_filter_map_scalar_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_filter_result_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_filter_scalar_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_assignment_line(lines.items[i], &env, &out)) continue;
+        if (lower_list_map_aggregate_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_aggregate_embedded_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_scalar_value_if_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_scalar_value_if_embedded_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_pick_struct_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_pick_field_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_assignment_line(lines.items[i], &env, &out)) continue;
+        if (lower_list_filter_map_sum_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_extreme_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_aggregate_embedded_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_extreme_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_sum_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_len_assignment_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_pick_struct_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_pick_field_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_result_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_filter_result_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_filter_scalar_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_aggregate_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_map_aggregate_embedded_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_result_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_scalar_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_sum_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_extreme_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_map_aggregate_embedded_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_extreme_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_sum_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_filter_len_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_scalar_value_if_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_scalar_value_if_embedded_return_line(lines.items[i], &temp_count, &env, &out)) continue;
+        list_method_env_track_decl_line(lines.items[i], &env);
         lines_push(&out, strdup(lines.items[i]));
     }
     char *joined = join_lines(&out, text[0] == '\0' || text[strlen(text) - 1] == '\n');
+    list_method_env_free(&env);
     lines_free(&lines);
     lines_free(&out);
     return joined;
@@ -4166,6 +16716,7 @@ static char *normalize_source_text(const char *raw, int core_lower) {
     sb_init(&out);
     int in_struct = 0;
     int struct_depth = 0;
+    int square_depth = 0;
     const char *line = raw;
     while (*line != '\0') {
         const char *end = strchr(line, '\n');
@@ -4177,14 +16728,14 @@ static char *normalize_source_text(const char *raw, int core_lower) {
         char *step4 = NULL;
         const char *trim = skip_ws(stripped);
 
-        if (!in_struct && starts_with(trim, "struct ") && strchr(trim, '{') != NULL) {
+        if (core_lower && !in_struct && starts_with(trim, "struct ") && strchr(trim, '{') != NULL) {
             if (strchr(trim, '}') != NULL) {
                 step1 = lower_struct_one_line_fields(stripped);
             } else {
                 in_struct = 1;
                 struct_depth = 1;
             }
-        } else if (in_struct) {
+        } else if (core_lower && in_struct) {
             if (strcmp(trim, "}") != 0) {
                 step1 = lower_struct_field_line(stripped);
             }
@@ -4201,12 +16752,14 @@ static char *normalize_source_text(const char *raw, int core_lower) {
             step4 = strdup(step3);
         }
 
-        if (statement_needs_semicolon(step4)) {
+        int next_square_depth = square_depth_after_text(step4, square_depth);
+        if (square_depth == 0 && next_square_depth == 0 && statement_needs_semicolon(step4)) {
             sb_append(&out, step4);
             sb_append(&out, ";");
         } else {
             sb_append(&out, step4);
         }
+        square_depth = next_square_depth;
         if (end != NULL) sb_append(&out, "\n");
 
         if (in_struct) {
@@ -4233,7 +16786,9 @@ static char *normalize_source_text(const char *raw, int core_lower) {
 
 static char *prepare_source_text(const char *raw) {
     char *normalized = normalize_source_text(raw, 0);
-    char *enum_lowered = lower_enum_text(normalized);
+    char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
+    char *result_str_lowered = lower_result_str_int_text(map_match_lowered);
+    char *enum_lowered = lower_enum_text(result_str_lowered);
     char *closure_lowered = lower_closure_text(enum_lowered);
     char *list_method_lowered = lower_list_method_text(closure_lowered);
     char *nested_list_lowered = lower_nested_list_text(list_method_lowered);
@@ -4242,6 +16797,8 @@ static char *prepare_source_text(const char *raw) {
     char *generic_lowered = lower_generic_identity_struct_text(method_lowered);
     char *prepared = normalize_source_text(generic_lowered, 1);
     free(normalized);
+    free(map_match_lowered);
+    free(result_str_lowered);
     free(enum_lowered);
     free(closure_lowered);
     free(list_method_lowered);
@@ -4309,7 +16866,13 @@ static int front_type_is_map_int_char(const char *type);
 static int front_type_is_map_str_int(const char *type);
 static int front_type_is_map_str_bool(const char *type);
 static int front_type_is_map_str_char(const char *type);
+static int front_type_is_map_str_str(const char *type);
 static int front_type_is_list_int(const char *type);
+static int front_type_is_list_str(const char *type);
+static int front_type_is_list_known_struct(const char *type, char **struct_names, int struct_count);
+static int front_type_is_option_int(const char *type);
+static int front_type_is_result_int_int(const char *type);
+static int front_type_is_result_known_struct_int(const char *type, char **struct_names, int struct_count);
 static int front_type_is_supported_map_param(const char *type);
 static int front_type_is_supported_map_return(const char *type);
 static const char *front_map_type_for(char **names, char **types, int count, const char *name);
@@ -4337,12 +16900,17 @@ static int is_valid_int_params(const char *params, char **struct_names, int stru
             borrowed = 1;
         }
         int ok = borrowed
-            ? front_type_is_list_int(ty)
+            ? (front_type_is_list_int(ty) || front_type_is_list_str(ty))
             : (strcmp(ty, "Int") == 0 ||
                 strcmp(ty, "Str") == 0 ||
                 strcmp(ty, "Bool") == 0 ||
                 strcmp(ty, "Char") == 0 ||
+                front_type_is_option_int(ty) ||
+                front_type_is_result_int_int(ty) ||
+                front_type_is_result_known_struct_int(ty, struct_names, struct_count) ||
                 front_type_is_list_int(ty) ||
+                front_type_is_list_str(ty) ||
+                front_type_is_list_known_struct(ty, struct_names, struct_count) ||
                 front_type_is_supported_map_param(ty) ||
                 front_type_is_known_struct(ty, struct_names, struct_count));
         free(ty);
@@ -4461,6 +17029,23 @@ static int front_type_is_map_str_char(const char *type) {
     return *q == '\0';
 }
 
+static int front_type_is_map_str_str(const char *type) {
+    const char *p = skip_ws(type);
+    if (!starts_with(p, "Map") || is_ident_continue(p[3])) return 0;
+    const char *q = skip_ws(p + 3);
+    if (*q != '<') return 0;
+    q = skip_ws(q + 1);
+    if (!starts_with(q, "Str") || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
+    if (*q != ',') return 0;
+    q = skip_ws(q + 1);
+    if (!starts_with(q, "Str") || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
+    if (*q != '>') return 0;
+    q = skip_ws(q + 1);
+    return *q == '\0';
+}
+
 static int front_type_is_list_int(const char *type) {
     const char *p = skip_ws(type);
     if (!starts_with(p, "List") || is_ident_continue(p[4])) return 0;
@@ -4474,12 +17059,80 @@ static int front_type_is_list_int(const char *type) {
     return *q == '\0';
 }
 
+static int front_type_is_list_str(const char *type) {
+    const char *p = skip_ws(type);
+    if (!starts_with(p, "List") || is_ident_continue(p[4])) return 0;
+    const char *q = skip_ws(p + 4);
+    if (*q != '<') return 0;
+    q = skip_ws(q + 1);
+    if (!starts_with(q, "Str") || is_ident_continue(q[3])) return 0;
+    q = skip_ws(q + 3);
+    if (*q != '>') return 0;
+    q = skip_ws(q + 1);
+    return *q == '\0';
+}
+
+static char *front_list_element_name(const char *type) {
+    const char *p = skip_ws(type);
+    if (!starts_with(p, "List") || is_ident_continue(p[4])) return NULL;
+    const char *q = skip_ws(p + 4);
+    if (*q != '<') return NULL;
+    q = skip_ws(q + 1);
+    if (!is_ident_start(*q)) return NULL;
+    const char *start = q;
+    q++;
+    while (is_ident_continue(*q)) q++;
+    char *elem = substr_copy(start, (size_t)(q - start));
+    q = skip_ws(q);
+    if (*q != '>') {
+        free(elem);
+        return NULL;
+    }
+    q = skip_ws(q + 1);
+    if (*q != '\0') {
+        free(elem);
+        return NULL;
+    }
+    return elem;
+}
+
+static int front_type_is_list_known_struct(const char *type, char **struct_names, int struct_count) {
+    char *elem = front_list_element_name(type);
+    if (elem == NULL) return 0;
+    int ok = front_type_is_known_struct(elem, struct_names, struct_count);
+    free(elem);
+    return ok;
+}
+
+static int front_type_is_option_int(const char *type) {
+    return type_text_equals_compact(type, "Option<Int>");
+}
+
+static int front_type_is_result_int_int(const char *type) {
+    return type_text_equals_compact(type, "Result<Int,Int>");
+}
+
+static int front_type_is_result_known_struct_int(const char *type, char **struct_names, int struct_count) {
+    for (int i = 0; i < struct_count; i++) {
+        StrBuf expected;
+        sb_init(&expected);
+        sb_append(&expected, "Result<");
+        sb_append(&expected, struct_names[i]);
+        sb_append(&expected, ",Int>");
+        char *shape = sb_take(&expected);
+        int ok = type_text_equals_compact(type, shape);
+        free(shape);
+        if (ok) return 1;
+    }
+    return 0;
+}
+
 static int front_type_is_supported_map_param(const char *type) {
-    return front_type_is_map_int_int(type) || front_type_is_map_int_bool(type) || front_type_is_map_int_char(type) || front_type_is_map_str_int(type) || front_type_is_map_str_bool(type) || front_type_is_map_str_char(type);
+    return front_type_is_map_int_int(type) || front_type_is_map_int_bool(type) || front_type_is_map_int_char(type) || front_type_is_map_str_int(type) || front_type_is_map_str_bool(type) || front_type_is_map_str_char(type) || front_type_is_map_str_str(type);
 }
 
 static int front_type_is_supported_map_return(const char *type) {
-    return front_type_is_map_int_int(type) || front_type_is_map_int_bool(type) || front_type_is_map_int_char(type) || front_type_is_map_str_int(type) || front_type_is_map_str_bool(type) || front_type_is_map_str_char(type);
+    return front_type_is_map_int_int(type) || front_type_is_map_int_bool(type) || front_type_is_map_int_char(type) || front_type_is_map_str_int(type) || front_type_is_map_str_bool(type) || front_type_is_map_str_char(type) || front_type_is_map_str_str(type);
 }
 
 static int front_type_is_known_struct(const char *type, char **struct_names, int struct_count) {
@@ -4503,10 +17156,38 @@ static char *front_canonical_supported_map_type(const char *type) {
     else if (front_type_is_map_str_int(type)) canonical = "Map<Str,Int>";
     else if (front_type_is_map_str_bool(type)) canonical = "Map<Str,Bool>";
     else if (front_type_is_map_str_char(type)) canonical = "Map<Str,Char>";
+    else if (front_type_is_map_str_str(type)) canonical = "Map<Str,Str>";
     if (canonical == NULL) return NULL;
     char *out = strdup(canonical);
     if (out == NULL) die_oom();
     return out;
+}
+
+static char *front_canonical_supported_list_type(const char *type, char **struct_names, int struct_count) {
+    if (front_type_is_list_int(type)) {
+        char *out = strdup("List<Int>");
+        if (out == NULL) die_oom();
+        return out;
+    }
+    if (front_type_is_list_str(type)) {
+        char *out = strdup("List<Str>");
+        if (out == NULL) die_oom();
+        return out;
+    }
+    char *elem = front_list_element_name(type);
+    if (elem == NULL) return NULL;
+    int ok = front_type_is_known_struct(elem, struct_names, struct_count);
+    if (!ok) {
+        free(elem);
+        return NULL;
+    }
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, "List<");
+    sb_append(&out, elem);
+    sb_append(&out, ">");
+    free(elem);
+    return sb_take(&out);
 }
 
 static char *front_return_type_text(const char *arrow) {
@@ -4582,27 +17263,27 @@ static int check_fn_contract_line(
     } else {
         if (arrow != NULL && front_has_map_type(arrow + 2) && !front_type_is_supported_map_return(ret)) {
             report_issue(path, line_no, find_col(line, "Map"), line,
-                "only Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, and Map<Str,Char> return values are verified yet",
-                "return Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, or Map<Str,Char> in this slice; keep generic Map returns local until their ABI slices are promoted.",
+                "only Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, Map<Str,Char>, and Map<Str,Str> return values are verified yet",
+                "return Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, Map<Str,Char>, or Map<Str,Str> in this slice; keep generic Map returns local until their ABI slices are promoted.",
                 NULL);
             issue = 1;
-        } else if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0 && strcmp(ret, "Char") != 0 && !front_type_is_supported_map_return(ret) && !front_type_is_known_struct(ret, struct_names, struct_count))) {
+        } else if (ret == NULL || (strcmp(ret, "Int") != 0 && strcmp(ret, "Str") != 0 && strcmp(ret, "Bool") != 0 && strcmp(ret, "Char") != 0 && !front_type_is_option_int(ret) && !front_type_is_result_int_int(ret) && !front_type_is_result_known_struct_int(ret, struct_names, struct_count) && !front_type_is_list_int(ret) && !front_type_is_list_str(ret) && !front_type_is_list_known_struct(ret, struct_names, struct_count) && !front_type_is_supported_map_return(ret) && !front_type_is_known_struct(ret, struct_names, struct_count))) {
             report_issue(path, line_no, find_col(line, "fn "), line,
                 "Vais native helper functions must return a verified scalar type",
-                "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, `-> Char`, `-> Str`, a declared struct type, `-> Map<Int,Int>`, `-> Map<Int,Bool>`, `-> Map<Int,Char>`, `-> Map<Str,Int>`, `-> Map<Str,Bool>`, or `-> Map<Str,Char>`.",
+                "write helpers as `fn name(a: Int, ...) -> Int`, `-> Bool`, `-> Char`, `-> Str`, `-> Option<Int>`, `-> Result<Int,Int>`, `-> Result<DeclaredStruct,Int>`, `-> List<Int>`, `-> List<Str>`, `-> List<Struct>`, a declared struct type, `-> Map<Int,Int>`, `-> Map<Int,Bool>`, `-> Map<Int,Char>`, `-> Map<Str,Int>`, `-> Map<Str,Bool>`, `-> Map<Str,Char>`, or `-> Map<Str,Str>`.",
                 NULL);
             issue = 1;
         }
         if (params != NULL && strlen(skip_ws(params)) > 0 && front_params_have_unsupported_map_type(params)) {
             report_issue(path, line_no, find_col(line, "Map"), line,
-                "only Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, and Map<Str,Char> parameters are verified yet",
+                "only Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, Map<Str,Char>, and Map<Str,Str> parameters are verified yet",
                 "keep generic Map parameters local until their ABI slices are promoted.",
                 NULL);
             issue = 1;
         } else if (params != NULL && strlen(skip_ws(params)) > 0 && !is_valid_int_params(params, struct_names, struct_count)) {
             report_issue(path, line_no, find_col(line, params), line,
                 "Vais native helper parameters must use verified scalar types",
-                "use `Int`, `Str`, `Bool`, `Char`, `List<Int>`, `&List<Int>`, declared struct types, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` parameters in this slice.",
+                "use `Int`, `Str`, `Bool`, `Char`, `Option<Int>`, `Result<Int,Int>`, `Result<DeclaredStruct,Int>`, `List<Int>`, `&List<Int>`, `List<Str>`, `&List<Str>`, `List<Struct>`, declared struct types, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or `Map<Str,Str>` parameters in this slice.",
                 NULL);
             issue = 1;
         }
@@ -4643,6 +17324,68 @@ static void front_register_map_params(const char *line, char **map_names, char *
             char *type = front_canonical_supported_map_type(raw_type);
             if (type != NULL && is_ident_start(name[0])) {
                 front_add_map_binding(map_names, map_types, map_count, name, type);
+                name = NULL;
+                type = NULL;
+            }
+            free(name);
+            free(type);
+            free(raw_type);
+        }
+        free(parts[i]);
+    }
+}
+
+static char *front_supported_list_local_name(const char *line, char **type_out, char **struct_names, int struct_count) {
+    if (type_out != NULL) *type_out = NULL;
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "let") || is_ident_continue(s[3])) return NULL;
+    s = skip_ws(s + 3);
+    if (starts_with(s, "mut") && !is_ident_continue(s[3])) {
+        s = skip_ws(s + 3);
+    }
+    if (!is_ident_start(*s)) return NULL;
+    const char *name_start = s;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    s = skip_ws(s);
+    if (*s != ':') return NULL;
+    const char *type_start = skip_ws(s + 1);
+    const char *eq = strchr(type_start, '=');
+    if (eq == NULL) return NULL;
+    const char *type_end = eq;
+    while (type_end > type_start && (type_end[-1] == ' ' || type_end[-1] == '\t' || type_end[-1] == '\n' || type_end[-1] == '\r')) type_end--;
+    char *raw_type = substr_copy(type_start, (size_t)(type_end - type_start));
+    char *type = front_canonical_supported_list_type(raw_type, struct_names, struct_count);
+    free(raw_type);
+    if (type == NULL) return NULL;
+    if (type_out != NULL) {
+        *type_out = type;
+    } else {
+        free(type);
+    }
+    return substr_copy(name_start, (size_t)(name_end - name_start));
+}
+
+static void front_register_list_params(const char *line, char **list_names, char **list_types, int *list_count, char **struct_names, int struct_count) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return;
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    if (open == NULL || close == NULL || close < open) return;
+    char *params = substr_copy(open + 1, (size_t)(close - open - 1));
+    char *parts[16] = {0};
+    int n = split_top_level_type_commas_c(params, parts, 16);
+    free(params);
+    if (n < 0) return;
+    for (int i = 0; i < n; i++) {
+        char *colon = strchr(parts[i], ':');
+        if (colon != NULL) {
+            char *name = trim_copy(substr_copy(parts[i], (size_t)(colon - parts[i])));
+            char *raw_type = trim_copy(colon + 1);
+            char *type = NULL;
+            if (raw_type[0] != '&') type = front_canonical_supported_list_type(raw_type, struct_names, struct_count);
+            if (type != NULL && is_ident_start(name[0])) {
+                front_add_map_binding(list_names, list_types, list_count, name, type);
                 name = NULL;
                 type = NULL;
             }
@@ -4763,17 +17506,20 @@ static char *front_supported_map_local_name(const char *line, char **type_out) {
     } else if (strncmp(q, "Char", 4) == 0 && !is_ident_continue(q[4])) {
         value_type = "Char";
         q = skip_ws(q + 4);
+    } else if (strcmp(key_type, "Str") == 0 && strncmp(q, "Str", 3) == 0 && !is_ident_continue(q[3])) {
+        value_type = "Str";
+        q = skip_ws(q + 3);
     } else {
         return NULL;
     }
-    if (strcmp(key_type, "Str") == 0 && strcmp(value_type, "Int") != 0 && strcmp(value_type, "Bool") != 0 && strcmp(value_type, "Char") != 0) return NULL;
+    if (strcmp(key_type, "Str") == 0 && strcmp(value_type, "Int") != 0 && strcmp(value_type, "Bool") != 0 && strcmp(value_type, "Char") != 0 && strcmp(value_type, "Str") != 0) return NULL;
     if (strcmp(key_type, "Int") != 0 && strcmp(key_type, "Str") != 0) return NULL;
     if (*q != '>') return NULL;
     int value_is_return_supported =
         (strcmp(key_type, "Int") == 0 &&
             (strcmp(value_type, "Int") == 0 || strcmp(value_type, "Bool") == 0 || strcmp(value_type, "Char") == 0)) ||
         (strcmp(key_type, "Str") == 0 &&
-            (strcmp(value_type, "Int") == 0 || strcmp(value_type, "Bool") == 0 || strcmp(value_type, "Char") == 0));
+            (strcmp(value_type, "Int") == 0 || strcmp(value_type, "Bool") == 0 || strcmp(value_type, "Char") == 0 || strcmp(value_type, "Str") == 0));
     const char *eq = strchr(q, '=');
     if (eq == NULL) return NULL;
     const char *rhs = skip_ws(eq + 1);
@@ -4859,6 +17605,31 @@ static int front_supported_map_clear_line(const char *line, char **map_locals, i
     return *tail == '\0' || *tail == ';';
 }
 
+static int front_supported_list_clear_line(const char *line, char **list_locals, int list_local_count) {
+    const char *s = skip_ws(line);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    int is_list = front_name_in_list(list_locals, list_local_count, name);
+    free(name);
+    if (!is_list) return 0;
+    s = skip_ws(s);
+    if (*s != '.') return 0;
+    s = skip_ws(s + 1);
+    if (!starts_with(s, "clear") || is_ident_continue(s[5])) return 0;
+    s = skip_ws(s + 5);
+    if (*s != '(') return 0;
+    int close = find_matching_paren_c(s, 0);
+    if (close < 0) return 0;
+    const char *args = s + 1;
+    while (args < s + close && (*args == ' ' || *args == '\t' || *args == '\n' || *args == '\r')) args++;
+    if (args < s + close) return 0;
+    const char *tail = skip_ws(s + close + 1);
+    return *tail == '\0' || *tail == ';';
+}
+
 static char *front_map_assignment_name(const char *line, char **map_locals, int map_local_count, char **rhs_out) {
     const char *s = skip_ws(line);
     if (starts_with(s, "let") && !is_ident_continue(s[3])) return NULL;
@@ -4928,6 +17699,17 @@ static char *front_probe_line(const char *line) {
     return sb_take(&out);
 }
 
+static int front_keyword_col(const char *probe, const char *keyword) {
+    size_t n = strlen(keyword);
+    for (size_t i = 0; probe[i] != '\0'; i++) {
+        if (strncmp(probe + i, keyword, n) != 0) continue;
+        if (i > 0 && is_ident_continue(probe[i - 1])) continue;
+        if (is_ident_continue(probe[i + n])) continue;
+        return (int)i + 1;
+    }
+    return 0;
+}
+
 static int generic_named_type_at(const char *line, size_t i, const char *name, size_t *end_out) {
     size_t name_len = strlen(name);
     if (i > 0 && is_ident_continue(line[i - 1])) return 0;
@@ -4954,6 +17736,13 @@ static int generic_named_type_at(const char *line, size_t i, const char *name, s
 static int check_option_result_generic_surface_text(const char *text, const char *path) {
     LineVec lines = split_lines(text);
     int issues = 0;
+    char *struct_names[128] = {0};
+    int struct_count = 0;
+    for (size_t row = 0; row < lines.len; row++) {
+        char *probe = front_probe_line(lines.items[row]);
+        front_register_struct_name(probe, struct_names, &struct_count);
+        free(probe);
+    }
     for (size_t row = 0; row < lines.len; row++) {
         const char *line = lines.items[row];
         char *probe = front_probe_line(line);
@@ -4971,10 +17760,19 @@ static int check_option_result_generic_surface_text(const char *text, const char
                 i = generic_end > i ? generic_end - 1 : i;
             } else if (generic_named_type_at(probe, i, "Result", &generic_end)) {
                 size_t supported_end = 0;
-                if (!generic_type_at(probe, i, "Result", "Int", "Int", &supported_end)) {
+                int supported_struct_result = 0;
+                for (int s = 0; s < struct_count; s++) {
+                    if (generic_type_at(probe, i, "Result", struct_names[s], "Int", &supported_end)) {
+                        supported_struct_result = 1;
+                        break;
+                    }
+                }
+                if (!generic_type_at(probe, i, "Result", "Int", "Int", &supported_end) &&
+                    !generic_type_at(probe, i, "Result", "Str", "Int", &supported_end) &&
+                    !supported_struct_result) {
                     report_issue(path, (int)row + 1, (int)i + 1, line,
-                        "only Result<Int,Int> is verified for now",
-                        "use Result<Int,Int> in this slice; generic Result<T,E> and non-Int payloads are not verified yet.",
+                        "only Result<Int,Int>, Result<Str,Int>, and Result<DeclaredStruct,Int> are verified for now",
+                        "use Result<Int,Int>, Result<Str,Int>, or Result<DeclaredStruct,Int> where the payload struct is declared in this file; generic Result<T,E> and non-Int error payloads are not verified yet.",
                         NULL);
                     issues++;
                 }
@@ -4983,6 +17781,7 @@ static int check_option_result_generic_surface_text(const char *text, const char
         }
         free(probe);
     }
+    for (int s = 0; s < struct_count; s++) free(struct_names[s]);
     lines_free(&lines);
     return issues == 0 ? 0 : 1;
 }
@@ -4995,6 +17794,9 @@ static int check_front_contract_text(const char *text, const char *path) {
     char *map_locals[128] = {0};
     char *map_types[128] = {0};
     int map_local_count = 0;
+    char *list_locals[128] = {0};
+    char *list_types[128] = {0};
+    int list_local_count = 0;
     char *map_fns[128] = {0};
     char *map_fn_types[128] = {0};
     int map_fn_count = 0;
@@ -5012,9 +17814,12 @@ static int check_front_contract_text(const char *text, const char *path) {
         int line_no = (int)i + 1;
         issues += check_fn_contract_line(path, line_no, line, &has_main, &has_bad_main, struct_names, struct_count);
         front_register_map_params(probe, map_locals, map_types, &map_local_count);
+        front_register_list_params(probe, list_locals, list_types, &list_local_count, struct_names, struct_count);
 
         char *fix = NULL;
         const char *trim = skip_ws(probe);
+        int enum_col = front_keyword_col(probe, "enum");
+        int match_col = front_keyword_col(probe, "match");
         const char *module_kw = NULL;
         if (starts_with(trim, "module") && !is_ident_continue(trim[6])) module_kw = "module";
         else if (starts_with(trim, "package") && !is_ident_continue(trim[7])) module_kw = "package";
@@ -5027,7 +17832,7 @@ static int check_front_contract_text(const char *text, const char *path) {
             if (map_assignment_rhs == NULL || source_type == NULL) {
                 report_issue(path, line_no, find_col(line, map_assignment), line,
                     "Map assignment requires another local or parameter Map value",
-                    "assign from a local, same-type parameter, or same-type Map-returning call for `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>`; broader generic key/value forms are not verified yet.",
+                    "assign from a local, same-type parameter, or same-type Map-returning call for `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or `Map<Str,Str>`; broader generic key/value forms are not verified yet.",
                     NULL);
                 issues++;
             } else if (target_type == NULL || strcmp(target_type, source_type) != 0) {
@@ -5087,14 +17892,16 @@ static int check_front_contract_text(const char *text, const char *path) {
                 "use `Int` for the verified release scalar type.", fix);
             free(fix);
             issues++;
-        } else if (strstr(probe, "enum ") != NULL) {
-            report_issue(path, line_no, find_col(probe, "enum"), line,
+        } else if (enum_col > 0) {
+            report_issue(path, line_no, enum_col, line,
                 "enum declarations beyond payload-free tags or small Int-coded payload enums are not in the Vais native front subset yet",
                 "use payload-free enum tags or Int/self-recursive payload enums with simple return-arm match; keep broader payload enums on the full compiler path.",
                 NULL);
             issues++;
-        } else if (strstr(probe, "match ") != NULL) {
-            report_issue(path, line_no, find_col(probe, "match"), line,
+        } else if (match_col > 0 &&
+                   !(strstr(probe, "Ok(") != NULL &&
+                     strstr(probe, "Err(") != NULL)) {
+            report_issue(path, line_no, match_col, line,
                 "`match` beyond simple enum return arms is not in the Vais native front subset yet",
                 "use if/else for native sources, or keep payload match code on the full compiler path.",
                 NULL);
@@ -5109,8 +17916,8 @@ static int check_front_contract_text(const char *text, const char *path) {
             if (!front_supported_map_local_line(probe)) {
                 int col = strstr(probe, "Map<") != NULL ? find_col(probe, "Map<") : find_col(probe, "Map <");
                 report_issue(path, line_no, col, line,
-                "only local Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, and Map<Str,Char> values are verified for now",
-                "write `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, `let name: Map<Int,Char> = {}`, `let name: Map<Str,Int> = {}`, `let name: Map<Str,Bool> = {}`, or `let name: Map<Str,Char> = {}`; return initialization is limited to the verified return Map types.",
+                "only local Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, Map<Str,Char>, and Map<Str,Str> values are verified for now",
+                "write `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, `let name: Map<Int,Char> = {}`, `let name: Map<Str,Int> = {}`, `let name: Map<Str,Bool> = {}`, `let name: Map<Str,Char> = {}`, or `let name: Map<Str,Str> = {}`; return initialization is limited to the verified return Map types.",
                 NULL);
             issues++;
         }
@@ -5120,9 +17927,9 @@ static int check_front_contract_text(const char *text, const char *path) {
                 "use a single Int capture returning `fn(Int) -> Int`, or write a named function for broader closure cases.",
                 NULL);
             issues++;
-        } else if (strstr(probe, ".clear(") != NULL && !front_supported_map_clear_line(probe, map_locals, map_local_count)) {
+        } else if (strstr(probe, ".clear(") != NULL && !front_supported_map_clear_line(probe, map_locals, map_local_count) && !front_supported_list_clear_line(probe, list_locals, list_local_count)) {
             report_issue(path, line_no, find_col(probe, ".clear("), line,
-                "method calls beyond push/len/is_empty/last/pop/sum are not in the Vais native front subset yet",
+                "method calls beyond push/clear/len/is_empty/last/pop/sum are not in the Vais native front subset yet",
                 "use a plain function call, or keep this source on the full compiler path until that method is promoted.",
                 NULL);
             issues++;
@@ -5131,6 +17938,11 @@ static int check_front_contract_text(const char *text, const char *path) {
         char *map_local = front_supported_map_local_name(probe, &map_local_type);
         if (map_local != NULL) {
             front_add_map_binding(map_locals, map_types, &map_local_count, map_local, map_local_type);
+        }
+        char *list_local_type = NULL;
+        char *list_local = front_supported_list_local_name(probe, &list_local_type, struct_names, struct_count);
+        if (list_local != NULL) {
+            front_add_map_binding(list_locals, list_types, &list_local_count, list_local, list_local_type);
         }
         free(probe);
     }
@@ -5155,6 +17967,10 @@ static int check_front_contract_text(const char *text, const char *path) {
         free(map_fns[m]);
         free(map_fn_types[m]);
     }
+    for (int l = 0; l < list_local_count; l++) {
+        free(list_locals[l]);
+        free(list_types[l]);
+    }
     for (int s = 0; s < struct_count; s++) free(struct_names[s]);
     lines_free(&lines);
     return issues == 0 ? 0 : 1;
@@ -5177,12 +17993,18 @@ typedef struct {
     char *name;
     char *version;
     char *source;
+    char *binary;
+    char *assets;
     int name_line;
     int version_line;
     int source_line;
+    int binary_line;
+    int assets_line;
     char *name_text;
     char *version_text;
     char *source_text;
+    char *binary_text;
+    char *assets_text;
     PackageDependencyInfo dependencies[32];
     int dependency_count;
 } PackageManifestInfo;
@@ -5376,9 +18198,13 @@ static void package_manifest_info_free(PackageManifestInfo *info) {
     free(info->name);
     free(info->version);
     free(info->source);
+    free(info->binary);
+    free(info->assets);
     free(info->name_text);
     free(info->version_text);
     free(info->source_text);
+    free(info->binary_text);
+    free(info->assets_text);
     for (int i = 0; i < info->dependency_count; i++) {
         free(info->dependencies[i].alias);
         free(info->dependencies[i].path);
@@ -5409,10 +18235,18 @@ static int set_manifest_key(
         slot = &info->source;
         line_slot = &info->source_line;
         text_slot = &info->source_text;
+    } else if (strcmp(key, "binary") == 0) {
+        slot = &info->binary;
+        line_slot = &info->binary_line;
+        text_slot = &info->binary_text;
+    } else if (strcmp(key, "assets") == 0) {
+        slot = &info->assets;
+        line_slot = &info->assets_line;
+        text_slot = &info->assets_text;
     } else {
         report_issue(manifest_path, line_no, 1, line,
             "unsupported package manifest key",
-            "use only top-level `name`, `version`, and `source`; put local packages under `[dependencies]`.",
+            "use only top-level `name`, `version`, `source`, optional `binary`, and optional `assets`; put local packages under `[dependencies]`.",
             NULL);
         free(value);
         return 1;
@@ -5424,7 +18258,7 @@ static int set_manifest_key(
         sb_append(&msg, key);
         sb_append(&msg, "`");
         report_issue(manifest_path, line_no, 1, line, msg.data,
-            "keep exactly one `name`, one `version`, and one `source` key.",
+            "keep exactly one `name`, one `version`, one `source`, at most one `binary`, and at most one `assets` key.",
             NULL);
         free(msg.data);
         free(value);
@@ -5518,7 +18352,7 @@ static int parse_package_manifest_info(const char *manifest_path, PackageManifes
         if (!parse_manifest_assignment_c(code, &key, &value)) {
             report_issue(manifest_path, (int)i + 1, 1, line,
                 "invalid package manifest entry",
-                "write top-level string keys `name`, `version`, and `source`, plus optional `[dependencies]` string entries.",
+                "write top-level string keys `name`, `version`, `source`, optional `binary`, optional `assets`, plus optional `[dependencies]` string entries.",
                 NULL);
             failed = 1;
             free(code);
@@ -5555,6 +18389,13 @@ static int parse_package_manifest_info(const char *manifest_path, PackageManifes
         report_issue(manifest_path, info->source_line, 1, info->source_text,
             "package manifest source must be a local relative path",
             "use a source path such as `src`; absolute paths and `..` are not supported.",
+            NULL);
+        failed = 1;
+    }
+    if (!failed && info->assets != NULL && !package_source_path_is_safe_c(info->assets)) {
+        report_issue(manifest_path, info->assets_line, 1, info->assets_text,
+            "package manifest assets must be a local relative path",
+            "use an assets path such as `assets`; absolute paths and `..` are not supported.",
             NULL);
         failed = 1;
     }
@@ -5612,6 +18453,301 @@ static char *package_manifest_source_root(const char *manifest_path, PackageMani
     free(raw_source_root);
     free(manifest_dir);
     return source_root;
+}
+
+static char *package_manifest_assets_root(const char *manifest_path, PackageManifestInfo *info) {
+    if (info->assets == NULL) return NULL;
+    char *manifest_dir = dirname_copy(manifest_path);
+    char *assets_root = path_join2(manifest_dir, info->assets);
+    free(manifest_dir);
+    struct stat st;
+    if (stat(assets_root, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        StrBuf help;
+        sb_init(&help);
+        sb_append(&help, "create the assets directory at ");
+        sb_append(&help, assets_root);
+        sb_append(&help, " or remove `assets` from the manifest.");
+        report_issue(manifest_path, info->assets_line, 1, info->assets_text,
+            "package manifest assets directory not found", help.data, NULL);
+        free(help.data);
+        free(assets_root);
+        return NULL;
+    }
+    return assets_root;
+}
+
+static int path_is_directory_c(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static int path_is_regular_file_c(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
+}
+
+static char *resolve_cli_package_entry(const char *source) {
+    char *manifest_path = path_join2(source, "vais.toml");
+    if (path_is_regular_file_c(manifest_path)) {
+        PackageManifestInfo info;
+        if (parse_package_manifest_info(manifest_path, &info) != 0) {
+            package_manifest_info_free(&info);
+            free(manifest_path);
+            return NULL;
+        }
+        char *source_root = package_manifest_source_root(manifest_path, &info);
+        if (source_root == NULL) {
+            package_manifest_info_free(&info);
+            free(manifest_path);
+            return NULL;
+        }
+        char *entry = path_join2(source_root, "main.vais");
+        if (!path_is_regular_file_c(entry)) {
+            StrBuf help;
+            sb_init(&help);
+            sb_append(&help, "create ");
+            sb_append(&help, entry);
+            sb_append(&help, " or compile an explicit `.vais` entry file.");
+            report_issue(manifest_path, info.source_line, 1, info.source_text,
+                "package directory entry `main.vais` not found", help.data, NULL);
+            free(help.data);
+            free(entry);
+            entry = NULL;
+        }
+        free(source_root);
+        package_manifest_info_free(&info);
+        free(manifest_path);
+        return entry;
+    }
+    free(manifest_path);
+
+    char *entry = path_join2(source, "main.vais");
+    if (!path_is_regular_file_c(entry)) {
+        fprintf(stderr, "error: package directory entry not found: %s\n", entry);
+        fprintf(stderr, "help: add main.vais, or add vais.toml with source = \"src\" and src/main.vais.\n");
+        free(entry);
+        return NULL;
+    }
+    return entry;
+}
+
+static char *resolve_cli_source_path(const char *source) {
+    if (!path_is_directory_c(source)) {
+        char *copy = strdup(source);
+        if (copy == NULL) die_oom();
+        return copy;
+    }
+    return resolve_cli_package_entry(source);
+}
+
+static int package_binary_name_is_safe_c(const char *name) {
+    if (name == NULL || name[0] == '\0') return 0;
+    if (name[0] == '.' || name[0] == '-') return 0;
+    for (const char *p = name; *p != '\0'; p++) {
+        char ch = *p;
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.') {
+            continue;
+        }
+        return 0;
+    }
+    return 1;
+}
+
+static char *package_archive_root_name(const char *binary_name, const char *version) {
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, binary_name);
+    sb_append(&out, "-");
+    sb_append(&out, version);
+    return sb_take(&out);
+}
+
+static int mkdir_p_c(const char *path) {
+    if (path == NULL || path[0] == '\0') return 1;
+    char tmp[4096];
+    if (snprintf(tmp, sizeof(tmp), "%s", path) >= (int)sizeof(tmp)) {
+        fprintf(stderr, "error: output path too long: %s\n", path);
+        return 1;
+    }
+    size_t len = strlen(tmp);
+    while (len > 1 && tmp[len - 1] == '/') {
+        tmp[len - 1] = '\0';
+        len--;
+    }
+    for (char *p = tmp + 1; *p != '\0'; p++) {
+        if (*p != '/') continue;
+        *p = '\0';
+        if (tmp[0] != '\0' && mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+            fprintf(stderr, "error: cannot create directory %s: %s\n", tmp, strerror(errno));
+            *p = '/';
+            return 1;
+        }
+        *p = '/';
+    }
+    if (mkdir(tmp, 0777) != 0 && errno != EEXIST) {
+        fprintf(stderr, "error: cannot create directory %s: %s\n", tmp, strerror(errno));
+        return 1;
+    }
+    if (!path_is_directory_c(tmp)) {
+        fprintf(stderr, "error: output path exists but is not a directory: %s\n", tmp);
+        return 1;
+    }
+    return 0;
+}
+
+static int copy_file_text_c(const char *src, const char *dst) {
+    char *text = read_file(src);
+    if (text == NULL) return 1;
+    int rc = write_file_text(dst, text);
+    free(text);
+    return rc;
+}
+
+static int copy_file_binary_c(const char *src, const char *dst) {
+    struct stat st;
+    if (stat(src, &st) != 0) {
+        fprintf(stderr, "error: cannot stat %s: %s\n", src, strerror(errno));
+        return 1;
+    }
+    FILE *in = fopen(src, "rb");
+    if (in == NULL) {
+        fprintf(stderr, "error: cannot open %s: %s\n", src, strerror(errno));
+        return 1;
+    }
+    FILE *out = fopen(dst, "wb");
+    if (out == NULL) {
+        fprintf(stderr, "error: cannot write %s: %s\n", dst, strerror(errno));
+        fclose(in);
+        return 1;
+    }
+    char buf[65536];
+    int rc = 0;
+    while (1) {
+        size_t n = fread(buf, 1, sizeof(buf), in);
+        if (n > 0 && fwrite(buf, 1, n, out) != n) {
+            fprintf(stderr, "error: cannot write %s: %s\n", dst, strerror(errno));
+            rc = 1;
+            break;
+        }
+        if (n < sizeof(buf)) {
+            if (ferror(in)) {
+                fprintf(stderr, "error: cannot read %s: %s\n", src, strerror(errno));
+                rc = 1;
+            }
+            break;
+        }
+    }
+    if (fclose(out) != 0) {
+        fprintf(stderr, "error: cannot close %s: %s\n", dst, strerror(errno));
+        rc = 1;
+    }
+    if (fclose(in) != 0) {
+        fprintf(stderr, "error: cannot close %s: %s\n", src, strerror(errno));
+        rc = 1;
+    }
+    if (rc == 0 && chmod(dst, st.st_mode & 0777) != 0) {
+        fprintf(stderr, "error: cannot chmod %s: %s\n", dst, strerror(errno));
+        rc = 1;
+    }
+    return rc;
+}
+
+static int copy_tree_c(const char *src, const char *dst) {
+    struct stat st;
+    if (lstat(src, &st) != 0) {
+        fprintf(stderr, "error: cannot stat %s: %s\n", src, strerror(errno));
+        return 1;
+    }
+    if (S_ISREG(st.st_mode)) return copy_file_binary_c(src, dst);
+    if (!S_ISDIR(st.st_mode)) {
+        fprintf(stderr, "error: package assets support regular files and directories only: %s\n", src);
+        return 1;
+    }
+    if (mkdir_p_c(dst) != 0) return 1;
+    DIR *dir = opendir(src);
+    if (dir == NULL) {
+        fprintf(stderr, "error: cannot open directory %s: %s\n", src, strerror(errno));
+        return 1;
+    }
+    int rc = 0;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        char *src_child = path_join2(src, entry->d_name);
+        char *dst_child = path_join2(dst, entry->d_name);
+        rc = copy_tree_c(src_child, dst_child);
+        free(src_child);
+        free(dst_child);
+        if (rc != 0) break;
+    }
+    closedir(dir);
+    if (rc == 0 && chmod(dst, st.st_mode & 0777) != 0) {
+        fprintf(stderr, "error: cannot chmod %s: %s\n", dst, strerror(errno));
+        rc = 1;
+    }
+    return rc;
+}
+
+static int package_create_archive(
+    const char *output_dir,
+    const char *binary_name,
+    const char *version,
+    const char *bin_path,
+    const char *manifest_path,
+    const char *assets_root,
+    char **archive_path_out
+) {
+    *archive_path_out = NULL;
+    char stage_root[512];
+    if (make_tmp_path(stage_root, sizeof(stage_root), "package-archive") != 0) return 1;
+    if (mkdir_p_c(stage_root) != 0) return 1;
+
+    char *archive_root_name = package_archive_root_name(binary_name, version);
+    StrBuf archive_file_name;
+    sb_init(&archive_file_name);
+    sb_append(&archive_file_name, archive_root_name);
+    sb_append(&archive_file_name, ".tar.gz");
+    char *archive_path = path_join2(output_dir, archive_file_name.data);
+
+    char *stage_package_root = path_join2(stage_root, archive_root_name);
+    char *stage_bin_dir = path_join2(stage_package_root, "bin");
+    char *stage_bin_path = path_join2(stage_bin_dir, binary_name);
+    char *stage_manifest_path = path_join2(stage_package_root, "vais.toml");
+    char *stage_assets_path = path_join2(stage_package_root, "assets");
+
+    int rc = mkdir_p_c(stage_bin_dir);
+    if (rc == 0) rc = copy_file_binary_c(bin_path, stage_bin_path);
+    if (rc == 0) rc = copy_file_text_c(manifest_path, stage_manifest_path);
+    if (rc == 0 && assets_root != NULL) rc = copy_tree_c(assets_root, stage_assets_path);
+    if (rc == 0) {
+        char *const tar_argv[] = {
+            "tar",
+            "-C",
+            stage_root,
+            "-czf",
+            archive_path,
+            archive_root_name,
+            NULL
+        };
+        rc = run_program_wait(tar_argv);
+        if (rc != 0) {
+            fprintf(stderr, "error: tar failed while creating package archive\n");
+            rc = 1;
+        }
+    }
+    if (rc == 0) {
+        *archive_path_out = archive_path;
+    } else {
+        free(archive_path);
+    }
+    free(archive_file_name.data);
+    free(stage_assets_path);
+    free(stage_manifest_path);
+    free(stage_bin_path);
+    free(stage_bin_dir);
+    free(stage_package_root);
+    free(archive_root_name);
+    return rc;
 }
 
 static int module_resolver_add_package_root(ModuleResolver *r, const char *alias, const char *source_root) {
@@ -6220,7 +19356,9 @@ static char *prepare_source_file(const char *path) {
         return NULL;
     }
     char *normalized = normalize_source_text(merged, 0);
-    char *enum_lowered = lower_enum_text(normalized);
+    char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
+    char *result_str_lowered = lower_result_str_int_text(map_match_lowered);
+    char *enum_lowered = lower_enum_text(result_str_lowered);
     char *closure_lowered = lower_closure_text(enum_lowered);
     char *list_method_lowered = lower_list_method_text(closure_lowered);
     char *nested_list_lowered = lower_nested_list_text(list_method_lowered);
@@ -6229,6 +19367,8 @@ static char *prepare_source_file(const char *path) {
     if (!trusted_self_host && check_front_contract_text(method_lowered, path) != 0) {
         free(merged);
         free(normalized);
+        free(map_match_lowered);
+        free(result_str_lowered);
         free(enum_lowered);
         free(closure_lowered);
         free(list_method_lowered);
@@ -6241,6 +19381,8 @@ static char *prepare_source_file(const char *path) {
     char *prepared = normalize_source_text(generic_lowered, 1);
     free(merged);
     free(normalized);
+    free(map_match_lowered);
+    free(result_str_lowered);
     free(enum_lowered);
     free(closure_lowered);
     free(list_method_lowered);
@@ -6286,7 +19428,7 @@ static void direct_names_add_typed(DirectNameSet *set, const char *name, const c
         existing->is_ref = 0;
         return;
     }
-    if (set->count >= 128) return;
+    if (set->count >= DIRECT_MAX_LOCALS) return;
     set->items[set->count].name = strdup(name);
     set->items[set->count].type = strdup(type);
     set->items[set->count].is_ref = 0;
@@ -6301,7 +19443,7 @@ static void direct_names_add_typed_ref(DirectNameSet *set, const char *name, con
         existing->is_ref = is_ref;
         return;
     }
-    if (set->count >= 128) return;
+    if (set->count >= DIRECT_MAX_LOCALS) return;
     set->items[set->count].name = strdup(name);
     set->items[set->count].type = strdup(type);
     set->items[set->count].is_ref = is_ref;
@@ -6346,7 +19488,10 @@ static DirectFnInfo *direct_find_fn(DirectFnInfo *fns, int count, const char *na
 
 static void direct_struct_free_one(DirectStructInfo *info) {
     free(info->name);
-    for (int i = 0; i < info->field_count; i++) free(info->fields[i]);
+    for (int i = 0; i < info->field_count; i++) {
+        free(info->fields[i]);
+        free(info->field_types[i]);
+    }
     memset(info, 0, sizeof(*info));
 }
 
@@ -6368,6 +19513,37 @@ static int direct_struct_has_field(DirectStructInfo *info, const char *field) {
     return 0;
 }
 
+static int direct_has_process_result_struct(DirectStructInfo *structs, int struct_count) {
+    DirectStructInfo *info = direct_find_struct(structs, struct_count, "ProcessResult");
+    if (info == NULL || info->field_count != 3) return 0;
+    return strcmp(info->fields[0], "code") == 0 &&
+        strcmp(info->field_types[0], "Int") == 0 &&
+        strcmp(info->fields[1], "stdout") == 0 &&
+        strcmp(info->field_types[1], "Str") == 0 &&
+        strcmp(info->fields[2], "stderr") == 0 &&
+        strcmp(info->field_types[2], "Str") == 0;
+}
+
+static int direct_struct_field_index(DirectStructInfo *info, const char *field) {
+    for (int i = 0; i < info->field_count; i++) {
+        if (strcmp(info->fields[i], field) == 0) return i;
+    }
+    return -1;
+}
+
+static const char *direct_struct_field_type(DirectStructInfo *info, const char *field) {
+    int idx = direct_struct_field_index(info, field);
+    if (idx < 0) return NULL;
+    return info->field_types[idx];
+}
+
+static int direct_is_single_int_field_struct(DirectStructInfo *info) {
+    return info != NULL &&
+        info->field_count == 1 &&
+        info->field_types[0] != NULL &&
+        strcmp(info->field_types[0], "Int") == 0;
+}
+
 static int direct_is_plain_ident(const char *text) {
     if (!is_ident_start(text[0])) return 0;
     int i = 1;
@@ -6377,6 +19553,22 @@ static int direct_is_plain_ident(const char *text) {
 
 static int direct_is_list_int_type(const char *type) {
     return type != NULL && strcmp(type, "List<Int>") == 0;
+}
+
+static int direct_is_list_str_type(const char *type) {
+    return type != NULL && strcmp(type, "List<Str>") == 0;
+}
+
+static int direct_is_option_int_type(const char *type) {
+    return type != NULL && strcmp(type, "Option<Int>") == 0;
+}
+
+static int direct_is_result_int_int_type(const char *type) {
+    return type != NULL && strcmp(type, "Result<Int,Int>") == 0;
+}
+
+static int direct_is_option_result_type(const char *type) {
+    return direct_is_option_int_type(type) || direct_is_result_int_int_type(type);
 }
 
 static int direct_is_map_int_int_type(const char *type) {
@@ -6403,15 +19595,20 @@ static int direct_is_map_str_char_type(const char *type) {
     return type != NULL && strcmp(type, "Map<Str,Char>") == 0;
 }
 
+static int direct_is_map_str_str_type(const char *type) {
+    return type != NULL && strcmp(type, "Map<Str,Str>") == 0;
+}
+
 static int direct_is_map_type(const char *type) {
-    return direct_is_map_int_int_type(type) || direct_is_map_int_bool_type(type) || direct_is_map_int_char_type(type) || direct_is_map_str_int_type(type) || direct_is_map_str_bool_type(type) || direct_is_map_str_char_type(type);
+    return direct_is_map_int_int_type(type) || direct_is_map_int_bool_type(type) || direct_is_map_int_char_type(type) || direct_is_map_str_int_type(type) || direct_is_map_str_bool_type(type) || direct_is_map_str_char_type(type) || direct_is_map_str_str_type(type);
 }
 
 static int direct_is_supported_map_return_type(const char *type) {
-    return direct_is_map_int_int_type(type) || direct_is_map_int_bool_type(type) || direct_is_map_int_char_type(type) || direct_is_map_str_int_type(type) || direct_is_map_str_bool_type(type) || direct_is_map_str_char_type(type);
+    return direct_is_map_int_int_type(type) || direct_is_map_int_bool_type(type) || direct_is_map_int_char_type(type) || direct_is_map_str_int_type(type) || direct_is_map_str_bool_type(type) || direct_is_map_str_char_type(type) || direct_is_map_str_str_type(type);
 }
 
 static const char *direct_map_key_type(const char *type) {
+    if (direct_is_map_str_str_type(type)) return "Str";
     if (direct_is_map_str_char_type(type)) return "Str";
     if (direct_is_map_str_bool_type(type)) return "Str";
     if (direct_is_map_str_int_type(type)) return "Str";
@@ -6420,6 +19617,7 @@ static const char *direct_map_key_type(const char *type) {
 }
 
 static const char *direct_map_value_type(const char *type) {
+    if (direct_is_map_str_str_type(type)) return "Str";
     if (direct_is_map_str_char_type(type)) return "Char";
     if (direct_is_map_str_bool_type(type)) return "Bool";
     if (direct_is_map_str_int_type(type)) return "Int";
@@ -6430,6 +19628,18 @@ static const char *direct_map_value_type(const char *type) {
 }
 
 static const char *direct_map_helper_name(const char *type, const char *method) {
+    if (direct_is_map_str_str_type(type)) {
+        if (strcmp(method, "insert") == 0) return "__vais_map_str_str_insert";
+        if (strcmp(method, "remove") == 0) return "__vais_map_str_str_remove";
+        if (strcmp(method, "clear") == 0) return "__vais_map_str_str_clear";
+        if (strcmp(method, "copy") == 0) return "__vais_map_str_str_copy";
+        if (strcmp(method, "get") == 0) return "__vais_map_str_str_get";
+        if (strcmp(method, "get_opt") == 0) return "__vais_map_str_str_get_opt";
+        if (strcmp(method, "contains") == 0) return "__vais_map_str_str_contains";
+        if (strcmp(method, "len") == 0) return "__vais_map_str_str_len";
+        if (strcmp(method, "key_at") == 0) return "__vais_map_str_str_key_at";
+        if (strcmp(method, "value_at") == 0) return "__vais_map_str_str_value_at";
+    }
     if (direct_is_map_str_int_type(type) || direct_is_map_str_bool_type(type) || direct_is_map_str_char_type(type)) {
         if (strcmp(method, "insert") == 0) return "__vais_map_str_int_insert";
         if (strcmp(method, "remove") == 0) return "__vais_map_str_int_remove";
@@ -6439,6 +19649,8 @@ static const char *direct_map_helper_name(const char *type, const char *method) 
         if (strcmp(method, "get_opt") == 0) return "__vais_map_str_int_get_opt";
         if (strcmp(method, "contains") == 0) return "__vais_map_str_int_contains";
         if (strcmp(method, "len") == 0) return "__vais_map_str_int_len";
+        if (strcmp(method, "key_at") == 0) return "__vais_map_str_int_key_at";
+        if (strcmp(method, "value_at") == 0) return "__vais_map_str_int_value_at";
     }
     if (strcmp(method, "insert") == 0) return "__vais_map_int_int_insert";
     if (strcmp(method, "remove") == 0) return "__vais_map_int_int_remove";
@@ -6448,6 +19660,8 @@ static const char *direct_map_helper_name(const char *type, const char *method) 
     if (strcmp(method, "get_opt") == 0) return "__vais_map_int_int_get_opt";
     if (strcmp(method, "contains") == 0) return "__vais_map_int_int_contains";
     if (strcmp(method, "len") == 0) return "__vais_map_int_int_len";
+    if (strcmp(method, "key_at") == 0) return "__vais_map_int_int_key_at";
+    if (strcmp(method, "value_at") == 0) return "__vais_map_int_int_value_at";
     return "__vais_map_int_int_len";
 }
 
@@ -6459,6 +19673,10 @@ static int direct_map_arg_type_compatible(const char *expected, const char *actu
 static int direct_is_list_type(const char *type) {
     size_t n = type == NULL ? 0 : strlen(type);
     return n > 6 && starts_with(type, "List<") && type[n - 1] == '>';
+}
+
+static int direct_is_token_list_type(const char *type) {
+    return type != NULL && strcmp(type, "List<Token>") == 0;
 }
 
 static char *direct_list_element_type(const char *type) {
@@ -6500,7 +19718,9 @@ static int direct_return_type_allowed(DirectStructInfo *structs, int struct_coun
         direct_is_str_type(type) ||
         direct_is_bool_type(type) ||
         direct_is_char_type(type) ||
+        direct_is_option_result_type(type) ||
         direct_is_list_int_type(type) ||
+        direct_is_list_str_type(type) ||
         direct_is_list_struct_type(structs, struct_count, type) ||
         direct_is_supported_map_return_type(type) ||
         direct_find_struct(structs, struct_count, type) != NULL;
@@ -6513,7 +19733,8 @@ static int direct_param_type_allowed(DirectStructInfo *structs, int struct_count
         direct_is_map_int_char_type(type) ||
         direct_is_map_str_int_type(type) ||
         direct_is_map_str_bool_type(type) ||
-        direct_is_map_str_char_type(type);
+        direct_is_map_str_char_type(type) ||
+        direct_is_map_str_str_type(type);
 }
 
 static int direct_local_type_allowed(DirectStructInfo *structs, int struct_count, const char *type) {
@@ -6532,7 +19753,10 @@ static const char *direct_c_type(const char *type) {
     if (direct_is_str_type(type)) return "Str";
     if (direct_is_bool_type(type)) return "Bool";
     if (direct_is_char_type(type)) return "long";
+    if (direct_is_option_result_type(type)) return "long";
     if (direct_is_list_int_type(type)) return "DirectListInt";
+    if (direct_is_list_str_type(type)) return "DirectList_Str";
+    if (direct_is_map_str_str_type(type)) return "DirectMapStrStr";
     if (direct_is_map_str_int_type(type) || direct_is_map_str_bool_type(type) || direct_is_map_str_char_type(type)) return "DirectMapStrInt";
     if (direct_is_map_type(type)) return "DirectMapIntInt";
     if (direct_is_list_type(type)) {
@@ -6548,6 +19772,7 @@ static const char *direct_c_type(const char *type) {
 }
 
 static const char *direct_c_param_type(const char *type) {
+    if (direct_is_map_str_str_type(type)) return "DirectMapStrStr *";
     if (direct_is_map_str_int_type(type) || direct_is_map_str_bool_type(type) || direct_is_map_str_char_type(type)) return "DirectMapStrInt *";
     if (direct_is_map_type(type)) return "DirectMapIntInt *";
     if (direct_is_list_type(type)) {
@@ -6560,8 +19785,96 @@ static const char *direct_c_param_type(const char *type) {
     return direct_c_type(type);
 }
 
+static const char *direct_list_cap_macro(const char *type) {
+    return direct_is_token_list_type(type) ? "VAIS_DIRECT_TOKEN_CAP" : "VAIS_DIRECT_LIST_CAP";
+}
+
+static void direct_append_default_initializer(StrBuf *out, const char *type) {
+    if (direct_is_str_type(type)) {
+        sb_append(out, "\"\"");
+    } else if (direct_is_option_result_type(type)) {
+        sb_append(out, "1");
+    } else if (direct_is_intlike_scalar_type(type)) {
+        sb_append(out, "0");
+    } else if (direct_is_token_list_type(type)) {
+        sb_append(out, "__vais_token_list_new()");
+    } else {
+        sb_append(out, "{0}");
+    }
+}
+
+static void direct_append_cast_initializer_prefix(StrBuf *out, const char *type) {
+    sb_append(out, "(");
+    sb_append(out, direct_c_type(type));
+    sb_append(out, ")");
+}
+
+static void direct_emit_local_binding_prefix(
+    StrBuf *out,
+    DirectNameSet *locals,
+    const char *name,
+    const char *type,
+    int already_bound,
+    int force_local_decl
+) {
+    if (locals->hoist_decls != NULL && !force_local_decl) {
+        if (!already_bound) {
+            sb_append(locals->hoist_decls, direct_c_type(type));
+            sb_append(locals->hoist_decls, " ");
+            sb_append(locals->hoist_decls, name);
+            sb_append(locals->hoist_decls, " = ");
+            direct_append_default_initializer(locals->hoist_decls, type);
+            sb_append(locals->hoist_decls, ";\n");
+        }
+        sb_append(out, name);
+        sb_append(out, " = ");
+        return;
+    }
+    sb_append(out, direct_c_type(type));
+    sb_append(out, " ");
+    sb_append(out, name);
+    sb_append(out, " = ");
+}
+
 static char *direct_parse_local_type(const char **cursor) {
     const char *p = skip_ws(*cursor);
+    if (*p == '&') {
+        p = skip_ws(p + 1);
+        *cursor = p;
+        return direct_parse_local_type(cursor);
+    }
+    if (starts_with(p, "Option") && !is_ident_continue(p[6])) {
+        const char *q = skip_ws(p + 6);
+        if (*q == '<') {
+            q = skip_ws(q + 1);
+            if (starts_with(q, "Int") && !is_ident_continue(q[3])) {
+                q = skip_ws(q + 3);
+                if (*q == '>') {
+                    *cursor = skip_ws(q + 1);
+                    return strdup("Option<Int>");
+                }
+            }
+        }
+    }
+    if (starts_with(p, "Result") && !is_ident_continue(p[6])) {
+        const char *q = skip_ws(p + 6);
+        if (*q == '<') {
+            q = skip_ws(q + 1);
+            if (starts_with(q, "Int") && !is_ident_continue(q[3])) {
+                q = skip_ws(q + 3);
+                if (*q == ',') {
+                    q = skip_ws(q + 1);
+                    if (starts_with(q, "Int") && !is_ident_continue(q[3])) {
+                        q = skip_ws(q + 3);
+                        if (*q == '>') {
+                            *cursor = skip_ws(q + 1);
+                            return strdup("Result<Int,Int>");
+                        }
+                    }
+                }
+            }
+        }
+    }
     if (starts_with(p, "Map") && !is_ident_continue(p[3])) {
         const char *q = skip_ws(p + 3);
         if (*q == '<') {
@@ -6661,6 +19974,8 @@ static int direct_parse_struct_field(
     int line_no,
     const char *source_line,
     const char *text,
+    DirectStructInfo *known_structs,
+    int known_struct_count,
     DirectStructInfo *out
 ) {
     char *part = trim_copy(text);
@@ -6681,25 +19996,44 @@ static int direct_parse_struct_field(
     s++;
     while (is_ident_continue(*s)) s++;
     char *field = substr_copy(name_start, (size_t)(s - name_start));
+    char *field_type = strdup("Int");
+    if (field_type == NULL) die_oom();
     const char *rest = skip_ws(s);
     if (*rest == ':') {
         char *ty = trim_copy(rest + 1);
-        int ok = strcmp(ty, "Int") == 0;
-        free(ty);
+        int ok = strcmp(ty, "Int") == 0 || strcmp(ty, "Str") == 0;
+        if (ok && strcmp(ty, "Int") != 0) {
+            free(field_type);
+            field_type = strdup(ty);
+            if (field_type == NULL) die_oom();
+        }
+        if (!ok) {
+            DirectStructInfo *nested = direct_find_struct(known_structs, known_struct_count, ty);
+            ok = nested != NULL;
+            if (ok) {
+                free(field_type);
+                field_type = strdup(ty);
+                if (field_type == NULL) die_oom();
+            }
+        }
         if (!ok) {
             report_issue(path, line_no, find_col(source_line, field), source_line,
-                "direct native emitter supports Int struct fields only",
-                "write this direct-engine field as `name: Int`.",
+                "direct native emitter supports Int, Str, and previously declared nested struct fields only",
+                "write this direct-engine field as `name: Int`, `name: Str`, or as a previously declared struct type.",
                 NULL);
+            free(ty);
+            free(field_type);
             free(field);
             free(part);
             return -1;
         }
+        free(ty);
     } else if (*rest != '\0') {
         report_issue(path, line_no, find_col(source_line, field), source_line,
             "direct native emitter expected an Int struct field",
             "write struct fields as `name: Int`.",
             NULL);
+        free(field_type);
         free(field);
         free(part);
         return -1;
@@ -6709,20 +20043,23 @@ static int direct_parse_struct_field(
             "direct native emitter found a duplicate struct field",
             "use each field name only once in a struct declaration.",
             NULL);
+        free(field_type);
         free(field);
         free(part);
         return -1;
     }
-    if (out->field_count >= 16) {
+    if (out->field_count >= DIRECT_MAX_STRUCT_FIELDS) {
         report_issue(path, line_no, 1, source_line,
-            "direct native emitter supports up to 16 struct fields",
+            "direct native emitter supports up to 64 struct fields",
             "split this direct-engine struct into a smaller shape for now.",
             NULL);
+        free(field_type);
         free(field);
         free(part);
         return -1;
     }
     out->fields[out->field_count++] = field;
+    out->field_types[out->field_count - 1] = field_type;
     free(part);
     return 0;
 }
@@ -6732,6 +20069,8 @@ static int direct_parse_struct_fields(
     int line_no,
     const char *source_line,
     const char *body,
+    DirectStructInfo *known_structs,
+    int known_struct_count,
     DirectStructInfo *out
 ) {
     const char *start = body;
@@ -6739,7 +20078,7 @@ static int direct_parse_struct_fields(
         char ch = *p;
         if (ch == ',' || ch == '\n' || ch == '\0') {
             char *piece = substr_copy(start, (size_t)(p - start));
-            int rc = direct_parse_struct_field(path, line_no, source_line, piece, out);
+            int rc = direct_parse_struct_field(path, line_no, source_line, piece, known_structs, known_struct_count, out);
             free(piece);
             if (rc < 0) return -1;
             if (ch == '\0') break;
@@ -6762,6 +20101,8 @@ static int direct_parse_struct_decl(
     size_t start_index,
     DirectStructInfo *out,
     size_t *end_index,
+    DirectStructInfo *known_structs,
+    int known_struct_count,
     const char *path
 ) {
     char *first = strip_line_comment(lines->items[start_index], strlen(lines->items[start_index]));
@@ -6832,7 +20173,7 @@ static int direct_parse_struct_decl(
         }
     }
 
-    if (direct_parse_struct_fields(path, (int)start_index + 1, lines->items[start_index], body.data, out) != 0) {
+    if (direct_parse_struct_fields(path, (int)start_index + 1, lines->items[start_index], body.data, known_structs, known_struct_count, out) != 0) {
         free(body.data);
         direct_struct_free_one(out);
         free(first);
@@ -6930,17 +20271,17 @@ static int direct_validate_fn_types(
 ) {
     int issues = 0;
     if (!direct_return_type_allowed(structs, struct_count, info->return_type)) {
-        report_issue(path, info->line_no, find_col(line, info->return_type), line,
-            "direct native emitter function return type is not available",
-            "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or a struct declared in this file.",
-            "fn f() -> Int");
+            report_issue(path, info->line_no, find_col(line, info->return_type), line,
+                "direct native emitter function return type is not available",
+                "use `Int`, `Bool`, `Char`, `Str`, `Option<Int>`, `Result<Int,Int>`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, `Map<Str,Str>`, or a struct declared in this file.",
+                "fn f() -> Int");
         issues++;
     }
     for (int p = 0; p < info->param_count; p++) {
         if (!direct_param_type_allowed(structs, struct_count, info->param_types[p])) {
             report_issue(path, info->line_no, find_col(line, info->param_types[p]), line,
                 "direct native emitter function parameter type is not available",
-                "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or a struct declared in this file.",
+                "use `Int`, `Bool`, `Char`, `Str`, `Option<Int>`, `Result<Int,Int>`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, `Map<Str,Str>`, or a struct declared in this file.",
                 "fn f(x: Int) -> Int");
             issues++;
         }
@@ -6983,6 +20324,11 @@ static int direct_parse_list_literal_items(const char *expr, char **parts, int m
     free(body_trim);
     free(trimmed);
     if (n < 0) return -1;
+    if (n > 0 && parts[n - 1] != NULL && parts[n - 1][0] == '\0') {
+        free(parts[n - 1]);
+        parts[n - 1] = NULL;
+        n--;
+    }
     *count = n;
     return 1;
 }
@@ -7018,6 +20364,131 @@ static int direct_is_map_empty_initializer_expr(const char *expr) {
     int ok = strcmp(trimmed, "{}") == 0;
     free(trimmed);
     return ok;
+}
+
+static char *direct_rewrite_struct_literals(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    DirectStructInfo *structs,
+    int struct_count
+);
+
+static char *direct_rewrite_single_field_nested_struct_value(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *value,
+    const char *expected_type,
+    DirectStructInfo *nested,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    char *trimmed = trim_copy(value);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        report_issue(path, line_no, 1, line,
+            "direct native emitter expected a nested struct literal",
+            "write the nested field as `inner: Inner { v: value }`.",
+            NULL);
+        free(trimmed);
+        return NULL;
+    }
+    const char *type_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *type_name = substr_copy(type_start, (size_t)(s - type_start));
+    const char *open = skip_ws(s);
+    if (strcmp(type_name, expected_type) != 0 || *open != '{') {
+        report_issue(path, line_no, find_col(line, type_name), line,
+            "direct native emitter nested field type does not match",
+            "use the struct type declared by the outer field.",
+            NULL);
+        free(type_name);
+        free(trimmed);
+        return NULL;
+    }
+    int close = find_matching_brace_c(trimmed, (int)(open - trimmed));
+    if (close < 0 || *skip_ws(trimmed + close + 1) != '\0') {
+        report_issue(path, line_no, find_col(line, type_name), line,
+            "direct native emitter expected `}` to close the nested struct literal",
+            "write a complete single-field nested struct literal.",
+            NULL);
+        free(type_name);
+        free(trimmed);
+        return NULL;
+    }
+    char *body = substr_copy(open + 1, (size_t)(close - (open - trimmed) - 1));
+    char *parts[16] = {0};
+    int n = split_top_level_commas_c(body, parts, 16);
+    free(body);
+    if (n < 0) {
+        report_issue(path, line_no, find_col(line, type_name), line,
+            "direct native emitter supports up to 64 nested literal fields",
+            "keep this direct-engine nested literal small.",
+            NULL);
+        free(type_name);
+        free(trimmed);
+        return NULL;
+    }
+    char *result = NULL;
+    for (int p = 0; p < n; p++) {
+        char *part = trim_copy(parts[p]);
+        if (part[0] == '\0') {
+            free(part);
+            continue;
+        }
+        char *colon = strchr(part, ':');
+        if (colon == NULL) {
+            report_issue(path, line_no, find_col(line, type_name), line,
+                "direct native emitter expected named nested struct fields",
+                "write nested fields as `v: expr`.",
+                NULL);
+            free(part);
+            for (int k = 0; k < n; k++) free(parts[k]);
+            free(type_name);
+            free(trimmed);
+            return NULL;
+        }
+        char *field_raw = substr_copy(part, (size_t)(colon - part));
+        char *field = trim_copy(field_raw);
+        free(field_raw);
+        if (strcmp(field, nested->fields[0]) != 0) {
+            report_issue(path, line_no, find_col(line, field), line,
+                "direct native emitter found an unknown nested struct field",
+                "use the single field declared on this nested struct.",
+                NULL);
+            free(field);
+            free(part);
+            for (int k = 0; k < n; k++) free(parts[k]);
+            free(type_name);
+            free(trimmed);
+            return NULL;
+        }
+        char *inner_value = trim_copy(colon + 1);
+        result = direct_rewrite_struct_literals(path, line_no, line, inner_value, structs, struct_count);
+        free(inner_value);
+        free(field);
+        free(part);
+        if (result == NULL) {
+            for (int k = 0; k < n; k++) free(parts[k]);
+            free(type_name);
+            free(trimmed);
+            return NULL;
+        }
+        break;
+    }
+    for (int k = 0; k < n; k++) free(parts[k]);
+    if (result == NULL) {
+        report_issue(path, line_no, find_col(line, type_name), line,
+            "direct native emitter expected the nested struct field value",
+            "initialize the single field declared by this nested struct.",
+            NULL);
+    }
+    free(type_name);
+    free(trimmed);
+    return result;
 }
 
 static char *direct_rewrite_struct_literals(
@@ -7087,12 +20558,12 @@ static char *direct_rewrite_struct_literals(
             return NULL;
         }
         char *body = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
-        char *parts[16] = {0};
-        int n = split_top_level_commas_c(body, parts, 16);
+        char *parts[DIRECT_MAX_STRUCT_LITERAL_FIELDS] = {0};
+        int n = split_top_level_commas_c(body, parts, DIRECT_MAX_STRUCT_LITERAL_FIELDS);
         free(body);
         if (n < 0) {
             report_issue(path, line_no, find_col(line, name), line,
-                "direct native emitter supports up to 16 struct literal fields",
+                "direct native emitter supports up to 64 struct literal fields",
                 "keep this direct-engine literal within the small struct slice.",
                 NULL);
             free(name);
@@ -7102,19 +20573,26 @@ static char *direct_rewrite_struct_literals(
         sb_append(&out, "(");
         sb_append(&out, name);
         sb_append(&out, "){");
+        int emitted_fields = 0;
         for (int p = 0; p < n; p++) {
-            char *colon = strchr(parts[p], ':');
+            char *part = trim_copy(parts[p]);
+            if (part[0] == '\0') {
+                free(part);
+                continue;
+            }
+            char *colon = strchr(part, ':');
             if (colon == NULL) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter expected named struct literal fields",
                     "write fields as `name: expr` inside the literal.",
                     NULL);
                 for (int k = 0; k < n; k++) free(parts[k]);
+                free(part);
                 free(name);
                 free(out.data);
                 return NULL;
             }
-            char *field_raw = substr_copy(parts[p], (size_t)(colon - parts[p]));
+            char *field_raw = substr_copy(part, (size_t)(colon - part));
             char *field = trim_copy(field_raw);
             free(field_raw);
             if (!direct_struct_has_field(st, field)) {
@@ -7123,6 +20601,7 @@ static char *direct_rewrite_struct_literals(
                     "use a field declared on this struct.",
                     NULL);
                 for (int k = 0; k < n; k++) free(parts[k]);
+                free(part);
                 free(field);
                 free(name);
                 free(out.data);
@@ -7133,18 +20612,21 @@ static char *direct_rewrite_struct_literals(
             free(value);
             if (rewritten_value == NULL) {
                 for (int k = 0; k < n; k++) free(parts[k]);
+                free(part);
                 free(field);
                 free(name);
                 free(out.data);
                 return NULL;
             }
-            if (p > 0) sb_append(&out, ", ");
+            if (emitted_fields > 0) sb_append(&out, ", ");
             sb_append(&out, ".");
             sb_append(&out, field);
             sb_append(&out, " = ");
             sb_append(&out, rewritten_value);
+            emitted_fields++;
             free(rewritten_value);
             free(field);
+            free(part);
         }
         sb_append(&out, "}");
         for (int p = 0; p < n; p++) free(parts[p]);
@@ -7157,6 +20639,7 @@ static char *direct_rewrite_struct_literals(
 static int direct_expr_bare_list_local(DirectNameSet *locals, const char *expr, char **name_out) {
     char *trimmed = trim_copy(expr);
     const char *s = skip_ws(trimmed);
+    if (*s == '&') s = skip_ws(s + 1);
     if (!is_ident_start(*s)) {
         free(trimmed);
         return 0;
@@ -7182,6 +20665,7 @@ static int direct_expr_bare_list_local(DirectNameSet *locals, const char *expr, 
 static int direct_expr_bare_map_local(DirectNameSet *locals, const char *expr, char **name_out) {
     char *trimmed = trim_copy(expr);
     const char *s = skip_ws(trimmed);
+    if (*s == '&') s = skip_ws(s + 1);
     if (!is_ident_start(*s)) {
         free(trimmed);
         return 0;
@@ -7265,6 +20749,282 @@ static void direct_append_list_sum_ref(StrBuf *out, const char *name, int is_ref
     sb_append(out, ")");
 }
 
+static void direct_append_list_max_ref(StrBuf *out, const char *name, int is_ref) {
+    sb_append(out, "__vais_list_int_max(");
+    if (!is_ref) sb_append(out, "&");
+    sb_append(out, name);
+    sb_append(out, ")");
+}
+
+static void direct_append_list_min_ref(StrBuf *out, const char *name, int is_ref) {
+    sb_append(out, "__vais_list_int_min(");
+    if (!is_ref) sb_append(out, "&");
+    sb_append(out, name);
+    sb_append(out, ")");
+}
+
+static void direct_append_list_contains_ref(StrBuf *out, const char *name, int is_ref, const char *base_type, const char *value) {
+    sb_append(out, direct_is_list_str_type(base_type) ? "__vais_list_str_contains(" : "__vais_list_int_contains(");
+    if (!is_ref) sb_append(out, "&");
+    sb_append(out, name);
+    sb_append(out, ", ");
+    sb_append(out, value);
+    sb_append(out, ")");
+}
+
+static void direct_append_list_index_of_ref(StrBuf *out, const char *name, int is_ref, const char *base_type, const char *value) {
+    sb_append(out, direct_is_list_str_type(base_type) ? "__vais_list_str_index_of(" : "__vais_list_int_index_of(");
+    if (!is_ref) sb_append(out, "&");
+    sb_append(out, name);
+    sb_append(out, ", ");
+    sb_append(out, value);
+    sb_append(out, ")");
+}
+
+static void direct_append_list_count_ref(StrBuf *out, const char *name, int is_ref, const char *base_type, const char *value) {
+    sb_append(out, direct_is_list_str_type(base_type) ? "__vais_list_str_count(" : "__vais_list_int_count(");
+    if (!is_ref) sb_append(out, "&");
+    sb_append(out, name);
+    sb_append(out, ", ");
+    sb_append(out, value);
+    sb_append(out, ")");
+}
+
+static void direct_append_list_remove_at_ref(StrBuf *out, const char *name, int is_ref, const char *base_type, const char *index, DirectNameSet *locals) {
+    if (direct_is_list_int_type(base_type) || direct_is_list_str_type(base_type)) {
+        sb_append(out, direct_is_list_str_type(base_type) ? "__vais_list_str_remove_at(" : "__vais_list_int_remove_at(");
+        if (!is_ref) sb_append(out, "&");
+        sb_append(out, name);
+        sb_append(out, ", ");
+        sb_append(out, index);
+        sb_append(out, ")");
+        return;
+    }
+    char *elem_type = direct_list_element_type(base_type);
+    const char *ctype = direct_c_type(elem_type == NULL ? "Int" : elem_type);
+    char idx_name[64];
+    char tmp_name[64];
+    char loop_name[64];
+    int n = locals->temp_count++;
+    snprintf(idx_name, sizeof(idx_name), "__vais_list_remove_idx_%d", n);
+    snprintf(tmp_name, sizeof(tmp_name), "__vais_list_remove_value_%d", n);
+    snprintf(loop_name, sizeof(loop_name), "__vais_list_remove_i_%d", n);
+    StrBuf *dst = direct_current_prelude;
+    if (dst != NULL) {
+        sb_append(dst, "long ");
+        sb_append(dst, idx_name);
+        sb_append(dst, " = (long)(");
+        sb_append(dst, index);
+        sb_append(dst, ");\n");
+        sb_append(dst, "if (");
+        sb_append(dst, idx_name);
+        sb_append(dst, " < 0 || ");
+        sb_append(dst, idx_name);
+        sb_append(dst, " >= ");
+        direct_append_list_len_ref(dst, name, is_ref);
+        sb_append(dst, ") __builtin_trap();\n");
+        sb_append(dst, ctype);
+        sb_append(dst, " ");
+        sb_append(dst, tmp_name);
+        sb_append(dst, " = ");
+        direct_append_list_data_ref(dst, name, is_ref);
+        sb_append(dst, "[");
+        sb_append(dst, idx_name);
+        sb_append(dst, "];\n");
+        sb_append(dst, "for (long ");
+        sb_append(dst, loop_name);
+        sb_append(dst, " = ");
+        sb_append(dst, idx_name);
+        sb_append(dst, "; ");
+        sb_append(dst, loop_name);
+        sb_append(dst, " < ");
+        direct_append_list_len_ref(dst, name, is_ref);
+        sb_append(dst, " - 1; ");
+        sb_append(dst, loop_name);
+        sb_append(dst, "++) ");
+        direct_append_list_data_ref(dst, name, is_ref);
+        sb_append(dst, "[");
+        sb_append(dst, loop_name);
+        sb_append(dst, "] = ");
+        direct_append_list_data_ref(dst, name, is_ref);
+        sb_append(dst, "[");
+        sb_append(dst, loop_name);
+        sb_append(dst, " + 1];\n");
+        direct_append_list_len_ref(dst, name, is_ref);
+        sb_append(dst, " -= 1;\n");
+        sb_append(out, tmp_name);
+    } else {
+        sb_append(out, "({ long ");
+        sb_append(out, idx_name);
+        sb_append(out, " = (long)(");
+        sb_append(out, index);
+        sb_append(out, "); if (");
+        sb_append(out, idx_name);
+        sb_append(out, " < 0 || ");
+        sb_append(out, idx_name);
+        sb_append(out, " >= ");
+        direct_append_list_len_ref(out, name, is_ref);
+        sb_append(out, ") __builtin_trap(); ");
+        sb_append(out, ctype);
+        sb_append(out, " ");
+        sb_append(out, tmp_name);
+        sb_append(out, " = ");
+        direct_append_list_data_ref(out, name, is_ref);
+        sb_append(out, "[");
+        sb_append(out, idx_name);
+        sb_append(out, "]; for (long ");
+        sb_append(out, loop_name);
+        sb_append(out, " = ");
+        sb_append(out, idx_name);
+        sb_append(out, "; ");
+        sb_append(out, loop_name);
+        sb_append(out, " < ");
+        direct_append_list_len_ref(out, name, is_ref);
+        sb_append(out, " - 1; ");
+        sb_append(out, loop_name);
+        sb_append(out, "++) ");
+        direct_append_list_data_ref(out, name, is_ref);
+        sb_append(out, "[");
+        sb_append(out, loop_name);
+        sb_append(out, "] = ");
+        direct_append_list_data_ref(out, name, is_ref);
+        sb_append(out, "[");
+        sb_append(out, loop_name);
+        sb_append(out, " + 1]; ");
+        direct_append_list_len_ref(out, name, is_ref);
+        sb_append(out, " -= 1; ");
+        sb_append(out, tmp_name);
+        sb_append(out, "; })");
+    }
+    free(elem_type);
+}
+
+static void direct_append_list_insert_at_ref(StrBuf *out, const char *name, int is_ref, const char *base_type, const char *index, const char *value, DirectNameSet *locals) {
+    if (direct_is_list_int_type(base_type) || direct_is_list_str_type(base_type)) {
+        sb_append(out, direct_is_list_str_type(base_type) ? "__vais_list_str_insert_at(" : "__vais_list_int_insert_at(");
+        if (!is_ref) sb_append(out, "&");
+        sb_append(out, name);
+        sb_append(out, ", ");
+        sb_append(out, index);
+        sb_append(out, ", ");
+        sb_append(out, value);
+        sb_append(out, ");\n");
+        return;
+    }
+    char *elem_type = direct_list_element_type(base_type);
+    const char *ctype = direct_c_type(elem_type == NULL ? "Int" : elem_type);
+    char idx_name[64];
+    char value_name[64];
+    char loop_name[64];
+    int n = locals->temp_count++;
+    snprintf(idx_name, sizeof(idx_name), "__vais_list_insert_idx_%d", n);
+    snprintf(value_name, sizeof(value_name), "__vais_list_insert_value_%d", n);
+    snprintf(loop_name, sizeof(loop_name), "__vais_list_insert_i_%d", n);
+    sb_append(out, "{ long ");
+    sb_append(out, idx_name);
+    sb_append(out, " = (long)(");
+    sb_append(out, index);
+    sb_append(out, "); if (");
+    direct_append_list_len_ref(out, name, is_ref);
+    sb_append(out, " >= VAIS_DIRECT_LIST_CAP || ");
+    sb_append(out, idx_name);
+    sb_append(out, " < 0 || ");
+    sb_append(out, idx_name);
+    sb_append(out, " > ");
+    direct_append_list_len_ref(out, name, is_ref);
+    sb_append(out, ") __builtin_trap(); ");
+    sb_append(out, ctype);
+    sb_append(out, " ");
+    sb_append(out, value_name);
+    sb_append(out, " = ");
+    sb_append(out, value);
+    sb_append(out, "; for (long ");
+    sb_append(out, loop_name);
+    sb_append(out, " = ");
+    direct_append_list_len_ref(out, name, is_ref);
+    sb_append(out, "; ");
+    sb_append(out, loop_name);
+    sb_append(out, " > ");
+    sb_append(out, idx_name);
+    sb_append(out, "; ");
+    sb_append(out, loop_name);
+    sb_append(out, "--) ");
+    direct_append_list_data_ref(out, name, is_ref);
+    sb_append(out, "[");
+    sb_append(out, loop_name);
+    sb_append(out, "] = ");
+    direct_append_list_data_ref(out, name, is_ref);
+    sb_append(out, "[");
+    sb_append(out, loop_name);
+    sb_append(out, " - 1]; ");
+    direct_append_list_data_ref(out, name, is_ref);
+    sb_append(out, "[");
+    sb_append(out, idx_name);
+    sb_append(out, "] = ");
+    sb_append(out, value_name);
+    sb_append(out, "; ");
+    direct_append_list_len_ref(out, name, is_ref);
+    sb_append(out, " += 1; }\n");
+    free(elem_type);
+}
+
+static void direct_append_list_extend_ref(StrBuf *out, const char *dst, int dst_is_ref, const char *src, int src_is_ref, const char *base_type, DirectNameSet *locals) {
+    if (direct_is_list_int_type(base_type) || direct_is_list_str_type(base_type)) {
+        sb_append(out, direct_is_list_str_type(base_type) ? "__vais_list_str_extend(" : "__vais_list_int_extend(");
+        if (!dst_is_ref) sb_append(out, "&");
+        sb_append(out, dst);
+        sb_append(out, ", ");
+        if (!src_is_ref) sb_append(out, "&");
+        sb_append(out, src);
+        sb_append(out, ");\n");
+        return;
+    }
+    char base_name[64];
+    char count_name[64];
+    char loop_name[64];
+    int n = locals->temp_count++;
+    snprintf(base_name, sizeof(base_name), "__vais_list_extend_base_%d", n);
+    snprintf(count_name, sizeof(count_name), "__vais_list_extend_n_%d", n);
+    snprintf(loop_name, sizeof(loop_name), "__vais_list_extend_i_%d", n);
+    sb_append(out, "{ long ");
+    sb_append(out, base_name);
+    sb_append(out, " = ");
+    direct_append_list_len_ref(out, dst, dst_is_ref);
+    sb_append(out, "; long ");
+    sb_append(out, count_name);
+    sb_append(out, " = ");
+    direct_append_list_len_ref(out, src, src_is_ref);
+    sb_append(out, "; if (");
+    sb_append(out, base_name);
+    sb_append(out, " + ");
+    sb_append(out, count_name);
+    sb_append(out, " > VAIS_DIRECT_LIST_CAP) __builtin_trap(); for (long ");
+    sb_append(out, loop_name);
+    sb_append(out, " = 0; ");
+    sb_append(out, loop_name);
+    sb_append(out, " < ");
+    sb_append(out, count_name);
+    sb_append(out, "; ");
+    sb_append(out, loop_name);
+    sb_append(out, "++) ");
+    direct_append_list_data_ref(out, dst, dst_is_ref);
+    sb_append(out, "[");
+    sb_append(out, base_name);
+    sb_append(out, " + ");
+    sb_append(out, loop_name);
+    sb_append(out, "] = ");
+    direct_append_list_data_ref(out, src, src_is_ref);
+    sb_append(out, "[");
+    sb_append(out, loop_name);
+    sb_append(out, "]; ");
+    direct_append_list_len_ref(out, dst, dst_is_ref);
+    sb_append(out, " = ");
+    sb_append(out, base_name);
+    sb_append(out, " + ");
+    sb_append(out, count_name);
+    sb_append(out, "; }\n");
+}
+
 static void direct_append_list_is_empty_ref(StrBuf *out, const char *name, int is_ref) {
     sb_append(out, "(");
     direct_append_list_len_ref(out, name, is_ref);
@@ -7274,6 +21034,13 @@ static void direct_append_list_is_empty_ref(StrBuf *out, const char *name, int i
 static void direct_append_list_last_ref(StrBuf *out, const char *name, int is_ref) {
     direct_append_list_data_ref(out, name, is_ref);
     sb_append(out, "[__vais_list_checked_last(");
+    direct_append_list_len_ref(out, name, is_ref);
+    sb_append(out, ")]");
+}
+
+static void direct_append_list_first_ref(StrBuf *out, const char *name, int is_ref) {
+    direct_append_list_data_ref(out, name, is_ref);
+    sb_append(out, "[__vais_list_checked_index(0, ");
     direct_append_list_len_ref(out, name, is_ref);
     sb_append(out, ")]");
 }
@@ -7301,6 +21068,145 @@ static void direct_append_list_pop_ref(StrBuf *out, const char *name, int is_ref
     sb_append(direct_current_prelude, " -= 1;\n");
     sb_append(out, tmp_name);
     free(elem_type);
+}
+
+static char *direct_rewrite_nested_struct_field_chains(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    StrBuf out;
+    sb_init(&out);
+    for (int i = 0; expr[i] != '\0';) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an unterminated string literal",
+                    "close the string before the end of the line.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an invalid char literal",
+                    "write a single-byte character literal such as `'A'`.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (!is_ident_start(expr[i])) {
+            sb_append_n(&out, expr + i, 1);
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(expr[i])) i++;
+        char *name = substr_copy(expr + start, (size_t)(i - start));
+        const char *rest = skip_ws(expr + i);
+        if (*rest == '(') {
+            int close = find_matching_paren_c(expr, (int)(rest - expr));
+            DirectFnInfo *fn = close < 0 ? NULL : direct_find_fn(fns, fn_count, name);
+            DirectStructInfo *call_st = fn == NULL ? NULL : direct_find_struct(structs, struct_count, fn->return_type);
+            const char *after_call = close < 0 ? rest : skip_ws(expr + close + 1);
+            if (call_st != NULL && *after_call == '.') {
+                int field_start = (int)(after_call - expr) + 1;
+                while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
+                int field_end = field_start;
+                while (is_ident_continue(expr[field_end])) field_end++;
+                char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
+                const char *after_field = skip_ws(expr + field_end);
+                if (*after_field == '.') {
+                    const char *field_type = direct_struct_field_type(call_st, field);
+                    DirectStructInfo *nested = field_type == NULL ? NULL : direct_find_struct(structs, struct_count, field_type);
+                    int nested_start = (int)(after_field - expr) + 1;
+                    while (expr[nested_start] == ' ' || expr[nested_start] == '\t') nested_start++;
+                    int nested_end = nested_start;
+                    while (is_ident_continue(expr[nested_end])) nested_end++;
+                    char *nested_field = substr_copy(expr + nested_start, (size_t)(nested_end - nested_start));
+                    if (nested == NULL || !direct_struct_has_field(nested, nested_field)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter found an unknown nested struct return field access",
+                            "read a field declared on this nested struct.",
+                            NULL);
+                        free(nested_field);
+                        free(field);
+                        free(name);
+                        free(out.data);
+                        return NULL;
+                    }
+                    sb_append_n(&out, expr + start, (size_t)(nested_end - start));
+                    i = nested_end;
+                    free(nested_field);
+                    free(field);
+                    free(name);
+                    continue;
+                }
+                free(field);
+            }
+        }
+        const char *base_type = direct_names_type(locals, name);
+        DirectStructInfo *st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
+        if (st == NULL || *rest != '.') {
+            sb_append_n(&out, expr + start, (size_t)(i - start));
+            free(name);
+            continue;
+        }
+        int field_start = (int)(rest - expr) + 1;
+        while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
+        int field_end = field_start;
+        while (is_ident_continue(expr[field_end])) field_end++;
+        char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
+        const char *after_field = skip_ws(expr + field_end);
+        if (*after_field != '.') {
+            sb_append_n(&out, expr + start, (size_t)(i - start));
+            free(field);
+            free(name);
+            continue;
+        }
+        const char *field_type = direct_struct_field_type(st, field);
+        DirectStructInfo *nested = field_type == NULL ? NULL : direct_find_struct(structs, struct_count, field_type);
+        int nested_start = (int)(after_field - expr) + 1;
+        while (expr[nested_start] == ' ' || expr[nested_start] == '\t') nested_start++;
+        int nested_end = nested_start;
+        while (is_ident_continue(expr[nested_end])) nested_end++;
+        char *nested_field = substr_copy(expr + nested_start, (size_t)(nested_end - nested_start));
+        if (nested == NULL || !direct_struct_has_field(nested, nested_field)) {
+            report_issue(path, line_no, find_col(line, name), line,
+                "direct native emitter found an unknown nested struct field access",
+                "read a field declared on this nested struct.",
+                NULL);
+            free(nested_field);
+            free(field);
+            free(name);
+            free(out.data);
+            return NULL;
+        }
+        sb_append_n(&out, expr + start, (size_t)(nested_end - start));
+        i = nested_end;
+        free(nested_field);
+        free(field);
+        free(name);
+    }
+    return sb_take(&out);
 }
 
 static char *direct_rewrite_expr(
@@ -7340,8 +21246,160 @@ static int direct_is_parse_builtin_name(const char *name) {
     return strcmp(name, "parse_uint") == 0 || strcmp(name, "parse_int") == 0;
 }
 
+static int direct_is_str_contains_builtin_name(const char *name) {
+    return strcmp(name, "str_contains") == 0;
+}
+
+static int direct_is_str_index_of_builtin_name(const char *name) {
+    return strcmp(name, "str_index_of") == 0;
+}
+
+static int direct_is_str_starts_with_builtin_name(const char *name) {
+    return strcmp(name, "str_starts_with") == 0;
+}
+
+static int direct_is_str_ends_with_builtin_name(const char *name) {
+    return strcmp(name, "str_ends_with") == 0;
+}
+
+static int direct_is_str_slice_builtin_name(const char *name) {
+    return strcmp(name, "str_slice") == 0;
+}
+
+static int direct_is_str_concat_builtin_name(const char *name) {
+    return strcmp(name, "str_concat") == 0;
+}
+
+static int direct_is_str_join_builtin_name(const char *name) {
+    return strcmp(name, "str_join") == 0;
+}
+
+static int direct_is_str_replace_builtin_name(const char *name) {
+    return strcmp(name, "str_replace") == 0;
+}
+
+static int direct_is_str_trim_builtin_name(const char *name) {
+    return strcmp(name, "str_trim") == 0;
+}
+
+static int direct_is_str_lower_builtin_name(const char *name) {
+    return strcmp(name, "str_lower") == 0;
+}
+
+static int direct_is_str_upper_builtin_name(const char *name) {
+    return strcmp(name, "str_upper") == 0;
+}
+
+static int direct_is_str_split_ws_into_builtin_name(const char *name) {
+    return strcmp(name, "str_split_ws_into") == 0;
+}
+
+static int direct_is_str_split_lines_into_builtin_name(const char *name) {
+    return strcmp(name, "str_split_lines_into") == 0;
+}
+
+static int direct_is_str_split_into_builtin_name(const char *name) {
+    return strcmp(name, "str_split_into") == 0;
+}
+
+static int direct_is_map_str_str_snapshot_builtin_name(const char *name) {
+    return strcmp(name, "map_str_str_snapshot") == 0;
+}
+
+static int direct_is_map_str_str_load_snapshot_builtin_name(const char *name) {
+    return strcmp(name, "map_str_str_load_snapshot") == 0;
+}
+
+static int direct_is_doc_term_counts_into_builtin_name(const char *name) {
+    return strcmp(name, "doc_term_counts_into") == 0;
+}
+
+static int direct_is_doc_term_overlap_score_builtin_name(const char *name) {
+    return strcmp(name, "doc_term_overlap_score") == 0;
+}
+
+static int direct_is_doc_term_weighted_score_builtin_name(const char *name) {
+    return strcmp(name, "doc_term_weighted_score") == 0;
+}
+
 static int direct_is_str_conversion_builtin_name(const char *name) {
     return strcmp(name, "Str") == 0;
+}
+
+static int direct_is_str_byte_builtin_name(const char *name) {
+    return strcmp(name, "str_byte") == 0;
+}
+
+static int direct_is_fs_read_text_builtin_name(const char *name) {
+    return strcmp(name, "fs_read_text") == 0;
+}
+
+static int direct_is_fs_write_text_builtin_name(const char *name) {
+    return strcmp(name, "fs_write_text") == 0;
+}
+
+static int direct_is_fs_exists_builtin_name(const char *name) {
+    return strcmp(name, "fs_exists") == 0;
+}
+
+static int direct_is_fs_temp_dir_builtin_name(const char *name) {
+    return strcmp(name, "fs_temp_dir") == 0;
+}
+
+static int direct_is_fs_cwd_builtin_name(const char *name) {
+    return strcmp(name, "fs_cwd") == 0;
+}
+
+static int direct_is_path_join_builtin_name(const char *name) {
+    return strcmp(name, "path_join") == 0;
+}
+
+static int direct_is_path_basename_builtin_name(const char *name) {
+    return strcmp(name, "path_basename") == 0;
+}
+
+static int direct_is_path_dirname_builtin_name(const char *name) {
+    return strcmp(name, "path_dirname") == 0;
+}
+
+static int direct_is_time_millis_builtin_name(const char *name) {
+    return strcmp(name, "time_millis") == 0;
+}
+
+static int direct_is_proc_argc_builtin_name(const char *name) {
+    return strcmp(name, "proc_argc") == 0;
+}
+
+static int direct_is_proc_arg_builtin_name(const char *name) {
+    return strcmp(name, "proc_arg") == 0;
+}
+
+static int direct_is_proc_capture_builtin_name(const char *name) {
+    return strcmp(name, "proc_capture") == 0;
+}
+
+static int direct_is_some_constructor_name(const char *name) {
+    return strcmp(name, "Some") == 0;
+}
+
+static int direct_is_ok_constructor_name(const char *name) {
+    return strcmp(name, "Ok") == 0;
+}
+
+static int direct_is_err_constructor_name(const char *name) {
+    return strcmp(name, "Err") == 0;
+}
+
+static int direct_is_option_result_payload_constructor_name(const char *name) {
+    return direct_is_some_constructor_name(name) || direct_is_ok_constructor_name(name) || direct_is_err_constructor_name(name);
+}
+
+static int direct_is_none_constructor_expr(const char *expr) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    int ok = starts_with(s, "None") && !is_ident_continue(s[4]) && *skip_ws(s + 4) == '\0';
+    free(trimmed);
+    return ok;
 }
 
 static int direct_expr_is_string_literal(const char *expr) {
@@ -7463,7 +21521,546 @@ static char *direct_rewrite_parse_builtin_calls(
         char *name = substr_copy(expr + start, (size_t)(i - start));
         int cursor = i;
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
-        if (!direct_is_parse_builtin_name(name) || expr[cursor] != '(') {
+        int is_parse = direct_is_parse_builtin_name(name);
+        int is_contains = direct_is_str_contains_builtin_name(name);
+        int is_index_of = direct_is_str_index_of_builtin_name(name);
+        int is_starts_with = direct_is_str_starts_with_builtin_name(name);
+        int is_ends_with = direct_is_str_ends_with_builtin_name(name);
+        int is_slice = direct_is_str_slice_builtin_name(name);
+        int is_concat = direct_is_str_concat_builtin_name(name);
+        int is_join = direct_is_str_join_builtin_name(name);
+        int is_replace = direct_is_str_replace_builtin_name(name);
+        int is_trim = direct_is_str_trim_builtin_name(name);
+        int is_lower = direct_is_str_lower_builtin_name(name);
+        int is_upper = direct_is_str_upper_builtin_name(name);
+        int is_byte = direct_is_str_byte_builtin_name(name);
+        int is_fs_read_text = direct_is_fs_read_text_builtin_name(name);
+        int is_fs_write_text = direct_is_fs_write_text_builtin_name(name);
+        int is_fs_exists = direct_is_fs_exists_builtin_name(name);
+        int is_fs_temp_dir = direct_is_fs_temp_dir_builtin_name(name);
+        int is_fs_cwd = direct_is_fs_cwd_builtin_name(name);
+        int is_path_join = direct_is_path_join_builtin_name(name);
+        int is_path_basename = direct_is_path_basename_builtin_name(name);
+        int is_path_dirname = direct_is_path_dirname_builtin_name(name);
+        int is_time_millis = direct_is_time_millis_builtin_name(name);
+        int is_proc_argc = direct_is_proc_argc_builtin_name(name);
+        int is_proc_arg = direct_is_proc_arg_builtin_name(name);
+        int is_split_ws_into = direct_is_str_split_ws_into_builtin_name(name);
+        int is_split_lines_into = direct_is_str_split_lines_into_builtin_name(name);
+        int is_split_into = direct_is_str_split_into_builtin_name(name);
+        int is_map_snapshot = direct_is_map_str_str_snapshot_builtin_name(name);
+        int is_map_load = direct_is_map_str_str_load_snapshot_builtin_name(name);
+        int is_doc_counts = direct_is_doc_term_counts_into_builtin_name(name);
+        int is_doc_overlap = direct_is_doc_term_overlap_score_builtin_name(name);
+        int is_doc_weighted = direct_is_doc_term_weighted_score_builtin_name(name);
+        if ((!is_parse && !is_contains && !is_index_of && !is_starts_with && !is_ends_with && !is_slice && !is_concat && !is_join && !is_replace && !is_trim && !is_lower && !is_upper && !is_byte && !is_fs_read_text && !is_fs_write_text && !is_fs_exists && !is_fs_temp_dir && !is_fs_cwd && !is_path_join && !is_path_basename && !is_path_dirname && !is_time_millis && !is_proc_argc && !is_proc_arg && !is_split_ws_into && !is_split_lines_into && !is_split_into && !is_map_snapshot && !is_map_load && !is_doc_counts && !is_doc_overlap && !is_doc_weighted) || expr[cursor] != '(') {
+            sb_append_n(&out, expr + start, (size_t)(i - start));
+            free(name);
+            continue;
+        }
+        int close = find_matching_paren_c(expr, cursor);
+        if (close < 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter expected `)` to close the string helper call",
+                    "write `parse_uint(s)`, `parse_int(s)`, `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `time_millis()`, `proc_argc()`, `proc_arg(index)`, `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_slice(text, start, len)`, `str_concat(left, right)`, `str_join(parts, sep)`, `str_replace(text, needle, replacement)`, `str_trim(text)`, `str_lower(text)`, `str_upper(text)`, `str_byte(value)`, `str_split_ws_into(text, out)`, `str_split_lines_into(text, out)`, `str_split_into(text, sep, out)`, `map_str_str_snapshot(docs)`, `map_str_str_load_snapshot(text, docs)`, `doc_term_counts_into(text, counts)`, `doc_term_overlap_score(query, doc)`, or `doc_term_weighted_score(query, doc)`.",
+                NULL);
+            free(name);
+            free(out.data);
+            return NULL;
+        }
+        char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+        char *args[16] = {0};
+        char *trimmed_inside = trim_copy(inside);
+        int argc = trimmed_inside[0] == '\0' ? 0 : split_top_level_commas_c(inside, args, 16);
+        free(trimmed_inside);
+        free(inside);
+        int want_argc = (is_fs_cwd || is_fs_temp_dir || is_time_millis || is_proc_argc) ? 0 : ((is_split_ws_into || is_split_lines_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted || is_join || is_fs_write_text || is_path_join) ? 2 : ((is_replace || is_split_into) ? 3 : ((is_contains || is_index_of || is_starts_with || is_ends_with || is_concat) ? 2 : (is_slice ? 3 : 1))));
+        int bad_args = argc != want_argc || (want_argc > 0 && (args[0] == NULL || strlen(skip_ws(args[0])) == 0));
+        if (!bad_args && (is_contains || is_index_of || is_starts_with || is_ends_with || is_concat || is_join || is_fs_write_text || is_path_join || is_split_ws_into || is_split_lines_into || is_split_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted)) {
+            bad_args = args[1] == NULL || strlen(skip_ws(args[1])) == 0;
+        }
+        if (!bad_args && (is_slice || is_replace || is_split_into)) {
+            bad_args = args[1] == NULL || args[2] == NULL ||
+                strlen(skip_ws(args[1])) == 0 || strlen(skip_ws(args[2])) == 0;
+        }
+        if (bad_args) {
+            report_issue(path, line_no, find_col(line, name), line,
+                "direct native emitter string helper argument count does not match",
+                "write `parse_uint(s)`, `parse_int(s)`, `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `time_millis()`, `proc_argc()`, `proc_arg(index)`, `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_slice(text, start, len)`, `str_concat(left, right)`, `str_join(parts, sep)`, `str_replace(text, needle, replacement)`, `str_trim(text)`, `str_lower(text)`, `str_upper(text)`, `str_byte(value)`, `str_split_ws_into(text, out)`, `str_split_lines_into(text, out)`, `str_split_into(text, sep, out)`, `map_str_str_snapshot(docs)`, `map_str_str_load_snapshot(text, docs)`, `doc_term_counts_into(text, counts)`, `doc_term_overlap_score(query, doc)`, or `doc_term_weighted_score(query, doc)`.",
+                NULL);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            free(name);
+            free(out.data);
+            return NULL;
+        }
+        if (is_fs_cwd || is_fs_temp_dir || is_time_millis || is_proc_argc) {
+            sb_append(&out, is_fs_cwd ? "fs_cwd()" : (is_fs_temp_dir ? "fs_temp_dir()" : (is_time_millis ? "time_millis()" : "proc_argc()")));
+            for (int k = 0; k < 16; k++) free(args[k]);
+            free(name);
+            i = close + 1;
+            continue;
+        }
+        if (is_join) {
+            char *list_name = NULL;
+            if (!direct_expr_bare_list_local(locals, args[0], &list_name) ||
+                strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter str_join input must be a local List<Str>",
+                    "declare `let parts: List<Str> = []` and pass `parts` as the first argument.",
+                    NULL);
+                free(list_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            char *rewritten_sep = direct_rewrite_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count);
+            if (rewritten_sep == NULL) {
+                free(list_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            StrBuf list_ref;
+            sb_init(&list_ref);
+            if (!direct_names_is_ref(locals, list_name)) sb_append(&list_ref, "&");
+            sb_append(&list_ref, list_name);
+            char *rewritten_list = sb_take(&list_ref);
+            sb_append(&out, "__vais_str_join(");
+            sb_append(&out, rewritten_list);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_sep);
+            sb_append(&out, ")");
+            free(list_name);
+            free(rewritten_sep);
+            free(rewritten_list);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            free(name);
+            i = close + 1;
+            continue;
+        }
+        if (is_map_snapshot) {
+            char *map_name = NULL;
+            if (!direct_expr_bare_map_local(locals, args[0], &map_name) ||
+                strcmp(direct_names_type(locals, map_name), "Map<Str,Str>") != 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter map_str_str_snapshot input must be a local Map<Str,Str>",
+                    "declare `let docs: Map<Str,Str> = {}` and pass `docs` as the argument.",
+                    NULL);
+                free(map_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            StrBuf map_ref;
+            sb_init(&map_ref);
+            direct_append_map_ptr_ref(&map_ref, map_name, direct_names_is_ref(locals, map_name));
+            char *rewritten_map = sb_take(&map_ref);
+            sb_append(&out, "__vais_map_str_str_snapshot(");
+            sb_append(&out, rewritten_map);
+            sb_append(&out, ")");
+            free(map_name);
+            free(rewritten_map);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            free(name);
+            i = close + 1;
+            continue;
+        }
+        char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+        char *rewritten_arg2 = (is_contains || is_index_of || is_starts_with || is_ends_with || is_slice || is_concat || is_replace || is_split_into || is_fs_write_text || is_path_join)
+            ? direct_rewrite_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count)
+            : NULL;
+        if (is_split_ws_into || is_split_lines_into) {
+            char *list_name = NULL;
+            if (!direct_expr_bare_list_local(locals, args[1], &list_name) ||
+                strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    is_split_lines_into ? "direct native emitter str_split_lines_into output must be a local List<Str>" : "direct native emitter str_split_ws_into output must be a local List<Str>",
+                    "declare `let lines: List<Str> = []` and pass it as the second argument.",
+                    NULL);
+                free(list_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(rewritten_arg);
+                free(out.data);
+                return NULL;
+            }
+            StrBuf list_ref;
+            sb_init(&list_ref);
+            if (!direct_names_is_ref(locals, list_name)) sb_append(&list_ref, "&");
+            sb_append(&list_ref, list_name);
+            rewritten_arg2 = sb_take(&list_ref);
+            free(list_name);
+        } else if (is_split_into) {
+            char *list_name = NULL;
+            if (!direct_expr_bare_list_local(locals, args[2], &list_name) ||
+                strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter str_split_into output must be a local List<Str>",
+                    "declare `let words: List<Str> = []` and pass `words` as the third argument.",
+                    NULL);
+                free(list_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(rewritten_arg);
+                free(rewritten_arg2);
+                free(out.data);
+                return NULL;
+            }
+            StrBuf list_ref;
+            sb_init(&list_ref);
+            if (!direct_names_is_ref(locals, list_name)) sb_append(&list_ref, "&");
+            sb_append(&list_ref, list_name);
+            free(list_name);
+            char *rewritten_list = sb_take(&list_ref);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            if (rewritten_arg == NULL || rewritten_arg2 == NULL || rewritten_list == NULL) {
+                free(name);
+                free(rewritten_arg);
+                free(rewritten_arg2);
+                free(rewritten_list);
+                free(out.data);
+                return NULL;
+            }
+            sb_append(&out, "__vais_str_split_into(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_list);
+            sb_append(&out, ")");
+            free(rewritten_arg);
+            free(rewritten_arg2);
+            free(rewritten_list);
+            free(name);
+            i = close + 1;
+            continue;
+        } else if (is_doc_counts) {
+            char *map_name = NULL;
+            if (!direct_expr_bare_map_local(locals, args[1], &map_name) ||
+                strcmp(direct_names_type(locals, map_name), "Map<Str,Int>") != 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter doc_term_counts_into output must be a local Map<Str,Int>",
+                    "declare `let counts: Map<Str,Int> = {}` and pass `counts` as the second argument.",
+                    NULL);
+                free(map_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(rewritten_arg);
+                free(out.data);
+                return NULL;
+            }
+            StrBuf map_ref;
+            sb_init(&map_ref);
+            direct_append_map_ptr_ref(&map_ref, map_name, direct_names_is_ref(locals, map_name));
+            rewritten_arg2 = sb_take(&map_ref);
+            free(map_name);
+        } else if (is_map_load) {
+            char *map_name = NULL;
+            if (!direct_expr_bare_map_local(locals, args[1], &map_name) ||
+                strcmp(direct_names_type(locals, map_name), "Map<Str,Str>") != 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter map_str_str_load_snapshot output must be a local Map<Str,Str>",
+                    "declare `let docs: Map<Str,Str> = {}` and pass `docs` as the second argument.",
+                    NULL);
+                free(map_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(rewritten_arg);
+                free(out.data);
+                return NULL;
+            }
+            StrBuf map_ref;
+            sb_init(&map_ref);
+            direct_append_map_ptr_ref(&map_ref, map_name, direct_names_is_ref(locals, map_name));
+            rewritten_arg2 = sb_take(&map_ref);
+            free(map_name);
+        } else if (is_doc_overlap) {
+            char *query_name = NULL;
+            char *doc_name = NULL;
+            if (!direct_expr_bare_map_local(locals, args[0], &query_name) ||
+                strcmp(direct_names_type(locals, query_name), "Map<Str,Int>") != 0 ||
+                !direct_expr_bare_map_local(locals, args[1], &doc_name) ||
+                strcmp(direct_names_type(locals, doc_name), "Map<Str,Int>") != 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter doc_term_overlap_score arguments must be Map<Str,Int>",
+                    "pass two local or parameter `Map<Str,Int>` values, such as `doc_term_overlap_score(query_counts, doc_counts)`.",
+                    NULL);
+                free(query_name);
+                free(doc_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(rewritten_arg);
+                free(out.data);
+                return NULL;
+            }
+            free(rewritten_arg);
+            StrBuf query_ref;
+            sb_init(&query_ref);
+            direct_append_map_ptr_ref(&query_ref, query_name, direct_names_is_ref(locals, query_name));
+            rewritten_arg = sb_take(&query_ref);
+            StrBuf doc_ref;
+            sb_init(&doc_ref);
+            direct_append_map_ptr_ref(&doc_ref, doc_name, direct_names_is_ref(locals, doc_name));
+            rewritten_arg2 = sb_take(&doc_ref);
+            free(query_name);
+            free(doc_name);
+        } else if (is_doc_weighted) {
+            char *query_name = NULL;
+            char *doc_name = NULL;
+            if (!direct_expr_bare_map_local(locals, args[0], &query_name) ||
+                strcmp(direct_names_type(locals, query_name), "Map<Str,Int>") != 0 ||
+                !direct_expr_bare_map_local(locals, args[1], &doc_name) ||
+                strcmp(direct_names_type(locals, doc_name), "Map<Str,Int>") != 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter doc_term_weighted_score arguments must be Map<Str,Int>",
+                    "pass two local or parameter `Map<Str,Int>` values, such as `doc_term_weighted_score(query_counts, doc_counts)`.",
+                    NULL);
+                free(query_name);
+                free(doc_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(rewritten_arg);
+                free(out.data);
+                return NULL;
+            }
+            free(rewritten_arg);
+            StrBuf query_ref;
+            sb_init(&query_ref);
+            direct_append_map_ptr_ref(&query_ref, query_name, direct_names_is_ref(locals, query_name));
+            rewritten_arg = sb_take(&query_ref);
+            StrBuf doc_ref;
+            sb_init(&doc_ref);
+            direct_append_map_ptr_ref(&doc_ref, doc_name, direct_names_is_ref(locals, doc_name));
+            rewritten_arg2 = sb_take(&doc_ref);
+            free(query_name);
+            free(doc_name);
+        }
+        char *rewritten_arg3 = (is_slice || is_replace)
+            ? direct_rewrite_expr(path, line_no, line, args[2], locals, fns, fn_count, structs, struct_count)
+            : NULL;
+        for (int k = 0; k < 16; k++) free(args[k]);
+        if (rewritten_arg == NULL || ((is_contains || is_index_of || is_starts_with || is_ends_with || is_slice || is_concat || is_replace || is_fs_write_text || is_path_join || is_split_ws_into || is_split_lines_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted) && rewritten_arg2 == NULL) ||
+            ((is_slice || is_replace) && rewritten_arg3 == NULL)) {
+            free(name);
+            free(rewritten_arg);
+            free(rewritten_arg2);
+            free(rewritten_arg3);
+            free(out.data);
+            return NULL;
+        }
+        int helper_returns_str = is_slice || is_concat || is_join || is_replace || is_trim || is_lower || is_upper || is_byte || is_fs_read_text || is_fs_temp_dir || is_fs_cwd || is_path_join || is_path_basename || is_path_dirname || is_proc_arg || is_map_snapshot;
+        int next_i = close + 1;
+        int len_chain = 0;
+        if (helper_returns_str && direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain) && len_chain) {
+            sb_append(&out, "__vais_str_len(");
+        }
+        if (is_contains) {
+            sb_append(&out, "__vais_str_contains(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_index_of) {
+            sb_append(&out, "__vais_str_index_of(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_starts_with) {
+            sb_append(&out, "__vais_str_starts_with(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_ends_with) {
+            sb_append(&out, "__vais_str_ends_with(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_slice) {
+            sb_append(&out, "__vais_str_slice(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg3);
+            sb_append(&out, ")");
+        } else if (is_concat) {
+            sb_append(&out, "__vais_str_concat(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_replace) {
+            sb_append(&out, "__vais_str_replace(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg3);
+            sb_append(&out, ")");
+        } else if (is_trim) {
+            sb_append(&out, "__vais_str_trim(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else if (is_lower) {
+            sb_append(&out, "__vais_str_lower(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else if (is_upper) {
+            sb_append(&out, "__vais_str_upper(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else if (is_byte) {
+            sb_append(&out, "__vais_str_from_byte(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else if (is_fs_exists) {
+            sb_append(&out, "fs_exists(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else if (is_fs_read_text) {
+            sb_append(&out, "fs_read_text(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else if (is_fs_write_text) {
+            sb_append(&out, "fs_write_text(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_path_join) {
+            sb_append(&out, "path_join(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_path_basename) {
+            sb_append(&out, "path_basename(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else if (is_path_dirname) {
+            sb_append(&out, "path_dirname(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else if (is_proc_arg) {
+            sb_append(&out, "proc_arg(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else if (is_split_ws_into) {
+            sb_append(&out, "__vais_str_split_ws_into(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_split_lines_into) {
+            sb_append(&out, "__vais_str_split_lines_into(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_map_load) {
+            sb_append(&out, "__vais_map_str_str_load_snapshot(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_doc_counts) {
+            sb_append(&out, "__vais_doc_term_counts_into(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_doc_overlap) {
+            sb_append(&out, "__vais_doc_term_overlap_score(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_doc_weighted) {
+            sb_append(&out, "__vais_doc_term_weighted_score(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else {
+            sb_append(&out, strcmp(name, "parse_uint") == 0 ? "__vais_parse_uint(" : "__vais_parse_int(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        }
+        if (len_chain) sb_append(&out, ")");
+        free(rewritten_arg);
+        free(rewritten_arg2);
+        free(rewritten_arg3);
+        free(name);
+        i = len_chain ? next_i : close + 1;
+    }
+    return sb_take(&out);
+}
+
+static char *direct_rewrite_option_result_constructors(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    StrBuf out;
+    sb_init(&out);
+    for (int i = 0; expr[i] != '\0';) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an unterminated string literal",
+                    "close the string before the end of the line.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) {
+                report_issue(path, line_no, 1, line,
+                    "direct native emitter found an invalid char literal",
+                    "write a single-byte character literal such as `'A'`.",
+                    NULL);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (!is_ident_start(expr[i])) {
+            sb_append_n(&out, expr + i, 1);
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(expr[i])) i++;
+        char *name = substr_copy(expr + start, (size_t)(i - start));
+        int cursor = i;
+        while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
+        if (strcmp(name, "None") == 0 && expr[cursor] != '(') {
+            sb_append(&out, "1");
+            free(name);
+            continue;
+        }
+        if (!direct_is_option_result_payload_constructor_name(name) || expr[cursor] != '(') {
             sb_append_n(&out, expr + start, (size_t)(i - start));
             free(name);
             continue;
@@ -7471,8 +22068,8 @@ static char *direct_rewrite_parse_builtin_calls(
         int close = find_matching_paren_c(expr, cursor);
         if (close < 0) {
             report_issue(path, line_no, find_col(line, name), line,
-                "direct native emitter expected `)` to close the parse call",
-                "write `parse_uint(s)` or `parse_int(s)`.",
+                "direct native emitter expected `)` to close the Option/Result constructor",
+                "write `Some(value)`, `Ok(value)`, or `Err(code)`.",
                 NULL);
             free(name);
             free(out.data);
@@ -7484,8 +22081,8 @@ static char *direct_rewrite_parse_builtin_calls(
         free(inside);
         if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
             report_issue(path, line_no, find_col(line, name), line,
-                "direct native emitter parse helpers take one Str argument",
-                "write `parse_uint(s)` or `parse_int(s)`.",
+                "direct native emitter Option/Result constructors take one Int payload",
+                "write `Some(value)`, `Ok(value)`, or `Err(code)` with an Int-compatible payload.",
                 NULL);
             for (int k = 0; k < 16; k++) free(args[k]);
             free(name);
@@ -7499,8 +22096,10 @@ static char *direct_rewrite_parse_builtin_calls(
             free(out.data);
             return NULL;
         }
-        sb_append(&out, strcmp(name, "parse_uint") == 0 ? "__vais_parse_uint(" : "__vais_parse_int(");
+        sb_append(&out, "(((");
         sb_append(&out, rewritten_arg);
+        sb_append(&out, ") * 2)");
+        if (direct_is_err_constructor_name(name)) sb_append(&out, " + 1");
         sb_append(&out, ")");
         free(rewritten_arg);
         free(name);
@@ -7645,6 +22244,82 @@ static int direct_find_top_level_eq_op(const char *expr, int *op_len) {
     return -1;
 }
 
+static int direct_find_top_level_word_op(const char *expr, const char *word, int *op_len) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    int word_len = (int)strlen(word);
+    for (int i = 0; expr[i] != '\0'; i++) {
+        if (is_string_delim_c(expr[i])) {
+            int end = skip_string_literal_c(expr, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '\'') {
+            int end = skip_char_literal_c(expr, i);
+            if (end < 0) return -1;
+            i = end - 1;
+            continue;
+        }
+        if (expr[i] == '(') paren_depth++;
+        else if (expr[i] == ')') paren_depth--;
+        else if (expr[i] == '[') bracket_depth++;
+        else if (expr[i] == ']') bracket_depth--;
+        else if (expr[i] == '{') brace_depth++;
+        else if (expr[i] == '}') brace_depth--;
+        else if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+            if (strncmp(expr + i, word, (size_t)word_len) == 0 &&
+                (i == 0 || !is_ident_continue(expr[i - 1])) &&
+                !is_ident_continue(expr[i + word_len])) {
+                *op_len = word_len;
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+static int direct_parse_if_expr_parts(const char *expr, char **cond_out, char **then_out, char **else_out) {
+    *cond_out = NULL;
+    *then_out = NULL;
+    *else_out = NULL;
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!starts_with(s, "if") || is_ident_continue(s[2])) {
+        free(trimmed);
+        return 0;
+    }
+    int then_len = 0;
+    int else_len = 0;
+    int then_pos = direct_find_top_level_word_op(s, "then", &then_len);
+    int else_pos = direct_find_top_level_word_op(s, "else", &else_len);
+    if (then_pos <= 0 || else_pos <= then_pos) {
+        free(trimmed);
+        return 0;
+    }
+    char *cond_raw = substr_copy(s + 2, (size_t)(then_pos - 2));
+    char *then_raw = substr_copy(s + then_pos + then_len, (size_t)(else_pos - then_pos - then_len));
+    char *else_raw = trim_copy(s + else_pos + else_len);
+    *cond_out = trim_copy(cond_raw);
+    *then_out = trim_copy(then_raw);
+    *else_out = trim_copy(else_raw);
+    free(cond_raw);
+    free(then_raw);
+    free(else_raw);
+    int ok = (*cond_out)[0] != '\0' && (*then_out)[0] != '\0' && (*else_out)[0] != '\0';
+    if (!ok) {
+        free(*cond_out);
+        free(*then_out);
+        free(*else_out);
+        *cond_out = NULL;
+        *then_out = NULL;
+        *else_out = NULL;
+    }
+    free(trimmed);
+    return ok;
+}
+
 static char *direct_rewrite_str_equality_expr(
     const char *path,
     int line_no,
@@ -7656,6 +22331,32 @@ static char *direct_rewrite_str_equality_expr(
     DirectStructInfo *structs,
     int struct_count
 ) {
+    int bool_op_len = 0;
+    int bool_op = direct_find_top_level_word_op(expr, "or", &bool_op_len);
+    if (bool_op < 0) bool_op = direct_find_top_level_word_op(expr, "and", &bool_op_len);
+    if (bool_op >= 0) {
+        char *lhs_raw = substr_copy(expr, (size_t)bool_op);
+        char *lhs = trim_copy(lhs_raw);
+        free(lhs_raw);
+        char *rhs = trim_copy(expr + bool_op + bool_op_len);
+        char *rewritten_lhs = direct_rewrite_expr(path, line_no, line, lhs, locals, fns, fn_count, structs, struct_count);
+        char *rewritten_rhs = direct_rewrite_expr(path, line_no, line, rhs, locals, fns, fn_count, structs, struct_count);
+        free(lhs);
+        free(rhs);
+        if (rewritten_lhs == NULL || rewritten_rhs == NULL) {
+            free(rewritten_lhs);
+            free(rewritten_rhs);
+            return NULL;
+        }
+        StrBuf out;
+        sb_init(&out);
+        sb_append(&out, rewritten_lhs);
+        sb_append(&out, bool_op_len == 2 ? " or " : " and ");
+        sb_append(&out, rewritten_rhs);
+        free(rewritten_lhs);
+        free(rewritten_rhs);
+        return sb_take(&out);
+    }
     int op_len = 0;
     int op = direct_find_top_level_eq_op(expr, &op_len);
     if (op < 0) return NULL;
@@ -7724,6 +22425,18 @@ static char *direct_rewrite_list_literal_value_expr(
     if (literal_state != 1) {
         for (int k = 0; k < 16; k++) free(items[k]);
         return NULL;
+    }
+    if (direct_is_token_list_type(list_type)) {
+        if (item_count != 0) {
+            report_issue(path, line_no, find_col(line, "List"), line,
+                "direct native emitter supports empty List<Token> literals only",
+                "start with `let toks: List<Token> = []` and call `push` to fill the token list.",
+                NULL);
+            for (int k = 0; k < 16; k++) free(items[k]);
+            return NULL;
+        }
+        for (int k = 0; k < 16; k++) free(items[k]);
+        return strdup("__vais_token_list_new()");
     }
 
     StrBuf out;
@@ -7862,8 +22575,8 @@ static int direct_check_map_value_expr(
 ) {
     if (!direct_is_supported_map_return_type(map_type)) {
         report_issue(path, line_no, find_col(line, expr), line,
-            "direct native emitter Map return values are verified only for Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, and Map<Str,Char>",
-            "use `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>` for returned Map values; keep generic Map values local.",
+            "direct native emitter Map return values are verified only for Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, Map<Str,Char>, and Map<Str,Str>",
+            "use `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or `Map<Str,Str>` for returned Map values; keep generic Map values local.",
             "fn make() -> Map<Int,Int>");
         return 1;
     }
@@ -7889,7 +22602,7 @@ static int direct_check_map_value_expr(
     }
     report_issue(path, line_no, find_col(line, expr), line,
         "direct native emitter Map value expression must be a local Map or Map-returning call",
-        "return a local `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>`, or initialize from a helper returning the same Map type.",
+        "return a local `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or `Map<Str,Str>`, or initialize from a helper returning the same Map type.",
         "let scores: Map<Int,Int> = make()");
     return 1;
 }
@@ -7925,7 +22638,7 @@ static char *direct_rewrite_map_value_expr(
     }
     report_issue(path, line_no, find_col(line, expr), line,
         "direct native emitter Map value expression must be a local Map or Map-returning call",
-        "return a local `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>`, or initialize from a helper returning the same Map type.",
+        "return a local `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or `Map<Str,Str>`, or initialize from a helper returning the same Map type.",
         "let scores: Map<Int,Int> = make()");
     return NULL;
 }
@@ -7955,6 +22668,213 @@ static char *direct_rewrite_list_value_expr(
         return sb_take(&out);
     }
     return direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+}
+
+static int direct_map_method_returns_str(const char *map_type, const char *method) {
+    if (strcmp(method, "key_at") == 0) {
+        return direct_is_str_type(direct_map_key_type(map_type));
+    }
+    if (strcmp(method, "get") == 0 || strcmp(method, "value_at") == 0) {
+        return direct_is_str_type(direct_map_value_type(map_type));
+    }
+    return 0;
+}
+
+static int direct_parse_trailing_str_len(const char *expr, int pos, int *next_i, int *has_len) {
+    *next_i = pos;
+    *has_len = 0;
+    const char *tail = skip_ws(expr + pos);
+    if (*tail != '.') return 1;
+
+    int field_start = (int)(tail - expr) + 1;
+    while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
+    int field_end = field_start;
+    while (is_ident_continue(expr[field_end])) field_end++;
+    if (field_end == field_start) return 0;
+    char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
+    int is_len = strcmp(field, "len") == 0;
+    free(field);
+    if (!is_len) return 0;
+
+    const char *after = skip_ws(expr + field_end);
+    int end = field_end;
+    if (*after == '(') {
+        int close = find_matching_paren_c(expr, (int)(after - expr));
+        if (close < 0) return 0;
+        char *args = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+        char *trimmed_args = trim_copy(args);
+        int has_args = trimmed_args[0] != '\0';
+        free(trimmed_args);
+        free(args);
+        if (has_args) return 0;
+        end = close + 1;
+    }
+
+    *next_i = end;
+    *has_len = 1;
+    return 1;
+}
+
+static int direct_parse_flattened_nested_struct_tail(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    int pos,
+    DirectStructInfo *st,
+    DirectStructInfo *structs,
+    int struct_count,
+    char **flatten_field,
+    int *next_i,
+    int *len_chain
+) {
+    *flatten_field = NULL;
+    *next_i = pos;
+    if (len_chain != NULL) *len_chain = 0;
+    const char *tail = skip_ws(expr + pos);
+    if (st == NULL || *tail != '.') return 1;
+    int field_start = (int)(tail - expr) + 1;
+    while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
+    int field_end = field_start;
+    while (is_ident_continue(expr[field_end])) field_end++;
+    if (field_end == field_start) return 1;
+    char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
+    const char *after_field = skip_ws(expr + field_end);
+    if (*after_field != '.') {
+        free(field);
+        return 1;
+    }
+    const char *field_type = direct_struct_field_type(st, field);
+    if (direct_is_str_type(field_type)) {
+        int str_next = field_end;
+        int str_len = 0;
+        if (direct_parse_trailing_str_len(expr, field_end, &str_next, &str_len) && str_len) {
+            *flatten_field = strdup(field);
+            if (*flatten_field == NULL) die_oom();
+            *next_i = str_next;
+            if (len_chain != NULL) *len_chain = 1;
+            free(field);
+            return 1;
+        }
+        report_issue(path, line_no, find_col(line, field), line,
+            "direct native emitter supports only `.len()` after a Str field on List<Struct> method results",
+            "write `docs.first().title.len()` or bind the struct value to a local first.",
+            NULL);
+        free(field);
+        return 0;
+    }
+    int nested_start = (int)(after_field - expr) + 1;
+    while (expr[nested_start] == ' ' || expr[nested_start] == '\t') nested_start++;
+    int nested_end = nested_start;
+    while (is_ident_continue(expr[nested_end])) nested_end++;
+    if (nested_end == nested_start) {
+        report_issue(path, line_no, find_col(line, field), line,
+            "direct native emitter expected a nested struct field name after `.`",
+            "read a field declared on this nested struct.",
+            NULL);
+        free(field);
+        return 0;
+    }
+    char *nested_field = substr_copy(expr + nested_start, (size_t)(nested_end - nested_start));
+    DirectStructInfo *nested = field_type == NULL ? NULL : direct_find_struct(structs, struct_count, field_type);
+    if (nested == NULL || !direct_struct_has_field(nested, nested_field)) {
+        report_issue(path, line_no, find_col(line, field), line,
+            "direct native emitter found an unknown nested List<Struct> method field access",
+            "read a field declared on this nested struct method result.",
+            NULL);
+        free(nested_field);
+        free(field);
+        return 0;
+    }
+    StrBuf tail_buf;
+    sb_init(&tail_buf);
+    sb_append(&tail_buf, field);
+    sb_append(&tail_buf, ".");
+    sb_append(&tail_buf, nested_field);
+    *flatten_field = sb_take(&tail_buf);
+    *next_i = nested_end;
+    free(nested_field);
+    free(field);
+    return 1;
+}
+
+static char *direct_infer_struct_tail_type(
+    const char *expr,
+    int pos,
+    DirectStructInfo *st,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    const char *tail = skip_ws(expr + pos);
+    if (st == NULL || *tail != '.') return NULL;
+    int field_start = (int)(tail - expr) + 1;
+    while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
+    int field_end = field_start;
+    while (is_ident_continue(expr[field_end])) field_end++;
+    if (field_end == field_start) return NULL;
+    char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
+    const char *field_type = direct_struct_field_type(st, field);
+    if (field_type == NULL) {
+        free(field);
+        return NULL;
+    }
+    const char *after_field = skip_ws(expr + field_end);
+    if (*after_field == '\0') {
+        char *out = strdup(field_type);
+        if (out == NULL) die_oom();
+        free(field);
+        return out;
+    }
+    int next_i = field_end;
+    int len_chain = 0;
+    if (direct_is_str_type(field_type) &&
+        direct_parse_trailing_str_len(expr, field_end, &next_i, &len_chain) &&
+        len_chain &&
+        *skip_ws(expr + next_i) == '\0') {
+        free(field);
+        return strdup("Int");
+    }
+    if (*after_field != '.') {
+        free(field);
+        return NULL;
+    }
+    DirectStructInfo *nested = direct_find_struct(structs, struct_count, field_type);
+    int nested_start = (int)(after_field - expr) + 1;
+    while (expr[nested_start] == ' ' || expr[nested_start] == '\t') nested_start++;
+    int nested_end = nested_start;
+    while (is_ident_continue(expr[nested_end])) nested_end++;
+    if (nested_end == nested_start) {
+        free(field);
+        return NULL;
+    }
+    char *nested_field = substr_copy(expr + nested_start, (size_t)(nested_end - nested_start));
+    const char *nested_type = nested == NULL ? NULL : direct_struct_field_type(nested, nested_field);
+    if (nested_type == NULL) {
+        free(nested_field);
+        free(field);
+        return NULL;
+    }
+    const char *after_nested = skip_ws(expr + nested_end);
+    if (*after_nested == '\0') {
+        char *out = strdup(nested_type);
+        if (out == NULL) die_oom();
+        free(nested_field);
+        free(field);
+        return out;
+    }
+    next_i = nested_end;
+    len_chain = 0;
+    if (direct_is_str_type(nested_type) &&
+        direct_parse_trailing_str_len(expr, nested_end, &next_i, &len_chain) &&
+        len_chain &&
+        *skip_ws(expr + next_i) == '\0') {
+        free(nested_field);
+        free(field);
+        return strdup("Int");
+    }
+    free(nested_field);
+    free(field);
+    return NULL;
 }
 
 static char *direct_rewrite_list_expr(
@@ -8011,6 +22931,63 @@ static char *direct_rewrite_list_expr(
         const char *base_type = direct_names_type(locals, name);
         int cursor = i;
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
+        if (expr[cursor] == '(' &&
+            (direct_is_parse_builtin_name(name) || direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_slice_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_join_builtin_name(name) || direct_is_str_replace_builtin_name(name) || direct_is_str_trim_builtin_name(name) || direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name) || direct_is_str_byte_builtin_name(name) || direct_is_fs_exists_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name) || direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_str_split_into_builtin_name(name) || direct_is_doc_term_counts_into_builtin_name(name) || direct_is_doc_term_overlap_score_builtin_name(name) || direct_is_doc_term_weighted_score_builtin_name(name))) {
+            int close = find_matching_paren_c(expr, cursor);
+            if (close < 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter expected `)` to close the string helper call",
+                    "write `parse_uint(s)`, `parse_int(s)`, `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `time_millis()`, `proc_argc()`, `proc_arg(index)`, `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_slice(text, start, len)`, `str_concat(left, right)`, `str_join(parts, sep)`, `str_replace(text, needle, replacement)`, `str_trim(text)`, `str_lower(text)`, `str_upper(text)`, `str_byte(value)`, `str_split_ws_into(text, out)`, `str_split_lines_into(text, out)`, `str_split_into(text, sep, out)`, `doc_term_counts_into(text, counts)`, `doc_term_overlap_score(query, doc)`, or `doc_term_weighted_score(query, doc)`.",
+                    NULL);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            sb_append_n(&out, expr + start, (size_t)(close + 1 - start));
+            free(name);
+            i = close + 1;
+            continue;
+        }
+        if (expr[cursor] == '(' && direct_is_proc_capture_builtin_name(name)) {
+            int close = find_matching_paren_c(expr, cursor);
+            if (close < 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter expected `)` to close the proc_capture call",
+                    "write `proc_capture(argv)` where `argv` is a local `List<Str>`.",
+                    NULL);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+            char *args[16] = {0};
+            int argc = split_top_level_commas_c(inside, args, 16);
+            free(inside);
+            if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter proc_capture takes one List<Str> argument",
+                    "write `proc_capture(argv)` where `argv` is a local `List<Str>`.",
+                    NULL);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            char *rewritten_arg = direct_rewrite_list_arg_expr(path, line_no, line, args[0], "List<Str>", locals, fns, fn_count, structs, struct_count);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            if (rewritten_arg == NULL) {
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            sb_append(&out, "__vais_proc_capture(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+            free(rewritten_arg);
+            free(name);
+            i = close + 1;
+            continue;
+        }
         if (expr[cursor] == '(') {
             DirectFnInfo *fn = direct_find_fn(fns, fn_count, name);
             if (fn != NULL) {
@@ -8160,6 +23137,41 @@ static char *direct_rewrite_list_expr(
             free(name);
             continue;
         }
+        DirectStructInfo *base_st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
+        if (base_st != NULL && expr[cursor] == '.') {
+            int field_start = cursor + 1;
+            while (expr[field_start] == ' ' || expr[field_start] == '\t') field_start++;
+            int field_end = field_start;
+            while (is_ident_continue(expr[field_end])) field_end++;
+            char *field = substr_copy(expr + field_start, (size_t)(field_end - field_start));
+            const char *field_type = direct_struct_field_type(base_st, field);
+            if (direct_is_str_type(field_type)) {
+                int next_i = field_end;
+                int len_chain = 0;
+                if (!direct_parse_trailing_str_len(expr, field_end, &next_i, &len_chain)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports only `.len()` after a Str struct field",
+                        "write `doc.title.len()` or bind the field to a Str local first.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (len_chain) {
+                    sb_append(&out, "__vais_str_len(");
+                    sb_append_n(&out, expr + start, (size_t)(field_end - start));
+                    sb_append(&out, ")");
+                } else {
+                    sb_append_n(&out, expr + start, (size_t)(field_end - start));
+                }
+                free(field);
+                free(name);
+                i = next_i;
+                continue;
+            }
+            free(field);
+        }
         if (!direct_is_list_type(base_type)) {
             if (direct_is_map_type(base_type)) {
                 if (expr[cursor] == '.') {
@@ -8228,6 +23240,22 @@ static char *direct_rewrite_list_expr(
                             free(out.data);
                             return NULL;
                         }
+                        int next_i = close + 1;
+                        int len_chain = 0;
+                        if (direct_map_method_returns_str(base_type, field)) {
+                            if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                                report_issue(path, line_no, find_col(line, name), line,
+                                    "direct native emitter supports only `.len()` after Str-returning Map methods",
+                                    "write `m.get(key, fallback).len()`, `m.key_at(index).len()`, or bind the string to a local first.",
+                                    NULL);
+                                for (int k = 0; k < 16; k++) free(args[k]);
+                                free(field);
+                                free(name);
+                                free(out.data);
+                                return NULL;
+                            }
+                        }
+                        if (len_chain) sb_append(&out, "__vais_str_len(");
                         sb_append(&out, direct_map_helper_name(base_type, field));
                         sb_append(&out, "(");
                         direct_append_map_ptr_ref(&out, name, direct_names_is_ref(locals, name));
@@ -8245,15 +23273,81 @@ static char *direct_rewrite_list_expr(
                             free(rewritten_arg);
                         }
                         sb_append(&out, ")");
+                        if (len_chain) sb_append(&out, ")");
                         for (int k = 0; k < 16; k++) free(args[k]);
                         free(field);
                         free(name);
-                        i = close + 1;
+                        i = next_i;
+                        continue;
+                    }
+                    if ((strcmp(field, "key_at") == 0 || strcmp(field, "value_at") == 0) && *after == '(') {
+                        int close = find_matching_paren_c(expr, (int)(after - expr));
+                        if (close < 0) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter expected `)` after Map entry method",
+                                "write `m.key_at(index)` or `m.value_at(index)`.",
+                                NULL);
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
+                        char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                        char *args[16] = {0};
+                        int argc = split_top_level_commas_c(inside, args, 16);
+                        free(inside);
+                        if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter Map entry method argument count does not match",
+                                "write `m.key_at(index)` or `m.value_at(index)`.",
+                                NULL);
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
+                        int next_i = close + 1;
+                        int len_chain = 0;
+                        if (direct_map_method_returns_str(base_type, field)) {
+                            if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                                report_issue(path, line_no, find_col(line, name), line,
+                                    "direct native emitter supports only `.len()` after Str-returning Map entry methods",
+                                    "write `m.key_at(index).len()`, `m.value_at(index).len()`, or bind the string to a local first.",
+                                    NULL);
+                                for (int k = 0; k < 16; k++) free(args[k]);
+                                free(field);
+                                free(name);
+                                free(out.data);
+                                return NULL;
+                            }
+                        }
+                        if (len_chain) sb_append(&out, "__vais_str_len(");
+                        sb_append(&out, direct_map_helper_name(base_type, field));
+                        sb_append(&out, "(");
+                        direct_append_map_ptr_ref(&out, name, direct_names_is_ref(locals, name));
+                        char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+                        if (rewritten_arg == NULL) {
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(field);
+                            free(name);
+                            free(out.data);
+                            return NULL;
+                        }
+                        sb_append(&out, ", ");
+                        sb_append(&out, rewritten_arg);
+                        free(rewritten_arg);
+                        sb_append(&out, ")");
+                        if (len_chain) sb_append(&out, ")");
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        i = next_i;
                         continue;
                     }
                     report_issue(path, line_no, find_col(line, name), line,
-                        "direct native emitter supports Map get, get_opt, contains, and len expressions",
-                            "write `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, local Map<Str,Int>, local Map<Str,Bool>, or local Map<Str,Char>.",
+                        "direct native emitter supports Map get, get_opt, contains, len, key_at, and value_at expressions",
+                            "write `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, `m.len()`, `m.key_at(index)`, or `m.value_at(index)` for verified concrete Map values.",
                         NULL);
                     free(field);
                     free(name);
@@ -8289,15 +23383,48 @@ static char *direct_rewrite_list_expr(
                 free(out.data);
                 return NULL;
             }
+            char *elem_type = direct_list_element_type(base_type);
+            int next_i = close + 1;
+            int len_chain = 0;
+            char *flatten_field = NULL;
+            if (direct_is_str_type(elem_type)) {
+                if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports only `.len()` after List<Str> index expressions",
+                        "write `words[i].len()` or bind the string element to a local first.",
+                        NULL);
+                    free(elem_type);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+            } else if (elem_type != NULL) {
+                DirectStructInfo *elem_st = direct_find_struct(structs, struct_count, elem_type);
+                if (!direct_parse_flattened_nested_struct_tail(path, line_no, line, expr, close + 1, elem_st, structs, struct_count, &flatten_field, &next_i, &len_chain)) {
+                    free(elem_type);
+                    free(rewritten_index);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+            }
+            free(elem_type);
+            if (len_chain) sb_append(&out, "__vais_str_len(");
             direct_append_list_data_ref(&out, name, is_ref);
             sb_append(&out, "[__vais_list_checked_index((long)(");
             sb_append(&out, rewritten_index);
             sb_append(&out, "), ");
             direct_append_list_len_ref(&out, name, is_ref);
             sb_append(&out, ")]");
+            if (flatten_field != NULL) {
+                sb_append(&out, ".");
+                sb_append(&out, flatten_field);
+                free(flatten_field);
+            }
+            if (len_chain) sb_append(&out, ")");
             free(rewritten_index);
             free(name);
-            i = close + 1;
+            i = next_i;
             continue;
         }
 
@@ -8388,6 +23515,471 @@ static char *direct_rewrite_list_expr(
                 i = close + 1;
                 continue;
             }
+            if (strcmp(field, "contains") == 0) {
+                if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports contains only on List<Int> and List<Str>",
+                        "use `xs.contains(value)` on `List<Int>` or `words.contains(value)` on `List<Str>`; compare `List<Struct>` elements in an explicit loop for now.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.contains must be called",
+                        "write `xs.contains(value)`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List.contains",
+                        "write `xs.contains(value)`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.contains expects one argument",
+                        "write `xs.contains(value)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (direct_check_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                const char *expected_arg_type = direct_is_list_str_type(base_type) ? "Str" : "Int";
+                if (!direct_map_arg_type_compatible(expected_arg_type, arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        direct_is_list_str_type(base_type) ?
+                            "direct native emitter List<Str>.contains argument must be Str" :
+                            "direct native emitter List<Int>.contains argument must be Int",
+                        direct_is_list_str_type(base_type) ?
+                            "pass a Str value to `words.contains(value)`." :
+                            "pass an Int-compatible value to `xs.contains(value)`.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                free(arg_type);
+                char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+                if (rewritten_arg == NULL) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                direct_append_list_contains_ref(&out, name, is_ref, base_type, rewritten_arg);
+                free(rewritten_arg);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(field);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (strcmp(field, "index_of") == 0) {
+                if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports index_of only on List<Int> and List<Str>",
+                        "use `xs.index_of(value)` on `List<Int>` or `words.index_of(value)` on `List<Str>`; scan other list element types in an explicit loop for now.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.index_of must be called",
+                        "write `words.index_of(value)`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List.index_of",
+                        "write `words.index_of(value)`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.index_of expects one argument",
+                        "write `words.index_of(value)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (direct_check_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                const char *expected_arg_type = direct_is_list_str_type(base_type) ? "Str" : "Int";
+                if (!direct_map_arg_type_compatible(expected_arg_type, arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        direct_is_list_str_type(base_type) ?
+                            "direct native emitter List<Str>.index_of argument must be Str" :
+                            "direct native emitter List<Int>.index_of argument must be Int",
+                        direct_is_list_str_type(base_type) ?
+                            "pass a Str value to `words.index_of(value)`." :
+                            "pass an Int-compatible value to `xs.index_of(value)`.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                free(arg_type);
+                char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+                if (rewritten_arg == NULL) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                direct_append_list_index_of_ref(&out, name, is_ref, base_type, rewritten_arg);
+                free(rewritten_arg);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(field);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (strcmp(field, "count") == 0) {
+                if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports count only on List<Int> and List<Str>",
+                        "use `xs.count(value)` on `List<Int>` or `words.count(value)` on `List<Str>`; scan other list element types in an explicit loop for now.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.count must be called",
+                        "write `words.count(value)`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List.count",
+                        "write `words.count(value)`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.count expects one argument",
+                        "write `words.count(value)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (direct_check_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                const char *expected_arg_type = direct_is_list_str_type(base_type) ? "Str" : "Int";
+                if (!direct_map_arg_type_compatible(expected_arg_type, arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        direct_is_list_str_type(base_type) ?
+                            "direct native emitter List<Str>.count argument must be Str" :
+                            "direct native emitter List<Int>.count argument must be Int",
+                        direct_is_list_str_type(base_type) ?
+                            "pass a Str value to `words.count(value)`." :
+                            "pass an Int-compatible value to `xs.count(value)`.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                free(arg_type);
+                char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+                if (rewritten_arg == NULL) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                direct_append_list_count_ref(&out, name, is_ref, base_type, rewritten_arg);
+                free(rewritten_arg);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(field);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (strcmp(field, "remove_at") == 0) {
+                if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type) && !direct_is_list_struct_type(structs, struct_count, base_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports remove_at only on List<Int>, List<Str>, and List<Struct>",
+                        "use `xs.remove_at(index)` on a verified direct-engine list type.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.remove_at must be called",
+                        "write `xs.remove_at(index)`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List.remove_at",
+                        "write `xs.remove_at(index)`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.remove_at expects one index argument",
+                        "write `xs.remove_at(index)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (direct_check_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                if (!direct_map_arg_type_compatible("Int", arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.remove_at index must be Int",
+                        "pass an Int-compatible index to `xs.remove_at(index)`.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                free(arg_type);
+                char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+                if (rewritten_arg == NULL) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int next_i = close + 1;
+                int len_chain = 0;
+                char *flatten_field = NULL;
+                if (direct_is_list_str_type(base_type)) {
+                    if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports only `.len()` after List<Str>.remove_at(index)",
+                            "write `words.remove_at(index).len()` or bind the string to a local first.",
+                            NULL);
+                        free(rewritten_arg);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        free(out.data);
+                        return NULL;
+                    }
+                } else {
+                    char *elem_type = direct_list_element_type(base_type);
+                    DirectStructInfo *elem_st = elem_type == NULL ? NULL : direct_find_struct(structs, struct_count, elem_type);
+                    if (!direct_parse_flattened_nested_struct_tail(path, line_no, line, expr, close + 1, elem_st, structs, struct_count, &flatten_field, &next_i, &len_chain)) {
+                        free(elem_type);
+                        free(rewritten_arg);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        free(out.data);
+                        return NULL;
+                    }
+                    free(elem_type);
+                }
+                if (len_chain) sb_append(&out, "__vais_str_len(");
+                direct_append_list_remove_at_ref(&out, name, is_ref, base_type, rewritten_arg, locals);
+                if (flatten_field != NULL) {
+                    sb_append(&out, ".");
+                    sb_append(&out, flatten_field);
+                    free(flatten_field);
+                }
+                if (len_chain) sb_append(&out, ")");
+                free(rewritten_arg);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(field);
+                free(name);
+                i = next_i;
+                continue;
+            }
+            if (strcmp(field, "first") == 0) {
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.first must be called",
+                        "write `xs.first()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List.first",
+                        "write `xs.first()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *args = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *trimmed_args = trim_copy(args);
+                int has_args = trimmed_args[0] != '\0';
+                free(trimmed_args);
+                free(args);
+                if (has_args) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List.first takes no arguments",
+                        "write `xs.first()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *elem_type = direct_list_element_type(base_type);
+                int next_i = close + 1;
+                int len_chain = 0;
+                char *flatten_field = NULL;
+                if (direct_is_str_type(elem_type)) {
+                    if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports only `.len()` after List<Str>.first()",
+                            "write `words.first().len()` or bind the string to a local first.",
+                            NULL);
+                        free(elem_type);
+                        free(field);
+                        free(name);
+                        free(out.data);
+                        return NULL;
+                    }
+                } else {
+                    DirectStructInfo *elem_st = elem_type == NULL ? NULL : direct_find_struct(structs, struct_count, elem_type);
+                    if (!direct_parse_flattened_nested_struct_tail(path, line_no, line, expr, close + 1, elem_st, structs, struct_count, &flatten_field, &next_i, &len_chain)) {
+                        free(elem_type);
+                        free(field);
+                        free(name);
+                        free(out.data);
+                        return NULL;
+                    }
+                }
+                free(elem_type);
+                if (len_chain) sb_append(&out, "__vais_str_len(");
+                direct_append_list_first_ref(&out, name, is_ref);
+                if (flatten_field != NULL) {
+                    sb_append(&out, ".");
+                    sb_append(&out, flatten_field);
+                    free(flatten_field);
+                }
+                if (len_chain) sb_append(&out, ")");
+                free(field);
+                free(name);
+                i = next_i;
+                continue;
+            }
             if (strcmp(field, "last") == 0) {
                 if (*after != '(') {
                     report_issue(path, line_no, find_col(line, name), line,
@@ -8425,10 +24017,44 @@ static char *direct_rewrite_list_expr(
                     free(out.data);
                     return NULL;
                 }
+                char *elem_type = direct_list_element_type(base_type);
+                int next_i = close + 1;
+                int len_chain = 0;
+                char *flatten_field = NULL;
+                if (direct_is_str_type(elem_type)) {
+                    if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports only `.len()` after List<Str>.last()",
+                            "write `words.last().len()` or bind the string to a local first.",
+                            NULL);
+                        free(elem_type);
+                        free(field);
+                        free(name);
+                        free(out.data);
+                        return NULL;
+                    }
+                } else {
+                    DirectStructInfo *elem_st = elem_type == NULL ? NULL : direct_find_struct(structs, struct_count, elem_type);
+                    if (!direct_parse_flattened_nested_struct_tail(path, line_no, line, expr, close + 1, elem_st, structs, struct_count, &flatten_field, &next_i, &len_chain)) {
+                        free(elem_type);
+                        free(field);
+                        free(name);
+                        free(out.data);
+                        return NULL;
+                    }
+                }
+                free(elem_type);
+                if (len_chain) sb_append(&out, "__vais_str_len(");
                 direct_append_list_last_ref(&out, name, is_ref);
+                if (flatten_field != NULL) {
+                    sb_append(&out, ".");
+                    sb_append(&out, flatten_field);
+                    free(flatten_field);
+                }
+                if (len_chain) sb_append(&out, ")");
                 free(field);
                 free(name);
-                i = close + 1;
+                i = next_i;
                 continue;
             }
             if (strcmp(field, "pop") == 0) {
@@ -8468,10 +24094,44 @@ static char *direct_rewrite_list_expr(
                     free(out.data);
                     return NULL;
                 }
+                char *elem_type = direct_list_element_type(base_type);
+                int next_i = close + 1;
+                int len_chain = 0;
+                char *flatten_field = NULL;
+                if (direct_is_str_type(elem_type)) {
+                    if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports only `.len()` after List<Str>.pop()",
+                            "write `words.pop().len()` or bind the string to a local first.",
+                            NULL);
+                        free(elem_type);
+                        free(field);
+                        free(name);
+                        free(out.data);
+                        return NULL;
+                    }
+                } else {
+                    DirectStructInfo *elem_st = elem_type == NULL ? NULL : direct_find_struct(structs, struct_count, elem_type);
+                    if (!direct_parse_flattened_nested_struct_tail(path, line_no, line, expr, close + 1, elem_st, structs, struct_count, &flatten_field, &next_i, &len_chain)) {
+                        free(elem_type);
+                        free(field);
+                        free(name);
+                        free(out.data);
+                        return NULL;
+                    }
+                }
+                free(elem_type);
+                if (len_chain) sb_append(&out, "__vais_str_len(");
                 direct_append_list_pop_ref(&out, name, is_ref, base_type, locals);
+                if (flatten_field != NULL) {
+                    sb_append(&out, ".");
+                    sb_append(&out, flatten_field);
+                    free(flatten_field);
+                }
+                if (len_chain) sb_append(&out, ")");
                 free(field);
                 free(name);
-                i = close + 1;
+                i = next_i;
                 continue;
             }
             if (strcmp(field, "sum") == 0) {
@@ -8527,9 +24187,115 @@ static char *direct_rewrite_list_expr(
                 i = close + 1;
                 continue;
             }
+            if (strcmp(field, "max") == 0) {
+                if (!direct_is_list_int_type(base_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports max only on List<Int>",
+                        "read struct list fields explicitly before taking a maximum.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List<Int>.max must be called",
+                        "write `xs.max()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List<Int>.max",
+                        "write `xs.max()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *args = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *trimmed_args = trim_copy(args);
+                int has_args = trimmed_args[0] != '\0';
+                free(trimmed_args);
+                free(args);
+                if (has_args) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List<Int>.max takes no arguments",
+                        "write `xs.max()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                direct_append_list_max_ref(&out, name, is_ref);
+                free(field);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (strcmp(field, "min") == 0) {
+                if (!direct_is_list_int_type(base_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter supports min only on List<Int>",
+                        "read struct list fields explicitly before taking a minimum.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                if (*after != '(') {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List<Int>.min must be called",
+                        "write `xs.min()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                int close = find_matching_paren_c(expr, (int)(after - expr));
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` after List<Int>.min",
+                        "write `xs.min()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                char *args = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                char *trimmed_args = trim_copy(args);
+                int has_args = trimmed_args[0] != '\0';
+                free(trimmed_args);
+                free(args);
+                if (has_args) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List<Int>.min takes no arguments",
+                        "write `xs.min()`.",
+                        NULL);
+                    free(field);
+                    free(name);
+                    free(out.data);
+                    return NULL;
+                }
+                direct_append_list_min_ref(&out, name, is_ref);
+                free(field);
+                free(name);
+                i = close + 1;
+                continue;
+            }
             report_issue(path, line_no, find_col(line, name), line,
-                "direct native emitter supports List len, is_empty, last, pop, index, and List<Int> sum expressions",
-                "write `xs.len()`, `xs.is_empty()`, `xs.last()`, `xs.pop()`, `xs[i]`, or `xs.sum()` for List<Int>.",
+                "direct native emitter supports List len, is_empty, first, last, pop, remove_at, index, List<Int>/List<Str> contains/index_of/count, and List<Int> sum/max/min expressions",
+                "write `xs.len()`, `xs.is_empty()`, `xs.first()`, `xs.last()`, `xs.pop()`, `xs.remove_at(index)`, `xs[i]`, `xs.contains(value)`, `xs.index_of(value)`, `xs.count(value)`, `xs.sum()`, `xs.max()`, or `xs.min()` for List<Int>; `words.first()`, `words.remove_at(index)`, `words.contains(value)`, `words.index_of(value)`, and `words.count(value)` are verified for List<Str>.",
                 NULL);
             free(field);
             free(name);
@@ -8554,6 +24320,36 @@ static char *direct_rewrite_expr(
     DirectStructInfo *structs,
     int struct_count
 ) {
+    char *if_cond = NULL;
+    char *if_then = NULL;
+    char *if_else = NULL;
+    if (direct_parse_if_expr_parts(expr, &if_cond, &if_then, &if_else)) {
+        char *rewritten_cond = direct_rewrite_expr(path, line_no, line, if_cond, locals, fns, fn_count, structs, struct_count);
+        char *rewritten_then = rewritten_cond == NULL ? NULL : direct_rewrite_expr(path, line_no, line, if_then, locals, fns, fn_count, structs, struct_count);
+        char *rewritten_else = rewritten_then == NULL ? NULL : direct_rewrite_expr(path, line_no, line, if_else, locals, fns, fn_count, structs, struct_count);
+        free(if_cond);
+        free(if_then);
+        free(if_else);
+        if (rewritten_cond == NULL || rewritten_then == NULL || rewritten_else == NULL) {
+            free(rewritten_cond);
+            free(rewritten_then);
+            free(rewritten_else);
+            return NULL;
+        }
+        StrBuf out;
+        sb_init(&out);
+        sb_append(&out, "(");
+        sb_append(&out, rewritten_cond);
+        sb_append(&out, " ? ");
+        sb_append(&out, rewritten_then);
+        sb_append(&out, " : ");
+        sb_append(&out, rewritten_else);
+        sb_append(&out, ")");
+        free(rewritten_cond);
+        free(rewritten_then);
+        free(rewritten_else);
+        return sb_take(&out);
+    }
     char *struct_rewritten = direct_rewrite_struct_literals(path, line_no, line, expr, structs, struct_count);
     if (struct_rewritten == NULL) return NULL;
     char *eq_rewritten = direct_rewrite_str_equality_expr(path, line_no, line, struct_rewritten, locals, fns, fn_count, structs, struct_count);
@@ -8570,8 +24366,14 @@ static char *direct_rewrite_expr(
     char *conversion_rewritten = direct_rewrite_str_conversion_calls(path, line_no, line, parse_rewritten, locals, fns, fn_count, structs, struct_count);
     free(parse_rewritten);
     if (conversion_rewritten == NULL) return NULL;
-    char *string_rewritten = direct_rewrite_string_literals(path, line_no, line, conversion_rewritten);
+    char *option_result_rewritten = direct_rewrite_option_result_constructors(path, line_no, line, conversion_rewritten, locals, fns, fn_count, structs, struct_count);
     free(conversion_rewritten);
+    if (option_result_rewritten == NULL) return NULL;
+    char *nested_rewritten = direct_rewrite_nested_struct_field_chains(path, line_no, line, option_result_rewritten, locals, fns, fn_count, structs, struct_count);
+    free(option_result_rewritten);
+    if (nested_rewritten == NULL) return NULL;
+    char *string_rewritten = direct_rewrite_string_literals(path, line_no, line, nested_rewritten);
+    free(nested_rewritten);
     return string_rewritten;
 }
 
@@ -8593,6 +24395,10 @@ static char *direct_infer_expr_type(
         free(trimmed);
         return strdup("Char");
     }
+    if (direct_is_none_constructor_expr(trimmed)) {
+        free(trimmed);
+        return strdup("Option<Int>");
+    }
     if (direct_is_list_initializer_expr(trimmed)) {
         free(trimmed);
         return strdup("List<Int>");
@@ -8600,6 +24406,49 @@ static char *direct_infer_expr_type(
     if (strcmp(s, "true") == 0 || strcmp(s, "false") == 0) {
         free(trimmed);
         return strdup("Bool");
+    }
+    char *if_cond = NULL;
+    char *if_then = NULL;
+    char *if_else = NULL;
+    if (direct_parse_if_expr_parts(s, &if_cond, &if_then, &if_else)) {
+        char *then_type = direct_infer_expr_type(if_then, locals, fns, fn_count, structs, struct_count);
+        char *else_type = direct_infer_expr_type(if_else, locals, fns, fn_count, structs, struct_count);
+        char *out = NULL;
+        if (then_type != NULL && else_type != NULL && strcmp(then_type, else_type) == 0) {
+            out = strdup(then_type);
+        } else if (direct_is_intlike_scalar_type(then_type) && direct_is_intlike_scalar_type(else_type)) {
+            out = strdup("Int");
+        } else if (then_type != NULL && else_type != NULL && direct_type_compatible(then_type, else_type)) {
+            out = strdup(then_type);
+        } else {
+            out = strdup("Int");
+        }
+        free(if_cond);
+        free(if_then);
+        free(if_else);
+        free(then_type);
+        free(else_type);
+        free(trimmed);
+        return out;
+    }
+    if (*s == '&') {
+        const char *ref = skip_ws(s + 1);
+        if (is_ident_start(*ref)) {
+            const char *name_start = ref;
+            ref++;
+            while (is_ident_continue(*ref)) ref++;
+            char *name = substr_copy(name_start, (size_t)(ref - name_start));
+            if (*skip_ws(ref) == '\0') {
+                const char *local_type = direct_names_type(locals, name);
+                if (local_type != NULL) {
+                    char *out = strdup(local_type);
+                    free(name);
+                    free(trimmed);
+                    return out;
+                }
+            }
+            free(name);
+        }
     }
     if (is_ident_start(*s)) {
         const char *name_start = s;
@@ -8618,18 +24467,42 @@ static char *direct_infer_expr_type(
         }
         if (*rest == '[') {
             int close = find_matching_bracket_c(trimmed, (int)(rest - trimmed));
-            if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+            if (close >= 0) {
                 const char *local_type = direct_names_type(locals, name);
                 if (direct_is_str_type(local_type)) {
-                    free(name);
-                    free(trimmed);
-                    return strdup("Int");
+                    if (*skip_ws(trimmed + close + 1) == '\0') {
+                        free(name);
+                        free(trimmed);
+                        return strdup("Int");
+                    }
                 }
                 char *elem_type = direct_list_element_type(local_type);
                 if (elem_type != NULL) {
-                    free(name);
-                    free(trimmed);
-                    return elem_type;
+                    if (*skip_ws(trimmed + close + 1) == '\0') {
+                        free(name);
+                        free(trimmed);
+                        return elem_type;
+                    }
+                    DirectStructInfo *elem_st = direct_find_struct(structs, struct_count, elem_type);
+                    char *tail_type = direct_infer_struct_tail_type(trimmed, close + 1, elem_st, structs, struct_count);
+                    if (tail_type != NULL) {
+                        free(elem_type);
+                        free(name);
+                        free(trimmed);
+                        return tail_type;
+                    }
+                    int next_i = close + 1;
+                    int len_chain = 0;
+                    int ok_len = direct_is_str_type(elem_type) &&
+                        direct_parse_trailing_str_len(trimmed, close + 1, &next_i, &len_chain) &&
+                        len_chain &&
+                        *skip_ws(trimmed + next_i) == '\0';
+                    free(elem_type);
+                    if (ok_len) {
+                        free(name);
+                        free(trimmed);
+                        return strdup("Int");
+                    }
                 }
             }
         }
@@ -8658,25 +24531,123 @@ static char *direct_infer_expr_type(
                     }
                 }
             }
-            if (direct_is_list_type(local_type) && (strcmp(field, "last") == 0 || strcmp(field, "pop") == 0) && *after == '(') {
+            if (direct_is_list_type(local_type) && (strcmp(field, "first") == 0 || strcmp(field, "last") == 0 || strcmp(field, "pop") == 0) && *after == '(') {
+                int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                if (close >= 0) {
+                    char *elem_type = direct_list_element_type(local_type);
+                    if (*skip_ws(trimmed + close + 1) == '\0') {
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return elem_type;
+                    }
+                    DirectStructInfo *elem_st = direct_find_struct(structs, struct_count, elem_type);
+                    char *tail_type = direct_infer_struct_tail_type(trimmed, close + 1, elem_st, structs, struct_count);
+                    if (tail_type != NULL) {
+                        free(elem_type);
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return tail_type;
+                    }
+                    int next_i = close + 1;
+                    int len_chain = 0;
+                    int ok_len = direct_is_str_type(elem_type) &&
+                        direct_parse_trailing_str_len(trimmed, close + 1, &next_i, &len_chain) &&
+                        len_chain &&
+                        *skip_ws(trimmed + next_i) == '\0';
+                    free(elem_type);
+                    if (ok_len) {
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return strdup("Int");
+                    }
+                }
+            }
+            if ((direct_is_list_int_type(local_type) || direct_is_list_str_type(local_type)) && strcmp(field, "contains") == 0 && *after == '(') {
                 int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
                 if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
-                    char *elem_type = direct_list_element_type(local_type);
                     free(field);
                     free(name);
                     free(trimmed);
-                    return elem_type;
+                    return strdup("Bool");
+                }
+            }
+            if ((direct_is_list_int_type(local_type) || direct_is_list_str_type(local_type)) && strcmp(field, "index_of") == 0 && *after == '(') {
+                int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                    free(field);
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+            }
+            if ((direct_is_list_int_type(local_type) || direct_is_list_str_type(local_type)) && strcmp(field, "count") == 0 && *after == '(') {
+                int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                    free(field);
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+            }
+            if (direct_is_list_type(local_type) && strcmp(field, "remove_at") == 0 && *after == '(') {
+                int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                if (close >= 0) {
+                    char *elem_type = direct_list_element_type(local_type);
+                    if (*skip_ws(trimmed + close + 1) == '\0') {
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return elem_type;
+                    }
+                    DirectStructInfo *elem_st = direct_find_struct(structs, struct_count, elem_type);
+                    char *tail_type = direct_infer_struct_tail_type(trimmed, close + 1, elem_st, structs, struct_count);
+                    if (tail_type != NULL) {
+                        free(elem_type);
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return tail_type;
+                    }
+                    int next_i = close + 1;
+                    int len_chain = 0;
+                    int ok_len = direct_is_str_type(elem_type) &&
+                        direct_parse_trailing_str_len(trimmed, close + 1, &next_i, &len_chain) &&
+                        len_chain &&
+                        *skip_ws(trimmed + next_i) == '\0';
+                    free(elem_type);
+                    if (ok_len) {
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return strdup("Int");
+                    }
                 }
             }
             if (direct_is_map_type(local_type)) {
                 if (strcmp(field, "get") == 0 && *after == '(') {
                     int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
-                    if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                    if (close >= 0) {
                         const char *value_type = direct_map_value_type(local_type);
-                        free(field);
-                        free(name);
-                        free(trimmed);
-                        return strdup(value_type == NULL ? "Int" : value_type);
+                        if (*skip_ws(trimmed + close + 1) == '\0') {
+                            free(field);
+                            free(name);
+                            free(trimmed);
+                            return strdup(value_type == NULL ? "Int" : value_type);
+                        }
+                        int next_i = close + 1;
+                        int len_chain = 0;
+                        if (direct_is_str_type(value_type) &&
+                            direct_parse_trailing_str_len(trimmed, close + 1, &next_i, &len_chain) &&
+                            len_chain &&
+                            *skip_ws(trimmed + next_i) == '\0') {
+                            free(field);
+                            free(name);
+                            free(trimmed);
+                            return strdup("Int");
+                        }
                     }
                 }
                 if ((strcmp(field, "get_opt") == 0 || strcmp(field, "len") == 0) && *after == '(') {
@@ -8697,6 +24668,90 @@ static char *direct_infer_expr_type(
                         return strdup("Bool");
                     }
                 }
+                if (strcmp(field, "key_at") == 0 && *after == '(') {
+                    int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                    if (close >= 0) {
+                        const char *key_type = direct_map_key_type(local_type);
+                        if (*skip_ws(trimmed + close + 1) == '\0') {
+                            free(field);
+                            free(name);
+                            free(trimmed);
+                            return strdup(key_type == NULL ? "Int" : key_type);
+                        }
+                        int next_i = close + 1;
+                        int len_chain = 0;
+                        if (direct_is_str_type(key_type) &&
+                            direct_parse_trailing_str_len(trimmed, close + 1, &next_i, &len_chain) &&
+                            len_chain &&
+                            *skip_ws(trimmed + next_i) == '\0') {
+                            free(field);
+                            free(name);
+                            free(trimmed);
+                            return strdup("Int");
+                        }
+                    }
+                }
+                if (strcmp(field, "value_at") == 0 && *after == '(') {
+                    int close = find_matching_paren_c(trimmed, (int)(after - trimmed));
+                    if (close >= 0) {
+                        const char *value_type = direct_map_value_type(local_type);
+                        if (*skip_ws(trimmed + close + 1) == '\0') {
+                            free(field);
+                            free(name);
+                            free(trimmed);
+                            return strdup(value_type == NULL ? "Int" : value_type);
+                        }
+                        int next_i = close + 1;
+                        int len_chain = 0;
+                        if (direct_is_str_type(value_type) &&
+                            direct_parse_trailing_str_len(trimmed, close + 1, &next_i, &len_chain) &&
+                            len_chain &&
+                            *skip_ws(trimmed + next_i) == '\0') {
+                            free(field);
+                            free(name);
+                            free(trimmed);
+                            return strdup("Int");
+                        }
+                    }
+                }
+            }
+            DirectStructInfo *st = local_type == NULL ? NULL : direct_find_struct(structs, struct_count, local_type);
+            if (st != NULL) {
+                char *tail_type = direct_infer_struct_tail_type(trimmed, (int)(rest - trimmed), st, structs, struct_count);
+                if (tail_type != NULL) {
+                    free(field);
+                    free(name);
+                    free(trimmed);
+                    return tail_type;
+                }
+                const char *field_type = direct_struct_field_type(st, field);
+                if (field_type != NULL) {
+                    if (*after == '\0') {
+                        char *out = strdup(field_type);
+                        free(field);
+                        free(name);
+                        free(trimmed);
+                        return out;
+                    }
+                    if (*after == '.') {
+                        DirectStructInfo *nested = direct_find_struct(structs, struct_count, field_type);
+                        int nested_start = (int)(after - trimmed) + 1;
+                        while (trimmed[nested_start] == ' ' || trimmed[nested_start] == '\t') nested_start++;
+                        int nested_end = nested_start;
+                        while (is_ident_continue(trimmed[nested_end])) nested_end++;
+                        char *nested_field = substr_copy(trimmed + nested_start, (size_t)(nested_end - nested_start));
+                        const char *nested_type = nested == NULL ? NULL : direct_struct_field_type(nested, nested_field);
+                        int ok = nested_type != NULL && *skip_ws(trimmed + nested_end) == '\0';
+                        free(nested_field);
+                        if (ok) {
+                            char *out = strdup(nested_type);
+                            free(field);
+                            free(name);
+                            free(trimmed);
+                            return out;
+                        }
+                    }
+                }
             }
             free(field);
         }
@@ -8708,8 +24763,188 @@ static char *direct_infer_expr_type(
         }
         if (*rest == '(') {
             int close = find_matching_paren_c(trimmed, (int)(rest - trimmed));
+            if (close >= 0) {
+                int next_i = close + 1;
+                int len_chain = 0;
+                int helper_returns_str =
+                    direct_is_str_slice_builtin_name(name) ||
+                    direct_is_str_concat_builtin_name(name) ||
+                    direct_is_str_join_builtin_name(name) ||
+                    direct_is_str_replace_builtin_name(name) ||
+                    direct_is_str_trim_builtin_name(name) ||
+                    direct_is_str_lower_builtin_name(name) ||
+                    direct_is_str_upper_builtin_name(name) ||
+                    direct_is_str_byte_builtin_name(name) ||
+                    direct_is_str_conversion_builtin_name(name) ||
+                    direct_is_fs_read_text_builtin_name(name) ||
+                    direct_is_fs_temp_dir_builtin_name(name) ||
+                    direct_is_fs_cwd_builtin_name(name) ||
+                    direct_is_path_join_builtin_name(name) ||
+                    direct_is_path_basename_builtin_name(name) ||
+                    direct_is_path_dirname_builtin_name(name) ||
+                    direct_is_proc_arg_builtin_name(name) ||
+                    direct_is_map_str_str_snapshot_builtin_name(name);
+                if (helper_returns_str &&
+                    direct_parse_trailing_str_len(trimmed, close + 1, &next_i, &len_chain) &&
+                    len_chain &&
+                    *skip_ws(trimmed + next_i) == '\0') {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+            }
             if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+                if (direct_is_some_constructor_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Option<Int>");
+                }
+                if (direct_is_ok_constructor_name(name) || direct_is_err_constructor_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Result<Int,Int>");
+                }
                 if (direct_is_parse_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_str_slice_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_str_concat_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_str_join_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_str_replace_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_str_trim_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_str_lower_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_str_upper_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_str_byte_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_fs_read_text_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_fs_exists_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_fs_write_text_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_fs_temp_dir_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_fs_cwd_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_path_join_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_path_basename_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_path_dirname_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_time_millis_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_proc_argc_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_proc_arg_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_str_split_ws_into_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_str_split_lines_into_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_str_split_into_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_map_str_str_snapshot_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_map_str_str_load_snapshot_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_doc_term_counts_into_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_doc_term_overlap_score_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
+                if (direct_is_doc_term_weighted_score_builtin_name(name)) {
                     free(name);
                     free(trimmed);
                     return strdup("Int");
@@ -8718,6 +24953,11 @@ static char *direct_infer_expr_type(
                     free(name);
                     free(trimmed);
                     return strdup("Str");
+                }
+                if (direct_is_proc_capture_builtin_name(name) && direct_has_process_result_struct(structs, struct_count)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("ProcessResult");
                 }
                 DirectFnInfo *fn = direct_find_fn(fns, fn_count, name);
                 if (fn != NULL) {
@@ -8801,6 +25041,58 @@ static int direct_check_expr_inner(
         }
         free(allowed_list_elem_type);
     }
+    char *if_cond = NULL;
+    char *if_then = NULL;
+    char *if_else = NULL;
+    if (direct_parse_if_expr_parts(expr, &if_cond, &if_then, &if_else)) {
+        if (direct_check_expr_inner(path, line_no, line, if_cond, locals, fns, fn_count, structs, struct_count, NULL)) {
+            free(if_cond);
+            free(if_then);
+            free(if_else);
+            return 1;
+        }
+        char *cond_type = direct_infer_expr_type(if_cond, locals, fns, fn_count, structs, struct_count);
+        if (!direct_is_intlike_scalar_type(cond_type)) {
+            report_issue(path, line_no, find_col(line, "if"), line,
+                "direct native emitter if-expression condition must be Int-compatible",
+                "use an Int, Bool, or Char expression before `then`.",
+                NULL);
+            free(cond_type);
+            free(if_cond);
+            free(if_then);
+            free(if_else);
+            return 1;
+        }
+        free(cond_type);
+        if (direct_check_expr_inner(path, line_no, line, if_then, locals, fns, fn_count, structs, struct_count, NULL) ||
+            direct_check_expr_inner(path, line_no, line, if_else, locals, fns, fn_count, structs, struct_count, NULL)) {
+            free(if_cond);
+            free(if_then);
+            free(if_else);
+            return 1;
+        }
+        char *then_type = direct_infer_expr_type(if_then, locals, fns, fn_count, structs, struct_count);
+        char *else_type = direct_infer_expr_type(if_else, locals, fns, fn_count, structs, struct_count);
+        int compatible = direct_type_compatible(then_type, else_type) || direct_type_compatible(else_type, then_type);
+        if (!compatible) {
+            report_issue(path, line_no, find_col(line, "then"), line,
+                "direct native emitter if-expression branches must have compatible types",
+                "return the same concrete type from both `then` and `else`, or use Int-compatible scalar branches.",
+                NULL);
+            free(then_type);
+            free(else_type);
+            free(if_cond);
+            free(if_then);
+            free(if_else);
+            return 1;
+        }
+        free(then_type);
+        free(else_type);
+        free(if_cond);
+        free(if_then);
+        free(if_else);
+        return 0;
+    }
     for (int i = 0; expr[i] != '\0';) {
         if (is_string_delim_c(expr[i])) {
             int end = skip_string_literal_c(expr, i);
@@ -8847,6 +25139,68 @@ static int direct_check_expr_inner(
             free(name);
             i = cursor + 1;
             continue;
+        }
+        if (expr[cursor] == '[') {
+            const char *base_type = direct_names_type(locals, name);
+            if (direct_is_list_type(base_type)) {
+                int close = find_matching_bracket_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `]` after List index",
+                        "write `xs[index]` with a valid Int index expression.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *index_expr = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                if (strlen(skip_ws(index_expr)) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List index cannot be empty",
+                        "write `xs[index]` with an Int index expression.",
+                        NULL);
+                    free(index_expr);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, index_expr, locals, fns, fn_count, structs, struct_count, NULL)) {
+                    free(index_expr);
+                    free(name);
+                    return 1;
+                }
+                char *index_type = direct_infer_expr_type(index_expr, locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_intlike_scalar_type(index_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter List index must be Int",
+                        "use an Int, Bool, or Char expression as the list index.",
+                        NULL);
+                    free(index_type);
+                    free(index_expr);
+                    free(name);
+                    return 1;
+                }
+                char *elem_type = direct_list_element_type(base_type);
+                int next_i = close + 1;
+                if (direct_is_str_type(elem_type)) {
+                    int len_chain = 0;
+                    if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports only `.len()` after List<Str> index expressions",
+                            "write `words[i].len()` or pass the string value directly.",
+                            NULL);
+                        free(elem_type);
+                        free(index_type);
+                        free(index_expr);
+                        free(name);
+                        return 1;
+                    }
+                }
+                free(elem_type);
+                free(index_type);
+                free(index_expr);
+                free(name);
+                i = next_i;
+                continue;
+            }
         }
         if (expr[cursor] == '.') {
             int field_start = cursor + 1;
@@ -8923,6 +25277,304 @@ static int direct_check_expr_inner(
                     free(name);
                     continue;
                 }
+                if (strcmp(field, "contains") == 0 && *after == '(') {
+                    if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports contains only on List<Int> and List<Str>",
+                            "use `xs.contains(value)` on `List<Int>` or `words.contains(value)` on `List<Str>`; compare `List<Struct>` elements in an explicit loop for now.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List.contains",
+                            "write `xs.contains(value)`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                    char *args[16] = {0};
+                    int argc = split_top_level_commas_c(inside, args, 16);
+                    free(inside);
+                    if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter List.contains expects one argument",
+                            "write `xs.contains(value)`.",
+                            NULL);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                    const char *expected_arg_type = direct_is_list_str_type(base_type) ? "Str" : "Int";
+                    if (!direct_map_arg_type_compatible(expected_arg_type, arg_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            direct_is_list_str_type(base_type) ?
+                                "direct native emitter List<Str>.contains argument must be Str" :
+                                "direct native emitter List<Int>.contains argument must be Int",
+                            direct_is_list_str_type(base_type) ?
+                                "pass a Str value to `words.contains(value)`." :
+                                "pass an Int-compatible value to `xs.contains(value)`.",
+                            NULL);
+                        free(arg_type);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
+                if (strcmp(field, "index_of") == 0 && *after == '(') {
+                    if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports index_of only on List<Int> and List<Str>",
+                            "use `xs.index_of(value)` on `List<Int>` or `words.index_of(value)` on `List<Str>`; scan other list element types in an explicit loop for now.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List.index_of",
+                            "write `words.index_of(value)`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                    char *args[16] = {0};
+                    int argc = split_top_level_commas_c(inside, args, 16);
+                    free(inside);
+                    if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter List.index_of expects one argument",
+                            "write `words.index_of(value)`.",
+                            NULL);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                    const char *expected_arg_type = direct_is_list_str_type(base_type) ? "Str" : "Int";
+                    if (!direct_map_arg_type_compatible(expected_arg_type, arg_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            direct_is_list_str_type(base_type) ?
+                                "direct native emitter List<Str>.index_of argument must be Str" :
+                                "direct native emitter List<Int>.index_of argument must be Int",
+                            direct_is_list_str_type(base_type) ?
+                                "pass a Str value to `words.index_of(value)`." :
+                                "pass an Int-compatible value to `xs.index_of(value)`.",
+                            NULL);
+                        free(arg_type);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
+                if (strcmp(field, "count") == 0 && *after == '(') {
+                    if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports count only on List<Int> and List<Str>",
+                            "use `xs.count(value)` on `List<Int>` or `words.count(value)` on `List<Str>`; scan other list element types in an explicit loop for now.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List.count",
+                            "write `words.count(value)`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                    char *args[16] = {0};
+                    int argc = split_top_level_commas_c(inside, args, 16);
+                    free(inside);
+                    if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter List.count expects one argument",
+                            "write `words.count(value)`.",
+                            NULL);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                    const char *expected_arg_type = direct_is_list_str_type(base_type) ? "Str" : "Int";
+                    if (!direct_map_arg_type_compatible(expected_arg_type, arg_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            direct_is_list_str_type(base_type) ?
+                                "direct native emitter List<Str>.count argument must be Str" :
+                                "direct native emitter List<Int>.count argument must be Int",
+                            direct_is_list_str_type(base_type) ?
+                                "pass a Str value to `words.count(value)`." :
+                                "pass an Int-compatible value to `xs.count(value)`.",
+                            NULL);
+                        free(arg_type);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
+                if (strcmp(field, "remove_at") == 0 && *after == '(') {
+                    if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type) && !direct_is_list_struct_type(structs, struct_count, base_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports remove_at only on List<Int>, List<Str>, and List<Struct>",
+                            "use `xs.remove_at(index)` on a verified direct-engine list type.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List.remove_at",
+                            "write `xs.remove_at(index)`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                    char *args[16] = {0};
+                    int argc = split_top_level_commas_c(inside, args, 16);
+                    free(inside);
+                    if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter List.remove_at expects one index argument",
+                            "write `xs.remove_at(index)`.",
+                            NULL);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                    if (!direct_map_arg_type_compatible("Int", arg_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter List.remove_at index must be Int",
+                            "pass an Int-compatible index to `xs.remove_at(index)`.",
+                            NULL);
+                        free(arg_type);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    free(arg_type);
+                    int next_i = close + 1;
+                    if (direct_is_list_str_type(base_type)) {
+                        int len_chain = 0;
+                        if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter supports only `.len()` after List<Str>.remove_at(index)",
+                                "write `words.remove_at(index).len()` or bind the string to a local first.",
+                                NULL);
+                            for (int k = 0; k < 16; k++) free(args[k]);
+                            free(field);
+                            free(name);
+                            return 1;
+                        }
+                    }
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    i = next_i;
+                    free(field);
+                    free(name);
+                    continue;
+                }
+                if (strcmp(field, "first") == 0 && *after == '(') {
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List.first",
+                            "write `xs.first()`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    i = close + 1;
+                    char *elem_type = direct_list_element_type(base_type);
+                    if (direct_is_str_type(elem_type)) {
+                        int next_i = close + 1;
+                        int len_chain = 0;
+                        if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter supports only `.len()` after List<Str>.first()",
+                                "write `words.first().len()` or bind the string to a local first.",
+                                NULL);
+                            free(elem_type);
+                            free(field);
+                            free(name);
+                            return 1;
+                        }
+                        if (len_chain) i = next_i;
+                    }
+                    free(elem_type);
+                    free(field);
+                    free(name);
+                    continue;
+                }
                 if (strcmp(field, "last") == 0 && *after == '(') {
                     int close = find_matching_paren_c(expr, (int)(after - expr));
                     if (close < 0) {
@@ -8935,6 +25587,23 @@ static int direct_check_expr_inner(
                         return 1;
                     }
                     i = close + 1;
+                    char *elem_type = direct_list_element_type(base_type);
+                    if (direct_is_str_type(elem_type)) {
+                        int next_i = close + 1;
+                        int len_chain = 0;
+                        if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter supports only `.len()` after List<Str>.last()",
+                                "write `words.last().len()` or bind the string to a local first.",
+                                NULL);
+                            free(elem_type);
+                            free(field);
+                            free(name);
+                            return 1;
+                        }
+                        if (len_chain) i = next_i;
+                    }
+                    free(elem_type);
                     free(field);
                     free(name);
                     continue;
@@ -8951,6 +25620,23 @@ static int direct_check_expr_inner(
                         return 1;
                     }
                     i = close + 1;
+                    char *elem_type = direct_list_element_type(base_type);
+                    if (direct_is_str_type(elem_type)) {
+                        int next_i = close + 1;
+                        int len_chain = 0;
+                        if (!direct_parse_trailing_str_len(expr, close + 1, &next_i, &len_chain)) {
+                            report_issue(path, line_no, find_col(line, name), line,
+                                "direct native emitter supports only `.len()` after List<Str>.pop()",
+                                "write `words.pop().len()` or bind the string to a local first.",
+                                NULL);
+                            free(elem_type);
+                            free(field);
+                            free(name);
+                            return 1;
+                        }
+                        if (len_chain) i = next_i;
+                    }
+                    free(elem_type);
                     free(field);
                     free(name);
                     continue;
@@ -8980,9 +25666,59 @@ static int direct_check_expr_inner(
                     free(name);
                     continue;
                 }
+                if (strcmp(field, "max") == 0 && *after == '(') {
+                    if (!direct_is_list_int_type(base_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports max only on List<Int>",
+                            "read struct list fields explicitly before taking a maximum.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List<Int>.max",
+                            "write `xs.max()`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
+                if (strcmp(field, "min") == 0 && *after == '(') {
+                    if (!direct_is_list_int_type(base_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter supports min only on List<Int>",
+                            "read struct list fields explicitly before taking a minimum.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after List<Int>.min",
+                            "write `xs.min()`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter supports List push, len, is_empty, last, pop, index, and List<Int> sum",
-                    "write `xs.push(value)`, `xs.len()`, `xs.is_empty()`, `xs.last()`, `xs.pop()`, `xs[i]`, or `xs.sum()` for List<Int>.",
+                    "direct native emitter supports List push, len, is_empty, first, last, pop, remove_at, index, List<Int>/List<Str> contains/index_of/count, and List<Int> sum/max/min",
+                    "write `xs.push(value)`, `xs.len()`, `xs.is_empty()`, `xs.first()`, `xs.last()`, `xs.pop()`, `xs.remove_at(index)`, `xs[i]`, `xs.contains(value)`, `xs.index_of(value)`, `xs.count(value)`, `xs.sum()`, `xs.max()`, or `xs.min()` for List<Int>; `words.first()`, `words.remove_at(index)`, `words.contains(value)`, `words.index_of(value)`, and `words.count(value)` are verified for List<Str>.",
                     "xs.push(value)");
                 free(field);
                 free(name);
@@ -9093,9 +25829,59 @@ static int direct_check_expr_inner(
                     free(name);
                     continue;
                 }
+                if ((strcmp(field, "key_at") == 0 || strcmp(field, "value_at") == 0) && *after == '(') {
+                    int close = find_matching_paren_c(expr, (int)(after - expr));
+                    if (close < 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter expected `)` after Map entry method",
+                            "write `m.key_at(index)` or `m.value_at(index)`.",
+                            NULL);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *inside = substr_copy(after + 1, (size_t)(close - (after - expr) - 1));
+                    char *args[16] = {0};
+                    int argc = split_top_level_commas_c(inside, args, 16);
+                    free(inside);
+                    if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter Map entry method argument count does not match",
+                            "write `m.key_at(index)` or `m.value_at(index)`.",
+                            NULL);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                    if (!direct_map_arg_type_compatible("Int", arg_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter Map entry index must be Int",
+                            "use an Int index in `m.key_at(index)` or `m.value_at(index)`.",
+                            NULL);
+                        free(arg_type);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(field);
+                        free(name);
+                        return 1;
+                    }
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    i = close + 1;
+                    free(field);
+                    free(name);
+                    continue;
+                }
                 report_issue(path, line_no, find_col(line, name), line,
-                    "direct native emitter supports Map insert/remove/clear statements and get/get_opt/contains/len expressions",
-                    "write `m.insert(key, value)`, `m.remove(key)`, `m.clear()`, `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, or `m.len()` for Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, local Map<Str,Int>, local Map<Str,Bool>, or local Map<Str,Char>.",
+                    "direct native emitter supports Map insert/remove/clear statements and get/get_opt/contains/len/key_at/value_at expressions",
+                    "write `m.insert(key, value)`, `m.remove(key)`, `m.clear()`, `m.get(key, default)`, `m.get_opt(key)`, `m.contains(key)`, `m.len()`, `m.key_at(index)`, or `m.value_at(index)` for verified concrete Map values.",
                     NULL);
                 free(field);
                 free(name);
@@ -9119,6 +25905,119 @@ static int direct_check_expr_inner(
         }
         int is_call = expr[cursor] == '(';
         if (is_call) {
+            if (direct_is_fs_exists_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) ||
+                direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) ||
+                direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) ||
+                direct_is_time_millis_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the host helper call",
+                        "write `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `time_millis()`, `proc_argc()`, or `proc_arg(index)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                char *trimmed_inside = trim_copy(inside);
+                int argc = trimmed_inside[0] == '\0' ? 0 : split_top_level_commas_c(inside, args, 16);
+                free(trimmed_inside);
+                free(inside);
+                int expected = (direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_proc_argc_builtin_name(name)) ? 0 :
+                    ((direct_is_fs_write_text_builtin_name(name) || direct_is_path_join_builtin_name(name)) ? 2 : 1);
+                if (argc != expected) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter host helper argument count does not match",
+                        "write `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `time_millis()`, `proc_argc()`, or `proc_arg(index)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                for (int a = 0; a < argc; a++) {
+                    if (args[a] == NULL || strlen(skip_ws(args[a])) == 0) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter host helper arguments cannot be empty",
+                            "pass explicit path, text, or index expressions to the host helper.",
+                            NULL);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(name);
+                        return 1;
+                    }
+                    if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, NULL)) {
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(name);
+                        return 1;
+                    }
+                    char *arg_type = direct_infer_expr_type(args[a], locals, fns, fn_count, structs, struct_count);
+                    const char *expected_type = direct_is_proc_arg_builtin_name(name) ? "Int" : "Str";
+                    if (!direct_map_arg_type_compatible(expected_type, arg_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            direct_is_proc_arg_builtin_name(name) ?
+                                "direct native emitter proc_arg index must be Int" :
+                                "direct native emitter host file/path helper arguments must be Str",
+                            direct_is_proc_arg_builtin_name(name) ?
+                                "pass an Int-compatible index to `proc_arg(index)`." :
+                                "pass Str path/text values to the host helper.",
+                            NULL);
+                        free(arg_type);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(name);
+                        return 1;
+                    }
+                    free(arg_type);
+                }
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_option_result_payload_constructor_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the Option/Result constructor",
+                        "write `Some(value)`, `Ok(value)`, or `Err(code)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter Option/Result constructors take one Int payload",
+                        "write `Some(value)`, `Ok(value)`, or `Err(code)` with an Int-compatible payload.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_intlike_scalar_type(arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter Option/Result constructors require an Int payload",
+                        "pass an Int, Bool, or Char value to the concrete Option<Int>/Result<Int,Int> constructor.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(arg_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
             if (direct_is_str_conversion_builtin_name(name)) {
                 int close = find_matching_paren_c(expr, cursor);
                 if (close < 0) {
@@ -9152,6 +26051,51 @@ static int direct_check_expr_inner(
                     report_issue(path, line_no, find_col(line, name), line,
                         "direct native emitter Str conversion requires an Int argument",
                         "pass an Int, Bool, or Char value.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(arg_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_str_byte_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the str_byte call",
+                        "write `str_byte(value)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_byte takes one Int argument",
+                        "write `str_byte(value)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_intlike_scalar_type(arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_byte requires an Int argument",
+                        "pass an Int, Bool, or Char value in the 0..255 range.",
                         NULL);
                     free(arg_type);
                     for (int k = 0; k < 16; k++) free(args[k]);
@@ -9204,6 +26148,678 @@ static int direct_check_expr_inner(
                     return 1;
                 }
                 free(arg_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the string split call",
+                        "write `str_split_ws_into(text, out)` or `str_split_lines_into(text, out)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 2 || args[0] == NULL || args[1] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter string split into takes Str and List<Str> arguments",
+                        "write `str_split_ws_into(text, words)` or `str_split_lines_into(text, lines)` where the output is a local `List<Str>`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_str_type(arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter string split into requires a Str text argument",
+                        "pass a string literal, Str local, or Str-returning expression as the first argument.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(arg_type);
+                char *list_name = NULL;
+                if (!direct_expr_bare_list_local(locals, args[1], &list_name) ||
+                    strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter string split into output must be a local List<Str>",
+                        "declare `let lines: List<Str> = []` and pass it as the second argument.",
+                        NULL);
+                    free(list_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(list_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_str_join_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the str_join call",
+                        "write `str_join(parts, sep)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 2 || args[0] == NULL || args[1] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_join takes List<Str> and Str arguments",
+                        "write `str_join(parts, sep)` where `parts` is a local `List<Str>`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *list_name = NULL;
+                if (!direct_expr_bare_list_local(locals, args[0], &list_name) ||
+                    strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_join input must be a local List<Str>",
+                        "declare `let parts: List<Str> = []` and pass `parts` as the first argument.",
+                        NULL);
+                    free(list_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(list_name);
+                if (direct_check_expr_inner(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *sep_type = direct_infer_expr_type(args[1], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_str_type(sep_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_join requires a Str separator argument",
+                        "pass a string literal, Str local, or Str-returning expression as the second argument.",
+                        NULL);
+                    free(sep_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(sep_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_str_split_into_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the str_split_into call",
+                        "write `str_split_into(text, sep, out)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 3 || args[0] == NULL || args[1] == NULL || args[2] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0 || strlen(skip_ws(args[2])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_split_into takes Str, Str, and List<Str> arguments",
+                        "write `str_split_into(text, sep, words)` where `words` is a local `List<Str>`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL) ||
+                    direct_check_expr_inner(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *text_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                char *sep_type = direct_infer_expr_type(args[1], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_str_type(text_type) || !direct_is_str_type(sep_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_split_into requires Str text and separator arguments",
+                        "pass string literals, Str locals, or Str-returning expressions as the first two arguments.",
+                        NULL);
+                    free(text_type);
+                    free(sep_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(text_type);
+                free(sep_type);
+                char *list_name = NULL;
+                if (!direct_expr_bare_list_local(locals, args[2], &list_name) ||
+                    strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_split_into output must be a local List<Str>",
+                        "declare `let words: List<Str> = []` and pass `words` as the third argument.",
+                        NULL);
+                    free(list_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(list_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_map_str_str_snapshot_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the map_str_str_snapshot call",
+                        "write `map_str_str_snapshot(docs)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter map_str_str_snapshot takes one Map<Str,Str> argument",
+                        "write `map_str_str_snapshot(docs)` where `docs` is a local `Map<Str,Str>`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *map_name = NULL;
+                if (!direct_expr_bare_map_local(locals, args[0], &map_name) ||
+                    strcmp(direct_names_type(locals, map_name), "Map<Str,Str>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter map_str_str_snapshot input must be a local Map<Str,Str>",
+                        "declare `let docs: Map<Str,Str> = {}` and pass `docs` as the argument.",
+                        NULL);
+                    free(map_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(map_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_map_str_str_load_snapshot_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the map_str_str_load_snapshot call",
+                        "write `map_str_str_load_snapshot(text, docs)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 2 || args[0] == NULL || args[1] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter map_str_str_load_snapshot takes Str and Map<Str,Str> arguments",
+                        "write `map_str_str_load_snapshot(text, docs)` where `docs` is a local `Map<Str,Str>`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_str_type(arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter map_str_str_load_snapshot requires a Str snapshot argument",
+                        "pass a string literal, Str local, or Str-returning expression as the first argument.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(arg_type);
+                char *map_name = NULL;
+                if (!direct_expr_bare_map_local(locals, args[1], &map_name) ||
+                    strcmp(direct_names_type(locals, map_name), "Map<Str,Str>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter map_str_str_load_snapshot output must be a local Map<Str,Str>",
+                        "declare `let docs: Map<Str,Str> = {}` and pass `docs` as the second argument.",
+                        NULL);
+                    free(map_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(map_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_doc_term_overlap_score_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the doc_term_overlap_score call",
+                        "write `doc_term_overlap_score(query_counts, doc_counts)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 2 || args[0] == NULL || args[1] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter doc_term_overlap_score takes two Map<Str,Int> arguments",
+                        "write `doc_term_overlap_score(query_counts, doc_counts)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *query_name = NULL;
+                char *doc_name = NULL;
+                if (!direct_expr_bare_map_local(locals, args[0], &query_name) ||
+                    strcmp(direct_names_type(locals, query_name), "Map<Str,Int>") != 0 ||
+                    !direct_expr_bare_map_local(locals, args[1], &doc_name) ||
+                    strcmp(direct_names_type(locals, doc_name), "Map<Str,Int>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter doc_term_overlap_score arguments must be Map<Str,Int>",
+                        "pass two local or parameter `Map<Str,Int>` values.",
+                        NULL);
+                    free(query_name);
+                    free(doc_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(query_name);
+                free(doc_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_doc_term_weighted_score_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the doc_term_weighted_score call",
+                        "write `doc_term_weighted_score(query_counts, doc_counts)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 2 || args[0] == NULL || args[1] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter doc_term_weighted_score takes two Map<Str,Int> arguments",
+                        "write `doc_term_weighted_score(query_counts, doc_counts)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *query_name = NULL;
+                char *doc_name = NULL;
+                if (!direct_expr_bare_map_local(locals, args[0], &query_name) ||
+                    strcmp(direct_names_type(locals, query_name), "Map<Str,Int>") != 0 ||
+                    !direct_expr_bare_map_local(locals, args[1], &doc_name) ||
+                    strcmp(direct_names_type(locals, doc_name), "Map<Str,Int>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter doc_term_weighted_score arguments must be Map<Str,Int>",
+                        "pass two local or parameter `Map<Str,Int>` values.",
+                        NULL);
+                    free(query_name);
+                    free(doc_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(query_name);
+                free(doc_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_doc_term_counts_into_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the doc_term_counts_into call",
+                        "write `doc_term_counts_into(text, counts)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 2 || args[0] == NULL || args[1] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter doc_term_counts_into takes Str and Map<Str,Int> arguments",
+                        "write `doc_term_counts_into(text, counts)` where `counts` is a local `Map<Str,Int>`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_str_type(arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter doc_term_counts_into requires a Str text argument",
+                        "pass a string literal, Str local, or Str-returning expression as the first argument.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(arg_type);
+                char *map_name = NULL;
+                if (!direct_expr_bare_map_local(locals, args[1], &map_name) ||
+                    strcmp(direct_names_type(locals, map_name), "Map<Str,Int>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter doc_term_counts_into output must be a local Map<Str,Int>",
+                        "declare `let counts: Map<Str,Int> = {}` and pass `counts` as the second argument.",
+                        NULL);
+                    free(map_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(map_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_str_slice_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the str_slice call",
+                        "write `str_slice(text, start, len)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 3 || args[0] == NULL || args[1] == NULL || args[2] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0 || strlen(skip_ws(args[2])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_slice takes Str, Int, Int arguments",
+                        "write `str_slice(text, start, len)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                for (int a = 0; a < 3; a++) {
+                    if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, NULL)) {
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(name);
+                        return 1;
+                    }
+                    char *arg_type = direct_infer_expr_type(args[a], locals, fns, fn_count, structs, struct_count);
+                    int ok = a == 0 ? direct_is_str_type(arg_type) : direct_is_intlike_scalar_type(arg_type);
+                    if (!ok) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter str_slice takes Str, Int, Int arguments",
+                            "pass a string plus Int-compatible start and length expressions.",
+                            NULL);
+                        free(arg_type);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(name);
+                        return 1;
+                    }
+                    free(arg_type);
+                }
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_str_trim_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the str_trim call",
+                        "write `str_trim(text)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_trim takes one Str argument",
+                        "write `str_trim(text)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_str_type(arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter str_trim requires a Str argument",
+                        "pass a string literal, Str local, or Str-returning expression.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(arg_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the string case-conversion call",
+                        "write `str_lower(text)` or `str_upper(text)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter string case conversion takes one Str argument",
+                        "write `str_lower(text)` or `str_upper(text)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count, NULL)) {
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+                if (!direct_is_str_type(arg_type)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter string case conversion requires a Str argument",
+                        "pass a string literal, Str local, or Str-returning expression.",
+                        NULL);
+                    free(arg_type);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(arg_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_replace_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the string helper call",
+                        "write `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_concat(left, right)`, or `str_replace(text, needle, replacement)`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                int want_argc = direct_is_str_replace_builtin_name(name) ? 3 : 2;
+                if (argc != want_argc || args[0] == NULL || args[1] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0 ||
+                    (want_argc == 3 && (args[2] == NULL || strlen(skip_ws(args[2])) == 0))) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter string helper argument count does not match",
+                        "write two Str arguments for search/concat helpers or `str_replace(text, needle, replacement)` with three Str arguments.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                for (int a = 0; a < want_argc; a++) {
+                    if (direct_check_expr_inner(path, line_no, line, args[a], locals, fns, fn_count, structs, struct_count, NULL)) {
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(name);
+                        return 1;
+                    }
+                    char *arg_type = direct_infer_expr_type(args[a], locals, fns, fn_count, structs, struct_count);
+                    if (!direct_is_str_type(arg_type)) {
+                        report_issue(path, line_no, find_col(line, name), line,
+                            "direct native emitter string helper requires Str arguments",
+                            "pass string literals, Str locals, or Str-returning expressions.",
+                            NULL);
+                        free(arg_type);
+                        for (int k = 0; k < 16; k++) free(args[k]);
+                        free(name);
+                        return 1;
+                    }
+                    free(arg_type);
+                }
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_proc_capture_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the proc_capture call",
+                        "write `proc_capture(argv)` where `argv` is a local `List<Str>`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                if (!direct_has_process_result_struct(structs, struct_count)) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter proc_capture requires `struct ProcessResult { code: Int, stdout: Str, stderr: Str }`",
+                        "declare the standard ProcessResult shape before calling `proc_capture`.",
+                        "struct ProcessResult { code: Int, stdout: Str, stderr: Str }");
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter proc_capture takes one List<Str> argument",
+                        "write `proc_capture(argv)` where `argv` is a local `List<Str>`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *list_name = NULL;
+                if (!direct_expr_bare_list_local(locals, args[0], &list_name) ||
+                    strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter proc_capture argument must be a local List<Str>",
+                        "declare `let argv: List<Str> = []`, push argv entries, then call `proc_capture(argv)`.",
+                        NULL);
+                    free(list_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(list_name);
                 for (int k = 0; k < 16; k++) free(args[k]);
                 free(name);
                 i = close + 1;
@@ -9338,7 +26954,8 @@ static int direct_check_expr_inner(
         int is_struct_literal = expr[cursor] == '{' && direct_find_struct(structs, struct_count, name) != NULL;
         int ok = direct_is_keyword(name) || direct_names_has(locals, name) ||
             (is_call && direct_find_fn(fns, fn_count, name) != NULL) ||
-            is_struct_literal;
+            is_struct_literal ||
+            (strcmp(name, "None") == 0 && expr[cursor] != '(');
         if (!ok) {
             int col = find_col(line, name);
             report_issue(path, line_no, col, line,
@@ -9557,6 +27174,50 @@ static int direct_parse_inline_block(const char *s, const char *keyword, char **
     return 1;
 }
 
+static int direct_parse_inline_cond_else(
+    const char *s,
+    const char *keyword,
+    char **expr_out,
+    char **then_out,
+    char **else_out
+) {
+    s = skip_ws(s);
+    size_t n = strlen(keyword);
+    if (strncmp(s, keyword, n) != 0) return 0;
+    char next = s[n];
+    if (!(next == ' ' || next == '\t')) return 0;
+    const char *expr = skip_ws(s + n);
+    int open_rel = direct_find_top_level_char(expr, '{');
+    if (open_rel < 0) return 0;
+    int open_abs = (int)(expr - s) + open_rel;
+    int then_close_abs = find_matching_brace_c(s, open_abs);
+    if (then_close_abs < 0) return 0;
+    const char *after_then = skip_ws(s + then_close_abs + 1);
+    if (!starts_with(after_then, "else") || is_ident_continue(after_then[4])) return 0;
+    const char *after_else = skip_ws(after_then + 4);
+    char *else_body = NULL;
+    if (*after_else == '{') {
+        int else_open_abs = (int)(after_else - s);
+        int else_close_abs = find_matching_brace_c(s, else_open_abs);
+        if (else_close_abs < 0 || *skip_ws(s + else_close_abs + 1) != '\0') return 0;
+        char *else_raw = substr_copy(s + else_open_abs + 1, (size_t)(else_close_abs - else_open_abs - 1));
+        else_body = trim_copy(else_raw);
+        free(else_raw);
+    } else if (starts_with(after_else, "if") && !is_ident_continue(after_else[2])) {
+        else_body = trim_copy(after_else);
+    } else {
+        return 0;
+    }
+    char *expr_raw = substr_copy(expr, (size_t)open_rel);
+    char *then_raw = substr_copy(s + open_abs + 1, (size_t)(then_close_abs - open_abs - 1));
+    *expr_out = trim_copy(expr_raw);
+    *then_out = trim_copy(then_raw);
+    *else_out = else_body;
+    free(expr_raw);
+    free(then_raw);
+    return 1;
+}
+
 static int direct_parse_field_target(const char *lhs, char **base, char **field) {
     const char *s = skip_ws(lhs);
     if (!is_ident_start(*s)) return 0;
@@ -9574,6 +27235,35 @@ static int direct_parse_field_target(const char *lhs, char **base, char **field)
     if (*skip_ws(s) != '\0') return 0;
     *base = substr_copy(base_start, (size_t)(base_end - base_start));
     *field = substr_copy(field_start, (size_t)(s - field_start));
+    return 1;
+}
+
+static int direct_parse_nested_field_target(const char *lhs, char **base, char **field, char **nested_field) {
+    const char *s = skip_ws(lhs);
+    if (!is_ident_start(*s)) return 0;
+    const char *base_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *base_end = s;
+    const char *dot = skip_ws(s);
+    if (*dot != '.') return 0;
+    s = skip_ws(dot + 1);
+    if (!is_ident_start(*s)) return 0;
+    const char *field_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *field_end = s;
+    dot = skip_ws(s);
+    if (*dot != '.') return 0;
+    s = skip_ws(dot + 1);
+    if (!is_ident_start(*s)) return 0;
+    const char *nested_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    if (*skip_ws(s) != '\0') return 0;
+    *base = substr_copy(base_start, (size_t)(base_end - base_start));
+    *field = substr_copy(field_start, (size_t)(field_end - field_start));
+    *nested_field = substr_copy(nested_start, (size_t)(s - nested_start));
     return 1;
 }
 
@@ -9598,6 +27288,39 @@ static int direct_parse_list_field_target(const char *lhs, char **base, char **f
     if (*skip_ws(s) != '\0') return 0;
     *base = substr_copy(base_start, (size_t)(base_end - base_start));
     *field = substr_copy(field_start, (size_t)(s - field_start));
+    return 1;
+}
+
+static int direct_parse_list_nested_field_target(const char *lhs, char **base, char **field, char **nested_field) {
+    const char *s = skip_ws(lhs);
+    if (!is_ident_start(*s)) return 0;
+    const char *base_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *base_end = s;
+    const char *open = skip_ws(s);
+    if (*open != '[') return 0;
+    int close = find_matching_bracket_c(lhs, (int)(open - lhs));
+    if (close < 0) return 0;
+    s = skip_ws(lhs + close + 1);
+    if (*s != '.') return 0;
+    s = skip_ws(s + 1);
+    if (!is_ident_start(*s)) return 0;
+    const char *field_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *field_end = s;
+    s = skip_ws(s);
+    if (*s != '.') return 0;
+    s = skip_ws(s + 1);
+    if (!is_ident_start(*s)) return 0;
+    const char *nested_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    if (*skip_ws(s) != '\0') return 0;
+    *base = substr_copy(base_start, (size_t)(base_end - base_start));
+    *field = substr_copy(field_start, (size_t)(field_end - field_start));
+    *nested_field = substr_copy(nested_start, (size_t)(s - nested_start));
     return 1;
 }
 
@@ -9628,6 +27351,27 @@ static int direct_check_assignment_target(
     if (direct_names_has(locals, lhs)) return 0;
     char *base = NULL;
     char *field = NULL;
+    char *nested_field = NULL;
+    if (direct_parse_nested_field_target(lhs, &base, &field, &nested_field)) {
+        const char *base_type = direct_names_type(locals, base);
+        DirectStructInfo *st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
+        const char *field_type = st == NULL ? NULL : direct_struct_field_type(st, field);
+        DirectStructInfo *nested = field_type == NULL ? NULL : direct_find_struct(structs, struct_count, field_type);
+        if (nested != NULL && direct_struct_has_field(nested, nested_field)) {
+            free(base);
+            free(field);
+            free(nested_field);
+            return 0;
+        }
+        report_issue(path, line_no, find_col(line, base), line,
+            "direct native emitter assignment target is not a known nested struct field",
+            "assign to a field declared on a direct-engine nested struct local.",
+            NULL);
+        free(base);
+        free(field);
+        free(nested_field);
+        return 1;
+    }
     if (direct_parse_field_target(lhs, &base, &field)) {
         const char *base_type = direct_names_type(locals, base);
         DirectStructInfo *st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
@@ -9659,6 +27403,29 @@ static int direct_check_assignment_target(
             "xs[0] = value");
         free(elem_type);
         free(base);
+        return 1;
+    }
+    if (direct_parse_list_nested_field_target(lhs, &base, &field, &nested_field)) {
+        const char *base_type = direct_names_type(locals, base);
+        char *elem_type = direct_list_element_type(base_type);
+        DirectStructInfo *st = elem_type == NULL ? NULL : direct_find_struct(structs, struct_count, elem_type);
+        const char *field_type = st == NULL ? NULL : direct_struct_field_type(st, field);
+        DirectStructInfo *nested = field_type == NULL ? NULL : direct_find_struct(structs, struct_count, field_type);
+        if (nested != NULL && direct_struct_has_field(nested, nested_field)) {
+            free(elem_type);
+            free(base);
+            free(field);
+            free(nested_field);
+            return 0;
+        }
+        report_issue(path, line_no, find_col(line, base), line,
+            "direct native emitter assignment target is not a known List<Struct> nested field",
+            "assign to a field declared on the nested struct element.",
+            "xs[0].inner.value = 42");
+        free(elem_type);
+        free(base);
+        free(field);
+        free(nested_field);
         return 1;
     }
     if (direct_parse_list_field_target(lhs, &base, &field)) {
@@ -9697,13 +27464,39 @@ static const char *direct_assignment_target_type(
     if (local_type != NULL) return local_type;
     char *base = NULL;
     char *field = NULL;
+    char *nested_field = NULL;
+    if (direct_parse_nested_field_target(lhs, &base, &field, &nested_field)) {
+        const char *base_type = direct_names_type(locals, base);
+        DirectStructInfo *st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
+        const char *field_type = st == NULL ? NULL : direct_struct_field_type(st, field);
+        DirectStructInfo *nested = field_type == NULL ? NULL : direct_find_struct(structs, struct_count, field_type);
+        const char *nested_type = nested == NULL ? NULL : direct_struct_field_type(nested, nested_field);
+        int ok = nested_type != NULL;
+        static char bufs[4][128];
+        static int slot = 0;
+        if (ok) {
+            slot = (slot + 1) % 4;
+            snprintf(bufs[slot], sizeof(bufs[slot]), "%s", nested_type);
+        }
+        free(base);
+        free(field);
+        free(nested_field);
+        return ok ? bufs[slot] : NULL;
+    }
     if (direct_parse_field_target(lhs, &base, &field)) {
         const char *base_type = direct_names_type(locals, base);
         DirectStructInfo *st = base_type == NULL ? NULL : direct_find_struct(structs, struct_count, base_type);
-        int ok = st != NULL && direct_struct_has_field(st, field);
+        const char *field_type = st == NULL ? NULL : direct_struct_field_type(st, field);
+        int ok = field_type != NULL;
+        static char bufs[4][128];
+        static int slot = 0;
+        if (ok) {
+            slot = (slot + 1) % 4;
+            snprintf(bufs[slot], sizeof(bufs[slot]), "%s", field_type);
+        }
         free(base);
         free(field);
-        return ok ? "Int" : NULL;
+        return ok ? bufs[slot] : NULL;
     }
     if (direct_parse_list_index_target(lhs, &base)) {
         const char *base_type = direct_names_type(locals, base);
@@ -9720,15 +27513,42 @@ static const char *direct_assignment_target_type(
         free(base);
         return bufs[slot];
     }
+    if (direct_parse_list_nested_field_target(lhs, &base, &field, &nested_field)) {
+        const char *base_type = direct_names_type(locals, base);
+        char *elem_type = direct_list_element_type(base_type);
+        DirectStructInfo *st = elem_type == NULL ? NULL : direct_find_struct(structs, struct_count, elem_type);
+        const char *field_type = st == NULL ? NULL : direct_struct_field_type(st, field);
+        DirectStructInfo *nested = field_type == NULL ? NULL : direct_find_struct(structs, struct_count, field_type);
+        const char *nested_type = nested == NULL ? NULL : direct_struct_field_type(nested, nested_field);
+        int ok = nested_type != NULL;
+        static char bufs2[4][128];
+        static int slot2 = 0;
+        if (ok) {
+            slot2 = (slot2 + 1) % 4;
+            snprintf(bufs2[slot2], sizeof(bufs2[slot2]), "%s", nested_type);
+        }
+        free(elem_type);
+        free(base);
+        free(field);
+        free(nested_field);
+        return ok ? bufs2[slot2] : NULL;
+    }
     if (direct_parse_list_field_target(lhs, &base, &field)) {
         const char *base_type = direct_names_type(locals, base);
         char *elem_type = direct_list_element_type(base_type);
         DirectStructInfo *st = elem_type == NULL ? NULL : direct_find_struct(structs, struct_count, elem_type);
-        int ok = st != NULL && direct_struct_has_field(st, field);
+        const char *field_type = st == NULL ? NULL : direct_struct_field_type(st, field);
+        int ok = field_type != NULL;
+        static char bufs3[4][128];
+        static int slot3 = 0;
+        if (ok) {
+            slot3 = (slot3 + 1) % 4;
+            snprintf(bufs3[slot3], sizeof(bufs3[slot3]), "%s", field_type);
+        }
         free(elem_type);
         free(base);
         free(field);
-        return ok ? "Int" : NULL;
+        return ok ? bufs3[slot3] : NULL;
     }
     return NULL;
 }
@@ -9799,6 +27619,265 @@ static int direct_is_option_none_pattern(const char *pattern) {
     return ok;
 }
 
+static int direct_parse_result_payload_pattern(const char *pattern, const char *variant, char **binder_out) {
+    char *trimmed = trim_copy(pattern);
+    const char *s = skip_ws(trimmed);
+    size_t n = strlen(variant);
+    if (strncmp(s, variant, n) != 0 || is_ident_continue(s[n])) {
+        free(trimmed);
+        return 0;
+    }
+    const char *p = skip_ws(s + n);
+    if (*p != '(') {
+        free(trimmed);
+        return -1;
+    }
+    int close = find_matching_paren_c(trimmed, (int)(p - trimmed));
+    if (close < 0 || *skip_ws(trimmed + close + 1) != '\0') {
+        free(trimmed);
+        return -1;
+    }
+    char *inside_raw = substr_copy(p + 1, (size_t)(close - (p - trimmed) - 1));
+    char *inside = trim_copy(inside_raw);
+    free(inside_raw);
+    if (!direct_is_plain_ident(inside)) {
+        free(inside);
+        free(trimmed);
+        return -1;
+    }
+    *binder_out = inside;
+    free(trimmed);
+    return 1;
+}
+
+static int direct_parse_result_ok_pattern(const char *pattern, char **binder_out) {
+    return direct_parse_result_payload_pattern(pattern, "Ok", binder_out);
+}
+
+static int direct_parse_result_err_pattern(const char *pattern, char **binder_out) {
+    return direct_parse_result_payload_pattern(pattern, "Err", binder_out);
+}
+
+static char *direct_get_opt_payload_type(const char *expr, DirectNameSet *locals) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return strdup("Int");
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(name);
+        free(trimmed);
+        return strdup("Int");
+    }
+    s = skip_ws(s + 1);
+    if (!starts_with(s, "get_opt") || is_ident_continue(s[7])) {
+        free(name);
+        free(trimmed);
+        return strdup("Int");
+    }
+    s = skip_ws(s + 7);
+    if (*s != '(') {
+        free(name);
+        free(trimmed);
+        return strdup("Int");
+    }
+    int close = find_matching_paren_c(trimmed, (int)(s - trimmed));
+    if (close < 0 || *skip_ws(trimmed + close + 1) != '\0') {
+        free(name);
+        free(trimmed);
+        return strdup("Int");
+    }
+    const char *map_type = direct_names_type(locals, name);
+    const char *value_type = direct_map_value_type(map_type);
+    char *out = strdup(direct_is_str_type(value_type) ? "Str" : "Int");
+    free(name);
+    free(trimmed);
+    return out;
+}
+
+static char *direct_option_match_result_type(const char *some_type, const char *none_type) {
+    if (direct_is_str_type(some_type) && direct_is_str_type(none_type)) return strdup("Str");
+    if (direct_is_intlike_scalar_type(some_type) && direct_is_intlike_scalar_type(none_type)) return strdup("Int");
+    if (some_type != NULL && none_type != NULL && strcmp(some_type, none_type) == 0) return strdup(some_type);
+    return NULL;
+}
+
+static char *direct_translate_trailing_str_len_expr(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *expr,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count
+) {
+    char *prefix = NULL;
+    if (!lower_split_trailing_len_call(expr, &prefix)) return NULL;
+    char *prefix_type = direct_infer_expr_type(prefix, locals, fns, fn_count, structs, struct_count);
+    if (!direct_is_str_type(prefix_type)) {
+        free(prefix_type);
+        free(prefix);
+        return NULL;
+    }
+    free(prefix_type);
+    if (direct_check_expr(path, line_no, line, prefix, locals, fns, fn_count, structs, struct_count)) {
+        free(prefix);
+        return NULL;
+    }
+    char *rewritten = direct_rewrite_expr(path, line_no, line, prefix, locals, fns, fn_count, structs, struct_count);
+    free(prefix);
+    if (rewritten == NULL) return NULL;
+    char *translated = direct_translate_expr(rewritten);
+    free(rewritten);
+    StrBuf out;
+    sb_init(&out);
+    sb_append(&out, "__vais_str_len(");
+    sb_append(&out, translated);
+    sb_append(&out, ")");
+    free(translated);
+    return sb_take(&out);
+}
+
+static int direct_parse_map_str_str_get_opt_components(
+    const char *expr,
+    DirectNameSet *locals,
+    char **base_out,
+    char **key_out
+) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return 0;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    if (!direct_is_map_str_str_type(direct_names_type(locals, name))) {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    s = skip_ws(s);
+    if (*s != '.') {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    s = skip_ws(s + 1);
+    if (!starts_with(s, "get_opt") || is_ident_continue(s[7])) {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    s = skip_ws(s + 7);
+    if (*s != '(') {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    int close = find_matching_paren_c(trimmed, (int)(s - trimmed));
+    if (close < 0 || *skip_ws(trimmed + close + 1) != '\0') {
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    char *inside = substr_copy(s + 1, (size_t)(close - (s - trimmed) - 1));
+    char *args[4] = {0};
+    int argc = split_top_level_commas_c(inside, args, 4);
+    free(inside);
+    if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+        for (int i = 0; i < 4; i++) free(args[i]);
+        free(name);
+        free(trimmed);
+        return 0;
+    }
+    *base_out = name;
+    *key_out = trim_copy(args[0]);
+    for (int i = 0; i < 4; i++) free(args[i]);
+    free(trimmed);
+    return 1;
+}
+
+static int direct_emit_map_str_str_option_match_let(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *name,
+    const char *match_expr,
+    const char *payload_tmp,
+    const char *some_c,
+    const char *none_c,
+    const char *result_type,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count,
+    StrBuf *out
+) {
+    char *base = NULL;
+    char *key = NULL;
+    if (!direct_parse_map_str_str_get_opt_components(match_expr, locals, &base, &key)) return 0;
+    char *key_rewritten = direct_rewrite_expr(path, line_no, line, key, locals, fns, fn_count, structs, struct_count);
+    if (key_rewritten == NULL) {
+        free(base);
+        free(key);
+        return -1;
+    }
+    char *key_c = direct_translate_expr(key_rewritten);
+    free(key_rewritten);
+    StrBuf base_ref;
+    sb_init(&base_ref);
+    direct_append_map_ptr_ref(&base_ref, base, direct_names_is_ref(locals, base));
+    char *base_c = sb_take(&base_ref);
+
+    char key_tmp[80];
+    snprintf(key_tmp, sizeof(key_tmp), "__vais_match_key_%d", locals->temp_count++);
+    sb_append(out, direct_c_type(result_type));
+    sb_append(out, " ");
+    sb_append(out, name);
+    sb_append(out, direct_is_str_type(result_type) ? " = NULL;\n" : " = 0;\n");
+    sb_append(out, "{\nStr ");
+    sb_append(out, key_tmp);
+    sb_append(out, " = ");
+    sb_append(out, key_c);
+    sb_append(out, ";\nif (__vais_map_str_str_contains(");
+    sb_append(out, base_c);
+    sb_append(out, ", ");
+    sb_append(out, key_tmp);
+    sb_append(out, ")) {\nStr ");
+    sb_append(out, payload_tmp);
+    sb_append(out, " = __vais_map_str_str_get(");
+    sb_append(out, base_c);
+    sb_append(out, ", ");
+    sb_append(out, key_tmp);
+    sb_append(out, ", \"\");\n");
+    sb_append(out, name);
+    sb_append(out, " = ");
+    sb_append(out, some_c);
+    sb_append(out, ";\n} else {\n");
+    sb_append(out, name);
+    sb_append(out, " = ");
+    sb_append(out, none_c);
+    sb_append(out, ";\n}\n}\n");
+
+    free(base_c);
+    free(key_c);
+    free(base);
+    free(key);
+    return 1;
+}
+
 static int direct_lower_option_match_let(
     const char *path,
     int line_no,
@@ -9813,13 +27892,17 @@ static int direct_lower_option_match_let(
     int struct_count,
     StrBuf *out
 ) {
-    if (strstr(match_expr, "get_opt") == NULL) {
+    char *match_value_type = direct_infer_expr_type(match_expr, locals, fns, fn_count, structs, struct_count);
+    int match_is_map_get_opt = strstr(match_expr, "get_opt") != NULL;
+    if (!match_is_map_get_opt && !direct_is_option_int_type(match_value_type)) {
         report_issue(path, line_no, find_col(line, "match"), line,
-            "direct native emitter supports Option match only for Map.get_opt results",
-            "write `let value = match m.get_opt(key) { Some(v) => v, None => fallback }`.",
+            "direct native emitter supports Option match for Option<Int> or Map.get_opt results",
+            "write `let value = match maybe { Some(v) => v, None => fallback }`.",
             NULL);
+        free(match_value_type);
         return 1;
     }
+    free(match_value_type);
 
     char *arm_parts[16] = {0};
     char *patterns[16] = {0};
@@ -9912,23 +27995,19 @@ static int direct_lower_option_match_let(
     snprintf(match_tmp, sizeof(match_tmp), "__vais_match_%d", locals->temp_count++);
     snprintf(payload_tmp, sizeof(payload_tmp), "__vais_match_payload_%d", locals->temp_count++);
 
+    char *payload_type = match_is_map_get_opt ? direct_get_opt_payload_type(match_expr, locals) : strdup("Int");
     char *some_bound = replace_word_all(some_expr, some_binder, payload_tmp);
-    direct_names_add_typed(locals, payload_tmp, "Int");
+    direct_names_add_typed(locals, payload_tmp, payload_type);
     int some_bad = direct_check_expr(path, line_no, line, some_bound, locals, fns, fn_count, structs, struct_count);
     char *some_type = some_bad ? NULL : direct_infer_expr_type(some_bound, locals, fns, fn_count, structs, struct_count);
-    if (!some_bad && !direct_type_compatible("Int", some_type)) {
-        report_issue(path, line_no, find_col(line, "Some"), line,
-            "direct native emitter Option Some arm must produce an Int value",
-            "return an Int-compatible expression from the Some arm.",
-            NULL);
-        some_bad = 1;
-    }
     char *some_rewritten = some_bad ? NULL : direct_rewrite_expr(path, line_no, line, some_bound, locals, fns, fn_count, structs, struct_count);
+    char *some_len_c = some_bad ? NULL : direct_translate_trailing_str_len_expr(path, line_no, line, some_bound, locals, fns, fn_count, structs, struct_count);
     direct_names_remove(locals, payload_tmp);
-    free(some_type);
     free(some_bound);
     if (some_bad || some_rewritten == NULL) {
         free(match_c);
+        free(payload_type);
+        free(some_type);
         for (int k = 0; k < 16; k++) {
             free(arm_parts[k]);
             free(patterns[k]);
@@ -9940,23 +28019,20 @@ static int direct_lower_option_match_let(
         free(some_rewritten);
         return 1;
     }
-    char *some_c = direct_translate_expr(some_rewritten);
+    char *some_c = some_len_c == NULL ? direct_translate_expr(some_rewritten) : some_len_c;
     free(some_rewritten);
 
     int none_bad = direct_check_expr(path, line_no, line, none_expr, locals, fns, fn_count, structs, struct_count);
     char *none_type = none_bad ? NULL : direct_infer_expr_type(none_expr, locals, fns, fn_count, structs, struct_count);
-    if (!none_bad && !direct_type_compatible("Int", none_type)) {
-        report_issue(path, line_no, find_col(line, "None"), line,
-            "direct native emitter Option None arm must produce an Int value",
-            "return an Int-compatible expression from the None arm.",
-            NULL);
-        none_bad = 1;
-    }
     char *none_rewritten = none_bad ? NULL : direct_rewrite_expr(path, line_no, line, none_expr, locals, fns, fn_count, structs, struct_count);
-    free(none_type);
+    char *none_len_c = none_bad ? NULL : direct_translate_trailing_str_len_expr(path, line_no, line, none_expr, locals, fns, fn_count, structs, struct_count);
     if (none_bad || none_rewritten == NULL) {
         free(match_c);
+        free(payload_type);
+        free(some_type);
+        free(none_type);
         free(some_c);
+        free(none_len_c);
         for (int k = 0; k < 16; k++) {
             free(arm_parts[k]);
             free(patterns[k]);
@@ -9968,34 +28044,110 @@ static int direct_lower_option_match_let(
         free(none_rewritten);
         return 1;
     }
-    char *none_c = direct_translate_expr(none_rewritten);
+    char *none_c = none_len_c == NULL ? direct_translate_expr(none_rewritten) : none_len_c;
     free(none_rewritten);
 
-    sb_append(out, "long ");
-    sb_append(out, name);
-    sb_append(out, " = 0;\n");
-    sb_append(out, "{\nlong ");
-    sb_append(out, match_tmp);
-    sb_append(out, " = ");
-    sb_append(out, match_c);
-    sb_append(out, ";\nif (");
-    sb_append(out, match_tmp);
-    sb_append(out, " % 2 == 0) {\nlong ");
-    sb_append(out, payload_tmp);
-    sb_append(out, " = (");
-    sb_append(out, match_tmp);
-    sb_append(out, " / 2) % 1000000;\n");
-    sb_append(out, name);
-    sb_append(out, " = ");
-    sb_append(out, some_c);
-    sb_append(out, ";\n} else {\n");
-    sb_append(out, name);
-    sb_append(out, " = ");
-    sb_append(out, none_c);
-    sb_append(out, ";\n}\n}\n");
-    direct_names_add_typed(locals, name, "Int");
+    char *result_type = direct_option_match_result_type(some_type, none_type);
+    if (result_type == NULL) {
+        report_issue(path, line_no, find_col(line, "match"), line,
+            "direct native emitter Option match arms must produce the same scalar type",
+            "return matching Int-compatible values or matching Str values from the Some and None arms.",
+            NULL);
+        free(match_c);
+        free(payload_type);
+        free(some_type);
+        free(none_type);
+        free(some_c);
+        free(none_c);
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(some_binder);
+        free(some_expr);
+        free(none_expr);
+        return 1;
+    }
+
+    int emitted = 0;
+    if (direct_is_str_type(payload_type)) {
+        emitted = direct_emit_map_str_str_option_match_let(
+            path,
+            line_no,
+            line,
+            name,
+            match_expr,
+            payload_tmp,
+            some_c,
+            none_c,
+            result_type,
+            locals,
+            fns,
+            fn_count,
+            structs,
+            struct_count,
+            out
+        );
+        if (emitted < 0) {
+            free(match_c);
+            free(payload_type);
+            free(result_type);
+            free(some_type);
+            free(none_type);
+            free(some_c);
+            free(none_c);
+            for (int k = 0; k < 16; k++) {
+                free(arm_parts[k]);
+                free(patterns[k]);
+                free(exprs[k]);
+            }
+            free(some_binder);
+            free(some_expr);
+            free(none_expr);
+            return 1;
+        }
+    }
+    if (!emitted) {
+        sb_append(out, direct_c_type(result_type));
+        sb_append(out, " ");
+        sb_append(out, name);
+        sb_append(out, direct_is_str_type(result_type) ? " = NULL;\n" : " = 0;\n");
+        sb_append(out, "{\nlong ");
+        sb_append(out, match_tmp);
+        sb_append(out, " = ");
+        sb_append(out, match_c);
+        sb_append(out, ";\nif (");
+        sb_append(out, match_tmp);
+        sb_append(out, " % 2 == 0) {\n");
+        sb_append(out, direct_c_type(payload_type));
+        sb_append(out, " ");
+        sb_append(out, payload_tmp);
+        if (direct_is_str_type(payload_type)) {
+            sb_append(out, " = (Str)");
+            sb_append(out, match_tmp);
+            sb_append(out, ";\n");
+        } else {
+            sb_append(out, " = (");
+            sb_append(out, match_tmp);
+            sb_append(out, " / 2) % 1000000;\n");
+        }
+        sb_append(out, name);
+        sb_append(out, " = ");
+        sb_append(out, some_c);
+        sb_append(out, ";\n} else {\n");
+        sb_append(out, name);
+        sb_append(out, " = ");
+        sb_append(out, none_c);
+        sb_append(out, ";\n}\n}\n");
+    }
+    direct_names_add_typed(locals, name, result_type);
 
     free(match_c);
+    free(payload_type);
+    free(result_type);
+    free(some_type);
+    free(none_type);
     free(some_c);
     free(none_c);
     for (int k = 0; k < 16; k++) {
@@ -10006,6 +28158,256 @@ static int direct_lower_option_match_let(
     free(some_binder);
     free(some_expr);
     free(none_expr);
+    return 0;
+}
+
+static int direct_lower_result_match_let(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *name,
+    const char *match_expr,
+    const char *arms_text,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count,
+    StrBuf *out
+) {
+    char *match_value_type = direct_infer_expr_type(match_expr, locals, fns, fn_count, structs, struct_count);
+    if (!direct_is_result_int_int_type(match_value_type)) {
+        report_issue(path, line_no, find_col(line, "match"), line,
+            "direct native emitter supports Result match for Result<Int,Int> values",
+            "write `let value = match result { Ok(v) => v, Err(e) => e }`.",
+            NULL);
+        free(match_value_type);
+        return 1;
+    }
+    free(match_value_type);
+
+    char *arm_parts[16] = {0};
+    char *patterns[16] = {0};
+    char *exprs[16] = {0};
+    int arm_count = split_top_level_commas_c(arms_text, arm_parts, 16);
+    char *ok_binder = NULL;
+    char *err_binder = NULL;
+    char *ok_expr = NULL;
+    char *err_expr = NULL;
+    int failed = 0;
+
+    if (arm_count != 2) failed = 1;
+    for (int a = 0; a < arm_count && a < 16 && failed == 0; a++) {
+        if (!parse_arm(arm_parts[a], &patterns[a], &exprs[a])) {
+            failed = 1;
+            break;
+        }
+        char *binder = NULL;
+        int ok = direct_parse_result_ok_pattern(patterns[a], &binder);
+        if (ok == 1) {
+            if (ok_binder != NULL || ok_expr != NULL) {
+                free(binder);
+                failed = 1;
+                break;
+            }
+            ok_binder = binder;
+            ok_expr = exprs[a];
+            exprs[a] = NULL;
+        } else if (ok < 0) {
+            failed = 1;
+            break;
+        } else {
+            int err = direct_parse_result_err_pattern(patterns[a], &binder);
+            if (err == 1) {
+                if (err_binder != NULL || err_expr != NULL) {
+                    free(binder);
+                    failed = 1;
+                    break;
+                }
+                err_binder = binder;
+                err_expr = exprs[a];
+                exprs[a] = NULL;
+            } else if (err < 0) {
+                failed = 1;
+                break;
+            } else {
+                failed = 1;
+                break;
+            }
+        }
+    }
+    if (ok_binder == NULL || ok_expr == NULL || err_binder == NULL || err_expr == NULL) failed = 1;
+    if (failed) {
+        report_issue(path, line_no, find_col(line, "match"), line,
+            "direct native emitter supports Result match with one Ok arm and one Err arm",
+            "write `let value = match result { Ok(v) => v, Err(e) => e }`.",
+            NULL);
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        return 1;
+    }
+
+    if (direct_check_expr(path, line_no, line, match_expr, locals, fns, fn_count, structs, struct_count)) {
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        return 1;
+    }
+    char *match_rewritten = direct_rewrite_expr(path, line_no, line, match_expr, locals, fns, fn_count, structs, struct_count);
+    if (match_rewritten == NULL) {
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        return 1;
+    }
+    char *match_c = direct_translate_expr(match_rewritten);
+    free(match_rewritten);
+
+    char match_tmp[80];
+    char ok_tmp[80];
+    char err_tmp[80];
+    snprintf(match_tmp, sizeof(match_tmp), "__vais_match_%d", locals->temp_count++);
+    snprintf(ok_tmp, sizeof(ok_tmp), "__vais_match_ok_%d", locals->temp_count++);
+    snprintf(err_tmp, sizeof(err_tmp), "__vais_match_err_%d", locals->temp_count++);
+
+    char *ok_bound = replace_word_all(ok_expr, ok_binder, ok_tmp);
+    direct_names_add_typed(locals, ok_tmp, "Int");
+    int ok_bad = direct_check_expr(path, line_no, line, ok_bound, locals, fns, fn_count, structs, struct_count);
+    char *ok_type = ok_bad ? NULL : direct_infer_expr_type(ok_bound, locals, fns, fn_count, structs, struct_count);
+    char *ok_rewritten = ok_bad ? NULL : direct_rewrite_expr(path, line_no, line, ok_bound, locals, fns, fn_count, structs, struct_count);
+    direct_names_remove(locals, ok_tmp);
+    free(ok_bound);
+    if (ok_bad || ok_rewritten == NULL) {
+        free(match_c);
+        free(ok_type);
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        free(ok_rewritten);
+        return 1;
+    }
+    char *ok_c = direct_translate_expr(ok_rewritten);
+    free(ok_rewritten);
+
+    char *err_bound = replace_word_all(err_expr, err_binder, err_tmp);
+    direct_names_add_typed(locals, err_tmp, "Int");
+    int err_bad = direct_check_expr(path, line_no, line, err_bound, locals, fns, fn_count, structs, struct_count);
+    char *err_type = err_bad ? NULL : direct_infer_expr_type(err_bound, locals, fns, fn_count, structs, struct_count);
+    char *err_rewritten = err_bad ? NULL : direct_rewrite_expr(path, line_no, line, err_bound, locals, fns, fn_count, structs, struct_count);
+    direct_names_remove(locals, err_tmp);
+    free(err_bound);
+    if (err_bad || err_rewritten == NULL) {
+        free(match_c);
+        free(ok_type);
+        free(err_type);
+        free(ok_c);
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        free(err_rewritten);
+        return 1;
+    }
+    char *err_c = direct_translate_expr(err_rewritten);
+    free(err_rewritten);
+
+    char *result_type = direct_option_match_result_type(ok_type, err_type);
+    if (result_type == NULL) {
+        report_issue(path, line_no, find_col(line, "match"), line,
+            "direct native emitter Result match arms must produce the same scalar type",
+            "return matching Int-compatible values or matching Str values from the Ok and Err arms.",
+            NULL);
+        free(match_c);
+        free(ok_type);
+        free(err_type);
+        free(ok_c);
+        free(err_c);
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        return 1;
+    }
+
+    sb_append(out, direct_c_type(result_type));
+    sb_append(out, " ");
+    sb_append(out, name);
+    sb_append(out, direct_is_str_type(result_type) ? " = NULL;\n" : " = 0;\n");
+    sb_append(out, "{\nlong ");
+    sb_append(out, match_tmp);
+    sb_append(out, " = ");
+    sb_append(out, match_c);
+    sb_append(out, ";\nif (");
+    sb_append(out, match_tmp);
+    sb_append(out, " % 2 == 0) {\nlong ");
+    sb_append(out, ok_tmp);
+    sb_append(out, " = (");
+    sb_append(out, match_tmp);
+    sb_append(out, " / 2) % 1000000;\n");
+    sb_append(out, name);
+    sb_append(out, " = ");
+    sb_append(out, ok_c);
+    sb_append(out, ";\n} else {\nlong ");
+    sb_append(out, err_tmp);
+    sb_append(out, " = (");
+    sb_append(out, match_tmp);
+    sb_append(out, " / 2) % 1000000;\n");
+    sb_append(out, name);
+    sb_append(out, " = ");
+    sb_append(out, err_c);
+    sb_append(out, ";\n}\n}\n");
+    direct_names_add_typed(locals, name, result_type);
+
+    free(match_c);
+    free(ok_type);
+    free(err_type);
+    free(result_type);
+    free(ok_c);
+    free(err_c);
+    for (int k = 0; k < 16; k++) {
+        free(arm_parts[k]);
+        free(patterns[k]);
+        free(exprs[k]);
+    }
+    free(ok_binder);
+    free(err_binder);
+    free(ok_expr);
+    free(err_expr);
     return 0;
 }
 
@@ -10021,6 +28423,23 @@ static int direct_parse_named_call_statement(const char *s, const char *name, ch
     if (*after != '\0') return -1;
     *args_out = substr_copy(p + 1, (size_t)(close - (p - s) - 1));
     return 1;
+}
+
+static char *direct_strip_try_suffix(const char *expr) {
+    char *trimmed = trim_copy(expr);
+    size_t n = strlen(trimmed);
+    if (n == 0 || trimmed[n - 1] != '?') {
+        free(trimmed);
+        return NULL;
+    }
+    trimmed[n - 1] = '\0';
+    char *inner = trim_copy(trimmed);
+    free(trimmed);
+    if (inner[0] == '\0') {
+        free(inner);
+        return NULL;
+    }
+    return inner;
 }
 
 static void sb_append_printf_literal_byte(StrBuf *out, char ch) {
@@ -10298,12 +28717,112 @@ static int direct_lower_line(
     DirectStructInfo *structs,
     int struct_count,
     StrBuf *out
+);
+
+static int direct_lower_inline_body(
+    const char *path,
+    int line_no,
+    const char *line,
+    const char *body,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count,
+    StrBuf *out
+) {
+    int start = 0;
+    int paren_depth = 0;
+    int square_depth = 0;
+    int brace_depth = 0;
+    char delim = '\0';
+    int escaped = 0;
+    int rc = 0;
+    int len = (int)strlen(body);
+    for (int i = 0; i <= len; i++) {
+        char ch = body[i];
+        int split = ch == '\0';
+        if (!split) {
+            if (escaped) {
+                escaped = 0;
+            } else if ((delim == '"' || delim == '\'') && ch == '\\') {
+                escaped = 1;
+            } else if (ch == '"' || ch == '\'' || ch == '`') {
+                if (delim == '\0') delim = ch;
+                else if (delim == ch) delim = '\0';
+            } else if (delim == '\0') {
+                if (ch == '(') paren_depth++;
+                else if (ch == ')' && paren_depth > 0) paren_depth--;
+                else if (ch == '[') square_depth++;
+                else if (ch == ']' && square_depth > 0) square_depth--;
+                else if (ch == '{') brace_depth++;
+                else if (ch == '}' && brace_depth > 0) brace_depth--;
+                else if (ch == ';' && paren_depth == 0 && square_depth == 0 && brace_depth == 0) split = 1;
+            }
+        }
+        if (!split) continue;
+        char *part_raw = substr_copy(body + start, (size_t)(i - start));
+        char *part = trim_copy(part_raw);
+        free(part_raw);
+        if (part[0] != '\0') {
+            rc = direct_lower_line(path, line_no, part, locals, fns, fn_count, structs, struct_count, out);
+        }
+        free(part);
+        if (rc != 0) return rc;
+        start = i + 1;
+    }
+    return 0;
+}
+
+static int direct_has_top_level_statement_separator(const char *body) {
+    int paren_depth = 0;
+    int square_depth = 0;
+    int brace_depth = 0;
+    char delim = '\0';
+    int escaped = 0;
+    for (int i = 0; body[i] != '\0'; i++) {
+        char ch = body[i];
+        if (escaped) {
+            escaped = 0;
+        } else if ((delim == '"' || delim == '\'') && ch == '\\') {
+            escaped = 1;
+        } else if (ch == '"' || ch == '\'' || ch == '`') {
+            if (delim == '\0') delim = ch;
+            else if (delim == ch) delim = '\0';
+        } else if (delim == '\0') {
+            if (ch == '(') paren_depth++;
+            else if (ch == ')' && paren_depth > 0) paren_depth--;
+            else if (ch == '[') square_depth++;
+            else if (ch == ']' && square_depth > 0) square_depth--;
+            else if (ch == '{') brace_depth++;
+            else if (ch == '}' && brace_depth > 0) brace_depth--;
+            else if (ch == ';' && paren_depth == 0 && square_depth == 0 && brace_depth == 0) return 1;
+        }
+    }
+    return 0;
+}
+
+static int direct_lower_line(
+    const char *path,
+    int line_no,
+    const char *line,
+    DirectNameSet *locals,
+    DirectFnInfo *fns,
+    int fn_count,
+    DirectStructInfo *structs,
+    int struct_count,
+    StrBuf *out
 ) {
     char *stripped = strip_line_comment(line, strlen(line));
     const char *s = skip_ws(stripped);
     if (*s == '\0') {
         free(stripped);
         return 0;
+    }
+    if (direct_has_top_level_statement_separator(s)) {
+        int rc = direct_lower_inline_body(path, line_no, line, s, locals, fns, fn_count, structs, struct_count, out);
+        free(stripped);
+        return rc;
     }
 
     DirectFnInfo header;
@@ -10325,6 +28844,25 @@ static int direct_lower_line(
             sb_append(out, header.params[p]);
         }
         sb_append(out, ") {\n");
+        const char *fn_open = strchr(stripped, '{');
+        if (fn_open != NULL) {
+            int fn_open_abs = (int)(fn_open - stripped);
+            int fn_close_abs = find_matching_brace_c(stripped, fn_open_abs);
+            if (fn_close_abs >= 0 && *skip_ws(stripped + fn_close_abs + 1) == '\0') {
+                char *body_raw = substr_copy(stripped + fn_open_abs + 1, (size_t)(fn_close_abs - fn_open_abs - 1));
+                char *body = trim_copy(body_raw);
+                free(body_raw);
+                int body_rc = 0;
+                if (body[0] != '\0') {
+                    body_rc = direct_lower_inline_body(path, line_no, line, body, locals, fns, fn_count, structs, struct_count, out);
+                }
+                sb_append(out, "}\n");
+                free(body);
+                direct_fns_free(&header, 1);
+                free(stripped);
+                return body_rc;
+            }
+        }
         direct_fns_free(&header, 1);
         free(stripped);
         return 0;
@@ -10332,7 +28870,7 @@ static int direct_lower_line(
     if (parsed_header < 0 || starts_with(s, "fn ")) {
         report_issue(path, line_no, find_col(line, "fn"), line,
             "direct native emitter supports scalar/List/Struct function headers, verified concrete Map returns, and verified Map parameters",
-            "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, or declared struct return types.",
+            "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, declared struct types, or verified concrete Map parameters/returns such as `Map<Int,Int>` or `Map<Str,Str>`.",
             NULL);
         free(stripped);
         return 1;
@@ -10344,6 +28882,43 @@ static int direct_lower_line(
         return 0;
     }
     if (starts_with(s, "} else if ")) {
+        char *close_inline_expr = NULL;
+        char *close_inline_body = NULL;
+        if (direct_parse_inline_block(skip_ws(s + 1), "else if", &close_inline_expr, &close_inline_body)) {
+            if (close_inline_expr == NULL || close_inline_body == NULL ||
+                direct_check_expr(path, line_no, line, close_inline_expr, locals, fns, fn_count, structs, struct_count)) {
+                free(close_inline_expr);
+                free(close_inline_body);
+                free(stripped);
+                return 1;
+            }
+            StrBuf prelude;
+            sb_init(&prelude);
+            direct_current_prelude = &prelude;
+            char *rewritten = direct_rewrite_expr(path, line_no, line, close_inline_expr, locals, fns, fn_count, structs, struct_count);
+            direct_current_prelude = NULL;
+            if (rewritten == NULL) {
+                free(prelude.data);
+                free(close_inline_expr);
+                free(close_inline_body);
+                free(stripped);
+                return 1;
+            }
+            char *c_expr = direct_translate_expr(rewritten);
+            sb_append(out, prelude.data);
+            sb_append(out, "} else if (");
+            sb_append(out, c_expr);
+            sb_append(out, ") {\n");
+            int body_rc = direct_lower_inline_body(path, line_no, line, close_inline_body, locals, fns, fn_count, structs, struct_count, out);
+            sb_append(out, "}\n");
+            free(prelude.data);
+            free(c_expr);
+            free(rewritten);
+            free(close_inline_expr);
+            free(close_inline_body);
+            free(stripped);
+            return body_rc;
+        }
         char *expr = direct_after_keyword_expr(s + 2, "else if", '{');
         if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)) {
             free(expr);
@@ -10367,12 +28942,209 @@ static int direct_lower_line(
         return 0;
     }
     if (starts_with(s, "} else")) {
+        const char *after_close = skip_ws(s + 1);
+        if (starts_with(after_close, "else") && !is_ident_continue(after_close[4])) {
+            const char *after_else = skip_ws(after_close + 4);
+            if (*after_else == '{') {
+                int close_abs = find_matching_brace_c(after_close, (int)(after_else - after_close));
+                if (close_abs >= 0 && *skip_ws(after_close + close_abs + 1) == '\0') {
+                    char *body_raw = substr_copy(after_else + 1, (size_t)(close_abs - (int)(after_else - after_close) - 1));
+                    char *body = trim_copy(body_raw);
+                    free(body_raw);
+                    sb_append(out, "} else {\n");
+                    int body_rc = 0;
+                    if (body[0] != '\0') {
+                        body_rc = direct_lower_inline_body(path, line_no, line, body, locals, fns, fn_count, structs, struct_count, out);
+                    }
+                    sb_append(out, "}\n");
+                    free(body);
+                    free(stripped);
+                    return body_rc;
+                }
+            }
+        }
         sb_append(out, "} else {\n");
         free(stripped);
         return 0;
     }
     char *inline_expr = NULL;
     char *inline_body = NULL;
+    char *inline_else_body = NULL;
+    if (direct_parse_inline_cond_else(s, "else if", &inline_expr, &inline_body, &inline_else_body)) {
+        if (inline_expr == NULL || inline_body == NULL || inline_else_body == NULL ||
+            direct_check_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count)) {
+            free(inline_expr);
+            free(inline_body);
+            free(inline_else_body);
+            free(stripped);
+            return 1;
+        }
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
+        char *rewritten = direct_rewrite_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
+        if (rewritten == NULL) {
+            free(prelude.data);
+            free(inline_expr);
+            free(inline_body);
+            free(inline_else_body);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
+        sb_append(out, prelude.data);
+        sb_append(out, "else if (");
+        sb_append(out, c_expr);
+        sb_append(out, ") {\n");
+        int then_rc = direct_lower_inline_body(path, line_no, line, inline_body, locals, fns, fn_count, structs, struct_count, out);
+        int else_rc = then_rc;
+        const char *else_trim = skip_ws(inline_else_body);
+        if (then_rc == 0 && starts_with(else_trim, "if") && !is_ident_continue(else_trim[2])) {
+            sb_append(out, "} else ");
+            else_rc = direct_lower_line(path, line_no, inline_else_body, locals, fns, fn_count, structs, struct_count, out);
+        } else {
+            sb_append(out, "} else {\n");
+            if (then_rc == 0) else_rc = direct_lower_inline_body(path, line_no, line, inline_else_body, locals, fns, fn_count, structs, struct_count, out);
+            sb_append(out, "}\n");
+        }
+        free(prelude.data);
+        free(c_expr);
+        free(rewritten);
+        free(inline_expr);
+        free(inline_body);
+        free(inline_else_body);
+        free(stripped);
+        return then_rc != 0 ? then_rc : else_rc;
+    }
+    if (direct_parse_inline_block(s, "else if", &inline_expr, &inline_body)) {
+        if (inline_expr == NULL || inline_body == NULL ||
+            direct_check_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count)) {
+            free(inline_expr);
+            free(inline_body);
+            free(stripped);
+            return 1;
+        }
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
+        char *rewritten = direct_rewrite_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
+        if (rewritten == NULL) {
+            free(prelude.data);
+            free(inline_expr);
+            free(inline_body);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
+        sb_append(out, prelude.data);
+        sb_append(out, "else if (");
+        sb_append(out, c_expr);
+        sb_append(out, ") {\n");
+        int body_rc = direct_lower_inline_body(path, line_no, line, inline_body, locals, fns, fn_count, structs, struct_count, out);
+        sb_append(out, "}\n");
+        free(prelude.data);
+        free(c_expr);
+        free(rewritten);
+        free(inline_expr);
+        free(inline_body);
+        free(stripped);
+        return body_rc;
+    }
+    if (starts_with(s, "else if ")) {
+        char *expr = direct_after_keyword_expr(s, "else if", '{');
+        if (expr == NULL || direct_check_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count)) {
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *rewritten = direct_rewrite_expr(path, line_no, line, expr, locals, fns, fn_count, structs, struct_count);
+        if (rewritten == NULL) {
+            free(expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
+        sb_append(out, "else if (");
+        sb_append(out, c_expr);
+        sb_append(out, ") {\n");
+        free(c_expr);
+        free(rewritten);
+        free(expr);
+        free(stripped);
+        return 0;
+    }
+    if (starts_with(s, "else")) {
+        const char *after_else = skip_ws(s + 4);
+        if (*after_else == '{') {
+            int close_abs = find_matching_brace_c(s, (int)(after_else - s));
+            if (close_abs >= 0 && *skip_ws(s + close_abs + 1) == '\0') {
+                char *body_raw = substr_copy(after_else + 1, (size_t)(close_abs - (int)(after_else - s) - 1));
+                char *body = trim_copy(body_raw);
+                free(body_raw);
+                sb_append(out, "else {\n");
+                int body_rc = 0;
+                if (body[0] != '\0') {
+                    body_rc = direct_lower_inline_body(path, line_no, line, body, locals, fns, fn_count, structs, struct_count, out);
+                }
+                sb_append(out, "}\n");
+                free(body);
+                free(stripped);
+                return body_rc;
+            }
+            sb_append(out, "else {\n");
+            free(stripped);
+            return 0;
+        }
+    }
+    if (direct_parse_inline_cond_else(s, "if", &inline_expr, &inline_body, &inline_else_body)) {
+        if (inline_expr == NULL || inline_body == NULL || inline_else_body == NULL ||
+            direct_check_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count)) {
+            free(inline_expr);
+            free(inline_body);
+            free(inline_else_body);
+            free(stripped);
+            return 1;
+        }
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
+        char *rewritten = direct_rewrite_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
+        if (rewritten == NULL) {
+            free(prelude.data);
+            free(inline_expr);
+            free(inline_body);
+            free(inline_else_body);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
+        sb_append(out, prelude.data);
+        sb_append(out, "if (");
+        sb_append(out, c_expr);
+        sb_append(out, ") {\n");
+        int then_rc = direct_lower_inline_body(path, line_no, line, inline_body, locals, fns, fn_count, structs, struct_count, out);
+        int else_rc = then_rc;
+        const char *else_trim = skip_ws(inline_else_body);
+        if (then_rc == 0 && starts_with(else_trim, "if") && !is_ident_continue(else_trim[2])) {
+            sb_append(out, "} else ");
+            else_rc = direct_lower_line(path, line_no, inline_else_body, locals, fns, fn_count, structs, struct_count, out);
+        } else {
+            sb_append(out, "} else {\n");
+            if (then_rc == 0) else_rc = direct_lower_inline_body(path, line_no, line, inline_else_body, locals, fns, fn_count, structs, struct_count, out);
+            sb_append(out, "}\n");
+        }
+        free(prelude.data);
+        free(c_expr);
+        free(rewritten);
+        free(inline_expr);
+        free(inline_body);
+        free(inline_else_body);
+        free(stripped);
+        return then_rc != 0 ? then_rc : else_rc;
+    }
     if (direct_parse_inline_block(s, "if", &inline_expr, &inline_body)) {
         if (inline_expr == NULL || inline_body == NULL ||
             direct_check_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count)) {
@@ -10398,7 +29170,7 @@ static int direct_lower_line(
         sb_append(out, "if (");
         sb_append(out, c_expr);
         sb_append(out, ") {\n");
-        int body_rc = direct_lower_line(path, line_no, inline_body, locals, fns, fn_count, structs, struct_count, out);
+        int body_rc = direct_lower_inline_body(path, line_no, line, inline_body, locals, fns, fn_count, structs, struct_count, out);
         sb_append(out, "}\n");
         free(prelude.data);
         free(c_expr);
@@ -10437,6 +29209,48 @@ static int direct_lower_line(
         free(expr);
         free(stripped);
         return 0;
+    }
+    if (direct_parse_inline_block(s, "while", &inline_expr, &inline_body)) {
+        if (inline_expr == NULL || inline_body == NULL ||
+            direct_check_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count)) {
+            free(inline_expr);
+            free(inline_body);
+            free(stripped);
+            return 1;
+        }
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
+        char *rewritten = direct_rewrite_expr(path, line_no, line, inline_expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
+        if (rewritten == NULL) {
+            free(prelude.data);
+            free(inline_expr);
+            free(inline_body);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
+        if (prelude.len > 0) {
+            sb_append(out, "while (1) {\n");
+            sb_append(out, prelude.data);
+            sb_append(out, "if (!(");
+            sb_append(out, c_expr);
+            sb_append(out, ")) break;\n");
+        } else {
+            sb_append(out, "while (");
+            sb_append(out, c_expr);
+            sb_append(out, ") {\n");
+        }
+        int body_rc = direct_lower_inline_body(path, line_no, line, inline_body, locals, fns, fn_count, structs, struct_count, out);
+        sb_append(out, "}\n");
+        free(prelude.data);
+        free(c_expr);
+        free(rewritten);
+        free(inline_expr);
+        free(inline_body);
+        free(stripped);
+        return body_rc;
     }
     if (starts_with(s, "while ")) {
         char *expr = direct_after_keyword_expr(s, "while", '{');
@@ -10595,21 +29409,11 @@ static int direct_lower_line(
     int parsed_each = direct_parse_for_each_header(s, &each_name, &each_iterable);
     if (parsed_each == 1) {
         const char *existing_type = direct_names_type(locals, each_name);
-        if (existing_type != NULL && !direct_is_intlike_scalar_type(existing_type)) {
-            report_issue(path, line_no, find_col(line, each_name), line,
-                "direct native emitter for-each variable must be an Int-compatible scalar",
-                "use a fresh loop variable name or an `Int` local.",
-                "for x in xs {");
-            free(each_name);
-            free(each_iterable);
-            free(stripped);
-            return 1;
-        }
         char *list_name = NULL;
         if (!direct_expr_bare_list_local(locals, each_iterable, &list_name)) {
             report_issue(path, line_no, find_col(line, each_iterable), line,
-                "direct native emitter for-each expects a local List<Int>",
-                "iterate a named local or parameter with type `List<Int>`.",
+                "direct native emitter for-each expects a local List<Int>, List<Str>, or List<Struct>",
+                "iterate a named local or parameter with type `List<Int>`, `List<Str>`, or `List<YourStruct>`.",
                 "for x in xs {");
             free(each_name);
             free(each_iterable);
@@ -10618,10 +29422,11 @@ static int direct_lower_line(
         }
         const char *iter_type = direct_names_type(locals, list_name);
         char *elem_type = direct_list_element_type(iter_type);
-        if (elem_type == NULL || strcmp(elem_type, "Int") != 0) {
+        int elem_is_struct = elem_type != NULL && direct_find_struct(structs, struct_count, elem_type) != NULL;
+        if (elem_type == NULL || (strcmp(elem_type, "Int") != 0 && strcmp(elem_type, "Str") != 0 && !elem_is_struct)) {
             report_issue(path, line_no, find_col(line, list_name), line,
-                "direct native emitter for-each currently supports List<Int>",
-                "iterate a `List<Int>` in this direct-engine slice.",
+                "direct native emitter for-each currently supports List<Int>, List<Str>, and List<Struct>",
+                "iterate a `List<Int>`, `List<Str>`, or declared-struct list in this direct-engine slice.",
                 "for x in xs {");
             free(elem_type);
             free(list_name);
@@ -10630,13 +29435,29 @@ static int direct_lower_line(
             free(stripped);
             return 1;
         }
-        free(elem_type);
+        int existing_ok = existing_type == NULL ||
+            (strcmp(elem_type, "Int") == 0 && direct_is_intlike_scalar_type(existing_type)) ||
+            (strcmp(elem_type, "Str") == 0 && direct_is_str_type(existing_type)) ||
+            (elem_is_struct && strcmp(existing_type, elem_type) == 0);
+        if (!existing_ok) {
+            report_issue(path, line_no, find_col(line, each_name), line,
+                "direct native emitter for-each variable type must match the list element type",
+                "use a fresh loop variable name or a local whose type matches the list element.",
+                "for x in xs {");
+            free(elem_type);
+            free(list_name);
+            free(each_name);
+            free(each_iterable);
+            free(stripped);
+            return 1;
+        }
         int declare_loop_var = existing_type == NULL;
-        if (declare_loop_var) direct_names_add_typed(locals, each_name, "Int");
+        if (declare_loop_var) direct_names_add_typed(locals, each_name, elem_type);
         char idx_name[64];
         snprintf(idx_name, sizeof(idx_name), "__vais_for_each_%d", locals->temp_count++);
         if (declare_loop_var) {
-            sb_append(out, "long ");
+            sb_append(out, direct_c_type(elem_type));
+            sb_append(out, " ");
             sb_append(out, each_name);
             sb_append(out, ";\n");
         }
@@ -10655,6 +29476,7 @@ static int direct_lower_line(
         sb_append(out, "[");
         sb_append(out, idx_name);
         sb_append(out, "];\n");
+        free(elem_type);
         free(list_name);
         free(each_name);
         free(each_iterable);
@@ -10663,8 +29485,8 @@ static int direct_lower_line(
     }
     if (parsed_for < 0 || starts_with(s, "for")) {
         report_issue(path, line_no, find_col(line, "for"), line,
-            "direct native emitter expected a for-loop range or List<Int> header",
-            "write `for i in 0..n {`, `for i in 0..=n {`, or `for x in xs {` where `xs` is `List<Int>`.",
+            "direct native emitter expected a for-loop range or supported List header",
+            "write `for i in 0..n {`, `for i in 0..=n {`, or `for x in xs {` where `xs` is `List<Int>`, `List<Str>`, or `List<Struct>`.",
             "for i in 0..n {");
         free(each_name);
         free(each_iterable);
@@ -10748,7 +29570,11 @@ static int direct_lower_line(
     char *match_expr = NULL;
     char *match_arms = NULL;
     if (parse_inline_match_let(s, &match_name, &match_expr, &match_arms)) {
-        int rc = direct_lower_option_match_let(path, line_no, line, match_name, match_expr, match_arms, locals, fns, fn_count, structs, struct_count, out);
+        char *match_value_type = direct_infer_expr_type(match_expr, locals, fns, fn_count, structs, struct_count);
+        int rc = direct_is_result_int_int_type(match_value_type)
+            ? direct_lower_result_match_let(path, line_no, line, match_name, match_expr, match_arms, locals, fns, fn_count, structs, struct_count, out)
+            : direct_lower_option_match_let(path, line_no, line, match_name, match_expr, match_arms, locals, fns, fn_count, structs, struct_count, out);
+        free(match_value_type);
         free(match_name);
         free(match_expr);
         free(match_arms);
@@ -10780,7 +29606,7 @@ static int direct_lower_line(
             if (local_type == NULL) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter expected a local type",
-                    "use `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or a declared struct type in this direct-engine slice.",
+                    "use `Int`, `Bool`, `Char`, `Str`, `Option<Int>`, `Result<Int,Int>`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, `Map<Str,Str>`, or a declared struct type in this direct-engine slice.",
                     NULL);
                 free(name);
                 free(stripped);
@@ -10789,8 +29615,8 @@ static int direct_lower_line(
             p = skip_ws(p);
             if (!direct_local_type_allowed(structs, struct_count, local_type)) {
                 report_issue(path, line_no, find_col(line, local_type), line,
-                    "direct native emitter supports Int, Bool, Char, Str, List<Int>, List<Struct>, Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, Map<Str,Char>, and declared struct locals only",
-                    "use `let name: Int = expr`, `let name: Bool = expr`, `let name: Char = expr`, `let name: Str = expr`, `let name: List<Int> = []`, `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, `let name: Map<Int,Char> = {}`, `let name: Map<Str,Int> = {}`, `let name: Map<Str,Bool> = {}`, `let name: Map<Str,Char> = {}`, `let name: Struct = expr`, or omit the annotation.",
+                    "direct native emitter supports Int, Bool, Char, Str, Option<Int>, Result<Int,Int>, List<Int>, List<Struct>, Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, Map<Str,Char>, Map<Str,Str>, and declared struct locals only",
+                    "use `let name: Int = expr`, `let name: Option<Int> = expr`, `let name: Result<Int,Int> = expr`, `let name: Str = expr`, `let name: List<Int> = []`, `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, `let name: Map<Int,Char> = {}`, `let name: Map<Str,Int> = {}`, `let name: Map<Str,Bool> = {}`, `let name: Map<Str,Char> = {}`, `let name: Map<Str,Str> = {}`, `let name: Struct = expr`, or omit the annotation.",
                     NULL);
                 free(local_type);
                 free(name);
@@ -10814,21 +29640,118 @@ static int direct_lower_line(
         if (local_type == NULL && direct_is_map_empty_initializer_expr(expr)) {
             report_issue(path, line_no, find_col(line, name), line,
                 "direct native emitter requires a Map type annotation for `{}`",
-                "write `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, `let name: Map<Int,Char> = {}`, `let name: Map<Str,Int> = {}`, `let name: Map<Str,Bool> = {}`, or `let name: Map<Str,Char> = {}` for the verified local Map slices.",
+                "write `let name: Map<Int,Int> = {}`, `let name: Map<Int,Bool> = {}`, `let name: Map<Int,Char> = {}`, `let name: Map<Str,Int> = {}`, `let name: Map<Str,Bool> = {}`, `let name: Map<Str,Char> = {}`, or `let name: Map<Str,Str> = {}` for the verified local Map slices.",
                 "let m: Map<Int,Int> = {}");
             free(expr);
             free(name);
             free(stripped);
             return 1;
         }
+        char *try_inner = direct_strip_try_suffix(expr);
+        if (try_inner != NULL) {
+            const char *return_type = locals->current_return_type == NULL ? "Int" : locals->current_return_type;
+            if (!direct_is_option_result_type(return_type)) {
+                report_issue(path, line_no, find_col(line, "?"), line,
+                    "direct native emitter `?` requires an Option<Int> or Result<Int,Int> return type",
+                    "use `?` inside a helper returning `Option<Int>` or `Result<Int,Int>`.",
+                    NULL);
+                free(try_inner);
+                free(expr);
+                free(local_type);
+                free(name);
+                free(stripped);
+                return 1;
+            }
+            if (direct_check_expr(path, line_no, line, try_inner, locals, fns, fn_count, structs, struct_count)) {
+                free(try_inner);
+                free(expr);
+                free(local_type);
+                free(name);
+                free(stripped);
+                return 1;
+            }
+            char *try_type = direct_infer_expr_type(try_inner, locals, fns, fn_count, structs, struct_count);
+            if (!direct_type_compatible(return_type, try_type) || !direct_is_option_result_type(try_type)) {
+                report_issue(path, line_no, find_col(line, "?"), line,
+                    "direct native emitter `?` input must match the enclosing Option/Result type",
+                    "bind `Option<Int>` with `?` inside `Option<Int>` helpers and `Result<Int,Int>` inside `Result<Int,Int>` helpers.",
+                    NULL);
+                free(try_type);
+                free(try_inner);
+                free(expr);
+                free(local_type);
+                free(name);
+                free(stripped);
+                return 1;
+            }
+            free(try_type);
+            if (local_type != NULL && !direct_type_compatible(local_type, "Int")) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter `?` local binding payload is Int",
+                    "bind the unwrapped payload as `Int` or omit the annotation.",
+                    NULL);
+                free(try_inner);
+                free(expr);
+                free(local_type);
+                free(name);
+                free(stripped);
+                return 1;
+            }
+            StrBuf prelude;
+            sb_init(&prelude);
+            direct_current_prelude = &prelude;
+            char *rewritten = direct_rewrite_expr(path, line_no, line, try_inner, locals, fns, fn_count, structs, struct_count);
+            direct_current_prelude = NULL;
+            if (rewritten == NULL) {
+                free(prelude.data);
+                free(try_inner);
+                free(expr);
+                free(local_type);
+                free(name);
+                free(stripped);
+                return 1;
+            }
+            char *c_expr = direct_translate_expr(rewritten);
+            char tmp_name[80];
+            snprintf(tmp_name, sizeof(tmp_name), "__vais_try_%d", locals->temp_count++);
+            sb_append(out, prelude.data);
+            sb_append(out, "long ");
+            sb_append(out, tmp_name);
+            sb_append(out, " = ");
+            sb_append(out, c_expr);
+            sb_append(out, ";\nif (");
+            sb_append(out, tmp_name);
+            sb_append(out, " % 2 != 0) return ");
+            sb_append(out, tmp_name);
+            sb_append(out, ";\n");
+            const char *existing_local_type = direct_names_type(locals, name);
+            int already_bound = existing_local_type != NULL;
+            int redeclare_local = already_bound && strcmp(existing_local_type, "Int") != 0;
+            direct_emit_local_binding_prefix(out, locals, name, "Int", already_bound, redeclare_local);
+            sb_append(out, "(");
+            sb_append(out, tmp_name);
+            sb_append(out, " / 2) % 1000000;\n");
+            if (!already_bound || redeclare_local) direct_names_add_typed(locals, name, "Int");
+            free(prelude.data);
+            free(c_expr);
+            free(rewritten);
+            free(try_inner);
+            free(expr);
+            free(local_type);
+            free(name);
+            free(stripped);
+            return 0;
+        }
         if (local_type == NULL) local_type = direct_infer_expr_type(expr, locals, fns, fn_count, structs, struct_count);
+        const char *existing_local_type = direct_names_type(locals, name);
+        int already_bound = existing_local_type != NULL;
+        int redeclare_local = already_bound && strcmp(existing_local_type, local_type) != 0;
         if (direct_is_map_type(local_type)) {
             if (direct_is_map_empty_initializer_expr(expr)) {
-                sb_append(out, direct_c_type(local_type));
-                sb_append(out, " ");
-                sb_append(out, name);
-                sb_append(out, " = {0};\n");
-                direct_names_add_typed(locals, name, local_type);
+                direct_emit_local_binding_prefix(out, locals, name, local_type, already_bound, redeclare_local);
+                if (locals->hoist_decls != NULL && !redeclare_local) direct_append_cast_initializer_prefix(out, local_type);
+                sb_append(out, "{0};\n");
+                if (!already_bound || redeclare_local) direct_names_add_typed(locals, name, local_type);
                 free(expr);
                 free(local_type);
                 free(name);
@@ -10838,7 +29761,7 @@ static int direct_lower_line(
             if (!direct_is_supported_map_return_type(local_type)) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter Map locals must start with `{}`",
-                    "initialize Map locals with `{}`; verified return-capable concrete maps may also use a same-type helper returning Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, or Map<Str,Char>.",
+                    "initialize Map locals with `{}`; verified return-capable concrete maps may also use a same-type helper returning Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, Map<Str,Char>, or Map<Str,Str>.",
                     "let m: Map<Int,Int> = {}");
                 free(expr);
                 free(local_type);
@@ -10868,13 +29791,10 @@ static int direct_lower_line(
             }
             char *c_expr = direct_translate_expr(rewritten);
             sb_append(out, prelude.data);
-            sb_append(out, direct_c_type(local_type));
-            sb_append(out, " ");
-            sb_append(out, name);
-            sb_append(out, " = ");
+            direct_emit_local_binding_prefix(out, locals, name, local_type, already_bound, redeclare_local);
             sb_append(out, c_expr);
             sb_append(out, ";\n");
-            direct_names_add_typed(locals, name, local_type);
+            if (!already_bound || redeclare_local) direct_names_add_typed(locals, name, local_type);
             free(prelude.data);
             free(c_expr);
             free(rewritten);
@@ -10887,11 +29807,14 @@ static int direct_lower_line(
         if (direct_is_list_type(local_type)) {
             char *list_elem_type = direct_list_element_type(local_type);
             if (direct_is_list_initializer_expr(expr)) {
-                sb_append(out, direct_c_type(local_type));
-                sb_append(out, " ");
-                sb_append(out, name);
-                sb_append(out, " = {{0}, 0};\n");
-                direct_names_add_typed(locals, name, local_type);
+                direct_emit_local_binding_prefix(out, locals, name, local_type, already_bound, redeclare_local);
+                if (locals->hoist_decls != NULL && !redeclare_local) direct_append_cast_initializer_prefix(out, local_type);
+                if (direct_is_token_list_type(local_type)) {
+                    sb_append(out, "__vais_token_list_new();\n");
+                } else {
+                    sb_append(out, "{{0}, 0};\n");
+                }
+                if (!already_bound || redeclare_local) direct_names_add_typed(locals, name, local_type);
                 char *items[16] = {0};
                 int item_count = 0;
                 int literal_state = direct_parse_list_literal_items(expr, items, 16, &item_count);
@@ -10951,6 +29874,11 @@ static int direct_lower_line(
                     }
                     char *c_item = direct_translate_expr(rewritten_item);
                     sb_append(out, prelude.data);
+                    sb_append(out, "if (");
+                    sb_append(out, name);
+                    sb_append(out, ".len >= ");
+                    sb_append(out, direct_list_cap_macro(local_type));
+                    sb_append(out, ") __builtin_trap();\n");
                     sb_append(out, name);
                     sb_append(out, ".data[");
                     sb_append(out, name);
@@ -11008,13 +29936,10 @@ static int direct_lower_line(
             }
             char *c_expr = direct_translate_expr(rewritten);
             sb_append(out, prelude.data);
-            sb_append(out, direct_c_type(local_type));
-            sb_append(out, " ");
-            sb_append(out, name);
-            sb_append(out, " = ");
+            direct_emit_local_binding_prefix(out, locals, name, local_type, already_bound, redeclare_local);
             sb_append(out, c_expr);
             sb_append(out, ";\n");
-            direct_names_add_typed(locals, name, local_type);
+            if (!already_bound || redeclare_local) direct_names_add_typed(locals, name, local_type);
             free(prelude.data);
             free(c_expr);
             free(rewritten);
@@ -11061,13 +29986,10 @@ static int direct_lower_line(
         }
         char *c_expr = direct_translate_expr(rewritten);
         sb_append(out, prelude.data);
-        sb_append(out, direct_c_type(local_type));
-        sb_append(out, " ");
-        sb_append(out, name);
-        sb_append(out, " = ");
+        direct_emit_local_binding_prefix(out, locals, name, local_type, already_bound, redeclare_local);
         sb_append(out, c_expr);
         sb_append(out, ";\n");
-        direct_names_add_typed(locals, name, local_type);
+        if (!already_bound || redeclare_local) direct_names_add_typed(locals, name, local_type);
         free(prelude.data);
         free(c_expr);
         free(rewritten);
@@ -11109,6 +30031,44 @@ static int direct_lower_line(
         free(stripped);
         return 1;
     }
+    char *call_stmt_expr = trim_copy(s);
+    size_t call_stmt_len = strlen(call_stmt_expr);
+    if (call_stmt_len > 0 && call_stmt_expr[call_stmt_len - 1] == ';') {
+        call_stmt_expr[call_stmt_len - 1] = '\0';
+        char *trimmed_call_stmt = trim_copy(call_stmt_expr);
+        free(call_stmt_expr);
+        call_stmt_expr = trimmed_call_stmt;
+    }
+    DirectFnInfo *call_stmt_fn = direct_expr_exact_call_fn(call_stmt_expr, fns, fn_count);
+    if (call_stmt_fn != NULL) {
+        if (direct_check_expr(path, line_no, line, call_stmt_expr, locals, fns, fn_count, structs, struct_count)) {
+            free(call_stmt_expr);
+            free(stripped);
+            return 1;
+        }
+        StrBuf prelude;
+        sb_init(&prelude);
+        direct_current_prelude = &prelude;
+        char *rewritten = direct_rewrite_expr(path, line_no, line, call_stmt_expr, locals, fns, fn_count, structs, struct_count);
+        direct_current_prelude = NULL;
+        if (rewritten == NULL) {
+            free(prelude.data);
+            free(call_stmt_expr);
+            free(stripped);
+            return 1;
+        }
+        char *c_expr = direct_translate_expr(rewritten);
+        sb_append(out, prelude.data);
+        sb_append(out, c_expr);
+        sb_append(out, ";\n");
+        free(prelude.data);
+        free(c_expr);
+        free(rewritten);
+        free(call_stmt_expr);
+        free(stripped);
+        return 0;
+    }
+    free(call_stmt_expr);
 
     char *method_base = NULL;
     char *method_name = NULL;
@@ -11122,7 +30082,7 @@ static int direct_lower_line(
             if (!is_insert && !is_remove && !is_clear) {
                 report_issue(path, line_no, find_col(line, method_base), line,
                     "direct native emitter supports Map.insert, Map.remove, and Map.clear statements only",
-                    "write `m.insert(key, value)`, `m.remove(key)`, or `m.clear()` on a local Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, or Map<Str,Char>.",
+                    "write `m.insert(key, value)`, `m.remove(key)`, or `m.clear()` on a local Map<Int,Int>, Map<Int,Bool>, Map<Int,Char>, Map<Str,Int>, Map<Str,Bool>, Map<Str,Char>, or Map<Str,Str>.",
                     NULL);
                 free(method_base);
                 free(method_name);
@@ -11219,10 +30179,14 @@ static int direct_lower_line(
             free(stripped);
             return 0;
         }
-        if (!direct_is_list_type(base_type) || strcmp(method_name, "push") != 0) {
+        int is_push = strcmp(method_name, "push") == 0;
+        int is_clear = strcmp(method_name, "clear") == 0;
+        int is_insert_at = strcmp(method_name, "insert_at") == 0;
+        int is_extend = strcmp(method_name, "extend") == 0;
+        if (!direct_is_list_type(base_type) || (!is_push && !is_clear && !is_insert_at && !is_extend)) {
             report_issue(path, line_no, find_col(line, method_base), line,
-                "direct native emitter supports List.push and Map.insert/Map.remove/Map.clear statements only",
-                "write `xs.push(value)`, `m.insert(key, value)`, `m.remove(key)`, or `m.clear()`.",
+                "direct native emitter supports List.push/List.clear/List.insert_at/List.extend and Map.insert/Map.remove/Map.clear statements only",
+                "write `xs.push(value)`, `xs.clear()`, `xs.insert_at(index, value)`, `xs.extend(other)`, `m.insert(key, value)`, `m.remove(key)`, or `m.clear()`.",
                 NULL);
             free(method_base);
             free(method_name);
@@ -11230,9 +30194,249 @@ static int direct_lower_line(
             free(stripped);
             return 1;
         }
-        char *list_elem_type = direct_list_element_type(base_type);
         char *args[16] = {0};
         int argc = split_top_level_commas_c(method_args, args, 16);
+        if (is_clear && argc == 1 && args[0] != NULL && strlen(skip_ws(args[0])) == 0) argc = 0;
+        if (is_clear) {
+            if (argc != 0) {
+                report_issue(path, line_no, find_col(line, method_name), line,
+                    "direct native emitter List.clear expects no arguments",
+                    "write `xs.clear()`.",
+                    NULL);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            int base_is_ref = direct_names_is_ref(locals, method_base);
+            direct_append_list_len_ref(out, method_base, base_is_ref);
+            sb_append(out, " = 0;\n");
+            for (int k = 0; k < 16; k++) free(args[k]);
+            free(method_base);
+            free(method_name);
+            free(method_args);
+            free(stripped);
+            return 0;
+        }
+	        if (is_extend) {
+	            if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type) && !direct_is_list_struct_type(structs, struct_count, base_type)) {
+	                report_issue(path, line_no, find_col(line, method_name), line,
+	                    "direct native emitter supports List.extend only on List<Int>, List<Str>, and List<Struct>",
+	                    "use `xs.extend(other)` on a verified direct-engine list type.",
+	                    NULL);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                report_issue(path, line_no, find_col(line, method_name), line,
+                    "direct native emitter List.extend expects one list argument",
+                    "write `xs.extend(other)` with another list of the same type.",
+                    NULL);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            char *source_name = trim_copy(args[0]);
+            if (!direct_is_plain_ident(source_name)) {
+                int source_is_literal = direct_is_list_initializer_expr(source_name);
+                DirectFnInfo *source_fn = source_is_literal ? NULL : direct_expr_exact_call_fn(source_name, fns, fn_count);
+                if (!source_is_literal && (source_fn == NULL || !direct_is_list_type(source_fn->return_type) || strcmp(source_fn->return_type, base_type) != 0)) {
+                    report_issue(path, line_no, find_col(line, method_name), line,
+                        "direct native emitter List.extend expects a named list source, inline list literal, or same-type list-returning call",
+                        "pass a local/parameter list name such as `xs.extend(other)`, an inline list literal such as `xs.extend([1, 2])`, or a helper call such as `xs.extend(make_items())`.",
+                        NULL);
+                    free(source_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(method_base);
+                    free(method_name);
+                    free(method_args);
+                    free(stripped);
+                    return 1;
+                }
+                if (direct_check_expr_inner(path, line_no, line, source_name, locals, fns, fn_count, structs, struct_count, base_type)) {
+                    free(source_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(method_base);
+                    free(method_name);
+                    free(method_args);
+                    free(stripped);
+                    return 1;
+                }
+                StrBuf prelude;
+                sb_init(&prelude);
+                direct_current_prelude = &prelude;
+                char *rewritten_source = direct_rewrite_list_value_expr(path, line_no, line, source_name, base_type, locals, fns, fn_count, structs, struct_count);
+                direct_current_prelude = NULL;
+                if (rewritten_source == NULL) {
+                    free(prelude.data);
+                    free(source_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(method_base);
+                    free(method_name);
+                    free(method_args);
+                    free(stripped);
+                    return 1;
+                }
+                char *c_source = direct_translate_expr(rewritten_source);
+                char tmp_name[64];
+                snprintf(tmp_name, sizeof(tmp_name), "__vais_list_extend_src_%d", locals->temp_count++);
+                sb_append(out, prelude.data);
+                sb_append(out, direct_c_type(base_type));
+                sb_append(out, " ");
+                sb_append(out, tmp_name);
+                sb_append(out, " = ");
+                sb_append(out, c_source);
+                sb_append(out, ";\n");
+                int base_is_ref = direct_names_is_ref(locals, method_base);
+                direct_append_list_extend_ref(out, method_base, base_is_ref, tmp_name, 0, base_type, locals);
+                free(c_source);
+                free(rewritten_source);
+                free(prelude.data);
+                free(source_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 0;
+            }
+            const char *source_type = direct_names_type(locals, source_name);
+            if (source_type == NULL || strcmp(source_type, base_type) != 0) {
+                report_issue(path, line_no, find_col(line, method_name), line,
+                    "direct native emitter List.extend source type does not match the target list",
+                    "extend with a local or parameter list of the same element type.",
+                    NULL);
+                free(source_name);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+	            }
+	            int base_is_ref = direct_names_is_ref(locals, method_base);
+	            int source_is_ref = direct_names_is_ref(locals, source_name);
+	            direct_append_list_extend_ref(out, method_base, base_is_ref, source_name, source_is_ref, base_type, locals);
+            free(source_name);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            free(method_base);
+            free(method_name);
+            free(method_args);
+            free(stripped);
+            return 0;
+        }
+	        if (is_insert_at) {
+	            if (!direct_is_list_int_type(base_type) && !direct_is_list_str_type(base_type) && !direct_is_list_struct_type(structs, struct_count, base_type)) {
+	                report_issue(path, line_no, find_col(line, method_name), line,
+	                    "direct native emitter supports List.insert_at only on List<Int>, List<Str>, and List<Struct>",
+	                    "use `xs.insert_at(index, value)` on a verified direct-engine list type.",
+	                    NULL);
+	                for (int k = 0; k < 16; k++) free(args[k]);
+	                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            if (argc != 2 || args[0] == NULL || args[1] == NULL || strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+                report_issue(path, line_no, find_col(line, method_name), line,
+                    "direct native emitter List.insert_at expects index and value arguments",
+                    "write `xs.insert_at(index, value)`.",
+                    NULL);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            if (direct_check_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count) ||
+                direct_check_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count)) {
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            char *index_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+            if (!direct_map_arg_type_compatible("Int", index_type)) {
+                report_issue(path, line_no, find_col(line, method_name), line,
+                    "direct native emitter List.insert_at index must be Int",
+                    "pass an Int-compatible index to `xs.insert_at(index, value)`.",
+                    NULL);
+                free(index_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            free(index_type);
+            char *list_elem_type = direct_list_element_type(base_type);
+            char *value_type = direct_infer_expr_type(args[1], locals, fns, fn_count, structs, struct_count);
+            if (strcmp(value_type, list_elem_type) != 0) {
+                report_issue(path, line_no, find_col(line, method_name), line,
+                    "direct native emitter List.insert_at value type does not match the list element type",
+                    "insert a value with the element type declared by the local list.",
+                    NULL);
+                free(value_type);
+                free(list_elem_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            free(value_type);
+            StrBuf prelude;
+            sb_init(&prelude);
+            direct_current_prelude = &prelude;
+            char *rewritten_index = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
+            char *rewritten_value = rewritten_index == NULL ? NULL : direct_rewrite_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count);
+            direct_current_prelude = NULL;
+            if (rewritten_index == NULL || rewritten_value == NULL) {
+                free(prelude.data);
+                free(rewritten_index);
+                free(rewritten_value);
+                free(list_elem_type);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            char *c_index = direct_translate_expr(rewritten_index);
+            char *c_value = direct_translate_expr(rewritten_value);
+            int base_is_ref = direct_names_is_ref(locals, method_base);
+	            sb_append(out, prelude.data);
+	            direct_append_list_insert_at_ref(out, method_base, base_is_ref, base_type, c_index, c_value, locals);
+            free(prelude.data);
+            free(c_index);
+            free(c_value);
+            free(rewritten_index);
+            free(rewritten_value);
+            free(list_elem_type);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            free(method_base);
+            free(method_name);
+            free(method_args);
+            free(stripped);
+            return 0;
+        }
+        char *list_elem_type = direct_list_element_type(base_type);
         if (argc != 1 || strlen(skip_ws(args[0])) == 0) {
             report_issue(path, line_no, find_col(line, method_name), line,
                 "direct native emitter List.push expects one argument",
@@ -11289,6 +30493,11 @@ static int direct_lower_line(
         char *c_arg = direct_translate_expr(rewritten_arg);
         int base_is_ref = direct_names_is_ref(locals, method_base);
         sb_append(out, prelude.data);
+        sb_append(out, "if (");
+        direct_append_list_len_ref(out, method_base, base_is_ref);
+        sb_append(out, " >= ");
+        sb_append(out, direct_list_cap_macro(base_type));
+        sb_append(out, ") __builtin_trap();\n");
         direct_append_list_data_ref(out, method_base, base_is_ref);
         sb_append(out, "[");
         direct_append_list_len_ref(out, method_base, base_is_ref);
@@ -11369,7 +30578,7 @@ static int direct_lower_line(
             if (!direct_is_map_type(rhs_type)) {
                 report_issue(path, line_no, find_col(line, lhs), line,
                     "direct native emitter Map assignment requires another local or parameter Map value",
-                    "assign from a local, same-type parameter, or same-type Map-returning call for `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, or `Map<Str,Char>`; broader generic key/value forms are not in this direct slice.",
+                    "assign from a local, same-type parameter, or same-type Map-returning call for `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, `Map<Str,Int>`, `Map<Str,Bool>`, `Map<Str,Char>`, or `Map<Str,Str>`; broader generic key/value forms are not in this direct slice.",
                     "scores = other");
                 free(rhs_name);
                 free(lhs);
@@ -11473,10 +30682,152 @@ static int direct_lower_line(
     return 1;
 }
 
+static int direct_struct_literal_join_allowed(const char *line) {
+    const char *s = skip_ws(line);
+    if ((starts_with(s, "fn") && !is_ident_continue(s[2])) ||
+        (starts_with(s, "if") && !is_ident_continue(s[2])) ||
+        (starts_with(s, "while") && !is_ident_continue(s[5])) ||
+        (starts_with(s, "for") && !is_ident_continue(s[3])) ||
+        (starts_with(s, "else") && !is_ident_continue(s[4])) ||
+        (starts_with(s, "struct") && !is_ident_continue(s[6])) ||
+        (starts_with(s, "enum") && !is_ident_continue(s[4])) ||
+        (starts_with(s, "impl") && !is_ident_continue(s[4])) ||
+        (starts_with(s, "trait") && !is_ident_continue(s[5]))) {
+        return 0;
+    }
+    return 1;
+}
+
+static void direct_struct_literal_depth_after_text(
+    const char *text,
+    DirectStructInfo *structs,
+    int struct_count,
+    int *brace_depth
+) {
+    char delim = '\0';
+    int escaped = 0;
+    for (int i = 0; text[i] != '\0';) {
+        char ch = text[i];
+        if (escaped) {
+            escaped = 0;
+            i++;
+            continue;
+        }
+        if ((delim == '"' || delim == '\'') && ch == '\\') {
+            escaped = 1;
+            i++;
+            continue;
+        }
+        if (ch == '"' || ch == '\'' || ch == '`') {
+            if (delim == '\0') delim = ch;
+            else if (delim == ch) delim = '\0';
+            i++;
+            continue;
+        }
+        if (delim != '\0') {
+            i++;
+            continue;
+        }
+        if (*brace_depth > 0) {
+            if (ch == '{') (*brace_depth)++;
+            else if (ch == '}' && *brace_depth > 0) (*brace_depth)--;
+            i++;
+            continue;
+        }
+        if (!is_ident_start(ch)) {
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(text[i])) i++;
+        char *name = substr_copy(text + start, (size_t)(i - start));
+        int cursor = i;
+        while (text[cursor] == ' ' || text[cursor] == '\t') cursor++;
+        int opens_literal = text[cursor] == '{' && direct_find_struct(structs, struct_count, name) != NULL;
+        free(name);
+        if (opens_literal) {
+            (*brace_depth)++;
+            i = cursor + 1;
+        }
+    }
+}
+
+static char *direct_join_delimited_statement(LineVec *lines, size_t start, size_t *end_out, DirectStructInfo *structs, int struct_count) {
+    char *first = strip_line_comment(lines->items[start], strlen(lines->items[start]));
+    int paren_depth = 0;
+    int square_depth = 0;
+    int struct_brace_depth = 0;
+    paren_square_depth_after_text(first, &paren_depth, &square_depth);
+    int allow_struct_join = direct_struct_literal_join_allowed(first);
+    if (allow_struct_join) {
+        direct_struct_literal_depth_after_text(first, structs, struct_count, &struct_brace_depth);
+    }
+    free(first);
+    if (paren_depth <= 0 && square_depth <= 0 && struct_brace_depth <= 0) {
+        *end_out = start;
+        return strdup(lines->items[start]);
+    }
+    StrBuf joined;
+    sb_init(&joined);
+    sb_append(&joined, lines->items[start]);
+    size_t j = start + 1;
+    while (j < lines->len && (paren_depth > 0 || square_depth > 0 || struct_brace_depth > 0)) {
+        sb_append(&joined, "\n");
+        sb_append(&joined, lines->items[j]);
+        char *code = strip_line_comment(lines->items[j], strlen(lines->items[j]));
+        paren_square_depth_after_text(code, &paren_depth, &square_depth);
+        if (allow_struct_join) {
+            direct_struct_literal_depth_after_text(code, structs, struct_count, &struct_brace_depth);
+        }
+        free(code);
+        j++;
+    }
+    *end_out = j == 0 ? start : j - 1;
+    return joined.data;
+}
+
+static void direct_append_function_with_decls(StrBuf *out, StrBuf *fn, StrBuf *decls) {
+    if (decls->len == 0) {
+        sb_append(out, fn->data);
+        return;
+    }
+    char *insert = strstr(fn->data, "{\n");
+    if (insert == NULL) {
+        sb_append(out, fn->data);
+        return;
+    }
+    size_t head_len = (size_t)(insert - fn->data) + 2;
+    sb_append_n(out, fn->data, head_len);
+    sb_append(out, decls->data);
+    sb_append(out, fn->data + head_len);
+}
+
+static int direct_source_brace_delta(const char *text) {
+    int delta = 0;
+    for (int i = 0; text[i] != '\0'; i++) {
+        if (is_string_delim_c(text[i])) {
+            int end = skip_string_literal_c(text, i);
+            if (end < 0) break;
+            i = end - 1;
+            continue;
+        }
+        if (text[i] == '\'') {
+            int end = skip_char_literal_c(text, i);
+            if (end < 0) break;
+            i = end - 1;
+            continue;
+        }
+        if (text[i] == '{') delta++;
+        else if (text[i] == '}') delta--;
+    }
+    return delta;
+}
+
 static char *direct_lower_to_c(const char *path, const char *raw) {
     LineVec lines = split_lines(raw);
-    DirectFnInfo fns[64];
-    DirectStructInfo structs[32];
+    DirectFnInfo fns[DIRECT_MAX_FNS];
+    DirectStructInfo structs[128];
     int fn_count = 0;
     int struct_count = 0;
     memset(fns, 0, sizeof(fns));
@@ -11490,8 +30841,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
         const char *trim = skip_ws(code);
         if (starts_with(trim, "import") && !is_ident_continue(trim[6])) {
             report_issue(path, (int)i + 1, find_col(lines.items[i], "import"), lines.items[i],
-                "direct native emitter does not support imports",
-                "use the full engine for local imports; direct engine builds stay single-file.",
+                "direct native emitter expected imports to be resolved before lowering",
+                "run direct compilation through `scripts/vaisc`, which resolves local dotted imports before lowering.",
                 NULL);
             free(code);
             free(skip_lines);
@@ -11519,9 +30870,9 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
         DirectStructInfo st;
         memset(&st, 0, sizeof(st));
         size_t struct_end = i;
-        int parsed_struct = direct_parse_struct_decl(&lines, i, &st, &struct_end, path);
+        int parsed_struct = direct_parse_struct_decl(&lines, i, &st, &struct_end, structs, struct_count, path);
         if (parsed_struct == 1) {
-            if (struct_count >= 32) {
+            if (struct_count >= 128) {
                 fprintf(stderr, "error: too many direct structs\n");
                 direct_struct_free_one(&st);
                 free(skip_lines);
@@ -11559,7 +30910,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
         memset(&info, 0, sizeof(info));
         int parsed = parse_direct_fn_header(lines.items[i], &info);
         if (parsed == 1) {
-            if (fn_count >= 64) {
+            if (fn_count >= DIRECT_MAX_FNS) {
                 fprintf(stderr, "error: too many direct functions\n");
                 free(skip_lines);
                 lines_free(&lines);
@@ -11586,8 +30937,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             fns[fn_count++] = info;
         } else if (parsed < 0) {
             report_issue(path, (int)i + 1, 1, lines.items[i],
-                "direct native emitter supports scalar/List/Struct function headers, verified concrete Map returns, and verified Map parameters",
-                "write functions with `Int`, `Bool`, `Char`, `Str`, `List<Int>`, `List<Struct>`, `Map<Int,Int>`, `Map<Int,Bool>`, `Map<Int,Char>`, or declared struct return types.",
+                "direct native emitter supports scalar/Option/Result/List/Struct function headers, verified concrete Map returns, and verified Map parameters",
+                "write functions with `Int`, `Bool`, `Char`, `Str`, `Option<Int>`, `Result<Int,Int>`, `List<Int>`, `List<Struct>`, declared struct types, or verified concrete Map parameters/returns such as `Map<Int,Int>` or `Map<Str,Str>`.",
                 NULL);
             free(skip_lines);
             lines_free(&lines);
@@ -11621,23 +30972,73 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
 
     StrBuf out;
     sb_init(&out);
+    sb_append(&out, "#include <errno.h>\n");
     sb_append(&out, "#include <stdbool.h>\n");
+    sb_append(&out, "#include <stdint.h>\n");
     sb_append(&out, "#include <stdio.h>\n");
+    sb_append(&out, "#include <stdlib.h>\n");
     sb_append(&out, "#include <string.h>\n");
+    sb_append(&out, "#include <sys/time.h>\n");
+    sb_append(&out, "#include <sys/wait.h>\n");
+    sb_append(&out, "#include <time.h>\n");
     sb_append(&out, "typedef long Int;\n");
     sb_append(&out, "typedef long Bool;\n");
     sb_append(&out, "typedef const char *Str;\n");
+    sb_append(&out, "int64_t proc_argc(void);\n");
+    sb_append(&out, "char *proc_arg(int64_t index);\n");
+    sb_append(&out, "int64_t fs_exists(const char *path);\n");
+    sb_append(&out, "char *fs_read_text(const char *path);\n");
+    sb_append(&out, "int64_t fs_write_text(const char *path, const char *text);\n");
+    sb_append(&out, "char *fs_cwd(void);\n");
+    sb_append(&out, "char *fs_temp_dir(void);\n");
+    sb_append(&out, "char *path_join(const char *base, const char *child);\n");
+    sb_append(&out, "char *path_basename(const char *path);\n");
+    sb_append(&out, "char *path_dirname(const char *path);\n");
+    sb_append(&out, "int64_t time_millis(void);\n");
     sb_append(&out, "static long __vais_str_len(const char *s) { return (long)strlen(s); }\n");
     sb_append(&out, "static long __vais_str_byte(const char *s, long index) { return (long)(unsigned char)s[index]; }\n");
     sb_append(&out, "static long __vais_str_eq(const char *a, const char *b) { return strcmp(a, b) == 0 ? 1 : 0; }\n");
+    sb_append(&out, "static long __vais_str_contains(const char *text, const char *needle) { return strstr(text, needle) != NULL ? 1 : 0; }\n");
+    sb_append(&out, "static long __vais_str_index_of(const char *text, const char *needle) { const char *p = strstr(text, needle); return p == NULL ? -1 : (long)(p - text); }\n");
+    sb_append(&out, "static long __vais_str_starts_with(const char *text, const char *prefix) { size_t n = strlen(prefix); return strncmp(text, prefix, n) == 0 ? 1 : 0; }\n");
+    sb_append(&out, "static long __vais_str_ends_with(const char *text, const char *suffix) { size_t n = strlen(text); size_t m = strlen(suffix); return m <= n && strcmp(text + n - m, suffix) == 0 ? 1 : 0; }\n");
+    sb_append(&out, "static const char *__vais_str_slice(const char *s, long start, long len) { size_t n = strlen(s); if (start < 0 || len < 0 || (size_t)start > n || (size_t)len > n - (size_t)start) __builtin_trap(); char *out = (char *)malloc((size_t)len + 1); if (out == NULL) return \"\"; memcpy(out, s + start, (size_t)len); out[len] = '\\0'; return out; }\n");
+    sb_append(&out, "static const char *__vais_str_concat(const char *left, const char *right) { size_t a = strlen(left); size_t b = strlen(right); char *out = (char *)malloc(a + b + 1); if (out == NULL) return \"\"; memcpy(out, left, a); memcpy(out + a, right, b); out[a + b] = '\\0'; return out; }\n");
+    sb_append(&out, "static const char *__vais_str_replace(const char *text, const char *needle, const char *replacement) { size_t tn = strlen(text), nn = strlen(needle), rn = strlen(replacement); if (nn == 0) { char *copy = (char *)malloc(tn + 1); if (copy == NULL) return \"\"; memcpy(copy, text, tn + 1); return copy; } size_t count = 0; const char *scan = text; const char *hit = NULL; while ((hit = strstr(scan, needle)) != NULL) { count++; scan = hit + nn; } size_t out_len = rn >= nn ? tn + count * (rn - nn) : tn - count * (nn - rn); char *out = (char *)malloc(out_len + 1); if (out == NULL) return \"\"; const char *src = text; size_t pos = 0; while ((hit = strstr(src, needle)) != NULL) { size_t chunk = (size_t)(hit - src); memcpy(out + pos, src, chunk); pos += chunk; memcpy(out + pos, replacement, rn); pos += rn; src = hit + nn; } size_t tail = strlen(src); memcpy(out + pos, src, tail); pos += tail; out[pos] = '\\0'; return out; }\n");
+    sb_append(&out, "static int __vais_str_trim_space(unsigned char c) { return c == 32 || (c >= 9 && c <= 13); }\n");
+    sb_append(&out, "static const char *__vais_str_trim(const char *s) { const unsigned char *start = (const unsigned char *)s; while (*start && __vais_str_trim_space(*start)) start++; const unsigned char *end = start + strlen((const char *)start); while (end > start && __vais_str_trim_space(*(end - 1))) end--; size_t len = (size_t)(end - start); char *out = (char *)malloc(len + 1); if (out == NULL) return \"\"; memcpy(out, start, len); out[len] = '\\0'; return out; }\n");
+    sb_append(&out, "static const char *__vais_str_lower(const char *s) { size_t len = strlen(s); char *out = (char *)malloc(len + 1); if (out == NULL) return \"\"; for (size_t i = 0; i < len; i++) { unsigned char c = (unsigned char)s[i]; out[i] = (char)((c >= 'A' && c <= 'Z') ? c + 32 : c); } out[len] = '\\0'; return out; }\n");
+    sb_append(&out, "static const char *__vais_str_upper(const char *s) { size_t len = strlen(s); char *out = (char *)malloc(len + 1); if (out == NULL) return \"\"; for (size_t i = 0; i < len; i++) { unsigned char c = (unsigned char)s[i]; out[i] = (char)((c >= 'a' && c <= 'z') ? c - 32 : c); } out[len] = '\\0'; return out; }\n");
     sb_append(&out, "static const char *__vais_int_to_str(long value) { static char buffers[8][32]; static int next = 0; char *out = buffers[next++ & 7]; snprintf(out, 32, \"%ld\", value); return out; }\n");
+    sb_append(&out, "static const char *__vais_str_from_byte(long value) { if (value < 0 || value > 255) __builtin_trap(); char *out = (char *)malloc(2); if (out == NULL) return \"\"; out[0] = (char)value; out[1] = '\\0'; return out; }\n");
     sb_append(&out, "static long __vais_parse_uint(const char *s) { long value = 0; for (long i = 0; s[i] != '\\0'; i++) { unsigned char b = (unsigned char)s[i]; if (b < '0' || b > '9') break; value = value * 10 + (long)(b - '0'); } return value; }\n");
     sb_append(&out, "static long __vais_parse_int(const char *s) { if (s[0] == '-') return 0 - __vais_parse_uint(s + 1); return __vais_parse_uint(s); }\n");
     sb_append(&out, "static long __vais_list_checked_index(long index, long len) { if (index < 0 || index >= len) __builtin_trap(); return index; }\n");
     sb_append(&out, "static long __vais_list_checked_last(long len) { if (len <= 0) __builtin_trap(); return len - 1; }\n");
     sb_append(&out, "static long __vais_list_checked_pop_index(long *len) { if (*len <= 0) __builtin_trap(); *len -= 1; return *len; }\n");
-    sb_append(&out, "typedef struct { long data[256]; long len; } DirectListInt;\n");
+    sb_append(&out, "#define VAIS_DIRECT_LIST_CAP 4096\n");
+    sb_append(&out, "#define VAIS_DIRECT_TOKEN_CAP 262144\n");
+    sb_append(&out, "typedef struct { long data[VAIS_DIRECT_LIST_CAP]; long len; } DirectListInt;\n");
+    sb_append(&out, "typedef struct { const char *data[VAIS_DIRECT_LIST_CAP]; long len; } DirectList_Str;\n");
+    sb_append(&out, "static const char *__vais_str_join(DirectList_Str *parts, const char *sep) { size_t sn = strlen(sep); size_t total = 0; for (long i = 0; i < parts->len; i++) { total += strlen(parts->data[i]); if (i > 0) total += sn; } char *out = (char *)malloc(total + 1); if (out == NULL) return \"\"; size_t pos = 0; for (long i = 0; i < parts->len; i++) { if (i > 0) { memcpy(out + pos, sep, sn); pos += sn; } size_t pn = strlen(parts->data[i]); memcpy(out + pos, parts->data[i], pn); pos += pn; } out[pos] = '\\0'; return out; }\n");
+    sb_append(&out, "static long __vais_str_split_ws_into(const char *text, DirectList_Str *out) { out->len = 0; long i = 0; while (text[i] != '\\0') { while (text[i] != '\\0' && __vais_str_trim_space((unsigned char)text[i])) i++; long start = i; while (text[i] != '\\0' && !__vais_str_trim_space((unsigned char)text[i])) i++; if (i > start) { if (out->len >= VAIS_DIRECT_LIST_CAP) __builtin_trap(); out->data[out->len++] = __vais_str_slice(text, start, i - start); } } return out->len; }\n");
+    sb_append(&out, "static long __vais_str_split_lines_into(const char *text, DirectList_Str *out) { out->len = 0; long i = 0; long start = 0; while (text[i] != '\\0') { if (text[i] == '\\n') { long len = i - start; if (len > 0 && text[i - 1] == '\\r') len--; if (out->len >= VAIS_DIRECT_LIST_CAP) __builtin_trap(); out->data[out->len++] = __vais_str_slice(text, start, len); i++; start = i; } else { i++; } } if (i > start) { long len = i - start; if (len > 0 && text[i - 1] == '\\r') len--; if (out->len >= VAIS_DIRECT_LIST_CAP) __builtin_trap(); out->data[out->len++] = __vais_str_slice(text, start, len); } return out->len; }\n");
+    sb_append(&out, "static long __vais_str_split_into(const char *text, const char *sep, DirectList_Str *out) { out->len = 0; size_t sn = strlen(sep); if (sn == 0) { if (out->len >= VAIS_DIRECT_LIST_CAP) __builtin_trap(); out->data[out->len++] = __vais_str_slice(text, 0, (long)strlen(text)); return out->len; } const char *cursor = text; const char *hit = NULL; while ((hit = strstr(cursor, sep)) != NULL) { if (out->len >= VAIS_DIRECT_LIST_CAP) __builtin_trap(); out->data[out->len++] = __vais_str_slice(text, (long)(cursor - text), (long)(hit - cursor)); cursor = hit + sn; } if (out->len >= VAIS_DIRECT_LIST_CAP) __builtin_trap(); out->data[out->len++] = __vais_str_slice(text, (long)(cursor - text), (long)strlen(cursor)); return out->len; }\n");
     sb_append(&out, "static long __vais_list_int_sum(DirectListInt *xs) { long total = 0; for (long i = 0; i < xs->len; i++) total += xs->data[i]; return total; }\n");
+    sb_append(&out, "static long __vais_list_int_max(DirectListInt *xs) { if (xs->len <= 0) __builtin_trap(); long best = xs->data[0]; for (long i = 1; i < xs->len; i++) if (xs->data[i] > best) best = xs->data[i]; return best; }\n");
+    sb_append(&out, "static long __vais_list_int_min(DirectListInt *xs) { if (xs->len <= 0) __builtin_trap(); long best = xs->data[0]; for (long i = 1; i < xs->len; i++) if (xs->data[i] < best) best = xs->data[i]; return best; }\n");
+    sb_append(&out, "static long __vais_list_int_contains(DirectListInt *xs, long value) { for (long i = 0; i < xs->len; i++) if (xs->data[i] == value) return 1; return 0; }\n");
+    sb_append(&out, "static long __vais_list_int_index_of(DirectListInt *xs, long value) { for (long i = 0; i < xs->len; i++) if (xs->data[i] == value) return i; return -1; }\n");
+    sb_append(&out, "static long __vais_list_int_count(DirectListInt *xs, long value) { long total = 0; for (long i = 0; i < xs->len; i++) if (xs->data[i] == value) total++; return total; }\n");
+    sb_append(&out, "static long __vais_list_int_remove_at(DirectListInt *xs, long index) { if (index < 0 || index >= xs->len) __builtin_trap(); long value = xs->data[index]; for (long i = index; i < xs->len - 1; i++) xs->data[i] = xs->data[i + 1]; xs->len -= 1; return value; }\n");
+    sb_append(&out, "static void __vais_list_int_insert_at(DirectListInt *xs, long index, long value) { if (xs->len >= VAIS_DIRECT_LIST_CAP || index < 0 || index > xs->len) __builtin_trap(); for (long i = xs->len; i > index; i--) xs->data[i] = xs->data[i - 1]; xs->data[index] = value; xs->len += 1; }\n");
+    sb_append(&out, "static void __vais_list_int_extend(DirectListInt *dst, DirectListInt *src) { long base = dst->len; long n = src->len; if (base + n > VAIS_DIRECT_LIST_CAP) __builtin_trap(); for (long i = 0; i < n; i++) dst->data[base + i] = src->data[i]; dst->len = base + n; }\n");
+    sb_append(&out, "static long __vais_list_str_contains(DirectList_Str *xs, const char *value) { for (long i = 0; i < xs->len; i++) if (__vais_str_eq(xs->data[i], value)) return 1; return 0; }\n");
+    sb_append(&out, "static long __vais_list_str_index_of(DirectList_Str *xs, const char *value) { for (long i = 0; i < xs->len; i++) if (__vais_str_eq(xs->data[i], value)) return i; return -1; }\n");
+    sb_append(&out, "static long __vais_list_str_count(DirectList_Str *xs, const char *value) { long total = 0; for (long i = 0; i < xs->len; i++) if (__vais_str_eq(xs->data[i], value)) total++; return total; }\n");
+    sb_append(&out, "static const char *__vais_list_str_remove_at(DirectList_Str *xs, long index) { if (index < 0 || index >= xs->len) __builtin_trap(); const char *value = xs->data[index]; for (long i = index; i < xs->len - 1; i++) xs->data[i] = xs->data[i + 1]; xs->len -= 1; return value; }\n");
+    sb_append(&out, "static void __vais_list_str_insert_at(DirectList_Str *xs, long index, const char *value) { if (xs->len >= VAIS_DIRECT_LIST_CAP || index < 0 || index > xs->len) __builtin_trap(); for (long i = xs->len; i > index; i--) xs->data[i] = xs->data[i - 1]; xs->data[index] = value; xs->len += 1; }\n");
+    sb_append(&out, "static void __vais_list_str_extend(DirectList_Str *dst, DirectList_Str *src) { long base = dst->len; long n = src->len; if (base + n > VAIS_DIRECT_LIST_CAP) __builtin_trap(); for (long i = 0; i < n; i++) dst->data[base + i] = src->data[i]; dst->len = base + n; }\n");
     sb_append(&out, "typedef struct { long keys[256]; long values[256]; unsigned char present[256]; long len; } DirectMapIntInt;\n");
     sb_append(&out, "static long __vais_map_int_int_find(DirectMapIntInt *m, long key) { for (long i = 0; i < m->len; i++) if (m->present[i] && m->keys[i] == key) return i; return -1; }\n");
     sb_append(&out, "static void __vais_map_int_int_insert(DirectMapIntInt *m, long key, long value) { long i = __vais_map_int_int_find(m, key); if (i >= 0) { m->values[i] = value; return; } if (m->len >= 256) __builtin_trap(); i = m->len++; m->present[i] = 1; m->keys[i] = key; m->values[i] = value; }\n");
@@ -11648,6 +31049,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "static long __vais_map_int_int_get_opt(DirectMapIntInt *m, long key) { long i = __vais_map_int_int_find(m, key); return i >= 0 ? (m->values[i] * 2) : 1; }\n");
     sb_append(&out, "static long __vais_map_int_int_contains(DirectMapIntInt *m, long key) { return __vais_map_int_int_find(m, key) >= 0 ? 1 : 0; }\n");
     sb_append(&out, "static long __vais_map_int_int_len(DirectMapIntInt *m) { return m->len; }\n");
+    sb_append(&out, "static long __vais_map_int_int_key_at(DirectMapIntInt *m, long index) { if (index < 0 || index >= m->len) __builtin_trap(); return m->keys[index]; }\n");
+    sb_append(&out, "static long __vais_map_int_int_value_at(DirectMapIntInt *m, long index) { if (index < 0 || index >= m->len) __builtin_trap(); return m->values[index]; }\n");
     sb_append(&out, "typedef struct { const char *keys[256]; long values[256]; unsigned char present[256]; long len; } DirectMapStrInt;\n");
     sb_append(&out, "static long __vais_map_str_int_find(DirectMapStrInt *m, const char *key) { for (long i = 0; i < m->len; i++) if (m->present[i] && strcmp(m->keys[i], key) == 0) return i; return -1; }\n");
     sb_append(&out, "static void __vais_map_str_int_insert(DirectMapStrInt *m, const char *key, long value) { long i = __vais_map_str_int_find(m, key); if (i >= 0) { m->values[i] = value; return; } if (m->len >= 256) __builtin_trap(); i = m->len++; m->present[i] = 1; m->keys[i] = key; m->values[i] = value; }\n");
@@ -11658,10 +31061,32 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "static long __vais_map_str_int_get_opt(DirectMapStrInt *m, const char *key) { long i = __vais_map_str_int_find(m, key); return i >= 0 ? (m->values[i] * 2) : 1; }\n");
     sb_append(&out, "static long __vais_map_str_int_contains(DirectMapStrInt *m, const char *key) { return __vais_map_str_int_find(m, key) >= 0 ? 1 : 0; }\n");
     sb_append(&out, "static long __vais_map_str_int_len(DirectMapStrInt *m) { return m->len; }\n");
+    sb_append(&out, "static const char *__vais_map_str_int_key_at(DirectMapStrInt *m, long index) { if (index < 0 || index >= m->len) __builtin_trap(); return m->keys[index]; }\n");
+    sb_append(&out, "static long __vais_map_str_int_value_at(DirectMapStrInt *m, long index) { if (index < 0 || index >= m->len) __builtin_trap(); return m->values[index]; }\n");
+    sb_append(&out, "static long __vais_doc_term_counts_into(const char *text, DirectMapStrInt *out) { __vais_map_str_int_clear(out); long total = 0; long i = 0; while (text[i] != '\\0') { while (text[i] != '\\0' && __vais_str_trim_space((unsigned char)text[i])) i++; long start = i; while (text[i] != '\\0' && !__vais_str_trim_space((unsigned char)text[i])) i++; if (i > start) { const char *raw = __vais_str_slice(text, start, i - start); const char *token = __vais_str_lower(raw); long prev = __vais_map_str_int_get(out, token, 0); __vais_map_str_int_insert(out, token, prev + 1); total++; } } return total; }\n");
+    sb_append(&out, "static long __vais_doc_term_overlap_score(DirectMapStrInt *query, DirectMapStrInt *doc) { long score = 0; for (long i = 0; i < query->len; i++) { long qv = query->values[i]; long dv = __vais_map_str_int_get(doc, query->keys[i], 0); score += qv < dv ? qv : dv; } return score; }\n");
+    sb_append(&out, "static long __vais_doc_term_weighted_score(DirectMapStrInt *query, DirectMapStrInt *doc) { long score = 0; for (long i = 0; i < query->len; i++) { long qv = query->values[i]; long dv = __vais_map_str_int_get(doc, query->keys[i], 0); score += qv * dv; } return score; }\n");
+    sb_append(&out, "typedef struct { const char *keys[256]; const char *values[256]; unsigned char present[256]; long len; } DirectMapStrStr;\n");
+    sb_append(&out, "static long __vais_map_str_str_find(DirectMapStrStr *m, const char *key) { for (long i = 0; i < m->len; i++) if (m->present[i] && strcmp(m->keys[i], key) == 0) return i; return -1; }\n");
+    sb_append(&out, "static void __vais_map_str_str_insert(DirectMapStrStr *m, const char *key, const char *value) { long i = __vais_map_str_str_find(m, key); if (i >= 0) { m->values[i] = value; return; } if (m->len >= 256) __builtin_trap(); i = m->len++; m->present[i] = 1; m->keys[i] = key; m->values[i] = value; }\n");
+    sb_append(&out, "static void __vais_map_str_str_remove(DirectMapStrStr *m, const char *key) { long i = __vais_map_str_str_find(m, key); if (i < 0) return; long last = --m->len; if (i != last) { m->present[i] = m->present[last]; m->keys[i] = m->keys[last]; m->values[i] = m->values[last]; } m->present[last] = 0; }\n");
+    sb_append(&out, "static void __vais_map_str_str_clear(DirectMapStrStr *m) { m->len = 0; }\n");
+    sb_append(&out, "static void __vais_map_str_str_copy(DirectMapStrStr *dst, DirectMapStrStr *src) { *dst = *src; }\n");
+    sb_append(&out, "static const char *__vais_map_str_str_get(DirectMapStrStr *m, const char *key, const char *fallback) { long i = __vais_map_str_str_find(m, key); return i >= 0 ? m->values[i] : fallback; }\n");
+    sb_append(&out, "static long __vais_map_str_str_get_opt(DirectMapStrStr *m, const char *key) { long i = __vais_map_str_str_find(m, key); return i >= 0 ? (long)(uintptr_t)m->values[i] : 1; }\n");
+    sb_append(&out, "static long __vais_map_str_str_contains(DirectMapStrStr *m, const char *key) { return __vais_map_str_str_find(m, key) >= 0 ? 1 : 0; }\n");
+    sb_append(&out, "static long __vais_map_str_str_len(DirectMapStrStr *m) { return m->len; }\n");
+    sb_append(&out, "static const char *__vais_map_str_str_key_at(DirectMapStrStr *m, long index) { if (index < 0 || index >= m->len) __builtin_trap(); return m->keys[index]; }\n");
+    sb_append(&out, "static const char *__vais_map_str_str_value_at(DirectMapStrStr *m, long index) { if (index < 0 || index >= m->len) __builtin_trap(); return m->values[index]; }\n");
+    sb_append(&out, "static const char *__vais_map_str_str_snapshot(DirectMapStrStr *m) { size_t total = 0; for (long i = 0; i < m->len; i++) { if (!m->present[i]) continue; total += strlen(m->keys[i]) + strlen(m->values[i]) + 2; } char *out = (char *)malloc(total + 1); if (out == NULL) return \"\"; size_t pos = 0; for (long i = 0; i < m->len; i++) { if (!m->present[i]) continue; size_t kn = strlen(m->keys[i]); size_t vn = strlen(m->values[i]); memcpy(out + pos, m->keys[i], kn); pos += kn; out[pos++] = '='; memcpy(out + pos, m->values[i], vn); pos += vn; out[pos++] = '\\n'; } out[pos] = '\\0'; return out; }\n");
+    sb_append(&out, "static long __vais_map_str_str_load_snapshot_line(const char *text, DirectMapStrStr *out, long start, long end, long eq) { while (end > start && text[end - 1] == '\\r') end--; if (eq < start || eq >= end || eq == start) return 0; const char *key = __vais_str_slice(text, start, eq - start); const char *value = __vais_str_slice(text, eq + 1, end - eq - 1); __vais_map_str_str_insert(out, key, value); return 1; }\n");
+    sb_append(&out, "static long __vais_map_str_str_load_snapshot(const char *text, DirectMapStrStr *out) { __vais_map_str_str_clear(out); long count = 0; long i = 0; long start = 0; long eq = -1; while (text[i] != '\\0') { if (text[i] == '\\n') { count += __vais_map_str_str_load_snapshot_line(text, out, start, i, eq); i++; start = i; eq = -1; } else { if (text[i] == '=' && eq < 0) eq = i; i++; } } count += __vais_map_str_str_load_snapshot_line(text, out, start, i, eq); return count; }\n");
     for (int s = 0; s < struct_count; s++) {
         sb_append(&out, "typedef struct {");
         for (int f = 0; f < structs[s].field_count; f++) {
-            sb_append(&out, " long ");
+            sb_append(&out, " ");
+            sb_append(&out, direct_c_type(structs[s].field_types[f]));
+            sb_append(&out, " ");
             sb_append(&out, structs[s].fields[f]);
             sb_append(&out, ";");
         }
@@ -11669,12 +31094,28 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
         sb_append(&out, structs[s].name);
         sb_append(&out, ";\n");
     }
+    if (direct_has_process_result_struct(structs, struct_count)) {
+        sb_append(&out, "extern pid_t fork(void);\n");
+        sb_append(&out, "extern int execvp(const char *, char *const []);\n");
+        sb_append(&out, "extern int close(int);\n");
+        sb_append(&out, "extern int unlink(const char *);\n");
+        sb_append(&out, "extern void _exit(int);\n");
+        sb_append(&out, "static const char *__vais_direct_read_all(const char *path) { FILE *fp = fopen(path, \"rb\"); if (fp == NULL) return \"\"; if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return \"\"; } long size = ftell(fp); if (size < 0) { fclose(fp); return \"\"; } if (fseek(fp, 0, SEEK_SET) != 0) { fclose(fp); return \"\"; } char *buf = (char *)malloc((size_t)size + 1); if (buf == NULL) { fclose(fp); return \"\"; } size_t got = fread(buf, 1, (size_t)size, fp); fclose(fp); buf[got] = '\\0'; return buf; }\n");
+        sb_append(&out, "static long __vais_direct_proc_capture_to(DirectList_Str *argv_list, const char *stdout_path, const char *stderr_path) { if (argv_list == NULL || argv_list->len <= 0) return 1; char **argv = (char **)malloc((size_t)(argv_list->len + 1) * sizeof(char *)); if (argv == NULL) return 1; for (long i = 0; i < argv_list->len; i++) argv[i] = (char *)argv_list->data[i]; argv[argv_list->len] = NULL; pid_t pid = fork(); if (pid < 0) { free(argv); return errno == 0 ? 1 : errno; } if (pid == 0) { if (stdout_path != NULL && stdout_path[0] != '\\0') { FILE *out = freopen(stdout_path, \"wb\", stdout); if (out == NULL) _exit(127); } if (stderr_path != NULL && stderr_path[0] != '\\0') { FILE *err = freopen(stderr_path, \"wb\", stderr); if (err == NULL) _exit(127); } execvp(argv[0], argv); fprintf(stderr, \"vais direct proc_capture failed: %s: %s\\n\", argv[0], strerror(errno == 0 ? EIO : errno)); _exit(127); } int status = 0; while (waitpid(pid, &status, 0) < 0) { if (errno == EINTR) continue; int err = errno == 0 ? 1 : errno; free(argv); return err; } free(argv); if (WIFEXITED(status)) return WEXITSTATUS(status); if (WIFSIGNALED(status)) return 128 + WTERMSIG(status); return 1; }\n");
+        sb_append(&out, "static ProcessResult __vais_proc_capture(DirectList_Str *argv) { ProcessResult result = {0}; result.stdout = \"\"; result.stderr = \"\"; char out_template[] = \"/tmp/vais-direct-out-XXXXXX\"; char err_template[] = \"/tmp/vais-direct-err-XXXXXX\"; int out_fd = mkstemp(out_template); if (out_fd < 0) { result.code = 1; return result; } int err_fd = mkstemp(err_template); if (err_fd < 0) { close(out_fd); unlink(out_template); result.code = 1; return result; } close(out_fd); close(err_fd); result.code = __vais_direct_proc_capture_to(argv, out_template, err_template); result.stdout = __vais_direct_read_all(out_template); result.stderr = __vais_direct_read_all(err_template); unlink(out_template); unlink(err_template); return result; }\n");
+    }
+    sb_append(&out, "#define div __vais_user_div\n");
     for (int s = 0; s < struct_count; s++) {
-        sb_append(&out, "typedef struct { ");
-        sb_append(&out, structs[s].name);
-        sb_append(&out, " data[256]; long len; } DirectList_");
-        sb_append(&out, structs[s].name);
-        sb_append(&out, ";\n");
+        if (strcmp(structs[s].name, "Token") == 0) {
+            sb_append(&out, "typedef struct { Token *data; long len; } DirectList_Token;\n");
+            sb_append(&out, "static DirectList_Token __vais_token_list_new(void) { DirectList_Token xs; xs.data = (Token *)calloc(VAIS_DIRECT_TOKEN_CAP, sizeof(Token)); if (xs.data == NULL) __builtin_trap(); xs.len = 0; return xs; }\n");
+        } else {
+            sb_append(&out, "typedef struct { ");
+            sb_append(&out, structs[s].name);
+            sb_append(&out, " data[VAIS_DIRECT_LIST_CAP]; long len; } DirectList_");
+            sb_append(&out, structs[s].name);
+            sb_append(&out, ";\n");
+        }
     }
     for (int f = 0; f < fn_count; f++) {
         sb_append(&out, direct_c_type(fns[f].return_type));
@@ -11694,21 +31135,42 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     int in_main = 0;
     int main_depth = 0;
     int main_has_return = 0;
+    int in_func = 0;
+    int func_depth = 0;
+    StrBuf fn_out;
+    StrBuf fn_decls;
+    sb_init(&fn_out);
+    sb_init(&fn_decls);
     for (size_t i = 0; i < lines.len; i++) {
         if (skip_lines[i]) continue;
+        size_t stmt_end = i;
+        char *line_for_lower = direct_join_delimited_statement(&lines, i, &stmt_end, structs, struct_count);
         DirectFnInfo line_header;
         memset(&line_header, 0, sizeof(line_header));
-        int header_state = parse_direct_fn_header(lines.items[i], &line_header);
+        int header_state = parse_direct_fn_header(line_for_lower, &line_header);
+        if (header_state == 1 && !in_func) {
+            free(fn_out.data);
+            free(fn_decls.data);
+            sb_init(&fn_out);
+            sb_init(&fn_decls);
+            locals.hoist_decls = &fn_decls;
+            in_func = 1;
+            func_depth = 0;
+        }
         if (header_state == 1 && strcmp(line_header.name, "main") == 0) {
             in_main = 1;
             main_depth = 0;
         }
-        if (in_main && strstr(skip_ws(lines.items[i]), "return ") != NULL) main_has_return = 1;
-        if (direct_lower_line(path, (int)i + 1, lines.items[i], &locals, fns, fn_count, structs, struct_count, &out) != 0) {
+        if (in_main && strstr(skip_ws(line_for_lower), "return ") != NULL) main_has_return = 1;
+        StrBuf *target_out = in_func ? &fn_out : &out;
+        if (direct_lower_line(path, (int)i + 1, line_for_lower, &locals, fns, fn_count, structs, struct_count, target_out) != 0) {
             if (header_state == 1) {
                 direct_fns_free(&line_header, 1);
             }
+            free(line_for_lower);
             free(out.data);
+            free(fn_out.data);
+            free(fn_decls.data);
             free(skip_lines);
             direct_names_free(&locals);
             lines_free(&lines);
@@ -11719,17 +31181,36 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
         if (header_state == 1) {
             direct_fns_free(&line_header, 1);
         }
-        if (in_main) {
-            const char *code = lines.items[i];
-            for (int c = 0; code[c] != '\0'; c++) {
-                if (code[c] == '{') main_depth++;
-                if (code[c] == '}') main_depth--;
+        if (in_func) {
+            func_depth += direct_source_brace_delta(line_for_lower);
+            if (func_depth <= 0) {
+                direct_append_function_with_decls(&out, &fn_out, &fn_decls);
+                free(fn_out.data);
+                free(fn_decls.data);
+                sb_init(&fn_out);
+                sb_init(&fn_decls);
+                locals.hoist_decls = NULL;
+                in_func = 0;
+                func_depth = 0;
             }
+        }
+        if (in_main) {
+            main_depth += direct_source_brace_delta(line_for_lower);
             if (main_depth <= 0) {
                 in_main = 0;
                 main_depth = 0;
             }
         }
+        free(line_for_lower);
+        i = stmt_end;
+    }
+    if (in_func) {
+        direct_append_function_with_decls(&out, &fn_out, &fn_decls);
+        free(fn_out.data);
+        free(fn_decls.data);
+        fn_out.data = NULL;
+        fn_decls.data = NULL;
+        locals.hoist_decls = NULL;
     }
     if (!main_has_return) {
         report_issue(path, 1, 1, lines.len ? lines.items[0] : "",
@@ -11737,6 +31218,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
             "write `fn main() -> Int { return 40 + 2 }` for the direct Int subset.",
             "fn main() -> Int { return 40 + 2 }");
         free(out.data);
+        free(fn_out.data);
+        free(fn_decls.data);
         free(skip_lines);
         direct_names_free(&locals);
         lines_free(&lines);
@@ -11746,6 +31229,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     }
 
     free(skip_lines);
+    free(fn_out.data);
+    free(fn_decls.data);
     direct_names_free(&locals);
     lines_free(&lines);
     direct_structs_free(structs, struct_count);
@@ -11766,10 +31251,25 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
         fprintf(stderr, "error: Vais source files must use the .vais extension: %s\n", source);
         return 1;
     }
-    char *raw = read_file(source);
-    if (raw == NULL) return 1;
-    char *c_src = direct_lower_to_c(source, raw);
-    free(raw);
+    char *merged = resolve_module_graph_source(source);
+    if (merged == NULL) return 1;
+    char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(merged);
+    free(merged);
+    if (map_match_lowered == NULL) return 1;
+    char *result_str_lowered = lower_result_str_int_text(map_match_lowered);
+    free(map_match_lowered);
+    if (result_str_lowered == NULL) return 1;
+    char *result_metric_lowered = lower_result_struct_int_text(result_str_lowered);
+    free(result_str_lowered);
+    if (result_metric_lowered == NULL) return 1;
+    char *enum_lowered = lower_enum_text(result_metric_lowered);
+    free(result_metric_lowered);
+    if (enum_lowered == NULL) return 1;
+    char *prepared = lower_list_method_text(enum_lowered);
+    free(enum_lowered);
+    if (prepared == NULL) return 1;
+    char *c_src = direct_lower_to_c(source, prepared);
+    free(prepared);
     if (c_src == NULL) return 1;
 
     char c_path[512];
@@ -11894,7 +31394,9 @@ static int write_host_runtime_c(const char *path) {
         "#include <string.h>\n"
         "#include <stdlib.h>\n"
         "#include <sys/stat.h>\n"
+        "#include <sys/time.h>\n"
         "#include <sys/wait.h>\n"
+        "#include <time.h>\n"
         "#include <unistd.h>\n"
         "\n"
         "int64_t fs_exists(char *path) {\n"
@@ -11918,6 +31420,18 @@ static int write_host_runtime_c(const char *path) {
         "static char *fs_host_copy(const char *text) {\n"
         "    if (text == 0) fs_host_trap(\"copy\", text);\n"
         "    return fs_host_copy_n(text, strlen(text));\n"
+        "}\n"
+        "\n"
+        "int64_t time_millis(void) {\n"
+        "#if defined(CLOCK_MONOTONIC)\n"
+        "    struct timespec ts;\n"
+        "    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {\n"
+        "        return (int64_t)ts.tv_sec * 1000 + (int64_t)(ts.tv_nsec / 1000000);\n"
+        "    }\n"
+        "#endif\n"
+        "    struct timeval tv;\n"
+        "    if (gettimeofday(&tv, 0) != 0) return 0;\n"
+        "    return (int64_t)tv.tv_sec * 1000 + (int64_t)(tv.tv_usec / 1000);\n"
         "}\n"
         "\n"
         "static int vais_host_argc = 0;\n"
@@ -11962,7 +31476,7 @@ static int write_host_runtime_c(const char *path) {
         "    return path[0] == '/';\n"
         "}\n"
         "\n"
-        "char *fs_read_text(char *path) {\n"
+        "char *fs_read_text(const char *path) {\n"
         "    if (path == 0) fs_host_trap(\"read\", path);\n"
         "    FILE *fp = fopen(path, \"rb\");\n"
         "    if (fp == 0) fs_host_trap(\"read\", path);\n"
@@ -11993,7 +31507,7 @@ static int write_host_runtime_c(const char *path) {
         "    return fs_host_copy(tmp);\n"
         "}\n"
         "\n"
-        "char *path_join(char *base, char *child) {\n"
+        "char *path_join(const char *base, const char *child) {\n"
         "    if (base == 0 || child == 0) fs_host_trap(\"path_join\", base == 0 ? base : child);\n"
         "    if (child[0] == '\\0') return fs_host_copy(base);\n"
         "    if (path_is_absolute(child)) return fs_host_copy(child);\n"
@@ -12333,6 +31847,33 @@ static int write_host_runtime_c(const char *path) {
         "    return 1;\n"
         "}\n"
         "\n"
+        "void proc_capture(int64_t *argv_buf, int64_t *out) {\n"
+        "    if (out == 0) fs_host_trap(\"proc_capture\", \"out\");\n"
+        "    out[0] = 1;\n"
+        "    out[1] = (int64_t)(intptr_t)fs_host_copy(\"\");\n"
+        "    out[2] = (int64_t)(intptr_t)fs_host_copy(\"\");\n"
+        "    char out_template[] = \"/tmp/vais-proc-out-XXXXXX\";\n"
+        "    char err_template[] = \"/tmp/vais-proc-err-XXXXXX\";\n"
+        "    int out_fd = mkstemp(out_template);\n"
+        "    if (out_fd < 0) return;\n"
+        "    int err_fd = mkstemp(err_template);\n"
+        "    if (err_fd < 0) {\n"
+        "        close(out_fd);\n"
+        "        unlink(out_template);\n"
+        "        return;\n"
+        "    }\n"
+        "    close(out_fd);\n"
+        "    close(err_fd);\n"
+        "    int64_t code = proc_capture_to(argv_buf, out_template, err_template);\n"
+        "    char *stdout_text = fs_read_text(out_template);\n"
+        "    char *stderr_text = fs_read_text(err_template);\n"
+        "    unlink(out_template);\n"
+        "    unlink(err_template);\n"
+        "    out[0] = code;\n"
+        "    out[1] = (int64_t)(intptr_t)stdout_text;\n"
+        "    out[2] = (int64_t)(intptr_t)stderr_text;\n"
+        "}\n"
+        "\n"
         "static int proc_apply_env(int64_t *env_buf) {\n"
         "    if (env_buf == 0) return 0;\n"
         "    int64_t envc = env_buf[4095];\n"
@@ -12433,7 +31974,7 @@ static int write_host_runtime_c(const char *path) {
         "    return 1;\n"
         "}\n"
         "\n"
-        "int64_t fs_write_text(char *path, char *text) {\n"
+        "int64_t fs_write_text(const char *path, const char *text) {\n"
         "    if (path == 0 || text == 0) return 1;\n"
         "    FILE *fp = fopen(path, \"wb\");\n"
         "    if (fp == 0) return errno == 0 ? 1 : errno;\n"
@@ -12521,6 +32062,18 @@ static int clang_build(const char *clang, const char *ir_path, const char *out_p
     if (make_tmp_path(link_ir_path, sizeof(link_ir_path), "link.ll") != 0) return 1;
     if (write_link_ir_entrypoint(ir_path, link_ir_path) != 0) return 1;
     if (write_host_runtime_c(runtime_path) != 0) return 1;
+#ifdef __APPLE__
+    char *const argv[] = {
+        (char *)clang,
+        "-Wno-override-module",
+        "-Wl,-stack_size,0x4000000",
+        "-o",
+        (char *)out_path,
+        link_ir_path,
+        runtime_path,
+        NULL
+    };
+#else
     char *const argv[] = {
         (char *)clang,
         "-Wno-override-module",
@@ -12530,6 +32083,7 @@ static int clang_build(const char *clang, const char *ir_path, const char *out_p
         runtime_path,
         NULL
     };
+#endif
     int rc = run_program_wait(argv);
     if (rc != 0) {
         fprintf(stderr, "error: clang failed with exit code %d\n", rc);
@@ -12539,25 +32093,94 @@ static int clang_build(const char *clang, const char *ir_path, const char *out_p
 }
 
 static int make_tmp_path(char *buf, size_t buflen, const char *suffix) {
-    char tmpl[] = "/tmp/vaisc-native-XXXXXX";
-    char *dir = mkdtemp(tmpl);
-    if (dir == NULL) {
-        fprintf(stderr, "error: mkdtemp failed: %s\n", strerror(errno));
-        return 1;
+    register_tmp_cleanup();
+    if (!vaisc_tmp_root_ready) {
+        const char *base = getenv("TMPDIR");
+        if (base == NULL || base[0] == '\0') base = "/tmp";
+        size_t len = strlen(base);
+        const char *sep = len > 0 && base[len - 1] == '/' ? "" : "/";
+        char tmpl[512];
+        if (snprintf(tmpl, sizeof(tmpl), "%s%svaisc-native-XXXXXX", base, sep) >= (int)sizeof(tmpl)) {
+            fprintf(stderr, "error: temporary root path too long\n");
+            return 1;
+        }
+        char *dir = mkdtemp(tmpl);
+        if (dir == NULL) {
+            fprintf(stderr, "error: mkdtemp failed: %s\n", strerror(errno));
+            return 1;
+        }
+        if (snprintf(vaisc_tmp_root, sizeof(vaisc_tmp_root), "%s", dir) >= (int)sizeof(vaisc_tmp_root)) {
+            fprintf(stderr, "error: temporary root path too long\n");
+            return 1;
+        }
+        vaisc_tmp_root_ready = 1;
     }
-    if (snprintf(buf, buflen, "%s/%s", dir, suffix) >= (int)buflen) {
+    vaisc_tmp_counter++;
+    if (snprintf(buf, buflen, "%s/%03d-%s", vaisc_tmp_root, vaisc_tmp_counter, suffix) >= (int)buflen) {
         fprintf(stderr, "error: temporary path too long\n");
         return 1;
     }
     return 0;
 }
 
+static void remove_tmp_entry_recursive(const char *path) {
+    struct stat st;
+    if (lstat(path, &st) != 0) return;
+    if (S_ISDIR(st.st_mode)) {
+        DIR *dir = opendir(path);
+        if (dir != NULL) {
+            struct dirent *entry;
+            while ((entry = readdir(dir)) != NULL) {
+                if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+                char child[1024];
+                if (snprintf(child, sizeof(child), "%s/%s", path, entry->d_name) < (int)sizeof(child)) {
+                    remove_tmp_entry_recursive(child);
+                }
+            }
+            closedir(dir);
+        }
+        rmdir(path);
+    } else {
+        unlink(path);
+    }
+}
+
+static void cleanup_tmp_root(void) {
+    if (vaisc_keep_tmp || !vaisc_tmp_root_ready || vaisc_tmp_root[0] == '\0') return;
+    DIR *dir = opendir(vaisc_tmp_root);
+    if (dir != NULL) {
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+            char path[1024];
+            if (snprintf(path, sizeof(path), "%s/%s", vaisc_tmp_root, entry->d_name) < (int)sizeof(path)) {
+                remove_tmp_entry_recursive(path);
+            }
+        }
+        closedir(dir);
+    }
+    rmdir(vaisc_tmp_root);
+}
+
+static void set_keep_tmp(void) {
+    vaisc_keep_tmp = 1;
+}
+
+static void register_tmp_cleanup(void) {
+    static int registered = 0;
+    if (!registered) {
+        atexit(cleanup_tmp_root);
+        registered = 1;
+    }
+}
+
 static void print_help(void) {
     printf("Vais compiler %s\n", VAIS_VERSION);
     printf("usage:\n");
-    printf("  vaisc emit-ir <source.vais> [-o out.ll] [--engine full|direct]\n");
-    printf("  vaisc build <source.vais> -o out [--ir-out out.ll] [--clang clang] [--engine full|direct]\n");
-    printf("  vaisc run <source.vais> [--clang clang] [--engine full|direct]\n");
+    printf("  vaisc emit-ir <source.vais|package-dir> [-o out.ll] [--engine full|direct]\n");
+    printf("  vaisc build <source.vais|package-dir> -o out [--ir-out out.ll] [--clang clang] [--engine full|direct]\n");
+    printf("  vaisc run <source.vais|package-dir> [--clang clang] [--engine full|direct]\n");
+    printf("  vaisc package <package-dir> -o dist-dir [--clang clang] [--engine full|direct] [--archive]\n");
     printf("  vaisc doctor\n");
     printf("  vaisc --version\n");
 }
@@ -12593,6 +32216,7 @@ static int command_emit_ir(int argc, char **argv) {
         } else if (starts_with(argv[i], "--engine=")) {
             engine = argv[i] + 9;
         } else if (strcmp(argv[i], "--keep-tmp") == 0) {
+            set_keep_tmp();
             continue;
         } else if (source == NULL) {
             source = argv[i];
@@ -12602,15 +32226,23 @@ static int command_emit_ir(int argc, char **argv) {
         }
     }
     if (source == NULL) {
-        fprintf(stderr, "error: emit-ir needs a source path\n");
+        fprintf(stderr, "error: emit-ir needs a source path or package directory\n");
         return 1;
     }
-    if (strcmp(engine, "direct") == 0) return direct_emit_ir_file(source, output, clang);
+    char *entry = resolve_cli_source_path(source);
+    if (entry == NULL) return 1;
+    if (strcmp(engine, "direct") == 0) {
+        int rc = direct_emit_ir_file(entry, output, clang);
+        free(entry);
+        return rc;
+    }
     if (strcmp(engine, "full") != 0) {
         fprintf(stderr, "error: unknown engine: %s\n", engine);
+        free(entry);
         return 1;
     }
-    char *prepared = prepare_source_file(source);
+    char *prepared = prepare_source_file(entry);
+    free(entry);
     if (prepared == NULL) return 1;
     int rc = strcmp(output, "-") == 0 ? compile_to_stream(prepared) : compile_to_file(prepared, output);
     free(prepared);
@@ -12636,6 +32268,7 @@ static int command_build(int argc, char **argv) {
         } else if (starts_with(argv[i], "--engine=")) {
             engine = argv[i] + 9;
         } else if (strcmp(argv[i], "--keep-tmp") == 0) {
+            set_keep_tmp();
             continue;
         } else if (source == NULL) {
             source = argv[i];
@@ -12645,29 +32278,200 @@ static int command_build(int argc, char **argv) {
         }
     }
     if (source == NULL || output == NULL) {
-        fprintf(stderr, "error: build needs <source.vais> and -o <out>\n");
+        fprintf(stderr, "error: build needs <source.vais|package-dir> and -o <out>\n");
         return 1;
     }
+    char *entry = resolve_cli_source_path(source);
+    if (entry == NULL) return 1;
     char tmp_ir[512];
     const char *ir_path = ir_out;
     if (ir_path == NULL) {
-        if (make_tmp_path(tmp_ir, sizeof(tmp_ir), "out.ll") != 0) return 1;
+        if (make_tmp_path(tmp_ir, sizeof(tmp_ir), "out.ll") != 0) {
+            free(entry);
+            return 1;
+        }
         ir_path = tmp_ir;
     }
     int rc = 0;
     if (strcmp(engine, "direct") == 0) {
-        rc = direct_emit_ir_file(source, ir_path, clang);
+        rc = direct_emit_ir_file(entry, ir_path, clang);
     } else if (strcmp(engine, "full") == 0) {
-        char *prepared = prepare_source_file(source);
-        if (prepared == NULL) return 1;
+        char *prepared = prepare_source_file(entry);
+        if (prepared == NULL) {
+            free(entry);
+            return 1;
+        }
         rc = compile_to_file(prepared, ir_path);
         free(prepared);
     } else {
         fprintf(stderr, "error: unknown engine: %s\n", engine);
+        free(entry);
         return 1;
     }
+    free(entry);
     if (rc != 0) return rc;
     return clang_build(clang, ir_path, output);
+}
+
+static int command_package(int argc, char **argv) {
+    const char *source = NULL;
+    const char *output_dir = NULL;
+    const char *engine = "full";
+    const char *clang = getenv("CLANG");
+    int make_archive = 0;
+    if (clang == NULL || clang[0] == '\0') clang = "clang";
+    for (int i = 2; i < argc; i++) {
+        if ((strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) && i + 1 < argc) {
+            output_dir = argv[++i];
+        } else if (strcmp(argv[i], "--clang") == 0 && i + 1 < argc) {
+            clang = argv[++i];
+        } else if (strcmp(argv[i], "--engine") == 0 && i + 1 < argc) {
+            engine = argv[++i];
+        } else if (starts_with(argv[i], "--engine=")) {
+            engine = argv[i] + 9;
+        } else if (strcmp(argv[i], "--archive") == 0) {
+            make_archive = 1;
+        } else if (strcmp(argv[i], "--keep-tmp") == 0) {
+            set_keep_tmp();
+            continue;
+        } else if (source == NULL) {
+            source = argv[i];
+        } else {
+            fprintf(stderr, "error: unexpected argument: %s\n", argv[i]);
+            return 1;
+        }
+    }
+    if (source == NULL || output_dir == NULL) {
+        fprintf(stderr, "error: package needs <package-dir> and -o <dist-dir>\n");
+        return 1;
+    }
+    if (!path_is_directory_c(source)) {
+        fprintf(stderr, "error: package needs a package directory, got: %s\n", source);
+        return 1;
+    }
+
+    char *manifest_path = path_join2(source, "vais.toml");
+    if (!path_is_regular_file_c(manifest_path)) {
+        fprintf(stderr, "error: package manifest not found: %s\n", manifest_path);
+        fprintf(stderr, "help: package directories must contain vais.toml.\n");
+        free(manifest_path);
+        return 1;
+    }
+
+    PackageManifestInfo info;
+    if (parse_package_manifest_info(manifest_path, &info) != 0) {
+        package_manifest_info_free(&info);
+        free(manifest_path);
+        return 1;
+    }
+    const char *binary_name = info.binary != NULL ? info.binary : info.name;
+    int binary_line = info.binary != NULL ? info.binary_line : info.name_line;
+    const char *binary_text = info.binary != NULL ? info.binary_text : info.name_text;
+    if (!package_binary_name_is_safe_c(binary_name)) {
+        report_issue(manifest_path, binary_line, 1, binary_text,
+            info.binary != NULL ? "package manifest binary cannot be used as a binary name" : "package manifest name cannot be used as a binary name",
+            "use letters, digits, `_`, `-`, or `.`, and do not start with `.` or `-`.",
+            NULL);
+        package_manifest_info_free(&info);
+        free(manifest_path);
+        return 1;
+    }
+    if (make_archive && !package_binary_name_is_safe_c(info.version)) {
+        report_issue(manifest_path, info.version_line, 1, info.version_text,
+            "package manifest version cannot be used in an archive filename",
+            "use letters, digits, `_`, `-`, or `.`, and do not start with `.` or `-`.",
+            NULL);
+        package_manifest_info_free(&info);
+        free(manifest_path);
+        return 1;
+    }
+
+    char *source_root = package_manifest_source_root(manifest_path, &info);
+    if (source_root == NULL) {
+        package_manifest_info_free(&info);
+        free(manifest_path);
+        return 1;
+    }
+    char *assets_root = package_manifest_assets_root(manifest_path, &info);
+    if (info.assets != NULL && assets_root == NULL) {
+        free(source_root);
+        package_manifest_info_free(&info);
+        free(manifest_path);
+        return 1;
+    }
+    char *entry = path_join2(source_root, "main.vais");
+    if (!path_is_regular_file_c(entry)) {
+        StrBuf help;
+        sb_init(&help);
+        sb_append(&help, "create ");
+        sb_append(&help, entry);
+        sb_append(&help, " or compile an explicit `.vais` entry file with `build`.");
+        report_issue(manifest_path, info.source_line, 1, info.source_text,
+            "package directory entry `main.vais` not found", help.data, NULL);
+        free(help.data);
+        free(entry);
+        free(assets_root);
+        free(source_root);
+        package_manifest_info_free(&info);
+        free(manifest_path);
+        return 1;
+    }
+
+    char *bin_dir = path_join2(output_dir, "bin");
+    int rc = mkdir_p_c(bin_dir);
+    if (rc == 0) {
+        char tmp_ir[512];
+        if (make_tmp_path(tmp_ir, sizeof(tmp_ir), "package.ll") != 0) {
+            rc = 1;
+        } else {
+            char *bin_path = path_join2(bin_dir, binary_name);
+            if (strcmp(engine, "direct") == 0) {
+                rc = direct_emit_ir_file(entry, tmp_ir, clang);
+            } else if (strcmp(engine, "full") == 0) {
+                char *prepared = prepare_source_file(entry);
+                if (prepared == NULL) {
+                    rc = 1;
+                } else {
+                    rc = compile_to_file(prepared, tmp_ir);
+                    free(prepared);
+                }
+            } else {
+                fprintf(stderr, "error: unknown engine: %s\n", engine);
+                rc = 1;
+            }
+            if (rc == 0) rc = clang_build(clang, tmp_ir, bin_path);
+            if (rc == 0) {
+                char *manifest_copy = path_join2(output_dir, "vais.toml");
+                rc = copy_file_text_c(manifest_path, manifest_copy);
+                if (rc == 0 && assets_root != NULL) {
+                    char *assets_copy = path_join2(output_dir, "assets");
+                    rc = copy_tree_c(assets_root, assets_copy);
+                    free(assets_copy);
+                }
+                if (rc == 0) {
+                    printf("packaged: %s\n", bin_path);
+                    if (make_archive) {
+                        char *archive_path = NULL;
+                        rc = package_create_archive(output_dir, binary_name, info.version, bin_path, manifest_path, assets_root, &archive_path);
+                        if (rc == 0) {
+                            printf("archive: %s\n", archive_path);
+                            free(archive_path);
+                        }
+                    }
+                }
+                free(manifest_copy);
+            }
+            free(bin_path);
+        }
+    }
+
+    free(bin_dir);
+    free(entry);
+    free(assets_root);
+    free(source_root);
+    package_manifest_info_free(&info);
+    free(manifest_path);
+    return rc;
 }
 
 static int command_run(int argc, char **argv) {
@@ -12694,6 +32498,7 @@ static int command_run(int argc, char **argv) {
         } else if (starts_with(argv[i], "--engine=")) {
             engine = argv[i] + 9;
         } else if (strcmp(argv[i], "--keep-tmp") == 0) {
+            set_keep_tmp();
             continue;
         } else if (source == NULL) {
             source = argv[i];
@@ -12703,7 +32508,7 @@ static int command_run(int argc, char **argv) {
         }
     }
     if (source == NULL) {
-        fprintf(stderr, "error: run needs a source path\n");
+        fprintf(stderr, "error: run needs a source path or package directory\n");
         return 1;
     }
     char bin_path[512];
@@ -12733,6 +32538,7 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "doctor") == 0) return command_doctor();
     if (strcmp(argv[1], "emit-ir") == 0) return command_emit_ir(argc, argv);
     if (strcmp(argv[1], "build") == 0) return command_build(argc, argv);
+    if (strcmp(argv[1], "package") == 0) return command_package(argc, argv);
     if (strcmp(argv[1], "run") == 0) return command_run(argc, argv);
     fprintf(stderr, "error: unknown command: %s\n", argv[1]);
     print_help();

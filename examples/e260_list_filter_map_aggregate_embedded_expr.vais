@@ -1,0 +1,30 @@
+# expect: 42
+# List<Int> filter-map aggregates can appear inside broader Int expressions.
+
+fn weigh(value: Int) -> Int {
+    return value
+}
+
+fn local_flow(scores: List<Int>) -> Int {
+    let mut total = 3
+    total = total + scores.filter(|score| score > 10).map(|score| score + 1).sum()
+    let offset = 2 + scores.filter(|score| score < 20).map(|score| score * 2).min()
+    let via_call = weigh(1 + scores.filter(|score| score > 10).map(|score| score + 4).max())
+    let values: List<Int> = []
+    values.push(total + scores.filter(|score| score > 10).map(|score| score + 1).sum())
+    values.insert_at(0, 4 + scores.filter(|score| score < 20).map(|score| score * 2).min())
+    return total + offset + via_call + values[0] + values[1] - 143
+}
+
+fn return_flow(base: Int, scores: List<Int>) -> Int {
+    return base + scores.filter(|score| score > 10).map(|score| score + 4).max()
+}
+
+fn main() -> Int {
+    let scores: List<Int> = []
+    scores.push(7)
+    scores.push(18)
+    scores.push(20)
+    if local_flow(scores) != 42 { return 1 }
+    return return_flow(18, scores)
+}

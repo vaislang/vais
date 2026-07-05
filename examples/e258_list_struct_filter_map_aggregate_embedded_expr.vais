@@ -1,0 +1,32 @@
+# expect: 42
+# Filter-map Int aggregates can appear inside broader Int expressions.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn weigh(value: Int) -> Int {
+    return value
+}
+
+fn local_flow(docs: List<Doc>) -> Int {
+    let mut total = 3
+    total = total + docs.filter(|doc| str_contains(doc.body, "tokens") == 1).map(|doc| doc.score).sum()
+    let offset = 2 + docs.filter(|doc| doc.score > 6).map(|doc| doc.score - 1).min()
+    let via_call = weigh(1 + docs.filter(|doc| doc.score > 6).map(|doc| doc.score + 1).max())
+    let values: List<Int> = []
+    values.push(total + docs.filter(|doc| str_contains(doc.body, "tokens") == 1).map(|doc| doc.score).sum())
+    values.insert_at(0, 4 + docs.filter(|doc| doc.score > 6).map(|doc| doc.score - 1).min())
+    return total + offset + via_call + values[0] + values[1] - 140
+}
+
+fn return_flow(base: Int, docs: List<Doc>) -> Int {
+    return base + docs.filter(|doc| doc.score > 6).map(|doc| doc.score + 1).max()
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    if local_flow(docs) != 42 { return 1 }
+    return return_flow(21, docs)
+}

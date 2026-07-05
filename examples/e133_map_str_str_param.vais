@@ -1,0 +1,22 @@
+# expect: 42
+
+fn put_doc(docs: Map<Str,Str>, key: Str, value: Str) -> Int {
+    docs.insert(key, value)
+    docs.insert("tmp", "drop")
+    docs.remove("tmp")
+    return docs.len()
+}
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    let key: Str = "doc"
+    let value: Str = "learned"
+    let n = put_doc(docs, key, value)
+    if docs.get(key, "") != "learned" {
+        return 1
+    }
+    if docs.contains("tmp") {
+        return 2
+    }
+    return n * 40 + docs.len() + 1
+}

@@ -1,0 +1,40 @@
+# expect: 42
+# Result<Entry,Int> declared multiline struct payload forwarding and field recovery.
+
+struct Entry {
+    title_len: Int,
+    body_terms: Int,
+    query_hits: Int,
+    rank: Int
+}
+
+fn build_entry(title_len: Int, body_terms: Int, query_hits: Int, rank: Int) -> Result<Entry, Int> {
+    if title_len < 1 { return Err(12) }
+    if body_terms < 1 { return Err(13) }
+    let entry = Entry { title_len: title_len, body_terms: body_terms, query_hits: query_hits, rank: rank }
+    return Ok(entry)
+}
+
+fn entry_score(flow: Result<Entry, Int>, fallback: Int) -> Int {
+    let value = match flow { Ok(entry) => entry.title_len + entry.body_terms + entry.query_hits + entry.rank, Err(code) => fallback + code }
+    return value
+}
+
+fn choose_entry(left: Result<Entry, Int>, right: Result<Entry, Int>) -> Int {
+    let left_score = entry_score(left, 0)
+    let right_score = entry_score(right, 0)
+    if left_score > right_score { return left_score }
+    return right_score
+}
+
+fn main() -> Int {
+    let ok = build_entry(6, 11, 8, 5)
+    let missing = build_entry(0, 5, 3, 2)
+    let ok_score = entry_score(ok, 0)
+    let missing_score = entry_score(missing, 0)
+    let chosen = choose_entry(ok, missing)
+    if ok_score != 30 { return 1 }
+    if missing_score != 12 { return 2 }
+    if chosen != 30 { return 3 }
+    return ok_score + missing_score
+}

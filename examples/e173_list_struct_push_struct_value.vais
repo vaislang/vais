@@ -1,0 +1,21 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn add(xs: List<Box>, value: Box) -> Int {
+    xs.push(value)
+    let tail = xs.last()
+    return tail.value + tail.tag
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    let first = Box { value: 10, tag: 5 }
+    xs.push(first)
+    let second = Box { value: 20, tag: 4 }
+    let score = add(xs, second)
+    return xs[0].value + xs[1].tag + score + 4
+}

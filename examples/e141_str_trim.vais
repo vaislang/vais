@@ -1,0 +1,34 @@
+# expect: 42
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "  VaisDB  ")
+    docs.insert("body", "  vector cache  ")
+    let words: List<Str> = []
+    words.push("  alpha  ")
+    words.push("beta")
+    words.push("  gamma  ")
+    if str_trim("  abc  ") != "abc" {
+        return 1
+    }
+    if str_trim("     ") != "" {
+        return 2
+    }
+    if str_trim(docs.get("title", "")) != "VaisDB" {
+        return 3
+    }
+    if str_trim(docs.value_at(1)) != "vector cache" {
+        return 4
+    }
+    if str_trim(words[0]) != "alpha" {
+        return 5
+    }
+    if str_trim(words.last()) != "gamma" {
+        return 6
+    }
+    if str_trim(words.pop()) != "gamma" {
+        return 7
+    }
+    let clean_title = str_trim(docs.get("title", ""))
+    return clean_title.len() * 7
+}

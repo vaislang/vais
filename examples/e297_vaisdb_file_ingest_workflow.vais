@@ -1,0 +1,84 @@
+# expect: 42
+# File-backed VaisDB workflow: read document/query files, split lines, index
+# term counts, snapshot metadata, and score a query.
+
+fn ingest_file(meta: Map<Str,Str>, title_key: Str, body_key: Str, path: Str, terms: Map<Str,Int>) -> Int {
+    let text = fs_read_text(path)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n < 2 { return 0 }
+    let title = str_trim(lines[0])
+    let body = str_trim(lines[1])
+    if title.len() == 0 { return 0 }
+    if body.len() == 0 { return 0 }
+    meta.insert(title_key, title)
+    meta.insert(body_key, body)
+    return doc_term_counts_into(body, terms)
+}
+
+fn read_query_file(path: Str, query: Map<Str,Int>) -> Int {
+    let text = fs_read_text(path)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n == 0 { return 0 }
+    let query_text = str_trim(lines[0])
+    if query_text.len() == 0 { return 0 }
+    return doc_term_counts_into(query_text, query)
+}
+
+fn run_files(doc_a_path: Str, doc_b_path: Str, query_path: Str) -> Int {
+    let meta: Map<Str,Str> = {}
+    let doc_a: Map<Str,Int> = {}
+    let doc_b: Map<Str,Int> = {}
+
+    let a_total = ingest_file(meta, "d1.title", "d1.body", doc_a_path, doc_a)
+    let b_total = ingest_file(meta, "d2.title", "d2.body", doc_b_path, doc_b)
+    if a_total != 6 { return 20 }
+    if b_total != 4 { return 21 }
+
+    let snapshot = map_str_str_snapshot(meta)
+    let loaded: Map<Str,Str> = {}
+    if map_str_str_load_snapshot(snapshot, loaded) != 4 { return 22 }
+    if loaded.get("d1.title", "") != "VaisDB Guide" { return 23 }
+    if loaded.get("d2.title", "") != "Cache Notes" { return 24 }
+    if loaded.get("d1.body", "").len() == 0 { return 25 }
+    if loaded.get("d2.body", "").len() == 0 { return 26 }
+
+    let query: Map<Str,Int> = {}
+    let q_total = read_query_file(query_path, query)
+    if q_total != 3 { return 27 }
+
+    let a_score = doc_term_weighted_score(query, doc_a)
+    let b_score = doc_term_weighted_score(query, doc_b)
+    if a_score != 8 { return 28 }
+    if b_score != 2 { return 29 }
+    if a_score <= b_score { return 30 }
+
+    return a_score * 5 + b_score
+}
+
+fn run_generated_files() -> Int {
+    let root = fs_temp_dir()
+    let doc_a = path_join(root, "vais-e297-doc-a.txt")
+    let doc_b = path_join(root, "vais-e297-doc-b.txt")
+    let query = path_join(root, "vais-e297-query.txt")
+    let lf = str_byte(10)
+
+    let doc_a_text = str_concat("VaisDB Guide", str_concat(lf, str_concat("AI cache ai CACHE vector ai", lf)))
+    let doc_b_text = str_concat("Cache Notes", str_concat(lf, str_concat("cache cache vector vector", lf)))
+    let query_text = str_concat("ai cache ai", lf)
+
+    if fs_write_text(doc_a, doc_a_text) != 0 { return 2 }
+    if fs_write_text(doc_b, doc_b_text) != 0 { return 3 }
+    if fs_write_text(query, query_text) != 0 { return 4 }
+
+    return run_files(doc_a, doc_b, query)
+}
+
+fn main() -> Int {
+    if proc_argc() == 3 {
+        return run_files(proc_arg(0), proc_arg(1), proc_arg(2))
+    }
+    if proc_argc() != 0 { return 1 }
+    return run_generated_files()
+}

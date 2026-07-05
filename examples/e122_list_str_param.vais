@@ -1,0 +1,25 @@
+# expect: 42
+
+fn score(words: List<Str>) -> Int {
+    let first = words[0]
+    let last = words.last()
+    let tail = words.pop()
+    if first != "alpha" {
+        return 0
+    }
+    if last != "gamma" {
+        return 1
+    }
+    if tail != "gamma" {
+        return 2
+    }
+    return words.len() * 20 + words.is_empty() + tail.len() - 3
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("alpha")
+    words.push("beta")
+    words.push("gamma")
+    return score(words)
+}

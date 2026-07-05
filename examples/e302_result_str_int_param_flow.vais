@@ -1,0 +1,55 @@
+# expect: 42
+# Result<Str,Int> parameter forwarding and inline recovery.
+
+fn read_text_checked(path: Str) -> Result<Str, Int> {
+    if fs_exists(path) != 1 { return Err(10) }
+    let text = fs_read_text(path)
+    if text.len() == 0 { return Err(11) }
+    return Ok(text)
+}
+
+fn read_first_line(path: Str) -> Result<Str, Int> {
+    let text = read_text_checked(path)?
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n == 0 { return Err(12) }
+    let first = str_trim(lines[0])
+    if first.len() == 0 { return Err(13) }
+    return Ok(first)
+}
+
+fn title_len(flow: Result<Str, Int>, fallback: Int) -> Int {
+    let value = match flow { Ok(title) => title.len(), Err(code) => fallback + code }
+    return value
+}
+
+fn normalize_or_code(flow: Result<Str, Int>) -> Str {
+    let value = match flow { Ok(title) => str_lower(title), Err(code) => Str(code) }
+    return value
+}
+
+fn choose_longer(left: Result<Str, Int>, right: Result<Str, Int>) -> Int {
+    let left_len = title_len(left, 0)
+    let right_len = title_len(right, 0)
+    if left_len > right_len { return left_len }
+    return right_len
+}
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let doc = path_join(root, "vais-e302-doc.txt")
+    let missing = path_join(root, "vais-e302-missing/no-doc.txt")
+    let text = str_concat("VaisDB Guide", str_concat(str_byte(10), "AI cache"))
+    if fs_write_text(doc, text) != 0 { return 4 }
+
+    let ok_flow = read_first_line(doc)
+    let missing_flow = read_first_line(missing)
+    let longest = choose_longer(ok_flow, missing_flow)
+    let normalized = normalize_or_code(ok_flow)
+    let missing_text = normalize_or_code(missing_flow)
+
+    if longest != 12 { return 1 }
+    if normalized != "vaisdb guide" { return 2 }
+    if missing_text != "10" { return 3 }
+    return longest * 2 + missing_text.len() + 16
+}

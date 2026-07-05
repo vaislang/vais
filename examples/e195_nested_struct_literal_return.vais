@@ -1,0 +1,21 @@
+# expect: 42
+
+struct Inner {
+    v: Int,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn make(v: Int) -> Outer {
+    return Outer {
+        inner: Inner {
+            v: v,
+        },
+    }
+}
+
+fn main() -> Int {
+    return make(40).inner.v + make(2).inner.v
+}

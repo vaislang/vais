@@ -1,0 +1,166 @@
+# expect: 42
+
+# Reusable Vais-authored benchmark/report tool for the VaisDB indexer prototype.
+
+struct ProcessResult { code: Int, stdout: Str, stderr: Str }
+
+fn append_metric(report: Str, name: Str, value: Int) -> Str {
+    return str_concat(report, str_concat(name, str_concat(Str(value), str_byte(10))))
+}
+
+fn append_text(report: Str, name: Str, value: Str) -> Str {
+    return str_concat(report, str_concat(name, str_concat(value, str_byte(10))))
+}
+
+fn find_repo_root(start: Str) -> Str {
+    let mut cur = start
+    let mut i = 0
+    while i < 8 {
+        let vaisc = path_join(cur, "scripts/vaisc")
+        let example = path_join(cur, "examples/e295_vaisdb_indexer_prototype.vais")
+        if fs_exists(vaisc) == 1 and fs_exists(example) == 1 { return cur }
+        let parent = path_dirname(cur)
+        if parent == cur { return start }
+        cur = parent
+        i = i + 1
+    }
+    return start
+}
+
+fn repo_root() -> Str {
+    if proc_argc() >= 1 { return proc_arg(0) }
+    return find_repo_root(fs_cwd())
+}
+
+fn raw_report_path() -> Str {
+    if proc_argc() >= 2 { return proc_arg(1) }
+    return path_join(fs_temp_dir(), "vaisdb-benchmark-report.txt")
+}
+
+fn summary_report_path() -> Str {
+    if proc_argc() >= 3 { return proc_arg(2) }
+    return path_join(fs_temp_dir(), "vaisdb-benchmark-summary.txt")
+}
+
+fn run_indexer(root: Str, direct: Int) -> ProcessResult {
+    let argv: List<Str> = []
+    argv.push(path_join(root, "scripts/vaisc"))
+    argv.push("run")
+    argv.push(path_join(root, "examples/e295_vaisdb_indexer_prototype.vais"))
+    if direct == 1 {
+        argv.push("--engine")
+        argv.push("direct")
+    }
+    return proc_capture(argv)
+}
+
+fn metric_value(report: Str, prefix: Str) -> Int {
+    let lines: List<Str> = []
+    let line_count = str_split_lines_into(report, lines)
+    if line_count < 0 { return 0 - 1 }
+    for line in lines {
+        if str_starts_with(line, prefix) == 1 {
+            let raw = str_slice(line, prefix.len(), line.len() - prefix.len())
+            return parse_int(raw)
+        }
+    }
+    return 0 - 1
+}
+
+fn build_raw_report(root: Str, out_path: Str) -> Int {
+    let vaisc = path_join(root, "scripts/vaisc")
+    let example = path_join(root, "examples/e295_vaisdb_indexer_prototype.vais")
+    if fs_exists(vaisc) != 1 { return 2 }
+    if fs_exists(example) != 1 { return 3 }
+
+    let direct_start = time_millis()
+    let direct = run_indexer(root, 1)
+    let direct_stop = time_millis()
+    if direct_stop < direct_start { return 4 }
+    if direct.code != 42 { return 5 }
+
+    let default_start = time_millis()
+    let default_run = run_indexer(root, 0)
+    let default_stop = time_millis()
+    if default_stop < default_start { return 6 }
+    if default_run.code != 42 { return 7 }
+
+    let mut report = str_concat("VaisDB CLI benchmark report", str_byte(10))
+    report = append_text(report, "root=", root)
+    report = append_text(report, "example=", example)
+    report = append_metric(report, "direct_code=", direct.code)
+    report = append_metric(report, "direct_ms=", direct_stop - direct_start)
+    report = append_metric(report, "direct_stdout_len=", direct.stdout.len())
+    report = append_metric(report, "direct_stderr_len=", direct.stderr.len())
+    report = append_metric(report, "default_code=", default_run.code)
+    report = append_metric(report, "default_ms=", default_stop - default_start)
+    report = append_metric(report, "default_stdout_len=", default_run.stdout.len())
+    report = append_metric(report, "default_stderr_len=", default_run.stderr.len())
+
+    if fs_write_text(out_path, report) != 0 { return 8 }
+    return 42
+}
+
+fn summarize_report(report: Str, out_path: Str) -> Int {
+    let direct_code = metric_value(report, "direct_code=")
+    let default_code = metric_value(report, "default_code=")
+    let direct_ms = metric_value(report, "direct_ms=")
+    let default_ms = metric_value(report, "default_ms=")
+    let direct_stdout_len = metric_value(report, "direct_stdout_len=")
+    let default_stdout_len = metric_value(report, "default_stdout_len=")
+    let direct_stderr_len = metric_value(report, "direct_stderr_len=")
+    let default_stderr_len = metric_value(report, "default_stderr_len=")
+
+    if direct_code != 42 { return 20 }
+    if default_code != 42 { return 21 }
+    if direct_ms < 0 { return 22 }
+    if default_ms < 0 { return 23 }
+    if direct_stdout_len < 0 { return 24 }
+    if default_stdout_len < 0 { return 25 }
+    if direct_stderr_len < 0 { return 26 }
+    if default_stderr_len < 0 { return 27 }
+
+    let delta = default_ms - direct_ms
+    let mut faster = "tie"
+    if direct_ms < default_ms {
+        faster = "direct"
+    } else if default_ms < direct_ms {
+        faster = "default"
+    }
+
+    let mut summary = str_concat("VaisDB benchmark summary", str_byte(10))
+    summary = append_metric(summary, "direct_ms=", direct_ms)
+    summary = append_metric(summary, "default_ms=", default_ms)
+    summary = append_metric(summary, "delta_ms_default_minus_direct=", delta)
+    summary = append_text(summary, "faster=", faster)
+    summary = append_metric(summary, "direct_stdout_len=", direct_stdout_len)
+    summary = append_metric(summary, "default_stdout_len=", default_stdout_len)
+    summary = append_metric(summary, "direct_stderr_len=", direct_stderr_len)
+    summary = append_metric(summary, "default_stderr_len=", default_stderr_len)
+
+    if fs_write_text(out_path, summary) != 0 { return 28 }
+    let saved = fs_read_text(out_path)
+    if str_contains(saved, "VaisDB benchmark summary") != 1 { return 29 }
+    if str_contains(saved, "direct_ms=") != 1 { return 30 }
+    if str_contains(saved, "default_ms=") != 1 { return 31 }
+    if str_contains(saved, "delta_ms_default_minus_direct=") != 1 { return 32 }
+    if str_contains(saved, "faster=") != 1 { return 33 }
+    return 42
+}
+
+fn run_tool(root: Str, raw_path: Str, summary_path: Str) -> Int {
+    let raw_code = build_raw_report(root, raw_path)
+    if raw_code != 42 { return raw_code }
+    let report = fs_read_text(raw_path)
+    return summarize_report(report, summary_path)
+}
+
+fn usage() -> Int {
+    print("usage: vaisdb-benchmark-report [repo-root] [raw-report] [summary-report]")
+    return 2
+}
+
+fn main() -> Int {
+    if proc_argc() > 3 { return usage() }
+    return run_tool(repo_root(), raw_report_path(), summary_report_path())
+}

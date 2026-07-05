@@ -1,0 +1,41 @@
+# expect: 42
+# Nested struct payloads can be copied through locals and returned in wrappers.
+
+struct DocArtifact { title: Str, score: Int }
+struct VaisResultDocArtifactInt { tag: Int, value: DocArtifact, error: Int }
+
+fn build_doc_artifact(title: Str, score: Int) -> VaisResultDocArtifactInt {
+    if title.len() == 0 {
+        return VaisResultDocArtifactInt { tag: 1, value: DocArtifact { title: "", score: 0 }, error: 20 }
+    }
+    if score < 1 {
+        return VaisResultDocArtifactInt { tag: 1, value: DocArtifact { title: "", score: 0 }, error: 21 }
+    }
+    let artifact = DocArtifact { title: title, score: score }
+    return VaisResultDocArtifactInt { tag: 0, value: artifact, error: 0 }
+}
+
+fn forward_doc(flow: VaisResultDocArtifactInt) -> VaisResultDocArtifactInt {
+    if flow.tag != 0 {
+        return VaisResultDocArtifactInt { tag: 1, value: DocArtifact { title: "", score: 0 }, error: flow.error }
+    }
+    let artifact = flow.value
+    return VaisResultDocArtifactInt { tag: 0, value: artifact, error: 0 }
+}
+
+fn score_doc(flow: VaisResultDocArtifactInt) -> Int {
+    if flow.tag == 0 {
+        let artifact = flow.value
+        return artifact.title.len() + artifact.score
+    }
+    return flow.error
+}
+
+fn main() -> Int {
+    let good = forward_doc(build_doc_artifact("VaisDB", 36))
+    let score = score_doc(good)
+    if score != 42 { return 1 }
+    let bad = forward_doc(build_doc_artifact("", 36))
+    if score_doc(bad) != 20 { return 2 }
+    return score
+}

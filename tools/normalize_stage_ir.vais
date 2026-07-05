@@ -3,6 +3,13 @@ fn is_digit(c: Int) -> Int {
     return 0
 }
 
+struct NameMap {
+    kind: Int,
+    number: Int,
+    replacement: Int,
+    pad: Int,
+}
+
 fn str_eq(a: Str, b: Str) -> Int {
     if a.len() != b.len() { return 0 }
     let mut i = 0
@@ -72,9 +79,30 @@ fn digit_end(text: Str, text_len: Int, start: Int) -> Int {
     return i
 }
 
+fn parse_uint_range(text: Str, start: Int, end: Int) -> Int {
+    let mut value = 0
+    let mut i = start
+    while i < end {
+        value = value * 10 + (text[i] - 48)
+        i = i + 1
+    }
+    return value
+}
+
+fn find_mapping(entries: List<NameMap>, kind: Int, number: Int) -> Int {
+    let mut i = 0
+    while i < entries.len {
+        let item = entries[i]
+        if item.kind == kind and item.number == number {
+            return item.replacement
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
 fn normalize_stage_ir_text(text: Str) -> Str {
-    let keys: List<Str> = []
-    let values: List<Str> = []
+    let entries: List<NameMap> = []
     let out = str_builder_new()
     let text_len = text.len()
     let mut s_count = 0
@@ -93,30 +121,22 @@ fn normalize_stage_ir_text(text: Str) -> Str {
         }
         if kind >= 0 {
             let end = digit_end(text, text_len, digit_start)
-            let key = str_slice(text, i, end - i)
-            let mut found = 0 - 1
-            let mut pos = 0
-            while pos < keys.len {
-                if str_eq(keys[pos], key) == 1 {
-                    found = pos
-                    pos = keys.len
-                } else {
-                    pos = pos + 1
-                }
-            }
+            let number = parse_uint_range(text, digit_start, end)
+            let mut found = find_mapping(entries, kind, number)
             let mut replacement = ""
             if found >= 0 {
-                replacement = values[found]
+                replacement = make_replacement(kind, found)
             } else {
                 if kind == 1 {
-                    replacement = make_replacement(kind, fmt_count)
+                    found = fmt_count
+                    replacement = make_replacement(kind, found)
                     fmt_count = fmt_count + 1
                 } else {
-                    replacement = make_replacement(kind, s_count)
+                    found = s_count
+                    replacement = make_replacement(kind, found)
                     s_count = s_count + 1
                 }
-                keys.push(key)
-                values.push(replacement)
+                entries.push(NameMap { kind: kind, number: number, replacement: found, pad: 0 })
             }
             builder_append_slice(out, text, last, i - last)
             str_builder_append(out, replacement)

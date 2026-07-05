@@ -1,0 +1,32 @@
+# expect: 42
+# List<Struct>.filter(...).map(...) projected scalar lists can be returned directly.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn matching_scores(docs: List<Doc>, needle: Str) -> List<Int> {
+    return docs.filter(|doc| str_contains(doc.body, needle) == 1).map(|doc| doc.score)
+}
+
+fn high_titles(docs: List<Doc>, min: Int) -> List<Str> {
+    return docs.filter(|doc| doc.score > min).map(|doc| doc.title)
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+
+    let scores = matching_scores(docs, "tokens")
+    let titles = high_titles(docs, 10)
+    if scores.len() != 2 { return 1 }
+    if scores.sum() != 38 { return 2 }
+    if titles.len() != 2 { return 3 }
+    if titles.contains("beta") != 1 { return 4 }
+    if titles.contains("gamma") != 1 { return 5 }
+    return scores.sum() + titles.len() + titles.contains("beta") + titles.contains("gamma")
+}

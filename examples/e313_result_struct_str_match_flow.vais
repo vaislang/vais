@@ -1,0 +1,35 @@
+# expect: 42
+# Result<Struct,Int> matches can recover Str fields for report-style code.
+
+struct DocArtifact { id: Str, title: Str, body: Str, terms: Int, score: Int }
+
+fn build_doc_artifact(id: Str, title: Str, body: Str, terms: Int, score: Int) -> Result<DocArtifact, Int> {
+    if id.len() == 0 { return Err(10) }
+    if title.len() == 0 { return Err(11) }
+    if body.len() == 0 { return Err(12) }
+    if terms < 1 { return Err(13) }
+    let artifact = DocArtifact { id: id, title: title, body: body, terms: terms, score: score }
+    return Ok(artifact)
+}
+
+fn title_or_code(flow: Result<DocArtifact, Int>) -> Str {
+    let value = match flow { Ok(artifact) => artifact.title, Err(code) => Str(code) }
+    return value
+}
+
+fn id_or_code(flow: Result<DocArtifact, Int>) -> Str {
+    let value = match flow { Ok(artifact) => artifact.id, Err(code) => Str(code) }
+    return value
+}
+
+fn main() -> Int {
+    let good = build_doc_artifact("d1", "VaisDB Guide", "AI cache", 3, 20)
+    let bad = build_doc_artifact("", "VaisDB Guide", "AI cache", 3, 20)
+    let title = title_or_code(good)
+    let id = id_or_code(good)
+    let code = title_or_code(bad)
+    if title != "VaisDB Guide" { return 1 }
+    if id != "d1" { return 2 }
+    if code != "10" { return 3 }
+    return title.len() * 3 + code.len() * 3
+}

@@ -1,0 +1,27 @@
+# expect: 42
+
+fn main() -> Int {
+    let parts: List<Str> = []
+    parts.push("vais")
+    parts.push("db")
+    parts.push("cache")
+
+    let slug = str_join(parts, "-")
+    if slug != "vais-db-cache" { return 1 }
+
+    let fields: List<Str> = []
+    let n = str_split_into("title=VaisDB=cache", "=", fields)
+    if n != 3 { return 2 }
+    if str_join(fields, "=") != "title=VaisDB=cache" { return 3 }
+
+    let csv: List<Str> = []
+    if str_split_into(",alpha,,beta,", ",", csv) != 5 { return 4 }
+    if str_join(csv, ",") != ",alpha,,beta," { return 5 }
+
+    let empty: List<Str> = []
+    if str_join(empty, "/") != "" { return 6 }
+
+    let compact = str_join(parts, "")
+    let empty_joined = str_join(empty, "/")
+    return slug.len() * 2 + compact.len() + csv.len() + empty_joined.len()
+}

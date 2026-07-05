@@ -1,0 +1,28 @@
+# expect: 42
+# List<Struct>.map(...) Int projection aggregates can keep simple arithmetic tails.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn adjusted_total(docs: List<Doc>, bonus: Int) -> Int {
+    return docs.map(|doc| doc.score).sum() + bonus - 2
+}
+
+fn score_flow(docs: List<Doc>) -> Int {
+    let best = docs.map(|doc| doc.score).max() + 25
+    let low: Int = docs.map(|doc| doc.score).min() * 2
+    let shifted = docs.map(|doc| doc.score).sum() - 36
+    return best + shifted - low
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    if adjusted_total(docs, 1) != 42 { return 1 }
+    return score_flow(docs)
+}

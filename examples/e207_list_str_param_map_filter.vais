@@ -1,0 +1,20 @@
+# expect: 42
+# List<Str> parameters drive map/filter result type inference in helper code.
+fn score_words(words: List<Str>) -> Int {
+    let same = words.map(|w| w)
+    if same.len() != 3 { return 1 }
+    if same.index_of("db") != 1 { return 2 }
+    let selected = same.filter(|w| str_contains(w, "ai") == 1)
+    if selected.len() != 2 { return 3 }
+    if selected.contains("vais") != 1 { return 4 }
+    if selected.contains("ai") != 1 { return 5 }
+    return selected.len() * 20 + selected.contains("vais") + selected.contains("ai")
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("vais")
+    words.push("db")
+    words.push("ai")
+    return score_words(words)
+}

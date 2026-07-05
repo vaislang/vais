@@ -38,14 +38,23 @@ fn append_line(out: Int, line: Str) -> Int {
     return 0
 }
 
-fn write_import_source(path: Str) -> Int {
+fn write_import_sources(root: Str) -> Str {
+    let math_dir = path_join(root, "math")
+    if fs_mkdirs(math_dir) != 0 { return "" }
+    let add = str_builder_new()
+    append_line(add, "fn add(a: Int, b: Int) -> Int {")
+    append_line(add, "    return a + b")
+    append_line(add, "}")
+    if fs_write_text(path_join(math_dir, "add.vais"), str_builder_finish(add)) != 0 { return "" }
     let out = str_builder_new()
     append_line(out, "import math.add")
     append_line(out, "")
     append_line(out, "fn main() -> Int {")
-    append_line(out, "    return 42")
+    append_line(out, "    return add(20, 22)")
     append_line(out, "}")
-    return fs_write_text(path, str_builder_finish(out))
+    let main_path = path_join(root, "main.vais")
+    if fs_write_text(main_path, str_builder_finish(out)) != 0 { return "" }
+    return main_path
 }
 
 fn write_bad_index_source(path: Str) -> Int {
@@ -98,23 +107,36 @@ fn capture_run_direct(vaisc: Str, src: Str, out_path: Str, err_path: Str) -> Int
     return proc_capture_to(argv, out_path, err_path)
 }
 
-fn expect_direct_reject(vaisc: Str, tmp: Str) -> Int {
-    let src = path_join(tmp, "direct_import.vais")
-    let ll = path_join(tmp, "direct_import.ll")
-    let out_path = path_join(tmp, "direct_import.out")
-    let err_path = path_join(tmp, "direct_import.err")
-    if write_import_source(src) != 0 {
-        print("  FAIL direct reject import source write")
+fn expect_direct_import_accept(vaisc: Str, tmp: Str) -> Int {
+    let root = path_join(tmp, "direct_import")
+    let src = write_import_sources(root)
+    let ll = path_join(root, "direct_import.ll")
+    let out_path = path_join(root, "direct_import.out")
+    let err_path = path_join(root, "direct_import.err")
+    let run_out = path_join(root, "direct_import_run.out")
+    let run_err = path_join(root, "direct_import_run.err")
+    if src.len() == 0 {
+        print("  FAIL direct import source write")
         return 1
     }
     let rc = capture_emit_direct(vaisc, src, ll, out_path, err_path)
-    let err = fs_read_text(err_path)
-    if rc != 0 and str_contains(err, "direct native emitter does not support imports") == 1 and str_contains(err, "use the full engine for local imports") == 1 {
-        print("  PASS direct rejects import")
+    if rc != 0 {
+        print(str_concat("  FAIL direct import emit rc=", uint_to_str(rc)))
+        if fs_exists(err_path) == 1 { print(fs_read_text(err_path)) }
+        return 1
+    }
+    let ir = fs_read_text(ll)
+    if str_contains(ir, "define i64 @add") != 1 or str_contains(ir, "call i64 @add") != 1 {
+        print("  FAIL direct import IR missing imported helper")
+        return 1
+    }
+    let got = capture_run_direct(vaisc, src, run_out, run_err)
+    if got == 42 {
+        print("  PASS direct accepts import")
         return 0
     }
-    print(str_concat("  FAIL direct reject import rc=", uint_to_str(rc)))
-    print(err)
+    print(str_concat("  FAIL direct import run got=", uint_to_str(got)))
+    if fs_exists(run_err) == 1 { print(fs_read_text(run_err)) }
     return 1
 }
 
@@ -171,7 +193,7 @@ fn main() -> Int {
     }
     let vaisc = path_join(root, "scripts/vaisc")
     let mut fail = 0
-    fail = fail + expect_direct_reject(vaisc, tmp)
+    fail = fail + expect_direct_import_accept(vaisc, tmp)
     fail = fail + check_traps(vaisc, tmp)
     return fail
 }

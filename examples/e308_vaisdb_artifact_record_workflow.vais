@@ -1,0 +1,103 @@
+# expect: 42
+# VaisDB artifact record workflow with Result<DocArtifact,Int> payload `?`.
+
+struct DocArtifact { id: Str, title: Str, body: Str, terms: Int, score: Int }
+
+fn build_doc_artifact(id: Str, title: Str, body: Str, terms: Int, score: Int) -> Result<DocArtifact, Int> {
+    if id.len() == 0 { return Err(10) }
+    if title.len() == 0 { return Err(11) }
+    if body.len() == 0 { return Err(12) }
+    if terms < 1 { return Err(13) }
+    let artifact = DocArtifact { id: id, title: title, body: body, terms: terms, score: score }
+    return Ok(artifact)
+}
+
+fn build_ranked_artifact(id: Str, title: Str, body: Str, terms: Int, score: Int) -> Result<DocArtifact, Int> {
+    let artifact: DocArtifact = build_doc_artifact(id, title, body, terms, score)?
+    if artifact.score < 1 { return Err(14) }
+    let ranked = DocArtifact { id: artifact.id, title: artifact.title, body: artifact.body, terms: artifact.terms, score: artifact.score + artifact.title.len() }
+    return Ok(ranked)
+}
+
+fn add_artifact_meta(meta: Map<Str,Str>, artifact: DocArtifact) -> Int {
+    if artifact.id == "d1" {
+        meta.insert("d1.title", artifact.title)
+        meta.insert("d1.body", artifact.body)
+        return 2
+    }
+    if artifact.id == "d2" {
+        meta.insert("d2.title", artifact.title)
+        meta.insert("d2.body", artifact.body)
+        return 2
+    }
+    return 0
+}
+
+fn index_artifacts(meta: Map<Str,Str>, query_text: Str, out: List<DocArtifact>) -> Result<Int, Int> {
+    if query_text.len() == 0 { return Err(20) }
+    let query: Map<Str,Int> = {}
+    let q_total = doc_term_counts_into(query_text, query)
+    if q_total != 3 { return Err(21) }
+
+    let doc_a_terms: Map<Str,Int> = {}
+    let doc_b_terms: Map<Str,Int> = {}
+    let a_terms = doc_term_counts_into("AI cache ai CACHE vector ai", doc_a_terms)
+    let b_terms = doc_term_counts_into("cache cache vector vector", doc_b_terms)
+    if a_terms != 6 { return Err(22) }
+    if b_terms != 4 { return Err(23) }
+    let a_score = doc_term_weighted_score(query, doc_a_terms)
+    let b_score = doc_term_weighted_score(query, doc_b_terms)
+    if a_score != 8 { return Err(24) }
+    if b_score != 2 { return Err(25) }
+
+    let a: DocArtifact = build_ranked_artifact("d1", "VaisDB Guide", "AI cache ai CACHE vector ai", a_terms, a_score)?
+    let b: DocArtifact = build_ranked_artifact("d2", "Cache Notes", "cache cache vector vector", b_terms, b_score)?
+    out.push(a)
+    out.push(b)
+
+    let meta_count = add_artifact_meta(meta, a) + add_artifact_meta(meta, b)
+    if meta_count != 4 { return Err(26) }
+    return Ok(a.score + b.score + out.len() + q_total + meta_count)
+}
+
+fn index_bad_artifact(out: List<DocArtifact>) -> Result<Int, Int> {
+    let query: Map<Str,Int> = {}
+    let q_total = doc_term_counts_into("ai cache ai", query)
+    if q_total != 3 { return Err(30) }
+    let bad: DocArtifact = build_ranked_artifact("d3", "Broken", "", q_total, 3)?
+    out.push(bad)
+    return Ok(out.len())
+}
+
+fn result_value(flow: Result<Int, Int>) -> Int {
+    let value = match flow { Ok(score) => score, Err(code) => code }
+    return value
+}
+
+fn main() -> Int {
+    let meta: Map<Str,Str> = {}
+    let artifacts: List<DocArtifact> = []
+
+    let ok = result_value(index_artifacts(meta, "ai cache ai", artifacts))
+    if ok != 42 { return 1 }
+    if artifacts.len() != 2 { return 2 }
+    if artifacts[0].title != "VaisDB Guide" { return 3 }
+    if artifacts[0].score != 20 { return 4 }
+    if artifacts[1].score != 13 { return 5 }
+
+    let snapshot = map_str_str_snapshot(meta)
+    let loaded: Map<Str,Str> = {}
+    if map_str_str_load_snapshot(snapshot, loaded) != 4 { return 6 }
+    if loaded.get("d1.title", "") != artifacts[0].title { return 7 }
+    if loaded.get("d2.body", "").len() != artifacts[1].body.len() { return 8 }
+
+    let missing_query_meta: Map<Str,Str> = {}
+    let missing_query_artifacts: List<DocArtifact> = []
+    if result_value(index_artifacts(missing_query_meta, "", missing_query_artifacts)) != 20 { return 9 }
+
+    let bad_artifacts: List<DocArtifact> = []
+    if result_value(index_bad_artifact(bad_artifacts)) != 12 { return 10 }
+    if bad_artifacts.len() != 0 { return 11 }
+
+    return ok
+}

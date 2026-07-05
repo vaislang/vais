@@ -1,0 +1,20 @@
+# expect: 42
+# List<Str> pipeline scalar calls can appear after an existing arithmetic term in reassignments.
+
+fn score(words: List<Str>, needle: Str) -> Int {
+    let mut total = 0
+    total = total + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).len()
+    total = total + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).count("ai")
+    total = total + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).index_of("vais") + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).index_of("ai")
+    total = total + words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).len() + words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).count("ai")
+    return total + 31
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  Vais")
+    words.push("AI")
+    words.push("db")
+    words.push("ai  ")
+    return score(words, "ai")
+}

@@ -1,0 +1,56 @@
+# expect: 42
+# Small Vais-authored document indexer prototype: ingest, metadata snapshot,
+# term-count indexing, visible error codes, and ranked query scoring.
+
+fn require_present_len(meta: Map<Str,Str>, key: Str) -> Int {
+    return match meta.get_opt(key) { Some(value) => str_trim(value).len(), None => 0 }
+}
+
+fn ingest_doc(meta: Map<Str,Str>, title_key: Str, body_key: Str, title: Str, body: Str, terms: Map<Str,Int>) -> Int {
+    if title.len() == 0 { return 0 }
+    if body.len() == 0 { return 0 }
+    meta.insert(title_key, title)
+    meta.insert(body_key, body)
+    return doc_term_counts_into(body, terms)
+}
+
+fn run_indexer() -> Int {
+    let meta: Map<Str,Str> = {}
+    let doc_a: Map<Str,Int> = {}
+    let doc_b: Map<Str,Int> = {}
+
+    let a_total = ingest_doc(meta, "d1.title", "d1.body", "VaisDB Guide", "AI cache ai CACHE vector ai", doc_a)
+    let b_total = ingest_doc(meta, "d2.title", "d2.body", "Cache Notes", "cache cache vector vector", doc_b)
+
+    if a_total != 6 { return 20 }
+    if b_total != 4 { return 21 }
+    if meta.len() != 4 { return 22 }
+
+    let snapshot = map_str_str_snapshot(meta)
+    let loaded: Map<Str,Str> = {}
+    if map_str_str_load_snapshot(snapshot, loaded) != 4 { return 23 }
+    if loaded.get("d1.title", "") != "VaisDB Guide" { return 24 }
+    if loaded.get("d2.title", "") != "Cache Notes" { return 25 }
+
+    let title_len = require_present_len(loaded, "d1.title")
+    let body_len = require_present_len(loaded, "d2.body")
+    if title_len == 0 { return 26 }
+    if body_len == 0 { return 27 }
+    if require_present_len(loaded, "d3.title") != 0 { return 28 }
+
+    let query: Map<Str,Int> = {}
+    let q_total = doc_term_counts_into("ai cache ai", query)
+    if q_total != 3 { return 29 }
+
+    let a_score = doc_term_weighted_score(query, doc_a)
+    let b_score = doc_term_weighted_score(query, doc_b)
+    if a_score != 8 { return 30 }
+    if b_score != 2 { return 31 }
+    if a_score <= b_score { return 32 }
+
+    return a_score * 5 + b_score
+}
+
+fn main() -> Int {
+    return run_indexer()
+}

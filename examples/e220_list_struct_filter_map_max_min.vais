@@ -1,0 +1,37 @@
+# expect: 42
+# List<Struct>.filter(...).map(...).max()/min() ranks projected Int fields directly.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn best_matching_score(docs: List<Doc>, needle: Str) -> Int {
+    return docs.filter(|doc| str_contains(doc.body, needle) == 1).map(|doc| doc.score).max()
+}
+
+fn lowest_high_score(docs: List<Doc>, min: Int) -> Int {
+    let low: Int = docs.filter(|doc| doc.score > min).map(|doc| doc.score).min()
+    return low
+}
+
+fn boosted_title_score(docs: List<Doc>, needle: Str, boost: Int) -> Int {
+    let best = docs.filter(|doc| str_contains(doc.title, needle) == 1).map(|doc| doc.score + boost).max()
+    return best
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+
+    let token_best = best_matching_score(docs, "tokens")
+    let high_low = lowest_high_score(docs, 10)
+    let boosted = boosted_title_score(docs, "alpha", 37)
+    if token_best != 20 { return 1 }
+    if high_low != 18 { return 2 }
+    if boosted != 42 { return 3 }
+    return token_best + high_low + boosted - 38
+}

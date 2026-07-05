@@ -1,0 +1,20 @@
+# expect: 42
+# List<Struct>.filter(...).first()/last() can feed push/insert_at directly.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn collect_matches(docs: List<Doc>, needle: Str, min_score: Int) -> List<Doc> {
+    let out: List<Doc> = []
+    out.push(docs.filter(|doc| str_contains(doc.body, needle) == 1).first())
+    out.insert_at(0, docs.filter(|doc| doc.score > min_score).last())
+    return out
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 9 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    let hits = collect_matches(docs, "tokens", 10)
+    return hits[0].score + hits[1].title.len() + hits.len() + 16
+}

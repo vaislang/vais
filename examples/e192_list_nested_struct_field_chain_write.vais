@@ -1,0 +1,25 @@
+# expect: 42
+
+struct Inner {
+    v: Int,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn bump(xs: List<Outer>) -> Int {
+    xs[0].inner.v = xs[0].inner.v + 1
+    return xs[0].inner.v
+}
+
+fn main() -> Int {
+    let xs: List<Outer> = []
+    xs.push(Outer {
+        inner: Inner {
+            v: 40,
+        },
+    })
+    xs[0].inner.v = xs[0].inner.v + 1
+    return bump(xs)
+}

@@ -1,0 +1,35 @@
+# expect: 42
+# List<Struct>.map(...) can project record fields into reusable scalar lists.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn matching_scores(docs: List<Doc>, needle: Str) -> List<Int> {
+    let matches = docs.filter(|doc| str_contains(doc.body, needle) == 1)
+    let scores = matches.map(|doc| doc.score)
+    return scores
+}
+
+fn high_titles(docs: List<Doc>, min: Int) -> List<Str> {
+    let high = docs.filter(|doc| doc.score > min)
+    let titles: List<Str> = high.map(|doc| doc.title)
+    return titles
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+
+    let scores = matching_scores(docs, "tokens")
+    let titles = high_titles(docs, 10)
+    if scores.len() != 2 { return 1 }
+    if titles.len() != 2 { return 2 }
+    if titles.contains("beta") != 1 { return 3 }
+    if titles.contains("gamma") != 1 { return 4 }
+    return scores.sum() + titles.len() + titles.contains("beta") + titles.contains("gamma")
+}

@@ -1,0 +1,28 @@
+# expect: 42
+# List<Struct>.filter(...).first()/last().str_field.len() reads matched field lengths directly.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn first_matching_title_len(docs: List<Doc>, needle: Str) -> Int {
+    return docs.filter(|doc| str_contains(doc.body, needle) == 1).first().title.len()
+}
+
+fn last_high_body_len(docs: List<Doc>, min_score: Int) -> Int {
+    let body_len: Int = docs.filter(|doc| doc.score > min_score).last().body.len()
+    return body_len
+}
+
+fn last_matching_title_len(docs: List<Doc>, needle: Str) -> Int {
+    return docs.filter(|doc| str_contains(doc.body, needle) == 1).last().title.len()
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    let first = first_matching_title_len(docs, "tokens")
+    let last_body = last_high_body_len(docs, 10)
+    let last_title = last_matching_title_len(docs, "tokens")
+    return first + last_body + last_title + 21
+}

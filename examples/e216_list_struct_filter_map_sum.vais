@@ -1,0 +1,32 @@
+# expect: 42
+# List<Struct>.filter(...).map(...).sum() can aggregate record scores directly.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn matching_score_sum(docs: List<Doc>, needle: Str) -> Int {
+    return docs.filter(|doc| str_contains(doc.body, needle) == 1).map(|doc| doc.score).sum()
+}
+
+fn high_score_sum(docs: List<Doc>, min: Int) -> Int {
+    let total: Int = docs.filter(|doc| doc.score > min).map(|doc| doc.score).sum()
+    return total
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+
+    let token_score = matching_score_sum(docs, "tokens")
+    let high_score = high_score_sum(docs, 10)
+    let cache_score = docs.filter(|doc| str_contains(doc.body, "cache") == 1).map(|doc| doc.score).sum()
+    if token_score != 38 { return 1 }
+    if high_score != 38 { return 2 }
+    if cache_score != 25 { return 3 }
+    return token_score + high_score - cache_score - 9
+}

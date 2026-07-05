@@ -1,0 +1,11 @@
+# expect: 42
+# List.filter can produce a reusable List<Int> local.
+fn main() -> Int {
+    let xs = [5, 2, 8, 1, 13]
+    let big = xs.filter(|x| x > 3)
+    if big.len() != 3 { return 1 }
+    if big[0] != 5 { return 2 }
+    if big[1] != 8 { return 3 }
+    if big[2] != 13 { return 4 }
+    return big.sum() + big.len() + 13
+}

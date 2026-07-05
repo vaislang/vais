@@ -1,0 +1,36 @@
+# expect: 42
+# List<Struct>.filter(...).map(...) projected scalar lists can feed extend arguments directly.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn collect_scores(docs: List<Doc>) -> Int {
+    let scores: List<Int> = []
+    scores.push(4)
+    scores.extend(docs.filter(|doc| str_contains(doc.body, "tokens") == 1).map(|doc| doc.score))
+    if scores.len() != 3 { return 1 }
+    if scores.sum() != 42 { return 2 }
+    return scores.sum()
+}
+
+fn collect_titles(docs: List<Doc>) -> Int {
+    let titles: List<Str> = []
+    titles.push("seed")
+    titles.extend(docs.filter(|doc| doc.score > 10).map(|doc| doc.title))
+    if titles.len() != 3 { return 3 }
+    if titles.contains("beta") != 1 { return 4 }
+    if titles.contains("gamma") != 1 { return 5 }
+    if titles.contains("alpha") != 0 { return 6 }
+    return titles.len() + titles.contains("beta") + titles.contains("gamma")
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return collect_scores(docs) + collect_titles(docs) - 5
+}

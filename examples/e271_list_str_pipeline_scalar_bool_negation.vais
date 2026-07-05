@@ -1,0 +1,38 @@
+# expect: 42
+# List<Str> pipeline scalar Bool expressions support negation in locals and conditions.
+
+fn bool_score(flag: Bool, yes: Int, no: Int) -> Int {
+    if flag { return yes }
+    return no
+}
+
+fn score(words: List<Str>, needle: Str) -> Int {
+    let mut present = not words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("missing")
+    present = not words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("missing")
+
+    let mut total = bool_score(present, 10, 0)
+    if not words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("missing") and words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("ai") {
+        total = total + 10
+    } else {
+        return 1
+    }
+
+    let mut guard = 0
+    while not words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("missing") and guard < 2 {
+        guard = guard + 1
+    }
+    if guard != 2 { return 2 }
+    if not words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("vais") {
+        return 3
+    }
+    return total + guard + 20
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  Vais")
+    words.push("AI")
+    words.push("db")
+    words.push("ai  ")
+    return score(words, "ai")
+}

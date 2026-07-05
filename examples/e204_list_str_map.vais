@@ -1,0 +1,19 @@
+# expect: 42
+# List<Str>.map can normalize strings through verified string builtins.
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  VAIS")
+    words.push("Db  ")
+
+    let normalized = words.map(|w| str_lower(str_trim(w)))
+    if normalized.len() != 2 {
+        return 1
+    }
+    if normalized.contains("vais") != 1 {
+        return 2
+    }
+    if normalized.index_of("db") != 1 {
+        return 3
+    }
+    return normalized.len() * 20 + normalized.contains("vais") + normalized.index_of("db")
+}

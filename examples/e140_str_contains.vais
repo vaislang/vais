@@ -1,0 +1,40 @@
+# expect: 42
+
+fn score_doc(title: Str, body: Str) -> Int {
+    if str_contains(title, "Vais") != 1 {
+        return 1
+    }
+    if str_contains(body, "cache") != 1 {
+        return 2
+    }
+    if str_contains(body, "billing") != 0 {
+        return 3
+    }
+    if str_contains(body, "") != 1 {
+        return 4
+    }
+    return str_contains(title, "DB") * 10 + str_contains(body, "vector") * 20 + str_contains(body, "") * 12
+}
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "VaisDB")
+    docs.insert("body", "vector cache without repeated tokens")
+    let words: List<Str> = []
+    words.push("alpha cache")
+    words.push("beta")
+    words.push("gamma")
+    if str_contains(docs.value_at(1), "cache") != 1 {
+        return 5
+    }
+    if str_contains(words[0], "alpha") != 1 {
+        return 6
+    }
+    if str_contains(words.last(), "gamma") != 1 {
+        return 7
+    }
+    if str_contains(words.pop(), "gamma") != 1 {
+        return 8
+    }
+    return score_doc(docs.get("title", ""), docs.get("body", ""))
+}

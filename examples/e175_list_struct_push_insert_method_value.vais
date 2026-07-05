@@ -1,0 +1,33 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn move_one(src: List<Box>, dst: List<Box>) -> Int {
+    dst.push(src.remove_at(0))
+    dst.insert_at(0, src.pop())
+    let head = dst[0]
+    let tail = dst.last()
+    return head.value + tail.tag + src.len() + dst.len()
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 10, tag: 1 })
+    xs.push(Box { value: 20, tag: 2 })
+    xs.push(Box { value: 30, tag: 3 })
+    xs.push(Box { value: 40, tag: 4 })
+
+    let ys: List<Box> = []
+    ys.push(Box { value: 1, tag: 4 })
+    ys.push(xs.pop())
+    ys.insert_at(1, xs.remove_at(0))
+
+    let score = move_one(xs, ys)
+    let first = ys[0]
+    let mid = ys[2]
+    let last = ys.last()
+    return first.tag + mid.value + last.value + ys.len() + score - 33
+}

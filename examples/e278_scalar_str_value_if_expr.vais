@@ -1,0 +1,24 @@
+# expect: 42
+# Scalar Str value if-expressions work in locals, reassignments, helper-call arguments, and Str returns.
+
+fn score(value: Str) -> Int {
+    if value == "vais" { return 42 }
+    return 0
+}
+
+fn choose(flag: Bool, yes: Str, no: Str) -> Str {
+    return if flag then yes else no
+}
+
+fn run(a: Int, b: Int) -> Int {
+    let good: Str = "vais"
+    let bad: Str = "db"
+    let mut label: Str = if a > b then good else bad
+    label = if label == "vais" then label else bad
+    let picked = choose(if label == "vais" then true else false, if a > b then label else bad, bad)
+    return score(if picked == "vais" then picked else bad)
+}
+
+fn main() -> Int {
+    return run(5, 2)
+}

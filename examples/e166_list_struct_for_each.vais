@@ -1,0 +1,31 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn score(xs: List<Box>) -> Int {
+    let mut total = 0
+    for box in xs {
+        total = total + box.value + box.tag
+    }
+    return total
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 10, tag: 1 })
+    xs.push(Box { value: 20, tag: 2 })
+    let more: List<Box> = []
+    more.push(Box { value: 7, tag: 2 })
+    xs.extend(more)
+
+    let mut local = 0
+    for item in xs {
+        local = local + item.value
+    }
+    if local != 37 { return 1 }
+
+    return score(xs)
+}

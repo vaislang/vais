@@ -1,0 +1,20 @@
+# expect: 42
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    docs.insert("title", "VaisDB")
+    docs.insert("body", "cache")
+
+    let k0 = docs.key_at(0)
+    let v0 = docs.value_at(0)
+    let k1 = docs.key_at(1)
+    let v1 = docs.value_at(1)
+    let text_total = k0.len() + v0.len() + k1.len() + v1.len() + docs.len()
+
+    let flags: Map<Int,Bool> = {}
+    flags.insert(3, true)
+    let fk = flags.key_at(0)
+    let fv = flags.value_at(0)
+
+    return text_total + fk * 6 + fv + 1
+}

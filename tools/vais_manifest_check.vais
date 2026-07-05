@@ -254,8 +254,12 @@ fn check_manifest_with_stack(path: Str, stack: Str, entry_path: Str) -> Int {
     let mut has_name = 0
     let mut has_version = 0
     let mut has_source = 0
+    let mut has_binary = 0
+    let mut has_assets = 0
     let mut source_value = ""
     let mut source_line = 1
+    let mut assets_value = ""
+    let mut assets_line = 1
     let mut in_dependencies = 0
     let aliases: Map<Str,Int> = {}
     let manifest_dir = path_dirname(path)
@@ -278,10 +282,10 @@ fn check_manifest_with_stack(path: Str, stack: Str, entry_path: Str) -> Int {
                 } else if section.len() > 0 {
                     return report_issue(path, line_no, str_concat(str_concat("unsupported package manifest section `[", section), "]`"), "only the `[dependencies]` section is supported in this package manifest slice")
                 } else {
-                    return report_issue(path, line_no, "invalid package manifest entry", "write top-level string keys `name`, `version`, and `source`, plus optional `[dependencies]` string entries")
+                    return report_issue(path, line_no, "invalid package manifest entry", "write top-level string keys `name`, `version`, `source`, optional `binary`, optional `assets`, plus optional `[dependencies]` string entries")
                 }
             } else if assignment_ok(code) == 0 {
-                return report_issue(path, line_no, "invalid package manifest entry", "write top-level string keys `name`, `version`, and `source`, plus optional `[dependencies]` string entries")
+                return report_issue(path, line_no, "invalid package manifest entry", "write top-level string keys `name`, `version`, `source`, optional `binary`, optional `assets`, plus optional `[dependencies]` string entries")
             } else {
                 let key = assignment_key(code)
                 let value = assignment_value(code)
@@ -304,33 +308,50 @@ fn check_manifest_with_stack(path: Str, stack: Str, entry_path: Str) -> Int {
                     let dep_status = check_manifest_with_stack(dep_manifest, next_stack, "")
                     if dep_status != 0 { return dep_status }
                 } else if str_eq(key, "name") == 1 {
-                    if has_name == 1 { return report_issue(path, line_no, "duplicate package manifest key `name`", "keep exactly one `name`, one `version`, and one `source` key") }
+                    if has_name == 1 { return report_issue(path, line_no, "duplicate package manifest key `name`", "keep exactly one `name`, one `version`, one `source` key, at most one `binary`, and at most one `assets` key") }
                     has_name = 1
                 } else if str_eq(key, "version") == 1 {
-                    if has_version == 1 { return report_issue(path, line_no, "duplicate package manifest key `version`", "keep exactly one `name`, one `version`, and one `source` key") }
+                    if has_version == 1 { return report_issue(path, line_no, "duplicate package manifest key `version`", "keep exactly one `name`, one `version`, one `source` key, at most one `binary`, and at most one `assets` key") }
                     has_version = 1
                 } else if str_eq(key, "source") == 1 {
-                    if has_source == 1 { return report_issue(path, line_no, "duplicate package manifest key `source`", "keep exactly one `name`, one `version`, and one `source` key") }
+                    if has_source == 1 { return report_issue(path, line_no, "duplicate package manifest key `source`", "keep exactly one `name`, one `version`, one `source` key, at most one `binary`, and at most one `assets` key") }
                     has_source = 1
                     source_value = value
                     source_line = line_no
+                } else if str_eq(key, "binary") == 1 {
+                    if has_binary == 1 { return report_issue(path, line_no, "duplicate package manifest key `binary`", "keep exactly one `name`, one `version`, one `source` key, at most one `binary`, and at most one `assets` key") }
+                    has_binary = 1
+                } else if str_eq(key, "assets") == 1 {
+                    if has_assets == 1 { return report_issue(path, line_no, "duplicate package manifest key `assets`", "keep exactly one `name`, one `version`, one `source` key, at most one `binary`, and at most one `assets` key") }
+                    has_assets = 1
+                    assets_value = value
+                    assets_line = line_no
                 } else {
-                    return report_issue(path, line_no, "unsupported package manifest key", "use only top-level `name`, `version`, and `source`; put local packages under `[dependencies]`")
+                    return report_issue(path, line_no, "unsupported package manifest key", "use only top-level `name`, `version`, `source`, optional `binary`, and optional `assets`; put local packages under `[dependencies]`")
                 }
             }
         }
         if line_end >= text.len() { pos = text.len() + 1 } else { pos = line_end + 1 }
         line_no = line_no + 1
     }
-    if has_name == 0 { return report_issue(path, 1, "package manifest is missing required key `name`", "write `name`, `version`, and `source` before compiling this package") }
-    if has_version == 0 { return report_issue(path, 1, "package manifest is missing required key `version`", "write `name`, `version`, and `source` before compiling this package") }
-    if has_source == 0 { return report_issue(path, 1, "package manifest is missing required key `source`", "write `name`, `version`, and `source` before compiling this package") }
+    if has_name == 0 { return report_issue(path, 1, "package manifest is missing required key `name`", "write `name`, `version`, and `source` before compiling this package; `binary` and `assets` are optional") }
+    if has_version == 0 { return report_issue(path, 1, "package manifest is missing required key `version`", "write `name`, `version`, and `source` before compiling this package; `binary` and `assets` are optional") }
+    if has_source == 0 { return report_issue(path, 1, "package manifest is missing required key `source`", "write `name`, `version`, and `source` before compiling this package; `binary` and `assets` are optional") }
     if path_is_safe(source_value, 1, 0) == 0 {
         return report_issue(path, source_line, "package manifest source must be a local relative path", "use a source path such as `src`; absolute paths and `..` are not supported")
+    }
+    if has_assets == 1 and path_is_safe(assets_value, 1, 0) == 0 {
+        return report_issue(path, assets_line, "package manifest assets must be a local relative path", "use an assets path such as `assets`; absolute paths and `..` are not supported")
     }
     let source_root = path_join(manifest_dir, source_value)
     if fs_exists(source_root) == 0 {
         return report_issue(path, source_line, "package manifest source directory not found", str_concat("create the source directory at ", str_concat(source_root, " or update `source`.")))
+    }
+    if has_assets == 1 {
+        let assets_root = path_join(manifest_dir, assets_value)
+        if fs_exists(assets_root) == 0 {
+            return report_issue(path, assets_line, "package manifest assets directory not found", str_concat("create the assets directory at ", str_concat(assets_root, " or remove `assets`.")))
+        }
     }
     if stack.len() == 0 and entry_path.len() > 0 {
         if path_is_under(entry_path, source_root) == 0 {

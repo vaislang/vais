@@ -1,0 +1,20 @@
+# expect: 42
+# List<Struct>.filter(...).map(...).sum/max/min Int aggregates can feed helper calls directly.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn combine_scores(total: Int, best: Int, low: Int) -> Int {
+    return total + best - low
+}
+
+fn score_flow(docs: List<Doc>) -> Int {
+    return combine_scores(docs.filter(|doc| str_contains(doc.body, "tokens") == 1).map(|doc| doc.score).sum(), docs.filter(|doc| doc.score > 6).map(|doc| doc.score + 1).max(), docs.filter(|doc| doc.score > 6).map(|doc| doc.score - 1).min())
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return score_flow(docs)
+}

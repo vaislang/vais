@@ -1,0 +1,29 @@
+# expect: 42
+# List<Struct>.filter(...).first()/last().field selects record fields directly.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn first_matching_score(docs: List<Doc>, needle: Str) -> Int {
+    return docs.filter(|doc| str_contains(doc.body, needle) == 1).first().score
+}
+
+fn last_high_title_len(docs: List<Doc>, min_score: Int) -> Int {
+    let title: Str = docs.filter(|doc| doc.score > min_score).last().title
+    return title.len()
+}
+
+fn first_high_score_local(docs: List<Doc>, min_score: Int) -> Int {
+    let score: Int = docs.filter(|doc| doc.score > min_score).first().score
+    return score
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    let first = first_matching_score(docs, "tokens")
+    let last_title = last_high_title_len(docs, 10)
+    let first_local = first_high_score_local(docs, 10)
+    return first + last_title + first_local + 1
+}

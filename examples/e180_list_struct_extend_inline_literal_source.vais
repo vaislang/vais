@@ -1,0 +1,22 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn add_boxes(xs: List<Box>) -> Int {
+    xs.extend([Box { value: 20, tag: 2 }, Box { value: 30, tag: 3 }])
+    let tail = xs.last()
+    return xs.len() + tail.value + tail.tag
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 5, tag: 1 })
+    xs.extend([Box { value: 10, tag: 2 }, Box { value: 12, tag: 3 }])
+    let score = add_boxes(xs)
+    let mid = xs[1]
+    let tail = xs.last()
+    return mid.value + tail.tag + xs.len() + score - 14
+}

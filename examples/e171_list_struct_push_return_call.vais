@@ -1,0 +1,26 @@
+# expect: 42
+
+struct Box {
+    value: Int,
+    tag: Int,
+}
+
+fn make_box(value: Int, tag: Int) -> Box {
+    return Box { value: value, tag: tag }
+}
+
+fn add(xs: List<Box>, value: Int, tag: Int) -> Int {
+    xs.push(make_box(value, tag))
+    let tail = xs.last()
+    return tail.value + tail.tag
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(make_box(10, 5))
+    let a = add(xs, 20, 4)
+    xs.push(Box { value: 1, tag: 2 })
+    let first = xs[0]
+    let third = xs[2]
+    return first.value + xs[1].tag + third.value + third.tag + a + 1
+}

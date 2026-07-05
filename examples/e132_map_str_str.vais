@@ -1,0 +1,28 @@
+# expect: 42
+
+fn main() -> Int {
+    let docs: Map<Str,Str> = {}
+    let body_key: Str = "body"
+    docs.insert("title", "Vais")
+    docs.insert(body_key, "alpha")
+
+    let copy: Map<Str,Str> = {}
+    copy = docs
+    docs.remove("body")
+    docs.clear()
+    docs.insert("temp", "gone")
+
+    if copy.get("title", "") != "Vais" {
+        return 1
+    }
+    if copy.get(body_key, "") != "alpha" {
+        return 2
+    }
+    if docs.get("body", "missing") != "missing" {
+        return 3
+    }
+    if not copy.contains("body") {
+        return 4
+    }
+    return copy.len() * 20 + docs.len() + 1
+}

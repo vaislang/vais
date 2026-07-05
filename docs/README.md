@@ -24,13 +24,15 @@ published by the release workflow for Linux x64, macOS arm64, and macOS x64.
 | [design/MODULES.md](design/MODULES.md) | Current Phase 2 module/package/import model |
 | [design/HOST_IO.md](design/HOST_IO.md) | Phase 3 file/process host API model and file/path/process intrinsic gate |
 | [design/MAP_ABI.md](design/MAP_ABI.md) | Map ABI and generic expansion contract before broader `Map<K,V>` gates |
+| [design/VAISDB_DX_BASELINE.md](design/VAISDB_DX_BASELINE.md) | Focused document/VaisDB workflow gate, diagnostics, formatting direction, and benchmark protocol |
 | [../tools/vais_check_core.vais](../tools/vais_check_core.vais) | Vais-authored checker rules, gated by fixture contract tests |
 | [../tools/vais_check_cli.vais](../tools/vais_check_cli.vais) | Source for the public `scripts/vais-check` checker command |
 
 ## Documentation Rules
 
 - Public docs must describe only the current `.vais` language, `scripts/vaisc`
-  compiler path, and `scripts/vais-check` checker path.
+  compiler/package path for `.vais` files and package directories, and
+  `scripts/vais-check` checker path.
 - Claims marked as verified must be backed by a gate in `scripts/` or
   `tools/vaisc-parity.tsv`.
 - Release notes must be sourced from `CHANGELOG.md`.
@@ -46,7 +48,8 @@ The GitHub README and official site source live in this repository. The site
 source is `website/`, and the public entry point should contain only:
 
 1. What Vais is today.
-2. How to compile and run a `.vais` file.
+2. How to compile, run, and package a `.vais` file or manifest-backed package
+   directory.
 3. How to install or package the standalone native `vaisc` and `vais-check`
    binaries.
 4. Which release archives and automation publish standalone compiler assets.

@@ -1,0 +1,30 @@
+# expect: 42
+# Filtered first/last helper-call arguments can start chained else-if conditions.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn score_chain(docs: List<Doc>, needle: Str, min_score: Int) -> Int {
+    let mut result = 0
+    if min_score < 0 {
+        result = 1
+    } else if combine_later(docs.filter(|doc| str_contains(doc.body, needle) == 1).first().score, docs.filter(|doc| doc.score > min_score).last(), docs.filter(|doc| doc.score > min_score).last().title.len()) > 100 {
+        result = 3
+    } else if combine_later(docs.filter(|doc| str_contains(doc.body, needle) == 1).first().score, docs.filter(|doc| doc.score > min_score).last(), docs.filter(|doc| doc.score > min_score).last().title.len()) > 40 {
+        result = 42
+    } else {
+        result = 4
+    }
+    return result
+}
+
+fn combine_later(first_score: Int, last_doc: Doc, last_title_len: Int) -> Int {
+    return first_score + last_doc.score + last_title_len + 8
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 9 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return score_chain(docs, "tokens", 10)
+}

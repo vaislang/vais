@@ -1,0 +1,31 @@
+# expect: 42
+
+fn main() -> Int {
+    let path = "compiler/self/fixpoint_full.vais"
+    let a = str_ends_with(path, ".vais")
+    let b = str_ends_with(path, "fixpoint")
+    let c = str_ends_with("abc", "")
+    let d = str_ends_with(str_lower("VaisDB"), "db")
+
+    if a != 1 { return 1 }
+    if b != 0 { return 2 }
+    if c != 1 { return 3 }
+    if d != 1 { return 4 }
+    if str_ends_with("abc", "zabc") != 0 { return 5 }
+
+    let docs: Map<Str,Str> = {}
+    docs.insert("file", "notes.vais")
+    docs.insert("title", "VaisDB")
+    if str_ends_with(docs.get("file", ""), ".vais") != 1 { return 6 }
+    if str_ends_with(docs.value_at(0), ".md") != 0 { return 7 }
+
+    let names: List<Str> = ["README.md", "compiler.vais"]
+    if str_ends_with(names[1], ".vais") != 1 { return 8 }
+    if str_ends_with(names.last(), ".md") != 0 { return 9 }
+
+    let from_match = match docs.get_opt("file") { Some(v) => str_lower(v), None => "" }
+    if str_ends_with(from_match, ".vais") != 1 { return 10 }
+    if str_ends_with(match docs.get_opt("title") { Some(v) => str_lower(v), None => "" }, "db") != 1 { return 11 }
+
+    return a * 20 + c * 10 + d * 12
+}

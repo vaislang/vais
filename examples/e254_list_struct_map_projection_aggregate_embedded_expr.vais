@@ -1,0 +1,32 @@
+# expect: 42
+# List<Struct>.map(...) Int projection aggregates can appear inside broader Int expressions.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn weigh(value: Int) -> Int {
+    return value
+}
+
+fn local_flow(docs: List<Doc>) -> Int {
+    let mut total = 3
+    total = total + docs.map(|doc| doc.score).sum()
+    let offset = 2 + docs.map(|doc| doc.score).min()
+    let via_call = weigh(1 + docs.map(|doc| doc.score).max())
+    let values: List<Int> = []
+    values.push(total + docs.map(|doc| doc.score).min())
+    values.insert_at(0, 4 + docs.map(|doc| doc.score).sum())
+    return total + offset + via_call + values[0] + values[1] - 60
+}
+
+fn return_flow(base: Int, docs: List<Doc>) -> Int {
+    return base + docs.map(|doc| doc.score).max()
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 8 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 10 })
+    if local_flow(docs) != 42 { return 1 }
+    return return_flow(32, docs)
+}

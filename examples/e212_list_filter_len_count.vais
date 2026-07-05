@@ -1,0 +1,30 @@
+# expect: 42
+# List<Int>/List<Str>.filter(...).len() can be stored and returned as Int counts.
+
+fn count_big(nums: List<Int>, min: Int) -> Int {
+    return nums.filter(|n| n > min).len()
+}
+
+fn score(words: List<Str>, needle: Str, nums: List<Int>, min: Int) -> Int {
+    let word_count: Int = words.filter(|w| str_contains(w, needle) == 1).len()
+    let high = nums.filter(|n| n > min).len()
+    if word_count != 2 { return 1 }
+    if high != 3 { return 2 }
+    return word_count * 10 + high * 5 + count_big(nums, min) + 4
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("vais")
+    words.push("db")
+    words.push("ai")
+
+    let nums: List<Int> = []
+    nums.push(1)
+    nums.push(2)
+    nums.push(3)
+    nums.push(4)
+    nums.push(5)
+
+    return score(words, "ai", nums, 2)
+}

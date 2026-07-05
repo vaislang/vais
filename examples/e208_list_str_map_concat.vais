@@ -1,0 +1,16 @@
+# expect: 42
+# List<Str>.map can derive strings with str_concat in non-capturing closures.
+fn decorate(words: List<Str>) -> Int {
+    let tagged = words.map(|w| str_concat(w, "!"))
+    if tagged.len() != 2 { return 1 }
+    if tagged.contains("ai!") != 1 { return 2 }
+    if tagged.index_of("db!") != 1 { return 3 }
+    return tagged.len() * 20 + tagged.contains("ai!") + tagged.index_of("db!")
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("ai")
+    words.push("db")
+    return decorate(words)
+}

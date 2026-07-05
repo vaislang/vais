@@ -1,0 +1,19 @@
+# expect: 42
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "Vais cache", score: 10 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 20 })
+    let removed = docs.remove_at(0)
+    let tail = docs.pop()
+    if removed.body.len() == 10 and tail.title == "beta" and docs.len() == 0 {
+        return removed.title.len() + tail.body.len() + tail.score + docs.len() + 5
+    }
+    return 0
+}

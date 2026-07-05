@@ -1,0 +1,24 @@
+# expect: 42
+
+fn make_words() -> List<Str> {
+    let words: List<Str> = ["alpha", "beta", "gamma"]
+    return words
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words = make_words()
+    let first = words[0]
+    let last = words.last()
+    let tail = words.pop()
+    if first != "alpha" {
+        return 0
+    }
+    if last != "gamma" {
+        return 1
+    }
+    if tail != "gamma" {
+        return 2
+    }
+    return words.len() * 20 + words.is_empty() + tail.len() - 3
+}

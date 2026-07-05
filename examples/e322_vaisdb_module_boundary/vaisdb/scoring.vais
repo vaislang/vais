@@ -1,0 +1,19 @@
+fn cleaned_len(text: Str) -> Int {
+    let clean = str_trim(text)
+    return clean.len()
+}
+
+fn count_terms(text: Str) -> Int {
+    let terms: Map<Str,Int> = {}
+    return doc_term_counts_into(text, terms)
+}
+
+fn score_body(query_text: Str, body: Str) -> Int {
+    let query: Map<Str,Int> = {}
+    let doc: Map<Str,Int> = {}
+    let query_terms = doc_term_counts_into(query_text, query)
+    let doc_terms = doc_term_counts_into(body, doc)
+    if query_terms == 0 { return 0 }
+    if doc_terms == 0 { return 0 }
+    return doc_term_weighted_score(query, doc)
+}

@@ -1,0 +1,11 @@
+# expect: 42
+
+fn main() -> Int {
+    let x = 40 # + 100 should be ignored
+    let y = 2
+    let marker = "# not a comment"
+
+    if marker.len() != 15 { return 1 }
+
+    return x + y
+}

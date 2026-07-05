@@ -1,0 +1,22 @@
+# expect: 42
+
+struct Box { value: Int, tag: Int }
+
+fn first_value(xs: List<Box>) -> Int {
+    let head = xs.first()
+    return head.value
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 20, tag: 1 })
+    xs.push(Box { value: 99, tag: 2 })
+    let head = xs.first()
+    if head.value != 20 { return 1 }
+    if head.tag != 1 { return 2 }
+    if first_value(xs) != 20 { return 3 }
+    let tail = xs.pop()
+    if tail.value != 99 { return 4 }
+    let still_head = xs.first()
+    return still_head.value + head.value + head.tag + xs.len()
+}

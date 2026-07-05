@@ -1,0 +1,50 @@
+# expect: 42
+
+fn append_nums(xs: List<Int>, more: List<Int>) -> Int {
+    xs.extend(more)
+    return xs.len()
+}
+
+fn append_words(words: List<Str>, more: List<Str>) -> Int {
+    words.extend(more)
+    return words.len()
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(1)
+    xs.push(2)
+    let more: List<Int> = []
+    more.push(10)
+    more.push(20)
+    xs.extend(more)
+    if xs.len() != 4 { return 1 }
+    if xs[2] != 10 { return 2 }
+    if xs.sum() != 33 { return 3 }
+    more.push(30)
+    if append_nums(xs, more) != 7 { return 4 }
+    if xs[4] != 10 { return 5 }
+    if xs[6] != 30 { return 6 }
+
+    let dup: List<Int> = []
+    dup.push(5)
+    dup.push(6)
+    dup.extend(dup)
+    if dup.len() != 4 { return 7 }
+    if dup.sum() != 22 { return 8 }
+
+    let words: List<Str> = []
+    words.push("ai")
+    let tail: List<Str> = []
+    tail.push(str_lower("CACHE"))
+    tail.push("vector")
+    words.extend(tail)
+    if words.len() != 3 { return 9 }
+    if words[1] != "cache" { return 10 }
+    if words[2] != "vector" { return 11 }
+    let extra: List<Str> = []
+    extra.push("rank")
+    if append_words(words, extra) != 4 { return 12 }
+    if words[3] != "rank" { return 13 }
+    return 42
+}

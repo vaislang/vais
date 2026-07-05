@@ -1,0 +1,32 @@
+# expect: 42
+# Bool if-expressions built from List<Str> pipeline scalar conditions infer Bool.
+
+fn bool_score(flag: Bool, yes: Int, no: Int) -> Int {
+    if flag { return yes }
+    return no
+}
+
+fn score(words: List<Str>, needle: Str) -> Int {
+    let mut ok = if words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("vais") then true else false
+    ok = words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("ai")
+
+    let mut missing = if words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("missing") then true else false
+    missing = if words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("missing") then true else false
+
+    let mut both = if words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("vais") and words.filter(|word| str_contains(str_lower(str_trim(word)), needle) == 1).map(|word| str_lower(str_trim(word))).contains("ai") then true else false
+    both = words.map(|word| str_lower(str_trim(word))).filter(|word| str_contains(word, needle) == 1).contains("ai")
+
+    let mut total = bool_score(ok, 10, 0)
+    total = total + bool_score(missing, 0, 10)
+    total = total + bool_score(both, 10, 0)
+    return total + 12
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("  Vais")
+    words.push("AI")
+    words.push("db")
+    words.push("ai  ")
+    return score(words, "ai")
+}

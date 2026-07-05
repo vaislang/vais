@@ -1,0 +1,32 @@
+# expect: 42
+# List<Struct>.filter(...).map(...) projected scalar lists can feed helper arguments directly.
+
+struct Doc {
+    title: Str,
+    body: Str,
+    score: Int,
+}
+
+fn total_scores(scores: List<Int>) -> Int {
+    return scores.sum()
+}
+
+fn has_title(titles: List<Str>, target: Str) -> Int {
+    if titles.contains(target) == 1 { return 1 }
+    return 0
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 18 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+
+    let token_total = total_scores(docs.filter(|doc| str_contains(doc.body, "tokens") == 1).map(|doc| doc.score))
+    let found_gamma = has_title(docs.filter(|doc| doc.score > 10).map(|doc| doc.title), "gamma")
+    let missing_alpha = has_title(docs.filter(|doc| doc.score > 10).map(|doc| doc.title), "alpha")
+    if token_total != 38 { return 1 }
+    if found_gamma != 1 { return 2 }
+    if missing_alpha != 0 { return 3 }
+    return token_total + found_gamma + 3
+}

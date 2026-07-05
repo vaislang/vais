@@ -1,0 +1,20 @@
+# expect: 42
+# List<Int>.filter(...).sum() can be stored in Int locals before reuse.
+fn score(nums: List<Int>, min: Int) -> Int {
+    let high: Int = nums.filter(|n| n > min).sum()
+    let threshold = 1
+    let mid = nums.filter(|n| n > threshold).sum()
+    if high != 12 { return 1 }
+    if mid != 14 { return 2 }
+    return high + mid + 16
+}
+
+fn main() -> Int {
+    let nums: List<Int> = []
+    nums.push(1)
+    nums.push(2)
+    nums.push(3)
+    nums.push(4)
+    nums.push(5)
+    return score(nums, 2)
+}

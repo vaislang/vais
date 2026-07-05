@@ -1,10 +1,93 @@
 # Vais Roadmap
 
-This file tracks current work only.
+This file tracks current work and completed gate-backed language surface.
+
+## Working Context
+
+설계 문서: docs/design/VAIS_90_LANGUAGE_ROADMAP.md
+전역 제약:
+- 모든 새 언어/API 표면은 full self-host, native direct, front, parity,
+  value example, reference/prelude docs, and release gates로 검증한다.
+- `compiler/self/vaisc_core.ll`은 `compiler/self/fixpoint_full.vais`에서
+  direct bootstrap과 canonical full self-host 경로를 거쳐 재생성한다.
+- Veriqel/VaisDB 제품화 목표에 직접 필요한 문서 처리, 구조화 텍스트,
+  오류 처리, snapshot/query workflow를 우선한다.
+공통 검증:
+- `bash scripts/test-vaisc-front.sh`
+- `bash scripts/test-vaisc-direct.sh`
+- `bash scripts/test-fixpoint-full.sh`
+- `bash scripts/test.sh`
+- `bash scripts/test-vaisc-parity.sh`
+- `bash scripts/test-fixpoint-full-self.sh`
+- `git diff --check`
+- `bash scripts/test-release-gates.sh`
+
+## 현재 작업 (2026-07-04)
+모드: 개별선택
+- [x] 1. 문서 라인 처리 API 승격 (impl-sonnet)
+- [x] 2. 구조화 텍스트 snapshot API 승격 (impl-sonnet)
+- [x] 3. Result/Option 오류 처리 ergonomics 보강 (impl-sonnet)
+- [x] 4. Vais-authored 문서 인덱서 prototype 작성 (impl-sonnet)
+- [x] 5. 개발자 경험과 성능 기준 정리 (impl-sonnet)
+진행률: 5/5 (100%)
+
+## 다음 후보 작업
+
+- e327 package release archive output을 바탕으로, richer reusable package
+  layout, additional package diagnostics, 또는
+  full self-host structured payload diagnostics 중 다음 제품화 병목을 선택한다.
+- full self-host의 structured Result/List/Map 조합 경험을 바탕으로,
+  `Result<Struct,Int>` helper composition과 diagnostics를 더 넓힐지
+  결정한다.
+
+## Task Briefs
+
+### 1. 문서 라인 처리 API 승격
+참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-1-document-text-ergonomics
+대상 파일: compiler/self/fixpoint_full.vais, compiler/self/vaisc_core.ll, tools/vaisc_native.c, tools/vaisc_front_check.vais, tools/vaisc_direct_feature_check.vais, tools/fixpoint_full_codegen_check.vais, tools/vaisc-parity.tsv, examples/e292_str_split_lines_into.vais, std/PRELUDE.md, docs/reference/LANGUAGE.md, examples/README.md, CHANGELOG.md, WORKLOG.md
+요구사항: `str_split_lines_into(text, out)`를 full/direct 양쪽에 추가하고 LF/CRLF/마지막 빈 줄/빈 입력 semantics를 예제로 고정한다.
+인터페이스: `str_split_lines_into(text: Str, out: List<Str>) -> Int`
+제약사항: `str_split_into(text, "\n", out)`와 호환 가능한 범위에서 CRLF만 추가 정규화하며, list capacity overflow는 기존 List push trap 정책을 따른다.
+완료조건: e292 예제가 direct/full에서 기대값으로 실행되고 front/direct/full/parity/release gates가 통과한다.
+
+### 2. 구조화 텍스트 snapshot API 승격
+참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-2-structured-data
+대상 파일: compiler/self/fixpoint_full.vais, tools/vaisc_native.c, examples/e293_*.vais, std/PRELUDE.md, docs/reference/LANGUAGE.md, tools/*check*.vais
+요구사항: VaisDB metadata snapshot에 필요한 최소 구조화 텍스트 API를 product workflow 기준으로 선택하고, line/key-value 또는 TSV 기반 snapshot read/write를 gate-backed 예제로 승격한다.
+인터페이스: `map_str_str_snapshot(docs: Map<Str,Str>) -> Str`, `map_str_str_load_snapshot(text: Str, out: Map<Str,Str>) -> Int`
+제약사항: line-based `key=value\n` snapshot으로 한정한다. load는 output map을 clear하고 LF/CRLF line을 읽으며 blank/malformed/no-key line은 skip하고, 추가 `=`는 value에 보존하고, 빈 value는 허용한다. full JSON parser로 범위를 확장하지 않는다.
+완료조건: snapshot write/read round trip 예제가 full/direct/parity/release gates에서 통과한다.
+
+### 3. Result/Option 오류 처리 ergonomics 보강
+참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-3-error-and-result-ergonomics
+대상 파일: compiler/self/fixpoint_full.vais, tools/vaisc_native.c, examples/e294_*.vais, docs/reference/LANGUAGE.md, std/PRELUDE.md
+요구사항: 파일/파싱/검색 실패를 Vais 코드에서 명확히 표현할 수 있게 현재 concrete `Result`/`Option` 표면을 확장하거나 예제 패턴을 고정한다.
+인터페이스: 기존 `Option<Int>`/`Result<Int,Int>` 제약을 깨지 않고 필요한 concrete slice부터 추가한다.
+제약사항: 범용 generics를 먼저 열지 않는다.
+완료조건: 문서 인덱서 prototype이 fallback integer codes만으로 흐름을 숨기지 않고 오류 경로를 표현할 수 있다.
+
+### 4. Vais-authored 문서 인덱서 prototype 작성
+참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-4-vaisdb-prototype-in-vais
+대상 파일: examples/e29x_vaisdb_*.vais, docs/design/VAISDB_*.md, tools/vaisc-parity.tsv
+요구사항: Vais로 문서 ingest, tokenize, term count, metadata snapshot, simple query scoring을 한 번에 실행하는 작은 prototype을 작성한다.
+인터페이스: CLI or example `main() -> Int` workflow로 시작한다.
+제약사항: 제품 DB 엔진 구현이 아니라 language dogfooding prototype이다.
+완료조건: prototype이 direct/full/parity/value corpus에서 실행되고, 부족한 언어 기능이 새 roadmap task로 환류된다.
+
+### 5. 개발자 경험과 성능 기준 정리
+참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-5-developer-experience
+대상 파일: scripts/, tools/, docs/reference/LANGUAGE.md, examples/README.md, website/
+요구사항: 새 document/VaisDB workflow에 필요한 diagnostics, examples, formatter or format-check direction, and performance baseline을 정리한다.
+인터페이스: scripts/test-* gates and documented commands.
+제약사항: release gate가 장시간이어도 green 유지가 우선이다.
+완료조건: docs와 gates만 보고 다음 contributor가 동일 workflow를 재현할 수 있다.
 
 ## Done
 
 - Project path is `/Users/sswoo/study/projects/vais`.
+- Native `vaisc` temporary intermediates are isolated under a per-run temp root,
+  cleaned on normal exit, and protected by a native smoke regression check;
+  `--keep-tmp` remains available for debug artifact preservation.
 - Checked-in language sources use `.vais`.
 - `scripts/vaisc` is the canonical compiler command.
 - `scripts/vais-check` is the canonical lint/error-help command, built from
@@ -15,6 +98,421 @@ This file tracks current work only.
 - `compiler/self/vaisc_core.ll` is the reusable self-host compiler core used by `scripts/vaisc`.
 - The full compiler path reads `.vais` source files directly through the self-host core.
 - Pure regeneration of `compiler/self/vaisc_core.ll` from `compiler/self/fixpoint_full.vais` is green.
+- `str_replace(text, needle, replacement)` is verified in full/direct paths for
+  all-occurrence string rewriting over literals, normalized `Map<Str,Str>`
+  reads, `List<Str>` reads, and `Map<Str,Str>.get_opt` match values.
+- `str_split_into(text, sep, out)` is verified in full/direct paths for
+  delimiter-based tokenization into `List<Str>` out-params, including
+  empty-field preservation and empty-separator whole-text behavior.
+- `str_split_lines_into(text, out)` is verified in full/direct paths for
+  LF/CRLF document line tokenization into `List<Str>` out-params, including
+  interior blank lines, empty input, and trailing-line-break handling.
+- `map_str_str_snapshot(docs)` and `map_str_str_load_snapshot(text, out)` are
+  verified in full/direct paths for `Map<Str,Str>` line metadata snapshot round
+  trips, including output map clearing, LF/CRLF loading, malformed-line
+  skipping, empty values, and additional `=` preservation.
+- Concrete `Option<Int>`/`Result<Int,Int>` value lowering is verified for
+  helper return/parameter/local types, constructors, inline match, and
+  local-binding `?` with `examples/e294_result_try_parse_error_flow.vais`.
+  `examples/e296_result_map_param_flow.vais` extends the Result slice to
+  helpers over `Map<Str,Str>` parameters with `get_opt` matches and `?`
+  propagation; full self-host codegen protects the two Result surfaces through
+  `case_080g6_result_encoding_parse_error_flow` and
+  `case_080g7_result_map_param_flow`. Generic `Option<T>`/`Result<T,E>` remain
+  intentionally closed.
+- `examples/e295_vaisdb_indexer_prototype.vais` is verified as the first
+  Vais-authored document indexer dogfooding prototype, combining metadata
+  ingest, `Map<Str,Str>` snapshot round trip, `Map<Str,Int>` term counts, and
+  weighted query scoring in direct/default/parity paths; full self-host
+  codegen protects the same workflow through
+  `case_080k_vaisdb_indexer_prototype`.
+- `examples/e297_vaisdb_file_ingest_workflow.vais` extends the VaisDB
+  dogfooding path to file-backed ingest: it reads document/query files,
+  creates deterministic temp fixtures with `fs_temp_dir`, `path_join`, and
+  `fs_write_text`, accepts argv-supplied paths with `proc_argc`/`proc_arg`,
+  splits lines, snapshots metadata, indexes term counts, and scores a query in
+  direct/default/parity paths. `scripts/test-vaisdb-workflow.sh` checks both
+  generated-file and argv-file modes, and full codegen protects the standalone
+  generated-IR shape through `case_080l_vaisdb_file_ingest_workflow`.
+- `examples/e298_vaisdb_file_ingest_result_flow.vais` adds the first
+  file-backed `Result<Int,Int>` ingest recipe: helpers guard raw
+  `fs_read_text` calls with `fs_exists`, return explicit integer error codes
+  for missing or malformed document/query paths, compose the helpers with
+  local-binding `?`, and run in generated-file, argv-file, and missing-file
+  modes through the focused VaisDB workflow gate. The native direct feature
+  gate now covers `fs_exists`, and full codegen protects the standalone shape
+  through `case_080m_file_exists_result_flow`.
+- `examples/e301_result_str_int_file_read.vais` adds the first
+  file-backed `Result<Str,Int>` payload recipe: guarded helpers return
+  `Ok(text)` or `Err(code)`, compose with local-binding `?`, and recover both
+  string payloads and missing-file integer error codes through inline match in
+  direct/default/parity paths. `scripts/test-vaisdb-workflow.sh` includes the
+  focused direct/default workflow check, the public `vais-check` contract
+  accepts the concrete shape, and full codegen protects it through
+  `case_080m2_result_str_int_file_read`.
+- `examples/e302_result_str_int_param_flow.vais` extends that concrete
+  string-payload Result slice to helper parameters and forwarding: a
+  `Result<Str,Int>` local can be passed into helper functions, forwarded to
+  another helper, and matched there to recover `Str` payloads or `Int` error
+  values. The native source-lowering path now tracks `Result<Str,Int>`
+  parameters, full self-host codegen parses `Result<Str,Int>` parameter slots,
+  and full codegen protects the standalone shape through
+  `case_080m3_result_str_int_param_flow`.
+- `examples/e303_result_metric_int_struct_payload.vais` opens the first
+  structured Result payload slice: a concrete `Result<Metric,Int>` helper can
+  return `Ok(Metric)` or `Err(Int)`, pass/forward that value through helper
+  parameters, and recover `Metric` fields or integer error values through
+  inline matches. Full self-host codegen protects the standalone shape through
+  `case_080m4_result_metric_int_struct_payload`.
+- `examples/e304_result_record_int_struct_payload.vais` broadens that path
+  beyond the previous `Metric`-only slice: declared Int-field struct payloads
+  such as `Record` can flow as `Result<DeclaredStruct,Int>` through helper
+  returns, parameters, forwarding helpers, and inline matches with three-field
+  recovery. Native source lowering now derives wrappers from struct
+  declarations, and full self-host codegen protects n-field structured Result
+  matches through `case_080m5_result_record_int_struct_payload`.
+- `examples/e305_result_multiline_struct_payload.vais` removes the one-line
+  declaration limitation from that path: multiline declared Int-field struct
+  payloads such as `Entry` can flow through `Result<DeclaredStruct,Int>`
+  helpers and recover four fields through inline matches. Native source
+  lowering now inserts derived Result wrappers after the closing struct line,
+  and full self-host codegen protects the multiline source shape through
+  `case_080m6_result_multiline_struct_payload`.
+- `examples/e306_result_struct_str_fields.vais` expands declared structured
+  Result payloads to document-like records with `Str` fields: `DocSummary`
+  carries title/summary text plus an Int score through
+  `Result<DeclaredStruct,Int>` helper returns and parameters, and inline
+  matches recover string field lengths mixed with Int fields. Full self-host
+  codegen protects this through `case_080m7_result_struct_str_fields`.
+- `examples/e307_result_struct_try_payload.vais` completes the next ergonomics
+  step for declared structured Result payloads: `DocSummary` can be extracted
+  from `Result<DocSummary,Int>` with local-binding `?`, reused through its
+  `Str` and `Int` fields, and propagated as an early integer error in
+  direct/default/parity paths. Full self-host codegen protects this through
+  `case_080m8_result_struct_try_payload`.
+- `examples/e308_vaisdb_artifact_record_workflow.vais` promotes that surface
+  into a VaisDB-style artifact/document record workflow: `DocArtifact` payloads
+  are built through `Result<DocArtifact,Int>` helpers, extracted with
+  local-binding `?`, stored through `List<DocArtifact>` output parameters,
+  paired with `Map<Str,Str>` metadata snapshots, and checked in
+  direct/default/parity paths. Full self-host codegen protects this through
+  `case_080m9_vaisdb_artifact_record_workflow`.
+- `examples/e309_vaisdb_artifact_store_snapshot.vais` persists that record
+  surface as a small text artifact store: `List<DocArtifact>` values are
+  serialized to a tab-delimited snapshot, written/read through host file
+  helpers, parsed back through `Result<DocArtifact,Int>` helpers, queried for
+  the best loaded record, and checked in direct/default/parity paths. Full
+  self-host codegen protects this through
+  `case_080m10_vaisdb_artifact_store_snapshot`.
+- `examples/e310_vaisdb_artifact_query_report.vais` adds a reusable persisted
+  artifact-store query/report layer: the store is loaded into
+  `List<DocArtifact>`, ranked through `Map<Str,Int>` term scoring, rendered as
+  a `Result<Str,Int>` report payload, persisted again with file helpers, and
+  checked for missing-store and empty-query error codes. Full self-host codegen
+  protects this through `case_080m11_vaisdb_artifact_query_report`.
+- `examples/e311_result_call_argument_flow.vais` closes the next Result
+  call-site ergonomics gap: `Result<Str,Int>` and
+  `Result<DeclaredStruct,Int>` returning helpers can feed other helper calls
+  directly without manual local binding. Full self-host codegen protects the
+  hidden-out struct-returning call-argument path through
+  `case_080m12_result_call_argument_flow`.
+- `examples/e312_result_struct_local_wrapper_flow.vais` closes the next
+  self-host structured-payload copy gap: explicit `VaisResult<Struct>Int`
+  wrapper code can bind `flow.value` to a local struct, read all payload fields,
+  and return that local in another wrapper literal without losing nested fields.
+  Full self-host codegen protects this through
+  `case_080m13_result_struct_local_wrapper_flow`.
+- `examples/e313_result_struct_str_match_flow.vais` closes the next
+  report-building gap for structured Results: `Result<DeclaredStruct,Int>`
+  matches can recover `Str` fields such as `artifact.title` directly into
+  string locals while `Err(Int)` arms convert codes with `Str(code)`. Full
+  self-host codegen protects this through
+  `case_080m14_result_struct_str_match_flow`.
+- `examples/e314_result_struct_str_concat_match_flow.vais` closes the follow-on
+  report-label gap for structured Results: `Result<DeclaredStruct,Int>` matches
+  can compose `Str` payload fields with nested `str_concat(...)` inside `Ok`
+  arms while `Err(Int)` arms convert codes with `Str(code)`. Full self-host
+  codegen protects this through
+  `case_080m15_result_struct_str_concat_match_flow`.
+- `examples/e315_result_struct_str_transform_match_flow.vais` closes the next
+  normalization gap for structured Results: `Result<DeclaredStruct,Int>` matches
+  can apply `str_replace`, `str_trim`, `str_upper`, `str_lower`, and local-prefix
+  `str_concat(...)` transforms to `Str` payload fields inside `Ok` arms while
+  `Err(Int)` arms convert codes with `Str(code)`. Full self-host codegen protects
+  this through `case_080m16_result_struct_str_transform_match_flow`.
+- `examples/e316_result_struct_str_transform_len_match_flow.vais` closes the
+  follow-on scoring gap for structured Results: `Result<DeclaredStruct,Int>`
+  matches can compute `Int` scores from transformed `Str` payload fields with
+  chained `.len()` calls while still mixing normal integer payload fields and
+  preserving `Err(Int)` recovery. Full self-host codegen protects this through
+  `case_080m17_result_struct_str_transform_len_match_flow`.
+- `examples/e317_result_struct_payload_helper_call_score.vais` closes the
+  reusable scoring-helper gap for structured Results: `Result<DeclaredStruct,Int>`
+  matches can pass the `Ok` payload struct directly to an `Int` helper such as
+  `score_artifact(artifact)` while preserving `Err(Int)` recovery. Full
+  self-host codegen protects this through
+  `case_080m18_result_struct_payload_helper_call_score`.
+- `examples/e318_result_struct_payload_helper_call_arithmetic.vais` closes the
+  helper-composition follow-up for structured Results: `Result<DeclaredStruct,Int>`
+  matches can use an `Ok` payload helper call as one `Int` term and add normal
+  payload fields such as `artifact.terms + artifact.score` while preserving
+  `Err(Int)` recovery. Full self-host codegen protects this through
+  `case_080m19_result_struct_payload_helper_call_arithmetic`.
+- `examples/e319_result_struct_payload_field_helper_call_arithmetic.vais` closes
+  the field-helper composition follow-up for structured Results:
+  `Result<DeclaredStruct,Int>` matches can pass `Ok` payload `Str` fields such
+  as `artifact.title` and `artifact.body` to reusable `Int` helpers, then add
+  normal payload fields while preserving `Err(Int)` recovery. Full self-host
+  codegen protects this through
+  `case_080m20_result_struct_payload_field_helper_call_arithmetic`.
+- `examples/e320_result_struct_payload_int_field_helper_call_arithmetic.vais`
+  closes the numeric field-helper follow-up for structured Results:
+  `Result<DeclaredStruct,Int>` matches can pass `Ok` payload `Int` fields such
+  as `artifact.terms` and `artifact.score` to reusable `Int` helpers, then
+  compose those helper-call terms with string-field helper terms while
+  preserving `Err(Int)` recovery. Full self-host codegen protects this through
+  `case_080m21_result_struct_payload_int_field_helper_call_arithmetic`.
+- `examples/e321_result_struct_payload_bool_match_condition.vais` closes the
+  Bool-return follow-up for structured Results: `Result<DeclaredStruct,Int>`
+  matches can return conditions derived from `Ok` payload helper terms and
+  `Err(Int)` code comparisons, which makes reusable validation/filter helpers
+  natural to write. Full self-host codegen protects this through
+  `case_080m22_result_struct_payload_bool_match_condition`.
+- `examples/e322_vaisdb_module_boundary/main.vais` closes the first reusable
+  VaisDB library-boundary gap: imported modules can share `DocArtifact`
+  structs, `Result<DocArtifact,Int>` helpers, `List<DocArtifact>` outputs, and
+  `Map<Str,Int>` scoring helpers across files, and the native direct engine now
+  resolves the same static dotted local imports as the full engine before
+  lowering.
+- `examples/e323_cli_package` closes the first package-directory CLI gap:
+  `scripts/vaisc emit-ir`, `build`, and `run` can accept a manifest-backed
+  package directory, resolve `source/main.vais`, preserve imports, and forward
+  argv to the compiled program in direct/default runs.
+- `scripts/vaisc package <package-dir> -o <dist-dir>` closes the first
+  installable package output gap: it builds `<dist-dir>/bin/<package-name>`,
+  copies `<dist-dir>/vais.toml`, and is verified in direct/default package
+  workflow gates.
+- Packaged `examples/e323_cli_package` binaries are now verified with real CLI
+  argv forwarding in native/direct/workflow gates, and `vaisc package` rejects
+  unsafe manifest names before they can become output paths.
+- `examples/e326_cli_binary_target` verifies optional `binary = "veriqel-demo"`
+  manifest metadata so package identity and output command name can diverge
+  while direct/default package workflows and file-entry parity stay aligned.
+- `scripts/vaisc package examples/e326_cli_binary_target -o <dist-dir>
+  --archive` verifies user-package release archive output: it writes
+  `<dist-dir>/veriqel-demo-0.1.0.tar.gz`, extracts to
+  `veriqel-demo-0.1.0/bin/veriqel-demo`, preserves the copied manifest, and
+  rejects unsafe manifest versions before they become archive filenames.
+- `time_millis() -> Int` is verified as the first elapsed-time helper for
+  Vais-authored developer tools. `examples/e299_vaisdb_benchmark_report.vais`
+  times document term counting/scoring, writes a benchmark report through
+  `fs_write_text`, reads it back with `fs_read_text`, and runs in
+  direct/default/parity paths; full codegen protects the standalone shape
+  through `case_080n_time_millis_benchmark_report`.
+- `examples/e300_vaisdb_benchmark_cli_report.vais` is verified as the first
+  CLI-style Vais-authored benchmark/report workflow: it discovers the repo root
+  with `fs_cwd`, `path_dirname`, and `path_basename`, invokes the e295 indexer
+  through `proc_capture`, records direct/default elapsed milliseconds, writes a
+  combined report, and runs in direct/default/parity paths. The native direct
+  feature gate now covers those path helpers and full codegen protects the
+  standalone shape through `case_080o_vaisdb_benchmark_cli_report`.
+- `tools/vaisdb_benchmark_report.vais` is verified as the first reusable
+  Vais-authored benchmark report command. It runs the e295 indexer, writes a
+  raw direct/default report, parses metric lines with line splitting, prefix
+  checks, slicing, and `parse_int`, computes a timing delta, writes a summary,
+  and is covered by workflow/front/direct/full/parity/value gates. The shell
+  wrapper is `scripts/vaisdb-benchmark-report.sh`, and full codegen protects
+  the summary parsing shape through `case_080p_vaisdb_benchmark_summary_tool`.
+- `docs/design/VAISDB_DX_BASELINE.md`, `scripts/test-vaisdb-workflow.sh`, and
+  `scripts/bench-vaisdb-indexer.sh` now define the focused document/VaisDB
+  developer workflow: e292-e324 direct/default reproducibility plus the
+  reusable benchmark report tool, diagnostic commands, formatter direction, and
+  a local compile+run performance baseline protocol. The focused workflow gate is included in
+  `scripts/test-release-gates.sh`.
+- `str_concat(left, right)` and `str_byte(value)` now lower through
+  self-contained full self-host helpers, so generated standalone IR no longer
+  depends on external host string-construction calls for those helpers.
+- The self-host `List<Token>` retarget capacity is raised to 262144 so the
+  enlarged `fixpoint_full.vais` continues to pass the full stage1/stage2
+  self-host gate.
+- `List<Struct>` storage now supports verified multi-field nested struct
+  elements for push, whole-element copy/assignment, indexed nested reads/writes,
+  parameter mutation, and non-mutating method-result nested field-chain reads in
+  full/direct.
+- Structs now support verified `Str` fields for document-like records in
+  full/direct, including equality, string helper calls, `.len()` chains, and
+  `List<Struct>` index/first/last/for-each reads plus indexed `Str` field
+  reassignment on local and parameter lists and `pop`/`remove_at` method-result
+  `Str` field reads.
+- `proc_capture(argv: List<Str>) -> ProcessResult` is verified for the standard
+  `ProcessResult { code: Int, stdout: Str, stderr: Str }` shape in full and
+  direct gates, completing the first in-memory process capture slice for
+  Vais-authored tools.
+- Non-capturing `List<Int>.filter(|x| predicate)` now produces a reusable
+  `List<Int>` result in full and direct gates, extending the previous
+  filter-sum-only slice.
+- Non-capturing `List<Str>.map` and annotated `List<Str>.filter` now produce
+  reusable `List<Str>` results in full and direct gates for verified string
+  builtin transform/predicate bodies.
+- `List<Str>.filter` result type inference now uses the known receiver type for
+  unannotated locals such as `let selected = words.filter(...)`.
+- `List<Str>` function parameters now feed map/filter result type inference,
+  including `words.map(|w| w)` followed by `filter(...)` inside helper code.
+- `str_concat(left, right)` is now available in the direct string helper path
+  and in verified non-capturing `List<Str>.map` closure bodies.
+- `List<Str>.filter/map` closures can capture known `Str` parameters and locals
+  in the verified source-prep lowering path.
+- `List<Str>.filter(...).map(...)` can produce direct result lists for locals,
+  helper returns, helper-call arguments including conditions, `extend(...)`
+  sources, and reassignments without a user-written filtered-list temporary.
+- `List<Str>.map(...).filter(...)` can produce direct result lists for locals,
+  helper returns, helper-call arguments including conditions, `extend(...)`
+  sources, and reassignments without a user-written mapped-list temporary.
+- `List<Str>.map(...).filter(...).len/contains/index_of/count` can feed direct
+  scalar contexts including locals, helper returns, helper-call arguments,
+  `List<Int>` mutation arguments, reassignments, and conditions without a
+  user-written mapped-list temporary.
+- `List<Str>.filter(...).map(...).len/contains/index_of/count` can feed direct
+  scalar contexts including locals, helper returns, helper-call arguments,
+  `List<Int>` mutation arguments, reassignments, and conditions without a
+  user-written filtered-list temporary.
+- Multiple same-family `List<Str>.map(...).filter(...).len/contains/index_of/count`
+  or `List<Str>.filter(...).map(...).len/contains/index_of/count` scalar calls
+  can appear in one arithmetic or condition expression.
+- `List<Str>.map(...).filter(...).len/contains/index_of/count` and
+  `List<Str>.filter(...).map(...).len/contains/index_of/count` scalar calls can
+  also mix inside one arithmetic or condition expression.
+- Composite Bool locals built from `List<Str>` pipeline scalar conditions infer
+  `Bool`, so exact pipeline scalar Bool reassignments remain verified.
+- Existing `Int` locals can be updated with arithmetic-tail `List<Str>`
+  pipeline scalar expressions, keeping accumulator-style code direct.
+- Negated `List<Str>` pipeline scalar Bool expressions are verified for locals,
+  reassignments, `if` conditions, and `while` conditions.
+- Bool `if ... then ... else ...` expressions built from `List<Str>` pipeline
+  scalar conditions are verified in locals, reassignments, helper-call
+  arguments, and Bool returns.
+- Nested helper-call arguments inside reassignment expressions can use Bool
+  if-expressions built from `List<Str>` pipeline scalar conditions.
+- Int `if ... then ... else ...` expressions built from `List<Str>` pipeline
+  scalar conditions are verified in locals, reassignments, helper-call
+  arguments, and returns.
+- Scalar `if ... then ... else ...` value expressions are verified in locals,
+  reassignments, helper-call arguments, and returns without requiring a
+  pipeline-specific lowering trigger.
+- Scalar Bool `if ... then ... else ...` value expressions are independently
+  verified in locals, reassignments, helper-call arguments, and returns without
+  requiring a pipeline-specific lowering trigger.
+- Scalar Str `if ... then ... else ...` value expressions are independently
+  verified in locals, reassignments, helper-call arguments, and Str returns
+  without requiring a pipeline-specific lowering trigger.
+- Scalar Char `if ... then ... else ...` value expressions are independently
+  verified in locals, reassignments, helper-call arguments, and Char returns
+  without requiring a pipeline-specific lowering trigger.
+- `Map<Str,Str>.get_opt` string payload match expressions are verified in
+  returns, reassignments, helper-call arguments, and embedded Int returns.
+- `Map<Str,Str>` return-inferred locals can feed those `get_opt` string payload
+  match expression contexts without requiring explicit local map annotations.
+- `Map<Str,Str>.get_opt` string payload match expressions can normalize or
+  compose payload strings through `str_concat`, `str_trim`, and `str_lower`.
+- `Str.len()` on locals reassigned from dynamic string values now reads the
+  current runtime pointer, including values from `Map<Str,Str>.get_opt`
+  match-transform expressions.
+- `Map<Str,Str>.get_opt` match arms can compute direct `.len()` after
+  `str_trim`/`str_lower` transforms in full/direct paths.
+- `Map<Str,Str>.get_opt` string payload matches lower through presence checks
+  and value loads instead of pointer-tagged string payload integers, so saved
+  `Str` payload locals remain stable across later embedded match/string helper
+  expressions in full/direct paths; full self-host statement parsing also skips
+  match-arm braces while locating `if`/`while` bodies for those embedded
+  conditions.
+- `Map<Str,Str>.get_opt` string payload match expressions are verified in
+  `while` and `else if` condition chains, preserving per-iteration loop
+  reevaluation and else-chain structure.
+- `str_upper(text)` is verified in full/direct paths for ASCII lowercase to
+  uppercase normalization over literals, trimmed document fields,
+  `Map<Str,Str>` reads, `List<Str>` reads, and `Map<Str,Str>.get_opt` match
+  payload transforms; native front keyword diagnostics now token-boundary check
+  `match`/`enum`.
+- `str_ends_with(text, suffix)` is verified in full/direct paths for suffix
+  checks over literals, normalized strings, `Map<Str,Str>` reads,
+  `List<Str>` reads, and `Map<Str,Str>.get_opt` match values.
+- `List<Int>.filter/map/filter-sum` closures can capture known `Int`
+  parameters and locals in the verified source-prep lowering path.
+- `List<Int>.filter(...).sum()` can be assigned to typed or inferred `Int`
+  locals and reused in follow-on calculations.
+- `List<Int>/List<Str>.filter(...).len()` can be returned directly or assigned
+  to typed/inferred `Int` locals for reusable filtered counts.
+- `List<Int>.filter(...).max()` and `.min()` can be returned directly or
+  assigned to typed/inferred `Int` locals for filtered ranking/selection
+  without materializing an intermediate list.
+- `List<Int>.map(...).sum()/max()/min()` can aggregate or rank transformed
+  scalar scores directly in returns, typed/inferred `Int` locals, helper-call
+  arguments, direct `List<Int>` mutation arguments, reassignments, broader
+  `Int` expressions, and broader `if`/`while`/`else if` condition expressions.
+- `List<Int>.filter(...).map(...).max()` and `.min()` can rank transformed
+  scalar scores directly in returns and typed/inferred `Int` locals without
+  materializing an intermediate list, including broader `Int` expressions used
+  by locals, helper-call arguments, direct `List<Int>` mutation arguments,
+  reassignments, returns, and broader `if`/`while`/`else if` condition
+  expressions.
+- `List<Int>.filter(...).map(...).sum()` can aggregate transformed scalar
+  scores directly in returns and typed/inferred `Int` locals without
+  materializing an intermediate list, including broader `Int` expressions used
+  by locals, helper-call arguments, direct `List<Int>` mutation arguments,
+  reassignments, returns, and broader `if`/`while`/`else if` condition
+  expressions.
+- `List<Struct>.filter(...).first().field` and `.last().field` can select
+  document-like `Int`/`Str` record fields directly in returns and typed locals
+  without materializing an intermediate record list.
+- `List<Struct>.filter(...).first().str_field.len()` and
+  `.last().str_field.len()` can read matched document-like string field
+  lengths directly in `Int` returns and typed locals without materializing an
+  intermediate record list.
+- `List<Struct>.filter(...).first()` and `.last()` can select matched
+  document-like records directly in same-struct returns and typed/inferred
+  locals without materializing an intermediate record list, including when the
+  record type is declared with multiline struct syntax.
+- `List<Struct>.filter(...).first()` and `.last()` whole-record selections can
+  feed same-struct `push` and `insert_at` calls directly, so matched records can
+  be accumulated without a user-written temporary local.
+- `List<Struct>.filter(...).first().field`/`.last().field` and string-field
+  `.len()` selections can feed scalar `List<Int>`/`List<Str>` `push` and
+  `insert_at` calls directly for score/title/lens accumulation patterns.
+- `List<Struct>.filter(...).first().field`/`.last().field` and string-field
+  `.len()` selections can infer `Int`/`Str` local types from declared record
+  field metadata, so document-like field picks no longer require explicit
+  local annotations in verified slices.
+- `List<Struct>.filter(...).first().field`/`.last().field` and string-field
+  `.len()` selections can feed `Int`/`Str` helper-call arguments directly,
+  lowering each selected field into a guarded temporary before the call.
+- `List<Struct>.filter(...).first()` and `.last()` whole-record selections can
+  feed same-struct helper-call arguments directly, lowering each matched record
+  into a guarded temporary before the call.
+- `List<Struct>.filter(...)` now produces reusable declared-record result
+  lists that can be returned from helpers for document-like predicates.
+- `List<Struct>.map(...)` can project declared-record fields into reusable,
+  directly returned, helper-call, helper-call condition, `extend(...)`, or
+  reassigned `List<Int>` and `List<Str>` scalar lists for ranking/reporting;
+  `Int` field projections can also aggregate directly through `sum()`,
+  `max()`, and `min()` in returns, typed/inferred locals, helper-call
+  arguments including simple arithmetic suffixes, standalone simple arithmetic
+  suffixes, direct `List<Int>` mutation arguments, known `Int` reassignments,
+  broader `Int` expressions, and broader `if`/`while`/`else if` condition
+  expressions.
+- `List<Struct>.filter(...).map(...)` can project filtered declared-record
+  fields directly into reusable or directly returned `List<Int>` and `List<Str>`
+  scalar lists, feed those scalar lists directly to helper calls, or extend
+  or reassign `List<Int>`/`List<Str>` buffers directly, without a user-written
+  intermediate record list; those helper calls can also start `if`, `while`,
+  and `else if` condition expressions.
+- `List<Struct>.filter(...).map(...).max()` and `.min()` can rank projected
+  `Int` score fields directly without materializing an intermediate score list;
+  filtered score `sum()`/`max()`/`min()` aggregates can also feed `Int`
+  helper-call arguments directly, including helper calls that start `if`,
+  `while`, or `else if` condition expressions, and can appear inside broader
+  `Int` expressions used by locals, helper-call arguments, direct `List<Int>`
+  mutation arguments, reassignments, and returns, plus broader `if`, `while`,
+  and `else if` condition expressions.
 - The native compiler and checker can be installed as standalone `vaisc` and
   `vais-check` binaries outside the checkout and packaged as a release archive.
 - Source tag builds have a release archive workflow for standalone compiler and
@@ -52,8 +550,9 @@ This file tracks current work only.
 - The public compiler driver covers the first simple `trait` plus
   `impl Trait for Struct` method-call expression slice by treating the trait
   declaration as metadata and lowering the impl method to a struct helper.
-- The public compiler driver covers non-capturing `List<Int>` `map` and
-  `filter(...).sum()` method slices by lowering them to explicit `for` loops.
+- The public compiler driver covers `List<Int>` `map`, `filter`,
+  `filter(...).sum()`, and filtered `max()`/`min()` method slices, including
+  known `Int` captures, by lowering them to explicit `for` loops.
 - The public compiler driver covers the first local `List<List<Int>>` literal
   double-index read slice by lowering nested rows to `List<Int>` locals.
 - The public compiler driver covers the first enum `Option<Int>` payload slice
@@ -118,9 +617,108 @@ This file tracks current work only.
   struct-returning calls are promoted through the full self-host path, native
   direct engine, public front, parity manifest, value corpus, and regenerated
   reusable core.
-- Single-field nested struct literals, nested field reads, and nested field
-  writes are promoted through the full self-host compiler path, public front,
+- `List<Struct>.push(make_struct(...))` for local and parameter lists is
+  promoted through the full self-host path, native direct engine, public front,
   parity manifest, value corpus, and regenerated reusable core.
+- `List<Struct>.insert_at(index, make_struct(...))` for local and parameter
+  lists is promoted through the full self-host path, native direct engine,
+  public front, parity manifest, value corpus, and regenerated reusable core.
+- `List<Struct>.push(value)` for same-type struct local/parameter values is
+  promoted through the full self-host path, native direct engine, public front,
+  parity manifest, value corpus, and regenerated reusable core.
+- `List<Struct>.push(xs[i])` and `insert_at(index, xs[i])` for same-type list
+  element values are promoted through the full self-host path, native direct
+  engine, public front, parity manifest, value corpus, and regenerated reusable
+  core.
+- `List<Struct>.push(xs.pop()/xs.remove_at(i))` and
+  `insert_at(index, xs.pop()/xs.remove_at(i))` for same-type list method return
+  values are promoted through the full self-host path, native direct engine,
+  public front, parity manifest, value corpus, and regenerated reusable core.
+- `List<Struct>.push(xs.first()/xs.last())` and
+  `insert_at(index, xs.first()/xs.last())` for non-mutating same-type list
+  method return values are promoted through the full self-host path, native
+  direct engine, public front, parity manifest, value corpus, and regenerated
+  reusable core.
+- `List<Struct>.extend(make_list(...))` for same-type list-returning helper
+  calls is promoted through the full self-host path, native direct engine,
+  public front, parity manifest, value corpus, and regenerated reusable core.
+- `List<Int>.extend(make_list(...))` and
+  `List<Str>.extend(make_list(...))` for same-type list-returning helper calls
+  are promoted through the full self-host path, native direct engine, public
+  front, parity manifest, value corpus, and regenerated reusable core; the same
+  slice also locks full-path `List<Int>.sum()` on list parameters.
+- `List<Int>.extend([..])` and `List<Str>.extend([..])` for inline list
+  literal source values are promoted through the full self-host path, native
+  direct engine, public front, parity manifest, value corpus, and regenerated
+  reusable core.
+- `List<Struct>.extend([Struct { .. }])` for inline struct list literal source
+  values is promoted through the full self-host path, native direct engine,
+  public front, parity manifest, value corpus, and regenerated reusable core.
+- `List<Struct>` typed local initialization and local/parameter assignment from
+  inline struct list literal values are promoted through the full self-host
+  path, native direct engine, public front, parity manifest, value corpus, and
+  regenerated reusable core.
+- `List<Struct>.first().field`, `.last().field`, `.pop().field`, and
+  `.remove_at(index).field` are promoted for local and parameter lists through
+  the full self-host path, native direct engine, public front, parity manifest,
+  value corpus, and regenerated reusable core.
+- Multiline typed `List<Struct>` literals with trailing commas are promoted
+  through the full self-host path, native direct engine, public front, parity
+  manifest, value corpus, and regenerated reusable core. This also locks
+  semicolon-free full statement advancement for list methods and `let`
+  initializers, plus fast no-import preflight in the import graph checker.
+- Multiline inline `List<Struct>` literal call arguments with trailing commas
+  are promoted through the full self-host path, native direct engine, public
+  front, parity manifest, value corpus, and regenerated reusable core.
+- Standalone call statements with multiline inline `List<Struct>` literal
+  arguments and trailing commas are promoted through the full self-host path,
+  native direct engine, public front, parity manifest, value corpus, and
+  regenerated reusable core.
+- `List<Struct>.push(Box { ... })` with multiline trailing-comma struct
+  literals is promoted through the full self-host path, native direct engine,
+  public front, parity manifest, value corpus, and regenerated reusable core.
+- Multiline struct literals in `List<Struct>` indexed element assignment and
+  struct-returning `return` statements are promoted through the full self-host
+  path, native direct engine, public front, parity manifest, value corpus, and
+  regenerated reusable core.
+- Multiline struct literals in plain struct local initialization, typed local
+  initialization, same-type local assignment, and struct call arguments are
+  promoted through the full self-host path, native direct engine, public front,
+  parity manifest, value corpus, and regenerated reusable core.
+- `List<Struct>.insert_at(index, Box { ... })` and
+  `List<Struct>.extend([Box { ... }])` with multiline struct literal sources
+  are promoted through the full self-host path, native direct engine, public
+  front, parity manifest, value corpus, and regenerated reusable core.
+- Single-field nested struct literals, nested field reads, and nested field
+  writes are promoted through the full self-host compiler path and native
+  direct flattening for previously declared single-`Int`-field nested structs,
+  with public front, parity manifest, value corpus, and regenerated reusable
+  core coverage.
+- Indexed `List<Struct>` element field-chain reads and writes such as
+  `xs[0].inner.v` and `xs[0].inner.v = value` are promoted for elements
+  containing a previously declared single-`Int`-field nested struct, including
+  nested struct literals pushed into the list, through the full self-host path,
+  native direct engine, public front, parity manifest, value corpus, and
+  regenerated reusable core coverage.
+- `List<Struct>` method-result field chains such as `xs.first().inner.v`,
+  `xs.last().inner.v`, `xs.pop().inner.v`, and `xs.remove_at(i).inner.v` are
+  promoted for the same single-`Int`-field nested struct shape through the full
+  self-host path, native direct engine, public front, parity manifest, value
+  corpus, and regenerated reusable core coverage.
+- Struct-returning helper field chains such as `make_box(...).value` and
+  `make_outer(...).inner.v` are promoted for top-level fields and the same
+  single-`Int`-field nested struct shape through the full self-host path,
+  native direct engine, public front, parity manifest, value corpus, and
+  regenerated reusable core coverage.
+- Direct returns of single-field nested struct literals such as
+  `return Outer { inner: Inner { v: value } }` are promoted through the full
+  self-host path, native direct engine, public front, parity manifest, value
+  corpus, and regenerated reusable core coverage.
+- Scalar multi-field nested structs such as `Outer { inner: Inner }` where
+  `Inner` has multiple `Int` fields are promoted for local literals, direct
+  helper returns, and field-chain reads through the full self-host path, native
+  direct engine, public front, parity manifest, value corpus, and regenerated
+  reusable core coverage.
 - Public struct/function/field modifiers are accepted as metadata through the
   checker, public front, full self-host compiler, parity manifest, value corpus,
   and regenerated reusable core. Struct literal lowering stores `Str` fields
@@ -197,8 +795,8 @@ This file tracks current work only.
   are the first verified process intrinsics. Program argv, child environment
   overrides, captured stdout/stderr, and status-plus-file capture are verified
   for full-engine `vaisc run` and binaries produced by `vaisc build`.
-- Host-backed `Str` construction helpers `str_concat`, `str_slice`, and
-  `str_byte` are verified through the same host gate so Vais-authored text
+- `Str` construction helpers `str_concat`, `str_slice`, and `str_byte` are
+  verified through full/direct and host gates so Vais-authored text
   transformation tools can be ported incrementally.
 - Host-backed `Str` builder helpers `str_builder_new`, `str_builder_push`,
   `str_builder_append`, and `str_builder_finish` are verified through the host
@@ -221,7 +819,9 @@ This file tracks current work only.
 - `tools/normalize_stage_ir.vais` is the Vais-authored stage IR normalizer.
   Its focused gate checks the expected normalized IR shape directly through the
   Vais helper, and the long full-source self-host gate uses it for stage1/stage2
-  compiler IR comparison.
+  compiler IR comparison. Its global-name mapping uses a 4-field struct list so
+  file-sized compiler IR with more than 4,096 distinct string globals can still
+  be normalized under the current fixed-list runtime.
 - Internal self-host helper builds now use the native `scripts/vaisc`
   trust-root path.
 - `docs/design/MAP_ABI.md` specifies the future Map parameter, return, and
@@ -247,7 +847,10 @@ This file tracks current work only.
   exclusive `..` and inclusive `..=` bounds through both full self-host and
   native direct paths, with `break` and `continue` lowered inside `while` and
   range `for` loops. Local `List<Struct>`
-  values support typed `[]`, `list()`, list literal initialization, `push`,
+  values support typed `[]`, `list()`, list literal initialization, `push`
+  from struct values, list element values, list method return values, and
+  struct-returning helper calls, `insert_at` including list element values,
+  list method return values, and struct-returning helper calls,
   `len`, `is_empty`, `last`, `pop`, index, field reads/writes, parameter reference, return value ABI,
   inline list arguments, and returned-list argument lowering in statements plus
   `if`, `else if`, and `while` conditions. Context-typed list assignment is supported
@@ -506,8 +1109,8 @@ validation.
   harness after adding child environment process support.
 - [x] 3.8j Move the direct-engine arithmetic/build/run smoke checks into a
   Vais-authored harness.
-- [x] 3.8k Move the direct-engine import reject and List bounds trap checks into
-  a Vais-authored harness using status-plus-file process capture.
+- [x] 3.8k Move the direct-engine import handling and List bounds trap checks
+  into a Vais-authored harness using status-plus-file process capture.
 - [x] 3.8l Move the direct helper/control-flow, range `for`, struct-local, and
   struct ABI success fixtures into a Vais-authored harness.
 - [x] 3.8m Move direct local `List<Int>`, `Str`, `Char`,
@@ -931,7 +1534,7 @@ Mode: sequential
 
 - [x] 1. Resolve static dotted `import` paths under the entry file directory.
 - [x] 2. Merge imported modules before the entry source for full-engine builds.
-- [x] 3. Keep direct-engine builds single-file.
+- [x] 3. Resolve static dotted imports before direct-engine lowering.
 - [x] 4. Reject missing imports, duplicate top-level symbols, and import cycles
   with P4 diagnostics.
 - [x] 5. Add a multi-file example and front-contract gates for native paths.
@@ -2011,6 +2614,279 @@ bash scripts/test-fixpoint-full-self.sh
 
 ## Current Progress
 
-- [x] Multiline `Option<Int>` expression-match bindings are promoted through
-  the public compiler driver, front fixture, parity manifest, and release
-  corpus with `examples/d2.vais`.
+- [x] `proc_capture(argv: List<Str>) -> ProcessResult` is promoted through the
+  compiler, host/front/direct fixtures, parity manifest, and release corpus with
+  `examples/e202_proc_capture_result.vais`.
+- [x] `List<Int>.filter(|x| predicate)` result lists are promoted through
+  source-prep lowering, front/direct fixtures, parity manifest, and release
+  corpus with `examples/e203_list_filter_result.vais`.
+- [x] `List<Str>.map` and annotated `List<Str>.filter` result lists are
+  promoted through source-prep lowering, front/direct fixtures, parity
+  manifest, and release corpus with `examples/e204_list_str_map.vais` and
+  `examples/e205_list_str_filter.vais`.
+- [x] Receiver-based `List<Str>.filter` result type inference is promoted with
+  `examples/e206_list_str_filter_infer.vais`.
+- [x] `List<Str>` function-parameter map/filter result type inference is
+  promoted with `examples/e207_list_str_param_map_filter.vais`.
+- [x] `str_concat(left, right)` is promoted through direct string helper
+  lowering and `List<Str>.map` closure bodies with
+  `examples/e208_list_str_map_concat.vais`.
+- [x] `List<Str>.filter/map` closure captures for known `Str` parameters and
+  locals are promoted with `examples/e209_list_str_closure_capture.vais`.
+- [x] `List<Str>.filter(...).map(...)` result lists are promoted for direct
+  local, helper-return, helper-call, condition, `extend(...)`, and reassignment
+  contexts with `examples/e263_list_str_filter_map_result_contexts.vais`.
+- [x] `List<Str>.map(...).filter(...)` result lists are promoted for direct
+  local, helper-return, helper-call, condition, `extend(...)`, and reassignment
+  contexts with `examples/e264_list_str_map_filter_result_contexts.vais`.
+- [x] `List<Str>.map(...).filter(...).len/contains/index_of/count` scalar
+  chains are promoted for direct local, helper-return, helper-call,
+  `List<Int>` mutation, reassignment, and condition contexts with
+  `examples/e265_list_str_map_filter_scalar_contexts.vais`.
+- [x] `List<Str>.filter(...).map(...).len/contains/index_of/count` scalar
+  chains are promoted for direct local, helper-return, helper-call,
+  `List<Int>` mutation, reassignment, and condition contexts with
+  `examples/e266_list_str_filter_map_scalar_contexts.vais`.
+- [x] Multiple same-family `List<Str>` pipeline scalar calls are promoted
+  inside one expression with
+  `examples/e267_list_str_pipeline_scalar_multi_expr.vais`.
+- [x] Mixed map-filter/filter-map `List<Str>` pipeline scalar calls are
+  promoted inside one expression with
+  `examples/e268_list_str_pipeline_scalar_mixed_expr.vais`.
+- [x] Composite Bool local inference for `List<Str>` pipeline scalar conditions
+  is promoted with `examples/e269_list_str_pipeline_scalar_bool_infer.vais`.
+- [x] Arithmetic-tail `List<Str>` pipeline scalar reassignments are promoted
+  with `examples/e270_list_str_pipeline_scalar_reassign_arithmetic_tail.vais`.
+- [x] Negated `List<Str>` pipeline scalar Bool expressions are promoted with
+  `examples/e271_list_str_pipeline_scalar_bool_negation.vais`.
+- [x] Bool if-expressions built from `List<Str>` pipeline scalar conditions are
+  promoted with `examples/e272_list_str_pipeline_scalar_bool_if_expr.vais`.
+- [x] Bool if-expressions built from `List<Str>` pipeline scalar conditions in
+  helper-call arguments and Bool returns are promoted with
+  `examples/e273_list_str_pipeline_scalar_bool_if_expr_call_return.vais`.
+- [x] Nested helper-call Bool if-expressions inside `List<Str>` pipeline scalar
+  reassignments are promoted with
+  `examples/e274_list_str_pipeline_scalar_bool_if_expr_nested_call_reassign.vais`.
+- [x] Int if-expressions built from `List<Str>` pipeline scalar conditions in
+  locals, reassignments, helper-call arguments, and returns are promoted with
+  `examples/e275_list_str_pipeline_scalar_int_if_expr.vais`.
+- [x] Scalar value if-expressions in locals, reassignments, helper-call
+  arguments, and returns without pipeline-specific lowering are promoted with
+  `examples/e276_scalar_value_if_expr_embedded_call_args.vais`.
+- [x] Scalar Bool value if-expressions in locals, reassignments, helper-call
+  arguments, and returns without pipeline-specific lowering are promoted with
+  `examples/e277_scalar_bool_value_if_expr.vais`.
+- [x] Scalar Str value if-expressions in locals, reassignments, helper-call
+  arguments, and Str returns without pipeline-specific lowering are promoted
+  with `examples/e278_scalar_str_value_if_expr.vais`.
+- [x] Scalar Char value if-expressions in locals, reassignments, helper-call
+  arguments, and Char returns without pipeline-specific lowering are promoted
+  with `examples/e279_scalar_char_value_if_expr.vais`.
+- [x] `Map<Str,Str>.get_opt` string payload match expressions in returns,
+  reassignments, helper-call arguments, and embedded Int returns are promoted
+  with `examples/e280_map_str_str_get_opt_match_contexts.vais`.
+- [x] `Map<Str,Str>` return-inferred locals feed those `get_opt` string payload
+  match expression contexts without explicit local map annotations, with
+  `examples/e281_map_str_str_return_infer_get_opt_match_contexts.vais`.
+- [x] `Map<Str,Str>.get_opt` string payload match expressions support
+  `str_concat`, `str_trim`, and `str_lower` transforms in verified `Str`
+  contexts, with
+  `examples/e282_map_str_str_get_opt_match_str_transforms.vais`.
+- [x] Reassigned `Str` locals read their current runtime string when `.len()` is
+  applied after dynamic match-transform results, with
+  `examples/e283_str_len_reassigned_match_transform.vais`.
+- [x] `Map<Str,Str>.get_opt` match arms compute direct `.len()` after
+  `str_trim`/`str_lower` match-arm transforms, with
+  `examples/e284_map_str_str_get_opt_match_transform_len.vais`.
+- [x] `Map<Str,Str>.get_opt` string payload matches avoid pointer-tagged string
+  payload integers by lowering through presence checks and value loads, and full
+  self-host statement parsing skips match-arm braces in embedded conditions, with
+  `examples/e285_map_str_str_get_opt_str_payload_stability.vais`.
+- [x] `Map<Str,Str>.get_opt` string payload match expressions are promoted in
+  `while` and `else if` condition chains with per-iteration loop reevaluation
+  and preserved else-chain structure, with
+  `examples/e286_map_str_str_get_opt_condition_chains.vais`.
+- [x] `str_upper(text)` is promoted in full/direct paths for ASCII lowercase to
+  uppercase normalization over literals, trimmed document fields,
+  `Map<Str,Str>` reads, `List<Str>` reads, and `Map<Str,Str>.get_opt` match
+  payload transforms, with `examples/e287_str_upper.vais`.
+- [x] `str_ends_with(text, suffix)` is promoted in full/direct paths for suffix
+  checks over literals, normalized strings, `Map<Str,Str>` reads,
+  `List<Str>` reads, and `Map<Str,Str>.get_opt` match values, with
+  `examples/e288_str_ends_with.vais`.
+- [x] `str_replace(text, needle, replacement)` is promoted in full/direct paths
+  for all-occurrence string rewriting over literals, normalized `Map<Str,Str>`
+  reads, `List<Str>` reads, and `Map<Str,Str>.get_opt` match values, with
+  `examples/e289_str_replace.vais`.
+- [x] `str_split_into(text, sep, out)` is promoted in full/direct paths for
+  delimiter tokenization into `List<Str>` out-params, preserving empty fields
+  and treating an empty separator as one whole-text field, with
+  `examples/e290_str_split_into.vais`.
+- [x] `str_join(parts, sep)` is promoted in full/direct paths for
+  reconstructing `List<Str>` values with separators, including empty-list
+  handling and delimiter round trips with `str_split_into`, with
+  `examples/e291_str_join.vais`.
+- [x] `List<Int>.filter/map/filter-sum` closure captures for known `Int`
+  parameters and locals are promoted with
+  `examples/e210_list_int_closure_capture.vais`.
+- [x] `List<Int>.filter(...).sum()` assignment to reusable `Int` locals is
+  promoted with `examples/e211_list_filter_sum_assignment.vais`.
+- [x] `List<Int>/List<Str>.filter(...).len()` return and assignment count
+  lowering is promoted with `examples/e212_list_filter_len_count.vais`.
+- [x] `List<Struct>.filter(...)` reusable result lists are promoted with
+  `examples/e213_list_struct_filter_result.vais`.
+- [x] `List<Struct>.map(...)` field projection is promoted with
+  `examples/e214_list_struct_map_projection.vais`.
+- [x] `List<Struct>.map(...)` projected result lists are promoted for direct
+  returns, helper-call arguments, `extend(...)` sources, and reassignment with
+  `examples/e245_list_struct_map_projection_direct_contexts.vais`.
+- [x] `List<Struct>.map(...)` projected helper-call arguments are promoted in
+  `if`, `while`, and `else if` condition expressions with
+  `examples/e246_list_struct_map_projection_call_arg_conditions.vais`.
+- [x] `List<Struct>.map(...).sum()/max()/min()` direct `Int` field projection
+  aggregation is promoted for helper returns and typed/inferred locals with
+  `examples/e247_list_struct_map_projection_aggregates.vais`.
+- [x] `List<Struct>.map(...).sum()/max()/min()` direct aggregate conditions
+  are promoted for `if`, `while`, and `else if` expressions with
+  `examples/e248_list_struct_map_projection_aggregate_conditions.vais`.
+- [x] `List<Struct>.map(...).sum()/max()/min()` direct aggregate helper-call
+  arguments are promoted in `return`, `let`, `if`, `while`, and `else if`
+  contexts with
+  `examples/e249_list_struct_map_projection_aggregate_call_args.vais`.
+- [x] `List<Struct>.map(...).sum()/max()/min()` direct aggregate simple
+  arithmetic suffixes are promoted for returns and typed/inferred locals with
+  `examples/e250_list_struct_map_projection_aggregate_arithmetic_tail.vais`.
+- [x] `List<Struct>.map(...).sum()/max()/min()` direct aggregate helper-call
+  arguments preserve simple arithmetic suffixes in `return`, `let`, `if`,
+  `while`, and `else if` contexts with
+  `examples/e251_list_struct_map_projection_aggregate_call_arg_arithmetic_tail.vais`.
+- [x] `List<Struct>.map(...).sum()/max()/min()` direct aggregate expressions are
+  promoted as direct `List<Int>.push` and `insert_at` mutation arguments with
+  simple arithmetic suffixes in
+  `examples/e252_list_struct_map_projection_aggregate_mutation_args.vais`.
+- [x] `List<Struct>.map(...).sum()/max()/min()` direct aggregate expressions are
+  promoted for reassignment to known `Int` locals and parameters with simple
+  arithmetic suffixes in
+  `examples/e253_list_struct_map_projection_aggregate_reassign.vais`.
+- [x] `List<Struct>.map(...).sum()/max()/min()` direct aggregate expressions can
+  be embedded inside broader `Int` expressions for locals, helper-call
+  arguments, direct `List<Int>` mutation arguments, reassignments, and returns
+  with `examples/e254_list_struct_map_projection_aggregate_embedded_expr.vais`.
+- [x] `List<Struct>.map(...).sum()/max()/min()` direct aggregate expressions can
+  be embedded inside broader `if`/`while`/`else if` condition expressions with
+  `examples/e255_list_struct_map_projection_aggregate_embedded_conditions.vais`.
+- [x] `List<Struct>.filter(...).len()` return and assignment count lowering is
+  promoted with `examples/e215_list_struct_filter_len_count.vais`.
+- [x] `List<Struct>.filter(...).map(...).sum()` same-item score aggregation is
+  promoted with `examples/e216_list_struct_filter_map_sum.vais`.
+- [x] `List<Int>.max()` ranking selection is promoted for local and parameter
+  lists with `examples/e217_list_int_max.vais`.
+- [x] `List<Int>.min()` ranking selection is promoted for local and parameter
+  lists with `examples/e218_list_int_min.vais`.
+- [x] `List<Int>.filter(...).max()`/`.min()` filtered ranking selection is
+  promoted for direct returns and reusable `Int` locals with
+  `examples/e219_list_filter_max_min.vais`.
+- [x] `List<Struct>.filter(...).map(...).max()`/`.min()` score projection
+  ranking is promoted for direct returns and reusable `Int` locals with
+  `examples/e220_list_struct_filter_map_max_min.vais`.
+- [x] `List<Struct>.filter(...).map(...).sum()/max()/min()` score aggregates
+  are promoted as direct `Int` helper-call arguments with
+  `examples/e256_list_struct_filter_map_aggregate_call_args.vais`.
+- [x] `List<Struct>.filter(...).map(...).sum()/max()/min()` aggregate
+  helper-call arguments are promoted in `if`, `while`, and `else if` condition
+  expressions with
+  `examples/e257_list_struct_filter_map_aggregate_call_arg_conditions.vais`.
+- [x] `List<Struct>.filter(...).map(...).sum()/max()/min()` aggregate
+  expressions are promoted inside broader `Int` expressions used by locals,
+  helper-call arguments, direct `List<Int>` mutation arguments, reassignments,
+  and returns with
+  `examples/e258_list_struct_filter_map_aggregate_embedded_expr.vais`.
+- [x] `List<Struct>.filter(...).map(...).sum()/max()/min()` aggregate
+  expressions are promoted inside broader `if`, `while`, and `else if`
+  condition expressions with
+  `examples/e259_list_struct_filter_map_aggregate_embedded_conditions.vais`.
+- [x] `List<Struct>.filter(...).map(...)` projected result lists are promoted
+  for reusable `List<Int>` and annotated `List<Str>` locals with
+  `examples/e239_list_struct_filter_map_result_chain.vais`.
+- [x] `List<Struct>.filter(...).map(...)` projected result lists are promoted
+  for direct `List<Int>`/`List<Str>` helper returns with
+  `examples/e240_list_struct_filter_map_return_chain.vais`.
+- [x] `List<Struct>.filter(...).map(...)` projected result lists are promoted
+  as direct `List<Int>`/`List<Str>` helper-call arguments with
+  `examples/e241_list_struct_filter_map_call_arg.vais`.
+- [x] `List<Struct>.filter(...).map(...)` projected helper-call arguments are
+  promoted in `if`, `while`, and `else if` condition expressions with
+  `examples/e242_list_struct_filter_map_call_arg_conditions.vais`.
+- [x] `List<Struct>.filter(...).map(...)` projected result lists are promoted
+  as direct `List<Int>`/`List<Str>.extend(...)` arguments with
+  `examples/e243_list_struct_filter_map_extend_arg.vais`.
+- [x] `List<Struct>.filter(...).map(...)` projected result lists are promoted
+  for existing `List<Int>`/`List<Str>` variable reassignment with
+  `examples/e244_list_struct_filter_map_reassign.vais`.
+- [x] `List<Int>.filter(...).map(...).max()`/`.min()` transformed scalar
+  ranking is promoted for direct returns and reusable `Int` locals with
+  `examples/e221_list_filter_map_max_min.vais`.
+- [x] `List<Int>.filter(...).map(...).sum()` transformed scalar aggregation is
+  promoted for direct returns and reusable `Int` locals with
+  `examples/e222_list_filter_map_sum.vais`.
+- [x] `List<Int>.filter(...).map(...).sum()/max()/min()` transformed scalar
+  aggregates are promoted inside broader `Int` expressions used by locals,
+  helper-call arguments, direct `List<Int>` mutation arguments, reassignments,
+  and returns with
+  `examples/e260_list_filter_map_aggregate_embedded_expr.vais`.
+- [x] `List<Int>.filter(...).map(...).sum()/max()/min()` transformed scalar
+  aggregates are promoted inside broader `if`, `while`, and `else if`
+  condition expressions with
+  `examples/e261_list_filter_map_aggregate_embedded_conditions.vais`.
+- [x] `List<Int>.map(...).sum()/max()/min()` transformed scalar aggregates are
+  promoted inside broader `Int` expressions and broader `if`, `while`, and
+  `else if` condition expressions with
+  `examples/e262_list_map_aggregate_embedded_expr_conditions.vais`.
+- [x] `List<Struct>.filter(...).first().field`/`.last().field` record field
+  selection is promoted for `Int`/`Str` returns and typed locals with
+  `examples/e223_list_struct_filter_first_last_field.vais`.
+- [x] `List<Struct>.filter(...).first().str_field.len()`/`.last().str_field.len()`
+  record string length selection is promoted for `Int` returns and typed locals
+  with `examples/e224_list_struct_filter_first_last_field_len.vais`.
+- [x] `List<Struct>.filter(...).first()`/`.last()` whole-record selection is
+  promoted for same-struct returns and typed/inferred locals with
+  `examples/e225_list_struct_filter_first_last_value.vais`.
+- [x] The same whole-record selection is promoted for multiline struct
+  declarations with
+  `examples/e226_list_struct_filter_first_last_multiline_value.vais`.
+- [x] Filtered whole-record first/last selections are promoted as direct
+  `List<Struct>.push` and `insert_at` arguments with
+  `examples/e227_list_struct_filter_first_last_push_insert.vais`.
+- [x] Filtered first/last field and string-length selections are promoted as
+  direct scalar list mutation arguments with
+  `examples/e228_list_struct_filter_first_last_field_push_insert.vais`.
+- [x] Filtered first/last field and string-length selections infer `Int`/`Str`
+  local types from declared record field metadata with
+  `examples/e229_list_struct_filter_first_last_field_infer.vais`.
+- [x] Filtered first/last field and string-length selections are promoted as
+  direct `Int`/`Str` helper-call arguments with
+  `examples/e230_list_struct_filter_first_last_field_call_arg.vais`.
+- [x] Filtered first/last whole-record selections are promoted as direct
+  same-struct helper-call arguments with
+  `examples/e231_list_struct_filter_first_last_value_call_arg.vais`.
+- [x] Filtered first/last helper-call arguments can use helper signatures
+  declared later in the file with
+  `examples/e232_list_struct_filter_first_last_late_helper_call_arg.vais`.
+- [x] Filtered first/last helper-call argument lowering preserves simple
+  arithmetic expression tails with
+  `examples/e233_list_struct_filter_first_last_call_arg_expr_tail.vais`.
+- [x] Filtered first/last helper-call arguments can start `if` condition
+  expressions with
+  `examples/e234_list_struct_filter_first_last_call_arg_if_condition.vais`.
+- [x] Filtered first/last helper-call arguments can start `while` condition
+  expressions with per-iteration recomputation, covered by
+  `examples/e235_list_struct_filter_first_last_call_arg_while_condition.vais`.
+- [x] Filtered first/last helper-call arguments can start `else if` condition
+  expressions while preserving the preceding `if` guard, covered by
+  `examples/e236_list_struct_filter_first_last_call_arg_else_if_condition.vais`.
+- [x] Filtered first/last helper-call arguments preserve chained `else if`
+  flow and final `else` fallthrough, covered by
+  `examples/e237_list_struct_filter_first_last_call_arg_else_if_chain.vais`.
+- [x] Full codegen recognizes `else` blocks with local statements followed by
+  all-return nested `if` chains as terminating, covered by
+  `examples/e238_list_struct_filter_first_last_call_arg_else_if_chain_return.vais`.

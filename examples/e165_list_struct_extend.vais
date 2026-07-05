@@ -1,0 +1,30 @@
+# expect: 42
+
+struct Box { value: Int, tag: Int }
+
+fn append_boxes(xs: List<Box>, more: List<Box>) -> Int {
+    xs.extend(more)
+    return xs.len()
+}
+
+fn main() -> Int {
+    let xs: List<Box> = []
+    xs.push(Box { value: 10, tag: 1 })
+
+    let more: List<Box> = []
+    more.push(Box { value: 20, tag: 2 })
+    more.push(Box { value: 30, tag: 3 })
+
+    xs.extend(more)
+    if xs.len() != 3 { return 1 }
+    if xs[1].value != 20 { return 2 }
+    if xs[2].tag != 3 { return 3 }
+
+    let tail: List<Box> = []
+    tail.push(Box { value: 40, tag: 4 })
+    if append_boxes(xs, tail) != 4 { return 4 }
+
+    let last = xs.last()
+    let mid = xs[1]
+    return last.value + mid.tag
+}

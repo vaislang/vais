@@ -1,0 +1,23 @@
+# expect: 42
+# List<Struct>.filter(...).first()/last().field can feed scalar list mutations.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn collect_score(docs: List<Doc>, needle: Str, min_score: Int) -> Int {
+    let scores: List<Int> = []
+    let titles: List<Str> = []
+    let lens: List<Int> = []
+    scores.push(docs.filter(|doc| str_contains(doc.body, needle) == 1).first().score)
+    scores.insert_at(0, docs.filter(|doc| doc.score > min_score).last().score)
+    titles.push(docs.filter(|doc| doc.score > min_score).last().title)
+    lens.insert_at(0, docs.filter(|doc| str_contains(doc.body, needle) == 1).last().body.len())
+    return scores[0] + scores[1] + titles[0].len() + lens[0] - 4
+}
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "vais cache", score: 5 })
+    docs.push(Doc { title: "beta", body: "learn tokens", score: 9 })
+    docs.push(Doc { title: "gamma", body: "tokens cache", score: 20 })
+    return collect_score(docs, "tokens", 10)
+}

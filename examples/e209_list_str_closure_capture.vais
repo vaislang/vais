@@ -1,0 +1,20 @@
+# expect: 42
+# List<Str>.filter/map closures can capture known Str parameters and locals.
+fn score_words(words: List<Str>, needle: Str) -> Int {
+    let selected = words.filter(|w| str_contains(w, needle) == 1)
+    if selected.len() != 2 { return 1 }
+    let suffix = "!"
+    let tagged = selected.map(|w| str_concat(w, suffix))
+    if tagged.len() != 2 { return 2 }
+    if tagged.contains("vais!") != 1 { return 3 }
+    if tagged.index_of("ai!") != 1 { return 4 }
+    return tagged.len() * 20 + tagged.contains("vais!") + tagged.index_of("ai!")
+}
+
+fn main() -> Int {
+    let words: List<Str> = []
+    words.push("vais")
+    words.push("db")
+    words.push("ai")
+    return score_words(words, "ai")
+}
