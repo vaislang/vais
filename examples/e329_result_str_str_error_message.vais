@@ -1,0 +1,42 @@
+# expect: 42
+# Result<Str,Str> non-Int error payload flow: string payloads carry both the
+# recovered value and a human-readable error message. Helpers return
+# `Ok(text)` or `Err("message")`, compose with local-binding `?`, and inline
+# match recovers either the Str payload or the Str error message. This is the
+# first verified slice where the Result error type is Str rather than Int.
+
+fn lookup_title(key: Str) -> Result<Str, Str> {
+    if key == "missing" { return Err("not found") }
+    if key == "empty" { return Err("blank title") }
+    return Ok("VaisDB Guide")
+}
+
+fn normalized_title(key: Str) -> Result<Str, Str> {
+    let title = lookup_title(key)?
+    if title.len() == 0 { return Err("blank title") }
+    return Ok(str_lower(title))
+}
+
+fn describe(key: Str) -> Int {
+    let flow = normalized_title(key)
+    let title_len = match flow { Ok(title) => title.len(), Err(msg) => msg.len() }
+    return title_len
+}
+
+fn main() -> Int {
+    # "vaisdb guide" is 12 chars after lowercasing.
+    let good = describe("guide")
+    if good != 12 { return 1 }
+
+    # Missing key: Err("not found") propagates through `?`, length is 9.
+    let missing = describe("missing")
+    if missing != 9 { return 2 }
+
+    # Recover the error message string directly from an Err arm.
+    let flow = lookup_title("missing")
+    let recovered = match flow { Ok(title) => title, Err(msg) => msg }
+    if recovered != "not found" { return 3 }
+
+    # 12 + 9 + 21 = 42
+    return good + missing + 21
+}

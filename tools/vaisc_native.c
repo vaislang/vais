@@ -2613,6 +2613,511 @@ static char *lower_result_str_int_text(const char *text) {
     return joined;
 }
 
+/* ---- Result<Str,Str> (non-Int error payload) direct lowering ----
+ * Mirrors the Result<Str,Int> machine but the error payload is a Str field.
+ * Shares the pure string helpers (result_str_int_name_in/add_name/clear_names/
+ * expr_local_name/parse_pattern_binder/expr_result_is_str/brace_delta/
+ * append_indent); only the type-name-matching functions are cloned so that
+ * Result<Str,Str>/VaisResultStrStr are recognized. */
+
+static int result_str_str_parse_fn_name(const char *line, char **name_out) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    const char *arrow = close == NULL ? NULL : strstr(close, "->");
+    if (arrow == NULL) return 0;
+    const char *ret_start = skip_ws(arrow + 2);
+    const char *ret_end = ret_start;
+    int depth = 0;
+    while (*ret_end != '\0') {
+        if (*ret_end == '<') depth++;
+        else if (*ret_end == '>') {
+            if (depth > 0) depth--;
+        } else if (depth == 0 && *ret_end == '{') {
+            break;
+        }
+        ret_end++;
+    }
+    while (ret_end > ret_start && (ret_end[-1] == ' ' || ret_end[-1] == '\t' || ret_end[-1] == '\r')) ret_end--;
+    char *ret = substr_copy(ret_start, (size_t)(ret_end - ret_start));
+    int ok = type_text_equals_compact(ret, "Result<Str,Str>") || type_text_equals_compact(ret, "VaisResultStrStr");
+    free(ret);
+    if (!ok) return 0;
+    *name_out = substr_copy(name_start, (size_t)(name_end - name_start));
+    return 1;
+}
+
+static void result_str_str_collect_param_names(const char *line, char **names, int *count) {
+    const char *s = skip_ws(line);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return;
+    s = skip_ws(s + 3);
+    if (!is_ident_start(*s)) return;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    const char *open = strchr(s, '(');
+    if (open == NULL) return;
+    int close = find_matching_paren_c(line, (int)(open - line));
+    if (close < 0) return;
+
+    char *params = substr_copy(open + 1, (size_t)(line + close - open - 1));
+    char *parts[16] = {0};
+    int n = split_top_level_commas_c(params, parts, 16);
+    for (int i = 0; i < n && i < 16; i++) {
+        char *part = trim_copy(parts[i]);
+        const char *p = skip_ws(part);
+        if (!is_ident_start(*p)) {
+            free(part);
+            continue;
+        }
+        const char *name_start = p;
+        p++;
+        while (is_ident_continue(*p)) p++;
+        const char *name_end = p;
+        p = skip_ws(p);
+        if (*p != ':') {
+            free(part);
+            continue;
+        }
+        char *type_text = trim_copy(p + 1);
+        if (type_text_equals_compact(type_text, "Result<Str,Str>") ||
+            type_text_equals_compact(type_text, "VaisResultStrStr")) {
+            char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+            result_str_int_add_name(names, count, name);
+            free(name);
+        }
+        free(type_text);
+        free(part);
+    }
+    for (int i = 0; i < 16; i++) free(parts[i]);
+    free(params);
+}
+
+static int result_str_str_expr_is_result(const char *expr, char **fn_names, int fn_count, char **local_names, int local_count) {
+    char *trimmed = trim_copy(expr);
+    const char *s = skip_ws(trimmed);
+    if (!is_ident_start(*s)) {
+        free(trimmed);
+        return 0;
+    }
+    const char *name_start = s;
+    s++;
+    while (is_ident_continue(*s)) s++;
+    char *name = substr_copy(name_start, (size_t)(s - name_start));
+    const char *rest = skip_ws(s);
+    int ok = 0;
+    if (*rest == '\0') {
+        ok = result_str_int_name_in(local_names, local_count, name);
+    } else if (*rest == '(') {
+        int close = find_matching_paren_c(trimmed, (int)(rest - trimmed));
+        if (close >= 0 && *skip_ws(trimmed + close + 1) == '\0') {
+            ok = result_str_int_name_in(fn_names, fn_count, name);
+        }
+    }
+    free(name);
+    free(trimmed);
+    return ok;
+}
+
+static char *result_str_str_rewrite_return_constructors(const char *line) {
+    StrBuf out;
+    sb_init(&out);
+    int changed = 0;
+    for (int i = 0; line[i] != '\0';) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if (line[i] == '\'' ) {
+            int end = skip_char_literal_c(line, i);
+            if (end < 0) {
+                sb_append(&out, line + i);
+                break;
+            }
+            sb_append_n(&out, line + i, (size_t)end - i);
+            i = end;
+            continue;
+        }
+        if ((i == 0 || !is_ident_continue(line[i - 1])) &&
+            strncmp(line + i, "return", 6) == 0 &&
+            !is_ident_continue(line[i + 6])) {
+            int cursor = i + 6;
+            while (line[cursor] == ' ' || line[cursor] == '\t') cursor++;
+            int is_ok = 0;
+            int is_err = 0;
+            if (strncmp(line + cursor, "Ok", 2) == 0 && !is_ident_continue(line[cursor + 2])) is_ok = 1;
+            else if (strncmp(line + cursor, "Err", 3) == 0 && !is_ident_continue(line[cursor + 3])) is_err = 1;
+            if (is_ok || is_err) {
+                int name_len = is_ok ? 2 : 3;
+                int open = cursor + name_len;
+                while (line[open] == ' ' || line[open] == '\t') open++;
+                if (line[open] == '(') {
+                    int close = find_matching_paren_c(line, open);
+                    if (close >= 0) {
+                        char *arg = trim_copy(substr_copy(line + open + 1, (size_t)(close - open - 1)));
+                        sb_append(&out, "return VaisResultStrStr { tag: ");
+                        sb_append(&out, is_ok ? "0, value: " : "1, value: \"\", error: ");
+                        sb_append(&out, arg);
+                        if (is_ok) sb_append(&out, ", error: \"\"");
+                        sb_append(&out, " }");
+                        free(arg);
+                        i = close + 1;
+                        changed = 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        sb_append_n(&out, line + i, 1);
+        i++;
+    }
+    if (!changed) {
+        free(out.data);
+        return strdup(line);
+    }
+    return sb_take(&out);
+}
+
+static int lower_result_str_str_try_let_line(
+    LineVec *out,
+    const char *line,
+    char **fn_names,
+    int fn_count,
+    char **local_names,
+    int local_count,
+    int *temp_count
+) {
+    char *name = NULL;
+    char *expr = NULL;
+    if (!parse_try_let(line, &name, &expr)) return 0;
+    if (!result_str_str_expr_is_result(expr, fn_names, fn_count, local_names, local_count)) {
+        free(name);
+        free(expr);
+        return 0;
+    }
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    char tmp[80];
+    snprintf(tmp, sizeof(tmp), "__vais_result_str_str_try%d", (*temp_count)++);
+    char *local_ref = result_str_int_expr_local_name(expr, local_names, local_count);
+    const char *result_ref = local_ref == NULL ? tmp : local_ref;
+
+    if (local_ref == NULL) {
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, tmp);
+        sb_append(&bind, " = ");
+        sb_append(&bind, expr);
+        lines_push(out, sb_take(&bind));
+    }
+
+    StrBuf guard;
+    sb_init(&guard);
+    sb_append_n(&guard, line, indent_len);
+    sb_append(&guard, "if ");
+    sb_append(&guard, result_ref);
+    sb_append(&guard, ".tag != 0 { return VaisResultStrStr { tag: 1, value: \"\", error: ");
+    sb_append(&guard, result_ref);
+    sb_append(&guard, ".error } }");
+    lines_push(out, sb_take(&guard));
+
+    StrBuf payload_decl;
+    sb_init(&payload_decl);
+    sb_append_n(&payload_decl, line, indent_len);
+    sb_append(&payload_decl, "let mut ");
+    sb_append(&payload_decl, name);
+    sb_append(&payload_decl, " = \"\"");
+    lines_push(out, sb_take(&payload_decl));
+
+    StrBuf payload_assign;
+    sb_init(&payload_assign);
+    sb_append_n(&payload_assign, line, indent_len);
+    sb_append(&payload_assign, name);
+    sb_append(&payload_assign, " = ");
+    sb_append(&payload_assign, result_ref);
+    sb_append(&payload_assign, ".value");
+    lines_push(out, sb_take(&payload_assign));
+
+    free(local_ref);
+    free(name);
+    free(expr);
+    return 1;
+}
+
+static int lower_result_str_str_inline_match_let_line(
+    LineVec *out,
+    const char *line,
+    char **fn_names,
+    int fn_count,
+    char **local_names,
+    int local_count,
+    int *temp_count
+) {
+    char *name = NULL;
+    char *match_expr = NULL;
+    char *arms_text = NULL;
+    if (!parse_inline_match_let(line, &name, &match_expr, &arms_text)) return 0;
+    if (!result_str_str_expr_is_result(match_expr, fn_names, fn_count, local_names, local_count)) {
+        free(name);
+        free(match_expr);
+        free(arms_text);
+        return 0;
+    }
+
+    char *arm_parts[16] = {0};
+    char *patterns[16] = {0};
+    char *exprs[16] = {0};
+    int arm_count = split_top_level_commas_c(arms_text, arm_parts, 16);
+    char *ok_binder = NULL;
+    char *err_binder = NULL;
+    char *ok_expr = NULL;
+    char *err_expr = NULL;
+    int failed = arm_count != 2;
+    for (int a = 0; a < arm_count && a < 16 && failed == 0; a++) {
+        if (!parse_arm(arm_parts[a], &patterns[a], &exprs[a])) {
+            failed = 1;
+            break;
+        }
+        char *binder = NULL;
+        if (result_str_int_parse_pattern_binder(patterns[a], "Ok", &binder)) {
+            ok_binder = binder;
+            ok_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else if (result_str_int_parse_pattern_binder(patterns[a], "Err", &binder)) {
+            err_binder = binder;
+            err_expr = strip_trailing_arm_comma_copy(exprs[a]);
+        } else {
+            failed = 1;
+        }
+    }
+    if (ok_binder == NULL || err_binder == NULL || ok_expr == NULL || err_expr == NULL) failed = 1;
+    if (failed) {
+        for (int k = 0; k < 16; k++) {
+            free(arm_parts[k]);
+            free(patterns[k]);
+            free(exprs[k]);
+        }
+        free(name);
+        free(match_expr);
+        free(arms_text);
+        free(ok_binder);
+        free(err_binder);
+        free(ok_expr);
+        free(err_expr);
+        return 0;
+    }
+
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    char tmp[80];
+    snprintf(tmp, sizeof(tmp), "__vais_result_str_str_match%d", (*temp_count)++);
+    char *local_ref = result_str_int_expr_local_name(match_expr, local_names, local_count);
+    const char *result_ref = local_ref == NULL ? tmp : local_ref;
+    /* The Ok payload is always Str; the Err payload is also Str. The result of
+     * the match is Str when either arm yields a Str value (bare binder, string
+     * literal, Str(...) or a str-returning helper); otherwise Int (e.g. .len()). */
+    int result_is_str = result_str_int_expr_result_is_str(ok_expr, ok_binder) ||
+        result_str_int_expr_result_is_str(err_expr, err_binder);
+
+    if (local_ref == NULL) {
+        StrBuf bind;
+        sb_init(&bind);
+        sb_append_n(&bind, line, indent_len);
+        sb_append(&bind, "let ");
+        sb_append(&bind, tmp);
+        sb_append(&bind, " = ");
+        sb_append(&bind, match_expr);
+        lines_push(out, sb_take(&bind));
+    }
+
+    StrBuf decl;
+    sb_init(&decl);
+    sb_append_n(&decl, line, indent_len);
+    sb_append(&decl, "let mut ");
+    sb_append(&decl, name);
+    sb_append(&decl, result_is_str ? " = \"\"" : " = 0");
+    lines_push(out, sb_take(&decl));
+
+    StrBuf head;
+    sb_init(&head);
+    sb_append_n(&head, line, indent_len);
+    sb_append(&head, "if ");
+    sb_append(&head, result_ref);
+    sb_append(&head, ".tag == 0 {");
+    lines_push(out, sb_take(&head));
+
+    StrBuf ok_bind;
+    sb_init(&ok_bind);
+    result_str_int_append_indent(&ok_bind, indent_len + 4);
+    sb_append(&ok_bind, "let mut ");
+    sb_append(&ok_bind, ok_binder);
+    sb_append(&ok_bind, " = \"\"");
+    lines_push(out, sb_take(&ok_bind));
+
+    StrBuf ok_bind_assign;
+    sb_init(&ok_bind_assign);
+    result_str_int_append_indent(&ok_bind_assign, indent_len + 4);
+    sb_append(&ok_bind_assign, ok_binder);
+    sb_append(&ok_bind_assign, " = ");
+    sb_append(&ok_bind_assign, result_ref);
+    sb_append(&ok_bind_assign, ".value");
+    lines_push(out, sb_take(&ok_bind_assign));
+
+    StrBuf ok_assign;
+    sb_init(&ok_assign);
+    result_str_int_append_indent(&ok_assign, indent_len + 4);
+    sb_append(&ok_assign, name);
+    sb_append(&ok_assign, " = ");
+    sb_append(&ok_assign, ok_expr);
+    lines_push(out, sb_take(&ok_assign));
+
+    StrBuf else_head;
+    sb_init(&else_head);
+    sb_append_n(&else_head, line, indent_len);
+    sb_append(&else_head, "} else {");
+    lines_push(out, sb_take(&else_head));
+
+    StrBuf err_bind;
+    sb_init(&err_bind);
+    result_str_int_append_indent(&err_bind, indent_len + 4);
+    sb_append(&err_bind, "let mut ");
+    sb_append(&err_bind, err_binder);
+    sb_append(&err_bind, " = \"\"");
+    lines_push(out, sb_take(&err_bind));
+
+    StrBuf err_bind_assign;
+    sb_init(&err_bind_assign);
+    result_str_int_append_indent(&err_bind_assign, indent_len + 4);
+    sb_append(&err_bind_assign, err_binder);
+    sb_append(&err_bind_assign, " = ");
+    sb_append(&err_bind_assign, result_ref);
+    sb_append(&err_bind_assign, ".error");
+    lines_push(out, sb_take(&err_bind_assign));
+
+    StrBuf err_assign;
+    sb_init(&err_assign);
+    result_str_int_append_indent(&err_assign, indent_len + 4);
+    sb_append(&err_assign, name);
+    sb_append(&err_assign, " = ");
+    sb_append(&err_assign, err_expr);
+    lines_push(out, sb_take(&err_assign));
+
+    StrBuf close;
+    sb_init(&close);
+    sb_append_n(&close, line, indent_len);
+    sb_append(&close, "}");
+    lines_push(out, sb_take(&close));
+
+    for (int k = 0; k < 16; k++) {
+        free(arm_parts[k]);
+        free(patterns[k]);
+        free(exprs[k]);
+    }
+    free(name);
+    free(match_expr);
+    free(arms_text);
+    free(local_ref);
+    free(ok_binder);
+    free(err_binder);
+    free(ok_expr);
+    free(err_expr);
+    return 1;
+}
+
+static char *lower_result_str_str_text(const char *text) {
+    if (!contains_generic_type(text, "Result", "Str", "Str")) return strdup(text);
+
+    LineVec lines = split_lines(text);
+    char *fn_names[128] = {0};
+    int fn_count = 0;
+    for (size_t i = 0; i < lines.len; i++) {
+        char *fname = NULL;
+        if (result_str_str_parse_fn_name(lines.items[i], &fname)) {
+            result_str_int_add_name(fn_names, &fn_count, fname);
+            free(fname);
+        }
+    }
+
+    LineVec out;
+    lines_init(&out);
+    lines_push(&out, strdup("struct VaisResultStrStr { tag: Int, value: Str, error: Str }"));
+
+    char *local_names[128] = {0};
+    int local_count = 0;
+    int in_result_fn = 0;
+    int fn_depth = 0;
+    int temp_count = 0;
+
+    for (size_t i = 0; i < lines.len; i++) {
+        char *typed = replace_generic_type(lines.items[i], "Result", "Str", "Str", "VaisResultStrStr");
+        if (line_starts_fn_decl(typed)) {
+            result_str_int_clear_names(local_names, &local_count);
+        }
+        result_str_str_collect_param_names(typed, local_names, &local_count);
+        char *fname = NULL;
+        int starts_result_fn = result_str_str_parse_fn_name(typed, &fname);
+        if (starts_result_fn) {
+            in_result_fn = 1;
+            fn_depth = 0;
+        }
+        free(fname);
+
+        char *work = lower_result_call_args_line(&out, typed, fn_names, fn_count, "__vais_result_str_str_arg", &temp_count);
+        int emitted = 0;
+        if (in_result_fn) {
+            emitted = lower_result_str_str_try_let_line(&out, work, fn_names, fn_count, local_names, local_count, &temp_count);
+        }
+        if (!emitted) {
+            emitted = lower_result_str_str_inline_match_let_line(&out, work, fn_names, fn_count, local_names, local_count, &temp_count);
+        }
+        if (!emitted) {
+            char *ctor_rewritten = in_result_fn ? result_str_str_rewrite_return_constructors(work) : strdup(work);
+            lines_push(&out, ctor_rewritten);
+        }
+
+        char *lname = NULL;
+        char *lexpr = NULL;
+        char *ltype = NULL;
+        if (result_str_int_parse_let_binding_expr(typed, &lname, &lexpr, &ltype)) {
+            if ((ltype != NULL && type_text_equals_compact(ltype, "VaisResultStrStr")) ||
+                result_str_str_expr_is_result(lexpr, fn_names, fn_count, local_names, local_count)) {
+                result_str_int_add_name(local_names, &local_count, lname);
+            }
+        }
+        free(lname);
+        free(lexpr);
+        free(ltype);
+
+        if (in_result_fn) {
+            fn_depth += result_str_int_brace_delta(typed);
+            if (fn_depth <= 0 && starts_result_fn) in_result_fn = 0;
+            else if (fn_depth <= 0 && !starts_result_fn) in_result_fn = 0;
+        }
+        free(work);
+        free(typed);
+    }
+
+    for (int i = 0; i < fn_count; i++) free(fn_names[i]);
+    for (int i = 0; i < local_count; i++) free(local_names[i]);
+    char *joined = join_lines(&out, 1);
+    lines_free(&out);
+    lines_free(&lines);
+    return joined;
+}
+
 static int result_metric_int_parse_fn_name(const char *line, char **name_out) {
     const char *s = skip_ws(line);
     if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
@@ -16787,7 +17292,9 @@ static char *normalize_source_text(const char *raw, int core_lower) {
 static char *prepare_source_text(const char *raw) {
     char *normalized = normalize_source_text(raw, 0);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
-    char *result_str_lowered = lower_result_str_int_text(map_match_lowered);
+    char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
+    char *result_str_lowered = lower_result_str_str_text(result_str_int_lowered);
+    free(result_str_int_lowered);
     char *enum_lowered = lower_enum_text(result_str_lowered);
     char *closure_lowered = lower_closure_text(enum_lowered);
     char *list_method_lowered = lower_list_method_text(closure_lowered);
@@ -19357,7 +19864,9 @@ static char *prepare_source_file(const char *path) {
     }
     char *normalized = normalize_source_text(merged, 0);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
-    char *result_str_lowered = lower_result_str_int_text(map_match_lowered);
+    char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
+    char *result_str_lowered = lower_result_str_str_text(result_str_int_lowered);
+    free(result_str_int_lowered);
     char *enum_lowered = lower_enum_text(result_str_lowered);
     char *closure_lowered = lower_closure_text(enum_lowered);
     char *list_method_lowered = lower_list_method_text(closure_lowered);
@@ -31256,8 +31765,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(merged);
     free(merged);
     if (map_match_lowered == NULL) return 1;
-    char *result_str_lowered = lower_result_str_int_text(map_match_lowered);
+    char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
     free(map_match_lowered);
+    if (result_str_int_lowered == NULL) return 1;
+    char *result_str_lowered = lower_result_str_str_text(result_str_int_lowered);
+    free(result_str_int_lowered);
     if (result_str_lowered == NULL) return 1;
     char *result_metric_lowered = lower_result_struct_int_text(result_str_lowered);
     free(result_str_lowered);

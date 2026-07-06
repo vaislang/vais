@@ -4415,6 +4415,39 @@ fn write_result_str_int_param_flow(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_result_str_str_error_message(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn lookup_title(key: Str) -> Result<Str, Str> {")
+    append_line(out, "    if key == \"missing\" { return Err(\"not found\") }")
+    append_line(out, "    if key == \"empty\" { return Err(\"blank title\") }")
+    append_line(out, "    return Ok(\"VaisDB Guide\")")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn normalized_title(key: Str) -> Result<Str, Str> {")
+    append_line(out, "    let title = lookup_title(key)?")
+    append_line(out, "    if title.len() == 0 { return Err(\"blank title\") }")
+    append_line(out, "    return Ok(str_lower(title))")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn describe(key: Str) -> Int {")
+    append_line(out, "    let flow = normalized_title(key)")
+    append_line(out, "    let title_len = match flow { Ok(title) => title.len(), Err(msg) => msg.len() }")
+    append_line(out, "    return title_len")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let good = describe(\"guide\")")
+    append_line(out, "    if good != 12 { return 1 }")
+    append_line(out, "    let missing = describe(\"missing\")")
+    append_line(out, "    if missing != 9 { return 2 }")
+    append_line(out, "    let flow = lookup_title(\"missing\")")
+    append_line(out, "    let recovered = match flow { Ok(title) => title, Err(msg) => msg }")
+    append_line(out, "    if recovered != \"not found\" { return 3 }")
+    append_line(out, "    return good + missing + 21")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_result_metric_int_struct_payload(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "struct Metric { docs: Int, terms: Int }")
@@ -7700,6 +7733,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "file_exists_result_flow") == 1 { wrote = write_file_exists_result_flow(src) }
     else if str_contains(name, "result_str_int_file_read") == 1 { wrote = write_result_str_int_file_read(src) }
     else if str_contains(name, "result_str_int_param_flow") == 1 { wrote = write_result_str_int_param_flow(src) }
+    else if str_contains(name, "result_str_str_error_message") == 1 { wrote = write_result_str_str_error_message(src) }
     else if str_contains(name, "result_metric_int_struct_payload") == 1 { wrote = write_result_metric_int_struct_payload(src) }
     else if str_contains(name, "result_record_int_struct_payload") == 1 { wrote = write_result_record_int_struct_payload(src) }
     else if str_contains(name, "result_multiline_struct_payload") == 1 { wrote = write_result_multiline_struct_payload(src) }
@@ -8328,6 +8362,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "%struct.VaisResultDocArtifactInt = type { i64, %struct.DocArtifact, i64 }") and str_contains(text, "%struct.DocArtifact = type { ptr, ptr, ptr, i64, i64 }") and str_contains(text, "define void @build_doc_artifact") and str_contains(text, "define i64 @trimmed_len") and str_contains(text, "define i64 @weight_terms") and str_contains(text, "define i64 @boost_score") and str_contains(text, "define i64 @score_or_code") and str_contains(text, "call void @build_doc_artifact") and str_contains(text, "call i64 @trimmed_len") and str_contains(text, "call i64 @weight_terms") and str_contains(text, "call i64 @boost_score") and str_contains(text, "call i64 @score_or_code") and str_contains(text, "__vais_str_trim") and str_contains(text, "__vais_str_len") and str_contains(text, "mul nsw i64") and str_contains(text, "add nsw i64")
     } else if shape == 232 {
         ok = str_contains(text, "%struct.VaisResultDocArtifactInt = type { i64, %struct.DocArtifact, i64 }") and str_contains(text, "%struct.DocArtifact = type { ptr, ptr, ptr, i64, i64 }") and str_contains(text, "define void @build_doc_artifact") and str_contains(text, "define i64 @trimmed_len") and str_contains(text, "define i64 @weight_terms") and str_contains(text, "define i64 @is_publishable") and str_contains(text, "call void @build_doc_artifact") and str_contains(text, "call i64 @trimmed_len") and str_contains(text, "call i64 @weight_terms") and str_contains(text, "call i64 @is_publishable") and str_contains(text, "__vais_str_trim") and str_contains(text, "__vais_str_len") and str_contains(text, "mul nsw i64") and str_contains(text, "icmp sge i64") and str_contains(text, "icmp eq i64")
+    } else if shape == 233 {
+        ok = str_contains(text, "%struct.VaisResultStrStr = type { i64, ptr, ptr }") and str_contains(text, "define void @lookup_title") and str_contains(text, "define void @normalized_title") and str_contains(text, "define i64 @describe") and str_contains(text, "call void @lookup_title") and str_contains(text, "call void @normalized_title") and str_contains(text, "__vais_str_lower") and str_contains(text, "__vais_str_len")
     } else if shape == 60 {
         ok = str_contains(text, "__vais_doc_term_counts_into") and str_contains(text, "__vais_map_str_int_get") and str_contains(text, "%struct.DirectMapStrInt")
     } else if shape == 61 {
@@ -8780,6 +8816,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "file_exists_result_flow", "direct fs_exists plus Result<Int,Int> file read flow reports missing files (=42)", 208)
     fail = fail + expect_case(vaisc, tmp, "result_str_int_file_read", "direct Result<Str,Int> file read flow binds Str payloads and missing-file codes (=42)", 212)
     fail = fail + expect_case(vaisc, tmp, "result_str_int_param_flow", "direct Result<Str,Int> helper parameters forward payloads and errors (=42)", 213)
+    fail = fail + expect_case(vaisc, tmp, "result_str_str_error_message", "direct Result<Str,Str> non-Int error payload flow recovers Str values and messages (=42)", 233)
     fail = fail + expect_case(vaisc, tmp, "result_metric_int_struct_payload", "direct Result<Metric,Int> struct payload helpers forward and recover fields (=42)", 214)
     fail = fail + expect_case(vaisc, tmp, "result_record_int_struct_payload", "direct Result<DeclaredStruct,Int> struct payload helpers forward and recover fields (=42)", 215)
     fail = fail + expect_case(vaisc, tmp, "result_multiline_struct_payload", "direct Result<DeclaredStruct,Int> multiline struct payload helpers forward and recover fields (=42)", 216)
