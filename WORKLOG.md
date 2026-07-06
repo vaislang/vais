@@ -1,5 +1,31 @@
 # Vais Worklog
 
+## 2026-07-06 (Result 진단 스프린트 착수 + 작업 1)
+
+Codex 미커밋 작업(e121~e328)을 게이트 검증 후 커밋하고 origin/main에 push
+완료(324d2cae..c0e443e3). push 전 `vaisc_core.ll` 헤더에 머신-로컬 임시경로
+(`/var/folders/.../vaisc-native-hGr9L4/...`)가 새어든 것을 발견 — 과거 모든
+커밋과 origin은 이 헤더가 0이었다. clang 헤더 4줄만 제거(IR 본문 345 define
+불변)하고 self-host fixpoint(stage1==stage2 bit-identical)·release gates
+재검증 후 e121~e328 커밋에 fixup으로 합쳤다.
+
+이후 새 스프린트 "VaisDB Result 진단 확장"(5작업)을 ROADMAP에 작성하고 작업 1
+착수. 조사로 확인한 핵심: Result 값-흐름은 e321에서 포화, 진단 프레디킷
+`unsupported_result_generic_at`(vais_check_core.vais:230)도 이미 강력(검증된
+4형식 외 전부 reject). **진짜 갭은 그 reject가 어떤 게이트로도 검증되지 않는
+것**. 작업 1은 checker의 bad.vais fixture에 Result<Unknown,Int>(미선언 struct
+payload) reject를 추가하고 count 29→30으로 고정. Result<Int,Str>(non-Int
+error)는 원래 fixture에 있었으나 이제 count 게이트가 두 오용을 함께 보호한다.
+front/direct/checker/diff-check green, 회귀 0. codegen 미변경이라 장시간 게이트
+(fixpoint-full/self/release)는 스프린트 종료 시 통합 실행 예정.
+
+**한계**: checker 게이트가 bad.vais 총 진단 count에 의존하는 기존 설계라, 특정
+Result 진단 메시지 자체를 assert하진 않는다(기존 관례 준수). count 틀어지면
+회귀는 잡힌다.
+
+**다음 세션:** 작업 2 non-Int error payload 슬라이스(Result<Str,Str>) 승격 —
+이건 codegen 변경 포함이라 full/direct/parity/value 전체 게이트 필요.
+
 ## 2026-07-05 (resume + commit)
 
 Resumed a Codex session that had stopped mid-work with ~10 days of uncommitted

@@ -22,65 +22,93 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-04)
+## 현재 작업 (2026-07-06) — VaisDB Result 진단 확장
 모드: 개별선택
-- [x] 1. 문서 라인 처리 API 승격 (impl-sonnet)
-- [x] 2. 구조화 텍스트 snapshot API 승격 (impl-sonnet)
-- [x] 3. Result/Option 오류 처리 ergonomics 보강 (impl-sonnet)
-- [x] 4. Vais-authored 문서 인덱서 prototype 작성 (impl-sonnet)
-- [x] 5. 개발자 경험과 성능 기준 정리 (impl-sonnet)
-진행률: 5/5 (100%)
+- [x] 1. Result 오용 P4 help 진단 신설 (impl-sonnet) ✅ 2026-07-06
+  - changes: tests/fixtures/vais_check/bad.vais (+Result<Unknown,Int> reject),
+    tools/vais_check_contract_check.vais·vais_check_smoke.vais (count 29→30);
+    Result<Int,Str>(non-Int error)와 Result<Unknown,Int>(미선언 struct) 오용이
+    checker P4 help로 거부되는 것을 bad.vais fixture count 게이트로 고정.
+- [ ] 2. non-Int error payload 슬라이스 승격 (impl-sonnet)
+- [ ] 3. nested Result/Option 진단 명확화 (impl-sonnet)
+- [ ] 4. VaisDB 인덱서에 진단 경로 적용 (impl-sonnet)
+- [ ] 5. 문서/게이트 정리 (impl-sonnet)
+진행률: 1/5 (20%)
 
-## 다음 후보 작업
+배경: Result 값-흐름 표면은 e321에서 포화(payload Int→Str→Struct, match 필드
+회수→조합→Bool 반환 완성). 반면 진단은 얇다 — 현재는 자동 wrapper 생성 위주이고
+잘못 쓴 Result 코드에 대한 명시적 P4 help가 거의 없다(`vaisc_errors_check.vais`에
+Result 항목 0). 이번 스프린트는 "오용이 명확한 help로 거부되는가"를 채우고,
+product workflow가 실제로 노출한 non-Int error / nested payload 인접 확장을 더한다.
+generic `Result<T,E>`는 여전히 열지 않는다.
 
-- e327 package release archive output을 바탕으로, richer reusable package
-  layout, additional package diagnostics, 또는
-  full self-host structured payload diagnostics 중 다음 제품화 병목을 선택한다.
-- full self-host의 structured Result/List/Map 조합 경험을 바탕으로,
-  `Result<Struct,Int>` helper composition과 diagnostics를 더 넓힐지
-  결정한다.
+## 다음 후보 작업 (이번 스프린트 이후)
+
+- 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
+  `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
+- richer reusable package layout / package diagnostics (e327 아카이브 기반).
 
 ## Task Briefs
 
-### 1. 문서 라인 처리 API 승격
-참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-1-document-text-ergonomics
-대상 파일: compiler/self/fixpoint_full.vais, compiler/self/vaisc_core.ll, tools/vaisc_native.c, tools/vaisc_front_check.vais, tools/vaisc_direct_feature_check.vais, tools/fixpoint_full_codegen_check.vais, tools/vaisc-parity.tsv, examples/e292_str_split_lines_into.vais, std/PRELUDE.md, docs/reference/LANGUAGE.md, examples/README.md, CHANGELOG.md, WORKLOG.md
-요구사항: `str_split_lines_into(text, out)`를 full/direct 양쪽에 추가하고 LF/CRLF/마지막 빈 줄/빈 입력 semantics를 예제로 고정한다.
-인터페이스: `str_split_lines_into(text: Str, out: List<Str>) -> Int`
-제약사항: `str_split_into(text, "\n", out)`와 호환 가능한 범위에서 CRLF만 추가 정규화하며, list capacity overflow는 기존 List push trap 정책을 따른다.
-완료조건: e292 예제가 direct/full에서 기대값으로 실행되고 front/direct/full/parity/release gates가 통과한다.
+### 1. Result 오용 P4 help 진단 신설
+대상 파일: tools/vaisc_errors_check.vais, tools/vaisc_front_check.vais, tools/vais_check_core.vais, tests/fixtures/vais_check/, docs/reference/LANGUAGE.md
+요구사항: 잘못 쓴 concrete Result 코드가 wrapper 자동생성으로 조용히 통과하거나 모호한 codegen 에러로 실패하는 대신, 명확한 P4 help로 거부되게 한다. 최소 케이스: (a) 검증되지 않은 payload/error 타입 조합(예: `Result<Int,Str>` 미검증 error 타입), (b) 파일에 선언되지 않은 struct payload(`Result<Unknown,Int>`), (c) Ok/Err arm 누락 또는 arm 타입 불일치.
+인터페이스: 기존 `vais_check_core.vais` 755/759줄의 Result 에러 메시지 스타일(P4 help)을 재사용해 reject 케이스를 늘린다.
+제약사항: 현재 통과하는 e294~e321 예제는 하나도 회귀시키지 않는다. codegen 변경 없이 checker/front 진단만 확장한다.
+완료조건: `vaisc_errors_check.vais`에 Result reject fixture가 추가되고, front/checker 게이트가 각 오용에 대해 P4 help 형태로 거부하며, 기존 게이트 전부 green.
 
-### 2. 구조화 텍스트 snapshot API 승격
-참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-2-structured-data
-대상 파일: compiler/self/fixpoint_full.vais, tools/vaisc_native.c, examples/e293_*.vais, std/PRELUDE.md, docs/reference/LANGUAGE.md, tools/*check*.vais
-요구사항: VaisDB metadata snapshot에 필요한 최소 구조화 텍스트 API를 product workflow 기준으로 선택하고, line/key-value 또는 TSV 기반 snapshot read/write를 gate-backed 예제로 승격한다.
-인터페이스: `map_str_str_snapshot(docs: Map<Str,Str>) -> Str`, `map_str_str_load_snapshot(text: Str, out: Map<Str,Str>) -> Int`
-제약사항: line-based `key=value\n` snapshot으로 한정한다. load는 output map을 clear하고 LF/CRLF line을 읽으며 blank/malformed/no-key line은 skip하고, 추가 `=`는 value에 보존하고, 빈 value는 허용한다. full JSON parser로 범위를 확장하지 않는다.
-완료조건: snapshot write/read round trip 예제가 full/direct/parity/release gates에서 통과한다.
+### 2. non-Int error payload 슬라이스 승격
+참조: tools/vais_check_core.vais(759줄 "non-Int error payloads are not verified yet")
+대상 파일: compiler/self/fixpoint_full.vais, compiler/self/vaisc_core.ll, tools/vaisc_native.c, tools/vais_check_core.vais, tools/vaisc_front_check.vais, tools/vaisc_direct_feature_check.vais, tools/fixpoint_full_codegen_check.vais, tools/vaisc-parity.tsv, examples/, std/PRELUDE.md, docs/reference/LANGUAGE.md
+요구사항: product workflow가 실제로 노출하는 non-Int error payload 한 슬라이스를 concrete하게 승격한다. 후보: `Result<Str,Str>`(문자열 에러 메시지) — helper return/param/forward/inline match/`?` 전파를 e321까지의 패턴과 동일 깊이로 고정.
+인터페이스: 기존 concrete 3형식(`Result<Int,Int>`/`Result<Str,Int>`/`Result<Struct,Int>`)을 깨지 않고 error 타입만 확장한다.
+제약사항: generic `Result<T,E>`는 열지 않는다. 한 번에 한 error 타입 슬라이스만.
+완료조건: 새 예제가 direct/full/parity/value/release 게이트에서 기대값으로 실행되고 full codegen case로 보호된다.
 
-### 3. Result/Option 오류 처리 ergonomics 보강
-참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-3-error-and-result-ergonomics
-대상 파일: compiler/self/fixpoint_full.vais, tools/vaisc_native.c, examples/e294_*.vais, docs/reference/LANGUAGE.md, std/PRELUDE.md
-요구사항: 파일/파싱/검색 실패를 Vais 코드에서 명확히 표현할 수 있게 현재 concrete `Result`/`Option` 표면을 확장하거나 예제 패턴을 고정한다.
-인터페이스: 기존 `Option<Int>`/`Result<Int,Int>` 제약을 깨지 않고 필요한 concrete slice부터 추가한다.
-제약사항: 범용 generics를 먼저 열지 않는다.
-완료조건: 문서 인덱서 prototype이 fallback integer codes만으로 흐름을 숨기지 않고 오류 경로를 표현할 수 있다.
+조사 완료 (2026-07-06, 다음 세션 진입점) — 이 작업은 dedicated 세션 필요:
+- **표현 스킴**: full self-host는 `Result<Str,Int>`를 packed scalar i64로 인코딩
+  (fixpoint_full.vais:3400~3496 생성자). 값을 `mul 2`로 시프트해 LSB를 태그로
+  사용: `Ok(v)`=`v*2`, `Err(code)`=`code*2+1`. Str payload는 heap malloc 후
+  포인터를 값으로 pack(3417~3470). native.c는 별도로 struct 기반
+  `VaisResultStrInt { tag, value: Str, error: Int }`(2532줄) — 두 백엔드 표현이
+  다르므로 각각 확장 필요.
+- **핵심 통찰**: Err payload도 heap 포인터(malloc 8-byte 정렬→LSB=0)로 처리하면
+  `Result<Str,Str>`가 기존 packed 스킴에 대칭적으로 들어간다. 표현을 새로
+  설계할 필요 없이 "기존 Str-payload 경로를 Err 쪽에도 적용"이 정답.
+- **첫 관문**: 현재 `Result<Str,Str>`는 checker/front 타입 진단(작업 1에서 강화)이
+  codegen 도달 전에 거부한다. 순서 = ①타입 인식 열기(checker
+  `result_str_str_type_at`, full/native 타입 태그 `result_str_str_ty()` 신규,
+  native `VaisResultStrStr` 구조체) → ②codegen이 실측으로 깨지는 지점을 packed-i64
+  match unpack(9594~9704 `result_match_*`, 토큰 오프셋 하드코딩)까지 확장.
+- **손댈 곳**: full self-host 123곳(result_str 관련), native.c의 `result_str_int_*`
+  함수군 전체(1617~2643 등), checker 235~238줄 accept 목록, 진단 help 17273/17286줄.
+- **Steps 체크포인트 권장**: (1)타입 인식+진단 (2)Ok/Err 생성자 (3)inline match
+  unpack (4)`?` 전파 (5)param forward. 각 단계 후 full/direct 게이트로 회귀 확인.
+- **.ll 주의**: fixpoint_full.vais 수정 후 vaisc_core.ll은 canonical 재생성만
+  (임시경로 유입 금지, 2026-07-06 위생 이슈 참조).
 
-### 4. Vais-authored 문서 인덱서 prototype 작성
-참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-4-vaisdb-prototype-in-vais
-대상 파일: examples/e29x_vaisdb_*.vais, docs/design/VAISDB_*.md, tools/vaisc-parity.tsv
-요구사항: Vais로 문서 ingest, tokenize, term count, metadata snapshot, simple query scoring을 한 번에 실행하는 작은 prototype을 작성한다.
-인터페이스: CLI or example `main() -> Int` workflow로 시작한다.
-제약사항: 제품 DB 엔진 구현이 아니라 language dogfooding prototype이다.
-완료조건: prototype이 direct/full/parity/value corpus에서 실행되고, 부족한 언어 기능이 새 roadmap task로 환류된다.
+### 3. nested Result/Option 진단 명확화
+참조: tools/vais_check_core.vais(755줄 nested Option/Result 미검증)
+대상 파일: tools/vais_check_core.vais, tools/vaisc_front_check.vais, tools/vaisc_errors_check.vais, docs/reference/LANGUAGE.md
+요구사항: `Result<Result<...>,Int>`, `Option<Result<...>>` 같은 nested 조합이 조용히 오작동하지 않고 "not verified yet" P4 help로 명확히 거부되게 한다.
+인터페이스: 작업 1의 reject 인프라를 재사용한다.
+제약사항: nested를 실제로 구현하지 않는다 — 진단 명확화만. codegen 변경 없음.
+완료조건: nested reject fixture가 게이트에서 P4 help로 거부되고 기존 게이트 green.
 
-### 5. 개발자 경험과 성능 기준 정리
-참조: docs/design/VAIS_90_LANGUAGE_ROADMAP.md#phase-5-developer-experience
-대상 파일: scripts/, tools/, docs/reference/LANGUAGE.md, examples/README.md, website/
-요구사항: 새 document/VaisDB workflow에 필요한 diagnostics, examples, formatter or format-check direction, and performance baseline을 정리한다.
-인터페이스: scripts/test-* gates and documented commands.
-제약사항: release gate가 장시간이어도 green 유지가 우선이다.
-완료조건: docs와 gates만 보고 다음 contributor가 동일 workflow를 재현할 수 있다.
+### 4. VaisDB 인덱서에 진단 경로 적용 (도그푸딩)
+참조: examples/e295_vaisdb_indexer_prototype.vais, e297/e298 file ingest
+대상 파일: examples/e29x_vaisdb_*.vais 또는 신규 예제, tools/vaisc-parity.tsv, scripts/test-vaisdb-workflow.sh
+요구사항: VaisDB 인덱서/ingest 워크플로가 작업 1~3의 명확한 오류 경로를 실제로 사용하는 도그푸딩 예제를 만든다(예: 손상된 스냅샷/누락 필드를 non-Int error 또는 명시적 Err로 표현). 작업 중 노출된 언어 갭은 새 roadmap task로 환류.
+인터페이스: example `main() -> Int` 또는 기존 워크플로 확장.
+제약사항: 제품 DB 엔진이 아니라 dogfooding prototype.
+완료조건: 예제가 direct/full/parity/value에서 실행되고 workflow 게이트에 편입된다.
+
+### 5. 문서/게이트 정리
+대상 파일: docs/reference/LANGUAGE.md, std/PRELUDE.md, examples/README.md, CHANGELOG.md, docs/design/VAISDB_DX_BASELINE.md, WORKLOG.md
+요구사항: 이번 스프린트로 확장된 Result 진단/타입 표면을 reference/prelude/example 문서에 반영하고, 다음 contributor가 "어떤 Result 형식이 검증됐고 무엇이 왜 거부되는가"를 문서만 보고 알 수 있게 한다.
+인터페이스: 문서 + scripts/test-* 게이트.
+제약사항: release gate가 장시간이어도 green 유지가 우선.
+완료조건: docs와 gates만 보고 검증된 Result 표면과 거부 규칙을 재현할 수 있다.
 
 ## Done
 
