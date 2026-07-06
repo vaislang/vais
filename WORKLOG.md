@@ -1,5 +1,36 @@
 # Vais Worklog
 
+## 2026-07-06 (작업 2 — Result<Str,Str> direct 슬라이스)
+
+작업 1을 main에 머지(fast-forward, origin push, 브랜치 정리)한 뒤 작업 2
+(Result<Str,Str> non-Int error payload 승격)에 착수. 위임을 3회 시도(이전 세션 1
++ 이번 2)했으나 모두 중간에 멈췄다 — 원인은 native.c의 얽힌 다수 검증 지점
+연쇄였다. Opus가 직접 파고들어 돌파.
+
+핵심 발견(위임이 놓친 것): direct 헤더 화이트리스트는 손댈 필요가 없었다.
+소스-투-소스 desugar가 `struct VaisResultStrStr { tag, value: Str, error: Str }`를
+주입하고, direct_return_type_allowed가 "선언된 struct는 무조건 허용"하므로
+desugar된 프로그램이 헤더 검증을 자동 통과한다. 필요한 건 desugar 함수
+`lower_result_str_str_text` 하나뿐이었다. 이전 에이전트들은 헤더 화이트리스트를
+고치려다 길을 잃었다.
+
+구현: lower_result_str_str_text + 6개 타입명 매칭 헬퍼 복제(str_int 머신 미러,
+error 필드만 Str). Ok 생성자 `error: 0`→`error: ""`가 유일한 로직 차이. desugar
+파이프라인 3곳에 str_int 다음 str_str 단계 삽입. checker result_str_str_type_at
++ accept 목록 + P4 help. direct feature check shape 233(VaisResultStrStr =
+{ i64, ptr, ptr }, error=ptr). 예제 e329. 실측: probe(match)=5, ?전파 Ok=7/Err=5,
+e329=42(문자열 payload 회수 포함). 회귀 0(front/direct/checker/value 347/0).
+커밋 cdcbc00d. `.ll` 미변경(native.c는 별도 빌드)이라 위생 이슈 없음.
+
+e329는 vaisc-parity.tsv에 등록 안 함 — default 엔진(full)이 아직 거부하므로.
+parity/value 게이트는 매니페스트 기반이라 미등록 예제를 건드리지 않는다. direct
+feature check(shape 233)로만 보호.
+
+**다음 세션: 작업 2의 full self-host 부분.** fixpoint_full.vais의 packed scalar
+i64 스킴에 Str error 확장(ROADMAP 작업2 브리프 + memory 참조). Err payload도 heap
+포인터로 대칭 처리가 정답. 완료 후 vaisc_core.ll canonical 재생성(임시경로 금지),
+e329를 parity에 native-supported 등록, native.c front 진단도 정렬.
+
 ## 2026-07-06 (Result 진단 스프린트 착수 + 작업 1)
 
 Codex 미커밋 작업(e121~e328)을 게이트 검증 후 커밋하고 origin/main에 push

@@ -29,11 +29,25 @@ This file tracks current work and completed gate-backed language surface.
     tools/vais_check_contract_check.vais·vais_check_smoke.vais (count 29→30);
     Result<Int,Str>(non-Int error)와 Result<Unknown,Int>(미선언 struct) 오용이
     checker P4 help로 거부되는 것을 bad.vais fixture count 게이트로 고정.
-- [ ] 2. non-Int error payload 슬라이스 승격 (impl-sonnet)
+- [~] 2. non-Int error payload 슬라이스 승격 (Opus 직접) — direct 완료, full 남음
+  - direct 슬라이스 완료 ✅ 2026-07-06 (커밋 cdcbc00d): Result<Str,Str>가
+    native direct 엔진에서 helper return + inline match + `?` 전파 동작.
+    lower_result_str_str_text(str_int 머신 복제, error 필드 Str) + checker
+    result_str_str_type_at + direct feature shape 233 + 예제 e329.
+  - 핵심 발견: direct 헤더 화이트리스트 불필요 — desugar가 VaisResultStrStr
+    struct 주입하면 direct_return_type_allowed가 선언된 struct 자동 허용.
+  - **남은 것 = full self-host 승격**: fixpoint_full.vais의 packed scalar i64
+    스킴(result_str_int_ty()=-20, 3400~3496 생성자)에 Str error 확장. Ok/Err
+    payload를 heap 포인터로(malloc 8-byte 정렬 LSB=0) 대칭 처리하면 packed에
+    들어감. result_str_str_ty() 새 태그 + match unpack(9594~9704) 확장. 완료 후
+    vaisc_core.ll canonical 재생성(임시경로 금지). 그 다음 e329를
+    vaisc-parity.tsv에 native-supported로 등록 + full codegen case 추가.
+    native.c의 front 진단(18277~18282)도 Result<Str,Str> 허용으로 열어 checker와
+    정렬(현재는 direct-only라 default engine이 e329 거부하는 게 정상).
 - [ ] 3. nested Result/Option 진단 명확화 (impl-sonnet)
 - [ ] 4. VaisDB 인덱서에 진단 경로 적용 (impl-sonnet)
 - [ ] 5. 문서/게이트 정리 (impl-sonnet)
-진행률: 1/5 (20%)
+진행률: 1.5/5 (30%) — 작업2 direct 완료, full 남음
 
 배경: Result 값-흐름 표면은 e321에서 포화(payload Int→Str→Struct, match 필드
 회수→조합→Bool 반환 완성). 반면 진단은 얇다 — 현재는 자동 wrapper 생성 위주이고
