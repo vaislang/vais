@@ -229,6 +229,12 @@ argv-supplied paths, and runs the same snapshot/index/query workflow,
 `examples/e298_vaisdb_file_ingest_result_flow.vais` for the `fs_exists`
 guarded follow-up that returns `Result<Int,Int>` error codes for missing or
 malformed file-backed inputs,
+`examples/e329_result_str_str_error_message.vais` for the first
+`Result<Str,Str>` non-Int error payload slice that carries both a `Str` value
+and a `Str` error message through helper returns, inline match, and `?`,
+`examples/e330_vaisdb_ingest_error_message_flow.vais` for the VaisDB
+file-ingest workflow that reports every failure path as a human-readable
+`Result<Str,Str>` message instead of an opaque integer code,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

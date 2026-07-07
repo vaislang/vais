@@ -1,5 +1,26 @@
 # Vais Worklog
 
+## 2026-07-06 (작업 4 — VaisDB ingest Str 에러 메시지 도그푸딩)
+
+작업 4(VaisDB 인덱서 진단 경로 도그푸딩). 작업2의 Result<Str,Str> non-Int error
+payload를 실제 제품 워크플로에서 쓰는 예제 e330 신설. e298(Result<Int,Int>
+정수 코드)을 발전시켜 파일 ingest + snapshot round trip + query scoring의 모든
+실패 경로를 사람이 읽는 Str 메시지("document not found"/"query not found"/
+"document body is blank" 등)로 표현. helper `-> Result<Str,Str>`, `?` 전파로
+ingest 실패 조기반환, inline match로 에러 메시지 문자열 회수. 성공 경로는
+"top document is VaisDB Guide"(28자) 반환. 계산: 28 + "document not found"(18) -
+4 = 42.
+
+세미콜론 잠복 버그(task_8ac041ef) 회피 위해 개행 형태로 작성(예제는 원래 개행이라
+자연스러움). e330 parity native-supported 등록(348→349), test-vaisdb-workflow.sh
+expect_pair 편입(full+direct 42), README에 e329(작업2 누락)+e330 문서화. codegen
+미변경. 실측 e330 full/direct=42, parity 349, value corpus 349/0, workflow OK,
+diff clean.
+
+**다음: 작업 5** (문서/게이트 정리 — LANGUAGE.md/PRELUDE.md에 Result 진단·타입
+표면 반영). 그 다음 스프린트 마감 시 작업2 codegen 변경 때문에 release gates 통합
+실행.
+
 ## 2026-07-06 (작업 3 — nested Result/Option 진단 게이트)
 
 작업 3(nested 진단 명확화). 조사로 확인: nested 조합 4종(Result<Result<..>,Int>,

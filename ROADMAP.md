@@ -55,9 +55,17 @@ This file tracks current work and completed gate-backed language surface.
   - nested 진단 로직은 이미 완결(unsupported_result_generic_at가 검증 4형식 외
     전부 reject)이었고, 갭은 작업1과 동일하게 "게이트 미고정". codegen 미변경.
     front/direct/checker/native smoke green.
-- [ ] 4. VaisDB 인덱서에 진단 경로 적용 (impl-sonnet)
+- [x] 4. VaisDB 인덱서에 진단 경로 적용 (Opus 직접) ✅ 2026-07-06
+  - changes: examples/e330_vaisdb_ingest_error_message_flow.vais 신설 — 작업2
+    Result<Str,Str>를 실제 VaisDB ingest 워크플로에서 도그푸딩. 파일 ingest +
+    snapshot round trip + query scoring의 모든 실패 경로를 정수 코드 대신
+    사람이 읽는 Str 에러 메시지("document not found" 등)로 표현, `?` 전파 +
+    inline match로 회수. e330 parity native-supported 등록(349), workflow 게이트
+    expect_pair 편입, README에 e329/e330 문서화(e329는 작업2에서 누락됐던 것).
+  - 검증: e330 full/direct=42, parity 349, value corpus 349/0, workflow OK.
+    codegen 미변경.
 - [ ] 5. 문서/게이트 정리 (impl-sonnet)
-진행률: 3/5 (60%)
+진행률: 4/5 (80%)
 
 배경: Result 값-흐름 표면은 e321에서 포화(payload Int→Str→Struct, match 필드
 회수→조합→Bool 반환 완성). 반면 진단은 얇다 — 현재는 자동 wrapper 생성 위주이고

@@ -1,0 +1,98 @@
+# expect: 42
+# VaisDB file-ingest workflow that reports failures as human-readable Str error
+# messages instead of opaque integer codes. This dogfoods the Result<Str,Str>
+# non-Int error payload surface (sprint task 2) in a real product-shaped flow:
+# ingest documents, snapshot metadata, read a query, and score it, with every
+# failure path carrying a descriptive message that a caller can surface or log.
+
+fn ingest_doc(meta: Map<Str,Str>, title_key: Str, body_key: Str, path: Str, terms: Map<Str,Int>) -> Result<Str, Str> {
+    if fs_exists(path) != 1 { return Err("document not found") }
+    let text = fs_read_text(path)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n < 2 { return Err("document needs a title and a body line") }
+    let title = str_trim(lines[0])
+    let body = str_trim(lines[1])
+    if title.len() == 0 { return Err("document title is blank") }
+    if body.len() == 0 { return Err("document body is blank") }
+    meta.insert(title_key, title)
+    meta.insert(body_key, body)
+    let count = doc_term_counts_into(body, terms)
+    return Ok(title)
+}
+
+fn read_query(path: Str, query: Map<Str,Int>) -> Result<Str, Str> {
+    if fs_exists(path) != 1 { return Err("query not found") }
+    let text = fs_read_text(path)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n == 0 { return Err("query is empty") }
+    let query_text = str_trim(lines[0])
+    if query_text.len() == 0 { return Err("query line is blank") }
+    let count = doc_term_counts_into(query_text, query)
+    return Ok(query_text)
+}
+
+fn run_ingest(doc_a_path: Str, doc_b_path: Str, query_path: Str) -> Result<Str, Str> {
+    let meta: Map<Str,Str> = {}
+    let doc_a: Map<Str,Int> = {}
+    let doc_b: Map<Str,Int> = {}
+
+    let title_a = ingest_doc(meta, "d1.title", "d1.body", doc_a_path, doc_a)?
+    let title_b = ingest_doc(meta, "d2.title", "d2.body", doc_b_path, doc_b)?
+    if title_a != "VaisDB Guide" { return Err("unexpected first title") }
+    if title_b != "Cache Notes" { return Err("unexpected second title") }
+
+    let snapshot = map_str_str_snapshot(meta)
+    let loaded: Map<Str,Str> = {}
+    if map_str_str_load_snapshot(snapshot, loaded) != 4 { return Err("snapshot round trip lost entries") }
+
+    let query: Map<Str,Int> = {}
+    let query_text = read_query(query_path, query)?
+
+    let a_score = doc_term_weighted_score(query, doc_a)
+    let b_score = doc_term_weighted_score(query, doc_b)
+    if a_score <= b_score { return Err("expected the first document to rank higher") }
+
+    return Ok(str_concat("top document is ", title_a))
+}
+
+fn describe_run(doc_a_path: Str, doc_b_path: Str, query_path: Str) -> Int {
+    let flow = run_ingest(doc_a_path, doc_b_path, query_path)
+    let report_len = match flow { Ok(summary) => summary.len(), Err(message) => message.len() }
+    return report_len
+}
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let doc_a = path_join(root, "vais-e330-doc-a.txt")
+    let doc_b = path_join(root, "vais-e330-doc-b.txt")
+    let query = path_join(root, "vais-e330-query.txt")
+    let missing = path_join(root, "vais-e330-missing/no-doc.txt")
+    let lf = str_byte(10)
+
+    let doc_a_text = str_concat("VaisDB Guide", str_concat(lf, str_concat("AI cache ai CACHE vector ai", lf)))
+    let doc_b_text = str_concat("Cache Notes", str_concat(lf, str_concat("cache cache vector vector", lf)))
+    let query_text = str_concat("ai cache ai", lf)
+
+    if fs_write_text(doc_a, doc_a_text) != 0 { return 1 }
+    if fs_write_text(doc_b, doc_b_text) != 0 { return 2 }
+    if fs_write_text(query, query_text) != 0 { return 3 }
+
+    # Success path: "top document is VaisDB Guide" is 28 chars.
+    let ok_len = describe_run(doc_a, doc_b, query)
+    if ok_len != 28 { return 4 }
+
+    # Recover the Str error message directly from a missing-document run.
+    let missing_flow = run_ingest(missing, doc_b, query)
+    let message = match missing_flow { Ok(summary) => summary, Err(reason) => reason }
+    if message != "document not found" { return 5 }
+
+    # Missing-query path also carries a descriptive message.
+    let bad_query = run_ingest(doc_a, doc_b, missing)
+    let query_message = match bad_query { Ok(summary) => summary, Err(reason) => reason }
+    if query_message != "query not found" { return 6 }
+
+    # 28 + message.len()(18) - 4 = 42
+    return ok_len + message.len() - 4
+}

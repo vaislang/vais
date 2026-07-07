@@ -142,6 +142,7 @@ expect_pair "result map helper flow" "$ROOT/examples/e296_result_map_param_flow.
 expect_pair "indexer prototype" "$ROOT/examples/e295_vaisdb_indexer_prototype.vais"
 expect_pair "file ingest generated workflow" "$ROOT/examples/e297_vaisdb_file_ingest_workflow.vais"
 expect_pair "file ingest Result flow" "$ROOT/examples/e298_vaisdb_file_ingest_result_flow.vais"
+expect_pair "ingest Str error message flow" "$ROOT/examples/e330_vaisdb_ingest_error_message_flow.vais"
 expect_pair "file read Result Str payload flow" "$ROOT/examples/e301_result_str_int_file_read.vais"
 expect_pair "Result Str parameter flow" "$ROOT/examples/e302_result_str_int_param_flow.vais"
 expect_pair "Result Metric struct payload flow" "$ROOT/examples/e303_result_metric_int_struct_payload.vais"
