@@ -8092,6 +8092,18 @@ fn write_option_nested(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_result_nested(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn wrap() -> Result<Result<Int, Int>, Int> {")
+    append_line(out, "    return Err(1)")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "day1") == 1 { return write_day1(path) }
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
@@ -8952,6 +8964,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "option_generic_not_verified") == 1 { return write_option_generic(path) }
     if str_eq(name, "result_generic_not_verified") == 1 { return write_result_generic(path) }
     if str_eq(name, "option_nested_not_verified") == 1 { return write_option_nested(path) }
+    if str_eq(name, "result_nested_not_verified") == 1 { return write_result_nested(path) }
     if str_eq(name, "module_not_implemented") == 1 { return write_module_not(path) }
     if str_eq(name, "package_not_implemented") == 1 { return write_package_not(path) }
     if str_eq(name, "missing_import") == 1 { return write_missing_import(path) }
@@ -9520,6 +9533,7 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "option_generic_not_verified", "only Option<Int> is verified", "", "generic Option<T>")
     fail = fail + expect_reject(vaisc, tmp, "result_generic_not_verified", "only Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, and Result<DeclaredStruct,Int> are verified", "", "generic Result<T,E>")
     fail = fail + expect_reject(vaisc, tmp, "option_nested_not_verified", "only Option<Int> is verified", "", "nested Option/Result")
+    fail = fail + expect_reject(vaisc, tmp, "result_nested_not_verified", "only Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, and Result<DeclaredStruct,Int> are verified", "", "nested Option/Result")
     fail = fail + expect_reject(vaisc, tmp, "module_not_implemented", "module and package declarations are not implemented", "", "module names are derived from file paths")
     fail = fail + expect_reject(vaisc, tmp, "package_not_implemented", "module and package declarations are not implemented", "", "module names are derived from file paths")
     fail = fail + expect_reject(vaisc, tmp, "missing_import", "import path not found", "", "expected local module file")

@@ -775,7 +775,7 @@ fn check_text_at(path: Str, src: Str) -> Int {
                 i = skip_generic_or_line_end(src, i)
                 handled = 1
             } else if unsupported_result_generic_at(src, i) == 1 {
-                issues = issues + report_issue_at(path, src, i, "error: only Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, and Result<DeclaredStruct,Int> are verified for now", "  help: use Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, or Result<DeclaredStruct,Int> where the payload struct is declared in this file; generic Result<T,E> and other non-Int error payloads are not verified yet")
+                issues = issues + report_issue_at(path, src, i, "error: only Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, and Result<DeclaredStruct,Int> are verified for now", "  help: use Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, or Result<DeclaredStruct,Int> where the payload struct is declared in this file; generic Result<T,E>, other non-Int error payloads, and nested Option/Result payloads are not verified yet")
                 i = skip_generic_or_line_end(src, i)
                 handled = 1
             } else if unsupported_map_generic_at(src, i) == 1 {

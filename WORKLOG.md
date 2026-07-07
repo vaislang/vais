@@ -1,5 +1,26 @@
 # Vais Worklog
 
+## 2026-07-06 (작업 3 — nested Result/Option 진단 게이트)
+
+작업 3(nested 진단 명확화). 조사로 확인: nested 조합 4종(Result<Result<..>,Int>,
+Result<Option<..>,Int>, Option<Result<..>>, Option<Option<..>>)은 이미 checker+
+full engine 양쪽에서 P4 help로 거부된다(unsupported_result_generic_at/
+unsupported_option_generic_at가 검증 형식 외 전부 reject). 진단 로직은 완결.
+갭은 작업1과 동일 — 게이트로 안 고정돼 회귀 시 못 잡음.
+
+구현: bad.vais에 nested_result + nested_option reject 2줄 추가(count 30→32,
+smoke/contract/install 3 게이트 동기화 — install_check는 작업1/2에서 반복해서
+놓친 파일이라 이번엔 처음부터 포함). front_check에 result_nested_not_verified
+reject 케이스 신설(write_result_nested + dispatch + expect_reject); nested Option은
+기존 option_nested 케이스가 이미 커버. Result P4 help(vais_check_core:778 +
+vaisc_native.c:18283)에 "nested Option/Result payloads are not verified yet"
+문구 추가 — Option 메시지와 일관성 맞춤, front_check가 이 문구로 nested Result를
+검증. codegen 미변경(진단/fixture only). front/direct/checker/native smoke green,
+회귀 0.
+
+**다음: 작업 4** (VaisDB 인덱서에 진단 경로 도그푸딩) 또는 5(문서). 작업 2의
+장시간 게이트(release)는 작업 3이 codegen 미변경이라 스프린트 마감 시 통합 실행.
+
 ## 2026-07-06 (작업 2 완료 — Result<Str,Str> full self-host)
 
 Opus 직접 구현으로 full self-host 승격 완료(커밋 fee3f697). fixpoint_full.vais에

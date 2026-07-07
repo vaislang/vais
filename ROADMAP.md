@@ -46,10 +46,18 @@ This file tracks current work and completed gate-backed language surface.
     작업2와 무관. full codegen check case는 이 버그 회피 위해 제외(e329가 정상
     multi-line으로 front/direct/full/parity/value 보호).
   - 검증: 전 게이트 green(self-host fixpoint stage1==stage2 bit-identical 포함).
-- [ ] 3. nested Result/Option 진단 명확화 (impl-sonnet)
+- [x] 3. nested Result/Option 진단 명확화 (Opus 직접) ✅ 2026-07-06
+  - changes: bad.vais에 nested_result(Result<Result<Int,Int>,Int>) +
+    nested_option(Option<Result<Int,Int>>) reject 추가, count 30→32 (smoke/
+    contract/install 3 게이트). front_check에 result_nested_not_verified reject
+    케이스 신설(option_nested는 기존). Result P4 help(vais_check_core +
+    vaisc_native.c)에 "nested Option/Result payloads are not verified yet" 명시.
+  - nested 진단 로직은 이미 완결(unsupported_result_generic_at가 검증 4형식 외
+    전부 reject)이었고, 갭은 작업1과 동일하게 "게이트 미고정". codegen 미변경.
+    front/direct/checker/native smoke green.
 - [ ] 4. VaisDB 인덱서에 진단 경로 적용 (impl-sonnet)
 - [ ] 5. 문서/게이트 정리 (impl-sonnet)
-진행률: 2/5 (40%)
+진행률: 3/5 (60%)
 
 배경: Result 값-흐름 표면은 e321에서 포화(payload Int→Str→Struct, match 필드
 회수→조합→Bool 반환 완성). 반면 진단은 얇다 — 현재는 자동 wrapper 생성 위주이고

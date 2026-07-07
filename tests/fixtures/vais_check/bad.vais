@@ -18,6 +18,8 @@ fn f(s: String) -> Int {
     let maybe: Option<Str> = None
     let result: Result<Int, Str> = Err("bad")
     let missing_struct: Result<Unknown, Int> = Err(1)
+    let nested_result: Result<Result<Int, Int>, Int> = Err(1)
+    let nested_option: Option<Result<Int, Int>> = None
     let generic_map: Map<Int, Str> = {}
     let casted = value as Int
     let small: i32 = 5

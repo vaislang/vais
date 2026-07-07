@@ -18280,7 +18280,7 @@ static int check_option_result_generic_surface_text(const char *text, const char
                     !supported_struct_result) {
                     report_issue(path, (int)row + 1, (int)i + 1, line,
                         "only Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, and Result<DeclaredStruct,Int> are verified for now",
-                        "use Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, or Result<DeclaredStruct,Int> where the payload struct is declared in this file; generic Result<T,E> and other non-Int error payloads are not verified yet.",
+                        "use Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, or Result<DeclaredStruct,Int> where the payload struct is declared in this file; generic Result<T,E>, other non-Int error payloads, and nested Option/Result payloads are not verified yet.",
                         NULL);
                     issues++;
                 }
