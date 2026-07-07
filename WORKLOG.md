@@ -1,5 +1,36 @@
 # Vais Worklog
 
+## 2026-07-06 (작업 2 완료 — Result<Str,Str> full self-host)
+
+Opus 직접 구현으로 full self-host 승격 완료(커밋 fee3f697). fixpoint_full.vais에
+result_str_str_ty() 타입 태그, param/return 파싱, call_ret_result_str_str,
+프레디킷 3개(result_match_expr_is_result_str_str + _is_str_at + _is_int_at),
+emit 함수 2개(match str_let/int_let, 양 arm 모두 Str 포인터), match dispatch 추가.
+native.c front 진단 열기 + 게이트 문자열 3곳 정렬. vaisc_core.ll canonical
+재생성(임시경로 0). e329 parity native-supported 등록. 실측: e329 full=42,
+match probe=5, ?전파 Ok=7/Err=5.
+
+**핵심 정정**: 이전 세션 memory/ROADMAP에 "Result<Str,Int>는 packed scalar
+i64"로 기록했으나 **실측 결과 틀렸다** — Result<Str,Int>도 Result<Str,Str>도
+struct out-param(hidden, 3-slot: tag/value-ptr/error-ptr)로 lowering된다.
+e301도 `define void @read_text_checked(i8*, i64*)`. 따라서 str_str는 packed
+확장이 아니라 struct 경로 재사용이었고, Ok/Err 둘 다 Str 포인터라 str_int보다
+단순(Err arm Int 분기 불필요). 처음 packed 전제로 헤맸으나 e301 IR 실측으로 정정.
+
+**부수 발견(task_8ac041ef)**: full codegen check case를 세미콜론 단일라인 형태
+(run_exit_case 요구)로 쓰다 기존 잠복 버그 노출 — Result<Str,*> local을
+세미콜론 다중문장 함수에 바인딩하면 slot 미할당으로 `%v-1` invalid IR. 개행
+형태는 정상. str_int도 동일(tD.vais로 확증). 작업2와 무관한 기존 버그. codegen
+check case 제외(주석 기록)하고 task로 분리. e329가 정상 multi-line으로 전
+게이트 보호하므로 커버리지 손실 없음.
+
+release gates에서 `installed vais-check bad` 실패 발견 → vaisc_install_check.vais
+count 29→30(작업1에서 놓친 파일) 수정. 전 게이트 green(self-host fixpoint
+stage1==stage2 bit-identical 4.45MB 포함).
+
+**다음: 작업 3** (nested Result/Option 진단 명확화, 저위험 codegen무). 작업1
+reject 인프라 재사용. 그 다음 4(도그푸딩)/5(문서).
+
 ## 2026-07-06 (작업 2 — Result<Str,Str> direct 슬라이스)
 
 작업 1을 main에 머지(fast-forward, origin push, 브랜치 정리)한 뒤 작업 2
