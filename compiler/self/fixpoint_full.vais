@@ -1700,6 +1700,11 @@ fn call_ret_result_str_int(toks: &List<Token>, fns: &List<Fn>, src: Str, vp: Int
     return 0
 }
 
+fn call_ret_result_str_str(toks: &List<Token>, fns: &List<Fn>, src: Str, vp: Int) -> Int {
+    if call_ret_result_ty(toks, fns, src, vp) == result_str_str_ty() { return 1 }
+    return 0
+}
+
 # Build the function table by scanning for `fn name ( param ) { ... }`.
 fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> List<Fn> {
     let mut fns: List<Fn> = []
@@ -1794,7 +1799,9 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                         let rerr = toks[q + 5]
                         let rgt = toks[q + 6]
                         if rlt.kind == 18 and rcomma.kind == 25 and rgt.kind == 19 {
-                            if kw3(src, rok.nstart, rok.nlen, 83, 116, 114) == 1 and kw3(src, rerr.nstart, rerr.nlen, 73, 110, 116) == 1 {
+                            if kw3(src, rok.nstart, rok.nlen, 83, 116, 114) == 1 and kw3(src, rerr.nstart, rerr.nlen, 83, 116, 114) == 1 {
+                                rpty = result_str_str_ty()
+                            } else if kw3(src, rok.nstart, rok.nlen, 83, 116, 114) == 1 and kw3(src, rerr.nstart, rerr.nlen, 73, 110, 116) == 1 {
                                 rpty = result_str_int_ty()
                             } else if kw3(src, rerr.nstart, rerr.nlen, 73, 110, 116) == 1 {
                                 let rsti = struct_index_by_name(defs, src, rok.nstart, rok.nlen)
@@ -1923,7 +1930,9 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                         let rerr = toks[rq + 4]
                         let rgt = toks[rq + 5]
                         if rlt.kind == 18 and rcomma.kind == 25 and rgt.kind == 19 {
-                            if kw3(src, rok.nstart, rok.nlen, 83, 116, 114) == 1 and kw3(src, rerr.nstart, rerr.nlen, 73, 110, 116) == 1 {
+                            if kw3(src, rok.nstart, rok.nlen, 83, 116, 114) == 1 and kw3(src, rerr.nstart, rerr.nlen, 83, 116, 114) == 1 {
+                                retty = result_str_str_ty()
+                            } else if kw3(src, rok.nstart, rok.nlen, 83, 116, 114) == 1 and kw3(src, rerr.nstart, rerr.nlen, 73, 110, 116) == 1 {
                                 retty = result_str_int_ty()
                             } else if kw3(src, rerr.nstart, rerr.nlen, 73, 110, 116) == 1 {
                                 let rsti = struct_index_by_name(defs, src, rok.nstart, rok.nlen)
@@ -2916,6 +2925,7 @@ fn map_str_bool_ty() -> Int { return 4 }
 fn map_str_char_ty() -> Int { return 5 }
 fn map_str_str_ty() -> Int { return 6 }
 fn result_str_int_ty() -> Int { return 0 - 20 }
+fn result_str_str_ty() -> Int { return 0 - 21 }
 fn result_struct_int_base_ty() -> Int { return 0 - 2000 }
 fn result_struct_int_ty(sty: Int) -> Int { return result_struct_int_base_ty() - sty }
 fn result_struct_int_payload_ty(ty: Int) -> Int {
@@ -2923,7 +2933,7 @@ fn result_struct_int_payload_ty(ty: Int) -> Int {
     return 0 - 1
 }
 fn is_result_struct_int_ty(ty: Int) -> Bool { return result_struct_int_payload_ty(ty) >= 0 }
-fn is_result_ty(ty: Int) -> Bool { return ty == result_str_int_ty() or is_result_struct_int_ty(ty) }
+fn is_result_ty(ty: Int) -> Bool { return ty == result_str_int_ty() or ty == result_str_str_ty() or is_result_struct_int_ty(ty) }
 fn retcfg_pack(retout: Int, retkind: Int, retty: Int) -> Int {
     return (((retout + 1) * 200000) + (retty + 100000)) * 10 + retkind
 }
@@ -9945,6 +9955,71 @@ fn result_match_str_int_result_is_int_at(toks: &List<Token>, slots: &List<Slot>,
     return 0
 }
 
+# ---- Result<Str,Str> (non-Int error payload) match dispatch ----
+# The scrutinee is result_str_str_ty(); both Ok and Err payloads are Str
+# pointers packed into the i64 via the shared `value*2 (+1 for Err)` scheme, so
+# both arms unpack with `inttoptr (val sdiv 2) to i8*`. This is simpler than the
+# str_int case, where the Err arm carried an Int code.
+
+fn result_match_expr_is_result_str_str(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, src: Str, vp: Int) -> Int {
+    let start = result_match_expr_start(toks, vp)
+    let stop = result_match_expr_end(toks, src, vp)
+    let t = toks[start]
+    if stop == start + 1 and t.kind == 1 {
+        if sty_of(slots, src, t.nstart, t.nlen) == result_str_str_ty() { return 1 }
+    }
+    if t.kind == 1 {
+        let nx = toks[start + 1]
+        if nx.kind == 9 {
+            let close = paren_end(toks, start + 2)
+            if close + 1 == stop and call_ret_result_str_str(toks, fns, src, start) == 1 { return 1 }
+        }
+    }
+    return 0
+}
+
+fn result_match_str_str_result_is_str_at(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, src: Str, vp: Int, stop: Int) -> Int {
+    let bo = result_match_brace_open(toks, src, vp)
+    if bo < 0 { return 0 }
+    let bc = match_brace(toks, bo, toks.len())
+    if bc + 1 != stop { return 0 }
+    if result_match_has_result_arms(toks, src, vp) != 1 { return 0 }
+    if result_match_expr_is_result_str_str(toks, slots, fns, src, vp) != 1 { return 0 }
+    let ok_bind = toks[result_match_ok_binder_i(toks, src, vp)]
+    let err_bind = toks[result_match_err_binder_i(toks, src, vp)]
+    let os = result_match_ok_expr_start(toks, src, vp)
+    let oe = result_match_ok_expr_end(toks, src, vp)
+    let es = result_match_err_expr_start(toks, src, vp)
+    let ee = result_match_err_expr_end(toks, src, vp)
+    if arm_is_str_expr(toks, slots, src, os, oe, ok_bind.nstart, ok_bind.nlen) != 1 { return 0 }
+    if arm_is_str_expr(toks, slots, src, es, ee, err_bind.nstart, err_bind.nlen) != 1 { return 0 }
+    return 1
+}
+
+fn rhs_result_match_str_str_result_is_str(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, src: Str, npos: Int) -> Int {
+    let vp = rhs_pos(toks, npos)
+    let stop = find_stmt_end(toks, src, vp, toks.len())
+    return result_match_str_str_result_is_str_at(toks, slots, fns, src, vp, stop)
+}
+
+fn result_match_str_str_result_is_int_at(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, src: Str, vp: Int, stop: Int) -> Int {
+    let bo = result_match_brace_open(toks, src, vp)
+    if bo < 0 { return 0 }
+    let bc = match_brace(toks, bo, toks.len())
+    if bc + 1 != stop { return 0 }
+    if result_match_has_result_arms(toks, src, vp) != 1 { return 0 }
+    if result_match_expr_is_result_str_str(toks, slots, fns, src, vp) != 1 { return 0 }
+    let ok_bind = toks[result_match_ok_binder_i(toks, src, vp)]
+    let err_bind = toks[result_match_err_binder_i(toks, src, vp)]
+    let os = result_match_ok_expr_start(toks, src, vp)
+    let oe = result_match_ok_expr_end(toks, src, vp)
+    let es = result_match_err_expr_start(toks, src, vp)
+    let ee = result_match_err_expr_end(toks, src, vp)
+    if arm_is_str_expr_len(toks, slots, src, os, oe, ok_bind.nstart, ok_bind.nlen) != 1 { return 0 }
+    if arm_is_str_expr_len(toks, slots, src, es, ee, err_bind.nstart, err_bind.nlen) != 1 { return 0 }
+    return 1
+}
+
 fn rhs_result_question_result_is_str(toks: &List<Token>, fns: &List<Fn>, src: Str, npos: Int) -> Int {
     let vp = rhs_pos(toks, npos)
     let stop = find_stmt_end(toks, src, vp, toks.len())
@@ -10933,6 +11008,166 @@ fn emit_result_struct_int_match_str_let(toks: &List<Token>, slots: &List<Slot>, 
     pint(lbl)
     putchar(10)
     emit_str("resStructStrMerge")
+    pint(lbl)
+    emit_str(":")
+    putchar(10)
+    return cc
+}
+
+fn emit_result_str_str_match_str_let(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, vp: Int, slot: Int, counter0: Int) -> Int {
+    let result_expr = gen_expr(toks, slots, fns, defs, src, result_match_expr_start(toks, vp), result_match_expr_end(toks, src, vp), counter0)
+    let tag = result_expr.next
+    emit_str("  %t")
+    pint(tag)
+    emit_str(" = srem i64 ")
+    emit_op(result_expr)
+    emit_str(", 2")
+    putchar(10)
+    let is_err = tag + 1
+    emit_str("  %t")
+    pint(is_err)
+    emit_str(" = icmp eq i64 %t")
+    pint(tag)
+    emit_str(", 1")
+    putchar(10)
+    let payload = is_err + 1
+    emit_str("  %t")
+    pint(payload)
+    emit_str(" = sdiv i64 ")
+    emit_op(result_expr)
+    emit_str(", 2")
+    putchar(10)
+    let val_ptr = payload + 1
+    emit_str("  %t")
+    pint(val_ptr)
+    emit_str(" = inttoptr i64 %t")
+    pint(payload)
+    emit_str(" to i8*")
+    putchar(10)
+    let lbl = val_ptr + 1
+    emit_str("  br i1 %t")
+    pint(is_err)
+    emit_str(", label %resSSErr")
+    pint(lbl)
+    emit_str(", label %resSSOk")
+    pint(lbl)
+    putchar(10)
+    let ok_binder_i = result_match_ok_binder_i(toks, src, vp)
+    let err_binder_i = result_match_err_binder_i(toks, src, vp)
+    let os = result_match_ok_expr_start(toks, src, vp)
+    let oe = result_match_ok_expr_end(toks, src, vp)
+    let es = result_match_err_expr_start(toks, src, vp)
+    let ee = result_match_err_expr_end(toks, src, vp)
+    let mut cc = lbl + 1
+    emit_str("resSSOk")
+    pint(lbl)
+    emit_str(":")
+    putchar(10)
+    let okop = emit_map_str_str_match_str_arm(toks, slots, fns, defs, src, os, oe, ok_binder_i, val_ptr, cc)
+    cc = okop.next
+    emit_str("  store i8* ")
+    emit_op(okop)
+    emit_str(", i8** %v")
+    pint(slot)
+    putchar(10)
+    emit_str("  br label %resSSMerge")
+    pint(lbl)
+    putchar(10)
+    emit_str("resSSErr")
+    pint(lbl)
+    emit_str(":")
+    putchar(10)
+    let errop = emit_map_str_str_match_str_arm(toks, slots, fns, defs, src, es, ee, err_binder_i, val_ptr, cc)
+    cc = errop.next
+    emit_str("  store i8* ")
+    emit_op(errop)
+    emit_str(", i8** %v")
+    pint(slot)
+    putchar(10)
+    emit_str("  br label %resSSMerge")
+    pint(lbl)
+    putchar(10)
+    emit_str("resSSMerge")
+    pint(lbl)
+    emit_str(":")
+    putchar(10)
+    return cc
+}
+
+fn emit_result_str_str_match_int_let(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, vp: Int, slot: Int, counter0: Int) -> Int {
+    let result_expr = gen_expr(toks, slots, fns, defs, src, result_match_expr_start(toks, vp), result_match_expr_end(toks, src, vp), counter0)
+    let tag = result_expr.next
+    emit_str("  %t")
+    pint(tag)
+    emit_str(" = srem i64 ")
+    emit_op(result_expr)
+    emit_str(", 2")
+    putchar(10)
+    let is_err = tag + 1
+    emit_str("  %t")
+    pint(is_err)
+    emit_str(" = icmp eq i64 %t")
+    pint(tag)
+    emit_str(", 1")
+    putchar(10)
+    let payload = is_err + 1
+    emit_str("  %t")
+    pint(payload)
+    emit_str(" = sdiv i64 ")
+    emit_op(result_expr)
+    emit_str(", 2")
+    putchar(10)
+    let val_ptr = payload + 1
+    emit_str("  %t")
+    pint(val_ptr)
+    emit_str(" = inttoptr i64 %t")
+    pint(payload)
+    emit_str(" to i8*")
+    putchar(10)
+    let lbl = val_ptr + 1
+    emit_str("  br i1 %t")
+    pint(is_err)
+    emit_str(", label %resSSIErr")
+    pint(lbl)
+    emit_str(", label %resSSIOk")
+    pint(lbl)
+    putchar(10)
+    let ok_binder_i = result_match_ok_binder_i(toks, src, vp)
+    let err_binder_i = result_match_err_binder_i(toks, src, vp)
+    let os = result_match_ok_expr_start(toks, src, vp)
+    let oe = result_match_ok_expr_end(toks, src, vp)
+    let es = result_match_err_expr_start(toks, src, vp)
+    let ee = result_match_err_expr_end(toks, src, vp)
+    let mut cc = lbl + 1
+    emit_str("resSSIOk")
+    pint(lbl)
+    emit_str(":")
+    putchar(10)
+    let okop = emit_map_str_str_match_int_arm(toks, slots, fns, defs, src, os, oe, ok_binder_i, val_ptr, cc)
+    cc = okop.next
+    emit_str("  store i64 ")
+    emit_op(okop)
+    emit_str(", i64* %v")
+    pint(slot)
+    putchar(10)
+    emit_str("  br label %resSSIMerge")
+    pint(lbl)
+    putchar(10)
+    emit_str("resSSIErr")
+    pint(lbl)
+    emit_str(":")
+    putchar(10)
+    let errop = emit_map_str_str_match_int_arm(toks, slots, fns, defs, src, es, ee, err_binder_i, val_ptr, cc)
+    cc = errop.next
+    emit_str("  store i64 ")
+    emit_op(errop)
+    emit_str(", i64* %v")
+    pint(slot)
+    putchar(10)
+    emit_str("  br label %resSSIMerge")
+    pint(lbl)
+    putchar(10)
+    emit_str("resSSIMerge")
     pint(lbl)
     emit_str(":")
     putchar(10)
@@ -12776,6 +13011,18 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 if result_stop < end {
                     let rst = toks[result_stop]
                     if rst.kind == 6 { i = result_stop + 1 } else { i = result_stop }
+                } else { i = result_stop }
+            } else if result_match_str_str_result_is_str_at(toks, slots, fns, src, vp, result_stop) == 1 {
+                counter = emit_result_str_str_match_str_let(toks, slots, fns, defs, src, vp, slot, counter)
+                if result_stop < end {
+                    let rst_ss_str = toks[result_stop]
+                    if rst_ss_str.kind == 6 { i = result_stop + 1 } else { i = result_stop }
+                } else { i = result_stop }
+            } else if result_match_str_str_result_is_int_at(toks, slots, fns, src, vp, result_stop) == 1 {
+                counter = emit_result_str_str_match_int_let(toks, slots, fns, defs, src, vp, slot, counter)
+                if result_stop < end {
+                    let rst_ss_int = toks[result_stop]
+                    if rst_ss_int.kind == 6 { i = result_stop + 1 } else { i = result_stop }
                 } else { i = result_stop }
             } else if result_match_str_int_result_is_str_at(toks, slots, fns, src, vp, result_stop) == 1 {
                 counter = emit_result_str_int_match_str_let(toks, slots, fns, defs, src, vp, slot, counter)

@@ -9518,7 +9518,7 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "map_generic_return_not_verified", msg_map_return(), "", "generic Map returns local")
     fail = fail + expect_reject(vaisc, tmp, "map_assignment_type_mismatch", "Map assignment source type must match", "", "same concrete Map type")
     fail = fail + expect_reject(vaisc, tmp, "option_generic_not_verified", "only Option<Int> is verified", "", "generic Option<T>")
-    fail = fail + expect_reject(vaisc, tmp, "result_generic_not_verified", "only Result<Int,Int>, Result<Str,Int>, and Result<DeclaredStruct,Int> are verified", "", "generic Result<T,E>")
+    fail = fail + expect_reject(vaisc, tmp, "result_generic_not_verified", "only Result<Int,Int>, Result<Str,Int>, Result<Str,Str>, and Result<DeclaredStruct,Int> are verified", "", "generic Result<T,E>")
     fail = fail + expect_reject(vaisc, tmp, "option_nested_not_verified", "only Option<Int> is verified", "", "nested Option/Result")
     fail = fail + expect_reject(vaisc, tmp, "module_not_implemented", "module and package declarations are not implemented", "", "module names are derived from file paths")
     fail = fail + expect_reject(vaisc, tmp, "package_not_implemented", "module and package declarations are not implemented", "", "module names are derived from file paths")
