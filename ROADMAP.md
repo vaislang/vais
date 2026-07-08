@@ -64,8 +64,14 @@ This file tracks current work and completed gate-backed language surface.
     expect_pair 편입, README에 e329/e330 문서화(e329는 작업2에서 누락됐던 것).
   - 검증: e330 full/direct=42, parity 349, value corpus 349/0, workflow OK.
     codegen 미변경.
-- [ ] 5. 문서/게이트 정리 (impl-sonnet)
-진행률: 4/5 (80%)
+- [x] 5. 문서/게이트 정리 (Opus 직접) ✅ 2026-07-06
+  - changes: docs/reference/LANGUAGE.md에 Result<Str,Str> 검증표 행 추가 +
+    "Rejected Option/Result shapes" 섹션 신설(non-Int/Str error, 미선언 struct,
+    nested 조합 명시 + 게이트 포인터). std/PRELUDE.md에 e329/e330 기술.
+    CHANGELOG.md Unreleased에 Result<Str,Str> 승격 + 진단 강화 2항목.
+  - 검증: 문서 기술한 reject 4종(Int,Str / Unknown,Int / nested Result / nested
+    Option) 실측 전부 거부, accept(Result<Str,Str>) e329/e330=42 확인. diff clean.
+진행률: 5/5 (100%) — VaisDB Result 진단 확장 스프린트 완료
 
 배경: Result 값-흐름 표면은 e321에서 포화(payload Int→Str→Struct, match 필드
 회수→조합→Bool 반환 완성). 반면 진단은 얇다 — 현재는 자동 wrapper 생성 위주이고

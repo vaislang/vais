@@ -184,6 +184,7 @@ Verified release surface:
 | `Option<Int>` | `Some(Int)`/`None`, helper returns, struct/local storage, statement-form `match`, single-line and multiline expression-match binding, local-binding `?` propagation, and nested match through an enum payload |
 | `Result<Int,Int>` | `Ok(Int)`/`Err(Int)`, helper returns, statement-form `match`, expression-match binding, local-binding `?` propagation, helper flows over `Map<Str,Str>` parameters with `get_opt` matches, and `fs_exists` guarded file-read error flows |
 | `Result<Str,Int>` | `Ok(Str)`/`Err(Int)`, helper returns for file-read flows, helper parameters/forwarding, direct call-argument use of Result-returning helpers, local-binding `?` propagation that binds the `Str` payload, and inline match recovery to `Int` or `Str` values |
+| `Result<Str,Str>` | First non-Int error payload slice: `Ok(Str)`/`Err(Str)` so failures carry human-readable messages, helper returns, local-binding `?` propagation, and inline match recovery of either the `Str` value or the `Str` error message to a `Str` or its `Int` length. Verified in the native direct engine and the full self-host compiler; used by the VaisDB ingest workflow in `examples/e330_vaisdb_ingest_error_message_flow.vais` |
 | `Result<Metric,Int>` | First structured payload slice: `Ok(Metric)`/`Err(Int)`, helper returns, helper parameters/forwarding, and inline match recovery of `Metric` fields to `Int` |
 | `Result<DeclaredStruct,Int>` | Verified for declared struct payloads such as Int-field `Record`, multiline `Entry`, Str-field `DocSummary`, and VaisDB `DocArtifact`: helper returns, helper parameters/forwarding, direct call-argument use of Result-returning helpers, explicit wrapper payload local copies, local-binding `?`, `List<Struct>` output storage, persisted store reload parsing, inline match recovery of multiple struct fields or string field lengths to `Int`, direct `Str` field recovery to string locals, nested `str_concat(...)` composition of `Str` fields, `str_replace`/`str_trim`/`str_upper`/`str_lower` normalization in match arms, transformed string `.len()` scoring in `Int` arms, `Ok` payload handoff to reusable `Int` scoring helpers, helper-call terms composed with normal payload fields, and Bool returns from payload helper terms plus `Err(Int)` comparisons |
 | `(Int, Int)` tuple | Function return and local destructuring slice lowered through generated structs |
@@ -192,6 +193,28 @@ Verified release surface:
 
 Specified or partial areas are tracked in [../../std/PRELUDE.md](../../std/PRELUDE.md)
 and `tools/vaisc-parity.tsv`.
+
+### Rejected `Option`/`Result` shapes
+
+Only the concrete `Option`/`Result` forms in the table above are verified. The
+checker and both engines reject everything else with a `help:` message that
+lists the verified shapes, so an unverified type fails at check time rather than
+miscompiling:
+
+- `Option<T>` for any `T` other than `Int`.
+- `Result<T,E>` outside `Result<Int,Int>`, `Result<Str,Int>`, `Result<Str,Str>`,
+  and `Result<DeclaredStruct,Int>` where the payload struct is declared in the
+  same file. In particular a non-`Int`, non-`Str` error payload
+  (e.g. `Result<Int,Str>`) and an undeclared struct payload
+  (e.g. `Result<Unknown,Int>`) are rejected.
+- Nested `Option`/`Result` payloads such as `Result<Result<Int,Int>,Int>`,
+  `Result<Option<Int>,Int>`, `Option<Result<Int,Int>>`, and
+  `Option<Option<Int>>`.
+
+These reject cases are pinned by the `tests/fixtures/vais_check/bad.vais`
+diagnostic-count gate and the `result_generic_not_verified`,
+`option_generic_not_verified`, `result_nested_not_verified`, and
+`option_nested_not_verified` front-contract cases.
 
 ## Expressions And Operators
 

@@ -60,6 +60,15 @@ binds the `Str` payload, and inline matches recover either string payloads or
 integer error codes. `examples/e302_result_str_int_param_flow.vais` extends
 that concrete slice so `Result<Str,Int>` values can be passed through helper
 parameters, forwarded to other helpers, and matched inside those helpers.
+`examples/e329_result_str_str_error_message.vais` opens the first non-`Int`
+error payload slice: `Result<Str,Str>` returns `Ok(Str)` or `Err(Str)` so a
+failure carries a human-readable message, with local-binding `?` propagation and
+inline match recovery of the `Str` value or `Str` message. It is verified in the
+native direct engine and the full self-host compiler.
+`examples/e330_vaisdb_ingest_error_message_flow.vais` dogfoods that surface in a
+VaisDB file-ingest workflow: document ingest, metadata snapshot round trips, and
+query scoring each report failures as descriptive `Result<Str,Str>` messages
+instead of opaque integer codes.
 `examples/e303_result_metric_int_struct_payload.vais` opens the first
 structured payload Result slice: a `Metric` struct can be returned as
 `Result<Metric,Int>`, passed through helpers, and matched to recover payload

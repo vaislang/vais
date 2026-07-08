@@ -1,5 +1,25 @@
 # Vais Worklog
 
+## 2026-07-06 (작업 5 + 스프린트 완료 — Result 진단 문서화)
+
+작업 5(문서/게이트 정리)로 VaisDB Result 진단 확장 스프린트 5/5 완료.
+docs/reference/LANGUAGE.md 검증표에 Result<Str,Str> 행 추가 + "Rejected
+Option/Result shapes" 섹션 신설(non-Int/Str error payload, 미선언 struct payload,
+nested Option/Result 조합을 예시와 함께 명시하고 bad.vais count 게이트 +
+front-contract reject 케이스 포인터 기록). std/PRELUDE.md에 e329(Result<Str,Str>
+첫 non-Int error)/e330(VaisDB ingest 도그푸딩) 기술. CHANGELOG.md Unreleased에
+Result<Str,Str> 승격 + Option/Result 진단 강화 2항목. 문서 정확성 실측 검증:
+기술한 reject 4종 전부 거부, accept(e329/e330)=42. diff clean.
+
+**스프린트 5작업 요약**: (1)Result 오용 P4 help 게이트 (2)Result<Str,Str>
+direct+full self-host 승격 (3)nested Result/Option reject 게이트 (4)VaisDB ingest
+Str 에러 메시지 도그푸딩 (5)문서 정리. 커밋 0b585a17/cdcbc00d/fee3f697/430e9633/
+1095f9df + 문서. 부수 발견 task_8ac041ef(세미콜론 단일라인 Result<Str,*> local
+slot 기존버그). memory 정정: Result<Str,*>=struct out-param(packed 아님).
+
+**남음**: 작업2가 codegen(.ll) 변경했으므로 스프린트 마감 통합 검증(전 게이트 +
+release gates) 후 브랜치 push/머지.
+
 ## 2026-07-06 (작업 4 — VaisDB ingest Str 에러 메시지 도그푸딩)
 
 작업 4(VaisDB 인덱서 진단 경로 도그푸딩). 작업2의 Result<Str,Str> non-Int error

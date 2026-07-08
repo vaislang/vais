@@ -4,6 +4,18 @@
 
 ### Changed
 
+- Promoted `Result<Str,Str>`, the first non-`Int` error payload slice: `Ok(Str)`
+  or `Err(Str)` so failures carry human-readable messages, with helper returns,
+  local-binding `?` propagation, and inline match recovery, verified in the
+  native direct engine and the full self-host compiler
+  (`examples/e329_result_str_str_error_message.vais`) and dogfooded in a VaisDB
+  file-ingest workflow (`examples/e330_vaisdb_ingest_error_message_flow.vais`).
+- Hardened the `Option`/`Result` diagnostics: misused concrete shapes
+  (non-`Int`/`Str` error payloads, undeclared struct payloads) and nested
+  `Option`/`Result` payloads are rejected with a `help:` message listing the
+  verified shapes, now pinned by the `bad.vais` diagnostic-count gate and
+  dedicated front-contract reject cases. The verified/rejected surface is
+  documented in `docs/reference/LANGUAGE.md`.
 - Added optional package static assets: `assets = "assets"` in `vais.toml`
   makes `scripts/vaisc package` copy regular files/directories to
   `<dist-dir>/assets`; `--archive` includes the same payload as
