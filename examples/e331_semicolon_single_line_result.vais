@@ -1,0 +1,32 @@
+# expect: 42
+# Single-line fn bodies can join statements with ';' while binding and matching
+# Result<Str,Str> locals and propagating with `?`. The native driver's
+# split_fn_body_line pre-pass breaks one-line fn bodies into per-statement
+# lines so the line-anchored Result match/`?` lowerings fire exactly as in the
+# multi-line form (this shape emitted undefined `%v-1` slot loads before that
+# pre-pass existed).
+
+fn get(key: Str) -> Result<Str, Str> { if key == "x" { return Err("bad key") }; return Ok("hello world") }
+
+fn describe(key: Str) -> Int { let flow = get(key); let n = match flow { Ok(t) => t.len(), Err(m) => m.len() }; return n }
+
+fn pick(key: Str) -> Result<Str, Str> { let text = get(key)?; return Ok(str_lower(text)) }
+
+fn main() -> Int {
+    # "hello world" is 11 chars through the semicolon-joined match helper.
+    let ok_len = describe("y")
+    if ok_len != 11 { return 1 }
+
+    # "bad key" is 7 chars recovered from the Err arm.
+    let err_len = describe("x")
+    if err_len != 7 { return 2 }
+
+    # `?` propagation inside a semicolon-joined body still lowers to the
+    # struct out-param call form.
+    let flow = pick("y")
+    let picked = match flow { Ok(t) => t.len(), Err(m) => m.len() }
+    if picked != 11 { return 3 }
+
+    # 11 + 7 + 22 + 2 = 42
+    return ok_len + err_len + picked * 2 + 2
+}

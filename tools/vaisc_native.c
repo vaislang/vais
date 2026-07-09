@@ -17216,6 +17216,188 @@ static char *lower_generic_identity_struct_text(const char *text) {
     return result;
 }
 
+/*
+ * Statement-splitting pre-pass.
+ *
+ * The line-anchored statement lowerings (parse_inline_match_let,
+ * parse_inline_match_return, parse_try_let and their siblings) only fire when
+ * a statement occupies its own physical line, while the type/constructor
+ * rewrites are substring based and fire anywhere. A one-line fn body with
+ * ';'-joined statements therefore reaches the self-host core half-lowered and
+ * miscompiles (undefined '%v-1' slot loads). This pass rewrites one-line fn
+ * bodies that contain top-level ';' separators so each body statement sits on
+ * its own line, matching the already-correct newline form. Lines that do not
+ * open-and-close a fn body with a depth-1 ';' pass through byte-identical.
+ */
+static void split_fn_body_line(StrBuf *out, const char *line, size_t n) {
+    size_t indent_len = 0;
+    while (indent_len < n && (line[indent_len] == ' ' || line[indent_len] == '\t')) indent_len++;
+    if (n - indent_len < 3 || strncmp(line + indent_len, "fn ", 3) != 0) {
+        sb_append_n(out, line, n);
+        return;
+    }
+
+    /* Pre-scan: the fn body must open ('{' at brace depth 0 -> 1) and close
+     * ('}' back to depth 0) on this line, with at least one statement
+     * separator ';' at brace depth 1 outside parens/brackets, strings, and
+     * '#' comments. Otherwise leave the line untouched. */
+    int brace = 0;
+    int paren = 0;
+    int bracket = 0;
+    char delim = '\0';
+    int escaped = 0;
+    int opened = 0;
+    int closed = 0;
+    int has_split = 0;
+    for (size_t i = indent_len; i < n; i++) {
+        char ch = line[i];
+        if (escaped) {
+            escaped = 0;
+            continue;
+        }
+        if (delim != '\0') {
+            if (ch == '\\') escaped = 1;
+            else if (ch == delim) delim = '\0';
+            continue;
+        }
+        if (ch == '"' || ch == '`') {
+            delim = ch;
+            continue;
+        }
+        if (ch == '#') break;
+        if (ch == '(') paren++;
+        else if (ch == ')') {
+            if (paren > 0) paren--;
+        } else if (ch == '[') bracket++;
+        else if (ch == ']') {
+            if (bracket > 0) bracket--;
+        } else if (ch == '{') {
+            brace++;
+            if (brace == 1 && paren == 0 && bracket == 0 && !opened && !closed) opened = 1;
+        } else if (ch == '}') {
+            if (brace > 0) brace--;
+            if (brace == 0 && opened && !closed) closed = 1;
+        } else if (ch == ';' && opened && !closed && brace == 1 && paren == 0 && bracket == 0) {
+            has_split = 1;
+        }
+    }
+    if (!opened || !closed || !has_split || delim != '\0') {
+        sb_append_n(out, line, n);
+        return;
+    }
+
+    /* Rewrite pass: newline after the body-opening '{', after every depth-1
+     * ';', and before the body-closing '}'. ';' inside nested blocks (depth
+     * >= 2, e.g. match arms) is left alone so inline-match parsing still sees
+     * the whole match on one line. */
+    brace = 0;
+    paren = 0;
+    bracket = 0;
+    delim = '\0';
+    escaped = 0;
+    int body_open = 0;
+    int body_closed = 0;
+    size_t i = indent_len;
+    sb_append_n(out, line, indent_len);
+    while (i < n) {
+        char ch = line[i];
+        if (escaped) {
+            sb_append_n(out, &ch, 1);
+            escaped = 0;
+            i++;
+            continue;
+        }
+        if (delim != '\0') {
+            sb_append_n(out, &ch, 1);
+            if (ch == '\\') escaped = 1;
+            else if (ch == delim) delim = '\0';
+            i++;
+            continue;
+        }
+        if (ch == '"' || ch == '`') {
+            delim = ch;
+            sb_append_n(out, &ch, 1);
+            i++;
+            continue;
+        }
+        if (ch == '#') {
+            sb_append_n(out, line + i, n - i);
+            break;
+        }
+        if (ch == '{') {
+            brace++;
+            sb_append_n(out, &ch, 1);
+            if (brace == 1 && paren == 0 && bracket == 0 && !body_open && !body_closed) {
+                body_open = 1;
+                sb_append(out, "\n");
+                sb_append_n(out, line, indent_len);
+                sb_append(out, "    ");
+                i++;
+                while (i < n && (line[i] == ' ' || line[i] == '\t')) i++;
+                continue;
+            }
+            i++;
+            continue;
+        }
+        if (ch == '}') {
+            if (brace > 0) brace--;
+            if (brace == 0 && body_open && !body_closed) {
+                body_closed = 1;
+                while (out->len > 0 && (out->data[out->len - 1] == ' ' || out->data[out->len - 1] == '\t')) {
+                    out->len--;
+                    out->data[out->len] = '\0';
+                }
+                if (out->len > 0 && out->data[out->len - 1] == '\n') {
+                    sb_append_n(out, line, indent_len);
+                } else {
+                    sb_append(out, "\n");
+                    sb_append_n(out, line, indent_len);
+                }
+                sb_append_n(out, &ch, 1);
+                i++;
+                continue;
+            }
+            sb_append_n(out, &ch, 1);
+            i++;
+            continue;
+        }
+        if (ch == '(') paren++;
+        else if (ch == ')') {
+            if (paren > 0) paren--;
+        } else if (ch == '[') bracket++;
+        else if (ch == ']') {
+            if (bracket > 0) bracket--;
+        }
+        if (ch == ';' && body_open && !body_closed && brace == 1 && paren == 0 && bracket == 0) {
+            sb_append_n(out, &ch, 1);
+            sb_append(out, "\n");
+            sb_append_n(out, line, indent_len);
+            sb_append(out, "    ");
+            i++;
+            while (i < n && (line[i] == ' ' || line[i] == '\t')) i++;
+            continue;
+        }
+        sb_append_n(out, &ch, 1);
+        i++;
+    }
+}
+
+static char *split_statement_lines(const char *text) {
+    StrBuf out;
+    sb_init(&out);
+    const char *line = text;
+    while (*line != '\0') {
+        const char *end = strchr(line, '\n');
+        size_t n = end ? (size_t)(end - line) : strlen(line);
+        split_fn_body_line(&out, line, n);
+        if (end == NULL) break;
+        sb_append(&out, "\n");
+        line = end + 1;
+    }
+    if (out.data == NULL) sb_append(&out, "");
+    return sb_take(&out);
+}
+
 static char *normalize_source_text(const char *raw, int core_lower) {
     StrBuf out;
     sb_init(&out);
@@ -17290,7 +17472,9 @@ static char *normalize_source_text(const char *raw, int core_lower) {
 }
 
 static char *prepare_source_text(const char *raw) {
-    char *normalized = normalize_source_text(raw, 0);
+    char *normalized_joined = normalize_source_text(raw, 0);
+    char *normalized = split_statement_lines(normalized_joined);
+    free(normalized_joined);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
     char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
     char *result_str_lowered = lower_result_str_str_text(result_str_int_lowered);
@@ -19863,7 +20047,9 @@ static char *prepare_source_file(const char *path) {
         free(merged);
         return NULL;
     }
-    char *normalized = normalize_source_text(merged, 0);
+    char *normalized_joined = normalize_source_text(merged, 0);
+    char *normalized = split_statement_lines(normalized_joined);
+    free(normalized_joined);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
     char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
     char *result_str_lowered = lower_result_str_str_text(result_str_int_lowered);
@@ -31763,8 +31949,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     }
     char *merged = resolve_module_graph_source(source);
     if (merged == NULL) return 1;
-    char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(merged);
+    char *split = split_statement_lines(merged);
     free(merged);
+    if (split == NULL) return 1;
+    char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(split);
+    free(split);
     if (map_match_lowered == NULL) return 1;
     char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
     free(map_match_lowered);

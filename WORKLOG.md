@@ -1,5 +1,37 @@
 # Vais Worklog
 
+## 2026-07-10 (세미콜론 단일라인 Result 버그 근본수정 — 울트라코드)
+
+스프린트 중 발견한 잠복 버그(task_595301c0: 세미콜론 단일라인 fn body에서
+Result<Str,*> local match/`?`가 `%v-1` invalid IR)를 멀티에이전트 워크플로로
+해결. 단독 조사 3회가 전부 틀린 층(core의 slot 할당/match dispatch/find_stmt_end)
+을 팠던 이유가 밝혀짐 — **버그는 core가 아니라 native driver(vaisc_native.c)의
+pre-core 텍스트 lowering**에 있었다.
+
+**근본 원인**(3-렌즈 병렬 진단 만장일치 + 판정 확정): driver의 타입/생성자
+rewrite는 substring 기반이라 라인 어디서든 발화하는데, 문장 rewrite
+(parse_inline_match_let :1467, parse_try_let :1564)는 물리 라인이 "let "으로
+시작해야만 발화. 세미콜론 한 줄 함수는 라인이 "fn f(...) {"로 시작하므로 match/`?`
+가 desugar되지 않은 반쯤-lower된 하이브리드가 core로 넘어가고, core는 `match`를
+식별자로 취급(find_slot=-1)해 %v-1을 emit. 개행 형태는 driver가 완전 desugar하므로
+정상 — 그래서 core 쪽 수정이 전부 무효했다.
+
+**수정**: split_fn_body_line pre-pass(+192줄, vaisc_native.c만) — 한 줄 fn body의
+depth-1 세미콜론을 개행 분리해 기존 정상 경로로 정규화(문자열/주석/중첩 brace
+인식). 3개 파이프라인 head에 삽입. fixpoint_full.vais 무변경, vaisc_core.ll
+byte-identical(기존 코퍼스에 한줄 다중문장 fn 0개). `?` 전파 오작동도 같은
+수정으로 해결. 검증: 세미콜론 probe 4종(5/10/5/12)+edge(문자열 내 ';{}', 주석),
+개행 회귀 11종, e331 신설(parity native-supported 등록, full/direct=42), 전 게이트
+green(value 349→350 예정, self-host fixpoint bit-identical, release gates OK).
+
+**남은 갭(task_6767f45a)**: fixpoint_full_codegen_check의 run_exit_case harness는
+driver를 우회해 raw core로 컴파일하는데, 그 경로의 str_str `?` 바인딩은 여전히
+i64/ptr 불일치(str_int는 통과). case_080m23은 계속 제외(NOTE 갱신), driver 경로는
+e331이 보호.
+
+**교훈**: 3회 단독조사가 같은 계층(core)만 판 것이 실패 원인 — 병렬 다중렌즈가
+계층 가정 자체를 깼다. "이 버그는 어느 컴포넌트인가"부터 의심할 것.
+
 ## 2026-07-06 (작업 5 + 스프린트 완료 — Result 진단 문서화)
 
 작업 5(문서/게이트 정리)로 VaisDB Result 진단 확장 스프린트 5/5 완료.

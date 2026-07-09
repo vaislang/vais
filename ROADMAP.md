@@ -150,6 +150,13 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 ## Done
 
+- Single-line semicolon-joined fn bodies now bind/match `Result<Str,*>` locals
+  and propagate with `?` correctly: the native driver's `split_fn_body_line`
+  pre-pass breaks one-line fn bodies into per-statement lines before the
+  line-anchored Result lowerings run (previously emitted undefined `%v-1`
+  loads). Pinned by `examples/e331_semicolon_single_line_result.vais` in
+  parity/value gates. The raw-core harness path for the same str_str `?` shape
+  is tracked separately (see fixpoint_full_codegen_check NOTE).
 - Project path is `/Users/sswoo/study/projects/vais`.
 - Native `vaisc` temporary intermediates are isolated under a per-run temp root,
   cleaned on normal exit, and protected by a native smoke regression check;
