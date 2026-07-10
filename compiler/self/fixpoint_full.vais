@@ -8402,6 +8402,18 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             return Op { kind: 1, val: loadc, next: loadc + 1 }
         }
         let slot = find_slot(slots, src, t.nstart, t.nlen)
+        if slot < 0 {
+            # Unresolved identifier: emit an attributable undefined marker so a
+            # half-lowered shape fails at the clang stage naming the identifier
+            # (`use of undefined value '@VAIS_UNRESOLVED_IDENT_<name>'`)
+            # instead of the cryptic `%v-1`.
+            emit_str("  %t")
+            pint(counter)
+            emit_str(" = load i64, i64* @VAIS_UNRESOLVED_IDENT_")
+            emit_name(src, t.nstart, t.nlen)
+            putchar(10)
+            return Op { kind: 1, val: counter, next: counter + 1 }
+        }
         if isarr_of(slots, src, t.nstart, t.nlen) == 3 {
             emit_str("  %t")
             pint(counter)

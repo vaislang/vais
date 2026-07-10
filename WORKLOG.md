@@ -1,5 +1,17 @@
 # Vais Worklog
 
+## 2026-07-10 (미해석 식별자 무음실패 → 명시적 마커)
+
+울트라코드 판정이 권고했던 위생 강화. core의 gen_factor 식별자 tail이
+find_slot=-1일 때 조용히 `%v-1`을 emit해 clang이 암호 같은 에러를 내던 것을,
+`@VAIS_UNRESOLVED_IDENT_<식별자>` 마커 emit으로 교체 — 이제 half-lowered
+형태가 새면 clang 실패가 **어떤 식별자가 해석 실패했는지 즉시 지목**한다
+(실측: `use of undefined value '@VAIS_UNRESOLVED_IDENT_zzz_unknown'`).
+core에 에러 채널이 없어(재귀 codegen이 Op 반환) 진단 plumbing 대신 attributable
+컴파일타임 실패를 택했다 — 최소 변경으로 동일한 방어 효과. green 경로는 이
+가드에 도달하지 않으므로(corpus %v-1=0) 무영향. slot<0 조기반환이 isarr 분기
+전에 있어 tail 전체를 덮는다.
+
 ## 2026-07-10 (raw-core str_str `?`/match 갭 해결 — task_6767f45a)
 
 driver 수정(1a7e5592) 후 남았던 raw-core 갭 해결. codegen check harness는 driver
