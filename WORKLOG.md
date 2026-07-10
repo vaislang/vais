@@ -1,5 +1,29 @@
 # Vais Worklog
 
+## 2026-07-10 (built-in List<Int>.sort() 승격 — 환류 갭 1호 전반부)
+
+도그푸딩-2가 등록한 갭 1호를 승격. 설계 핵심: `xs.sort()` statement를 driver의
+lower_list_method_text에 **단일 text rewrite**(lower_list_sort_statement_line)로
+추가 — 검증된 표면(중첩 while + 원소 read/write)으로 된 삽입정렬 블록으로
+desugar하며, 이 pass가 full/embed/direct 3개 파이프라인 전부에서 돌므로
+**양 엔진이 lowering을 공유**한다(C 헬퍼도 core 변경도 불필요,
+split_fn_body_line과 동일 패턴). 수신자는 env 타입 조회로 List<Int>일 때만
+발화.
+
+**root-fix 1건 동반**: edge probe(param receiver)에서 full이 SIGSEGV —
+격리해보니 sort와 무관한 기존 core 버그. `xs[i] = v` 원소 쓰기가 warr==4
+(pointer-aliased slot: 파라미터/alias 리스트)를 분기하지 않고 slot 자체를
+`[0 x i64]` 버퍼로 gep해 저장된 버퍼 포인터를 clobber(IR 실측:
+`getelementptr [0 x i64], [0 x i64]* %v0`). 읽기 경로는 이미 warr==4를
+처리(load 포인터 + lenidx 4095 bounds). 쓰기 경로에 동일 분기 추가
+(fixpoint_full.vais 17294 근처) — bounds trap 포함. e332의 List<Struct>
+param 쓰기는 별도 경로라 영향받지 않았던 것.
+
+e335_list_int_sort.vais(local/param/중복/정렬됨/빈 리스트, param 쓰기로 core
+수정도 보호), parity/value 354 예정, LANGUAGE List<Int> 행/PRELUDE/CHANGELOG.
+"다음 후보"의 sort 항목은 후반부(List<Struct>.sort_by)로 갱신. .ll canonical
+재생성.
+
 ## 2026-07-10 (VaisDB 도그푸딩 확장 2 스프린트 — 5/5 완료)
 
 한 세션에 5작업 완료. (1) e332 top-k 랭킹: List<Struct> 수동 selection sort

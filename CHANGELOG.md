@@ -4,6 +4,15 @@
 
 ### Changed
 
+- Added the built-in `List<Int>.sort()` statement (dogfood-2 gap feedback #1):
+  an in-place ascending sort desugared once in the driver so the full and
+  direct engines share the lowering, verified for local and parameter
+  receivers, duplicates, sorted input, and empty lists
+  (`examples/e335_list_int_sort.vais`). Promoting it exposed and root-fixed a
+  full-engine crash on element writes through pointer-aliased `List<Int>`
+  slots (parameter receivers), which previously clobbered the stored buffer
+  pointer.
+
 - Added the VaisDB dogfooding-2 workflow slice: a top-k ranking report over a
   hand-written `List<Struct>` selection sort
   (`examples/e332_vaisdb_topk_ranking_report.vais`), versioned metadata

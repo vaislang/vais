@@ -247,6 +247,8 @@ messages,
 term index that reloads from disk, extends incrementally without a rebuild,
 scores identically to a fresh build, and reports missing index files as
 `Result<Str,Str>` messages,
+`examples/e335_list_int_sort.vais` for the built-in `List<Int>.sort()`
+statement that sorts in place through local and parameter receivers,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

@@ -15962,6 +15962,96 @@ static int lower_scalar_value_if_embedded_return_line(const char *line, int *tem
     return 1;
 }
 
+/*
+ * `xs.sort()` statement on a List<Int> receiver: desugar into an in-place
+ * ascending insertion sort over verified surface (nested while loops, element
+ * reads into locals, indexed element assignment). One text rewrite serves the
+ * full, embed, and direct pipelines alike, so neither engine needs new
+ * codegen or runtime helpers.
+ */
+static int lower_list_sort_statement_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    if (*s != '.') return 0;
+    if (strncmp(s + 1, "sort", 4) != 0 || is_ident_continue(s[5])) return 0;
+    const char *p = s + 5;
+    if (*p != '(') return 0;
+    p = skip_ws(p + 1);
+    if (*p != ')') return 0;
+    p = skip_ws(p + 1);
+    if (*p == ';') p = skip_ws(p + 1);
+    if (*p != '\0') return 0;
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    const char *type = list_method_env_type(env, name);
+    if (type == NULL || strcmp(type, "List<Int>") != 0) {
+        free(name);
+        return 0;
+    }
+
+    int t = (*temp_count)++;
+    char i_var[48], key_var[48], j_var[48], go_var[48], p_var[48], v_var[48];
+    snprintf(i_var, sizeof(i_var), "__vais_sort_i%d", t);
+    snprintf(key_var, sizeof(key_var), "__vais_sort_key%d", t);
+    snprintf(j_var, sizeof(j_var), "__vais_sort_j%d", t);
+    snprintf(go_var, sizeof(go_var), "__vais_sort_go%d", t);
+    snprintf(p_var, sizeof(p_var), "__vais_sort_p%d", t);
+    snprintf(v_var, sizeof(v_var), "__vais_sort_v%d", t);
+
+    const char *body[] = {
+        "let mut %I = 1",
+        "while %I < %N.len() {",
+        "    let %K = %N[%I]",
+        "    let mut %J = %I",
+        "    let mut %G = 1",
+        "    while %G == 1 {",
+        "        if %J > 0 {",
+        "            let %P = %J - 1",
+        "            let %V = %N[%P]",
+        "            if %V > %K {",
+        "                %N[%J] = %V",
+        "                %J = %P",
+        "            } else {",
+        "                %G = 0",
+        "            }",
+        "        } else {",
+        "            %G = 0",
+        "        }",
+        "    }",
+        "    %N[%J] = %K",
+        "    %I = %I + 1",
+        "}",
+    };
+    size_t body_len = sizeof(body) / sizeof(body[0]);
+    for (size_t bi = 0; bi < body_len; bi++) {
+        StrBuf b;
+        sb_init(&b);
+        sb_append_n(&b, line, indent_len);
+        for (const char *c = body[bi]; *c != '\0'; c++) {
+            if (*c == '%' && c[1] != '\0') {
+                c++;
+                if (*c == 'I') sb_append(&b, i_var);
+                else if (*c == 'K') sb_append(&b, key_var);
+                else if (*c == 'J') sb_append(&b, j_var);
+                else if (*c == 'G') sb_append(&b, go_var);
+                else if (*c == 'P') sb_append(&b, p_var);
+                else if (*c == 'V') sb_append(&b, v_var);
+                else if (*c == 'N') sb_append(&b, name);
+                else { sb_append_n(&b, c - 1, 2); }
+            } else {
+                sb_append_n(&b, c, 1);
+            }
+        }
+        lines_push(out, sb_take(&b));
+    }
+    free(name);
+    return 1;
+}
+
 static char *lower_list_method_text(const char *text) {
     LineVec lines = split_lines(text);
     LineVec out;
@@ -15998,6 +16088,7 @@ static char *lower_list_method_text(const char *text) {
             }
             continue;
         }
+        if (lower_list_sort_statement_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_filter_pick_struct_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_filter_pick_field_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_map_aggregate_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;

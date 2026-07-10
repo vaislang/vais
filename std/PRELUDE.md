@@ -79,6 +79,10 @@ missing or unknown versions as `Result<Str,Str>` messages.
 `examples/e334_vaisdb_index_persistence_incremental.vais` persists per-document
 term counts under `docid.term` keys, reloads, extends incrementally without a
 rebuild, and scores identically to a fresh build.
+`examples/e335_list_int_sort.vais` promotes the dogfood-2 gap feedback into a
+built-in: `List<Int>.sort()` sorts in place (ascending) as a statement on local
+and parameter receivers; promoting it also root-fixed the full-engine
+pointer-aliased list element write used by parameter receivers.
 `tools/vaisdb_cli.vais` promotes those recipes into a reusable Vais-authored
 command with `ingest`, `query`, and `report` subcommands over the persisted
 index; `scripts/vaisdb-cli.sh` is the shell entrypoint, and the VaisDB workflow
