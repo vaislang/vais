@@ -145,6 +145,7 @@ expect_pair "file ingest Result flow" "$ROOT/examples/e298_vaisdb_file_ingest_re
 expect_pair "ingest Str error message flow" "$ROOT/examples/e330_vaisdb_ingest_error_message_flow.vais"
 expect_pair "top-k ranking report" "$ROOT/examples/e332_vaisdb_topk_ranking_report.vais"
 expect_pair "snapshot version migration" "$ROOT/examples/e333_vaisdb_snapshot_version_migration.vais"
+expect_pair "index persistence incremental" "$ROOT/examples/e334_vaisdb_index_persistence_incremental.vais"
 expect_pair "file read Result Str payload flow" "$ROOT/examples/e301_result_str_int_file_read.vais"
 expect_pair "Result Str parameter flow" "$ROOT/examples/e302_result_str_int_param_flow.vais"
 expect_pair "Result Metric struct payload flow" "$ROOT/examples/e303_result_metric_int_struct_payload.vais"

@@ -243,6 +243,10 @@ lines as a `Result<Str,Str>` report with a blank-query error message,
 snapshots whose loader migrates the v1 key layout, accepts the current
 version, and reports missing or unknown versions as `Result<Str,Str>`
 messages,
+`examples/e334_vaisdb_index_persistence_incremental.vais` for the persisted
+term index that reloads from disk, extends incrementally without a rebuild,
+scores identically to a fresh build, and reports missing index files as
+`Result<Str,Str>` messages,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

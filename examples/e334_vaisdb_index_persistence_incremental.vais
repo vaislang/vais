@@ -1,0 +1,105 @@
+# expect: 42
+# VaisDB persisted term index with incremental ingest: per-document term
+# counts are flattened into one Map<Str,Str> under `docid.term` keys, saved
+# through the line snapshot helpers, reloaded, extended with a new document
+# without rebuilding, and persisted again. Query scoring over the reloaded
+# index matches a fresh build, and a missing index file reports a readable
+# Result<Str,Str> message.
+
+fn index_key(doc_id: Str, term: Str) -> Str {
+    return str_concat(doc_id, str_concat(".", term))
+}
+
+fn ingest_into(index: Map<Str,Str>, doc_id: Str, body: Str) -> Int {
+    let counts: Map<Str,Int> = {}
+    let total = doc_term_counts_into(body, counts)
+    let n = counts.len()
+    let mut i = 0
+    while i < n {
+        let term = counts.key_at(i)
+        let count = counts.value_at(i)
+        index.insert(index_key(doc_id, term), Str(count))
+        i = i + 1
+    }
+    return total
+}
+
+fn save_index(path: Str, index: Map<Str,Str>) -> Int {
+    return fs_write_text(path, map_str_str_snapshot(index))
+}
+
+fn load_index(path: Str, out: Map<Str,Str>) -> Result<Str, Str> {
+    if fs_exists(path) != 1 { return Err("index not found") }
+    let text = fs_read_text(path)
+    let loaded = map_str_str_load_snapshot(text, out)
+    if loaded == 0 { return Err("index is empty") }
+    return Ok(Str(loaded))
+}
+
+fn doc_score(index: Map<Str,Str>, doc_id: Str, query: Map<Str,Int>) -> Int {
+    let n = query.len()
+    let mut score = 0
+    let mut i = 0
+    while i < n {
+        let term = query.key_at(i)
+        let weight = query.value_at(i)
+        let count = parse_int(index.get(index_key(doc_id, term), "0"))
+        score = score + weight * count
+        i = i + 1
+    }
+    return score
+}
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let path = path_join(root, "vais-e334-index.txt")
+    let missing = path_join(root, "vais-e334-missing/index.txt")
+
+    # Build and persist the initial two-document index.
+    let index: Map<Str,Str> = {}
+    let d1_total = ingest_into(index, "d1", "ai ai ai cache")
+    let d2_total = ingest_into(index, "d2", "ai cache cache")
+    if d1_total != 4 { return 1 }
+    if d2_total != 3 { return 2 }
+    if save_index(path, index) != 0 { return 3 }
+
+    # Reload and score without touching the in-memory original.
+    let loaded: Map<Str,Str> = {}
+    let load_flow = load_index(path, loaded)
+    let load_note = match load_flow { Ok(entries) => entries, Err(msg) => msg }
+    if load_note != "4" { return 4 }
+
+    let query: Map<Str,Int> = {}
+    let query_total = doc_term_counts_into("ai cache", query)
+    if query_total != 2 { return 5 }
+    let s1 = doc_score(loaded, "d1", query)
+    let s2 = doc_score(loaded, "d2", query)
+    if s1 != 4 { return 6 }
+    if s2 != 3 { return 7 }
+
+    # Incremental ingest into the reloaded index, persist, reload again.
+    let d3_total = ingest_into(loaded, "d3", "cache vector vector cache")
+    if d3_total != 4 { return 8 }
+    if save_index(path, loaded) != 0 { return 9 }
+    let reloaded: Map<Str,Str> = {}
+    let second_flow = load_index(path, reloaded)
+    let second_note = match second_flow { Ok(entries) => entries, Err(msg) => msg }
+    if second_note != "6" { return 10 }
+
+    # The incrementally added document scores exactly like a fresh build.
+    let s3 = doc_score(reloaded, "d3", query)
+    let fresh: Map<Str,Str> = {}
+    let fresh_total = ingest_into(fresh, "d3", "cache vector vector cache")
+    let s3_fresh = doc_score(fresh, "d3", query)
+    if s3 != 2 { return 11 }
+    if s3 != s3_fresh { return 12 }
+
+    # Missing index files carry a readable message.
+    let sink: Map<Str,Str> = {}
+    let missing_flow = load_index(missing, sink)
+    let missing_note = match missing_flow { Ok(entries) => entries, Err(msg) => msg }
+    if missing_note != "index not found" { return 13 }
+
+    # 4*10 + 3 - 1 = 42
+    return s1 * 10 + s2 - 1
+}
