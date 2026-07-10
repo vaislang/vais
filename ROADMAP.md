@@ -133,6 +133,10 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
 - richer reusable package layout / package diagnostics (e327 아카이브 기반).
+- **built-in `List<T>.sort`/`sort_by`** (도그푸딩 2 환류 갭 1호): e332가 수동
+  selection sort로 top-k 랭킹을 구현했다 — 원소 스왑 표면은 검증돼 동작하지만
+  랭킹류 워크플로마다 정렬을 손으로 쓰는 것은 ergonomics 병목. 승격 시
+  full/direct 양 엔진 + 비교자 슬라이스 범위 결정 필요.
 
 ## Task Briefs
 

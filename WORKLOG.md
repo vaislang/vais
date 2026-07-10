@@ -1,5 +1,26 @@
 # Vais Worklog
 
+## 2026-07-10 (VaisDB 도그푸딩 확장 2 스프린트 — 5/5 완료)
+
+한 세션에 5작업 완료. (1) e332 top-k 랭킹: List<Struct> 수동 selection sort
+(원소 스왑=검증 표면, Int/Str 필드 probe 선행) + Result<Str,Str> blank-query
+에러. (2) e333 스냅샷 버전: version=N 헤더, v1→v2 key 마이그레이션(key_at/
+value_at 순회), 미지버전 Str 에러 — 유일한 디버깅은 str_slice 시그니처 오해
+((start,len), invalid range trap은 문서화된 동작)로 컴파일러 버그 아님,
+str_starts_with로 교체. (3) e334 인덱스 영속화: docid.term 평탄 키, 증분
+ingest가 fresh build와 점수 동일. (4) tools/vaisdb_cli.vais: ingest/query/report
+서브커맨드(query/report는 score를 exit code로), scripts/vaisdb-cli.sh 래퍼,
+workflow 게이트 10케이스(양 엔진+래퍼+전 에러경로). (5) 환류: built-in
+List sort/sort_by 부재를 "다음 후보"에 갭 1호로 등록, PRELUDE/CHANGELOG 반영.
+
+**핵심 신호: 이번 스프린트 컴파일러 갭 0건.** e334/e335급 워크플로가 전부
+검증된 표면 위에서 첫 시도에 동작 — 문서/텍스트/인덱스 도메인의 표면이
+실전 수준으로 성숙했다는 실측 증거. 남은 병목은 ergonomics(정렬)와 표현력
+확장(generic Result 등)이지 정확성이 아니다.
+
+parity/value 351→353(+e332/333/334), workflow 게이트에 예제 3 + CLI 10케이스.
+전 게이트 래더로 마감 검증.
+
 ## 2026-07-10 (미해석 식별자 무음실패 → 명시적 마커)
 
 울트라코드 판정이 권고했던 위생 강화. core의 gen_factor 식별자 tail이

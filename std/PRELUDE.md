@@ -69,6 +69,20 @@ native direct engine and the full self-host compiler.
 VaisDB file-ingest workflow: document ingest, metadata snapshot round trips, and
 query scoring each report failures as descriptive `Result<Str,Str>` messages
 instead of opaque integer codes.
+`examples/e332_vaisdb_topk_ranking_report.vais` orders scored documents with a
+hand-written `List<Struct>` selection sort (whole-element swaps through a
+temporary struct local) and renders top-k report lines; a built-in list sort
+remains an open ergonomics gap.
+`examples/e333_vaisdb_snapshot_version_migration.vais` adds a `version=N`
+header to metadata snapshots, migrates the v1 key layout on load, and reports
+missing or unknown versions as `Result<Str,Str>` messages.
+`examples/e334_vaisdb_index_persistence_incremental.vais` persists per-document
+term counts under `docid.term` keys, reloads, extends incrementally without a
+rebuild, and scores identically to a fresh build.
+`tools/vaisdb_cli.vais` promotes those recipes into a reusable Vais-authored
+command with `ingest`, `query`, and `report` subcommands over the persisted
+index; `scripts/vaisdb-cli.sh` is the shell entrypoint, and the VaisDB workflow
+gate covers both engines, the wrapper, and every error exit code.
 `examples/e303_result_metric_int_struct_payload.vais` opens the first
 structured payload Result slice: a `Metric` struct can be returned as
 `Result<Metric,Int>`, passed through helpers, and matched to recover payload

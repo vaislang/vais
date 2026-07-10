@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Added the VaisDB dogfooding-2 workflow slice: a top-k ranking report over a
+  hand-written `List<Struct>` selection sort
+  (`examples/e332_vaisdb_topk_ranking_report.vais`), versioned metadata
+  snapshots with v1 migration and readable version errors
+  (`examples/e333_vaisdb_snapshot_version_migration.vais`), a persisted
+  incrementally-extended term index
+  (`examples/e334_vaisdb_index_persistence_incremental.vais`), and the
+  Vais-authored `vaisdb` CLI (`tools/vaisdb_cli.vais`,
+  `scripts/vaisdb-cli.sh`) with ingest/query/report subcommands, all covered
+  by the VaisDB workflow, parity, and value gates.
+
 - Promoted `Result<Str,Str>`, the first non-`Int` error payload slice: `Ok(Str)`
   or `Err(Str)` so failures carry human-readable messages, with helper returns,
   local-binding `?` propagation, and inline match recovery, verified in the
