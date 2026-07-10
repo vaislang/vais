@@ -30,11 +30,16 @@ This file tracks current work and completed gate-backed language surface.
     expect_pair, README. probe로 Int/Str 필드 원소 스왑 양 엔진 검증(컴파일러
     갭 없음). **환류 갭 1호: built-in List sort 부재**(수동 정렬은 동작하나
     ergonomics) — 작업 5에서 등록.
-- [ ] 2. 스냅샷 버전 헤더 + 마이그레이션 (Opus 직접)
+- [x] 2. 스냅샷 버전 헤더 + 마이그레이션 (Opus 직접) ✅ 2026-07-10
+  - changes: examples/e333_vaisdb_snapshot_version_migration.vais (version=N
+    헤더, v1 bare-key→v2 doc.* 마이그레이션(key_at/value_at 순회), 미지버전/
+    헤더누락 Str 에러), parity 352, workflow 게이트, README. 컴파일러 갭 없음 —
+    디버깅 일화: 트랩은 str_slice 시그니처 오해((start,len), invalid range trap
+    은 문서화된 동작)였고 str_starts_with(기검증)로 교체.
 - [ ] 3. 인덱스 영속화 + 증분 ingest (Opus 직접)
 - [ ] 4. Vais-authored `vaisdb` CLI 통합 도구 (Opus 직접)
 - [ ] 5. 갭 환류 + 문서 정리 (Opus 직접)
-진행률: 1/5 (20%)
+진행률: 2/5 (40%)
 
 배경: Result 진단 스프린트(5/5)로 오류 표현이 완성됐다. 다음 병목은 "실제 제품
 워크플로가 요구하는 조합"이다 — 정렬/랭킹, 스키마 버전, 영속 인덱스, CLI 통합.

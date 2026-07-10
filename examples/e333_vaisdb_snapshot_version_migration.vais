@@ -1,0 +1,94 @@
+# expect: 42
+# VaisDB versioned metadata snapshots: snapshots carry a `version=N` header
+# line ahead of the `key=value` body. The loader migrates known older layouts
+# (v1 stored bare `title`/`body` keys; v2 namespaces them under `doc.`),
+# accepts the current version directly, and reports missing or unknown
+# versions as human-readable Result<Str,Str> messages.
+
+fn versioned_snapshot(meta: Map<Str,Str>) -> Str {
+    let lf = str_byte(10)
+    return str_concat("version=2", str_concat(lf, map_str_str_snapshot(meta)))
+}
+
+fn body_after_header(lines: List<Str>) -> Str {
+    let lf = str_byte(10)
+    let mut body = ""
+    let n = lines.len()
+    let mut i = 1
+    while i < n {
+        if i == 1 { body = lines[i] } else { body = str_concat(body, str_concat(lf, lines[i])) }
+        i = i + 1
+    }
+    return body
+}
+
+fn load_versioned(text: Str, out: Map<Str,Str>) -> Result<Str, Str> {
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    if n == 0 { return Err("snapshot is empty") }
+    let header = str_trim(lines[0])
+    if header.len() < 9 { return Err("snapshot missing version header") }
+    if str_starts_with(header, "version=") != true { return Err("snapshot missing version header") }
+    let version = parse_int(str_slice(header, 8, header.len() - 8))
+    let body = body_after_header(lines)
+    if version == 2 {
+        let loaded = map_str_str_load_snapshot(body, out)
+        if loaded == 0 { return Err("snapshot body is empty") }
+        return Ok("loaded v2")
+    }
+    if version == 1 {
+        let old: Map<Str,Str> = {}
+        let loaded = map_str_str_load_snapshot(body, old)
+        if loaded == 0 { return Err("snapshot body is empty") }
+        out.clear()
+        let count = old.len()
+        let mut i = 0
+        while i < count {
+            let key = old.key_at(i)
+            let value = old.value_at(i)
+            out.insert(str_concat("doc.", key), value)
+            i = i + 1
+        }
+        return Ok("migrated v1 to v2")
+    }
+    return Err(str_concat("unknown snapshot version ", Str(version)))
+}
+
+fn main() -> Int {
+    let lf = str_byte(10)
+
+    # Current-version round trip.
+    let meta: Map<Str,Str> = {}
+    meta.insert("doc.title", "VaisDB Guide")
+    meta.insert("doc.body", "ai cache vector")
+    let snapshot = versioned_snapshot(meta)
+    let loaded: Map<Str,Str> = {}
+    let v2_flow = load_versioned(snapshot, loaded)
+    let v2_note = match v2_flow { Ok(note) => note, Err(msg) => msg }
+    if v2_note != "loaded v2" { return 1 }
+    if loaded.get("doc.title", "") != "VaisDB Guide" { return 2 }
+    if loaded.len() != 2 { return 3 }
+
+    # Older v1 layout migrates its bare keys under the doc. namespace.
+    let v1_text = str_concat("version=1", str_concat(lf, str_concat("title=Old Guide", str_concat(lf, "body=legacy cache"))))
+    let migrated: Map<Str,Str> = {}
+    let v1_flow = load_versioned(v1_text, migrated)
+    let v1_note = match v1_flow { Ok(note) => note, Err(msg) => msg }
+    if v1_note != "migrated v1 to v2" { return 4 }
+    if migrated.get("doc.title", "") != "Old Guide" { return 5 }
+    if migrated.get("doc.body", "") != "legacy cache" { return 6 }
+
+    # Unknown versions and missing headers carry readable messages.
+    let v9_text = str_concat("version=9", str_concat(lf, "doc.title=Future"))
+    let sink: Map<Str,Str> = {}
+    let v9_flow = load_versioned(v9_text, sink)
+    let v9_message = match v9_flow { Ok(note) => note, Err(msg) => msg }
+    if v9_message != "unknown snapshot version 9" { return 7 }
+
+    let bare_flow = load_versioned("doc.title=NoHeader", sink)
+    let bare_message = match bare_flow { Ok(note) => note, Err(msg) => msg }
+    if bare_message != "snapshot missing version header" { return 8 }
+
+    # 2 loaded + 2 migrated entries, "loaded v2".len()=9, "migrated v1 to v2".len()=17: 9+17+2*2*4 = 42
+    return v2_note.len() + v1_note.len() + loaded.len() * migrated.len() * 4
+}
