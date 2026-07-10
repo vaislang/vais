@@ -155,8 +155,12 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   pre-pass breaks one-line fn bodies into per-statement lines before the
   line-anchored Result lowerings run (previously emitted undefined `%v-1`
   loads). Pinned by `examples/e331_semicolon_single_line_result.vais` in
-  parity/value gates. The raw-core harness path for the same str_str `?` shape
-  is tracked separately (see fixpoint_full_codegen_check NOTE).
+  parity/value gates. The raw self-host core path (used by the codegen check
+  harness, which bypasses the driver lowerings) also handles `Result<Str,Str>`
+  `?` bindings and Str-result matches now: the core's question predicate
+  accepts str_str callees and the str_str match-result slot predicate is wired
+  into both slot collectors. Pinned by
+  `case_080m23_result_str_str_error_message` in the full codegen gate.
 - Project path is `/Users/sswoo/study/projects/vais`.
 - Native `vaisc` temporary intermediates are isolated under a per-run temp root,
   cleaned on normal exit, and protected by a native smoke regression check;

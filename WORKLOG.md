@@ -1,5 +1,32 @@
 # Vais Worklog
 
+## 2026-07-10 (raw-core str_str `?`/match 갭 해결 — task_6767f45a)
+
+driver 수정(1a7e5592) 후 남았던 raw-core 갭 해결. codegen check harness는 driver
+텍스트 lowering을 우회해 stage-빌드된 self-host core로 직접 컴파일하는데, 그
+경로에서 Result<Str,Str>가 두 곳 미완이었다 — 둘 다 작업 2(fee3f697)에서 core에
+match emit을 추가할 때 빠뜨린 배선:
+
+1. **`?` 바인딩 프레디킷**: rhs_result_question_result_is_str가
+   call_ret_result_str_int만 확인 → str_str `?`의 바인딩 local(title)이 Str
+   slot(alloca i8*, is_arr 3)을 못 받아 Int 취급 → str_lower(title)에서 i64/ptr
+   불일치. 수정 = call_ret_result_str_str 추가. payload 저장(inttoptr+store
+   i8*)과 Err early-return(packed 재반환)은 slot 종류 기반이라 자동 정상화.
+2. **match-결과 slot 등록**: rhs_result_match_str_str_result_is_str 프레디킷을
+   작업 2에서 만들어놓고 add_local_slots/collect_top_slots에 연결 안 함 →
+   `let recovered = match flow { Ok(t)=>t, Err(m)=>m }`의 recovered가 스칼라
+   slot으로 등록, match emit은 i8*를 store, 후속 문자열 비교는 정수 icmp
+   (ptr vs i64 불일치). 수정 = 두 collector에 str_int와 평행한 분기 연결.
+
+**고속 재현 루프 확립**(다음에 유용): 게이트 전체 대신 단일 case를 ~1분에 반복 —
+embed_self_source --raw fixpoint_full.vais prog.vais c.vais →
+VAISC_SELF_HOST_TRUST_ROOTS=<root> scripts/vaisc build (trust 레이아웃
+<root>/compiler/self/c.vais 필수) → ./c > out.ll → clang 검증+실행.
+
+case_080m23(str_str `?`+match, 세미콜론 형태) 복원 완료, 고속 루프 실측 42.
+driver 경로 회귀 0(e329/e330/e331/e301/e294=42). .ll canonical 재생성. 전 게이트
+래더로 최종 검증.
+
 ## 2026-07-10 (세미콜론 단일라인 Result 버그 근본수정 — 울트라코드)
 
 스프린트 중 발견한 잠복 버그(task_595301c0: 세미콜론 단일라인 fn body에서

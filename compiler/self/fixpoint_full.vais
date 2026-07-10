@@ -10021,11 +10021,15 @@ fn result_match_str_str_result_is_int_at(toks: &List<Token>, slots: &List<Slot>,
 }
 
 fn rhs_result_question_result_is_str(toks: &List<Token>, fns: &List<Fn>, src: Str, npos: Int) -> Int {
+    # Result<Str,Int> and Result<Str,Str> both carry a Str Ok payload, so the
+    # `?`-bound local is a Str pointer either way; the Err early-return simply
+    # re-returns the packed i64, which is error-payload-agnostic.
     let vp = rhs_pos(toks, npos)
     let stop = find_stmt_end(toks, src, vp, toks.len())
     let close = rhs_result_question_call_end(toks, src, npos, stop)
     if close < 0 { return 0 }
-    return call_ret_result_str_int(toks, fns, src, vp)
+    if call_ret_result_str_int(toks, fns, src, vp) == 1 { return 1 }
+    return call_ret_result_str_str(toks, fns, src, vp)
 }
 
 fn rhs_result_question_result_ty(toks: &List<Token>, fns: &List<Fn>, src: Str, npos: Int, end: Int) -> Int {
@@ -11651,6 +11655,13 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
                 putchar(10)
                 next_slot = next_slot + 1
             } else if rhs_result_match_str_int_result_is_str(toks, &slots, fns, src, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca i8*")
+                putchar(10)
+                next_slot = next_slot + 1
+            } else if rhs_result_match_str_str_result_is_str(toks, &slots, fns, src, npos) == 1 {
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
                 emit_str("  %v")
                 pint(next_slot)
@@ -19124,6 +19135,13 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
                 putchar(10)
                 next_slot = next_slot + 1
             } else if rhs_result_match_str_int_result_is_str(toks, &slots, fns, src, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca i8*")
+                putchar(10)
+                next_slot = next_slot + 1
+            } else if rhs_result_match_str_str_result_is_str(toks, &slots, fns, src, npos) == 1 {
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
                 emit_str("  %v")
                 pint(next_slot)
