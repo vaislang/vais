@@ -235,6 +235,10 @@ and a `Str` error message through helper returns, inline match, and `?`,
 `examples/e330_vaisdb_ingest_error_message_flow.vais` for the VaisDB
 file-ingest workflow that reports every failure path as a human-readable
 `Result<Str,Str>` message instead of an opaque integer code,
+`examples/e332_vaisdb_topk_ranking_report.vais` for the top-k ranking report
+that orders scored documents with a hand-written `List<Struct>` selection sort
+(whole-element swaps through a temporary struct local) and renders the top
+lines as a `Result<Str,Str>` report with a blank-query error message,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

@@ -22,7 +22,42 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-06) — VaisDB Result 진단 확장
+## 현재 작업 (2026-07-10) — VaisDB 도그푸딩 확장 2
+모드: 개별선택
+- [x] 1. 다중 문서 top-k 랭킹 리포트 (Opus 직접) ✅ 2026-07-10
+  - changes: examples/e332_vaisdb_topk_ranking_report.vais (점수→수동 selection
+    sort→top-k 렌더→blank-query Str 에러), parity 351 등록, workflow 게이트
+    expect_pair, README. probe로 Int/Str 필드 원소 스왑 양 엔진 검증(컴파일러
+    갭 없음). **환류 갭 1호: built-in List sort 부재**(수동 정렬은 동작하나
+    ergonomics) — 작업 5에서 등록.
+- [ ] 2. 스냅샷 버전 헤더 + 마이그레이션 (Opus 직접)
+- [ ] 3. 인덱스 영속화 + 증분 ingest (Opus 직접)
+- [ ] 4. Vais-authored `vaisdb` CLI 통합 도구 (Opus 직접)
+- [ ] 5. 갭 환류 + 문서 정리 (Opus 직접)
+진행률: 1/5 (20%)
+
+배경: Result 진단 스프린트(5/5)로 오류 표현이 완성됐다. 다음 병목은 "실제 제품
+워크플로가 요구하는 조합"이다 — 정렬/랭킹, 스키마 버전, 영속 인덱스, CLI 통합.
+ROADMAP 전략("dogfooding으로 언어 갭 노출")대로 각 작업은 예제/도구를 먼저
+Vais로 작성하고, 막히면 컴파일러를 root-cause로 고친 뒤 진행한다. 노출됐지만
+이번에 안 고치는 갭은 작업 5에서 다음 task brief로 환류한다.
+
+### 도그푸딩 2 Task Briefs
+
+1. **top-k 랭킹**: N개 문서를 질의 점수로 정렬해 상위 k 리포트를 만든다.
+   `List<Struct>` 원소 스왑 기반 수동 정렬(검증된 indexed element assignment)로
+   시작 — 동작하면 built-in sort 부재를 ergonomics 갭으로 환류, 깨지면 컴파일러
+   수정. 완료: 예제 direct/full/parity/value green + workflow 게이트 편입.
+2. **스냅샷 버전**: `version=N` 헤더를 가진 스냅샷을 쓰고, 구버전 load 시
+   마이그레이션, 미지 버전은 `Err("unknown snapshot version ...")`. 완료: 버전
+   round-trip + 오류경로 예제 green.
+3. **인덱스 영속화**: term index를 디스크 저장/재로드 후 문서 1개 증분 추가가
+   기존 결과와 일치. 완료: round-trip 예제 green.
+4. **vaisdb CLI**: `tools/`에 ingest/query/report 서브커맨드 도구 + `scripts/`
+   래퍼. 완료: workflow 게이트에서 서브커맨드 실행 검증.
+5. **환류**: 노출 갭을 "다음 후보 작업"에 등록, LANGUAGE/PRELUDE/README 반영.
+
+## 직전 완료 (2026-07-06) — VaisDB Result 진단 확장
 모드: 개별선택
 - [x] 1. Result 오용 P4 help 진단 신설 (impl-sonnet) ✅ 2026-07-06
   - changes: tests/fixtures/vais_check/bad.vais (+Result<Unknown,Int> reject),

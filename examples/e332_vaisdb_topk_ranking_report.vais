@@ -1,0 +1,97 @@
+# expect: 42
+# VaisDB top-k ranking report: score several documents against a query, order
+# them with a hand-written selection sort over List<Struct> (whole-element
+# swaps through a temporary struct local are verified surface; a built-in
+# sort remains an ergonomics gap), and render the top-k lines as a reusable
+# Result<Str,Str> report that carries a human-readable error for blank
+# queries.
+
+struct Ranked {
+    title: Str,
+    score: Int,
+}
+
+fn sort_by_score_desc(docs: List<Ranked>) -> Int {
+    let n = docs.len()
+    let mut i = 0
+    while i < n {
+        let mut best = i
+        let mut j = i + 1
+        while j < n {
+            if docs[j].score > docs[best].score { best = j }
+            j = j + 1
+        }
+        if best != i {
+            let tmp = docs[i]
+            docs[i] = docs[best]
+            docs[best] = tmp
+        }
+        i = i + 1
+    }
+    return n
+}
+
+fn rank_docs(query_text: Str, titles: List<Str>, bodies: List<Str>, out: List<Ranked>) -> Result<Str, Str> {
+    let trimmed = str_trim(query_text)
+    if trimmed.len() == 0 { return Err("query is blank") }
+    let query: Map<Str,Int> = {}
+    let query_total = doc_term_counts_into(trimmed, query)
+    if query_total == 0 { return Err("query has no terms") }
+    let n = titles.len()
+    let mut i = 0
+    while i < n {
+        let doc: Map<Str,Int> = {}
+        let body_total = doc_term_counts_into(bodies[i], doc)
+        let score = doc_term_weighted_score(query, doc)
+        out.push(Ranked { title: titles[i], score: score })
+        i = i + 1
+    }
+    let sorted = sort_by_score_desc(out)
+    if sorted != n { return Err("ranking lost documents") }
+    return Ok(trimmed)
+}
+
+fn render_top_k(docs: List<Ranked>, k: Int) -> Str {
+    let lf = str_byte(10)
+    let mut report = ""
+    let mut i = 0
+    let mut limit = k
+    if docs.len() < k { limit = docs.len() }
+    while i < limit {
+        let line = str_concat(Str(i + 1), str_concat(". ", str_concat(docs[i].title, str_concat(" (", str_concat(Str(docs[i].score), ")")))))
+        if i == 0 { report = line } else { report = str_concat(report, str_concat(lf, line)) }
+        i = i + 1
+    }
+    return report
+}
+
+fn main() -> Int {
+    let titles: List<Str> = ["alpha guide", "beta notes", "gamma misc"]
+    let bodies: List<Str> = ["ai ai ai cache", "ai cache cache", "vector vector"]
+
+    let ranked: List<Ranked> = []
+    let flow = rank_docs("ai cache", titles, bodies, ranked)
+    let query_echo = match flow { Ok(text) => text, Err(msg) => msg }
+    if query_echo != "ai cache" { return 1 }
+
+    # Scores: alpha = 1*3 + 1*1 = 4, beta = 1*1 + 1*2 = 3, gamma = 0.
+    if ranked[0].title != "alpha guide" { return 2 }
+    if ranked[0].score != 4 { return 3 }
+    if ranked[1].title != "beta notes" { return 4 }
+    if ranked[1].score != 3 { return 5 }
+    if ranked[2].score != 0 { return 6 }
+
+    let report = render_top_k(ranked, 2)
+    let lf = str_byte(10)
+    let expected = str_concat("1. alpha guide (4)", str_concat(lf, "2. beta notes (3)"))
+    if report != expected { return 7 }
+
+    # Blank query reports a readable message instead of a code.
+    let empty: List<Ranked> = []
+    let bad = rank_docs("   ", titles, bodies, empty)
+    let message = match bad { Ok(text) => text, Err(msg) => msg }
+    if message != "query is blank" { return 8 }
+
+    # 4*10 + 3 - 1 = 42
+    return ranked[0].score * 10 + ranked[1].score - 1
+}
