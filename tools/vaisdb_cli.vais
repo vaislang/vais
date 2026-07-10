@@ -1,0 +1,161 @@
+# Vais-authored VaisDB command-line tool.
+#
+# Subcommands over a persisted docid.term index (the e334 layout):
+#   ingest <index-path> <doc-id> <doc-file>   add/update one document, exit 0
+#   query  <index-path> <doc-id> <query-text> print and exit with the score
+#   report <index-path> <query-text>          print the top document, exit with
+#                                             its score
+# Errors exit 1 (usage), 2 (unknown subcommand), or 3 (missing input) with a
+# readable message, mirroring the Result<Str,Str> error style of the examples.
+
+fn index_key(doc_id: Str, term: Str) -> Str {
+    return str_concat(doc_id, str_concat(".", term))
+}
+
+fn ingest_into(index: Map<Str,Str>, doc_id: Str, body: Str) -> Int {
+    let counts: Map<Str,Int> = {}
+    let total = doc_term_counts_into(body, counts)
+    let n = counts.len()
+    let mut i = 0
+    while i < n {
+        index.insert(index_key(doc_id, counts.key_at(i)), Str(counts.value_at(i)))
+        i = i + 1
+    }
+    return total
+}
+
+fn load_index(path: Str, out: Map<Str,Str>) -> Result<Str, Str> {
+    if fs_exists(path) != 1 { return Err("index not found") }
+    let text = fs_read_text(path)
+    let loaded = map_str_str_load_snapshot(text, out)
+    if loaded == 0 { return Err("index is empty") }
+    return Ok(Str(loaded))
+}
+
+fn doc_score(index: Map<Str,Str>, doc_id: Str, query: Map<Str,Int>) -> Int {
+    let n = query.len()
+    let mut score = 0
+    let mut i = 0
+    while i < n {
+        let term = query.key_at(i)
+        let weight = query.value_at(i)
+        let count = parse_int(index.get(index_key(doc_id, term), "0"))
+        score = score + weight * count
+        i = i + 1
+    }
+    return score
+}
+
+fn key_doc_id(key: Str) -> Str {
+    let dot = str_index_of(key, ".")
+    if dot < 0 { return key }
+    return str_slice(key, 0, dot)
+}
+
+fn run_ingest(index_path: Str, doc_id: Str, doc_path: Str) -> Int {
+    if fs_exists(doc_path) != 1 {
+        print("error: document not found")
+        return 3
+    }
+    let index: Map<Str,Str> = {}
+    if fs_exists(index_path) == 1 {
+        let text = fs_read_text(index_path)
+        let loaded = map_str_str_load_snapshot(text, index)
+        if loaded < 0 { return 3 }
+    }
+    let body = fs_read_text(doc_path)
+    let total = ingest_into(index, doc_id, body)
+    if fs_write_text(index_path, map_str_str_snapshot(index)) != 0 {
+        print("error: could not write index")
+        return 3
+    }
+    let summary = str_concat("ingested ", str_concat(doc_id, str_concat(" terms=", Str(total))))
+    print(summary)
+    return 0
+}
+
+fn run_query(index_path: Str, doc_id: Str, query_text: Str) -> Int {
+    let index: Map<Str,Str> = {}
+    let flow = load_index(index_path, index)
+    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
+    if note == "index not found" {
+        print("error: index not found")
+        return 3
+    }
+    let query: Map<Str,Int> = {}
+    let total = doc_term_counts_into(query_text, query)
+    if total == 0 {
+        print("error: query has no terms")
+        return 1
+    }
+    let score = doc_score(index, doc_id, query)
+    let line = str_concat("score ", str_concat(doc_id, str_concat("=", Str(score))))
+    print(line)
+    return score
+}
+
+fn run_report(index_path: Str, query_text: Str) -> Int {
+    let index: Map<Str,Str> = {}
+    let flow = load_index(index_path, index)
+    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
+    if note == "index not found" {
+        print("error: index not found")
+        return 3
+    }
+    let query: Map<Str,Int> = {}
+    let total = doc_term_counts_into(query_text, query)
+    if total == 0 {
+        print("error: query has no terms")
+        return 1
+    }
+    let seen: Map<Str,Int> = {}
+    let n = index.len()
+    let mut i = 0
+    let mut best_doc = ""
+    let mut best_score = 0 - 1
+    while i < n {
+        let doc_id = key_doc_id(index.key_at(i))
+        if seen.contains(doc_id) != true {
+            seen.insert(doc_id, 1)
+            let score = doc_score(index, doc_id, query)
+            if score > best_score {
+                best_score = score
+                best_doc = doc_id
+            }
+        }
+        i = i + 1
+    }
+    if best_score < 0 {
+        print("error: index has no documents")
+        return 3
+    }
+    let line = str_concat("top ", str_concat(best_doc, str_concat("=", Str(best_score))))
+    print(line)
+    return best_score
+}
+
+fn usage() -> Int {
+    print("usage: vaisdb-cli ingest <index> <doc-id> <doc-file>")
+    print("       vaisdb-cli query <index> <doc-id> <query-text>")
+    print("       vaisdb-cli report <index> <query-text>")
+    return 1
+}
+
+fn main() -> Int {
+    if proc_argc() < 1 { return usage() }
+    let command = proc_arg(0)
+    if command == "ingest" {
+        if proc_argc() != 4 { return usage() }
+        return run_ingest(proc_arg(1), proc_arg(2), proc_arg(3))
+    }
+    if command == "query" {
+        if proc_argc() != 4 { return usage() }
+        return run_query(proc_arg(1), proc_arg(2), proc_arg(3))
+    }
+    if command == "report" {
+        if proc_argc() != 3 { return usage() }
+        return run_report(proc_arg(1), proc_arg(2))
+    }
+    print("error: unknown subcommand")
+    return 2
+}

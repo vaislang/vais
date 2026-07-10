@@ -195,6 +195,22 @@ expect_exit \
     bash "$ROOT/scripts/vaisdb-benchmark-report.sh" \
     "$tmp/script-raw-report.txt" \
     "$tmp/script-summary-report.txt"
+
+# Vais-authored vaisdb CLI: ingest/query/report subcommands over the persisted
+# docid.term index, plus readable error paths with distinct exit codes.
+cli_index="$tmp/vaisdb-cli-index.txt"
+printf 'ai ai ai cache\n' > "$tmp/vaisdb-cli-d1.txt"
+printf 'ai cache cache\n' > "$tmp/vaisdb-cli-d2.txt"
+expect_exit "vaisdb cli ingest d1" 0 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" -- ingest "$cli_index" d1 "$tmp/vaisdb-cli-d1.txt"
+expect_exit "vaisdb cli ingest d2" 0 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" -- ingest "$cli_index" d2 "$tmp/vaisdb-cli-d2.txt"
+expect_exit "vaisdb cli query d1" 4 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" -- query "$cli_index" d1 "ai cache"
+expect_exit "vaisdb cli query d2" 3 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" -- query "$cli_index" d2 "ai cache"
+expect_exit "vaisdb cli report top" 4 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" -- report "$cli_index" "ai cache"
+expect_exit "vaisdb cli report direct" 4 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" --engine direct -- report "$cli_index" "ai cache"
+expect_exit "vaisdb cli missing index" 3 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" -- query "$tmp/vaisdb-cli-none.txt" d1 "ai"
+expect_exit "vaisdb cli unknown subcommand" 2 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" -- frobnicate
+expect_exit "vaisdb cli usage" 1 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" --
+expect_exit "vaisdb cli script wrapper" 4 bash "$ROOT/scripts/vaisdb-cli.sh" report "$cli_index" "ai cache"
 write_file_ingest_inputs "$tmp"
 expect_pair_args \
     "file ingest argv workflow" \

@@ -41,9 +41,13 @@ This file tracks current work and completed gate-backed language surface.
     평탄 키 인덱스 영속화→재로드→증분 d3 추가→재영속→fresh build와 점수 동일,
     누락 인덱스 Str 에러), parity 353, workflow 게이트, README. 첫 시도 양 엔진
     42 — 컴파일러 갭 없음.
-- [ ] 4. Vais-authored `vaisdb` CLI 통합 도구 (Opus 직접)
+- [x] 4. Vais-authored `vaisdb` CLI 통합 도구 (Opus 직접) ✅ 2026-07-10
+  - changes: tools/vaisdb_cli.vais (ingest/query/report 서브커맨드, e334 인덱스
+    레이아웃, query/report는 score를 exit code로 반환, 에러 3/2/1 구분) +
+    scripts/vaisdb-cli.sh 래퍼 + workflow 게이트 10케이스(direct 엔진 report +
+    래퍼 포함). 첫 시도 전 케이스 정확 — 컴파일러 갭 없음.
 - [ ] 5. 갭 환류 + 문서 정리 (Opus 직접)
-진행률: 3/5 (60%)
+진행률: 4/5 (80%)
 
 배경: Result 진단 스프린트(5/5)로 오류 표현이 완성됐다. 다음 병목은 "실제 제품
 워크플로가 요구하는 조합"이다 — 정렬/랭킹, 스키마 버전, 영속 인덱스, CLI 통합.
