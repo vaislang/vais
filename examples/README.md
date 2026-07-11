@@ -252,6 +252,9 @@ statement that sorts in place through local and parameter receivers,
 `examples/e336_list_struct_sort_by.vais` for the built-in
 `List<Struct>.sort_by(|x| x.int_field)` and `sort_by_desc` key sorts that
 order records in place for ranking flows,
+`examples/e337_vaisdb_cli_package` for the installable vaisdb CLI package
+whose multi-module source builds to `dist/bin/vaisdb` with ingest/query/report
+subcommands, a deterministic no-argument self-test, and a release archive,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

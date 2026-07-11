@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-07-10 (vaisdb 설치형 패키지 — 첫 배포 가능한 Vais 도구)
+
+"richer package layout" 후보를 실제 제품으로 도그푸딩. tools/vaisdb_cli.vais의
+로직을 다중 모듈 패키지로 재구성: examples/e337_vaisdb_cli_package/
+(vais.toml: binary="vaisdb", source="src"; src/vaisdb/index.vais +
+src/vaisdb/report.vais(import vaisdb.index 전이 import) + src/main.vais).
+main은 무인자=결정적 self-test(42, parity/value 코퍼스 진입용, e326 패턴),
+인자=ingest/query/report 디스패치(도구와 동일한 exit 프로토콜).
+
+실측: scripts/vaisc package → dist/bin/vaisdb 빌드, 배포 바이너리로
+ingest(0)/query(4)/report(4)/self-test(42) 전부 정확, --archive로
+vaisdb-0.1.0.tar.gz 생성·추출·실행까지. **Vais로 작성한 첫 배포 가능한
+실제 도구.** workflow 게이트에 8케이스(build/self-test/서브커맨드 3종/
+아카이브 존재/추출/추출본 실행) 추가, parity(e337 main) 등록. 노출 갭 0건 —
+패키징+모듈 표면도 실전 조합에서 성숙 확인. ROADMAP의 richer-layout 후보는
+"현 표면 도그푸딩 완료, 추가 요구 노출 시 재개"로 갱신.
+
 ## 2026-07-10 (List<Struct>.sort_by/sort_by_desc 승격 — 갭 1호 완결)
 
 sort() 전반부와 동일 패턴으로 후반부 완결. lower_list_method_text에

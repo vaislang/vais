@@ -90,6 +90,12 @@ place by an Int key, replacing the hand-written ranking sort in product flows.
 command with `ingest`, `query`, and `report` subcommands over the persisted
 index; `scripts/vaisdb-cli.sh` is the shell entrypoint, and the VaisDB workflow
 gate covers both engines, the wrapper, and every error exit code.
+`examples/e337_vaisdb_cli_package` productizes that command as an installable
+package: the index/report logic is split across `vaisdb.index` and
+`vaisdb.report` modules, `scripts/vaisc package` builds `dist/bin/vaisdb` and a
+`vaisdb-0.1.0.tar.gz` release archive, and the workflow gate runs the packaged
+binary's subcommands and self-test from both the dist tree and the extracted
+archive.
 `examples/e303_result_metric_int_struct_payload.vais` opens the first
 structured payload Result slice: a `Metric` struct can be returned as
 `Result<Metric,Int>`, passed through helpers, and matched to recover payload

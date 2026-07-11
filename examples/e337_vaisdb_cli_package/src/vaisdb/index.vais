@@ -1,0 +1,43 @@
+# Persisted docid.term index helpers shared by the vaisdb package commands.
+
+fn index_key(doc_id: Str, term: Str) -> Str {
+    return str_concat(doc_id, str_concat(".", term))
+}
+
+fn ingest_into(index: Map<Str,Str>, doc_id: Str, body: Str) -> Int {
+    let counts: Map<Str,Int> = {}
+    let total = doc_term_counts_into(body, counts)
+    let n = counts.len()
+    let mut i = 0
+    while i < n {
+        index.insert(index_key(doc_id, counts.key_at(i)), Str(counts.value_at(i)))
+        i = i + 1
+    }
+    return total
+}
+
+fn save_index(path: Str, index: Map<Str,Str>) -> Int {
+    return fs_write_text(path, map_str_str_snapshot(index))
+}
+
+fn load_index(path: Str, out: Map<Str,Str>) -> Result<Str, Str> {
+    if fs_exists(path) != 1 { return Err("index not found") }
+    let text = fs_read_text(path)
+    let loaded = map_str_str_load_snapshot(text, out)
+    if loaded == 0 { return Err("index is empty") }
+    return Ok(Str(loaded))
+}
+
+fn doc_score(index: Map<Str,Str>, doc_id: Str, query: Map<Str,Int>) -> Int {
+    let n = query.len()
+    let mut score = 0
+    let mut i = 0
+    while i < n {
+        let term = query.key_at(i)
+        let weight = query.value_at(i)
+        let count = parse_int(index.get(index_key(doc_id, term), "0"))
+        score = score + weight * count
+        i = i + 1
+    }
+    return score
+}

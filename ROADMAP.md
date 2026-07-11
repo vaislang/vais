@@ -132,7 +132,10 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
-- richer reusable package layout / package diagnostics (e327 아카이브 기반).
+- richer reusable package layout / package diagnostics: e337(vaisdb 설치형
+  패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
+  도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지
+  결합 등)가 제품에서 나오면 재개.
 - ~~built-in List sort~~ (환류 갭 1호, 완결): `List<Int>.sort()`(e335) +
   `List<Struct>.sort_by/sort_by_desc(|x| x.int_field)`(e336) 모두 2026-07-10
   승격 완료 — driver 단일 desugar로 양 엔진 공유. Str-key sort_by는 필요

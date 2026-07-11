@@ -362,3 +362,4 @@ examples/dependency_basic/app/src/main.vais	native-supported	vais.toml dependenc
 examples/e323_cli_package/src/main.vais	native-supported	Package CLI example keeps the file-entry release subset aligned with package-directory execution.
 examples/e326_cli_binary_target/src/main.vais	native-supported	Package binary target example keeps optional manifest binary metadata aligned with file-entry execution.
 examples/e328_cli_package_assets/src/main.vais	native-supported	Package assets example keeps optional manifest assets metadata aligned with file-entry execution.
+examples/e337_vaisdb_cli_package/src/main.vais	native-supported	Installable vaisdb CLI package self-test keeps the multi-module package entry aligned with file-entry execution.

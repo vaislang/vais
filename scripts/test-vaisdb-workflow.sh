@@ -211,6 +211,23 @@ expect_exit "vaisdb cli missing index" 3 "$ROOT/scripts/vaisc" run "$ROOT/tools/
 expect_exit "vaisdb cli unknown subcommand" 2 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" -- frobnicate
 expect_exit "vaisdb cli usage" 1 "$ROOT/scripts/vaisc" run "$ROOT/tools/vaisdb_cli.vais" --
 expect_exit "vaisdb cli script wrapper" 4 bash "$ROOT/scripts/vaisdb-cli.sh" report "$cli_index" "ai cache"
+
+# Installable vaisdb package: multi-module package builds to dist/bin/vaisdb,
+# the packaged binary serves the CLI subcommands and self-test, and the
+# release archive round-trips.
+vdb_dist="$tmp/vaisdb-dist"
+vdb_extract="$tmp/vaisdb-extract"
+vdb_index="$tmp/vaisdb-pkg-index.txt"
+rm -rf "$vdb_dist" "$vdb_extract"
+expect_exit "vaisdb package build" 0 "$ROOT/scripts/vaisc" package "$ROOT/examples/e337_vaisdb_cli_package" -o "$vdb_dist" --archive
+expect_exit "vaisdb package self-test" 42 "$vdb_dist/bin/vaisdb"
+expect_exit "vaisdb package ingest" 0 "$vdb_dist/bin/vaisdb" ingest "$vdb_index" d1 "$tmp/vaisdb-cli-d1.txt"
+expect_exit "vaisdb package query" 4 "$vdb_dist/bin/vaisdb" query "$vdb_index" d1 "ai cache"
+expect_exit "vaisdb package report" 4 "$vdb_dist/bin/vaisdb" report "$vdb_index" "ai cache"
+expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
+mkdir -p "$vdb_extract"
+expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"
+expect_exit "vaisdb archived self-test" 42 "$vdb_extract/vaisdb-0.1.0/bin/vaisdb"
 write_file_ingest_inputs "$tmp"
 expect_pair_args \
     "file ingest argv workflow" \

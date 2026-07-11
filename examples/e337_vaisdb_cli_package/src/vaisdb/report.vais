@@ -1,0 +1,46 @@
+# Top-document report helpers over the persisted docid.term index.
+import vaisdb.index
+
+fn key_doc_id(key: Str) -> Str {
+    let dot = str_index_of(key, ".")
+    if dot < 0 { return key }
+    return str_slice(key, 0, dot)
+}
+
+fn top_doc_score(index: Map<Str,Str>, query: Map<Str,Int>) -> Int {
+    let seen: Map<Str,Int> = {}
+    let n = index.len()
+    let mut i = 0
+    let mut best_score = 0 - 1
+    while i < n {
+        let doc_id = key_doc_id(index.key_at(i))
+        if seen.contains(doc_id) != true {
+            seen.insert(doc_id, 1)
+            let score = doc_score(index, doc_id, query)
+            if score > best_score { best_score = score }
+        }
+        i = i + 1
+    }
+    return best_score
+}
+
+fn top_doc_id(index: Map<Str,Str>, query: Map<Str,Int>) -> Str {
+    let seen: Map<Str,Int> = {}
+    let n = index.len()
+    let mut i = 0
+    let mut best_doc = ""
+    let mut best_score = 0 - 1
+    while i < n {
+        let doc_id = key_doc_id(index.key_at(i))
+        if seen.contains(doc_id) != true {
+            seen.insert(doc_id, 1)
+            let score = doc_score(index, doc_id, query)
+            if score > best_score {
+                best_score = score
+                best_doc = doc_id
+            }
+        }
+        i = i + 1
+    }
+    return best_doc
+}

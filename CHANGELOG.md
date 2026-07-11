@@ -4,6 +4,13 @@
 
 ### Changed
 
+- Added the installable vaisdb CLI package
+  (`examples/e337_vaisdb_cli_package`): the ingest/query/report command logic
+  is split across `vaisdb.index`/`vaisdb.report` package modules,
+  `scripts/vaisc package` builds `dist/bin/vaisdb` plus a versioned release
+  archive, and the VaisDB workflow gate exercises the packaged binary's
+  subcommands and self-test from the dist tree and the extracted archive —
+  the first distributable Vais-authored tool.
 - Added the built-in `List<Struct>.sort_by(|x| x.int_field)` and
   `sort_by_desc` statements, completing dogfood-2 gap feedback #1: in-place
   key sorts over an Int field on local and parameter receivers, sharing the
