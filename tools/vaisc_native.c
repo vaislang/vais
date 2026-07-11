@@ -16052,6 +16052,120 @@ static int lower_list_sort_statement_line(const char *line, int *temp_count, Lis
     return 1;
 }
 
+/*
+ * `xs.sort_by(|x| x.field)` / `xs.sort_by_desc(|x| x.field)` statements on a
+ * List<Struct> receiver keyed by an Int field: desugar into the in-place
+ * selection sort proven by examples/e332 (field comparisons on indexed
+ * elements plus whole-element swaps through a temporary struct local), so
+ * both engines share the one lowering, mirroring List<Int>.sort().
+ */
+static int lower_list_sort_by_statement_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    if (*s != '.') return 0;
+    int desc = 0;
+    if (strncmp(s + 1, "sort_by_desc", 12) == 0 && !is_ident_continue(s[13])) {
+        desc = 1;
+        s = s + 13;
+    } else if (strncmp(s + 1, "sort_by", 7) == 0 && !is_ident_continue(s[8])) {
+        s = s + 8;
+    } else {
+        return 0;
+    }
+    if (*s != '(') return 0;
+    s = skip_ws(s + 1);
+    if (*s != '|') return 0;
+    s = skip_ws(s + 1);
+    if (!is_ident_start(*s)) return 0;
+    const char *param_start = s;
+    while (is_ident_continue(*s)) s++;
+    const char *param_end = s;
+    s = skip_ws(s);
+    if (*s != '|') return 0;
+    s = skip_ws(s + 1);
+    size_t param_len = (size_t)(param_end - param_start);
+    if (strncmp(s, param_start, param_len) != 0 || is_ident_continue(s[param_len])) return 0;
+    s = skip_ws(s + param_len);
+    if (*s != '.') return 0;
+    s = skip_ws(s + 1);
+    if (!is_ident_start(*s)) return 0;
+    const char *field_start = s;
+    while (is_ident_continue(*s)) s++;
+    const char *field_end = s;
+    s = skip_ws(s);
+    if (*s != ')') return 0;
+    s = skip_ws(s + 1);
+    if (*s == ';') s = skip_ws(s + 1);
+    if (*s != '\0') return 0;
+
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    char *field = substr_copy(field_start, (size_t)(field_end - field_start));
+    const char *type = list_method_env_type(env, name);
+    char *elem = type == NULL ? NULL : list_method_list_element_type_copy(type);
+    const char *field_type = elem == NULL ? NULL : list_method_struct_field_type(env, elem, field);
+    if (field_type == NULL || strcmp(field_type, "Int") != 0) {
+        free(elem);
+        free(field);
+        free(name);
+        return 0;
+    }
+    free(elem);
+
+    int t = (*temp_count)++;
+    char i_var[48], b_var[48], j_var[48], t_var[48];
+    snprintf(i_var, sizeof(i_var), "__vais_sortby_i%d", t);
+    snprintf(b_var, sizeof(b_var), "__vais_sortby_b%d", t);
+    snprintf(j_var, sizeof(j_var), "__vais_sortby_j%d", t);
+    snprintf(t_var, sizeof(t_var), "__vais_sortby_t%d", t);
+
+    const char *body[] = {
+        "let mut %I = 0",
+        "while %I < %N.len() {",
+        "    let mut %B = %I",
+        "    let mut %J = %I + 1",
+        "    while %J < %N.len() {",
+        "        if %N[%J].%F %C %N[%B].%F { %B = %J }",
+        "        %J = %J + 1",
+        "    }",
+        "    if %B != %I {",
+        "        let %T = %N[%I]",
+        "        %N[%I] = %N[%B]",
+        "        %N[%B] = %T",
+        "    }",
+        "    %I = %I + 1",
+        "}",
+    };
+    size_t body_len = sizeof(body) / sizeof(body[0]);
+    for (size_t bi = 0; bi < body_len; bi++) {
+        StrBuf b;
+        sb_init(&b);
+        sb_append_n(&b, line, indent_len);
+        for (const char *c = body[bi]; *c != '\0'; c++) {
+            if (*c == '%' && c[1] != '\0') {
+                c++;
+                if (*c == 'I') sb_append(&b, i_var);
+                else if (*c == 'B') sb_append(&b, b_var);
+                else if (*c == 'J') sb_append(&b, j_var);
+                else if (*c == 'T') sb_append(&b, t_var);
+                else if (*c == 'N') sb_append(&b, name);
+                else if (*c == 'F') sb_append(&b, field);
+                else if (*c == 'C') sb_append(&b, desc ? ">" : "<");
+                else { sb_append_n(&b, c - 1, 2); }
+            } else {
+                sb_append_n(&b, c, 1);
+            }
+        }
+        lines_push(out, sb_take(&b));
+    }
+    free(field);
+    free(name);
+    return 1;
+}
+
 static char *lower_list_method_text(const char *text) {
     LineVec lines = split_lines(text);
     LineVec out;
@@ -16089,6 +16203,7 @@ static char *lower_list_method_text(const char *text) {
             continue;
         }
         if (lower_list_sort_statement_line(lines.items[i], &temp_count, &env, &out)) continue;
+        if (lower_list_sort_by_statement_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_filter_pick_struct_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_filter_pick_field_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_map_aggregate_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;

@@ -4,6 +4,11 @@
 
 ### Changed
 
+- Added the built-in `List<Struct>.sort_by(|x| x.int_field)` and
+  `sort_by_desc` statements, completing dogfood-2 gap feedback #1: in-place
+  key sorts over an Int field on local and parameter receivers, sharing the
+  same driver desugar as `List<Int>.sort()`
+  (`examples/e336_list_struct_sort_by.vais`).
 - Added the built-in `List<Int>.sort()` statement (dogfood-2 gap feedback #1):
   an in-place ascending sort desugared once in the driver so the full and
   direct engines share the lowering, verified for local and parameter

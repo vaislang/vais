@@ -100,6 +100,7 @@ examples/e332_vaisdb_topk_ranking_report.vais	native-supported	VaisDB top-k rank
 examples/e333_vaisdb_snapshot_version_migration.vais	native-supported	VaisDB versioned snapshots carry a version header, migrate the v1 key layout on load, and report missing or unknown versions as Result<Str,Str> messages.
 examples/e334_vaisdb_index_persistence_incremental.vais	native-supported	VaisDB persisted term index reloads from disk, extends incrementally without a rebuild, scores identically to a fresh build, and reports missing index files as Result<Str,Str> messages.
 examples/e335_list_int_sort.vais	native-supported	Built-in List<Int>.sort() sorts in place through local and parameter receivers, covering duplicates, sorted input, and empty lists.
+examples/e336_list_struct_sort_by.vais	native-supported	Built-in List<Struct>.sort_by and sort_by_desc key sorts over an Int field through local and parameter receivers, covering duplicates and empty lists.
 examples/e303_result_metric_int_struct_payload.vais	native-supported	Result<Metric,Int> struct payload values flow through helper parameters and recover fields through inline matches.
 examples/e304_result_record_int_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> struct payload values flow through helper parameters and recover three fields through inline matches.
 examples/e305_result_multiline_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> multiline struct payload values flow through helper parameters and recover four fields through inline matches.

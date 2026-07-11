@@ -133,10 +133,10 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
 - richer reusable package layout / package diagnostics (e327 아카이브 기반).
-- **`List<Struct>.sort_by(|x| x.int_field)`** (환류 갭 1호 후속):
-  `List<Int>.sort()`는 2026-07-10 승격 완료(e335, driver 단일 desugar). 남은
-  절반은 e332의 실제 요구인 struct 리스트 키-정렬 — 기존 closure 슬라이스
-  (filter/map)의 |x| x.field 머신을 재활용해 동일 desugar 패턴으로 확장.
+- ~~built-in List sort~~ (환류 갭 1호, 완결): `List<Int>.sort()`(e335) +
+  `List<Struct>.sort_by/sort_by_desc(|x| x.int_field)`(e336) 모두 2026-07-10
+  승격 완료 — driver 단일 desugar로 양 엔진 공유. Str-key sort_by는 필요
+  노출 시 후속.
 
 ## Task Briefs
 

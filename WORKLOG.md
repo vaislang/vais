@@ -1,5 +1,21 @@
 # Vais Worklog
 
+## 2026-07-10 (List<Struct>.sort_by/sort_by_desc 승격 — 갭 1호 완결)
+
+sort() 전반부와 동일 패턴으로 후반부 완결. lower_list_method_text에
+lower_list_sort_by_statement_line 추가 — `xs.sort_by(|x| x.int_field)`와
+`sort_by_desc`를 e332가 손으로 증명한 선택정렬 shape(인덱스 필드 비교 +
+temp struct local 경유 원소 스왑)로 desugar. 기존 헬퍼 재활용:
+list_method_env_type(수신자)→list_method_list_element_type_copy(원소 struct)→
+list_method_struct_field_type(필드가 Int인지 검증) — Int 키일 때만 발화.
+비교 연산자만 desc 플래그로 분기(</>).
+
+첫 시도 양 엔진 42(probe: desc/asc/param receiver/Str필드 struct/중복/빈/
+세미콜론 한줄). .ll 무변경(driver-only). e336 등록(parity/value 355 예정),
+LANGUAGE List<Struct> 행/PRELUDE/README/CHANGELOG, ROADMAP 갭 1호 완결 표기
+(Str-key sort_by는 필요 노출 시 후속). e332의 수동 정렬은 역사적 갭 문서로
+유지.
+
 ## 2026-07-10 (built-in List<Int>.sort() 승격 — 환류 갭 1호 전반부)
 
 도그푸딩-2가 등록한 갭 1호를 승격. 설계 핵심: `xs.sort()` statement를 driver의

@@ -249,6 +249,9 @@ scores identically to a fresh build, and reports missing index files as
 `Result<Str,Str>` messages,
 `examples/e335_list_int_sort.vais` for the built-in `List<Int>.sort()`
 statement that sorts in place through local and parameter receivers,
+`examples/e336_list_struct_sort_by.vais` for the built-in
+`List<Struct>.sort_by(|x| x.int_field)` and `sort_by_desc` key sorts that
+order records in place for ranking flows,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

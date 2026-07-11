@@ -83,6 +83,9 @@ rebuild, and scores identically to a fresh build.
 built-in: `List<Int>.sort()` sorts in place (ascending) as a statement on local
 and parameter receivers; promoting it also root-fixed the full-engine
 pointer-aliased list element write used by parameter receivers.
+`examples/e336_list_struct_sort_by.vais` completes that gap feedback:
+`List<Struct>.sort_by(|x| x.int_field)` and `sort_by_desc` order records in
+place by an Int key, replacing the hand-written ranking sort in product flows.
 `tools/vaisdb_cli.vais` promotes those recipes into a reusable Vais-authored
 command with `ingest`, `query`, and `report` subcommands over the persisted
 index; `scripts/vaisdb-cli.sh` is the shell entrypoint, and the VaisDB workflow

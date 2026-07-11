@@ -1,0 +1,54 @@
+# expect: 42
+# Built-in `List<Struct>.sort_by(|x| x.int_field)` and `sort_by_desc`: in-place
+# key sorts over an Int field, desugared by the driver into the selection-sort
+# shape e332 proved by hand (indexed field comparisons plus whole-element swaps
+# through a temporary struct local), so both engines share one lowering. This
+# replaces the hand-written ranking sort for product flows: score, sort_by_desc,
+# read the top-k.
+
+struct Ranked {
+    title: Str,
+    score: Int,
+}
+
+fn rank_desc(docs: List<Ranked>) -> Int {
+    docs.sort_by_desc(|d| d.score)
+    return docs[0].score
+}
+
+fn main() -> Int {
+    let docs: List<Ranked> = []
+    docs.push(Ranked { title: "alpha guide", score: 4 })
+    docs.push(Ranked { title: "beta notes", score: 9 })
+    docs.push(Ranked { title: "gamma misc", score: 0 })
+    docs.push(Ranked { title: "delta cache", score: 7 })
+
+    # Descending rank through a parameter receiver mutates the caller's list.
+    let top = rank_desc(docs)
+    if top != 9 { return 1 }
+    if docs[0].title != "beta notes" { return 2 }
+    if docs[1].score != 7 { return 3 }
+    if docs[3].score != 0 { return 4 }
+
+    # Ascending key sort restores id-like order on the same list.
+    docs.sort_by(|d| d.score)
+    if docs[0].score != 0 { return 5 }
+    if docs[3].title != "beta notes" { return 6 }
+
+    # Duplicates keep every element.
+    let dup: List<Ranked> = []
+    dup.push(Ranked { title: "a", score: 5 })
+    dup.push(Ranked { title: "b", score: 3 })
+    dup.push(Ranked { title: "c", score: 5 })
+    dup.sort_by(|d| d.score)
+    if dup[0].score != 3 { return 7 }
+    if dup[1].score != 5 { return 8 }
+    if dup[2].score != 5 { return 9 }
+
+    let empty: List<Ranked> = []
+    empty.sort_by_desc(|d| d.score)
+    if empty.len() != 0 { return 10 }
+
+    # 9 + 7*5 - 2 = 42
+    return top + docs[2].score * dup[2].score - 2
+}
