@@ -1,6 +1,11 @@
 # Top-document report helpers over the persisted docid.term index.
 import vaisdb.index
 
+struct RankedDoc {
+    doc_id: Str,
+    score: Int,
+}
+
 fn key_doc_id(key: Str) -> Str {
     let dot = str_index_of(key, ".")
     if dot < 0 { return key }
@@ -43,4 +48,36 @@ fn top_doc_id(index: Map<Str,Str>, query: Map<Str,Int>) -> Str {
         i = i + 1
     }
     return best_doc
+}
+
+
+fn rank_lines(index: Map<Str,Str>, query: Map<Str,Int>, k: Int) -> Str {
+    let ranked: List<RankedDoc> = []
+    let seen: Map<Str,Int> = {}
+    let n = index.len()
+    let mut i = 0
+    while i < n {
+        let doc_id = key_doc_id(index.key_at(i))
+        if seen.contains(doc_id) != true {
+            seen.insert(doc_id, 1)
+            ranked.push(RankedDoc { doc_id: doc_id, score: doc_score(index, doc_id, query) })
+        }
+        i = i + 1
+    }
+    ranked.sort_by_desc(|d| d.score)
+    let lf = str_byte(10)
+    let mut report = ""
+    let mut limit = k
+    if ranked.len() < k { limit = ranked.len() }
+    let mut j = 0
+    while j < limit {
+        # Bind the element first: local List<Struct> indexed field reads inside
+        # nested call arguments are not a verified direct slice yet (gap fed
+        # back to the roadmap).
+        let entry = ranked[j]
+        let line = str_concat(Str(j + 1), str_concat(". ", str_concat(entry.doc_id, str_concat("=", Str(entry.score)))))
+        if j == 0 { report = line } else { report = str_concat(report, str_concat(lf, line)) }
+        j = j + 1
+    }
+    return report
 }

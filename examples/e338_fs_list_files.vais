@@ -1,0 +1,37 @@
+# expect: 42
+# Built-in `fs_list_files(dir, out)`: fills a List<Str> out-param with the
+# regular file names in a directory (sorted, dotfiles' "." and ".." excluded,
+# subdirectories skipped) and returns the count. Missing directories yield 0
+# instead of trapping, so callers can guard with a readable error.
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let dir = path_join(root, "vais-e338-docs")
+    if fs_mkdirs(dir) != 0 { return 1 }
+    if fs_write_text(path_join(dir, "beta.txt"), "cache cache") != 0 { return 2 }
+    if fs_write_text(path_join(dir, "alpha.txt"), "ai ai cache") != 0 { return 3 }
+    let sub = path_join(dir, "nested")
+    if fs_mkdirs(sub) != 0 { return 4 }
+    if fs_write_text(path_join(sub, "inner.txt"), "skipped") != 0 { return 5 }
+
+    let names: List<Str> = []
+    let n = fs_list_files(dir, names)
+    if n != 2 { return 6 }
+    if names.len() != 2 { return 7 }
+    # Sorted order is part of the contract, so gates stay deterministic.
+    if names[0] != "alpha.txt" { return 8 }
+    if names[1] != "beta.txt" { return 9 }
+
+    # A listed name joins back into a readable path.
+    let text = fs_read_text(path_join(dir, names[0]))
+    if str_contains(text, "ai") != true { return 10 }
+
+    # Missing directories report zero entries.
+    let ghost: List<Str> = []
+    let missing = fs_list_files(path_join(dir, "no-such-dir"), ghost)
+    if missing != 0 { return 11 }
+    if ghost.len() != 0 { return 12 }
+
+    # 2*9 + 8*3 + 0 = 42
+    return n * names[0].len() + names[1].len() * 3 + missing
+}

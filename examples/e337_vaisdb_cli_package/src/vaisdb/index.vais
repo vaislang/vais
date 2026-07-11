@@ -41,3 +41,25 @@ fn doc_score(index: Map<Str,Str>, doc_id: Str, query: Map<Str,Int>) -> Int {
     }
     return score
 }
+
+fn ingest_dir_into(index: Map<Str,Str>, dir: Str) -> Result<Str, Str> {
+    let names: List<Str> = []
+    let count = fs_list_files(dir, names)
+    if count == 0 { return Err("no documents in directory") }
+    let mut i = 0
+    let mut ingested = 0
+    while i < count {
+        let name = names[i]
+        if str_ends_with(name, ".txt") == true {
+            let body = fs_read_text(path_join(dir, name))
+            # Strip the .txt extension: the flat index key is docid.term, so a
+            # dot inside the doc id would collide with the key separator.
+            let doc_id = str_slice(name, 0, name.len() - 4)
+            let total = ingest_into(index, doc_id, body)
+            ingested = ingested + 1
+        }
+        i = i + 1
+    }
+    if ingested == 0 { return Err("no .txt documents in directory") }
+    return Ok(Str(ingested))
+}

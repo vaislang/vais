@@ -22,7 +22,28 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-10) — VaisDB 도그푸딩 확장 2
+## 현재 작업 (2026-07-10b) — 도그푸딩 3: fs_list_files + vaisdb 제품 기능
+모드: 개별선택
+- [x] 1. fs_list_files host API 승격 ✅ 2026-07-12
+  - changes: HOST_INTRINSIC_IR declare + write_host_runtime_c 구현(opendir/
+    readdir/stat, 정렬, 누락 dir=0, full 리스트 계약 buf[4095]=len) + direct
+    builtin 배선(8지점)+static 헬퍼. 부수: fs_mkdirs를 direct에도 승격
+    (prototype+emission, host runtime 공유). e338 양 엔진 42. **full core
+    무변경** — 제네릭 call 경로가 (i8*, i64*) shape을 이미 emit.
+- [x] 2. vaisdb ingest-dir ✅ 2026-07-12
+  - changes: ingest_dir_into(.txt만, doc-id=확장자 제거 — flat key의 dot 충돌
+    회피) + main 디스패치 + workflow 게이트(성공 0/누락 dir 3).
+- [x] 3. rank top-k ✅ 2026-07-12
+  - changes: rank_lines가 RankedDoc 수집→**sort_by_desc(|d| d.score)** 제품
+    실사용→k라인 렌더. rank <index> <query> <k> 서브커맨드(exit=top score,
+    k<1은 1). 게이트 rank=4/bad-k=1.
+- [x] 4. 환류 + 문서 ✅ 2026-07-12
+  - 환류 갭: direct의 local List<Struct> 인덱스 필드 중첩 call-인자 미승격
+    (원소 let-바인딩으로 우회 가능, 아래 다음 후보 등록). HOST_IO/PRELUDE/
+    README/CHANGELOG 반영.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-10) — VaisDB 도그푸딩 확장 2
 모드: 개별선택
 - [x] 1. 다중 문서 top-k 랭킹 리포트 (Opus 직접) ✅ 2026-07-10
   - changes: examples/e332_vaisdb_topk_ranking_report.vais (점수→수동 selection
@@ -132,6 +153,10 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
+- direct 엔진의 local `List<Struct>` 인덱스 필드를 **중첩 call 인자**로 쓰는
+  슬라이스 미승격(파라미터 리스트는 동작): `str_concat(.., xs[j].field)` 형태.
+  현재는 `let entry = xs[j]` 바인딩으로 회피(e337 rank_lines 주석). 반복
+  노출 시 direct expression translator에 승격.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지

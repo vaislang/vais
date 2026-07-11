@@ -75,10 +75,66 @@ fn run_report(index_path: Str, query_text: Str) -> Int {
     return best_score
 }
 
+fn run_ingest_dir(index_path: Str, dir: Str) -> Int {
+    let index: Map<Str,Str> = {}
+    if fs_exists(index_path) == 1 {
+        let text = fs_read_text(index_path)
+        let loaded = map_str_str_load_snapshot(text, index)
+        if loaded < 0 { return 3 }
+    }
+    let flow = ingest_dir_into(index, dir)
+    let note = match flow { Ok(count) => count, Err(msg) => msg }
+    if flow_failed(note) == 1 {
+        print(str_concat("error: ", note))
+        return 3
+    }
+    if save_index(index_path, index) != 0 {
+        print("error: could not write index")
+        return 3
+    }
+    print(str_concat("ingested ", str_concat(note, " documents")))
+    return 0
+}
+
+fn flow_failed(note: Str) -> Int {
+    # ingest_dir_into Ok payloads are pure digit counts; error messages are not.
+    if note.len() == 0 { return 1 }
+    let first = note[0]
+    if first >= 48 {
+        if first <= 57 { return 0 }
+    }
+    return 1
+}
+
+fn run_rank(index_path: Str, query_text: Str, k: Int) -> Int {
+    let index: Map<Str,Str> = {}
+    let flow = load_index(index_path, index)
+    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
+    if note == "index not found" {
+        print("error: index not found")
+        return 3
+    }
+    let query: Map<Str,Int> = {}
+    let total = doc_term_counts_into(query_text, query)
+    if total == 0 {
+        print("error: query has no terms")
+        return 1
+    }
+    if k < 1 {
+        print("error: rank count must be positive")
+        return 1
+    }
+    let report = rank_lines(index, query, k)
+    print(report)
+    return top_doc_score(index, query)
+}
+
 fn usage() -> Int {
     print("usage: vaisdb ingest <index> <doc-id> <doc-file>")
     print("       vaisdb query <index> <doc-id> <query-text>")
     print("       vaisdb report <index> <query-text>")
+    print("       vaisdb ingest-dir <index> <doc-dir>")
+    print("       vaisdb rank <index> <query-text> <k>")
     return 1
 }
 
@@ -107,6 +163,18 @@ fn self_test() -> Int {
     if top_doc_score(loaded, query) != 4 { return 8 }
     if top_doc_id(loaded, query) != "d1" { return 9 }
 
+    # Directory ingest and ranked report reuse the same index layout.
+    let docs_dir = path_join(root, "vais-e337-selftest-docs")
+    if fs_mkdirs(docs_dir) != 0 { return 10 }
+    if fs_write_text(path_join(docs_dir, "d3.txt"), "vector vector cache") != 0 { return 11 }
+    let dir_flow = ingest_dir_into(loaded, docs_dir)
+    let dir_note = match dir_flow { Ok(count) => count, Err(msg) => msg }
+    if dir_note != "1" { return 12 }
+    let ranked = rank_lines(loaded, query, 2)
+    let lf = str_byte(10)
+    let expected = str_concat("1. d1=4", str_concat(lf, "2. d2=3"))
+    if ranked != expected { return 13 }
+
     # 4*10 + 3 - 1 = 42
     return s1 * 10 + s2 - 1
 }
@@ -125,6 +193,14 @@ fn main() -> Int {
     if command == "report" {
         if proc_argc() != 3 { return usage() }
         return run_report(proc_arg(1), proc_arg(2))
+    }
+    if command == "ingest-dir" {
+        if proc_argc() != 3 { return usage() }
+        return run_ingest_dir(proc_arg(1), proc_arg(2))
+    }
+    if command == "rank" {
+        if proc_argc() != 4 { return usage() }
+        return run_rank(proc_arg(1), proc_arg(2), parse_int(proc_arg(3)))
     }
     print("error: unknown subcommand")
     return 2

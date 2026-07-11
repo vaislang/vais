@@ -4,6 +4,15 @@
 
 ### Changed
 
+- Added the built-in `fs_list_files(dir, out)` host API: fills a `List<Str>`
+  with the sorted regular-file names in a directory (subdirectories skipped,
+  missing directories yield 0), verified on both engines
+  (`examples/e338_fs_list_files.vais`), and promoted `fs_mkdirs` to the direct
+  engine. The vaisdb package gains `ingest-dir <index> <dir>` (ingests every
+  `.txt`, doc id = file name without extension) and `rank <index> <query> <k>`
+  (top-k lines ordered with the new `sort_by_desc`), both covered by the
+  workflow gate against the packaged binary.
+
 - Added the installable vaisdb CLI package
   (`examples/e337_vaisdb_cli_package`): the ingest/query/report command logic
   is split across `vaisdb.index`/`vaisdb.report` package modules,

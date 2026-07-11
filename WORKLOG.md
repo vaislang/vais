@@ -1,5 +1,26 @@
 # Vais Worklog
 
+## 2026-07-12 (도그푸딩 3 — fs_list_files 승격 + vaisdb ingest-dir/rank)
+
+호스트 API 승격: `fs_list_files(dir, out: List<Str>) -> Int` —
+HOST_INTRINSIC_IR declare + write_host_runtime_c 구현(opendir/readdir,
+정규 파일만, qsort 정렬, 누락 dir=0, full 리스트 계약 out[4095]=len) +
+direct 엔진 배선(빌트인 인식 4지점 포함 총 9지점 + static C 헬퍼).
+full core(.ll)는 무변경 — 제네릭 call 경로가 (i8*, i64*) shape을 이미 emit.
+부수 승격: fs_mkdirs를 direct에도(호스트 런타임 공유, prototype+emission).
+e338 양 엔진 42, parity 357.
+
+제품 도그푸딩: vaisdb 패키지에 `ingest-dir <index> <dir>`(.txt만,
+doc-id=확장자 제거 — flat `docid.term` 키의 dot 충돌 회피)와
+`rank <index> <query> <k>`(RankedDoc 수집 → **sort_by_desc 제품 실사용**
+→ top-k 라인, exit=top score) 추가. workflow 게이트 +4케이스
+(ingest-dir 0/누락 dir 3/rank 4/bad-k 1).
+
+환류 갭 1건 등록: direct의 local List<Struct> 인덱스 필드를 중첩 call
+인자로 쓰는 슬라이스 미승격(`str_concat(.., xs[j].field)`) — `let entry =
+xs[j]` 바인딩으로 우회 가능, ROADMAP 다음 후보에 등록. 문서:
+HOST_IO/PRELUDE/README/CHANGELOG. 스프린트 4/4 종료.
+
 ## 2026-07-10 (vaisdb 설치형 패키지 — 첫 배포 가능한 Vais 도구)
 
 "richer package layout" 후보를 실제 제품으로 도그푸딩. tools/vaisdb_cli.vais의

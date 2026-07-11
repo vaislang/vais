@@ -90,6 +90,10 @@ place by an Int key, replacing the hand-written ranking sort in product flows.
 command with `ingest`, `query`, and `report` subcommands over the persisted
 index; `scripts/vaisdb-cli.sh` is the shell entrypoint, and the VaisDB workflow
 gate covers both engines, the wrapper, and every error exit code.
+`examples/e338_fs_list_files.vais` promotes directory enumeration:
+`fs_list_files(dir, out)` fills a `List<Str>` with the sorted regular-file
+names so Vais tools can ingest whole directories; the vaisdb package's
+`ingest-dir` and ranked `rank` subcommands build on it.
 `examples/e337_vaisdb_cli_package` productizes that command as an installable
 package: the index/report logic is split across `vaisdb.index` and
 `vaisdb.report` modules, `scripts/vaisc package` builds `dist/bin/vaisdb` and a
@@ -236,6 +240,7 @@ direct/default summary report.
 | `doc_term_overlap_score(query: Map<Str,Int>, doc: Map<Str,Int>) -> Int` | Verified; full/direct |
 | `doc_term_weighted_score(query: Map<Str,Int>, doc: Map<Str,Int>) -> Int` | Verified; full/direct |
 | `str_byte(value: Int) -> Str` | Verified; full/direct |
+| `fs_list_files(dir: Str, out: List<Str>) -> Int` | Verified; full/direct — sorted regular-file names, subdirectories skipped, missing directory yields 0 |
 | `time_millis() -> Int` | Verified; full/direct |
 | `proc_argc() -> Int` | Verified |
 | `proc_arg(index: Int) -> Str` | Verified |

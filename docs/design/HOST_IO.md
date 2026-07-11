@@ -4,6 +4,9 @@ Status: `fs_exists(path: Str) -> Bool`,
 `fs_read_text(path: Str) -> Str`,
 `fs_write_text(path: Str, text: Str) -> Int`,
 `fs_mkdirs(path: Str) -> Int`, and `fs_remove(path: Str) -> Int`, plus the first `Str` path helpers,
+- `fs_list_files(dir: Str, out: List<Str>) -> Int`: fills `out` with the
+  sorted regular-file names in `dir` (subdirectories and `.`/`..` skipped) and
+  returns the count; a missing directory yields `0`.
 string-construction helpers, argv helpers, `proc_run(argv: List<Str>) -> Int`,
 `proc_run_env(argv: List<Str>, env: List<Str>) -> Int`,
 `proc_capture_stdout(argv: List<Str>) -> Str`, and
