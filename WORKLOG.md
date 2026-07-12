@@ -1,5 +1,20 @@
 # Vais Worklog
 
+## 2026-07-12d (도그푸딩 4 — vaisdb 문서 관리, 컴파일러 갭 0건)
+
+vaisdb 패키지에 docs(고유 doc id 목록, exit=수)/remove(문서 키 전부 제거 —
+Map 키 삭제 표면 없이 필터된 새 Map 재구축 후 저장)/stats(docs=N terms=M)
+서브커맨드 추가. key_doc_id를 report→index 모듈로 이동해 순환 import 없이
+공유. self-test 6단계 확장(목록 3/contains/제거 키 2/제거 후 2/ghost 0),
+여전히 42. workflow 게이트 +5케이스(docs 2/stats 2/remove 0/제거후 docs 1/
+ghost 3).
+
+**컴파일러 갭 0건 — 첫 시도 양 엔진 42.** dedupe(seen map)/Map 재구축/
+List<Str> push·contains·인덱스 출력 표면 전부 성숙 실측(도그푸딩 2에 이어
+2번째 무갭 스프린트). 부수 정리: fs_mkdirs direct prototype const(경고 0).
+환류: List<Str> 정렬 표면 부재(Str 비교/sort 미승격 — docs는 삽입 순서
+출력)를 다음 후보로 등록.
+
 ## 2026-07-12c (full 엔진 미지 함수 front 진단)
 
 직전 유닛의 부수 발견 승격: 존재하지 않는 함수 호출이 full에서 bare call로

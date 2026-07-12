@@ -6,12 +6,6 @@ struct RankedDoc {
     score: Int,
 }
 
-fn key_doc_id(key: Str) -> Str {
-    let dot = str_index_of(key, ".")
-    if dot < 0 { return key }
-    return str_slice(key, 0, dot)
-}
-
 fn top_doc_score(index: Map<Str,Str>, query: Map<Str,Int>) -> Int {
     let seen: Map<Str,Int> = {}
     let n = index.len()

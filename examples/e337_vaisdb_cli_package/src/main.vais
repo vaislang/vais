@@ -129,12 +129,71 @@ fn run_rank(index_path: Str, query_text: Str, k: Int) -> Int {
     return top_doc_score(index, query)
 }
 
+fn run_docs(index_path: Str) -> Int {
+    let index: Map<Str,Str> = {}
+    let flow = load_index(index_path, index)
+    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
+    if note == "index not found" {
+        print("error: index not found")
+        return 3
+    }
+    let ids: List<Str> = []
+    let count = doc_ids_into(index, ids)
+    let mut i = 0
+    while i < count {
+        print(ids[i])
+        i = i + 1
+    }
+    return count
+}
+
+fn run_remove(index_path: Str, doc_id: Str) -> Int {
+    let index: Map<Str,Str> = {}
+    let flow = load_index(index_path, index)
+    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
+    if note == "index not found" {
+        print("error: index not found")
+        return 3
+    }
+    let filtered: Map<Str,Str> = {}
+    let removed = remove_doc_into(index, doc_id, filtered)
+    if removed == 0 {
+        print("error: document not found")
+        return 3
+    }
+    if save_index(index_path, filtered) != 0 {
+        print("error: could not write index")
+        return 3
+    }
+    let line = str_concat("removed ", str_concat(doc_id, str_concat(" keys=", Str(removed))))
+    print(line)
+    return 0
+}
+
+fn run_stats(index_path: Str) -> Int {
+    let index: Map<Str,Str> = {}
+    let flow = load_index(index_path, index)
+    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
+    if note == "index not found" {
+        print("error: index not found")
+        return 3
+    }
+    let ids: List<Str> = []
+    let docs = doc_ids_into(index, ids)
+    let line = str_concat("docs=", str_concat(Str(docs), str_concat(" terms=", Str(index.len()))))
+    print(line)
+    return docs
+}
+
 fn usage() -> Int {
     print("usage: vaisdb ingest <index> <doc-id> <doc-file>")
     print("       vaisdb query <index> <doc-id> <query-text>")
     print("       vaisdb report <index> <query-text>")
     print("       vaisdb ingest-dir <index> <doc-dir>")
     print("       vaisdb rank <index> <query-text> <k>")
+    print("       vaisdb docs <index>")
+    print("       vaisdb remove <index> <doc-id>")
+    print("       vaisdb stats <index>")
     return 1
 }
 
@@ -175,6 +234,18 @@ fn self_test() -> Int {
     let expected = str_concat("1. d1=4", str_concat(lf, "2. d2=3"))
     if ranked != expected { return 13 }
 
+    # Document management: listing, stats, and removal over the same index.
+    let ids: List<Str> = []
+    if doc_ids_into(loaded, ids) != 3 { return 14 }
+    if ids.contains("d3") != true { return 15 }
+    let filtered: Map<Str,Str> = {}
+    let removed = remove_doc_into(loaded, "d2", filtered)
+    if removed != 2 { return 16 }
+    let ids2: List<Str> = []
+    if doc_ids_into(filtered, ids2) != 2 { return 17 }
+    if ids2.contains("d2") == true { return 18 }
+    if remove_doc_into(filtered, "ghost", filtered) != 0 { return 19 }
+
     # 4*10 + 3 - 1 = 42
     return s1 * 10 + s2 - 1
 }
@@ -201,6 +272,18 @@ fn main() -> Int {
     if command == "rank" {
         if proc_argc() != 4 { return usage() }
         return run_rank(proc_arg(1), proc_arg(2), parse_int(proc_arg(3)))
+    }
+    if command == "docs" {
+        if proc_argc() != 2 { return usage() }
+        return run_docs(proc_arg(1))
+    }
+    if command == "remove" {
+        if proc_argc() != 3 { return usage() }
+        return run_remove(proc_arg(1), proc_arg(2))
+    }
+    if command == "stats" {
+        if proc_argc() != 2 { return usage() }
+        return run_stats(proc_arg(1))
     }
     print("error: unknown subcommand")
     return 2

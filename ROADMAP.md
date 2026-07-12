@@ -22,7 +22,19 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-12b) — full 미지 함수 front 진단
+## 현재 작업 (2026-07-12c) — 도그푸딩 4: vaisdb 문서 관리
+모드: 개별선택
+- [x] 1. `docs <index>` ✅ 2026-07-12 — doc_ids_into(dedupe seen map), exit=수
+- [x] 2. `remove <index> <doc-id>` ✅ 2026-07-12 — remove_doc_into가 필터된
+      새 Map 재구축 후 저장(키 삭제 표면 불필요), exit 0/미존재 3
+- [x] 3. `stats <index>` ✅ 2026-07-12 — docs=N terms=M, exit=N
+- [x] 4. 환류 + 문서 ✅ 2026-07-12 — **컴파일러 갭 0건**(첫 시도 양 엔진 42).
+      key_doc_id를 report→index로 이동(순환 없이 공유). fs_mkdirs direct
+      prototype const 정리(경고 0). List<Str> 정렬 표면 부재는 아래 후보 등록
+      (docs 출력은 삽입 순서 — 결정적이라 게이트 가능).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-12b) — full 미지 함수 front 진단
 모드: 개별선택
 - [x] 1. check_front_contract_text에 unknown-call 검사 추가 ✅ 2026-07-12
   - pass1: 호출 가능 이름 수집(fn/pub fn 선언 + let/mut 바인딩 + `name:`
@@ -178,6 +190,10 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
+- `List<Str>` 정렬 표면 부재: Str 비교 연산/`List<Str>.sort`가 미승격이라
+  vaisdb `docs` 목록이 삽입 순서로 출력됨(결정적이지만 사전순 아님). 정렬
+  요구가 반복 노출되면 List<Int>.sort 데수가 패턴(선택/삽입 정렬 텍스트
+  lowering)에 Str 비교를 더해 승격.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지

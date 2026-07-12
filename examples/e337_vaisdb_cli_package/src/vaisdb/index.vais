@@ -4,6 +4,43 @@ fn index_key(doc_id: Str, term: Str) -> Str {
     return str_concat(doc_id, str_concat(".", term))
 }
 
+fn key_doc_id(key: Str) -> Str {
+    let dot = str_index_of(key, ".")
+    if dot < 0 { return key }
+    return str_slice(key, 0, dot)
+}
+
+fn doc_ids_into(index: Map<Str,Str>, out: List<Str>) -> Int {
+    let seen: Map<Str,Int> = {}
+    let n = index.len()
+    let mut i = 0
+    while i < n {
+        let doc_id = key_doc_id(index.key_at(i))
+        if seen.contains(doc_id) != true {
+            seen.insert(doc_id, 1)
+            out.push(doc_id)
+        }
+        i = i + 1
+    }
+    return out.len()
+}
+
+fn remove_doc_into(index: Map<Str,Str>, doc_id: Str, out: Map<Str,Str>) -> Int {
+    let n = index.len()
+    let mut i = 0
+    let mut removed = 0
+    while i < n {
+        let key = index.key_at(i)
+        if key_doc_id(key) == doc_id {
+            removed = removed + 1
+        } else {
+            out.insert(key, index.value_at(i))
+        }
+        i = i + 1
+    }
+    return removed
+}
+
 fn ingest_into(index: Map<Str,Str>, doc_id: Str, body: Str) -> Int {
     let counts: Map<Str,Int> = {}
     let total = doc_term_counts_into(body, counts)

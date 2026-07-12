@@ -32085,7 +32085,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "char *proc_arg(int64_t index);\n");
     sb_append(&out, "int64_t fs_exists(const char *path);\n");
     sb_append(&out, "char *fs_read_text(const char *path);\n");
-    sb_append(&out, "int64_t fs_mkdirs(char *path);\n");
+    sb_append(&out, "int64_t fs_mkdirs(const char *path);\n");
     sb_append(&out, "int64_t fs_write_text(const char *path, const char *text);\n");
     sb_append(&out, "char *fs_cwd(void);\n");
     sb_append(&out, "char *fs_temp_dir(void);\n");
@@ -33141,7 +33141,7 @@ static int write_host_runtime_c(const char *path) {
         "    return errno == 0 ? 1 : errno;\n"
         "}\n"
         "\n"
-        "int64_t fs_mkdirs(char *path) {\n"
+        "int64_t fs_mkdirs(const char *path) {\n"
         "    if (path == 0 || path[0] == '\\0') return 1;\n"
         "    char buf[4096];\n"
         "    size_t len = strlen(path);\n"

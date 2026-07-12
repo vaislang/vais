@@ -4,6 +4,13 @@
 
 ### Changed
 
+- The vaisdb package gains document management: `docs <index>` (lists unique
+  doc ids, exit = count), `remove <index> <doc-id>` (drops every key of a
+  document by rebuilding the index, exit 3 when missing), and
+  `stats <index>` (docs/terms summary line). All covered by packaged-binary
+  workflow gate cases; the direct-engine `fs_mkdirs` prototype is now
+  const-correct (warning-free build).
+
 - The full engine now rejects calls to unknown functions at the front
   (`error: call to an unknown function`) instead of emitting a bare call
   that surfaced later as a confusing clang type or link error. Declared

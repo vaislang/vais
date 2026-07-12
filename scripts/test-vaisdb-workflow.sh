@@ -234,6 +234,11 @@ expect_exit "vaisdb package ingest-dir" 0 "$vdb_dist/bin/vaisdb" ingest-dir "$vd
 expect_exit "vaisdb package rank" 4 "$vdb_dist/bin/vaisdb" rank "$vdb_dir_index" "ai cache" 2
 expect_exit "vaisdb package ingest-dir missing" 3 "$vdb_dist/bin/vaisdb" ingest-dir "$vdb_dir_index" "$tmp/vaisdb-no-such-docs"
 expect_exit "vaisdb package rank bad k" 1 "$vdb_dist/bin/vaisdb" rank "$vdb_dir_index" "ai cache" 0
+expect_exit "vaisdb package docs" 2 "$vdb_dist/bin/vaisdb" docs "$vdb_dir_index"
+expect_exit "vaisdb package stats" 2 "$vdb_dist/bin/vaisdb" stats "$vdb_dir_index"
+expect_exit "vaisdb package remove" 0 "$vdb_dist/bin/vaisdb" remove "$vdb_dir_index" pd1
+expect_exit "vaisdb package docs after remove" 1 "$vdb_dist/bin/vaisdb" docs "$vdb_dir_index"
+expect_exit "vaisdb package remove missing" 3 "$vdb_dist/bin/vaisdb" remove "$vdb_dir_index" ghost
 expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
 mkdir -p "$vdb_extract"
 expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"
