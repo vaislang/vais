@@ -4,6 +4,13 @@
 
 ### Changed
 
+- The full engine now rejects calls to unknown functions at the front
+  (`error: call to an unknown function`) instead of emitting a bare call
+  that surfaced later as a confusing clang type or link error. Declared
+  functions (including `pub fn`), imported modules, locals/parameters, and
+  the documented built-in surface stay accepted; the front gate covers the
+  rejection.
+
 - Fixed the direct engine rejecting `List<Struct>` indexed field reads inside
   `Str(...)` conversion arguments (`str_concat("=", Str(xs[j].score))`): the
   list rewriter now skips conversion-call interiors like other string-helper

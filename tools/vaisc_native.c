@@ -18336,6 +18336,159 @@ static void front_register_struct_name(const char *line, char **struct_names, in
     }
 }
 
+#define FRONT_CALLABLE_CAP 4096
+
+static void front_callable_add(char **names, int *count, int *overflow, char *name) {
+    if (name == NULL) return;
+    for (int i = 0; i < *count; i++) {
+        if (strcmp(names[i], name) == 0) {
+            free(name);
+            return;
+        }
+    }
+    if (*count < FRONT_CALLABLE_CAP) {
+        names[(*count)++] = name;
+    } else {
+        *overflow = 1;
+        free(name);
+    }
+}
+
+/*
+ * Register every name that may legitimately appear in call position: declared
+ * functions, plus let/mut bindings and `name:` parameter or field idents
+ * (locals and parameters can hold callable closures, so treating them as
+ * callable avoids false positives at the cost of missing a few typos).
+ */
+static void front_register_callable_names(const char *probe, char **names, int *count, int *overflow) {
+    const char *s = skip_ws(probe);
+    if (starts_with(s, "pub ") && !is_ident_continue(s[3])) s = skip_ws(s + 4);
+    if (starts_with(s, "fn ") && !is_ident_continue(s[2])) {
+        const char *name_start = skip_ws(s + 3);
+        const char *name_end = name_start;
+        while (is_ident_continue(*name_end)) name_end++;
+        if (name_end > name_start) {
+            front_callable_add(names, count, overflow, substr_copy(name_start, (size_t)(name_end - name_start)));
+        }
+    }
+    for (int i = 0; probe[i] != '\0';) {
+        if (!is_ident_start(probe[i])) {
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(probe[i])) i++;
+        int len = i - start;
+        if ((len == 3 && strncmp(probe + start, "let", 3) == 0) ||
+            (len == 3 && strncmp(probe + start, "mut", 3) == 0)) {
+            const char *ns = skip_ws(probe + i);
+            if (starts_with(ns, "mut") && !is_ident_continue(ns[3])) ns = skip_ws(ns + 3);
+            if (is_ident_start(*ns)) {
+                const char *ne = ns;
+                while (is_ident_continue(*ne)) ne++;
+                front_callable_add(names, count, overflow, substr_copy(ns, (size_t)(ne - ns)));
+            }
+            continue;
+        }
+        const char *after = skip_ws(probe + i);
+        if (*after == ':' && after[1] != ':') {
+            front_callable_add(names, count, overflow, substr_copy(probe + start, (size_t)len));
+        }
+    }
+}
+
+static int front_is_call_keyword(const char *name) {
+    static const char *kw[] = {
+        "if", "else", "while", "return", "match", "and", "or", "not", "let",
+        "mut", "loop", "break", "continue", "fn", "struct", "enum", "import",
+        "true", "false", "in", "as", NULL,
+    };
+    for (int i = 0; kw[i] != NULL; i++) {
+        if (strcmp(name, kw[i]) == 0) return 1;
+    }
+    return 0;
+}
+
+static int front_is_builtin_call_name(const char *name) {
+    static const char *names[] = {
+        "print", "puts", "putchar", "sizeof", "parse_int", "parse_uint",
+        "bitand", "bitor", "bitnot",
+        "str_concat", "str_contains", "str_index_of", "str_starts_with",
+        "str_ends_with", "str_slice", "str_join", "str_replace", "str_trim",
+        "str_lower", "str_upper", "str_byte", "str_split_ws_into",
+        "str_split_lines_into", "str_split_into",
+        "str_builder_new", "str_builder_push", "str_builder_append",
+        "str_builder_finish",
+        "fs_exists", "fs_read_text", "fs_write_text", "fs_mkdirs", "fs_remove",
+        "fs_cwd", "fs_temp_dir", "fs_list_files",
+        "path_join", "path_basename", "path_dirname",
+        "time_millis", "proc_argc", "proc_arg", "proc_capture",
+        "proc_capture_stdout", "proc_capture_stderr", "proc_capture_to",
+        "proc_run", "proc_run_env",
+        "map_str_str_snapshot", "map_str_str_load_snapshot",
+        "doc_term_counts_into", "doc_term_overlap_score",
+        "doc_term_weighted_score", NULL,
+    };
+    for (int i = 0; names[i] != NULL; i++) {
+        if (strcmp(name, names[i]) == 0) return 1;
+    }
+    return 0;
+}
+
+/*
+ * Reject calls to names that are neither declared in the merged build text
+ * nor known built-ins, so a typo like `int_to_str(...)` fails at the front
+ * with a readable diagnostic instead of surfacing as a confusing clang type
+ * or link error against the emitted IR. Uppercase and `_`-prefixed names are
+ * skipped (conversion calls, enum constructors, lowering-generated helpers),
+ * as are method calls behind `.`.
+ */
+static int front_check_unknown_call_line(const char *path, int line_no, const char *line, const char *probe, char **names, int count, int overflow) {
+    if (overflow) return 0;
+    int issues = 0;
+    char prev_significant = '\0';
+    for (int i = 0; probe[i] != '\0';) {
+        char ch = probe[i];
+        if (!is_ident_start(ch)) {
+            if (ch != ' ' && ch != '\t') prev_significant = ch;
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(probe[i])) i++;
+        int j = i;
+        while (probe[j] == ' ' || probe[j] == '\t') j++;
+        int called = probe[j] == '(';
+        int method = prev_significant == '.';
+        prev_significant = 'a';
+        if (!called || method) continue;
+        if (probe[start] == '_' || (probe[start] >= 'A' && probe[start] <= 'Z')) continue;
+        char *name = substr_copy(probe + start, (size_t)(i - start));
+        if (front_is_call_keyword(name) || front_is_builtin_call_name(name) || starts_with(name, "vais_")) {
+            free(name);
+            continue;
+        }
+        int known = 0;
+        for (int k = 0; k < count; k++) {
+            if (strcmp(names[k], name) == 0) {
+                known = 1;
+                break;
+            }
+        }
+        if (!known) {
+            report_issue(path, line_no, find_col(line, name), line,
+                "call to an unknown function",
+                "declare the function in this build, import the module that defines it, or use a documented built-in (std/PRELUDE.md).",
+                NULL);
+            issues++;
+        }
+        free(name);
+    }
+    return issues;
+}
+
 static const char *front_map_return_call_type(const char *expr, char **map_fn_names, char **map_fn_types, int map_fn_count) {
     const char *s = skip_ws(expr);
     if (!is_ident_start(*s)) return NULL;
@@ -18701,10 +18854,14 @@ static int check_front_contract_text(const char *text, const char *path) {
     int map_fn_count = 0;
     char *struct_names[128] = {0};
     int struct_count = 0;
+    char **callable_names = (char **)calloc(FRONT_CALLABLE_CAP, sizeof(char *));
+    int callable_count = 0;
+    int callable_overflow = callable_names == NULL;
     for (size_t i = 0; i < lines.len; i++) {
         char *probe = front_probe_line(lines.items[i]);
         front_register_map_return_fn(probe, map_fns, map_fn_types, &map_fn_count);
         front_register_struct_name(probe, struct_names, &struct_count);
+        if (!callable_overflow) front_register_callable_names(probe, callable_names, &callable_count, &callable_overflow);
         free(probe);
     }
     for (size_t i = 0; i < lines.len; i++) {
@@ -18712,6 +18869,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         char *probe = front_probe_line(line);
         int line_no = (int)i + 1;
         issues += check_fn_contract_line(path, line_no, line, &has_main, &has_bad_main, struct_names, struct_count);
+        issues += front_check_unknown_call_line(path, line_no, line, probe, callable_names, callable_count, callable_overflow);
         front_register_map_params(probe, map_locals, map_types, &map_local_count);
         front_register_list_params(probe, list_locals, list_types, &list_local_count, struct_names, struct_count);
 
@@ -18871,6 +19029,10 @@ static int check_front_contract_text(const char *text, const char *path) {
         free(list_types[l]);
     }
     for (int s = 0; s < struct_count; s++) free(struct_names[s]);
+    if (callable_names != NULL) {
+        for (int c = 0; c < callable_count; c++) free(callable_names[c]);
+        free(callable_names);
+    }
     lines_free(&lines);
     return issues == 0 ? 0 : 1;
 }

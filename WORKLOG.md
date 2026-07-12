@@ -1,5 +1,19 @@
 # Vais Worklog
 
+## 2026-07-12c (full 엔진 미지 함수 front 진단)
+
+직전 유닛의 부수 발견 승격: 존재하지 않는 함수 호출이 full에서 bare call로
+emit되어 clang 단계 타입/링크 에러로 표면화되던 진단 갭. locus는
+`check_front_contract_text`(병합+lowering 후 텍스트라 모듈 간 호출 안전,
+trust root skip 유지). pass1에서 호출 가능 이름 수집(fn/pub fn + let/mut +
+`name:` 파라미터·필드 — 클로저 보유 로컬 오탐 방지), pass2에서 `.` 리시버
+없는 lowercase ident+`(`를 검사해 "call to an unknown function" front 거부.
+
+오탐 방지 절차: 구현 전 코퍼스 전체(examples/tools/std) 사전 스윕으로
+비선언 lowercase 호출명을 수집 → 진짜 빌트인 잔여는 bitand/bitor/bitnot뿐
+임을 확인, 게이트에서 putchar(IO slice)/pub fn(public_struct) 2건 추가 발견
+즉시 수정. front 게이트에 unknown_call reject 케이스 추가.
+
 ## 2026-07-12b (갭 승격 — List<Struct> 인덱스 필드 in 중첩 call 인자)
 
 도그푸딩 3에서 환류한 direct 갭을 즉시 승격. 격리 이분탐색으로 실제 트리거는

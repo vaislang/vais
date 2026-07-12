@@ -22,7 +22,20 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-12) — 갭 승격: List<Struct> 인덱스 필드 in 중첩 call 인자
+## 현재 작업 (2026-07-12b) — full 미지 함수 front 진단
+모드: 개별선택
+- [x] 1. check_front_contract_text에 unknown-call 검사 추가 ✅ 2026-07-12
+  - pass1: 호출 가능 이름 수집(fn/pub fn 선언 + let/mut 바인딩 + `name:`
+    파라미터·필드 — 클로저 보유 로컬 오탐 방지, 4096 cap 초과 시 검사 비활성).
+  - pass2: `.` 리시버 없는 lowercase ident+`(` 중 미등록·비빌트인 →
+    "call to an unknown function" front 거부. 대문자(변환/variant)와
+    `_`/`vais_` 접두(lowering 생성)는 skip.
+  - 병합·lowering 후 텍스트 대상이라 모듈 간 호출 안전. trust root는 기존
+    처럼 skip. 사전 코퍼스 스윕으로 화이트리스트 검증(bitand/bitor/bitnot/
+    putchar/puts 추가). front 게이트 reject 케이스(unknown_call) 추가.
+진행률: 1/1 (100%)
+
+## 직전 완료 (2026-07-12) — 갭 승격: List<Struct> 인덱스 필드 in 중첩 call 인자
 모드: 개별선택
 - [x] 1. direct 이중 재작성 근본수정 ✅ 2026-07-12
   - 원인: `direct_rewrite_list_expr`의 builtin-skip 목록에 `Str(...)` 변환
@@ -165,9 +178,6 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
-- full 엔진 미지 함수 호출 진단: 존재하지 않는 함수 호출(`int_to_str` 오타
-  등)이 front 거부 없이 bare call로 emit되어 clang 단계에서 혼란스러운 타입
-  에러로 표면화. direct는 LOUD 거부 — full도 front에서 잡도록 정렬 필요.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지
