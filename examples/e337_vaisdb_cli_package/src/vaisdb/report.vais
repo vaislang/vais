@@ -71,11 +71,7 @@ fn rank_lines(index: Map<Str,Str>, query: Map<Str,Int>, k: Int) -> Str {
     if ranked.len() < k { limit = ranked.len() }
     let mut j = 0
     while j < limit {
-        # Bind the element first: local List<Struct> indexed field reads inside
-        # nested call arguments are not a verified direct slice yet (gap fed
-        # back to the roadmap).
-        let entry = ranked[j]
-        let line = str_concat(Str(j + 1), str_concat(". ", str_concat(entry.doc_id, str_concat("=", Str(entry.score)))))
+        let line = str_concat(Str(j + 1), str_concat(". ", str_concat(ranked[j].doc_id, str_concat("=", Str(ranked[j].score)))))
         if j == 0 { report = line } else { report = str_concat(report, str_concat(lf, line)) }
         j = j + 1
     }

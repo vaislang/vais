@@ -1,5 +1,21 @@
 # Vais Worklog
 
+## 2026-07-12b (갭 승격 — List<Struct> 인덱스 필드 in 중첩 call 인자)
+
+도그푸딩 3에서 환류한 direct 갭을 즉시 승격. 격리 이분탐색으로 실제 트리거는
+"중첩 깊이"가 아니라 **`Str(xs[j].score)` — 변환 call 인자 위치의 인덱스 필드**
+로 확정(파라미터/로컬 리시버 무관). 근본 원인: `direct_rewrite_list_expr`의
+builtin-skip 목록에 `Str(...)`이 빠져 변환 인자 내부가 선(先)재작성되고,
+`direct_rewrite_str_conversion_calls`가 그 인자를 다시 `direct_rewrite_expr`로
+재귀 재작성하는 **이중 재작성**에서 `xs.data`를 List 메서드로 오인. fix는
+skip 목록 1항 추가(1줄), full core 무변경.
+
+검증: e339 신설(변환 인자 + 4중 중첩 + 로컬/파라미터 리시버, 양 엔진 42,
+parity 358) + e337 rank_lines의 `let entry` 워크어라운드 제거(제품 코드 실증).
+부수 발견 기록: full 엔진은 미지 함수 호출(`int_to_str` 오타 등)을 front에서
+거부하지 않고 bare call로 emit해 clang 단계에서 혼란스러운 타입 에러가 남 —
+진단 갭으로 다음 후보 등록.
+
 ## 2026-07-12 (도그푸딩 3 — fs_list_files 승격 + vaisdb ingest-dir/rank)
 
 호스트 API 승격: `fs_list_files(dir, out: List<Str>) -> Int` —

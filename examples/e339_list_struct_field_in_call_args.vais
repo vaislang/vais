@@ -1,0 +1,39 @@
+# expect: 42
+# List<Struct> indexed field reads stay usable inside nested call arguments,
+# including as the argument of a `Str(...)` conversion: the direct engine must
+# not rewrite the interior of a conversion call before the conversion pass
+# translates its argument (double-rewrite regression guard).
+
+struct Pair {
+    name: Str,
+    score: Int,
+}
+
+fn render(xs: List<Pair>, k: Int) -> Str {
+    let mut out = ""
+    let mut j = 0
+    while j < k {
+        let line = str_concat(Str(j + 1), str_concat(". ", str_concat(xs[j].name, str_concat("=", Str(xs[j].score)))))
+        out = str_concat(out, line)
+        j = j + 1
+    }
+    return out
+}
+
+fn main() -> Int {
+    let xs: List<Pair> = []
+    xs.push(Pair { name: "alpha", score: 40 })
+    xs.push(Pair { name: "beta", score: 2 })
+
+    # Local receiver: conversion argument plus deep nesting.
+    let j = 0
+    let solo = str_concat("top=", str_concat(xs[j].name, str_concat("/", Str(xs[j].score))))
+    if solo != "top=alpha/40" { return 1 }
+
+    # Parameter receiver through a helper, same nested shape.
+    let text = render(xs, 2)
+    if text != "1. alpha=402. beta=2" { return 2 }
+
+    # The score still reads back as an Int through the same nesting.
+    return xs[0].score + xs[1].score
+}

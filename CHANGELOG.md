@@ -4,6 +4,15 @@
 
 ### Changed
 
+- Fixed the direct engine rejecting `List<Struct>` indexed field reads inside
+  `Str(...)` conversion arguments (`str_concat("=", Str(xs[j].score))`): the
+  list rewriter now skips conversion-call interiors like other string-helper
+  builtins, so the conversion pass translates raw source instead of
+  double-rewriting already-translated text. Covered by
+  `examples/e339_list_struct_field_in_call_args.vais` and the vaisdb package
+  `rank` report, which now reads ranked entries inline without a let-binding
+  workaround.
+
 - Added the built-in `fs_list_files(dir, out)` host API: fills a `List<Str>`
   with the sorted regular-file names in a directory (subdirectories skipped,
   missing directories yield 0), verified on both engines

@@ -258,6 +258,8 @@ ingest/query/report/ingest-dir/rank subcommands, a deterministic no-argument
 self-test, and a release archive,
 `examples/e338_fs_list_files.vais` for the built-in `fs_list_files(dir, out)`
 directory enumeration that fills a `List<Str>` with sorted regular-file names,
+`examples/e339_list_struct_field_in_call_args.vais` for `List<Struct>` indexed
+field reads inside nested call arguments including `Str(...)` conversions,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

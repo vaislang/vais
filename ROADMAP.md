@@ -22,7 +22,19 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-10b) — 도그푸딩 3: fs_list_files + vaisdb 제품 기능
+## 현재 작업 (2026-07-12) — 갭 승격: List<Struct> 인덱스 필드 in 중첩 call 인자
+모드: 개별선택
+- [x] 1. direct 이중 재작성 근본수정 ✅ 2026-07-12
+  - 원인: `direct_rewrite_list_expr`의 builtin-skip 목록에 `Str(...)` 변환
+    call이 빠져 있어 변환 인자 내부가 먼저 C 형태로 재작성되고, 이후
+    `direct_rewrite_str_conversion_calls`가 인자를 다시 `direct_rewrite_expr`
+    로 재귀 재작성하며 `xs.data`를 List 메서드로 오인해 거부.
+  - fix: skip 목록에 `direct_is_str_conversion_builtin_name` 1항 추가(1줄).
+    full core 무변경. e339(양 엔진 42, parity 358) + e337 rank_lines
+    워크어라운드 제거(제품 코드가 갭 승격의 실증).
+진행률: 1/1 (100%)
+
+## 직전 완료 (2026-07-10b) — 도그푸딩 3: fs_list_files + vaisdb 제품 기능
 모드: 개별선택
 - [x] 1. fs_list_files host API 승격 ✅ 2026-07-12
   - changes: HOST_INTRINSIC_IR declare + write_host_runtime_c 구현(opendir/
@@ -153,10 +165,9 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
-- direct 엔진의 local `List<Struct>` 인덱스 필드를 **중첩 call 인자**로 쓰는
-  슬라이스 미승격(파라미터 리스트는 동작): `str_concat(.., xs[j].field)` 형태.
-  현재는 `let entry = xs[j]` 바인딩으로 회피(e337 rank_lines 주석). 반복
-  노출 시 direct expression translator에 승격.
+- full 엔진 미지 함수 호출 진단: 존재하지 않는 함수 호출(`int_to_str` 오타
+  등)이 front 거부 없이 bare call로 emit되어 clang 단계에서 혼란스러운 타입
+  에러로 표면화. direct는 LOUD 거부 — full도 front에서 잡도록 정렬 필요.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지
