@@ -30,6 +30,7 @@ static const char *HOST_INTRINSIC_IR =
     "declare i8* @path_dirname(i8*)\n"
     "declare i64 @time_millis()\n"
     "declare i8* @str_concat(i8*, i8*)\n"
+    "declare i64 @str_cmp(i8*, i8*)\n"
     "declare i8* @str_slice(i8*, i64, i64)\n"
     "declare i8* @str_byte(i64)\n"
     "declare i64 @str_builder_new()\n"
@@ -15989,7 +15990,8 @@ static int lower_list_sort_statement_line(const char *line, int *temp_count, Lis
 
     char *name = substr_copy(name_start, (size_t)(name_end - name_start));
     const char *type = list_method_env_type(env, name);
-    if (type == NULL || strcmp(type, "List<Int>") != 0) {
+    int is_str = type != NULL && strcmp(type, "List<Str>") == 0;
+    if (type == NULL || (strcmp(type, "List<Int>") != 0 && !is_str)) {
         free(name);
         return 0;
     }
@@ -16013,7 +16015,7 @@ static int lower_list_sort_statement_line(const char *line, int *temp_count, Lis
         "        if %J > 0 {",
         "            let %P = %J - 1",
         "            let %V = %N[%P]",
-        "            if %V > %K {",
+        is_str ? "            if str_cmp(%V, %K) > 0 {" : "            if %V > %K {",
         "                %N[%J] = %V",
         "                %J = %P",
         "            } else {",
@@ -18414,7 +18416,7 @@ static int front_is_builtin_call_name(const char *name) {
     static const char *names[] = {
         "print", "puts", "putchar", "sizeof", "parse_int", "parse_uint",
         "bitand", "bitor", "bitnot",
-        "str_concat", "str_contains", "str_index_of", "str_starts_with",
+        "str_cmp", "str_concat", "str_contains", "str_index_of", "str_starts_with",
         "str_ends_with", "str_slice", "str_join", "str_replace", "str_trim",
         "str_lower", "str_upper", "str_byte", "str_split_ws_into",
         "str_split_lines_into", "str_split_into",
@@ -22311,6 +22313,10 @@ static int direct_is_parse_builtin_name(const char *name) {
     return strcmp(name, "parse_uint") == 0 || strcmp(name, "parse_int") == 0;
 }
 
+static int direct_is_str_cmp_builtin_name(const char *name) {
+    return strcmp(name, "str_cmp") == 0;
+}
+
 static int direct_is_str_contains_builtin_name(const char *name) {
     return strcmp(name, "str_contains") == 0;
 }
@@ -22596,6 +22602,7 @@ static char *direct_rewrite_parse_builtin_calls(
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
         int is_parse = direct_is_parse_builtin_name(name);
         int is_contains = direct_is_str_contains_builtin_name(name);
+        int is_cmp = direct_is_str_cmp_builtin_name(name);
         int is_index_of = direct_is_str_index_of_builtin_name(name);
         int is_starts_with = direct_is_str_starts_with_builtin_name(name);
         int is_ends_with = direct_is_str_ends_with_builtin_name(name);
@@ -22628,7 +22635,7 @@ static char *direct_rewrite_parse_builtin_calls(
         int is_doc_counts = direct_is_doc_term_counts_into_builtin_name(name);
         int is_doc_overlap = direct_is_doc_term_overlap_score_builtin_name(name);
         int is_doc_weighted = direct_is_doc_term_weighted_score_builtin_name(name);
-        if ((!is_parse && !is_contains && !is_index_of && !is_starts_with && !is_ends_with && !is_slice && !is_concat && !is_join && !is_replace && !is_trim && !is_lower && !is_upper && !is_byte && !is_fs_read_text && !is_fs_write_text && !is_fs_exists && !is_fs_temp_dir && !is_fs_cwd && !is_path_join && !is_path_basename && !is_path_dirname && !is_time_millis && !is_proc_argc && !is_proc_arg && !is_split_ws_into && !is_split_lines_into && !is_fs_list_files && !is_fs_mkdirs && !is_split_into && !is_map_snapshot && !is_map_load && !is_doc_counts && !is_doc_overlap && !is_doc_weighted) || expr[cursor] != '(') {
+        if ((!is_parse && !is_contains && !is_cmp && !is_index_of && !is_starts_with && !is_ends_with && !is_slice && !is_concat && !is_join && !is_replace && !is_trim && !is_lower && !is_upper && !is_byte && !is_fs_read_text && !is_fs_write_text && !is_fs_exists && !is_fs_temp_dir && !is_fs_cwd && !is_path_join && !is_path_basename && !is_path_dirname && !is_time_millis && !is_proc_argc && !is_proc_arg && !is_split_ws_into && !is_split_lines_into && !is_fs_list_files && !is_fs_mkdirs && !is_split_into && !is_map_snapshot && !is_map_load && !is_doc_counts && !is_doc_overlap && !is_doc_weighted) || expr[cursor] != '(') {
             sb_append_n(&out, expr + start, (size_t)(i - start));
             free(name);
             continue;
@@ -22649,9 +22656,9 @@ static char *direct_rewrite_parse_builtin_calls(
         int argc = trimmed_inside[0] == '\0' ? 0 : split_top_level_commas_c(inside, args, 16);
         free(trimmed_inside);
         free(inside);
-        int want_argc = (is_fs_cwd || is_fs_temp_dir || is_time_millis || is_proc_argc) ? 0 : ((is_split_ws_into || is_split_lines_into || is_fs_list_files || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted || is_join || is_fs_write_text || is_path_join) ? 2 : ((is_replace || is_split_into) ? 3 : ((is_contains || is_index_of || is_starts_with || is_ends_with || is_concat) ? 2 : (is_slice ? 3 : 1))));
+        int want_argc = (is_fs_cwd || is_fs_temp_dir || is_time_millis || is_proc_argc) ? 0 : ((is_split_ws_into || is_split_lines_into || is_fs_list_files || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted || is_join || is_fs_write_text || is_path_join) ? 2 : ((is_replace || is_split_into) ? 3 : ((is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_concat) ? 2 : (is_slice ? 3 : 1))));
         int bad_args = argc != want_argc || (want_argc > 0 && (args[0] == NULL || strlen(skip_ws(args[0])) == 0));
-        if (!bad_args && (is_contains || is_index_of || is_starts_with || is_ends_with || is_concat || is_join || is_fs_write_text || is_path_join || is_split_ws_into || is_split_lines_into || is_fs_list_files || is_split_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted)) {
+        if (!bad_args && (is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_concat || is_join || is_fs_write_text || is_path_join || is_split_ws_into || is_split_lines_into || is_fs_list_files || is_split_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted)) {
             bad_args = args[1] == NULL || strlen(skip_ws(args[1])) == 0;
         }
         if (!bad_args && (is_slice || is_replace || is_split_into)) {
@@ -22744,7 +22751,7 @@ static char *direct_rewrite_parse_builtin_calls(
             continue;
         }
         char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
-        char *rewritten_arg2 = (is_contains || is_index_of || is_starts_with || is_ends_with || is_slice || is_concat || is_replace || is_split_into || is_fs_write_text || is_path_join)
+        char *rewritten_arg2 = (is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_slice || is_concat || is_replace || is_split_into || is_fs_write_text || is_path_join)
             ? direct_rewrite_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count)
             : NULL;
         if (is_split_ws_into || is_split_lines_into || is_fs_list_files) {
@@ -22917,7 +22924,7 @@ static char *direct_rewrite_parse_builtin_calls(
             ? direct_rewrite_expr(path, line_no, line, args[2], locals, fns, fn_count, structs, struct_count)
             : NULL;
         for (int k = 0; k < 16; k++) free(args[k]);
-        if (rewritten_arg == NULL || ((is_contains || is_index_of || is_starts_with || is_ends_with || is_slice || is_concat || is_replace || is_fs_write_text || is_path_join || is_split_ws_into || is_split_lines_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted) && rewritten_arg2 == NULL) ||
+        if (rewritten_arg == NULL || ((is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_slice || is_concat || is_replace || is_fs_write_text || is_path_join || is_split_ws_into || is_split_lines_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted) && rewritten_arg2 == NULL) ||
             ((is_slice || is_replace) && rewritten_arg3 == NULL)) {
             free(name);
             free(rewritten_arg);
@@ -22934,6 +22941,12 @@ static char *direct_rewrite_parse_builtin_calls(
         }
         if (is_contains) {
             sb_append(&out, "__vais_str_contains(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
+        } else if (is_cmp) {
+            sb_append(&out, "__vais_str_cmp(");
             sb_append(&out, rewritten_arg);
             sb_append(&out, ", ");
             sb_append(&out, rewritten_arg2);
@@ -24017,7 +24030,7 @@ static char *direct_rewrite_list_expr(
         int cursor = i;
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
         if (expr[cursor] == '(' &&
-            (direct_is_str_conversion_builtin_name(name) || direct_is_parse_builtin_name(name) || direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_slice_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_join_builtin_name(name) || direct_is_str_replace_builtin_name(name) || direct_is_str_trim_builtin_name(name) || direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name) || direct_is_str_byte_builtin_name(name) || direct_is_fs_exists_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name) || direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name) || direct_is_str_split_into_builtin_name(name) || direct_is_doc_term_counts_into_builtin_name(name) || direct_is_doc_term_overlap_score_builtin_name(name) || direct_is_doc_term_weighted_score_builtin_name(name))) {
+            (direct_is_str_conversion_builtin_name(name) || direct_is_parse_builtin_name(name) || direct_is_str_cmp_builtin_name(name) || direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_slice_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_join_builtin_name(name) || direct_is_str_replace_builtin_name(name) || direct_is_str_trim_builtin_name(name) || direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name) || direct_is_str_byte_builtin_name(name) || direct_is_fs_exists_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name) || direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name) || direct_is_str_split_into_builtin_name(name) || direct_is_doc_term_counts_into_builtin_name(name) || direct_is_doc_term_overlap_score_builtin_name(name) || direct_is_doc_term_weighted_score_builtin_name(name))) {
             int close = find_matching_paren_c(expr, cursor);
             if (close < 0) {
                 report_issue(path, line_no, find_col(line, name), line,
@@ -25894,7 +25907,7 @@ static char *direct_infer_expr_type(
                     free(trimmed);
                     return strdup("Int");
                 }
-                if (direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name)) {
+                if (direct_is_str_contains_builtin_name(name) || direct_is_str_cmp_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name)) {
                     free(name);
                     free(trimmed);
                     return strdup("Int");
@@ -27821,7 +27834,7 @@ static int direct_check_expr_inner(
                 i = close + 1;
                 continue;
             }
-            if (direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_replace_builtin_name(name)) {
+            if (direct_is_str_contains_builtin_name(name) || direct_is_str_cmp_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_replace_builtin_name(name)) {
                 int close = find_matching_paren_c(expr, cursor);
                 if (close < 0) {
                     report_issue(path, line_no, find_col(line, name), line,
@@ -28486,7 +28499,7 @@ static int direct_check_assignment_target(
     if (direct_parse_list_index_target(lhs, &base)) {
         const char *base_type = direct_names_type(locals, base);
         char *elem_type = direct_list_element_type(base_type);
-        int ok = elem_type != NULL && (strcmp(elem_type, "Int") == 0 || direct_find_struct(structs, struct_count, elem_type) != NULL);
+        int ok = elem_type != NULL && (strcmp(elem_type, "Int") == 0 || strcmp(elem_type, "Str") == 0 || direct_find_struct(structs, struct_count, elem_type) != NULL);
         if (ok) {
             free(elem_type);
             free(base);
@@ -32097,6 +32110,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "static long __vais_str_byte(const char *s, long index) { return (long)(unsigned char)s[index]; }\n");
     sb_append(&out, "static long __vais_str_eq(const char *a, const char *b) { return strcmp(a, b) == 0 ? 1 : 0; }\n");
     sb_append(&out, "static long __vais_str_contains(const char *text, const char *needle) { return strstr(text, needle) != NULL ? 1 : 0; }\n");
+    sb_append(&out, "static long __vais_str_cmp(const char *a, const char *b) { int r = strcmp(a ? a : \"\", b ? b : \"\"); return r < 0 ? -1 : (r > 0 ? 1 : 0); }\n");
     sb_append(&out, "static long __vais_str_index_of(const char *text, const char *needle) { const char *p = strstr(text, needle); return p == NULL ? -1 : (long)(p - text); }\n");
     sb_append(&out, "static long __vais_str_starts_with(const char *text, const char *prefix) { size_t n = strlen(prefix); return strncmp(text, prefix, n) == 0 ? 1 : 0; }\n");
     sb_append(&out, "static long __vais_str_ends_with(const char *text, const char *suffix) { size_t n = strlen(text); size_t m = strlen(suffix); return m <= n && strcmp(text + n - m, suffix) == 0 ? 1 : 0; }\n");
@@ -32709,6 +32723,15 @@ static int write_host_runtime_c(const char *path) {
         "    memcpy(out + llen, right, rlen);\n"
         "    out[llen + rlen] = '\\0';\n"
         "    return out;\n"
+        "}\n"
+        "\n"
+        "int64_t str_cmp(char *left, char *right) {\n"
+        "    const char *a = left == 0 ? \"\" : left;\n"
+        "    const char *b = right == 0 ? \"\" : right;\n"
+        "    int r = strcmp(a, b);\n"
+        "    if (r < 0) return -1;\n"
+        "    if (r > 0) return 1;\n"
+        "    return 0;\n"
         "}\n"
         "\n"
         "char *str_slice(char *text, int64_t start, int64_t len) {\n"

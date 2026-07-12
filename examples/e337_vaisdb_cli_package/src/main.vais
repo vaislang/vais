@@ -139,6 +139,7 @@ fn run_docs(index_path: Str) -> Int {
     }
     let ids: List<Str> = []
     let count = doc_ids_into(index, ids)
+    ids.sort()
     let mut i = 0
     while i < count {
         print(ids[i])
@@ -238,6 +239,9 @@ fn self_test() -> Int {
     let ids: List<Str> = []
     if doc_ids_into(loaded, ids) != 3 { return 14 }
     if ids.contains("d3") != true { return 15 }
+    ids.sort()
+    if ids[0] != "d1" { return 20 }
+    if ids[2] != "d3" { return 21 }
     let filtered: Map<Str,Str> = {}
     let removed = remove_doc_into(loaded, "d2", filtered)
     if removed != 2 { return 16 }

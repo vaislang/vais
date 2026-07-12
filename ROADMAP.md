@@ -22,7 +22,21 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-12c) — 도그푸딩 4: vaisdb 문서 관리
+## 현재 작업 (2026-07-12d) — List<Str> 정렬 표면 승격 (도그푸딩 4 환류)
+모드: 개별선택
+- [x] 1. List<Str> 원소 대입 승격 ✅ 2026-07-12 — 선행 갭. full core는
+      원소-store 폴백에서 ensure_i64_op로 ptr 값 변환(.ll 재생성), direct는
+      원소 대입 게이트에 Str 1줄 추가.
+- [x] 2. str_cmp(a,b)->Int 빌트인 ✅ 2026-07-12 — 3-way(-1/0/1). host
+      runtime + HOST_INTRINSIC_IR(full 제네릭 call 경로 그대로) + direct
+      10지점 배선 + front unknown-call 화이트리스트.
+- [x] 3. List<Str>.sort() ✅ 2026-07-12 — 공유 sort 데수가의 비교 라인만
+      str_cmp(%V,%K)>0으로 교체(2줄). 로컬/파라미터/빈 리스트 검증.
+- [x] 4. 적용+문서 ✅ 2026-07-12 — vaisdb docs 사전순 출력(self-test 순서
+      검증 추가), e340(parity 359), PRELUDE/LANGUAGE/README/CHANGELOG.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-12c) — 도그푸딩 4: vaisdb 문서 관리
 모드: 개별선택
 - [x] 1. `docs <index>` ✅ 2026-07-12 — doc_ids_into(dedupe seen map), exit=수
 - [x] 2. `remove <index> <doc-id>` ✅ 2026-07-12 — remove_doc_into가 필터된
@@ -190,10 +204,6 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
-- `List<Str>` 정렬 표면 부재: Str 비교 연산/`List<Str>.sort`가 미승격이라
-  vaisdb `docs` 목록이 삽입 순서로 출력됨(결정적이지만 사전순 아님). 정렬
-  요구가 반복 노출되면 List<Int>.sort 데수가 패턴(선택/삽입 정렬 텍스트
-  lowering)에 Str 비교를 더해 승격.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지

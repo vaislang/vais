@@ -1,0 +1,48 @@
+# expect: 42
+# List<Str> ordering surface: `str_cmp(a, b)` compares strings (-1/0/1) and
+# `List<Str>.sort()` sorts in place (ascending, byte order) on local and
+# parameter receivers, backed by the newly promoted List<Str> element
+# assignment (`words[i] = value`).
+
+fn sorted_first(words: List<Str>) -> Str {
+    words.sort()
+    return words[0]
+}
+
+fn main() -> Int {
+    if str_cmp("alpha", "beta") != 0 - 1 { return 1 }
+    if str_cmp("beta", "alpha") != 1 { return 2 }
+    if str_cmp("same", "same") != 0 { return 3 }
+
+    # Element assignment: swap through a temporary local.
+    let pair: List<Str> = []
+    pair.push("beta")
+    pair.push("alpha")
+    let tmp = pair[0]
+    pair[0] = pair[1]
+    pair[1] = tmp
+    if pair[0] != "alpha" { return 4 }
+    if pair[1] != "beta" { return 5 }
+
+    # Local receiver sort.
+    let words: List<Str> = []
+    words.push("cherry")
+    words.push("apple")
+    words.push("banana")
+    words.sort()
+    if words[0] != "apple" { return 6 }
+    if words[1] != "banana" { return 7 }
+    if words[2] != "cherry" { return 8 }
+
+    # Parameter receiver sort through a helper, plus empty-list safety.
+    let more: List<Str> = []
+    more.push("zeta")
+    more.push("eta")
+    if sorted_first(more) != "eta" { return 9 }
+    let empty: List<Str> = []
+    empty.sort()
+    if empty.len() != 0 { return 10 }
+
+    # 3 sorted lists * 14 = 42
+    return (words.len() + more.len() + pair.len()) * 6
+}

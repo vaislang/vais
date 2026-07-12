@@ -17329,9 +17329,17 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                         }
                         let stop = find_stmt_end(toks, src, bend + 2, end)
                         let valop = gen_expr(toks, slots, fns, defs, src, bend + 2, stop, counter)
-                        let valkind = valop.kind
-                        let valval = valop.val
+                        let mut valkind = valop.kind
+                        let mut valval = valop.val
                         counter = valop.next
+                        if valkind == 2 or valkind == 3 {
+                            # Str (or pointer) element values store into the i64
+                            # slot buffer, so convert before the store below.
+                            let valfix = ensure_i64_op(Op { kind: valkind, val: valval, next: 0 }, counter)
+                            valkind = valfix.kind
+                            valval = valfix.val
+                            counter = valfix.next
+                        }
                         if warr == 4 {
                             emit_str("  %t")
                             pint(counter)

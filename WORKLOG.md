@@ -1,5 +1,24 @@
 # Vais Worklog
 
+## 2026-07-12e (List<Str> 정렬 표면 승격 — 도그푸딩 4 환류 완결)
+
+환류 갭을 즉시 승격. 선행 갭부터: **List<Str> 원소 대입**이 양 엔진 미승격
+— full은 원소-store 폴백이 ptr 값을 i64 슬롯에 그대로 store(clang 타입
+에러), 기존 `ensure_i64_op` 헬퍼를 kind 2/3 값에 적용하는 6줄로 root-fix
+(.ll 재생성, %v-1/var-folders 0 확인). direct는 원소 대입 게이트에 Str
+1줄 추가로 기존 lvalue 재작성 경로가 그대로 동작.
+
+**str_cmp(a,b)->Int 승격**(3-way -1/0/1): host runtime 구현 +
+HOST_INTRINSIC_IR declare(full은 제네릭 call 경로가 (i8*,i8*)->i64 그대로
+emit, core 무변경) + direct 10지점 배선(predicate/parse_builtin 6그룹/
+skip 목록/타입 추론/게이트 체인/프렐류드 static) + front unknown-call
+화이트리스트. **List<Str>.sort()**: 공유 sort 데수가의 비교 라인만
+`str_cmp(%V,%K) > 0`으로 교체(2줄 diff) — 로컬/파라미터/빈 리스트 42.
+
+적용: vaisdb `docs`가 사전순 출력(self-test에 순서 검증 2단계 추가).
+e340 신설(str_cmp/원소 스왑/로컬·파라미터 sort, 양 엔진 42, parity 359).
+PRELUDE/LANGUAGE 표·시그니처, README, CHANGELOG 반영.
+
 ## 2026-07-12d (도그푸딩 4 — vaisdb 문서 관리, 컴파일러 갭 0건)
 
 vaisdb 패키지에 docs(고유 doc id 목록, exit=수)/remove(문서 키 전부 제거 —

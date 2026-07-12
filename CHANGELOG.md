@@ -4,6 +4,16 @@
 
 ### Changed
 
+- Promoted the `List<Str>` ordering surface (dogfood-4 gap feedback):
+  `List<Str>` element assignment (`words[i] = value`) now works on both
+  engines (the full engine converts pointer element values before the i64
+  slot store; the direct engine accepts Str list element targets), the new
+  `str_cmp(left, right) -> Int` built-in compares strings three-way
+  (-1/0/1), and `List<Str>.sort()` sorts in place on local and parameter
+  receivers through the shared sort desugar. The vaisdb `docs` subcommand
+  now prints doc ids in sorted order. Covered by
+  `examples/e340_list_str_sort.vais`.
+
 - The vaisdb package gains document management: `docs <index>` (lists unique
   doc ids, exit = count), `remove <index> <doc-id>` (drops every key of a
   document by rebuilding the index, exit 3 when missing), and
