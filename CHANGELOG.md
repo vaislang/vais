@@ -4,6 +4,13 @@
 
 ### Changed
 
+- Added the second installable Vais tool: `examples/e341_vaisgrep_package`
+  builds `dist/bin/vaisgrep` (substring line search over a file or a
+  directory of text files, plus `-c` per-file counts, with a deterministic
+  no-argument self-test). The sprint promoted the `fs_is_dir(path)` host
+  API it exposed as a gap: `fs_exists` answers 1 for directories too, so
+  path dispatch needed a real directory test on both engines.
+
 - Promoted the `List<Str>` ordering surface (dogfood-4 gap feedback):
   `List<Str>` element assignment (`words[i] = value`) now works on both
   engines (the full engine converts pointer element values before the i64

@@ -104,6 +104,7 @@ examples/e336_list_struct_sort_by.vais	native-supported	Built-in List<Struct>.so
 examples/e338_fs_list_files.vais	native-supported	Built-in fs_list_files fills a List<Str> with sorted regular file names, skips subdirectories, and reports missing directories as zero entries.
 examples/e339_list_struct_field_in_call_args.vais	native-supported	List<Struct> indexed field reads inside nested call arguments, including as Str conversion arguments, on local and parameter receivers.
 examples/e340_list_str_sort.vais	native-supported	Built-in str_cmp three-way string comparison plus in-place List<Str>.sort() on local and parameter receivers, backed by List<Str> element assignment.
+examples/e341_vaisgrep_package/src/main.vais	native-supported	Installable vaisgrep CLI package self-test covers substring line search, fs_is_dir path dispatch, and the text-name directory filter.
 examples/e303_result_metric_int_struct_payload.vais	native-supported	Result<Metric,Int> struct payload values flow through helper parameters and recover fields through inline matches.
 examples/e304_result_record_int_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> struct payload values flow through helper parameters and recover three fields through inline matches.
 examples/e305_result_multiline_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> multiline struct payload values flow through helper parameters and recover four fields through inline matches.

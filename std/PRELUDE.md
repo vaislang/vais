@@ -94,6 +94,9 @@ gate covers both engines, the wrapper, and every error exit code.
 `fs_list_files(dir, out)` fills a `List<Str>` with the sorted regular-file
 names so Vais tools can ingest whole directories; the vaisdb package's
 `ingest-dir` and ranked `rank` subcommands build on it.
+`examples/e341_vaisgrep_package` is the second installable tool: `vaisgrep`
+searches files or directories for substring-matching lines (with `-c` counts),
+dispatching on the new `fs_is_dir(path)` host test before reading.
 `examples/e337_vaisdb_cli_package` productizes that command as an installable
 package: the index/report logic is split across `vaisdb.index` and
 `vaisdb.report` modules, `scripts/vaisc package` builds `dist/bin/vaisdb` and a
@@ -211,6 +214,7 @@ direct/default summary report.
 | API | Status |
 | --- | --- |
 | `fs_exists(path: Str) -> Bool` | Verified |
+| `fs_is_dir(path: Str) -> Bool` | Verified; full/direct — directory test (missing paths yield 0) |
 | `fs_read_text(path: Str) -> Str` | Verified |
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified |
 | `fs_mkdirs(path: Str) -> Int` | Verified |

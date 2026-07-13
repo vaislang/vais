@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-07-13 (도그푸딩 5 — vaisgrep 두 번째 배포 도구 + fs_is_dir 승격)
+
+vaisgrep 설치형 패키지(e341, grep.scan 모듈 + main): 파일/디렉토리 대상
+서브스트링 라인 검색(`N: line`/`file:N: line`), `-c` 카운트 모드, 무인자
+self-test 42. 패키지 바이너리 실측 전 케이스 정확(파일 2/디렉토리 3/카운트
+3/누락 3/빈 패턴 1), workflow 게이트 +7케이스, parity 360.
+
+**갭 노출→즉시 승격: fs_is_dir(path: Str) -> Bool.** fs_exists가 디렉토리
+에도 1을 반환해 경로 디스패치가 fs_read_text에서 host trap — stat/S_ISDIR
+기반 host API를 fs_exists 미러로 9지점 승격(HOST_INTRINSIC_IR/host runtime/
+front 화이트리스트/direct predicate·parse_builtin·skip·추론·게이트·prototype).
+full core 무변경.
+
+트랩 재확인 2건: ① 문자열 리터럴에 `\n` 이스케이프 없음 — 멀티라인은
+str_byte(10) concat(기존 e337 lf 패턴). ② str_split_lines_into는 할당형
+(`let n = ...`)이 검증 표면 — bare 문장은 양 엔진 미인식.
+
 ## 2026-07-12e (List<Str> 정렬 표면 승격 — 도그푸딩 4 환류 완결)
 
 환류 갭을 즉시 승격. 선행 갭부터: **List<Str> 원소 대입**이 양 엔진 미승격

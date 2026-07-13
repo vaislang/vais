@@ -1883,6 +1883,7 @@ process intrinsics. The current and planned broader surface is:
 
 ```vais
 fs_exists(path: Str) -> Bool
+fs_is_dir(path: Str) -> Int
 fs_read_text(path: Str) -> Str
 fs_write_text(path: Str, text: Str) -> Int
 fs_mkdirs(path: Str) -> Int

@@ -22,7 +22,21 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-12d) — List<Str> 정렬 표면 승격 (도그푸딩 4 환류)
+## 현재 작업 (2026-07-13) — 도그푸딩 5: vaisgrep (두 번째 배포 도구)
+모드: 개별선택
+- [x] 1. e341 vaisgrep 패키지 ✅ 2026-07-13 — grep.scan 모듈(match_lines_into/
+      count_matches/is_text_name) + main 디스패치, 무인자 self-test 42.
+- [x] 2. 디렉토리 검색 ✅ 2026-07-13 — **갭 노출→즉시 승격: fs_is_dir(path)**.
+      fs_exists는 디렉토리에도 1이라 파일 분기가 host trap — stat 기반
+      fs_is_dir을 host runtime+양 엔진에 승격(9지점, fs_exists 미러).
+- [x] 3. count 모드 ✅ 2026-07-13 — `-c` 플래그 first-arg 디스패치, 파일별
+      count 라인, exit=총 매칭.
+- [x] 4. 환류 + 문서 ✅ 2026-07-13 — parity 360(e341 main), workflow 게이트
+      +7케이스, HOST_IO/PRELUDE/LANGUAGE/README/CHANGELOG. 트랩 재확인:
+      문자열 리터럴 `\n` 이스케이프 없음(str_byte(10) 사용).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-12d) — List<Str> 정렬 표면 승격 (도그푸딩 4 환류)
 모드: 개별선택
 - [x] 1. List<Str> 원소 대입 승격 ✅ 2026-07-12 — 선행 갭. full core는
       원소-store 폴백에서 ensure_i64_op로 ptr 값 변환(.ll 재생성), direct는

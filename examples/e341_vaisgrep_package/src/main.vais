@@ -1,0 +1,115 @@
+# expect: 42
+# Second installable Vais tool: `scripts/vaisc package` builds dist/bin/vaisgrep
+# with substring line search over files and directories. Run without arguments
+# it executes a deterministic self-test (the release-corpus entry); with
+# arguments it dispatches:
+#   vaisgrep <pattern> <path>      print matching lines, exit = match count
+#   vaisgrep -c <pattern> <path>   print per-file counts, exit = total matches
+# where <path> is a text file or a directory scanned for .txt/.vais/.md files.
+import grep.scan
+
+fn grep_file(pattern: Str, path: Str, prefix: Str, show_lines: Int) -> Int {
+    let body = fs_read_text(path)
+    if show_lines == 1 {
+        let hits: List<Str> = []
+        let count = match_lines_into(body, pattern, hits)
+        let mut i = 0
+        while i < count {
+            print(str_concat(prefix, hits[i]))
+            i = i + 1
+        }
+        return count
+    }
+    let count = count_matches(body, pattern)
+    print(str_concat(prefix, str_concat("count=", Str(count))))
+    return count
+}
+
+fn grep_dir(pattern: Str, dir: Str, show_lines: Int) -> Int {
+    let names: List<Str> = []
+    let n = fs_list_files(dir, names)
+    let mut total = 0
+    let mut i = 0
+    while i < n {
+        let name = names[i]
+        if is_text_name(name) == 1 {
+            let prefix = str_concat(name, ":")
+            total = total + grep_file(pattern, path_join(dir, name), prefix, show_lines)
+        }
+        i = i + 1
+    }
+    return total
+}
+
+fn run_grep(pattern: Str, path: Str, show_lines: Int) -> Int {
+    if pattern.len() == 0 {
+        print("error: empty pattern")
+        return 1
+    }
+    if fs_is_dir(path) == 1 {
+        return grep_dir(pattern, path, show_lines)
+    }
+    if fs_exists(path) == 1 {
+        return grep_file(pattern, path, "", show_lines)
+    }
+    print("error: path not found")
+    return 3
+}
+
+fn usage() -> Int {
+    print("usage: vaisgrep <pattern> <file-or-dir>")
+    print("       vaisgrep -c <pattern> <file-or-dir>")
+    return 1
+}
+
+fn self_test() -> Int {
+    let root = fs_temp_dir()
+    let dir = path_join(root, "vais-e341-selftest")
+    if fs_mkdirs(dir) != 0 { return 1 }
+    let f1 = path_join(dir, "alpha.txt")
+    let f2 = path_join(dir, "beta.vais")
+    let f3 = path_join(dir, "skip.bin")
+    let lf = str_byte(10)
+    let body1 = str_concat("cache line one", str_concat(lf, str_concat("plain line", str_concat(lf, "cache line two"))))
+    let body2 = str_concat("let cache = 1", str_concat(lf, "let other = 2"))
+    if fs_write_text(f1, body1) != 0 { return 2 }
+    if fs_write_text(f2, body2) != 0 { return 3 }
+    if fs_write_text(f3, "cache cache cache") != 0 { return 4 }
+
+    # Single file: matching lines carry 1-based numbers.
+    let hits: List<Str> = []
+    let body = fs_read_text(f1)
+    if match_lines_into(body, "cache", hits) != 2 { return 5 }
+    if hits[0] != "1: cache line one" { return 6 }
+    if hits[1] != "3: cache line two" { return 7 }
+    if count_matches(body, "cache") != 2 { return 8 }
+    if count_matches(body, "missing") != 0 { return 9 }
+
+    # The directory filter keeps text names and skips binaries; totals across
+    # the two text files match the per-file counts (the packaged-binary gate
+    # covers the printing paths).
+    if is_text_name("alpha.txt") != 1 { return 10 }
+    if is_text_name("beta.vais") != 1 { return 11 }
+    if is_text_name("notes.md") != 1 { return 12 }
+    if is_text_name("skip.bin") != 0 { return 13 }
+    if fs_is_dir(dir) != 1 { return 15 }
+    if fs_is_dir(f1) != 0 { return 16 }
+    if fs_is_dir(path_join(dir, "no-such")) != 0 { return 17 }
+    let dir_total = count_matches(fs_read_text(f1), "cache") + count_matches(fs_read_text(f2), "cache")
+    if dir_total != 3 { return 14 }
+
+    # 2 file hits * 3 dir hits * 7 = 42
+    let final_hits: List<Str> = []
+    return match_lines_into(body, "cache", final_hits) * dir_total * 7
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let first = proc_arg(0)
+    if first == "-c" {
+        if proc_argc() != 3 { return usage() }
+        return run_grep(proc_arg(1), proc_arg(2), 0)
+    }
+    if proc_argc() != 2 { return usage() }
+    return run_grep(first, proc_arg(1), 1)
+}

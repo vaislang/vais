@@ -239,6 +239,21 @@ expect_exit "vaisdb package stats" 2 "$vdb_dist/bin/vaisdb" stats "$vdb_dir_inde
 expect_exit "vaisdb package remove" 0 "$vdb_dist/bin/vaisdb" remove "$vdb_dir_index" pd1
 expect_exit "vaisdb package docs after remove" 1 "$vdb_dist/bin/vaisdb" docs "$vdb_dir_index"
 expect_exit "vaisdb package remove missing" 3 "$vdb_dist/bin/vaisdb" remove "$vdb_dir_index" ghost
+
+vgrep_dist="$tmp/vaisgrep-dist"
+vgrep_docs="$tmp/vaisgrep-docs"
+rm -rf "$vgrep_dist" "$vgrep_docs"
+mkdir -p "$vgrep_docs"
+printf 'cache one\nplain\ncache two\n' > "$vgrep_docs/a.txt"
+printf 'let cache = 1\n' > "$vgrep_docs/b.vais"
+printf 'cache\n' > "$vgrep_docs/skip.bin"
+expect_exit "vaisgrep package build" 0 "$ROOT/scripts/vaisc" package "$ROOT/examples/e341_vaisgrep_package" -o "$vgrep_dist"
+expect_exit "vaisgrep package self-test" 42 "$vgrep_dist/bin/vaisgrep"
+expect_exit "vaisgrep file search" 2 "$vgrep_dist/bin/vaisgrep" cache "$vgrep_docs/a.txt"
+expect_exit "vaisgrep dir search" 3 "$vgrep_dist/bin/vaisgrep" cache "$vgrep_docs"
+expect_exit "vaisgrep count mode" 3 "$vgrep_dist/bin/vaisgrep" -c cache "$vgrep_docs"
+expect_exit "vaisgrep missing path" 3 "$vgrep_dist/bin/vaisgrep" cache "$vgrep_docs/no-such"
+expect_exit "vaisgrep empty pattern" 1 "$vgrep_dist/bin/vaisgrep" "" "$vgrep_docs/a.txt"
 expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
 mkdir -p "$vdb_extract"
 expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"
