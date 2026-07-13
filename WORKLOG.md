@@ -1,5 +1,27 @@
 # Vais Worklog
 
+## 2026-07-14 (도그푸딩 6 — vaisgrep 재귀 검색 + fs_list_dirs + 이중 재작성 3호)
+
+**fs_list_dirs(dir, out) 승격**: fs_list_files 완전 미러 14지점(S_ISDIR만
+다름 — declare/host runtime 리스트 계약/front 화이트리스트/direct predicate·
+게이트 6그룹·out-param 검증·emission·skip·추론·문장스캔·static 헬퍼).
+e342 양 엔진 42(정렬/파일 제외/누락 0), parity 361. full core 무변경.
+
+**vaisgrep -r**: grep_tree가 fs_list_dirs로 레벨별 하강, 상대경로
+prefix(`sub/deeper/c.md:2: ...`) 출력. workflow +2케이스.
+
+**갭 노출→즉시 승격(이중 재작성 3호)**: direct에서 helper-call 인자 속
+builtin call(`ident(path_join(dir, xs[j]))`)이 실패 — list_expr의 user-fn
+분기가 인자를 전체 파이프라인으로 재작성한 출력을, 바깥 parse_builtin이
+다시 스캔하며 내부 builtin 인자(`xs.data[...]`)를 재재작성. fix:
+parse_builtin/str_conversion 패스가 **선언된 helper call 그룹을 opaque로
+skip**(두 패스 모두 list_expr 이후에만 호출됨을 확인 후). 이름 재귀
+트리워크가 이 fix로 개통.
+
+환류: `@(...)` self-recursion이 call-인자/컴파운드 위치에서 양 엔진 미승격
+(full=ptr 타입 불일치/direct=미번역) — 이름 재귀가 verified 표면, ROADMAP
+후보 등록.
+
 ## 2026-07-13 (도그푸딩 5 — vaisgrep 두 번째 배포 도구 + fs_is_dir 승격)
 
 vaisgrep 설치형 패키지(e341, grep.scan 모듈 + main): 파일/디렉토리 대상

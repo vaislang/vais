@@ -32,3 +32,24 @@ fn is_text_name(name: Str) -> Int {
     if str_ends_with(name, ".md") == 1 { return 1 }
     return 0
 }
+
+fn tree_matches(pattern: Str, dir: Str) -> Int {
+    let names: List<Str> = []
+    let n = fs_list_files(dir, names)
+    let mut total = 0
+    let mut i = 0
+    while i < n {
+        if is_text_name(names[i]) == 1 {
+            total = total + count_matches(fs_read_text(path_join(dir, names[i])), pattern)
+        }
+        i = i + 1
+    }
+    let subs: List<Str> = []
+    let m = fs_list_dirs(dir, subs)
+    let mut j = 0
+    while j < m {
+        total = total + tree_matches(pattern, path_join(dir, subs[j]))
+        j = j + 1
+    }
+    return total
+}

@@ -7,6 +7,10 @@ Status: `fs_exists(path: Str) -> Bool`,
 - `fs_list_files(dir: Str, out: List<Str>) -> Int`: fills `out` with the
   sorted regular-file names in `dir` (subdirectories and `.`/`..` skipped) and
   returns the count; a missing directory yields `0`.
+- `fs_list_dirs(dir: Str, out: List<Str>) -> Int`: fills `out` with the sorted
+  subdirectory names in `dir` (regular files and `.`/`..` skipped) and returns
+  the count; a missing directory yields `0`. Pairs with `fs_list_files` for
+  level-by-level tree walks.
 string-construction helpers, argv helpers, `proc_run(argv: List<Str>) -> Int`,
 `proc_run_env(argv: List<Str>, env: List<Str>) -> Int`,
 `proc_capture_stdout(argv: List<Str>) -> Str`, and

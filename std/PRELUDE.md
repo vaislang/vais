@@ -95,8 +95,9 @@ gate covers both engines, the wrapper, and every error exit code.
 names so Vais tools can ingest whole directories; the vaisdb package's
 `ingest-dir` and ranked `rank` subcommands build on it.
 `examples/e341_vaisgrep_package` is the second installable tool: `vaisgrep`
-searches files or directories for substring-matching lines (with `-c` counts),
-dispatching on the new `fs_is_dir(path)` host test before reading.
+searches files or directories for substring-matching lines (with `-c` counts
+and `-r` recursive tree walks over `fs_list_dirs`), dispatching on the
+`fs_is_dir(path)` host test before reading.
 `examples/e337_vaisdb_cli_package` productizes that command as an installable
 package: the index/report logic is split across `vaisdb.index` and
 `vaisdb.report` modules, `scripts/vaisc package` builds `dist/bin/vaisdb` and a
@@ -246,6 +247,7 @@ direct/default summary report.
 | `doc_term_weighted_score(query: Map<Str,Int>, doc: Map<Str,Int>) -> Int` | Verified; full/direct |
 | `str_byte(value: Int) -> Str` | Verified; full/direct |
 | `fs_list_files(dir: Str, out: List<Str>) -> Int` | Verified; full/direct — sorted regular-file names, subdirectories skipped, missing directory yields 0 |
+| `fs_list_dirs(dir: Str, out: List<Str>) -> Int` | Verified; full/direct — sorted subdirectory names, regular files skipped, missing directory yields 0 |
 | `time_millis() -> Int` | Verified; full/direct |
 | `proc_argc() -> Int` | Verified |
 | `proc_arg(index: Int) -> Str` | Verified |

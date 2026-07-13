@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Added the built-in `fs_list_dirs(dir, out)` host API (sorted subdirectory
+  names, regular files skipped, missing directories yield 0) and a `-r`
+  recursive tree-walk mode to vaisgrep that prints `sub/dir/name:N: line`
+  relative paths (`examples/e342_fs_list_dirs.vais`). Fixed the direct
+  engine double-rewriting helper-call arguments: builtin calls nested
+  inside a declared helper's arguments (`ident(path_join(dir, xs[j])`)
+  were rewritten twice, so the parse-builtin and Str-conversion passes now
+  treat already-rewritten helper-call groups as opaque. Named self-recursion
+  is the verified recursion surface (`@(...)` in argument/compound positions
+  is registered as a candidate).
+
 - Added the second installable Vais tool: `examples/e341_vaisgrep_package`
   builds `dist/bin/vaisgrep` (substring line search over a file or a
   directory of text files, plus `-c` per-file counts, with a deterministic

@@ -1,0 +1,33 @@
+# expect: 42
+# Built-in `fs_list_dirs(dir, out)`: fills a List<Str> out-param with the
+# subdirectory names in a directory (sorted, "." and ".." excluded, regular
+# files skipped) and returns the count. Missing directories yield 0, mirroring
+# fs_list_files so tools can walk a tree level by level.
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let dir = path_join(root, "vais-e342-tree")
+    if fs_mkdirs(path_join(dir, "beta")) != 0 { return 1 }
+    if fs_mkdirs(path_join(dir, "alpha")) != 0 { return 2 }
+    if fs_write_text(path_join(dir, "plain.txt"), "not a directory") != 0 { return 3 }
+
+    let names: List<Str> = []
+    let n = fs_list_dirs(dir, names)
+    if n != 2 { return 4 }
+    if names.len() != 2 { return 5 }
+    # Sorted order is part of the contract, so gates stay deterministic.
+    if names[0] != "alpha" { return 6 }
+    if names[1] != "beta" { return 7 }
+
+    # A listed name joins back into a walkable directory path.
+    if fs_is_dir(path_join(dir, names[0])) != 1 { return 8 }
+
+    # Regular files never appear, and missing directories report zero.
+    let ghost: List<Str> = []
+    let missing = fs_list_dirs(path_join(dir, "no-such-dir"), ghost)
+    if missing != 0 { return 9 }
+    if ghost.len() != 0 { return 10 }
+
+    # 2 dirs * (5 + 4 + 12) = 42
+    return n * (names[0].len() + names[1].len() + 12)
+}

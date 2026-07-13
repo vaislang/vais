@@ -263,8 +263,10 @@ field reads inside nested call arguments including `Str(...)` conversions,
 `examples/e340_list_str_sort.vais` for `str_cmp` three-way comparison and
 in-place `List<Str>.sort()` with element assignment on both engines,
 `examples/e341_vaisgrep_package` for the installable vaisgrep CLI package
-(substring line search over files and directories with `-c` counts) built on
-the `fs_is_dir(path)` host dispatch,
+(substring line search over files and directories with `-c` counts and `-r`
+recursive tree walks) built on the `fs_is_dir(path)` host dispatch,
+`examples/e342_fs_list_dirs.vais` for the built-in `fs_list_dirs(dir, out)`
+subdirectory enumeration that pairs with `fs_list_files` for tree walks,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

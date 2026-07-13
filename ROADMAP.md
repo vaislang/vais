@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-13) — 도그푸딩 5: vaisgrep (두 번째 배포 도구)
+## 현재 작업 (2026-07-14) — 도그푸딩 6: vaisgrep 재귀 검색 + fs_list_dirs
+모드: 개별선택
+- [x] 1. fs_list_dirs 승격 ✅ 2026-07-14 — fs_list_files 완전 미러 14지점
+      (S_ISDIR), e342 양 엔진 42, parity 361. full core 무변경.
+- [x] 2. vaisgrep `-r` ✅ 2026-07-14 — grep_tree **이름 재귀**(verified 표면)
+      + 상대경로 prefix. 갭 노출→즉시 승격: direct의 helper-call 인자 속
+      builtin call 이중 재작성(3번째 사례 — parse_builtin/conversion 패스에
+      user-fn 그룹 opaque skip 추가).
+- [x] 3. 게이트 ✅ 2026-07-14 — workflow +2케이스(재귀 6/단일 3), self-test
+      tree_matches 2단계(42 유지).
+- [x] 4. 환류 + 문서 ✅ 2026-07-14 — `@(...)` self-recursion이 call-인자/
+      컴파운드 위치에서 양 엔진 미승격(아래 후보 등록, 이름 재귀가 verified).
+      HOST_IO/PRELUDE/LANGUAGE/README/CHANGELOG.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-13) — 도그푸딩 5: vaisgrep (두 번째 배포 도구)
 모드: 개별선택
 - [x] 1. e341 vaisgrep 패키지 ✅ 2026-07-13 — grep.scan 모듈(match_lines_into/
       count_matches/is_text_name) + main 디스패치, 무인자 self-test 42.
@@ -218,6 +233,10 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
+- `@(...)` self-recursion의 call-인자/컴파운드 위치 미승격: `total = total +
+  @(args)`가 full은 ptr/i64 타입 불일치, direct는 `@` 미번역으로 실패.
+  이름 재귀(`fn f` 안에서 `f(...)`)가 verified 표면 — `@` 요구가 반복
+  노출되면 양 엔진 정렬.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지

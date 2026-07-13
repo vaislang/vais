@@ -25,7 +25,7 @@ fn grep_file(pattern: Str, path: Str, prefix: Str, show_lines: Int) -> Int {
     return count
 }
 
-fn grep_dir(pattern: Str, dir: Str, show_lines: Int) -> Int {
+fn grep_dir(pattern: Str, dir: Str, rel: Str, show_lines: Int) -> Int {
     let names: List<Str> = []
     let n = fs_list_files(dir, names)
     let mut total = 0
@@ -33,7 +33,7 @@ fn grep_dir(pattern: Str, dir: Str, show_lines: Int) -> Int {
     while i < n {
         let name = names[i]
         if is_text_name(name) == 1 {
-            let prefix = str_concat(name, ":")
+            let prefix = str_concat(rel, str_concat(name, ":"))
             total = total + grep_file(pattern, path_join(dir, name), prefix, show_lines)
         }
         i = i + 1
@@ -41,13 +41,30 @@ fn grep_dir(pattern: Str, dir: Str, show_lines: Int) -> Int {
     return total
 }
 
-fn run_grep(pattern: Str, path: Str, show_lines: Int) -> Int {
+fn grep_tree(pattern: Str, dir: Str, rel: Str, show_lines: Int) -> Int {
+    let mut total = grep_dir(pattern, dir, rel, show_lines)
+    let subs: List<Str> = []
+    let m = fs_list_dirs(dir, subs)
+    let mut j = 0
+    while j < m {
+        let name = subs[j]
+        let child_rel = str_concat(rel, str_concat(name, "/"))
+        total = total + grep_tree(pattern, path_join(dir, name), child_rel, show_lines)
+        j = j + 1
+    }
+    return total
+}
+
+fn run_grep(pattern: Str, path: Str, show_lines: Int, recurse: Int) -> Int {
     if pattern.len() == 0 {
         print("error: empty pattern")
         return 1
     }
     if fs_is_dir(path) == 1 {
-        return grep_dir(pattern, path, show_lines)
+        if recurse == 1 {
+            return grep_tree(pattern, path, "", show_lines)
+        }
+        return grep_dir(pattern, path, "", show_lines)
     }
     if fs_exists(path) == 1 {
         return grep_file(pattern, path, "", show_lines)
@@ -59,6 +76,7 @@ fn run_grep(pattern: Str, path: Str, show_lines: Int) -> Int {
 fn usage() -> Int {
     print("usage: vaisgrep <pattern> <file-or-dir>")
     print("       vaisgrep -c <pattern> <file-or-dir>")
+    print("       vaisgrep -r <pattern> <dir>")
     return 1
 }
 
@@ -98,6 +116,14 @@ fn self_test() -> Int {
     let dir_total = count_matches(fs_read_text(f1), "cache") + count_matches(fs_read_text(f2), "cache")
     if dir_total != 3 { return 14 }
 
+    # Recursive walk sums nested subdirectories through fs_list_dirs.
+    let sub = path_join(dir, "nested")
+    if fs_mkdirs(path_join(sub, "deeper")) != 0 { return 18 }
+    if fs_write_text(path_join(sub, "d.txt"), "cache nested") != 0 { return 19 }
+    if fs_write_text(path_join(sub, "deeper/e.md"), "cache deep") != 0 { return 22 }
+    if tree_matches("cache", dir) != 5 { return 23 }
+    if tree_matches("cache", sub) != 2 { return 24 }
+
     # 2 file hits * 3 dir hits * 7 = 42
     let final_hits: List<Str> = []
     return match_lines_into(body, "cache", final_hits) * dir_total * 7
@@ -108,8 +134,12 @@ fn main() -> Int {
     let first = proc_arg(0)
     if first == "-c" {
         if proc_argc() != 3 { return usage() }
-        return run_grep(proc_arg(1), proc_arg(2), 0)
+        return run_grep(proc_arg(1), proc_arg(2), 0, 0)
+    }
+    if first == "-r" {
+        if proc_argc() != 3 { return usage() }
+        return run_grep(proc_arg(1), proc_arg(2), 1, 1)
     }
     if proc_argc() != 2 { return usage() }
-    return run_grep(first, proc_arg(1), 1)
+    return run_grep(first, proc_arg(1), 1, 0)
 }

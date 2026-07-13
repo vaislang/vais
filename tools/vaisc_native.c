@@ -23,6 +23,7 @@ static const char *HOST_INTRINSIC_IR =
     "declare i64 @fs_exists(i8*)\n"
     "declare i64 @fs_is_dir(i8*)\n"
     "declare i64 @fs_list_files(i8*, i64*)\n"
+    "declare i64 @fs_list_dirs(i8*, i64*)\n"
     "declare i8* @fs_read_text(i8*)\n"
     "declare i8* @fs_cwd()\n"
     "declare i8* @fs_temp_dir()\n"
@@ -18424,7 +18425,7 @@ static int front_is_builtin_call_name(const char *name) {
         "str_builder_new", "str_builder_push", "str_builder_append",
         "str_builder_finish",
         "fs_exists", "fs_is_dir", "fs_read_text", "fs_write_text", "fs_mkdirs", "fs_remove",
-        "fs_cwd", "fs_temp_dir", "fs_list_files",
+        "fs_cwd", "fs_temp_dir", "fs_list_files", "fs_list_dirs",
         "path_join", "path_basename", "path_dirname",
         "time_millis", "proc_argc", "proc_arg", "proc_capture",
         "proc_capture_stdout", "proc_capture_stderr", "proc_capture_to",
@@ -22374,6 +22375,10 @@ static int direct_is_fs_list_files_builtin_name(const char *name) {
     return strcmp(name, "fs_list_files") == 0;
 }
 
+static int direct_is_fs_list_dirs_builtin_name(const char *name) {
+    return strcmp(name, "fs_list_dirs") == 0;
+}
+
 static int direct_is_fs_mkdirs_builtin_name(const char *name) {
     return strcmp(name, "fs_mkdirs") == 0;
 }
@@ -22605,6 +22610,18 @@ static char *direct_rewrite_parse_builtin_calls(
         char *name = substr_copy(expr + start, (size_t)(i - start));
         int cursor = i;
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
+        if (expr[cursor] == '(' && direct_find_fn(fns, fn_count, name) != NULL) {
+            /* Known helper-call group: the list rewriter already ran the full
+               pipeline over its arguments, so re-scanning would double-rewrite
+               list accesses inside them. */
+            int fn_close = find_matching_paren_c(expr, cursor);
+            if (fn_close >= 0) {
+                sb_append_n(&out, expr + start, (size_t)(fn_close + 1 - start));
+                free(name);
+                i = fn_close + 1;
+                continue;
+            }
+        }
         int is_parse = direct_is_parse_builtin_name(name);
         int is_contains = direct_is_str_contains_builtin_name(name);
         int is_cmp = direct_is_str_cmp_builtin_name(name);
@@ -22634,6 +22651,7 @@ static char *direct_rewrite_parse_builtin_calls(
         int is_split_ws_into = direct_is_str_split_ws_into_builtin_name(name);
         int is_split_lines_into = direct_is_str_split_lines_into_builtin_name(name);
         int is_fs_list_files = direct_is_fs_list_files_builtin_name(name);
+        int is_fs_list_dirs = direct_is_fs_list_dirs_builtin_name(name);
         int is_fs_mkdirs = direct_is_fs_mkdirs_builtin_name(name);
         int is_split_into = direct_is_str_split_into_builtin_name(name);
         int is_map_snapshot = direct_is_map_str_str_snapshot_builtin_name(name);
@@ -22641,7 +22659,7 @@ static char *direct_rewrite_parse_builtin_calls(
         int is_doc_counts = direct_is_doc_term_counts_into_builtin_name(name);
         int is_doc_overlap = direct_is_doc_term_overlap_score_builtin_name(name);
         int is_doc_weighted = direct_is_doc_term_weighted_score_builtin_name(name);
-        if ((!is_parse && !is_contains && !is_cmp && !is_index_of && !is_starts_with && !is_ends_with && !is_slice && !is_concat && !is_join && !is_replace && !is_trim && !is_lower && !is_upper && !is_byte && !is_fs_read_text && !is_fs_write_text && !is_fs_exists && !is_fs_is_dir && !is_fs_temp_dir && !is_fs_cwd && !is_path_join && !is_path_basename && !is_path_dirname && !is_time_millis && !is_proc_argc && !is_proc_arg && !is_split_ws_into && !is_split_lines_into && !is_fs_list_files && !is_fs_mkdirs && !is_split_into && !is_map_snapshot && !is_map_load && !is_doc_counts && !is_doc_overlap && !is_doc_weighted) || expr[cursor] != '(') {
+        if ((!is_parse && !is_contains && !is_cmp && !is_index_of && !is_starts_with && !is_ends_with && !is_slice && !is_concat && !is_join && !is_replace && !is_trim && !is_lower && !is_upper && !is_byte && !is_fs_read_text && !is_fs_write_text && !is_fs_exists && !is_fs_is_dir && !is_fs_temp_dir && !is_fs_cwd && !is_path_join && !is_path_basename && !is_path_dirname && !is_time_millis && !is_proc_argc && !is_proc_arg && !is_split_ws_into && !is_split_lines_into && !is_fs_list_files && !is_fs_list_dirs && !is_fs_mkdirs && !is_split_into && !is_map_snapshot && !is_map_load && !is_doc_counts && !is_doc_overlap && !is_doc_weighted) || expr[cursor] != '(') {
             sb_append_n(&out, expr + start, (size_t)(i - start));
             free(name);
             continue;
@@ -22662,9 +22680,9 @@ static char *direct_rewrite_parse_builtin_calls(
         int argc = trimmed_inside[0] == '\0' ? 0 : split_top_level_commas_c(inside, args, 16);
         free(trimmed_inside);
         free(inside);
-        int want_argc = (is_fs_cwd || is_fs_temp_dir || is_time_millis || is_proc_argc) ? 0 : ((is_split_ws_into || is_split_lines_into || is_fs_list_files || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted || is_join || is_fs_write_text || is_path_join) ? 2 : ((is_replace || is_split_into) ? 3 : ((is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_concat) ? 2 : (is_slice ? 3 : 1))));
+        int want_argc = (is_fs_cwd || is_fs_temp_dir || is_time_millis || is_proc_argc) ? 0 : ((is_split_ws_into || is_split_lines_into || is_fs_list_files || is_fs_list_dirs || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted || is_join || is_fs_write_text || is_path_join) ? 2 : ((is_replace || is_split_into) ? 3 : ((is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_concat) ? 2 : (is_slice ? 3 : 1))));
         int bad_args = argc != want_argc || (want_argc > 0 && (args[0] == NULL || strlen(skip_ws(args[0])) == 0));
-        if (!bad_args && (is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_concat || is_join || is_fs_write_text || is_path_join || is_split_ws_into || is_split_lines_into || is_fs_list_files || is_split_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted)) {
+        if (!bad_args && (is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_concat || is_join || is_fs_write_text || is_path_join || is_split_ws_into || is_split_lines_into || is_fs_list_files || is_fs_list_dirs || is_split_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted)) {
             bad_args = args[1] == NULL || strlen(skip_ws(args[1])) == 0;
         }
         if (!bad_args && (is_slice || is_replace || is_split_into)) {
@@ -22760,12 +22778,12 @@ static char *direct_rewrite_parse_builtin_calls(
         char *rewritten_arg2 = (is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_slice || is_concat || is_replace || is_split_into || is_fs_write_text || is_path_join)
             ? direct_rewrite_expr(path, line_no, line, args[1], locals, fns, fn_count, structs, struct_count)
             : NULL;
-        if (is_split_ws_into || is_split_lines_into || is_fs_list_files) {
+        if (is_split_ws_into || is_split_lines_into || is_fs_list_files || is_fs_list_dirs) {
             char *list_name = NULL;
             if (!direct_expr_bare_list_local(locals, args[1], &list_name) ||
                 strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
                 report_issue(path, line_no, find_col(line, name), line,
-                    is_fs_list_files ? "direct native emitter fs_list_files output must be a local List<Str>" : (is_split_lines_into ? "direct native emitter str_split_lines_into output must be a local List<Str>" : "direct native emitter str_split_ws_into output must be a local List<Str>"),
+                    is_fs_list_dirs ? "direct native emitter fs_list_dirs output must be a local List<Str>" : is_fs_list_files ? "direct native emitter fs_list_files output must be a local List<Str>" : (is_split_lines_into ? "direct native emitter str_split_lines_into output must be a local List<Str>" : "direct native emitter str_split_ws_into output must be a local List<Str>"),
                     "declare `let lines: List<Str> = []` and pass it as the second argument.",
                     NULL);
                 free(list_name);
@@ -23065,6 +23083,12 @@ static char *direct_rewrite_parse_builtin_calls(
             sb_append(&out, ", ");
             sb_append(&out, rewritten_arg2);
             sb_append(&out, ")");
+        } else if (is_fs_list_dirs) {
+            sb_append(&out, "__vais_fs_list_dirs(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_arg2);
+            sb_append(&out, ")");
         } else if (is_fs_list_files) {
             sb_append(&out, "__vais_fs_list_files(");
             sb_append(&out, rewritten_arg);
@@ -23269,6 +23293,15 @@ static char *direct_rewrite_str_conversion_calls(
         char *name = substr_copy(expr + start, (size_t)(i - start));
         int cursor = i;
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
+        if (expr[cursor] == '(' && direct_find_fn(fns, fn_count, name) != NULL) {
+            int fn_close = find_matching_paren_c(expr, cursor);
+            if (fn_close >= 0) {
+                sb_append_n(&out, expr + start, (size_t)(fn_close + 1 - start));
+                free(name);
+                i = fn_close + 1;
+                continue;
+            }
+        }
         if (!direct_is_str_conversion_builtin_name(name) || expr[cursor] != '(') {
             sb_append_n(&out, expr + start, (size_t)(i - start));
             free(name);
@@ -24040,7 +24073,7 @@ static char *direct_rewrite_list_expr(
         int cursor = i;
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
         if (expr[cursor] == '(' &&
-            (direct_is_str_conversion_builtin_name(name) || direct_is_parse_builtin_name(name) || direct_is_str_cmp_builtin_name(name) || direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_slice_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_join_builtin_name(name) || direct_is_str_replace_builtin_name(name) || direct_is_str_trim_builtin_name(name) || direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name) || direct_is_str_byte_builtin_name(name) || direct_is_fs_exists_builtin_name(name) || direct_is_fs_is_dir_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name) || direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name) || direct_is_str_split_into_builtin_name(name) || direct_is_doc_term_counts_into_builtin_name(name) || direct_is_doc_term_overlap_score_builtin_name(name) || direct_is_doc_term_weighted_score_builtin_name(name))) {
+            (direct_is_str_conversion_builtin_name(name) || direct_is_parse_builtin_name(name) || direct_is_str_cmp_builtin_name(name) || direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_slice_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_join_builtin_name(name) || direct_is_str_replace_builtin_name(name) || direct_is_str_trim_builtin_name(name) || direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name) || direct_is_str_byte_builtin_name(name) || direct_is_fs_exists_builtin_name(name) || direct_is_fs_is_dir_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name) || direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name) || direct_is_fs_list_dirs_builtin_name(name) || direct_is_str_split_into_builtin_name(name) || direct_is_doc_term_counts_into_builtin_name(name) || direct_is_doc_term_overlap_score_builtin_name(name) || direct_is_doc_term_weighted_score_builtin_name(name))) {
             int close = find_matching_paren_c(expr, cursor);
             if (close < 0) {
                 report_issue(path, line_no, find_col(line, name), line,
@@ -26032,7 +26065,7 @@ static char *direct_infer_expr_type(
                     free(trimmed);
                     return strdup("Int");
                 }
-                if (direct_is_fs_list_files_builtin_name(name)) {
+                if (direct_is_fs_list_files_builtin_name(name) || direct_is_fs_list_dirs_builtin_name(name)) {
                     free(name);
                     free(trimmed);
                     return strdup("Int");
@@ -27271,7 +27304,7 @@ static int direct_check_expr_inner(
                 i = close + 1;
                 continue;
             }
-            if (direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name)) {
+            if (direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name) || direct_is_fs_list_dirs_builtin_name(name)) {
                 int close = find_matching_paren_c(expr, cursor);
                 if (close < 0) {
                     report_issue(path, line_no, find_col(line, name), line,
@@ -32149,6 +32182,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
 
     sb_append(&out, "static int __vais_fs_list_name_cmp(const void *a, const void *b) { return strcmp(*(const char *const *)a, *(const char *const *)b); }\n");
     sb_append(&out, "static long __vais_fs_list_files(const char *dir, DirectList_Str *out) { out->len = 0; if (dir == 0) return 0; DIR *d = opendir(dir); if (d == 0) return 0; struct dirent *entry; while ((entry = readdir(d)) != 0) { if (strcmp(entry->d_name, \".\") == 0 || strcmp(entry->d_name, \"..\") == 0) continue; size_t dn = strlen(dir); size_t en = strlen(entry->d_name); char *full = (char *)malloc(dn + en + 2); if (full == 0) { closedir(d); __builtin_trap(); } memcpy(full, dir, dn); full[dn] = '/'; memcpy(full + dn + 1, entry->d_name, en + 1); struct stat st; int is_file = stat(full, &st) == 0 && S_ISREG(st.st_mode); free(full); if (!is_file) continue; if (out->len >= VAIS_DIRECT_LIST_CAP) { closedir(d); __builtin_trap(); } char *copy = (char *)malloc(en + 1); if (copy == 0) { closedir(d); __builtin_trap(); } memcpy(copy, entry->d_name, en + 1); out->data[out->len++] = copy; } closedir(d); qsort(out->data, (size_t)out->len, sizeof(char *), __vais_fs_list_name_cmp); return out->len; }\n");
+    sb_append(&out, "static long __vais_fs_list_dirs(const char *dir, DirectList_Str *out) { out->len = 0; if (dir == 0) return 0; DIR *d = opendir(dir); if (d == 0) return 0; struct dirent *entry; while ((entry = readdir(d)) != 0) { if (strcmp(entry->d_name, \".\") == 0 || strcmp(entry->d_name, \"..\") == 0) continue; size_t dn = strlen(dir); size_t en = strlen(entry->d_name); char *full = (char *)malloc(dn + en + 2); if (full == 0) { closedir(d); __builtin_trap(); } memcpy(full, dir, dn); full[dn] = '/'; memcpy(full + dn + 1, entry->d_name, en + 1); struct stat st; int is_dir = stat(full, &st) == 0 && S_ISDIR(st.st_mode); free(full); if (!is_dir) continue; if (out->len >= VAIS_DIRECT_LIST_CAP) { closedir(d); __builtin_trap(); } char *copy = (char *)malloc(en + 1); if (copy == 0) { closedir(d); __builtin_trap(); } memcpy(copy, entry->d_name, en + 1); out->data[out->len++] = copy; } closedir(d); qsort(out->data, (size_t)out->len, sizeof(char *), __vais_fs_list_name_cmp); return out->len; }\n");
     sb_append(&out, "static long __vais_str_split_into(const char *text, const char *sep, DirectList_Str *out) { out->len = 0; size_t sn = strlen(sep); if (sn == 0) { if (out->len >= VAIS_DIRECT_LIST_CAP) __builtin_trap(); out->data[out->len++] = __vais_str_slice(text, 0, (long)strlen(text)); return out->len; } const char *cursor = text; const char *hit = NULL; while ((hit = strstr(cursor, sep)) != NULL) { if (out->len >= VAIS_DIRECT_LIST_CAP) __builtin_trap(); out->data[out->len++] = __vais_str_slice(text, (long)(cursor - text), (long)(hit - cursor)); cursor = hit + sn; } if (out->len >= VAIS_DIRECT_LIST_CAP) __builtin_trap(); out->data[out->len++] = __vais_str_slice(text, (long)(cursor - text), (long)strlen(cursor)); return out->len; }\n");
     sb_append(&out, "static long __vais_list_int_sum(DirectListInt *xs) { long total = 0; for (long i = 0; i < xs->len; i++) total += xs->data[i]; return total; }\n");
     sb_append(&out, "static long __vais_list_int_max(DirectListInt *xs) { if (xs->len <= 0) __builtin_trap(); long best = xs->data[0]; for (long i = 1; i < xs->len; i++) if (xs->data[i] > best) best = xs->data[i]; return best; }\n");
@@ -32582,6 +32616,37 @@ static int write_host_runtime_c(const char *path) {
         "        int is_file = stat(full, &st) == 0 && S_ISREG(st.st_mode);\n"
         "        free(full);\n"
         "        if (!is_file) continue;\n"
+        "        if (count >= 4095) { closedir(d); fs_host_trap(\"list\", dir); }\n"
+        "        names[count++] = fs_host_copy_n(entry->d_name, en);\n"
+        "    }\n"
+        "    closedir(d);\n"
+        "    qsort(names, (size_t)count, sizeof(char *), fs_list_name_cmp);\n"
+        "    for (int64_t i = 0; i < count; i++) out[i] = (int64_t)names[i];\n"
+        "    out[4095] = count;\n"
+        "    return count;\n"
+        "}\n"
+        "\n"
+        "int64_t fs_list_dirs(char *dir, int64_t *out) {\n"
+        "    out[4095] = 0;\n"
+        "    if (dir == 0) return 0;\n"
+        "    DIR *d = opendir(dir);\n"
+        "    if (d == 0) return 0;\n"
+        "    char *names[4095];\n"
+        "    int64_t count = 0;\n"
+        "    struct dirent *entry;\n"
+        "    while ((entry = readdir(d)) != 0) {\n"
+        "        if (strcmp(entry->d_name, \".\") == 0 || strcmp(entry->d_name, \"..\") == 0) continue;\n"
+        "        size_t dn = strlen(dir);\n"
+        "        size_t en = strlen(entry->d_name);\n"
+        "        char *full = (char *)malloc(dn + en + 2);\n"
+        "        if (full == 0) { closedir(d); fs_host_trap(\"list\", dir); }\n"
+        "        memcpy(full, dir, dn);\n"
+        "        full[dn] = '/';\n"
+        "        memcpy(full + dn + 1, entry->d_name, en + 1);\n"
+        "        struct stat st;\n"
+        "        int is_dir = stat(full, &st) == 0 && S_ISDIR(st.st_mode);\n"
+        "        free(full);\n"
+        "        if (!is_dir) continue;\n"
         "        if (count >= 4095) { closedir(d); fs_host_trap(\"list\", dir); }\n"
         "        names[count++] = fs_host_copy_n(entry->d_name, en);\n"
         "    }\n"
