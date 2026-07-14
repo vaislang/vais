@@ -1,5 +1,19 @@
 # Vais Worklog
 
+## 2026-07-14c (도그푸딩 7 — vaismake 세 번째 배포 도구 + direct proc_run 승격)
+
+vaismake 설치형 패키지(e344, make.tasks 모듈 + main): `name = command
+args...` 태스크 파일을 파싱해 공백 분리 argv로 자식 실행(no-shell 계약),
+exit=자식 exit. 모드 3종(목록/실행/`-o` 캡처 stdout), 무인자 self-test 42.
+패키지 바이너리 실측 전 케이스 정확(list 3/ok 0/bad 1/capture "hi there"/
+unknown 3/missing 3), workflow +8케이스, parity 363.
+
+**갭 노출→즉시 승격: direct 엔진 proc_run 미배선**(proc_capture만 존재,
+ProcessResult 게이트 안). lean `__vais_proc_run`(fork/execvp/waitpid,
+비게이트 — ProcessResult 불요) + expression 분기/statement 스캔/타입 추론
+5지점 배선. full은 HOST_INTRINSIC_IR 기존 declare로 무변경. **proc 표면의
+제품 코드 첫 실사용**(기존엔 게이트 도구만 사용).
+
 ## 2026-07-14b (@(...) self-recursion 전 위치 승격)
 
 도그푸딩 6 환류 갭 즉시 승격. 실측: 코퍼스에 `@(` 사용 0건, 기존 동작은

@@ -97,6 +97,10 @@ names so Vais tools can ingest whole directories; the vaisdb package's
 `examples/e343_self_recursion_at.vais` promotes `@(args)` self-recursion for
 every expression position (the driver lowers it to the enclosing function's
 name, so both engines share the named-recursion path).
+`examples/e344_vaismake_package` is the third installable tool: `vaismake`
+runs named tasks from a plain `name = command args...` file through
+`proc_run`/`proc_capture` (whitespace-split argv, no shell) — the first
+product use of the process surface.
 `examples/e341_vaisgrep_package` is the second installable tool: `vaisgrep`
 searches files or directories for substring-matching lines (with `-c` counts
 and `-r` recursive tree walks over `fs_list_dirs`), dispatching on the

@@ -22,7 +22,21 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-14b) — @(...) self-recursion 전 위치 승격
+## 현재 작업 (2026-07-14c) — 도그푸딩 7: vaismake (세 번째 배포 도구, proc 표면)
+모드: 개별선택
+- [x] 1. e344 vaismake 패키지 ✅ 2026-07-14 — make.tasks 모듈(엔트리 필터/
+      이름·커맨드 추출/argv 분리), self-test 42.
+- [x] 2. 실행 ✅ 2026-07-14 — **갭 노출→즉시 승격: direct proc_run 미배선**
+      (proc_capture만 존재). lean fork/execvp/waitpid 헬퍼(비게이트) +
+      expression/statement/추론 5지점. run ok 0/bad 1/목록 3.
+- [x] 3. 캡처 ✅ 2026-07-14 — `-o`가 proc_capture stdout 출력(trim), exit=
+      자식 code. proc 표면 제품 첫 실사용.
+- [x] 4. 환류 + 문서 ✅ 2026-07-14 — parity 363(e344 main), workflow +8
+      케이스, PRELUDE/README/CHANGELOG. 트랩: argv는 공백 분리(따옴표
+      미지원 — 문서화된 no-shell 계약).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-14b) — @(...) self-recursion 전 위치 승격
 모드: 개별선택
 - [x] 1. lower_self_recursion_text ✅ 2026-07-14 — 드라이버 공유 텍스트
       lowering이 `@(`를 enclosing fn 이름으로 재작성(3개 파이프라인 동일

@@ -259,6 +259,19 @@ printf 'cache sub\n' > "$vgrep_docs/sub/b2.txt"
 printf 'cache deep\ncache again\n' > "$vgrep_docs/sub/deeper/c2.md"
 expect_exit "vaisgrep recursive search" 6 "$vgrep_dist/bin/vaisgrep" -r cache "$vgrep_docs"
 expect_exit "vaisgrep single level unchanged" 3 "$vgrep_dist/bin/vaisgrep" cache "$vgrep_docs"
+
+vmake_dist="$tmp/vaismake-dist"
+vmake_tasks="$tmp/vaismake-tasks.txt"
+rm -rf "$vmake_dist"
+printf 'hello = /bin/echo hi there\nok = /usr/bin/true\nbad = /usr/bin/false\n' > "$vmake_tasks"
+expect_exit "vaismake package build" 0 "$ROOT/scripts/vaisc" package "$ROOT/examples/e344_vaismake_package" -o "$vmake_dist"
+expect_exit "vaismake package self-test" 42 "$vmake_dist/bin/vaismake"
+expect_exit "vaismake list" 3 "$vmake_dist/bin/vaismake" "$vmake_tasks"
+expect_exit "vaismake run ok" 0 "$vmake_dist/bin/vaismake" "$vmake_tasks" ok
+expect_exit "vaismake run bad" 1 "$vmake_dist/bin/vaismake" "$vmake_tasks" bad
+expect_exit "vaismake capture" 0 "$vmake_dist/bin/vaismake" -o "$vmake_tasks" hello
+expect_exit "vaismake unknown task" 3 "$vmake_dist/bin/vaismake" "$vmake_tasks" nope
+expect_exit "vaismake missing file" 3 "$vmake_dist/bin/vaismake" "$tmp/no-such-tasks.txt" ok
 expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
 mkdir -p "$vdb_extract"
 expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"

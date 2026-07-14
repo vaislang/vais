@@ -1,0 +1,121 @@
+# expect: 42
+# Third installable Vais tool: `scripts/vaisc package` builds dist/bin/vaismake
+# running named tasks from a plain tasks file (`name = command args...` lines,
+# whitespace-split argv, no shell). Run without arguments it executes a
+# deterministic self-test (the release-corpus entry); with arguments:
+#   vaismake <tasks-file>             list task names, exit = count
+#   vaismake <tasks-file> <task>      run the task, exit = child exit
+#   vaismake -o <tasks-file> <task>   run and print captured stdout
+import make.tasks
+
+struct ProcessResult { code: Int, stdout: Str, stderr: Str }
+
+fn load_tasks(path: Str) -> Str {
+    if fs_exists(path) != 1 { return "" }
+    if fs_is_dir(path) == 1 { return "" }
+    return fs_read_text(path)
+}
+
+fn run_list(path: Str) -> Int {
+    let text = load_tasks(path)
+    if text.len() == 0 {
+        print("error: tasks file not found")
+        return 3
+    }
+    let names: List<Str> = []
+    let count = task_names_into(text, names)
+    let mut i = 0
+    while i < count {
+        print(names[i])
+        i = i + 1
+    }
+    return count
+}
+
+fn task_argv(path: Str, name: Str, out: List<Str>) -> Int {
+    let text = load_tasks(path)
+    if text.len() == 0 {
+        print("error: tasks file not found")
+        return 3
+    }
+    let command = task_command(text, name)
+    if command.len() == 0 {
+        print("error: unknown task")
+        return 3
+    }
+    let n = command_argv_into(command, out)
+    if n == 0 {
+        print("error: empty command")
+        return 1
+    }
+    return 0
+}
+
+fn run_task(path: Str, name: Str) -> Int {
+    let argv: List<Str> = []
+    let bad = task_argv(path, name, argv)
+    if bad != 0 { return bad }
+    return proc_run(argv)
+}
+
+fn run_task_capture(path: Str, name: Str) -> Int {
+    let argv: List<Str> = []
+    let bad = task_argv(path, name, argv)
+    if bad != 0 { return bad }
+    let got = proc_capture(argv)
+    let body = str_trim(got.stdout)
+    if body.len() > 0 { print(body) }
+    return got.code
+}
+
+fn usage() -> Int {
+    print("usage: vaismake <tasks-file>")
+    print("       vaismake <tasks-file> <task>")
+    print("       vaismake -o <tasks-file> <task>")
+    return 1
+}
+
+fn self_test() -> Int {
+    let lf = str_byte(10)
+    let text = str_concat("# demo tasks", str_concat(lf, str_concat("hello = /bin/echo hi there", str_concat(lf, str_concat("ok = /usr/bin/true", str_concat(lf, "bad = /usr/bin/false"))))))
+
+    # Parsing: names, commands, comment/blank filtering.
+    let names: List<Str> = []
+    if task_names_into(text, names) != 3 { return 1 }
+    if names[0] != "hello" { return 2 }
+    if names[2] != "bad" { return 3 }
+    if task_command(text, "hello") != "/bin/echo hi there" { return 4 }
+    if task_command(text, "missing") != "" { return 5 }
+    let argv: List<Str> = []
+    if command_argv_into(task_command(text, "hello"), argv) != 3 { return 6 }
+    if argv[0] != "/bin/echo" { return 7 }
+    if argv[2] != "there" { return 8 }
+
+    # Process surface: run and capture through a real tasks file.
+    let root = fs_temp_dir()
+    let path = path_join(root, "vais-e344-selftest-tasks.txt")
+    if fs_write_text(path, text) != 0 { return 9 }
+    if run_task(path, "ok") != 0 { return 10 }
+    if run_task(path, "bad") != 1 { return 11 }
+    let capture: List<Str> = []
+    if task_argv(path, "hello", capture) != 0 { return 12 }
+    let got = proc_capture(capture)
+    if got.code != 0 { return 13 }
+    let out_text = str_trim(got.stdout)
+    if out_text != "hi there" { return 14 }
+
+    # 3 tasks * (3 argv words + 8 stdout bytes + 3) = 42
+    return 3 * (3 + out_text.len() + 3)
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let first = proc_arg(0)
+    if first == "-o" {
+        if proc_argc() != 3 { return usage() }
+        return run_task_capture(proc_arg(1), proc_arg(2))
+    }
+    if proc_argc() == 1 { return run_list(first) }
+    if proc_argc() != 2 { return usage() }
+    return run_task(first, proc_arg(1))
+}

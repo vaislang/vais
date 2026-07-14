@@ -4,6 +4,15 @@
 
 ### Changed
 
+- Added the third installable Vais tool: `examples/e344_vaismake_package`
+  builds `dist/bin/vaismake` (named tasks from a plain
+  `name = command args...` file, whitespace-split argv with no shell,
+  exit = child exit, plus `-o` stdout capture and a task listing mode).
+  The sprint promoted `proc_run(argv)` to the direct engine, which only
+  had `proc_capture`: a lean fork/execvp/waitpid helper plus expression,
+  statement, and inference wiring, so both engines now run children
+  without requiring the ProcessResult struct.
+
 - Promoted `@(args)` self-recursion for every expression position: the
   driver now rewrites `@(` to the enclosing function's name before either
   engine runs (one text lowering serves the full, embed, and direct

@@ -22539,6 +22539,10 @@ static int direct_is_proc_arg_builtin_name(const char *name) {
     return strcmp(name, "proc_arg") == 0;
 }
 
+static int direct_is_proc_run_builtin_name(const char *name) {
+    return strcmp(name, "proc_run") == 0;
+}
+
 static int direct_is_proc_capture_builtin_name(const char *name) {
     return strcmp(name, "proc_capture") == 0;
 }
@@ -24161,6 +24165,46 @@ static char *direct_rewrite_list_expr(
                 return NULL;
             }
             sb_append_n(&out, expr + start, (size_t)(close + 1 - start));
+            free(name);
+            i = close + 1;
+            continue;
+        }
+        if (expr[cursor] == '(' && direct_is_proc_run_builtin_name(name)) {
+            int close = find_matching_paren_c(expr, cursor);
+            if (close < 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter expected `)` to close the proc_run call",
+                    "write `proc_run(argv)` where `argv` is a local `List<Str>`.",
+                    NULL);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+            char *args[16] = {0};
+            int argc = split_top_level_commas_c(inside, args, 16);
+            free(inside);
+            if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter proc_run takes one List<Str> argument",
+                    "write `proc_run(argv)` where `argv` is a local `List<Str>`.",
+                    NULL);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            char *rewritten_arg = direct_rewrite_list_arg_expr(path, line_no, line, args[0], "List<Str>", locals, fns, fn_count, structs, struct_count);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            if (rewritten_arg == NULL) {
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            sb_append(&out, "__vais_proc_run(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+            free(rewritten_arg);
             free(name);
             i = close + 1;
             continue;
@@ -26181,6 +26225,11 @@ static char *direct_infer_expr_type(
                     free(trimmed);
                     return strdup("Str");
                 }
+                if (direct_is_proc_run_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
                 if (direct_is_proc_capture_builtin_name(name) && direct_has_process_result_struct(structs, struct_count)) {
                     free(name);
                     free(trimmed);
@@ -27998,6 +28047,47 @@ static int direct_check_expr_inner(
                     }
                     free(arg_type);
                 }
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_proc_run_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the proc_run call",
+                        "write `proc_run(argv)` where `argv` is a local `List<Str>`.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                if (argc != 1 || args[0] == NULL || strlen(skip_ws(args[0])) == 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter proc_run takes one List<Str> argument",
+                        "write `proc_run(argv)` where `argv` is a local `List<Str>`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                char *list_name = NULL;
+                if (!direct_expr_bare_list_local(locals, args[0], &list_name) ||
+                    strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter proc_run argument must be a local List<Str>",
+                        "declare `let argv: List<Str> = []`, push argv entries, then call `proc_run(argv)`.",
+                        NULL);
+                    free(list_name);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
+                }
+                free(list_name);
                 for (int k = 0; k < 16; k++) free(args[k]);
                 free(name);
                 i = close + 1;
@@ -32330,6 +32420,10 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
         sb_append(&out, structs[s].name);
         sb_append(&out, ";\n");
     }
+    sb_append(&out, "extern pid_t fork(void);\n");
+    sb_append(&out, "extern int execvp(const char *, char *const []);\n");
+    sb_append(&out, "extern void _exit(int);\n");
+    sb_append(&out, "static long __vais_proc_run(DirectList_Str *argv_list) { if (argv_list == NULL || argv_list->len <= 0) return 1; char **argv = (char **)malloc((size_t)(argv_list->len + 1) * sizeof(char *)); if (argv == NULL) return 1; for (long i = 0; i < argv_list->len; i++) argv[i] = (char *)argv_list->data[i]; argv[argv_list->len] = NULL; pid_t pid = fork(); if (pid < 0) { free(argv); return errno == 0 ? 1 : errno; } if (pid == 0) { execvp(argv[0], argv); fprintf(stderr, \"vais direct proc_run failed: %s: %s\\n\", argv[0], strerror(errno == 0 ? EIO : errno)); _exit(127); } int status = 0; while (waitpid(pid, &status, 0) < 0) { if (errno == EINTR) continue; int err = errno == 0 ? 1 : errno; free(argv); return err; } free(argv); if (WIFEXITED(status)) return WEXITSTATUS(status); if (WIFSIGNALED(status)) return 128 + WTERMSIG(status); return 1; }\n");
     if (direct_has_process_result_struct(structs, struct_count)) {
         sb_append(&out, "extern pid_t fork(void);\n");
         sb_append(&out, "extern int execvp(const char *, char *const []);\n");

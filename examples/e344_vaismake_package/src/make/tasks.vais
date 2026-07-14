@@ -1,0 +1,58 @@
+# Task-file helpers shared by the vaismake subcommand paths. A tasks file
+# holds one `name = command args...` entry per line; blank lines and lines
+# starting with # are ignored.
+
+fn line_task_name(line: Str) -> Str {
+    let eq = str_index_of(line, "=")
+    if eq < 1 { return "" }
+    return str_trim(str_slice(line, 0, eq))
+}
+
+fn line_task_command(line: Str) -> Str {
+    let eq = str_index_of(line, "=")
+    if eq < 1 { return "" }
+    return str_trim(str_slice(line, eq + 1, line.len() - eq - 1))
+}
+
+fn is_entry_line(line: Str) -> Int {
+    let body = str_trim(line)
+    if body.len() == 0 { return 0 }
+    if str_starts_with(body, "#") == 1 { return 0 }
+    if str_index_of(body, "=") < 1 { return 0 }
+    return 1
+}
+
+fn task_names_into(text: Str, out: List<Str>) -> Int {
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    let mut i = 0
+    while i < n {
+        let line = lines[i]
+        if is_entry_line(line) == 1 {
+            out.push(line_task_name(line))
+        }
+        i = i + 1
+    }
+    return out.len()
+}
+
+fn task_command(text: Str, name: Str) -> Str {
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    let mut i = 0
+    while i < n {
+        let line = lines[i]
+        if is_entry_line(line) == 1 {
+            if line_task_name(line) == name {
+                return line_task_command(line)
+            }
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+fn command_argv_into(command: Str, out: List<Str>) -> Int {
+    let n = str_split_ws_into(command, out)
+    return n
+}
