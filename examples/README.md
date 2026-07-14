@@ -267,6 +267,8 @@ in-place `List<Str>.sort()` with element assignment on both engines,
 recursive tree walks) built on the `fs_is_dir(path)` host dispatch,
 `examples/e342_fs_list_dirs.vais` for the built-in `fs_list_dirs(dir, out)`
 subdirectory enumeration that pairs with `fs_list_files` for tree walks,
+`examples/e343_self_recursion_at.vais` for `@(args)` self-recursion in tail,
+compound, and nested call-argument positions on both engines,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

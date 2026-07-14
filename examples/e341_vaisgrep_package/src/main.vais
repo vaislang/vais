@@ -49,7 +49,7 @@ fn grep_tree(pattern: Str, dir: Str, rel: Str, show_lines: Int) -> Int {
     while j < m {
         let name = subs[j]
         let child_rel = str_concat(rel, str_concat(name, "/"))
-        total = total + grep_tree(pattern, path_join(dir, name), child_rel, show_lines)
+        total = total + @(pattern, path_join(dir, name), child_rel, show_lines)
         j = j + 1
     }
     return total

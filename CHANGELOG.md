@@ -4,6 +4,14 @@
 
 ### Changed
 
+- Promoted `@(args)` self-recursion for every expression position: the
+  driver now rewrites `@(` to the enclosing function's name before either
+  engine runs (one text lowering serves the full, embed, and direct
+  pipelines), fixing the previous full-engine mistype and direct-engine
+  rejection outside tail positions. The vaisgrep tree walk now uses `@`
+  in product code; `examples/e343_self_recursion_at.vais` covers tail,
+  compound, and nested call-argument shapes.
+
 - Added the built-in `fs_list_dirs(dir, out)` host API (sorted subdirectory
   names, regular files skipped, missing directories yield 0) and a `-r`
   recursive tree-walk mode to vaisgrep that prints `sub/dir/name:N: line`

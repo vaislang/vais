@@ -1,0 +1,41 @@
+# expect: 42
+# `@(args)` self-recursion calls the enclosing function in every expression
+# position: tail returns, compound arithmetic on either side, and nested call
+# arguments (including list-index arguments). The driver lowers `@(` to the
+# enclosing function's name once, so both engines share the one verified
+# named-recursion path.
+
+fn fact(n: Int) -> Int {
+    if n <= 1 { return 1 }
+    return n * @(n - 1)
+}
+
+fn sum_to(n: Int) -> Int {
+    let mut acc = 0
+    if n > 0 { acc = @(n - 1) + n }
+    return acc
+}
+
+fn depth(s: Str, d: Int) -> Int {
+    if s.len() == 0 { return d }
+    return @(str_slice(s, 1, s.len() - 1), d + 1)
+}
+
+fn join_all(words: List<Str>, i: Int) -> Str {
+    if i >= words.len() { return "" }
+    return str_concat(words[i], @(words, i + 1))
+}
+
+fn main() -> Int {
+    if fact(4) != 24 { return 1 }
+    if sum_to(3) != 6 { return 2 }
+    if depth("abcd", 0) != 4 { return 3 }
+    let words: List<Str> = []
+    words.push("a")
+    words.push("bc")
+    words.push("def")
+    let joined = join_all(words, 0)
+    if joined != "abcdef" { return 4 }
+    # 24 + 6 + 4 + 6 + 2 = 42
+    return fact(4) + sum_to(3) + depth("abcd", 0) + joined.len() + 2
+}

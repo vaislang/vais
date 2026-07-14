@@ -17682,10 +17682,84 @@ static char *normalize_source_text(const char *raw, int core_lower) {
     return out.data;
 }
 
+
+/*
+ * `@(args)` self-recursion: rewrite the call to the enclosing function's
+ * name so every position (return value, compound expression, nested call
+ * argument) lowers through the one verified named-recursion path on both
+ * engines. `@` had no other surface meaning and the previous emission was
+ * either rejected (direct) or mistyped (full), so this is strictly a fix.
+ */
+static char *lower_self_recursion_text(const char *text) {
+    StrBuf out;
+    sb_init(&out);
+    char fn_name[128];
+    fn_name[0] = '\0';
+    const char *line = text;
+    for (;;) {
+        const char *end = strchr(line, '\n');
+        size_t len = end == NULL ? strlen(line) : (size_t)(end - line);
+        const char *s = line;
+        while (s < line + len && (*s == ' ' || *s == '\t')) s++;
+        const char *decl = s;
+        if (strncmp(decl, "pub ", 4) == 0 && !is_ident_continue(decl[3])) decl += 4;
+        if (strncmp(decl, "fn ", 3) == 0 && !is_ident_continue(decl[2])) {
+            const char *ns = decl + 3;
+            while (*ns == ' ') ns++;
+            size_t nl = 0;
+            while (is_ident_continue(ns[nl])) nl++;
+            if (nl > 0 && nl < sizeof(fn_name)) {
+                memcpy(fn_name, ns, nl);
+                fn_name[nl] = '\0';
+            }
+        }
+        char delim = '\0';
+        int escaped = 0;
+        for (size_t i = 0; i < len; i++) {
+            char ch = line[i];
+            if (escaped) {
+                sb_append_n(&out, &ch, 1);
+                escaped = 0;
+                continue;
+            }
+            if (delim != '\0') {
+                if (ch == '\\') escaped = 1;
+                else if (ch == delim) delim = '\0';
+                sb_append_n(&out, &ch, 1);
+                continue;
+            }
+            if (is_string_delim_c(ch) || ch == '\'') {
+                delim = ch;
+                sb_append_n(&out, &ch, 1);
+                continue;
+            }
+            if (ch == '#') {
+                sb_append_n(&out, line + i, len - i);
+                break;
+            }
+            if (ch == '@' && fn_name[0] != '\0') {
+                size_t j = i + 1;
+                while (j < len && (line[j] == ' ' || line[j] == '\t')) j++;
+                if (j < len && line[j] == '(') {
+                    sb_append(&out, fn_name);
+                    continue;
+                }
+            }
+            sb_append_n(&out, &ch, 1);
+        }
+        if (end == NULL) break;
+        sb_append(&out, "\n");
+        line = end + 1;
+    }
+    return sb_take(&out);
+}
+
 static char *prepare_source_text(const char *raw) {
     char *normalized_joined = normalize_source_text(raw, 0);
-    char *normalized = split_statement_lines(normalized_joined);
+    char *normalized_presplit = split_statement_lines(normalized_joined);
     free(normalized_joined);
+    char *normalized = lower_self_recursion_text(normalized_presplit);
+    free(normalized_presplit);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
     char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
     char *result_str_lowered = lower_result_str_str_text(result_str_int_lowered);
@@ -20421,8 +20495,10 @@ static char *prepare_source_file(const char *path) {
         return NULL;
     }
     char *normalized_joined = normalize_source_text(merged, 0);
-    char *normalized = split_statement_lines(normalized_joined);
+    char *normalized_presplit = split_statement_lines(normalized_joined);
     free(normalized_joined);
+    char *normalized = lower_self_recursion_text(normalized_presplit);
+    free(normalized_presplit);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
     char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
     char *result_str_lowered = lower_result_str_str_text(result_str_int_lowered);
@@ -32413,8 +32489,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     }
     char *merged = resolve_module_graph_source(source);
     if (merged == NULL) return 1;
-    char *split = split_statement_lines(merged);
+    char *split_presplit = split_statement_lines(merged);
     free(merged);
+    if (split_presplit == NULL) return 1;
+    char *split = lower_self_recursion_text(split_presplit);
+    free(split_presplit);
     if (split == NULL) return 1;
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(split);
     free(split);

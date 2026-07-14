@@ -94,6 +94,9 @@ gate covers both engines, the wrapper, and every error exit code.
 `fs_list_files(dir, out)` fills a `List<Str>` with the sorted regular-file
 names so Vais tools can ingest whole directories; the vaisdb package's
 `ingest-dir` and ranked `rank` subcommands build on it.
+`examples/e343_self_recursion_at.vais` promotes `@(args)` self-recursion for
+every expression position (the driver lowers it to the enclosing function's
+name, so both engines share the named-recursion path).
 `examples/e341_vaisgrep_package` is the second installable tool: `vaisgrep`
 searches files or directories for substring-matching lines (with `-c` counts
 and `-r` recursive tree walks over `fs_list_dirs`), dispatching on the

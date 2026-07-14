@@ -22,7 +22,20 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-14) — 도그푸딩 6: vaisgrep 재귀 검색 + fs_list_dirs
+## 현재 작업 (2026-07-14b) — @(...) self-recursion 전 위치 승격
+모드: 개별선택
+- [x] 1. lower_self_recursion_text ✅ 2026-07-14 — 드라이버 공유 텍스트
+      lowering이 `@(`를 enclosing fn 이름으로 재작성(3개 파이프라인 동일
+      삽입, 문자열/주석 안전, pub fn 인식). **코퍼스 `@` 사용 0건 실측** +
+      기존 동작이 full=silent 오컴파일/direct=거부였어 순수 fix.
+- [x] 2. 실증 ✅ 2026-07-14 — e343(tail/컴파운드/중첩 call-인자/리스트 인자,
+      양 엔진 42, parity 362) + e341 vaisgrep grep_tree·tree_matches를
+      `@`로 전환(제품 코드 실사용).
+- [x] 3. 문서 ✅ 2026-07-14 — LANGUAGE Self-recursion 섹션 신설, PRELUDE/
+      README/CHANGELOG.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-14) — 도그푸딩 6: vaisgrep 재귀 검색 + fs_list_dirs
 모드: 개별선택
 - [x] 1. fs_list_dirs 승격 ✅ 2026-07-14 — fs_list_files 완전 미러 14지점
       (S_ISDIR), e342 양 엔진 42, parity 361. full core 무변경.
@@ -233,10 +246,6 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
-- `@(...)` self-recursion의 call-인자/컴파운드 위치 미승격: `total = total +
-  @(args)`가 full은 ptr/i64 타입 불일치, direct는 `@` 미번역으로 실패.
-  이름 재귀(`fn f` 안에서 `f(...)`)가 verified 표면 — `@` 요구가 반복
-  노출되면 양 엔진 정렬.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지

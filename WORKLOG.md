@@ -1,5 +1,21 @@
 # Vais Worklog
 
+## 2026-07-14b (@(...) self-recursion 전 위치 승격)
+
+도그푸딩 6 환류 갭 즉시 승격. 실측: 코퍼스에 `@(` 사용 0건, 기존 동작은
+tail 위치조차 full=silent 오컴파일(count_down(5)가 4 반환)/direct=거부 —
+보존할 동작이 없는 순수 fix. locus는 드라이버 공유 텍스트 lowering:
+`lower_self_recursion_text`가 fn 선언(pub 포함)을 추적하며 문자열/주석
+밖의 `@(`를 enclosing fn 이름으로 재작성, 3개 파이프라인(prepare_source_
+text/prepare_source_file/direct emit)에 동일 삽입. 이후 양 엔진이 verified
+이름-재귀 경로 하나를 공유.
+
+검증: e343(tail return/양측 컴파운드/중첩 call-인자/리스트-인자 재귀 join,
+양 엔진 42, parity 362) + vaisgrep grep_tree·tree_matches를 `@`로 전환해
+제품 실사용(패키지 self-test 42 유지). LANGUAGE에 Self-recursion 섹션
+신설. 부수 확인: `helper_call(...).len()` 체인은 별개 미검증 슬라이스
+(let 바인딩이 verified) — 기존 문서화 상태 유지.
+
 ## 2026-07-14 (도그푸딩 6 — vaisgrep 재귀 검색 + fs_list_dirs + 이중 재작성 3호)
 
 **fs_list_dirs(dir, out) 승격**: fs_list_files 완전 미러 14지점(S_ISDIR만

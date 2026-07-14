@@ -2238,3 +2238,13 @@ bash scripts/test.sh
 ```
 
 The exact release subset is tracked in `tools/vaisc-parity.tsv`.
+
+
+## Self-recursion
+
+`@(args)` inside a function body calls the enclosing function itself. The
+driver rewrites `@(` to the enclosing function's name before either engine
+runs, so `@` works anywhere a named call works: tail returns
+(`return @(n - 1)`), compound arithmetic (`n * @(n - 1)`), and nested call
+arguments (`@(str_slice(s, 1, s.len() - 1), d + 1)`), as covered by
+`examples/e343_self_recursion_at.vais`. Named self-calls remain equivalent.
