@@ -272,6 +272,12 @@ expect_exit "vaismake run bad" 1 "$vmake_dist/bin/vaismake" "$vmake_tasks" bad
 expect_exit "vaismake capture" 0 "$vmake_dist/bin/vaismake" -o "$vmake_tasks" hello
 expect_exit "vaismake unknown task" 3 "$vmake_dist/bin/vaismake" "$vmake_tasks" nope
 expect_exit "vaismake missing file" 3 "$vmake_dist/bin/vaismake" "$tmp/no-such-tasks.txt" ok
+vmake_env_tasks="$tmp/vaismake-env-tasks.txt"
+printf '!env VAIS_MAKE_GATE_FLAG=on\nflag = /usr/bin/printenv VAIS_MAKE_GATE_FLAG\n' > "$vmake_env_tasks"
+expect_exit "vaismake env overlay" 0 "$vmake_dist/bin/vaismake" "$vmake_env_tasks" flag
+vmake_chain_tasks="$tmp/vaismake-chain-tasks.txt"
+printf 'search = %s cache %s\n' "$vgrep_dist/bin/vaisgrep" "$vgrep_docs/a.txt" > "$vmake_chain_tasks"
+expect_exit "vaismake chains vaisgrep" 2 "$vmake_dist/bin/vaismake" "$vmake_chain_tasks" search
 expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
 mkdir -p "$vdb_extract"
 expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"

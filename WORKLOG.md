@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-07-14d (도그푸딩 8 — vaismake !env + proc_run_env direct + 도구 체인)
+
+**direct proc_run_env 승격**(계획된 갭): proc_run 배선 미러 5지점 — 2개
+List<Str> 인자를 각각 direct_rewrite_list_arg_expr로 재작성하는 expression
+분기 + statement 스캔(양 인자 로컬 List<Str> 검증) + 추론 Int + setenv
+오버레이 static 헬퍼(자식에서 NAME=VALUE 분해·setenv 후 execvp). full은
+기존 HOST declare + proc_apply_env로 무변경(격리 프로브 42 선확인).
+
+**vaismake `!env NAME=VALUE`**: tasks 파일의 ! 접두 라인은 태스크 엔트리
+에서 제외하고 env 오버레이로 수집, run 모드에서 env 존재 시 proc_run_env
+사용(-o 캡처는 no-env — usage에 계약 표기). self-test 6단계 확장(42 유지).
+
+**도구 체인 첫 실전**: workflow 게이트에 vaismake 태스크가 packaged
+vaisgrep을 실행해 exit 2를 전파하는 케이스 추가 — Vais 도구 3개가 프로세스
+경계를 넘어 조합됨을 게이트로 고정. e345(오버레이 vs 미설정 대비, 양 엔진
+42), parity 364. 스프린트 갭 0건(승격은 계획분).
+
 ## 2026-07-14c (도그푸딩 7 — vaismake 세 번째 배포 도구 + direct proc_run 승격)
 
 vaismake 설치형 패키지(e344, make.tasks 모듈 + main): `name = command

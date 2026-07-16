@@ -4,6 +4,14 @@
 
 ### Changed
 
+- Promoted `proc_run_env(argv, env)` to the direct engine (setenv-overlay
+  child environments, mirroring the proc_run wiring with a two-list
+  argument shape) and taught vaismake `!env NAME=VALUE` task-file lines
+  that overlay the child environment in run mode. The workflow gate adds
+  an env-overlay case and a three-tool chain case where a vaismake task
+  runs the packaged vaisgrep binary and propagates its exit code.
+  `examples/e345_proc_run_env.vais` covers the built-in on both engines.
+
 - Added the third installable Vais tool: `examples/e344_vaismake_package`
   builds `dist/bin/vaismake` (named tasks from a plain
   `name = command args...` file, whitespace-split argv with no shell,

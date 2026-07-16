@@ -55,6 +55,9 @@ fn run_task(path: Str, name: Str) -> Int {
     let argv: List<Str> = []
     let bad = task_argv(path, name, argv)
     if bad != 0 { return bad }
+    let env: List<Str> = []
+    let envc = task_env_into(load_tasks(path), env)
+    if envc > 0 { return proc_run_env(argv, env) }
     return proc_run(argv)
 }
 
@@ -72,6 +75,8 @@ fn usage() -> Int {
     print("usage: vaismake <tasks-file>")
     print("       vaismake <tasks-file> <task>")
     print("       vaismake -o <tasks-file> <task>")
+    print("tasks file: `name = command args...` lines; `!env NAME=VALUE` lines")
+    print("overlay the child environment in run mode (-o capture runs without env)")
     return 1
 }
 
@@ -90,6 +95,19 @@ fn self_test() -> Int {
     if command_argv_into(task_command(text, "hello"), argv) != 3 { return 6 }
     if argv[0] != "/bin/echo" { return 7 }
     if argv[2] != "there" { return 8 }
+
+    # `!env NAME=VALUE` lines overlay the child environment in run mode.
+    let env_text = str_concat("!env VAIS_MAKE_FLAG=on", str_concat(lf, "flag = /usr/bin/printenv VAIS_MAKE_FLAG"))
+    let env_entries: List<Str> = []
+    if task_env_into(env_text, env_entries) != 1 { return 15 }
+    if env_entries[0] != "VAIS_MAKE_FLAG=on" { return 16 }
+    if task_env_into(text, env_entries) != 1 { return 17 }
+    let env_names: List<Str> = []
+    if task_names_into(env_text, env_names) != 1 { return 18 }
+    let env_root = fs_temp_dir()
+    let env_path = path_join(env_root, "vais-e344-selftest-env-tasks.txt")
+    if fs_write_text(env_path, env_text) != 0 { return 19 }
+    if run_task(env_path, "flag") != 0 { return 20 }
 
     # Process surface: run and capture through a real tasks file.
     let root = fs_temp_dir()

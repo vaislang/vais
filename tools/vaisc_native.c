@@ -22543,6 +22543,10 @@ static int direct_is_proc_run_builtin_name(const char *name) {
     return strcmp(name, "proc_run") == 0;
 }
 
+static int direct_is_proc_run_env_builtin_name(const char *name) {
+    return strcmp(name, "proc_run_env") == 0;
+}
+
 static int direct_is_proc_capture_builtin_name(const char *name) {
     return strcmp(name, "proc_capture") == 0;
 }
@@ -24165,6 +24169,53 @@ static char *direct_rewrite_list_expr(
                 return NULL;
             }
             sb_append_n(&out, expr + start, (size_t)(close + 1 - start));
+            free(name);
+            i = close + 1;
+            continue;
+        }
+        if (expr[cursor] == '(' && direct_is_proc_run_env_builtin_name(name)) {
+            int close = find_matching_paren_c(expr, cursor);
+            if (close < 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter expected `)` to close the proc_run_env call",
+                    "write `proc_run_env(argv, env)` where both are local `List<Str>` values.",
+                    NULL);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+            char *args[16] = {0};
+            int argc = split_top_level_commas_c(inside, args, 16);
+            free(inside);
+            if (argc != 2 || args[0] == NULL || args[1] == NULL ||
+                strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0) {
+                report_issue(path, line_no, find_col(line, name), line,
+                    "direct native emitter proc_run_env takes argv and env List<Str> arguments",
+                    "write `proc_run_env(argv, env)` where both are local `List<Str>` values.",
+                    NULL);
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            char *rewritten_argv = direct_rewrite_list_arg_expr(path, line_no, line, args[0], "List<Str>", locals, fns, fn_count, structs, struct_count);
+            char *rewritten_env = rewritten_argv == NULL ? NULL : direct_rewrite_list_arg_expr(path, line_no, line, args[1], "List<Str>", locals, fns, fn_count, structs, struct_count);
+            for (int k = 0; k < 16; k++) free(args[k]);
+            if (rewritten_argv == NULL || rewritten_env == NULL) {
+                free(rewritten_argv);
+                free(rewritten_env);
+                free(name);
+                free(out.data);
+                return NULL;
+            }
+            sb_append(&out, "__vais_proc_run_env(");
+            sb_append(&out, rewritten_argv);
+            sb_append(&out, ", ");
+            sb_append(&out, rewritten_env);
+            sb_append(&out, ")");
+            free(rewritten_argv);
+            free(rewritten_env);
             free(name);
             i = close + 1;
             continue;
@@ -26225,7 +26276,7 @@ static char *direct_infer_expr_type(
                     free(trimmed);
                     return strdup("Str");
                 }
-                if (direct_is_proc_run_builtin_name(name)) {
+                if (direct_is_proc_run_builtin_name(name) || direct_is_proc_run_env_builtin_name(name)) {
                     free(name);
                     free(trimmed);
                     return strdup("Int");
@@ -28046,6 +28097,46 @@ static int direct_check_expr_inner(
                         return 1;
                     }
                     free(arg_type);
+                }
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = close + 1;
+                continue;
+            }
+            if (direct_is_proc_run_env_builtin_name(name)) {
+                int close = find_matching_paren_c(expr, cursor);
+                if (close < 0) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter expected `)` to close the proc_run_env call",
+                        "write `proc_run_env(argv, env)` where both are local `List<Str>` values.",
+                        NULL);
+                    free(name);
+                    return 1;
+                }
+                char *inside = substr_copy(expr + cursor + 1, (size_t)(close - cursor - 1));
+                char *args[16] = {0};
+                int argc = split_top_level_commas_c(inside, args, 16);
+                free(inside);
+                int bad = argc != 2 || args[0] == NULL || args[1] == NULL ||
+                    strlen(skip_ws(args[0])) == 0 || strlen(skip_ws(args[1])) == 0;
+                if (!bad) {
+                    for (int a = 0; a < 2; a++) {
+                        char *list_name = NULL;
+                        if (!direct_expr_bare_list_local(locals, args[a], &list_name) ||
+                            strcmp(direct_names_type(locals, list_name), "List<Str>") != 0) {
+                            bad = 1;
+                        }
+                        free(list_name);
+                    }
+                }
+                if (bad) {
+                    report_issue(path, line_no, find_col(line, name), line,
+                        "direct native emitter proc_run_env arguments must be local List<Str> values",
+                        "declare argv and env as `let xs: List<Str> = []`, push entries, then call `proc_run_env(argv, env)`.",
+                        NULL);
+                    for (int k = 0; k < 16; k++) free(args[k]);
+                    free(name);
+                    return 1;
                 }
                 for (int k = 0; k < 16; k++) free(args[k]);
                 free(name);
@@ -32423,6 +32514,8 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "extern pid_t fork(void);\n");
     sb_append(&out, "extern int execvp(const char *, char *const []);\n");
     sb_append(&out, "extern void _exit(int);\n");
+    sb_append(&out, "extern int setenv(const char *, const char *, int);\n");
+    sb_append(&out, "static long __vais_proc_run_env(DirectList_Str *argv_list, DirectList_Str *env_list) { if (argv_list == NULL || argv_list->len <= 0) return 1; char **argv = (char **)malloc((size_t)(argv_list->len + 1) * sizeof(char *)); if (argv == NULL) return 1; for (long i = 0; i < argv_list->len; i++) argv[i] = (char *)argv_list->data[i]; argv[argv_list->len] = NULL; pid_t pid = fork(); if (pid < 0) { free(argv); return errno == 0 ? 1 : errno; } if (pid == 0) { if (env_list != NULL) { for (long i = 0; i < env_list->len; i++) { const char *entry = env_list->data[i]; if (entry == NULL) _exit(127); const char *eq = strchr(entry, '='); if (eq == NULL || eq == entry) _exit(127); size_t key_len = (size_t)(eq - entry); char *key = (char *)malloc(key_len + 1); if (key == NULL) _exit(127); memcpy(key, entry, key_len); key[key_len] = '\\0'; if (setenv(key, eq + 1, 1) != 0) _exit(127); free(key); } } execvp(argv[0], argv); fprintf(stderr, \"vais direct proc_run_env failed: %s: %s\\n\", argv[0], strerror(errno == 0 ? EIO : errno)); _exit(127); } int status = 0; while (waitpid(pid, &status, 0) < 0) { if (errno == EINTR) continue; int err = errno == 0 ? 1 : errno; free(argv); return err; } free(argv); if (WIFEXITED(status)) return WEXITSTATUS(status); if (WIFSIGNALED(status)) return 128 + WTERMSIG(status); return 1; }\n");
     sb_append(&out, "static long __vais_proc_run(DirectList_Str *argv_list) { if (argv_list == NULL || argv_list->len <= 0) return 1; char **argv = (char **)malloc((size_t)(argv_list->len + 1) * sizeof(char *)); if (argv == NULL) return 1; for (long i = 0; i < argv_list->len; i++) argv[i] = (char *)argv_list->data[i]; argv[argv_list->len] = NULL; pid_t pid = fork(); if (pid < 0) { free(argv); return errno == 0 ? 1 : errno; } if (pid == 0) { execvp(argv[0], argv); fprintf(stderr, \"vais direct proc_run failed: %s: %s\\n\", argv[0], strerror(errno == 0 ? EIO : errno)); _exit(127); } int status = 0; while (waitpid(pid, &status, 0) < 0) { if (errno == EINTR) continue; int err = errno == 0 ? 1 : errno; free(argv); return err; } free(argv); if (WIFEXITED(status)) return WEXITSTATUS(status); if (WIFSIGNALED(status)) return 128 + WTERMSIG(status); return 1; }\n");
     if (direct_has_process_result_struct(structs, struct_count)) {
         sb_append(&out, "extern pid_t fork(void);\n");

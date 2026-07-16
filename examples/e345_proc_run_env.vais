@@ -1,0 +1,19 @@
+# expect: 42
+# `proc_run_env(argv, env)` runs a child with `NAME=VALUE` entries overlaid
+# onto the inherited environment (setenv semantics, not a replacement), so
+# PATH-independent absolute commands keep working while flags are injected.
+# printenv exits 0 and prints the value when the name is set, 1 when unset —
+# the printed "on" line is the child's inherited stdout.
+
+fn main() -> Int {
+    let argv: List<Str> = []
+    argv.push("/usr/bin/printenv")
+    argv.push("VAIS_E345_FLAG")
+    let env: List<Str> = []
+    env.push("VAIS_E345_FLAG=on")
+    let with_env = proc_run_env(argv, env)
+    if with_env != 0 { return 1 }
+    let bare = proc_run(argv)
+    if bare != 1 { return 2 }
+    return 42
+}

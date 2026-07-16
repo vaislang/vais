@@ -22,7 +22,20 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-14c) — 도그푸딩 7: vaismake (세 번째 배포 도구, proc 표면)
+## 현재 작업 (2026-07-14d) — 도그푸딩 8: vaismake !env + 도구 체인
+모드: 개별선택
+- [x] 1. direct proc_run_env 승격 ✅ 2026-07-14 — proc_run 미러 5지점
+      (2 List<Str> 인자 분기 + setenv 오버레이 헬퍼). full 무변경.
+- [x] 2. vaismake `!env` ✅ 2026-07-14 — task_env_into 파서(!접두는 엔트리
+      제외), run 모드 proc_run_env 적용, usage에 no-env(-o) 계약 표기.
+- [x] 3. 도구 체인 게이트 ✅ 2026-07-14 — vaismake 태스크가 packaged
+      vaisgrep 실행, exit 2 전파 확인(3-도구 조합 첫 실전).
+- [x] 4. 환류 + 문서 ✅ 2026-07-14 — **컴파일러 갭 0건**(proc_run_env는
+      계획된 승격). e345/parity 364, workflow +2케이스, PRELUDE/README/
+      CHANGELOG.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-14c) — 도그푸딩 7: vaismake (세 번째 배포 도구, proc 표면)
 모드: 개별선택
 - [x] 1. e344 vaismake 패키지 ✅ 2026-07-14 — make.tasks 모듈(엔트리 필터/
       이름·커맨드 추출/argv 분리), self-test 42.
