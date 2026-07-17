@@ -1,0 +1,103 @@
+# expect: 42
+# Fourth installable Vais tool: `scripts/vaisc package` builds dist/bin/vaisfmt
+# normalizing Vais source whitespace (trailing spaces/tabs stripped, exactly
+# one trailing newline). Run without arguments it executes a deterministic
+# self-test (the release-corpus entry); with arguments:
+#   vaisfmt -c <file-or-dir>   check only: list dirty .vais files, exit = count
+#   vaisfmt <file-or-dir>      rewrite dirty files, exit = rewritten count
+# Directories are scanned recursively for .vais files.
+import fmt.clean
+
+fn check_file(path: Str, rel: Str, fix: Int) -> Int {
+    let text = fs_read_text(path)
+    if needs_format(text) == 0 { return 0 }
+    if fix == 1 {
+        if fs_write_text(path, normalize_text(text)) != 0 { return 0 }
+        print(str_concat("formatted ", rel))
+        return 1
+    }
+    print(str_concat("dirty ", rel))
+    return 1
+}
+
+fn walk(path: Str, rel: Str, fix: Int) -> Int {
+    let names: List<Str> = []
+    let n = fs_list_files(path, names)
+    let mut total = 0
+    let mut i = 0
+    while i < n {
+        let name = names[i]
+        if str_ends_with(name, ".vais") == 1 {
+            total = total + check_file(path_join(path, name), str_concat(rel, name), fix)
+        }
+        i = i + 1
+    }
+    let subs: List<Str> = []
+    let m = fs_list_dirs(path, subs)
+    let mut j = 0
+    while j < m {
+        let sub = subs[j]
+        let child_rel = str_concat(rel, str_concat(sub, "/"))
+        total = total + @(path_join(path, sub), child_rel, fix)
+        j = j + 1
+    }
+    return total
+}
+
+fn run_fmt(path: Str, fix: Int) -> Int {
+    if fs_is_dir(path) == 1 {
+        return walk(path, "", fix)
+    }
+    if fs_exists(path) == 1 {
+        return check_file(path, path_basename(path), fix)
+    }
+    print("error: path not found")
+    return 3
+}
+
+fn usage() -> Int {
+    print("usage: vaisfmt -c <file-or-dir>")
+    print("       vaisfmt <file-or-dir>")
+    return 2
+}
+
+fn self_test() -> Int {
+    let lf = str_byte(10)
+    # Normalization: trailing spaces and tabs go, blank lines survive.
+    let dirty = str_concat("fn main() -> Int {   ", str_concat(lf, str_concat("    return 42", str_concat(str_byte(9), str_concat(lf, str_concat(lf, "}"))))))
+    let clean = normalize_text(dirty)
+    let expected = str_concat("fn main() -> Int {", str_concat(lf, str_concat("    return 42", str_concat(lf, str_concat(lf, str_concat("}", lf))))))
+    if clean != expected { return 1 }
+    if needs_format(dirty) != 1 { return 2 }
+    if needs_format(clean) != 0 { return 3 }
+    if needs_format("") != 0 { return 4 }
+    if line_end_trimmed("abc  ") != "abc" { return 5 }
+    if line_end_trimmed("   ") != "" { return 6 }
+    if line_end_trimmed("abc") != "abc" { return 7 }
+
+    # Fix mode rewrites a real tree once, then the check pass is clean.
+    let root = fs_temp_dir()
+    let dir = path_join(root, "vais-e346-selftest")
+    if fs_mkdirs(path_join(dir, "sub")) != 0 { return 8 }
+    if fs_write_text(path_join(dir, "a.vais"), dirty) != 0 { return 9 }
+    if fs_write_text(path_join(dir, "sub/b.vais"), clean) != 0 { return 10 }
+    if fs_write_text(path_join(dir, "skip.txt"), "notvais   ") != 0 { return 11 }
+    if walk(dir, "", 0) != 1 { return 12 }
+    if walk(dir, "", 1) != 1 { return 13 }
+    if walk(dir, "", 0) != 0 { return 14 }
+    if fs_read_text(path_join(dir, "a.vais")) != clean { return 15 }
+
+    # normalized text is 36 bytes; 36 + 6 = 42
+    return clean.len() + 6
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let first = proc_arg(0)
+    if first == "-c" {
+        if proc_argc() != 2 { return usage() }
+        return run_fmt(proc_arg(1), 0)
+    }
+    if proc_argc() != 1 { return usage() }
+    return run_fmt(first, 1)
+}

@@ -97,6 +97,11 @@ names so Vais tools can ingest whole directories; the vaisdb package's
 `examples/e343_self_recursion_at.vais` promotes `@(args)` self-recursion for
 every expression position (the driver lowers it to the enclosing function's
 name, so both engines share the named-recursion path).
+`examples/e346_vaisfmt_package` is the fourth installable tool: `vaisfmt`
+normalizes Vais source whitespace (trailing spaces/tabs stripped, exactly one
+trailing newline) with `-c` check and in-place fix modes over recursive
+`.vais` tree walks, rebuilding file text through the `str_builder_*` chain —
+now verified on both engines.
 `examples/e344_vaismake_package` is the third installable tool: `vaismake`
 runs named tasks from a plain `name = command args...` file through
 `proc_run`/`proc_capture` (whitespace-split argv, no shell) — the first

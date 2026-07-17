@@ -276,6 +276,9 @@ with `tools/gates.tasks` driving this repository's own gate ladder through it
 (`scripts/vaismake-ladder.sh`),
 `examples/e345_proc_run_env.vais` for the built-in `proc_run_env(argv, env)`
 child-environment overlay on both engines,
+`examples/e346_vaisfmt_package` for the installable vaisfmt whitespace
+normalizer (`-c` check / in-place fix over recursive `.vais` trees) built on
+the now direct-verified `str_builder_*` chain,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

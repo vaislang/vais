@@ -4,6 +4,16 @@
 
 ### Changed
 
+- Added the fourth installable Vais tool: `examples/e346_vaisfmt_package`
+  builds `dist/bin/vaisfmt`, normalizing Vais source whitespace (trailing
+  spaces/tabs stripped, exactly one trailing newline, blank lines
+  preserved) with `-c` check and in-place fix modes over recursive
+  `.vais` tree walks. The sprint promoted the `str_builder_new/push/
+  append/finish` chain to the direct engine (predicates, argument
+  wiring with per-position Int/Str expectations, prototypes, and
+  inference), which only the full engine accepted before. The workflow
+  gate covers check/fix/recheck plus a live `std/` cleanliness check.
+
 - The Vais gate ladder is now runnable through vaismake itself:
   `tools/gates.tasks` chains every gate with `!needs` (plus a
   front/direct/check `quick` subset) and `scripts/vaismake-ladder.sh`

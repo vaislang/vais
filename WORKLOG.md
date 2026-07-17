@@ -1,5 +1,24 @@
 # Vais Worklog
 
+## 2026-07-14g (도그푸딩 11 — vaisfmt 네 번째 도구 + direct str_builder 승격)
+
+**갭 노출→즉시 승격: direct str_builder 미배선**(full만 검증). 4종(new/
+push/append/finish)을 time_millis(0-인자)·scalar 2-인자 그룹 미러로 배선
+— predicate/parse_builtin/skip/추론(finish→Str, 나머지→Int)/host-helper
+체인 argc(0·2·2·1)+인자 타입 per-position(Int 핸들·Str 본문)/prototype.
+과정 트랩 2건 즉시 정정: 0-인자 early-return 분기 누락→드라이버 SEGV,
+일괄 치환이 expected-argc 삼항식 오염.
+
+**vaisfmt**(e346, 네 번째 도구): 후행 공백/탭 제거+최종 개행 1개 보장
+(빈 줄 보존), `-c` 체크/in-place fix, `.vais` 재귀 트리 워크(@), 본문
+재구축은 str_builder 체인. self-test 42 양 엔진, 패키지 CLI 전 케이스
+정확. **repo 실측: examples/compiler/std 3트리 clean 0** — git diff
+--check 위생의 상시 가드로 즉시 사용 가능. workflow +7케이스(std clean
+포함), parity 365.
+
+휴면 후보 재평가: 도그푸딩 3~11 아홉 스프린트 동안 generic Result<T,E>/
+richer layout 신규 요구 0건 — 트리거 미충족 유지(ROADMAP 기록).
+
 ## 2026-07-14f (도그푸딩 10 — vaismake가 자기 게이트 래더 실행)
 
 자기참조 도그푸딩: `tools/gates.tasks`가 전체 게이트 래더(front/direct/

@@ -284,6 +284,20 @@ expect_exit "vaismake deps run first" 0 "$vmake_dist/bin/vaismake" "$vmake_dep_t
 expect_exit "vaismake dep failure stops" 1 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" broken
 expect_exit "vaismake dep cycle detected" 4 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" loopa
 expect_exit "vaismake gates.tasks parses" 13 "$vmake_dist/bin/vaismake" "$ROOT/tools/gates.tasks"
+
+vfmt_dist="$tmp/vaisfmt-dist"
+vfmt_src="$tmp/vaisfmt-src"
+rm -rf "$vfmt_dist" "$vfmt_src"
+mkdir -p "$vfmt_src/sub"
+printf 'fn main() -> Int {   \n    return 42\n}\n' > "$vfmt_src/dirty.vais"
+printf 'fn helper() -> Int {\n    return 1\n}\n' > "$vfmt_src/sub/clean.vais"
+expect_exit "vaisfmt package build" 0 "$ROOT/scripts/vaisc" package "$ROOT/examples/e346_vaisfmt_package" -o "$vfmt_dist"
+expect_exit "vaisfmt package self-test" 42 "$vfmt_dist/bin/vaisfmt"
+expect_exit "vaisfmt check finds dirty" 1 "$vfmt_dist/bin/vaisfmt" -c "$vfmt_src"
+expect_exit "vaisfmt fix rewrites" 1 "$vfmt_dist/bin/vaisfmt" "$vfmt_src"
+expect_exit "vaisfmt recheck clean" 0 "$vfmt_dist/bin/vaisfmt" -c "$vfmt_src"
+expect_exit "vaisfmt missing path" 3 "$vfmt_dist/bin/vaisfmt" -c "$tmp/vaisfmt-no-such"
+expect_exit "vaisfmt repo std clean" 0 "$vfmt_dist/bin/vaisfmt" -c "$ROOT/std"
 expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
 mkdir -p "$vdb_extract"
 expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"

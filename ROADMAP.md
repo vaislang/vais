@@ -22,7 +22,23 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-14f) — 도그푸딩 10: vaismake로 자기 게이트 래더 실행
+## 현재 작업 (2026-07-14g) — 도그푸딩 11: vaisfmt (네 번째 도구, str_builder)
+모드: 개별선택
+- [x] 1. direct str_builder 승격 ✅ 2026-07-14 — new/push/append/finish 4종
+      (predicate/parse_builtin 그룹/skip/추론/host-helper 체인 argc·인자타입
+      per-position Int·Str/prototype). full은 기존 검증. 수정 중 SEGV 1건
+      (0-인자 분기 누락)·오염 치환 1건(expected argc) 즉시 정정.
+- [x] 2. e346 vaisfmt 패키지 ✅ 2026-07-14 — 후행 공백 제거+최종 개행 보장
+      (빈 줄 보존), `-c` 체크/in-place fix, 재귀 트리 워크(@). str_builder
+      로 본문 재구축. self-test 42 양 엔진.
+- [x] 3. 실측 ✅ 2026-07-14 — repo 3트리(examples/compiler/std) clean 0
+      확인. workflow +7케이스(check 1/fix 1/recheck 0/missing 3/std clean 0).
+- [x] 4. 환류 + 문서 ✅ 2026-07-14 — parity 365. **휴면 후보 재평가**:
+      generic Result<T,E>·richer layout 모두 도그푸딩 3~11 동안 신규 요구
+      0건 — 트리거 미충족 유지 확인(아래 후보 항목에 재평가일 기록).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-14f) — 도그푸딩 10: vaismake로 자기 게이트 래더 실행
 모드: 개별선택
 - [x] 1. tools/gates.tasks ✅ 2026-07-14 — 게이트 11개 + quick/ladder 체인
       (13 태스크), 주석/의존 문법 실사용.
@@ -297,6 +313,8 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 
 - 이번 스프린트가 노출하는 concrete non-Int/nested 사례가 반복되면 generic
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
+- (재평가 2026-07-14: 도그푸딩 3~11 아홉 스프린트 동안 generic Result·중첩
+  layout 신규 요구 0건 — 두 휴면 후보 모두 트리거 미충족 유지.)
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지

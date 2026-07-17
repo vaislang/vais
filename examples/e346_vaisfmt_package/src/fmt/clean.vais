@@ -1,0 +1,41 @@
+# Whitespace normalization shared by the vaisfmt subcommand paths: strip
+# trailing spaces/tabs from every line and guarantee exactly one trailing
+# newline on non-empty files. Blank-line structure is preserved.
+
+fn line_end_trimmed(line: Str) -> Str {
+    let mut end = line.len()
+    let mut go = 1
+    while go == 1 {
+        if end > 0 {
+            let ch = line[end - 1]
+            if ch == 32 or ch == 9 {
+                end = end - 1
+            } else {
+                go = 0
+            }
+        } else {
+            go = 0
+        }
+    }
+    return str_slice(line, 0, end)
+}
+
+fn normalize_text(text: Str) -> Str {
+    if text.len() == 0 { return "" }
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    let b = str_builder_new()
+    let mut i = 0
+    while i < n {
+        let trimmed = line_end_trimmed(lines[i])
+        let r1 = str_builder_append(b, trimmed)
+        let r2 = str_builder_push(b, 10)
+        i = i + 1
+    }
+    return str_builder_finish(b)
+}
+
+fn needs_format(text: Str) -> Int {
+    if normalize_text(text) == text { return 0 }
+    return 1
+}
