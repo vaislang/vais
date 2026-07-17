@@ -104,7 +104,9 @@ product use of the process surface — and `!env NAME=VALUE` lines overlay the
 child environment through `proc_run_env` in run mode
 (`examples/e345_proc_run_env.vais` covers the built-in on both engines), while
 `!needs task dep...` lines run dependencies first, once each, stopping on the
-first failing child and refusing dependency cycles.
+first failing child and refusing dependency cycles. `tools/gates.tasks` runs
+this repository's own gate ladder through the tool
+(`scripts/vaismake-ladder.sh`).
 `examples/e341_vaisgrep_package` is the second installable tool: `vaisgrep`
 searches files or directories for substring-matching lines (with `-c` counts
 and `-r` recursive tree walks over `fs_list_dirs`), dispatching on the

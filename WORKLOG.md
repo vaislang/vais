@@ -1,5 +1,18 @@
 # Vais Worklog
 
+## 2026-07-14f (도그푸딩 10 — vaismake가 자기 게이트 래더 실행)
+
+자기참조 도그푸딩: `tools/gates.tasks`가 전체 게이트 래더(front/direct/
+check/fixpoint/value/parity/workflow/native/selfhost/release/diff 11게이트)
+를 vaismake 태스크로 정의, `!needs` 체인(quick=스모크 3종, ladder=전체)이
+기존 래더 시맨틱(순차·첫 실패 중단·exit 전파)을 그대로 재현.
+`scripts/vaismake-ladder.sh`가 패키지 빌드→ladder 실행 편의 진입점.
+
+이번 스프린트의 래더 검증 자체를 vaismake로 수행(Vais로 만든 도구가 Vais
+프로젝트의 검증을 운영). ladder 실행 중 workflow 게이트가 vaismake 패키지
+를 다시 빌드·실행하는 중첩(vaismake→bash→vaismake)도 정상. workflow
+게이트에 gates.tasks 파싱 케이스(list=13). 갭 0건.
+
 ## 2026-07-14e (도그푸딩 9 — vaismake !needs 의존성, 갭 0건)
 
 vaismake에 `!needs <task> <dep...>` 의존 라인 추가: run_task_tree가 의존을

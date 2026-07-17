@@ -4,6 +4,14 @@
 
 ### Changed
 
+- The Vais gate ladder is now runnable through vaismake itself:
+  `tools/gates.tasks` chains every gate with `!needs` (plus a
+  front/direct/check `quick` subset) and `scripts/vaismake-ladder.sh`
+  packages the tool and drives the full ladder with first-failure stop
+  and exit propagation. The workflow gate asserts the tasks file parses
+  (13 tasks). Self-referential dogfooding: a Vais-built tool now
+  operates the Vais project's own verification.
+
 - vaismake gains `!needs <task> <dep...>` dependency lines: dependencies
   run before the task (each at most once via a visited map), the first
   failing child stops the chain with its exit code, and dependency cycles

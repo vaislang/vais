@@ -1,0 +1,23 @@
+# Vais gate ladder as a vaismake tasks file. Run from the repository root:
+#   scripts/vaismake-ladder.sh            # full ladder (all gates + diff)
+#   <vaismake> tools/gates.tasks quick    # front/direct/check smoke subset
+# Dependency chains run each gate once, stop on the first failure, and
+# propagate its exit code (vaismake !needs semantics).
+
+front = bash scripts/test-vaisc-front.sh
+direct = bash scripts/test-vaisc-direct.sh
+check = bash scripts/test-vais-check-vais.sh
+fixpoint = bash scripts/test-fixpoint-full.sh
+value = bash scripts/test.sh
+parity = bash scripts/test-vaisc-parity.sh
+workflow = bash scripts/test-vaisdb-workflow.sh
+native = bash scripts/test-vaisc-native.sh
+selfhost = bash scripts/test-fixpoint-full-self.sh
+release = bash scripts/test-release-gates.sh
+diff = git diff --check
+
+quick = /usr/bin/true
+!needs quick front direct check
+
+ladder = /usr/bin/true
+!needs ladder front direct check fixpoint value parity workflow native selfhost release diff

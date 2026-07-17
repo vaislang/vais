@@ -22,7 +22,18 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-14e) — 도그푸딩 9: vaismake 태스크 의존성
+## 현재 작업 (2026-07-14f) — 도그푸딩 10: vaismake로 자기 게이트 래더 실행
+모드: 개별선택
+- [x] 1. tools/gates.tasks ✅ 2026-07-14 — 게이트 11개 + quick/ladder 체인
+      (13 태스크), 주석/의존 문법 실사용.
+- [x] 2. scripts/vaismake-ladder.sh ✅ 2026-07-14 — 패키지 빌드 후 ladder
+      태스크 실행(첫 실패 중단·exit 전파 = 기존 래더 시맨틱 그대로).
+- [x] 3. 실측 ✅ 2026-07-14 — 이번 스프린트 래더 검증을 vaismake로 수행.
+      workflow 게이트에 파싱 케이스(list=13).
+- [x] 4. 환류 + 문서 ✅ 2026-07-14 — 갭 0건. README/PRELUDE/CHANGELOG.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-14e) — 도그푸딩 9: vaismake 태스크 의존성
 모드: 개별선택
 - [x] 1. `!needs` 파서 ✅ 2026-07-14 — task_needs_into(이름 매칭 라인들의
       의존 누적).

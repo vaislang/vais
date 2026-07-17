@@ -272,6 +272,8 @@ compound, and nested call-argument positions on both engines,
 `examples/e344_vaismake_package` for the installable vaismake task runner
 (named tasks from a plain file, whitespace argv, `proc_run`/`-o` capture,
 `!env` environment overlays, `!needs` dependency chains with cycle detection),
+with `tools/gates.tasks` driving this repository's own gate ladder through it
+(`scripts/vaismake-ladder.sh`),
 `examples/e345_proc_run_env.vais` for the built-in `proc_run_env(argv, env)`
 child-environment overlay on both engines,
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
