@@ -4,6 +4,13 @@
 
 ### Changed
 
+- vaismake gains `!needs <task> <dep...>` dependency lines: dependencies
+  run before the task (each at most once via a visited map), the first
+  failing child stops the chain with its exit code, and dependency cycles
+  are refused with exit 4. The resolver is `@` self-recursion over a
+  `Map<Str,Int>` state in product code; the workflow gate adds
+  deps-first, failure-stop, and cycle cases. Zero compiler gaps.
+
 - Promoted `proc_run_env(argv, env)` to the direct engine (setenv-overlay
   child environments, mirroring the proc_run wiring with a two-list
   argument shape) and taught vaismake `!env NAME=VALUE` task-file lines

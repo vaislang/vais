@@ -51,7 +51,7 @@ fn task_argv(path: Str, name: Str, out: List<Str>) -> Int {
     return 0
 }
 
-fn run_task(path: Str, name: Str) -> Int {
+fn run_single_task(path: Str, name: Str) -> Int {
     let argv: List<Str> = []
     let bad = task_argv(path, name, argv)
     if bad != 0 { return bad }
@@ -59,6 +59,34 @@ fn run_task(path: Str, name: Str) -> Int {
     let envc = task_env_into(load_tasks(path), env)
     if envc > 0 { return proc_run_env(argv, env) }
     return proc_run(argv)
+}
+
+fn run_task_tree(path: Str, name: Str, state: Map<Str,Int>) -> Int {
+    # state: 1 = visiting (cycle guard), 2 = done.
+    let mark = state.get(name, 0)
+    if mark == 2 { return 0 }
+    if mark == 1 {
+        print("error: task dependency cycle")
+        return 4
+    }
+    state.insert(name, 1)
+    let deps: List<Str> = []
+    let depc = task_needs_into(load_tasks(path), name, deps)
+    let mut i = 0
+    while i < depc {
+        let code = @(path, deps[i], state)
+        if code != 0 { return code }
+        i = i + 1
+    }
+    let own = run_single_task(path, name)
+    if own != 0 { return own }
+    state.insert(name, 2)
+    return 0
+}
+
+fn run_task(path: Str, name: Str) -> Int {
+    let state: Map<Str,Int> = {}
+    return run_task_tree(path, name, state)
 }
 
 fn run_task_capture(path: Str, name: Str) -> Int {
@@ -108,6 +136,22 @@ fn self_test() -> Int {
     let env_path = path_join(env_root, "vais-e344-selftest-env-tasks.txt")
     if fs_write_text(env_path, env_text) != 0 { return 19 }
     if run_task(env_path, "flag") != 0 { return 20 }
+
+    # Dependencies: `!needs task dep...` runs deps first, once, and refuses
+    # cycles. bad exits 1, so a task needing bad stops before its own command.
+    let dep_text_a = str_concat(text, str_concat(lf, str_concat("!needs bad ok", str_concat(lf, "!needs hello ok"))))
+    let deps: List<Str> = []
+    if task_needs_into(dep_text_a, "bad", deps) != 1 { return 25 }
+    if deps[0] != "ok" { return 26 }
+    let none_deps: List<Str> = []
+    if task_needs_into(dep_text_a, "missingname", none_deps) != 0 { return 27 }
+    let dep_root = fs_temp_dir()
+    let dep_path = path_join(dep_root, "vais-e344-selftest-deps.txt")
+    if fs_write_text(dep_path, dep_text_a) != 0 { return 28 }
+    if run_task(dep_path, "bad") != 1 { return 29 }
+    let cycle_text = str_concat(text, str_concat(lf, str_concat("!needs ok hello", str_concat(lf, "!needs hello ok"))))
+    if fs_write_text(dep_path, cycle_text) != 0 { return 30 }
+    if run_task(dep_path, "ok") != 4 { return 31 }
 
     # Process surface: run and capture through a real tasks file.
     let root = fs_temp_dir()

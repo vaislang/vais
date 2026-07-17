@@ -1,5 +1,17 @@
 # Vais Worklog
 
+## 2026-07-14e (도그푸딩 9 — vaismake !needs 의존성, 갭 0건)
+
+vaismake에 `!needs <task> <dep...>` 의존 라인 추가: run_task_tree가 의존을
+먼저 실행(방문 1회 — Map<Str,Int> 상태 1=visiting/2=done), 첫 실패 자식의
+exit로 즉시 중단·전파, 순환은 exit 4 거부. **해석기가 `@` 재귀 + Map 파라
+미터 + 리스트-인자(`@(path, deps[i], state)`) 조합의 제품 실사용** — 이번
+세션에서 승격한 표면들이 한 함수에 모여 **첫 시도 양 엔진 42(갭 0건)**.
+
+패키지 실측: deps-first(prep→build "built"), 실패 중단(broken이 fail 뒤
+자기 커맨드 미실행 — "never" 미출력), 순환 4. workflow +3케이스, self-test
++7단계. 3번째 무갭 스프린트.
+
 ## 2026-07-14d (도그푸딩 8 — vaismake !env + proc_run_env direct + 도구 체인)
 
 **direct proc_run_env 승격**(계획된 갭): proc_run 배선 미러 5지점 — 2개

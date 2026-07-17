@@ -74,3 +74,28 @@ fn command_argv_into(command: Str, out: List<Str>) -> Int {
     let n = str_split_ws_into(command, out)
     return n
 }
+
+fn task_needs_into(text: Str, name: Str, out: List<Str>) -> Int {
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    let mut i = 0
+    while i < n {
+        let body = str_trim(lines[i])
+        if str_starts_with(body, "!needs ") == 1 {
+            let rest = str_trim(str_slice(body, 7, body.len() - 7))
+            let words: List<Str> = []
+            let m = str_split_ws_into(rest, words)
+            if m > 1 {
+                if words[0] == name {
+                    let mut j = 1
+                    while j < m {
+                        out.push(words[j])
+                        j = j + 1
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    return out.len()
+}

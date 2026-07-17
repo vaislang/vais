@@ -278,6 +278,11 @@ expect_exit "vaismake env overlay" 0 "$vmake_dist/bin/vaismake" "$vmake_env_task
 vmake_chain_tasks="$tmp/vaismake-chain-tasks.txt"
 printf 'search = %s cache %s\n' "$vgrep_dist/bin/vaisgrep" "$vgrep_docs/a.txt" > "$vmake_chain_tasks"
 expect_exit "vaismake chains vaisgrep" 2 "$vmake_dist/bin/vaismake" "$vmake_chain_tasks" search
+vmake_dep_tasks="$tmp/vaismake-dep-tasks.txt"
+printf 'prep = /usr/bin/true\nbuild = /bin/echo built\nfail = /usr/bin/false\nbroken = /bin/echo never\nloopa = /usr/bin/true\nloopb = /usr/bin/true\n!needs build prep\n!needs broken fail\n!needs loopa loopb\n!needs loopb loopa\n' > "$vmake_dep_tasks"
+expect_exit "vaismake deps run first" 0 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" build
+expect_exit "vaismake dep failure stops" 1 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" broken
+expect_exit "vaismake dep cycle detected" 4 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" loopa
 expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
 mkdir -p "$vdb_extract"
 expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"
