@@ -283,7 +283,7 @@ printf 'prep = /usr/bin/true\nbuild = /bin/echo built\nfail = /usr/bin/false\nbr
 expect_exit "vaismake deps run first" 0 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" build
 expect_exit "vaismake dep failure stops" 1 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" broken
 expect_exit "vaismake dep cycle detected" 4 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" loopa
-expect_exit "vaismake gates.tasks parses" 13 "$vmake_dist/bin/vaismake" "$ROOT/tools/gates.tasks"
+expect_exit "vaismake gates.tasks parses" 14 "$vmake_dist/bin/vaismake" "$ROOT/tools/gates.tasks"
 
 vfmt_dist="$tmp/vaisfmt-dist"
 vfmt_src="$tmp/vaisfmt-src"

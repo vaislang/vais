@@ -4,6 +4,15 @@
 
 ### Changed
 
+- Whitespace hygiene is now a ladder gate: `scripts/vaisfmt-check.sh`
+  packages vaisfmt and checks the std/examples/compiler/tools `.vais`
+  trees, and `tools/gates.tasks` runs it as the `fmt` task in both the
+  quick and ladder chains. Dogfooding it exposed a real capacity limit —
+  `str_split_lines_into` traps past the 4095-entry fixed list contract on
+  the ~23k-line self-host source — so vaisfmt now streams lines by byte
+  offset with no per-line list (a generated 5000-line self-test case
+  protects the path), and the list-contract ceiling is documented.
+
 - Added the fourth installable Vais tool: `examples/e346_vaisfmt_package`
   builds `dist/bin/vaisfmt`, normalizing Vais source whitespace (trailing
   spaces/tabs stripped, exactly one trailing newline, blank lines

@@ -1,5 +1,18 @@
 # Vais Worklog
 
+## 2026-07-18 (도그푸딩 12 — vaisfmt 위생 게이트 편입 + 스트리밍 재구조화)
+
+vaisfmt를 상시 게이트로 편입하려다 **진짜 용량 갭 발견**: compiler/tools
+트리 검사에서 바이너리가 무메시지 trap — fixpoint_full.vais(22,865줄)가
+str_split_lines_into의 4095 슬롯 고정 리스트 계약을 초과. 도구를 바이트
+오프셋 스트리밍(라인 리스트 미사용, trimmed_end+str_builder 직결)으로
+재작성해 한 패스 정규화 — 5000줄 생성 self-test 케이스로 보호, 4트리
+(std/examples/compiler/tools) 위생 OK 실측.
+
+게이트 편입: scripts/vaisfmt-check.sh(패키지→4트리 -c) + gates.tasks
+fmt 태스크(quick/ladder 체인 선두, 14태스크). 환류: 리스트 계약 상한
+PRELUDE 명시 + *_into 초과 trap의 진단 메시지 부재를 ROADMAP 후보 등록.
+
 ## 2026-07-14g (도그푸딩 11 — vaisfmt 네 번째 도구 + direct str_builder 승격)
 
 **갭 노출→즉시 승격: direct str_builder 미배선**(full만 검증). 4종(new/

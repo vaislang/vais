@@ -87,6 +87,20 @@ fn self_test() -> Int {
     if walk(dir, "", 0) != 0 { return 14 }
     if fs_read_text(path_join(dir, "a.vais")) != clean { return 15 }
 
+    # Streaming path: far beyond the 4095 list-slot contract that a
+    # split-lines materialization would hit (the self-host source is ~23k
+    # lines), a generated 5000-line body normalizes to itself.
+    let big = str_builder_new()
+    let mut k = 0
+    while k < 5000 {
+        let r1 = str_builder_append(big, "line body")
+        let r2 = str_builder_push(big, 10)
+        k = k + 1
+    }
+    let big_text = str_builder_finish(big)
+    if needs_format(big_text) != 0 { return 16 }
+    if normalize_text(big_text) != big_text { return 17 }
+
     # normalized text is 36 bytes; 36 + 6 = 42
     return clean.len() + 6
 }

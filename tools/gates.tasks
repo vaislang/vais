@@ -4,6 +4,7 @@
 # Dependency chains run each gate once, stop on the first failure, and
 # propagate its exit code (vaismake !needs semantics).
 
+fmt = bash scripts/vaisfmt-check.sh
 front = bash scripts/test-vaisc-front.sh
 direct = bash scripts/test-vaisc-direct.sh
 check = bash scripts/test-vais-check-vais.sh
@@ -17,7 +18,7 @@ release = bash scripts/test-release-gates.sh
 diff = git diff --check
 
 quick = /usr/bin/true
-!needs quick front direct check
+!needs quick fmt front direct check
 
 ladder = /usr/bin/true
-!needs ladder front direct check fixpoint value parity workflow native selfhost release diff
+!needs ladder fmt front direct check fixpoint value parity workflow native selfhost release diff

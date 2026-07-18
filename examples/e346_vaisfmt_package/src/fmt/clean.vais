@@ -1,13 +1,16 @@
 # Whitespace normalization shared by the vaisfmt subcommand paths: strip
 # trailing spaces/tabs from every line and guarantee exactly one trailing
-# newline on non-empty files. Blank-line structure is preserved.
+# newline on non-empty files. Blank-line structure is preserved. Lines are
+# scanned by byte offset (no per-line list), so files far beyond the 4095
+# fixed list-slot contract - the self-host compiler source included -
+# normalize in one pass.
 
-fn line_end_trimmed(line: Str) -> Str {
-    let mut end = line.len()
+fn trimmed_end(text: Str, start: Int, stop: Int) -> Int {
+    let mut end = stop
     let mut go = 1
     while go == 1 {
-        if end > 0 {
-            let ch = line[end - 1]
+        if end > start {
+            let ch = text[end - 1]
             if ch == 32 or ch == 9 {
                 end = end - 1
             } else {
@@ -17,20 +20,37 @@ fn line_end_trimmed(line: Str) -> Str {
             go = 0
         }
     }
+    return end
+}
+
+fn line_end_trimmed(line: Str) -> Str {
+    let end = trimmed_end(line, 0, line.len())
     return str_slice(line, 0, end)
 }
 
 fn normalize_text(text: Str) -> Str {
-    if text.len() == 0 { return "" }
-    let lines: List<Str> = []
-    let n = str_split_lines_into(text, lines)
+    let n = text.len()
+    if n == 0 { return "" }
     let b = str_builder_new()
+    let mut line_start = 0
     let mut i = 0
     while i < n {
-        let trimmed = line_end_trimmed(lines[i])
-        let r1 = str_builder_append(b, trimmed)
-        let r2 = str_builder_push(b, 10)
+        if text[i] == 10 {
+            let end = trimmed_end(text, line_start, i)
+            if end > line_start {
+                let r1 = str_builder_append(b, str_slice(text, line_start, end - line_start))
+            }
+            let r2 = str_builder_push(b, 10)
+            line_start = i + 1
+        }
         i = i + 1
+    }
+    if line_start < n {
+        let end = trimmed_end(text, line_start, n)
+        if end > line_start {
+            let r3 = str_builder_append(b, str_slice(text, line_start, end - line_start))
+        }
+        let r4 = str_builder_push(b, 10)
     }
     return str_builder_finish(b)
 }

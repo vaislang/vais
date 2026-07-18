@@ -22,7 +22,21 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-14g) — 도그푸딩 11: vaisfmt (네 번째 도구, str_builder)
+## 현재 작업 (2026-07-18) — 도그푸딩 12: vaisfmt 위생 게이트 편입
+모드: 개별선택
+- [x] 1. scripts/vaisfmt-check.sh ✅ 2026-07-18 — 패키지 빌드 후 std/
+      examples/compiler/tools 4트리 -c 검사, 실패 트리 보고.
+- [x] 2. 갭 노출→도구 재구조화 ✅ 2026-07-18 — **str_split_lines_into가
+      4095 슬롯 리스트 계약 초과(23k줄 core 소스)에서 무메시지 trap** →
+      vaisfmt를 바이트 오프셋 스트리밍(리스트 미사용)으로 재작성, 5000줄
+      생성 self-test 케이스로 보호. 4트리 위생 OK 실측.
+- [x] 3. 게이트 편입 ✅ 2026-07-18 — gates.tasks에 fmt 태스크(quick/ladder
+      체인 선두), workflow parse 케이스 14.
+- [x] 4. 환류 + 문서 ✅ 2026-07-18 — 리스트 계약 상한 PRELUDE 명시, *_into
+      초과 trap의 진단 메시지 부재를 아래 후보 등록.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-14g) — 도그푸딩 11: vaisfmt (네 번째 도구, str_builder)
 모드: 개별선택
 - [x] 1. direct str_builder 승격 ✅ 2026-07-14 — new/push/append/finish 4종
       (predicate/parse_builtin 그룹/skip/추론/host-helper 체인 argc·인자타입
@@ -315,6 +329,10 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
 - (재평가 2026-07-14: 도그푸딩 3~11 아홉 스프린트 동안 generic Result·중첩
   layout 신규 요구 0건 — 두 휴면 후보 모두 트리거 미충족 유지.)
+- `*_into` 계열(str_split_lines_into 등)이 4095 슬롯 리스트 계약을 초과할
+  때 메시지 없는 trap(SIGTRAP)으로 종료: 진단 메시지("list capacity
+  exceeded" 류)를 host runtime trap 경로에 추가할 후보. 현재는 PRELUDE에
+  계약 상한만 문서화, 대용량은 스트리밍 패턴(vaisfmt clean.vais 참조).
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지
