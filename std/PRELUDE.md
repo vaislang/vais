@@ -103,8 +103,10 @@ trailing newline) with `-c` check and in-place fix modes over recursive
 `.vais` tree walks, rebuilding file text through the `str_builder_*` chain —
 now verified on both engines. Its line scan walks byte offsets instead of
 materializing a `List<Str>`, because the fixed list contract holds at most
-4095 entries: `str_split_lines_into` (and the other `*_into` fillers) trap
-past that, so whole-repo tools stream instead
+4095 entries: `str_split_lines_into` (and the other `*_into` fillers) abort
+past that with a `vais list trap: capacity exceeded` diagnostic on stderr
+(list bounds and empty-access traps are diagnosed the same way on both
+engines), so whole-repo tools stream instead
 (`scripts/vaisfmt-check.sh` gates every tracked `.vais` tree, the ~23k-line
 self-host source included).
 `examples/e344_vaismake_package` is the third installable tool: `vaismake`

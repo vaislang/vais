@@ -14,6 +14,13 @@ extern int64_t vais_user_main(void);
 static int64_t vais_argc = 0;
 static char **vais_argv = NULL;
 
+void vais_list_trap(int64_t kind) {
+    if (kind == 3) fprintf(stderr, "vais list trap: capacity exceeded (fixed list contract: 4095 entries)\n");
+    else if (kind == 2) fprintf(stderr, "vais list trap: empty-list access\n");
+    else fprintf(stderr, "vais list trap: index out of range\n");
+    abort();
+}
+
 static void host_trap(const char *name) {
     fprintf(stderr, "vais host runtime trap: %s\n", name);
     abort();

@@ -298,6 +298,27 @@ expect_exit "vaisfmt fix rewrites" 1 "$vfmt_dist/bin/vaisfmt" "$vfmt_src"
 expect_exit "vaisfmt recheck clean" 0 "$vfmt_dist/bin/vaisfmt" -c "$vfmt_src"
 expect_exit "vaisfmt missing path" 3 "$vfmt_dist/bin/vaisfmt" -c "$tmp/vaisfmt-no-such"
 expect_exit "vaisfmt repo std clean" 0 "$vfmt_dist/bin/vaisfmt" -c "$ROOT/std"
+
+overflow_src="$tmp/list-cap-overflow.vais"
+cat > "$overflow_src" <<'VAIS'
+fn main() -> Int {
+    let b = str_builder_new()
+    let mut k = 0
+    while k < 4200 {
+        let r1 = str_builder_append(b, "x")
+        let r2 = str_builder_push(b, 10)
+        k = k + 1
+    }
+    let text = str_builder_finish(b)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    return n
+}
+VAIS
+expect_exit "list cap overflow full build" 0 "$ROOT/scripts/vaisc" build "$overflow_src" -o "$tmp/list-cap-overflow-full"
+expect_exit "list cap overflow full traps loud" 134 "$tmp/list-cap-overflow-full"
+expect_exit "list cap overflow direct build" 0 "$ROOT/scripts/vaisc" build "$overflow_src" --engine direct -o "$tmp/list-cap-overflow-direct"
+expect_exit "list cap overflow direct traps loud" 134 "$tmp/list-cap-overflow-direct"
 expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
 mkdir -p "$vdb_extract"
 expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"

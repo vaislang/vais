@@ -4,6 +4,16 @@
 
 ### Changed
 
+- List-contract violations now abort with a diagnostic instead of a bare
+  SIGTRAP on both engines: `vais list trap: capacity exceeded / index out
+  of range / empty-list access` on stderr, then a deterministic SIGABRT.
+  The full engine routes its four labeled trap helpers and eleven
+  runtime-helper capacity traps through a new `vais_list_trap(kind)` host
+  function (real symbols in the driver and the fixpoint gate runtime);
+  the direct engine replaces its capacity and checked-index
+  `__builtin_trap()` calls with a message-printing equivalent. The
+  workflow gate asserts the loud overflow on both engines (exit 134).
+
 - Whitespace hygiene is now a ladder gate: `scripts/vaisfmt-check.sh`
   packages vaisfmt and checks the std/examples/compiler/tools `.vais`
   trees, and `tools/gates.tasks` runs it as the `fmt` task in both the

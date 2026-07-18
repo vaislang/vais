@@ -22,7 +22,26 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-18) — 도그푸딩 12: vaisfmt 위생 게이트 편입
+## 현재 작업 (2026-07-18b) — 리스트 계약 trap 진단 승격
+모드: 개별선택
+- [x] 1. vais_list_trap(kind) ✅ 2026-07-18 — kind 0/1=index, 2=empty,
+      3=capacity 메시지 후 abort. **최종 설계: core가 모든 emit 모듈
+      프리앰블에 internal define(문자열 글로벌+puts+abort)을 자급 포함** —
+      bare-libc 링크(codegen 게이트)까지 무의존. 드라이버/fixpoint 게이트
+      런타임에는 부트스트랩 안전판 실심볼(구세대 .ll의 declare 대비) 유지.
+      경유 이슈 3건: 링크 미해결(실심볼)→이중 declare→bare-libc 링크 —
+      internal define 자급으로 종결, .ll 2세대 수렴.
+- [x] 2. core 15지점 ✅ 2026-07-18 — 4개 라벨 trap 헬퍼(bounds/insert/
+      empty/capacity) + 러너타임 헬퍼 trap 라벨 11곳의 llvm.trap을
+      vais_list_trap 호출로 교체(.ll 재생성, 위생 0/0).
+- [x] 3. direct 12지점 ✅ 2026-07-18 — checked_index + 용량 검사 11곳의
+      __builtin_trap을 메시지 trap으로(플레이스먼트 트랩 2회: 매크로 정의
+      순서/emit 순서 — 헬퍼를 checked_index 직전 배치로 해결).
+- [x] 4. 게이트+문서 ✅ 2026-07-18 — workflow +4케이스(양 엔진 overflow
+      빌드 0/실행 134), PRELUDE 진단 문서화. 정상 경로 무영향(100줄=100).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-18) — 도그푸딩 12: vaisfmt 위생 게이트 편입
 모드: 개별선택
 - [x] 1. scripts/vaisfmt-check.sh ✅ 2026-07-18 — 패키지 빌드 후 std/
       examples/compiler/tools 4트리 -c 검사, 실패 트리 보고.
@@ -329,10 +348,6 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
 - (재평가 2026-07-14: 도그푸딩 3~11 아홉 스프린트 동안 generic Result·중첩
   layout 신규 요구 0건 — 두 휴면 후보 모두 트리거 미충족 유지.)
-- `*_into` 계열(str_split_lines_into 등)이 4095 슬롯 리스트 계약을 초과할
-  때 메시지 없는 trap(SIGTRAP)으로 종료: 진단 메시지("list capacity
-  exceeded" 류)를 host runtime trap 경로에 추가할 후보. 현재는 PRELUDE에
-  계약 상한만 문서화, 대용량은 스트리밍 패턴(vaisfmt clean.vais 참조).
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지

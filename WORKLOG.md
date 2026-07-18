@@ -1,5 +1,28 @@
 # Vais Worklog
 
+## 2026-07-18b (리스트 계약 trap 진단 승격 — 무음 SIGTRAP 종료)
+
+도그푸딩 12에서 등록한 진단 갭 즉시 승격. 모든 리스트 계약 위반이 이제
+stderr 진단("vais list trap: capacity exceeded / index out of range /
+empty-list access") 후 결정적 SIGABRT(134)로 종료 — 이전엔 무메시지
+SIGTRAP(133).
+
+- **최종 설계(3회 반복로 수렴)**: core가 **모든 emit 모듈 프리앰블에
+  internal define을 자급 포함**(문자열 글로벌 3개 + puts + abort) — codegen
+  게이트처럼 bare-libc로 링크하는 소비자까지 무의존. 경유: ① declare만
+  추가→드라이버 링크 미해결(core 자신의 경계 검사가 호출) ② 실심볼+
+  HOST_INTRINSIC_IR declare→emit 모듈과 이중 declare ③ 게이트가 IR 단독
+  링크→미해결 — internal define으로 종결. 드라이버/fixpoint 런타임엔
+  구세대 .ll(declare형) 부트스트랩 안전판 실심볼 유지, .ll 2세대 수렴.
+- **core 15지점**: 라벨 trap 헬퍼 4(bounds/insert/empty/capacity) + 러너타임
+  헬퍼 trap 라벨 11곳의 llvm.trap 교체(.ll 재생성).
+- **direct 12지점**: checked_index + 용량 11곳의 __builtin_trap 교체.
+  플레이스먼트 트랩 2회(매크로/emit 순서) — 헬퍼를 checked_index 직전
+  배치로 해결.
+
+검증: overflow 프로브 양 엔진 134+메시지, 100줄 정상 경로 무영향(100),
+workflow +4케이스. vaisfmt-check(스트리밍)도 그대로 GREEN.
+
 ## 2026-07-18 (도그푸딩 12 — vaisfmt 위생 게이트 편입 + 스트리밍 재구조화)
 
 vaisfmt를 상시 게이트로 편입하려다 **진짜 용량 갭 발견**: compiler/tools
