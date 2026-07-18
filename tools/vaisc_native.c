@@ -15978,6 +15978,63 @@ static int lower_scalar_value_if_embedded_return_line(const char *line, int *tem
     return 1;
 }
 
+
+/*
+ * Bare `xs.remove_at(i)` / `xs.pop()` statements on List receivers: desugar
+ * into the verified assigned form (`let __vais_discard_N = ...`) so both
+ * engines route through the existing expression paths. Without this the raw
+ * statement reached the full core, which silently miscompiled it (length
+ * left unadjusted or worse).
+ */
+static int lower_list_discard_statement_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
+    const char *s = skip_ws(line);
+    size_t indent_len = (size_t)(s - line);
+    if (!is_ident_start(*s)) return 0;
+    const char *name_start = s;
+    while (is_ident_continue(*s)) s++;
+    const char *name_end = s;
+    if (*s != '.') return 0;
+    const char *meth = s + 1;
+    int is_remove = strncmp(meth, "remove_at", 9) == 0 && meth[9] == '(';
+    int is_pop_m = strncmp(meth, "pop", 3) == 0 && meth[3] == '(';
+    if (!is_remove && !is_pop_m) return 0;
+    const char *open = meth + (is_remove ? 9 : 3);
+    int close = find_matching_paren_c(line, (int)(open - line));
+    if (close < 0) return 0;
+    const char *after = skip_ws(line + close + 1);
+    if (*after == ';') after = skip_ws(after + 1);
+    if (*after != '\0') return 0;
+    if (is_pop_m) {
+        const char *inside = skip_ws(open + 1);
+        if (inside > line + close) return 0;
+        char *inner = substr_copy(open + 1, (size_t)(close - (int)(open - line) - 1));
+        char *trimmed_inner = trim_copy(inner);
+        int empty = trimmed_inner[0] == '\0';
+        free(trimmed_inner);
+        free(inner);
+        if (!empty) return 0;
+    }
+    char *name = substr_copy(name_start, (size_t)(name_end - name_start));
+    const char *type = list_method_env_type(env, name);
+    if (type == NULL || strncmp(type, "List<", 5) != 0) {
+        free(name);
+        return 0;
+    }
+    free(name);
+    int t = (*temp_count)++;
+    StrBuf b;
+    sb_init(&b);
+    sb_append_n(&b, line, indent_len);
+    sb_append(&b, "let __vais_discard");
+    char num[24];
+    snprintf(num, sizeof(num), "%d", t);
+    sb_append(&b, num);
+    sb_append(&b, " = ");
+    sb_append_n(&b, line + (name_start - line), (size_t)(close + 1 - (int)(name_start - line)));
+    lines_push(out, sb_take(&b));
+    return 1;
+}
+
 /*
  * `xs.sort()` statement on a List<Int> receiver: desugar into an in-place
  * ascending insertion sort over verified surface (nested while loops, element
@@ -16219,6 +16276,7 @@ static char *lower_list_method_text(const char *text) {
             }
             continue;
         }
+        if (lower_list_discard_statement_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_sort_statement_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_sort_by_statement_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_filter_pick_struct_list_arg_line(lines.items[i], &temp_count, &env, &out)) continue;
@@ -31654,10 +31712,52 @@ static int direct_lower_line(
         int is_clear = strcmp(method_name, "clear") == 0;
         int is_insert_at = strcmp(method_name, "insert_at") == 0;
         int is_extend = strcmp(method_name, "extend") == 0;
+        int is_remove_at_stmt = strcmp(method_name, "remove_at") == 0;
+        int is_pop_stmt = strcmp(method_name, "pop") == 0;
+        if (direct_is_list_type(base_type) && (is_remove_at_stmt || is_pop_stmt)) {
+            /* Value-discarding forms: reuse the expression translation (which
+               emits the bounds-checked prelude) and drop the result. */
+            StrBuf call_text;
+            sb_init(&call_text);
+            sb_append(&call_text, method_base);
+            sb_append(&call_text, ".");
+            sb_append(&call_text, method_name);
+            sb_append(&call_text, "(");
+            if (method_args != NULL) sb_append(&call_text, method_args);
+            sb_append(&call_text, ")");
+            StrBuf prelude;
+            sb_init(&prelude);
+            direct_current_prelude = &prelude;
+            char *rewritten = direct_rewrite_expr(path, line_no, line, call_text.data, locals, fns, fn_count, structs, struct_count);
+            direct_current_prelude = NULL;
+            if (rewritten == NULL) {
+                free(prelude.data);
+                free(call_text.data);
+                free(method_base);
+                free(method_name);
+                free(method_args);
+                free(stripped);
+                return 1;
+            }
+            char *c_expr = direct_translate_expr(rewritten);
+            sb_append(out, prelude.data);
+            sb_append(out, "(void)(");
+            sb_append(out, c_expr);
+            sb_append(out, ");\n");
+            free(prelude.data);
+            free(c_expr);
+            free(rewritten);
+            free(call_text.data);
+            free(method_base);
+            free(method_name);
+            free(method_args);
+            free(stripped);
+            return 0;
+        }
         if (!direct_is_list_type(base_type) || (!is_push && !is_clear && !is_insert_at && !is_extend)) {
             report_issue(path, line_no, find_col(line, method_base), line,
-                "direct native emitter supports List.push/List.clear/List.insert_at/List.extend and Map.insert/Map.remove/Map.clear statements only",
-                "write `xs.push(value)`, `xs.clear()`, `xs.insert_at(index, value)`, `xs.extend(other)`, `m.insert(key, value)`, `m.remove(key)`, or `m.clear()`.",
+                "direct native emitter supports List.push/List.clear/List.insert_at/List.extend/List.remove_at/List.pop and Map.insert/Map.remove/Map.clear statements only",
+                "write `xs.push(value)`, `xs.clear()`, `xs.insert_at(index, value)`, `xs.extend(other)`, `xs.remove_at(index)`, `xs.pop()`, `m.insert(key, value)`, `m.remove(key)`, or `m.clear()`.",
                 NULL);
             free(method_base);
             free(method_name);

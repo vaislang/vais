@@ -97,6 +97,9 @@ names so Vais tools can ingest whole directories; the vaisdb package's
 `examples/e343_self_recursion_at.vais` promotes `@(args)` self-recursion for
 every expression position (the driver lowers it to the enclosing function's
 name, so both engines share the named-recursion path).
+Bare `xs.remove_at(i)` / `xs.pop()` statements (result discarded) are
+verified on both engines for Int and struct lists — the driver desugars them
+into the assigned form (`examples/e347_list_discard_statements.vais`).
 `examples/e346_vaisfmt_package` is the fourth installable tool: `vaisfmt`
 normalizes Vais source whitespace (trailing spaces/tabs stripped, exactly one
 trailing newline) with `-c` check and in-place fix modes over recursive

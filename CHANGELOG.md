@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Value-correctness fuzzing round (32 probes x both engines) found and
+  fixed silent full-engine miscompiles of bare `xs.remove_at(i)` /
+  `xs.pop()` statements (lengths left unadjusted, struct lists summing
+  removed elements): the driver now desugars discard statements into the
+  verified assigned form for every pipeline, and the direct engine
+  additionally accepts them natively in its statement whitelist.
+  `examples/e347_list_discard_statements.vais` locks the behavior
+  (parity 366); all other probes (negative div/mod truncation, operator
+  precedence, container interleavings, sort/str_cmp/str_builder/@ edges,
+  alias writes) measured value-exact on both engines.
+
 - List-contract violations now abort with a diagnostic instead of a bare
   SIGTRAP on both engines: `vais list trap: capacity exceeded / index out
   of range / empty-list access` on stderr, then a deterministic SIGABRT.

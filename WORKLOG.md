@@ -1,5 +1,25 @@
 # Vais Worklog
 
+## 2026-07-18c (값-정확성 fuzzing 라운드 — full silent 오컴파일 3건 근절)
+
+파이썬 독립 기대값 대조 프로브 32종 × 양 엔진(64런). **건강 신호**: 산술
+우선순위/음수 div·mod(C 트렁케이션)/컨테이너 인터리빙/struct 흐름/최근
+승격 표면 경계(@ 100깊이·str_cmp·sort 중복·builder 인터리빙·파라미터
+앨리어싱 쓰기) 전부 값 정확.
+
+**발견 4건 전부 root-fix**:
+- direct: bare `xs.remove_at(i)`/`xs.pop()` 문장 미지원(문장 화이트리스트
+  갭) — (void) 표현식 경로 재사용 분기 추가.
+- **full silent 오컴파일 3건**(fuzzing 최대 수확): bare remove/pop 문장이
+  드라이버 데수가 누락으로 core에 도달 — len 미조정(remove 후 shift만),
+  struct 리스트 제거 원소 오합산, pop이 len을 늘리는 등 조용한 오답.
+  root fix = 공유 텍스트 lowering `lower_list_discard_statement_line`:
+  List 리시버의 discard 문장을 `let __vais_discardN = ...` 검증 할당형으로
+  데수가(3 파이프라인 공통). e347 잠금, parity 366.
+
+트랩(자기 교훈): C-문자열 생성 파이썬 히어닥에서 `\n`이 실제 개행으로
+들어가 driver 빌드가 깨짐 — 빌드 로그를 삼키지 말 것.
+
 ## 2026-07-18b (리스트 계약 trap 진단 승격 — 무음 SIGTRAP 종료)
 
 도그푸딩 12에서 등록한 진단 갭 즉시 승격. 모든 리스트 계약 위반이 이제

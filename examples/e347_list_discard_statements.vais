@@ -1,0 +1,41 @@
+# expect: 42
+# Bare `xs.remove_at(i)` and `xs.pop()` statements (value discarded) work on
+# both engines for Int and struct element lists: the driver desugars them into
+# the verified assigned form, so lengths shrink and elements shift exactly as
+# in the `let t = xs.pop()` shape.
+
+struct P {
+    a: Int,
+    b: Int,
+}
+
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.push(10)
+    xs.push(20)
+    xs.push(30)
+    xs.remove_at(0)
+    if xs.len() != 2 { return 1 }
+    if xs[0] != 20 { return 2 }
+    xs.pop()
+    if xs.len() != 1 { return 3 }
+    if xs[0] != 20 { return 4 }
+
+    let ps: List<P> = []
+    ps.push(P { a: 2, b: 3 })
+    ps.push(P { a: 4, b: 5 })
+    ps.push(P { a: 1, b: 10 })
+    ps.remove_at(1)
+    if ps.len() != 2 { return 5 }
+    if ps[1].a != 1 { return 6 }
+    ps.pop()
+    if ps.len() != 1 { return 7 }
+
+    while xs.len() > 0 {
+        xs.remove_at(0)
+    }
+    if xs.len() != 0 { return 8 }
+
+    # 20 discarded down to: 2*3 from the surviving struct + 36 = 42
+    return ps[0].a * ps[0].b + 36
+}

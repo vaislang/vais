@@ -22,7 +22,21 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-18b) — 리스트 계약 trap 진단 승격
+## 현재 작업 (2026-07-18c) — 값-정확성 fuzzing 라운드 (네이티브 양 엔진)
+모드: 개별선택
+- [x] 1~3. 프로브 32종 × 양 엔진 ✅ 2026-07-18 — 산술/우선순위/음수
+      div·mod(C 트렁케이션 확인), 컨테이너 인터리빙, struct 흐름, 최근 승격
+      표면 경계(str_cmp/sort/@ 100깊이/builder/앨리어싱) 값 정확.
+- [x] 4. 발견 4건 전부 root-fix ✅ 2026-07-18 —
+      ① direct: bare remove_at/pop 문장 미지원(문장 화이트리스트 +
+      (void) 표현식 경로 재사용). ②~④ **full silent 오컴파일 3건**: bare
+      remove_at/pop 문장이 미데수가로 core 도달(len 미조정·struct 리스트
+      오합산·pop이 len 증가) — 공유 lowering에 discard-데수가
+      (`let __vais_discardN = ...`) 추가로 검증된 할당형 경로 라우팅.
+      e347(parity 366).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-18b) — 리스트 계약 trap 진단 승격
 모드: 개별선택
 - [x] 1. vais_list_trap(kind) ✅ 2026-07-18 — kind 0/1=index, 2=empty,
       3=capacity 메시지 후 abort. **최종 설계: core가 모든 emit 모듈
