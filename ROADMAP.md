@@ -22,7 +22,19 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-20) — 값-정확성 fuzzing 라운드 2 (경계·흐름 확장)
+## 현재 작업 (2026-07-20b) — 값-정확성 fuzzing 라운드 3 (흐름·스트레스)
+모드: 개별선택
+- [x] 1~3. 프로브 19종 × 양 엔진(38런) ✅ 2026-07-20 — Result<Str,Int>/
+      <Str,Str> `?`·match 메시지 전파, for-each(Int/Str/누적 push 구조체),
+      filter/map/sum·first 파이프라인, sort_by→filter 조합, 5KB builder→
+      slice→replace 체인, Map 200키 덮어쓰기·remove, 10k 루프 누적,
+      proc exit 255 왕복, 10단 call 체인, doc_term_counts, Bool/Char.
+- [x] 4. **발견 0건 — 첫 무결함 라운드** ✅ 2026-07-20. 라운드 1~2의 수정
+      (discard 데수가/중첩 리스트 일반화/brace if-식 거부) 이후 신규 영역
+      전반 값 정확 실측. 코드 무변경(문서 기록만).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-20) — 값-정확성 fuzzing 라운드 2 (경계·흐름 확장)
 모드: 개별선택
 - [x] 1~3. 프로브 46종 × 양 엔진(92런) ✅ 2026-07-20 — i64 경계 일치성/
       빈 문자열 × str 빌트인 전체/char 합산/Result `?` 체인/Option match/

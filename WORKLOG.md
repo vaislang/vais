@@ -1,5 +1,19 @@
 # Vais Worklog
 
+## 2026-07-20b (fuzzing 라운드 3 — 발견 0건, 첫 무결함 라운드)
+
+프로브 19종 × 양 엔진(38런), 전부 값 정확: Result<Str,Int>/<Str,Str>의
+`?`·match 메시지 전파(에러 텍스트 보존 포함), for-each(Int/Str/누적 push
+구조체 리시버), filter/map/sum·first 파이프라인과 sort_by→filter 조합,
+5KB str_builder→slice→replace 체인, Map<Int,Int> 200키 덮어쓰기 후 홀수
+합·remove 재구축, 10k 루프 누적(가우스 합 일치), proc_run 자식 exit 255
+왕복, 10단 call 체인, doc_term_counts_into, Bool 반환·Char 리터럴 비교.
+
+라운드 1~2에서 근절한 5건(discard 문장/중첩 리스트/brace if-식) 이후
+신규 영역 전반에서 **결함 0** — 세 라운드 누적 97프로브가 네이티브 양
+엔진의 값-정확성 기준선을 형성. 코드 무변경(기록만), 후보 2건(3중 인라인
+struct/dynamic-row)은 수요 대기 유지.
+
 ## 2026-07-20 (값-정확성 fuzzing 라운드 2 — 중첩 리스트/if-식 경화)
 
 프로브 46종 × 양 엔진(92런). 건강 신호: i64 경계 일치성(재조립·절반 왕복)/
