@@ -281,6 +281,8 @@ normalizer (`-c` check / in-place fix over recursive `.vais` trees) built on
 the now direct-verified `str_builder_*` chain,
 `examples/e347_list_discard_statements.vais` for bare `remove_at`/`pop`
 statements on Int and struct lists on both engines,
+`examples/e348_nested_list_expr_reads.vais` for composed `List<List<Int>>`
+double-index reads (arithmetic, call arguments, dynamic columns),
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded
 `Result<Str,Int>` follow-up that propagates file text with `?` and recovers
 missing-file error codes through inline match,

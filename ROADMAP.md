@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-18c) — 값-정확성 fuzzing 라운드 (네이티브 양 엔진)
+## 현재 작업 (2026-07-20) — 값-정확성 fuzzing 라운드 2 (경계·흐름 확장)
+모드: 개별선택
+- [x] 1~3. 프로브 46종 × 양 엔진(92런) ✅ 2026-07-20 — i64 경계 일치성/
+      빈 문자열 × str 빌트인 전체/char 합산/Result `?` 체인/Option match/
+      break·continue/중첩 while/깊은 struct 체인/Map 순서 값 정확.
+- [x] 4. 발견 3건 처리 ✅ 2026-07-20 —
+      ① **중첩 리스트 조합식 읽기**: bare return만 동작(그 외 %v-1 clang
+      에러) → 출현 치환 일반화(`nested_list_rewrite_occurrences`) + direct
+      파이프라인에 lowering 편입(e77이 direct에서도 동작, 패리티 확장).
+      ② **brace if-식 value 위치**: full이 silent 0 → front 거부
+      ("then/else" help, front 게이트 reject 케이스). e348(parity 367).
+      ③ 3중 인라인 struct 리터럴: LOUD clang 실패 — 단계 조립이 verified,
+      아래 후보 등록.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-18c) — 값-정확성 fuzzing 라운드 (네이티브 양 엔진)
 모드: 개별선택
 - [x] 1~3. 프로브 32종 × 양 엔진 ✅ 2026-07-18 — 산술/우선순위/음수
       div·mod(C 트렁케이션 확인), 컨테이너 인터리빙, struct 흐름, 최근 승격
@@ -362,6 +377,11 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
 - (재평가 2026-07-14: 도그푸딩 3~11 아홉 스프린트 동안 generic Result·중첩
   layout 신규 요구 0건 — 두 휴면 후보 모두 트리거 미충족 유지.)
+- 3중 이상 인라인 중첩 struct 리터럴(`Outer { mid: Mid { inner: Inner {..}}}`)
+  미검증 — clang 단계 LOUD 실패. 단계 조립(let 바인딩 후 참조)이 verified
+  form. 수요 반복 시 리터럴 lowering 확장.
+- 중첩 리스트 dynamic-row 읽기(`grid[i][j]`의 i가 변수)는 미치환 잔존 —
+  %v-1 clang 에러로 표면화. 수요 시 행 스위치 데수가 검토.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지

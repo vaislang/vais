@@ -1,5 +1,24 @@
 # Vais Worklog
 
+## 2026-07-20 (값-정확성 fuzzing 라운드 2 — 중첩 리스트/if-식 경화)
+
+프로브 46종 × 양 엔진(92런). 건강 신호: i64 경계 일치성(재조립·절반 왕복)/
+빈 문자열이 str 빌트인 9종을 경유하는 경계/Result `?` 2단 체인/Option
+match/break·continue 혼합/중첩 while break/깊은 struct 필드 체인(단계
+조립)/Map 삽입 순서 — 전부 값 정확.
+
+**발견 3건 처리**:
+- **중첩 리스트 읽기 표면이 문서보다 훨씬 좁았음**: `List<List<Int>>`
+  이중 인덱스가 bare `return grid[r][c]`만 동작, 조합식은 %v-1(미해결
+  슬롯) clang 에러. root fix = 출현 치환 일반화(라인 내 모든 리터럴-행
+  `grid[R][col]`을 행별 flat 리스트 인덱스로 문자열-안전 치환) + direct
+  파이프라인에 nested-list lowering 편입(기존엔 타입 자체를 거부) —
+  **e77이 direct에서도 처음 동작(패리티 확장)**, e348 잠금.
+- **brace if-식 value 위치 = full silent 0**: 검증 문법은 `then/else` 형
+  뿐 — front 거부 신설(help가 then-형 안내), front 게이트 reject 케이스.
+- 3중 인라인 struct 리터럴: LOUD clang 실패로 분류(단계 조립 verified),
+  dynamic-row 중첩 리스트 읽기와 함께 후보 등록.
+
 ## 2026-07-18c (값-정확성 fuzzing 라운드 — full silent 오컴파일 3건 근절)
 
 파이썬 독립 기대값 대조 프로브 32종 × 양 엔진(64런). **건강 신호**: 산술

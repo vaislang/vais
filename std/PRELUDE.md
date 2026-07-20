@@ -100,6 +100,10 @@ name, so both engines share the named-recursion path).
 Bare `xs.remove_at(i)` / `xs.pop()` statements (result discarded) are
 verified on both engines for Int and struct lists — the driver desugars them
 into the assigned form (`examples/e347_list_discard_statements.vais`).
+`List<List<Int>>` literal double-index reads now compose in any expression
+position on both engines (`examples/e348_nested_list_expr_reads.vais`), and
+value if-expressions use the `then`/`else` form only — brace blocks in value
+position are rejected at the front.
 `examples/e346_vaisfmt_package` is the fourth installable tool: `vaisfmt`
 normalizes Vais source whitespace (trailing spaces/tabs stripped, exactly one
 trailing newline) with `-c` check and in-place fix modes over recursive

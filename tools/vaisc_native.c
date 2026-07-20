@@ -16574,6 +16574,69 @@ static char *nested_list_index_expr(
     return sb_take(&out);
 }
 
+
+/*
+ * Rewrite every `name[ROW][col]` occurrence of a lowered nested-list local
+ * inside a line (string-safe) to the flat per-row list index
+ * `<row_list>[col]`, so double-index reads work in any expression position,
+ * not just as a bare return value. Rows must be nonnegative int literals
+ * (the declaration shape); other shapes are left untouched.
+ */
+static char *nested_list_rewrite_occurrences(const char *line, NestedListInfo *infos, int info_count, int *changed) {
+    StrBuf out;
+    sb_init(&out);
+    *changed = 0;
+    for (int i = 0; line[i] != '\0';) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, i);
+            if (end < 0) { sb_append(&out, line + i); break; }
+            sb_append_n(&out, line + i, (size_t)(end - i));
+            i = end;
+            continue;
+        }
+        if (!is_ident_start(line[i]) || (i > 0 && is_ident_continue(line[i - 1]))) {
+            sb_append_n(&out, line + i, 1);
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(line[i])) i++;
+        NestedListInfo *info = nested_list_find(infos, info_count, line + start, (size_t)(i - start));
+        if (info == NULL || line[i] != '[') {
+            sb_append_n(&out, line + start, (size_t)(i - start));
+            continue;
+        }
+        int row_close = find_matching_bracket_c(line, i);
+        if (row_close < 0) {
+            sb_append_n(&out, line + start, (size_t)(i - start));
+            continue;
+        }
+        char *row_raw = substr_copy(line + i + 1, (size_t)(row_close - i - 1));
+        int row_index = 0;
+        int row_ok = parse_nonnegative_int_literal(row_raw, &row_index);
+        free(row_raw);
+        if (!row_ok || row_index < 0 || row_index >= info->row_count || line[row_close + 1] != '[') {
+            sb_append_n(&out, line + start, (size_t)(i - start));
+            continue;
+        }
+        int col_close = find_matching_bracket_c(line, row_close + 1);
+        if (col_close < 0) {
+            sb_append_n(&out, line + start, (size_t)(i - start));
+            continue;
+        }
+        char *col = substr_copy(line + row_close + 2, (size_t)(col_close - row_close - 2));
+        sb_append(&out, info->rows[row_index]);
+        sb_append(&out, "[");
+        sb_append(&out, col);
+        sb_append(&out, "]");
+        free(col);
+        *changed = 1;
+        i = col_close + 1;
+    }
+    return sb_take(&out);
+}
+
 static int lower_nested_list_return_line(
     const char *line,
     NestedListInfo *infos,
@@ -16606,6 +16669,15 @@ static char *lower_nested_list_text(const char *text) {
     for (size_t i = 0; i < lines.len; i++) {
         if (nested_list_assignment_line(lines.items[i], infos, &info_count, &out)) continue;
         if (lower_nested_list_return_line(lines.items[i], infos, info_count, &out)) continue;
+        if (info_count > 0) {
+            int changed = 0;
+            char *rewritten = nested_list_rewrite_occurrences(lines.items[i], infos, info_count, &changed);
+            if (changed) {
+                lines_push(&out, rewritten);
+                continue;
+            }
+            free(rewritten);
+        }
         lines_push(&out, strdup(lines.items[i]));
     }
     char *joined = join_lines(&out, text[0] == '\0' || text[strlen(text) - 1] == '\n');
@@ -19018,6 +19090,21 @@ static int check_front_contract_text(const char *text, const char *path) {
         int line_no = (int)i + 1;
         issues += check_fn_contract_line(path, line_no, line, &has_main, &has_bad_main, struct_names, struct_count);
         issues += front_check_unknown_call_line(path, line_no, line, probe, callable_names, callable_count, callable_overflow);
+        {
+            const char *eq = strstr(probe, "= if ");
+            if (eq != NULL) {
+                const char *rest = eq + 5;
+                const char *then_kw = strstr(rest, " then ");
+                const char *brace = strchr(rest, '{');
+                if (brace != NULL && (then_kw == NULL || brace < then_kw)) {
+                    report_issue(path, line_no, find_col(line, "if"), line,
+                        "if-expression values use `then`/`else`, not braces",
+                        "write `let x = if cond then value else other`; brace blocks are statements, not values.",
+                        NULL);
+                    issues++;
+                }
+            }
+        }
         front_register_map_params(probe, map_locals, map_types, &map_local_count);
         front_register_list_params(probe, list_locals, list_types, &list_local_count, struct_names, struct_count);
 
@@ -32865,8 +32952,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *enum_lowered = lower_enum_text(result_metric_lowered);
     free(result_metric_lowered);
     if (enum_lowered == NULL) return 1;
-    char *prepared = lower_list_method_text(enum_lowered);
+    char *nested_lowered = lower_nested_list_text(enum_lowered);
     free(enum_lowered);
+    if (nested_lowered == NULL) return 1;
+    char *prepared = lower_list_method_text(nested_lowered);
+    free(nested_lowered);
     if (prepared == NULL) return 1;
     char *c_src = direct_lower_to_c(source, prepared);
     free(prepared);

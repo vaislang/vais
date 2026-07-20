@@ -4,6 +4,19 @@
 
 ### Changed
 
+- Second value-fuzzing round (46 probes x both engines) hardened three
+  more surfaces: `List<List<Int>>` double-index reads now compose in any
+  expression position on both engines (the nested-list lowering rewrites
+  every literal-row occurrence in place and also runs in the direct
+  pipeline, which previously rejected the type), brace-form
+  if-expressions in value position are rejected at the front with a
+  `then`/`else` help (the full engine silently produced 0 before), and
+  the front gate locks the rejection. Three-deep inline struct literals
+  remain a registered candidate (staged assembly is the verified form).
+  All other probes — i64 boundary consistency, empty-string edges across
+  the str builtins, Option/Result `?`/match flows, break/continue mixes,
+  deep struct chains, map ordering — measured value-exact.
+
 - Value-correctness fuzzing round (32 probes x both engines) found and
   fixed silent full-engine miscompiles of bare `xs.remove_at(i)` /
   `xs.pop()` statements (lengths left unadjusted, struct lists summing

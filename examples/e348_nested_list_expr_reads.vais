@@ -1,0 +1,20 @@
+# expect: 42
+# List<List<Int>> literal double-index reads work in any expression position
+# on both engines: the driver lowers the literal into per-row flat lists and
+# rewrites every `grid[ROW][col]` occurrence (row as an int literal) in place,
+# so composed arithmetic and call arguments read naturally.
+
+fn weight(v: Int) -> Int {
+    return v * 2
+}
+
+fn main() -> Int {
+    let grid: List<List<Int>> = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    let mut t = 0
+    t = t + grid[0][0] + grid[1][1] + grid[2][2]
+    t = t + grid[0][2] * grid[2][0]
+    let picked = weight(grid[1][0])
+    let j = 2
+    let dynamic_col = grid[0][j]
+    return t + picked - dynamic_col + 1
+}
