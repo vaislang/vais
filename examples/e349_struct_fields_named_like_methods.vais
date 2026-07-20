@@ -1,0 +1,28 @@
+# expect: 42
+# Struct fields may share names with list methods (count, contains,
+# index_of): reads and writes stay plain field accesses because the method
+# dispatch only fires when a `(` call actually follows.
+
+struct Stats {
+    count: Int,
+    contains: Int,
+    index_of: Int,
+}
+
+fn main() -> Int {
+    let mut s = Stats { count: 10, contains: 20, index_of: 5 }
+    s.count = s.count + 4
+    s.contains = s.contains - 6
+    s.index_of = s.index_of * 2
+    if s.count != 14 { return 1 }
+    if s.contains != 14 { return 2 }
+    if s.index_of != 10 { return 3 }
+
+    # The real list methods keep working beside the fields.
+    let xs: List<Int> = [5, 7, 5]
+    if xs.count(5) != 2 { return 4 }
+    if xs.contains(7) != true { return 5 }
+    if xs.index_of(7) != 1 { return 6 }
+
+    return s.count + s.contains + s.index_of + 4
+}

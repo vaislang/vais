@@ -1,5 +1,23 @@
 # Vais Worklog
 
+## 2026-07-21 (fuzzing 라운드 4 — 메서드명 필드 abort 근절, 수렴 리셋)
+
+프로브 12종 × 양 엔진. 11종 값 정확(extend 자기 앨리어싱 [1,2,3]→6원소,
+insert_at 0/len 경계, parse_int "007"/-13, 겹침 replace "aaaa"→"bb",
+Map<Int,Bool>·<Str,Char>, 변이 후 first/last, 음수 mod 루프 가드,
+proc_capture stderr 텍스트 보존, count/contains/index_of, sort_by 순서).
+
+**발견 1건(컴파일러 abort) root-fix**: struct 필드명이 리스트 메서드명
+(count/contains/index_of)과 같으면 **그 필드를 읽기만 해도 full 컴파일러가
+무메시지 SIGABRT** — gen_factor의 메서드 디스패치 3지점이 다음 토큰이
+`(`인지 확인 없이 paren_end→gen_expr로 돌진(맵 분기는 이미 opn.kind==9
+가드 보유). 스크립트 전수 감사로 무가드 지점이 정확히 그 3곳뿐임을 확정,
+`and toks[i + 3].kind == 9` 가드 추가(.ll 재생성, 위생 0/0). e349가 필드
+읽기/쓰기와 진짜 리스트 메서드 공존을 잠금(parity 368).
+
+수렴 판정: 라운드 3(0건) 후 4에서 1건 — 연속 무발견 카운터 리셋, 수렴
+확정에는 라운드 5(무발견) 필요.
+
 ## 2026-07-20b (fuzzing 라운드 3 — 발견 0건, 첫 무결함 라운드)
 
 프로브 19종 × 양 엔진(38런), 전부 값 정확: Result<Str,Int>/<Str,Str>의

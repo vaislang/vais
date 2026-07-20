@@ -112,6 +112,7 @@ examples/e345_proc_run_env.vais	native-supported	Built-in proc_run_env overlays 
 examples/e346_vaisfmt_package/src/main.vais	native-supported	Installable vaisfmt whitespace normalizer self-test covers str_builder text reconstruction, trailing-whitespace stripping, and recursive check/fix tree walks.
 examples/e347_list_discard_statements.vais	native-supported	Bare remove_at and pop statements on Int and struct lists shrink lengths and shift elements exactly like the assigned forms.
 examples/e348_nested_list_expr_reads.vais	native-supported	List<List<Int>> literal double-index reads compose in arithmetic, call arguments, and dynamic column positions on both engines.
+examples/e349_struct_fields_named_like_methods.vais	native-supported	Struct fields named count, contains, and index_of read and write as plain fields while the real list methods keep working.
 examples/e303_result_metric_int_struct_payload.vais	native-supported	Result<Metric,Int> struct payload values flow through helper parameters and recover fields through inline matches.
 examples/e304_result_record_int_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> struct payload values flow through helper parameters and recover three fields through inline matches.
 examples/e305_result_multiline_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> multiline struct payload values flow through helper parameters and recover four fields through inline matches.

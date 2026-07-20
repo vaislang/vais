@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-20b) — 값-정확성 fuzzing 라운드 3 (흐름·스트레스)
+## 현재 작업 (2026-07-21) — 값-정확성 fuzzing 라운드 4 (수렴 확인 → 리셋)
+모드: 개별선택
+- [x] 1. 프로브 12종 × 양 엔진(24런) ✅ 2026-07-21 — extend 자기 앨리어싱/
+      insert_at 경계(0·len)/parse_int 경계(-13·007)/겹침 replace/
+      Map<Int,Bool>·<Str,Char>/first·last 변이 후/음수 mod 루프/
+      proc_capture stderr 텍스트/count·index_of/sort_by 순서 값 정확.
+- [x] 2. **발견 1건 root-fix** ✅ 2026-07-21 — 메서드명과 같은 struct 필드
+      (count/contains/index_of)를 **읽기만 해도 full 컴파일러가 무메시지
+      abort**(gen_factor 메서드 디스패치가 `(` 확인 없이 paren_end 돌진).
+      전수 감사로 무가드 3지점 확정 → `toks[i+3].kind == 9` 가드(.ll 재생성).
+      e349(parity 368).
+- [x] 3. 수렴 판정 ✅ — 라운드 3(0건)→4(1건)로 연속 무발견 리셋. 수렴
+      확정에는 연속 2회 무발견 필요 → 라운드 5 권고.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-20b) — 값-정확성 fuzzing 라운드 3 (흐름·스트레스)
 모드: 개별선택
 - [x] 1~3. 프로브 19종 × 양 엔진(38런) ✅ 2026-07-20 — Result<Str,Int>/
       <Str,Str> `?`·match 메시지 전파, for-each(Int/Str/누적 push 구조체),

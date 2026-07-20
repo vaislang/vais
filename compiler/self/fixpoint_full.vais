@@ -4827,7 +4827,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     return Op { kind: 1, val: zc, next: zc + 1 }
                 }
             }
-            if is_contains(src, meth.nstart, meth.nlen) == 1 {
+            if is_contains(src, meth.nstart, meth.nlen) == 1 and toks[i + 3].kind == 9 {
                 let cclose = paren_end(toks, i + 4)
                 let carg = gen_expr(toks, slots, fns, defs, src, i + 4, cclose, counter)
                 let lsty = sty_of(slots, src, t.nstart, t.nlen)
@@ -5392,7 +5392,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     return Op { kind: 1, val: resc, next: resc + 1 }
                 }
             }
-            if is_index_of(src, meth.nstart, meth.nlen) == 1 {
+            if is_index_of(src, meth.nstart, meth.nlen) == 1 and toks[i + 3].kind == 9 {
                 let cclose = paren_end(toks, i + 4)
                 let carg = gen_expr(toks, slots, fns, defs, src, i + 4, cclose, counter)
                 let lsty = sty_of(slots, src, t.nstart, t.nlen)
@@ -6057,7 +6057,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     return Op { kind: 1, val: resc, next: resc + 1 }
                 }
             }
-            if is_count(src, meth.nstart, meth.nlen) == 1 {
+            if is_count(src, meth.nstart, meth.nlen) == 1 and toks[i + 3].kind == 9 {
                 let cclose = paren_end(toks, i + 4)
                 let carg = gen_expr(toks, slots, fns, defs, src, i + 4, cclose, counter)
                 let lsty = sty_of(slots, src, t.nstart, t.nlen)

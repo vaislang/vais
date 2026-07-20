@@ -4,6 +4,16 @@
 
 ### Changed
 
+- Fuzzing round 4 (12 probes x both engines) found the full compiler
+  aborting on struct fields named like list methods: reading `.count`
+  (or `.contains` / `.index_of`) on a struct receiver entered the list
+  method dispatch, which scanned for a call `(` that never existed. The
+  three dispatch sites now require an actual `(` token, so such fields
+  read and write as plain fields (examples/e349, parity 368); the other
+  eleven probes (self-alias extend, insert_at boundaries, parse_int
+  edges, overlapping replace, Map<Int,Bool>/Map<Str,Char>, proc_capture
+  stderr text, sort_by ordering) measured value-exact.
+
 - Second value-fuzzing round (46 probes x both engines) hardened three
   more surfaces: `List<List<Int>>` double-index reads now compose in any
   expression position on both engines (the nested-list lowering rewrites
