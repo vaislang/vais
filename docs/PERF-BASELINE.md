@@ -46,6 +46,13 @@ Sum of the pre-dedup ladder chain: ~4143 s (~69 min).
   superset of the old chain at roughly half the serial wall time (~36 min).
   Individual gate tasks remain for selective runs, and `quick`
   (fmt/front/direct/check, ~6 min) is unchanged for tight loops.
-- Largest single gate: `test-fixpoint-full` (863 s) — the full-codegen case
-  matrix compiles and clang-links per case. Recorded as the next optimization
-  target if ladder time matters again.
+- Largest single gate: `test-fixpoint-full` (863 s serial) — every case
+  embeds the 23k-line self-host core, builds that compiler, emits the case
+  IR, clang-links, and runs it. 2026-07-22: cases are now stateless-hash
+  sharded across `VAIS_FIXPOINT_SHARDS` parallel workers (default 8) with
+  identical coverage (partition by construction; the only repeated log line
+  is the per-shard embed-helper setup): **863 s → 320 s (2.7x)**. The
+  sub-linear scaling is per-shard setup plus concurrent clang links of
+  ~4.4 MB IR saturating memory bandwidth. `test.sh` (206 s) and
+  `test-vaisc-parity` (205 s) run similar per-case loops and are the next
+  sharding candidates if further ladder time matters.

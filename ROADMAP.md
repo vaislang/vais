@@ -22,7 +22,19 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-22) — 성능 기준선 측정 + 래더 중복 제거
+## 현재 작업 (2026-07-22b) — fixpoint-full 게이트 샤딩 병렬화
+모드: 개별선택
+- [x] 1. 원인 실측 ✅ — 케이스마다 23k줄 core를 embed→컴파일러 빌드→emit→
+      clang→run (직렬 863s의 정체).
+- [x] 2. 무상태 해시 샤딩 ✅ — 도구가 (shard_index, shard_count) 선택 인자
+      수용, 6개 케이스 진입 함수에 이름-해시 버킷 조기 반환(케이스 간
+      상태 없음 → 분할=구성상 전수).
+- [x] 3. 게이트 8-워커 팬아웃 ✅ — VAIS_FIXPOINT_SHARDS(기본 8, 1=직렬
+      동작 보존), 샤드 로그 집계·단일 RESULT. **863s→320s(2.7×)**,
+      케이스 중복 0 실측. 차기 후보: test.sh/parity 동일 패턴.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-22) — 성능 기준선 측정 + 래더 중복 제거
 모드: 개별선택 (우선순위 자체 판단: 래더 ~10분×상시 실행이 실측된 최대 고통)
 - [x] 1. 단위 빌드 기준선 ✅ 2026-07-22 — hello 174/193ms, 패키지 ~140ms,
       core emit 444ms, 드라이버 리빌드 11.9s. 단위 비용은 문제 아님.

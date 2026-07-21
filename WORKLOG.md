@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-07-22b (fixpoint-full 게이트 샤딩 — 863s→320s)
+
+원인: 케이스(383 등록)마다 23k줄 core 소스를 embed한 컴파일러를 통째로
+빌드(emit 444ms + clang 링크 수 s)하는 구조 — 직렬 863s의 정체.
+
+무상태 해시 샤딩: 도구 main이 (shard_index, shard_count) 선택 인자(기본
+0/1)를 받고, 6개 케이스 진입 함수(run_exit/trap/stdout_case, check_ir_case,
+check_source_file, run_embedded_source_program)가 케이스명 djb2-유사 해시
+버킷 밖이면 조기 반환. 케이스 간 상태가 없어 분할=구성상 전수 커버.
+게이트 스크립트는 VAIS_FIXPOINT_SHARDS(기본 8) 워커 팬아웃 + 로그 집계 +
+단일 RESULT(1이면 기존 직렬 경로 그대로).
+
+실측: **863s→320s(2.7×)**, rc=0, 샤드 로그 중복은 샤드당 셋업 라인뿐
+(케이스 중복 0). 스케일 손실은 샤드별 embed-helper 셋업 + 4.4MB IR 동시
+clang의 메모리 대역폭. 래더(fmt+release) 기대 ~36분→~27분. 차기 샤딩
+후보: test.sh(206s)/parity(205s) 동일 케이스-루프 구조.
+
 ## 2026-07-22 (성능 기준선 + 래더 중복 제거 — 우선순위 자체 판단 유닛)
 
 fuzzing 사이클 종결 후 다음 방향을 자체 우선순위로 결정(배포=외부 차단/

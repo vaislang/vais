@@ -314,7 +314,35 @@ fn emit_case_ir(case_dir: Str, case_name: Str) -> Str {
     return ""
 }
 
+fn shard_count() -> Int {
+    if proc_argc() < 4 { return 1 }
+    let n = parse_int(proc_arg(3))
+    if n < 1 { return 1 }
+    return n
+}
+
+fn shard_index() -> Int {
+    if proc_argc() < 4 { return 0 }
+    let i = parse_int(proc_arg(2))
+    if i < 0 { return 0 }
+    return i
+}
+
+fn case_in_shard(case_name: Str) -> Int {
+    let n = shard_count()
+    if n <= 1 { return 1 }
+    let mut h = 5381
+    let mut i = 0
+    while i < case_name.len() {
+        h = (h * 33 + case_name[i]) % 1000003
+        i = i + 1
+    }
+    if h % n == shard_index() { return 1 }
+    return 0
+}
+
 fn run_exit_case(vaisc: Str, helper: Str, harness: Str, tmp: Str, case_name: Str, prog: Str, want: Int) -> Int {
+    if case_in_shard(case_name) == 0 { return 0 }
     let case_dir = prepare_case(vaisc, helper, harness, tmp, case_name, prog)
     if case_dir.len() == 0 { return 1 }
     let ir = emit_case_ir(case_dir, case_name)
@@ -334,6 +362,7 @@ fn run_exit_case(vaisc: Str, helper: Str, harness: Str, tmp: Str, case_name: Str
 }
 
 fn run_trap_case(vaisc: Str, helper: Str, harness: Str, tmp: Str, case_name: Str, prog: Str, label: Str) -> Int {
+    if case_in_shard(case_name) == 0 { return 0 }
     let case_dir = prepare_case(vaisc, helper, harness, tmp, case_name, prog)
     if case_dir.len() == 0 { return 1 }
     let ir = emit_case_ir(case_dir, case_name)
@@ -350,6 +379,7 @@ fn run_trap_case(vaisc: Str, helper: Str, harness: Str, tmp: Str, case_name: Str
 }
 
 fn run_stdout_case(vaisc: Str, helper: Str, harness: Str, tmp: Str, case_name: Str, prog: Str, want: Str) -> Int {
+    if case_in_shard(case_name) == 0 { return 0 }
     let case_dir = prepare_case(vaisc, helper, harness, tmp, case_name, prog)
     if case_dir.len() == 0 { return 1 }
     let ir = emit_case_ir(case_dir, case_name)
@@ -2010,6 +2040,7 @@ fn list_extend_inline_literal_source_lines_source() -> Str {
 }
 
 fn check_ir_case(vaisc: Str, helper: Str, harness: Str, tmp: Str, case_name: Str, prog: Str, p1: Str, p2: Str, p3: Str, label: Str) -> Int {
+    if case_in_shard(case_name) == 0 { return 0 }
     let case_dir = prepare_case(vaisc, helper, harness, tmp, case_name, prog)
     if case_dir.len() == 0 { return 1 }
     let ir = emit_case_ir(case_dir, case_name)
@@ -2029,6 +2060,7 @@ fn check_ir_case(vaisc: Str, helper: Str, harness: Str, tmp: Str, case_name: Str
 }
 
 fn check_source_file(vaisc: Str, helper: Str, harness: Str, tmp: Str, case_name: Str, source_file: Str, want: Int, label: Str) -> Int {
+    if case_in_shard(case_name) == 0 { return 0 }
     let case_dir = path_join(tmp, case_name)
     if fs_mkdirs(case_dir) != 0 { return 1 }
     let input = path_join(case_dir, "c.input.vais")
@@ -2109,6 +2141,7 @@ fn write_direct_double_source(path: Str) -> Int {
 }
 
 fn run_embedded_source_program(vaisc: Str, helper: Str, harness: Str, tmp: Str, case_name: Str, source_file: Str, raw: Int, want: Int, marker1: Str, marker2: Str) -> Int {
+    if case_in_shard(case_name) == 0 { return 0 }
     let case_dir = path_join(tmp, case_name)
     if fs_mkdirs(case_dir) != 0 { return 1 }
     let input = path_join(case_dir, "c.input.vais")
@@ -2575,7 +2608,7 @@ fn usage() -> Int {
 }
 
 fn main() -> Int {
-    if proc_argc() != 2 { return usage() }
+    if proc_argc() != 2 and proc_argc() != 4 { return usage() }
     let root = proc_arg(0)
     let tmp = proc_arg(1)
     if fs_mkdirs(tmp) != 0 {

@@ -4,6 +4,13 @@
 
 ### Changed
 
+- test-fixpoint-full drops from 863 s to 320 s: the codegen check tool
+  accepts an optional (shard-index, shard-count) argument pair and skips
+  cases outside its stateless name-hash bucket, and the gate script fans
+  out VAIS_FIXPOINT_SHARDS parallel workers (default 8; set 1 for the
+  serial behavior). Coverage is unchanged — the partition covers every
+  case by construction and the sharded log shows no duplicated case.
+
 - Measured the toolchain performance baseline (docs/PERF-BASELINE.md):
   unit builds are fast (hello ~174 ms, packages ~140 ms, self-host core
   emit 444 ms, driver rebuild 11.9 s), but the serial gate ladder cost
