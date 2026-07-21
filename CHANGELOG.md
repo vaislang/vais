@@ -4,6 +4,21 @@
 
 ### Changed
 
+- Fuzzing round 5 (27 probes x both engines) closed out the round-4
+  defect families: a residual unguarded remove_at dispatch (a struct
+  field named `remove_at` aborted the full compiler on read) now
+  requires a call `(` like its siblings, and the direct engine's twelve
+  remaining silent list/map contract traps (index and insert bounds,
+  capacity, empty pop/max/min, map key_at/value_at and 256-entry
+  inserts) route through the message-printing trap, so an empty
+  `xs.pop()` reports "vais list trap: empty-list access" before the
+  deterministic SIGABRT on both engines. A 21-name field sweep and all
+  fresh-area probes (empty-list contracts, clear-then-reuse, same-field
+  structs, deep else-if chains, method-call loop guards) measured
+  correct; e349 extends to the remove_at field and the workflow gate
+  adds loud empty-pop cases. Remaining silent traps are only the
+  str_slice/str_from_byte range checks and out-of-memory paths (noted).
+
 - Fuzzing round 4 (12 probes x both engines) found the full compiler
   aborting on struct fields named like list methods: reading `.count`
   (or `.contains` / `.index_of`) on a struct receiver entered the list

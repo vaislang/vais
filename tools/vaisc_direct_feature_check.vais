@@ -8155,11 +8155,11 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     } else if shape == 75 {
         ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "__vais_list_checked_index") and str_contains(text, "define i64 @first_value(ptr")
     } else if shape == 76 {
-        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "define i64 @remove_value(ptr") and str_contains(text, "llvm.memcpy") and str_contains(text, "llvm.trap")
+        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "define i64 @remove_value(ptr") and str_contains(text, "llvm.memcpy") and str_contains(text, "vais_list_trap")
     } else if shape == 77 {
-        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "define i64 @insert_box(ptr") and str_contains(text, "llvm.memcpy") and str_contains(text, "llvm.trap")
+        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "define i64 @insert_box(ptr") and str_contains(text, "llvm.memcpy") and str_contains(text, "vais_list_trap")
     } else if shape == 78 {
-        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "define i64 @append_boxes(ptr") and str_contains(text, "llvm.memcpy") and str_contains(text, "llvm.trap")
+        ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "define i64 @append_boxes(ptr") and str_contains(text, "llvm.memcpy") and str_contains(text, "vais_list_trap")
     } else if shape == 79 {
         ok = str_contains(text, "%struct.DirectList_Box = type") and str_contains(text, "define i64 @score(ptr") and str_contains(text, "llvm.memcpy") and str_contains(text, "br label")
     } else if shape == 80 {

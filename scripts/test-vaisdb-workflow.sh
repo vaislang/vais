@@ -319,6 +319,18 @@ expect_exit "list cap overflow full build" 0 "$ROOT/scripts/vaisc" build "$overf
 expect_exit "list cap overflow full traps loud" 134 "$tmp/list-cap-overflow-full"
 expect_exit "list cap overflow direct build" 0 "$ROOT/scripts/vaisc" build "$overflow_src" --engine direct -o "$tmp/list-cap-overflow-direct"
 expect_exit "list cap overflow direct traps loud" 134 "$tmp/list-cap-overflow-direct"
+empty_pop_src="$tmp/list-empty-pop.vais"
+cat > "$empty_pop_src" <<'VAIS'
+fn main() -> Int {
+    let xs: List<Int> = []
+    xs.pop()
+    return 0
+}
+VAIS
+expect_exit "list empty pop full build" 0 "$ROOT/scripts/vaisc" build "$empty_pop_src" -o "$tmp/list-empty-pop-full"
+expect_exit "list empty pop full traps loud" 134 "$tmp/list-empty-pop-full"
+expect_exit "list empty pop direct build" 0 "$ROOT/scripts/vaisc" build "$empty_pop_src" --engine direct -o "$tmp/list-empty-pop-direct"
+expect_exit "list empty pop direct traps loud" 134 "$tmp/list-empty-pop-direct"
 expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
 mkdir -p "$vdb_extract"
 expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"

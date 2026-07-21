@@ -6987,7 +6987,7 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     return Op { kind: 1, val: loadc, next: loadc + 1 }
                 }
             }
-            if is_remove_at(src, meth.nstart, meth.nlen) == 1 {
+            if is_remove_at(src, meth.nstart, meth.nlen) == 1 and toks[i + 3].kind == 9 {
                 let lsty = sty_of(slots, src, t.nstart, t.nlen)
                 let mclose = paren_end(toks, i + 4)
                 let ridx = gen_expr(toks, slots, fns, defs, src, i + 4, mclose, counter)

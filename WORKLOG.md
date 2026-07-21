@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-07-21b (fuzzing 라운드 5 — 패밀리 소탕, 사이클 종결)
+
+인접-위험 정조준이 적중: 메서드명 struct 필드 21종 전수에서 **remove_at
+1건만 잔존 무가드**(라운드 4 감사의 정규식 패턴 밖 형태 — lsty 선행 줄) →
+`(` 가드. 빈 리스트 trap 프로브가 **direct 잔여 무메시지 trap을 노출**
+(empty-pop이 SIGTRAP) → 리스트/Map 계약 trap 12지점 일괄 메시지화
+(인덱스 0/삽입 1/빈 접근 2/용량 3). 이제 `xs.pop()` on empty가 양 엔진
+에서 "vais list trap: empty-list access" 후 결정적 SIGABRT. grep 잔여는
+str_slice·from_byte 범위 + OOM뿐(별개 부류, 후보 노트).
+
+신규 영역(빈 계약/clear 재사용/동명 필드 2-struct/깊은 else-if/메서드
+혼합 루프 가드) 전부 값 정확. **수렴 판정: 신규-영역 무발견 3회 연속
+(라운드 3·4·5) + 패밀리 구조적 소진 → 값-정확성 fuzzing 사이클 종결.**
+5라운드 누적 136프로브가 기준선. e349 확장(remove_at 필드), workflow
++4케이스(양 엔진 empty-pop 134). 트랩(자기 교훈): python subprocess의
+returncode는 시그널을 음수로 보고(-6=SIGABRT) — 셸 134와 혼동 금지.
+
 ## 2026-07-21 (fuzzing 라운드 4 — 메서드명 필드 abort 근절, 수렴 리셋)
 
 프로브 12종 × 양 엔진. 11종 값 정확(extend 자기 앨리어싱 [1,2,3]→6원소,

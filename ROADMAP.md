@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-21) — 값-정확성 fuzzing 라운드 4 (수렴 확인 → 리셋)
+## 현재 작업 (2026-07-21b) — 값-정확성 fuzzing 라운드 5 (수렴 재확인)
+모드: 개별선택
+- [x] 1~2. 프로브 27종 × 양 엔진(54런) ✅ 2026-07-21 — 메서드명 필드 21종
+      전수(잔여 1건 발견), 빈 리스트 trap 계약, clear 재사용, 동명 필드
+      2-struct, 깊은 else-if, 메서드-혼합 루프 가드.
+- [x] 발견 2건 = **라운드 4 패밀리 잔여 소탕(구조적 소진)** ✅ —
+      ① remove_at 디스패치 무가드 1지점(감사 패턴 밖 형태) → `(` 가드.
+      ② direct 잔여 무메시지 계약 trap 12지점(인덱스/삽입/용량/빈 pop·
+      max·min/Map key_at·value_at·256 insert) → 메시지 trap 일괄.
+      grep 잔여 = str_slice·from_byte 범위 2 + OOM 5뿐(별개 부류, 노트).
+- [x] 3. 판정 ✅ — **신규-영역 무발견은 라운드 3·4·5 연속 3회**(4~5의
+      발견은 전부 기지 패밀리 잔여, 전수 감사로 소진). 값-정확성 fuzzing
+      사이클 종결. 누적 136프로브 기준선.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-21) — 값-정확성 fuzzing 라운드 4 (수렴 확인 → 리셋)
 모드: 개별선택
 - [x] 1. 프로브 12종 × 양 엔진(24런) ✅ 2026-07-21 — extend 자기 앨리어싱/
       insert_at 경계(0·len)/parse_int 경계(-13·007)/겹침 replace/
@@ -409,6 +424,8 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   form. 수요 반복 시 리터럴 lowering 확장.
 - 중첩 리스트 dynamic-row 읽기(`grid[i][j]`의 i가 변수)는 미치환 잔존 —
   %v-1 clang 에러로 표면화. 수요 시 행 스위치 데수가 검토.
+- 잔여 무메시지 trap 2부류(리스트 외): __vais_str_slice/from_byte 범위
+  검사, malloc 실패(OOM) 경로 — 메시지화 여부는 수요 시 검토.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지
