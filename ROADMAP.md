@@ -22,7 +22,19 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-21b) — 값-정확성 fuzzing 라운드 5 (수렴 재확인)
+## 현재 작업 (2026-07-22) — 성능 기준선 측정 + 래더 중복 제거
+모드: 개별선택 (우선순위 자체 판단: 래더 ~10분×상시 실행이 실측된 최대 고통)
+- [x] 1. 단위 빌드 기준선 ✅ 2026-07-22 — hello 174/193ms, 패키지 ~140ms,
+      core emit 444ms, 드라이버 리빌드 11.9s. 단위 비용은 문제 아님.
+- [x] 2. 게이트 분해 ✅ — **직렬 래더 실측 ~69분**(체감 10분은 오판정).
+      release 2153s(내부 재실행 1967s), fixpoint-full 863s 최대 단일.
+- [x] 3. 중복 제거 ✅ — ladder = fmt + release(엄격 상위집합, ~36분,
+      48% 단축). quick(~6분)/개별 태스크 유지, 14태스크 불변.
+- [x] 4. 문서 ✅ — docs/PERF-BASELINE.md 신설(표+분석+차기 타깃
+      fixpoint-full 기록).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-21b) — 값-정확성 fuzzing 라운드 5 (수렴 재확인)
 모드: 개별선택
 - [x] 1~2. 프로브 27종 × 양 엔진(54런) ✅ 2026-07-21 — 메서드명 필드 21종
       전수(잔여 1건 발견), 빈 리스트 trap 계약, clear 재사용, 동명 필드

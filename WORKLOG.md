@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-07-22 (성능 기준선 + 래더 중복 제거 — 우선순위 자체 판단 유닛)
+
+fuzzing 사이클 종결 후 다음 방향을 자체 우선순위로 결정(배포=외부 차단/
+nl=컨텍스트 단절/시나리오=수확 체감 → **성능이 유일한 미측정 축 + 실고통**).
+
+기준선 실측(docs/PERF-BASELINE.md): 단위 빌드는 전부 빠름(hello 174ms,
+패키지 140ms, core emit 444ms, 드라이버 리빌드 11.9s). **직렬 게이트 래더가
+~69분** — 체감 10분은 세션 대기 중 완주된 것의 오판정이었음. 분해 결과
+release 게이트(2153s)가 front/direct/check/fixpoint/value/parity/workflow/
+native/selfhost를 내부 재실행(1967s) + 릴리스 전용 게이트, 즉 기존 ladder
+체인은 매회 ~33분을 중복 실행.
+
+**무위험 단축**: gates.tasks의 ladder를 `fmt + release`로 재정의 — 커버리지
+엄격 상위집합(release가 diff --check로 종결)에 wall ~36분(48% 단축).
+quick(~6분)/개별 태스크/14태스크 수·workflow parse 케이스 불변. 차기
+최적화 타깃으로 fixpoint-full(863s, 케이스별 clang 링크) 기록.
+
 ## 2026-07-21b (fuzzing 라운드 5 — 패밀리 소탕, 사이클 종결)
 
 인접-위험 정조준이 적중: 메서드명 struct 필드 21종 전수에서 **remove_at

@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Measured the toolchain performance baseline (docs/PERF-BASELINE.md):
+  unit builds are fast (hello ~174 ms, packages ~140 ms, self-host core
+  emit 444 ms, driver rebuild 11.9 s), but the serial gate ladder cost
+  ~69 minutes because tools/gates.tasks ran nine gates that
+  test-release-gates re-runs internally. The ladder chain is now
+  `fmt + release` — a strict coverage superset at roughly half the wall
+  time (~36 min) — while individual gate tasks and the ~6-minute `quick`
+  chain stay available for selective runs. Largest single gate
+  (test-fixpoint-full, 863 s) is recorded as the next optimization
+  target.
+
 - Fuzzing round 5 (27 probes x both engines) closed out the round-4
   defect families: a residual unguarded remove_at dispatch (a struct
   field named `remove_at` aborted the full compiler on read) now

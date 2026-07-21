@@ -20,5 +20,10 @@ diff = git diff --check
 quick = /usr/bin/true
 !needs quick fmt front direct check
 
+# `release` already runs front/direct/check/fixpoint/value/parity/workflow/
+# native/selfhost internally (a strict superset, ending with git diff --check),
+# so the full ladder is exactly fmt + release: measured 2026-07-22, this halves
+# the serial wall time (~69min -> ~36min) with identical-or-wider coverage.
+# The individual tasks above remain for selective runs.
 ladder = /usr/bin/true
-!needs ladder fmt front direct check fixpoint value parity workflow native selfhost release diff
+!needs ladder fmt release
