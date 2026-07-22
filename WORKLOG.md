@@ -1,5 +1,18 @@
 # Vais Worklog
 
+## 2026-07-23 (도그푸딩 13 — vaisbench 다섯 번째 도구, 갭 0건)
+
+성능 사이클의 bash 측정 패턴을 Vais 도구로 자기환류: vaisbench <n> <cmd>
+[args...]가 n회 proc_run을 time_millis로 계측해 runs/min/median/avg/max ms
+리포트(정렬 샘플 — 파라미터 리스트 in-place sort의 제품 실사용), 자식 비0
+exit 즉시 전파, **가변 후행 인자 패스스루**(고정 argc 아닌 첫 CLI 패턴).
+
+**컴파일러 갭 0건 — 첫 시도 양 엔진 42.** 실전 증명: 패키지 바이너리로
+`vaisbench 3 bash scripts/test-vaisc-native.sh` → 16.1~17.9s로
+PERF-BASELINE의 17s 기준선을 도구가 재검증. sleep 50ms 계측 59~61ms
+(스폰 오버헤드 포함 정확). workflow +5케이스, parity 369. 배포 도구 5개
+체제(vaisdb/vaisgrep/vaismake/vaisfmt/vaisbench).
+
 ## 2026-07-22e (성능 사이클 종결 — 래더 3.1×)
 
 4유닛 결산: ① 래더 중복 제거(release가 9게이트 내부 포함 → fmt+release,

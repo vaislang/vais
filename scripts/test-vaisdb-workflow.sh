@@ -299,6 +299,14 @@ expect_exit "vaisfmt recheck clean" 0 "$vfmt_dist/bin/vaisfmt" -c "$vfmt_src"
 expect_exit "vaisfmt missing path" 3 "$vfmt_dist/bin/vaisfmt" -c "$tmp/vaisfmt-no-such"
 expect_exit "vaisfmt repo std clean" 0 "$vfmt_dist/bin/vaisfmt" -c "$ROOT/std"
 
+vbench_dist="$tmp/vaisbench-dist"
+rm -rf "$vbench_dist"
+expect_exit "vaisbench package build" 0 "$ROOT/scripts/vaisc" package "$ROOT/examples/e350_vaisbench_package" -o "$vbench_dist"
+expect_exit "vaisbench package self-test" 42 "$vbench_dist/bin/vaisbench"
+expect_exit "vaisbench times true" 0 "$vbench_dist/bin/vaisbench" 3 /usr/bin/true
+expect_exit "vaisbench propagates failure" 1 "$vbench_dist/bin/vaisbench" 3 /usr/bin/false
+expect_exit "vaisbench rejects bad count" 2 "$vbench_dist/bin/vaisbench" 0 /usr/bin/true
+
 overflow_src="$tmp/list-cap-overflow.vais"
 cat > "$overflow_src" <<'VAIS'
 fn main() -> Int {

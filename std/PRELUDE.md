@@ -104,6 +104,11 @@ into the assigned form (`examples/e347_list_discard_statements.vais`).
 position on both engines (`examples/e348_nested_list_expr_reads.vais`), and
 value if-expressions use the `then`/`else` form only — brace blocks in value
 position are rejected at the front.
+`examples/e350_vaisbench_package` is the fifth installable tool: `vaisbench`
+times a child command over repeated `proc_run` runs with `time_millis` (the
+first product use of the clock) and reports min/median/avg/max over a sorted
+sample — variable trailing arguments pass straight through to the child, so
+it benchmarks the repo's own gate scripts.
 `examples/e346_vaisfmt_package` is the fourth installable tool: `vaisfmt`
 normalizes Vais source whitespace (trailing spaces/tabs stripped, exactly one
 trailing newline) with `-c` check and in-place fix modes over recursive

@@ -4,6 +4,15 @@
 
 ### Changed
 
+- Added the fifth installable Vais tool: `examples/e350_vaisbench_package`
+  builds `dist/bin/vaisbench <n> <cmd> [args...]`, timing a child command
+  over n `proc_run` runs with `time_millis` (the clock's first product
+  use) and reporting `runs/min/median/avg/max ms` over a sorted sample;
+  failing children stop the loop and propagate their exit. Variable
+  trailing arguments pass through to the child — measured against the
+  repo's own native smoke gate it reproduces the recorded ~17 s
+  baseline. Zero compiler gaps (first-try 42 on both engines).
+
 - The self-host gate parallelizes its five independent probes (each
   embeds and builds its own first-generation compiler) as phase workers,
   with the stage1/stage2 IR comparison running last against the workers'

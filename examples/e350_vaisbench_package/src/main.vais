@@ -1,0 +1,88 @@
+# expect: 42
+# Fifth installable Vais tool: `scripts/vaisc package` builds dist/bin/vaisbench
+# timing a child command over repeated runs:
+#   vaisbench <n> <cmd> [args...]
+# runs the command n times through proc_run, measuring each run with
+# time_millis, and reports `runs=N min=A median=B avg=C max=D ms`. A child
+# that exits non-zero stops the loop and that exit code is propagated;
+# n < 1 exits 2. Run without arguments it executes a deterministic self-test
+# (the release-corpus entry).
+import bench.stats
+
+fn bench_argv(out: List<Str>) -> Int {
+    let total = proc_argc()
+    let mut i = 1
+    while i < total {
+        out.push(proc_arg(i))
+        i = i + 1
+    }
+    return out.len()
+}
+
+fn run_bench(n: Int, argv: List<Str>) -> Int {
+    let durations: List<Int> = []
+    let mut i = 0
+    while i < n {
+        let t0 = time_millis()
+        let code = proc_run(argv)
+        let t1 = time_millis()
+        if code != 0 { return code }
+        durations.push(t1 - t0)
+        i = i + 1
+    }
+    let line = str_concat("runs=", str_concat(Str(durations.len()), str_concat(" min=", str_concat(Str(stats_min(durations)), str_concat(" median=", str_concat(Str(stats_median(durations)), str_concat(" avg=", str_concat(Str(stats_avg(durations)), str_concat(" max=", str_concat(Str(stats_max(durations)), " ms"))))))))))
+    print(line)
+    return 0
+}
+
+fn usage() -> Int {
+    print("usage: vaisbench <n> <cmd> [args...]")
+    return 2
+}
+
+fn self_test() -> Int {
+    # Statistics over a fixed sample: sort/median/avg/min/max stay exact.
+    let xs: List<Int> = [9, 3, 7, 5]
+    if stats_min(xs) != 3 { return 1 }
+    if stats_max(xs) != 9 { return 2 }
+    if stats_avg(xs) != 6 { return 3 }
+    if stats_median(xs) != 5 { return 4 }
+    let one: List<Int> = [11]
+    if stats_median(one) != 11 { return 5 }
+
+    # Real timed runs: /usr/bin/true three times, all zero exits.
+    let argv: List<Str> = []
+    argv.push("/usr/bin/true")
+    let durations: List<Int> = []
+    let mut i = 0
+    while i < 3 {
+        let t0 = time_millis()
+        let code = proc_run(argv)
+        let t1 = time_millis()
+        if code != 0 { return 6 }
+        let d = t1 - t0
+        if d < 0 { return 7 }
+        durations.push(d)
+        i = i + 1
+    }
+    if durations.len() != 3 { return 8 }
+    if stats_min(durations) > stats_max(durations) { return 9 }
+
+    # A failing child propagates its exit.
+    let bad: List<Str> = []
+    bad.push("/usr/bin/false")
+    if proc_run(bad) != 1 { return 10 }
+
+    return 42
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    if proc_argc() < 2 { return usage() }
+    let n = parse_int(proc_arg(0))
+    if n < 1 { return usage() }
+    let argv: List<Str> = []
+    let count = bench_argv(argv)
+    if count == 0 { return usage() }
+    return run_bench(n, argv)
+}

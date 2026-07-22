@@ -1,0 +1,4 @@
+name = "e350_vaisbench_package"
+version = "0.1.0"
+source = "src"
+binary = "vaisbench"

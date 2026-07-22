@@ -1,0 +1,22 @@
+# Duration statistics shared by the vaisbench report path. Durations are
+# whole milliseconds; median of an even count takes the lower middle (sorted
+# in place via the built-in List<Int>.sort()).
+
+fn stats_min(xs: List<Int>) -> Int {
+    return xs.min()
+}
+
+fn stats_max(xs: List<Int>) -> Int {
+    return xs.max()
+}
+
+fn stats_avg(xs: List<Int>) -> Int {
+    if xs.len() == 0 { return 0 }
+    return xs.sum() / xs.len()
+}
+
+fn stats_median(xs: List<Int>) -> Int {
+    if xs.len() == 0 { return 0 }
+    xs.sort()
+    return xs[(xs.len() - 1) / 2]
+}

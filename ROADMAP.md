@@ -22,7 +22,18 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-22e) — 성능 사이클 종결
+## 현재 작업 (2026-07-23) — 도그푸딩 13: vaisbench (다섯 번째 도구)
+모드: 개별선택
+- [x] 1. e350 vaisbench ✅ 2026-07-23 — bench.stats 모듈(min/max/avg/median
+      — 파라미터 리스트 in-place sort) + 가변 인자 패스스루 + time_millis
+      제품 첫 실사용.
+- [x] 2. 실패 전파 ✅ — 비0 즉시 전파(false→1), n<1/비숫자→usage 2.
+- [x] 3. 게이트 ✅ — self-test 42 양 엔진, workflow +5케이스, parity 369.
+- [x] 4. 환류 + 문서 ✅ — **컴파일러 갭 0건(첫 시도 42)**. 실전 증명:
+      네이티브 스모크 게이트 3회 벤치가 기준선 17s 재현(16.1~17.9s).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-22e) — 성능 사이클 종결
 모드: 기록만 (코드 무변경)
 - [x] 사이클 결산 ✅ 2026-07-22 — 4유닛(래더 중복 제거→fixpoint 샤딩→
       value/parity 샤딩→selfhost 페이즈 병렬화)으로 **래더 ~69분→~22분
