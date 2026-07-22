@@ -22,7 +22,18 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-22b) — fixpoint-full 게이트 샤딩 병렬화
+## 현재 작업 (2026-07-22c) — value/parity 게이트 샤딩
+모드: 개별선택
+- [x] 1. 도구 샤딩 ✅ — value/parity 체크 도구에 (shard_index, shard_count)
+      선택 인자 + 매니페스트 엔트리 이름-해시 버킷 필터(단일-이름 경로와
+      argc 4 직렬 경로 보존).
+- [x] 2. 셸 팬아웃+집계 ✅ — VAIS_VALUE_SHARDS/VAIS_PARITY_SHARDS(기본 8),
+      샤드 RESULT 카운터 합산으로 정본 RESULT 라인 재구성.
+- [x] 3. 실측 ✅ — **206s→129s / 205s→129s**, 합산 pass=368·native=368
+      불변. 래더(fmt+release) ~69분→~24분 누적.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-22b) — fixpoint-full 게이트 샤딩 병렬화
 모드: 개별선택
 - [x] 1. 원인 실측 ✅ — 케이스마다 23k줄 core를 embed→컴파일러 빌드→emit→
       clang→run (직렬 863s의 정체).

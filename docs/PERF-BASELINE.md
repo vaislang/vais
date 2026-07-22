@@ -53,6 +53,11 @@ Sum of the pre-dedup ladder chain: ~4143 s (~69 min).
   identical coverage (partition by construction; the only repeated log line
   is the per-shard embed-helper setup): **863 s → 320 s (2.7x)**. The
   sub-linear scaling is per-shard setup plus concurrent clang links of
-  ~4.4 MB IR saturating memory bandwidth. `test.sh` (206 s) and
-  `test-vaisc-parity` (205 s) run similar per-case loops and are the next
-  sharding candidates if further ladder time matters.
+  ~4.4 MB IR saturating memory bandwidth. 2026-07-22 (same day): `test.sh`
+  and `test-vaisc-parity` received the same stateless-hash sharding
+  (`VAIS_VALUE_SHARDS` / `VAIS_PARITY_SHARDS`, default 8; 1 keeps the serial
+  path, single-name runs bypass sharding): **206 s → 129 s** and
+  **205 s → 129 s**, with the shell wrappers summing per-shard counters into
+  the canonical RESULT lines (pass=368 / native=368 unchanged). The 1.6x
+  scaling is bounded by per-entry `scripts/vaisc` process spawns; the ladder
+  (fmt + release) now lands around ~24 min from the original ~69 min.

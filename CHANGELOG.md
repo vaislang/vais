@@ -4,6 +4,15 @@
 
 ### Changed
 
+- The value corpus and parity gates now shard like fixpoint-full:
+  tools/vais_value_check.vais and tools/vais_parity_check.vais accept an
+  optional (shard-index, shard-count) pair and skip manifest entries
+  outside their stateless name-hash bucket, while the gate scripts fan
+  out VAIS_VALUE_SHARDS / VAIS_PARITY_SHARDS workers (default 8) and sum
+  the per-shard counters into the canonical RESULT lines. Measured
+  206 s -> 129 s and 205 s -> 129 s with identical counts (pass=368,
+  native=368); single-name runs and shards=1 keep the serial paths.
+
 - test-fixpoint-full drops from 863 s to 320 s: the codegen check tool
   accepts an optional (shard-index, shard-count) argument pair and skips
   cases outside its stateless name-hash bucket, and the gate script fans

@@ -1,5 +1,18 @@
 # Vais Worklog
 
+## 2026-07-22c (value/parity 게이트 샤딩 — 각 129s)
+
+fixpoint-full과 동일한 무상태 해시 샤딩을 두 코퍼스 게이트에 적용.
+도구(vais_value_check/vais_parity_check)에 (shard_index, shard_count)
+선택 인자와 엔트리 이름-해시 버킷 필터를 추가(단일-이름 실행과 argc 4
+직렬 경로는 그대로), 셸 래퍼가 8-워커 팬아웃 후 샤드별 RESULT 카운터를
+합산해 정본 라인(pass=…, native=…)을 재구성.
+
+실측: value 206s→129s, parity 205s→129s(각 1.6× — 엔트리당
+scripts/vaisc 프로세스 스폰이 하한). 합산 카운트 pass=368/native=368
+직렬과 동일(커버리지 불변). 성능 사이클 3유닛 누적으로 래더(fmt+release)
+~69분→~24분.
+
 ## 2026-07-22b (fixpoint-full 게이트 샤딩 — 863s→320s)
 
 원인: 케이스(383 등록)마다 23k줄 core 소스를 embed한 컴파일러를 통째로

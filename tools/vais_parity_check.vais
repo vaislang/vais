@@ -149,8 +149,37 @@ fn usage() -> Int {
     return 2
 }
 
+fn shard_count_arg(base: Int) -> Int {
+    if proc_argc() < base + 2 { return 1 }
+    let n = parse_int(proc_arg(base + 1))
+    if n < 1 { return 1 }
+    return n
+}
+
+fn shard_index_arg(base: Int) -> Int {
+    if proc_argc() < base + 2 { return 0 }
+    let i = parse_int(proc_arg(base))
+    if i < 0 { return 0 }
+    return i
+}
+
+fn entry_in_shard(rel: Str, base: Int) -> Int {
+    let n = shard_count_arg(base)
+    if n <= 1 { return 1 }
+    let mut h = 5381
+    let mut i = 0
+    while i < rel.len() {
+        h = (h * 33 + rel[i]) % 1000003
+        i = i + 1
+    }
+    if h % n == shard_index_arg(base) { return 1 }
+    return 0
+}
+
 fn main() -> Int {
-    if proc_argc() != 4 { return usage() }
+    if proc_argc() != 4 {
+        if proc_argc() != 6 { return usage() }
+    }
     let root = proc_arg(0)
     let manifest = proc_arg(1)
     let source_root = proc_arg(2)
@@ -206,7 +235,9 @@ fn main() -> Int {
                         let rel = str_slice(line, 0, tab1)
                         let status = str_slice(line, tab1 + 1, tab2 - tab1 - 1)
                         let src = path_join(source_root, rel)
-                        if fs_exists(src) == 0 {
+                        if entry_in_shard(rel, 4) == 0 {
+                            let skip_shard = 0
+                        } else if fs_exists(src) == 0 {
                             print(str_concat("  FAIL manifest path missing: ", rel))
                             fail = 1
                         } else {
