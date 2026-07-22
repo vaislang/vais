@@ -4,6 +4,14 @@
 
 ### Changed
 
+- The self-host gate parallelizes its five independent probes (each
+  embeds and builds its own first-generation compiler) as phase workers,
+  with the stage1/stage2 IR comparison running last against the workers'
+  outputs: 272 s -> 177 s with an identical case-level PASS set.
+  tools/fixpoint_full_self_check.vais accepts a phase argument (or
+  explicit stage paths for the comparison); VAIS_SELFHOST_PHASES=serial
+  keeps the original single-process behavior.
+
 - The value corpus and parity gates now shard like fixpoint-full:
   tools/vais_value_check.vais and tools/vais_parity_check.vais accept an
   optional (shard-index, shard-count) pair and skip manifest entries

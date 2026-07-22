@@ -1,5 +1,18 @@
 # Vais Worklog
 
+## 2026-07-22d (selfhost 게이트 페이즈 병렬화 — 272s→177s)
+
+구조 판정이 핵심이었던 유닛: 세대 체인이라 직렬로 보였지만, 5개 프로브
+(self_probe + retarget×4)는 **각자 embed→1세대 컴파일러를 빌드**하므로
+상호 독립 — 유일한 의존은 마지막 compare(stage1=self_probe IR, stage2=
+retarget_fixpoint_full IR). 도구에 페이즈 인자(단일 프로브/명시 stage 경로
+compare)를 추가하고 셸이 5-워커 팬아웃 후 compare를 실행.
+
+실측: 272s→177s(1.5× — 최중량 프로브 2개가 하한), 케이스-레벨 PASS 집합
+diff로 직렬과 동일 확인(초과 라인은 워커별 헬퍼 셋업뿐). 직렬 경로는
+VAIS_SELFHOST_PHASES=serial로 보존. 경유 이슈: compare argc 오프바이원
+(5→4) 1건 즉시 정정. 성능 사이클 4유닛 누적: 래더 ~69분→**~22분**.
+
 ## 2026-07-22c (value/parity 게이트 샤딩 — 각 129s)
 
 fixpoint-full과 동일한 무상태 해시 샤딩을 두 코퍼스 게이트에 적용.

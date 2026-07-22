@@ -59,5 +59,11 @@ Sum of the pre-dedup ladder chain: ~4143 s (~69 min).
   path, single-name runs bypass sharding): **206 s → 129 s** and
   **205 s → 129 s**, with the shell wrappers summing per-shard counters into
   the canonical RESULT lines (pass=368 / native=368 unchanged). The 1.6x
-  scaling is bounded by per-entry `scripts/vaisc` process spawns; the ladder
-  (fmt + release) now lands around ~24 min from the original ~69 min.
+  scaling is bounded by per-entry `scripts/vaisc` process spawns. The
+  self-host gate's five independent probes (each embeds and builds its own
+  first-generation compiler) now run as parallel phase workers with the
+  stage1/stage2 comparison last (`VAIS_SELFHOST_PHASES=serial` preserves the
+  single-process path): **272 s → 177 s**, bounded by the two heaviest
+  probes. The ladder (fmt + release) now lands around ~22 min from the
+  original ~69 min; remaining costs are the release-only gates and the
+  sequential heavy probes.

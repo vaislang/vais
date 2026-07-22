@@ -456,8 +456,32 @@ fn usage() -> Int {
     return 2
 }
 
+fn probe_phase(vaisc: Str, embed_bin: Str, src: Str, compiler_self: Str, phase: Str, tmp: Str) -> Int {
+    if phase == "self_probe" {
+        return run_full_probe(vaisc, embed_bin, src, src, "full-source fixpoint_full.vais self probe", "self_probe", 42, "program", tmp)
+    }
+    if phase == "retarget_fixpoint" {
+        return run_retarget_probe(vaisc, embed_bin, src, path_join(compiler_self, "fixpoint.vais"), 24, "first-generation compiler consumes fixpoint.vais", "retarget_fixpoint", tmp)
+    }
+    if phase == "retarget_fixpoint2" {
+        return run_retarget_probe(vaisc, embed_bin, src, path_join(compiler_self, "fixpoint2.vais"), 50, "first-generation compiler consumes fixpoint2.vais", "retarget_fixpoint2", tmp)
+    }
+    if phase == "retarget_fixpoint3" {
+        return run_retarget_probe(vaisc, embed_bin, src, path_join(compiler_self, "fixpoint3.vais"), 120, "first-generation compiler consumes fixpoint3.vais", "retarget_fixpoint3", tmp)
+    }
+    if phase == "retarget_fixpoint_full" {
+        return run_retarget_probe(vaisc, embed_bin, src, src, 42, "first-generation compiler consumes fixpoint_full.vais", "retarget_fixpoint_full", tmp)
+    }
+    print(str_concat("  FAIL unknown self-host phase: ", phase))
+    return 1
+}
+
 fn main() -> Int {
-    if proc_argc() != 2 { return usage() }
+    if proc_argc() != 2 {
+        if proc_argc() != 3 {
+            if proc_argc() != 4 { return usage() }
+        }
+    }
     let root = proc_arg(0)
     let tmp = proc_arg(1)
     if fs_mkdirs(tmp) != 0 {
@@ -487,6 +511,18 @@ fn main() -> Int {
     } else {
         print("  FAIL Vais stage IR normalizer build")
         print_log_if_exists(path_join(tmp, "stage_normalizer.build.err"))
+        return 1
+    }
+
+    if proc_argc() == 4 {
+        # compare phase: explicit stage1/stage2 paths from the parallel workers.
+        let c_fail = compare_stage_ir(norm_bin, proc_arg(2), proc_arg(3), "fixpoint_full stage1/stage2 compiler output", tmp)
+        if c_fail == 0 { return 0 }
+        return 1
+    }
+    if proc_argc() == 3 {
+        let p_fail = probe_phase(vaisc, embed_bin, src, compiler_self, proc_arg(2), tmp)
+        if p_fail == 0 { return 0 }
         return 1
     }
 

@@ -22,7 +22,17 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-22c) — value/parity 게이트 샤딩
+## 현재 작업 (2026-07-22d) — selfhost 게이트 페이즈 병렬화
+모드: 개별선택
+- [x] 1. 독립성 판정 ✅ — 5개 프로브는 각자 embed→1세대 컴파일러 빌드로
+      상호 독립, compare만 self_probe/retarget_fixpoint_full 산출물 소비.
+- [x] 2. 도구 페이즈 인자 ✅ — argc 3=단일 프로브/4=compare(명시 stage
+      경로)/2=기존 직렬 전체. 경유 이슈 1건(compare argc 오프바이원) 정정.
+- [x] 3. 실측 ✅ — **272s→177s(1.5×)**, rc=0, 케이스-레벨 PASS 집합 직렬
+      동일(diff 검증). VAIS_SELFHOST_PHASES=serial 보존. 래더 ~22분 누적.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-22c) — value/parity 게이트 샤딩
 모드: 개별선택
 - [x] 1. 도구 샤딩 ✅ — value/parity 체크 도구에 (shard_index, shard_count)
       선택 인자 + 매니페스트 엔트리 이름-해시 버킷 필터(단일-이름 경로와
