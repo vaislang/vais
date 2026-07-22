@@ -22,7 +22,18 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-22d) — selfhost 게이트 페이즈 병렬화
+## 현재 작업 (2026-07-22e) — 성능 사이클 종결
+모드: 기록만 (코드 무변경)
+- [x] 사이클 결산 ✅ 2026-07-22 — 4유닛(래더 중복 제거→fixpoint 샤딩→
+      value/parity 샤딩→selfhost 페이즈 병렬화)으로 **래더 ~69분→~22분
+      (3.1×)**. 정본 카운트/케이스 집합 전 유닛에서 불변 실증.
+- 잔여 비용(수확 체감으로 종결): selfhost 최중량 프로브 2개(각 ~150s,
+  진짜 직렬 — 1세대 컴파일러 빌드+4.4MB emit), release 전용 게이트들,
+  엔트리당 scripts/vaisc 프로세스 스폰 하한. 재개 트리거: 래더 시간이
+  다시 병목이 되거나 게이트 수가 크게 늘 때.
+진행률: 1/1 (100%)
+
+## 직전 완료 (2026-07-22d) — selfhost 게이트 페이즈 병렬화
 모드: 개별선택
 - [x] 1. 독립성 판정 ✅ — 5개 프로브는 각자 embed→1세대 컴파일러 빌드로
       상호 독립, compare만 self_probe/retarget_fixpoint_full 산출물 소비.
