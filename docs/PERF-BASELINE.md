@@ -64,6 +64,10 @@ Sum of the pre-dedup ladder chain: ~4143 s (~69 min).
   first-generation compiler) now run as parallel phase workers with the
   stage1/stage2 comparison last (`VAIS_SELFHOST_PHASES=serial` preserves the
   single-process path): **272 s → 177 s**, bounded by the two heaviest
-  probes. The ladder (fmt + release) now lands around ~22 min from the
+  probes. The ladder (fmt + perf + release) now lands around ~22 min from the
   original ~69 min; remaining costs are the release-only gates and the
-  sequential heavy probes.
+  sequential heavy probes. The `perf` ladder task
+  (`scripts/vaisbench-gate.sh 60000 2 bash scripts/test-vaisc-native.sh`)
+  watches the native smoke gate under a 60 s median budget — ~3.5x the
+  17 s baseline, so only real regressions fire — turning this document's
+  resume trigger into an automated check.

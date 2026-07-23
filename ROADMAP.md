@@ -22,7 +22,18 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-23) — 도그푸딩 13: vaisbench (다섯 번째 도구)
+## 현재 작업 (2026-07-23b) — 도그푸딩 14: vaisbench 예산 모드 + perf 감시 태스크
+모드: 개별선택
+- [x] 1. `-b <budget_ms>` ✅ 2026-07-23 — runs/median/budget 리포트 후
+      median>예산이면 exit 3. self-test +2단계(관대/불가능 예산).
+- [x] 2. vaisbench-gate.sh ✅ — 패키지→`-b` 실행 래퍼.
+- [x] 3. perf 태스크 ✅ — ladder = fmt+perf+release(15태스크). 실측:
+      native 게이트 median 16.7s < 60s 예산 통과.
+- [x] 4. 게이트/문서 ✅ — workflow +2(-b 통과 0/초과 3), parse 15,
+      PERF-BASELINE "재개 트리거의 자동화" 기록. **갭 0건.**
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-23) — 도그푸딩 13: vaisbench (다섯 번째 도구)
 모드: 개별선택
 - [x] 1. e350 vaisbench ✅ 2026-07-23 — bench.stats 모듈(min/max/avg/median
       — 파라미터 리스트 in-place sort) + 가변 인자 패스스루 + time_millis

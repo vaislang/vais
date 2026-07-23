@@ -19,6 +19,27 @@ fn bench_argv(out: List<Str>) -> Int {
     return out.len()
 }
 
+fn run_bench_budget(n: Int, budget_ms: Int, argv: List<Str>) -> Int {
+    let durations: List<Int> = []
+    let mut i = 0
+    while i < n {
+        let t0 = time_millis()
+        let code = proc_run(argv)
+        let t1 = time_millis()
+        if code != 0 { return code }
+        durations.push(t1 - t0)
+        i = i + 1
+    }
+    let med = stats_median(durations)
+    let line = str_concat("runs=", str_concat(Str(durations.len()), str_concat(" median=", str_concat(Str(med), str_concat(" budget=", str_concat(Str(budget_ms), " ms"))))))
+    print(line)
+    if med > budget_ms {
+        print(str_concat("budget exceeded: median=", str_concat(Str(med), str_concat(" > ", str_concat(Str(budget_ms), " ms")))))
+        return 3
+    }
+    return 0
+}
+
 fn run_bench(n: Int, argv: List<Str>) -> Int {
     let durations: List<Int> = []
     let mut i = 0
@@ -37,6 +58,7 @@ fn run_bench(n: Int, argv: List<Str>) -> Int {
 
 fn usage() -> Int {
     print("usage: vaisbench <n> <cmd> [args...]")
+    print("       vaisbench -b <budget-ms> <n> <cmd> [args...]")
     return 2
 }
 
@@ -73,11 +95,38 @@ fn self_test() -> Int {
     bad.push("/usr/bin/false")
     if proc_run(bad) != 1 { return 10 }
 
+    # Budget mode: a generous budget passes, an impossible one exits 3.
+    let quick: List<Str> = []
+    quick.push("/usr/bin/true")
+    if run_bench_budget(2, 60000, quick) != 0 { return 11 }
+    if run_bench_budget(2, 0 - 1, quick) != 3 { return 12 }
+
     return 42
+}
+
+fn budget_argv(out: List<Str>) -> Int {
+    let total = proc_argc()
+    let mut i = 3
+    while i < total {
+        out.push(proc_arg(i))
+        i = i + 1
+    }
+    return out.len()
 }
 
 fn main() -> Int {
     if proc_argc() == 0 { return self_test() }
+    let first = proc_arg(0)
+    if first == "-b" {
+        if proc_argc() < 4 { return usage() }
+        let budget = parse_int(proc_arg(1))
+        let n = parse_int(proc_arg(2))
+        if n < 1 { return usage() }
+        let argv: List<Str> = []
+        let count = budget_argv(argv)
+        if count == 0 { return usage() }
+        return run_bench_budget(n, budget, argv)
+    }
     if proc_argc() < 2 { return usage() }
     let n = parse_int(proc_arg(0))
     if n < 1 { return usage() }

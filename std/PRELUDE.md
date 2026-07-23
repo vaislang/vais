@@ -108,7 +108,9 @@ position are rejected at the front.
 times a child command over repeated `proc_run` runs with `time_millis` (the
 first product use of the clock) and reports min/median/avg/max over a sorted
 sample — variable trailing arguments pass straight through to the child, so
-it benchmarks the repo's own gate scripts.
+it benchmarks the repo's own gate scripts, and the `-b <budget-ms>` mode
+turns it into the ladder's `perf` regression watch (median over budget
+exits 3).
 `examples/e346_vaisfmt_package` is the fourth installable tool: `vaisfmt`
 normalizes Vais source whitespace (trailing spaces/tabs stripped, exactly one
 trailing newline) with `-c` check and in-place fix modes over recursive

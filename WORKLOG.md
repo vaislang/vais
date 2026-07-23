@@ -1,5 +1,17 @@
 # Vais Worklog
 
+## 2026-07-23b (도그푸딩 14 — vaisbench 예산 모드 + perf 감시 태스크)
+
+성능 사이클이 남긴 "재개 트리거"를 자동화: vaisbench `-b <budget-ms>`가
+runs/median/budget 리포트 후 median 초과 시 exit 3, vaisbench-gate.sh
+래퍼가 패키지→예산 벤치를 한 명령으로, gates.tasks에 perf 태스크
+(네이티브 스모크 2회, 예산 60s = 기준선 17s의 3.5×)를 ladder 체인 선두부
+(fmt→perf→release, 15태스크)에 편입 — 진짜 회귀만 발화하는 flake-안전
+감시. 실측: median 16.7s 통과, 불가능 예산(-1)은 3.
+
+갭 0건. 도구 체인 자기참조 심화: Vais 벤치 도구가 Vais 게이트의 시간
+회귀를 Vais 태스크 러너 아래에서 감시.
+
 ## 2026-07-23 (도그푸딩 13 — vaisbench 다섯 번째 도구, 갭 0건)
 
 성능 사이클의 bash 측정 패턴을 Vais 도구로 자기환류: vaisbench <n> <cmd>

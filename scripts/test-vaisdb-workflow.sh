@@ -283,7 +283,7 @@ printf 'prep = /usr/bin/true\nbuild = /bin/echo built\nfail = /usr/bin/false\nbr
 expect_exit "vaismake deps run first" 0 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" build
 expect_exit "vaismake dep failure stops" 1 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" broken
 expect_exit "vaismake dep cycle detected" 4 "$vmake_dist/bin/vaismake" "$vmake_dep_tasks" loopa
-expect_exit "vaismake gates.tasks parses" 14 "$vmake_dist/bin/vaismake" "$ROOT/tools/gates.tasks"
+expect_exit "vaismake gates.tasks parses" 15 "$vmake_dist/bin/vaismake" "$ROOT/tools/gates.tasks"
 
 vfmt_dist="$tmp/vaisfmt-dist"
 vfmt_src="$tmp/vaisfmt-src"
@@ -306,6 +306,8 @@ expect_exit "vaisbench package self-test" 42 "$vbench_dist/bin/vaisbench"
 expect_exit "vaisbench times true" 0 "$vbench_dist/bin/vaisbench" 3 /usr/bin/true
 expect_exit "vaisbench propagates failure" 1 "$vbench_dist/bin/vaisbench" 3 /usr/bin/false
 expect_exit "vaisbench rejects bad count" 2 "$vbench_dist/bin/vaisbench" 0 /usr/bin/true
+expect_exit "vaisbench budget passes" 0 "$vbench_dist/bin/vaisbench" -b 60000 2 /usr/bin/true
+expect_exit "vaisbench budget exceeded" 3 "$vbench_dist/bin/vaisbench" -b -1 2 /usr/bin/true
 
 overflow_src="$tmp/list-cap-overflow.vais"
 cat > "$overflow_src" <<'VAIS'

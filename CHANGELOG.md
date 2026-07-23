@@ -4,6 +4,14 @@
 
 ### Changed
 
+- vaisbench gains a `-b <budget-ms>` mode (median over budget exits 3
+  after a `runs/median/budget` report) and the ladder gains a `perf`
+  task: scripts/vaisbench-gate.sh packages the tool and watches the
+  native smoke gate under a 60 s median budget (~3.5x the recorded 17 s
+  baseline, so only real regressions fire). The gate ladder chain is now
+  fmt + perf + release (15 tasks); the workflow gate covers the budget
+  pass and exceeded paths.
+
 - Added the fifth installable Vais tool: `examples/e350_vaisbench_package`
   builds `dist/bin/vaisbench <n> <cmd> [args...]`, timing a child command
   over n `proc_run` runs with `time_millis` (the clock's first product

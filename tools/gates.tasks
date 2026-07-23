@@ -5,6 +5,7 @@
 # propagate its exit code (vaismake !needs semantics).
 
 fmt = bash scripts/vaisfmt-check.sh
+perf = bash scripts/vaisbench-gate.sh 60000 2 bash scripts/test-vaisc-native.sh
 front = bash scripts/test-vaisc-front.sh
 direct = bash scripts/test-vaisc-direct.sh
 check = bash scripts/test-vais-check-vais.sh
@@ -26,4 +27,4 @@ quick = /usr/bin/true
 # the serial wall time (~69min -> ~36min) with identical-or-wider coverage.
 # The individual tasks above remain for selective runs.
 ladder = /usr/bin/true
-!needs ladder fmt release
+!needs ladder fmt perf release
