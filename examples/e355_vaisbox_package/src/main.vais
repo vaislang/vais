@@ -23,12 +23,13 @@ fn known_tool(name: Str) -> Int {
     if name == "vaisbench" { return 1 }
     if name == "vaisdiff" { return 1 }
     if name == "vaiswc" { return 1 }
+    if name == "vaissort" { return 1 }
     return 0
 }
 
 fn tool_list() -> Str {
     let lf = str_byte(10)
-    return str_concat("vaisdb", str_concat(lf, str_concat("vaisgrep", str_concat(lf, str_concat("vaismake", str_concat(lf, str_concat("vaisfmt", str_concat(lf, str_concat("vaisbench", str_concat(lf, str_concat("vaisdiff", str_concat(lf, "vaiswc"))))))))))))
+    return str_concat("vaisdb", str_concat(lf, str_concat("vaisgrep", str_concat(lf, str_concat("vaismake", str_concat(lf, str_concat("vaisfmt", str_concat(lf, str_concat("vaisbench", str_concat(lf, str_concat("vaisdiff", str_concat(lf, str_concat("vaiswc", str_concat(lf, "vaissort"))))))))))))))
 }
 
 fn self_dir() -> Str {
@@ -72,13 +73,13 @@ fn self_test() -> Int {
     if known_tool("vaiswc") != 1 { return 2 }
     if known_tool("nope") != 0 { return 3 }
 
-    # The applet list carries all seven names, one per line.
+    # The applet list carries all eight names, one per line.
     let list = tool_list()
     let names: List<Str> = []
     let count = str_split_lines_into(list, names)
-    if count != 7 { return 4 }
+    if count != 8 { return 4 }
     if names[0] != "vaisdb" { return 5 }
-    if names[6] != "vaiswc" { return 6 }
+    if names[7] != "vaissort" { return 6 }
 
     # proc_self resolves to a real basename we can dispatch on.
     let base = path_basename(proc_self())
@@ -88,8 +89,8 @@ fn self_test() -> Int {
     let dir = self_dir()
     if dir.len() == 0 { return 8 }
 
-    # 7 tools * 6 = 42
-    return count * 6
+    # 8 tools * 5 + 2 = 42
+    return count * 5 + 2
 }
 
 fn main() -> Int {

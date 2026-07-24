@@ -1,5 +1,29 @@
 # Vais Worklog
 
+## 2026-07-25 (도그푸딩 22 — vaissort 아홉 번째 도구, 갭 0건)
+
+vaissort(e357): 파일/stdin 라인 정렬 필터 — **List<Str>.sort 제품 첫
+실사용**(승격 2026-07-12 후 첫 실전). `-u`(정렬 후 인접 dedupe=전역
+unique)가 스프린트 18/19에서 고친 런타임 Str equality를 이웃 원소 비교로
+제품 검증, `-r` 역순, `-u -r` 조합 정확. 에러/usage는 stderr만(스프린트
+17 stdout 순수성 관례 — vaiswc의 stdout usage보다 엄격), 누락 파일 exit
+3+잔여 소스 계속 정렬. 다중 소스는 collect_lines가 소스별 임시 리스트로
+분해 후 누적(4095 계약 공유).
+
+**컴파일러 갭 0건 — 양 엔진 첫 시도 42**(vaiswc에 이어 2연속 무갭).
+workflow +12케이스(전부 cmp 바이트 대조: 기본/-u/-r/조합/stdin/빈/누락
+3/stdout-빈 2/체인), vaisbox 8도구 체제(known_tool/tool_list/self-test
+42 산술 count*5+2, list 8/dispatch 게이트). parity 376 실측. 래더
+(fmt+release) GREEN.
+
+경유 이슈(컴파일러 아님): 체인 게이트 기대값 오설정 — vaisgrep stdin
+출력이 `N: line` 프리픽스라 grep 출력은 이미 라인번호순 = 정렬 효과가
+안 보임 → grep→sort `-r` 역순 검증으로 조정. ROADMAP 스테일 체크박스
+2건(스프린트 17 미갱신, 도그푸딩2 작업5) 백필도 이번 세션에서 수행.
+
+**다음 세션:** 후보 갭(3중 인라인 struct/dynamic-row/무메시지 trap 잔여)
+또는 도그푸딩 23. 미커밋 상태로 마감 — 커밋은 사용자 확인 후.
+
 ## 2026-07-24g (도그푸딩 21 — vaisbox 멀티콜 + proc_self 승격 + Str==call 수정)
 
 vaisbox(e355): busybox 스타일 멀티콜 디스패처. **표면 부재 발견**:

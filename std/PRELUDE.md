@@ -104,6 +104,13 @@ into the assigned form (`examples/e347_list_discard_statements.vais`).
 position on both engines (`examples/e348_nested_list_expr_reads.vais`), and
 value if-expressions use the `then`/`else` form only — brace blocks in value
 position are rejected at the front.
+`examples/e357_vaissort_package` is the ninth installable tool: `vaissort`
+sorts lines from one or more sources (`-` for stdin) ascending in byte order —
+the first product use of `List<Str>.sort` — with `-u` dropping adjacent
+duplicates after sorting (= global unique, runtime Str equality) and `-r`
+printing in reverse; errors and usage go to stderr only, a missing file sets
+exit 3 while the remaining sources still sort, and all gathered lines share
+the 4095-slot list contract.
 `examples/e355_vaisbox_package` is the eighth installable tool: `vaisbox`
 is a busybox-style multicall dispatcher — it runs a sibling `dist/bin/<tool>`
 chosen from `proc_self()`'s basename when that names a known applet, or from

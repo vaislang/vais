@@ -292,6 +292,8 @@ variable argument passthrough),
 counter (multi-source `total` row, stdin via `-`, `str_split_ws_into` words),
 `examples/e355_vaisbox_package` for the installable vaisbox multicall
 dispatcher (proc_self basename applet selection, sibling re-exec, `list`),
+`examples/e357_vaissort_package` for the installable vaissort line sorter
+(`List<Str>.sort` over multi-source lines, `-u` adjacent unique, `-r` reverse),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

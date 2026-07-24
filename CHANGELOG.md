@@ -4,6 +4,19 @@
 
 ### Changed
 
+- Added the ninth installable Vais tool: `examples/e357_vaissort_package`
+  builds `dist/bin/vaissort [-u] [-r] <file...>` (`-` for stdin), gathering
+  lines from every source and sorting them ascending in byte order — the
+  first product use of `List<Str>.sort` in a shipped tool. `-u` drops
+  adjacent duplicates after sorting (= global unique, exercising the
+  runtime Str equality path fixed in sprints 18/19 on neighbor elements),
+  `-r` prints in reverse, errors and usage stay off stdout, and a missing
+  file reports to stderr (exit 3) while the remaining sources still sort.
+  vaisbox now dispatches vaissort as its eighth applet. Composes in pipes
+  (`vaisgrep ... | vaissort -r -`), locked by the workflow gate with
+  byte-exact `cmp` cases. Zero compiler gaps (first-try 42 on both
+  engines; parity 376).
+
 - Added the eighth installable Vais tool and a matching host API:
   `proc_self() -> Str` returns the running program path on both engines,
   and `examples/e355_vaisbox_package` builds `dist/bin/vaisbox`, a

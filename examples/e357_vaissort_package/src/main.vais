@@ -1,0 +1,203 @@
+# expect: 42
+# Ninth installable Vais tool: `scripts/vaisc package` builds dist/bin/vaissort
+# sorting lines from files or stdin:
+#   vaissort [-u] [-r] <file...>    (use - for stdin)
+# Lines from every source are gathered into one list and sorted ascending in
+# byte order (List<Str>.sort / str_cmp). `-u` drops adjacent duplicates after
+# sorting (= global unique), `-r` prints the sorted lines in reverse. Missing
+# files report to stderr and set the exit code to 3 while the remaining
+# sources still sort; errors and usage never touch stdout. Sources share the
+# 4095-slot list contract (str_split_lines_into). Run without arguments it
+# executes a deterministic self-test (the release-corpus entry).
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    return 0
+}
+
+fn read_source(path: Str) -> Str {
+    if path == "-" { return stdin_read_all() }
+    return fs_read_text(path)
+}
+
+fn collect_lines(text: Str, out: List<Str>) -> Int {
+    let tmp: List<Str> = []
+    let n = str_split_lines_into(text, tmp)
+    let mut i = 0
+    while i < n {
+        out.push(tmp[i])
+        i = i + 1
+    }
+    return n
+}
+
+fn unique_count(lines: List<Str>) -> Int {
+    let n = lines.len()
+    let mut u = 0
+    let mut j = 0
+    while j < n {
+        let mut fresh = 1
+        if j > 0 {
+            let cur = lines[j]
+            let prev = lines[j - 1]
+            if cur == prev { fresh = 0 }
+        }
+        u = u + fresh
+        j = j + 1
+    }
+    return u
+}
+
+fn emit_lines(lines: List<Str>, unique: Int, reverse: Int) -> Int {
+    let n = lines.len()
+    let mut printed = 0
+    if reverse == 1 {
+        let mut j = n - 1
+        while j >= 0 {
+            let mut show = 1
+            if unique == 1 {
+                if j + 1 < n {
+                    let cur = lines[j]
+                    let succ = lines[j + 1]
+                    if cur == succ { show = 0 }
+                }
+            }
+            if show == 1 {
+                print(lines[j])
+                printed = printed + 1
+            }
+            j = j - 1
+        }
+        return printed
+    }
+    let mut j = 0
+    while j < n {
+        let mut show = 1
+        if unique == 1 {
+            if j > 0 {
+                let cur = lines[j]
+                let prev = lines[j - 1]
+                if cur == prev { show = 0 }
+            }
+        }
+        if show == 1 {
+            print(lines[j])
+            printed = printed + 1
+        }
+        j = j + 1
+    }
+    return printed
+}
+
+fn run_sort(paths: List<Str>, unique: Int, reverse: Int) -> Int {
+    let lines: List<Str> = []
+    let mut status = 0
+    let mut i = 0
+    while i < paths.len() {
+        let path = paths[i]
+        if path != "-" {
+            if fs_exists(path) != 1 {
+                eprint(str_concat("error: file not found: ", path))
+                status = 3
+                i = i + 1
+            } else {
+                collect_lines(read_source(path), lines)
+                i = i + 1
+            }
+        } else {
+            collect_lines(read_source(path), lines)
+            i = i + 1
+        }
+    }
+    lines.sort()
+    emit_lines(lines, unique, reverse)
+    return status
+}
+
+fn is_flag(a: Str) -> Int {
+    if a == "-u" { return 1 }
+    if a == "-r" { return 1 }
+    return 0
+}
+
+fn usage() -> Int {
+    eprint("usage: vaissort [-u] [-r] <file...>   (use - for stdin)")
+    return 2
+}
+
+fn self_test() -> Int {
+    let lf = str_byte(10)
+
+    # Split + ascending sort over one source.
+    let lines: List<Str> = []
+    let body = str_concat("banana", str_concat(lf, str_concat("apple", str_concat(lf, str_concat("cherry", lf)))))
+    let n = collect_lines(body, lines)
+    if n != 3 { return 1 }
+    lines.sort()
+    if lines[0] != "apple" { return 2 }
+    if lines[1] != "banana" { return 3 }
+    if lines[2] != "cherry" { return 4 }
+
+    # Multi-source accumulation keeps earlier lines and re-sorts.
+    let extra = collect_lines(str_concat("apple", lf), lines)
+    if extra != 1 { return 5 }
+    if lines.len() != 4 { return 6 }
+    lines.sort()
+    if lines[0] != "apple" { return 7 }
+    if lines[1] != "apple" { return 8 }
+
+    # Adjacent dedupe after sorting = global unique (runtime Str equality on
+    # neighbor elements, the e352/e353-fixed path).
+    if unique_count(lines) != 3 { return 9 }
+
+    # Empty input stays empty through sort.
+    let none: List<Str> = []
+    let z = collect_lines("", none)
+    if z != 0 { return 10 }
+    none.sort()
+    if none.len() != 0 { return 11 }
+
+    # File round trip sorts disk content too.
+    let root = fs_temp_dir()
+    let f1 = path_join(root, "vais-e357.txt")
+    if fs_write_text(f1, str_concat("zeta", str_concat(lf, str_concat("eta", lf)))) != 0 { return 12 }
+    let disk: List<Str> = []
+    let dn = collect_lines(fs_read_text(f1), disk)
+    if dn != 2 { return 13 }
+    disk.sort()
+    if disk[0] != "eta" { return 14 }
+
+    # 3 unique lines * 14 = 42
+    return unique_count(lines) * 14
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let mut unique = 0
+    let mut reverse = 0
+    let mut start = 0
+    let mut scanning = 1
+    while scanning == 1 {
+        if start >= proc_argc() {
+            scanning = 0
+        } else {
+            let a = proc_arg(start)
+            if is_flag(a) == 1 {
+                if a == "-u" { unique = 1 }
+                if a == "-r" { reverse = 1 }
+                start = start + 1
+            } else {
+                scanning = 0
+            }
+        }
+    }
+    let paths: List<Str> = []
+    let mut i = start
+    while i < proc_argc() {
+        paths.push(proc_arg(i))
+        i = i + 1
+    }
+    if paths.len() == 0 { return usage() }
+    return run_sort(paths, unique, reverse)
+}

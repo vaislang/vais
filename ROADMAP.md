@@ -22,7 +22,27 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-24g) — 도그푸딩 21: vaisbox (멀티콜 디스패처)
+## 현재 작업 (2026-07-25) — 도그푸딩 22: vaissort (아홉 번째 도구)
+모드: 개별선택
+- [x] 1. e357 vaissort 패키지 ✅ 2026-07-25 — 파일/`-`(stdin) 입력, 라인
+      분해 후 `List<Str>.sort`(str_cmp 사전순) 정렬 출력. **sort 표면 제품
+      첫 실사용**. 무인자 self-test 42 양 엔진(첫 시도).
+- [x] 2. `-u`/`-r` ✅ — 정렬 후 인접 dedupe(전역 unique — 런타임 Str
+      equality e352/e353 수정 경로 제품 검증) + 역순 출력, 조합(-u -r)
+      포함 실측 정확. 에러/usage stderr(stdout-빈 검증), 누락 파일 exit 3
+      후 잔여 소스 계속 정렬.
+- [x] 3. 게이트 + vaisbox 등록 ✅ — workflow +12케이스(build/self-test/
+      기본/-u/-r/-u -r/stdin/빈 stdin/누락 3/누락 stdout-빈/usage stdout-빈/
+      grep→sort -r 파이프, 전부 cmp 바이트 대조) + vaisbox 8도구
+      (list 8/dispatch vaissort). 주의: vaisgrep stdin 출력은 `N: line`
+      프리픽스라 체인 기대값에 반영.
+- [x] 4. 환류 + 문서 ✅ — **컴파일러 갭 0건**(vaiswc에 이어 2연속 무갭 —
+      sort/이웃 equality/다중 소스 누적 전부 첫 시도 통과). parity 376
+      (native=376 실측), PRELUDE/README/CHANGELOG, 4095 계약 명시.
+      래더(fmt+release) GREEN.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-24g) — 도그푸딩 21: vaisbox (멀티콜 디스패처)
 모드: 개별선택
 - [x] 1. proc_self() 승격 + vaisbox ✅ 2026-07-24 — argv[0] 노출 표면 부재
       발견(proc_arg(0)=첫 사용자 인자 규약) → proc_self host API 승격
@@ -78,13 +98,14 @@ This file tracks current work and completed gate-backed language surface.
 
 ## 직전 완료 (2026-07-24c) — 도그푸딩 17: stderr_write + vaisdb 파이프 + stdout 순수성
 모드: 개별선택
-- [ ] 1. `stderr_write(text) -> Int` 승격 — stdout_write 미러(fd 2).
-- [ ] 2. vaisdb `ingest-stdin <index> <doc-id>` — 파이프 인제스트,
+- [x] 1. `stderr_write(text) -> Int` 승격 ✅ 2026-07-24 — stdout_write
+      미러(fd 2).
+- [x] 2. vaisdb `ingest-stdin <index> <doc-id>` ✅ — 파이프 인제스트,
       vaisgrep→vaisdb 체인 게이트.
-- [ ] 3. 필터 도구 stdout 순수성 — vaisgrep/vaisfmt의 에러 메시지를
+- [x] 3. 필터 도구 stdout 순수성 ✅ — vaisgrep/vaisfmt의 에러 메시지를
       stderr로(eprint 헬퍼), stdout-빈 검증 케이스.
-- [ ] 4. 환류 + 문서.
-진행률: 0/4
+- [x] 4. 환류 + 문서 ✅.
+진행률: 4/4 (100%) — 체크박스 백필 2026-07-25(완료 커밋 629f277e, 기록만 누락)
 
 ## 직전 완료 (2026-07-24b) — 도그푸딩 16: stdout_write 승격 + vaisfmt 필터
 모드: 개별선택
@@ -496,8 +517,9 @@ This file tracks current work and completed gate-backed language surface.
     레이아웃, query/report는 score를 exit code로 반환, 에러 3/2/1 구분) +
     scripts/vaisdb-cli.sh 래퍼 + workflow 게이트 10케이스(direct 엔진 report +
     래퍼 포함). 첫 시도 전 케이스 정확 — 컴파일러 갭 없음.
-- [ ] 5. 갭 환류 + 문서 정리 (Opus 직접)
-진행률: 4/5 (80%)
+- [x] 5. 갭 환류 + 문서 정리 (Opus 직접) ✅ 2026-07-10 — 환류 갭 1호
+      (built-in List sort)는 "다음 후보 작업"에 등록 후 e335/e336으로 완결.
+진행률: 5/5 (100%) — 체크박스 백필 2026-07-25
 
 배경: Result 진단 스프린트(5/5)로 오류 표현이 완성됐다. 다음 병목은 "실제 제품
 워크플로가 요구하는 조합"이다 — 정렬/랭킹, 스키마 버전, 영속 인덱스, CLI 통합.
