@@ -347,6 +347,22 @@ expect_exit "vaiswc stdin word count" 0 /bin/sh -c "printf 'pipe words here\n' |
 expect_exit "vaiswc missing keeps counting" 3 /bin/sh -c "'$vwc_dist/bin/vaiswc' '$tmp/vaiswc-no-such' '$tmp/vaiswc-b.txt' 2>/dev/null"
 expect_exit "grep to wc chain" 0 /bin/sh -c "printf 'cache one\nplain\ncache two three\n' | '$vgrep_dist/bin/vaisgrep' cache - | '$vwc_dist/bin/vaiswc' - | grep -qx '2 7 32 -'"
 
+vbox_dist="$tmp/vaisbox-dist"
+vbox_bin="$tmp/vaisbox-bin"
+rm -rf "$vbox_dist" "$vbox_bin"
+mkdir -p "$vbox_bin"
+"$ROOT/scripts/vaisc" package "$ROOT/examples/e355_vaisbox_package" -o "$vbox_dist" >/dev/null
+cp "$vbox_dist/bin/vaisbox" "$vbox_bin/vaisbox"
+cp "$vwc_dist/bin/vaiswc" "$vbox_bin/vaiswc"
+cp "$vgrep_dist/bin/vaisgrep" "$vbox_bin/vaisgrep"
+printf 'one two\nthree\n' > "$tmp/vaisbox-in.txt"
+expect_exit "vaisbox package self-test" 42 "$vbox_dist/bin/vaisbox"
+expect_exit "vaisbox list count" 0 /bin/sh -c "'$vbox_bin/vaisbox' list | wc -l | grep -q 7"
+expect_exit "vaisbox dispatch vaiswc" 0 /bin/sh -c "'$vbox_bin/vaisbox' vaiswc '$tmp/vaisbox-in.txt' < /dev/null | grep -qx '2 3 14 $tmp/vaisbox-in.txt'"
+expect_exit "vaisbox dispatch grep pipe" 2 /bin/sh -c "printf 'cache x\nplain\ncache y\n' | '$vbox_bin/vaisbox' vaisgrep -c cache -"
+expect_exit "vaisbox unknown tool" 2 /bin/sh -c "'$vbox_bin/vaisbox' nope < /dev/null 2>/dev/null"
+expect_exit "vaisbox missing sibling guard" 3 /bin/sh -c "'$vbox_dist/bin/vaisbox' vaisdb x < /dev/null 2>/dev/null"
+
 overflow_src="$tmp/list-cap-overflow.vais"
 cat > "$overflow_src" <<'VAIS'
 fn main() -> Int {

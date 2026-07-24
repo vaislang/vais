@@ -290,6 +290,10 @@ variable argument passthrough),
 (byte-level trim, middle-block `-N:`/`+N:` reports, one-side stdin),
 `examples/e354_vaiswc_package` for the installable vaiswc line/word/byte
 counter (multi-source `total` row, stdin via `-`, `str_split_ws_into` words),
+`examples/e355_vaisbox_package` for the installable vaisbox multicall
+dispatcher (proc_self basename applet selection, sibling re-exec, `list`),
+`examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
+string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between
 identifier operands without literal keys,
 `examples/e348_nested_list_expr_reads.vais` for composed `List<List<Int>>`

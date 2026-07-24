@@ -1,0 +1,23 @@
+# expect: 42
+# Str equality where one operand is a string-returning call (not a literal or
+# plain local) must byte-compare at runtime: the compiler recognizes such
+# calls as Str-returning so the comparison does not emit a type-mismatched
+# icmp (regression lock for proc_self and the is_host_str_return set).
+
+fn label() -> Str {
+    return str_concat("vais", "box")
+}
+
+fn main() -> Int {
+    let want = "vaisbox"
+    let mut r = 0
+    if want == label() { r = r + 14 }
+    if label() == want { r = r + 14 }
+    let other = "different"
+    if other != label() { r = r + 14 }
+
+    # Bound to a local first, then compared.
+    let got = label()
+    if got == want { r = r + 0 }
+    return r
+}

@@ -1,5 +1,28 @@
 # Vais Worklog
 
+## 2026-07-24g (도그푸딩 21 — vaisbox 멀티콜 + proc_self 승격 + Str==call 수정)
+
+vaisbox(e355): busybox 스타일 멀티콜 디스패처. **표면 부재 발견**:
+proc_arg(0)이 argv[0]이 아니라 첫 사용자 인자 규약이라 프로그램 이름
+접근 불가 → **proc_self() -> Str 승격**(host runtime이 argv[0] 저장, direct
+9그룹, core Str-return). basename이 known applet이면 형제 dist/bin/<tool>을
+proc_run 재실행, 아니면 첫 인자. `list`/unknown(stderr 2).
+
+**실측 중 위험 2건 발견·수정**: ① known argv0인데 형제 부재 시 자기 재실행
+무한 재귀(타임아웃 실측) → 형제 fs_exists + `target==proc_self()` 가드로
+exit 3. ② 그 가드 작성이 **full silent 오컴파일 노출**: `Str == 문자열반환
+호출`(path==proc_self())이 proc_self 미등록으로 반환 슬롯 i64화→icmp
+타입 충돌. is_host_str_return에 proc_self 등록으로 root-fix, e356 잠금.
+
+argv0 디스패치는 형제 실존 시만 동작(경로 없는 argv0는 self_dir이 빈
+문자열)이라 명시 `vaisbox <tool>`을 1급 경로로 문서화. parity 375,
+workflow +6. 배포 도구 8개 체제.
+
+경유 트랩(기록된 C 선언 순서 재범): fixpoint 게이트 런타임에 proc_self를
+`fs_host_copy`로 썼는데 그 런타임은 `copy_str` 헬퍼를 씀(드라이버 런타임과
+헬퍼 이름 다름) → codegen 게이트만 implicit-declaration 실패. copy_str로
+교체. 첫 래더가 이걸로 FAILURES(LADDER-EXIT 1) — 커밋 전 발견, 재검증 GREEN.
+
 ## 2026-07-24f (도그푸딩 20 — vaiswc 일곱 번째 도구, 갭 0건)
 
 vaiswc(e354): 라인/워드/바이트 카운트, 파일별 `L W B path` + 2소스↑ 시

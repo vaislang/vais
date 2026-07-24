@@ -104,6 +104,12 @@ into the assigned form (`examples/e347_list_discard_statements.vais`).
 position on both engines (`examples/e348_nested_list_expr_reads.vais`), and
 value if-expressions use the `then`/`else` form only — brace blocks in value
 position are rejected at the front.
+`examples/e355_vaisbox_package` is the eighth installable tool: `vaisbox`
+is a busybox-style multicall dispatcher — it runs a sibling `dist/bin/<tool>`
+chosen from `proc_self()`'s basename when that names a known applet, or from
+the first argument (`vaisbox <tool> [args...]`, plus `vaisbox list`). It
+refuses to re-exec itself or a missing sibling (exit 3), so argv[0] dispatch
+requires the sibling binary to exist next to it.
 `examples/e354_vaiswc_package` is the seventh installable tool: `vaiswc`
 counts lines, words, and bytes over one or more sources (`-` for stdin),
 printing `L W B path` per source and a summed `total` row for two or more —
@@ -277,6 +283,7 @@ direct/default summary report.
 | `stdin_read_all() -> Str` | Verified; full/direct — read standard input to EOF (empty input yields "") |
 | `stdout_write(text: Str) -> Int` | Verified; full/direct — raw stdout write, no added newline (returns bytes written) |
 | `stderr_write(text: Str) -> Int` | Verified; full/direct — raw stderr write, no added newline (returns bytes written) |
+| `proc_self() -> Str` | Verified; full/direct — running program path (argv[0]) for multicall dispatch |
 | `fs_read_text(path: Str) -> Str` | Verified |
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified |
 | `fs_mkdirs(path: Str) -> Int` | Verified |

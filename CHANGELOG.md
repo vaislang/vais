@@ -4,6 +4,20 @@
 
 ### Changed
 
+- Added the eighth installable Vais tool and a matching host API:
+  `proc_self() -> Str` returns the running program path on both engines,
+  and `examples/e355_vaisbox_package` builds `dist/bin/vaisbox`, a
+  busybox-style multicall dispatcher that runs a sibling dist/bin/<tool>
+  chosen from proc_self's basename (or the first argument), with `list`
+  and a guard that refuses to re-exec itself or a missing sibling
+  (exit 3) so argv[0] dispatch can't recurse.
+- Fixed a silent full-engine miscompile the new tool exposed: Str
+  equality with a string-returning call operand (e.g. `path == proc_self()`)
+  emitted a type-mismatched icmp because the full core did not treat
+  proc_self as Str-returning, so its result slot typed as i64. proc_self
+  now joins is_host_str_return and the comparison byte-compares at
+  runtime (examples/e356_str_eq_call_operand.vais locks it; parity 375).
+
 - Added the seventh installable Vais tool: `examples/e354_vaiswc_package`
   builds `dist/bin/vaiswc <file...>` (`-` for stdin), printing line, word,
   and byte counts per source with a summed `total` row for two or more

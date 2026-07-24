@@ -1887,6 +1887,7 @@ fs_is_dir(path: Str) -> Int
 stdin_read_all() -> Str
 stdout_write(text: Str) -> Int
 stderr_write(text: Str) -> Int
+proc_self() -> Str
 fs_list_dirs(dir: Str, out: List<Str>) -> Int
 fs_read_text(path: Str) -> Str
 fs_write_text(path: Str, text: Str) -> Int

@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-24f) — 도그푸딩 20: vaiswc (일곱 번째 도구)
+## 현재 작업 (2026-07-24g) — 도그푸딩 21: vaisbox (멀티콜 디스패처)
+모드: 개별선택
+- [x] 1. proc_self() 승격 + vaisbox ✅ 2026-07-24 — argv[0] 노출 표면 부재
+      발견(proc_arg(0)=첫 사용자 인자 규약) → proc_self host API 승격
+      (host runtime argv0 저장 + direct 9그룹 + core Str-return). vaisbox
+      basename 디스패치 + 형제 재실행.
+- [x] 2. list/unknown ✅ + **재실행 가드**(자기참조/형제부재 exit 3 —
+      무한 재귀 위험 실측 후 추가).
+- [x] 3. 게이트 ✅ — workflow +6(self-test/list/dispatch/pipe/unknown/
+      guard). 명시 `<tool>`이 1급, argv0 디스패치는 형제 실존 시만(문서화).
+- [x] 4. **갭 노출→root-fix: full `Str == 문자열반환호출`** ✅ — proc_self
+      미등록으로 반환 슬롯이 i64→icmp 타입 충돌. is_host_str_return 등록,
+      e356 잠금. parity 375.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-24f) — 도그푸딩 20: vaiswc (일곱 번째 도구)
 모드: 개별선택
 - [x] 1. e354 vaiswc ✅ 2026-07-24 — count.tally 모듈(struct Counts 반환,
       모듈 경계 struct-return 실증) + str_split_ws_into 제품 첫 실사용.

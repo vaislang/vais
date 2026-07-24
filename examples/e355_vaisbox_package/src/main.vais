@@ -1,0 +1,107 @@
+# expect: 42
+# Eighth installable Vais tool: a multicall dispatcher over the sibling tools.
+# The applet name comes from argv[0]'s basename (via proc_self) when it is a
+# known tool, otherwise from the first argument:
+#   vaisbox <tool> [args...]     run dist/bin/<tool> with args
+#   vaisbox list                 print the known tool names
+#   <symlink-named-tool> [args]  run that tool (busybox style)
+# Unknown tools report to stderr and exit 2. The dispatched binary is found
+# next to vaisbox itself (proc_self's directory). Run without arguments it
+# executes a deterministic self-test (the release-corpus entry).
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    return 0
+}
+
+fn known_tool(name: Str) -> Int {
+    if name == "vaisdb" { return 1 }
+    if name == "vaisgrep" { return 1 }
+    if name == "vaismake" { return 1 }
+    if name == "vaisfmt" { return 1 }
+    if name == "vaisbench" { return 1 }
+    if name == "vaisdiff" { return 1 }
+    if name == "vaiswc" { return 1 }
+    return 0
+}
+
+fn tool_list() -> Str {
+    let lf = str_byte(10)
+    return str_concat("vaisdb", str_concat(lf, str_concat("vaisgrep", str_concat(lf, str_concat("vaismake", str_concat(lf, str_concat("vaisfmt", str_concat(lf, str_concat("vaisbench", str_concat(lf, str_concat("vaisdiff", str_concat(lf, "vaiswc"))))))))))))
+}
+
+fn self_dir() -> Str {
+    return path_dirname(proc_self())
+}
+
+fn run_tool(tool: Str, arg_start: Int) -> Int {
+    if known_tool(tool) == 0 {
+        eprint(str_concat("error: unknown tool: ", tool))
+        return 2
+    }
+    let target = path_join(self_dir(), tool)
+    # Never re-exec ourselves: if the resolved binary is missing or is this
+    # very program, dispatch would recurse. Bail loudly instead.
+    if fs_exists(target) != 1 {
+        eprint(str_concat("error: tool binary not found: ", target))
+        return 3
+    }
+    if target == proc_self() {
+        eprint(str_concat("error: refusing to re-exec self as ", tool))
+        return 3
+    }
+    let argv: List<Str> = []
+    argv.push(target)
+    let mut i = arg_start
+    while i < proc_argc() {
+        argv.push(proc_arg(i))
+        i = i + 1
+    }
+    return proc_run(argv)
+}
+
+fn usage() -> Int {
+    print("usage: vaisbox <tool> [args...]   (or: vaisbox list)")
+    return 2
+}
+
+fn self_test() -> Int {
+    # Known-tool membership is exact.
+    if known_tool("vaisgrep") != 1 { return 1 }
+    if known_tool("vaiswc") != 1 { return 2 }
+    if known_tool("nope") != 0 { return 3 }
+
+    # The applet list carries all seven names, one per line.
+    let list = tool_list()
+    let names: List<Str> = []
+    let count = str_split_lines_into(list, names)
+    if count != 7 { return 4 }
+    if names[0] != "vaisdb" { return 5 }
+    if names[6] != "vaiswc" { return 6 }
+
+    # proc_self resolves to a real basename we can dispatch on.
+    let base = path_basename(proc_self())
+    if base.len() == 0 { return 7 }
+
+    # self_dir is a directory prefix of the running binary.
+    let dir = self_dir()
+    if dir.len() == 0 { return 8 }
+
+    # 7 tools * 6 = 42
+    return count * 6
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let applet = path_basename(proc_self())
+    if known_tool(applet) == 1 {
+        return run_tool(applet, 0)
+    }
+    let first = proc_arg(0)
+    if first == "list" {
+        print(tool_list())
+        return 0
+    }
+    return run_tool(first, 1)
+}

@@ -51,7 +51,14 @@ int64_t time_millis(void) {
     return (int64_t)tv.tv_sec * 1000 + (int64_t)(tv.tv_usec / 1000);
 }
 
+static const char *vais_self = "";
+
+char *proc_self(void) {
+    return copy_str(vais_self);
+}
+
 int main(int argc, char **argv) {
+    vais_self = argc > 0 ? argv[0] : "";
     vais_argc = argc > 0 ? (int64_t)argc - 1 : 0;
     vais_argv = argc > 1 ? argv + 1 : NULL;
     return (int)vais_user_main();
