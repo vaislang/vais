@@ -8,6 +8,12 @@
 # Directories are scanned recursively for .vais files.
 import fmt.clean
 
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    return 0
+}
+
 fn check_file(path: Str, rel: Str, fix: Int) -> Int {
     let text = fs_read_text(path)
     if needs_format(text) == 0 { return 0 }
@@ -60,7 +66,7 @@ fn run_fmt(path: Str, fix: Int) -> Int {
     if fs_exists(path) == 1 {
         return check_file(path, path_basename(path), fix)
     }
-    print("error: path not found")
+    let e1 = eprint("error: path not found")
     return 3
 }
 

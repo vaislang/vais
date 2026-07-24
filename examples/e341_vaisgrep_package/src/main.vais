@@ -8,6 +8,12 @@
 # where <path> is a text file or a directory scanned for .txt/.vais/.md files.
 import grep.scan
 
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    return 0
+}
+
 fn grep_body(pattern: Str, body: Str, prefix: Str, show_lines: Int) -> Int {
     if show_lines == 1 {
         let hits: List<Str> = []
@@ -60,7 +66,7 @@ fn grep_tree(pattern: Str, dir: Str, rel: Str, show_lines: Int) -> Int {
 
 fn run_grep(pattern: Str, path: Str, show_lines: Int, recurse: Int) -> Int {
     if pattern.len() == 0 {
-        print("error: empty pattern")
+        let e1 = eprint("error: empty pattern")
         return 1
     }
     if path == "-" {
@@ -75,7 +81,7 @@ fn run_grep(pattern: Str, path: Str, show_lines: Int, recurse: Int) -> Int {
     if fs_exists(path) == 1 {
         return grep_file(pattern, path, "", show_lines)
     }
-    print("error: path not found")
+    let e2 = eprint("error: path not found")
     return 3
 }
 

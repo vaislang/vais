@@ -1,5 +1,18 @@
 # Vais Worklog
 
+## 2026-07-24c (도그푸딩 17 — stderr_write + vaisdb 파이프 + stdout 순수성)
+
+스트림 3부작 완결: stderr_write(stdout_write 완전 미러) 승격으로
+stdin/stdout/stderr 전부 Vais 표면화. 이를 즉시 제품에 적용해 **필터
+도구의 UNIX 결함 수정** — vaisgrep/vaisfmt의 에러 메시지가 print(stdout)
+로 파이프를 오염하던 것을 eprint(stderr_write) 라우팅으로 정리, 게이트가
+에러 시 stdout-빈을 검증.
+
+vaisdb도 파이프 세계 합류: `ingest-stdin <index> <doc-id>`(빈 stdin=1)로
+**vaisgrep 검색 결과가 파이프로 곧장 인덱스에 들어가는 체인**
+(`vaisgrep cache … | vaisdb ingest-stdin idx hits` → query 확인)이 게이트
+잠금. 세 도구 self-test 42 유지, 갭 0건. workflow +6케이스.
+
 ## 2026-07-24b (도그푸딩 16 — stdout_write + vaisfmt 필터, 파이프 완성)
 
 **stdout_write(text)->Int 승격**(print의 짝 — 개행 없는 raw 출력, 쓴 바이트

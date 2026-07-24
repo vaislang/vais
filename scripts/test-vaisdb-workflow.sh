@@ -239,6 +239,10 @@ expect_exit "vaisdb package stats" 2 "$vdb_dist/bin/vaisdb" stats "$vdb_dir_inde
 expect_exit "vaisdb package remove" 0 "$vdb_dist/bin/vaisdb" remove "$vdb_dir_index" pd1
 expect_exit "vaisdb package docs after remove" 1 "$vdb_dist/bin/vaisdb" docs "$vdb_dir_index"
 expect_exit "vaisdb package remove missing" 3 "$vdb_dist/bin/vaisdb" remove "$vdb_dir_index" ghost
+vdb_stdin_index="$tmp/vaisdb-stdin-index.txt"
+expect_exit "vaisdb ingest-stdin" 0 /bin/sh -c "printf 'ai cache ai\n' | '$vdb_dist/bin/vaisdb' ingest-stdin '$vdb_stdin_index' d1"
+expect_exit "vaisdb ingest-stdin empty" 1 /bin/sh -c "'$vdb_dist/bin/vaisdb' ingest-stdin '$vdb_stdin_index' d2 < /dev/null"
+expect_exit "vaisdb ingest-stdin query" 3 "$vdb_dist/bin/vaisdb" query "$vdb_stdin_index" d1 "ai cache"
 
 vgrep_dist="$tmp/vaisgrep-dist"
 vgrep_docs="$tmp/vaisgrep-docs"
@@ -305,6 +309,9 @@ expect_exit "vaisfmt stdin dirty check" 1 /bin/sh -c "printf 'x   \n' | '$vfmt_d
 expect_exit "vaisfmt stdin clean check" 0 /bin/sh -c "printf 'x\n' | '$vfmt_dist/bin/vaisfmt' -c -"
 expect_exit "vaisfmt stdin filter output" 0 /bin/sh -c "printf 'x   \ny\t\n' | '$vfmt_dist/bin/vaisfmt' - > '$tmp/fmt-filter.out' && printf 'x\ny\n' | cmp -s - '$tmp/fmt-filter.out'"
 expect_exit "three-tool pipe grep fmt grep" 2 /bin/sh -c "printf 'a cache   \nplain\nb cache\t\n' | '$vgrep_dist/bin/vaisgrep' cache - | '$vfmt_dist/bin/vaisfmt' - | '$vgrep_dist/bin/vaisgrep' -c cache -"
+expect_exit "grep to db chain ingest" 0 /bin/sh -c "printf 'cache one\ncache two\n' | '$vgrep_dist/bin/vaisgrep' cache - | '$vdb_dist/bin/vaisdb' ingest-stdin '$tmp/vaisdb-chain-index.txt' hits"
+expect_exit "grep error stdout stays empty" 0 /bin/sh -c "out=\$('$vgrep_dist/bin/vaisgrep' cache '$tmp/no-such-path' 2>/dev/null); test -z \"\$out\""
+expect_exit "fmt error stdout stays empty" 0 /bin/sh -c "out=\$('$vfmt_dist/bin/vaisfmt' -c '$tmp/no-such-path' 2>/dev/null); test -z \"\$out\""
 
 vbench_dist="$tmp/vaisbench-dist"
 rm -rf "$vbench_dist"

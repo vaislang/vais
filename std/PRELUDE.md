@@ -118,7 +118,10 @@ trailing newline) with `-c` check and in-place fix modes over recursive
 now verified on both engines. Path `-` turns it into a pipe filter: `-c -`
 exits 1 on dirty stdin, and the plain form writes the normalized text to
 stdout via `stdout_write` (no added newline), so
-`vaisgrep ... - | vaisfmt - | vaisgrep ... -` chains compose. Its line scan walks byte offsets instead of
+`vaisgrep ... - | vaisfmt - | vaisgrep ... -` chains compose. vaisdb joins
+the pipeline with `ingest-stdin <index> <doc-id>` (so search hits pipe
+straight into the index), and the filter tools route their error messages
+through `stderr_write`, keeping stdout byte-pure for downstream consumers. Its line scan walks byte offsets instead of
 materializing a `List<Str>`, because the fixed list contract holds at most
 4095 entries: `str_split_lines_into` (and the other `*_into` fillers) abort
 past that with a `vais list trap: capacity exceeded` diagnostic on stderr
@@ -262,6 +265,7 @@ direct/default summary report.
 | `fs_is_dir(path: Str) -> Bool` | Verified; full/direct — directory test (missing paths yield 0) |
 | `stdin_read_all() -> Str` | Verified; full/direct — read standard input to EOF (empty input yields "") |
 | `stdout_write(text: Str) -> Int` | Verified; full/direct — raw stdout write, no added newline (returns bytes written) |
+| `stderr_write(text: Str) -> Int` | Verified; full/direct — raw stderr write, no added newline (returns bytes written) |
 | `fs_read_text(path: Str) -> Str` | Verified |
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified |
 | `fs_mkdirs(path: Str) -> Int` | Verified |

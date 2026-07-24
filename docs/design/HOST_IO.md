@@ -66,6 +66,7 @@ The first file API is text-only and UTF-8 oriented:
 | `fs_is_dir(path: Str) -> Bool` | Verified | Return whether a path names a directory (missing paths yield 0), so tools can dispatch file vs directory before `fs_read_text`. |
 | `stdin_read_all() -> Str` | Verified | Read standard input to EOF into one string (empty input yields ""), so tools can sit in shell pipelines. |
 | `stdout_write(text: Str) -> Int` | Verified | Write text to standard output with no added newline (returns bytes written), so tools can emit exact filter output. |
+| `stderr_write(text: Str) -> Int` | Verified | Write text to standard error with no added newline (returns bytes written), so filter tools keep stdout pure. |
 | `fs_read_text(path: Str) -> Str` | Verified | Read a whole text file. Missing or unreadable files still trap in the raw API; use the gate-backed e298 `fs_exists` + `Result<Int,Int>` recipe for status-only flows or the e301/e302 `fs_exists` + `Result<Str,Int>` recipes when the success payload is the file text and helper parameter forwarding is needed. |
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified | Write text, replacing the file. Return `0` on success and a non-zero host status on failure. |
 | `fs_mkdirs(path: Str) -> Int` | Verified | Create a directory and missing parents. Return `0` on success. |
