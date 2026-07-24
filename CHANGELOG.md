@@ -4,6 +4,14 @@
 
 ### Changed
 
+- Promoted the `stdin_read_all() -> Str` host API on both engines (read
+  standard input to EOF with a growing buffer; empty input yields ""),
+  and vaisgrep accepts `-` as its path to search stdin in both line and
+  `-c` modes — the first shell-pipeline composition for Vais tools,
+  verified end to end including a chained
+  `vaisgrep ... - | vaisgrep ... -` pipe. The full core recognizes the
+  call as Str-returning; the workflow gate adds piped stdin cases.
+
 - vaisbench gains a `-b <budget-ms>` mode (median over budget exits 3
   after a `runs/median/budget` report) and the ladder gains a `perf`
   task: scripts/vaisbench-gate.sh packages the tool and watches the

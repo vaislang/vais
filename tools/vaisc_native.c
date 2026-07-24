@@ -38,6 +38,7 @@ static const char *HOST_INTRINSIC_IR =
     "declare i64 @fs_list_dirs(i8*, i64*)\n"
     "declare i8* @fs_read_text(i8*)\n"
     "declare i8* @fs_cwd()\n"
+    "declare i8* @stdin_read_all()\n"
     "declare i8* @fs_temp_dir()\n"
     "declare i8* @path_join(i8*, i8*)\n"
     "declare i8* @path_basename(i8*)\n"
@@ -18641,7 +18642,7 @@ static int front_is_builtin_call_name(const char *name) {
         "str_builder_new", "str_builder_push", "str_builder_append",
         "str_builder_finish",
         "fs_exists", "fs_is_dir", "fs_read_text", "fs_write_text", "fs_mkdirs", "fs_remove",
-        "fs_cwd", "fs_temp_dir", "fs_list_files", "fs_list_dirs",
+        "fs_cwd", "fs_temp_dir", "fs_list_files", "fs_list_dirs", "stdin_read_all",
         "path_join", "path_basename", "path_dirname",
         "time_millis", "proc_argc", "proc_arg", "proc_capture",
         "proc_capture_stdout", "proc_capture_stderr", "proc_capture_to",
@@ -22668,6 +22669,10 @@ static int direct_is_fs_temp_dir_builtin_name(const char *name) {
     return strcmp(name, "fs_temp_dir") == 0;
 }
 
+static int direct_is_stdin_read_all_builtin_name(const char *name) {
+    return strcmp(name, "stdin_read_all") == 0;
+}
+
 static int direct_is_fs_cwd_builtin_name(const char *name) {
     return strcmp(name, "fs_cwd") == 0;
 }
@@ -22899,6 +22904,7 @@ static char *direct_rewrite_parse_builtin_calls(
         int is_fs_is_dir = direct_is_fs_is_dir_builtin_name(name);
         int is_fs_temp_dir = direct_is_fs_temp_dir_builtin_name(name);
         int is_fs_cwd = direct_is_fs_cwd_builtin_name(name);
+        int is_stdin_read = direct_is_stdin_read_all_builtin_name(name);
         int is_path_join = direct_is_path_join_builtin_name(name);
         int is_path_basename = direct_is_path_basename_builtin_name(name);
         int is_path_dirname = direct_is_path_dirname_builtin_name(name);
@@ -22920,7 +22926,7 @@ static char *direct_rewrite_parse_builtin_calls(
         int is_doc_counts = direct_is_doc_term_counts_into_builtin_name(name);
         int is_doc_overlap = direct_is_doc_term_overlap_score_builtin_name(name);
         int is_doc_weighted = direct_is_doc_term_weighted_score_builtin_name(name);
-        if ((!is_parse && !is_contains && !is_cmp && !is_index_of && !is_starts_with && !is_ends_with && !is_slice && !is_concat && !is_join && !is_replace && !is_trim && !is_lower && !is_upper && !is_byte && !is_fs_read_text && !is_fs_write_text && !is_fs_exists && !is_fs_is_dir && !is_fs_temp_dir && !is_fs_cwd && !is_path_join && !is_path_basename && !is_path_dirname && !is_time_millis && !is_sb_new && !is_sb_push && !is_sb_append && !is_sb_finish && !is_proc_argc && !is_proc_arg && !is_split_ws_into && !is_split_lines_into && !is_fs_list_files && !is_fs_list_dirs && !is_fs_mkdirs && !is_split_into && !is_map_snapshot && !is_map_load && !is_doc_counts && !is_doc_overlap && !is_doc_weighted) || expr[cursor] != '(') {
+        if ((!is_parse && !is_contains && !is_cmp && !is_index_of && !is_starts_with && !is_ends_with && !is_slice && !is_concat && !is_join && !is_replace && !is_trim && !is_lower && !is_upper && !is_byte && !is_fs_read_text && !is_fs_write_text && !is_fs_exists && !is_fs_is_dir && !is_fs_temp_dir && !is_fs_cwd && !is_stdin_read && !is_path_join && !is_path_basename && !is_path_dirname && !is_time_millis && !is_sb_new && !is_sb_push && !is_sb_append && !is_sb_finish && !is_proc_argc && !is_proc_arg && !is_split_ws_into && !is_split_lines_into && !is_fs_list_files && !is_fs_list_dirs && !is_fs_mkdirs && !is_split_into && !is_map_snapshot && !is_map_load && !is_doc_counts && !is_doc_overlap && !is_doc_weighted) || expr[cursor] != '(') {
             sb_append_n(&out, expr + start, (size_t)(i - start));
             free(name);
             continue;
@@ -22941,7 +22947,7 @@ static char *direct_rewrite_parse_builtin_calls(
         int argc = trimmed_inside[0] == '\0' ? 0 : split_top_level_commas_c(inside, args, 16);
         free(trimmed_inside);
         free(inside);
-        int want_argc = (is_fs_cwd || is_fs_temp_dir || is_time_millis || is_sb_new || is_proc_argc) ? 0 : ((is_split_ws_into || is_split_lines_into || is_fs_list_files || is_fs_list_dirs || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted || is_join || is_fs_write_text || is_path_join) ? 2 : ((is_replace || is_split_into) ? 3 : ((is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_concat || is_sb_push || is_sb_append) ? 2 : (is_slice ? 3 : 1))));
+        int want_argc = (is_fs_cwd || is_fs_temp_dir || is_stdin_read || is_time_millis || is_sb_new || is_proc_argc) ? 0 : ((is_split_ws_into || is_split_lines_into || is_fs_list_files || is_fs_list_dirs || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted || is_join || is_fs_write_text || is_path_join) ? 2 : ((is_replace || is_split_into) ? 3 : ((is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_concat || is_sb_push || is_sb_append) ? 2 : (is_slice ? 3 : 1))));
         int bad_args = argc != want_argc || (want_argc > 0 && (args[0] == NULL || strlen(skip_ws(args[0])) == 0));
         if (!bad_args && (is_sb_push || is_sb_append || is_contains || is_cmp || is_index_of || is_starts_with || is_ends_with || is_concat || is_join || is_fs_write_text || is_path_join || is_split_ws_into || is_split_lines_into || is_fs_list_files || is_fs_list_dirs || is_split_into || is_map_load || is_doc_counts || is_doc_overlap || is_doc_weighted)) {
             bad_args = args[1] == NULL || strlen(skip_ws(args[1])) == 0;
@@ -22960,8 +22966,8 @@ static char *direct_rewrite_parse_builtin_calls(
             free(out.data);
             return NULL;
         }
-        if (is_fs_cwd || is_fs_temp_dir || is_time_millis || is_sb_new || is_proc_argc) {
-            sb_append(&out, is_fs_cwd ? "fs_cwd()" : (is_fs_temp_dir ? "fs_temp_dir()" : (is_time_millis ? "time_millis()" : (is_sb_new ? "str_builder_new()" : "proc_argc()"))));
+        if (is_fs_cwd || is_fs_temp_dir || is_stdin_read || is_time_millis || is_sb_new || is_proc_argc) {
+            sb_append(&out, is_fs_cwd ? "fs_cwd()" : (is_fs_temp_dir ? "fs_temp_dir()" : (is_stdin_read ? "stdin_read_all()" : (is_time_millis ? "time_millis()" : (is_sb_new ? "str_builder_new()" : "proc_argc()")))));
             for (int k = 0; k < 16; k++) free(args[k]);
             free(name);
             i = close + 1;
@@ -24350,7 +24356,7 @@ static char *direct_rewrite_list_expr(
         int cursor = i;
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
         if (expr[cursor] == '(' &&
-            (direct_is_str_conversion_builtin_name(name) || direct_is_parse_builtin_name(name) || direct_is_str_cmp_builtin_name(name) || direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_slice_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_join_builtin_name(name) || direct_is_str_replace_builtin_name(name) || direct_is_str_trim_builtin_name(name) || direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name) || direct_is_str_byte_builtin_name(name) || direct_is_fs_exists_builtin_name(name) || direct_is_fs_is_dir_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_str_builder_new_builtin_name(name) || direct_is_str_builder_push_builtin_name(name) || direct_is_str_builder_append_builtin_name(name) || direct_is_str_builder_finish_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name) || direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name) || direct_is_fs_list_dirs_builtin_name(name) || direct_is_str_split_into_builtin_name(name) || direct_is_doc_term_counts_into_builtin_name(name) || direct_is_doc_term_overlap_score_builtin_name(name) || direct_is_doc_term_weighted_score_builtin_name(name))) {
+            (direct_is_str_conversion_builtin_name(name) || direct_is_parse_builtin_name(name) || direct_is_str_cmp_builtin_name(name) || direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_slice_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_join_builtin_name(name) || direct_is_str_replace_builtin_name(name) || direct_is_str_trim_builtin_name(name) || direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name) || direct_is_str_byte_builtin_name(name) || direct_is_fs_exists_builtin_name(name) || direct_is_fs_is_dir_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_cwd_builtin_name(name) || direct_is_stdin_read_all_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_str_builder_new_builtin_name(name) || direct_is_str_builder_push_builtin_name(name) || direct_is_str_builder_append_builtin_name(name) || direct_is_str_builder_finish_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name) || direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name) || direct_is_fs_list_dirs_builtin_name(name) || direct_is_str_split_into_builtin_name(name) || direct_is_doc_term_counts_into_builtin_name(name) || direct_is_doc_term_overlap_score_builtin_name(name) || direct_is_doc_term_weighted_score_builtin_name(name))) {
             int close = find_matching_paren_c(expr, cursor);
             if (close < 0) {
                 report_issue(path, line_no, find_col(line, name), line,
@@ -26284,6 +26290,7 @@ static char *direct_infer_expr_type(
                     direct_is_fs_read_text_builtin_name(name) ||
                     direct_is_str_builder_finish_builtin_name(name) ||
                     direct_is_fs_temp_dir_builtin_name(name) ||
+                    direct_is_stdin_read_all_builtin_name(name) ||
                     direct_is_fs_cwd_builtin_name(name) ||
                     direct_is_path_join_builtin_name(name) ||
                     direct_is_path_basename_builtin_name(name) ||
@@ -26371,6 +26378,11 @@ static char *direct_infer_expr_type(
                     return strdup("Int");
                 }
                 if (direct_is_str_builder_finish_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Str");
+                }
+                if (direct_is_stdin_read_all_builtin_name(name)) {
                     free(name);
                     free(trimmed);
                     return strdup("Str");
@@ -27436,7 +27448,8 @@ static int direct_check_expr_inner(
         }
         int is_call = expr[cursor] == '(';
         if (is_call) {
-            if (direct_is_str_builder_new_builtin_name(name) || direct_is_str_builder_push_builtin_name(name) || direct_is_str_builder_append_builtin_name(name) || direct_is_str_builder_finish_builtin_name(name) ||
+            if (direct_is_stdin_read_all_builtin_name(name) ||
+                direct_is_str_builder_new_builtin_name(name) || direct_is_str_builder_push_builtin_name(name) || direct_is_str_builder_append_builtin_name(name) || direct_is_str_builder_finish_builtin_name(name) ||
                 direct_is_fs_exists_builtin_name(name) || direct_is_fs_is_dir_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) ||
                 direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) ||
                 direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) ||
@@ -27456,7 +27469,7 @@ static int direct_check_expr_inner(
                 int argc = trimmed_inside[0] == '\0' ? 0 : split_top_level_commas_c(inside, args, 16);
                 free(trimmed_inside);
                 free(inside);
-                int expected = (direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_str_builder_new_builtin_name(name) || direct_is_proc_argc_builtin_name(name)) ? 0 :
+                int expected = (direct_is_fs_cwd_builtin_name(name) || direct_is_stdin_read_all_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_str_builder_new_builtin_name(name) || direct_is_proc_argc_builtin_name(name)) ? 0 :
                     ((direct_is_fs_write_text_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_str_builder_push_builtin_name(name) || direct_is_str_builder_append_builtin_name(name)) ? 2 : 1);
                 if (argc != expected) {
                     report_issue(path, line_no, find_col(line, name), line,
@@ -32653,6 +32666,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "char *str_builder_finish(int64_t);\n");
     sb_append(&out, "int64_t fs_is_dir(const char *path);\n");
     sb_append(&out, "char *fs_read_text(const char *path);\n");
+    sb_append(&out, "char *stdin_read_all(void);\n");
     sb_append(&out, "int64_t fs_mkdirs(const char *path);\n");
     sb_append(&out, "int64_t fs_write_text(const char *path, const char *text);\n");
     sb_append(&out, "char *fs_cwd(void);\n");
@@ -33179,6 +33193,27 @@ static int write_host_runtime_c(const char *path) {
         "    for (int64_t i = 0; i < count; i++) out[i] = (int64_t)names[i];\n"
         "    out[4095] = count;\n"
         "    return count;\n"
+        "}\n"
+        "\n"
+        "char *stdin_read_all(void) {\n"
+        "    size_t cap = 4096;\n"
+        "    size_t len = 0;\n"
+        "    char *buf = (char *)malloc(cap);\n"
+        "    if (buf == 0) fs_host_trap(\"stdin\", \"<alloc>\");\n"
+        "    for (;;) {\n"
+        "        if (len == cap) {\n"
+        "            cap = cap * 2;\n"
+        "            char *next = (char *)realloc(buf, cap);\n"
+        "            if (next == 0) fs_host_trap(\"stdin\", \"<alloc>\");\n"
+        "            buf = next;\n"
+        "        }\n"
+        "        size_t got = fread(buf + len, 1, cap - len, stdin);\n"
+        "        len += got;\n"
+        "        if (got == 0) break;\n"
+        "    }\n"
+        "    char *out = fs_host_copy_n(buf, len);\n"
+        "    free(buf);\n"
+        "    return out;\n"
         "}\n"
         "\n"
         "static char *fs_host_copy(const char *text) {\n"

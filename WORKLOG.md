@@ -1,5 +1,19 @@
 # Vais Worklog
 
+## 2026-07-24 (도그푸딩 15 — stdin 표면 승격 + vaisgrep 파이프)
+
+**stdin_read_all() -> Str 승격**: host runtime(4KB 배증 동적 버퍼, EOF까지
+fread) + direct 10그룹(0-인자 Str 그룹 미러) + **core is_host_str_return
+프레디킷 추가**(.ll 재생성) — core에 미등록이면 full이 반환 슬롯을 i64로
+오타이핑해 Str 비교가 IR 타입 에러. 경유 트랩: 메모리에 기록된 C 선언
+순서(호스트 헬퍼는 fs_host_copy_n 뒤) 그대로 재현→즉시 해결.
+
+**vaisgrep `-`**: grep_body 추출 후 stdin 분기 — 라인/-c/빈 입력 전부
+정확, **체인 파이프**(`vaisgrep cache - | vaisgrep -c "1:" -`)까지 동작.
+Vais 도구가 셸 파이프라인 세계에 처음 연결됨. 예제 커버리지는 corpus
+러너의 stdin 상속(터미널 행 위험) 때문에 제품 코드+workflow 게이트(명시
+리다이렉트 3케이스)로 잡고 사유를 ROADMAP에 기록. 갭 0건.
+
 ## 2026-07-23b (도그푸딩 14 — vaisbench 예산 모드 + perf 감시 태스크)
 
 성능 사이클이 남긴 "재개 트리거"를 자동화: vaisbench `-b <budget-ms>`가

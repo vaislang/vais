@@ -134,9 +134,11 @@ first failing child and refusing dependency cycles. `tools/gates.tasks` runs
 this repository's own gate ladder through the tool
 (`scripts/vaismake-ladder.sh`).
 `examples/e341_vaisgrep_package` is the second installable tool: `vaisgrep`
-searches files or directories for substring-matching lines (with `-c` counts
-and `-r` recursive tree walks over `fs_list_dirs`), dispatching on the
-`fs_is_dir(path)` host test before reading.
+searches files, directories, or standard input (path `-`, via the new
+`stdin_read_all()` host read — so it composes in shell pipelines) for
+substring-matching lines (with `-c` counts and `-r` recursive tree walks over
+`fs_list_dirs`), dispatching on the `fs_is_dir(path)` host test before
+reading.
 `examples/e337_vaisdb_cli_package` productizes that command as an installable
 package: the index/report logic is split across `vaisdb.index` and
 `vaisdb.report` modules, `scripts/vaisc package` builds `dist/bin/vaisdb` and a
@@ -255,6 +257,7 @@ direct/default summary report.
 | --- | --- |
 | `fs_exists(path: Str) -> Bool` | Verified |
 | `fs_is_dir(path: Str) -> Bool` | Verified; full/direct — directory test (missing paths yield 0) |
+| `stdin_read_all() -> Str` | Verified; full/direct — read standard input to EOF (empty input yields "") |
 | `fs_read_text(path: Str) -> Str` | Verified |
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified |
 | `fs_mkdirs(path: Str) -> Int` | Verified |

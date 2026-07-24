@@ -22,7 +22,20 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-23b) — 도그푸딩 14: vaisbench 예산 모드 + perf 감시 태스크
+## 현재 작업 (2026-07-24) — 도그푸딩 15: stdin 표면 승격 + vaisgrep 파이프
+모드: 개별선택
+- [x] 1. stdin_read_all 승격 ✅ 2026-07-24 — host runtime(동적 버퍼) + direct
+      10그룹 + **core is_host_str_return 프레디킷**(.ll 재생성 — 미등록 시
+      full이 슬롯을 i64로 오타이핑). 경유 트랩: 기록된 C 선언 순서
+      (fs_host_copy_n 뒤 배치) 재확인.
+- [x] 2. vaisgrep `-` ✅ — grep_body 추출 후 stdin 분기. 라인/-c/빈 입력/
+      **체인 파이프(vaisgrep|vaisgrep)** 실측 정확.
+- [x] 3. 게이트 ✅ — workflow +3(stdin 라인 2/카운트 2/빈 0). 예제는
+      corpus의 stdin 상속 행 위험으로 제품 코드+게이트로 커버(기록).
+- [x] 4. 환류 + 문서 ✅ — HOST_IO/PRELUDE/LANGUAGE/README. 갭 0건.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-23b) — 도그푸딩 14: vaisbench 예산 모드 + perf 감시 태스크
 모드: 개별선택
 - [x] 1. `-b <budget_ms>` ✅ 2026-07-23 — runs/median/budget 리포트 후
       median>예산이면 exit 3. self-test +2단계(관대/불가능 예산).

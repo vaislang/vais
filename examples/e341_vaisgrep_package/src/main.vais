@@ -8,8 +8,7 @@
 # where <path> is a text file or a directory scanned for .txt/.vais/.md files.
 import grep.scan
 
-fn grep_file(pattern: Str, path: Str, prefix: Str, show_lines: Int) -> Int {
-    let body = fs_read_text(path)
+fn grep_body(pattern: Str, body: Str, prefix: Str, show_lines: Int) -> Int {
     if show_lines == 1 {
         let hits: List<Str> = []
         let count = match_lines_into(body, pattern, hits)
@@ -23,6 +22,10 @@ fn grep_file(pattern: Str, path: Str, prefix: Str, show_lines: Int) -> Int {
     let count = count_matches(body, pattern)
     print(str_concat(prefix, str_concat("count=", Str(count))))
     return count
+}
+
+fn grep_file(pattern: Str, path: Str, prefix: Str, show_lines: Int) -> Int {
+    return grep_body(pattern, fs_read_text(path), prefix, show_lines)
 }
 
 fn grep_dir(pattern: Str, dir: Str, rel: Str, show_lines: Int) -> Int {
@@ -60,6 +63,9 @@ fn run_grep(pattern: Str, path: Str, show_lines: Int, recurse: Int) -> Int {
         print("error: empty pattern")
         return 1
     }
+    if path == "-" {
+        return grep_body(pattern, stdin_read_all(), "", show_lines)
+    }
     if fs_is_dir(path) == 1 {
         if recurse == 1 {
             return grep_tree(pattern, path, "", show_lines)
@@ -74,7 +80,7 @@ fn run_grep(pattern: Str, path: Str, show_lines: Int, recurse: Int) -> Int {
 }
 
 fn usage() -> Int {
-    print("usage: vaisgrep <pattern> <file-or-dir>")
+    print("usage: vaisgrep <pattern> <file-or-dir>   (use - for stdin)")
     print("       vaisgrep -c <pattern> <file-or-dir>")
     print("       vaisgrep -r <pattern> <dir>")
     return 1

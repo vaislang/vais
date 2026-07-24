@@ -259,6 +259,11 @@ printf 'cache sub\n' > "$vgrep_docs/sub/b2.txt"
 printf 'cache deep\ncache again\n' > "$vgrep_docs/sub/deeper/c2.md"
 expect_exit "vaisgrep recursive search" 6 "$vgrep_dist/bin/vaisgrep" -r cache "$vgrep_docs"
 expect_exit "vaisgrep single level unchanged" 3 "$vgrep_dist/bin/vaisgrep" cache "$vgrep_docs"
+vgrep_stdin_out="$tmp/vaisgrep-stdin.out"
+printf 'one cache\nplain\ntwo cache\n' | "$vgrep_dist/bin/vaisgrep" cache - > "$vgrep_stdin_out"; stdin_rc=$?
+expect_exit "vaisgrep stdin lines" 2 /bin/sh -c "exit $stdin_rc"
+expect_exit "vaisgrep stdin count" 2 /bin/sh -c "printf 'one cache\nplain\ntwo cache\n' | '$vgrep_dist/bin/vaisgrep' -c cache -"
+expect_exit "vaisgrep empty stdin" 0 /bin/sh -c "'$vgrep_dist/bin/vaisgrep' cache - < /dev/null"
 
 vmake_dist="$tmp/vaismake-dist"
 vmake_tasks="$tmp/vaismake-tasks.txt"

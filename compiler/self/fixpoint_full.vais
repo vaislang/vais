@@ -868,10 +868,29 @@ fn is_process_result_name(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 12] != 116 { return 0 }
     return 1
 }
+fn is_stdin_read_all(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 14 { return 0 }
+    if src[a + 0] != 115 { return 0 }
+    if src[a + 1] != 116 { return 0 }
+    if src[a + 2] != 100 { return 0 }
+    if src[a + 3] != 105 { return 0 }
+    if src[a + 4] != 110 { return 0 }
+    if src[a + 5] != 95 { return 0 }
+    if src[a + 6] != 114 { return 0 }
+    if src[a + 7] != 101 { return 0 }
+    if src[a + 8] != 97 { return 0 }
+    if src[a + 9] != 100 { return 0 }
+    if src[a + 10] != 95 { return 0 }
+    if src[a + 11] != 97 { return 0 }
+    if src[a + 12] != 108 { return 0 }
+    if src[a + 13] != 108 { return 0 }
+    return 1
+}
 fn is_host_str_return(src: Str, a: Int, alen: Int) -> Int {
     if is_fs_read_text(src, a, alen) == 1 { return 1 }
     if is_fs_cwd(src, a, alen) == 1 { return 1 }
     if is_fs_temp_dir(src, a, alen) == 1 { return 1 }
+    if is_stdin_read_all(src, a, alen) == 1 { return 1 }
     if is_path_join(src, a, alen) == 1 { return 1 }
     if is_path_basename(src, a, alen) == 1 { return 1 }
     if is_path_dirname(src, a, alen) == 1 { return 1 }
