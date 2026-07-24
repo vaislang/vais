@@ -1,5 +1,17 @@
 # Vais Worklog
 
+## 2026-07-24b (도그푸딩 16 — stdout_write + vaisfmt 필터, 파이프 완성)
+
+**stdout_write(text)->Int 승격**(print의 짝 — 개행 없는 raw 출력, 쓴 바이트
+반환): host fwrite+flush, direct 9그룹 미러, core는 기본 i64 반환 경로라
+무변경. 양 엔진 첫 시도 정확.
+
+**vaisfmt `-` 필터 모드**: stdin→정규화→stdout(od로 바이트 정확 검증),
+`-c -`는 dirty exit 1. 이로써 파이프 스토리 완성 — **3-도구 체인**
+`vaisgrep cache - | vaisfmt - | vaisgrep -c cache -`가 정확 동작(workflow
+게이트가 cmp 바이트 대조 + 체인 exit 2 잠금). 갭 0건. 교훈 적용: 래더
+GREEN 확인 후에만 커밋.
+
 ## 2026-07-24 (도그푸딩 15 — stdin 표면 승격 + vaisgrep 파이프)
 
 **stdin_read_all() -> Str 승격**: host runtime(4KB 배증 동적 버퍼, EOF까지

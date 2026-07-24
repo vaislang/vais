@@ -45,6 +45,15 @@ fn walk(path: Str, rel: Str, fix: Int) -> Int {
 }
 
 fn run_fmt(path: Str, fix: Int) -> Int {
+    if path == "-" {
+        let body = stdin_read_all()
+        if fix == 0 {
+            return needs_format(body)
+        }
+        let wrote = stdout_write(normalize_text(body))
+        if wrote < 0 { return 3 }
+        return 0
+    }
     if fs_is_dir(path) == 1 {
         return walk(path, "", fix)
     }
@@ -56,8 +65,8 @@ fn run_fmt(path: Str, fix: Int) -> Int {
 }
 
 fn usage() -> Int {
-    print("usage: vaisfmt -c <file-or-dir>")
-    print("       vaisfmt <file-or-dir>")
+    print("usage: vaisfmt -c <file-or-dir>   (use - for stdin: dirty exits 1)")
+    print("       vaisfmt <file-or-dir>      (use - to filter stdin to stdout)")
     return 2
 }
 

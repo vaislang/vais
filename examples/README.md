@@ -278,8 +278,9 @@ with `tools/gates.tasks` driving this repository's own gate ladder through it
 `examples/e345_proc_run_env.vais` for the built-in `proc_run_env(argv, env)`
 child-environment overlay on both engines,
 `examples/e346_vaisfmt_package` for the installable vaisfmt whitespace
-normalizer (`-c` check / in-place fix over recursive `.vais` trees) built on
-the now direct-verified `str_builder_*` chain,
+normalizer (`-c` check / in-place fix over recursive `.vais` trees, plus `-`
+as a stdin-to-stdout pipe filter) built on the direct-verified
+`str_builder_*` chain and the raw `stdout_write` host call,
 `examples/e347_list_discard_statements.vais` for bare `remove_at`/`pop`
 statements on Int and struct lists on both engines,
 `examples/e350_vaisbench_package` for the installable vaisbench command timer

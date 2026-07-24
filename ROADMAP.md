@@ -22,7 +22,17 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-24) — 도그푸딩 15: stdin 표면 승격 + vaisgrep 파이프
+## 현재 작업 (2026-07-24b) — 도그푸딩 16: stdout_write 승격 + vaisfmt 필터
+모드: 개별선택
+- [x] 1. stdout_write 승격 ✅ 2026-07-24 — host fwrite+flush, direct 9그룹,
+      core는 기본 i64 반환이라 무변경. 양 엔진 raw 출력·바이트 수 정확.
+- [x] 2. vaisfmt `-` ✅ — 필터 모드(od로 바이트 정확 검증), `-c -` dirty 1.
+- [x] 3. 게이트 ✅ — workflow +4(cmp 바이트 대조, **3-도구 파이프
+      grep→fmt→grep** exit 2).
+- [x] 4. 환류 + 문서 ✅ — HOST_IO/PRELUDE/LANGUAGE/README. 갭 0건.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-24) — 도그푸딩 15: stdin 표면 승격 + vaisgrep 파이프
 모드: 개별선택
 - [x] 1. stdin_read_all 승격 ✅ 2026-07-24 — host runtime(동적 버퍼) + direct
       10그룹 + **core is_host_str_return 프레디킷**(.ll 재생성 — 미등록 시

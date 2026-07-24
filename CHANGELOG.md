@@ -4,6 +4,13 @@
 
 ### Changed
 
+- Promoted `stdout_write(text) -> Int` on both engines (raw standard
+  output with no added newline, returning bytes written) and vaisfmt
+  accepts `-`: `-c -` exits 1 on dirty stdin, and the plain form filters
+  stdin to normalized stdout — completing the pipe story so
+  `vaisgrep ... - | vaisfmt - | vaisgrep ... -` three-tool chains
+  compose, verified byte-exact via cmp in the workflow gate.
+
 - Promoted the `stdin_read_all() -> Str` host API on both engines (read
   standard input to EOF with a growing buffer; empty input yields ""),
   and vaisgrep accepts `-` as its path to search stdin in both line and
