@@ -2478,11 +2478,16 @@ fn sty_of(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
 fn string_slot_eq(slots: &List<Slot>, src: Str, ans: Int, anl: Int, bns: Int, bnl: Int) -> Int {
     if isarr_of(slots, src, ans, anl) != 3 { return 0 - 1 }
     if isarr_of(slots, src, bns, bnl) != 3 { return 0 - 1 }
+    # Only literal-backed slots carry a source key (sty = literal offset);
+    # parameters, argv reads, and slice results have sty -1 and must fall
+    # through to the runtime byte compare instead of constant folding.
+    let ak = strkey_of(slots, src, ans, anl)
+    if ak < 0 { return 0 - 1 }
+    let bk = strkey_of(slots, src, bns, bnl)
+    if bk < 0 { return 0 - 1 }
     let al = arrlen_of(slots, src, ans, anl)
     let bl = arrlen_of(slots, src, bns, bnl)
     if al != bl { return 0 }
-    let ak = strkey_of(slots, src, ans, anl)
-    let bk = strkey_of(slots, src, bns, bnl)
     let mut k = 0
     while k < al {
         if src[ak + k] != src[bk + k] { return 0 }

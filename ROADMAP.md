@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-24c) — 도그푸딩 17: stderr_write + vaisdb 파이프 + stdout 순수성
+## 현재 작업 (2026-07-24d) — 도그푸딩 18: vaisdiff (여섯 번째 도구)
+모드: 개별선택
+- [x] 1. e351 vaisdiff ✅ 2026-07-24 — 바이트 트림+중간 블록 라인 리포트,
+      6000줄 동일 바이트 경로 self-test. exit 0/1/3(cmp 관례).
+- [x] 2. `-` 한쪽 stdin ✅ (양쪽 - 는 2).
+- [x] 3. 게이트 ✅ — workflow +7케이스.
+- [x] 4. **갭 노출→root-fix: full Str 파라미터 equality 상수 접힘** ✅ —
+      string_slot_eq가 리터럴 키(sty=오프셋) 없는 슬롯(파라미터/argv/slice,
+      sty=-1)까지 접어 동일-길이 서로 다른 파라미터가 "같음"(icmp 1,0로
+      상수화), 길이 다르면 "다름" 접힘. ident-vs-ident에서만 발화(리터럴
+      피연산자는 토큰 종류가 달라 무사 — 기존 fuzzing이 놓친 이유).
+      키 유효성 가드 2줄(.ll 재생성), e352 잠금, parity 371. 스프린트 17
+      CHANGELOG/README 누락 백필 포함.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-24c) — 도그푸딩 17: stderr_write + vaisdb 파이프 + stdout 순수성
 모드: 개별선택
 - [ ] 1. `stderr_write(text) -> Int` 승격 — stdout_write 미러(fd 2).
 - [ ] 2. vaisdb `ingest-stdin <index> <doc-id>` — 파이프 인제스트,

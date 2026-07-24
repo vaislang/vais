@@ -286,6 +286,10 @@ statements on Int and struct lists on both engines,
 `examples/e350_vaisbench_package` for the installable vaisbench command timer
 (repeated `proc_run` with `time_millis`, min/median/avg/max reporting,
 variable argument passthrough),
+`examples/e351_vaisdiff_package` for the installable vaisdiff line comparer
+(byte-level trim, middle-block `-N:`/`+N:` reports, one-side stdin),
+`examples/e352_str_param_equality.vais` for runtime Str equality between
+identifier operands without literal keys,
 `examples/e348_nested_list_expr_reads.vais` for composed `List<List<Int>>`
 double-index reads (arithmetic, call arguments, dynamic columns),
 `examples/e301_result_str_int_file_read.vais` for the `fs_exists` guarded

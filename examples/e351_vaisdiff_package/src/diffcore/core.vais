@@ -1,0 +1,64 @@
+# Byte-first diff core: trim the common prefix and suffix at byte level
+# (snapped back to line starts), then split only the differing middle block
+# into lines. Large files with small diffs never materialize full line lists;
+# a middle block past the fixed 4095-line list contract traps loudly.
+
+fn common_prefix_bytes(a: Str, b: Str) -> Int {
+    let n = a.len()
+    let m = b.len()
+    let mut i = 0
+    let mut go = 1
+    while go == 1 {
+        if i < n and i < m {
+            if a[i] == b[i] { i = i + 1 } else { go = 0 }
+        } else { go = 0 }
+    }
+    return i
+}
+
+fn common_suffix_bytes(a: Str, b: Str, limit: Int) -> Int {
+    let n = a.len()
+    let m = b.len()
+    let mut i = 0
+    let mut go = 1
+    while go == 1 {
+        if i < n - limit and i < m - limit {
+            if a[n - 1 - i] == b[m - 1 - i] { i = i + 1 } else { go = 0 }
+        } else { go = 0 }
+    }
+    return i
+}
+
+fn snap_to_line_start(text: Str, pos: Int) -> Int {
+    let mut i = pos
+    let mut go = 1
+    while go == 1 {
+        if i > 0 {
+            if text[i - 1] == 10 { go = 0 } else { i = i - 1 }
+        } else { go = 0 }
+    }
+    return i
+}
+
+fn line_count_before(text: Str, stop: Int) -> Int {
+    let mut count = 0
+    let mut i = 0
+    while i < stop {
+        if text[i] == 10 { count = count + 1 }
+        i = i + 1
+    }
+    return count
+}
+
+fn snap_to_line_end(text: Str, pos: Int) -> Int {
+    let n = text.len()
+    let mut i = pos
+    let mut go = 1
+    while go == 1 {
+        if i < n {
+            if text[i] == 10 { go = 0 } else { i = i + 1 }
+        } else { go = 0 }
+    }
+    if i < n { return i + 1 }
+    return n
+}

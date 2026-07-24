@@ -323,6 +323,18 @@ expect_exit "vaisbench rejects bad count" 2 "$vbench_dist/bin/vaisbench" 0 /usr/
 expect_exit "vaisbench budget passes" 0 "$vbench_dist/bin/vaisbench" -b 60000 2 /usr/bin/true
 expect_exit "vaisbench budget exceeded" 3 "$vbench_dist/bin/vaisbench" -b -1 2 /usr/bin/true
 
+vdiff_dist="$tmp/vaisdiff-dist"
+rm -rf "$vdiff_dist"
+printf 'alpha\nbeta\ngamma\n' > "$tmp/vaisdiff-a.txt"
+printf 'alpha\nBETA\ngamma\n' > "$tmp/vaisdiff-b.txt"
+expect_exit "vaisdiff package build" 0 "$ROOT/scripts/vaisc" package "$ROOT/examples/e351_vaisdiff_package" -o "$vdiff_dist"
+expect_exit "vaisdiff package self-test" 42 "$vdiff_dist/bin/vaisdiff"
+expect_exit "vaisdiff identical" 0 "$vdiff_dist/bin/vaisdiff" "$tmp/vaisdiff-a.txt" "$tmp/vaisdiff-a.txt"
+expect_exit "vaisdiff differ" 1 "$vdiff_dist/bin/vaisdiff" "$tmp/vaisdiff-a.txt" "$tmp/vaisdiff-b.txt"
+expect_exit "vaisdiff stdin side" 1 /bin/sh -c "printf 'alpha\nBETA\ngamma\n' | '$vdiff_dist/bin/vaisdiff' '$tmp/vaisdiff-a.txt' -"
+expect_exit "vaisdiff missing file" 3 /bin/sh -c "'$vdiff_dist/bin/vaisdiff' '$tmp/vaisdiff-no-such' '$tmp/vaisdiff-a.txt' 2>/dev/null"
+expect_exit "vaisdiff both stdin rejected" 2 /bin/sh -c "'$vdiff_dist/bin/vaisdiff' - - 2>/dev/null"
+
 overflow_src="$tmp/list-cap-overflow.vais"
 cat > "$overflow_src" <<'VAIS'
 fn main() -> Int {

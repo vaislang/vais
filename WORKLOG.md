@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-07-24d (도그푸딩 18 — vaisdiff 여섯 번째 도구 + Str equality 근본수정)
+
+**vaisdiff**(e351): 바이트 공통 prefix/suffix 트림→중간 블록만 라인 분해
+(`-N:`/`+N:`) — 대용량 소diff가 리스트 계약을 건드리지 않는 스트리밍-우선
+설계(6000줄 동일 본문 바이트 경로 self-test). 한쪽 `-` stdin, exit 0/1/3.
+
+**도구가 노출한 silent 오컴파일 root-fix(이번 사이클 최대 수확)**: full의
+Str `==`/`!=`가 **ident-vs-ident**에서 string_slot_eq로 상수 접힘 —
+리터럴 키(sty=리터럴 오프셋)가 없는 슬롯(파라미터/argv/slice, sty=-1)까지
+접어서, 동일 길이의 서로 다른 파라미터 둘이 `icmp ne i64 1, 0`(항상 같음)
+으로, 길이 다르면 상수 "다름"으로 오판. 리터럴 피연산자 비교는 토큰 종류가
+달라 fold 경로에 안 들어가 기존 프로브가 전부 통과했던 것(fuzzing 사각).
+fix=키 유효성 가드 2줄(ak/bk<0 → 런타임 __vais_str_eq 폴백), e352 잠금.
+
+경유 트랩: `cmd | tail; $?` 파이프 상태 오독 재범(기록된 트랩). 스프린트
+17 커밋에서 CHANGELOG/README 편집 누락 발견→백필. parity 371, workflow +7.
+
 ## 2026-07-24c (도그푸딩 17 — stderr_write + vaisdb 파이프 + stdout 순수성)
 
 스트림 3부작 완결: stderr_write(stdout_write 완전 미러) 승격으로

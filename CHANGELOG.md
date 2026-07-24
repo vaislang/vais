@@ -4,6 +4,24 @@
 
 ### Changed
 
+- Added the sixth installable Vais tool: `examples/e351_vaisdiff_package`
+  builds `dist/bin/vaisdiff <left> <right>` (one side may be `-` for
+  stdin), trimming the common prefix and suffix at byte level and
+  reporting only the differing middle block as `-N:`/`+N:` lines — so
+  large files with small diffs never materialize full line lists
+  (a 6000-line identical body stays on the byte path in the self-test).
+  Exit codes follow cmp: 0 identical, 1 differing, 3 missing file.
+- Fixed a silent full-engine miscompile the new tool exposed: Str
+  equality between two identifier operands constant-folded through
+  string_slot_eq even when a side had no literal key (parameters, argv
+  reads, slices), so two different same-length parameter strings
+  compared equal. The fold now requires literal keys on both sides and
+  everything else byte-compares at runtime
+  (examples/e352_str_param_equality.vais locks it).
+- (Backfill from sprint 17, missed in that commit:) stderr_write joined
+  the stream trio, vaisgrep/vaisfmt route errors to stderr, and vaisdb
+  gained ingest-stdin with the vaisgrep chain case.
+
 - Promoted `stdout_write(text) -> Int` on both engines (raw standard
   output with no added newline, returning bytes written) and vaisfmt
   accepts `-`: `-c -` exits 1 on dirty stdin, and the plain form filters

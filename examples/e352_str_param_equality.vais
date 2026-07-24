@@ -1,0 +1,34 @@
+# expect: 42
+# Str equality between two identifier operands must byte-compare at runtime
+# whenever either side is not a literal-backed local: helper parameters,
+# proc/argv-derived values, and slice results carry no literal key, so the
+# compiler falls through to __vais_str_eq instead of constant folding
+# (regression lock for the string_slot_eq literal-key guard).
+
+fn same(left: Str, right: Str) -> Int {
+    if left == right { return 1 }
+    return 0
+}
+
+fn differs(left: Str, right: Str) -> Int {
+    if left != right { return 1 }
+    return 0
+}
+
+fn main() -> Int {
+    let lf = str_byte(10)
+    let a = str_concat("alpha", str_concat(lf, "beta"))
+    let b = str_concat("alpha", str_concat(lf, "BETA"))
+    let mut r = 0
+    if same(a, b) == 0 { r = r + 10 }
+    if same(a, a) == 1 { r = r + 10 }
+    if differs(a, b) == 1 { r = r + 10 }
+    if differs(a, a) == 0 { r = r + 6 }
+
+    # Mixed: a literal-backed local against a computed value, as idents.
+    let lit = "alpha"
+    let cut = str_slice(a, 0, 5)
+    if lit == cut { r = r + 3 }
+    if cut == lit { r = r + 3 }
+    return r
+}

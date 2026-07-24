@@ -1,0 +1,114 @@
+# expect: 42
+# Sixth installable Vais tool: `scripts/vaisc package` builds dist/bin/vaisdiff
+# comparing two texts line by line:
+#   vaisdiff <left> <right>    (use - for stdin on one side)
+# Identical inputs exit 0 with no output; differing inputs print the middle
+# block as `-N: line` (left) and `+N: line` (right) and exit 1; a missing
+# file exits 3. The common prefix and suffix are trimmed at byte level, so
+# only the differing middle block is split into lines (the fixed 4095-line
+# list contract applies to that block, not the whole file). Run without
+# arguments it executes a deterministic self-test (the release-corpus entry).
+import diffcore.core
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    return 0
+}
+
+fn print_block(text: Str, from: Int, to: Int, sign: Str, first_line: Int) -> Int {
+    if to <= from { return 0 }
+    let block = str_slice(text, from, to - from)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(block, lines)
+    let mut i = 0
+    while i < n {
+        let tag = str_concat(sign, str_concat(Str(first_line + i), ": "))
+        print(str_concat(tag, lines[i]))
+        i = i + 1
+    }
+    return n
+}
+
+fn diff_texts(left: Str, right: Str) -> Int {
+    if left == right { return 0 }
+    let prefix = common_prefix_bytes(left, right)
+    let start = snap_to_line_start(left, prefix)
+    let suffix = common_suffix_bytes(left, right, start)
+    let left_end = snap_to_line_end(left, left.len() - suffix)
+    let right_end = snap_to_line_end(right, right.len() - suffix)
+    let first_line = line_count_before(left, start) + 1
+    let removed = print_block(left, start, left_end, "-", first_line)
+    let added = print_block(right, start, right_end, "+", first_line)
+    if removed + added == 0 { return 0 }
+    return 1
+}
+
+fn read_side(path: Str) -> Str {
+    if path == "-" { return stdin_read_all() }
+    return fs_read_text(path)
+}
+
+fn run_diff(left_path: Str, right_path: Str) -> Int {
+    if left_path == "-" and right_path == "-" {
+        eprint("error: only one side may be -")
+        return 2
+    }
+    if left_path != "-" {
+        if fs_exists(left_path) != 1 {
+            eprint("error: left file not found")
+            return 3
+        }
+    }
+    if right_path != "-" {
+        if fs_exists(right_path) != 1 {
+            eprint("error: right file not found")
+            return 3
+        }
+    }
+    return diff_texts(read_side(left_path), read_side(right_path))
+}
+
+fn usage() -> Int {
+    print("usage: vaisdiff <left> <right>   (use - for stdin on one side)")
+    return 2
+}
+
+fn self_test() -> Int {
+    let lf = str_byte(10)
+    let base = str_concat("alpha", str_concat(lf, str_concat("beta", str_concat(lf, str_concat("gamma", lf)))))
+    if diff_texts(base, base) != 0 { return 1 }
+
+    # One middle line changed: prefix/suffix trim isolates exactly it.
+    let changed = str_concat("alpha", str_concat(lf, str_concat("BETA", str_concat(lf, str_concat("gamma", lf)))))
+    let prefix = common_prefix_bytes(base, changed)
+    let start = snap_to_line_start(base, prefix)
+    if line_count_before(base, start) != 1 { return 2 }
+    let suffix = common_suffix_bytes(base, changed, start)
+    let left_end = snap_to_line_end(base, base.len() - suffix)
+    if str_slice(base, start, left_end - start) != str_concat("beta", lf) { return 3 }
+    if diff_texts(base, changed) != 1 { return 4 }
+
+    # Pure append: prefix covers all of the left side.
+    let appended = str_concat(base, str_concat("delta", lf))
+    if diff_texts(base, appended) != 1 { return 5 }
+
+    # Byte path: two identical 6000-line bodies never split into lines.
+    let big = str_builder_new()
+    let mut k = 0
+    while k < 6000 {
+        let r1 = str_builder_append(big, "same line body")
+        let r2 = str_builder_push(big, 10)
+        k = k + 1
+    }
+    let big_text = str_builder_finish(big)
+    if diff_texts(big_text, big_text) != 0 { return 6 }
+
+    return 42
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    if proc_argc() != 2 { return usage() }
+    return run_diff(proc_arg(0), proc_arg(1))
+}
