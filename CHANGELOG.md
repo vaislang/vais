@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Fixed a second constant-folded Str equality miscompile (adjacent to
+  sprint 18): a `mut` string local reassigned to a different literal kept
+  its original literal key, so `a == b` folded against the stale declared
+  value (a same-length reassignment compared as still-equal to the old
+  text, a different-length one as never-equal). `mut` string bindings now
+  carry no static literal key and always byte-compare at runtime
+  (examples/e353_mut_str_literal_reassign.vais locks it). A ten-probe
+  fold-family audit — parameter/slice/argv `.len()`, byte indexing,
+  empty checks, list metadata through helpers, literal-local identity —
+  otherwise measured value-exact, so the family is closed for locals.
+
 - Added the sixth installable Vais tool: `examples/e351_vaisdiff_package`
   builds `dist/bin/vaisdiff <left> <right>` (one side may be `-` for
   stdin), trimming the common prefix and suffix at byte level and

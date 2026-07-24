@@ -1,5 +1,23 @@
 # Vais Worklog
 
+## 2026-07-24e (도그푸딩 19 — 상수-접힘 패밀리 정밀사냥, mut Str 키 수정)
+
+e352 인접 위험 전수: 프로브 10종×양 엔진(파라미터/슬라이스/argv Str의
+len·바이트 인덱싱·빈검사, 헬퍼 경유 리터럴 리스트 메타, 리터럴 로컬
+identity). 9종 값 정확 — **접힘 소스가 string_slot_eq의 리터럴 키뿐**임을
+확정(18=파라미터 슬롯 무키, 여기=mut).
+
+**발견 1건 root-fix**: `let mut a = "first"; a = "second"; a == "second"`가
+full에서 0(다름) — mut 로컬의 슬롯이 최초 리터럴 키(sty=오프셋)를 유지해
+stale "first"로 접힘(동일 길이 재대입은 "여전히 같음", 다른 길이는 "절대
+다름"으로 오판). fix=mut 바인딩은 리터럴 키·길이 폐기(sty=-1) → 런타임
+__vais_str_eq 폴백. 슬롯 수집 3함수(add_local_slots 2블록 + collect_top_
+slots) 전부. e353 잠금, parity 372. 최상위 전역 mut 재대입은 별개 미지원
+문법이라 스코프 밖(빌드 거부 확인).
+
+경유: sed -A/replace_all이 코멘트 차이로 일부 지점을 놓쳐 개별 Edit 병행
+(자기 교훈: 일괄 치환 후 grep -c로 적용 수 반드시 검증).
+
 ## 2026-07-24d (도그푸딩 18 — vaisdiff 여섯 번째 도구 + Str equality 근본수정)
 
 **vaisdiff**(e351): 바이트 공통 prefix/suffix 트림→중간 블록만 라인 분해

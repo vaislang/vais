@@ -1,0 +1,23 @@
+# expect: 42
+# A `mut` string local reassigned to another literal compares by its current
+# value, not the declared literal: the compiler drops the static literal key
+# on mut bindings so equality byte-compares at runtime (regression lock for
+# the string_slot_eq mut-key guard).
+
+fn main() -> Int {
+    let mut a = "first"
+    a = "second"
+    let b = "second"
+    let mut r = 0
+    if a == b { r = r + 14 }
+    if a != "first" { r = r + 14 }
+
+    # Reassign to a same-length different value, then to equal.
+    let mut tag = "AAAA"
+    tag = "BBBB"
+    if tag != "AAAA" { r = r + 7 }
+    tag = "CCCC"
+    let want = "CCCC"
+    if tag == want { r = r + 7 }
+    return r
+}

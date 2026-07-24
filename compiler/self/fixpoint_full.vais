@@ -11607,7 +11607,9 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
         if t.kind == 7 {
             let nx = toks[i + 1]
             let mut npos = i + 1
+            let mut is_mut_let = 0
             if nx.kind == 21 { npos = i + 2 }
+            if nx.kind == 21 { is_mut_let = 1 }
             let name = toks[npos]
             # RHS value position handles typed lets `name : Type = rhs`.
             let vp = rhs_pos(toks, npos)
@@ -11834,7 +11836,14 @@ fn add_local_slots(base: List<Slot>, toks: &List<Token>, fns: &List<Fn>, defs: &
                 next_slot = next_slot + 2
             } else if rhs.kind == 28 {
                 # string var: is_arr=3, alen=length, sty=global key (literal nstart).
-                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: rhs.value , sty: rhs.nstart })
+                # A `mut` binding may be reassigned to a different string, so it
+                # carries no static literal key (sty -1) and never constant-folds
+                # in equality; the initial store below is unaffected.
+                let mut str_key = rhs.nstart
+                let mut str_alen = rhs.value
+                if is_mut_let == 1 { str_key = 0 - 1 }
+                if is_mut_let == 1 { str_alen = 0 }
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: str_alen , sty: str_key })
                 emit_str("  %v")
                 pint(next_slot)
                 emit_str(" = alloca i8*")
@@ -19140,7 +19149,9 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
         } else if t.kind == 7 {
             let nx = toks[i + 1]
             let mut npos = i + 1
+            let mut is_mut_let = 0
             if nx.kind == 21 { npos = i + 2 }
+            if nx.kind == 21 { is_mut_let = 1 }
             let name = toks[npos]
             # RHS value position handles typed lets `name : Type = rhs`.
             let vp = rhs_pos(toks, npos)
@@ -19290,7 +19301,13 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
             } else if rhs.kind == 28 {
                 # string var: is_arr=3, alen=length, sty=global key (literal nstart).
                 # alloca i8* + GEP the @.s<key> global's element 0 + store the ptr.
-                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: rhs.value , sty: rhs.nstart })
+                # A `mut` binding may be reassigned, so it carries no static
+                # literal key (sty -1) and never constant-folds in equality.
+                let mut str_key = rhs.nstart
+                let mut str_alen = rhs.value
+                if is_mut_let == 1 { str_key = 0 - 1 }
+                if is_mut_let == 1 { str_alen = 0 }
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: str_alen , sty: str_key })
                 emit_str("  %v")
                 pint(next_slot)
                 emit_str(" = alloca i8*")

@@ -22,7 +22,21 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-24d) — 도그푸딩 18: vaisdiff (여섯 번째 도구)
+## 현재 작업 (2026-07-24e) — 도그푸딩 19: 상수-접힘 패밀리 정밀사냥
+모드: 개별선택 (e352 인접 위험)
+- [x] 1~2. 프로브 10종 × 양 엔진(20런) + fold 감사 ✅ 2026-07-24 —
+      파라미터/슬라이스/argv len·인덱싱·빈검사/헬퍼 경유 리스트 메타/리터럴
+      로컬 identity 전부 값 정확. 접힘 소스는 string_slot_eq 리터럴 키뿐임
+      확정(18에서 파라미터, 여기서 mut).
+- [x] 3. **발견 1건 root-fix**: `mut` Str 로컬 재대입 시 최초 리터럴 키가
+      남아 stale 값으로 접힘(동일길이 재대입=여전히 같음, 다른길이=절대
+      다름) → mut 바인딩은 리터럴 키/길이 폐기(3함수 add_local_slots×2+
+      collect_top_slots). e353 잠금. 최상위 전역 mut 재대입은 별개 미지원
+      문법(스코프 밖).
+- [x] 4. 문서 ✅ — CHANGELOG/parity 372. 로컬 fold 패밀리 종결.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-24d) — 도그푸딩 18: vaisdiff (여섯 번째 도구)
 모드: 개별선택
 - [x] 1. e351 vaisdiff ✅ 2026-07-24 — 바이트 트림+중간 블록 라인 리포트,
       6000줄 동일 바이트 경로 self-test. exit 0/1/3(cmp 관례).
