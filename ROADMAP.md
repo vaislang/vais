@@ -22,7 +22,17 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-24e) — 도그푸딩 19: 상수-접힘 패밀리 정밀사냥
+## 현재 작업 (2026-07-24f) — 도그푸딩 20: vaiswc (일곱 번째 도구)
+모드: 개별선택
+- [x] 1. e354 vaiswc ✅ 2026-07-24 — count.tally 모듈(struct Counts 반환,
+      모듈 경계 struct-return 실증) + str_split_ws_into 제품 첫 실사용.
+- [x] 2. 다중 소스 누적 total ✅ — 파일/stdin/혼합 집계, 누락 시 stderr+계속.
+- [x] 3. 게이트 ✅ — workflow +7(단일/total 형태 grep -qx/stdin/누락 3/
+      grep→wc 파이프). self-test 42 양 엔진.
+- [x] 4. 환류 + 문서 ✅ — **컴파일러 갭 0건(첫 시도 42)**. parity 373.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-24e) — 도그푸딩 19: 상수-접힘 패밀리 정밀사냥
 모드: 개별선택 (e352 인접 위험)
 - [x] 1~2. 프로브 10종 × 양 엔진(20런) + fold 감사 ✅ 2026-07-24 —
       파라미터/슬라이스/argv len·인덱싱·빈검사/헬퍼 경유 리스트 메타/리터럴

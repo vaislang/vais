@@ -1,0 +1,31 @@
+# Line/word/byte counting over a text body. Words are whitespace-separated
+# runs (str_split_ws_into); lines are newline count (a trailing line without
+# a newline still counts). Byte count is the raw length.
+
+struct Counts {
+    lines: Int,
+    words: Int,
+    bytes: Int,
+}
+
+fn count_lines(text: Str) -> Int {
+    let mut n = 0
+    let mut i = 0
+    while i < text.len() {
+        if text[i] == 10 { n = n + 1 }
+        i = i + 1
+    }
+    if text.len() > 0 {
+        if text[text.len() - 1] != 10 { n = n + 1 }
+    }
+    return n
+}
+
+fn count_words(text: Str) -> Int {
+    let words: List<Str> = []
+    return str_split_ws_into(text, words)
+}
+
+fn tally(text: Str) -> Counts {
+    return Counts { lines: count_lines(text), words: count_words(text), bytes: text.len() }
+}

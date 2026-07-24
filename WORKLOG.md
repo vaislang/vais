@@ -1,5 +1,18 @@
 # Vais Worklog
 
+## 2026-07-24f (도그푸딩 20 — vaiswc 일곱 번째 도구, 갭 0건)
+
+vaiswc(e354): 라인/워드/바이트 카운트, 파일별 `L W B path` + 2소스↑ 시
+`total` 합산 행. **str_split_ws_into 제품 첫 실사용**(워드 = 공백 분리 런),
+count.tally 모듈이 struct Counts 반환(모듈 경계 struct-return 실증). 한쪽
+`-` stdin, 누락 파일은 stderr 보고+계속 카운트(exit 3). 파일/stdin/혼합/
+grep→wc 파이프 전부 정확.
+
+**컴파일러 갭 0건 — 첫 시도 양 엔진 42.** 미탐침 표면 2종(다중 소스 누적
+집계 + split_ws) 모두 통과. workflow +7(total 행을 grep -qx로 바이트 형태
+검증). 배포 도구 7개 체제(vaisdb/vaisgrep/vaismake/vaisfmt/vaisbench/
+vaisdiff/vaiswc). fuzzing 수확(18~19) 뒤 다시 무갭 — 표면 성숙 재확인.
+
 ## 2026-07-24e (도그푸딩 19 — 상수-접힘 패밀리 정밀사냥, mut Str 키 수정)
 
 e352 인접 위험 전수: 프로브 10종×양 엔진(파라미터/슬라이스/argv Str의

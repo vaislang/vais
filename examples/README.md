@@ -288,6 +288,8 @@ statements on Int and struct lists on both engines,
 variable argument passthrough),
 `examples/e351_vaisdiff_package` for the installable vaisdiff line comparer
 (byte-level trim, middle-block `-N:`/`+N:` reports, one-side stdin),
+`examples/e354_vaiswc_package` for the installable vaiswc line/word/byte
+counter (multi-source `total` row, stdin via `-`, `str_split_ws_into` words),
 `examples/e352_str_param_equality.vais` for runtime Str equality between
 identifier operands without literal keys,
 `examples/e348_nested_list_expr_reads.vais` for composed `List<List<Int>>`

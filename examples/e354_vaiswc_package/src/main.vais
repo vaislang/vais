@@ -1,0 +1,118 @@
+# expect: 42
+# Seventh installable Vais tool: `scripts/vaisc package` builds dist/bin/vaiswc
+# counting lines, words, and bytes:
+#   vaiswc <file...>            (use - for stdin)
+# Each source prints `L W B path`; with two or more sources a `total` row sums
+# them. Words are whitespace-separated runs (str_split_ws_into). A missing
+# file prints an error to stderr and sets the exit code to 3, but other
+# sources still count. Run without arguments it executes a deterministic
+# self-test (the release-corpus entry).
+import count.tally
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    return 0
+}
+
+fn print_counts(c: Counts, label: Str) -> Int {
+    let line = str_concat(Str(c.lines), str_concat(" ", str_concat(Str(c.words), str_concat(" ", str_concat(Str(c.bytes), str_concat(" ", label))))))
+    print(line)
+    return 0
+}
+
+fn read_source(path: Str) -> Str {
+    if path == "-" { return stdin_read_all() }
+    return fs_read_text(path)
+}
+
+fn run_wc(paths: List<Str>) -> Int {
+    let n = paths.len()
+    let mut total = Counts { lines: 0, words: 0, bytes: 0 }
+    let mut status = 0
+    let mut counted = 0
+    let mut i = 0
+    while i < n {
+        let path = paths[i]
+        if path != "-" {
+            if fs_exists(path) != 1 {
+                eprint(str_concat("error: file not found: ", path))
+                status = 3
+                i = i + 1
+            } else {
+                let c = tally(read_source(path))
+                print_counts(c, path)
+                total.lines = total.lines + c.lines
+                total.words = total.words + c.words
+                total.bytes = total.bytes + c.bytes
+                counted = counted + 1
+                i = i + 1
+            }
+        } else {
+            let c = tally(read_source(path))
+            print_counts(c, "-")
+            total.lines = total.lines + c.lines
+            total.words = total.words + c.words
+            total.bytes = total.bytes + c.bytes
+            counted = counted + 1
+            i = i + 1
+        }
+    }
+    if counted > 1 {
+        print_counts(total, "total")
+    }
+    return status
+}
+
+fn usage() -> Int {
+    print("usage: vaiswc <file...>   (use - for stdin)")
+    return 2
+}
+
+fn self_test() -> Int {
+    let lf = str_byte(10)
+    let body = str_concat("one two three", str_concat(lf, str_concat("four  five", lf)))
+    let c = tally(body)
+    if c.lines != 2 { return 1 }
+    if c.words != 5 { return 2 }
+    if c.bytes != body.len() { return 3 }
+
+    # Trailing line without newline still counts; extra spaces collapse.
+    let ragged = str_concat("a b", str_concat(lf, "c"))
+    let r = tally(ragged)
+    if r.lines != 2 { return 4 }
+    if r.words != 3 { return 5 }
+
+    # Empty body is all zeros.
+    let z = tally("")
+    if z.lines != 0 { return 6 }
+    if z.words != 0 { return 7 }
+    if z.bytes != 0 { return 8 }
+
+    # Multi-source accumulation matches the sum of parts.
+    let paths: List<Str> = []
+    let root = fs_temp_dir()
+    let f1 = path_join(root, "vais-e354-a.txt")
+    let f2 = path_join(root, "vais-e354-b.txt")
+    if fs_write_text(f1, "alpha beta") != 0 { return 9 }
+    if fs_write_text(f2, str_concat("gamma", lf)) != 0 { return 10 }
+    let ca = tally(fs_read_text(f1))
+    let cb = tally(fs_read_text(f2))
+    if ca.words + cb.words != 3 { return 11 }
+    if ca.lines + cb.lines != 2 { return 12 }
+
+    # 5 words * 8 + 2 = 42
+    return c.words * 8 + 2
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let paths: List<Str> = []
+    let mut i = 0
+    while i < proc_argc() {
+        paths.push(proc_arg(i))
+        i = i + 1
+    }
+    if paths.len() == 0 { return usage() }
+    return run_wc(paths)
+}

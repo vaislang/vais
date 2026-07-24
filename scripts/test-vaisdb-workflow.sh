@@ -335,6 +335,18 @@ expect_exit "vaisdiff stdin side" 1 /bin/sh -c "printf 'alpha\nBETA\ngamma\n' | 
 expect_exit "vaisdiff missing file" 3 /bin/sh -c "'$vdiff_dist/bin/vaisdiff' '$tmp/vaisdiff-no-such' '$tmp/vaisdiff-a.txt' 2>/dev/null"
 expect_exit "vaisdiff both stdin rejected" 2 /bin/sh -c "'$vdiff_dist/bin/vaisdiff' - - 2>/dev/null"
 
+vwc_dist="$tmp/vaiswc-dist"
+rm -rf "$vwc_dist"
+printf 'one two three\nfour five\n' > "$tmp/vaiswc-a.txt"
+printf 'alpha beta gamma delta\n' > "$tmp/vaiswc-b.txt"
+expect_exit "vaiswc package build" 0 "$ROOT/scripts/vaisc" package "$ROOT/examples/e354_vaiswc_package" -o "$vwc_dist"
+expect_exit "vaiswc package self-test" 42 "$vwc_dist/bin/vaiswc"
+expect_exit "vaiswc single file" 0 "$vwc_dist/bin/vaiswc" "$tmp/vaiswc-a.txt"
+expect_exit "vaiswc total row shape" 0 /bin/sh -c "'$vwc_dist/bin/vaiswc' '$tmp/vaiswc-a.txt' '$tmp/vaiswc-b.txt' | tail -1 | grep -qx '3 9 47 total'"
+expect_exit "vaiswc stdin word count" 0 /bin/sh -c "printf 'pipe words here\n' | '$vwc_dist/bin/vaiswc' - | grep -qx '1 3 16 -'"
+expect_exit "vaiswc missing keeps counting" 3 /bin/sh -c "'$vwc_dist/bin/vaiswc' '$tmp/vaiswc-no-such' '$tmp/vaiswc-b.txt' 2>/dev/null"
+expect_exit "grep to wc chain" 0 /bin/sh -c "printf 'cache one\nplain\ncache two three\n' | '$vgrep_dist/bin/vaisgrep' cache - | '$vwc_dist/bin/vaiswc' - | grep -qx '2 7 32 -'"
+
 overflow_src="$tmp/list-cap-overflow.vais"
 cat > "$overflow_src" <<'VAIS'
 fn main() -> Int {

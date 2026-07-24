@@ -4,6 +4,14 @@
 
 ### Changed
 
+- Added the seventh installable Vais tool: `examples/e354_vaiswc_package`
+  builds `dist/bin/vaiswc <file...>` (`-` for stdin), printing line, word,
+  and byte counts per source with a summed `total` row for two or more
+  sources; word counts are the first product use of `str_split_ws_into`,
+  and a missing file reports to stderr (exit 3) while the remaining
+  sources still count. Composes in pipes (`vaisgrep ... | vaiswc -`),
+  locked by the workflow gate. Zero compiler gaps (first-try 42).
+
 - Fixed a second constant-folded Str equality miscompile (adjacent to
   sprint 18): a `mut` string local reassigned to a different literal kept
   its original literal key, so `a == b` folded against the stale declared

@@ -104,6 +104,11 @@ into the assigned form (`examples/e347_list_discard_statements.vais`).
 position on both engines (`examples/e348_nested_list_expr_reads.vais`), and
 value if-expressions use the `then`/`else` form only — brace blocks in value
 position are rejected at the front.
+`examples/e354_vaiswc_package` is the seventh installable tool: `vaiswc`
+counts lines, words, and bytes over one or more sources (`-` for stdin),
+printing `L W B path` per source and a summed `total` row for two or more —
+its word count is the first product use of `str_split_ws_into`, and a missing
+file reports to stderr while the other sources still count.
 `examples/e351_vaisdiff_package` is the sixth installable tool: `vaisdiff`
 compares two texts (one side may be `-` for stdin) by trimming the common
 prefix and suffix at byte level and splitting only the differing middle block

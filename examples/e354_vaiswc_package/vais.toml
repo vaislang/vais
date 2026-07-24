@@ -1,0 +1,4 @@
+name = "e354_vaiswc_package"
+version = "0.1.0"
+source = "src"
+binary = "vaiswc"
