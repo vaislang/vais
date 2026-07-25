@@ -1,5 +1,30 @@
 # Vais Worklog
 
+## 2026-07-26b (3중 인라인 struct 리터럴 승격 — 드라이버 단계화 데수가)
+
+**매트릭스 프로브가 후보 노트를 정정**: "양 엔진 LOUD"로 기록됐던 갭이
+실은 full 전용 — core 리터럴 파서가 2단까지만 처리하고 3단째 생성자명을
+미해결 식별자로 방치(@VAIS_UNRESOLVED_IDENT_Inner → clang LOUD). direct
+는 3·4중 원래 지원. 2중 다중필드는 양 엔진 verified 확인(승격 노트의
+single-field 한정 표기는 보수적 과소기록이었음).
+
+fix = 드라이버 공유 데수가(lower_nested_struct_literal_line): 라인의
+리터럴 중첩 깊이 3+ 감지 시 innermost 리터럴부터 __vais_slit<N> 합성
+let으로 호이스트, 완전 단계화(verified form by construction). 스캐너는
+문자열/char 리터럴 스킵 + 대문자-ident `{`(리터럴) vs bare `{`(블록)
+스택 구분. 2중은 트리거 밖(native 경로 무접촉). sort/discard/@ 데수가
+선례의 라인 체인에 편입 — **core 무변경, .ll 재생성 불필요**.
+
+e366 잠금(3중 전 레이어 형제 필드 + 4중 체인) 양 엔진 42. 경계 프로브
+6종에서 데수가 회귀 0 — direct 실패 2건은 베이스라인 대조로 선재 한계
+판정: ① 중첩 필드 경로 Str .len 체인(o.mid.tag.len() — 체인 패밀리
+sibling) ② 단일라인 if 블록 다문장(let+return). 둘 다 LOUD, 후보 등록.
+기존 중첩 struct 코퍼스(e01/e190/e197) 회귀 0. parity 385, 래더 GREEN
+(23k줄 core 소스가 새 데수가를 통과 = 오발화 0 실증).
+
+**다음 세션:** dynamic-row 중첩 리스트 읽기(마지막 구갭) 또는 direct
+체인 sibling(중첩 필드 .len) 소탕, 또는 도그푸딩 27.
+
 ## 2026-07-26 (trap 진단 패밀리 완결 — str 범위/OOM 메시지화 + 공허 수렴 함정)
 
 2026-07-18b가 남긴 마지막 무메시지 trap 2부류 종결. **recon이 후보 노트를

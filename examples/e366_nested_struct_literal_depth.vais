@@ -1,0 +1,33 @@
+# expect: 42
+# Inline struct literals nested three or more levels deep build on both
+# engines: the driver desugars such lines into the verified staged form
+# (each inner literal hoisted to a synthetic `let __vais_slit<N>` binding,
+# innermost first), so `Outer { mid: Mid { inner: Inner {..} } }` and even
+# four-level chains no longer need hand staging. Two-level literals keep
+# their untouched native paths.
+
+struct Inner { v: Int }
+struct Mid { x: Int, inner: Inner, y: Int }
+struct Outer { a: Int, mid: Mid, b: Int }
+
+struct L4 { v: Int }
+struct L3 { l4: L4 }
+struct L2 { l3: L3 }
+struct L1 { l2: L2 }
+
+fn main() -> Int {
+    # Three levels with sibling fields on every layer.
+    let o = Outer { a: 1, mid: Mid { x: 2, inner: Inner { v: 3 }, y: 4 }, b: 5 }
+    if o.a != 1 { return 1 }
+    if o.mid.x != 2 { return 2 }
+    if o.mid.inner.v != 3 { return 3 }
+    if o.mid.y != 4 { return 4 }
+    if o.b != 5 { return 5 }
+
+    # Four levels, single-field chain.
+    let q = L1 { l2: L2 { l3: L3 { l4: L4 { v: 27 } } } }
+    if q.l2.l3.l4.v != 27 { return 6 }
+
+    # 3 * 5 + 27 = 42
+    return o.mid.inner.v * 5 + q.l2.l3.l4.v
+}

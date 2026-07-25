@@ -4,6 +4,20 @@
 
 ### Changed
 
+- Promoted inline struct literals nested three or more levels deep on
+  both engines: a shared driver desugar rewrites such lines into the
+  verified staged form (each inner literal hoisted to a synthetic
+  `let __vais_slit<N>` binding, innermost first), leaving two-level
+  literals on their untouched native paths. Root cause was full-only —
+  the core's literal parser handles two levels and left the third
+  constructor name unresolved (@VAIS_UNRESOLVED_IDENT_*, loud at clang);
+  the direct engine already built triple and quadruple nests. Locked by
+  examples/e366_nested_struct_literal_depth.vais (three levels with
+  sibling fields plus a four-level chain, parity 385). Probe sweep
+  recorded two pre-existing direct-only loud gaps as candidates: Str
+  `.len()` chains on nested field paths (`o.mid.tag.len()`), and
+  multi-statement single-line if blocks.
+
 - Completed the trap-diagnostics family: `str_slice`/`str_byte` range
   violations now abort with `vais str trap: slice or byte out of range`
   on both engines (previously the full core borrowed the list-capacity

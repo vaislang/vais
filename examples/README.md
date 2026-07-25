@@ -310,6 +310,8 @@ including bare statements and idempotent missing-path status,
 user-defined Str function receivers on both engines,
 `examples/e365_vaiscut_package` for the installable vaiscut field extractor
 (`-f N`/`-d SEP` per-line `str_split_into`, cut-style fallbacks),
+`examples/e366_nested_struct_literal_depth.vais` for three- and four-level
+inline nested struct literals on both engines via the staged-let desugar,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

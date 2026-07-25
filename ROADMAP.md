@@ -22,7 +22,28 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26) — 무메시지 trap 잔여 메시지화 (진단 패밀리 완결)
+## 현재 작업 (2026-07-26b) — 3중 인라인 struct 리터럴 root-fix
+모드: 개별선택
+- [x] 1. 매트릭스 프로브 ✅ 2026-07-26 — **후보 노트 정정**: 갭은 full
+      전용(core 리터럴 파서 2단 한정 — 3단째 생성자명 @VAIS_UNRESOLVED_
+      IDENT로 LOUD), direct는 3·4중 원래 지원. 2중 다중필드는 양 엔진
+      verified 확인.
+- [x] 2. Root-fix ✅ — 드라이버 공유 데수가 lower_nested_struct_literal_
+      line: 3단+ 감지 시 innermost 리터럴부터 __vais_slit 합성 let으로
+      호이스트(문자열/블록 브레이스 인지 스캐너), 완전 단계화 출력.
+      2중 무접촉(트리거 깊이 3+). core 무변경(.ll 재생성 불필요 —
+      데수가가 core 도달 전 처리).
+- [x] 3. e366 잠금 ✅ — 3중 혼합 필드(전 레이어 형제 필드) + 4중 체인
+      양 엔진 42. 경계 프로브 6종: 문자열 내 중괄호/단일라인 if 분리
+      판정(데수가 회귀 0 — 실패 2건은 선재 direct 한계로 후보 기록).
+      기존 중첩 struct 코퍼스(e01/e190/e197) 회귀 0.
+- [x] 4. 환류 + 문서 ✅ — 후보 취소선 + 신규 direct 후보 2건(중첩 필드
+      .len 체인/단일라인 if 다문장), README/CHANGELOG, parity 385 실측
+      (native=385). 래더 GREEN(LADDER-EXIT 0 — 23k줄 core 소스가 새
+      데수가 통과, 오발화 0 실증).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-26) — 무메시지 trap 잔여 메시지화 (진단 패밀리 완결)
 모드: 개별선택
 - [x] 1. Recon ✅ 2026-07-26 — **후보 노트 정정 실측**: direct는 진짜
       무메시지 7지점(__builtin_trap: slice/from_byte 범위 2 + OOM 5 —
@@ -749,9 +770,14 @@ generic `Result<T,E>`는 여전히 열지 않는다.
 - ~~fs_remove direct 미배선~~ (완결 2026-07-25f): direct 재작성 사이트
   일괄 배선 + bare 문장 슬라이스(call_stmt_host_discard) — 양 엔진 e363
   잠금(idempotent 미존재 0 포함).
-- 3중 이상 인라인 중첩 struct 리터럴(`Outer { mid: Mid { inner: Inner {..}}}`)
-  미검증 — clang 단계 LOUD 실패. 단계 조립(let 바인딩 후 참조)이 verified
-  form. 수요 반복 시 리터럴 lowering 확장.
+- ~~3중 이상 인라인 중첩 struct 리터럴~~ (완결 2026-07-26b): 드라이버
+  데수가가 3단+ 리터럴을 단계 let(__vais_slit)로 재작성 — 양 엔진 e366
+  잠금(3중 혼합 필드 + 4중). 원인은 full 전용(core 리터럴 파서 2단 한정,
+  3단째 생성자명 미해결 → LOUD)이었고 direct는 원래 지원. 신규 후보 2건
+  기록: ① 중첩 필드 경로 위 Str `.len()` 체인(`o.mid.tag.len()`)은
+  direct 미지원(LOUD, 체인 패밀리 sibling — bind-then-len이 verified)
+  ② direct는 단일라인 if 블록의 다문장(let+return)을 미지원(LOUD,
+  full은 지원 — 스타일상 비권장 형태).
 - 중첩 리스트 dynamic-row 읽기(`grid[i][j]`의 i가 변수)는 미치환 잔존 —
   %v-1 clang 에러로 표면화. 수요 시 행 스위치 데수가 검토.
 - ~~잔여 무메시지 trap 2부류~~ (완결 2026-07-26): str 범위(kind 4 "vais

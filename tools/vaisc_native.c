@@ -15992,6 +15992,122 @@ static int lower_scalar_value_if_embedded_return_line(const char *line, int *tem
  * statement reached the full core, which silently miscompiled it (length
  * left unadjusted or worse).
  */
+/*
+ * Inline struct literals nested three or more levels deep
+ * (`Outer { mid: Mid { inner: Inner { v: 1 } } }`) reach the full core with
+ * the innermost constructor name unresolved (@VAIS_UNRESOLVED_IDENT_*), so
+ * desugar such lines into the verified staged form: hoist every literal that
+ * sits inside another literal to its own `let __vais_slit<N> = ...` line,
+ * innermost first, until the statement carries at most one literal level.
+ * Two-level literals (natively verified on both engines) never trigger this.
+ */
+static int find_innermost_nested_literal(const char *line, int *lit_start, int *lit_end, int *max_depth) {
+    int stack[64];
+    int cur_start[64];
+    int child_lit[64];
+    int sp = 0;
+    int lit_depth = 0;
+    int deepest = 0;
+    int found = 0;
+    int best = -1;
+    int best_end = -1;
+    int i = 0;
+    while (line[i] != '\0') {
+        if (is_string_delim_c(line[i])) {
+            int e = skip_string_literal_c(line, i);
+            if (e < 0) break;
+            i = e;
+            continue;
+        }
+        if (line[i] == '\'') {
+            int e = skip_char_literal_c(line, i);
+            if (e < 0) { i++; continue; }
+            i = e;
+            continue;
+        }
+        if (is_ident_start(line[i])) {
+            int s = i;
+            while (is_ident_continue(line[i])) i++;
+            int j = i;
+            while (line[j] == ' ' || line[j] == '\t') j++;
+            if (line[j] == '{' && line[s] >= 'A' && line[s] <= 'Z' && sp < 64 && lit_depth < 64) {
+                if (lit_depth > 0) child_lit[lit_depth - 1] = 1;
+                cur_start[lit_depth] = s;
+                child_lit[lit_depth] = 0;
+                stack[sp++] = 1;
+                lit_depth++;
+                if (lit_depth > deepest) deepest = lit_depth;
+                i = j + 1;
+                continue;
+            }
+            continue;
+        }
+        if (line[i] == '{') {
+            if (sp < 64) stack[sp++] = 0;
+            i++;
+            continue;
+        }
+        if (line[i] == '}') {
+            if (sp > 0) {
+                sp--;
+                if (stack[sp] == 1) {
+                    lit_depth--;
+                    if (!found && lit_depth >= 1 && child_lit[lit_depth] == 0) {
+                        best = cur_start[lit_depth];
+                        best_end = i;
+                        found = 1;
+                    }
+                }
+            }
+            i++;
+            continue;
+        }
+        i++;
+    }
+    *max_depth = deepest;
+    if (found) {
+        *lit_start = best;
+        *lit_end = best_end;
+    }
+    return found;
+}
+
+static int lower_nested_struct_literal_line(const char *line, int *temp_count, LineVec *out) {
+    int ls = 0;
+    int le = 0;
+    int depth = 0;
+    int f = find_innermost_nested_literal(line, &ls, &le, &depth);
+    if (!f || depth < 3) return 0;
+    const char *sw = skip_ws(line);
+    size_t indent_len = (size_t)(sw - line);
+    char *work = strdup(line);
+    while (f) {
+        int t = (*temp_count)++;
+        char num[24];
+        snprintf(num, sizeof(num), "%d", t);
+        StrBuf letb;
+        sb_init(&letb);
+        sb_append_n(&letb, work, indent_len);
+        sb_append(&letb, "let __vais_slit");
+        sb_append(&letb, num);
+        sb_append(&letb, " = ");
+        sb_append_n(&letb, work + ls, (size_t)(le - ls + 1));
+        lines_push(out, sb_take(&letb));
+        StrBuf rep;
+        sb_init(&rep);
+        sb_append_n(&rep, work, (size_t)ls);
+        sb_append(&rep, "__vais_slit");
+        sb_append(&rep, num);
+        sb_append(&rep, work + le + 1);
+        free(work);
+        work = sb_take(&rep);
+        int wdepth = 0;
+        f = find_innermost_nested_literal(work, &ls, &le, &wdepth);
+    }
+    lines_push(out, work);
+    return 1;
+}
+
 static int lower_list_discard_statement_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
     const char *s = skip_ws(line);
     size_t indent_len = (size_t)(s - line);
@@ -16282,6 +16398,7 @@ static char *lower_list_method_text(const char *text) {
             }
             continue;
         }
+        if (lower_nested_struct_literal_line(lines.items[i], &temp_count, &out)) continue;
         if (lower_list_discard_statement_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_sort_statement_line(lines.items[i], &temp_count, &env, &out)) continue;
         if (lower_list_sort_by_statement_line(lines.items[i], &temp_count, &env, &out)) continue;
