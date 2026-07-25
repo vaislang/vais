@@ -104,6 +104,12 @@ into the assigned form (`examples/e347_list_discard_statements.vais`).
 position on both engines (`examples/e348_nested_list_expr_reads.vais`), and
 value if-expressions use the `then`/`else` form only — brace blocks in value
 position are rejected at the front.
+`examples/e365_vaiscut_package` is the twelfth installable tool: `vaiscut`
+prints one 1-based delimited field per line (`-f N`, `-d SEP` defaulting to
+a tab) — the first per-line product use of `str_split_into`, preserving
+empty fields and multi-byte separators — with cut conventions: no-delimiter
+lines print whole, past-the-end fields print empty lines, missing files
+report to stderr with exit 3 while the remaining sources still print.
 `examples/e362_vaistee_package` is the eleventh installable tool: `vaistee`
 duplicates stdin to stdout and every file argument byte-exact — truncating
 by default, appending with `-a` (the first product use of `fs_append_text`)

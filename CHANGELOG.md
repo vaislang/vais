@@ -4,6 +4,18 @@
 
 ### Changed
 
+- Added the twelfth installable Vais tool: `examples/e365_vaiscut_package`
+  builds `dist/bin/vaiscut -f N [-d SEP] [file...]` (`-` or no files for
+  stdin), printing one 1-based delimited field per line — the first
+  per-line product use of `str_split_into`, preserving empty fields and
+  multi-byte separators — with cut conventions (no-delimiter lines print
+  whole, past-the-end fields print empty lines) and the usual filter
+  contract (missing files to stderr with exit 3 while remaining sources
+  print, usage off stdout). Composes in pipes
+  (`vaisgrep ... | vaiscut -f 2 -d , | vaissort -`) and vaisbox now
+  dispatches vaiscut as its eleventh applet. Zero compiler gaps
+  (first-try 42 on both engines; parity 384).
+
 - Closed two direct-engine parity holes surfaced by the recent sprints:
   fs_remove is now wired through the direct rewrite sites (predicate,
   gates, emit, type inference, prototype) with a bare value-discarding

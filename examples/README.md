@@ -308,6 +308,8 @@ accumulation and truncating rewrites through `fs_append_text`,
 including bare statements and idempotent missing-path status,
 `examples/e364_user_fn_len_chain.vais` for trailing `.len()` chains on
 user-defined Str function receivers on both engines,
+`examples/e365_vaiscut_package` for the installable vaiscut field extractor
+(`-f N`/`-d SEP` per-line `str_split_into`, cut-style fallbacks),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

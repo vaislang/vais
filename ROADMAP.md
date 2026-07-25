@@ -22,7 +22,23 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-25f) — 도그푸딩 25: direct 파리티 소탕
+## 현재 작업 (2026-07-25g) — 도그푸딩 26: vaiscut (열두 번째 도구)
+모드: 개별선택 (완료까지 자동 진행 — 사용자 지시)
+- [x] 1. e365 vaiscut 패키지 ✅ 2026-07-25 — `-f N`/`-d SEP`(기본 탭),
+      파일/`-`/무파일=stdin. str_split_into 라인 단위 제품 첫 실사용.
+      양 엔진 첫 시도 42(4번째 무갭 도구 스프린트).
+- [x] 2. cut 관례 계약 ✅ — 무구분자=전체 라인/초과=빈 라인/빈 필드
+      보존/멀티바이트 SEP 전부 실측 정확. 누락 파일 3 계속, usage 2,
+      stdout 순수성.
+- [x] 3. 게이트 + vaisbox 11애플릿 ✅ — workflow +11케이스(byte-cmp
+      기대값/초과 grep -c/stdin/usage stdout-빈/**grep→cut→sort 3단
+      체인**), vaisbox list 11/dispatch(42 산술 count*4-2). 전부 GREEN.
+- [x] 4. 환류 + 문서 ✅ — **컴파일러 갭 0건**. parity 384 실측(native=
+      384), PRELUDE/README/CHANGELOG. 래더(fmt+release) GREEN(LADDER-EXIT
+      0 직접 확인) 후 커밋·main 머지·푸시 완결.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-25f) — 도그푸딩 25: direct 파리티 소탕
 모드: 개별선택
 - [x] 1. fs_remove direct 배선 ✅ 2026-07-25 — 재작성 사이트 일괄(프레디킷/
       게이트/emit/타입추론 Int/프로토타입 — 임베디드 impl·declare는 기존)

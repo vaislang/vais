@@ -1,0 +1,130 @@
+# expect: 42
+# Twelfth installable Vais tool: `scripts/vaisc package` builds
+# dist/bin/vaiscut extracting one delimited field per line:
+#   vaiscut -f N [-d SEP] [file...]    (use - or no files for stdin)
+# `-f N` selects the 1-based field (required), `-d SEP` sets the delimiter
+# (default: a tab byte). Splitting is the first per-line product use of
+# str_split_into, so empty fields are preserved and multi-byte separators
+# work. cut conventions apply: a line without the delimiter prints whole,
+# a field index past the last field prints an empty line. A missing file
+# reports to stderr and sets the exit code to 3 while the remaining sources
+# still print; errors and usage never touch stdout. Sources share the
+# 4095-slot list contract (lines per source, fields per line). Run without
+# arguments it executes a deterministic self-test (the release-corpus entry).
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    return 0
+}
+
+fn cut_line(line: Str, sep: Str, field: Int) -> Str {
+    let parts: List<Str> = []
+    let n = str_split_into(line, sep, parts)
+    if n < 2 { return line }
+    if field > n { return "" }
+    return parts[field - 1]
+}
+
+fn cut_source(text: Str, sep: Str, field: Int) -> Int {
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    let mut i = 0
+    while i < n {
+        print(cut_line(lines[i], sep, field))
+        i = i + 1
+    }
+    return n
+}
+
+fn read_source(path: Str) -> Str {
+    if path == "-" { return stdin_read_all() }
+    return fs_read_text(path)
+}
+
+fn run_cut(paths: List<Str>, sep: Str, field: Int) -> Int {
+    let mut status = 0
+    let mut i = 0
+    while i < paths.len() {
+        let path = paths[i]
+        if path != "-" {
+            if fs_exists(path) != 1 {
+                eprint(str_concat("error: file not found: ", path))
+                status = 3
+                i = i + 1
+            } else {
+                cut_source(read_source(path), sep, field)
+                i = i + 1
+            }
+        } else {
+            cut_source(read_source(path), sep, field)
+            i = i + 1
+        }
+    }
+    return status
+}
+
+fn usage() -> Int {
+    eprint("usage: vaiscut -f N [-d SEP] [file...]   (use - or no files for stdin)")
+    return 2
+}
+
+fn self_test() -> Int {
+    # Basic field selection and empty-field preservation.
+    if cut_line("a,b,c", ",", 2) != "b" { return 1 }
+    if cut_line("a,,c", ",", 2) != "" { return 2 }
+
+    # Field past the last one yields an empty line.
+    if cut_line("a,b,c", ",", 5) != "" { return 3 }
+
+    # A line without the delimiter prints whole (cut convention).
+    if cut_line("plain", ",", 3) != "plain" { return 4 }
+
+    # Empty input line stays empty.
+    if cut_line("", ",", 1) != "" { return 5 }
+
+    # Default-style tab delimiter and multi-byte separators.
+    let tab = str_byte(9)
+    if cut_line(str_concat("x", str_concat(tab, "y")), tab, 2) != "y" { return 6 }
+    if cut_line("a::b::c", "::", 3) != "c" { return 7 }
+
+    # 6 * 7 = 42
+    return 6 * 7
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let mut field = 0
+    let mut sep = str_byte(9)
+    let mut start = 0
+    let mut scanning = 1
+    while scanning == 1 {
+        if start >= proc_argc() {
+            scanning = 0
+        } else {
+            let a = proc_arg(start)
+            if a == "-f" {
+                if start + 1 >= proc_argc() { return usage() }
+                field = parse_int(proc_arg(start + 1))
+                start = start + 2
+            } else if a == "-d" {
+                if start + 1 >= proc_argc() { return usage() }
+                sep = proc_arg(start + 1)
+                start = start + 2
+            } else {
+                scanning = 0
+            }
+        }
+    }
+    if field < 1 { return usage() }
+    let paths: List<Str> = []
+    let mut i = start
+    while i < proc_argc() {
+        paths.push(proc_arg(i))
+        i = i + 1
+    }
+    if paths.len() == 0 {
+        paths.push("-")
+    }
+    return run_cut(paths, sep, field)
+}

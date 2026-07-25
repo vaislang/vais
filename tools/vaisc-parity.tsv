@@ -128,6 +128,7 @@ examples/e361_fs_append_text_accumulate.vais	native-supported	fs_append_text acc
 examples/e362_vaistee_package/src/main.vais	native-supported	Installable vaistee self-test covers truncating and appending multi-file duplication plus bad-path status with surviving writes.
 examples/e363_fs_remove_roundtrip.vais	native-supported	fs_remove works on both engines including bare value-discarding statements, with idempotent missing-path zero status.
 examples/e364_user_fn_len_chain.vais	native-supported	Trailing .len() chains on user-defined Str function receivers emit on both engines across return, let, if-condition, and arithmetic positions.
+examples/e365_vaiscut_package/src/main.vais	native-supported	Installable vaiscut self-test covers per-line str_split_into field extraction with empty-field preservation, whole-line no-delimiter fallback, and multi-byte separators.
 examples/e303_result_metric_int_struct_payload.vais	native-supported	Result<Metric,Int> struct payload values flow through helper parameters and recover fields through inline matches.
 examples/e304_result_record_int_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> struct payload values flow through helper parameters and recover three fields through inline matches.
 examples/e305_result_multiline_struct_payload.vais	native-supported	Result<DeclaredStruct,Int> multiline struct payload values flow through helper parameters and recover four fields through inline matches.

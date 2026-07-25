@@ -1,5 +1,23 @@
 # Vais Worklog
 
+## 2026-07-25g (도그푸딩 26 — vaiscut 열두 번째 도구, 갭 0건)
+
+vaiscut(e365): 라인당 1-기반 필드 추출 필터 — `-f N`(필수)/`-d SEP`
+(기본 탭 str_byte(9)), 파일/`-`/무파일=stdin. **str_split_into 라인 단위
+제품 첫 실사용**(빈 필드 보존·멀티바이트 SEP 실측). cut 관례: 무구분자
+라인=전체 출력, 필드 초과=빈 라인. 누락 파일 stderr+3 계속, usage 2,
+stdout 순수성.
+
+**컴파일러 갭 0건 — 양 엔진 첫 시도 42(4번째 무갭 도구 스프린트:
+vaiswc/vaissort/vaiscut + vaisenv도 승격 외 무갭).** workflow +11케이스
+(byte-cmp/grep→cut→sort 3단 체인), vaisbox 11애플릿(count*4-2=42).
+parity 384 실측, 래더 GREEN(LADDER-EXIT 0). 사용자 지시로 완료까지
+논스톱 진행(커밋·머지·푸시 포함).
+
+**다음 세션:** 잔여 후보(3중 인라인 struct 리터럴/dynamic-row 중첩
+리스트/무메시지 trap str_slice·from_byte·OOM) 또는 도그푸딩 27
+(vaisuniq/vaishead·tail — 소형).
+
 ## 2026-07-25f (도그푸딩 25 — direct 파리티 소탕: fs_remove + user-fn 체인)
 
 최근 스프린트가 노출한 direct 전용 구멍 2건을 한 스프린트로 종결.
