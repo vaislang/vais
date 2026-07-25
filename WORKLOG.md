@@ -1,5 +1,36 @@
 # Vais Worklog
 
+## 2026-07-26 (trap 진단 패밀리 완결 — str 범위/OOM 메시지화 + 공허 수렴 함정)
+
+2026-07-18b가 남긴 마지막 무메시지 trap 2부류 종결. **recon이 후보 노트를
+정정**: direct는 진짜 무메시지 7지점(__builtin_trap: slice/from_byte 범위
+2 + OOM 5), core는 무메시지가 아니라 **오라벨**(slice/from_byte trap이
+kind 3 capacity 메시지 차용 — "4095 entries" 메시지가 범위 위반에서 출력
+되던 것). core llvm.trap 22지점 전수 분류: 차용 2 외에는 정당한
+capacity(맵 insert/key_at/value_at, split 3종) 또는 컴파일가드·고정배열
+부류(스코프 밖).
+
+fix: vais_list_trap kind 4("vais str trap: slice or byte out of range")
+신설 + direct kind 5("vais trap: out of memory"). direct 정의를 첫 호출자
+(str_slice) 앞으로 이동(기록된 플레이스먼트 트랩 회피). core는 malloc
+NULL 무보호가 별개 사실로 판명 — 신규 후보 기록. 특성: full은 trap
+텍스트를 puts(stdout)로 출력(bare-libc 자급 제약), direct는 stderr —
+PRELUDE에 명시.
+
+**최대 수확 — 공허 수렴 함정 발견**: cp로 core 교체 직후 emit하면
+scripts/vaisc의 `-nt` mtime 비교(초 단위)가 리빌드를 스킵할 수 있어
+gen1==gen2가 **같은 구 바이너리 2회 emit의 공허 수렴**이 됨. 실제로 첫
+CONVERGED가 공허였고, 프로브가 옛 메시지를 출력해 발각(재생성만 믿었으면
+오라벨 fix가 무효인 채 커밋될 뻔). **불변 절차 확립: 세대 사이마다
+`rm -f build/vaisc` 강제 리빌드** — gen3==gen4 진짜 수렴 확보. 이는
+stale-binary 교훈(2026-04 cargo 시대)의 신종 변형.
+
+workflow +6케이스(양 엔진 빌드 0/실행 134/메시지 grep) + 기존 list trap
+회귀 GREEN. 래더 GREEN(LADDER-EXIT 0).
+
+**다음 세션:** 3중 인라인 struct 리터럴 root-fix(recon 완료 — 2중은 e01
+verified/single-field 한정 주의, 매트릭스 프로브부터).
+
 ## 2026-07-25g (도그푸딩 26 — vaiscut 열두 번째 도구, 갭 0건)
 
 vaiscut(e365): 라인당 1-기반 필드 추출 필터 — `-f N`(필수)/`-d SEP`

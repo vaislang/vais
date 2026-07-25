@@ -471,6 +471,20 @@ expect_exit "list empty pop full build" 0 "$ROOT/scripts/vaisc" build "$empty_po
 expect_exit "list empty pop full traps loud" 134 "$tmp/list-empty-pop-full"
 expect_exit "list empty pop direct build" 0 "$ROOT/scripts/vaisc" build "$empty_pop_src" --engine direct -o "$tmp/list-empty-pop-direct"
 expect_exit "list empty pop direct traps loud" 134 "$tmp/list-empty-pop-direct"
+
+range_trap_src="$tmp/str-range-trap.vais"
+cat > "$range_trap_src" <<'VAIS'
+fn main() -> Int {
+    let s = str_slice("abc", 0, 99)
+    return s.len()
+}
+VAIS
+expect_exit "str range trap full build" 0 "$ROOT/scripts/vaisc" build "$range_trap_src" -o "$tmp/str-range-trap-full"
+expect_exit "str range trap full loud" 134 "$tmp/str-range-trap-full"
+expect_exit "str range trap full message" 0 /bin/sh -c "'$tmp/str-range-trap-full' 2>&1 | grep -q 'vais str trap: slice or byte out of range'"
+expect_exit "str range trap direct build" 0 "$ROOT/scripts/vaisc" build "$range_trap_src" --engine direct -o "$tmp/str-range-trap-direct"
+expect_exit "str range trap direct loud" 134 "$tmp/str-range-trap-direct"
+expect_exit "str range trap direct message" 0 /bin/sh -c "'$tmp/str-range-trap-direct' 2>&1 | grep -q 'vais str trap: slice or byte out of range'"
 expect_exit "vaisdb package archive exists" 0 test -f "$vdb_dist/vaisdb-0.1.0.tar.gz"
 mkdir -p "$vdb_extract"
 expect_exit "vaisdb package archive extracts" 0 tar -C "$vdb_extract" -xzf "$vdb_dist/vaisdb-0.1.0.tar.gz"

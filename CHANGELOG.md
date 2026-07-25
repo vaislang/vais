@@ -4,6 +4,22 @@
 
 ### Changed
 
+- Completed the trap-diagnostics family: `str_slice`/`str_byte` range
+  violations now abort with `vais str trap: slice or byte out of range`
+  on both engines (previously the full core borrowed the list-capacity
+  message for those traps and the direct runtime called a bare
+  `__builtin_trap`), and the direct runtime's allocation-failure paths
+  (directory listing copies, token-list arena) report
+  `vais trap: out of memory` instead of trapping silently. The shared
+  trap helper gained kinds 4/5, the direct definition moved ahead of its
+  first caller, and the workflow gate locks the range diagnostic with
+  build-0/run-134/message cases per engine. Note: the full engine prints
+  trap text via `puts` (stdout, a bare-libc constraint), the direct
+  engine via stderr. Regenerated vaisc_core.ll with a hardened
+  procedure — forced driver rebuilds between generations after
+  discovering the mtime-based rebuild check can skip a same-second core
+  install and vacuously "converge" (recorded in WORKLOG).
+
 - Added the twelfth installable Vais tool: `examples/e365_vaiscut_package`
   builds `dist/bin/vaiscut -f N [-d SEP] [file...]` (`-` or no files for
   stdin), printing one 1-based delimited field per line — the first

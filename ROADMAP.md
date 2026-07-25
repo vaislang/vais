@@ -22,7 +22,32 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-25g) — 도그푸딩 26: vaiscut (열두 번째 도구)
+## 현재 작업 (2026-07-26) — 무메시지 trap 잔여 메시지화 (진단 패밀리 완결)
+모드: 개별선택
+- [x] 1. Recon ✅ 2026-07-26 — **후보 노트 정정 실측**: direct는 진짜
+      무메시지 7지점(__builtin_trap: slice/from_byte 범위 2 + OOM 5 —
+      fs_list_files·dirs malloc ×4, token calloc ×1), core는 무메시지가
+      아니라 **오라벨**(slice/from_byte trap이 kind 3 capacity 메시지
+      차용). core llvm.trap 22지점 분류: kind3 차용 2 외 나머지는 정당한
+      capacity(맵/split) 또는 컴파일가드·고정배열 부류(스코프 밖 기록).
+- [x] 2. 메시지 trap 배선 ✅ — vais_list_trap kind 4(str 범위)/5(OOM,
+      direct만 — core는 malloc NULL 무보호가 별개 사실로 기록) 추가.
+      direct 정의를 첫 호출자(str_slice) 앞으로 이동(2026-07-18 플레이스
+      먼트 트랩 회피). **경유 발견: 공허 수렴 함정** — cp 직후 mtime
+      초단위 -nt 비교로 드라이버 리빌드 스킵 → gen1==gen2가 구 바이너리
+      2회 emit의 공허 수렴이었음(stale-binary 교훈의 신종). 세대 간
+      rm -f build/vaisc 강제 리빌드 절차로 **진짜 수렴(gen3==gen4)** 확보.
+- [x] 3. 게이트 ✅ — workflow +6케이스(양 엔진 빌드 0/실행 134/메시지
+      grep), 기존 list trap 4케이스 회귀 GREEN. 프로브 4/4(엔진×slice·
+      byte) 메시지 정확.
+- [x] 4. 환류 + 문서 ✅ — PRELUDE 진단 섹션(범위/OOM 메시지 + full=stdout
+      puts 특성 명시), CHANGELOG, 후보 취소선 처리. 신규 후보 기록:
+      core malloc NULL 무보호(별개 부류). 래더(fmt+release) GREEN
+      (LADDER-EXIT 0 — fixpoint 수렴 게이트가 강제 리빌드 절차 산출물
+      독립 재검증).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-25g) — 도그푸딩 26: vaiscut (열두 번째 도구)
 모드: 개별선택 (완료까지 자동 진행 — 사용자 지시)
 - [x] 1. e365 vaiscut 패키지 ✅ 2026-07-25 — `-f N`/`-d SEP`(기본 탭),
       파일/`-`/무파일=stdin. str_split_into 라인 단위 제품 첫 실사용.
@@ -729,8 +754,11 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   form. 수요 반복 시 리터럴 lowering 확장.
 - 중첩 리스트 dynamic-row 읽기(`grid[i][j]`의 i가 변수)는 미치환 잔존 —
   %v-1 clang 에러로 표면화. 수요 시 행 스위치 데수가 검토.
-- 잔여 무메시지 trap 2부류(리스트 외): __vais_str_slice/from_byte 범위
-  검사, malloc 실패(OOM) 경로 — 메시지화 여부는 수요 시 검토.
+- ~~잔여 무메시지 trap 2부류~~ (완결 2026-07-26): str 범위(kind 4 "vais
+  str trap: slice or byte out of range")·direct OOM(kind 5) 메시지화 —
+  양 엔진 게이트 잠금. 신규 기록: **core(full) 런타임의 malloc NULL은
+  무보호**(trap조차 없음, null-deref) — 전수 NULL 검사 배선은 별개
+  스프린트 규모, 수요 시 검토.
 - richer reusable package layout / package diagnostics: e337(vaisdb 설치형
   패키지, 다중 모듈 src/vaisdb/* + binary + archive)이 현 표면을 실제 도구로
   도그푸딩 완료 — 노출 갭 0건. 추가 layout 요구(중첩 모듈 트리, 의존 패키지

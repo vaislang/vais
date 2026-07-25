@@ -166,7 +166,11 @@ materializing a `List<Str>`, because the fixed list contract holds at most
 4095 entries: `str_split_lines_into` (and the other `*_into` fillers) abort
 past that with a `vais list trap: capacity exceeded` diagnostic on stderr
 (list bounds and empty-access traps are diagnosed the same way on both
-engines), so whole-repo tools stream instead
+engines, `str_slice`/`str_byte` range violations abort with
+`vais str trap: slice or byte out of range`, and the direct runtime's
+allocation-failure paths report `vais trap: out of memory` — the full
+engine routes its trap text through `puts`, so it lands on stdout there),
+so whole-repo tools stream instead
 (`scripts/vaisfmt-check.sh` gates every tracked `.vais` tree, the ~23k-line
 self-host source included).
 `examples/e344_vaismake_package` is the third installable tool: `vaismake`
