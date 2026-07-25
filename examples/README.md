@@ -300,6 +300,10 @@ through `env_get` (unset and empty names yield the empty string),
 (per-name value lines, unset names to stderr with exit 3),
 `examples/e360_host_call_len_chain.vais` for trailing `.len()` chains on host
 Str-call receivers across return/let/if/arithmetic positions on both engines,
+`examples/e361_fs_append_text_accumulate.vais` for ordered append
+accumulation and truncating rewrites through `fs_append_text`,
+`examples/e362_vaistee_package` for the installable vaistee stdin duplicator
+(stdout passthrough plus per-file truncate/`-a` append writes),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

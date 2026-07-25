@@ -99,6 +99,19 @@ int64_t fs_write_text(char *path, char *text) {
     return 0;
 }
 
+int64_t fs_append_text(char *path, char *text) {
+    if (path == NULL || text == NULL) return 1;
+    FILE *fp = fopen(path, "ab");
+    if (fp == NULL) return errno == 0 ? 1 : errno;
+    if (fputs(text, fp) < 0) {
+        int err = errno == 0 ? 1 : errno;
+        fclose(fp);
+        return err;
+    }
+    if (fclose(fp) != 0) return errno == 0 ? 1 : errno;
+    return 0;
+}
+
 char *fs_cwd(void) {
     char buf[4096];
     if (getcwd(buf, sizeof(buf)) == NULL) host_trap("fs_cwd");

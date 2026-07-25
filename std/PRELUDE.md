@@ -104,6 +104,11 @@ into the assigned form (`examples/e347_list_discard_statements.vais`).
 position on both engines (`examples/e348_nested_list_expr_reads.vais`), and
 value if-expressions use the `then`/`else` form only — brace blocks in value
 position are rejected at the front.
+`examples/e362_vaistee_package` is the eleventh installable tool: `vaistee`
+duplicates stdin to stdout and every file argument byte-exact — truncating
+by default, appending with `-a` (the first product use of `fs_append_text`)
+— while unwritable paths report to stderr with exit 3 and the remaining
+files plus stdout still receive the input.
 `examples/e359_vaisenv_package` is the tenth installable tool: `vaisenv`
 prints process environment variables one value per line — the first product
 use of `env_get`, whose total contract reads unset (and empty-named)
@@ -299,6 +304,7 @@ direct/default summary report.
 | `env_get(name: Str) -> Str` | Verified; full/direct — total environment read (unset or empty names yield "") |
 | `fs_read_text(path: Str) -> Str` | Verified |
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified |
+| `fs_append_text(path: Str, text: Str) -> Int` | Verified; full/direct — "ab" append (missing file created, 0 = success) |
 | `fs_mkdirs(path: Str) -> Int` | Verified |
 | `fs_remove(path: Str) -> Int` | Verified |
 | `fs_cwd() -> Str` | Verified; full/direct |

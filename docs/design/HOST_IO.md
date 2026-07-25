@@ -71,6 +71,7 @@ The first file API is text-only and UTF-8 oriented:
 | `env_get(name: Str) -> Str` | Verified | Read a process environment variable. Total: unset variables and empty names yield the empty string (never a trap), so tools branch on emptiness. |
 | `fs_read_text(path: Str) -> Str` | Verified | Read a whole text file. Missing or unreadable files still trap in the raw API; use the gate-backed e298 `fs_exists` + `Result<Int,Int>` recipe for status-only flows or the e301/e302 `fs_exists` + `Result<Str,Int>` recipes when the success payload is the file text and helper parameter forwarding is needed. |
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified | Write text, replacing the file. Return `0` on success and a non-zero host status on failure. |
+| `fs_append_text(path: Str, text: Str) -> Int` | Verified | Append text to a file, creating it when missing. Return `0` on success and a non-zero host status on failure. |
 | `fs_mkdirs(path: Str) -> Int` | Verified | Create a directory and missing parents. Return `0` on success. |
 | `fs_remove(path: Str) -> Int` | Verified | Remove a file path. Missing paths return `0`; recursive directory removal is not part of this slice. |
 

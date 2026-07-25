@@ -1,5 +1,45 @@
 # Vais Worklog
 
+## 2026-07-25e (도그푸딩 24 — fs_append_text 승격 + vaistee, 갭 0건)
+
+**fs_append_text(path, text) -> Int 승격**: fs_write_text 완전 미러("ab"
+모드, 미존재 생성, 0=성공) — native.c 23사이트=23 정합, 런타임 2종.
+**Int-반환 host API는 core 무변경**이 재실측 확정(제네릭 call 경로,
+fs_list_files 선례) — .ll 재생성 자체가 불필요한 첫 승격 스프린트.
+e361 잠금(write→append×2 누적 순서→write 트렁케이트).
+
+vaistee(e362, 열한 번째 도구): stdin을 stdout(stdout_write 바이트 정확)+
+파일들에 복제, `-a`가 fs_append_text 제품 첫 실사용. 실패 stderr+exit 3
+(잔여 파일·stdout 유지). self-test는 write_files(파일 절반)만 호출해
+stdout 무오염 설계. 양 엔진 첫 시도 42, workflow +11케이스(누적/생성/
+실패/3단 체인+파일 사본), vaisbox 10애플릿(42 산술 count*4+2). parity
+381 실측, 래더 GREEN(LADDER-EXIT 0).
+
+**경유 발견(환류 등록)**: fs_remove가 direct 미배선(full-only) — 프로브의
+bare fs_remove 문장이 direct 서브셋 에러로 LOUD 거부되며 표면화. 승격
+자체 갭은 0건(vaiswc/vaissort에 이어 3번째 무갭 도구 스프린트). 예제/
+게이트에선 트렁케이트 쓰기(fs_write_text)로 리셋해 fs_remove 회피.
+
+**다음 세션:** 후보(fs_remove direct 배선(소형)/사용자-fn 체인 direct/
+3중 struct/dynamic-row/무메시지 trap) 또는 도그푸딩 25(vaiscut/vaisuniq/
+vaishead·tail 등).
+
+## 2026-07-25d (fuzzing 라운드 6 — 체인 인접 영역, 발견 0건)
+
+체인 수정(2026-07-25c)의 blast radius 정밀 프로브 11종 × 양 엔진(22런)
+전부 42. 커버: 체인 위치 확장(while-조건/call-인자/이항 양변/Str() 변환/
+and 조합), call==call·!= equality **첫 탐침**(미설정 둘=같음, 미설정 vs
+PATH=다름 — 값 정확), mut×host-call 재바인딩(빈→PATH→빈, e353 인접),
+mut Int 체인 재대입, 0-인자 4종 체인 전수(stdin은 </dev/null), Str-call의
+사용자-fn 인자 직접 전달(measure(env_get(..))).
+
+**발견 0건 — 수정 안정 + 인접 표면 값 정확 실측.** 코드 무변경(기록만).
+프로브는 scratch 전용(발견 없어 예제 잠금 불필요, 라운드 3 선례). 누적
+147프로브.
+
+**다음 세션:** 도그푸딩 24(vaistee+fs_append_text 승격 등) 또는 잔여
+후보(사용자-fn 체인 direct/3중 struct/dynamic-row/무메시지 trap).
+
 ## 2026-07-25c (체인 갭 root-fix — host Str-call 리시버 .len(), 원인 3중)
 
 도그푸딩 23이 노출한 체인 갭을 당일 root-fix. 매트릭스 8프로브(위치

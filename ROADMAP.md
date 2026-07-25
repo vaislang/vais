@@ -22,7 +22,38 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-25c) — 체인 갭 root-fix: host Str-call 리시버 `.len()`
+## 현재 작업 (2026-07-25e) — 도그푸딩 24: fs_append_text 승격 + vaistee
+모드: 개별선택
+- [x] 1. `fs_append_text(path, text) -> Int` 승격 ✅ 2026-07-25 —
+      fs_write_text 완전 미러(native.c 23=23, "ab" 모드, 런타임 2종).
+      **core 무변경 실측 확정**(Int-반환 제네릭 call 경로, fs_list_files
+      선례 적중 — .ll 재생성 불필요). e361 잠금(누적→트렁케이트) 양 엔진
+      첫 시도 42. 경유 발견: fs_remove direct 미배선(후보 등록).
+- [x] 2. e362 vaistee ✅ — stdout_write 바이트 정확 패스스루 + 파일들
+      truncate/-a append, 실패 stderr+3(잔여 계속). self-test는
+      write_files(파일 절반)만 사용해 stdout 무오염. 양 엔진 42.
+- [x] 3. 게이트 + vaisbox ✅ — workflow +11케이스(passthrough/파일 내용/
+      멀티/-a 누적/미존재 생성/실패 3/stdout 유지/grep→tee→wc 체인+파일
+      사본) + vaisbox 10애플릿(list 10/dispatch, 42 산술 count*4+2).
+      전부 GREEN.
+- [x] 4. 환류 + 문서 ✅ — fs_remove direct 미배선 후보 등록, HOST_IO/
+      PRELUDE/LANGUAGE/README/CHANGELOG, parity 381 실측(native=381).
+      래더(fmt+release) GREEN, LADDER-EXIT 0 직접 확인.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-25d) — 값-정확성 fuzzing 라운드 6: 체인 인접 영역
+모드: 개별선택
+- [x] 1. 프로브 11종 × 양 엔진(22런) ✅ 2026-07-25 — 체인 위치 확장
+      (while-조건/call-인자/이항 양변/Str() 변환/and 논리 조합), **call==
+      call·call!=call equality 첫 탐침**, mut×host-call 재바인딩(빈→PATH→
+      빈), mut Int 체인 재대입, 0-인자 4종(proc_self/fs_cwd/fs_temp_dir/
+      stdin_read_all) 체인 전수, Str-call의 사용자-fn 인자 직접 전달.
+- [x] 2. 발견 처리 ✅ — **발견 0건**(silent/LOUD 모두 없음). 처리 대상 없음.
+- [x] 3. 판정 ✅ — 체인 수정(2026-07-25c)의 blast radius 값 정확 실측.
+      코드 무변경(기록만, 라운드 3 선례). 누적 147프로브 기준선.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-25c) — 체인 갭 root-fix: host Str-call 리시버 `.len()`
 모드: 개별선택
 - [x] 1. 원인 recon ✅ 2026-07-25 — 매트릭스 8프로브 완성(위치 3×인자수 2
       ×양 엔진 + 사용자-fn/산술). **full 원인 2중**: ① gen_factor call-emit
@@ -654,6 +685,9 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   잔여: **사용자 정의 Str 함수 체인**(`my_helper().len()`)은 full만 지원,
   direct는 LOUD C 에러(member reference on char*) — 수요 노출 시 direct
   user-fn 재작성 경로 확장.
+- fs_remove가 direct 엔진에 미배선(full-only, 도그푸딩 24에서 실측 —
+  bare 문장이 direct 서브셋 에러로 LOUD 거부). direct 제품 코드는
+  트렁케이트 쓰기로 수명 관리 가능해 수요 노출 시 배선(fs_mkdirs 미러).
 - 3중 이상 인라인 중첩 struct 리터럴(`Outer { mid: Mid { inner: Inner {..}}}`)
   미검증 — clang 단계 LOUD 실패. 단계 조립(let 바인딩 후 참조)이 verified
   form. 수요 반복 시 리터럴 lowering 확장.

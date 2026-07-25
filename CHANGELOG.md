@@ -4,6 +4,22 @@
 
 ### Changed
 
+- Added the eleventh installable Vais tool and a matching host API:
+  `fs_append_text(path, text) -> Int` appends to a file on both engines
+  ("ab" mirror of fs_write_text — missing files are created, 0 = success,
+  full core unchanged since Int-returning host calls flow through the
+  generic call path; examples/e361_fs_append_text_accumulate.vais locks
+  ordered accumulation plus truncating rewrites) — and
+  `examples/e362_vaistee_package` builds `dist/bin/vaistee [-a] <file...>`,
+  duplicating stdin to stdout byte-exact and to every file argument,
+  truncating by default and appending with `-a`; unwritable paths report
+  to stderr (exit 3) while stdout and the remaining files still receive
+  the input. vaisbox now dispatches vaistee as its tenth applet
+  (parity 381). Zero compiler gaps in the promotion; recorded one
+  pre-existing asymmetry as a candidate: fs_remove is not wired in the
+  direct engine (full-only), so direct programs manage lifecycle with
+  truncating writes instead.
+
 - Fixed the host str-call receiver chain gap on both engines: trailing
   `.len()` on host Str-returning calls (`env_get(name).len()`,
   `fs_temp_dir().len()`) now emits correctly in return, let, if-condition,

@@ -1,0 +1,24 @@
+# expect: 42
+# fs_append_text(path, text) -> Int appends to a file on both engines — the
+# "ab"-mode mirror of fs_write_text (0 = success, non-zero host status on
+# failure; a missing file is created). Appends accumulate in order after a
+# write, and a later fs_write_text truncates the accumulated body back.
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let f = path_join(root, "vais-e361-append.txt")
+
+    # write -> append -> append accumulates bytes in order.
+    if fs_write_text(f, "log:") != 0 { return 1 }
+    if fs_append_text(f, "a") != 0 { return 2 }
+    if fs_append_text(f, "b") != 0 { return 3 }
+    let body = fs_read_text(f)
+    if body != "log:ab" { return 4 }
+
+    # fs_write_text truncates the accumulated body.
+    if fs_write_text(f, "fresh") != 0 { return 5 }
+    if fs_read_text(f) != "fresh" { return 6 }
+
+    # 6 accumulated bytes * 7 = 42
+    return body.len() * 7
+}

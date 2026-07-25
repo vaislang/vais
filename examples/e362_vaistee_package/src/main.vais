@@ -1,0 +1,104 @@
+# expect: 42
+# Eleventh installable Vais tool: `scripts/vaisc package` builds
+# dist/bin/vaistee duplicating stdin to stdout and files:
+#   vaistee [-a] <file...>
+# The whole input passes to stdout byte-exact (stdout_write, no added
+# newline) and is written to every file argument — truncating by default,
+# appending with `-a` (the first product use of fs_append_text). A file that
+# cannot be written reports to stderr and sets the exit code to 3 while the
+# remaining files and stdout still receive the input; errors never touch
+# stdout. Run without arguments it executes a deterministic self-test (the
+# release-corpus entry).
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    return 0
+}
+
+fn write_one(path: Str, body: Str, append: Int) -> Int {
+    if append == 1 { return fs_append_text(path, body) }
+    return fs_write_text(path, body)
+}
+
+fn write_files(files: List<Str>, body: Str, append: Int) -> Int {
+    let mut status = 0
+    let mut i = 0
+    while i < files.len() {
+        let path = files[i]
+        if write_one(path, body, append) != 0 {
+            eprint(str_concat("error: cannot write: ", path))
+            status = 3
+        }
+        i = i + 1
+    }
+    return status
+}
+
+fn run_tee(files: List<Str>, body: Str, append: Int) -> Int {
+    let out = stdout_write(body)
+    return write_files(files, body, append)
+}
+
+fn self_test() -> Int {
+    let root = fs_temp_dir()
+    let f1 = path_join(root, "vais-e362-a.txt")
+    let f2 = path_join(root, "vais-e362-b.txt")
+
+    # Truncating tee writes the same body to every file (write_files is the
+    # file half of run_tee — the stdout half stays out of the self-test).
+    let files: List<Str> = []
+    files.push(f1)
+    files.push(f2)
+    if write_files(files, "tee:", 0) != 0 { return 1 }
+    if fs_read_text(f1) != "tee:" { return 2 }
+    if fs_read_text(f2) != "tee:" { return 3 }
+
+    # Append mode accumulates on both files.
+    if write_files(files, "more", 1) != 0 { return 4 }
+    if fs_read_text(f1) != "tee:more" { return 5 }
+    if fs_read_text(f2) != "tee:more" { return 6 }
+
+    # Truncate mode resets accumulated bodies.
+    if write_files(files, "reset", 0) != 0 { return 7 }
+    if fs_read_text(f1) != "reset" { return 8 }
+
+    # A bad path reports status 3 but the good file still receives bytes.
+    let mixed: List<Str> = []
+    mixed.push(path_join(root, "vais-e362-no-such-dir/x.txt"))
+    mixed.push(f2)
+    if write_files(mixed, "kept", 0) != 3 { return 9 }
+    if fs_read_text(f2) != "kept" { return 10 }
+
+    # 8 accumulated bytes ("tee:more") * 5 + 2 = 42
+    let acc = 8
+    return acc * 5 + 2
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let mut append = 0
+    let mut start = 0
+    let mut scanning = 1
+    while scanning == 1 {
+        if start >= proc_argc() {
+            scanning = 0
+        } else {
+            let a = proc_arg(start)
+            if a == "-a" {
+                append = 1
+                start = start + 1
+            } else {
+                scanning = 0
+            }
+        }
+    }
+    let files: List<Str> = []
+    let mut i = start
+    while i < proc_argc() {
+        files.push(proc_arg(i))
+        i = i + 1
+    }
+    let body = stdin_read_all()
+    return run_tee(files, body, append)
+}

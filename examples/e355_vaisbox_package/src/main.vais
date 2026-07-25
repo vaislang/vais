@@ -25,12 +25,13 @@ fn known_tool(name: Str) -> Int {
     if name == "vaiswc" { return 1 }
     if name == "vaissort" { return 1 }
     if name == "vaisenv" { return 1 }
+    if name == "vaistee" { return 1 }
     return 0
 }
 
 fn tool_list() -> Str {
     let lf = str_byte(10)
-    return str_concat("vaisdb", str_concat(lf, str_concat("vaisgrep", str_concat(lf, str_concat("vaismake", str_concat(lf, str_concat("vaisfmt", str_concat(lf, str_concat("vaisbench", str_concat(lf, str_concat("vaisdiff", str_concat(lf, str_concat("vaiswc", str_concat(lf, str_concat("vaissort", str_concat(lf, "vaisenv"))))))))))))))))
+    return str_concat("vaisdb", str_concat(lf, str_concat("vaisgrep", str_concat(lf, str_concat("vaismake", str_concat(lf, str_concat("vaisfmt", str_concat(lf, str_concat("vaisbench", str_concat(lf, str_concat("vaisdiff", str_concat(lf, str_concat("vaiswc", str_concat(lf, str_concat("vaissort", str_concat(lf, str_concat("vaisenv", str_concat(lf, "vaistee"))))))))))))))))))
 }
 
 fn self_dir() -> Str {
@@ -74,13 +75,13 @@ fn self_test() -> Int {
     if known_tool("vaiswc") != 1 { return 2 }
     if known_tool("nope") != 0 { return 3 }
 
-    # The applet list carries all nine names, one per line.
+    # The applet list carries all ten names, one per line.
     let list = tool_list()
     let names: List<Str> = []
     let count = str_split_lines_into(list, names)
-    if count != 9 { return 4 }
+    if count != 10 { return 4 }
     if names[0] != "vaisdb" { return 5 }
-    if names[8] != "vaisenv" { return 6 }
+    if names[9] != "vaistee" { return 6 }
 
     # proc_self resolves to a real basename we can dispatch on.
     let base = path_basename(proc_self())
@@ -90,8 +91,8 @@ fn self_test() -> Int {
     let dir = self_dir()
     if dir.len() == 0 { return 8 }
 
-    # 9 tools * 4 + 6 = 42
-    return count * 4 + 6
+    # 10 tools * 4 + 2 = 42
+    return count * 4 + 2
 }
 
 fn main() -> Int {
