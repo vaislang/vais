@@ -4,6 +4,20 @@
 
 ### Changed
 
+- Fixed the host str-call receiver chain gap on both engines: trailing
+  `.len()` on host Str-returning calls (`env_get(name).len()`,
+  `fs_temp_dir().len()`) now emits correctly in return, let, if-condition,
+  and arithmetic positions. Full-core root causes were twofold — the
+  generic call emitter returned the raw i8* while skip_factor skipped the
+  chain positionally, and the shared let-slot predicate
+  (rhs_is_host_str_call) typed chained bindings as string slots; both now
+  peek trailing_len_call_end (regenerated vaisc_core.ll, gen1==gen2). The
+  direct engine's zero-arg helper branch emitted the call verbatim and
+  leaked `.len()` into C — it now wraps Str-returning zero-arg receivers
+  in __vais_str_len. Locked by examples/e360_host_call_len_chain.vais
+  across a position×arity matrix (parity 379). Remaining candidate:
+  user-defined Str function chains stay full-only (direct rejects loudly).
+
 - Added the tenth installable Vais tool and a matching host API:
   `env_get(name) -> Str` reads a process environment variable on both
   engines with a total contract — unset variables and empty names yield

@@ -4580,7 +4580,16 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             rc = sync_list_len(ls7, li7, lb7, rc)
             rc = sync_list_len(ls8, li8, lb8, rc)
             rc = sync_list_len(ls9, li9, lb9, rc)
-            if retstr == 1 { return Op { kind: 2, val: dest, next: rc } }
+            if retstr == 1 {
+                # A trailing `.len()` on a Str-returning call is skipped
+                # positionally by skip_factor, so it must be emitted here or
+                # the raw i8* leaks as the factor value.
+                let lend = trailing_len_call_end(toks, src, close + 1)
+                if lend != close + 1 {
+                    return emit_strlen_from_ptr(dest, rc)
+                }
+                return Op { kind: 2, val: dest, next: rc }
+            }
             return Op { kind: 1, val: dest, next: rc }
         }
         if nx.kind == 27 {
@@ -9386,6 +9395,10 @@ fn rhs_is_host_str_call(toks: &List<Token>, fns: &List<Fn>, src: Str, npos: Int)
     if rhs.kind == 1 {
         let after = toks[vp + 1]
         if after.kind == 9 {
+            # A trailing `.len()` chain turns the binding into an Int value,
+            # so the slot must not be typed as a string pointer.
+            let close = paren_end(toks, vp + 2)
+            if trailing_len_call_end(toks, src, close + 1) != close + 1 { return 0 }
             if is_host_str_return(src, rhs.nstart, rhs.nlen) == 1 { return 1 }
             return call_retstr(toks, fns, src, vp)
         }

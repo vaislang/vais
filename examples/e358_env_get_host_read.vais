@@ -4,8 +4,8 @@
 # string — never a trap — so callers branch on emptiness. Comparing the call
 # result directly against a string literal locks the Str-vs-call-operand
 # equality path (the e356 family) for env_get from day one. Method chains on
-# call receivers (`env_get(...).len()`) are not a verified form on either
-# engine — bind to a local first (both fail loudly at the clang stage).
+# host call receivers (`env_get(...).len()`) are verified separately by
+# examples/e360_host_call_len_chain.vais.
 
 fn unset_len() -> Int {
     let value = env_get("VAIS_E358_DEFINITELY_UNSET")

@@ -1,5 +1,34 @@
 # Vais Worklog
 
+## 2026-07-25c (체인 갭 root-fix — host Str-call 리시버 .len(), 원인 3중)
+
+도그푸딩 23이 노출한 체인 갭을 당일 root-fix. 매트릭스 8프로브(위치
+ret/let/if × 인자수 0/1 × 양 엔진 + 사용자-fn/산술)로 원인 3중 분리:
+
+① **full gen_factor call-emit**: skip_factor가 `.len()`을 포지션만 스킵
+하고 emit은 누락 — raw i8*가 팩터 값으로 흘러 ret/store에서 타입 충돌
+(LOUD). fix=retstr 반환 직전 trailing_len_call_end peek →
+emit_strlen_from_ptr(기존 10사이트와 동일 관례). ② **full 슬롯 수집기**:
+공유 프레디킷 rhs_is_host_str_call이 체인 바인딩(`let n = env_get(..)
+.len()`)을 Str 슬롯으로 오타이핑 — 체인이면 0 반환(호출자 add_local_
+slots/collect_top_slots 2곳 자동 커버). ③ **direct 0-인자 분기**: 트레일
+링-len 래핑(23252) 도달 전 continue로 `.len()`이 C에 그대로 누출 —
+Str-반환 4종(fs_cwd/fs_temp_dir/stdin_read_all/proc_self)에 __vais_str_
+len 래핑(Int-반환 time_millis/sb_new/proc_argc는 제외).
+
+.ll 재생성 2세대 수렴 ×2회(수정 단계별). 매트릭스 12/12 + 산술 조합 +
+e360 잠금(parity 379 실측). 잔여 후보: 사용자 정의 Str 함수 체인은 full
+지원/direct LOUD 거부(member reference on char*) — 수요 시 확장.
+
+경유 트랩 2건: ① zsh 루프에서 `$eng` 미인용 → `--engine direct`가 한
+인자로 붙어 direct 전멸 오판(실제 회귀 아님 — 개별 재실행으로 판별,
+루프 검증은 bash 배열/개별 커맨드로). ② 슬롯 프레디킷 수정 전 core
+재생성을 먼저 한 번 돌려 재생성 2회 소요 — 다단 수정은 프로브로 전 지점
+확정 후 일괄 적용이 재생성 비용 절약.
+
+**다음 세션:** fuzzing 라운드 6(체인 인접 영역 정밀 프로브 — 사용자 선택
+완료), 이후 도그푸딩 24 후보(vaistee+fs_append 등).
+
 ## 2026-07-25b (도그푸딩 23 — env_get 승격 + vaisenv, 선재 체인 갭 발견)
 
 **env_get(name) -> Str 승격**: path_dirname(동일 시그니처 형태)을 템플릿

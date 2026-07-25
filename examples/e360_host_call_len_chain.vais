@@ -1,0 +1,43 @@
+# expect: 42
+# Method chains on host Str-call receivers emit on both engines:
+# `env_get(name).len()` (one-arg) and `fs_temp_dir().len()` (zero-arg) work
+# in return, let, if-condition, and arithmetic positions. The full core now
+# emits the trailing strlen it previously skipped positionally (raw i8*
+# leaked as the factor value), and the direct engine now wraps zero-arg
+# receivers it previously leaked verbatim into C. User-defined Str function
+# chains (`my_helper().len()`) remain full-only — the direct engine rejects
+# them loudly, so bind to a local first in cross-engine code.
+
+fn ret_chain_one_arg() -> Int {
+    return env_get("VAIS_E360_UNSET").len()
+}
+
+fn ret_chain_zero_arg() -> Int {
+    return fs_temp_dir().len()
+}
+
+fn main() -> Int {
+    # return-position chains, both arities.
+    if ret_chain_one_arg() != 0 { return 1 }
+    if ret_chain_zero_arg() == 0 { return 2 }
+
+    # let-position chains, both arities.
+    let unset_n = env_get("VAIS_E360_UNSET").len()
+    if unset_n != 0 { return 3 }
+    let tmp_n = fs_temp_dir().len()
+    if tmp_n == 0 { return 4 }
+
+    # if-condition chains, both arities.
+    if env_get("VAIS_E360_UNSET").len() != 0 { return 5 }
+    if fs_temp_dir().len() == 0 { return 6 }
+
+    # Arithmetic composition keeps the Int typing.
+    let padded = env_get("VAIS_E360_UNSET").len() + 40
+    if padded != 40 { return 7 }
+
+    # A set variable reads back through the chain (PATH under shell gates).
+    if env_get("PATH").len() == 0 { return 8 }
+
+    # 40 + 2 = 42
+    return padded + 2
+}

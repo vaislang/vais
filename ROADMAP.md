@@ -22,7 +22,29 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-25b) — 도그푸딩 23: env_get 승격 + vaisenv (열 번째 도구)
+## 현재 작업 (2026-07-25c) — 체인 갭 root-fix: host Str-call 리시버 `.len()`
+모드: 개별선택
+- [x] 1. 원인 recon ✅ 2026-07-25 — 매트릭스 8프로브 완성(위치 3×인자수 2
+      ×양 엔진 + 사용자-fn/산술). **full 원인 2중**: ① gen_factor call-emit
+      이 raw i8* 반환(skip_factor는 `.len()`을 포지션만 스킵 — "스킵하되
+      emit 누락" 형태) ② 슬롯 수집기 공유 프레디킷(rhs_is_host_str_call)이
+      체인 바인딩을 Str 슬롯으로 오타이핑. **direct 원인**: 0-인자 헬퍼
+      분기가 트레일링-len 래핑(23252) 도달 전 continue → `.len()` C 누출.
+      경유 트랩: zsh 루프 `$eng` 미인용 워드스플리팅으로 direct 전멸 오판
+      1회(실제 회귀 아님 — bash/zsh 차이).
+- [x] 2. full core fix ✅ — call-emit retstr 반환에 trailing_len_call_end
+      peek(+emit_strlen_from_ptr, 기존 10사이트 관례) + rhs_is_host_str_call
+      에 체인 시 0 반환(호출자 add_local_slots/collect_top_slots 2곳 공유
+      fix). .ll 재생성 2세대 수렴 ×2회.
+- [x] 3. direct fix ✅ — 0-인자 분기에 Str-반환 서브셋(fs_cwd/fs_temp_dir/
+      stdin_read_all/proc_self)의 __vais_str_len 래핑(Int-반환 3종 제외).
+- [x] 4. e360 잠금 + 환류 ✅ — 매트릭스 예제(ret/let/if/산술 × 0·1-인자)
+      양 엔진 42, e358 스테일 주석 정정, 후보 갱신(완결 취소선 + 잔여:
+      사용자-fn 체인 direct 미지원 LOUD), CHANGELOG/README. parity 379
+      실측(native=379). 래더(fmt+release) GREEN, LADDER-EXIT 0 직접 확인.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-25b) — 도그푸딩 23: env_get 승격 + vaisenv (열 번째 도구)
 모드: 개별선택
 - [x] 1. `env_get(name) -> Str` host API 승격 ✅ 2026-07-25 — path_dirname
       완전 미러(native.c 21사이트 = 21, core 2, 런타임 2종 — copy_str/
@@ -627,11 +649,11 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
 - (재평가 2026-07-14: 도그푸딩 3~11 아홉 스프린트 동안 generic Result·중첩
   layout 신규 요구 0건 — 두 휴면 후보 모두 트리거 미충족 유지.)
-- host Str-call 리시버 위 메서드 체인(`env_get("X").len()`,
-  `fs_temp_dir().len()`) 미검증 — LOUD clang 실패(도그푸딩 23 프로브 실측:
-  full은 전 형태(ret/let 위치, 인자 수 무관), direct는 0-인자 리시버만
-  실패·1-인자는 동작). bind-then-method(로컬 바인딩 후 .len())가 verified
-  form. 수요 반복 시 core 체인 emit 확장.
+- ~~host Str-call 리시버 위 메서드 체인~~ (완결 2026-07-25c): host call
+  `.len()` 체인은 양 엔진 승격 완료(e360, ret/let/if/산술 × 0·1-인자).
+  잔여: **사용자 정의 Str 함수 체인**(`my_helper().len()`)은 full만 지원,
+  direct는 LOUD C 에러(member reference on char*) — 수요 노출 시 direct
+  user-fn 재작성 경로 확장.
 - 3중 이상 인라인 중첩 struct 리터럴(`Outer { mid: Mid { inner: Inner {..}}}`)
   미검증 — clang 단계 LOUD 실패. 단계 조립(let 바인딩 후 참조)이 verified
   form. 수요 반복 시 리터럴 lowering 확장.

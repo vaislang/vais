@@ -22991,7 +22991,20 @@ static char *direct_rewrite_parse_builtin_calls(
             return NULL;
         }
         if (is_fs_cwd || is_fs_temp_dir || is_stdin_read || is_proc_self || is_time_millis || is_sb_new || is_proc_argc) {
-            sb_append(&out, is_fs_cwd ? "fs_cwd()" : (is_fs_temp_dir ? "fs_temp_dir()" : (is_stdin_read ? "stdin_read_all()" : (is_proc_self ? "proc_self()" : (is_time_millis ? "time_millis()" : (is_sb_new ? "str_builder_new()" : "proc_argc()"))))));
+            const char *zero_call = is_fs_cwd ? "fs_cwd()" : (is_fs_temp_dir ? "fs_temp_dir()" : (is_stdin_read ? "stdin_read_all()" : (is_proc_self ? "proc_self()" : (is_time_millis ? "time_millis()" : (is_sb_new ? "str_builder_new()" : "proc_argc()")))));
+            int zero_next = close + 1;
+            int zero_len = 0;
+            if ((is_fs_cwd || is_fs_temp_dir || is_stdin_read || is_proc_self) &&
+                direct_parse_trailing_str_len(expr, close + 1, &zero_next, &zero_len) && zero_len) {
+                sb_append(&out, "__vais_str_len(");
+                sb_append(&out, zero_call);
+                sb_append(&out, ")");
+                for (int k = 0; k < 16; k++) free(args[k]);
+                free(name);
+                i = zero_next;
+                continue;
+            }
+            sb_append(&out, zero_call);
             for (int k = 0; k < 16; k++) free(args[k]);
             free(name);
             i = close + 1;

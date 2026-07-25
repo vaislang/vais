@@ -298,6 +298,8 @@ dispatcher (proc_self basename applet selection, sibling re-exec, `list`),
 through `env_get` (unset and empty names yield the empty string),
 `examples/e359_vaisenv_package` for the installable vaisenv variable printer
 (per-name value lines, unset names to stderr with exit 3),
+`examples/e360_host_call_len_chain.vais` for trailing `.len()` chains on host
+Str-call receivers across return/let/if/arithmetic positions on both engines,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between
