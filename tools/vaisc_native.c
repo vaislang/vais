@@ -16760,6 +16760,191 @@ static char *nested_list_rewrite_occurrences(const char *line, NestedListInfo *i
     return sb_take(&out);
 }
 
+/*
+ * Dynamic-row nested list reads (`grid[i][j]` with a non-literal row index)
+ * previously leaked the erased grid name (%v-1 on full, unknown identifier
+ * on direct). Desugar them against the statically known per-row flat lists:
+ * hoist the row expression to a temp, trap out-of-range rows through the
+ * verified negative-index list trap, then select the row with single-
+ * statement multiline if blocks into a mut result temp.
+ */
+static int nested_list_find_dynamic_row(
+    const char *line,
+    NestedListInfo *infos,
+    int info_count,
+    int *name_start,
+    int *row_open,
+    int *row_close,
+    int *col_close,
+    NestedListInfo **info_out
+) {
+    for (int i = 0; line[i] != '\0';) {
+        if (is_string_delim_c(line[i])) {
+            int end = skip_string_literal_c(line, i);
+            if (end < 0) return 0;
+            i = end;
+            continue;
+        }
+        if (!is_ident_start(line[i]) || (i > 0 && is_ident_continue(line[i - 1]))) {
+            i++;
+            continue;
+        }
+        int start = i;
+        i++;
+        while (is_ident_continue(line[i])) i++;
+        NestedListInfo *info = nested_list_find(infos, info_count, line + start, (size_t)(i - start));
+        if (info == NULL || line[i] != '[') continue;
+        int rc = find_matching_bracket_c(line, i);
+        if (rc < 0 || line[rc + 1] != '[') continue;
+        char *row_raw = substr_copy(line + i + 1, (size_t)(rc - i - 1));
+        int row_index = 0;
+        int literal = parse_nonnegative_int_literal(row_raw, &row_index);
+        free(row_raw);
+        if (literal) continue;
+        int cc = find_matching_bracket_c(line, rc + 1);
+        if (cc < 0) continue;
+        *name_start = start;
+        *row_open = i;
+        *row_close = rc;
+        *col_close = cc;
+        *info_out = info;
+        return 1;
+    }
+    return 0;
+}
+
+static int lower_nested_list_dynamic_row_line(
+    const char *line,
+    NestedListInfo *infos,
+    int info_count,
+    int *temp_count,
+    LineVec *out
+) {
+    int ns = 0;
+    int ro = 0;
+    int rc = 0;
+    int cc = 0;
+    NestedListInfo *info = NULL;
+    if (!nested_list_find_dynamic_row(line, infos, info_count, &ns, &ro, &rc, &cc, &info)) return 0;
+    const char *sw = skip_ws(line);
+    size_t indent_len = (size_t)(sw - line);
+    char *work = strdup(line);
+    int rounds = 0;
+    while (nested_list_find_dynamic_row(work, infos, info_count, &ns, &ro, &rc, &cc, &info) && rounds < 8) {
+        rounds++;
+        char *row_expr = substr_copy(work + ro + 1, (size_t)(rc - ro - 1));
+        char *col_expr = substr_copy(work + rc + 2, (size_t)(cc - rc - 2));
+        int t = (*temp_count)++;
+        char num[24];
+        snprintf(num, sizeof(num), "%d", t);
+        StrBuf b;
+        int emit_changed = 0;
+
+        sb_init(&b);
+        sb_append_n(&b, work, indent_len);
+        sb_append(&b, "let __vais_nrowi");
+        sb_append(&b, num);
+        sb_append(&b, " = ");
+        sb_append(&b, row_expr);
+        char *idx_line = nested_list_rewrite_occurrences(b.data, infos, info_count, &emit_changed);
+        free(b.data);
+        lines_push(out, idx_line);
+
+        char lim[32];
+        snprintf(lim, sizeof(lim), "%d", info->row_count - 1);
+        sb_init(&b);
+        sb_append_n(&b, work, indent_len);
+        sb_append(&b, "if __vais_nrowi");
+        sb_append(&b, num);
+        sb_append(&b, " < 0 {");
+        lines_push(out, sb_take(&b));
+        sb_init(&b);
+        sb_append_n(&b, work, indent_len);
+        sb_append(&b, "    let __vais_nrowg");
+        sb_append(&b, num);
+        sb_append(&b, " = ");
+        sb_append(&b, info->rows[0]);
+        sb_append(&b, "[0 - 1]");
+        lines_push(out, sb_take(&b));
+        sb_init(&b);
+        sb_append_n(&b, work, indent_len);
+        sb_append(&b, "}");
+        lines_push(out, sb_take(&b));
+
+        sb_init(&b);
+        sb_append_n(&b, work, indent_len);
+        sb_append(&b, "if __vais_nrowi");
+        sb_append(&b, num);
+        sb_append(&b, " > ");
+        sb_append(&b, lim);
+        sb_append(&b, " {");
+        lines_push(out, sb_take(&b));
+        sb_init(&b);
+        sb_append_n(&b, work, indent_len);
+        sb_append(&b, "    let __vais_nrowh");
+        sb_append(&b, num);
+        sb_append(&b, " = ");
+        sb_append(&b, info->rows[0]);
+        sb_append(&b, "[0 - 1]");
+        lines_push(out, sb_take(&b));
+        sb_init(&b);
+        sb_append_n(&b, work, indent_len);
+        sb_append(&b, "}");
+        lines_push(out, sb_take(&b));
+
+        sb_init(&b);
+        sb_append_n(&b, work, indent_len);
+        sb_append(&b, "let mut __vais_nrow");
+        sb_append(&b, num);
+        sb_append(&b, " = 0");
+        lines_push(out, sb_take(&b));
+
+        for (int r = 0; r < info->row_count; r++) {
+            char rnum[24];
+            snprintf(rnum, sizeof(rnum), "%d", r);
+            sb_init(&b);
+            sb_append_n(&b, work, indent_len);
+            sb_append(&b, "if __vais_nrowi");
+            sb_append(&b, num);
+            sb_append(&b, " == ");
+            sb_append(&b, rnum);
+            sb_append(&b, " {");
+            lines_push(out, sb_take(&b));
+            sb_init(&b);
+            sb_append_n(&b, work, indent_len);
+            sb_append(&b, "    __vais_nrow");
+            sb_append(&b, num);
+            sb_append(&b, " = ");
+            sb_append(&b, info->rows[r]);
+            sb_append(&b, "[");
+            sb_append(&b, col_expr);
+            sb_append(&b, "]");
+            char *body_line = nested_list_rewrite_occurrences(b.data, infos, info_count, &emit_changed);
+            free(b.data);
+            lines_push(out, body_line);
+            sb_init(&b);
+            sb_append_n(&b, work, indent_len);
+            sb_append(&b, "}");
+            lines_push(out, sb_take(&b));
+        }
+
+        sb_init(&b);
+        sb_append_n(&b, work, (size_t)ns);
+        sb_append(&b, "__vais_nrow");
+        sb_append(&b, num);
+        sb_append(&b, work + cc + 1);
+        free(work);
+        work = sb_take(&b);
+        free(row_expr);
+        free(col_expr);
+    }
+    int changed = 0;
+    char *fin = nested_list_rewrite_occurrences(work, infos, info_count, &changed);
+    free(work);
+    lines_push(out, fin);
+    return 1;
+}
+
 static int lower_nested_list_return_line(
     const char *line,
     NestedListInfo *infos,
@@ -16788,9 +16973,11 @@ static char *lower_nested_list_text(const char *text) {
     lines_init(&out);
     NestedListInfo infos[16];
     int info_count = 0;
+    int dyn_temp = 0;
     memset(infos, 0, sizeof(infos));
     for (size_t i = 0; i < lines.len; i++) {
         if (nested_list_assignment_line(lines.items[i], infos, &info_count, &out)) continue;
+        if (info_count > 0 && lower_nested_list_dynamic_row_line(lines.items[i], infos, info_count, &dyn_temp, &out)) continue;
         if (lower_nested_list_return_line(lines.items[i], infos, info_count, &out)) continue;
         if (info_count > 0) {
             int changed = 0;

@@ -1,0 +1,40 @@
+# expect: 42
+# Dynamic-row nested list reads work on both engines: `grid[i][j]` with a
+# variable row index desugars against the statically known per-row flat
+# lists (row expression hoisted to a temp, rows selected through multiline
+# if blocks into a mut result). Out-of-range rows abort loudly through the
+# verified list trap ("vais list trap: index out of range"), literal-row
+# and dynamic-column reads keep their existing paths, and both indices may
+# be variables at once.
+
+fn pick(v: Int) -> Int {
+    return v
+}
+
+fn main() -> Int {
+    let grid: List<List<Int>> = [[10, 20], [30, 40], [50, 60]]
+
+    # Loop accumulation over a dynamic row index.
+    let mut i = 0
+    let mut acc = 0
+    while i < 3 {
+        acc = acc + grid[i][0] + grid[i][1]
+        i = i + 1
+    }
+    if acc != 210 { return 1 }
+
+    # Both indices variable at once.
+    let r = 1
+    let c = 1
+    if grid[r][c] != 40 { return 2 }
+
+    # Two reads composed in one expression, dynamic and literal rows mixed.
+    let two = grid[r][0] + grid[2][1] - 80
+    if two != 10 { return 3 }
+
+    # Call-argument position.
+    if pick(grid[r][c]) != 40 { return 4 }
+
+    # 30 + 10 + 2 = 42
+    return grid[r][0] + two + 2
+}

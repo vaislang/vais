@@ -22,7 +22,26 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26b) — 3중 인라인 struct 리터럴 root-fix
+## 현재 작업 (2026-07-26c) — dynamic-row 중첩 리스트 읽기 root-fix (마지막 구갭)
+모드: 개별선택
+- [x] 1. Recon ✅ 2026-07-26 — NestedListInfo가 행별 플랫 리스트
+      (vais_nested_<name>_rowN, List<Int>)로 lowering, 리터럴-행만 치환.
+      dynamic-row 실패: full %v-1 / direct 미해결 ident(grid 이름 소거
+      후). **주의: 주석(`: List<List<Int>>`) 있는 바인딩만 등록** — 무주석
+      프로브는 별개 거부(잘못된 프로브였음). 동적-열은 기존 verified.
+- [x] 2. Root-fix ✅ — lower_nested_list_dynamic_row_line: 행 식 임시
+      호이스트 → 범위 가드 2개(음수/초과 시 row0[0-1] 경유 = 승격된
+      메시지 trap 재사용) → let mut 결과 + 행별 멀티라인 단문 if 선택
+      (direct의 단일라인 다문장 한계 회피 설계). 최종/생성 라인 전부
+      occurrences 재작성 통과(리터럴-행 혼합 지원). core 무변경.
+- [x] 3. e367 잠금 ✅ — 루프 누적(210)/이중 변수 인덱스/조합식/call-인자
+      양 엔진 42, 범위 밖 행 134+"index out of range" 메시지 양 엔진,
+      리터럴-행 회귀 0(d4/e348).
+- [x] 4. 환류 + 문서 ✅ — 후보 취소선(**구갭 목록 완전 소진**), README/
+      CHANGELOG, parity 386 실측(native=386). 래더 GREEN(LADDER-EXIT 0).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-26b) — 3중 인라인 struct 리터럴 root-fix
 모드: 개별선택
 - [x] 1. 매트릭스 프로브 ✅ 2026-07-26 — **후보 노트 정정**: 갭은 full
       전용(core 리터럴 파서 2단 한정 — 3단째 생성자명 @VAIS_UNRESOLVED_
@@ -778,8 +797,12 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   direct 미지원(LOUD, 체인 패밀리 sibling — bind-then-len이 verified)
   ② direct는 단일라인 if 블록의 다문장(let+return)을 미지원(LOUD,
   full은 지원 — 스타일상 비권장 형태).
-- 중첩 리스트 dynamic-row 읽기(`grid[i][j]`의 i가 변수)는 미치환 잔존 —
-  %v-1 clang 에러로 표면화. 수요 시 행 스위치 데수가 검토.
+- ~~중첩 리스트 dynamic-row 읽기~~ (완결 2026-07-26c): 행 스위치 데수가
+  (행 식 임시 호이스트 + 행별 멀티라인 if 선택 + 범위 밖은 음수-인덱스
+  경유 메시지 trap 재사용). e367 잠금(루프 누적/이중 변수 인덱스/조합식/
+  call-인자, 양 엔진). 리터럴-행·동적-열 기존 경로 무접촉. **구갭 목록
+  소진** — 잔여는 direct 후보 2건(중첩 필드 .len 체인/단일라인 if 다문장)
+  과 core malloc NULL 무보호, 휴면 2종뿐.
 - ~~잔여 무메시지 trap 2부류~~ (완결 2026-07-26): str 범위(kind 4 "vais
   str trap: slice or byte out of range")·direct OOM(kind 5) 메시지화 —
   양 엔진 게이트 잠금. 신규 기록: **core(full) 런타임의 malloc NULL은

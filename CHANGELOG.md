@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Promoted dynamic-row nested list reads on both engines: `grid[i][j]`
+  with a variable row index now desugars against the statically known
+  per-row flat lists — the row expression hoists to a temp, multiline if
+  blocks select the row into a mut result, and out-of-range rows abort
+  loudly by routing through the verified negative-index list trap
+  ("vais list trap: index out of range"). Literal-row and dynamic-column
+  reads keep their existing rewrite untouched. Locked by
+  examples/e367_nested_list_dynamic_row.vais (loop accumulation, both
+  indices variable, composed reads, call arguments; parity 386). This
+  clears the last registered legacy gap from the fuzzing-round backlog.
+
 - Promoted inline struct literals nested three or more levels deep on
   both engines: a shared driver desugar rewrites such lines into the
   verified staged form (each inner literal hoisted to a synthetic

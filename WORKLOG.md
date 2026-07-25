@@ -1,5 +1,30 @@
 # Vais Worklog
 
+## 2026-07-26c (dynamic-row 중첩 리스트 승격 — 구갭 목록 소진)
+
+fuzzing 라운드 백로그의 마지막 구갭 종결. 기존 인프라(NestedListInfo)는
+주석 있는 List<List<Int>> 바인딩을 행별 플랫 리스트(vais_nested_*_rowN)
+로 lowering하고 **리터럴-행만** 치환 — 변수 행은 grid 이름 소거 후 누출
+(full %v-1 / direct 미해결 ident). 동적-열은 원래 verified(e348).
+
+fix = lower_nested_list_dynamic_row_line(중첩 리스트 패스 내 자기완결):
+행 식 임시 호이스트 → 범위 가드 2개(음수/초과 시 row0[0-1] 경유 —
+2026-07-26 승격 메시지 trap 재사용, 범위 밖 행이 양 엔진 134+"index out
+of range") → let mut 결과 + 행별 **멀티라인 단문 if** 선택(direct의
+단일라인 다문장 한계 회피). 생성/최종 라인 전부 occurrences 재작성 통과
+(리터럴-행 혼합 지원). core 무변경.
+
+e367 잠금(루프 누적 210/이중 변수 인덱스/조합식/call-인자) 양 엔진 42,
+리터럴-행 회귀 0(e348). parity 386, 래더 GREEN.
+
+프로브 트랩 2건 자기기록: ① 무주석 중첩 리스트 바인딩은 등록 자체가 안
+됨(별개 표면) — 첫 프로브 오설계. ② zsh PIPESTATUS(bash 전용) — 4번째
+zsh 함정, exit 캡처는 리다이렉트+`$?`로.
+
+**다음 세션:** 잔여 = direct 후보 2건(중첩 필드 .len 체인/단일라인 if
+다문장) + core malloc NULL + 휴면 2종. 또는 도그푸딩 27(vaisuniq 등)
+/fuzzing 라운드 7(데수가 3종 인접 영역).
+
 ## 2026-07-26b (3중 인라인 struct 리터럴 승격 — 드라이버 단계화 데수가)
 
 **매트릭스 프로브가 후보 노트를 정정**: "양 엔진 LOUD"로 기록됐던 갭이
