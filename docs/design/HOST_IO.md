@@ -73,7 +73,7 @@ The first file API is text-only and UTF-8 oriented:
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified | Write text, replacing the file. Return `0` on success and a non-zero host status on failure. |
 | `fs_append_text(path: Str, text: Str) -> Int` | Verified | Append text to a file, creating it when missing. Return `0` on success and a non-zero host status on failure. |
 | `fs_mkdirs(path: Str) -> Int` | Verified | Create a directory and missing parents. Return `0` on success. |
-| `fs_remove(path: Str) -> Int` | Verified | Remove a file path. Missing paths return `0`; recursive directory removal is not part of this slice. |
+| `fs_remove(path: Str) -> Int` | Verified | Remove a file path. Missing paths return `0`; recursive directory removal is not part of this slice. Wired on both engines, including bare value-discarding statements. |
 
 The verified file/path slice passes explicit Vais `Str` paths to the host
 without canonicalization, symlink resolution, recursive directory walking, or

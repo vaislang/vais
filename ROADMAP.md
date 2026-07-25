@@ -22,7 +22,27 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-25e) — 도그푸딩 24: fs_append_text 승격 + vaistee
+## 현재 작업 (2026-07-25f) — 도그푸딩 25: direct 파리티 소탕
+모드: 개별선택
+- [x] 1. fs_remove direct 배선 ✅ 2026-07-25 — 재작성 사이트 일괄(프레디킷/
+      게이트/emit/타입추론 Int/프로토타입 — 임베디드 impl·declare는 기존)
+      + **bare 문장 원인 별도 발견**: 문장 분류기의 bare call 수용이
+      user-fn 조회 전용 → fs_remove 호스트-디스카드 슬라이스
+      (call_stmt_host_discard) 추가. e363 잠금(멱등 미존재 0 포함) 양 엔진
+      42.
+- [x] 2. direct 사용자-fn Str 체인 ✅ — 원인 2중: ① parse_builtin 패스의
+      helper-call opaque-skip(도그푸딩 6 유산)이 `.len()`을 C로 누출 →
+      Str-반환 user-fn이면 __vais_str_len 래핑 ② let 타입 추론의 user-fn
+      조회가 체인 무시하고 Str 반환 → 조기 체인 게이트(Int) 추가. e364
+      잠금(ret/let/if/산술 × 0·1-인자) 양 엔진 42. **체인 패밀리 완전
+      종결**(e360+e364).
+- [x] 3. 게이트 + 환류 + 문서 ✅ — 후보 목록 2건 취소선, PRELUDE/HOST_IO/
+      README/CHANGELOG, e360 스테일 주석 정정, parity 383 실측(native=
+      383). workflow 게이트 회귀 GREEN, 래더(fmt+release) GREEN
+      (LADDER-EXIT 0 직접 확인).
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-25e) — 도그푸딩 24: fs_append_text 승격 + vaistee
 모드: 개별선택
 - [x] 1. `fs_append_text(path, text) -> Int` 승격 ✅ 2026-07-25 —
       fs_write_text 완전 미러(native.c 23=23, "ab" 모드, 런타임 2종).
@@ -682,12 +702,12 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   layout 신규 요구 0건 — 두 휴면 후보 모두 트리거 미충족 유지.)
 - ~~host Str-call 리시버 위 메서드 체인~~ (완결 2026-07-25c): host call
   `.len()` 체인은 양 엔진 승격 완료(e360, ret/let/if/산술 × 0·1-인자).
-  잔여: **사용자 정의 Str 함수 체인**(`my_helper().len()`)은 full만 지원,
-  direct는 LOUD C 에러(member reference on char*) — 수요 노출 시 direct
-  user-fn 재작성 경로 확장.
-- fs_remove가 direct 엔진에 미배선(full-only, 도그푸딩 24에서 실측 —
-  bare 문장이 direct 서브셋 에러로 LOUD 거부). direct 제품 코드는
-  트렁케이트 쓰기로 수명 관리 가능해 수요 노출 시 배선(fs_mkdirs 미러).
+  ~~잔여: 사용자 정의 Str 함수 체인~~ (완결 2026-07-25f): direct의
+  opaque-skip에 __vais_str_len 래핑 + 타입 추론 체인 게이트 추가로 양
+  엔진 완결(e364) — 체인 패밀리 전체 종료.
+- ~~fs_remove direct 미배선~~ (완결 2026-07-25f): direct 재작성 사이트
+  일괄 배선 + bare 문장 슬라이스(call_stmt_host_discard) — 양 엔진 e363
+  잠금(idempotent 미존재 0 포함).
 - 3중 이상 인라인 중첩 struct 리터럴(`Outer { mid: Mid { inner: Inner {..}}}`)
   미검증 — clang 단계 LOUD 실패. 단계 조립(let 바인딩 후 참조)이 verified
   form. 수요 반복 시 리터럴 lowering 확장.

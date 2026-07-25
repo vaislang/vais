@@ -1,0 +1,22 @@
+# expect: 42
+# fs_remove(path) -> Int works on both engines, including as a bare
+# value-discarding statement: write -> exists 1 -> remove -> exists 0, and
+# removing an already-missing path stays 0 (idempotent host contract).
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let f = path_join(root, "vais-e363-remove.txt")
+    if fs_write_text(f, "x") != 0 { return 1 }
+    if fs_exists(f) != 1 { return 2 }
+
+    # Bare statement form discards the status.
+    fs_remove(f)
+    if fs_exists(f) != 0 { return 3 }
+
+    # Assigned form reads the status; missing paths stay 0.
+    let again = fs_remove(f)
+    if again != 0 { return 4 }
+
+    # 6 * 7 = 42
+    return 6 * 7
+}

@@ -1,5 +1,32 @@
 # Vais Worklog
 
+## 2026-07-25f (도그푸딩 25 — direct 파리티 소탕: fs_remove + user-fn 체인)
+
+최근 스프린트가 노출한 direct 전용 구멍 2건을 한 스프린트로 종결.
+
+**fs_remove direct 배선**: 재작성 사이트 일괄(프레디킷/게이트 3종/emit/
+타입추론 Int/프로토타입 — declare·임베디드 impl은 기존) 후에도 bare 문장
+거부 잔존 → **진짜 원인은 배선이 아니라 문장 분류기**: bare call 수용이
+direct_expr_exact_call_fn(사용자-fn 조회) 전용이라 호스트 빌트인 문장은
+폴스루 거부. fs_remove 호스트-디스카드 슬라이스(call_stmt_host_discard)
+추가로 검증된 표현 파이프라인 재사용. e363 잠금(bare+멱등 미존재 0).
+
+**user-fn Str 체인 direct**: 원인 2중 — ① parse_builtin 패스의
+helper-call opaque-skip(도그푸딩 6의 이중 재작성 방지 유산)이 call만
+통과시키고 `.len()`을 C로 누출(member reference on char* LOUD) →
+Str-반환 user-fn + trailing len이면 __vais_str_len 래핑 후 체인 소비.
+② let 타입 추론 말단의 user-fn 조회가 체인 무시하고 return_type("Str")
+그대로 반환 → helper_returns_str 조기 게이트 뒤에 user-fn 체인 게이트
+(Int) 추가. e364 잠금(ret/let/if/산술 × 0·1-인자). **체인 패밀리
+(e360 host + e364 user-fn) 양 엔진 완전 종결.**
+
+parity 383 실측, workflow 회귀 GREEN, 래더 GREEN(LADDER-EXIT 0).
+교훈: "미배선"으로 등록한 후보의 실제 원인이 다층(배선+분류기)일 수
+있음 — 배선 후 재프로브가 두 번째 층을 노출했다.
+
+**다음 세션:** 도그푸딩 26(vaiscut/vaisuniq/vaishead·tail) 또는 잔여
+후보(3중 struct/dynamic-row/무메시지 trap str_slice·from_byte·OOM).
+
 ## 2026-07-25e (도그푸딩 24 — fs_append_text 승격 + vaistee, 갭 0건)
 
 **fs_append_text(path, text) -> Int 승격**: fs_write_text 완전 미러("ab"

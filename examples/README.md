@@ -304,6 +304,10 @@ Str-call receivers across return/let/if/arithmetic positions on both engines,
 accumulation and truncating rewrites through `fs_append_text`,
 `examples/e362_vaistee_package` for the installable vaistee stdin duplicator
 (stdout passthrough plus per-file truncate/`-a` append writes),
+`examples/e363_fs_remove_roundtrip.vais` for cross-engine `fs_remove`
+including bare statements and idempotent missing-path status,
+`examples/e364_user_fn_len_chain.vais` for trailing `.len()` chains on
+user-defined Str function receivers on both engines,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

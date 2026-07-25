@@ -5,8 +5,8 @@
 # emits the trailing strlen it previously skipped positionally (raw i8*
 # leaked as the factor value), and the direct engine now wraps zero-arg
 # receivers it previously leaked verbatim into C. User-defined Str function
-# chains (`my_helper().len()`) remain full-only — the direct engine rejects
-# them loudly, so bind to a local first in cross-engine code.
+# chains (`my_helper().len()`) are verified separately by
+# examples/e364_user_fn_len_chain.vais on both engines.
 
 fn ret_chain_one_arg() -> Int {
     return env_get("VAIS_E360_UNSET").len()

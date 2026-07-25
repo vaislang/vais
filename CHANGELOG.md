@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Closed two direct-engine parity holes surfaced by the recent sprints:
+  fs_remove is now wired through the direct rewrite sites (predicate,
+  gates, emit, type inference, prototype) with a bare value-discarding
+  statement slice, matching the full engine's idempotent contract
+  (examples/e363_fs_remove_roundtrip.vais); and trailing `.len()` chains
+  on user-defined Str function receivers now emit on direct — the
+  helper-call opaque-skip wraps Str-returning calls in __vais_str_len and
+  the let type inference gains a matching chain gate — completing the
+  chain family started by e360 across both engines
+  (examples/e364_user_fn_len_chain.vais, parity 383).
+
 - Added the eleventh installable Vais tool and a matching host API:
   `fs_append_text(path, text) -> Int` appends to a file on both engines
   ("ab" mirror of fs_write_text — missing files are created, 0 = success,
