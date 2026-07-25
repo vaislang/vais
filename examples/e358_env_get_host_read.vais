@@ -1,0 +1,36 @@
+# expect: 42
+# env_get(name) -> Str reads a process environment variable on both engines.
+# The surface is total: an unset variable (or an empty name) yields the empty
+# string — never a trap — so callers branch on emptiness. Comparing the call
+# result directly against a string literal locks the Str-vs-call-operand
+# equality path (the e356 family) for env_get from day one. Method chains on
+# call receivers (`env_get(...).len()`) are not a verified form on either
+# engine — bind to a local first (both fail loudly at the clang stage).
+
+fn unset_len() -> Int {
+    let value = env_get("VAIS_E358_DEFINITELY_UNSET")
+    return value.len()
+}
+
+fn main() -> Int {
+    # Unset variables read back as the empty string.
+    let missing = env_get("VAIS_E358_DEFINITELY_UNSET")
+    if missing.len() != 0 { return 1 }
+
+    # Direct call-operand comparison against a literal.
+    if env_get("VAIS_E358_DEFINITELY_UNSET") != "" { return 2 }
+
+    # Helper-return chaining keeps the Str typing.
+    if unset_len() != 0 { return 3 }
+
+    # A shell-provided variable reads back non-empty (the gates run under a
+    # shell, so PATH is always set).
+    let path_value = env_get("PATH")
+    if path_value.len() == 0 { return 4 }
+
+    # Empty names are total too.
+    if env_get("") != "" { return 5 }
+
+    # 6 * 7 = 42
+    return 6 * 7
+}

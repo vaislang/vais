@@ -4,6 +4,23 @@
 
 ### Changed
 
+- Added the tenth installable Vais tool and a matching host API:
+  `env_get(name) -> Str` reads a process environment variable on both
+  engines with a total contract — unset variables and empty names yield
+  the empty string, never a trap (examples/e358_env_get_host_read.vais
+  locks unset-sentinel emptiness, direct literal comparison on the call
+  result, and PATH presence) — and `examples/e359_vaisenv_package` builds
+  `dist/bin/vaisenv <NAME...>`, printing one value per line while unset
+  names report to stderr (exit 3) and the remaining names still print.
+  vaisbox now dispatches vaisenv as its ninth applet. The env_get wiring
+  mirrors path_dirname across the host runtimes, direct groups, the full
+  core's is_host_str_return (regenerated vaisc_core.ll, gen1==gen2), and
+  the front whitelist. Zero gaps in the promotion itself; the sprint's
+  probes exposed one pre-existing loud gap, recorded as a candidate:
+  method chains on host str-call receivers (`env_get(...).len()`,
+  `fs_temp_dir().len()`) fail at the clang stage on full (all shapes) and
+  on direct for zero-arg receivers — bind to a local first (parity 378).
+
 - Added the ninth installable Vais tool: `examples/e357_vaissort_package`
   builds `dist/bin/vaissort [-u] [-r] <file...>` (`-` for stdin), gathering
   lines from every source and sorting them ascending in byte order — the

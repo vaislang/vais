@@ -104,6 +104,11 @@ into the assigned form (`examples/e347_list_discard_statements.vais`).
 position on both engines (`examples/e348_nested_list_expr_reads.vais`), and
 value if-expressions use the `then`/`else` form only — brace blocks in value
 position are rejected at the front.
+`examples/e359_vaisenv_package` is the tenth installable tool: `vaisenv`
+prints process environment variables one value per line — the first product
+use of `env_get`, whose total contract reads unset (and empty-named)
+variables as the empty string — reporting unset names to stderr with exit 3
+while the remaining names still print.
 `examples/e357_vaissort_package` is the ninth installable tool: `vaissort`
 sorts lines from one or more sources (`-` for stdin) ascending in byte order —
 the first product use of `List<Str>.sort` — with `-u` dropping adjacent
@@ -291,6 +296,7 @@ direct/default summary report.
 | `stdout_write(text: Str) -> Int` | Verified; full/direct — raw stdout write, no added newline (returns bytes written) |
 | `stderr_write(text: Str) -> Int` | Verified; full/direct — raw stderr write, no added newline (returns bytes written) |
 | `proc_self() -> Str` | Verified; full/direct — running program path (argv[0]) for multicall dispatch |
+| `env_get(name: Str) -> Str` | Verified; full/direct — total environment read (unset or empty names yield "") |
 | `fs_read_text(path: Str) -> Str` | Verified |
 | `fs_write_text(path: Str, text: Str) -> Int` | Verified |
 | `fs_mkdirs(path: Str) -> Int` | Verified |

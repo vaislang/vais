@@ -181,6 +181,12 @@ char *path_dirname(char *path) {
     return copy_n(path, (size_t)(last - path));
 }
 
+char *env_get(char *name) {
+    if (name == NULL) return copy_str("");
+    const char *value = getenv(name);
+    return copy_str(value == NULL ? "" : value);
+}
+
 char *str_concat(char *left, char *right) {
     if (left == NULL || right == NULL) host_trap("str_concat");
     size_t a = strlen(left);

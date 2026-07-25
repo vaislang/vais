@@ -383,6 +383,17 @@ fn is_path_dirname(src: Str, a: Int, alen: Int) -> Int {
     if src[a + 11] != 101 { return 0 }
     return 1
 }
+fn is_env_get(src: Str, a: Int, alen: Int) -> Int {
+    if alen != 7 { return 0 }
+    if src[a] != 101 { return 0 }
+    if src[a + 1] != 110 { return 0 }
+    if src[a + 2] != 118 { return 0 }
+    if src[a + 3] != 95 { return 0 }
+    if src[a + 4] != 103 { return 0 }
+    if src[a + 5] != 101 { return 0 }
+    if src[a + 6] != 116 { return 0 }
+    return 1
+}
 fn is_str_concat(src: Str, a: Int, alen: Int) -> Int {
     if alen != 10 { return 0 }
     if src[a] != 115 { return 0 }
@@ -908,6 +919,7 @@ fn is_host_str_return(src: Str, a: Int, alen: Int) -> Int {
     if is_path_join(src, a, alen) == 1 { return 1 }
     if is_path_basename(src, a, alen) == 1 { return 1 }
     if is_path_dirname(src, a, alen) == 1 { return 1 }
+    if is_env_get(src, a, alen) == 1 { return 1 }
     if is_str_concat(src, a, alen) == 1 { return 1 }
     if is_str_join(src, a, alen) == 1 { return 1 }
     if is_str_replace(src, a, alen) == 1 { return 1 }

@@ -22,7 +22,28 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-25) — 도그푸딩 22: vaissort (아홉 번째 도구)
+## 현재 작업 (2026-07-25b) — 도그푸딩 23: env_get 승격 + vaisenv (열 번째 도구)
+모드: 개별선택
+- [x] 1. `env_get(name) -> Str` host API 승격 ✅ 2026-07-25 — path_dirname
+      완전 미러(native.c 21사이트 = 21, core 2, 런타임 2종 — copy_str/
+      fs_host_copy 트랩 회피). .ll 재생성 gen1==gen2 수렴. e358 양 엔진 42
+      + 네거티브(변수 설정 시 비-42)로 실환경 읽기 실증. **경유 발견:
+      선재 LOUD 갭** — host Str-call 리시버 `.len()` 체인이 full 전 형태/
+      direct 0-인자에서 clang 실패(env_get 특이 아님, fs_temp_dir 동일 —
+      격리 프로브 5종 실측). 후보 등록, e358은 bind-then-len verified form.
+- [x] 2. e359 vaisenv 패키지 ✅ — 값 라인 출력, 미설정 stderr+exit 3(잔여
+      계속), stdout 순수성. env_get 총계약(미설정/빈 이름→"") 문서화.
+      양 엔진 첫 시도 42.
+- [x] 3. 게이트 + vaisbox 등록 ✅ — workflow +8케이스(build/self-test/
+      set/unset 3/mixed 2/env→grep 체인) + vaisbox 9애플릿(list 9/dispatch
+      vaisenv, 42 산술 count*4+6). 전부 GREEN.
+- [x] 4. 환류 + 문서 ✅ — 선재 체인 갭(host Str-call 리시버 .len())을
+      프로브 매트릭스와 함께 후보 등록. HOST_IO/PRELUDE/LANGUAGE/README/
+      CHANGELOG, parity 378 실측(native=378). 래더(fmt+release) GREEN —
+      재생성 core의 fixpoint 수렴 게이트 포함.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-25) — 도그푸딩 22: vaissort (아홉 번째 도구)
 모드: 개별선택
 - [x] 1. e357 vaissort 패키지 ✅ 2026-07-25 — 파일/`-`(stdin) 입력, 라인
       분해 후 `List<Str>.sort`(str_cmp 사전순) 정렬 출력. **sort 표면 제품
@@ -606,6 +627,11 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   `Result<T,E>` 일반화를 값-정확성 fuzzing 기반과 함께 검토한다.
 - (재평가 2026-07-14: 도그푸딩 3~11 아홉 스프린트 동안 generic Result·중첩
   layout 신규 요구 0건 — 두 휴면 후보 모두 트리거 미충족 유지.)
+- host Str-call 리시버 위 메서드 체인(`env_get("X").len()`,
+  `fs_temp_dir().len()`) 미검증 — LOUD clang 실패(도그푸딩 23 프로브 실측:
+  full은 전 형태(ret/let 위치, 인자 수 무관), direct는 0-인자 리시버만
+  실패·1-인자는 동작). bind-then-method(로컬 바인딩 후 .len())가 verified
+  form. 수요 반복 시 core 체인 emit 확장.
 - 3중 이상 인라인 중첩 struct 리터럴(`Outer { mid: Mid { inner: Inner {..}}}`)
   미검증 — clang 단계 LOUD 실패. 단계 조립(let 바인딩 후 참조)이 verified
   form. 수요 반복 시 리터럴 lowering 확장.

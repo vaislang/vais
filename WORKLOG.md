@@ -1,5 +1,32 @@
 # Vais Worklog
 
+## 2026-07-25b (도그푸딩 23 — env_get 승격 + vaisenv, 선재 체인 갭 발견)
+
+**env_get(name) -> Str 승격**: path_dirname(동일 시그니처 형태)을 템플릿
+으로 완전 미러 — native.c 21사이트(=path_dirname 21과 정확 일치, grep -c
+검증), core is_env_get 프레디킷+is_host_str_return 등록, 두 host 런타임
+(fixpoint 게이트=copy_str / 드라이버 embedded=fs_host_copy — 기록된 헬퍼
+이름 차이 트랩 회피). 총계약: 미설정/빈 이름→""(trap 없음). .ll canonical
+재생성 emit-ir gen1→설치→gen2 diff 동일(2세대 수렴). e358이 `env_get() !=
+""` call-피연산자 비교(e356 패밀리)를 첫날부터 잠금 + 네거티브 체크(변수
+설정 시 비-42)로 실환경 읽기 실증.
+
+**경유 발견 — 선재 LOUD 갭 패밀리(후보 등록)**: e358 초안의
+`env_get("X").len()` 체인이 full에서 clang 타입 에러. 격리 프로브 5종
+실측: full은 전 형태(ret/let 위치) 실패, direct는 0-인자 리시버
+(`fs_temp_dir().len()`)만 실패(1-인자는 동작) — env_get 특이가 아닌
+호스트 Str-call 리시버 메서드 체인 전반의 기존 갭(fs_temp_dir로 교차
+확증). 전부 LOUD라 silent 위험 없음. verified form=bind-then-method.
+
+vaisenv(e359, 열 번째 도구): 이름별 값 라인 출력, 미설정 stderr+exit 3
+(잔여 계속), stdout 순수성. 양 엔진 첫 시도 42. workflow +8케이스(셸
+FOO=bar 주입 set/unset/mixed + env→grep 체인), vaisbox 9애플릿(list 9/
+dispatch, 42 산술 count*4+6). parity 378 실측. 래더 GREEN(재생성 core
+fixpoint 수렴 게이트 포함). 미커밋 — 커밋은 사용자 확인 후.
+
+**다음 세션:** 후보 갭 스프린트(체인 emit/3중 struct/dynamic-row/무메시지
+trap) 또는 도그푸딩 24(vaiscut/vaisuniq/vaistee+fs_append 등).
+
 ## 2026-07-25 (도그푸딩 22 — vaissort 아홉 번째 도구, 갭 0건)
 
 vaissort(e357): 파일/stdin 라인 정렬 필터 — **List<Str>.sort 제품 첫
