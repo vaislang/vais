@@ -22,7 +22,29 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26f) — fuzzing 라운드 8 + 값-정확성 사이클 마감
+## 현재 작업 (2026-07-26g) — VaisDB 제품화 1: 스케일 실측 (제품 모드 진입)
+모드: 개별선택
+- [x] 1. 코퍼스 3단(소10/중62/대374) + 기준선 ✅ 2026-07-26 — **소형
+      코퍼스조차 ingest-dir 즉사**(v1.1.0 메시지 trap 134 발화). 성능은
+      무결(문서당 ingest 중앙값 10ms — vaisbench 실측).
+- [x] 2. 한계 실측 ✅ — 합성 문서로 차원 분리: **Map 256 계약이 이중
+      즉사점**(문서당 고유 term 257 trap — 실전 문서 ~1,600 / 인덱스
+      flat key 문서 2개째 400키 trap). 단어·라인은 스트리밍이라 5,000
+      OK(무제한). 부수 발견: 부분 실패 시 인덱스 원자성 부재.
+- [x] 3. 리포트 + 제품 래더 ✅ — docs/design/VAISDB-SCALE-BASELINE.md
+      (경계 표/아키텍처 판정/P1~P4 래더). **수요 주도 컴파일러 1호 확정:
+      Map 용량 계약 256→4096 상향**(P1). 제품 방향: 디스크-우선 인덱스
+      (P2, term-샤딩 포스팅 + fs_append_text) + 원자성(P3) + 스케일
+      게이트(P4).
+진행률: 3/3 (100%)
+
+### VaisDB 제품 트랙 다음 후보
+- P1. Map 계약 상향(컴파일러): cap 256→4096, trap·게이트 정합, 양 엔진.
+- P2. 디스크-우선 인덱스: term-샤딩 포스팅 파일, corpus_l(374) green.
+- P3. ingest 원자성: temp-then-rename, 부분 실패 불변 게이트.
+- P4. 스케일 게이트: vaisbench 예산 모드 래더 편입.
+
+## 직전 완료 (2026-07-26f) — fuzzing 라운드 8 + 값-정확성 사이클 마감
 모드: 개별선택 (완료까지 자동 진행 — 사용자 지시)
 - [x] 1. 라운드 8 프로브 ✅ 2026-07-26 — 오프셋 민감 표면 8종 × 선행-필드
       변형 × 양 엔진(격리 포함 22런): call().field 비-0 오프셋/struct-복사
