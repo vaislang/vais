@@ -4,6 +4,22 @@
 
 ### Changed
 
+- Fixed a full-engine loud gap that fuzzing round 7 (cross-desugar sweep)
+  surfaced in its probes: plain let bindings from struct Str field chains
+  (`let t = m.tag`, `let u = d.meta.tag`) typed the slot as i64 while the
+  field read correctly produced a string pointer, failing at clang. The
+  existing struct-chain predicate deliberately rejects Str terminals
+  (encoded -2), so the slot collectors gained a sibling predicate
+  (rhs_struct_field_chain_is_str) binding such lets as string slots in
+  both collectors (regenerated vaisc_core.ll with forced rebuilds,
+  true convergence). Previously only match-arm recovery and direct
+  `.len()` chains on fields were verified. Locked by
+  examples/e368_struct_str_field_let.vais (one- and two-level chains,
+  length/equality/concat composition; parity 387). The round's other
+  eight cross-desugar probes (deep literals × chains × dynamic rows,
+  5-level literals, loop-generated literals) all passed value-exact on
+  both engines.
+
 - Promoted dynamic-row nested list reads on both engines: `grid[i][j]`
   with a variable row index now desugars against the statically known
   per-row flat lists — the row expression hoists to a temp, multiline if

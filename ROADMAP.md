@@ -22,7 +22,25 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26c) — dynamic-row 중첩 리스트 읽기 root-fix (마지막 구갭)
+## 현재 작업 (2026-07-26d) — 값-정확성 fuzzing 라운드 7: 데수가 교차 조합
+모드: 개별선택
+- [x] 1. 프로브 8종 + 격리 2종 × 양 엔진 ✅ 2026-07-26 — 교차 조합
+      (리터럴 필드 속 체인·grid 읽기/체인식 행 인덱스/5중 리터럴/while
+      반복 생성/한 라인 3중 dynamic-row/문자열 필드 교차). **교차 자체는
+      전부 값 정확** — 데수가 3종 상호작용 무결.
+- [x] 2. **발견 1건 root-fix** ✅ — x8이 노출한 건 교차가 아니라 선재
+      full 갭: `let t = m.tag`(struct Str 필드 → let, 깊이 1부터) 슬롯이
+      i64로 오타이핑(LOUD store 충돌). 기존 rhs_struct_field_chain_sty가
+      Str 터미널(-2)을 의도적으로 거부(struct 복사 전용) — 자매 프레디킷
+      rhs_struct_field_chain_is_str 신설, 수집기 2곳 배선. .ll 재생성
+      **강제 리빌드 절차로 진짜 수렴**. e368 잠금(1·2단 체인 + len/eq/
+      concat 조합). 기존 verified는 match-arm 회수·직접 .len 체인뿐이었음.
+- [x] 3. 판정·기록 ✅ — 라운드 수확: 새 데수가층 무결 + 인접 기본형 갭
+      1건 승격(프로브가 자연스럽게 쓴 형태가 갭 — e358 패턴 재현).
+      parity 387. 누적 157프로브.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-26c) — dynamic-row 중첩 리스트 읽기 root-fix (마지막 구갭)
 모드: 개별선택
 - [x] 1. Recon ✅ 2026-07-26 — NestedListInfo가 행별 플랫 리스트
       (vais_nested_<name>_rowN, List<Int>)로 lowering, 리터럴-행만 치환.

@@ -314,6 +314,8 @@ user-defined Str function receivers on both engines,
 inline nested struct literals on both engines via the staged-let desugar,
 `examples/e367_nested_list_dynamic_row.vais` for dynamic-row nested list
 reads (variable row and column indices, loop accumulation, loud row trap),
+`examples/e368_struct_str_field_let.vais` for plain let bindings from
+struct Str field chains on both engines,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

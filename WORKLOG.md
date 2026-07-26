@@ -1,5 +1,29 @@
 # Vais Worklog
 
+## 2026-07-26d (fuzzing 라운드 7 — 데수가 교차 무결 + 필드-Str-let 갭 승격)
+
+이번 아크의 데수가 3종(slit/nrow/체인) 교차 조합 8프로브 × 양 엔진:
+리터럴 필드 속 체인·grid 읽기/체인식 행 인덱스/5중 리터럴/while 반복
+생성/한 라인 3중 dynamic-row 혼합 — **교차 자체는 전부 값 정확**(새
+lowering 층들의 상호작용 무결 실증).
+
+**발견 1건(x8) → 당일 root-fix**: 원인은 교차가 아니라 선재 full 갭 —
+`let t = m.tag`(struct Str 필드의 평범한 let)가 깊이 1부터 슬롯 i64
+오타이핑(LOUD store 충돌). 그동안 verified는 match-arm 회수(e313)와
+직접 .len 체인뿐, **기본형 let 바인딩은 사각**. 인프라는 이미 Str
+터미널을 -2로 식별 중이었고 rhs_struct_field_chain_sty가 struct-복사
+전용이라 -2를 거부 — 자매 프레디킷 rhs_struct_field_chain_is_str 신설
+(전문장 체인+Str 터미널 → is_arr 3 슬롯), add_local_slots/collect_top_
+slots 2곳 배선. .ll 강제-리빌드 절차로 진짜 수렴. e368 잠금(1·2단 체인
++ len/eq/concat/Int 필드 공존). parity 387, 래더 GREEN.
+
+패턴 재확인: "프로브가 자연스럽게 쓴 형태가 곧 갭"(e358 체인 때와 동일)
+— fuzzing 프로브 작성 자체가 갭 탐지기 역할. 누적 157프로브.
+
+**다음 세션:** direct 후보 2건(중첩 필드 .len 체인/단일라인 if 다문장),
+core malloc NULL, 도그푸딩 27(vaisuniq 등), 혹은 mut 재대입 `t = m.tag`
+형태(이번 슬라이스는 let만 — 수요 시 확장).
+
 ## 2026-07-26c (dynamic-row 중첩 리스트 승격 — 구갭 목록 소진)
 
 fuzzing 라운드 백로그의 마지막 구갭 종결. 기존 인프라(NestedListInfo)는

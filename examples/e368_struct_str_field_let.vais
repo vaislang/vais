@@ -1,0 +1,30 @@
+# expect: 42
+# Plain let bindings from struct Str fields work on both engines: the full
+# core's slot collectors now recognize whole-statement field chains with a
+# Str terminal (`let t = m.tag`, `let u = d.meta.tag`) as string slots —
+# previously only match-arm recovery and direct `.len()` chains were
+# verified, and the bound pointer leaked into an i64 slot (loud at clang).
+
+struct Meta { tag: Str, score: Int }
+struct Doc { meta: Meta }
+
+fn main() -> Int {
+    # One-level field into a let, then verified string uses.
+    let m = Meta { tag: "abc", score: 5 }
+    let t = m.tag
+    if t.len() != 3 { return 1 }
+    if t != "abc" { return 2 }
+    if m.score != 5 { return 3 }
+
+    # Two-level chain into a let.
+    let d = Doc { meta: Meta { tag: "deep", score: 7 } }
+    let u = d.meta.tag
+    if u.len() != 4 { return 4 }
+
+    # Bound values compose through the verified string surface.
+    let joined = str_concat(t, u)
+    if joined != "abcdeep" { return 5 }
+
+    # 7 * 6 = 42
+    return joined.len() * 6
+}
