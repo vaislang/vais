@@ -163,8 +163,12 @@ the pipeline with `ingest-stdin <index> <doc-id>` (so search hits pipe
 straight into the index), and the filter tools route their error messages
 through `stderr_write`, keeping stdout byte-pure for downstream consumers. Its line scan walks byte offsets instead of
 materializing a `List<Str>`, because the fixed list contract holds at most
-4095 entries: `str_split_lines_into` (and the other `*_into` fillers) abort
-past that with a `vais list trap: capacity exceeded` diagnostic on stderr
+4095 entries, and maps hold at most 4096 entries (raised from 256 so a
+real document's vocabulary fits a `Map<Str,Int>` — the VaisDB scale
+baseline measured ~1,600 unique terms per typical document):
+`str_split_lines_into` (and the other `*_into` fillers) and map inserts
+abort past their caps with a `vais list trap: capacity exceeded`
+diagnostic on stderr
 (list bounds and empty-access traps are diagnosed the same way on both
 engines, `str_slice`/`str_byte` range violations abort with
 `vais str trap: slice or byte out of range`, and the direct runtime's

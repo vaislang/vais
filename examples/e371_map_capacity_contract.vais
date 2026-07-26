@@ -1,0 +1,39 @@
+# expect: 42
+# Map capacity contract: maps hold up to 4096 entries on both engines —
+# raised from 256 so a single real document's vocabulary fits a
+# Map<Str,Int> (the VaisDB scale baseline measured ~1,600 unique terms in
+# a typical document). Inserts past the cap abort loudly through the
+# shared capacity trap (the workflow gate locks the 4097 boundary); this
+# example locks the raise by filling well past the old 256 boundary.
+
+fn main() -> Int {
+    # Str-keyed counts beyond the old 256 cap.
+    let counts: Map<Str,Int> = {}
+    let mut i = 0
+    while i < 300 {
+        counts.insert(Str(i), i)
+        i = i + 1
+    }
+    if counts.len() != 300 { return 1 }
+    if counts.get("0", 0 - 1) != 0 { return 2 }
+    if counts.get("299", 0 - 1) != 299 { return 3 }
+    if counts.get("257", 0 - 1) != 257 { return 4 }
+
+    # Int-keyed map crosses the old boundary the same way.
+    let hits: Map<Int,Int> = {}
+    let mut j = 0
+    while j < 300 {
+        hits.insert(j, j * 2)
+        j = j + 1
+    }
+    if hits.len() != 300 { return 5 }
+    if hits.get(299, 0 - 1) != 598 { return 6 }
+
+    # Overwrites past the old cap stay updates, not new entries.
+    counts.insert("257", 1000)
+    if counts.len() != 300 { return 7 }
+    if counts.get("257", 0 - 1) != 1000 { return 8 }
+
+    # 300 - 258 = 42
+    return counts.len() - 258
+}

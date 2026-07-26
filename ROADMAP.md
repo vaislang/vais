@@ -22,7 +22,26 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26g) — VaisDB 제품화 1: 스케일 실측 (제품 모드 진입)
+## 현재 작업 (2026-07-26h) — VaisDB P1: Map 용량 계약 256→4096 (수요 주도 1호)
+모드: 개별선택
+- [x] 1. Recon ✅ 2026-07-26 — core는 map_cap() 파생 3함수 + IR 텍스트
+      하드코드 39지점(값-plane 오프셋 256/len 슬롯 512/클리어 루프 513),
+      direct는 typedef·insert 12지점. 스택 비용 맵당 ~64KB 허용 판정.
+      내부 버퍼 256들(env/argv)과 from_byte 255 경계는 불변 확인.
+- [x] 2. 상향 적용 ✅ — 정밀 패턴 치환(치환 수 = 분류 수 정합), .ll
+      강제-리빌드 진짜 수렴(gen2==gen3). 경계 재실측 4096 OK/4097 trap
+      134. **실전 문서(고유 1,588) ingest green + rank 동작**(P1 성공
+      기준). 인덱스 flat 합산은 예측대로 P2 잔존. **경유 silent 발견·
+      즉시 root-fix**: direct __vais_int_to_str 8-순환 버퍼가 map 키
+      저장 시 붕괴(Str(i) 20개 → len 8) → malloc 사본(+OOM kind 5 trap).
+- [x] 3. 게이트·문서 ✅ — workflow +8케이스(4096 holds/4097 traps ×
+      양 엔진), e371 잠금(구 256 경계 통과 + 변환-키 사본 생존), PRELUDE
+      map 계약 신규 문서화, CHANGELOG, 베이스라인 리포트 P1 결과 갱신.
+      parity 390 실측(native=390). 래더(fmt+release) GREEN(LADDER-EXIT
+      0). 커밋·머지·푸시 완결.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-26g) — VaisDB 제품화 1: 스케일 실측 (제품 모드 진입)
 모드: 개별선택
 - [x] 1. 코퍼스 3단(소10/중62/대374) + 기준선 ✅ 2026-07-26 — **소형
       코퍼스조차 ingest-dir 즉사**(v1.1.0 메시지 trap 134 발화). 성능은

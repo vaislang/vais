@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Changed
+
+- Raised the map capacity contract from 256 to 4096 entries on both
+  engines — the first demand-driven compiler change of the product phase:
+  the VaisDB scale baseline showed a single real document's vocabulary
+  (~1,600 unique terms) tripping the old per-document cap, and the index
+  flat-key map dying on the second document. The core's layout constants
+  (value-plane offset, length slot, clear loop) and the direct engine's
+  map typedefs and insert guards moved together (regenerated
+  vaisc_core.ll, forced-rebuild convergence); the boundary re-measured at
+  exactly 4096 OK / 4097 loud trap on both engines, and a real 1,588-term
+  document now ingests green. The raise's own probe also exposed a direct
+  silent wrong-value bug: `__vais_int_to_str` handed out one of eight
+  rotating static buffers, so storing converted-Int strings as map keys
+  collapsed every ninth key onto a stale buffer (twenty `Str(i)` inserts
+  left len 8) — it now returns a malloc'd copy, trapping through the OOM
+  diagnostic on allocation failure. Locked by
+  examples/e371_map_capacity_contract.vais plus workflow boundary gates
+  (4096 holds / 4097 traps per engine; parity 390). Index-level scale
+  (summed vocabulary past 4096) remains the disk-first P2 design as
+  recorded in docs/design/VAISDB-SCALE-BASELINE.md.
+
 ## v1.1.0 - 2026-07-26
 
 ### Changed

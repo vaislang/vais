@@ -472,6 +472,40 @@ expect_exit "list empty pop full traps loud" 134 "$tmp/list-empty-pop-full"
 expect_exit "list empty pop direct build" 0 "$ROOT/scripts/vaisc" build "$empty_pop_src" --engine direct -o "$tmp/list-empty-pop-direct"
 expect_exit "list empty pop direct traps loud" 134 "$tmp/list-empty-pop-direct"
 
+map_cap_src="$tmp/map-cap-boundary.vais"
+cat > "$map_cap_src" <<'VAIS'
+fn main() -> Int {
+    let m: Map<Int,Int> = {}
+    let mut i = 0
+    while i < 4096 {
+        m.insert(i, i)
+        i = i + 1
+    }
+    if m.len() != 4096 { return 1 }
+    return 0
+}
+VAIS
+map_over_src="$tmp/map-cap-overflow.vais"
+cat > "$map_over_src" <<'VAIS'
+fn main() -> Int {
+    let m: Map<Int,Int> = {}
+    let mut i = 0
+    while i < 4097 {
+        m.insert(i, i)
+        i = i + 1
+    }
+    return m.len()
+}
+VAIS
+expect_exit "map cap 4096 full build" 0 "$ROOT/scripts/vaisc" build "$map_cap_src" -o "$tmp/map-cap-full"
+expect_exit "map cap 4096 full holds" 0 "$tmp/map-cap-full"
+expect_exit "map cap 4096 direct build" 0 "$ROOT/scripts/vaisc" build "$map_cap_src" --engine direct -o "$tmp/map-cap-direct"
+expect_exit "map cap 4096 direct holds" 0 "$tmp/map-cap-direct"
+expect_exit "map cap overflow full build" 0 "$ROOT/scripts/vaisc" build "$map_over_src" -o "$tmp/map-over-full"
+expect_exit "map cap overflow full traps loud" 134 "$tmp/map-over-full"
+expect_exit "map cap overflow direct build" 0 "$ROOT/scripts/vaisc" build "$map_over_src" --engine direct -o "$tmp/map-over-direct"
+expect_exit "map cap overflow direct traps loud" 134 "$tmp/map-over-direct"
+
 range_trap_src="$tmp/str-range-trap.vais"
 cat > "$range_trap_src" <<'VAIS'
 fn main() -> Int {

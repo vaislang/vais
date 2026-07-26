@@ -320,6 +320,8 @@ struct Str field chains on both engines,
 chains, call-result field reads, and mut Str-field rebinding,
 `examples/e370_list_elem_str_field_let.vais` for list-element Str field
 lets and offset-shifted Int fields after Str fields,
+`examples/e371_map_capacity_contract.vais` for the 4096-entry map capacity
+contract with converted-Int string keys stored as copies,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

@@ -1,5 +1,32 @@
 # Vais Worklog
 
+## 2026-07-26h (VaisDB P1 — Map 계약 256→4096, 수요 주도 1호 완결)
+
+제품 병목 실측(2026-07-26g)이 확정한 1호를 당일 완결. core는 map_cap()
+파생 3함수 + IR 텍스트 하드코드 39지점(값-plane 오프셋/len 슬롯/클리어
+루프 — 정밀 패턴 치환, 치환 수=분류 수 정합 검증), direct는 map
+typedef·insert 12지점. 내부 버퍼 256(env/argv)·from_byte 255 경계 불변.
+.ll 강제-리빌드 절차로 진짜 수렴(gen2==gen3). 경계 재실측: 4096 OK/4097
+trap 134 양 엔진.
+
+**P1 성공 기준 달성**: 베이스라인에서 즉사하던 실전 문서(고유 1,588
+term) 단일 ingest green + stats/rank 동작. 인덱스 flat 합산(>4096)은
+예측대로 P2(디스크-우선) 잔존 — 베이스라인 리포트에 P1 결과 절 추가.
+
+**경유 silent 발견·즉시 root-fix**: e371 잠금 프로브가 direct
+__vais_int_to_str의 8-순환 static 버퍼 붕괴를 노출 — Str(i)를 map 키로
+저장하면 9번째마다 stale 버퍼로 키가 무너져 20개 insert가 len 8(조용히
+잘못된 맵). 코퍼스는 변환-키 저장 패턴이 없어 사각이었음. malloc 사본
+반환으로 근절(실패 시 kind 5 OOM trap — 이번 아크 진단 재사용). "저장
+가능한 값을 반환하는 헬퍼는 버퍼 재사용 금지" 원칙.
+
+e371 잠금(구 256 경계 통과+변환-키 사본 생존) 양 엔진 42, workflow
++8케이스(4096 holds/4097 traps × 엔진), PRELUDE map 계약 신규 문서화.
+parity 390, 래더 GREEN.
+
+**다음 세션:** P2(디스크-우선 인덱스 — term-샤딩 포스팅 + fs_append_
+text, corpus_l 374파일 green이 완료 기준) 또는 P3(ingest 원자성).
+
 ## 2026-07-26g (제품 모드 진입 — VaisDB 스케일 실측, 병목 확정)
 
 제품 전환 첫 스프린트. repo 자체 텍스트로 코퍼스 3단(소10/중62/대374)
