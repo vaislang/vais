@@ -22765,6 +22765,21 @@ static char *direct_rewrite_nested_struct_field_chains(
                         free(out.data);
                         return NULL;
                     }
+                    const char *call_nested_type = direct_struct_field_type(nested, nested_field);
+                    if (direct_is_str_type(call_nested_type)) {
+                        int call_str_next = nested_end;
+                        int call_str_len = 0;
+                        if (direct_parse_trailing_str_len(expr, nested_end, &call_str_next, &call_str_len) && call_str_len) {
+                            sb_append(&out, "__vais_str_len(");
+                            sb_append_n(&out, expr + start, (size_t)(nested_end - start));
+                            sb_append(&out, ")");
+                            i = call_str_next;
+                            free(nested_field);
+                            free(field);
+                            free(name);
+                            continue;
+                        }
+                    }
                     sb_append_n(&out, expr + start, (size_t)(nested_end - start));
                     i = nested_end;
                     free(nested_field);
@@ -22811,6 +22826,21 @@ static char *direct_rewrite_nested_struct_field_chains(
             free(name);
             free(out.data);
             return NULL;
+        }
+        const char *local_nested_type = direct_struct_field_type(nested, nested_field);
+        if (direct_is_str_type(local_nested_type)) {
+            int local_str_next = nested_end;
+            int local_str_len = 0;
+            if (direct_parse_trailing_str_len(expr, nested_end, &local_str_next, &local_str_len) && local_str_len) {
+                sb_append(&out, "__vais_str_len(");
+                sb_append_n(&out, expr + start, (size_t)(nested_end - start));
+                sb_append(&out, ")");
+                i = local_str_next;
+                free(nested_field);
+                free(field);
+                free(name);
+                continue;
+            }
         }
         sb_append_n(&out, expr + start, (size_t)(nested_end - start));
         i = nested_end;

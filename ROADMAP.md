@@ -22,7 +22,25 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26d) — 값-정확성 fuzzing 라운드 7: 데수가 교차 조합
+## 현재 작업 (2026-07-26e) — 필드-Str 패밀리 소탕 (e368 인접 완결)
+모드: 개별선택
+- [x] 1. 매트릭스 프로브 ✅ 2026-07-26 — 1단 .len 양 엔진 OK/2단은
+      direct만 실패/mut 재대입 양 엔진 OK. 확장 프로브가 **full silent
+      오값 발견**: `let a = make().num`이 struct-복사 분기로 오라우팅
+      (꼬리 무시) → slot 0 로드(단일 필드 struct에선 우연히 정답,
+      중첩 필드 선행 시 포인터 로드 — f5/f6 대조로 확정).
+- [x] 2. Root-fix 2건 ✅ — ① direct nested 분기 2곳(로컬/call-결과)에
+      Str 터미널+트레일링 len 래핑. ② full 수집기·let-emit의 struct-복사
+      분기에 rhs_is_bare_call_stmt 가드(꼬리 있으면 스칼라 슬롯 →
+      기존 emit_struct_return_field_call 플랫-오프셋 경로가 정확 emit).
+      .ll 강제-리빌드 수렴(gen1==gen2). **silent 부류 1건 근절**(잔여
+      Str-바인딩 형태는 silent→LOUD 전환, 후보 등록).
+- [x] 3. e369 잠금 ✅ — 2단 로컬 체인/call-결과 스칼라·중첩 Str len/
+      mut 재대입 양 엔진 42, f6·구조-복사 회귀 0. parity 388 실측
+      (native=388), 래더(fmt+release) GREEN(LADDER-EXIT 0).
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-07-26d) — 값-정확성 fuzzing 라운드 7: 데수가 교차 조합
 모드: 개별선택
 - [x] 1. 프로브 8종 + 격리 2종 × 양 엔진 ✅ 2026-07-26 — 교차 조합
       (리터럴 필드 속 체인·grid 읽기/체인식 행 인덱스/5중 리터럴/while
@@ -811,10 +829,15 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   데수가가 3단+ 리터럴을 단계 let(__vais_slit)로 재작성 — 양 엔진 e366
   잠금(3중 혼합 필드 + 4중). 원인은 full 전용(core 리터럴 파서 2단 한정,
   3단째 생성자명 미해결 → LOUD)이었고 direct는 원래 지원. 신규 후보 2건
-  기록: ① 중첩 필드 경로 위 Str `.len()` 체인(`o.mid.tag.len()`)은
-  direct 미지원(LOUD, 체인 패밀리 sibling — bind-then-len이 verified)
+  기록: ① ~~중첩 필드 경로 위 Str `.len()` 체인 direct~~ (완결
+  2026-07-26e: nested 분기 2곳에 __vais_str_len 래핑, e369 잠금 — full
+  silent call().field 오값도 같은 스프린트에서 bare-call 가드로 근절)
   ② direct는 단일라인 if 블록의 다문장(let+return)을 미지원(LOUD,
   full은 지원 — 스타일상 비권장 형태).
+- call-결과 Str 필드의 `.len()` 없는 바인딩(`let s = make().mid.tag`)은
+  양 엔진 LOUD(2026-07-26e에서 full은 silent→LOUD로 전환됨). verified
+  form = `let o = make()` 후 필드 접근. 수요 시 슬롯 Str 타이핑 +
+  inttoptr 배선으로 승격.
 - ~~중첩 리스트 dynamic-row 읽기~~ (완결 2026-07-26c): 행 스위치 데수가
   (행 식 임시 호이스트 + 행별 멀티라인 if 선택 + 범위 밖은 음수-인덱스
   경유 메시지 trap 재사용). e367 잠금(루프 누적/이중 변수 인덱스/조합식/

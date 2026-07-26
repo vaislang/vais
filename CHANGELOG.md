@@ -4,6 +4,23 @@
 
 ### Changed
 
+- Closed the field-access family across both engines. Direct now rewrites
+  trailing `.len()` on two-level field paths (`o.mid.tag.len()`) and on
+  call-result nested Str fields — both nested-field branches wrap the
+  chain in __vais_str_len instead of leaking `.len()` into C. The full
+  engine had a silent wrong-value bug for call-result scalar field reads:
+  `let a = make().num` fired the struct-copy let branches (which ignore
+  the `.field` tail), binding the whole flat buffer and reading slot 0 —
+  correct by accident for single-field structs, silently wrong once the
+  struct had a preceding nested field. Both branches now require a bare
+  call statement (rhs_is_bare_call_stmt), routing tails through the
+  existing emit_struct_return_field_call flat-offset path (regenerated
+  vaisc_core.ll, forced-rebuild convergence). Mut rebinding from Str
+  fields verified. Locked by examples/e369_call_field_access_family.vais
+  (parity 388). Remaining candidate: binding a call-result Str field
+  without `.len()` stays loud on both engines (previously silent on
+  full), with bind-the-struct-first as the verified form.
+
 - Fixed a full-engine loud gap that fuzzing round 7 (cross-desugar sweep)
   surfaced in its probes: plain let bindings from struct Str field chains
   (`let t = m.tag`, `let u = d.meta.tag`) typed the slot as i64 while the

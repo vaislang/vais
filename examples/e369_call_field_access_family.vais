@@ -1,0 +1,41 @@
+# expect: 42
+# Field-access family locks across both engines: two-level local field
+# `.len()` chains (`o.mid.tag.len()`), call-result scalar field reads that
+# must skip the struct-copy let path (`let a = make().num` previously bound
+# the whole struct buffer and read the wrong flat slot silently on full),
+# call-result nested Str `.len()` chains, and mut rebinding from Str
+# fields. Binding a call-result Str field without `.len()`
+# (`let s = make().mid.tag`) stays a loud candidate on both engines.
+
+struct M { tag: Str }
+struct O { mid: M, num: Int, extra: Int }
+
+fn make() -> O {
+    return O { mid: M { tag: "abcde" }, num: 9, extra: 4 }
+}
+
+fn main() -> Int {
+    # Two-level local field chains, if- and let-position.
+    let o = O { mid: M { tag: "abcd" }, num: 1, extra: 2 }
+    if o.mid.tag.len() != 4 { return 1 }
+    let n = o.mid.tag.len()
+    if n != 4 { return 2 }
+
+    # Call-result scalar fields read their own flat slots.
+    let a = make().num
+    if a != 9 { return 3 }
+    if make().extra != 4 { return 4 }
+
+    # Call-result nested Str .len chains.
+    if make().mid.tag.len() != 5 { return 5 }
+
+    # Mut rebinding across struct Str fields.
+    let other = M { tag: "three" }
+    let mut t = o.mid.tag
+    if t.len() != 4 { return 6 }
+    t = other.tag
+    if t != "three" { return 7 }
+
+    # 4 * 9 + 4 + 2 = 42
+    return n * a + make().extra + 2
+}

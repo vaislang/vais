@@ -1,5 +1,33 @@
 # Vais Worklog
 
+## 2026-07-26e (필드-접근 패밀리 소탕 — full silent 오값 근절 포함)
+
+e368 인접 소탕이 예상보다 큰 수확: 매트릭스 프로브(1·2단 .len × 위치,
+mut 재대입)로 direct 2단 체인 갭을 좁힌 뒤, 확장 프로브(f4~f7)가
+**full의 silent 오값**을 노출 — `let a = make().num`이 수집기·let-emit의
+struct-복사 분기(call_retsty 접두만 검사, 꼬리 무시)로 오라우팅되어
+전체 플랫 버퍼를 바인딩하고 slot 0을 로드. **단일 필드 struct에선
+우연히 정답이라 기존 코퍼스가 못 잡았고**, 중첩 필드 선행 시 포인터가
+정수로 로드되는 무증상 오값(f5/f6 대조 실측).
+
+fix: ① full — rhs_is_bare_call_stmt 가드를 struct-복사 분기 2곳에(꼬리
+있으면 스칼라 슬롯 → 기존 emit_struct_return_field_call 플랫-오프셋
+경로가 정확 emit, 중첩 필드 오프셋 포함). ② direct — nested 필드 분기
+2곳(로컬/call-결과)에 Str 터미널+트레일링 len 시 __vais_str_len 래핑.
+.ll 강제-리빌드 수렴. **silent 1건 근절 + 잔여 Str-바인딩 형태는
+silent→LOUD 전환**(`let s = make().mid.tag` — 후보 등록, verified form
+= struct 먼저 바인딩).
+
+e369 잠금(2단 로컬 체인/call-결과 스칼라·중첩 Str len/mut 재대입) 양
+엔진 42. parity 388, 래더 GREEN. 교훈: **"우연히 정답" 클래스** —
+단일-필드 struct의 slot 0 로드처럼 대표 케이스에서 정답이 나오는 오컴파일
+은 다중-필드·중첩-선행 변형 프로브 없이는 못 잡는다(f5의 2필드+중첩
+구성이 결정적이었음).
+
+**다음 세션:** 잔여 후보(call-결과 Str 필드 바인딩 승격/단일라인 if
+다문장 direct/core malloc NULL) 또는 도그푸딩 27/fuzzing 라운드 8
+("우연히 정답" 클래스 사냥 — 오프셋 민감 표면 전수).
+
 ## 2026-07-26d (fuzzing 라운드 7 — 데수가 교차 무결 + 필드-Str-let 갭 승격)
 
 이번 아크의 데수가 3종(slit/nrow/체인) 교차 조합 8프로브 × 양 엔진:
