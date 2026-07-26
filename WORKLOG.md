@@ -1,5 +1,30 @@
 # Vais Worklog
 
+## 2026-07-26i (VaisDB P2 — 디스크-우선 인덱스, 스케일 실증)
+
+인덱스 정본을 인메모리 Map+스냅샷에서 **디스크 포스팅**으로 전환(e337
+전면 재작성): 인덱스=디렉토리(docs.txt + terms/s<N>.txt 64샤드,
+`term\tdoc\tcount` 라인). ingest=샤드별 str_builder 배치→fs_append_text,
+조회=쿼리 term의 샤드만 바이트 스트리밍 스캔(4095 라인 계약 비의존) +
+per-query Map 스코어(4096 구간), remove=샤드 재작성 필터. 도구 사이클의
+스트리밍 선례와 이번 아크 신규 API(fs_append_text/fs_remove)가 정확히
+설계에 꽂힘.
+
+**회귀 기준: 기존 workflow 게이트 케이스 무변경 전부 GREEN**(stdout/
+exit 계약 보존). **스케일 기준: corpus_l 374파일 ingest 0.9초, 포스팅
+23,114(구 계약 5.6배), rank 정상** — 베이스라인에서 문서 2개째 즉사하던
+시스템이 인덱스 어휘 무제한으로.
+
+경유 트랩 2건: ① bare str_builder_append 문장 — 기록된 "out-param
+빌트인 할당형만" 재범(10지점 let 교정). ② **주석 속 `'` 스캐너 오염
+(신규 후보)**: contains_generic_type가 주석을 코드로 스캔, 미종결 char
+리터럴 판정 시 전체 스캔 0 반환 → Result lowering 조용히 스킵 → 하류
+오도성 헤더 거부로 표면화(격리 3왕복 소모 — .vais 주석에 `'` 회피 규칙).
+잔존 정직 기록: 고유>4096 초대형 문서(per-doc Map)/부분 실패 잔존(P3).
+
+**다음 세션:** P3(ingest 원자성 — temp-then-rename, 부분 실패 불변
+게이트) 또는 P4(vaisbench 스케일 게이트 래더 편입).
+
 ## 2026-07-26h (VaisDB P1 — Map 계약 256→4096, 수요 주도 1호 완결)
 
 제품 병목 실측(2026-07-26g)이 확정한 1호를 당일 완결. core는 map_cap()

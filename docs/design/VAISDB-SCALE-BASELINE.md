@@ -57,6 +57,20 @@ stats/rank 정상. 인덱스 flat key는 소형 코퍼스(10문서 합산 어휘
 direct의 `__vais_int_to_str` 8-순환 버퍼가 map 키 저장 시 silent 붕괴
 (20개 insert → len 8) — malloc 사본으로 root-fix(e371이 잠금).
 
+## P2 결과 (2026-07-26i)
+
+디스크-우선 인덱스 적용 완료(e337 재작성): 인덱스=디렉토리(docs.txt +
+terms/s<N>.txt 64샤드 포스팅), ingest는 샤드별 fs_append_text 배치,
+query/rank는 쿼리 term의 샤드만 바이트 스트리밍 스캔 + per-query Map
+스코어(4096 구간). **기존 workflow 게이트 케이스 무변경 전부 GREEN**
+(stdout/exit 계약 보존) — 회귀 기준 충족.
+
+스케일 실측: **corpus_l 374파일 ingest 0.9초, 포스팅 23,114**(구 인덱스
+계약 4096의 5.6배 — 인덱스 어휘 무제한 실증), rank 정상. 잔존 한계:
+① 고유 term > 4096인 초대형 단일 문서(ROADMAP/WORKLOG급 기술문서)는
+per-doc 카운팅 Map 한도에 걸림 — 후속(문서 분할 ingest 또는 스트리밍
+카운팅) ② 부분 실패 시 docs.txt 부분 잔존 — P3 원자성 스프린트 대상.
+
 ## 재현 커맨드
 
 합성 경계 문서는 고유 N개 단어를 총 M개로 반복한 1~5,000라인 텍스트.

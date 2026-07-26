@@ -22,7 +22,27 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26h) — VaisDB P1: Map 용량 계약 256→4096 (수요 주도 1호)
+## 현재 작업 (2026-07-26i) — VaisDB P2: 디스크-우선 인덱스 (제품 재설계)
+모드: 개별선택
+- [x] 1. 레이아웃 + ingest ✅ 2026-07-26 — 인덱스=디렉토리(docs.txt +
+      terms/s<N>.txt 64샤드), 샤드별 str_builder 배치→fs_append_text.
+      self-test 42 양 엔진(신 레이아웃 전면 재작성).
+- [x] 2. 조회 경로 ✅ — query/rank/report가 term별 샤드 바이트 스트리밍
+      스캔 + per-query Map(4096 구간), remove는 샤드 재작성 필터.
+      **기존 workflow 게이트 케이스 무변경 전부 GREEN**(회귀 기준 충족).
+      경유 트랩 2건: ① bare str_builder_append 문장(기록된 "할당형만"
+      재범 — 10지점 let 교정) ② **주석 속 `'`가 스캐너 오염**(lowering
+      조용히 스킵→오도성 헤더 거부 — 신규 후보 등록, 진단 왕복 소모).
+- [x] 3. 스케일 기준 ✅ — **corpus_l 374파일 ingest 0.9초, 포스팅
+      23,114(구 계약 5.6배), rank 정상** — 인덱스 어휘 무제한 실증.
+      잔존 정직 기록: 고유>4096 초대형 문서(per-doc Map)/부분 실패
+      잔존(P3 대상).
+- [x] 4. 환류 + 문서 ✅ — 리포트 P2 절/CHANGELOG/후보 2건(주석 `'`
+      스캐너·초대형 문서). 래더(fmt+release) GREEN(LADDER-EXIT 0 —
+      e337 릴리스 코퍼스 엔트리 포함 전 게이트). 커밋·머지·푸시 완결.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-26h) — VaisDB P1: Map 용량 계약 256→4096 (수요 주도 1호)
 모드: 개별선택
 - [x] 1. Recon ✅ 2026-07-26 — core는 map_cap() 파생 3함수 + IR 텍스트
       하드코드 39지점(값-plane 오프셋 256/len 슬롯 512/클리어 루프 513),
@@ -902,6 +922,13 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   (@VAIS_UNRESOLVED_IDENT — 라운드 8 실측, all-Int 리터럴은 동작).
   verified form = e306의 staged(`let doc = ...` 후 `Ok(doc)`).
   수요 시 Result 래퍼 lowering에 Str-필드 리터럴 지원 확장.
+- **주석 속 아포스트로피가 드라이버 스캐너를 오염**(P2 실측): contains_
+  generic_type 등이 주석을 코드로 스캔해 `'`를 미종결 char 리터럴로
+  판정하면 전체 텍스트 스캔이 0 반환 → Result lowering이 조용히 스킵되고
+  하류에서 오도성 헤더 거부("supports ... function headers")로 표면화.
+  수요 시 스캐너에 주석 스킵 추가. 당장은 .vais 주석에 `'` 회피.
+- 문서당 고유 term > 4096(초대형 기술문서)은 per-doc 카운팅 Map 한도
+  잔존 — VaisDB 측 후속(분할 ingest/스트리밍 카운팅) 후보.
 - ~~중첩 리스트 dynamic-row 읽기~~ (완결 2026-07-26c): 행 스위치 데수가
   (행 식 임시 호이스트 + 행별 멀티라인 if 선택 + 범위 밖은 음수-인덱스
   경유 메시지 trap 재사용). e367 잠금(루프 누적/이중 변수 인덱스/조합식/

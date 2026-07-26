@@ -1,4 +1,4 @@
-# Top-document report helpers over the persisted docid.term index.
+# Top-document report helpers over the disk-first posting index.
 import vaisdb.index
 
 struct RankedDoc {
@@ -6,56 +6,53 @@ struct RankedDoc {
     score: Int,
 }
 
-fn top_doc_score(index: Map<Str,Str>, query: Map<Str,Int>) -> Int {
-    let seen: Map<Str,Int> = {}
-    let n = index.len()
-    let mut i = 0
+fn top_doc_score(index_dir: Str, query: Map<Str,Int>) -> Int {
+    let ids: List<Str> = []
+    let count = docs_list_into(index_dir, ids)
+    if count == 0 { return 0 - 1 }
+    let scores: Map<Str,Int> = {}
+    query_scores_into(index_dir, query, scores)
     let mut best_score = 0 - 1
-    while i < n {
-        let doc_id = key_doc_id(index.key_at(i))
-        if seen.contains(doc_id) != true {
-            seen.insert(doc_id, 1)
-            let score = doc_score(index, doc_id, query)
-            if score > best_score { best_score = score }
-        }
+    let mut i = 0
+    while i < count {
+        let doc_id = ids[i]
+        let score = scores.get(doc_id, 0)
+        if score > best_score { best_score = score }
         i = i + 1
     }
     return best_score
 }
 
-fn top_doc_id(index: Map<Str,Str>, query: Map<Str,Int>) -> Str {
-    let seen: Map<Str,Int> = {}
-    let n = index.len()
-    let mut i = 0
+fn top_doc_id(index_dir: Str, query: Map<Str,Int>) -> Str {
+    let ids: List<Str> = []
+    let count = docs_list_into(index_dir, ids)
+    let scores: Map<Str,Int> = {}
+    query_scores_into(index_dir, query, scores)
     let mut best_doc = ""
     let mut best_score = 0 - 1
-    while i < n {
-        let doc_id = key_doc_id(index.key_at(i))
-        if seen.contains(doc_id) != true {
-            seen.insert(doc_id, 1)
-            let score = doc_score(index, doc_id, query)
-            if score > best_score {
-                best_score = score
-                best_doc = doc_id
-            }
+    let mut i = 0
+    while i < count {
+        let doc_id = ids[i]
+        let score = scores.get(doc_id, 0)
+        if score > best_score {
+            best_score = score
+            best_doc = doc_id
         }
         i = i + 1
     }
     return best_doc
 }
 
-
-fn rank_lines(index: Map<Str,Str>, query: Map<Str,Int>, k: Int) -> Str {
+fn rank_lines(index_dir: Str, query: Map<Str,Int>, k: Int) -> Str {
+    let ids: List<Str> = []
+    let count = docs_list_into(index_dir, ids)
+    let scores: Map<Str,Int> = {}
+    query_scores_into(index_dir, query, scores)
     let ranked: List<RankedDoc> = []
-    let seen: Map<Str,Int> = {}
-    let n = index.len()
     let mut i = 0
-    while i < n {
-        let doc_id = key_doc_id(index.key_at(i))
-        if seen.contains(doc_id) != true {
-            seen.insert(doc_id, 1)
-            ranked.push(RankedDoc { doc_id: doc_id, score: doc_score(index, doc_id, query) })
-        }
+    while i < count {
+        let doc_id = ids[i]
+        ranked.push(RankedDoc { doc_id: doc_id, score: scores.get(doc_id, 0) })
         i = i + 1
     }
     ranked.sort_by_desc(|d| d.score)

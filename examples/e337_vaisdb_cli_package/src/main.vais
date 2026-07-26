@@ -1,27 +1,23 @@
 # expect: 42
 # Installable vaisdb CLI package: `scripts/vaisc package` builds dist/bin/vaisdb
-# with ingest/query/report subcommands over the persisted docid.term index,
-# with the index/report logic split across package modules. Run without
-# arguments it executes a deterministic self-test (the release-corpus entry);
-# with arguments it dispatches the CLI subcommands using the same exit-code
-# protocol as tools/vaisdb_cli.vais.
+# with ingest/query/report subcommands over a disk-first posting index — the
+# index argument names a directory holding docs.txt plus term-hash posting
+# shards (terms/s<N>.txt), so the on-disk postings are the source of truth
+# and per-query state stays inside the 4096 map contract while total index
+# vocabulary is unbounded. Run without arguments it executes a deterministic
+# self-test (the release-corpus entry); with arguments it dispatches the CLI
+# subcommands with the same stdout/exit protocol as the snapshot-era CLI.
 import vaisdb.index
 import vaisdb.report
 
-fn run_ingest(index_path: Str, doc_id: Str, doc_path: Str) -> Int {
+fn run_ingest(index_dir: Str, doc_id: Str, doc_path: Str) -> Int {
     if fs_exists(doc_path) != 1 {
         print("error: document not found")
         return 3
     }
-    let index: Map<Str,Str> = {}
-    if fs_exists(index_path) == 1 {
-        let text = fs_read_text(index_path)
-        let loaded = map_str_str_load_snapshot(text, index)
-        if loaded < 0 { return 3 }
-    }
     let body = fs_read_text(doc_path)
-    let total = ingest_into(index, doc_id, body)
-    if save_index(index_path, index) != 0 {
+    let total = ingest_doc(index_dir, doc_id, body)
+    if total < 0 {
         print("error: could not write index")
         return 3
     }
@@ -30,11 +26,8 @@ fn run_ingest(index_path: Str, doc_id: Str, doc_path: Str) -> Int {
     return 0
 }
 
-fn run_query(index_path: Str, doc_id: Str, query_text: Str) -> Int {
-    let index: Map<Str,Str> = {}
-    let flow = load_index(index_path, index)
-    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
-    if note == "index not found" {
+fn run_query(index_dir: Str, doc_id: Str, query_text: Str) -> Int {
+    if index_exists(index_dir) != 1 {
         print("error: index not found")
         return 3
     }
@@ -44,17 +37,14 @@ fn run_query(index_path: Str, doc_id: Str, query_text: Str) -> Int {
         print("error: query has no terms")
         return 1
     }
-    let score = doc_score(index, doc_id, query)
+    let score = doc_score(index_dir, doc_id, query)
     let line = str_concat("score ", str_concat(doc_id, str_concat("=", Str(score))))
     print(line)
     return score
 }
 
-fn run_report(index_path: Str, query_text: Str) -> Int {
-    let index: Map<Str,Str> = {}
-    let flow = load_index(index_path, index)
-    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
-    if note == "index not found" {
+fn run_report(index_dir: Str, query_text: Str) -> Int {
+    if index_exists(index_dir) != 1 {
         print("error: index not found")
         return 3
     }
@@ -64,32 +54,22 @@ fn run_report(index_path: Str, query_text: Str) -> Int {
         print("error: query has no terms")
         return 1
     }
-    let best_score = top_doc_score(index, query)
+    let best_score = top_doc_score(index_dir, query)
     if best_score < 0 {
         print("error: index has no documents")
         return 3
     }
-    let best_doc = top_doc_id(index, query)
+    let best_doc = top_doc_id(index_dir, query)
     let line = str_concat("top ", str_concat(best_doc, str_concat("=", Str(best_score))))
     print(line)
     return best_score
 }
 
-fn run_ingest_dir(index_path: Str, dir: Str) -> Int {
-    let index: Map<Str,Str> = {}
-    if fs_exists(index_path) == 1 {
-        let text = fs_read_text(index_path)
-        let loaded = map_str_str_load_snapshot(text, index)
-        if loaded < 0 { return 3 }
-    }
-    let flow = ingest_dir_into(index, dir)
+fn run_ingest_dir(index_dir: Str, dir: Str) -> Int {
+    let flow = ingest_dir_into(index_dir, dir)
     let note = match flow { Ok(count) => count, Err(msg) => msg }
     if flow_failed(note) == 1 {
         print(str_concat("error: ", note))
-        return 3
-    }
-    if save_index(index_path, index) != 0 {
-        print("error: could not write index")
         return 3
     }
     print(str_concat("ingested ", str_concat(note, " documents")))
@@ -106,11 +86,8 @@ fn flow_failed(note: Str) -> Int {
     return 1
 }
 
-fn run_rank(index_path: Str, query_text: Str, k: Int) -> Int {
-    let index: Map<Str,Str> = {}
-    let flow = load_index(index_path, index)
-    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
-    if note == "index not found" {
+fn run_rank(index_dir: Str, query_text: Str, k: Int) -> Int {
+    if index_exists(index_dir) != 1 {
         print("error: index not found")
         return 3
     }
@@ -124,25 +101,19 @@ fn run_rank(index_path: Str, query_text: Str, k: Int) -> Int {
         print("error: rank count must be positive")
         return 1
     }
-    let report = rank_lines(index, query, k)
+    let report = rank_lines(index_dir, query, k)
     print(report)
-    return top_doc_score(index, query)
+    return top_doc_score(index_dir, query)
 }
 
-fn run_ingest_stdin(index_path: Str, doc_id: Str) -> Int {
+fn run_ingest_stdin(index_dir: Str, doc_id: Str) -> Int {
     let body = stdin_read_all()
     if body.len() == 0 {
         print("error: empty stdin document")
         return 1
     }
-    let index: Map<Str,Str> = {}
-    if fs_exists(index_path) == 1 {
-        let text = fs_read_text(index_path)
-        let loaded = map_str_str_load_snapshot(text, index)
-        if loaded < 0 { return 3 }
-    }
-    let total = ingest_into(index, doc_id, body)
-    if save_index(index_path, index) != 0 {
+    let total = ingest_doc(index_dir, doc_id, body)
+    if total < 0 {
         print("error: could not write index")
         return 3
     }
@@ -151,16 +122,13 @@ fn run_ingest_stdin(index_path: Str, doc_id: Str) -> Int {
     return 0
 }
 
-fn run_docs(index_path: Str) -> Int {
-    let index: Map<Str,Str> = {}
-    let flow = load_index(index_path, index)
-    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
-    if note == "index not found" {
+fn run_docs(index_dir: Str) -> Int {
+    if index_exists(index_dir) != 1 {
         print("error: index not found")
         return 3
     }
     let ids: List<Str> = []
-    let count = doc_ids_into(index, ids)
+    let count = docs_list_into(index_dir, ids)
     ids.sort()
     let mut i = 0
     while i < count {
@@ -170,21 +138,17 @@ fn run_docs(index_path: Str) -> Int {
     return count
 }
 
-fn run_remove(index_path: Str, doc_id: Str) -> Int {
-    let index: Map<Str,Str> = {}
-    let flow = load_index(index_path, index)
-    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
-    if note == "index not found" {
+fn run_remove(index_dir: Str, doc_id: Str) -> Int {
+    if index_exists(index_dir) != 1 {
         print("error: index not found")
         return 3
     }
-    let filtered: Map<Str,Str> = {}
-    let removed = remove_doc_into(index, doc_id, filtered)
+    let removed = remove_doc(index_dir, doc_id)
     if removed == 0 {
         print("error: document not found")
         return 3
     }
-    if save_index(index_path, filtered) != 0 {
+    if removed < 0 {
         print("error: could not write index")
         return 3
     }
@@ -193,17 +157,14 @@ fn run_remove(index_path: Str, doc_id: Str) -> Int {
     return 0
 }
 
-fn run_stats(index_path: Str) -> Int {
-    let index: Map<Str,Str> = {}
-    let flow = load_index(index_path, index)
-    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
-    if note == "index not found" {
+fn run_stats(index_dir: Str) -> Int {
+    if index_exists(index_dir) != 1 {
         print("error: index not found")
         return 3
     }
     let ids: List<Str> = []
-    let docs = doc_ids_into(index, ids)
-    let line = str_concat("docs=", str_concat(Str(docs), str_concat(" terms=", Str(index.len()))))
+    let docs = docs_list_into(index_dir, ids)
+    let line = str_concat("docs=", str_concat(Str(docs), str_concat(" terms=", Str(postings_count(index_dir)))))
     print(line)
     return docs
 }
@@ -223,55 +184,51 @@ fn usage() -> Int {
 
 fn self_test() -> Int {
     let root = fs_temp_dir()
-    let path = path_join(root, "vais-e337-selftest-index.txt")
-    let index: Map<Str,Str> = {}
-    let d1_total = ingest_into(index, "d1", "ai ai ai cache")
-    let d2_total = ingest_into(index, "d2", "ai cache cache")
+    let dir = path_join(root, "vais-e337-selftest-index")
+    index_reset(dir)
+
+    let d1_total = ingest_doc(dir, "d1", "ai ai ai cache")
+    let d2_total = ingest_doc(dir, "d2", "ai cache cache")
     if d1_total != 4 { return 1 }
     if d2_total != 3 { return 2 }
-    if save_index(path, index) != 0 { return 3 }
-
-    let loaded: Map<Str,Str> = {}
-    let flow = load_index(path, loaded)
-    let note = match flow { Ok(entries) => entries, Err(msg) => msg }
-    if note != "4" { return 4 }
+    if index_exists(dir) != 1 { return 3 }
+    if postings_count(dir) != 4 { return 4 }
 
     let query: Map<Str,Int> = {}
     let query_total = doc_term_counts_into("ai cache", query)
     if query_total != 2 { return 5 }
-    let s1 = doc_score(loaded, "d1", query)
-    let s2 = doc_score(loaded, "d2", query)
+    let s1 = doc_score(dir, "d1", query)
+    let s2 = doc_score(dir, "d2", query)
     if s1 != 4 { return 6 }
     if s2 != 3 { return 7 }
-    if top_doc_score(loaded, query) != 4 { return 8 }
-    if top_doc_id(loaded, query) != "d1" { return 9 }
+    if top_doc_score(dir, query) != 4 { return 8 }
+    if top_doc_id(dir, query) != "d1" { return 9 }
 
-    # Directory ingest and ranked report reuse the same index layout.
+    # Directory ingest and ranked report reuse the same posting layout.
     let docs_dir = path_join(root, "vais-e337-selftest-docs")
     if fs_mkdirs(docs_dir) != 0 { return 10 }
     if fs_write_text(path_join(docs_dir, "d3.txt"), "vector vector cache") != 0 { return 11 }
-    let dir_flow = ingest_dir_into(loaded, docs_dir)
+    let dir_flow = ingest_dir_into(dir, docs_dir)
     let dir_note = match dir_flow { Ok(count) => count, Err(msg) => msg }
     if dir_note != "1" { return 12 }
-    let ranked = rank_lines(loaded, query, 2)
+    let ranked = rank_lines(dir, query, 2)
     let lf = str_byte(10)
     let expected = str_concat("1. d1=4", str_concat(lf, "2. d2=3"))
     if ranked != expected { return 13 }
 
     # Document management: listing, stats, and removal over the same index.
     let ids: List<Str> = []
-    if doc_ids_into(loaded, ids) != 3 { return 14 }
+    if docs_list_into(dir, ids) != 3 { return 14 }
     if ids.contains("d3") != true { return 15 }
     ids.sort()
     if ids[0] != "d1" { return 20 }
     if ids[2] != "d3" { return 21 }
-    let filtered: Map<Str,Str> = {}
-    let removed = remove_doc_into(loaded, "d2", filtered)
+    let removed = remove_doc(dir, "d2")
     if removed != 2 { return 16 }
     let ids2: List<Str> = []
-    if doc_ids_into(filtered, ids2) != 2 { return 17 }
+    if docs_list_into(dir, ids2) != 2 { return 17 }
     if ids2.contains("d2") == true { return 18 }
-    if remove_doc_into(filtered, "ghost", filtered) != 0 { return 19 }
+    if remove_doc(dir, "ghost") != 0 { return 19 }
 
     # 4*10 + 3 - 1 = 42
     return s1 * 10 + s2 - 1

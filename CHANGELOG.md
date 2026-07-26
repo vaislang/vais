@@ -4,6 +4,25 @@
 
 ### Changed
 
+- Rebuilt the vaisdb package on a disk-first posting index (VaisDB P2):
+  an index argument now names a directory holding docs.txt plus 64
+  term-hash posting shards (terms/s<N>.txt, lines `term\tdoc\tcount`).
+  Ingest appends shard batches through fs_append_text, queries stream
+  only the shards their terms hash to (byte scan, no line-list
+  contract), and per-query score state stays inside the 4096 map
+  contract while total index vocabulary is unbounded — 374 documents
+  ingest in under a second with 23k postings and ranked queries work,
+  where the snapshot-era index died on its second document. Every
+  existing workflow gate case passes unchanged (same stdout/exit
+  protocol), and the package self-test covers the new layout end to end
+  including shard-rewriting removal. Recorded two follow-ups: documents
+  with more than 4096 unique terms still hit the per-document counting
+  map (split or streamed ingest later), and partial-failure atomicity is
+  the next product sprint. Also recorded a driver scanner candidate the
+  rewrite surfaced: an apostrophe inside a comment poisons the generic-
+  type scan (comments are scanned as code), silently skipping the Result
+  lowering and surfacing as a misleading header rejection downstream.
+
 - Raised the map capacity contract from 256 to 4096 entries on both
   engines — the first demand-driven compiler change of the product phase:
   the VaisDB scale baseline showed a single real document's vocabulary
