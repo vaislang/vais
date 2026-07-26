@@ -472,6 +472,18 @@ expect_exit "list empty pop full traps loud" 134 "$tmp/list-empty-pop-full"
 expect_exit "list empty pop direct build" 0 "$ROOT/scripts/vaisc" build "$empty_pop_src" --engine direct -o "$tmp/list-empty-pop-direct"
 expect_exit "list empty pop direct traps loud" 134 "$tmp/list-empty-pop-direct"
 
+huge_docs_dir="$tmp/vaisdb-huge-docs"
+huge_idx="$tmp/vaisdb-huge-idx"
+rm -rf "$huge_docs_dir" "$huge_idx"
+mkdir -p "$huge_docs_dir"
+seq -s ' ' 0 4200 > "$huge_docs_dir/big.txt"
+printf 'alpha beta\n' > "$huge_docs_dir/ok1.txt"
+printf 'beta gamma\n' > "$huge_docs_dir/ok2.txt"
+expect_exit "vaisdb oversized doc skipped in batch" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' ingest-dir '$huge_idx' '$huge_docs_dir' 2>/dev/null | grep -qx 'ingested 2 documents'"
+expect_exit "vaisdb oversized skip reported on stderr" 0 /bin/sh -c "rm -rf '$huge_idx'; '$vdb_dist/bin/vaisdb' ingest-dir '$huge_idx' '$huge_docs_dir' 2>&1 >/dev/null | grep -q 'skipped (too large): big'"
+expect_exit "vaisdb oversized single ingest rejected" 3 /bin/sh -c "'$vdb_dist/bin/vaisdb' ingest '$huge_idx' big '$huge_docs_dir/big.txt' >/dev/null"
+expect_exit "vaisdb batch survivors queryable" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' stats '$huge_idx' | grep -qx 'docs=2 terms=4'"
+
 map_cap_src="$tmp/map-cap-boundary.vais"
 cat > "$map_cap_src" <<'VAIS'
 fn main() -> Int {

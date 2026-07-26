@@ -22,7 +22,26 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26i) — VaisDB P2: 디스크-우선 인덱스 (제품 재설계)
+## 현재 작업 (2026-07-26j) — VaisDB P3: ingest 견고성 (trap 제거 + 배치 계속)
+모드: 개별선택 (스코프 정련: 실측 실패 모드는 "초대형 문서가 trap으로
+프로세스+배치를 죽임" — temp-rename 전면 도입 대신 trap 제거가 본질.
+문서-단위 쓰기 순서는 이미 안전(docs.txt가 postings 성공 후 마지막)).
+- [x] 1. 스트리밍 term 카운터 ✅ 2026-07-26 — doc_terms_guarded_into
+      (바이트 스캔 화이트스페이스-런 토크나이즈 + fresh insert 전 len
+      가드 → -2). 내장 동일성 self-test(총계·카운트) + 질의 경로 통일.
+- [x] 2. 스킵·보고 ✅ — 단일 ingest "error: document too large" 3,
+      ingest-dir stderr "skipped (too large): <id>" 후 계속, 초과 합성
+      4100-고유 문서가 인덱스 불변(self-test 잠금).
+- [x] 3. 게이트 + 완료 기준 ✅ — workflow +4케이스(배치 스킵 stdout
+      계약/stderr 보고/단일 거부 3/생존자 조회) 포함 전부 GREEN.
+      **corpus_s 실문서 10 ingest-dir exit 0 실측**(8 인제스트 + 초대형
+      2 스킵, 포스팅 11,877, rank 정상 — 베이스라인 즉사 완전 해소).
+- [x] 4. 환류 + 문서 ✅ — 리포트 P3 절(temp-rename 미채택 근거 포함),
+      CHANGELOG. 래더(fmt+release) GREEN(LADDER-EXIT 0). 커밋·머지·푸시
+      완결.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-07-26i) — VaisDB P2: 디스크-우선 인덱스 (제품 재설계)
 모드: 개별선택
 - [x] 1. 레이아웃 + ingest ✅ 2026-07-26 — 인덱스=디렉토리(docs.txt +
       terms/s<N>.txt 64샤드), 샤드별 str_builder 배치→fs_append_text.

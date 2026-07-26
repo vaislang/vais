@@ -71,6 +71,19 @@ query/rank는 쿼리 term의 샤드만 바이트 스트리밍 스캔 + per-query
 per-doc 카운팅 Map 한도에 걸림 — 후속(문서 분할 ingest 또는 스트리밍
 카운팅) ② 부분 실패 시 docs.txt 부분 잔존 — P3 원자성 스프린트 대상.
 
+## P3 결과 (2026-07-26j)
+
+ingest 견고성 완결: 스트리밍 term 카운터(바이트 스캔 + Map len 가드)가
+내장 카운터를 대체 — 어휘가 4096 창을 넘는 문서는 **trap 대신 -2 보고**.
+단일 ingest는 "error: document too large" exit 3, ingest-dir은 해당
+문서를 stderr로 보고하고 계속(Ok=성공 수). 질의 경로도 동일 카운터.
+
+완료 기준 실측: **corpus_s(실문서 10, ROADMAP·WORKLOG급 초대형 2 포함)
+ingest-dir exit 0** — 8개 인제스트(포스팅 11,877) + 2개 스킵 보고,
+rank 정상. 베이스라인의 원 즉사 케이스가 완전 해소됐다. 문서-단위 쓰기
+순서(성공한 postings 후 docs.txt)는 P2부터 안전 — temp-rename 전면
+도입은 실측 실패 모드(대형 문서 trap)와 무관해 미채택(근거 기록).
+
 ## 재현 커맨드
 
 합성 경계 문서는 고유 N개 단어를 총 M개로 반복한 1~5,000라인 텍스트.

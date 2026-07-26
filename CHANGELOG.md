@@ -4,6 +4,20 @@
 
 ### Changed
 
+- Hardened vaisdb ingest against oversized documents (VaisDB P3): a
+  streaming word counter (byte-scan tokenization matching the builtin,
+  with a map-window guard before every fresh insert) replaces the
+  builtin counter on ingest and query paths, so a document whose
+  vocabulary exceeds the 4096 window reports an error instead of
+  trapping the process. Single ingests answer "error: document too
+  large" (exit 3), directory ingests report the skip on stderr and keep
+  going, and the batch survivors stay queryable. The real-document
+  corpus that has crashed since the scale baseline (ten repo documents
+  including the ~4k-line ROADMAP and WORKLOG) now ingests green — eight
+  documents in, two skipped loudly. Locked by the package self-test
+  (guarded-counter equivalence plus an oversized synthetic that leaves
+  the index untouched) and four workflow gate cases.
+
 - Rebuilt the vaisdb package on a disk-first posting index (VaisDB P2):
   an index argument now names a directory holding docs.txt plus 64
   term-hash posting shards (terms/s<N>.txt, lines `term\tdoc\tcount`).

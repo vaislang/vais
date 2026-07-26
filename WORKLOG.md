@@ -1,5 +1,27 @@
 # Vais Worklog
 
+## 2026-07-26j (VaisDB P3 — ingest 견고성: trap 제거 + 배치 계속)
+
+스코프 정련이 핵심이었다: 실측 실패 모드는 "초대형 문서(어휘>4096)가
+카운팅 단계 trap으로 프로세스+배치를 죽임"이지 다중-파일 쓰기 원자성이
+아님(쓰기 순서는 P2부터 postings→docs.txt로 안전). temp-rename 전면
+도입 미채택 근거를 리포트에 기록.
+
+fix = doc_terms_guarded_into: 바이트 스캔 화이트스페이스-런 토크나이즈
+(내장 doc_term_counts_into와 동일성 self-test 검증 — 스코어 시맨틱
+보존) + fresh insert 전 len 가드로 초과 시 -2 반환. 단일 ingest는
+"error: document too large" exit 3, ingest-dir은 stderr "skipped (too
+large): <id>" 보고 후 계속, 질의 경로도 동일 카운터 통일. 초과 합성
+(4100 고유)이 인덱스 불변임을 self-test로 잠금.
+
+**완료 기준 실측: corpus_s 실문서 10개 ingest-dir exit 0** — 8개 인제스트
+(포스팅 11,877) + ROADMAP·WORKLOG급 2개 스킵 보고, rank 정상. 스케일
+베이스라인의 원 즉사 케이스 완전 해소. workflow +4케이스(배치 스킵
+stdout 계약/stderr 보고/단일 거부/생존자 조회) 전부 GREEN, 래더 GREEN.
+
+**다음 세션:** P4(vaisbench 예산 스케일 게이트 gates.tasks 편입)로
+제품 래더 종결.
+
 ## 2026-07-26i (VaisDB P2 — 디스크-우선 인덱스, 스케일 실증)
 
 인덱스 정본을 인메모리 Map+스냅샷에서 **디스크 포스팅**으로 전환(e337

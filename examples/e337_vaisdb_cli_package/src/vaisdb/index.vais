@@ -71,9 +71,63 @@ fn doc_known(index_dir: Str, doc_id: Str) -> Int {
     return 0
 }
 
+# Streaming word counter with a capacity window: byte-scans whitespace-run
+# tokenization (matching doc_term_counts_into) but guards the map before
+# every fresh insert, so a document whose vocabulary exceeds the 4096 map
+# window reports -2 instead of trapping the whole process.
+fn doc_terms_guarded_into(body: Str, counts: Map<Str,Int>) -> Int {
+    let n = body.len()
+    let mut pos = 0
+    let mut total = 0
+    while pos < n {
+        let mut b = body[pos]
+        if b == 32 {
+            pos = pos + 1
+        } else if b == 9 {
+            pos = pos + 1
+        } else if b == 10 {
+            pos = pos + 1
+        } else if b == 13 {
+            pos = pos + 1
+        } else {
+            let start = pos
+            let mut scanning = 1
+            while scanning == 1 {
+                if pos >= n {
+                    scanning = 0
+                } else {
+                    b = body[pos]
+                    if b == 32 {
+                        scanning = 0
+                    } else if b == 9 {
+                        scanning = 0
+                    } else if b == 10 {
+                        scanning = 0
+                    } else if b == 13 {
+                        scanning = 0
+                    } else {
+                        pos = pos + 1
+                    }
+                }
+            }
+            let word = str_slice(body, start, pos - start)
+            if counts.contains(word) == true {
+                let prev = counts.get(word, 0)
+                counts.insert(word, prev + 1)
+            } else {
+                if counts.len() >= 4096 { return 0 - 2 }
+                counts.insert(word, 1)
+            }
+            total = total + 1
+        }
+    }
+    return total
+}
+
 fn ingest_doc(index_dir: Str, doc_id: Str, body: Str) -> Int {
     let counts: Map<Str,Int> = {}
-    let total = doc_term_counts_into(body, counts)
+    let total = doc_terms_guarded_into(body, counts)
+    if total < 0 { return 0 - 2 }
     if index_init(index_dir) != 0 { return 0 - 1 }
     let tab = str_byte(9)
     let lf = str_byte(10)
@@ -265,8 +319,16 @@ fn ingest_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
             let body = fs_read_text(path_join(dir, name))
             let doc_id = str_slice(name, 0, name.len() - 4)
             let total = ingest_doc(index_dir, doc_id, body)
-            if total < 0 { failed = 1 }
-            ingested = ingested + 1
+            if total == 0 - 2 {
+                let w1 = stderr_write("skipped (too large): ")
+                let w2 = stderr_write(doc_id)
+                let w3 = stderr_write(str_byte(10))
+            } else if total < 0 {
+                failed = 1
+                ingested = ingested + 1
+            } else {
+                ingested = ingested + 1
+            }
         }
         i = i + 1
     }

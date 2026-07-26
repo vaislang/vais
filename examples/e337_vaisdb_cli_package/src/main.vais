@@ -17,6 +17,10 @@ fn run_ingest(index_dir: Str, doc_id: Str, doc_path: Str) -> Int {
     }
     let body = fs_read_text(doc_path)
     let total = ingest_doc(index_dir, doc_id, body)
+    if total == 0 - 2 {
+        print("error: document too large")
+        return 3
+    }
     if total < 0 {
         print("error: could not write index")
         return 3
@@ -32,7 +36,11 @@ fn run_query(index_dir: Str, doc_id: Str, query_text: Str) -> Int {
         return 3
     }
     let query: Map<Str,Int> = {}
-    let total = doc_term_counts_into(query_text, query)
+    let total = doc_terms_guarded_into(query_text, query)
+    if total == 0 - 2 {
+        print("error: query too large")
+        return 1
+    }
     if total == 0 {
         print("error: query has no terms")
         return 1
@@ -49,7 +57,11 @@ fn run_report(index_dir: Str, query_text: Str) -> Int {
         return 3
     }
     let query: Map<Str,Int> = {}
-    let total = doc_term_counts_into(query_text, query)
+    let total = doc_terms_guarded_into(query_text, query)
+    if total == 0 - 2 {
+        print("error: query too large")
+        return 1
+    }
     if total == 0 {
         print("error: query has no terms")
         return 1
@@ -92,7 +104,11 @@ fn run_rank(index_dir: Str, query_text: Str, k: Int) -> Int {
         return 3
     }
     let query: Map<Str,Int> = {}
-    let total = doc_term_counts_into(query_text, query)
+    let total = doc_terms_guarded_into(query_text, query)
+    if total == 0 - 2 {
+        print("error: query too large")
+        return 1
+    }
     if total == 0 {
         print("error: query has no terms")
         return 1
@@ -113,6 +129,10 @@ fn run_ingest_stdin(index_dir: Str, doc_id: Str) -> Int {
         return 1
     }
     let total = ingest_doc(index_dir, doc_id, body)
+    if total == 0 - 2 {
+        print("error: document too large")
+        return 3
+    }
     if total < 0 {
         print("error: could not write index")
         return 3
@@ -229,6 +249,27 @@ fn self_test() -> Int {
     if docs_list_into(dir, ids2) != 2 { return 17 }
     if ids2.contains("d2") == true { return 18 }
     if remove_doc(dir, "ghost") != 0 { return 19 }
+
+    # The guarded counter matches builtin tokenization on small bodies.
+    let eq: Map<Str,Int> = {}
+    if doc_terms_guarded_into("ai ai ai cache", eq) != 4 { return 25 }
+    if eq.get("ai", 0) != 3 { return 26 }
+
+    # A vocabulary past the 4096 window reports -2 and leaves the index
+    # untouched instead of trapping the process.
+    let bb = str_builder_new()
+    let mut w = 0
+    while w < 4100 {
+        let a1 = str_builder_append(bb, Str(w))
+        let a2 = str_builder_append(bb, " ")
+        w = w + 1
+    }
+    let big = str_builder_finish(bb)
+    let probe: Map<Str,Int> = {}
+    if doc_terms_guarded_into(big, probe) != 0 - 2 { return 22 }
+    if ingest_doc(dir, "huge", big) != 0 - 2 { return 23 }
+    let ids3: List<Str> = []
+    if docs_list_into(dir, ids3) != 2 { return 24 }
 
     # 4*10 + 3 - 1 = 42
     return s1 * 10 + s2 - 1
