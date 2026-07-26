@@ -22,7 +22,21 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26j) — VaisDB P3: ingest 견고성 (trap 제거 + 배치 계속)
+## 현재 작업 (2026-07-26k) — VaisDB P4: 스케일 게이트 (제품 래더 종결)
+모드: 개별선택
+- [x] 1. scripts/vaisdb-scale-gate.sh ✅ 2026-07-26 — 결정적 합성 코퍼스
+      (60문서×203고유 = 포스팅 12,180)로 ingest-dir(예산 20s, 실측
+      287ms)/rank 읽기 경로(예산 5s) vaisbench 예산 검사 + 정확성 스팟
+      (top score/stats 캡처 비교 — exit-as-count와 pipefail 충돌 회피).
+- [x] 2. 래더 편입 ✅ — gates.tasks에 vaisdb-scale 태스크(16태스크),
+      ladder 체인 fmt+perf+vaisdb-scale+release, workflow parse 케이스
+      15→16, 스테일 주석 정정.
+- [x] 3. 문서 + 마감 ✅ — 리포트 P4 절(**제품 래더 P1~P4 종결 선언**),
+      CHANGELOG, gates.tasks 주석 정정. 래더 GREEN(LADDER-EXIT 0 —
+      vaisdb-scale 태스크 자기 체인 포함 통과 확인). 커밋·머지·푸시 완결.
+진행률: 3/3 (100%) — **VaisDB 제품 래더 P1~P4 전체 종결**
+
+## 직전 완료 (2026-07-26j) — VaisDB P3: ingest 견고성 (trap 제거 + 배치 계속)
 모드: 개별선택 (스코프 정련: 실측 실패 모드는 "초대형 문서가 trap으로
 프로세스+배치를 죽임" — temp-rename 전면 도입 대신 trap 제거가 본질.
 문서-단위 쓰기 순서는 이미 안전(docs.txt가 postings 성공 후 마지막)).

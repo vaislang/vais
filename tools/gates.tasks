@@ -6,6 +6,7 @@
 
 fmt = bash scripts/vaisfmt-check.sh
 perf = bash scripts/vaisbench-gate.sh 60000 2 bash scripts/test-vaisc-native.sh
+vaisdb-scale = bash scripts/vaisdb-scale-gate.sh
 front = bash scripts/test-vaisc-front.sh
 direct = bash scripts/test-vaisc-direct.sh
 check = bash scripts/test-vais-check-vais.sh
@@ -23,8 +24,10 @@ quick = /usr/bin/true
 
 # `release` already runs front/direct/check/fixpoint/value/parity/workflow/
 # native/selfhost internally (a strict superset, ending with git diff --check),
-# so the full ladder is exactly fmt + release: measured 2026-07-22, this halves
-# the serial wall time (~69min -> ~36min) with identical-or-wider coverage.
-# The individual tasks above remain for selective runs.
+# so the full ladder is fmt + perf + vaisdb-scale + release: measured
+# 2026-07-22, dropping the duplicated gates halved the serial wall time
+# (~69min -> ~36min) with identical-or-wider coverage; the perf and
+# vaisdb-scale budget watches add seconds. The individual tasks above
+# remain for selective runs.
 ladder = /usr/bin/true
-!needs ladder fmt perf release
+!needs ladder fmt perf vaisdb-scale release

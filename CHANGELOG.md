@@ -4,6 +4,16 @@
 
 ### Changed
 
+- Added the VaisDB scale gate and wired it into the ladder (VaisDB P4,
+  closing the P1-P4 product ladder): scripts/vaisdb-scale-gate.sh builds
+  vaisdb and vaisbench, ingests a deterministic 60-document synthetic
+  corpus (12,180 postings) under a generous ingest budget, budget-checks
+  the rank read path, and spot-checks top-score and stats correctness
+  (captured, since the CLI carries counts in exit codes and pipefail
+  would misread them). gates.tasks gains the vaisdb-scale task (16
+  tasks, ladder chain fmt + perf + vaisdb-scale + release), so index
+  scale regressions now surface as ladder budget breaches.
+
 - Hardened vaisdb ingest against oversized documents (VaisDB P3): a
   streaming word counter (byte-scan tokenization matching the builtin,
   with a map-window guard before every fresh insert) replaces the

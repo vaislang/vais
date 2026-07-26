@@ -1,5 +1,27 @@
 # Vais Worklog
 
+## 2026-07-26k (VaisDB P4 — 스케일 게이트, 제품 래더 P1~P4 종결)
+
+scripts/vaisdb-scale-gate.sh 신설: 결정적 합성 코퍼스(60문서×203고유 =
+포스팅 12,180)로 ingest-dir(예산 20s — 실측 287ms)과 rank 읽기 경로
+(예산 5s, 무매칭 질의로 exit 0 확보) vaisbench 예산 검사 + 정확성 스팟
+(top score 2/stats). gates.tasks 16번째 태스크로 래더 체인 편입(fmt+
+perf+vaisdb-scale+release), workflow parse 15→16, 스테일 주석 정정.
+
+경유 트랩: **CLI exit-as-count 시맨틱 × pipefail** — `stats | grep`이
+매칭에도 실패(stats exit=docs 수). 캡처 비교(`out=$(...)`)로 회피 —
+vaisdb류 exit-프로토콜 도구를 셸 파이프에 넣을 때의 일반 규칙.
+
+**제품 래더 P1~P4 종결**: 이틀 전 스케일 베이스라인이 정의한 병목·즉사
+시나리오 전부 해소·게이트화 — P1 Map 4096(실문서 어휘), P2 디스크-우선
+(인덱스 무제한, 374파일 0.9s), P3 견고성(초대형 스킵·배치 계속, corpus_s
+green), P4 스케일 게이트(회귀 상시 감시). 래더가 새 게이트를 자기 체인에
+포함해 자기검증 통과.
+
+**다음 세션:** VaisDB 기능 확장(수요 주도 — 잔여 후보: 초대형 문서 분할
+ingest/docs 4095 상한/원자적 스냅샷) 또는 Veriqel 방향 정의, 또는 v1.2.0
+릴리스 컷.
+
 ## 2026-07-26j (VaisDB P3 — ingest 견고성: trap 제거 + 배치 계속)
 
 스코프 정련이 핵심이었다: 실측 실패 모드는 "초대형 문서(어휘>4096)가
