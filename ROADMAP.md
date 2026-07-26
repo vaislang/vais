@@ -22,7 +22,26 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26e) — 필드-Str 패밀리 소탕 (e368 인접 완결)
+## 현재 작업 (2026-07-26f) — fuzzing 라운드 8 + 값-정확성 사이클 마감
+모드: 개별선택 (완료까지 자동 진행 — 사용자 지시)
+- [x] 1. 라운드 8 프로브 ✅ 2026-07-26 — 오프셋 민감 표면 8종 × 선행-필드
+      변형 × 양 엔진(격리 포함 22런): call().field 비-0 오프셋/struct-복사
+      read·write/원소 필드 read/중첩 체인/sort_by 키/모듈 경계 struct-
+      return/Result payload 회수 전부 값 정확. **"우연히 정답" 클래스
+      silent 무발견** — e369 가드가 유일 사례였음을 전수로 확증.
+- [x] 2. 발견 처리 ✅ — LOUD 인접 2건(bind-first 패밀리): ① 원소 Str
+      필드 let(`docs[1].title`) → **root-fix**(rhs_los_field_chain_is_str,
+      수집기 2곳 — e368/e369에 이은 3번째 리시버, e370 잠금, 강제-리빌드
+      수렴) ② 인라인 Ok(Struct{Str..}) 리터럴 → 후보 등록(staged e306
+      형태가 verified). 프로브 자기트랩 1건: 멀티라인 match는 front가
+      거부하는 문서화된 경계(문법 오류였음).
+- [x] 3. 사이클 마감 ✅ — **값-정확성 사이클 공식 종결**(silent 무발견
+      전수 확증 + 잔여 전부 LOUD/휴면), v1.1.0 릴리스 컷(CHANGELOG +
+      드라이버 버전), parity 389 실측, 래더 GREEN(LADDER-EXIT 0).
+      제품 전환 핸드오프(WORKLOG). 커밋·태그·머지·푸시 완결.
+진행률: 3/3 (100%) — **사이클 종결, 이후 컴파일러는 수요 주도 모드**
+
+## 직전 완료 (2026-07-26e) — 필드-Str 패밀리 소탕 (e368 인접 완결)
 모드: 개별선택
 - [x] 1. 매트릭스 프로브 ✅ 2026-07-26 — 1단 .len 양 엔진 OK/2단은
       direct만 실패/mut 재대입 양 엔진 OK. 확장 프로브가 **full silent
@@ -838,6 +857,10 @@ generic `Result<T,E>`는 여전히 열지 않는다.
   양 엔진 LOUD(2026-07-26e에서 full은 silent→LOUD로 전환됨). verified
   form = `let o = make()` 후 필드 접근. 수요 시 슬롯 Str 타이핑 +
   inttoptr 배선으로 승격.
+- 인라인 `Ok(Struct { .. })` 리터럴에 Str 필드 포함 시 full LOUD
+  (@VAIS_UNRESOLVED_IDENT — 라운드 8 실측, all-Int 리터럴은 동작).
+  verified form = e306의 staged(`let doc = ...` 후 `Ok(doc)`).
+  수요 시 Result 래퍼 lowering에 Str-필드 리터럴 지원 확장.
 - ~~중첩 리스트 dynamic-row 읽기~~ (완결 2026-07-26c): 행 스위치 데수가
   (행 식 임시 호이스트 + 행별 멀티라인 if 선택 + 범위 밖은 음수-인덱스
   경유 메시지 trap 재사용). e367 잠금(루프 누적/이중 변수 인덱스/조합식/

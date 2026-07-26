@@ -11,7 +11,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define VAIS_VERSION "1.0.1"
+#define VAIS_VERSION "1.1.0"
 #define DIRECT_MAX_STRUCT_FIELDS 64
 #define DIRECT_MAX_STRUCT_LITERAL_FIELDS 64
 #define DIRECT_MAX_FNS 512

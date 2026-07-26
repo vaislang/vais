@@ -2,7 +2,23 @@
 
 ## Unreleased
 
+## v1.1.0 - 2026-07-26
+
 ### Changed
+
+- Fuzzing round 8 swept the "accidentally correct" class (offset-sensitive
+  surfaces probed with preceding heterogeneous fields): call-result and
+  list-element scalar reads, struct-copy read/write, nested chains,
+  sort_by keys, module-boundary struct returns, and Result payload
+  recovery all read exact flat offsets — no silent findings, closing the
+  value-correctness cycle. The sweep's two loud adjacents in the
+  bind-first family: list-element Str field lets (`let t = docs[1].title`)
+  now bind string slots on both engines
+  (examples/e370_list_elem_str_field_let.vais, the third receiver after
+  e368 locals and e369 call results; parity 389), and inline
+  `Ok(Struct { .. })` literals carrying Str fields stay a loud candidate
+  with the staged e306 form (`let doc = ...; return Ok(doc)`) verified.
+  The compiler version string moved to 1.1.0 for this cut.
 
 - Closed the field-access family across both engines. Direct now rewrites
   trailing `.len()` on two-level field paths (`o.mid.tag.len()`) and on

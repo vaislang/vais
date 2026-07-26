@@ -1,5 +1,28 @@
 # Vais Worklog
 
+## 2026-07-26f (라운드 8 + 값-정확성 사이클 종결 — v1.1.0)
+
+**fuzzing 라운드 8**: "우연히 정답" 클래스(오프셋 민감 표면 × 선행-필드
+변형) 전수 — call().field 비-0 오프셋/struct-복사 read·write/원소 필드/
+중첩 체인/sort_by 키/모듈 경계 struct-return/Result payload 회수, 22런
+전부 값 정확. **silent 무발견 = e369 가드가 그 클래스의 유일 사례였음을
+전수로 확증.** LOUD 인접 2건: ① 원소 Str 필드 let → root-fix(rhs_los_
+field_chain_is_str — e368 로컬/e369 call에 이은 bind-first 3번째 리시버,
+e370 잠금) ② 인라인 Ok(Struct{Str..}) → 후보(staged e306형 verified).
+프로브 자기트랩: 멀티라인 match는 front 거부가 정상(문서화된 경계).
+
+**사이클 종결 선언**: 구갭 백로그 0 + 무갭 도구 4연속 + 라운드 6 무발견
+/7 교차무결/8 silent 무발견 — 값-정확성 fuzzing 사이클을 공식 종결한다.
+누적 179프로브. silent 부류는 아크 통산 3건 발견·전부 근절(Str==call/
+call().field/우연히-정답 전수 소거), 잔여 후보는 전부 LOUD(안전) 또는
+휴면. **v1.1.0 릴리스 컷**(CHANGELOG 한 달치 정리 + 드라이버 버전).
+
+**제품 전환 핸드오프**: 다음 세션부터 컴파일러는 수요 주도 모드 —
+VaisDB/Veriqel 제품 개발 진입, 제품이 갭을 만나면 그때 root-fix(잔여
+LOUD 후보 목록이 착수점). 유지 장치: 래더(fmt+release ~22분)/워크플로
+게이트/parity 389/코어 재생성 강제-리빌드 절차/데수가·승격 체크리스트
+선례(memory 참조).
+
 ## 2026-07-26e (필드-접근 패밀리 소탕 — full silent 오값 근절 포함)
 
 e368 인접 소탕이 예상보다 큰 수확: 매트릭스 프로브(1·2단 .len × 위치,

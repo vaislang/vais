@@ -1,0 +1,29 @@
+# expect: 42
+# List<Struct> element Str fields bind through plain lets on both engines
+# (`let t = docs[1].title`), completing the bind-first family across
+# receivers: struct locals (e368), call results (e369), and list elements.
+# Int fields that sit after Str fields keep exact flat offsets, closing the
+# round-8 "accidentally correct" sweep on this surface.
+
+struct Doc { title: Str, body: Str, score: Int }
+
+fn main() -> Int {
+    let docs: List<Doc> = []
+    docs.push(Doc { title: "alpha", body: "b1", score: 3 })
+    docs.push(Doc { title: "beta", body: "b2", score: 8 })
+
+    # Element Str field into a let, then verified string uses.
+    let t = docs[1].title
+    if t != "beta" { return 1 }
+    if t.len() != 4 { return 2 }
+
+    # Offset-shifted Int fields after two Str fields stay exact.
+    if docs[0].score + docs[1].score != 11 { return 3 }
+
+    # Bound values compose across elements.
+    let first = docs[0].title
+    if str_concat(first, t) != "alphabeta" { return 4 }
+
+    # 4 * 8 + 3 + 8 - 1 = 42
+    return t.len() * docs[1].score + docs[0].score + docs[1].score - 1
+}
