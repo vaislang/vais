@@ -1559,16 +1559,11 @@ fn strkey_of(slots: &List<Slot>, src: Str, qs: Int, ql: Int) -> Int {
 }
 # Find the end of an array-literal element: next ',' or the closing ']' (bend).
 fn arr_elem_end(toks: &List<Token>, i: Int, bend: Int) -> Int {
-    let mut j = i
-    let mut go = true
-    while go {
-        if j >= bend { go = false }
-        else {
-            let t = toks[j]
-            if t.kind == 25 { go = false } else { j = j + 1 }
-        }
-    }
-    return j
+    # Depth-aware comma scan: a bare comma stop split struct-literal fields
+    # and array elements at commas inside nested calls (`m.get(i, 0)`),
+    # storing the orphaned tail at flat offset -1 — silently zeroing the
+    # previous element's last field on parameter-list pushes.
+    return arg_comma_end(toks, i, bend)
 }
 # Index just past the matching ']' for the '[' whose contents start at op2.
 fn bracket_end(toks: &List<Token>, op2: Int) -> Int {

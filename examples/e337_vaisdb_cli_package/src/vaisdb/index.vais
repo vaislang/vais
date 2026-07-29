@@ -53,11 +53,54 @@ fn index_reset(index_dir: Str) -> Int {
     return 0
 }
 
+# docs.txt lines are `id<TAB>source-path` (v2); bare-id lines from older
+# indexes still parse (their snippets are simply unavailable). This helper
+# keeps returning ids only, so every caller stays format-agnostic.
 fn docs_list_into(index_dir: Str, out: List<Str>) -> Int {
     let path = index_docs_path(index_dir)
     if fs_exists(path) != 1 { return 0 }
     let text = fs_read_text(path)
-    return str_split_lines_into(text, out)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    let tab = str_byte(9)
+    let mut i = 0
+    let mut pushed = 0
+    while i < n {
+        let parts: List<Str> = []
+        let np = str_split_into(lines[i], tab, parts)
+        if np >= 1 {
+            out.push(parts[0])
+            pushed = pushed + 1
+        }
+        i = i + 1
+    }
+    return pushed
+}
+
+fn doc_src_path(index_dir: Str, doc_id: Str) -> Str {
+    let path = index_docs_path(index_dir)
+    if fs_exists(path) != 1 { return "" }
+    let text = fs_read_text(path)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    let tab = str_byte(9)
+    let mut i = 0
+    while i < n {
+        let parts: List<Str> = []
+        let np = str_split_into(lines[i], tab, parts)
+        if np >= 2 {
+            if parts[0] == doc_id { return parts[1] }
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+fn abs_src_path(p: Str) -> Str {
+    if p.len() == 0 { return "-" }
+    if p == "-" { return "-" }
+    if p[0] == 47 { return p }
+    return path_join(fs_cwd(), p)
 }
 
 fn doc_known(index_dir: Str, doc_id: Str) -> Int {
@@ -124,7 +167,7 @@ fn doc_terms_guarded_into(body: Str, counts: Map<Str,Int>) -> Int {
     return total
 }
 
-fn ingest_doc(index_dir: Str, doc_id: Str, body: Str) -> Int {
+fn ingest_doc(index_dir: Str, doc_id: Str, body: Str, src_path: Str) -> Int {
     let counts: Map<Str,Int> = {}
     let total = doc_terms_guarded_into(body, counts)
     if total < 0 { return 0 - 2 }
@@ -157,7 +200,8 @@ fn ingest_doc(index_dir: Str, doc_id: Str, body: Str) -> Int {
         s = s + 1
     }
     if doc_known(index_dir, doc_id) != 1 {
-        let entry = str_concat(doc_id, lf)
+        let src = abs_src_path(src_path)
+        let entry = str_concat(doc_id, str_concat(tab, str_concat(src, lf)))
         if fs_append_text(index_docs_path(index_dir), entry) != 0 { return 0 - 1 }
     }
     return total
@@ -269,14 +313,22 @@ fn remove_doc(index_dir: Str, doc_id: Str) -> Int {
         }
         s = s + 1
     }
-    let ids: List<Str> = []
-    let count = docs_list_into(index_dir, ids)
+    # Rewrite docs.txt preserving full `id<TAB>path` lines.
+    let docs_text = fs_read_text(index_docs_path(index_dir))
+    let doc_lines: List<Str> = []
+    let count = str_split_lines_into(docs_text, doc_lines)
     let b2 = str_builder_new()
     let mut i = 0
     while i < count {
-        let id = ids[i]
-        if id != doc_id {
-            let ab9 = str_builder_append(b2, id)
+        let entry_line = doc_lines[i]
+        let entry_parts: List<Str> = []
+        let np2 = str_split_into(entry_line, tab, entry_parts)
+        let mut keep_doc = 1
+        if np2 >= 1 {
+            if entry_parts[0] == doc_id { keep_doc = 0 }
+        }
+        if keep_doc == 1 {
+            let ab9 = str_builder_append(b2, entry_line)
             let ab10 = str_builder_append(b2, lf)
         }
         i = i + 1
@@ -306,6 +358,19 @@ fn postings_count(index_dir: Str) -> Int {
     return total
 }
 
+# Indexable text extensions; returns the suffix length to strip for the
+# doc id (0 = not a text document).
+fn text_suffix_len(name: Str) -> Int {
+    if str_ends_with(name, ".txt") == true { return 4 }
+    if str_ends_with(name, ".md") == true { return 3 }
+    if str_ends_with(name, ".vais") == true { return 5 }
+    if str_ends_with(name, ".sh") == true { return 3 }
+    if str_ends_with(name, ".c") == true { return 2 }
+    if str_ends_with(name, ".toml") == true { return 5 }
+    if str_ends_with(name, ".tsv") == true { return 4 }
+    return 0
+}
+
 fn ingest_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
     let names: List<Str> = []
     let count = fs_list_files(dir, names)
@@ -315,10 +380,12 @@ fn ingest_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
     let mut failed = 0
     while i < count {
         let name = names[i]
-        if str_ends_with(name, ".txt") == true {
-            let body = fs_read_text(path_join(dir, name))
-            let doc_id = str_slice(name, 0, name.len() - 4)
-            let total = ingest_doc(index_dir, doc_id, body)
+        let ext = text_suffix_len(name)
+        if ext > 0 {
+            let src = path_join(dir, name)
+            let body = fs_read_text(src)
+            let doc_id = str_slice(name, 0, name.len() - ext)
+            let total = ingest_doc(index_dir, doc_id, body, src)
             if total == 0 - 2 {
                 let w1 = stderr_write("skipped (too large): ")
                 let w2 = stderr_write(doc_id)
@@ -333,6 +400,59 @@ fn ingest_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
         i = i + 1
     }
     if failed == 1 { return Err("could not write index") }
-    if ingested == 0 { return Err("no .txt documents in directory") }
+    if ingested == 0 { return Err("no text documents in directory") }
     return Ok(Str(ingested))
+}
+
+fn utf8_trim(line: Str, limit: Int) -> Str {
+    if line.len() <= limit { return line }
+    let mut end = limit
+    let mut scanning = 1
+    while scanning == 1 {
+        if end <= 0 {
+            scanning = 0
+        } else {
+            let b = line[end]
+            if b >= 128 {
+                if b < 192 { end = end - 1 } else { scanning = 0 }
+            } else {
+                scanning = 0
+            }
+        }
+    }
+    return str_slice(line, 0, end)
+}
+
+# First body line containing any query term, trimmed for display; empty
+# when nothing matches (case-sensitive, substring semantics).
+fn snippet_from_text(body: Str, query: Map<Str,Int>) -> Str {
+    let n = body.len()
+    let qn = query.len()
+    let mut pos = 0
+    while pos < n {
+        let mut le = pos
+        let mut scanning = 1
+        while scanning == 1 {
+            if le >= n {
+                scanning = 0
+            } else if body[le] == 10 {
+                scanning = 0
+            } else {
+                le = le + 1
+            }
+        }
+        if le > pos {
+            let line = str_slice(body, pos, le - pos)
+            let mut qi = 0
+            while qi < qn {
+                let term = query.key_at(qi)
+                if str_contains(line, term) == 1 {
+                    return utf8_trim(str_trim(line), 80)
+                }
+                qi = qi + 1
+            }
+        }
+        pos = le + 1
+    }
+    return ""
 }

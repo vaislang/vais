@@ -1,0 +1,58 @@
+# expect: 42
+# Struct-literal fields built from multi-argument calls survive pushes to
+# List<Struct> parameters on both engines: the core's shared element/field
+# comma scan is depth-aware, so `m.get(i, 0)` or `pick2(i, 7)` inside a
+# pushed literal no longer splits at the inner comma — previously the
+# orphaned tail resolved to flat offset -1 and silently zeroed the previous
+# element's last field (only the final push survived). Array literal
+# elements with multi-argument calls ride the same scan.
+
+struct R { id: Int, score: Int }
+
+fn pick2(v: Int, add: Int) -> Int {
+    return v + add
+}
+
+fn fill_get(out: List<R>, m: Map<Int,Int>) -> Int {
+    let mut i = 0
+    while i < 3 {
+        out.push(R { id: i, score: m.get(i, 0) })
+        i = i + 1
+    }
+    return out.len()
+}
+
+fn fill_call(out: List<R>) -> Int {
+    let mut i = 0
+    while i < 3 {
+        out.push(R { id: i, score: pick2(i, 7) })
+        i = i + 1
+    }
+    return out.len()
+}
+
+fn main() -> Int {
+    let m: Map<Int,Int> = {}
+    m.insert(0, 7)
+    m.insert(1, 8)
+    m.insert(2, 9)
+    let xs: List<R> = []
+    if fill_get(xs, m) != 3 { return 1 }
+    if xs[0].score != 7 { return 2 }
+    if xs[1].score != 8 { return 3 }
+    if xs[2].score != 9 { return 4 }
+
+    let ys: List<R> = []
+    if fill_call(ys) != 3 { return 5 }
+    if ys[0].score != 7 { return 6 }
+    if ys[2].score != 9 { return 7 }
+
+    # Array-literal elements with multi-argument calls share the scan.
+    let zs: List<Int> = [pick2(1, 2), pick2(3, 4), pick2(5, 6)]
+    if zs[0] != 3 { return 8 }
+    if zs[1] != 7 { return 9 }
+    if zs[2] != 11 { return 10 }
+
+    # 7 + 8 + 9 + 3 + 7 + 11 - 3 = 42
+    return xs[0].score + xs[1].score + xs[2].score + zs[0] + zs[1] + zs[2] - 3
+}

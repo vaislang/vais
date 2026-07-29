@@ -1,5 +1,37 @@
 # Vais Worklog
 
+## 2026-07-26l (VaisDB 검색 UX — search+스니펫 + 콤마-스캔 silent 근절)
+
+설계 검토(사용자 요청)가 값었다: 구현 전 검토에서 3개 결정 정정(저장
+경로 절대화/UTF-8 연속바이트 백오프 트림/경고 대신 조용한 생략) — 전부
+실구현에서 유효했다(한글 스니펫 무결 실증).
+
+**인덱스 v2**: docs.txt `id<TAB>절대경로`(stdin `-`). docs_list_into가
+id-only 반환을 유지해 호출부 무수정, 구 bare-id 라인은 스니펫만 생략
+(하위 호환 공짜). 확장자 화이트리스트 7종 — 게이트 픽스처가 구 ".txt만"
+계약을 잠그고 있어(skip.md) 신 계약으로 갱신(skip.bin).
+
+**search**: 순위+경로+첫 매칭 라인(str_trim+UTF-8 백오프 80바이트),
+0점 숨김·노출 순번. repo 실검색 데모: docs/design 인덱스 → 한글 스니펫
+정확 출력, 무매칭 조용히 exit 0.
+
+**최대 수확 — full silent 오값 root-fix**: ranked_docs_into 리팩토링
+(out-param push + 리터럴 필드 m.get(i, 0))이 노출 — IR 실측으로
+`add i64 %tN, -1` orphan store 확정: arr_elem_end가 괄호-비인지 콤마
+정지라 다중 인자 call이 필드를 쪼개고, 미해결 꼬리("0)")가 오프셋 -1에
+store되어 **앞 원소의 마지막 필드를 매 push마다 0으로**(마지막 push만
+생존 — "우연히 정답" 클래스의 사촌: 단일-인자 call은 무사고라 코퍼스
+사각). fix = arg_comma_end(괄호/브래킷/브레이스 3중 깊이) 위임 1줄로
+워커 5사이트(struct 필드 3+배열 원소 1+확진 1) 일괄 치유. e372 잠금
+(map get/2-인자 user fn/배열 원소 call). 격리 사다리: psort(param
+sort ✓)→pget(map get ✗)→pget3(1-인자 ✓)→pget5(2-인자 ✗)가 "다중 인자
+콤마"로 수렴시킴.
+
+parity 391, workflow +5 search 케이스, 래더 GREEN. fs_mtime 수요 등록.
+
+**다음 세션:** 검색기 마감(증분 재인덱스 = fs_mtime 승격) 또는 v1.2.0
+릴리스 컷(제품 래더+검색 UX 묶음).
+
 ## 2026-07-26k (VaisDB P4 — 스케일 게이트, 제품 래더 P1~P4 종결)
 
 scripts/vaisdb-scale-gate.sh 신설: 결정적 합성 코퍼스(60문서×203고유 =

@@ -228,7 +228,7 @@ vdb_docs="$tmp/vaisdb-pkg-docs"
 mkdir -p "$vdb_docs"
 printf 'ai ai ai cache\n' > "$vdb_docs/pd1.txt"
 printf 'ai cache cache\n' > "$vdb_docs/pd2.txt"
-printf 'not ingested\n' > "$vdb_docs/skip.md"
+printf 'not ingested\n' > "$vdb_docs/skip.bin"
 vdb_dir_index="$tmp/vaisdb-pkg-dir-index.txt"
 expect_exit "vaisdb package ingest-dir" 0 "$vdb_dist/bin/vaisdb" ingest-dir "$vdb_dir_index" "$vdb_docs"
 expect_exit "vaisdb package rank" 4 "$vdb_dist/bin/vaisdb" rank "$vdb_dir_index" "ai cache" 2
@@ -483,6 +483,18 @@ expect_exit "vaisdb oversized doc skipped in batch" 0 /bin/sh -c "'$vdb_dist/bin
 expect_exit "vaisdb oversized skip reported on stderr" 0 /bin/sh -c "rm -rf '$huge_idx'; '$vdb_dist/bin/vaisdb' ingest-dir '$huge_idx' '$huge_docs_dir' 2>&1 >/dev/null | grep -q 'skipped (too large): big'"
 expect_exit "vaisdb oversized single ingest rejected" 3 /bin/sh -c "'$vdb_dist/bin/vaisdb' ingest '$huge_idx' big '$huge_docs_dir/big.txt' >/dev/null"
 expect_exit "vaisdb batch survivors queryable" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' stats '$huge_idx' | grep -qx 'docs=2 terms=4'"
+
+search_docs="$tmp/vaisdb-search-docs"
+search_idx="$tmp/vaisdb-search-idx"
+rm -rf "$search_docs" "$search_idx"
+mkdir -p "$search_docs"
+printf 'plain filler line\ncache hit line here\n' > "$search_docs/hits.txt"
+printf 'markdown body without match\n' > "$search_docs/note.md"
+expect_exit "vaisdb search ingest mixed extensions" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' ingest-dir '$search_idx' '$search_docs' | grep -qx 'ingested 2 documents'"
+expect_exit "vaisdb search md doc listed" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' docs '$search_idx' | grep -qx 'note'"
+expect_exit "vaisdb search ranks and snippets" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$search_idx' cache 3 | grep -q '^1\. hits=1 '"
+expect_exit "vaisdb search snippet line" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$search_idx' cache 3 | grep -qx '    cache hit line here'"
+expect_exit "vaisdb search hides zero scores" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$search_idx' zzzabsent 3 | cmp -s - /dev/null"
 
 map_cap_src="$tmp/map-cap-boundary.vais"
 cat > "$map_cap_src" <<'VAIS'

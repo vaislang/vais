@@ -4,6 +4,31 @@
 
 ### Changed
 
+- Turned vaisdb into a usable local search tool: the new
+  `search <index> <query> [k]` subcommand prints ranked hits with source
+  paths and a first-matching-line snippet (whitespace-trimmed, cut at 80
+  bytes with UTF-8 continuation backoff so multibyte text never splits),
+  hiding zero-score documents; docs.txt entries now carry
+  `id<TAB>absolute-source-path` (v2 — bare-id lines from older indexes
+  still parse, their snippets are simply unavailable; stdin ingests store
+  `-`), and ingest-dir accepts a text-extension whitelist
+  (.txt/.md/.vais/.sh/.c/.toml/.tsv) instead of .txt only. Locked by the
+  package self-test (source paths, snippet extraction, UTF-8 trim
+  boundary) and five workflow gate cases; incremental reindexing is
+  recorded as an fs_mtime host-API candidate.
+
+- Fixed a full-engine silent wrong-value bug the search work exposed:
+  the shared element/field comma scan (arr_elem_end) stopped at any
+  comma, so a multi-argument call inside a struct literal pushed to a
+  List parameter (`out.push(R { id: i, score: m.get(i, 0) })`) split at
+  the inner comma and stored the orphaned tail at flat offset -1 —
+  silently zeroing the previous element's last field, with only the
+  final push surviving. The scan now delegates to the depth-aware
+  arg_comma_end (parens, brackets, braces), healing all five walker
+  sites including array literals (regenerated vaisc_core.ll,
+  forced-rebuild convergence). Locked by
+  examples/e372_param_push_call_fields.vais (parity 391).
+
 - Added the VaisDB scale gate and wired it into the ladder (VaisDB P4,
   closing the P1-P4 product ladder): scripts/vaisdb-scale-gate.sh builds
   vaisdb and vaisbench, ingests a deterministic 60-document synthetic

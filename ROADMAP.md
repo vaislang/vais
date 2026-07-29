@@ -22,7 +22,33 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26k) — VaisDB P4: 스케일 게이트 (제품 래더 종결)
+## 현재 작업 (2026-07-26l) — VaisDB 검색 UX: search 서브커맨드 + 스니펫
+모드: 개별선택 (제품화 2기 — 실사용 검색기)
+- [x] 1. 인덱스 v2 ✅ 2026-07-26 — docs.txt `id<TAB>절대경로`(stdin `-`),
+      docs_list_into가 id-only 반환 유지로 호출부 무수정, doc_src_path/
+      abs_src_path 신규, remove 라인 보존 재작성. **구 형식 하위 호환
+      공짜 성립**(bare-id 라인 = 스니펫만 생략).
+- [x] 2. search ✅ — rank + 첫 매칭 라인 스니펫(str_trim + UTF-8 연속
+      바이트 백오프 80바이트 트림), 0점 문서 숨김(재검토 반영: 경고
+      대신 조용한 생략), 순번은 노출 기준. **경유 발견→root-fix: full
+      silent 오값** — arr_elem_end가 괄호-비인지 콤마 정지라 리터럴 필드
+      의 다중 인자 call(`m.get(i, 0)`)이 분리돼 orphan이 플랫 오프셋
+      -1에 store(앞 원소 마지막 필드를 0으로 덮음, 마지막 push만 생존).
+      IR 실측으로 확정, arg_comma_end(3중 깊이) 위임으로 워커 5사이트
+      일괄 치유, e372 잠금(+배열 원소 call). .ll 강제-리빌드 수렴.
+- [x] 3. 확장자 확대 ✅ — 화이트리스트 7종, 게이트 픽스처를 신 계약으로
+      갱신(skip.md→skip.bin — 구 ".txt만" 계약을 잠그던 케이스).
+- [x] 4. 게이트 + 실사용 ✅ — workflow +5 search 케이스 전부 GREEN,
+      repo 실검색 데모(docs/design 인덱스 → 한글 스니펫 UTF-8 정확 출력
+      실증). fs_mtime host API 수요 후보 등록. parity 391 실측(native=
+      391), 래더(fmt+release) GREEN(LADDER-EXIT 0). 커밋·머지·푸시 완결.
+진행률: 4/4 (100%)
+
+### 후보 추가 (검색 스프린트 환류)
+- fs_mtime(path) host API — 증분 재인덱스(변경 문서만) 수요. 현재는
+  remove 후 재인제스트 가이드.
+
+## 직전 완료 (2026-07-26k) — VaisDB P4: 스케일 게이트 (제품 래더 종결)
 모드: 개별선택
 - [x] 1. scripts/vaisdb-scale-gate.sh ✅ 2026-07-26 — 결정적 합성 코퍼스
       (60문서×203고유 = 포스팅 12,180)로 ingest-dir(예산 20s, 실측

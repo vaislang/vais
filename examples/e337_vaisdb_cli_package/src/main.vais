@@ -16,7 +16,7 @@ fn run_ingest(index_dir: Str, doc_id: Str, doc_path: Str) -> Int {
         return 3
     }
     let body = fs_read_text(doc_path)
-    let total = ingest_doc(index_dir, doc_id, body)
+    let total = ingest_doc(index_dir, doc_id, body, doc_path)
     if total == 0 - 2 {
         print("error: document too large")
         return 3
@@ -122,13 +122,72 @@ fn run_rank(index_dir: Str, query_text: Str, k: Int) -> Int {
     return top_doc_score(index_dir, query)
 }
 
+fn run_search(index_dir: Str, query_text: Str, k: Int) -> Int {
+    if index_exists(index_dir) != 1 {
+        print("error: index not found")
+        return 3
+    }
+    let query: Map<Str,Int> = {}
+    let total = doc_terms_guarded_into(query_text, query)
+    if total == 0 - 2 {
+        print("error: query too large")
+        return 1
+    }
+    if total == 0 {
+        print("error: query has no terms")
+        return 1
+    }
+    if k < 1 {
+        print("error: search count must be positive")
+        return 1
+    }
+    let ranked: List<RankedDoc> = []
+    let count = ranked_docs_into(index_dir, query, ranked)
+    if count == 0 {
+        print("error: index has no documents")
+        return 3
+    }
+    let mut limit = k
+    if count < k { limit = count }
+    let mut j = 0
+    let mut shown = 0
+    while j < limit {
+        let hit = ranked[j]
+        if hit.score > 0 {
+            shown = shown + 1
+            let doc_id = hit.doc_id
+            let src = doc_src_path(index_dir, doc_id)
+            let mut line = str_concat(Str(shown), str_concat(". ", str_concat(doc_id, str_concat("=", Str(hit.score)))))
+            if src != "" {
+                if src != "-" {
+                    line = str_concat(line, str_concat(" ", src))
+                }
+            }
+            print(line)
+            if src != "" {
+                if src != "-" {
+                    if fs_exists(src) == 1 {
+                        let body = fs_read_text(src)
+                        let sn = snippet_from_text(body, query)
+                        if sn.len() > 0 {
+                            print(str_concat("    ", sn))
+                        }
+                    }
+                }
+            }
+        }
+        j = j + 1
+    }
+    return ranked[0].score
+}
+
 fn run_ingest_stdin(index_dir: Str, doc_id: Str) -> Int {
     let body = stdin_read_all()
     if body.len() == 0 {
         print("error: empty stdin document")
         return 1
     }
-    let total = ingest_doc(index_dir, doc_id, body)
+    let total = ingest_doc(index_dir, doc_id, body, "-")
     if total == 0 - 2 {
         print("error: document too large")
         return 3
@@ -195,6 +254,7 @@ fn usage() -> Int {
     print("       vaisdb report <index> <query-text>")
     print("       vaisdb ingest-dir <index> <doc-dir>")
     print("       vaisdb rank <index> <query-text> <k>")
+    print("       vaisdb search <index> <query-text> [k]")
     print("       vaisdb ingest-stdin <index> <doc-id>")
     print("       vaisdb docs <index>")
     print("       vaisdb remove <index> <doc-id>")
@@ -207,8 +267,8 @@ fn self_test() -> Int {
     let dir = path_join(root, "vais-e337-selftest-index")
     index_reset(dir)
 
-    let d1_total = ingest_doc(dir, "d1", "ai ai ai cache")
-    let d2_total = ingest_doc(dir, "d2", "ai cache cache")
+    let d1_total = ingest_doc(dir, "d1", "ai ai ai cache", "-")
+    let d2_total = ingest_doc(dir, "d2", "ai cache cache", "-")
     if d1_total != 4 { return 1 }
     if d2_total != 3 { return 2 }
     if index_exists(dir) != 1 { return 3 }
@@ -250,6 +310,37 @@ fn self_test() -> Int {
     if ids2.contains("d2") == true { return 18 }
     if remove_doc(dir, "ghost") != 0 { return 19 }
 
+    # v2 docs entries carry source paths; stdin ingests store `-`.
+    if doc_src_path(dir, "d1") != "-" { return 27 }
+    let d3_src = doc_src_path(dir, "d3")
+    if str_ends_with(d3_src, "d3.txt") != true { return 28 }
+
+    # Snippet extraction: first matching line, trimmed; empty on no match.
+    let lf2 = str_byte(10)
+    let sbody = str_concat("plain line", str_concat(lf2, str_concat("cache hit line", lf2)))
+    let sq: Map<Str,Int> = {}
+    let sq_total = doc_terms_guarded_into("cache", sq)
+    if sq_total != 1 { return 29 }
+    if snippet_from_text(sbody, sq) != "cache hit line" { return 30 }
+    let nomatch: Map<Str,Int> = {}
+    let nm_total = doc_terms_guarded_into("zzz", nomatch)
+    if nm_total != 1 { return 33 }
+    if snippet_from_text(sbody, nomatch) != "" { return 31 }
+
+    # UTF-8 trim backs off a continuation byte split at the limit.
+    let two = str_concat(str_byte(196), str_byte(145))
+    let bpad = str_builder_new()
+    let mut bi = 0
+    while bi < 79 {
+        let bp = str_builder_append(bpad, "x")
+        bi = bi + 1
+    }
+    let bp2 = str_builder_append(bpad, two)
+    let padded = str_builder_finish(bpad)
+    if padded.len() != 81 { return 34 }
+    let trimmed = utf8_trim(padded, 80)
+    if trimmed.len() != 79 { return 32 }
+
     # The guarded counter matches builtin tokenization on small bodies.
     let eq: Map<Str,Int> = {}
     if doc_terms_guarded_into("ai ai ai cache", eq) != 4 { return 25 }
@@ -267,7 +358,7 @@ fn self_test() -> Int {
     let big = str_builder_finish(bb)
     let probe: Map<Str,Int> = {}
     if doc_terms_guarded_into(big, probe) != 0 - 2 { return 22 }
-    if ingest_doc(dir, "huge", big) != 0 - 2 { return 23 }
+    if ingest_doc(dir, "huge", big, "-") != 0 - 2 { return 23 }
     let ids3: List<Str> = []
     if docs_list_into(dir, ids3) != 2 { return 24 }
 
@@ -297,6 +388,11 @@ fn main() -> Int {
     if command == "rank" {
         if proc_argc() != 4 { return usage() }
         return run_rank(proc_arg(1), proc_arg(2), parse_int(proc_arg(3)))
+    }
+    if command == "search" {
+        if proc_argc() == 3 { return run_search(proc_arg(1), proc_arg(2), 5) }
+        if proc_argc() == 4 { return run_search(proc_arg(1), proc_arg(2), parse_int(proc_arg(3))) }
+        return usage()
     }
     if command == "ingest-stdin" {
         if proc_argc() != 3 { return usage() }

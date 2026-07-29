@@ -322,6 +322,8 @@ chains, call-result field reads, and mut Str-field rebinding,
 lets and offset-shifted Int fields after Str fields,
 `examples/e371_map_capacity_contract.vais` for the 4096-entry map capacity
 contract with converted-Int string keys stored as copies,
+`examples/e372_param_push_call_fields.vais` for multi-argument call fields
+in literals pushed to list parameters via the depth-aware comma scan,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between
