@@ -343,6 +343,10 @@ on both engines,
 methods (`s.has(x)`, `s.trim().lower()`, `path.read()`, and friends
 lowering to the existing builtins with postfix-chain receivers on both
 engines),
+`examples/e379_collect_methods.vais` for return-value collection methods
+(`let xs = body.lines()`, `for x in csv.split(",") { ... }`, `dir.files()`,
+`dir.dirs()` lowering to the `*_into` out-param calls with injected temp
+lists on both engines),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

@@ -1,0 +1,60 @@
+# expect: 42
+# Return-value collection methods (Token-Density Stage 2b): the `*_into`
+# out-param family gains method spellings that read as return values in two
+# statement shapes on both engines. `let xs = recv.lines()` (and
+# .split(sep), .files(), .dirs()) lowers in the shared driver pass to the
+# empty-list declaration plus the existing out-param call
+# (str_split_lines_into / str_split_into / fs_list_files / fs_list_dirs)
+# with the count landing in a discard local, and `for x in recv.lines() {`
+# lowers to a fresh temp list plus the same call before the for-each head.
+# The 4095 fixed-list contract is unchanged, and a collect method in any
+# other position is a loud front error ("collection method needs a let
+# binding or a for-in head").
+
+fn main() -> Int {
+    let body = "alpha\nbeta\ngamma"
+    let lines = body.lines()
+    if lines.len() != 3 { return 1 }
+    if lines[1] != "beta" { return 2 }
+
+    # The bound list is a normal List<Str>: mut bindings keep mutating.
+    let csv = "a,b,c,d"
+    let mut cells = csv.split(",")
+    if cells.len() != 4 { return 3 }
+    cells.push("e")
+    if cells.len() != 5 { return 4 }
+
+    # Directory listings through the same spelling.
+    let dir = path_join(fs_temp_dir(), "vais-e379")
+    if fs_mkdirs(path_join(dir, "sub")) != 0 { return 5 }
+    let one = path_join(dir, "one.txt")
+    let two = path_join(dir, "two.txt")
+    if one.write("cache") != 0 { return 6 }
+    if two.write("cache") != 0 { return 7 }
+    let names = dir.files()
+    if names.len() < 2 { return 8 }
+    let subs = dir.dirs()
+    if subs.len() < 1 { return 9 }
+
+    # For-in heads consume the collection directly.
+    let mut hits = 0
+    for line in body.lines() {
+        if line.has("a") { hits += 1 }
+    }
+    if hits != 3 { return 10 }
+    let pair = "x;y"
+    let mut joined = ""
+    for cell in pair.split(";") {
+        joined = f"{joined}[{cell}]"
+    }
+    if joined != "[x][y]" { return 11 }
+
+    # Receiver chains from Stage 2a compose with collect methods.
+    let raw = " A,B "
+    let cleaned = raw.trim().split(",")
+    if cleaned.len() != 2 { return 12 }
+    if cleaned[0].lower() != "a" { return 13 }
+
+    # 3 lines * 4 original cells * 3 hits + 2 + 4 = 42.
+    return lines.len() * 4 * hits + 2 + 4
+}

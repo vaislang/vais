@@ -8110,6 +8110,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "compound_assign") == 1 { return write_compound_assign_accept(path) }
     if str_eq(name, "bool_predicate") == 1 { return write_bool_predicate_accept(path) }
     if str_eq(name, "str_method") == 1 { return write_str_method_accept(path) }
+    if str_eq(name, "collect_method") == 1 { return write_collect_method_accept(path) }
     if str_eq(name, "day1") == 1 { return write_day1(path) }
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
     if str_eq(name, "io") == 1 { return write_io_accept(path) }
@@ -9063,6 +9064,37 @@ fn write_str_method_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_collect_method_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let body = \"alpha\\nbeta\"")
+    append_line(out, "    let lines = body.lines()")
+    append_line(out, "    if lines.len() != 2 { return 1 }")
+    append_line(out, "    if lines[1] != \"beta\" { return 2 }")
+    append_line(out, "    let csv = \"a,b,c\"")
+    append_line(out, "    let mut cells = csv.split(\",\")")
+    append_line(out, "    if cells.len() != 3 { return 3 }")
+    append_line(out, "    cells.push(\"d\")")
+    append_line(out, "    let mut hits = 0")
+    append_line(out, "    for line in body.lines() {")
+    append_line(out, "        if line.has(\"a\") { hits += 1 }")
+    append_line(out, "    }")
+    append_line(out, "    if hits != 2 { return 4 }")
+    append_line(out, "    return 34 + cells.len() * hits")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_collect_method_position_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let body = \"a\\nb\"")
+    append_line(out, "    if body.lines().len() != 2 { return 1 }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_str_method_literal_receiver_bad(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -9164,6 +9196,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "char_escape_unknown") == 1 { return write_char_escape_bad(path) }
     if str_eq(name, "compound_assign_call_lhs") == 1 { return write_compound_assign_call_lhs_bad(path) }
     if str_eq(name, "str_method_literal_receiver") == 1 { return write_str_method_literal_receiver_bad(path) }
+    if str_eq(name, "collect_method_position") == 1 { return write_collect_method_position_bad(path) }
     if str_eq(name, "fstring_empty_hole") == 1 { return write_fstring_empty_hole_bad(path) }
     if str_eq(name, "fstring_lone_brace") == 1 { return write_fstring_lone_brace_bad(path) }
     if str_eq(name, "fstring_open_hole") == 1 { return write_fstring_open_hole_bad(path) }
@@ -9717,6 +9750,8 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "bool_predicate", "accepts bare predicate conditions and for accumulation idioms (=42)", 42)
     fail = fail + expect_accept(vaisc, tmp, "str_method", "accepts Str receiver method chains (=42)", 42)
     fail = fail + expect_reject(vaisc, tmp, "str_method_literal_receiver", "method receiver is not a lowerable postfix chain", "", "bind the receiver")
+    fail = fail + expect_accept(vaisc, tmp, "collect_method", "accepts return-value collection method bindings and for-in heads (=42)", 42)
+    fail = fail + expect_reject(vaisc, tmp, "collect_method_position", "collection method needs a let binding or a for-in head", "", "other positions")
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/clear/len/is_empty/last/pop/sum", "", "plain function call")
     fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)

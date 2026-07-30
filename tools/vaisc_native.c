@@ -18578,6 +18578,251 @@ static char *lower_str_method_text(const char *text) {
     return sb_take(&out);
 }
 
+/* Stage 2b return-value collection desugar: the `*_into` out-param family
+ * gains method spellings that read as return values in two statement
+ * shapes. `let [mut] NAME = RECV.lines()` (and .split(sep), .files(),
+ * .dirs()) lowers to
+ *     let [mut] NAME: List<Str> = []
+ *     let vais_collect_K = str_split_lines_into(RECV, NAME)
+ * and `for VAR in RECV.lines() {` lowers to a fresh temp list plus the
+ * same call before the for-each head. The out list is appended as the
+ * final argument, the Int count lands in a discard local, and the 4095
+ * fixed-list contract is unchanged. Set-name methods in any other
+ * position stay unlowered for the front check to reject loudly. */
+typedef struct {
+    const char *method;
+    const char *builtin;
+} CollectMethodMapEntry;
+
+static const CollectMethodMapEntry COLLECT_METHOD_MAP[] = {
+    {"lines", "str_split_lines_into"},
+    {"split", "str_split_into"},
+    {"files", "fs_list_files"},
+    {"dirs", "fs_list_dirs"},
+};
+
+static int collect_method_lookup(const char *name, size_t len) {
+    for (size_t k = 0; k < sizeof(COLLECT_METHOD_MAP) / sizeof(COLLECT_METHOD_MAP[0]); k++) {
+        if (strlen(COLLECT_METHOD_MAP[k].method) == len &&
+            strncmp(COLLECT_METHOD_MAP[k].method, name, len) == 0) {
+            return (int)k;
+        }
+    }
+    return -1;
+}
+
+/* Find the last top-level `.method(` from the collect set inside expr;
+ * returns the map index and stores the dot position and the matching
+ * close-paren position, requiring only whitespace after the close. */
+static int collect_method_tail(const char *expr, size_t *dot_out, size_t *open_out, int *close_out) {
+    char delim = '\0';
+    int best = -1;
+    size_t best_dot = 0;
+    size_t best_open = 0;
+    int best_close = -1;
+    for (size_t i = 0; expr[i] != '\0'; i++) {
+        char c = expr[i];
+        if (delim == '"') {
+            if (c == '\\' && expr[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '\'') {
+            int end = skip_char_literal_c(expr, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if (c == '.' && i > 0 && expr[i - 1] != '.' && expr[i + 1] != '.') {
+            size_t ns = i + 1;
+            size_t j = ns;
+            while (is_ident_continue(expr[j])) j++;
+            if (j > ns && expr[j] == '(') {
+                int idx = collect_method_lookup(expr + ns, j - ns);
+                if (idx >= 0) {
+                    int close = find_matching_paren_c(expr, (int)j);
+                    if (close >= 0) {
+                        /* the full-path normalizer terminates statements
+                         * with `;`, so accept an optional trailing one */
+                        const char *tail = skip_ws(expr + close + 1);
+                        if (*tail == ';') tail = skip_ws(tail + 1);
+                        if (*tail == '\0') {
+                            best = idx;
+                            best_dot = i;
+                            best_open = j;
+                            best_close = close;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (best >= 0) {
+        *dot_out = best_dot;
+        *open_out = best_open;
+        *close_out = best_close;
+    }
+    return best;
+}
+
+static void collect_emit_call(StrBuf *out, int map_idx, const char *recv, const char *args, const char *out_name, int counter) {
+    sb_append(out, "let vais_collect_");
+    char num[32];
+    snprintf(num, sizeof(num), "%d", counter);
+    sb_append(out, num);
+    sb_append(out, " = ");
+    sb_append(out, COLLECT_METHOD_MAP[map_idx].builtin);
+    sb_append(out, "(");
+    sb_append(out, recv);
+    if (args[0] != '\0') {
+        sb_append(out, ", ");
+        sb_append(out, args);
+    }
+    sb_append(out, ", ");
+    sb_append(out, out_name);
+    sb_append(out, ")");
+}
+
+static char *lower_collect_method_line(const char *line, int *counter) {
+    const char *p = skip_ws(line);
+    size_t indent_len = (size_t)(p - line);
+
+    if (starts_with(p, "let ") ) {
+        const char *q = skip_ws(p + 4);
+        int is_mut = 0;
+        if (starts_with(q, "mut ")) {
+            is_mut = 1;
+            q = skip_ws(q + 4);
+        }
+        const char *name_start = q;
+        while (is_ident_continue(*q)) q++;
+        if (q == name_start) return NULL;
+        size_t name_len = (size_t)(q - name_start);
+        const char *r = skip_ws(q);
+        if (*r == ':') {
+            r++;
+            while (*r != '\0' && *r != '=') r++;
+        }
+        if (*r != '=') return NULL;
+        const char *expr = skip_ws(r + 1);
+        size_t dot = 0, open = 0;
+        int close = -1;
+        int idx = collect_method_tail(expr, &dot, &open, &close);
+        if (idx < 0 || dot == 0) return NULL;
+        char *recv = substr_copy(expr, dot);
+        char *trimmed_recv = trim_copy(recv);
+        free(recv);
+        char *args_raw = substr_copy(expr + open + 1, (size_t)(close - 1) - open);
+        char *args = trim_copy(args_raw);
+        free(args_raw);
+        char *name = substr_copy(name_start, name_len);
+        *counter += 1;
+        StrBuf out;
+        sb_init(&out);
+        sb_append_n(&out, line, indent_len);
+        sb_append(&out, "let ");
+        if (is_mut) sb_append(&out, "mut ");
+        sb_append(&out, name);
+        sb_append(&out, ": List<Str> = []\n");
+        sb_append_n(&out, line, indent_len);
+        collect_emit_call(&out, idx, trimmed_recv, args, name, *counter);
+        free(trimmed_recv);
+        free(args);
+        free(name);
+        return sb_take(&out);
+    }
+
+    if (starts_with(p, "for ")) {
+        const char *q = skip_ws(p + 4);
+        const char *var_start = q;
+        while (is_ident_continue(*q)) q++;
+        if (q == var_start) return NULL;
+        size_t var_len = (size_t)(q - var_start);
+        const char *r = skip_ws(q);
+        if (!starts_with(r, "in ")) return NULL;
+        const char *expr = skip_ws(r + 3);
+        const char *brace = strrchr(expr, '{');
+        if (brace == NULL) return NULL;
+        char *head = substr_copy(expr, (size_t)(brace - expr));
+        char *head_trimmed = trim_copy(head);
+        free(head);
+        size_t dot = 0, open = 0;
+        int close = -1;
+        int idx = collect_method_tail(head_trimmed, &dot, &open, &close);
+        if (idx < 0 || dot == 0) {
+            free(head_trimmed);
+            return NULL;
+        }
+        char *recv = substr_copy(head_trimmed, dot);
+        char *trimmed_recv = trim_copy(recv);
+        free(recv);
+        char *args_raw = substr_copy(head_trimmed + open + 1, (size_t)(close - 1) - open);
+        char *args = trim_copy(args_raw);
+        free(args_raw);
+        free(head_trimmed);
+        *counter += 1;
+        char list_name[48];
+        snprintf(list_name, sizeof(list_name), "vais_collect_list_%d", *counter);
+        StrBuf out;
+        sb_init(&out);
+        sb_append_n(&out, line, indent_len);
+        sb_append(&out, "let ");
+        sb_append(&out, list_name);
+        sb_append(&out, ": List<Str> = []\n");
+        sb_append_n(&out, line, indent_len);
+        collect_emit_call(&out, idx, trimmed_recv, args, list_name, *counter);
+        sb_append(&out, "\n");
+        sb_append_n(&out, line, indent_len);
+        sb_append(&out, "for ");
+        sb_append_n(&out, var_start, var_len);
+        sb_append(&out, " in ");
+        sb_append(&out, list_name);
+        sb_append(&out, " ");
+        sb_append(&out, brace);
+        free(trimmed_recv);
+        free(args);
+        return sb_take(&out);
+    }
+
+    return NULL;
+}
+
+static char *lower_collect_method_text(const char *text) {
+    StrBuf out;
+    sb_init(&out);
+    int counter = 0;
+    const char *line = text;
+    for (;;) {
+        const char *end = strchr(line, '\n');
+        size_t len = end == NULL ? strlen(line) : (size_t)(end - line);
+        char *one = substr_copy(line, len);
+        char *rewritten = lower_collect_method_line(one, &counter);
+        if (rewritten != NULL) {
+            sb_append(&out, rewritten);
+            free(rewritten);
+        } else {
+            sb_append(&out, one);
+        }
+        free(one);
+        if (end == NULL) break;
+        sb_append(&out, "\n");
+        line = end + 1;
+    }
+    return sb_take(&out);
+}
+
 /* Stage 1c compound-assign desugar: `place += expr` (and -=, *=, /=, %=)
  * lowers to `place = place + (expr)` in the shared pipeline, so both engines
  * keep their single assignment lowering and the parenthesized right side
@@ -18839,8 +19084,10 @@ static char *prepare_source_text(const char *raw) {
     free(normalized_presplit);
     char *str_method_lowered = lower_str_method_text(fstring_lowered);
     free(fstring_lowered);
-    char *compound_lowered = lower_compound_assign_text(str_method_lowered);
+    char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
+    char *compound_lowered = lower_compound_assign_text(collect_lowered);
+    free(collect_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -18865,6 +19112,10 @@ static char *prepare_source_text(const char *raw) {
     free(tuple_lowered);
     free(method_lowered);
     free(generic_lowered);
+    /* Debug aid: dump the fully lowered source the core will compile. */
+    if (prepared != NULL && getenv("VAISC_DUMP_PREPARED") != NULL) {
+        fputs(prepared, stderr);
+    }
     return prepared;
 }
 
@@ -19658,6 +19909,55 @@ static int front_check_string_escape_line(const char *path, int line_no, const c
     return issues;
 }
 
+/* Front check: the return-value collection lowering rewrites the two
+ * supported statement shapes away before this loop runs, so a surviving
+ * collect-set method call sits in an unsupported position; report it. */
+static int front_check_collect_method_line(const char *path, int line_no, const char *line) {
+    int issues = 0;
+    char delim = '\0';
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if (c == '.' && i > 0 && line[i - 1] != '.' && line[i + 1] != '.') {
+            size_t ns = i + 1;
+            size_t j = ns;
+            while (is_ident_continue(line[j])) j++;
+            if (j > ns && line[j] == '(' && collect_method_lookup(line + ns, j - ns) >= 0) {
+                report_issue(path, line_no, (int)i + 2, line,
+                    "collection method needs a let binding or a for-in head",
+                    "write `let xs = recv.lines()` or `for x in recv.lines() { ... }`; other positions are not lowered.",
+                    NULL);
+                issues++;
+                i = j;
+            }
+        }
+    }
+    return issues;
+}
+
 /* Front check: the receiver-method lowering pass rewrites every lowerable
  * `recv.method(...)` spelling from the curated Str/fs set away before this
  * loop runs, so a surviving set-name method call has a receiver the scan
@@ -20306,6 +20606,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         issues += front_check_fstring_line(path, line_no, line);
         issues += front_check_compound_assign_line(path, line_no, line);
         issues += front_check_str_method_line(path, line_no, line);
+        issues += front_check_collect_method_line(path, line_no, line);
         {
             const char *eq = strstr(probe, "= if ");
             if (eq != NULL) {
@@ -21874,8 +22175,10 @@ static char *prepare_source_file(const char *path) {
     free(normalized_presplit);
     char *str_method_lowered = lower_str_method_text(fstring_lowered);
     free(fstring_lowered);
-    char *compound_lowered = lower_compound_assign_text(str_method_lowered);
+    char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
+    char *compound_lowered = lower_compound_assign_text(collect_lowered);
+    free(collect_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -21914,6 +22217,10 @@ static char *prepare_source_file(const char *path) {
     free(tuple_lowered);
     free(method_lowered);
     free(generic_lowered);
+    /* Debug aid: dump the fully lowered source the core will compile. */
+    if (prepared != NULL && getenv("VAISC_DUMP_PREPARED") != NULL) {
+        fputs(prepared, stderr);
+    }
     return prepared;
 }
 
@@ -34389,8 +34696,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *str_method_lowered = lower_str_method_text(fstring_lowered);
     free(fstring_lowered);
     if (str_method_lowered == NULL) return 1;
-    char *compound_lowered = lower_compound_assign_text(str_method_lowered);
+    char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
+    if (collect_lowered == NULL) return 1;
+    char *compound_lowered = lower_compound_assign_text(collect_lowered);
+    free(collect_lowered);
     if (compound_lowered == NULL) return 1;
     char *split = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);

@@ -1784,6 +1784,14 @@ Verified today:
   iteratively, and a receiver containing a string literal is a loud front
   error ("method receiver is not a lowerable postfix chain") instead of a
   partial lowering. The function spellings keep working unchanged.
+- Return-value collection methods: `recv.lines()`, `recv.split(sep)`,
+  `dir.files()`, and `dir.dirs()` read as return values in two statement
+  shapes — `let [mut] name = recv.lines()` and `for x in recv.lines() {`
+  — lowering in the shared driver pass to the existing `*_into` out-param
+  calls with an injected empty list and a discarded count local
+  (`examples/e379_collect_methods.vais`). The 4095 fixed-list contract is
+  unchanged, and a collect method in any other position is a loud front
+  error ("collection method needs a let binding or a for-in head").
 - Bare predicate conditions: the Int(1/0) predicate builtins
   (`str_contains`, `str_starts_with`, `str_ends_with`, `fs_exists`,
   `fs_is_dir`) and container predicate methods (`List.contains`,

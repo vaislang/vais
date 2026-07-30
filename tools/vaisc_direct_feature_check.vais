@@ -7622,6 +7622,27 @@ fn write_list_else_if_hoist(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_collect_methods(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let body = \"alpha\\nbeta\"")
+    append_line(out, "    let lines = body.lines()")
+    append_line(out, "    if lines.len() != 2 { return 1 }")
+    append_line(out, "    if lines[1] != \"beta\" { return 2 }")
+    append_line(out, "    let csv = \"a,b,c\"")
+    append_line(out, "    let mut cells = csv.split(\",\")")
+    append_line(out, "    if cells.len() != 3 { return 3 }")
+    append_line(out, "    cells.push(\"d\")")
+    append_line(out, "    let mut hits = 0")
+    append_line(out, "    for line in body.lines() {")
+    append_line(out, "        if line.has(\"a\") { hits += 1 }")
+    append_line(out, "    }")
+    append_line(out, "    if hits != 2 { return 4 }")
+    append_line(out, "    return 34 + cells.len() * hits")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_str_receiver_methods(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -7815,6 +7836,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "map_str_str_get_opt_transform_len") == 1 { wrote = write_map_str_str_get_opt_transform_len(src) }
     else if str_contains(name, "str_len_reassigned_match_transform") == 1 { wrote = write_str_len_reassigned_match_transform(src) }
     else if str_contains(name, "map_str_str_get_opt_str_transforms") == 1 { wrote = write_map_str_str_get_opt_str_transforms(src) }
+    else if str_contains(name, "collect_methods") == 1 { wrote = write_collect_methods(src) }
     else if str_contains(name, "str_receiver_methods") == 1 { wrote = write_str_receiver_methods(src) }
     else if str_contains(name, "bool_predicate_conditions") == 1 { wrote = write_bool_predicate_conditions(src) }
     else if str_contains(name, "compound_assign_places") == 1 { wrote = write_compound_assign_places(src) }
@@ -8070,6 +8092,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "__vais_str_contains(") and str_contains(text, "br i1")
     } else if shape == 238 {
         ok = str_contains(text, "__vais_str_trim") and str_contains(text, "__vais_str_lower") and str_contains(text, "__vais_str_contains")
+    } else if shape == 239 {
+        ok = str_contains(text, "__vais_str_split_lines_into") and str_contains(text, "__vais_str_split_into")
     } else if shape == 2 {
         ok = str_contains(text, " br ")
     } else if shape == 3 {
@@ -9059,5 +9083,6 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "compound_assign_places", "direct compound assignment lowers over locals, list indexes, and struct fields (=42)", 236)
     fail = fail + expect_case(vaisc, tmp, "bool_predicate_conditions", "direct bare predicate conditions and for accumulation idioms run (=42)", 237)
     fail = fail + expect_case(vaisc, tmp, "str_receiver_methods", "direct Str receiver method chains lower to shared builtin calls (=42)", 238)
+    fail = fail + expect_case(vaisc, tmp, "collect_methods", "direct return-value collection methods lower to *_into calls with temp lists (=42)", 239)
     return fail
 }

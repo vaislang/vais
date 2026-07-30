@@ -4,6 +4,24 @@
 
 ### Changed
 
+- Promoted return-value collection methods as verified surface
+  (Token-Density Stage 2b, docs/design/TOKEN-DENSITY.md): the `*_into`
+  out-param family gains method spellings that read as return values in
+  two statement shapes — `let [mut] name = recv.lines()` (and
+  .split(sep), dir.files(), dir.dirs()) lowers in the shared driver pass
+  to the empty-list declaration plus the existing out-param call
+  (str_split_lines_into / str_split_into / fs_list_files /
+  fs_list_dirs) with the count in a discard local, and
+  `for x in recv.lines() {` injects a fresh temp list before the
+  for-each head. The full-path normalizer's trailing-semicolon form is
+  handled, the 4095 fixed-list contract is unchanged, and a collect
+  method in any other position is a loud front error ("collection
+  method needs a let binding or a for-in head"). Adds a
+  VAISC_DUMP_PREPARED debug env that dumps the fully lowered source the
+  core compiles. Locked by examples/e379_collect_methods.vais (parity
+  native-supported), a front accept fixture plus a position reject
+  fixture, and direct feature shape 239.
+
 - Promoted Str/fs receiver methods as verified surface (Token-Density
   Stage 2a, docs/design/TOKEN-DENSITY.md): a curated method set lowers
   in the shared driver pass to the existing builtins — s.has(x) /
