@@ -324,6 +324,21 @@ lets and offset-shifted Int fields after Str fields,
 contract with converted-Int string keys stored as copies,
 `examples/e372_param_push_call_fields.vais` for multi-argument call fields
 in literals pushed to list parameters via the depth-aware comma scan,
+`examples/e373_fs_mtime_read.vais` for total epoch-second modification
+stamps through `fs_mtime`,
+`examples/e374_string_escapes.vais` for verified string and char escapes
+(`\n`, `\t`, `\r`, `\"`, `\\`, and `'\''`) decoding to real bytes on both
+engines with newline split and file round-trips,
+`examples/e375_string_interpolation.vais` for f-string interpolation
+(`f"{expr}..."` lowering to `str_concat`/`Str(...)` chains with Int and Str
+holes, literal `{{`/`}}` braces, and escape interplay on both engines),
+`examples/e376_compound_assign.vais` for compound assignment on plain
+places (`+=`, `-=`, `*=`, `/=`, `%=` lowering to `place = place op (expr)`
+over locals, list indexes, and struct fields on both engines),
+`examples/e377_bool_predicate_conditions.vais` for bare predicate
+conditions (`if str_contains(...)` without `== 1`, `not`/`and`/`or`
+chains, container predicates) and range-for/for-each accumulation idioms
+on both engines,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

@@ -1,0 +1,62 @@
+# expect: 42
+# Bare predicate conditions and loop idioms (Token-Density Stage 1d): the
+# Int(1/0) predicate builtins and container predicate methods sit directly in
+# `if`/`while` conditions, under `not`, and inside `and`/`or` chains on both
+# engines — the `== 1` spelling is no longer needed. Covered here:
+# str_contains / str_starts_with / str_ends_with / fs_exists, List contains /
+# is_empty, Map contains, predicate results bound to bare-condition locals,
+# range `for` and for-each accumulation with compound assignment, and
+# f-string accumulation in a for-each body.
+
+fn main() -> Int {
+    let a = "alpha.txt"
+    if str_contains(a, "alpha") { } else { return 1 }
+    if str_ends_with(a, ".txt") { } else { return 2 }
+    if not str_contains(a, "zzz") { } else { return 3 }
+    if str_contains(a, "alp") and str_ends_with(a, "txt") { } else { return 4 }
+    if str_contains(a, "zzz") or str_starts_with(a, "alpha") { } else { return 5 }
+    if fs_exists("/no/such/path/vais-e377") { return 6 }
+
+    # A predicate result bound to a local is itself a bare condition.
+    let ok = str_contains(a, "alpha")
+    if ok { } else { return 7 }
+
+    # Bare predicates drive while loops together with comparisons.
+    let mut hits = 0
+    while str_contains(a, "alpha") and hits < 3 { hits += 1 }
+    if hits != 3 { return 8 }
+
+    # Container predicates in bare conditions.
+    let xs: List<Int> = [3, 5, 7]
+    if xs.contains(5) { } else { return 9 }
+    if not xs.is_empty() { } else { return 10 }
+    let empty: List<Int> = []
+    if empty.is_empty() { } else { return 11 }
+    let m: Map<Str,Int> = {}
+    m.insert("k", 1)
+    if m.contains("k") { } else { return 12 }
+    let words: List<Str> = ["alpha", "beta"]
+    if words.contains("beta") { } else { return 13 }
+
+    # Range for and for-each with compound assignment.
+    let mut total = 0
+    for i in 0..3 {
+        total += xs[i]
+    }
+    if total != 15 { return 14 }
+    let mut sum = 0
+    for x in xs {
+        sum += x
+    }
+    if sum != 15 { return 15 }
+
+    # f-string accumulation over a Str for-each.
+    let mut joined = ""
+    for w in words {
+        joined = f"{joined}{w};"
+    }
+    if joined != "alpha;beta;" { return 16 }
+
+    # 15 + 15 + 3*4 = 42.
+    return total + sum + hits * 4
+}

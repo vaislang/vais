@@ -4,6 +4,90 @@
 
 ### Changed
 
+- Verified bare predicate conditions and loop accumulation idioms
+  (Token-Density Stage 1d, docs/design/TOKEN-DENSITY.md): the Int(1/0)
+  predicate builtins (str_contains / str_starts_with / str_ends_with /
+  fs_exists / fs_is_dir) and container predicate methods (List contains /
+  is_empty, Map contains) sit directly in `if`/`while` conditions, under
+  `not`, and inside `and`/`or` chains on both engines, a predicate result
+  bound to a local is itself a bare condition, and range `for` /
+  for-each bodies compose with compound assignment and f-string
+  accumulation. The surface already ran on both engines — this promotion
+  locks it (examples/e377_bool_predicate_conditions.vais, parity
+  native-supported, front accept fixture, direct feature shape 237) and
+  retires the `== 1` idiom from guidance, completing the Stage 1 ladder.
+
+- Promoted compound assignment as verified surface (Token-Density
+  Stage 1c, docs/design/TOKEN-DENSITY.md): `place += expr` and the -=,
+  *=, /=, %= family lower in the shared driver pass to
+  `place = place op (expr)` (parenthesized right side preserves
+  precedence), covering locals, list indexes, and struct field chains on
+  both engines. The left side must be a plain place: call results and
+  string keys on the left are loud front errors in emit and vais-check
+  ("compound assignment needs a plain place on the left"), so the
+  textual lowering can never duplicate side effects. This closes another
+  full-engine silent trap — `x += 2` previously compiled and silently
+  ignored the increment (vais-check rejected the spelling but `vaisc
+  run` did not) — and supersedes the old blanket "compound assignment is
+  not supported" contract line. Locked by
+  examples/e376_compound_assign.vais (parity native-supported), a front
+  accept fixture plus a call-lhs reject fixture, direct feature shape
+  236, and the updated vais-check contract fixture.
+
+- Promoted f-string interpolation as verified surface (Token-Density
+  Stage 1b, docs/design/TOKEN-DENSITY.md): `f"n={n}: {title}"` lowers in
+  one driver pass shared by the full and direct pipelines to `str_concat`
+  chains with every `{expr}` hole wrapped in `Str(...)`, and `Str(x)`
+  became total over the scalar slice — identity on Str values (fixing a
+  full-engine type hole that emitted invalid IR for `Str(str_value)` and
+  the direct-engine reject) and digit conversion on Int-likes. `{{`/`}}`
+  are literal braces, escapes decode inside f-string text, plain `"..."`
+  literals never interpolate outside the legacy print path (the corpus
+  embeds source-as-string fixtures with 2,500+ literal-brace literals, so
+  interpolation is opt-in by the `f` prefix), and invalid holes (empty,
+  unterminated, quote/backtick/brace/backslash inside, lone `}`) are loud
+  front errors in emit and vais-check. Locked by
+  examples/e375_string_interpolation.vais (parity native-supported), a
+  front accept fixture plus three reject fixtures, and direct feature
+  shape 235. Replaces nested `str_concat(Str(...), ...)` report lines —
+  the e332-style ranking line drops from a 5-call chain to one literal.
+
+- Promoted string and char escapes as verified surface (Token-Density
+  Stage 1a, docs/design/TOKEN-DENSITY.md): `\n`, `\t`, `\r`, `\"`, `\\`
+  decode to real bytes inside `"` literals on both engines, char literals
+  decode the same set plus `'\''` and `'\0'` (NUL — also the placeholder
+  the driver's if-expression lowering emits; `\0` stays char-only and is
+  rejected inside `"` literals), and backtick literals stay raw. This
+  closes two silent traps: the old lexers dropped the backslash of an
+  unknown escape without a diagnostic (`"a\nb"` compiled as `anb`), and
+  `'\n'`/`'\0'` char literals diverged between engines (full lexed 92
+  plus accidental stray tokens, direct used C semantics). Escapes outside the verified set are now a loud front error
+  through emit, the direct rewrite paths, and vais-check ("unknown
+  string escape" / "unknown char escape" with fix-it help). Locked by
+  examples/e374_string_escapes.vais (parity native-supported), a front
+  accept fixture plus two reject fixtures, and direct feature shape 75;
+  the print/printf interpolation format path decodes the same escape
+  pairs so `print("x={n}\nend")` emits a real newline.
+
+- Added incremental reindexing and the fs_mtime host API: `fs_mtime(path)
+  -> Int` reads epoch-second modification stamps on both engines with a
+  total contract (missing paths yield 0, no core change — the Int-return
+  generic call path; examples/e373_fs_mtime_read.vais). docs.txt entries
+  now carry `id<TAB>path<TAB>mtime` (v3 — v2 and bare-id lines still
+  parse as stampless, which reindex treats as always-stale), and the new
+  `vaisdb reindex <index> <dir>` ingests new files, removes and
+  re-ingests files whose current mtime moved past the stored stamp, and
+  skips the rest, reporting `reindexed added=A updated=U skipped=S`.
+  Locked by the package self-test (stamp parsing across format
+  generations, add/skip determinism without sleeping) and five workflow
+  gate cases using a backdated-touch fixture so the update path is
+  deterministic; refreshed content is immediately searchable and stats
+  stay exact after the remove-and-reingest. Recorded a checker candidate
+  the wiring surfaced: the Map-assignment validation resolves lowered
+  Result-binder names across function boundaries, so a binder sharing a
+  name with another function's map local is falsely rejected (loud;
+  renaming the binder sidesteps it).
+
 - Turned vaisdb into a usable local search tool: the new
   `search <index> <query> [k]` subcommand prints ranked hits with source
   paths and a first-matching-line snippet (whitespace-trimmed, cut at 80

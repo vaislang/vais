@@ -321,6 +321,7 @@ direct/default summary report.
 | `fs_append_text(path: Str, text: Str) -> Int` | Verified; full/direct — "ab" append (missing file created, 0 = success) |
 | `fs_mkdirs(path: Str) -> Int` | Verified |
 | `fs_remove(path: Str) -> Int` | Verified; full/direct — bare value-discarding statements included |
+| `fs_mtime(path: Str) -> Int` | Verified; full/direct — epoch-second stamp, missing paths yield 0 |
 | `fs_cwd() -> Str` | Verified; full/direct |
 | `fs_temp_dir() -> Str` | Verified |
 | `path_join(base: Str, child: Str) -> Str` | Verified |

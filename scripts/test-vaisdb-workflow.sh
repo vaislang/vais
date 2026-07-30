@@ -496,6 +496,20 @@ expect_exit "vaisdb search ranks and snippets" 0 /bin/sh -c "'$vdb_dist/bin/vais
 expect_exit "vaisdb search snippet line" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$search_idx' cache 3 | grep -qx '    cache hit line here'"
 expect_exit "vaisdb search hides zero scores" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$search_idx' zzzabsent 3 | cmp -s - /dev/null"
 
+reindex_docs="$tmp/vaisdb-reindex-docs"
+reindex_idx="$tmp/vaisdb-reindex-idx"
+rm -rf "$reindex_docs" "$reindex_idx"
+mkdir -p "$reindex_docs"
+printf 'alpha beta\n' > "$reindex_docs/r1.txt"
+printf 'gamma delta\n' > "$reindex_docs/r2.txt"
+touch -t 202001010000 "$reindex_docs/r1.txt"
+expect_exit "vaisdb reindex adds fresh docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=2 updated=0 skipped=0'"
+expect_exit "vaisdb reindex skips unchanged" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=0 skipped=2'"
+printf 'alpha beta epsilon\n' > "$reindex_docs/r1.txt"
+expect_exit "vaisdb reindex updates changed doc" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=1 skipped=1'"
+expect_exit "vaisdb reindex refreshed content searchable" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' epsilon 2 | grep -q '^1\. r1=1 '"
+expect_exit "vaisdb reindex stats stay exact" 0 /bin/sh -c "out=\$('$vdb_dist/bin/vaisdb' stats '$reindex_idx' 2>/dev/null); [ \"\$out\" = 'docs=2 terms=5' ]"
+
 map_cap_src="$tmp/map-cap-boundary.vais"
 cat > "$map_cap_src" <<'VAIS'
 fn main() -> Int {

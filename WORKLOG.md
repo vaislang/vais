@@ -1,5 +1,29 @@
 # Vais Worklog
 
+## 2026-07-26m (증분 재인덱스 — fs_mtime 승격 + vaisdb reindex)
+
+**fs_mtime(path) -> Int 승격**: Int-반환 1-인자 미러 클래스(native.c
+18참조, 런타임 2종, core 무변경 적중). 계약: epoch 초, 미존재 0(total —
+존재 사전검사 없이 스탬프 비교 가능). e373 양 엔진 첫 시도 42.
+
+**인덱스 v3 + reindex**: docs.txt `id\tpath\tmtime`(v2/bare 라인은
+스탬프 0 = always-stale 자연 강등 — 3세대 파싱 self-test 잠금).
+reindex = 신규 ingest/변경(cur>stored) remove+재인제스트/동일 skip,
+"reindexed added=A updated=U skipped=S". 결정성 확보 기법 2종: self-test
+는 즉시 재실행(cur==stored→skip), 게이트는 **backdated touch**(과거로
+touch 후 ingest→재작성하면 cur>stored 확정) — sleep 없이 updated 경로
+잠금. 갱신 내용 즉시 검색·stats 정확까지 게이트 5케이스.
+
+경유 발견 2건: ① **체커 Map-대입 검증의 로컬 테이블 함수경계 누수**
+(match 바인더 `counts`가 타 함수의 Map 로컬명과 같아 lowering 산물
+`counts = flow.value`를 LOUD 오거부 — 후보 등록, 바인더 개명 회피.
+lowering 산물 검증이 파일-전역 이름 테이블을 쓰는 구조 냄새) ② self-
+test 데이터 오염 자기트랩(legacy 라인이 후행 docs 카운트 검증을 오염 —
+합성 픽스처는 검증 직후 정리 원칙).
+
+parity 392, 래더 GREEN. **검색기 일상 루프 완성**: ingest-dir → search
+(스니펫) → reindex(증분). 다음: v1.2.0 컷(제품 아크 묶음) 또는 Veriqel.
+
 ## 2026-07-26l (VaisDB 검색 UX — search+스니펫 + 콤마-스캔 silent 근절)
 
 설계 검토(사용자 요청)가 값었다: 구현 전 검토에서 3개 결정 정정(저장

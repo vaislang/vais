@@ -60,6 +60,7 @@ static const char *HOST_INTRINSIC_IR =
     "declare i64 @fs_append_text(i8*, i8*)\n"
     "declare i64 @fs_mkdirs(i8*)\n"
     "declare i64 @fs_remove(i8*)\n"
+    "declare i64 @fs_mtime(i8*)\n"
     "declare i64 @proc_argc()\n"
     "declare i8* @proc_arg(i64)\n"
     "declare i8* @proc_capture_stdout(i64*)\n"
@@ -766,6 +767,26 @@ static int skip_char_literal_c(const char *text, int start) {
     }
     if (text[start + 2] == '\'') return start + 3;
     return -1;
+}
+
+/* Decode the byte after a backslash in a Vais double-quoted literal: \n, \t,
+ * and \r lower to newline/tab/carriage-return; every other escaped byte
+ * (quote, backslash) passes through unchanged. Mirrors escape_byte_value in
+ * compiler/self/fixpoint_full.vais; the front checker rejects escapes outside
+ * the verified set. */
+static char decode_vais_escape(char ch) {
+    if (ch == 'n') return '\n';
+    if (ch == 't') return '\t';
+    if (ch == 'r') return '\r';
+    return ch;
+}
+
+static int is_verified_string_escape(char ch) {
+    return ch == 'n' || ch == 't' || ch == 'r' || ch == '"' || ch == '\\';
+}
+
+static int is_verified_char_escape(char ch) {
+    return ch == 'n' || ch == 't' || ch == 'r' || ch == '0' || ch == '\'' || ch == '\\';
 }
 
 static void sb_append_c_escaped_byte(StrBuf *out, char ch) {
@@ -2082,6 +2103,32 @@ static int result_expr_starts_with_str_helper_len(const char *expr) {
     int next_i = close + 1;
     int has_len = 0;
     return direct_parse_trailing_str_len(s, close + 1, &next_i, &has_len) && has_len;
+}
+
+/* After the direct rewrite stages, a hole/argument that yields a string is
+ * either a quoted literal or a whole-expression call to one of the
+ * char*-returning runtime helpers. Used by the Str(x) identity path so
+ * f-string holes can wrap every payload in Str(...) uniformly. */
+static int direct_rewritten_expr_yields_str(const char *expr) {
+    const char *s = skip_ws(expr);
+    if (is_string_delim_c(*s)) {
+        int end = skip_string_literal_c(s, 0);
+        return end >= 0 && *skip_ws(s + end) == '\0';
+    }
+    static const char *str_fns[] = {
+        "__vais_str_concat", "__vais_str_slice", "__vais_str_replace",
+        "__vais_str_trim", "__vais_str_lower", "__vais_str_upper",
+        "__vais_str_join", "__vais_str_from_byte", "__vais_int_to_str",
+        "__vais_direct_read_all",
+    };
+    for (size_t k = 0; k < sizeof(str_fns) / sizeof(str_fns[0]); k++) {
+        if (!result_expr_starts_with_name(s, str_fns[k])) continue;
+        const char *p = skip_ws(s + strlen(str_fns[k]));
+        if (*p != '(') continue;
+        int close = find_matching_paren_c(s, (int)(p - s));
+        if (close >= 0 && *skip_ws(s + close + 1) == '\0') return 1;
+    }
+    return 0;
 }
 
 static int result_str_int_expr_result_is_str(const char *expr, const char *ok_binder) {
@@ -18142,6 +18189,392 @@ static char *normalize_source_text(const char *raw, int core_lower) {
  * engines. `@` had no other surface meaning and the previous emission was
  * either rejected (direct) or mistyped (full), so this is strictly a fix.
  */
+/* Stage 1b f-string desugar: f"a={x} b={y + 1}!" lowers to
+ * str_concat("a=", str_concat(Str(x), str_concat(" b=", str_concat(Str(y + 1), "!")))).
+ * Holes wrap in Str(...) (identity on Str values), {{ and }} are literal
+ * braces, and text segments keep their escapes verbatim for the escape
+ * decoders. Invalid f-strings (unterminated, empty hole, quote/backtick/
+ * brace/backslash inside a hole, lone }) pass through unchanged so the front
+ * check reports them loudly. Plain "..." literals never change here. This
+ * pass runs before the other lowerings in the full and direct pipelines, so
+ * both engines share one lowering. */
+static char *lower_fstring_literal(const char *content, int n) {
+    LineVec parts;
+    lines_init(&parts);
+    StrBuf text;
+    sb_init(&text);
+    int ok = 1;
+    for (int i = 0; i < n;) {
+        char c = content[i];
+        if (c == '\\' && i + 1 < n) {
+            sb_append_n(&text, content + i, 2);
+            i += 2;
+            continue;
+        }
+        if (c == '{') {
+            if (i + 1 < n && content[i + 1] == '{') {
+                sb_append(&text, "{");
+                i += 2;
+                continue;
+            }
+            int close = -1;
+            int bad = 0;
+            for (int j = i + 1; j < n; j++) {
+                char h = content[j];
+                if (h == '}') {
+                    close = j;
+                    break;
+                }
+                if (h == '{' || h == '"' || h == '`' || h == '\\') {
+                    bad = 1;
+                    break;
+                }
+            }
+            if (close < 0 || bad) {
+                ok = 0;
+                break;
+            }
+            char *raw_hole = substr_copy(content + i + 1, (size_t)(close - i - 1));
+            char *hole = trim_copy(raw_hole);
+            free(raw_hole);
+            if (hole[0] == '\0') {
+                free(hole);
+                ok = 0;
+                break;
+            }
+            if (text.len > 0) {
+                StrBuf part;
+                sb_init(&part);
+                sb_append(&part, "\"");
+                sb_append_n(&part, text.data, text.len);
+                sb_append(&part, "\"");
+                lines_push(&parts, sb_take(&part));
+                text.len = 0;
+            }
+            StrBuf part;
+            sb_init(&part);
+            sb_append(&part, "Str(");
+            sb_append(&part, hole);
+            sb_append(&part, ")");
+            free(hole);
+            lines_push(&parts, sb_take(&part));
+            i = close + 1;
+            continue;
+        }
+        if (c == '}') {
+            if (i + 1 < n && content[i + 1] == '}') {
+                sb_append(&text, "}");
+                i += 2;
+                continue;
+            }
+            ok = 0;
+            break;
+        }
+        sb_append_n(&text, &c, 1);
+        i++;
+    }
+    if (ok && text.len > 0) {
+        StrBuf part;
+        sb_init(&part);
+        sb_append(&part, "\"");
+        sb_append_n(&part, text.data, text.len);
+        sb_append(&part, "\"");
+        lines_push(&parts, sb_take(&part));
+    }
+    free(text.data);
+    if (!ok) {
+        lines_free(&parts);
+        return NULL;
+    }
+    StrBuf out;
+    sb_init(&out);
+    if (parts.len == 0) {
+        sb_append(&out, "\"\"");
+    } else {
+        for (size_t k = 0; k + 1 < parts.len; k++) {
+            sb_append(&out, "str_concat(");
+            sb_append(&out, parts.items[k]);
+            sb_append(&out, ", ");
+        }
+        sb_append(&out, parts.items[parts.len - 1]);
+        for (size_t k = 0; k + 1 < parts.len; k++) sb_append(&out, ")");
+    }
+    lines_free(&parts);
+    return sb_take(&out);
+}
+
+static char *lower_fstring_text(const char *text) {
+    StrBuf out;
+    sb_init(&out);
+    char delim = '\0';
+    int in_comment = 0;
+    for (int i = 0; text[i] != '\0';) {
+        char c = text[i];
+        if (in_comment) {
+            sb_append_n(&out, &c, 1);
+            if (c == '\n') in_comment = 0;
+            i++;
+            continue;
+        }
+        if (delim == '"') {
+            if (c == '\\' && text[i + 1] != '\0') {
+                sb_append_n(&out, text + i, 2);
+                i += 2;
+                continue;
+            }
+            sb_append_n(&out, &c, 1);
+            if (c == '"' || c == '\n') delim = '\0';
+            i++;
+            continue;
+        }
+        if (delim == '`') {
+            sb_append_n(&out, &c, 1);
+            if (c == '`' || c == '\n') delim = '\0';
+            i++;
+            continue;
+        }
+        if (c == '#') {
+            in_comment = 1;
+            sb_append_n(&out, &c, 1);
+            i++;
+            continue;
+        }
+        if (c == '\'') {
+            int end = skip_char_literal_c(text, i);
+            if (end > i) {
+                sb_append_n(&out, text + i, (size_t)(end - i));
+                i = end;
+                continue;
+            }
+            sb_append_n(&out, &c, 1);
+            i++;
+            continue;
+        }
+        if (c == 'f' && text[i + 1] == '"' && (i == 0 || !is_ident_continue(text[i - 1]))) {
+            int end = skip_string_literal_c(text, i + 1);
+            if (end >= 0) {
+                int has_nl = 0;
+                for (int j = i + 1; j < end; j++) {
+                    if (text[j] == '\n') {
+                        has_nl = 1;
+                        break;
+                    }
+                }
+                if (!has_nl) {
+                    char *repl = lower_fstring_literal(text + i + 2, end - (i + 2) - 1);
+                    if (repl != NULL) {
+                        sb_append(&out, repl);
+                        free(repl);
+                        i = end;
+                        continue;
+                    }
+                }
+            }
+            sb_append_n(&out, &c, 1);
+            i++;
+            continue;
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            sb_append_n(&out, &c, 1);
+            i++;
+            continue;
+        }
+        sb_append_n(&out, &c, 1);
+        i++;
+    }
+    return sb_take(&out);
+}
+
+/* Stage 1c compound-assign desugar: `place += expr` (and -=, *=, /=, %=)
+ * lowers to `place = place + (expr)` in the shared pipeline, so both engines
+ * keep their single assignment lowering and the parenthesized right side
+ * preserves precedence. The left side must be a plain place — a local, list
+ * index, or struct field chain without calls or string keys — so the textual
+ * duplication cannot duplicate side effects; anything else stays unlowered
+ * for the front check to reject loudly. Runs after the f-string pass, so
+ * `total += xs.len()` style right sides are already plain expressions. */
+static int compound_lhs_is_plain_place(const char *lhs) {
+    const char *s = skip_ws(lhs);
+    if (*s == '\0') return 0;
+    if (!(is_ident_continue(*s) && !(*s >= '0' && *s <= '9'))) return 0;
+    int brackets = 0;
+    for (const char *p = s; *p != '\0'; p++) {
+        char c = *p;
+        if (is_ident_continue(c) || c == '.' || c == ' ' || c == '\t') continue;
+        if (c == '[') {
+            brackets++;
+            continue;
+        }
+        if (c == ']') {
+            brackets--;
+            if (brackets < 0) return 0;
+            continue;
+        }
+        return 0;
+    }
+    return brackets == 0;
+}
+
+static char *lower_compound_assign_line(const char *line) {
+    char *current = strdup(line);
+    if (current == NULL) return NULL;
+    size_t search_from = 0;
+    for (;;) {
+        size_t len = strlen(current);
+        char delim = '\0';
+        size_t stmt_start = 0;
+        size_t op_pos = 0;
+        char op = '\0';
+        int found = 0;
+        for (size_t i = 0; i < len && !found; i++) {
+            char c = current[i];
+            if (delim == '"') {
+                if (c == '\\' && current[i + 1] != '\0') {
+                    i++;
+                    continue;
+                }
+                if (c == '"') delim = '\0';
+                continue;
+            }
+            if (delim == '`') {
+                if (c == '`') delim = '\0';
+                continue;
+            }
+            if (c == '#') break;
+            if (c == '\'') {
+                int end = skip_char_literal_c(current, (int)i);
+                if (end > (int)i + 1) {
+                    i = (size_t)end - 1;
+                    continue;
+                }
+            }
+            if (c == '"' || c == '`') {
+                delim = c;
+                continue;
+            }
+            if (c == '{' || c == '}' || c == ';') {
+                stmt_start = i + 1;
+                continue;
+            }
+            if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%') &&
+                current[i + 1] == '=' && current[i + 2] != '=' && i >= search_from) {
+                op = c;
+                op_pos = i;
+                found = 1;
+            }
+        }
+        if (!found) return current;
+
+        char *lhs_raw = substr_copy(current + stmt_start, op_pos - stmt_start);
+        char *lhs = trim_copy(lhs_raw);
+        free(lhs_raw);
+        if (!compound_lhs_is_plain_place(lhs)) {
+            free(lhs);
+            search_from = op_pos + 2;
+            continue;
+        }
+
+        size_t rhs_start = op_pos + 2;
+        size_t rhs_end = rhs_start;
+        int depth = 0;
+        int bad_rhs = 0;
+        char rdelim = '\0';
+        size_t j = rhs_start;
+        for (; j < len; j++) {
+            char c = current[j];
+            if (rdelim == '"') {
+                if (c == '\\' && current[j + 1] != '\0') {
+                    j++;
+                    continue;
+                }
+                if (c == '"') rdelim = '\0';
+                continue;
+            }
+            if (rdelim == '`') {
+                if (c == '`') rdelim = '\0';
+                continue;
+            }
+            if (c == '#') break;
+            if (c == '\'') {
+                int end = skip_char_literal_c(current, (int)j);
+                if (end > (int)j + 1) {
+                    j = (size_t)end - 1;
+                    continue;
+                }
+            }
+            if (c == '"' || c == '`') {
+                rdelim = c;
+                continue;
+            }
+            if (c == '(' || c == '[') {
+                depth++;
+                continue;
+            }
+            if (c == ')' || c == ']') {
+                depth--;
+                continue;
+            }
+            if (depth == 0 && (c == ';' || c == '}')) break;
+            if (depth == 0 && c == '{') {
+                bad_rhs = 1;
+                break;
+            }
+        }
+        rhs_end = j;
+        char *rhs_raw = substr_copy(current + rhs_start, rhs_end - rhs_start);
+        char *rhs = trim_copy(rhs_raw);
+        free(rhs_raw);
+        if (bad_rhs || rhs[0] == '\0') {
+            free(lhs);
+            free(rhs);
+            search_from = op_pos + 2;
+            continue;
+        }
+
+        StrBuf next;
+        sb_init(&next);
+        sb_append_n(&next, current, stmt_start);
+        sb_append(&next, lhs);
+        sb_append(&next, " = ");
+        sb_append(&next, lhs);
+        sb_append(&next, " ");
+        sb_append_n(&next, &op, 1);
+        sb_append(&next, " (");
+        sb_append(&next, rhs);
+        sb_append(&next, ")");
+        sb_append(&next, current + rhs_end);
+        free(lhs);
+        free(rhs);
+        free(current);
+        current = sb_take(&next);
+        search_from = 0;
+    }
+}
+
+static char *lower_compound_assign_text(const char *text) {
+    StrBuf out;
+    sb_init(&out);
+    const char *line = text;
+    for (;;) {
+        const char *end = strchr(line, '\n');
+        size_t len = end == NULL ? strlen(line) : (size_t)(end - line);
+        char *one = substr_copy(line, len);
+        char *rewritten = lower_compound_assign_line(one);
+        free(one);
+        if (rewritten == NULL) {
+            free(out.data);
+            return NULL;
+        }
+        sb_append(&out, rewritten);
+        free(rewritten);
+        if (end == NULL) break;
+        sb_append(&out, "\n");
+        line = end + 1;
+    }
+    return sb_take(&out);
+}
+
 static char *lower_self_recursion_text(const char *text) {
     StrBuf out;
     sb_init(&out);
@@ -18210,8 +18643,12 @@ static char *prepare_source_text(const char *raw) {
     char *normalized_joined = normalize_source_text(raw, 0);
     char *normalized_presplit = split_statement_lines(normalized_joined);
     free(normalized_joined);
-    char *normalized = lower_self_recursion_text(normalized_presplit);
+    char *fstring_lowered = lower_fstring_text(normalized_presplit);
     free(normalized_presplit);
+    char *compound_lowered = lower_compound_assign_text(fstring_lowered);
+    free(fstring_lowered);
+    char *normalized = lower_self_recursion_text(compound_lowered);
+    free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
     char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
     char *result_str_lowered = lower_result_str_str_text(result_str_int_lowered);
@@ -18950,7 +19387,7 @@ static int front_is_builtin_call_name(const char *name) {
         "str_split_lines_into", "str_split_into",
         "str_builder_new", "str_builder_push", "str_builder_append",
         "str_builder_finish",
-        "fs_exists", "fs_is_dir", "fs_read_text", "fs_write_text", "fs_append_text", "fs_mkdirs", "fs_remove",
+        "fs_exists", "fs_is_dir", "fs_read_text", "fs_write_text", "fs_append_text", "fs_mkdirs", "fs_remove", "fs_mtime",
         "fs_cwd", "fs_temp_dir", "fs_list_files", "fs_list_dirs", "stdin_read_all", "stdout_write", "stderr_write", "proc_self",
         "path_join", "path_basename", "path_dirname", "env_get",
         "time_millis", "proc_argc", "proc_arg", "proc_capture",
@@ -18974,6 +19411,226 @@ static int front_is_builtin_call_name(const char *name) {
  * skipped (conversion calls, enum constructors, lowering-generated helpers),
  * as are method calls behind `.`.
  */
+/* Front check: every backslash inside a double-quoted literal must start a
+ * verified escape (\n, \t, \r, \", \\), and char literals may only escape
+ * '\n', '\t', '\r', '\\', '\''. Backtick literals stay raw. This keeps the
+ * old silent decode (backslash dropped, next byte kept) from surviving as an
+ * unreadable spelling now that escapes are verified surface. */
+static int front_check_string_escape_line(const char *path, int line_no, const char *line) {
+    int issues = 0;
+    char delim = '\0';
+    for (int i = 0; line[i] != '\0'; i++) {
+        char ch = line[i];
+        if (delim == '`') {
+            if (ch == '`') delim = '\0';
+            continue;
+        }
+        if (delim == '"') {
+            if (ch == '\\' && line[i + 1] != '\0') {
+                if (!is_verified_string_escape(line[i + 1])) {
+                    report_issue(path, line_no, i + 2, line,
+                        "unknown string escape",
+                        "use \\n, \\t, \\r, \\\", or \\\\; write a literal backslash as \\\\.",
+                        NULL);
+                    issues++;
+                }
+                i++;
+                continue;
+            }
+            if (ch == '"') delim = '\0';
+            continue;
+        }
+        if (ch == '#') break;
+        if (ch == '"' || ch == '`') {
+            delim = ch;
+            continue;
+        }
+        if (ch == '\'' && line[i + 1] == '\\' && line[i + 2] != '\0' && line[i + 3] == '\'') {
+            if (!is_verified_char_escape(line[i + 2])) {
+                report_issue(path, line_no, i + 3, line,
+                    "unknown char escape",
+                    "use '\\n', '\\t', '\\r', '\\0', '\\\\', or '\\''.",
+                    NULL);
+                issues++;
+            }
+            i += 3;
+            continue;
+        }
+        if (ch == '\'' && line[i + 1] != '\0' && line[i + 1] != '\\' && line[i + 2] == '\'') {
+            i += 2;
+            continue;
+        }
+    }
+    return issues;
+}
+
+/* Front check: the compound-assign lowering pass rewrites every valid
+ * `place op= expr` statement away before this loop runs, so any surviving
+ * op= spelling has an unsupported left side; report it loudly. */
+static int front_check_compound_assign_line(const char *path, int line_no, const char *line) {
+    int issues = 0;
+    char delim = '\0';
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if ((c == '+' || c == '-' || c == '*' || c == '/' || c == '%') &&
+            line[i + 1] == '=' && line[i + 2] != '=') {
+            report_issue(path, line_no, (int)i + 1, line,
+                "compound assignment needs a plain place on the left",
+                "write a local, list index, or struct field on the left of `+=`; call results and string keys cannot be compound-assigned.",
+                NULL);
+            issues++;
+            i++;
+        }
+    }
+    return issues;
+}
+
+/* Front check: the f-string lowering pass rewrites every valid f"..."
+ * literal away before this loop runs, so any surviving f" literal is
+ * invalid; classify the first problem and report it loudly. */
+static int front_check_fstring_line(const char *path, int line_no, const char *line) {
+    int issues = 0;
+    char delim = '\0';
+    for (int i = 0; line[i] != '\0'; i++) {
+        char ch = line[i];
+        if (delim == '`') {
+            if (ch == '`') delim = '\0';
+            continue;
+        }
+        if (delim == '"') {
+            if (ch == '\\' && line[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (ch == '"') delim = '\0';
+            continue;
+        }
+        if (ch == '#') break;
+        if (ch == '\'') {
+            int end = skip_char_literal_c(line, i);
+            if (end > i + 1) {
+                i = end - 1;
+                continue;
+            }
+        }
+        if (ch == 'f' && line[i + 1] == '"' && (i == 0 || !is_ident_continue(line[i - 1]))) {
+            int end = skip_string_literal_c(line, i + 1);
+            if (end < 0) {
+                report_issue(path, line_no, i + 1, line,
+                    "f-string is missing its closing quote",
+                    "close the f-string before the end of the line.",
+                    NULL);
+                issues++;
+                break;
+            }
+            const char *content = line + i + 2;
+            int n = end - (i + 2) - 1;
+            int reported = 0;
+            for (int k = 0; k < n && !reported;) {
+                char c = content[k];
+                if (c == '\\' && k + 1 < n) {
+                    k += 2;
+                    continue;
+                }
+                if (c == '{') {
+                    if (k + 1 < n && content[k + 1] == '{') {
+                        k += 2;
+                        continue;
+                    }
+                    int close = -1;
+                    int bad = -1;
+                    for (int j = k + 1; j < n; j++) {
+                        char h = content[j];
+                        if (h == '}') {
+                            close = j;
+                            break;
+                        }
+                        if (h == '{' || h == '"' || h == '`' || h == '\\') {
+                            bad = j;
+                            break;
+                        }
+                    }
+                    if (bad >= 0) {
+                        report_issue(path, line_no, i + 3 + bad, line,
+                            "f-string hole cannot contain quotes, backticks, braces, or backslashes",
+                            "keep the hole a plain expression; move string literals into a local first.",
+                            NULL);
+                        issues++;
+                        reported = 1;
+                    } else if (close < 0) {
+                        report_issue(path, line_no, i + 3 + k, line,
+                            "f-string hole is missing `}`",
+                            "close the `{expr}` hole inside the f-string.",
+                            NULL);
+                        issues++;
+                        reported = 1;
+                    } else {
+                        int empty = 1;
+                        for (int j = k + 1; j < close; j++) {
+                            if (content[j] != ' ' && content[j] != '\t') empty = 0;
+                        }
+                        if (empty) {
+                            report_issue(path, line_no, i + 3 + k, line,
+                                "f-string hole is empty",
+                                "write `{expr}` with an Int or Str expression inside.",
+                                NULL);
+                            issues++;
+                            reported = 1;
+                        }
+                        k = close + 1;
+                    }
+                    continue;
+                }
+                if (c == '}') {
+                    if (k + 1 < n && content[k + 1] == '}') {
+                        k += 2;
+                        continue;
+                    }
+                    report_issue(path, line_no, i + 3 + k, line,
+                        "unmatched `}` in f-string",
+                        "write a literal brace as `}}` or open a `{expr}` hole.",
+                        NULL);
+                    issues++;
+                    reported = 1;
+                    continue;
+                }
+                k++;
+            }
+            i = end - 1;
+            continue;
+        }
+        if (ch == '"' || ch == '`') {
+            delim = ch;
+            continue;
+        }
+    }
+    return issues;
+}
+
 static int front_check_unknown_call_line(const char *path, int line_no, const char *line, const char *probe, char **names, int count, int overflow) {
     if (overflow) return 0;
     int issues = 0;
@@ -19400,6 +20057,9 @@ static int check_front_contract_text(const char *text, const char *path) {
         int line_no = (int)i + 1;
         issues += check_fn_contract_line(path, line_no, line, &has_main, &has_bad_main, struct_names, struct_count);
         issues += front_check_unknown_call_line(path, line_no, line, probe, callable_names, callable_count, callable_overflow);
+        issues += front_check_string_escape_line(path, line_no, line);
+        issues += front_check_fstring_line(path, line_no, line);
+        issues += front_check_compound_assign_line(path, line_no, line);
         {
             const char *eq = strstr(probe, "= if ");
             if (eq != NULL) {
@@ -20964,8 +21624,12 @@ static char *prepare_source_file(const char *path) {
     char *normalized_joined = normalize_source_text(merged, 0);
     char *normalized_presplit = split_statement_lines(normalized_joined);
     free(normalized_joined);
-    char *normalized = lower_self_recursion_text(normalized_presplit);
+    char *fstring_lowered = lower_fstring_text(normalized_presplit);
     free(normalized_presplit);
+    char *compound_lowered = lower_compound_assign_text(fstring_lowered);
+    free(fstring_lowered);
+    char *normalized = lower_self_recursion_text(compound_lowered);
+    free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
     char *result_str_int_lowered = lower_result_str_int_text(map_match_lowered);
     char *result_str_lowered = lower_result_str_str_text(result_str_int_lowered);
@@ -22960,6 +23624,10 @@ static int direct_is_fs_remove_builtin_name(const char *name) {
     return strcmp(name, "fs_remove") == 0;
 }
 
+static int direct_is_fs_mtime_builtin_name(const char *name) {
+    return strcmp(name, "fs_mtime") == 0;
+}
+
 static int direct_is_str_split_into_builtin_name(const char *name) {
     return strcmp(name, "str_split_into") == 0;
 }
@@ -23169,7 +23837,15 @@ static char *direct_rewrite_string_literals(
         while (j < end - 1) {
             if (delim == '"' && expr[j] == '\\' && j + 1 < end - 1) {
                 j++;
-                sb_append_c_escaped_byte(&out, expr[j]);
+                if (!is_verified_string_escape(expr[j])) {
+                    report_issue(path, line_no, 1, line,
+                        "unknown string escape",
+                        "use \\n, \\t, \\r, \\\", or \\\\; write a literal backslash as \\\\.",
+                        NULL);
+                    free(out.data);
+                    return NULL;
+                }
+                sb_append_c_escaped_byte(&out, decode_vais_escape(expr[j]));
                 j++;
                 continue;
             }
@@ -23301,13 +23977,14 @@ static char *direct_rewrite_parse_builtin_calls(
         int is_fs_list_dirs = direct_is_fs_list_dirs_builtin_name(name);
         int is_fs_mkdirs = direct_is_fs_mkdirs_builtin_name(name);
         int is_fs_remove = direct_is_fs_remove_builtin_name(name);
+        int is_fs_mtime = direct_is_fs_mtime_builtin_name(name);
         int is_split_into = direct_is_str_split_into_builtin_name(name);
         int is_map_snapshot = direct_is_map_str_str_snapshot_builtin_name(name);
         int is_map_load = direct_is_map_str_str_load_snapshot_builtin_name(name);
         int is_doc_counts = direct_is_doc_term_counts_into_builtin_name(name);
         int is_doc_overlap = direct_is_doc_term_overlap_score_builtin_name(name);
         int is_doc_weighted = direct_is_doc_term_weighted_score_builtin_name(name);
-        if ((!is_parse && !is_contains && !is_cmp && !is_index_of && !is_starts_with && !is_ends_with && !is_slice && !is_concat && !is_join && !is_replace && !is_trim && !is_lower && !is_upper && !is_byte && !is_fs_read_text && !is_fs_write_text && !is_fs_append_text && !is_fs_exists && !is_fs_is_dir && !is_fs_temp_dir && !is_fs_cwd && !is_stdin_read && !is_stdout_write && !is_stderr_write && !is_proc_self && !is_path_join && !is_path_basename && !is_path_dirname && !is_env_get && !is_time_millis && !is_sb_new && !is_sb_push && !is_sb_append && !is_sb_finish && !is_proc_argc && !is_proc_arg && !is_split_ws_into && !is_split_lines_into && !is_fs_list_files && !is_fs_list_dirs && !is_fs_mkdirs && !is_fs_remove && !is_split_into && !is_map_snapshot && !is_map_load && !is_doc_counts && !is_doc_overlap && !is_doc_weighted) || expr[cursor] != '(') {
+        if ((!is_parse && !is_contains && !is_cmp && !is_index_of && !is_starts_with && !is_ends_with && !is_slice && !is_concat && !is_join && !is_replace && !is_trim && !is_lower && !is_upper && !is_byte && !is_fs_read_text && !is_fs_write_text && !is_fs_append_text && !is_fs_exists && !is_fs_is_dir && !is_fs_temp_dir && !is_fs_cwd && !is_stdin_read && !is_stdout_write && !is_stderr_write && !is_proc_self && !is_path_join && !is_path_basename && !is_path_dirname && !is_env_get && !is_time_millis && !is_sb_new && !is_sb_push && !is_sb_append && !is_sb_finish && !is_proc_argc && !is_proc_arg && !is_split_ws_into && !is_split_lines_into && !is_fs_list_files && !is_fs_list_dirs && !is_fs_mkdirs && !is_fs_remove && !is_fs_mtime && !is_split_into && !is_map_snapshot && !is_map_load && !is_doc_counts && !is_doc_overlap && !is_doc_weighted) || expr[cursor] != '(') {
             sb_append_n(&out, expr + start, (size_t)(i - start));
             free(name);
             continue;
@@ -23316,7 +23993,7 @@ static char *direct_rewrite_parse_builtin_calls(
         if (close < 0) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter expected `)` to close the string helper call",
-                    "write `parse_uint(s)`, `parse_int(s)`, `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, `proc_arg(index)`, `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_slice(text, start, len)`, `str_concat(left, right)`, `str_join(parts, sep)`, `str_replace(text, needle, replacement)`, `str_trim(text)`, `str_lower(text)`, `str_upper(text)`, `str_byte(value)`, `str_split_ws_into(text, out)`, `str_split_lines_into(text, out)`, `str_split_into(text, sep, out)`, `fs_list_files(dir, out)`, `map_str_str_snapshot(docs)`, `map_str_str_load_snapshot(text, docs)`, `doc_term_counts_into(text, counts)`, `doc_term_overlap_score(query, doc)`, or `doc_term_weighted_score(query, doc)`.",
+                    "write `parse_uint(s)`, `parse_int(s)`, `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_mtime(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, `proc_arg(index)`, `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_slice(text, start, len)`, `str_concat(left, right)`, `str_join(parts, sep)`, `str_replace(text, needle, replacement)`, `str_trim(text)`, `str_lower(text)`, `str_upper(text)`, `str_byte(value)`, `str_split_ws_into(text, out)`, `str_split_lines_into(text, out)`, `str_split_into(text, sep, out)`, `fs_list_files(dir, out)`, `map_str_str_snapshot(docs)`, `map_str_str_load_snapshot(text, docs)`, `doc_term_counts_into(text, counts)`, `doc_term_overlap_score(query, doc)`, or `doc_term_weighted_score(query, doc)`.",
                 NULL);
             free(name);
             free(out.data);
@@ -23340,7 +24017,7 @@ static char *direct_rewrite_parse_builtin_calls(
         if (bad_args) {
             report_issue(path, line_no, find_col(line, name), line,
                 "direct native emitter string helper argument count does not match",
-                "write `parse_uint(s)`, `parse_int(s)`, `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, `proc_arg(index)`, `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_slice(text, start, len)`, `str_concat(left, right)`, `str_join(parts, sep)`, `str_replace(text, needle, replacement)`, `str_trim(text)`, `str_lower(text)`, `str_upper(text)`, `str_byte(value)`, `str_split_ws_into(text, out)`, `str_split_lines_into(text, out)`, `str_split_into(text, sep, out)`, `fs_list_files(dir, out)`, `map_str_str_snapshot(docs)`, `map_str_str_load_snapshot(text, docs)`, `doc_term_counts_into(text, counts)`, `doc_term_overlap_score(query, doc)`, or `doc_term_weighted_score(query, doc)`.",
+                "write `parse_uint(s)`, `parse_int(s)`, `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_mtime(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, `proc_arg(index)`, `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_slice(text, start, len)`, `str_concat(left, right)`, `str_join(parts, sep)`, `str_replace(text, needle, replacement)`, `str_trim(text)`, `str_lower(text)`, `str_upper(text)`, `str_byte(value)`, `str_split_ws_into(text, out)`, `str_split_lines_into(text, out)`, `str_split_into(text, sep, out)`, `fs_list_files(dir, out)`, `map_str_str_snapshot(docs)`, `map_str_str_load_snapshot(text, docs)`, `doc_term_counts_into(text, counts)`, `doc_term_overlap_score(query, doc)`, or `doc_term_weighted_score(query, doc)`.",
                 NULL);
             for (int k = 0; k < 16; k++) free(args[k]);
             free(name);
@@ -23724,6 +24401,10 @@ static char *direct_rewrite_parse_builtin_calls(
             sb_append(&out, "fs_remove(");
             sb_append(&out, rewritten_arg);
             sb_append(&out, ")");
+        } else if (is_fs_mtime) {
+            sb_append(&out, "fs_mtime(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
         } else if (is_stdout_write) {
             sb_append(&out, "stdout_write(");
             sb_append(&out, rewritten_arg);
@@ -24030,6 +24711,11 @@ static char *direct_rewrite_str_conversion_calls(
             free(out.data);
             return NULL;
         }
+        char *str_arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
+        int str_identity = (str_arg_type != NULL && strcmp(str_arg_type, "Str") == 0) ||
+            result_str_int_expr_result_is_str(args[0], NULL) ||
+            direct_rewritten_expr_yields_str(args[0]);
+        free(str_arg_type);
         char *rewritten_arg = direct_rewrite_expr(path, line_no, line, args[0], locals, fns, fn_count, structs, struct_count);
         for (int k = 0; k < 16; k++) free(args[k]);
         if (rewritten_arg == NULL) {
@@ -24037,9 +24723,16 @@ static char *direct_rewrite_str_conversion_calls(
             free(out.data);
             return NULL;
         }
-        sb_append(&out, "__vais_int_to_str(");
-        sb_append(&out, rewritten_arg);
-        sb_append(&out, ")");
+        if (str_identity) {
+            /* Str(x) on a Str value is identity; emit the argument directly. */
+            sb_append(&out, "(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        } else {
+            sb_append(&out, "__vais_int_to_str(");
+            sb_append(&out, rewritten_arg);
+            sb_append(&out, ")");
+        }
         free(rewritten_arg);
         free(name);
         i = close + 1;
@@ -24772,12 +25465,12 @@ static char *direct_rewrite_list_expr(
         int cursor = i;
         while (expr[cursor] == ' ' || expr[cursor] == '\t') cursor++;
         if (expr[cursor] == '(' &&
-            (direct_is_str_conversion_builtin_name(name) || direct_is_parse_builtin_name(name) || direct_is_str_cmp_builtin_name(name) || direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_slice_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_join_builtin_name(name) || direct_is_str_replace_builtin_name(name) || direct_is_str_trim_builtin_name(name) || direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name) || direct_is_str_byte_builtin_name(name) || direct_is_fs_exists_builtin_name(name) || direct_is_fs_is_dir_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_remove_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_append_text_builtin_name(name) || direct_is_fs_cwd_builtin_name(name) || direct_is_proc_self_builtin_name(name) || direct_is_stdin_read_all_builtin_name(name) || direct_is_stdout_write_builtin_name(name) || direct_is_stderr_write_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_env_get_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_str_builder_new_builtin_name(name) || direct_is_str_builder_push_builtin_name(name) || direct_is_str_builder_append_builtin_name(name) || direct_is_str_builder_finish_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name) || direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name) || direct_is_fs_list_dirs_builtin_name(name) || direct_is_str_split_into_builtin_name(name) || direct_is_doc_term_counts_into_builtin_name(name) || direct_is_doc_term_overlap_score_builtin_name(name) || direct_is_doc_term_weighted_score_builtin_name(name))) {
+            (direct_is_str_conversion_builtin_name(name) || direct_is_parse_builtin_name(name) || direct_is_str_cmp_builtin_name(name) || direct_is_str_contains_builtin_name(name) || direct_is_str_index_of_builtin_name(name) || direct_is_str_starts_with_builtin_name(name) || direct_is_str_ends_with_builtin_name(name) || direct_is_str_slice_builtin_name(name) || direct_is_str_concat_builtin_name(name) || direct_is_str_join_builtin_name(name) || direct_is_str_replace_builtin_name(name) || direct_is_str_trim_builtin_name(name) || direct_is_str_lower_builtin_name(name) || direct_is_str_upper_builtin_name(name) || direct_is_str_byte_builtin_name(name) || direct_is_fs_exists_builtin_name(name) || direct_is_fs_is_dir_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_remove_builtin_name(name) || direct_is_fs_mtime_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_append_text_builtin_name(name) || direct_is_fs_cwd_builtin_name(name) || direct_is_proc_self_builtin_name(name) || direct_is_stdin_read_all_builtin_name(name) || direct_is_stdout_write_builtin_name(name) || direct_is_stderr_write_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) || direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_env_get_builtin_name(name) || direct_is_time_millis_builtin_name(name) || direct_is_str_builder_new_builtin_name(name) || direct_is_str_builder_push_builtin_name(name) || direct_is_str_builder_append_builtin_name(name) || direct_is_str_builder_finish_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name) || direct_is_str_split_ws_into_builtin_name(name) || direct_is_str_split_lines_into_builtin_name(name) || direct_is_fs_list_files_builtin_name(name) || direct_is_fs_list_dirs_builtin_name(name) || direct_is_str_split_into_builtin_name(name) || direct_is_doc_term_counts_into_builtin_name(name) || direct_is_doc_term_overlap_score_builtin_name(name) || direct_is_doc_term_weighted_score_builtin_name(name))) {
             int close = find_matching_paren_c(expr, cursor);
             if (close < 0) {
                 report_issue(path, line_no, find_col(line, name), line,
                     "direct native emitter expected `)` to close the string helper call",
-                    "write `parse_uint(s)`, `parse_int(s)`, `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, `proc_arg(index)`, `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_slice(text, start, len)`, `str_concat(left, right)`, `str_join(parts, sep)`, `str_replace(text, needle, replacement)`, `str_trim(text)`, `str_lower(text)`, `str_upper(text)`, `str_byte(value)`, `str_split_ws_into(text, out)`, `str_split_lines_into(text, out)`, `str_split_into(text, sep, out)`, `fs_list_files(dir, out)`, `doc_term_counts_into(text, counts)`, `doc_term_overlap_score(query, doc)`, or `doc_term_weighted_score(query, doc)`.",
+                    "write `parse_uint(s)`, `parse_int(s)`, `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_mtime(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, `proc_arg(index)`, `str_contains(text, needle)`, `str_index_of(text, needle)`, `str_starts_with(text, prefix)`, `str_ends_with(text, suffix)`, `str_slice(text, start, len)`, `str_concat(left, right)`, `str_join(parts, sep)`, `str_replace(text, needle, replacement)`, `str_trim(text)`, `str_lower(text)`, `str_upper(text)`, `str_byte(value)`, `str_split_ws_into(text, out)`, `str_split_lines_into(text, out)`, `str_split_into(text, sep, out)`, `fs_list_files(dir, out)`, `doc_term_counts_into(text, counts)`, `doc_term_overlap_score(query, doc)`, or `doc_term_weighted_score(query, doc)`.",
                     NULL);
                 free(name);
                 free(out.data);
@@ -26844,6 +27537,11 @@ static char *direct_infer_expr_type(
                     free(trimmed);
                     return strdup("Int");
                 }
+                if (direct_is_fs_mtime_builtin_name(name)) {
+                    free(name);
+                    free(trimmed);
+                    return strdup("Int");
+                }
                 if (direct_is_fs_write_text_builtin_name(name)) {
                     free(name);
                     free(trimmed);
@@ -27910,7 +28608,7 @@ static int direct_check_expr_inner(
                 direct_is_stdout_write_builtin_name(name) ||
                 direct_is_stdin_read_all_builtin_name(name) ||
                 direct_is_str_builder_new_builtin_name(name) || direct_is_str_builder_push_builtin_name(name) || direct_is_str_builder_append_builtin_name(name) || direct_is_str_builder_finish_builtin_name(name) ||
-                direct_is_fs_exists_builtin_name(name) || direct_is_fs_is_dir_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_remove_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_append_text_builtin_name(name) ||
+                direct_is_fs_exists_builtin_name(name) || direct_is_fs_is_dir_builtin_name(name) || direct_is_fs_mkdirs_builtin_name(name) || direct_is_fs_remove_builtin_name(name) || direct_is_fs_mtime_builtin_name(name) || direct_is_fs_read_text_builtin_name(name) || direct_is_fs_write_text_builtin_name(name) || direct_is_fs_append_text_builtin_name(name) ||
                 direct_is_fs_cwd_builtin_name(name) || direct_is_fs_temp_dir_builtin_name(name) || direct_is_path_join_builtin_name(name) ||
                 direct_is_path_basename_builtin_name(name) || direct_is_path_dirname_builtin_name(name) || direct_is_env_get_builtin_name(name) ||
                 direct_is_time_millis_builtin_name(name) || direct_is_proc_argc_builtin_name(name) || direct_is_proc_arg_builtin_name(name)) {
@@ -27918,7 +28616,7 @@ static int direct_check_expr_inner(
                 if (close < 0) {
                     report_issue(path, line_no, find_col(line, name), line,
                         "direct native emitter expected `)` to close the host helper call",
-                        "write `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, or `proc_arg(index)`.",
+                        "write `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_mtime(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, or `proc_arg(index)`.",
                         NULL);
                     free(name);
                     return 1;
@@ -27934,7 +28632,7 @@ static int direct_check_expr_inner(
                 if (argc != expected) {
                     report_issue(path, line_no, find_col(line, name), line,
                         "direct native emitter host helper argument count does not match",
-                        "write `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, or `proc_arg(index)`.",
+                        "write `fs_exists(path)`, `fs_read_text(path)`, `fs_write_text(path, text)`, `fs_append_text(path, text)`, `fs_mkdirs(path)`, `fs_remove(path)`, `fs_mtime(path)`, `fs_cwd()`, `fs_temp_dir()`, `path_join(base, child)`, `path_basename(path)`, `path_dirname(path)`, `env_get(name)`, `time_millis()`, `proc_argc()`, or `proc_arg(index)`.",
                         NULL);
                     for (int k = 0; k < 16; k++) free(args[k]);
                     free(name);
@@ -28055,10 +28753,11 @@ static int direct_check_expr_inner(
                     return 1;
                 }
                 char *arg_type = direct_infer_expr_type(args[0], locals, fns, fn_count, structs, struct_count);
-                if (!direct_is_intlike_scalar_type(arg_type)) {
+                if (!direct_is_intlike_scalar_type(arg_type) &&
+                    !(arg_type != NULL && strcmp(arg_type, "Str") == 0)) {
                     report_issue(path, line_no, find_col(line, name), line,
-                        "direct native emitter Str conversion requires an Int argument",
-                        "pass an Int, Bool, or Char value.",
+                        "direct native emitter Str conversion requires a scalar argument",
+                        "pass an Int, Bool, Char, or Str value (Str is identity).",
                         NULL);
                     free(arg_type);
                     for (int k = 0; k < 16; k++) free(args[k]);
@@ -30580,7 +31279,17 @@ static int direct_append_print_interpolation(
     for (int i = 1; i < end - 1;) {
         if (s[0] == '"' && s[i] == '\\' && i + 1 < end - 1) {
             i++;
-            sb_append_printf_literal_byte(&fmt, s[i]);
+            if (!is_verified_string_escape(s[i])) {
+                report_issue(path, line_no, find_col(line, "\\"), line,
+                    "unknown string escape",
+                    "use \\n, \\t, \\r, \\\", or \\\\; write a literal backslash as \\\\.",
+                    NULL);
+                free(fmt.data);
+                free(args.data);
+                free(trimmed);
+                return 1;
+            }
+            sb_append_printf_literal_byte(&fmt, decode_vais_escape(s[i]));
             i++;
             continue;
         }
@@ -33143,6 +33852,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "int64_t stderr_write(const char *);\n");
     sb_append(&out, "int64_t fs_mkdirs(const char *path);\n");
     sb_append(&out, "int64_t fs_remove(char *path);\n");
+    sb_append(&out, "int64_t fs_mtime(const char *path);\n");
     sb_append(&out, "int64_t fs_write_text(const char *path, const char *text);\n");
     sb_append(&out, "int64_t fs_append_text(const char *path, const char *text);\n");
     sb_append(&out, "char *fs_cwd(void);\n");
@@ -33425,8 +34135,14 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *split_presplit = split_statement_lines(merged);
     free(merged);
     if (split_presplit == NULL) return 1;
-    char *split = lower_self_recursion_text(split_presplit);
+    char *fstring_lowered = lower_fstring_text(split_presplit);
     free(split_presplit);
+    if (fstring_lowered == NULL) return 1;
+    char *compound_lowered = lower_compound_assign_text(fstring_lowered);
+    free(fstring_lowered);
+    if (compound_lowered == NULL) return 1;
+    char *split = lower_self_recursion_text(compound_lowered);
+    free(compound_lowered);
     if (split == NULL) return 1;
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(split);
     free(split);
@@ -34350,6 +35066,13 @@ static int write_host_runtime_c(const char *path) {
         "    if (unlink(path) == 0) return 0;\n"
         "    if (errno == ENOENT) return 0;\n"
         "    return errno == 0 ? 1 : errno;\n"
+        "}\n"
+        "\n"
+        "int64_t fs_mtime(const char *path) {\n"
+        "    if (path == 0) return 0;\n"
+        "    struct stat st;\n"
+        "    if (stat(path, &st) != 0) return 0;\n"
+        "    return (int64_t)st.st_mtime;\n"
         "}\n",
         fp
     );

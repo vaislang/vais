@@ -200,6 +200,13 @@ char *env_get(char *name) {
     return copy_str(value == NULL ? "" : value);
 }
 
+int64_t fs_mtime(const char *path) {
+    if (path == NULL) return 0;
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    return (int64_t)st.st_mtime;
+}
+
 char *str_concat(char *left, char *right) {
     if (left == NULL || right == NULL) host_trap("str_concat");
     size_t a = strlen(left);

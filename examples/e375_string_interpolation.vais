@@ -1,0 +1,53 @@
+# expect: 42
+# f-string interpolation (Token-Density Stage 1b): f"..." literals lower in
+# the shared driver pass to str_concat chains with every `{expr}` hole wrapped
+# in Str(...), which is now identity on Str values and int_to_str on Int
+# values, so Int and Str holes mix freely on both engines. `{{` and `}}` are
+# literal braces, escapes decode inside f-string text, plain "..." literals
+# never interpolate outside the legacy print path, and invalid holes (empty,
+# unterminated, quotes/backticks/braces/backslashes inside) are loud front
+# errors. This replaces nested str_concat(Str(...), ...) report lines: compare
+# render() below with the e332 hand-written chain.
+
+fn render(title: Str, score: Int, i: Int) -> Str {
+    return f"{i + 1}. {title} ({score})"
+}
+
+fn main() -> Int {
+    let n = 7
+    let name = "vais"
+
+    # Int holes, Str holes, and expression holes in one literal.
+    let s = f"n={n}!"
+    if s != "n=7!" { return 1 }
+    if f"{name}-{n}" != "vais-7" { return 2 }
+    if f"{n + 1} and {n * 2}" != "8 and 14" { return 3 }
+
+    # The e332 report line as one f-string.
+    if render("alpha guide", 4, 0) != "1. alpha guide (4)" { return 4 }
+    if f"{render(name, n, 1)}." != "2. vais (7)." { return 5 }
+
+    # Str(x) is identity on Str values and total over Int, so helper calls
+    # sit directly in holes.
+    let x = "x"
+    let y = "y"
+    if f"{str_concat(x, y)}!" != "xy!" { return 6 }
+    if Str(name) != "vais" { return 7 }
+    if Str(str_concat(x, y)) != "xy" { return 8 }
+
+    # Literal braces, empty and hole-only forms, and escape interplay.
+    if f"" != "" { return 9 }
+    if f"plain" != "plain" { return 10 }
+    if f"{{n}} raw" != "{n} raw" { return 11 }
+    if f"{n}" != "7" { return 12 }
+    if f"a\n{n}" != str_concat("a", str_concat(str_byte(10), "7")) { return 13 }
+
+    # Plain strings keep braces literally outside the legacy print path.
+    let plain = "keep {n} braces"
+    if plain.len() != 15 { return 14 }
+
+    # len("6. vais (7)") = 11, so (11 - 5) * 7 = 42.
+    let echo = f"{n}{n}"
+    if echo != "77" { return 15 }
+    return (render(name, n, 5).len() - 5) * n
+}

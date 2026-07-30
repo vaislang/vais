@@ -74,6 +74,7 @@ The first file API is text-only and UTF-8 oriented:
 | `fs_append_text(path: Str, text: Str) -> Int` | Verified | Append text to a file, creating it when missing. Return `0` on success and a non-zero host status on failure. |
 | `fs_mkdirs(path: Str) -> Int` | Verified | Create a directory and missing parents. Return `0` on success. |
 | `fs_remove(path: Str) -> Int` | Verified | Remove a file path. Missing paths return `0`; recursive directory removal is not part of this slice. Wired on both engines, including bare value-discarding statements. |
+| `fs_mtime(path: Str) -> Int` | Verified | Read a file modification time as epoch seconds. Total: missing paths yield `0`, so incremental workflows compare stored stamps without existence pre-checks. |
 
 The verified file/path slice passes explicit Vais `Str` paths to the host
 without canonicalization, symlink resolution, recursive directory walking, or

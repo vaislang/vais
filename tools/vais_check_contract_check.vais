@@ -133,7 +133,7 @@ fn check_required_patterns(output: Str) -> Int {
     fail = fail + require_contains("Vais checker contract includes 'error: unchecked result access is not Vais'", "error: unchecked result access is not Vais", output)
     fail = fail + require_contains("Vais checker contract includes 'error: pattern conditional uses match'", "error: pattern conditional uses match", output)
     fail = fail + require_contains("Vais checker contract includes 'error: else if is two words'", "error: else if is two words", output)
-    fail = fail + require_contains("Vais checker contract includes 'error: compound assignment is not supported'", "error: compound assignment is not supported", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: compound assignment needs a plain place on the left'", "error: compound assignment needs a plain place on the left", output)
     return fail
 }
 

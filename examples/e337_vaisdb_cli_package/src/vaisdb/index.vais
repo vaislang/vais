@@ -53,8 +53,9 @@ fn index_reset(index_dir: Str) -> Int {
     return 0
 }
 
-# docs.txt lines are `id<TAB>source-path` (v2); bare-id lines from older
-# indexes still parse (their snippets are simply unavailable). This helper
+# docs.txt lines are `id<TAB>source-path<TAB>mtime` (v3); bare-id and v2
+# two-field lines from older
+# indexes still parse (snippets/stamps are simply unavailable). This helper
 # keeps returning ids only, so every caller stays format-agnostic.
 fn docs_list_into(index_dir: Str, out: List<Str>) -> Int {
     let path = index_docs_path(index_dir)
@@ -201,10 +202,33 @@ fn ingest_doc(index_dir: Str, doc_id: Str, body: Str, src_path: Str) -> Int {
     }
     if doc_known(index_dir, doc_id) != 1 {
         let src = abs_src_path(src_path)
-        let entry = str_concat(doc_id, str_concat(tab, str_concat(src, lf)))
+        let mut stamp = 0
+        if src != "-" { stamp = fs_mtime(src) }
+        let entry = str_concat(doc_id, str_concat(tab, str_concat(src, str_concat(tab, str_concat(Str(stamp), lf)))))
         if fs_append_text(index_docs_path(index_dir), entry) != 0 { return 0 - 1 }
     }
     return total
+}
+
+# Stored ingest-time stamp for a doc; 0 for stdin docs, missing docs, and
+# v2-era entries without a stamp (which reindex treats as always-stale).
+fn doc_mtime(index_dir: Str, doc_id: Str) -> Int {
+    let path = index_docs_path(index_dir)
+    if fs_exists(path) != 1 { return 0 }
+    let text = fs_read_text(path)
+    let lines: List<Str> = []
+    let n = str_split_lines_into(text, lines)
+    let tab = str_byte(9)
+    let mut i = 0
+    while i < n {
+        let parts: List<Str> = []
+        let np = str_split_into(lines[i], tab, parts)
+        if np >= 3 {
+            if parts[0] == doc_id { return parse_int(parts[2]) }
+        }
+        i = i + 1
+    }
+    return 0
 }
 
 # Stream one shard for one query term, folding weight*count into scores.
@@ -402,6 +426,66 @@ fn ingest_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
     if failed == 1 { return Err("could not write index") }
     if ingested == 0 { return Err("no text documents in directory") }
     return Ok(Str(ingested))
+}
+
+# Incremental refresh: new files ingest, files whose current mtime moved
+# past the stored stamp are removed and re-ingested, unchanged files skip.
+# Ok payload is `added updated skipped` as space-separated digits.
+fn reindex_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
+    let names: List<Str> = []
+    let count = fs_list_files(dir, names)
+    if count == 0 { return Err("no documents in directory") }
+    let mut i = 0
+    let mut added = 0
+    let mut updated = 0
+    let mut skipped = 0
+    let mut touched = 0
+    let mut failed = 0
+    while i < count {
+        let name = names[i]
+        let ext = text_suffix_len(name)
+        if ext > 0 {
+            touched = touched + 1
+            let src = path_join(dir, name)
+            let cur = fs_mtime(abs_src_path(src))
+            let doc_id = str_slice(name, 0, name.len() - ext)
+            let mut mode = 0
+            if doc_known(index_dir, doc_id) == 1 {
+                let stored = doc_mtime(index_dir, doc_id)
+                if stored > 0 {
+                    if cur <= stored { mode = 2 }
+                    else { mode = 1 }
+                } else {
+                    mode = 1
+                }
+            }
+            if mode == 2 {
+                skipped = skipped + 1
+            } else {
+                if mode == 1 {
+                    let dropped = remove_doc(index_dir, doc_id)
+                    if dropped < 0 { failed = 1 }
+                }
+                let body = fs_read_text(src)
+                let total = ingest_doc(index_dir, doc_id, body, src)
+                if total == 0 - 2 {
+                    let w1 = stderr_write("skipped (too large): ")
+                    let w2 = stderr_write(doc_id)
+                    let w3 = stderr_write(str_byte(10))
+                } else if total < 0 {
+                    failed = 1
+                } else {
+                    if mode == 1 { updated = updated + 1 }
+                    if mode == 0 { added = added + 1 }
+                }
+            }
+        }
+        i = i + 1
+    }
+    if failed == 1 { return Err("could not write index") }
+    if touched == 0 { return Err("no text documents in directory") }
+    let note = str_concat(Str(added), str_concat(" ", str_concat(Str(updated), str_concat(" ", Str(skipped)))))
+    return Ok(note)
 }
 
 fn utf8_trim(line: Str, limit: Int) -> Str {

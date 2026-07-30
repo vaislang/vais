@@ -8105,6 +8105,10 @@ fn write_result_nested(path: Str) -> Int {
 }
 
 fn write_accept_source(name: Str, path: Str) -> Int {
+    if str_eq(name, "string_escape") == 1 { return write_string_escape_accept(path) }
+    if str_eq(name, "fstring") == 1 { return write_fstring_accept(path) }
+    if str_eq(name, "compound_assign") == 1 { return write_compound_assign_accept(path) }
+    if str_eq(name, "bool_predicate") == 1 { return write_bool_predicate_accept(path) }
     if str_eq(name, "day1") == 1 { return write_day1(path) }
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
     if str_eq(name, "io") == 1 { return write_io_accept(path) }
@@ -8969,7 +8973,173 @@ fn write_unknown_call(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_string_escape_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let s = \"a\\nb\"")
+    append_line(out, "    if s.len() != 3 { return 1 }")
+    append_line(out, "    if s[1] != 10 { return 2 }")
+    append_line(out, "    let t = \"x\\ty\"")
+    append_line(out, "    if t[1] != 9 { return 3 }")
+    append_line(out, "    let r = \"p\\rq\"")
+    append_line(out, "    if r[1] != 13 { return 4 }")
+    append_line(out, "    let q = \"say \\\"hi\\\"\"")
+    append_line(out, "    if q.len() != 8 { return 5 }")
+    append_line(out, "    let b = \"a\\\\b\"")
+    append_line(out, "    if b[1] != 92 { return 6 }")
+    append_line(out, "    if '\\n' != 10 { return 7 }")
+    append_line(out, "    if '\\t' != 9 { return 8 }")
+    append_line(out, "    if '\\r' != 13 { return 9 }")
+    append_line(out, "    if '\\\\' != 92 { return 10 }")
+    append_line(out, "    if '\\'' != 39 { return 11 }")
+    append_line(out, "    if '\\0' != 0 { return 14 }")
+    append_line(out, "    let lines: List<Str> = []")
+    append_line(out, "    if str_split_lines_into(s, lines) != 2 { return 12 }")
+    append_line(out, "    if lines[0] != \"a\" { return 13 }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_fstring_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn render(title: Str, score: Int, i: Int) -> Str {")
+    append_line(out, "    return f\"{i + 1}. {title} ({score})\"")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let n = 7")
+    append_line(out, "    let name = \"vais\"")
+    append_line(out, "    if f\"n={n}!\" != \"n=7!\" { return 1 }")
+    append_line(out, "    if f\"{name}-{n}\" != \"vais-7\" { return 2 }")
+    append_line(out, "    if render(\"alpha guide\", 4, 0) != \"1. alpha guide (4)\" { return 3 }")
+    append_line(out, "    if f\"{{n}} raw\" != \"{n} raw\" { return 4 }")
+    append_line(out, "    if Str(name) != \"vais\" { return 5 }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_compound_assign_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Acc {")
+    append_line(out, "    total: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut x = 40")
+    append_line(out, "    x += 2")
+    append_line(out, "    if x != 42 { return 1 }")
+    append_line(out, "    x -= 2")
+    append_line(out, "    x *= 2")
+    append_line(out, "    x /= 4")
+    append_line(out, "    x %= 13")
+    append_line(out, "    if x != 7 { return 2 }")
+    append_line(out, "    let xs: List<Int> = [40]")
+    append_line(out, "    xs[0] += 2")
+    append_line(out, "    if xs[0] != 42 { return 3 }")
+    append_line(out, "    let mut a = Acc { total: 40 }")
+    append_line(out, "    a.total += 2")
+    append_line(out, "    if a.total != 42 { return 4 }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_bool_predicate_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let a = \"alpha.txt\"")
+    append_line(out, "    if str_contains(a, \"alpha\") { } else { return 1 }")
+    append_line(out, "    if not str_contains(a, \"zzz\") { } else { return 2 }")
+    append_line(out, "    if str_contains(a, \"alp\") and str_ends_with(a, \"txt\") { } else { return 3 }")
+    append_line(out, "    let ok = str_starts_with(a, \"alpha\")")
+    append_line(out, "    if ok { } else { return 4 }")
+    append_line(out, "    let xs: List<Int> = [3, 5]")
+    append_line(out, "    if xs.contains(5) { } else { return 5 }")
+    append_line(out, "    if not xs.is_empty() { } else { return 6 }")
+    append_line(out, "    let mut total = 0")
+    append_line(out, "    for i in 0..2 {")
+    append_line(out, "        total += xs[i]")
+    append_line(out, "    }")
+    append_line(out, "    if total != 8 { return 7 }")
+    append_line(out, "    let mut sum = 0")
+    append_line(out, "    for x in xs {")
+    append_line(out, "        sum += x")
+    append_line(out, "    }")
+    append_line(out, "    if sum != 8 { return 8 }")
+    append_line(out, "    return 26 + total + sum")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_compound_assign_call_lhs_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn pick() -> Int {")
+    append_line(out, "    return 0")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = [1]")
+    append_line(out, "    xs[pick()] += 1")
+    append_line(out, "    return xs[0]")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_fstring_empty_hole_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let s = f\"a{}b\"")
+    append_line(out, "    return s.len()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_fstring_lone_brace_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let s = f\"a}b\"")
+    append_line(out, "    return s.len()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_fstring_open_hole_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let x = 1")
+    append_line(out, "    let s = f\"a{x\"")
+    append_line(out, "    return s.len()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_string_escape_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let s = \"a\\qb\"")
+    append_line(out, "    return s.len()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_char_escape_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let c = '\\q'")
+    append_line(out, "    return c")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_reject_source(name: Str, path: Str) -> Int {
+    if str_eq(name, "string_escape_unknown") == 1 { return write_string_escape_bad(path) }
+    if str_eq(name, "char_escape_unknown") == 1 { return write_char_escape_bad(path) }
+    if str_eq(name, "compound_assign_call_lhs") == 1 { return write_compound_assign_call_lhs_bad(path) }
+    if str_eq(name, "fstring_empty_hole") == 1 { return write_fstring_empty_hole_bad(path) }
+    if str_eq(name, "fstring_lone_brace") == 1 { return write_fstring_lone_brace_bad(path) }
+    if str_eq(name, "fstring_open_hole") == 1 { return write_fstring_open_hole_bad(path) }
     if str_eq(name, "bad_main_signature") == 1 { return write_bad_main(path) }
     if str_eq(name, "unknown_call") == 1 { return write_unknown_call(path) }
     if str_eq(name, "brace_if_expr") == 1 { return write_brace_if_expr(path) }
@@ -9508,6 +9678,16 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, name_payload_bad(), msg_enum_decl(), "", str_concat("broader payload ", str_concat(kw_enum(), "s")))
     fail = fail + expect_reject(vaisc, tmp, "closure_literal", msg_closure(), "", help_closure())
     fail = fail + expect_reject(vaisc, tmp, "rust_and", "logical AND uses the word", "", "and")
+    fail = fail + expect_accept(vaisc, tmp, "string_escape", "accepts verified string and char escapes (=42)", 42)
+    fail = fail + expect_reject(vaisc, tmp, "string_escape_unknown", "unknown string escape", "", "literal backslash")
+    fail = fail + expect_reject(vaisc, tmp, "char_escape_unknown", "unknown char escape", "", "use '")
+    fail = fail + expect_accept(vaisc, tmp, "fstring", "accepts f-string interpolation with Int and Str holes (=42)", 42)
+    fail = fail + expect_reject(vaisc, tmp, "fstring_empty_hole", "f-string hole is empty", "", "{expr}")
+    fail = fail + expect_reject(vaisc, tmp, "fstring_lone_brace", "unmatched `}` in f-string", "", "literal brace")
+    fail = fail + expect_reject(vaisc, tmp, "fstring_open_hole", "f-string hole is missing", "", "close the")
+    fail = fail + expect_accept(vaisc, tmp, "compound_assign", "accepts compound assignment on plain places (=42)", 42)
+    fail = fail + expect_reject(vaisc, tmp, "compound_assign_call_lhs", "compound assignment needs a plain place", "", "compound-assigned")
+    fail = fail + expect_accept(vaisc, tmp, "bool_predicate", "accepts bare predicate conditions and for accumulation idioms (=42)", 42)
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/clear/len/is_empty/last/pop/sum", "", "plain function call")
     fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)

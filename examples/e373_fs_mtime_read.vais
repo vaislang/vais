@@ -1,0 +1,25 @@
+# expect: 42
+# fs_mtime(path) -> Int reads a file modification time as epoch seconds on
+# both engines with a total contract: missing paths (and null-ish inputs)
+# yield 0, never a trap. Rewriting a file never decreases its mtime, so
+# incremental reindexing can compare stored against current stamps.
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let f = path_join(root, "vais-e373-mtime.txt")
+    if fs_write_text(f, "one") != 0 { return 1 }
+
+    let first = fs_mtime(f)
+    if first <= 0 { return 2 }
+
+    # Missing paths are total zeros.
+    if fs_mtime(path_join(root, "vais-e373-missing.txt")) != 0 { return 3 }
+
+    # Rewrites never move the stamp backwards.
+    if fs_write_text(f, "two") != 0 { return 4 }
+    let second = fs_mtime(f)
+    if second < first { return 5 }
+
+    # 6 * 7 = 42
+    return 6 * 7
+}

@@ -22,7 +22,26 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26l) — VaisDB 검색 UX: search 서브커맨드 + 스니펫
+## 현재 작업 (2026-07-26m) — 증분 재인덱스: fs_mtime 승격 + vaisdb reindex
+모드: 개별선택
+- [x] 1. fs_mtime 승격 ✅ 2026-07-26 — 미러 배선(native.c 18참조, 런타임
+      2종, **core 무변경 적중**), e373 잠금(존재>0/미존재 0/재작성
+      비감소) 양 엔진 첫 시도 42.
+- [x] 2. 인덱스 v3 + reindex ✅ — `id<TAB>path<TAB>mtime`(v2/bare 하위
+      호환 = 스탬프 0 → always-stale), doc_mtime, reindex(added/updated/
+      skipped). **경유 발견 2건**: ① 체커 Map-대입 검증의 로컬 테이블
+      함수경계 누수(바인더명 `counts`가 타 함수 Map 로컬과 충돌해 LOUD
+      오거부 — 후보 등록, 개명 회피) ② self-test 데이터 오염 자기트랩
+      (legacy 라인이 후행 카운트 검증 오염 — 정리 추가).
+- [x] 3. 게이트 ✅ — self-test(스탬프 3세대 파싱/add·skip 무sleep 결정)
+      + workflow +5(backdated touch로 updated 경로 결정적/갱신 내용 즉시
+      검색/stats 정확). 기존 게이트 무변경 GREEN.
+- [x] 4. 환류 + 문서 ✅ — HOST_IO/PRELUDE/LANGUAGE/README/CHANGELOG,
+      체커 스코프 누수 후보 등록, parity 392 실측(native=392). 래더
+      (fmt+release) GREEN(LADDER-EXIT 0). 커밋·머지·푸시 완결.
+진행률: 4/4 (100%) — **검색기 일상 루프(ingest→search→reindex) 완성**
+
+## 직전 완료 (2026-07-26l) — VaisDB 검색 UX: search 서브커맨드 + 스니펫
 모드: 개별선택 (제품화 2기 — 실사용 검색기)
 - [x] 1. 인덱스 v2 ✅ 2026-07-26 — docs.txt `id<TAB>절대경로`(stdin `-`),
       docs_list_into가 id-only 반환 유지로 호출부 무수정, doc_src_path/
@@ -45,8 +64,12 @@ This file tracks current work and completed gate-backed language surface.
 진행률: 4/4 (100%)
 
 ### 후보 추가 (검색 스프린트 환류)
-- fs_mtime(path) host API — 증분 재인덱스(변경 문서만) 수요. 현재는
-  remove 후 재인제스트 가이드.
+- ~~fs_mtime(path) host API~~ (완결 2026-07-26m: 승격 + vaisdb reindex,
+  e373).
+- 체커 Map-대입 검증의 로컬 테이블이 함수 경계를 누수(2026-07-26m 실측):
+  Result match 바인더명이 **타 함수**의 Map 로컬명과 같으면 lowering
+  산물(`name = flow.value`)이 "Map assignment requires..." LOUD 오거부.
+  회피 = 바인더 개명. 수요 시 체커 로컬 스코프를 함수 단위로 격리.
 
 ## 직전 완료 (2026-07-26k) — VaisDB P4: 스케일 게이트 (제품 래더 종결)
 모드: 개별선택

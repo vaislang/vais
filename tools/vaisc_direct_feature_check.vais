@@ -7622,6 +7622,110 @@ fn write_list_else_if_hoist(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_bool_predicate_conditions(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let a = \"alpha.txt\"")
+    append_line(out, "    if str_contains(a, \"alpha\") { } else { return 1 }")
+    append_line(out, "    if not str_contains(a, \"zzz\") { } else { return 2 }")
+    append_line(out, "    if str_contains(a, \"alp\") and str_ends_with(a, \"txt\") { } else { return 3 }")
+    append_line(out, "    let ok = str_starts_with(a, \"alpha\")")
+    append_line(out, "    if ok { } else { return 4 }")
+    append_line(out, "    let xs: List<Int> = [3, 5]")
+    append_line(out, "    if xs.contains(5) { } else { return 5 }")
+    append_line(out, "    if not xs.is_empty() { } else { return 6 }")
+    append_line(out, "    let mut hits = 0")
+    append_line(out, "    while str_contains(a, \"alpha\") and hits < 3 { hits += 1 }")
+    append_line(out, "    if hits != 3 { return 7 }")
+    append_line(out, "    let mut total = 0")
+    append_line(out, "    for i in 0..2 {")
+    append_line(out, "        total += xs[i]")
+    append_line(out, "    }")
+    append_line(out, "    let mut sum = 0")
+    append_line(out, "    for x in xs {")
+    append_line(out, "        sum += x")
+    append_line(out, "    }")
+    append_line(out, "    return 26 + total + sum")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_compound_assign_places(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct Acc {")
+    append_line(out, "    total: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut x = 40")
+    append_line(out, "    x += 2")
+    append_line(out, "    if x != 42 { return 1 }")
+    append_line(out, "    x -= 12")
+    append_line(out, "    x *= 3")
+    append_line(out, "    x /= 2")
+    append_line(out, "    x %= 7")
+    append_line(out, "    if x != 3 { return 2 }")
+    append_line(out, "    let xs: List<Int> = [40]")
+    append_line(out, "    xs[0] += 2")
+    append_line(out, "    if xs[0] != 42 { return 3 }")
+    append_line(out, "    let mut a = Acc { total: 40 }")
+    append_line(out, "    a.total += 2")
+    append_line(out, "    if a.total != 42 { return 4 }")
+    append_line(out, "    let n = 7")
+    append_line(out, "    let mut sum = 0")
+    append_line(out, "    sum += n + 1")
+    append_line(out, "    sum -= n - 5")
+    append_line(out, "    if sum != 6 { return 5 }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_fstring_interpolation(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn render(title: Str, score: Int, i: Int) -> Str {")
+    append_line(out, "    return f\"{i + 1}. {title} ({score})\"")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let n = 7")
+    append_line(out, "    let name = \"vais\"")
+    append_line(out, "    if f\"n={n}!\" != \"n=7!\" { return 1 }")
+    append_line(out, "    if f\"{name}-{n}\" != \"vais-7\" { return 2 }")
+    append_line(out, "    if render(\"alpha guide\", 4, 0) != \"1. alpha guide (4)\" { return 3 }")
+    append_line(out, "    if f\"{{n}} raw\" != \"{n} raw\" { return 4 }")
+    append_line(out, "    if Str(name) != \"vais\" { return 5 }")
+    append_line(out, "    if f\"a\\n{n}\" != str_concat(\"a\", str_concat(str_byte(10), \"7\")) { return 6 }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_string_escape_decode(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let s = \"a\\nb\"")
+    append_line(out, "    if s.len() != 3 { return 1 }")
+    append_line(out, "    if s[1] != 10 { return 2 }")
+    append_line(out, "    let t = \"x\\ty\"")
+    append_line(out, "    if t[1] != 9 { return 3 }")
+    append_line(out, "    let r = \"p\\rq\"")
+    append_line(out, "    if r[1] != 13 { return 4 }")
+    append_line(out, "    let q = \"say \\\"hi\\\"\"")
+    append_line(out, "    if q.len() != 8 { return 5 }")
+    append_line(out, "    let b = \"a\\\\b\"")
+    append_line(out, "    if b[1] != 92 { return 6 }")
+    append_line(out, "    if '\\n' != 10 { return 7 }")
+    append_line(out, "    if '\\t' != 9 { return 8 }")
+    append_line(out, "    if '\\r' != 13 { return 9 }")
+    append_line(out, "    if '\\\\' != 92 { return 10 }")
+    append_line(out, "    if '\\'' != 39 { return 11 }")
+    append_line(out, "    if '\\0' != 0 { return 12 }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_proc_capture_result(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "struct ProcessResult { code: Int, stdout: Str, stderr: Str }")
@@ -7690,6 +7794,10 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "map_str_str_get_opt_transform_len") == 1 { wrote = write_map_str_str_get_opt_transform_len(src) }
     else if str_contains(name, "str_len_reassigned_match_transform") == 1 { wrote = write_str_len_reassigned_match_transform(src) }
     else if str_contains(name, "map_str_str_get_opt_str_transforms") == 1 { wrote = write_map_str_str_get_opt_str_transforms(src) }
+    else if str_contains(name, "bool_predicate_conditions") == 1 { wrote = write_bool_predicate_conditions(src) }
+    else if str_contains(name, "compound_assign_places") == 1 { wrote = write_compound_assign_places(src) }
+    else if str_contains(name, "fstring_interpolation") == 1 { wrote = write_fstring_interpolation(src) }
+    else if str_contains(name, "string_escape_decode") == 1 { wrote = write_string_escape_decode(src) }
     else if str_contains(name, "proc_capture_result") == 1 { wrote = write_proc_capture_result(src) }
     else if str_contains(name, "list_else_if_hoist") == 1 { wrote = write_list_else_if_hoist(src) }
     else if str_contains(name, "list_if_hoist") == 1 { wrote = write_list_if_hoist(src) }
@@ -7930,6 +8038,14 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     let mut ok = 0
     if shape == 1 {
         ok = str_contains(text, "define i64 @add") and str_contains(text, "call i64 @add") and str_contains(text, " br ")
+    } else if shape == 234 {
+        ok = str_contains(text, "a\\0Ab") and str_contains(text, "say \\22hi\\22")
+    } else if shape == 235 {
+        ok = str_contains(text, "__vais_str_concat") and str_contains(text, "__vais_int_to_str") and str_contains(text, "n=")
+    } else if shape == 236 {
+        ok = str_contains(text, "add nsw") or str_contains(text, "add i64")
+    } else if shape == 237 {
+        ok = str_contains(text, "__vais_str_contains(") and str_contains(text, "br i1")
     } else if shape == 2 {
         ok = str_contains(text, " br ")
     } else if shape == 3 {
@@ -8914,5 +9030,9 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "list_int_while_hoist", "direct List<Int> while-condition returned arguments hoist per iteration (=42)", 19)
     fail = fail + expect_case(vaisc, tmp, "list_if_hoist", "direct List<Int> and List<Struct> if-condition returned arguments hoist (=42)", 20)
     fail = fail + expect_case(vaisc, tmp, "list_else_if_hoist", "direct List<Int> and List<Struct> else-if returned arguments lower (=42)", 21)
+    fail = fail + expect_case(vaisc, tmp, "string_escape_decode", "direct string and char escape decode runs (=42)", 234)
+    fail = fail + expect_case(vaisc, tmp, "fstring_interpolation", "direct f-string interpolation lowers to shared concat chains (=42)", 235)
+    fail = fail + expect_case(vaisc, tmp, "compound_assign_places", "direct compound assignment lowers over locals, list indexes, and struct fields (=42)", 236)
+    fail = fail + expect_case(vaisc, tmp, "bool_predicate_conditions", "direct bare predicate conditions and for accumulation idioms run (=42)", 237)
     return fail
 }

@@ -33,8 +33,8 @@ fn f(s: String) -> Int {
     if a || b { return 2 }
     if a { return 3 } elsif b { return 4 }
     match c { Color::Red => return 5 }
-    total += 1
-    total -= 1
-    total *= 2
+    pick() += 1
+    xs[pick()] -= 1
+    totals["k"] *= 2
     return 0
 }

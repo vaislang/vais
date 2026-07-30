@@ -159,7 +159,13 @@ let typed: Int = 42
 - `let name: Int = value`, `let name: Bool = value`,
   `let name: Char = value`, and `let name: Str = value` are verified for
   scalar locals.
-- Compound assignment such as `+=` is not Vais syntax.
+- Compound assignment `place += expr` (and `-=`, `*=`, `/=`, `%=`) lowers in
+  the shared driver pass to `place = place op (expr)`, so both engines keep
+  one assignment lowering and the parenthesized right side preserves
+  precedence (`examples/e376_compound_assign.vais`). The left side must be a
+  plain place — a local, list index, or struct field chain; call results and
+  string keys on the left are loud front errors so the lowering never
+  duplicates side effects.
 
 ## Types
 
@@ -1756,6 +1762,37 @@ fn main() -> Int {
 Verified today:
 
 - String literals with `"` or backtick delimiters.
+- Escapes inside `"` literals: `\n`, `\t`, and `\r` decode to
+  newline/tab/carriage-return bytes, `\"` embeds a quote, and `\\` embeds a
+  backslash, on both engines (`examples/e374_string_escapes.vais`). Backtick
+  literals stay raw and never decode escapes. Any other `\x` sequence is a
+  loud front error ("unknown string escape") instead of the old silent
+  backslash drop.
+- Char literals `'A'` lower to the ASCII Int value; `'\n'`, `'\t'`, `'\r'`,
+  `'\0'`, `'\\'`, and `'\''` decode the escape set plus NUL and the quote
+  escape, and other char escapes are a loud front error. `\0` stays
+  char-only: inside `"` literals it is rejected so no string carries an
+  embedded NUL byte.
+- Bare predicate conditions: the Int(1/0) predicate builtins
+  (`str_contains`, `str_starts_with`, `str_ends_with`, `fs_exists`,
+  `fs_is_dir`) and container predicate methods (`List.contains`,
+  `List.is_empty`, `Map.contains`) sit directly in `if`/`while` conditions,
+  under `not`, and inside `and`/`or` chains on both engines, and a predicate
+  result bound to a local is itself a bare condition
+  (`examples/e377_bool_predicate_conditions.vais`). The `== 1` spelling
+  keeps working but is no longer needed.
+- f-string interpolation: `f"n={n}: {title}"` lowers in the shared driver
+  pass to `str_concat` chains with every `{expr}` hole wrapped in `Str(...)`,
+  so Int and Str holes mix freely on both engines
+  (`examples/e375_string_interpolation.vais`). `{{` and `}}` are literal
+  braces, escapes decode inside f-string text, and holes are plain
+  expressions: quotes, backticks, braces, and backslashes inside a hole,
+  empty holes, unterminated holes, and lone `}` are loud front errors. Plain
+  `"..."` literals never interpolate outside the legacy `print("{name}")`
+  path.
+- `Str(x)` conversion is total over the scalar slice: identity on `Str`
+  values (locals, parameters, literals, `str_*` helper results, and
+  Str-returning helper calls) and the digit conversion on Int-like values.
 - `Str` helper parameters, local values, reassignment, and helper return values,
   as covered by `examples/e89_str_type.vais`.
 - `s.len()` and `s[i]` in the full self-host path and native direct engine.
@@ -1895,6 +1932,7 @@ fs_write_text(path: Str, text: Str) -> Int
 fs_append_text(path: Str, text: Str) -> Int
 fs_mkdirs(path: Str) -> Int
 fs_remove(path: Str) -> Int
+fs_mtime(path: Str) -> Int
 fs_cwd() -> Str
 fs_temp_dir() -> Str
 path_join(base: Str, child: Str) -> Str

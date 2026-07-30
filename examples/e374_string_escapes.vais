@@ -1,0 +1,51 @@
+# expect: 42
+# String and char escapes: double-quoted literals decode \n, \t, \r, \", and
+# \\ to real newline/tab/carriage-return/quote/backslash bytes on both
+# engines, char literals decode the same set plus '\'', and the front loudly
+# rejects escapes outside the verified set (previously the backslash was
+# dropped silently). Backtick literals stay raw. The decoded newline round-trips
+# through str_split_lines_into, file IO, and equality with str_byte(10) concat.
+
+fn main() -> Int {
+    let s = "a\nb"
+    if s.len() != 3 { return 1 }
+    if s[0] != 97 { return 2 }
+    if s[1] != 10 { return 3 }
+    if s[2] != 98 { return 4 }
+    let t = "x\ty"
+    if t[1] != 9 { return 5 }
+    let r = "p\rq"
+    if r[1] != 13 { return 6 }
+    let q = "he said \"hi\""
+    if q.len() != 12 { return 7 }
+    let b = "back\\slash"
+    if b[4] != 92 { return 8 }
+
+    # Char literals share the escape set (plus the quote escape '\'').
+    if '\n' != 10 { return 9 }
+    if '\t' != 9 { return 10 }
+    if '\r' != 13 { return 11 }
+    if '\\' != 92 { return 12 }
+    if '\'' != 39 { return 13 }
+    if '\0' != 0 { return 22 }
+
+    # A decoded \n is a real line break: split, rebuild, and compare.
+    let lines: List<Str> = []
+    if str_split_lines_into(s, lines) != 2 { return 14 }
+    if lines[0] != "a" { return 15 }
+    if lines[1] != "b" { return 16 }
+    let joined = str_concat("a", str_concat(str_byte(10), "b"))
+    if joined != s { return 17 }
+
+    # The escaped newline survives a file round-trip byte for byte.
+    let path = path_join(fs_temp_dir(), "vais-e374-escapes.txt")
+    if fs_write_text(path, "one\ntwo") != 0 { return 18 }
+    let body = fs_read_text(path)
+    if body.len() != 7 { return 19 }
+    let back: List<Str> = []
+    if str_split_lines_into(body, back) != 2 { return 20 }
+    if back[1] != "two" { return 21 }
+
+    # 3*2*7 = 42: string length, split count, and file line width agree.
+    return s.len() * back.len() * 7
+}

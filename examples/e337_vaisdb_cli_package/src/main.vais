@@ -98,6 +98,24 @@ fn flow_failed(note: Str) -> Int {
     return 1
 }
 
+fn run_reindex(index_dir: Str, dir: Str) -> Int {
+    let flow = reindex_dir_into(index_dir, dir)
+    let note = match flow { Ok(rc) => rc, Err(msg) => msg }
+    if flow_failed(note) == 1 {
+        print(str_concat("error: ", note))
+        return 3
+    }
+    let parts: List<Str> = []
+    let np = str_split_into(note, " ", parts)
+    if np != 3 {
+        print("error: could not write index")
+        return 3
+    }
+    let line = str_concat("reindexed added=", str_concat(parts[0], str_concat(" updated=", str_concat(parts[1], str_concat(" skipped=", parts[2])))))
+    print(line)
+    return 0
+}
+
 fn run_rank(index_dir: Str, query_text: Str, k: Int) -> Int {
     if index_exists(index_dir) != 1 {
         print("error: index not found")
@@ -253,6 +271,7 @@ fn usage() -> Int {
     print("       vaisdb query <index> <doc-id> <query-text>")
     print("       vaisdb report <index> <query-text>")
     print("       vaisdb ingest-dir <index> <doc-dir>")
+    print("       vaisdb reindex <index> <doc-dir>")
     print("       vaisdb rank <index> <query-text> <k>")
     print("       vaisdb search <index> <query-text> [k]")
     print("       vaisdb ingest-stdin <index> <doc-id>")
@@ -341,6 +360,31 @@ fn self_test() -> Int {
     let trimmed = utf8_trim(padded, 80)
     if trimmed.len() != 79 { return 32 }
 
+    # v3 stamps: dir-ingested docs carry a positive mtime, stdin docs 0,
+    # and v2-era two-field lines parse as 0 (always-stale for reindex).
+    if doc_mtime(dir, "d3") <= 0 { return 35 }
+    if doc_mtime(dir, "d1") != 0 { return 36 }
+    let tabb = str_byte(9)
+    let legacy = str_concat("legacy", str_concat(tabb, str_concat("-", str_byte(10))))
+    if fs_append_text(index_docs_path(dir), legacy) != 0 { return 37 }
+    if doc_mtime(dir, "legacy") != 0 { return 38 }
+    # Drop the synthetic legacy entry so later doc counts stay exact
+    # (zero postings removed, but the docs line is rewritten away).
+    if remove_doc(dir, "legacy") != 0 { return 44 }
+
+    # Incremental reindex: a fresh dir adds, an immediate rerun skips.
+    let rdir = path_join(root, "vais-e337-selftest-reindex")
+    if fs_mkdirs(rdir) != 0 { return 39 }
+    if fs_write_text(path_join(rdir, "r1.txt"), "alpha beta") != 0 { return 40 }
+    let ridx = path_join(root, "vais-e337-selftest-reindex-idx")
+    index_reset(ridx)
+    let r_flow = reindex_dir_into(ridx, rdir)
+    let r_note = match r_flow { Ok(rc1) => rc1, Err(msg) => msg }
+    if r_note != "1 0 0" { return 41 }
+    let r_flow2 = reindex_dir_into(ridx, rdir)
+    let r_note2 = match r_flow2 { Ok(rc2) => rc2, Err(msg) => msg }
+    if r_note2 != "0 0 1" { return 43 }
+
     # The guarded counter matches builtin tokenization on small bodies.
     let eq: Map<Str,Int> = {}
     if doc_terms_guarded_into("ai ai ai cache", eq) != 4 { return 25 }
@@ -384,6 +428,10 @@ fn main() -> Int {
     if command == "ingest-dir" {
         if proc_argc() != 3 { return usage() }
         return run_ingest_dir(proc_arg(1), proc_arg(2))
+    }
+    if command == "reindex" {
+        if proc_argc() != 3 { return usage() }
+        return run_reindex(proc_arg(1), proc_arg(2))
     }
     if command == "rank" {
         if proc_argc() != 4 { return usage() }
