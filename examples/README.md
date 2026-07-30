@@ -339,6 +339,10 @@ over locals, list indexes, and struct fields on both engines),
 conditions (`if str_contains(...)` without `== 1`, `not`/`and`/`or`
 chains, container predicates) and range-for/for-each accumulation idioms
 on both engines,
+`examples/e378_str_receiver_methods.vais` for curated Str/fs receiver
+methods (`s.has(x)`, `s.trim().lower()`, `path.read()`, and friends
+lowering to the existing builtins with postfix-chain receivers on both
+engines),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

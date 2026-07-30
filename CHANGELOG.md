@@ -4,6 +4,25 @@
 
 ### Changed
 
+- Promoted Str/fs receiver methods as verified surface (Token-Density
+  Stage 2a, docs/design/TOKEN-DENSITY.md): a curated method set lowers
+  in the shared driver pass to the existing builtins — s.has(x) /
+  s.starts(p) / s.ends(sfx) -> str_contains / str_starts_with /
+  str_ends_with, s.trim() / s.lower() / s.upper() -> str_trim /
+  str_lower / str_upper, s.replace(a, b) -> str_replace, s.slice(i, n)
+  -> str_slice, and path.read() / path.write(t) / path.exists() /
+  path.is_dir() -> fs_read_text / fs_write_text / fs_exists / fs_is_dir
+  — so both engines share one lowering with zero new codegen. Receivers
+  are postfix chains (locals, fields, list indexes, call results,
+  earlier method results) captured by a balanced backward scan and
+  spliced exactly once, chains resolve iteratively
+  (name.trim().lower() -> str_lower(str_trim(name))), the names never
+  collide with List/Map method surface, and a receiver containing a
+  string literal is a loud front error instead of a partial lowering.
+  Locked by examples/e378_str_receiver_methods.vais (parity
+  native-supported), a front accept fixture plus a literal-receiver
+  reject fixture, and direct feature shape 238.
+
 - Verified bare predicate conditions and loop accumulation idioms
   (Token-Density Stage 1d, docs/design/TOKEN-DENSITY.md): the Int(1/0)
   predicate builtins (str_contains / str_starts_with / str_ends_with /

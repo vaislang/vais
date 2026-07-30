@@ -18386,6 +18386,198 @@ static char *lower_fstring_text(const char *text) {
     return sb_take(&out);
 }
 
+/* Stage 2a receiver-method desugar: a curated set of Str/fs method
+ * spellings lowers to the existing builtin calls in the shared pipeline —
+ * s.has(x) -> str_contains(s, x), s.starts(p)/s.ends(p) ->
+ * str_starts_with/str_ends_with, s.trim()/s.lower()/s.upper() ->
+ * str_trim/str_lower/str_upper, s.replace(a, b) -> str_replace,
+ * s.slice(i, n) -> str_slice, p.read() -> fs_read_text, p.write(t) ->
+ * fs_write_text, p.exists() -> fs_exists, p.is_dir() -> fs_is_dir. The
+ * receiver is a postfix chain captured by a balanced backward scan and is
+ * spliced exactly once, so side effects never duplicate; receivers
+ * containing string literals bail out and the front check reports them.
+ * Names never collide with List/Map method surface, and chains resolve
+ * over repeated rewrites (s.trim().lower() -> str_lower(str_trim(s))). */
+typedef struct {
+    const char *method;
+    const char *builtin;
+} StrMethodMapEntry;
+
+static const StrMethodMapEntry STR_METHOD_MAP[] = {
+    {"has", "str_contains"},
+    {"starts", "str_starts_with"},
+    {"ends", "str_ends_with"},
+    {"trim", "str_trim"},
+    {"lower", "str_lower"},
+    {"upper", "str_upper"},
+    {"replace", "str_replace"},
+    {"slice", "str_slice"},
+    {"read", "fs_read_text"},
+    {"write", "fs_write_text"},
+    {"exists", "fs_exists"},
+    {"is_dir", "fs_is_dir"},
+};
+
+static int str_method_lookup(const char *name, size_t len) {
+    for (size_t k = 0; k < sizeof(STR_METHOD_MAP) / sizeof(STR_METHOD_MAP[0]); k++) {
+        if (strlen(STR_METHOD_MAP[k].method) == len &&
+            strncmp(STR_METHOD_MAP[k].method, name, len) == 0) {
+            return (int)k;
+        }
+    }
+    return -1;
+}
+
+static char *lower_str_method_line(const char *line) {
+    char *current = strdup(line);
+    if (current == NULL) return NULL;
+    size_t search_from = 0;
+    for (;;) {
+        size_t len = strlen(current);
+        char delim = '\0';
+        int found = 0;
+        size_t dot_pos = 0;
+        size_t open_pos = 0;
+        int map_idx = -1;
+        for (size_t i = 0; i < len && !found; i++) {
+            char c = current[i];
+            if (delim == '"') {
+                if (c == '\\' && current[i + 1] != '\0') {
+                    i++;
+                    continue;
+                }
+                if (c == '"') delim = '\0';
+                continue;
+            }
+            if (delim == '`') {
+                if (c == '`') delim = '\0';
+                continue;
+            }
+            if (c == '#') break;
+            if (c == '\'') {
+                int end = skip_char_literal_c(current, (int)i);
+                if (end > (int)i + 1) {
+                    i = (size_t)end - 1;
+                    continue;
+                }
+            }
+            if (c == '"' || c == '`') {
+                delim = c;
+                continue;
+            }
+            if (c == '.' && i > 0 && current[i - 1] != '.' && current[i + 1] != '.' &&
+                i >= search_from) {
+                size_t ns = i + 1;
+                size_t j = ns;
+                while (is_ident_continue(current[j])) j++;
+                if (j > ns && current[j] == '(') {
+                    int idx = str_method_lookup(current + ns, j - ns);
+                    if (idx >= 0) {
+                        dot_pos = i;
+                        open_pos = j;
+                        map_idx = idx;
+                        found = 1;
+                    }
+                }
+            }
+        }
+        if (!found) return current;
+
+        long r = (long)dot_pos - 1;
+        int depth = 0;
+        int bail = 0;
+        while (r >= 0) {
+            char c = current[r];
+            if (c == ')' || c == ']') {
+                depth++;
+                r--;
+                continue;
+            }
+            if (c == '(' || c == '[') {
+                if (depth == 0) break;
+                depth--;
+                r--;
+                continue;
+            }
+            if (depth > 0) {
+                if (c == '"' || c == '`' || c == '\'') {
+                    bail = 1;
+                    break;
+                }
+                r--;
+                continue;
+            }
+            if (is_ident_continue(c)) {
+                r--;
+                continue;
+            }
+            if (c == '.') {
+                if (r > 0 && current[r - 1] == '.') break;
+                r--;
+                continue;
+            }
+            break;
+        }
+        size_t recv_start = (size_t)(r + 1);
+        int ok = !bail && recv_start < dot_pos;
+        if (ok) {
+            char first = current[recv_start];
+            if (!is_ident_continue(first) || (first >= '0' && first <= '9')) ok = 0;
+        }
+        int close = -1;
+        if (ok) close = find_matching_paren_c(current, (int)open_pos);
+        if (!ok || close < 0) {
+            search_from = dot_pos + 1;
+            continue;
+        }
+
+        char *recv = substr_copy(current + recv_start, dot_pos - recv_start);
+        char *args_raw = substr_copy(current + open_pos + 1, (size_t)(close - 1) - open_pos);
+        char *args = trim_copy(args_raw);
+        free(args_raw);
+        StrBuf next;
+        sb_init(&next);
+        sb_append_n(&next, current, recv_start);
+        sb_append(&next, STR_METHOD_MAP[map_idx].builtin);
+        sb_append(&next, "(");
+        sb_append(&next, recv);
+        if (args[0] != '\0') {
+            sb_append(&next, ", ");
+            sb_append(&next, args);
+        }
+        sb_append(&next, ")");
+        sb_append(&next, current + close + 1);
+        free(recv);
+        free(args);
+        free(current);
+        current = sb_take(&next);
+        search_from = 0;
+    }
+}
+
+static char *lower_str_method_text(const char *text) {
+    StrBuf out;
+    sb_init(&out);
+    const char *line = text;
+    for (;;) {
+        const char *end = strchr(line, '\n');
+        size_t len = end == NULL ? strlen(line) : (size_t)(end - line);
+        char *one = substr_copy(line, len);
+        char *rewritten = lower_str_method_line(one);
+        free(one);
+        if (rewritten == NULL) {
+            free(out.data);
+            return NULL;
+        }
+        sb_append(&out, rewritten);
+        free(rewritten);
+        if (end == NULL) break;
+        sb_append(&out, "\n");
+        line = end + 1;
+    }
+    return sb_take(&out);
+}
+
 /* Stage 1c compound-assign desugar: `place += expr` (and -=, *=, /=, %=)
  * lowers to `place = place + (expr)` in the shared pipeline, so both engines
  * keep their single assignment lowering and the parenthesized right side
@@ -18645,8 +18837,10 @@ static char *prepare_source_text(const char *raw) {
     free(normalized_joined);
     char *fstring_lowered = lower_fstring_text(normalized_presplit);
     free(normalized_presplit);
-    char *compound_lowered = lower_compound_assign_text(fstring_lowered);
+    char *str_method_lowered = lower_str_method_text(fstring_lowered);
     free(fstring_lowered);
+    char *compound_lowered = lower_compound_assign_text(str_method_lowered);
+    free(str_method_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -19464,6 +19658,57 @@ static int front_check_string_escape_line(const char *path, int line_no, const c
     return issues;
 }
 
+/* Front check: the receiver-method lowering pass rewrites every lowerable
+ * `recv.method(...)` spelling from the curated Str/fs set away before this
+ * loop runs, so a surviving set-name method call has a receiver the scan
+ * could not capture (string literal in the chain, literal receiver, or an
+ * unbalanced chain); report it loudly. */
+static int front_check_str_method_line(const char *path, int line_no, const char *line) {
+    int issues = 0;
+    char delim = '\0';
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if (c == '.' && i > 0 && line[i - 1] != '.' && line[i + 1] != '.') {
+            size_t ns = i + 1;
+            size_t j = ns;
+            while (is_ident_continue(line[j])) j++;
+            if (j > ns && line[j] == '(' && str_method_lookup(line + ns, j - ns) >= 0) {
+                report_issue(path, line_no, (int)i + 2, line,
+                    "method receiver is not a lowerable postfix chain",
+                    "bind the receiver to a local first; string literals inside the receiver chain are not lowered.",
+                    NULL);
+                issues++;
+                i = j;
+            }
+        }
+    }
+    return issues;
+}
+
 /* Front check: the compound-assign lowering pass rewrites every valid
  * `place op= expr` statement away before this loop runs, so any surviving
  * op= spelling has an unsupported left side; report it loudly. */
@@ -20060,6 +20305,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         issues += front_check_string_escape_line(path, line_no, line);
         issues += front_check_fstring_line(path, line_no, line);
         issues += front_check_compound_assign_line(path, line_no, line);
+        issues += front_check_str_method_line(path, line_no, line);
         {
             const char *eq = strstr(probe, "= if ");
             if (eq != NULL) {
@@ -21626,8 +21872,10 @@ static char *prepare_source_file(const char *path) {
     free(normalized_joined);
     char *fstring_lowered = lower_fstring_text(normalized_presplit);
     free(normalized_presplit);
-    char *compound_lowered = lower_compound_assign_text(fstring_lowered);
+    char *str_method_lowered = lower_str_method_text(fstring_lowered);
     free(fstring_lowered);
+    char *compound_lowered = lower_compound_assign_text(str_method_lowered);
+    free(str_method_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -34138,8 +34386,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *fstring_lowered = lower_fstring_text(split_presplit);
     free(split_presplit);
     if (fstring_lowered == NULL) return 1;
-    char *compound_lowered = lower_compound_assign_text(fstring_lowered);
+    char *str_method_lowered = lower_str_method_text(fstring_lowered);
     free(fstring_lowered);
+    if (str_method_lowered == NULL) return 1;
+    char *compound_lowered = lower_compound_assign_text(str_method_lowered);
+    free(str_method_lowered);
     if (compound_lowered == NULL) return 1;
     char *split = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);

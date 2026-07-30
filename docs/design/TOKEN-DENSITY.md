@@ -24,9 +24,15 @@ accumulation idioms already ran on both engines and are now locked by
 examples/e377_bool_predicate_conditions.vais and direct feature shape 237,
 retiring the `== 1` idiom. STAGE 1 COMPLETE: every measured hotspot
 (escapes, interpolation, compound assignment, predicate spelling, loop
-idioms) is verified surface. Next: Stage 2 prelude v2 (receiver methods,
-return-value collections), and re-measuring the corpus as new code adopts
-the Stage 1 idioms. Goal: cut LLM development token cost by half against
+idioms) is verified surface. Stage 2a promoted 2026-07-30 — curated Str/fs
+receiver methods (has/starts/ends/trim/lower/upper/replace/slice and
+read/write/exists/is_dir) lower to the existing builtins in the shared
+pass with postfix-chain receivers spliced once, locked by
+examples/e378_str_receiver_methods.vais and direct feature shape 238.
+Remaining Stage 2: return-value collection spellings for the `*_into`
+out-param family (s.lines(), s.split(sep), dir.files(), dir.dirs()),
+expression bodies, and argv slice match; then re-measure the corpus as
+new code adopts the idioms. Goal: cut LLM development token cost by half against
 performance-equivalent mainstream languages while keeping runtime behavior and
 performance unchanged.
 

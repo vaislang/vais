@@ -1,0 +1,49 @@
+# expect: 42
+# Receiver methods for the Str/fs prelude (Token-Density Stage 2a): a curated
+# method set lowers in the shared driver pass to the existing builtins —
+# has/starts/ends -> str_contains/str_starts_with/str_ends_with,
+# trim/lower/upper -> str_trim/str_lower/str_upper, replace/slice ->
+# str_replace/str_slice, and read/write/exists/is_dir ->
+# fs_read_text/fs_write_text/fs_exists/fs_is_dir — so both engines keep one
+# lowering and zero new codegen. Receivers are postfix chains spliced exactly
+# once (locals, fields, list indexes, call results, and earlier method
+# results), chains resolve iteratively, and a receiver containing a string
+# literal is a loud front error instead of a partial lowering. The names
+# never collide with List/Map method surface.
+
+fn pick_name(xs: List<Str>, i: Int) -> Str {
+    return xs[i]
+}
+
+fn main() -> Int {
+    let name = " Alpha.TXT "
+    if name.trim().lower().ends(".txt") { } else { return 1 }
+    if name.has("Alpha") { } else { return 2 }
+    if name.trim().starts("Alpha") { } else { return 3 }
+    let cleaned = name.trim().lower()
+    if cleaned != "alpha.txt" { return 4 }
+    if cleaned.replace(".txt", ".md") != "alpha.md" { return 5 }
+    if cleaned.slice(0, 5) != "alpha" { return 6 }
+
+    # Indexed and call-result receivers splice once, no duplication.
+    let words: List<Str> = ["beta", "gamma"]
+    if words[1].has("amm") { } else { return 7 }
+    if pick_name(words, 0).upper() != "BETA" { return 8 }
+
+    # fs methods round-trip a file with an f-string body.
+    let path = path_join(fs_temp_dir(), "vais-e378.txt")
+    if path.write(f"n={cleaned.len()}") != 0 { return 9 }
+    if path.exists() { } else { return 10 }
+    if path.is_dir() { return 11 }
+    if path.read() != "n=9" { return 12 }
+
+    # Method predicates drive bare conditions in loops.
+    let mut hits = 0
+    for w in words {
+        if w.has("a") { hits += 1 }
+    }
+    if hits != 2 { return 13 }
+
+    # cleaned.len() 9 * 4 + hits 2 * 3 = 42.
+    return cleaned.len() * 4 + hits * 3
+}

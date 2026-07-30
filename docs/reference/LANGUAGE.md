@@ -1773,6 +1773,17 @@ Verified today:
   escape, and other char escapes are a loud front error. `\0` stays
   char-only: inside `"` literals it is rejected so no string carries an
   embedded NUL byte.
+- Receiver methods for the Str/fs prelude: `s.has(x)`, `s.starts(p)`,
+  `s.ends(sfx)`, `s.trim()`, `s.lower()`, `s.upper()`, `s.replace(a, b)`,
+  `s.slice(i, n)`, `path.read()`, `path.write(text)`, `path.exists()`, and
+  `path.is_dir()` lower in the shared driver pass to the existing
+  `str_*`/`fs_*` builtins (`examples/e378_str_receiver_methods.vais`).
+  Receivers are postfix chains — locals, fields, list indexes, call
+  results, and earlier method results — spliced exactly once, so side
+  effects never duplicate; chains like `name.trim().lower()` resolve
+  iteratively, and a receiver containing a string literal is a loud front
+  error ("method receiver is not a lowerable postfix chain") instead of a
+  partial lowering. The function spellings keep working unchanged.
 - Bare predicate conditions: the Int(1/0) predicate builtins
   (`str_contains`, `str_starts_with`, `str_ends_with`, `fs_exists`,
   `fs_is_dir`) and container predicate methods (`List.contains`,
