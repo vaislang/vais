@@ -156,6 +156,27 @@ Against the performance-equivalent baseline (Rust-class native), the combined
 path lands in the 0.5-0.6x band. Against Python the honest offer is token
 parity plus 10-100x runtime performance, not half tokens.
 
+## Re-measurement With The Landed Surface (2026-07-30)
+
+After Stages 1a-1d and 2a-2b landed, the two heaviest benchmark programs
+were rewritten in the promoted surface only and verified by execution
+(package self-test / example both exit 42 on both engines) before
+re-tokenizing (o200k):
+
+| Program | Vais before | Vais landed | Python | TypeScript | Rust |
+| --- | --- | --- | --- | --- | --- |
+| vaisgrep (main+scan) | 2,156 | 1,736 | 1,511 | 1,705 | 1,829 |
+| e332 top-k ranking | 1,013 | 902 | 823 | 914 | 1,072 |
+| Total | 3,169 | 2,638 (0.83x) | 2,334 | 2,619 | 2,901 |
+
+Verified-execution result: the landed surface recovers 17% on real
+programs, reaching TypeScript parity (2,638 vs 2,619) and 9% below Rust —
+the performance-equivalent baseline — with Python 12% ahead. The residual
+against the Stage 2 sketch (0.75x) is the not-yet-landed remainder:
+expression bodies, argv slice match, and the pipeline methods
+(enumerate/map/join). Unlike the earlier sketches, these numbers carry no
+design risk — every construct in the rewrite is gate-locked surface.
+
 ## Macro Data Points
 
 - `compiler/self/fixpoint_full.vais` = 247.6k o200k tokens (23.1k lines,
