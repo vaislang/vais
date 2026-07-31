@@ -36,5 +36,7 @@ fn f(s: String) -> Int {
     pick() += 1
     xs[pick()] -= 1
     totals["k"] *= 2
+    if flag { total = 1
+    else { total = 2 }
     return 0
 }

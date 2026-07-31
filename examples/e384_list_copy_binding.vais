@@ -1,0 +1,40 @@
+# expect: 42
+# List-copy bindings: `let [mut] name = xs` and the annotated spelling
+# `let [mut] name: List<T> = xs` copy a list local or parameter through the
+# shared driver pass, which lowers both to the verified reassignment pair
+# (`let mut name: List<T> = []` then `name = xs`), so both engines share
+# copy semantics. Previously the full engine typed the unannotated copy as
+# Int and emitted invalid IR while the direct engine ran it, and the
+# annotated let-initializer diverged the same way — both spellings now
+# agree with the direct engine's copy behavior: mutating the copy leaves
+# the source untouched.
+
+fn tail_len(words: List<Str>) -> Int {
+    let local = words
+    return local.len()
+}
+
+fn main() -> Int {
+    # Unannotated copy from a list local.
+    let xs: List<Str> = ["a", "b"]
+    let ys = xs
+    if ys.len() != 2 { return 1 }
+    if ys[1] != "b" { return 2 }
+
+    # Annotated copy stays a copy: pushing on it never touches the source.
+    let nums: List<Int> = [1, 2]
+    let mut copied: List<Int> = nums
+    copied.push(3)
+    if copied.len() != 3 { return 3 }
+    if nums.len() != 2 { return 4 }
+
+    # Chained copies resolve through the registered binding.
+    let chained = copied
+    if chained.len() != 3 { return 5 }
+
+    # Parameters copy the same way inside helpers.
+    if tail_len(xs) != 2 { return 6 }
+
+    # 2 + 3*10 + 2 + 3 + 5 = 42.
+    ys.len() + copied.len() * 10 + nums.len() + chained.len() + 5
+}

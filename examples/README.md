@@ -363,6 +363,9 @@ both engines),
 (closure tuple parameters lowering to indexed accumulation loops, with
 List<Str>/List<Int> bindings, `.join(sep)` tails, and the one-line
 ranking-report renderer on both engines),
+`examples/e384_list_copy_binding.vais` for list-copy bindings in both
+spellings (`let ys = xs` and `let ys: List<T> = xs` lowering to the
+verified reassignment pair with copy semantics on both engines),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

@@ -19756,6 +19756,178 @@ static char *lower_enum_map_text(const char *text) {
     return sb_take(&out);
 }
 
+/* List-copy binding desugar: `let [mut] name = xs` (and the annotated
+ * spelling `let [mut] name: List<T> = xs`) where xs is a known list local
+ * or parameter lowers to the verified pair
+ *     let mut name: List<T> = []
+ *     name = xs
+ * so both engines share the reassignment-copy path (copy semantics,
+ * matching the direct engine). The pass tracks `: List<T>` annotations
+ * from fn parameters and let declarations per function body, so only
+ * known lists rewrite; scalar bindings never match. This closes an engine
+ * divergence where the full engine typed the unannotated copy as Int and
+ * emitted invalid IR while the direct engine ran it. */
+typedef struct {
+    char names[64][64];
+    char elems[64][32];
+    int count;
+} ListSymTab;
+
+static void list_sym_reset(ListSymTab *t) {
+    t->count = 0;
+}
+
+static void list_sym_add(ListSymTab *t, const char *name, size_t name_len, const char *elem, size_t elem_len) {
+    if (t->count >= 64 || name_len == 0 || name_len >= 64 || elem_len == 0 || elem_len >= 32) return;
+    memcpy(t->names[t->count], name, name_len);
+    t->names[t->count][name_len] = '\0';
+    memcpy(t->elems[t->count], elem, elem_len);
+    t->elems[t->count][elem_len] = '\0';
+    t->count++;
+}
+
+static const char *list_sym_find(ListSymTab *t, const char *name, size_t name_len) {
+    for (int k = 0; k < t->count; k++) {
+        if (strlen(t->names[k]) == name_len && strncmp(t->names[k], name, name_len) == 0) {
+            return t->elems[k];
+        }
+    }
+    return NULL;
+}
+
+/* Register every `IDENT: List<ELEM>` spelling on the line (covers fn
+ * parameter lists and let annotations in one scan). */
+static void list_sym_scan_line(ListSymTab *t, const char *line) {
+    char delim = '\0';
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if (is_ident_continue(c) && (i == 0 || !is_ident_continue(line[i - 1]))) {
+            size_t ns = i;
+            size_t j = i;
+            while (is_ident_continue(line[j])) j++;
+            const char *p = skip_ws(line + j);
+            if (*p == ':' && starts_with(skip_ws(p + 1), "List<")) {
+                const char *e = skip_ws(p + 1) + 5;
+                const char *ee = e;
+                int depth = 1;
+                while (*ee != '\0' && depth > 0) {
+                    if (*ee == '<') depth++;
+                    if (*ee == '>') depth--;
+                    if (depth > 0) ee++;
+                }
+                if (depth == 0) {
+                    list_sym_add(t, line + ns, j - ns, e, (size_t)(ee - e));
+                }
+            }
+            i = j - 1;
+        }
+    }
+}
+
+static char *lower_list_copy_line(const char *line, ListSymTab *t) {
+    const char *p = skip_ws(line);
+    size_t indent_len = (size_t)(p - line);
+    if (!starts_with(p, "let ")) return NULL;
+    const char *q = skip_ws(p + 4);
+    if (starts_with(q, "mut ")) q = skip_ws(q + 4);
+    const char *name_start = q;
+    while (is_ident_continue(*q)) q++;
+    if (q == name_start) return NULL;
+    size_t name_len = (size_t)(q - name_start);
+    const char *r = skip_ws(q);
+    const char *anno_elem = NULL;
+    size_t anno_elem_len = 0;
+    if (*r == ':') {
+        const char *a = skip_ws(r + 1);
+        if (!starts_with(a, "List<")) return NULL;
+        const char *e = a + 5;
+        const char *ee = e;
+        int depth = 1;
+        while (*ee != '\0' && depth > 0) {
+            if (*ee == '<') depth++;
+            if (*ee == '>') depth--;
+            if (depth > 0) ee++;
+        }
+        if (depth != 0) return NULL;
+        anno_elem = e;
+        anno_elem_len = (size_t)(ee - e);
+        r = skip_ws(ee + 1);
+    }
+    if (*r != '=') return NULL;
+    const char *rhs = skip_ws(r + 1);
+    const char *rs = rhs;
+    while (is_ident_continue(*rs)) rs++;
+    if (rs == rhs) return NULL;
+    size_t rhs_len = (size_t)(rs - rhs);
+    const char *after = skip_ws(rs);
+    if (*after == ';') after = skip_ws(after + 1);
+    if (*after != '\0') return NULL;
+
+    const char *rhs_elem = list_sym_find(t, rhs, rhs_len);
+    if (rhs_elem == NULL) return NULL;
+    const char *elem = anno_elem != NULL ? anno_elem : rhs_elem;
+    size_t elem_len = anno_elem != NULL ? anno_elem_len : strlen(rhs_elem);
+
+    StrBuf out;
+    sb_init(&out);
+    sb_append_n(&out, line, indent_len);
+    sb_append(&out, "let mut ");
+    sb_append_n(&out, name_start, name_len);
+    sb_append(&out, ": List<");
+    sb_append_n(&out, elem, elem_len);
+    sb_append(&out, "> = []\n");
+    sb_append_n(&out, line, indent_len);
+    sb_append_n(&out, name_start, name_len);
+    sb_append(&out, " = ");
+    sb_append_n(&out, rhs, rhs_len);
+    return sb_take(&out);
+}
+
+static char *lower_list_copy_text(const char *text) {
+    ListSymTab tab;
+    list_sym_reset(&tab);
+    StrBuf out;
+    sb_init(&out);
+    const char *line = text;
+    for (;;) {
+        const char *end = strchr(line, '\n');
+        size_t len = end == NULL ? strlen(line) : (size_t)(end - line);
+        char *one = substr_copy(line, len);
+        const char *s = skip_ws(one);
+        if (starts_with(s, "fn ")) list_sym_reset(&tab);
+        char *rewritten = lower_list_copy_line(one, &tab);
+        list_sym_scan_line(&tab, rewritten != NULL ? rewritten : one);
+        if (rewritten != NULL) {
+            sb_append(&out, rewritten);
+            free(rewritten);
+        } else {
+            sb_append(&out, one);
+        }
+        free(one);
+        if (end == NULL) break;
+        sb_append(&out, "\n");
+        line = end + 1;
+    }
+    return sb_take(&out);
+}
+
 /* Stage 1c compound-assign desugar: `place += expr` (and -=, *=, /=, %=)
  * lowers to `place = place + (expr)` in the shared pipeline, so both engines
  * keep their single assignment lowering and the parenthesized right side
@@ -20027,8 +20199,10 @@ static char *prepare_source_text(const char *raw) {
     free(argv_lowered);
     char *enum_map_lowered = lower_enum_map_text(expr_body_lowered);
     free(expr_body_lowered);
-    char *compound_lowered = lower_compound_assign_text(enum_map_lowered);
+    char *list_copy_lowered = lower_list_copy_text(enum_map_lowered);
     free(enum_map_lowered);
+    char *compound_lowered = lower_compound_assign_text(list_copy_lowered);
+    free(list_copy_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -20846,6 +21020,107 @@ static int front_check_string_escape_line(const char *path, int line_no, const c
             i += 2;
             continue;
         }
+    }
+    return issues;
+}
+
+/* Last significant character of a line: string-aware, trailing comments
+ * stripped; '\0' when the line is blank or comment-only. */
+static char front_last_sig_char(const char *line) {
+    char delim = '\0';
+    char last = '\0';
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                last = 'x';
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            last = c;
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            last = c;
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '"' || c == '`') {
+            delim = c;
+            last = c;
+            continue;
+        }
+        if (c != ' ' && c != '\t') last = c;
+    }
+    return last;
+}
+
+/* Front check: an `else` keyword is valid only directly after a closed
+ * block (`} else if cond {` on one line, or a leading `else` whose previous
+ * significant line ends with `}`) or inside an if-expression's
+ * `then ... else ...` form. Anything else used to be swallowed silently —
+ * a dangling `else if` with a missing closing brace was inlined into the
+ * previous then-block — so it is a loud error now. */
+static int front_check_dangling_else_line(const char *path, int line_no, const char *line, char prev_last) {
+    int issues = 0;
+    const char *s = skip_ws(line);
+    char delim = '\0';
+    int seen_then = 0;
+    char last_sig = '\0';
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                last_sig = 'x';
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            last_sig = c;
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            last_sig = c;
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                last_sig = '\'';
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            last_sig = c;
+            continue;
+        }
+        if (is_ident_continue(c) && (i == 0 || !is_ident_continue(line[i - 1]))) {
+            size_t j = i;
+            while (is_ident_continue(line[j])) j++;
+            size_t wl = j - i;
+            if (wl == 4 && strncmp(line + i, "then", 4) == 0) {
+                seen_then = 1;
+            } else if (wl == 4 && strncmp(line + i, "else", 4) == 0 && !seen_then) {
+                char before = (line + i == s) ? prev_last : last_sig;
+                if (before != '}') {
+                    report_issue(path, line_no, (int)i + 1, line,
+                        "`else` must follow a closed block",
+                        "write `} else if cond {` or `} else {` after the closing brace, or close the previous block first; if-expression values use `then ... else ...`.",
+                        NULL);
+                    issues++;
+                }
+            }
+            last_sig = line[j - 1];
+            i = j - 1;
+            continue;
+        }
+        if (c != ' ' && c != '\t') last_sig = c;
     }
     return issues;
 }
@@ -21685,10 +21960,16 @@ static int check_front_contract_text(const char *text, const char *path) {
         if (!callable_overflow) front_register_callable_names(probe, callable_names, &callable_count, &callable_overflow);
         free(probe);
     }
+    char front_prev_last = '\0';
     for (size_t i = 0; i < lines.len; i++) {
         const char *line = lines.items[i];
         char *probe = front_probe_line(line);
         int line_no = (int)i + 1;
+        issues += front_check_dangling_else_line(path, line_no, line, front_prev_last);
+        {
+            char front_cur_last = front_last_sig_char(line);
+            if (front_cur_last != '\0') front_prev_last = front_cur_last;
+        }
         issues += check_fn_contract_line(path, line_no, line, &has_main, &has_bad_main, struct_names, struct_count);
         issues += front_check_unknown_call_line(path, line_no, line, probe, callable_names, callable_count, callable_overflow);
         issues += front_check_string_escape_line(path, line_no, line);
@@ -23277,8 +23558,10 @@ static char *prepare_source_file(const char *path) {
     free(argv_lowered);
     char *enum_map_lowered = lower_enum_map_text(expr_body_lowered);
     free(expr_body_lowered);
-    char *compound_lowered = lower_compound_assign_text(enum_map_lowered);
+    char *list_copy_lowered = lower_list_copy_text(enum_map_lowered);
     free(enum_map_lowered);
+    char *compound_lowered = lower_compound_assign_text(list_copy_lowered);
+    free(list_copy_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -35810,8 +36093,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *enum_map_lowered = lower_enum_map_text(expr_body_lowered);
     free(expr_body_lowered);
     if (enum_map_lowered == NULL) return 1;
-    char *compound_lowered = lower_compound_assign_text(enum_map_lowered);
+    char *list_copy_lowered = lower_list_copy_text(enum_map_lowered);
     free(enum_map_lowered);
+    if (list_copy_lowered == NULL) return 1;
+    char *compound_lowered = lower_compound_assign_text(list_copy_lowered);
+    free(list_copy_lowered);
     if (compound_lowered == NULL) return 1;
     char *split = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);

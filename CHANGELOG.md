@@ -4,6 +4,28 @@
 
 ### Changed
 
+- Fixed the list-copy binding engine divergence: `let name = xs` (and
+  the annotated `let name: List<T> = xs` let-initializer) where xs is a
+  list local or parameter previously typed the copy as Int on the full
+  engine and emitted invalid IR while the direct engine ran it. Both
+  spellings now lower in the shared driver pass to the verified
+  reassignment pair (`let mut name: List<T> = []` then `name = xs`), so
+  both engines share copy semantics — mutating the copy leaves the
+  source untouched. The pass resolves the element type from `: List<T>`
+  annotations tracked per function body (parameters and lets), so scalar
+  bindings never match. Locked by examples/e384_list_copy_binding.vais
+  (parity native-supported) and a front accept fixture.
+
+- Made dangling `else` loud: an `else` keyword now must directly follow
+  a closed block (`} else if cond {` / `} else {`, or a leading `else`
+  whose previous significant line ends with `}`) or sit in an
+  if-expression's `then ... else` form. Previously a dangling `else if`
+  with a missing closing brace was silently swallowed — the full engine
+  inlined it into the previous then-block and compiled the miswired
+  branch. The check reports "else must follow a closed block" in both
+  the emit front pass and vais-check (contract fixture extended to 33
+  issues), locked by a front reject fixture.
+
 - Promoted enumerate-map pipelines as the closure-tuple slice
   (Token-Density Stage 3b, docs/design/TOKEN-DENSITY.md): closure tuple
   parameters exist in exactly one place — the enumerate-map pipeline

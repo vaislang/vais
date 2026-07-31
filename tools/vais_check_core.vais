@@ -597,6 +597,80 @@ fn if_let_at(src: Str, i: Int) -> Int {
     return 0
 }
 
+# Last significant char of the line [ls, le): string-aware, trailing
+# comments stripped; 0 when blank or comment-only.
+fn line_last_sig(src: Str, ls: Int, le: Int) -> Int {
+    let mut delim = 0
+    let mut last = 0
+    let mut i = ls
+    while i < le {
+        let c = src[i]
+        if delim == 34 {
+            if c == 92 {
+                i = i + 2
+                last = 120
+                continue
+            }
+            if c == 34 { delim = 0 }
+            last = c
+            i = i + 1
+        } else if delim == 96 {
+            if c == 96 { delim = 0 }
+            last = c
+            i = i + 1
+        } else if c == 35 {
+            return last
+        } else if c == 34 or c == 96 {
+            delim = c
+            last = c
+            i = i + 1
+        } else {
+            if c != 32 and c != 9 { last = c }
+            i = i + 1
+        }
+    }
+    return last
+}
+
+# The significant character preceding position i: same-line non-space, or
+# the last significant char of the nearest earlier non-blank line.
+fn prev_sig_char(src: Str, i: Int) -> Int {
+    let mut j = i - 1
+    while j >= 0 and (src[j] == 32 or src[j] == 9) { j = j - 1 }
+    if j < 0 { return 0 }
+    if src[j] != 10 { return src[j] }
+    # walk earlier lines until one carries a significant char
+    let mut le = j
+    while le > 0 {
+        let mut ls = le - 1
+        while ls > 0 and src[ls - 1] != 10 { ls = ls - 1 }
+        let last = line_last_sig(src, ls, le)
+        if last != 0 { return last }
+        le = ls - 1
+    }
+    return 0
+}
+
+# A `then` word earlier on the same line marks an if-expression, whose
+# `else` is not block-attached.
+fn then_before_on_line(src: Str, i: Int) -> Int {
+    let mut ls = i
+    while ls > 0 and src[ls - 1] != 10 { ls = ls - 1 }
+    let mut j = ls
+    while j + 4 <= i {
+        if word_text_at(src, j, "then") == 1 { return 1 }
+        j = j + 1
+    }
+    return 0
+}
+
+fn dangling_else_at(src: Str, i: Int) -> Int {
+    if word_text_at(src, i, "else") == 0 { return 0 }
+    if then_before_on_line(src, i) == 1 { return 0 }
+    if prev_sig_char(src, i) == 125 { return 0 }
+    return 1
+}
+
 fn else_if_typo_at(src: Str, i: Int) -> Int {
     if word_text_at(src, i, "elsif") == 1 { return 1 }
     if word_text_at(src, i, "elif") == 1 { return 1 }
@@ -978,6 +1052,10 @@ fn check_text_at(path: Str, src: Str) -> Int {
                 handled = 1
             } else if else_if_typo_at(src, i) == 1 {
                 issues = issues + report_issue_at(path, src, i, "error: else if is two words", "  help: write else if")
+                i = i + 4
+                handled = 1
+            } else if dangling_else_at(src, i) == 1 {
+                issues = issues + report_issue_at(path, src, i, "error: else must follow a closed block", "  help: write } else if cond { or } else { after the closing brace, or close the previous block first")
                 i = i + 4
                 handled = 1
             } else if compound_assign_at(src, i) == 1 {

@@ -1784,6 +1784,15 @@ Verified today:
   iteratively, and a receiver containing a string literal is a loud front
   error ("method receiver is not a lowerable postfix chain") instead of a
   partial lowering. The function spellings keep working unchanged.
+- List-copy bindings: `let [mut] name = xs` and
+  `let [mut] name: List<T> = xs` copy a list local or parameter with copy
+  semantics on both engines (`examples/e384_list_copy_binding.vais`) —
+  the shared pass lowers both spellings to the verified reassignment pair,
+  so mutating the copy never touches the source.
+- Dangling `else` is a loud front error: `else` must directly follow a
+  closed block (`} else if cond {`, `} else {`, or a leading `else` whose
+  previous significant line ends with `}`) or sit in an if-expression's
+  `then ... else` form.
 - Enumerate-map pipelines: closure tuple parameters exist in exactly one
   place — `let [mut] xs = coll.enumerate().map(|(i, x)| expr)` (optionally
   with a `.join(sep)` tail, also in return position) lowers to an indexed
