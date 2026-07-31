@@ -351,6 +351,10 @@ lists on both engines),
 (implicit return on bare-expression tails), `args()` argv reads with the
 `return match args()` CLI dispatch, and `.join(sep)` over filter/map
 pipelines on both engines,
+`examples/e381_vaisfind_package` for the installable vaisfind name-search
+CLI written entirely in the Token-Density surface (recursive tree walk
+over `dir.files()`/`dir.dirs()`, `name.has`/`name.ends` predicates,
+f-string paths, and `return match args()` dispatch),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

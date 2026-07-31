@@ -4,6 +4,21 @@
 
 ### Changed
 
+- Added vaisfind, the thirteenth dogfooding tool and the first written
+  entirely in the Token-Density surface: `vaisfind <needle> <dir>` prints
+  relative paths whose file name contains the needle and
+  `vaisfind -e <ext> <dir>` matches name tails, walking the tree
+  recursively; without arguments the deterministic self-test runs (the
+  release-corpus entry, examples/e381_vaisfind_package, parity
+  native-supported). The source exercises f-strings, receiver and
+  collection methods, bare predicates, compound assignment, expression
+  bodies, self-recursion with an f-string argument, and the
+  `return match args()` dispatch together — and the dogfooding gap
+  report is zero: the tool compiled and self-tested at 42 on both
+  engines on the first attempt, the packaged binary passes the same
+  self-test, and real-tree runs return relative paths with match-count
+  exits.
+
 - Promoted expression bodies, args() dispatch, and pipeline join
   (Token-Density Stage 2c, docs/design/TOKEN-DENSITY.md), completing the
   Stage 2 remainder. The last statement of a function body, when it is a

@@ -1,0 +1,99 @@
+# expect: 42
+# Installable vaisfind: recursive file-name search, the vaisgrep sibling for
+# names instead of contents — and the first dogfooding tool written entirely
+# in the Token-Density surface (f-strings, receiver methods, dir.files() /
+# dir.dirs() collection reads, bare predicates, compound assignment,
+# expression bodies, and the `return match args()` CLI dispatch). Run without
+# arguments it executes a deterministic self-test (the release-corpus entry);
+# with arguments it dispatches:
+#   vaisfind <needle> <dir>      print relative paths whose file name
+#                                contains <needle>, exit = match count
+#   vaisfind -e <ext> <dir>      print relative paths whose file name ends
+#                                with <ext>, exit = match count
+# scanning the directory tree recursively in both modes.
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(f"{msg}\n")
+    0
+}
+
+fn name_hits(name: Str, needle: Str, by_ext: Int) -> Bool {
+    if by_ext == 1 { return name.ends(needle) }
+    name.has(needle)
+}
+
+fn find_tree(needle: Str, dir: Str, rel: Str, by_ext: Int, quiet: Int) -> Int {
+    let mut total = 0
+    for name in dir.files() {
+        if name_hits(name, needle, by_ext) {
+            if quiet == 0 { print(f"{rel}{name}") }
+            total += 1
+        }
+    }
+    for sub in dir.dirs() {
+        total += @(needle, path_join(dir, sub), f"{rel}{sub}/", by_ext, quiet)
+    }
+    total
+}
+
+fn run_find(needle: Str, root: Str, by_ext: Int) -> Int {
+    if needle.len() == 0 {
+        let e1 = eprint("error: empty needle")
+        return 1
+    }
+    if not root.is_dir() {
+        let e2 = eprint("error: not a directory")
+        return 3
+    }
+    find_tree(needle, root, "", by_ext, 0)
+}
+
+fn usage() -> Int {
+    print("usage: vaisfind <needle> <dir>")
+    print("       vaisfind -e <ext> <dir>")
+    1
+}
+
+fn self_test() -> Int {
+    let dir = path_join(fs_temp_dir(), "vais-e381-selftest")
+    if fs_mkdirs(path_join(dir, "nested/deeper")) != 0 { return 1 }
+    let a = path_join(dir, "alpha_report.txt")
+    let b = path_join(dir, "beta_notes.md")
+    let c = path_join(dir, "nested/report_two.txt")
+    let d = path_join(dir, "nested/deeper/final_report.vais")
+    if a.write("one") != 0 { return 2 }
+    if b.write("two") != 0 { return 3 }
+    if c.write("three") != 0 { return 4 }
+    if d.write("four") != 0 { return 5 }
+
+    # Substring hits walk the whole tree; quiet mode keeps the gate silent.
+    if find_tree("report", dir, "", 0, 1) != 3 { return 6 }
+    if find_tree("notes", dir, "", 0, 1) != 1 { return 7 }
+    if find_tree("missing", dir, "", 0, 1) != 0 { return 8 }
+
+    # Extension mode matches name tails only.
+    if find_tree(".txt", dir, "", 1, 1) != 2 { return 9 }
+    if find_tree(".vais", dir, "", 1, 1) != 1 { return 10 }
+    if find_tree("report", dir, "", 1, 1) != 0 { return 11 }
+
+    # The predicate itself stays honest about both modes.
+    if not name_hits("alpha_report.txt", "report", 0) { return 12 }
+    if name_hits("alpha_report.txt", "report", 1) { return 13 }
+    if not name_hits("alpha_report.txt", ".txt", 1) { return 14 }
+
+    # Bad inputs stay loud without touching the tree.
+    let missing_root = path_join(dir, "no-such")
+    if run_find("x", missing_root, 0) != 3 { return 15 }
+
+    # 3 substring hits * 2 txt hits * 7 = 42
+    find_tree("report", dir, "", 0, 1) * find_tree(".txt", dir, "", 1, 1) * 7
+}
+
+fn main() -> Int {
+    return match args() {
+        [] => self_test(),
+        ["-e", ext, root] => run_find(ext, root, 1),
+        [needle, root] => run_find(needle, root, 0),
+        _ => usage(),
+    }
+}
