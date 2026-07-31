@@ -282,6 +282,24 @@ fn query_scores_into(index_dir: Str, query: Map<Str,Int>, scores: Map<Str,Int>) 
     return scores.len()
 }
 
+# Count of one term inside one document, read from the term's shard; 0
+# when the pair has no posting. Backs the `why` per-term breakdown.
+# (An odd `tick and the apostrophe above lock the comment-quote scanner
+# regression: whole-text pass gates must never open string state here.)
+fn term_doc_count(index_dir: Str, term: Str, doc_id: Str) -> Int {
+    let path = index_shard_path(index_dir, term_shard(term))
+    if not path.exists() { return 0 }
+    let tab = str_byte(9)
+    let body = path.read()
+    for line in body.lines() {
+        let parts = line.split(tab)
+        if parts.len() == 3 and parts[0] == term and parts[1] == doc_id {
+            return parse_int(parts[2])
+        }
+    }
+    0
+}
+
 fn doc_score(index_dir: Str, doc_id: Str, query: Map<Str,Int>) -> Int {
     let scores: Map<Str,Int> = {}
     query_scores_into(index_dir, query, scores)

@@ -197,6 +197,43 @@ fn run_search(index_dir: Str, query_text: Str, k: Int) -> Int {
     return ranked[0].score
 }
 
+# Relevance debugging: break a document's score for a query into per-term
+# contributions (query count times doc count), one line per query term with
+# absent terms shown as doc=0, then the total; the exit code is the score,
+# matching the rank contract.
+fn run_why(index_dir: Str, query_text: Str, doc_id: Str) -> Int {
+    if index_exists(index_dir) != 1 {
+        print("error: index not found")
+        return 3
+    }
+    let query: Map<Str,Int> = {}
+    let total = doc_terms_guarded_into(query_text, query)
+    if total == 0 - 2 {
+        print("error: query too large")
+        return 1
+    }
+    if total == 0 {
+        print("error: query has no terms")
+        return 1
+    }
+    if doc_known(index_dir, doc_id) != 1 {
+        print("error: doc not found")
+        return 3
+    }
+    let mut score = 0
+    print(f"why {doc_id} query={query_text}")
+    let qn = query.len()
+    for i in 0..qn {
+        let term = query.key_at(i)
+        let q = query.value_at(i)
+        let d = term_doc_count(index_dir, term, doc_id)
+        score += q * d
+        print(f"  {term} q={q} doc={d} adds {q * d}")
+    }
+    print(f"score={score}")
+    return score
+}
+
 fn run_ingest_stdin(index_dir: Str, doc_id: Str) -> Int {
     let body = stdin_read_all()
     if body.len() == 0 {
@@ -270,6 +307,7 @@ fn usage() -> Int {
     print("       vaisdb report <index> <query-text>")
     print("       vaisdb ingest-dir <index> <doc-dir>")
     print("       vaisdb reindex <index> <doc-dir>")
+    print("       vaisdb why <index> <query> <doc-id>")
     print("       vaisdb rank <index> <query-text> <k>")
     print("       vaisdb search <index> <query-text> [k]")
     print("       vaisdb ingest-stdin <index> <doc-id>")
@@ -397,6 +435,16 @@ fn self_test() -> Int {
     let r_ids: List<Str> = []
     if docs_list_into(ridx, r_ids) != 1 { return 49 }
 
+    # The why breakdown reads exact per-term posting counts: r1 holds
+    # "alpha beta", so a doubled beta query scores 1*1 + 2*1 = 3.
+    if term_doc_count(ridx, "alpha", "r1") != 1 { return 50 }
+    if term_doc_count(ridx, "beta", "r1") != 1 { return 51 }
+    if term_doc_count(ridx, "missing", "r1") != 0 { return 52 }
+    let wq: Map<Str,Int> = {}
+    let wt = doc_terms_guarded_into("alpha beta beta", wq)
+    if wt != 3 { return 54 }
+    if doc_score(ridx, "r1", wq) != 3 { return 53 }
+
     # The guarded counter matches builtin tokenization on small bodies.
     let eq: Map<Str,Int> = {}
     if doc_terms_guarded_into("ai ai ai cache", eq) != 4 { return 25 }
@@ -440,6 +488,10 @@ fn main() -> Int {
     if command == "ingest-dir" {
         if proc_argc() != 3 { return usage() }
         return run_ingest_dir(proc_arg(1), proc_arg(2))
+    }
+    if command == "why" {
+        if proc_argc() != 4 { return usage() }
+        return run_why(proc_arg(1), proc_arg(2), proc_arg(3))
     }
     if command == "reindex" {
         if proc_argc() != 3 { return usage() }

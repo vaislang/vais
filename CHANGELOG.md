@@ -4,6 +4,31 @@
 
 ### Changed
 
+- Added `vaisdb why <index> <query> <doc-id>`, the relevance-debugging
+  subcommand: it breaks a document's score into per-term contributions —
+  one `  <term> q=<n> doc=<n> adds <n>` line per query term with absent
+  terms shown as doc=0 — then prints `score=<total>`, and the exit code
+  is the score (matching the rank contract). Errors mirror the family
+  (index/doc not found = 3, empty/oversized query = 1). Backed by the
+  new term_doc_count shard lookup, written in the Token-Density surface
+  (for-each over .lines(), .split bindings, receiver methods, f-string
+  rows, compound assignment). Locked by package self-test cases 50-54
+  and five workflow gate cases (exit-is-score, per-term line, total
+  line, absent-term zero, unknown-doc error).
+
+- Fixed a silent lowering blackout when comments carry odd quote
+  characters: the whole-text gates behind the Result/Option/enum
+  lowering family (contains_generic_type and siblings) and the
+  replace_word_all rewriter tracked string state without skipping `#`
+  comments, so a single unpaired backtick or an apostrophe in a comment
+  opened a phantom string, made the gate report "no such type", and
+  silently disabled the entire pass — surfacing as a bogus
+  "unsupported function header" reject at the first unlowered
+  Result<Str,Str> header on the direct path. All four scanners now skip
+  comments; the fix is locked by the vaisdb index module's own comment
+  (apostrophe plus an odd backtick) compiling on both engines through
+  the package gates.
+
 - Completed the vaisdb reindex sync story with deletion handling:
   entries whose stored source path no longer exists on disk are removed
   before the walk, so deleted files stop surfacing as stale search hits,

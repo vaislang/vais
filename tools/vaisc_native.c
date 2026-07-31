@@ -1050,6 +1050,13 @@ static int generic_type_at(
 
 static int contains_generic_type(const char *text, const char *name, const char *arg1, const char *arg2) {
     for (size_t i = 0; text[i] != '\0'; i++) {
+        if (text[i] == '#') {
+            /* comments may carry odd quote characters; never let them open
+             * a string state that silently disables the whole pass */
+            while (text[i] != '\0' && text[i] != '\n') i++;
+            if (text[i] == '\0') break;
+            continue;
+        }
         if (is_string_delim_c(text[i])) {
             int end = skip_string_literal_c(text, (int)i);
             if (end < 0) return 0;
@@ -1070,6 +1077,11 @@ static int contains_generic_type(const char *text, const char *name, const char 
 
 static int contains_result_type_other_than_int_int(const char *text) {
     for (size_t i = 0; text[i] != '\0'; i++) {
+        if (text[i] == '#') {
+            while (text[i] != '\0' && text[i] != '\n') i++;
+            if (text[i] == '\0') break;
+            continue;
+        }
         if (is_string_delim_c(text[i])) {
             int end = skip_string_literal_c(text, (int)i);
             if (end < 0) return 0;
@@ -1129,6 +1141,11 @@ static int option_constructor_marker_at(const char *text, size_t i) {
 
 static int contains_option_constructor_marker(const char *text) {
     for (size_t i = 0; text[i] != '\0'; i++) {
+        if (text[i] == '#') {
+            while (text[i] != '\0' && text[i] != '\n') i++;
+            if (text[i] == '\0') break;
+            continue;
+        }
         if (is_string_delim_c(text[i])) {
             int end = skip_string_literal_c(text, (int)i);
             if (end < 0) return 0;
@@ -6369,6 +6386,13 @@ static char *replace_word_all(const char *text, const char *name, const char *re
     sb_init(&out);
     size_t name_len = strlen(name);
     for (size_t i = 0; text[i] != '\0';) {
+        if (text[i] == '#') {
+            size_t j = i;
+            while (text[j] != '\0' && text[j] != '\n') j++;
+            sb_append_n(&out, text + i, j - i);
+            i = j;
+            continue;
+        }
         if (is_string_delim_c(text[i])) {
             int end = skip_string_literal_c(text, (int)i);
             if (end < 0) {
@@ -36123,6 +36147,10 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *prepared = lower_list_method_text(nested_lowered);
     free(nested_lowered);
     if (prepared == NULL) return 1;
+    /* Debug aid: dump the fully lowered source the direct emitter consumes. */
+    if (getenv("VAISC_DUMP_PREPARED") != NULL) {
+        fputs(prepared, stderr);
+    }
     char *c_src = direct_lower_to_c(source, prepared);
     free(prepared);
     if (c_src == NULL) return 1;
