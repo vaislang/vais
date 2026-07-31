@@ -38,11 +38,15 @@ Stage 2c promoted 2026-07-31 — expression bodies (implicit return on
 bare-expression tails), `args()` argv reads with the `return match args()`
 CLI-dispatch tail lowered to first-match if-chains, and `.join(sep)` over
 List<Str> pipelines, locked by examples/e380_expr_body_argv_pipeline.vais
-and direct feature shape 240. STAGE 2 COMPLETE except the deliberately
-deferred items: `.enumerate()`/`.take(k)` pipeline steps need tuple
-closure parameters, which are new type surface rather than desugar — they
-move to the Stage 3 candidate list. Next: adopt the idioms in new product
-code and re-measure the corpus. Goal: cut LLM development token cost by half against
+and direct feature shape 240. STAGE 2 COMPLETE. Stage 3a promoted
+same day — enumerate for-head destructuring
+(`for (i, x) in expr.enumerate() {`) lowers to an indexed range-for over
+plain places, collect-method results, and filter-chain temps, locked by
+examples/e382_enumerate_for_destructuring.vais and direct feature shape
+241; this closes the last idiom from the Stage 2 sketch while keeping
+general tuple types (and closure tuple parameters for `.map(|(i, x)| ...)`
+pipelines) deferred as the remaining Stage 3 candidates. Next: adopt the
+idioms in new product code and re-measure the corpus. Goal: cut LLM development token cost by half against
 performance-equivalent mainstream languages while keeping runtime behavior and
 performance unchanged.
 

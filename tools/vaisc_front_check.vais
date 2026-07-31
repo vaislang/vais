@@ -8112,6 +8112,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "str_method") == 1 { return write_str_method_accept(path) }
     if str_eq(name, "collect_method") == 1 { return write_collect_method_accept(path) }
     if str_eq(name, "expr_body_argv") == 1 { return write_expr_body_argv_accept(path) }
+    if str_eq(name, "enumerate") == 1 { return write_enumerate_accept(path) }
     if str_eq(name, "day1") == 1 { return write_day1(path) }
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
     if str_eq(name, "io") == 1 { return write_io_accept(path) }
@@ -9112,6 +9113,36 @@ fn write_expr_body_argv_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_enumerate_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let words: List<Str> = [\"alpha\", \"beta\"]")
+    append_line(out, "    let mut tagged = \"\"")
+    append_line(out, "    for (i, w) in words.enumerate() {")
+    append_line(out, "        tagged = f\"{tagged}{i}:{w};\"")
+    append_line(out, "    }")
+    append_line(out, "    if tagged != \"0:alpha;1:beta;\" { return 1 }")
+    append_line(out, "    let body = \"one\\ntwo\"")
+    append_line(out, "    let mut count = 0")
+    append_line(out, "    for (n, line) in body.lines().enumerate() {")
+    append_line(out, "        count += n + line.len()")
+    append_line(out, "    }")
+    append_line(out, "    if count != 7 { return 2 }")
+    append_line(out, "    return 35 + count")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_enumerate_position_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Str> = [\"a\"]")
+    append_line(out, "    let e = xs.enumerate()")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_argv_position_bad(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -9234,6 +9265,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "str_method_literal_receiver") == 1 { return write_str_method_literal_receiver_bad(path) }
     if str_eq(name, "collect_method_position") == 1 { return write_collect_method_position_bad(path) }
     if str_eq(name, "argv_position") == 1 { return write_argv_position_bad(path) }
+    if str_eq(name, "enumerate_position") == 1 { return write_enumerate_position_bad(path) }
     if str_eq(name, "fstring_empty_hole") == 1 { return write_fstring_empty_hole_bad(path) }
     if str_eq(name, "fstring_lone_brace") == 1 { return write_fstring_lone_brace_bad(path) }
     if str_eq(name, "fstring_open_hole") == 1 { return write_fstring_open_hole_bad(path) }
@@ -9791,6 +9823,8 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "collect_method_position", "collection method needs a let binding or a for-in head", "", "other positions")
     fail = fail + expect_accept(vaisc, tmp, "expr_body_argv", "accepts expression bodies, args() dispatch, and pipeline join (=42)", 42)
     fail = fail + expect_reject(vaisc, tmp, "argv_position", "args() needs a let binding, a for-in head, or a return match head", "", "single-line")
+    fail = fail + expect_accept(vaisc, tmp, "enumerate", "accepts for-head enumerate destructuring (=42)", 42)
+    fail = fail + expect_reject(vaisc, tmp, "enumerate_position", "enumerate needs a for-in head", "", "other positions")
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/clear/len/is_empty/last/pop/sum", "", "plain function call")
     fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)

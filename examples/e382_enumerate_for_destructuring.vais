@@ -1,0 +1,52 @@
+# expect: 42
+# Enumerate for-head destructuring (Token-Density Stage 3a): the verified
+# tuple slice. `for (i, x) in EXPR.enumerate() {` lowers in the shared driver
+# pass to an indexed range-for — a plain-place receiver is indexed directly
+# (`for i in 0..xs.len() { let x = xs[i]`), and any other receiver (collect
+# methods, filter/map chains) first binds to a temp local whose binding line
+# the later passes lower as usual. The (index, value) pattern exists only in
+# this for-head: general tuple types stay deferred, and `.enumerate()` or a
+# `for (` pattern in any other position is a loud front error.
+
+fn main() -> Int {
+    let words: List<Str> = ["alpha", "beta", "gamma"]
+
+    # Plain-place receiver indexes directly.
+    let mut tagged = ""
+    for (i, w) in words.enumerate() {
+        tagged = f"{tagged}{i}:{w};"
+    }
+    if tagged != "0:alpha;1:beta;2:gamma;" { return 1 }
+
+    # Collect-method receiver composes with the Stage 2b lowering — the
+    # e332-style numbered report is one head plus one f-string now.
+    let body = "one\ntwo\nthree"
+    let mut numbered = ""
+    for (n, line) in body.lines().enumerate() {
+        numbered = f"{numbered}{n + 1}. {line}\n"
+    }
+    if numbered != "1. one\n2. two\n3. three\n" { return 2 }
+
+    # Filter-chain receiver binds to a temp and stays value-correct:
+    # survivors are alpha and gamma, so 0 + 5 + 1 + 5 = 11.
+    let mut long_hits = 0
+    for (k, w) in words.filter(|x| x.len() > 4).enumerate() {
+        long_hits += k + w.len()
+    }
+    if long_hits != 11 { return 3 }
+
+    # Index and value compose with bare predicates and compound assignment:
+    # every word contains "a", so 1 + 2 + 3 = 6.
+    let mut sum = 0
+    for (i, w) in words.enumerate() {
+        if w.has("a") { sum += i + 1 }
+    }
+    if sum != 6 { return 4 }
+
+    # 3 words * 14 = 42.
+    let mut count = 0
+    for (i, w) in words.enumerate() {
+        count += 1
+    }
+    count * 14
+}

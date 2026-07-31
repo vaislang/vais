@@ -4,6 +4,22 @@
 
 ### Changed
 
+- Promoted enumerate for-head destructuring as the verified tuple slice
+  (Token-Density Stage 3a, docs/design/TOKEN-DENSITY.md):
+  `for (i, x) in expr.enumerate() {` lowers in the shared driver pass to
+  an indexed range-for — plain-place receivers index directly
+  (`for i in 0..xs.len() { let x = xs[i]`), and collect-method or
+  filter/map-chain receivers first bind to a temp local whose binding
+  line the later passes lower as usual, so
+  `for (n, line) in body.lines().enumerate()` composes with the Stage 2b
+  lowering. The (index, value) pattern exists only in this for-head;
+  general tuple types stay deferred, and `.enumerate()` or a `for (`
+  pattern in any other position is a loud front error. Locked by
+  examples/e382_enumerate_for_destructuring.vais (parity
+  native-supported), a front accept fixture plus a position reject
+  fixture, and direct feature shape 241. This closes the last idiom from
+  the Stage 2 design sketch.
+
 - Added vaisfind, the thirteenth dogfooding tool and the first written
   entirely in the Token-Density surface: `vaisfind <needle> <dir>` prints
   relative paths whose file name contains the needle and

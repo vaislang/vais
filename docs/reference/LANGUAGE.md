@@ -1784,6 +1784,13 @@ Verified today:
   iteratively, and a receiver containing a string literal is a loud front
   error ("method receiver is not a lowerable postfix chain") instead of a
   partial lowering. The function spellings keep working unchanged.
+- Enumerate destructuring: `for (i, x) in expr.enumerate() {` iterates any
+  list-yielding expression with an index — plain places index directly and
+  other receivers (collect methods, filter/map chains) bind through a temp
+  local (`examples/e382_enumerate_for_destructuring.vais`). This is the
+  verified tuple slice: the `(index, value)` pattern exists only in this
+  for-head, general tuple types stay deferred, and `.enumerate()` or a
+  `for (` pattern in any other position is a loud front error.
 - Expression bodies: the last statement of a function body, when it is a
   bare expression or call, gains an implicit `return`
   (`examples/e380_expr_body_argv_pipeline.vais`). Such tails were

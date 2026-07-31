@@ -355,6 +355,10 @@ pipelines on both engines,
 CLI written entirely in the Token-Density surface (recursive tree walk
 over `dir.files()`/`dir.dirs()`, `name.has`/`name.ends` predicates,
 f-string paths, and `return match args()` dispatch),
+`examples/e382_enumerate_for_destructuring.vais` for the verified tuple
+slice (`for (i, x) in expr.enumerate()` lowering to indexed range-for
+over plain places, collect-method results, and filter-chain temps on
+both engines),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

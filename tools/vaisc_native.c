@@ -18386,6 +18386,124 @@ static char *lower_fstring_text(const char *text) {
     return sb_take(&out);
 }
 
+static int compound_lhs_is_plain_place(const char *lhs);
+
+/* Stage 3a enumerate desugar: `for (i, x) in EXPR.enumerate() {` destructures
+ * an indexed for-each over any list-yielding expression. A plain-place
+ * receiver is indexed directly:
+ *     for i in 0..xs.len() {
+ *         let x = xs[i]
+ * and any other receiver (collect methods, filter/map chains) first binds to
+ * a temp local whose binding line the later passes lower as usual. This is
+ * the verified tuple slice: the (index, value) pattern exists only in this
+ * for-head, general tuple types stay deferred, and `.enumerate()` or a
+ * `for (` pattern in any other position is a loud front error. */
+static char *lower_enumerate_line(const char *line, int *counter) {
+    const char *p = skip_ws(line);
+    size_t indent_len = (size_t)(p - line);
+    if (!starts_with(p, "for ")) return NULL;
+    const char *q = skip_ws(p + 4);
+    if (*q != '(') return NULL;
+    q = skip_ws(q + 1);
+    const char *i_start = q;
+    while (is_ident_continue(*q)) q++;
+    if (q == i_start) return NULL;
+    size_t i_len = (size_t)(q - i_start);
+    q = skip_ws(q);
+    if (*q != ',') return NULL;
+    q = skip_ws(q + 1);
+    const char *x_start = q;
+    while (is_ident_continue(*q)) q++;
+    if (q == x_start) return NULL;
+    size_t x_len = (size_t)(q - x_start);
+    q = skip_ws(q);
+    if (*q != ')') return NULL;
+    q = skip_ws(q + 1);
+    if (!starts_with(q, "in ")) return NULL;
+    const char *head_start = skip_ws(q + 3);
+    char *head = trim_copy(head_start);
+    size_t hn = strlen(head);
+    if (hn == 0 || head[hn - 1] != '{') {
+        free(head);
+        return NULL;
+    }
+    head[--hn] = '\0';
+    char *head_trimmed = trim_copy(head);
+    free(head);
+    hn = strlen(head_trimmed);
+    /* the head must end with a top-level `.enumerate()` tail */
+    static const char *tail = ".enumerate()";
+    size_t tn = strlen(tail);
+    if (hn <= tn || strcmp(head_trimmed + hn - tn, tail) != 0) {
+        free(head_trimmed);
+        return NULL;
+    }
+    char *recv_raw = substr_copy(head_trimmed, hn - tn);
+    free(head_trimmed);
+    char *recv = trim_copy(recv_raw);
+    free(recv_raw);
+    if (recv[0] == '\0') {
+        free(recv);
+        return NULL;
+    }
+
+    StrBuf out;
+    sb_init(&out);
+    const char *src_name = recv;
+    char temp_name[48];
+    if (!compound_lhs_is_plain_place(recv)) {
+        *counter += 1;
+        snprintf(temp_name, sizeof(temp_name), "vais_enum_src_%d", *counter);
+        sb_append_n(&out, line, indent_len);
+        sb_append(&out, "let ");
+        sb_append(&out, temp_name);
+        sb_append(&out, " = ");
+        sb_append(&out, recv);
+        sb_append(&out, "\n");
+        src_name = temp_name;
+    }
+    sb_append_n(&out, line, indent_len);
+    sb_append(&out, "for ");
+    sb_append_n(&out, i_start, i_len);
+    sb_append(&out, " in 0..");
+    sb_append(&out, src_name);
+    sb_append(&out, ".len() {\n");
+    sb_append_n(&out, line, indent_len);
+    sb_append(&out, "    let ");
+    sb_append_n(&out, x_start, x_len);
+    sb_append(&out, " = ");
+    sb_append(&out, src_name);
+    sb_append(&out, "[");
+    sb_append_n(&out, i_start, i_len);
+    sb_append(&out, "]");
+    free(recv);
+    return sb_take(&out);
+}
+
+static char *lower_enumerate_text(const char *text) {
+    StrBuf out;
+    sb_init(&out);
+    int counter = 0;
+    const char *line = text;
+    for (;;) {
+        const char *end = strchr(line, '\n');
+        size_t len = end == NULL ? strlen(line) : (size_t)(end - line);
+        char *one = substr_copy(line, len);
+        char *rewritten = lower_enumerate_line(one, &counter);
+        if (rewritten != NULL) {
+            sb_append(&out, rewritten);
+            free(rewritten);
+        } else {
+            sb_append(&out, one);
+        }
+        free(one);
+        if (end == NULL) break;
+        sb_append(&out, "\n");
+        line = end + 1;
+    }
+    return sb_take(&out);
+}
+
 /* Stage 2c argv desugar: `args()` reads the process arguments as a
  * List<Str> in three shapes. `let [mut] name = args()` and
  * `for x in args() {` lower to a proc_argc/proc_arg fill loop over an
@@ -19641,8 +19759,10 @@ static char *prepare_source_text(const char *raw) {
     free(normalized_joined);
     char *fstring_lowered = lower_fstring_text(normalized_presplit);
     free(normalized_presplit);
-    char *str_method_lowered = lower_str_method_text(fstring_lowered);
+    char *enum_for_lowered = lower_enumerate_text(fstring_lowered);
     free(fstring_lowered);
+    char *str_method_lowered = lower_str_method_text(enum_for_lowered);
+    free(enum_for_lowered);
     char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
     char *argv_lowered = lower_argv_text(collect_lowered);
@@ -20472,6 +20592,60 @@ static int front_check_string_escape_line(const char *path, int line_no, const c
     return issues;
 }
 
+/* Front check: the enumerate lowering consumes every supported
+ * `for (i, x) in expr.enumerate() {` head, so a surviving `.enumerate(`
+ * spelling or `for (` tuple pattern sits in an unsupported position;
+ * report it loudly. */
+static int front_check_enumerate_line(const char *path, int line_no, const char *line) {
+    int issues = 0;
+    char delim = '\0';
+    const char *s = skip_ws(line);
+    if (starts_with(s, "for ") && *skip_ws(s + 4) == '(') {
+        report_issue(path, line_no, (int)(skip_ws(s + 4) - line) + 1, line,
+            "for-head destructuring is only lowered over .enumerate()",
+            "write `for (i, x) in xs.enumerate() { ... }` on one line, or use a plain `for x in xs` head.",
+            NULL);
+        issues++;
+    }
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if (c == '.' && strncmp(line + i, ".enumerate", 10) == 0 &&
+            !is_ident_continue(line[i + 10]) && line[i + 10] == '(') {
+            report_issue(path, line_no, (int)i + 2, line,
+                "enumerate needs a for-in head with an (index, value) pattern",
+                "write `for (i, x) in xs.enumerate() { ... }`; other positions are not lowered.",
+                NULL);
+            issues++;
+            i += 10;
+        }
+    }
+    return issues;
+}
+
 /* Front check: the argv lowering consumes every supported `args()` shape
  * (`let name = args()`, `for x in args() {`, and the `return match args()`
  * dispatch block with single-line arms plus a trailing `_`), so a surviving
@@ -21221,6 +21395,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         issues += front_check_str_method_line(path, line_no, line);
         issues += front_check_collect_method_line(path, line_no, line);
         issues += front_check_argv_line(path, line_no, line);
+        issues += front_check_enumerate_line(path, line_no, line);
         {
             const char *eq = strstr(probe, "= if ");
             if (eq != NULL) {
@@ -22787,8 +22962,10 @@ static char *prepare_source_file(const char *path) {
     free(normalized_joined);
     char *fstring_lowered = lower_fstring_text(normalized_presplit);
     free(normalized_presplit);
-    char *str_method_lowered = lower_str_method_text(fstring_lowered);
+    char *enum_for_lowered = lower_enumerate_text(fstring_lowered);
     free(fstring_lowered);
+    char *str_method_lowered = lower_str_method_text(enum_for_lowered);
+    free(enum_for_lowered);
     char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
     char *argv_lowered = lower_argv_text(collect_lowered);
@@ -35311,8 +35488,10 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *fstring_lowered = lower_fstring_text(split_presplit);
     free(split_presplit);
     if (fstring_lowered == NULL) return 1;
-    char *str_method_lowered = lower_str_method_text(fstring_lowered);
+    char *enum_for_lowered = lower_enumerate_text(fstring_lowered);
     free(fstring_lowered);
+    char *str_method_lowered = lower_str_method_text(enum_for_lowered);
+    free(enum_for_lowered);
     if (str_method_lowered == NULL) return 1;
     char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
