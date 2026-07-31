@@ -43,10 +43,16 @@ same day — enumerate for-head destructuring
 (`for (i, x) in expr.enumerate() {`) lowers to an indexed range-for over
 plain places, collect-method results, and filter-chain temps, locked by
 examples/e382_enumerate_for_destructuring.vais and direct feature shape
-241; this closes the last idiom from the Stage 2 sketch while keeping
-general tuple types (and closure tuple parameters for `.map(|(i, x)| ...)`
-pipelines) deferred as the remaining Stage 3 candidates. Next: adopt the
-idioms in new product code and re-measure the corpus. Goal: cut LLM development token cost by half against
+241; this closes the last idiom from the Stage 2 sketch. Stage 3b promoted
+same day — closure tuple parameters in enumerate-map pipeline statements
+(`coll.enumerate().map(|(i, x)| expr)[.join(sep)]`, let and return forms)
+lower to indexed accumulation loops, locked by
+examples/e383_enum_map_pipeline.vais and direct feature shape 242; the
+execution-verified e332 rewrite with the one-line pipeline renderer
+measures 897 tokens (below TypeScript's 914). EVERY idiom from the
+original Stage 2 design sketch is now verified surface; general tuple
+types and `.take(k)` remain the only deliberately deferred candidates.
+Next: adopt the idioms in new product code and re-measure the corpus. Goal: cut LLM development token cost by half against
 performance-equivalent mainstream languages while keeping runtime behavior and
 performance unchanged.
 

@@ -7622,6 +7622,22 @@ fn write_list_else_if_hoist(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_enum_map_pipeline(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let words: List<Str> = [\"alpha\", \"be\", \"gamma\"]")
+    append_line(out, "    let tags = words.enumerate().map(|(i, w)| f\"{i}:{w}\")")
+    append_line(out, "    if tags.len() != 3 { return 1 }")
+    append_line(out, "    if tags[2] != \"2:gamma\" { return 2 }")
+    append_line(out, "    let banner = words.enumerate().map(|(i, w)| f\"{w}/{i}\").join(\", \")")
+    append_line(out, "    if banner != \"alpha/0, be/1, gamma/2\" { return 3 }")
+    append_line(out, "    let lens = words.enumerate().map(|(i, w)| w.len() + i)")
+    append_line(out, "    if lens[2] != 7 { return 4 }")
+    append_line(out, "    return 35 + lens[2]")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_enumerate_destructuring(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -7887,6 +7903,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "map_str_str_get_opt_transform_len") == 1 { wrote = write_map_str_str_get_opt_transform_len(src) }
     else if str_contains(name, "str_len_reassigned_match_transform") == 1 { wrote = write_str_len_reassigned_match_transform(src) }
     else if str_contains(name, "map_str_str_get_opt_str_transforms") == 1 { wrote = write_map_str_str_get_opt_str_transforms(src) }
+    else if str_contains(name, "enum_map_pipeline") == 1 { wrote = write_enum_map_pipeline(src) }
     else if str_contains(name, "enumerate_destructuring") == 1 { wrote = write_enumerate_destructuring(src) }
     else if str_contains(name, "expr_body_argv_pipeline") == 1 { wrote = write_expr_body_argv_pipeline(src) }
     else if str_contains(name, "collect_methods") == 1 { wrote = write_collect_methods(src) }
@@ -8151,6 +8168,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "__vais_str_join") and str_contains(text, "__vais_str_trim")
     } else if shape == 241 {
         ok = str_contains(text, "__vais_str_split_lines_into")
+    } else if shape == 242 {
+        ok = str_contains(text, "__vais_str_join")
     } else if shape == 2 {
         ok = str_contains(text, " br ")
     } else if shape == 3 {
@@ -9143,5 +9162,6 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "collect_methods", "direct return-value collection methods lower to *_into calls with temp lists (=42)", 239)
     fail = fail + expect_case(vaisc, tmp, "expr_body_argv_pipeline", "direct expression bodies, args() dispatch, and pipeline join run (=42)", 240)
     fail = fail + expect_case(vaisc, tmp, "enumerate_destructuring", "direct for-head enumerate destructuring lowers to indexed range-for (=42)", 241)
+    fail = fail + expect_case(vaisc, tmp, "enum_map_pipeline", "direct enumerate-map pipelines lower to indexed accumulation loops (=42)", 242)
     return fail
 }

@@ -1,0 +1,53 @@
+# expect: 42
+# Enumerate-map pipelines (Token-Density Stage 3b): closure tuple parameters
+# exist in exactly one place — the enumerate-map pipeline statement — and
+# lower in the shared driver pass to an indexed accumulation loop, so no
+# general tuple type is opened. `let xs = coll.enumerate().map(|(i, x)|
+# expr)` binds the accumulator directly (List<Str> when the body is
+# string-yielding by the textual rule, List<Int> otherwise), an optional
+# `.join(sep)` tail accumulates into a temp and joins through str_join, and
+# the return form composes with expression bodies — the e332 ranking report
+# renderer is now the one-line sketch shape. Receivers follow the Stage 3a
+# rule (plain places index directly, filter chains bind to a temp), and any
+# other `|(` closure-tuple spelling is a loud front error.
+
+struct Ranked {
+    title: Str,
+    score: Int,
+}
+
+fn render(docs: List<Ranked>) -> Str {
+    return docs.enumerate().map(|(i, d)| f"{i + 1}. {d.title} ({d.score})").join("\n")
+}
+
+fn main() -> Int {
+    # The e332 top-k report body is one pipeline statement now.
+    let docs: List<Ranked> = []
+    docs.push(Ranked { title: "alpha guide", score: 4 })
+    docs.push(Ranked { title: "beta notes", score: 3 })
+    if render(docs) != "1. alpha guide (4)\n2. beta notes (3)" { return 1 }
+
+    # A-form: the accumulator binds directly as List<Str>.
+    let words: List<Str> = ["alpha", "be", "gamma"]
+    let tags = words.enumerate().map(|(i, w)| f"{i}:{w}")
+    if tags.len() != 3 { return 2 }
+    if tags[2] != "2:gamma" { return 3 }
+
+    # B-form: the join tail goes through str_join on a temp.
+    let banner = words.enumerate().map(|(i, w)| f"{w}/{i}").join(", ")
+    if banner != "alpha/0, be/1, gamma/2" { return 4 }
+
+    # Int-yielding bodies bind as List<Int> by the textual rule.
+    let lens = words.enumerate().map(|(i, w)| w.len() + i)
+    if lens.len() != 3 { return 5 }
+    if lens[0] != 5 { return 6 }
+    if lens[2] != 7 { return 7 }
+
+    # Filter-chain receivers bind to a temp first, indexes restart at 0.
+    let picked = words.filter(|x| x.len() > 2).enumerate().map(|(i, w)| f"{i}{w}")
+    if picked.len() != 2 { return 8 }
+    if picked[1] != "1gamma" { return 9 }
+
+    # 5 + 7 + 3*10 = 42.
+    lens[0] + lens[2] + tags.len() * 10
+}

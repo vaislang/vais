@@ -8113,6 +8113,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "collect_method") == 1 { return write_collect_method_accept(path) }
     if str_eq(name, "expr_body_argv") == 1 { return write_expr_body_argv_accept(path) }
     if str_eq(name, "enumerate") == 1 { return write_enumerate_accept(path) }
+    if str_eq(name, "enum_map") == 1 { return write_enum_map_accept(path) }
     if str_eq(name, "day1") == 1 { return write_day1(path) }
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
     if str_eq(name, "io") == 1 { return write_io_accept(path) }
@@ -9133,6 +9134,32 @@ fn write_enumerate_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_enum_map_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let words: List<Str> = [\"alpha\", \"be\", \"gamma\"]")
+    append_line(out, "    let tags = words.enumerate().map(|(i, w)| f\"{i}:{w}\")")
+    append_line(out, "    if tags.len() != 3 { return 1 }")
+    append_line(out, "    if tags[2] != \"2:gamma\" { return 2 }")
+    append_line(out, "    let banner = words.enumerate().map(|(i, w)| f\"{w}/{i}\").join(\", \")")
+    append_line(out, "    if banner != \"alpha/0, be/1, gamma/2\" { return 3 }")
+    append_line(out, "    let lens = words.enumerate().map(|(i, w)| w.len() + i)")
+    append_line(out, "    if lens[2] != 7 { return 4 }")
+    append_line(out, "    return 35 + lens[2]")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_enum_map_position_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Str> = [\"a\"]")
+    append_line(out, "    let bad = xs.map(|(i, w)| w)")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_enumerate_position_bad(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -9266,6 +9293,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "collect_method_position") == 1 { return write_collect_method_position_bad(path) }
     if str_eq(name, "argv_position") == 1 { return write_argv_position_bad(path) }
     if str_eq(name, "enumerate_position") == 1 { return write_enumerate_position_bad(path) }
+    if str_eq(name, "enum_map_position") == 1 { return write_enum_map_position_bad(path) }
     if str_eq(name, "fstring_empty_hole") == 1 { return write_fstring_empty_hole_bad(path) }
     if str_eq(name, "fstring_lone_brace") == 1 { return write_fstring_lone_brace_bad(path) }
     if str_eq(name, "fstring_open_hole") == 1 { return write_fstring_open_hole_bad(path) }
@@ -9825,6 +9853,8 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "argv_position", "args() needs a let binding, a for-in head, or a return match head", "", "single-line")
     fail = fail + expect_accept(vaisc, tmp, "enumerate", "accepts for-head enumerate destructuring (=42)", 42)
     fail = fail + expect_reject(vaisc, tmp, "enumerate_position", "enumerate needs a for-in head", "", "other positions")
+    fail = fail + expect_accept(vaisc, tmp, "enum_map", "accepts enumerate-map pipeline statements (=42)", 42)
+    fail = fail + expect_reject(vaisc, tmp, "enum_map_position", "closure tuple parameters are only lowered", "", "enumerate-map")
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/clear/len/is_empty/last/pop/sum", "", "plain function call")
     fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)

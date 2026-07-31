@@ -359,6 +359,10 @@ f-string paths, and `return match args()` dispatch),
 slice (`for (i, x) in expr.enumerate()` lowering to indexed range-for
 over plain places, collect-method results, and filter-chain temps on
 both engines),
+`examples/e383_enum_map_pipeline.vais` for enumerate-map pipelines
+(closure tuple parameters lowering to indexed accumulation loops, with
+List<Str>/List<Int> bindings, `.join(sep)` tails, and the one-line
+ranking-report renderer on both engines),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

@@ -19500,6 +19500,262 @@ static char *lower_collect_method_text(const char *text) {
     return sb_take(&out);
 }
 
+/* Stage 3b enumerate-map pipeline desugar: closure tuple parameters exist
+ * in exactly one place — the enumerate-map pipeline statement — and lower
+ * to an indexed accumulation loop, so no general tuple type is opened:
+ *     let [mut] N = COLL.enumerate().map(|(i, x)| EXPR)            (A)
+ *     let [mut] N = COLL.enumerate().map(|(i, x)| EXPR).join(SEP)  (B)
+ *     return COLL.enumerate().map(|(i, x)| EXPR)[.join(SEP)]       (C)
+ * A binds N as the accumulator (List<Str> when EXPR is string-yielding by
+ * the textual rule, List<Int> otherwise); B and C accumulate into a temp
+ * and join through str_join directly. COLL follows the Stage 3a receiver
+ * rule (plain places index directly, other receivers bind to a temp whose
+ * binding line the earlier passes already lowered). Any other `|(` closure
+ * tuple spelling stays unlowered for the front check to reject loudly.
+ * This pass runs after the f-string and expression-body passes, so EXPR is
+ * already plain and bare pipeline tails already carry `return`. */
+static char *lower_enum_map_line(const char *line, int *counter) {
+    const char *p = skip_ws(line);
+    size_t indent_len = (size_t)(p - line);
+    int is_return = 0;
+    int is_mut = 0;
+    const char *name_start = NULL;
+    size_t name_len = 0;
+    const char *expr_part = NULL;
+    if (starts_with(p, "return ")) {
+        is_return = 1;
+        expr_part = skip_ws(p + 7);
+    } else if (starts_with(p, "let ")) {
+        const char *q = skip_ws(p + 4);
+        if (starts_with(q, "mut ")) {
+            is_mut = 1;
+            q = skip_ws(q + 4);
+        }
+        name_start = q;
+        while (is_ident_continue(*q)) q++;
+        if (q == name_start) return NULL;
+        name_len = (size_t)(q - name_start);
+        q = skip_ws(q);
+        if (*q != '=') return NULL;
+        expr_part = skip_ws(q + 1);
+    } else {
+        return NULL;
+    }
+
+    const char *marker = strstr(expr_part, ".enumerate().map(");
+    if (marker == NULL) return NULL;
+    /* the marker must sit outside string literals */
+    char delim = '\0';
+    for (const char *scan = expr_part; scan < marker; scan++) {
+        char c = *scan;
+        if (delim != '\0') {
+            if (delim == '"' && c == '\\' && scan[1] != '\0') {
+                scan++;
+                continue;
+            }
+            if (c == delim) delim = '\0';
+            continue;
+        }
+        if (c == '"' || c == '`') delim = c;
+    }
+    if (delim != '\0') return NULL;
+
+    char *coll_raw = substr_copy(expr_part, (size_t)(marker - expr_part));
+    char *coll = trim_copy(coll_raw);
+    free(coll_raw);
+    if (coll[0] == '\0') {
+        free(coll);
+        return NULL;
+    }
+
+    const char *m = marker + strlen(".enumerate().map(");
+    m = skip_ws(m);
+    if (m[0] != '|' || m[1] != '(') {
+        free(coll);
+        return NULL;
+    }
+    const char *q = skip_ws(m + 2);
+    const char *i_start = q;
+    while (is_ident_continue(*q)) q++;
+    if (q == i_start) {
+        free(coll);
+        return NULL;
+    }
+    size_t i_len = (size_t)(q - i_start);
+    q = skip_ws(q);
+    if (*q != ',') {
+        free(coll);
+        return NULL;
+    }
+    q = skip_ws(q + 1);
+    const char *x_start = q;
+    while (is_ident_continue(*q)) q++;
+    if (q == x_start) {
+        free(coll);
+        return NULL;
+    }
+    size_t x_len = (size_t)(q - x_start);
+    q = skip_ws(q);
+    if (*q != ')') {
+        free(coll);
+        return NULL;
+    }
+    q = skip_ws(q + 1);
+    if (*q != '|') {
+        free(coll);
+        return NULL;
+    }
+    q++;
+
+    int map_open = (int)(marker - expr_part) + (int)strlen(".enumerate().map(") - 1;
+    int map_close = find_matching_paren_c(expr_part, map_open);
+    if (map_close < 0 || q - expr_part >= map_close) {
+        free(coll);
+        return NULL;
+    }
+    char *expr_raw = substr_copy(q, (size_t)(map_close - (q - expr_part)));
+    char *body_expr = trim_copy(expr_raw);
+    free(expr_raw);
+
+    /* optional `.join(SEP)` tail, then only ws/; to EOL */
+    const char *tail = expr_part + map_close + 1;
+    char *join_sep = NULL;
+    if (starts_with(tail, ".join(")) {
+        int jopen = (int)(tail - expr_part) + 5;
+        int jclose = find_matching_paren_c(expr_part, jopen);
+        if (jclose < 0) {
+            free(coll);
+            free(body_expr);
+            return NULL;
+        }
+        char *sep_raw = substr_copy(expr_part + jopen + 1, (size_t)(jclose - 1) - (size_t)jopen);
+        join_sep = trim_copy(sep_raw);
+        free(sep_raw);
+        tail = expr_part + jclose + 1;
+    }
+    const char *after = skip_ws(tail);
+    if (*after == ';') after = skip_ws(after + 1);
+    if (*after != '\0') {
+        free(coll);
+        free(body_expr);
+        free(join_sep);
+        return NULL;
+    }
+
+    *counter += 1;
+    char src_temp[48];
+    const char *src_name = coll;
+    int needs_src = !compound_lhs_is_plain_place(coll);
+    if (needs_src) {
+        snprintf(src_temp, sizeof(src_temp), "vais_pipe_src_%d", *counter);
+        src_name = src_temp;
+    }
+    char acc_temp[48];
+    snprintf(acc_temp, sizeof(acc_temp), "vais_pipe_%d", *counter);
+    int acc_is_name = name_start != NULL && join_sep == NULL;
+    const char *elem_ty = result_str_int_expr_result_is_str(body_expr, NULL) ? "List<Str>" : "List<Int>";
+    if (join_sep != NULL) elem_ty = "List<Str>";
+
+    StrBuf out;
+    sb_init(&out);
+    char *indent = substr_copy(line, indent_len);
+    if (needs_src) {
+        sb_append(&out, indent);
+        sb_append(&out, "let ");
+        sb_append(&out, src_temp);
+        sb_append(&out, " = ");
+        sb_append(&out, coll);
+        sb_append(&out, "\n");
+    }
+    sb_append(&out, indent);
+    sb_append(&out, "let ");
+    if (acc_is_name && is_mut) sb_append(&out, "mut ");
+    if (acc_is_name) {
+        sb_append_n(&out, name_start, name_len);
+    } else {
+        sb_append(&out, acc_temp);
+    }
+    sb_append(&out, ": ");
+    sb_append(&out, elem_ty);
+    sb_append(&out, " = []\n");
+    sb_append(&out, indent);
+    sb_append(&out, "for ");
+    sb_append_n(&out, i_start, i_len);
+    sb_append(&out, " in 0..");
+    sb_append(&out, src_name);
+    sb_append(&out, ".len() {\n");
+    sb_append(&out, indent);
+    sb_append(&out, "    let ");
+    sb_append_n(&out, x_start, x_len);
+    sb_append(&out, " = ");
+    sb_append(&out, src_name);
+    sb_append(&out, "[");
+    sb_append_n(&out, i_start, i_len);
+    sb_append(&out, "]\n");
+    sb_append(&out, indent);
+    sb_append(&out, "    ");
+    if (acc_is_name) {
+        sb_append_n(&out, name_start, name_len);
+    } else {
+        sb_append(&out, acc_temp);
+    }
+    sb_append(&out, ".push(");
+    sb_append(&out, body_expr);
+    sb_append(&out, ")\n");
+    sb_append(&out, indent);
+    sb_append(&out, "}");
+    if (!acc_is_name) {
+        sb_append(&out, "\n");
+        sb_append(&out, indent);
+        if (is_return) {
+            sb_append(&out, "return ");
+        } else {
+            sb_append(&out, "let ");
+            if (is_mut) sb_append(&out, "mut ");
+            sb_append_n(&out, name_start, name_len);
+            sb_append(&out, " = ");
+        }
+        if (join_sep != NULL) {
+            sb_append(&out, "str_join(");
+            sb_append(&out, acc_temp);
+            sb_append(&out, ", ");
+            sb_append(&out, join_sep);
+            sb_append(&out, ")");
+        } else {
+            sb_append(&out, acc_temp);
+        }
+    }
+    free(indent);
+    free(coll);
+    free(body_expr);
+    free(join_sep);
+    return sb_take(&out);
+}
+
+static char *lower_enum_map_text(const char *text) {
+    StrBuf out;
+    sb_init(&out);
+    int counter = 0;
+    const char *line = text;
+    for (;;) {
+        const char *end = strchr(line, '\n');
+        size_t len = end == NULL ? strlen(line) : (size_t)(end - line);
+        char *one = substr_copy(line, len);
+        char *rewritten = lower_enum_map_line(one, &counter);
+        if (rewritten != NULL) {
+            sb_append(&out, rewritten);
+            free(rewritten);
+        } else {
+            sb_append(&out, one);
+        }
+        free(one);
+        if (end == NULL) break;
+        sb_append(&out, "\n");
+        line = end + 1;
+    }
+    return sb_take(&out);
+}
+
 /* Stage 1c compound-assign desugar: `place += expr` (and -=, *=, /=, %=)
  * lowers to `place = place + (expr)` in the shared pipeline, so both engines
  * keep their single assignment lowering and the parenthesized right side
@@ -19769,8 +20025,10 @@ static char *prepare_source_text(const char *raw) {
     free(collect_lowered);
     char *expr_body_lowered = lower_expr_body_text(argv_lowered);
     free(argv_lowered);
-    char *compound_lowered = lower_compound_assign_text(expr_body_lowered);
+    char *enum_map_lowered = lower_enum_map_text(expr_body_lowered);
     free(expr_body_lowered);
+    char *compound_lowered = lower_compound_assign_text(enum_map_lowered);
+    free(enum_map_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -20592,6 +20850,50 @@ static int front_check_string_escape_line(const char *path, int line_no, const c
     return issues;
 }
 
+/* Front check: the enumerate-map pipeline lowering consumes every
+ * supported closure-tuple statement, so a surviving `|(` spelling sits in
+ * an unsupported position; report it loudly. */
+static int front_check_enum_map_line(const char *path, int line_no, const char *line) {
+    int issues = 0;
+    char delim = '\0';
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if (c == '|' && line[i + 1] == '(') {
+            report_issue(path, line_no, (int)i + 1, line,
+                "closure tuple parameters are only lowered in enumerate-map pipeline statements",
+                "write `let xs = coll.enumerate().map(|(i, x)| expr)` (optionally with `.join(sep)`) or `return coll.enumerate().map(|(i, x)| expr).join(sep)` on one line; other tuple-closure positions are not lowered.",
+                NULL);
+            issues++;
+            i++;
+        }
+    }
+    return issues;
+}
+
 /* Front check: the enumerate lowering consumes every supported
  * `for (i, x) in expr.enumerate() {` head, so a surviving `.enumerate(`
  * spelling or `for (` tuple pattern sits in an unsupported position;
@@ -21396,6 +21698,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         issues += front_check_collect_method_line(path, line_no, line);
         issues += front_check_argv_line(path, line_no, line);
         issues += front_check_enumerate_line(path, line_no, line);
+        issues += front_check_enum_map_line(path, line_no, line);
         {
             const char *eq = strstr(probe, "= if ");
             if (eq != NULL) {
@@ -22972,8 +23275,10 @@ static char *prepare_source_file(const char *path) {
     free(collect_lowered);
     char *expr_body_lowered = lower_expr_body_text(argv_lowered);
     free(argv_lowered);
-    char *compound_lowered = lower_compound_assign_text(expr_body_lowered);
+    char *enum_map_lowered = lower_enum_map_text(expr_body_lowered);
     free(expr_body_lowered);
+    char *compound_lowered = lower_compound_assign_text(enum_map_lowered);
+    free(enum_map_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -35502,8 +35807,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *expr_body_lowered = lower_expr_body_text(argv_lowered);
     free(argv_lowered);
     if (expr_body_lowered == NULL) return 1;
-    char *compound_lowered = lower_compound_assign_text(expr_body_lowered);
+    char *enum_map_lowered = lower_enum_map_text(expr_body_lowered);
     free(expr_body_lowered);
+    if (enum_map_lowered == NULL) return 1;
+    char *compound_lowered = lower_compound_assign_text(enum_map_lowered);
+    free(enum_map_lowered);
     if (compound_lowered == NULL) return 1;
     char *split = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);

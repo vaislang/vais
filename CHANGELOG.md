@@ -4,6 +4,25 @@
 
 ### Changed
 
+- Promoted enumerate-map pipelines as the closure-tuple slice
+  (Token-Density Stage 3b, docs/design/TOKEN-DENSITY.md): closure tuple
+  parameters exist in exactly one place — the enumerate-map pipeline
+  statement — and lower in the shared driver pass to an indexed
+  accumulation loop, so no general tuple type is opened.
+  `let [mut] xs = coll.enumerate().map(|(i, x)| expr)` binds the
+  accumulator directly (List<Str> when the body is string-yielding by
+  the textual rule, List<Int> otherwise), an optional `.join(sep)` tail
+  accumulates into a temp and joins through str_join, and the return
+  form composes with expression bodies — the e332 ranking renderer is
+  now the one-line sketch shape
+  (`docs.enumerate().map(|(i, d)| f"{i + 1}. {d.title} ({d.score})").join("\n")`).
+  Receivers follow the Stage 3a rule, and any other `|(` closure-tuple
+  spelling is a loud front error. Locked by
+  examples/e383_enum_map_pipeline.vais (parity native-supported), a
+  front accept fixture plus a position reject fixture, and direct
+  feature shape 242. General tuple types and `.take(k)` remain the
+  explicitly deferred candidates.
+
 - Promoted enumerate for-head destructuring as the verified tuple slice
   (Token-Density Stage 3a, docs/design/TOKEN-DENSITY.md):
   `for (i, x) in expr.enumerate() {` lowers in the shared driver pass to

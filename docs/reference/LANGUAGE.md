@@ -1784,6 +1784,15 @@ Verified today:
   iteratively, and a receiver containing a string literal is a loud front
   error ("method receiver is not a lowerable postfix chain") instead of a
   partial lowering. The function spellings keep working unchanged.
+- Enumerate-map pipelines: closure tuple parameters exist in exactly one
+  place — `let [mut] xs = coll.enumerate().map(|(i, x)| expr)` (optionally
+  with a `.join(sep)` tail, also in return position) lowers to an indexed
+  accumulation loop (`examples/e383_enum_map_pipeline.vais`). The
+  accumulator binds as `List<Str>` when the body is string-yielding by the
+  textual rule and `List<Int>` otherwise; `.join` tails go through
+  `str_join`; receivers follow the enumerate rule below. Any other `|(`
+  closure-tuple spelling is a loud front error, and general tuple types
+  stay deferred.
 - Enumerate destructuring: `for (i, x) in expr.enumerate() {` iterates any
   list-yielding expression with an index — plain places index directly and
   other receivers (collect methods, filter/map chains) bind through a temp
