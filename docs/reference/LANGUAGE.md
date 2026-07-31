@@ -1784,6 +1784,22 @@ Verified today:
   iteratively, and a receiver containing a string literal is a loud front
   error ("method receiver is not a lowerable postfix chain") instead of a
   partial lowering. The function spellings keep working unchanged.
+- Expression bodies: the last statement of a function body, when it is a
+  bare expression or call, gains an implicit `return`
+  (`examples/e380_expr_body_argv_pipeline.vais`). Such tails were
+  previously hard errors on both engines, so no existing program changes
+  meaning; `if`/`match` block tails still return explicitly inside their
+  arms.
+- Process arguments: `args()` reads argv as a `List<Str>` in three shapes
+  — `let [mut] name = args()`, `for x in args() {`, and the CLI-dispatch
+  tail `return match args() { [] => expr, ["-c", a, b] => expr,
+  [a, b] => expr, _ => expr }`, which lowers to first-match if-chains
+  (literal items become equality guards; binder items substitute as direct
+  element reads, so arms may reuse binder names; the trailing `_` arm is
+  required). Any other `args()` position is a loud front error.
+- `xs.join(sep)` joins a `List<Str>` through `str_join`; a closure-bearing
+  filter/map chain directly under `.join` is a loud front error — bind the
+  chain to a local first, matching the verified closure slice.
 - Return-value collection methods: `recv.lines()`, `recv.split(sep)`,
   `dir.files()`, and `dir.dirs()` read as return values in two statement
   shapes — `let [mut] name = recv.lines()` and `for x in recv.lines() {`

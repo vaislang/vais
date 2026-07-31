@@ -347,6 +347,10 @@ engines),
 (`let xs = body.lines()`, `for x in csv.split(",") { ... }`, `dir.files()`,
 `dir.dirs()` lowering to the `*_into` out-param calls with injected temp
 lists on both engines),
+`examples/e380_expr_body_argv_pipeline.vais` for expression bodies
+(implicit return on bare-expression tails), `args()` argv reads with the
+`return match args()` CLI dispatch, and `.join(sep)` over filter/map
+pipelines on both engines,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

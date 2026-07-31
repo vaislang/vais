@@ -1,0 +1,58 @@
+# expect: 42
+# Expression bodies, argv dispatch, and pipeline joins (Token-Density
+# Stage 2c). The last statement of a function body, when it is a bare
+# expression or call, gains an implicit return (previously a hard error on
+# both engines, so no existing program changes meaning; block tails still
+# return explicitly in their arms). `args()` reads the process arguments as
+# a List<Str> through `let argv = args()`, `for x in args() {`, and the
+# CLI-dispatch tail `return match args() { [...] => expr, ..., _ => expr }`
+# which lowers to first-match if-chains — literal items become equality
+# guards and binder items substitute as direct element reads, so arms may
+# reuse binder names. `.join(sep)` joins a List<Str> through str_join, and
+# List<Str>.filter/.map chains compose with it on both engines.
+
+fn label(w: Str) -> Str {
+    w.trim().upper()
+}
+
+fn score(xs: List<Str>) -> Int {
+    xs.len() * 2
+}
+
+fn dispatch() -> Int {
+    return match args() {
+        [] => 40 + 2,
+        ["-c", pattern, path] => pattern.len() * 10 + path.len(),
+        [one] => one.len(),
+        _ => 99,
+    }
+}
+
+fn main() -> Int {
+    # Expression bodies: helper tails above carry no `return`.
+    if label(" ok ") != "OK" { return 1 }
+    let words: List<Str> = ["alpha", "be", "gamma"]
+    if score(words) != 6 { return 2 }
+
+    # args() binding and for-each are empty under the value gate.
+    let argv = args()
+    if argv.len() != 0 { return 3 }
+    let mut seen = 0
+    for a in args() {
+        seen += 1
+    }
+    if seen != 0 { return 4 }
+
+    # Pipeline: filter/map chains bind to a local, then .join(sep) joins it
+    # (a closure-bearing chain directly under .join is a loud front error —
+    # bind it first, matching the verified closure slice).
+    let long_words = words.filter(|w| w.len() > 3)
+    if long_words.len() != 2 { return 5 }
+    let picked = words.filter(|w| w.len() > 3).map(|w| str_upper(w))
+    if picked.join(", ") != "ALPHA, GAMMA" { return 6 }
+    let parts: List<Str> = ["a", "b", "c"]
+    if parts.join("-") != "a-b-c" { return 7 }
+
+    # The dispatch tail returns 42 through the empty-argv arm.
+    dispatch()
+}

@@ -7622,6 +7622,37 @@ fn write_list_else_if_hoist(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_expr_body_argv_pipeline(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn label(w: Str) -> Str {")
+    append_line(out, "    w.trim().upper()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn dispatch() -> Int {")
+    append_line(out, "    return match args() {")
+    append_line(out, "        [] => 42,")
+    append_line(out, "        [\"-c\", pattern, path] => pattern.len() + path.len(),")
+    append_line(out, "        [one] => one.len(),")
+    append_line(out, "        _ => 99,")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    if label(\" ok \") != \"OK\" { return 1 }")
+    append_line(out, "    let argv = args()")
+    append_line(out, "    if argv.len() != 0 { return 2 }")
+    append_line(out, "    let mut seen = 0")
+    append_line(out, "    for a in args() {")
+    append_line(out, "        seen += 1")
+    append_line(out, "    }")
+    append_line(out, "    if seen != 0 { return 3 }")
+    append_line(out, "    let parts: List<Str> = [\"a\", \"b\", \"c\"]")
+    append_line(out, "    if parts.join(\"-\") != \"a-b-c\" { return 4 }")
+    append_line(out, "    dispatch()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_collect_methods(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -7836,6 +7867,7 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "map_str_str_get_opt_transform_len") == 1 { wrote = write_map_str_str_get_opt_transform_len(src) }
     else if str_contains(name, "str_len_reassigned_match_transform") == 1 { wrote = write_str_len_reassigned_match_transform(src) }
     else if str_contains(name, "map_str_str_get_opt_str_transforms") == 1 { wrote = write_map_str_str_get_opt_str_transforms(src) }
+    else if str_contains(name, "expr_body_argv_pipeline") == 1 { wrote = write_expr_body_argv_pipeline(src) }
     else if str_contains(name, "collect_methods") == 1 { wrote = write_collect_methods(src) }
     else if str_contains(name, "str_receiver_methods") == 1 { wrote = write_str_receiver_methods(src) }
     else if str_contains(name, "bool_predicate_conditions") == 1 { wrote = write_bool_predicate_conditions(src) }
@@ -8094,6 +8126,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "__vais_str_trim") and str_contains(text, "__vais_str_lower") and str_contains(text, "__vais_str_contains")
     } else if shape == 239 {
         ok = str_contains(text, "__vais_str_split_lines_into") and str_contains(text, "__vais_str_split_into")
+    } else if shape == 240 {
+        ok = str_contains(text, "__vais_str_join") and str_contains(text, "__vais_str_trim")
     } else if shape == 2 {
         ok = str_contains(text, " br ")
     } else if shape == 3 {
@@ -9084,5 +9118,6 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "bool_predicate_conditions", "direct bare predicate conditions and for accumulation idioms run (=42)", 237)
     fail = fail + expect_case(vaisc, tmp, "str_receiver_methods", "direct Str receiver method chains lower to shared builtin calls (=42)", 238)
     fail = fail + expect_case(vaisc, tmp, "collect_methods", "direct return-value collection methods lower to *_into calls with temp lists (=42)", 239)
+    fail = fail + expect_case(vaisc, tmp, "expr_body_argv_pipeline", "direct expression bodies, args() dispatch, and pipeline join run (=42)", 240)
     return fail
 }

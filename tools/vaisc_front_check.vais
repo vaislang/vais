@@ -8111,6 +8111,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "bool_predicate") == 1 { return write_bool_predicate_accept(path) }
     if str_eq(name, "str_method") == 1 { return write_str_method_accept(path) }
     if str_eq(name, "collect_method") == 1 { return write_collect_method_accept(path) }
+    if str_eq(name, "expr_body_argv") == 1 { return write_expr_body_argv_accept(path) }
     if str_eq(name, "day1") == 1 { return write_day1(path) }
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
     if str_eq(name, "io") == 1 { return write_io_accept(path) }
@@ -9085,6 +9086,41 @@ fn write_collect_method_accept(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_expr_body_argv_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn label(w: Str) -> Str {")
+    append_line(out, "    w.trim().upper()")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn dispatch() -> Int {")
+    append_line(out, "    return match args() {")
+    append_line(out, "        [] => 42,")
+    append_line(out, "        [\"-c\", pattern, path] => pattern.len() + path.len(),")
+    append_line(out, "        [one] => one.len(),")
+    append_line(out, "        _ => 99,")
+    append_line(out, "    }")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    if label(\" ok \") != \"OK\" { return 1 }")
+    append_line(out, "    let argv = args()")
+    append_line(out, "    if argv.len() != 0 { return 2 }")
+    append_line(out, "    let parts: List<Str> = [\"a\", \"b\", \"c\"]")
+    append_line(out, "    if parts.join(\"-\") != \"a-b-c\" { return 3 }")
+    append_line(out, "    dispatch()")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_argv_position_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    if args().len() != 0 { return 1 }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_collect_method_position_bad(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -9197,6 +9233,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "compound_assign_call_lhs") == 1 { return write_compound_assign_call_lhs_bad(path) }
     if str_eq(name, "str_method_literal_receiver") == 1 { return write_str_method_literal_receiver_bad(path) }
     if str_eq(name, "collect_method_position") == 1 { return write_collect_method_position_bad(path) }
+    if str_eq(name, "argv_position") == 1 { return write_argv_position_bad(path) }
     if str_eq(name, "fstring_empty_hole") == 1 { return write_fstring_empty_hole_bad(path) }
     if str_eq(name, "fstring_lone_brace") == 1 { return write_fstring_lone_brace_bad(path) }
     if str_eq(name, "fstring_open_hole") == 1 { return write_fstring_open_hole_bad(path) }
@@ -9752,6 +9789,8 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "str_method_literal_receiver", "method receiver is not a lowerable postfix chain", "", "bind the receiver")
     fail = fail + expect_accept(vaisc, tmp, "collect_method", "accepts return-value collection method bindings and for-in heads (=42)", 42)
     fail = fail + expect_reject(vaisc, tmp, "collect_method_position", "collection method needs a let binding or a for-in head", "", "other positions")
+    fail = fail + expect_accept(vaisc, tmp, "expr_body_argv", "accepts expression bodies, args() dispatch, and pipeline join (=42)", 42)
+    fail = fail + expect_reject(vaisc, tmp, "argv_position", "args() needs a let binding, a for-in head, or a return match head", "", "single-line")
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/clear/len/is_empty/last/pop/sum", "", "plain function call")
     fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)

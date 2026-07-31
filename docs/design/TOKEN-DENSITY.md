@@ -34,8 +34,15 @@ Stage 2b promoted same day — return-value collection spellings for the
 `dir.files()`, `dir.dirs()`, plus `for x in recv.lines() {` heads) lower
 to the existing out-param calls with injected temp lists, locked by
 examples/e379_collect_methods.vais and direct feature shape 239.
-Remaining Stage 2: expression bodies and argv slice match; then
-re-measure the corpus as new code adopts the idioms. Goal: cut LLM development token cost by half against
+Stage 2c promoted 2026-07-31 — expression bodies (implicit return on
+bare-expression tails), `args()` argv reads with the `return match args()`
+CLI-dispatch tail lowered to first-match if-chains, and `.join(sep)` over
+List<Str> pipelines, locked by examples/e380_expr_body_argv_pipeline.vais
+and direct feature shape 240. STAGE 2 COMPLETE except the deliberately
+deferred items: `.enumerate()`/`.take(k)` pipeline steps need tuple
+closure parameters, which are new type surface rather than desugar — they
+move to the Stage 3 candidate list. Next: adopt the idioms in new product
+code and re-measure the corpus. Goal: cut LLM development token cost by half against
 performance-equivalent mainstream languages while keeping runtime behavior and
 performance unchanged.
 
@@ -171,11 +178,15 @@ re-tokenizing (o200k):
 
 Verified-execution result: the landed surface recovers 17% on real
 programs, reaching TypeScript parity (2,638 vs 2,619) and 9% below Rust —
-the performance-equivalent baseline — with Python 12% ahead. The residual
-against the Stage 2 sketch (0.75x) is the not-yet-landed remainder:
-expression bodies, argv slice match, and the pipeline methods
-(enumerate/map/join). Unlike the earlier sketches, these numbers carry no
-design risk — every construct in the rewrite is gate-locked surface.
+the performance-equivalent baseline — with Python 12% ahead. Unlike the
+earlier sketches, these numbers carry no design risk — every construct in
+the rewrite is gate-locked surface.
+
+With Stage 2c (expression bodies, `return match args()` dispatch,
+`.join(sep)`) the vaisgrep rewrite drops further: 2,156 -> 1,670 (-23%),
+now below TypeScript (1,705) and 9% under Rust, with Python (1,511) 11%
+ahead — the remaining gap is stdlib expressivity (enumerate-style
+pipelines, comprehensions), tracked as Stage 3 candidates.
 
 ## Macro Data Points
 

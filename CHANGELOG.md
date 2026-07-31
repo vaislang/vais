@@ -4,6 +4,27 @@
 
 ### Changed
 
+- Promoted expression bodies, args() dispatch, and pipeline join
+  (Token-Density Stage 2c, docs/design/TOKEN-DENSITY.md), completing the
+  Stage 2 remainder. The last statement of a function body, when it is a
+  bare expression or call, gains an implicit return (previously a hard
+  error on both engines, so no existing program changes meaning; block
+  tails still return explicitly in their arms). `args()` reads argv as a
+  List<Str> through `let name = args()` and `for x in args() {` fill
+  loops plus the CLI-dispatch tail `return match args() { [...] => expr,
+  ..., _ => expr }`, lowered to first-match if-chains where literal
+  items become equality guards and binder items substitute as direct
+  element reads (arms may reuse binder names; the trailing `_` arm is
+  required, and any other `args()` position is a loud front error).
+  `xs.join(sep)` joins a List<Str> through str_join; a closure-bearing
+  filter/map chain directly under `.join` bails to a loud front error so
+  closures never move into call-argument positions outside the verified
+  closure slice — bind the chain to a local first. Locked by
+  examples/e380_expr_body_argv_pipeline.vais (parity native-supported,
+  arm selection also probed with real argv on both engines), a front
+  accept fixture plus an args-position reject fixture, and direct
+  feature shape 240.
+
 - Promoted return-value collection methods as verified surface
   (Token-Density Stage 2b, docs/design/TOKEN-DENSITY.md): the `*_into`
   out-param family gains method spellings that read as return values in

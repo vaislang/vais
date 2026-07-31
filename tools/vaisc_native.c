@@ -18386,6 +18386,561 @@ static char *lower_fstring_text(const char *text) {
     return sb_take(&out);
 }
 
+/* Stage 2c argv desugar: `args()` reads the process arguments as a
+ * List<Str> in three shapes. `let [mut] name = args()` and
+ * `for x in args() {` lower to a proc_argc/proc_arg fill loop over an
+ * injected list, and the CLI-dispatch tail
+ *     return match args() {
+ *         [] => expr,
+ *         ["-c", pattern, path] => expr,
+ *         [pattern, path] => expr,
+ *         _ => expr,
+ *     }
+ * lowers to first-match if-chains: literal items become equality guards,
+ * binder items substitute as direct vais_argv_K[i] reads inside the arm
+ * expression (no lets, so arms may reuse binder names), and the required
+ * trailing `_` arm becomes the final return. Malformed blocks stay
+ * unlowered for the front check to reject loudly. */
+static char *argv_replace_ident(const char *expr, const char *name, const char *repl) {
+    size_t name_len = strlen(name);
+    StrBuf out;
+    sb_init(&out);
+    char delim = '\0';
+    for (size_t i = 0; expr[i] != '\0';) {
+        char c = expr[i];
+        if (delim == '"') {
+            if (c == '\\' && expr[i + 1] != '\0') {
+                sb_append_n(&out, expr + i, 2);
+                i += 2;
+                continue;
+            }
+            sb_append_n(&out, &c, 1);
+            if (c == '"') delim = '\0';
+            i++;
+            continue;
+        }
+        if (delim == '`') {
+            sb_append_n(&out, &c, 1);
+            if (c == '`') delim = '\0';
+            i++;
+            continue;
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            sb_append_n(&out, &c, 1);
+            i++;
+            continue;
+        }
+        if (is_ident_continue(c) && (i == 0 || !is_ident_continue(expr[i - 1]))) {
+            size_t j = i;
+            while (is_ident_continue(expr[j])) j++;
+            if (j - i == name_len && strncmp(expr + i, name, name_len) == 0) {
+                sb_append(&out, repl);
+            } else {
+                sb_append_n(&out, expr + i, j - i);
+            }
+            i = j;
+            continue;
+        }
+        sb_append_n(&out, &c, 1);
+        i++;
+    }
+    return sb_take(&out);
+}
+
+static void argv_emit_fill(StrBuf *out, const char *indent, const char *list_name, int counter) {
+    char idx[48];
+    snprintf(idx, sizeof(idx), "vais_argv_i_%d", counter);
+    sb_append(out, indent);
+    sb_append(out, "let ");
+    sb_append(out, list_name);
+    sb_append(out, ": List<Str> = []\n");
+    sb_append(out, indent);
+    sb_append(out, "let mut ");
+    sb_append(out, idx);
+    sb_append(out, " = 0\n");
+    sb_append(out, indent);
+    sb_append(out, "while ");
+    sb_append(out, idx);
+    sb_append(out, " < proc_argc() {\n");
+    sb_append(out, indent);
+    sb_append(out, "    ");
+    sb_append(out, list_name);
+    sb_append(out, ".push(proc_arg(");
+    sb_append(out, idx);
+    sb_append(out, "))\n");
+    sb_append(out, indent);
+    sb_append(out, "    ");
+    sb_append(out, idx);
+    sb_append(out, " = ");
+    sb_append(out, idx);
+    sb_append(out, " + 1\n");
+    sb_append(out, indent);
+    sb_append(out, "}\n");
+}
+
+static int argv_line_is_call(const char *trimmed, const char *prefix) {
+    /* matches `<prefix>args()` with optional trailing `;` and spaces */
+    if (!starts_with(trimmed, prefix)) return -1;
+    const char *p = skip_ws(trimmed + strlen(prefix));
+    if (!starts_with(p, "args")) return -1;
+    p = skip_ws(p + 4);
+    if (*p != '(') return -1;
+    p = skip_ws(p + 1);
+    if (*p != ')') return -1;
+    p = skip_ws(p + 1);
+    if (*p == ';') p = skip_ws(p + 1);
+    return *p == '\0' ? 1 : -1;
+}
+
+/* Lower one `return match args() {` block starting at lines[start]; returns
+ * the rewritten text and stores the index past the closing brace, or NULL
+ * when the block does not fit the supported arm grammar. */
+static char *argv_lower_match_block(LineVec *lines, size_t start, size_t *next_out, int counter) {
+    const char *header = lines->items[start];
+    const char *indent_end = skip_ws(header);
+    size_t indent_len = (size_t)(indent_end - header);
+    char *indent = substr_copy(header, indent_len);
+    char list_name[48];
+    snprintf(list_name, sizeof(list_name), "vais_argv_%d", counter);
+
+    StrBuf out;
+    sb_init(&out);
+    argv_emit_fill(&out, indent, list_name, counter);
+
+    int saw_default = 0;
+    size_t i = start + 1;
+    for (; i < lines->len; i++) {
+        char *arm_raw = trim_copy(lines->items[i]);
+        size_t n = strlen(arm_raw);
+        while (n > 0 && (arm_raw[n - 1] == ',' || arm_raw[n - 1] == ';' ||
+                         arm_raw[n - 1] == ' ' || arm_raw[n - 1] == '\t')) {
+            arm_raw[--n] = '\0';
+        }
+        if (strcmp(arm_raw, "}") == 0) {
+            free(arm_raw);
+            break;
+        }
+        if (arm_raw[0] == '\0' || arm_raw[0] == '#') {
+            free(arm_raw);
+            continue;
+        }
+        if (saw_default) {
+            free(arm_raw);
+            free(indent);
+            free(out.data);
+            return NULL;
+        }
+        const char *arrow = strstr(arm_raw, "=>");
+        if (arrow == NULL) {
+            free(arm_raw);
+            free(indent);
+            free(out.data);
+            return NULL;
+        }
+        char *pat = substr_copy(arm_raw, (size_t)(arrow - arm_raw));
+        char *pat_trimmed = trim_copy(pat);
+        free(pat);
+        char *expr = trim_copy(arrow + 2);
+        free(arm_raw);
+
+        if (strcmp(pat_trimmed, "_") == 0) {
+            sb_append(&out, indent);
+            sb_append(&out, "return ");
+            sb_append(&out, expr);
+            saw_default = 1;
+            free(pat_trimmed);
+            free(expr);
+            continue;
+        }
+        size_t pn = strlen(pat_trimmed);
+        if (pn < 2 || pat_trimmed[0] != '[' || pat_trimmed[pn - 1] != ']') {
+            free(pat_trimmed);
+            free(expr);
+            free(indent);
+            free(out.data);
+            return NULL;
+        }
+        char *inner = substr_copy(pat_trimmed + 1, pn - 2);
+        free(pat_trimmed);
+        char *items[16] = {0};
+        int item_count = 0;
+        if (strlen(skip_ws(inner)) > 0) {
+            item_count = split_top_level_commas_c(inner, items, 16);
+        }
+        free(inner);
+        if (item_count < 0) {
+            for (int k = 0; k < 16; k++) free(items[k]);
+            free(expr);
+            free(indent);
+            free(out.data);
+            return NULL;
+        }
+
+        StrBuf cond;
+        sb_init(&cond);
+        char num[32];
+        snprintf(num, sizeof(num), "%d", item_count);
+        sb_append(&cond, list_name);
+        sb_append(&cond, ".len() == ");
+        sb_append(&cond, num);
+        char *subst = strdup(expr);
+        int bad = subst == NULL;
+        for (int k = 0; k < item_count && !bad; k++) {
+            char *item = trim_copy(items[k]);
+            char idx_ref[64];
+            snprintf(idx_ref, sizeof(idx_ref), "%s[%d]", list_name, k);
+            if (item[0] == '"') {
+                sb_append(&cond, " and ");
+                sb_append(&cond, idx_ref);
+                sb_append(&cond, " == ");
+                sb_append(&cond, item);
+            } else if (is_ident_continue(item[0]) && !(item[0] >= '0' && item[0] <= '9')) {
+                char *next_subst = argv_replace_ident(subst, item, idx_ref);
+                free(subst);
+                subst = next_subst;
+            } else {
+                bad = 1;
+            }
+            free(item);
+        }
+        for (int k = 0; k < 16; k++) free(items[k]);
+        free(expr);
+        if (bad) {
+            free(subst);
+            free(cond.data);
+            free(indent);
+            free(out.data);
+            return NULL;
+        }
+        sb_append(&out, indent);
+        sb_append(&out, "if ");
+        sb_append_n(&out, cond.data, cond.len);
+        sb_append(&out, " { return ");
+        sb_append(&out, subst);
+        sb_append(&out, " }\n");
+        free(cond.data);
+        free(subst);
+    }
+    free(indent);
+    if (!saw_default || i >= lines->len) {
+        free(out.data);
+        return NULL;
+    }
+    *next_out = i + 1;
+    return sb_take(&out);
+}
+
+static char *lower_argv_text(const char *text) {
+    LineVec lines;
+    lines_init(&lines);
+    const char *cursor = text;
+    for (;;) {
+        const char *end = strchr(cursor, '\n');
+        size_t len = end == NULL ? strlen(cursor) : (size_t)(end - cursor);
+        lines_push(&lines, substr_copy(cursor, len));
+        if (end == NULL) break;
+        cursor = end + 1;
+    }
+    StrBuf out;
+    sb_init(&out);
+    int counter = 0;
+    for (size_t i = 0; i < lines.len;) {
+        const char *line = lines.items[i];
+        const char *s = skip_ws(line);
+        size_t indent_len = (size_t)(s - line);
+
+        /* `return match args() {` block */
+        char *no_semi = trim_copy(s);
+        int is_match_header = strcmp(no_semi, "return match args() {") == 0;
+        free(no_semi);
+        if (is_match_header) {
+            size_t next = i;
+            counter++;
+            char *block = argv_lower_match_block(&lines, i, &next, counter);
+            if (block != NULL) {
+                sb_append(&out, block);
+                sb_append(&out, "\n");
+                free(block);
+                i = next;
+                continue;
+            }
+        }
+
+        /* `let [mut] name = args()` */
+        if (starts_with(s, "let ")) {
+            const char *q = skip_ws(s + 4);
+            if (starts_with(q, "mut ")) q = skip_ws(q + 4);
+            const char *name_start = q;
+            while (is_ident_continue(*q)) q++;
+            if (q > name_start) {
+                const char *r = skip_ws(q);
+                if (*r == '=' && argv_line_is_call(r, "=") == 1) {
+                    char *indent = substr_copy(line, indent_len);
+                    char *name = substr_copy(name_start, (size_t)(q - name_start));
+                    const char *mut_spot = skip_ws(s + 4);
+                    int is_mut = starts_with(skip_ws(s + 4), "mut ") ? 1 : 0;
+                    (void)mut_spot;
+                    counter++;
+                    StrBuf fill;
+                    sb_init(&fill);
+                    /* reuse the fill emitter with the user name, honoring mut */
+                    char idx[48];
+                    snprintf(idx, sizeof(idx), "vais_argv_i_%d", counter);
+                    sb_append(&fill, indent);
+                    sb_append(&fill, is_mut ? "let mut " : "let ");
+                    sb_append(&fill, name);
+                    sb_append(&fill, ": List<Str> = []\n");
+                    sb_append(&fill, indent);
+                    sb_append(&fill, "let mut ");
+                    sb_append(&fill, idx);
+                    sb_append(&fill, " = 0\n");
+                    sb_append(&fill, indent);
+                    sb_append(&fill, "while ");
+                    sb_append(&fill, idx);
+                    sb_append(&fill, " < proc_argc() {\n");
+                    sb_append(&fill, indent);
+                    sb_append(&fill, "    ");
+                    sb_append(&fill, name);
+                    sb_append(&fill, ".push(proc_arg(");
+                    sb_append(&fill, idx);
+                    sb_append(&fill, "))\n");
+                    sb_append(&fill, indent);
+                    sb_append(&fill, "    ");
+                    sb_append(&fill, idx);
+                    sb_append(&fill, " = ");
+                    sb_append(&fill, idx);
+                    sb_append(&fill, " + 1\n");
+                    sb_append(&fill, indent);
+                    sb_append(&fill, "}");
+                    sb_append_n(&out, fill.data, fill.len);
+                    sb_append(&out, "\n");
+                    free(fill.data);
+                    free(indent);
+                    free(name);
+                    i++;
+                    continue;
+                }
+            }
+        }
+
+        /* `for x in args() {` */
+        if (starts_with(s, "for ")) {
+            const char *q = skip_ws(s + 4);
+            const char *var_start = q;
+            while (is_ident_continue(*q)) q++;
+            if (q > var_start) {
+                const char *r = skip_ws(q);
+                if (starts_with(r, "in ")) {
+                    char *head = trim_copy(skip_ws(r + 3));
+                    size_t hn = strlen(head);
+                    if (hn > 0 && head[hn - 1] == '{') {
+                        head[--hn] = '\0';
+                        char *call = trim_copy(head);
+                        int is_args = argv_line_is_call(call, "") == 1;
+                        free(call);
+                        if (is_args) {
+                            counter++;
+                            char *indent = substr_copy(line, indent_len);
+                            char list_name[48];
+                            snprintf(list_name, sizeof(list_name), "vais_argv_%d", counter);
+                            argv_emit_fill(&out, indent, list_name, counter);
+                            sb_append(&out, indent);
+                            sb_append(&out, "for ");
+                            sb_append_n(&out, var_start, (size_t)(q - var_start));
+                            sb_append(&out, " in ");
+                            sb_append(&out, list_name);
+                            sb_append(&out, " {\n");
+                            free(indent);
+                            free(head);
+                            i++;
+                            continue;
+                        }
+                    }
+                    free(head);
+                }
+            }
+        }
+
+        sb_append(&out, line);
+        sb_append(&out, "\n");
+        i++;
+    }
+    lines_free(&lines);
+    /* drop the final extra newline to preserve the original shape */
+    if (out.len > 0 && out.data[out.len - 1] == '\n') out.data[--out.len] = '\0';
+    return sb_take(&out);
+}
+
+/* Stage 2c expression-body desugar: the last statement of a function body,
+ * when it is a bare expression (an operator expression or a call, with no
+ * top-level assignment and no leading keyword), gains an implicit
+ * `return ` prefix. Today such tails are hard errors on both engines
+ * (missing return), so no existing program changes meaning; block tails
+ * (if/match closers) still need explicit returns in their arms. */
+static int expr_body_scan_depth(const char *line, int *depth, int *pdepth) {
+    char delim = '\0';
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if (c == '{') (*depth)++;
+        if (c == '}') (*depth)--;
+        if (c == '(' || c == '[') (*pdepth)++;
+        if (c == ')' || c == ']') (*pdepth)--;
+    }
+    return 0;
+}
+
+static int expr_body_line_is_statement(const char *line) {
+    const char *s = skip_ws(line);
+    if (*s == '\0' || *s == '#' || *s == '}' || *s == '{') return 1;
+    static const char *kws[] = {
+        "let", "if", "else", "while", "for", "match", "return",
+        "break", "continue", "import", "fn", "struct",
+    };
+    for (size_t k = 0; k < sizeof(kws) / sizeof(kws[0]); k++) {
+        size_t n = strlen(kws[k]);
+        if (strncmp(s, kws[k], n) == 0 && !is_ident_continue(s[n])) return 1;
+    }
+    /* a top-level plain `=` makes it an assignment statement */
+    char delim = '\0';
+    int depth = 0;
+    for (size_t i = 0; s[i] != '\0'; i++) {
+        char c = s[i];
+        if (delim == '"') {
+            if (c == '\\' && s[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '\'') {
+            int end = skip_char_literal_c(s, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if (c == '(' || c == '[') depth++;
+        if (c == ')' || c == ']') depth--;
+        if (depth == 0 && c == '=') {
+            char prev = i > 0 ? s[i - 1] : '\0';
+            char next = s[i + 1];
+            if (prev != '=' && prev != '!' && prev != '<' && prev != '>' &&
+                prev != '+' && prev != '-' && prev != '*' && prev != '/' &&
+                prev != '%' && next != '=' && next != '>') {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static char *lower_expr_body_text(const char *text) {
+    LineVec lines;
+    lines_init(&lines);
+    const char *cursor = text;
+    for (;;) {
+        const char *end = strchr(cursor, '\n');
+        size_t len = end == NULL ? strlen(cursor) : (size_t)(end - cursor);
+        lines_push(&lines, substr_copy(cursor, len));
+        if (end == NULL) break;
+        cursor = end + 1;
+    }
+    int depth = 0;
+    int pdepth = 0;
+    int in_fn = 0;
+    long last_stmt = -1;
+    for (size_t i = 0; i < lines.len; i++) {
+        const char *line = lines.items[i];
+        int before = depth;
+        int pbefore = pdepth;
+        expr_body_scan_depth(line, &depth, &pdepth);
+        const char *s = skip_ws(line);
+        if (before == 0 && depth == 1) {
+            /* only fn-opened bodies get implicit returns; struct/enum
+             * declaration bodies also sit at depth 1 and must stay
+             * untouched */
+            in_fn = starts_with(s, "fn ") ? 1 : 0;
+            last_stmt = -1;
+            continue;
+        }
+        if (!in_fn) {
+            if (depth == 0) in_fn = 0;
+            continue;
+        }
+        if (before == 1 && depth == 0 && pbefore == 0 && *s == '}') {
+            /* function body closes; retro-prefix the last candidate */
+            if (last_stmt >= 0 && !expr_body_line_is_statement(lines.items[last_stmt])) {
+                const char *old = lines.items[last_stmt];
+                const char *body = skip_ws(old);
+                StrBuf nb;
+                sb_init(&nb);
+                sb_append_n(&nb, old, (size_t)(body - old));
+                sb_append(&nb, "return ");
+                sb_append(&nb, body);
+                free(lines.items[last_stmt]);
+                lines.items[last_stmt] = sb_take(&nb);
+            }
+            last_stmt = -1;
+            continue;
+        }
+        /* a candidate starts and ends at brace depth 1 with balanced
+         * parens/brackets, so multiline call or literal continuations are
+         * never mistaken for statements */
+        if (before == 1 && depth == 1 && pbefore == 0 && pdepth == 0 &&
+            *s != '\0' && *s != '#') {
+            last_stmt = (long)i;
+        }
+        if (before == 1 && depth > 1) last_stmt = -1;
+        if (before > 1 && depth == 1) last_stmt = -1;
+        if (pbefore == 0 && pdepth > 0) last_stmt = -1;
+        if (pbefore > 0 && pdepth == 0) last_stmt = -1;
+        if (depth == 0) last_stmt = -1;
+    }
+    StrBuf out;
+    sb_init(&out);
+    for (size_t i = 0; i < lines.len; i++) {
+        sb_append(&out, lines.items[i]);
+        if (i + 1 < lines.len) sb_append(&out, "\n");
+    }
+    lines_free(&lines);
+    return sb_take(&out);
+}
+
 /* Stage 2a receiver-method desugar: a curated set of Str/fs method
  * spellings lowers to the existing builtin calls in the shared pipeline —
  * s.has(x) -> str_contains(s, x), s.starts(p)/s.ends(p) ->
@@ -18416,6 +18971,7 @@ static const StrMethodMapEntry STR_METHOD_MAP[] = {
     {"write", "fs_write_text"},
     {"exists", "fs_exists"},
     {"is_dir", "fs_is_dir"},
+    {"join", "str_join"},
 };
 
 static int str_method_lookup(const char *name, size_t len) {
@@ -18500,7 +19056,10 @@ static char *lower_str_method_line(const char *line) {
                 continue;
             }
             if (depth > 0) {
-                if (c == '"' || c == '`' || c == '\'') {
+                /* string literals are ambiguous to scan backward, and
+                 * closure pipes would move a closure into a call-argument
+                 * position outside the verified closure slice */
+                if (c == '"' || c == '`' || c == '\'' || c == '|') {
                     bail = 1;
                     break;
                 }
@@ -19086,8 +19645,12 @@ static char *prepare_source_text(const char *raw) {
     free(fstring_lowered);
     char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
-    char *compound_lowered = lower_compound_assign_text(collect_lowered);
+    char *argv_lowered = lower_argv_text(collect_lowered);
     free(collect_lowered);
+    char *expr_body_lowered = lower_expr_body_text(argv_lowered);
+    free(argv_lowered);
+    char *compound_lowered = lower_compound_assign_text(expr_body_lowered);
+    free(expr_body_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -19909,6 +20472,56 @@ static int front_check_string_escape_line(const char *path, int line_no, const c
     return issues;
 }
 
+/* Front check: the argv lowering consumes every supported `args()` shape
+ * (`let name = args()`, `for x in args() {`, and the `return match args()`
+ * dispatch block with single-line arms plus a trailing `_`), so a surviving
+ * `args()` spelling sits in an unsupported position or a malformed match
+ * block; report it loudly. */
+static int front_check_argv_line(const char *path, int line_no, const char *line) {
+    int issues = 0;
+    char delim = '\0';
+    for (size_t i = 0; line[i] != '\0'; i++) {
+        char c = line[i];
+        if (delim == '"') {
+            if (c == '\\' && line[i + 1] != '\0') {
+                i++;
+                continue;
+            }
+            if (c == '"') delim = '\0';
+            continue;
+        }
+        if (delim == '`') {
+            if (c == '`') delim = '\0';
+            continue;
+        }
+        if (c == '#') break;
+        if (c == '\'') {
+            int end = skip_char_literal_c(line, (int)i);
+            if (end > (int)i + 1) {
+                i = (size_t)end - 1;
+                continue;
+            }
+        }
+        if (c == '"' || c == '`') {
+            delim = c;
+            continue;
+        }
+        if (c == 'a' && (i == 0 || !is_ident_continue(line[i - 1])) &&
+            strncmp(line + i, "args", 4) == 0 && !is_ident_continue(line[i + 4])) {
+            const char *p = skip_ws(line + i + 4);
+            if (*p == '(') {
+                report_issue(path, line_no, (int)i + 1, line,
+                    "args() needs a let binding, a for-in head, or a return match head",
+                    "write `let argv = args()`, `for x in args() { ... }`, or `return match args() {` with single-line `[...] => expr` arms and a trailing `_` arm.",
+                    NULL);
+                issues++;
+                i += 3;
+            }
+        }
+    }
+    return issues;
+}
+
 /* Front check: the return-value collection lowering rewrites the two
  * supported statement shapes away before this loop runs, so a surviving
  * collect-set method call sits in an unsupported position; report it. */
@@ -20607,6 +21220,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         issues += front_check_compound_assign_line(path, line_no, line);
         issues += front_check_str_method_line(path, line_no, line);
         issues += front_check_collect_method_line(path, line_no, line);
+        issues += front_check_argv_line(path, line_no, line);
         {
             const char *eq = strstr(probe, "= if ");
             if (eq != NULL) {
@@ -22177,8 +22791,12 @@ static char *prepare_source_file(const char *path) {
     free(fstring_lowered);
     char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
-    char *compound_lowered = lower_compound_assign_text(collect_lowered);
+    char *argv_lowered = lower_argv_text(collect_lowered);
     free(collect_lowered);
+    char *expr_body_lowered = lower_expr_body_text(argv_lowered);
+    free(argv_lowered);
+    char *compound_lowered = lower_compound_assign_text(expr_body_lowered);
+    free(expr_body_lowered);
     char *normalized = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
     char *map_match_lowered = lower_map_str_str_get_opt_embedded_match_text(normalized);
@@ -34699,8 +35317,14 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
     if (collect_lowered == NULL) return 1;
-    char *compound_lowered = lower_compound_assign_text(collect_lowered);
+    char *argv_lowered = lower_argv_text(collect_lowered);
     free(collect_lowered);
+    if (argv_lowered == NULL) return 1;
+    char *expr_body_lowered = lower_expr_body_text(argv_lowered);
+    free(argv_lowered);
+    if (expr_body_lowered == NULL) return 1;
+    char *compound_lowered = lower_compound_assign_text(expr_body_lowered);
+    free(expr_body_lowered);
     if (compound_lowered == NULL) return 1;
     char *split = lower_self_recursion_text(compound_lowered);
     free(compound_lowered);
