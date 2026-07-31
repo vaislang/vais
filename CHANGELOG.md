@@ -4,6 +4,22 @@
 
 ### Changed
 
+- Completed the vaisdb reindex sync story with deletion handling:
+  entries whose stored source path no longer exists on disk are removed
+  before the walk, so deleted files stop surfacing as stale search hits,
+  and the report gains the fourth counter —
+  `reindexed added=A updated=U removed=R skipped=S`. Docs without an
+  on-disk path (stdin ingests, bare-id/v2 lines) are kept, and an empty
+  target dir still errors before any cleanup runs. The new code is the
+  first product-cycle use of the Token-Density surface inside the
+  existing vaisdb codebase (for-each over the docs listing,
+  path.exists()/write() receiver methods, .split() bindings, f-string
+  note and report lines, compound assignment) and landed with a zero
+  gap report — first-attempt 42 on both engines. Locked by the package
+  self-test (vanish-and-rerun cases with docs-listing shrinkage) and
+  three new workflow gate cases (removed=1 report, removed doc leaves
+  search, stats drop to docs=1 terms=3).
+
 - Fixed the list-copy binding engine divergence: `let name = xs` (and
   the annotated `let name: List<T> = xs` let-initializer) where xs is a
   list local or parameter previously typed the copy as Int on the full

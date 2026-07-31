@@ -441,6 +441,23 @@ fn reindex_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
     let mut skipped = 0
     let mut touched = 0
     let mut failed = 0
+    # Deletion sync: entries whose stored source path vanished are removed
+    # before the walk, so deleted files stop surfacing as stale search hits.
+    # Docs without an on-disk path (stdin ingests, bare-id/v2 lines) are
+    # kept — there is nothing on disk to check them against — and an empty
+    # target dir still errors above before any cleanup runs.
+    let mut removed = 0
+    let known: List<Str> = []
+    let kn = docs_list_into(index_dir, known)
+    for doc_id in known {
+        let src_path = doc_src_path(index_dir, doc_id)
+        if src_path.len() > 0 and src_path != "-" {
+            let full = abs_src_path(src_path)
+            if not full.exists() {
+                if remove_doc(index_dir, doc_id) < 0 { failed = 1 } else { removed += 1 }
+            }
+        }
+    }
     while i < count {
         let name = names[i]
         let ext = text_suffix_len(name)
@@ -484,8 +501,7 @@ fn reindex_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
     }
     if failed == 1 { return Err("could not write index") }
     if touched == 0 { return Err("no text documents in directory") }
-    let note = str_concat(Str(added), str_concat(" ", str_concat(Str(updated), str_concat(" ", Str(skipped)))))
-    return Ok(note)
+    return Ok(f"{added} {updated} {removed} {skipped}")
 }
 
 fn utf8_trim(line: Str, limit: Int) -> Str {

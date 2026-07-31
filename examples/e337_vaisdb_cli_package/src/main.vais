@@ -105,14 +105,12 @@ fn run_reindex(index_dir: Str, dir: Str) -> Int {
         print(str_concat("error: ", note))
         return 3
     }
-    let parts: List<Str> = []
-    let np = str_split_into(note, " ", parts)
-    if np != 3 {
+    let parts = note.split(" ")
+    if parts.len() != 4 {
         print("error: could not write index")
         return 3
     }
-    let line = str_concat("reindexed added=", str_concat(parts[0], str_concat(" updated=", str_concat(parts[1], str_concat(" skipped=", parts[2])))))
-    print(line)
+    print(f"reindexed added={parts[0]} updated={parts[1]} removed={parts[2]} skipped={parts[3]}")
     return 0
 }
 
@@ -380,10 +378,24 @@ fn self_test() -> Int {
     index_reset(ridx)
     let r_flow = reindex_dir_into(ridx, rdir)
     let r_note = match r_flow { Ok(rc1) => rc1, Err(msg) => msg }
-    if r_note != "1 0 0" { return 41 }
+    if r_note != "1 0 0 0" { return 41 }
     let r_flow2 = reindex_dir_into(ridx, rdir)
     let r_note2 = match r_flow2 { Ok(rc2) => rc2, Err(msg) => msg }
-    if r_note2 != "0 0 1" { return 43 }
+    if r_note2 != "0 0 0 1" { return 43 }
+
+    # Deletion sync: a vanished source file leaves the walk as removed=1
+    # while the surviving doc still skips.
+    let r2 = path_join(rdir, "r2.txt")
+    if r2.write("gamma delta") != 0 { return 45 }
+    let r_flow3 = reindex_dir_into(ridx, rdir)
+    let r_note3 = match r_flow3 { Ok(rc3) => rc3, Err(msg) => msg }
+    if r_note3 != "1 0 0 1" { return 46 }
+    if fs_remove(r2) != 0 { return 47 }
+    let r_flow4 = reindex_dir_into(ridx, rdir)
+    let r_note4 = match r_flow4 { Ok(rc4) => rc4, Err(msg) => msg }
+    if r_note4 != "0 0 1 1" { return 48 }
+    let r_ids: List<Str> = []
+    if docs_list_into(ridx, r_ids) != 1 { return 49 }
 
     # The guarded counter matches builtin tokenization on small bodies.
     let eq: Map<Str,Int> = {}
