@@ -249,6 +249,60 @@ fn run_msearch(query_text: Str, k: Int, indexes: List<Str>) -> Int {
     merged[0].score
 }
 
+# More-like-this: rank every indexed document against the stored source
+# text of one document, drop the document itself and zero scores, and
+# print the top k as `N. doc=score` rows; the exit code is the number of
+# similar rows printed. Docs without an on-disk source (stdin ingests,
+# pre-v2 lines) error politely instead of guessing.
+fn run_similar(index_dir: Str, doc_id: Str, k: Int) -> Int {
+    if index_exists(index_dir) != 1 {
+        print("error: index not found")
+        return 3
+    }
+    if doc_known(index_dir, doc_id) != 1 {
+        print("error: doc not found")
+        return 3
+    }
+    if k < 1 {
+        print("error: similar count must be positive")
+        return 1
+    }
+    let src = doc_src_path(index_dir, doc_id)
+    if src == "" or src == "-" {
+        print("error: doc has no on-disk source")
+        return 3
+    }
+    let full = abs_src_path(src)
+    if not full.exists() {
+        print("error: source file missing")
+        return 3
+    }
+    let query: Map<Str,Int> = {}
+    let total = doc_terms_guarded_into(full.read(), query)
+    if total == 0 - 2 {
+        print("error: source too large")
+        return 1
+    }
+    if total == 0 {
+        print("error: source has no terms")
+        return 1
+    }
+    let ranked: List<RankedDoc> = []
+    ranked_docs_into(index_dir, query, ranked)
+    let others: List<RankedDoc> = []
+    for hit in ranked {
+        if hit.doc_id != doc_id and hit.score > 0 {
+            others.push(RankedDoc { doc_id: hit.doc_id, score: hit.score })
+        }
+    }
+    let mut shown = 0
+    for row in others.take(k) {
+        shown += 1
+        print(f"{shown}. {row.doc_id}={row.score}")
+    }
+    shown
+}
+
 # Relevance debugging: break a document's score for a query into per-term
 # contributions (query count times doc count), one line per query term with
 # absent terms shown as doc=0, then the total; the exit code is the score,
@@ -355,6 +409,7 @@ fn usage() -> Int {
     print("       vaisdb ingest-dir <index> <doc-dir>")
     print("       vaisdb reindex <index> <doc-dir>")
     print("       vaisdb why <index> <query> <doc-id>")
+    print("       vaisdb similar <index> <doc-id> [k]")
     print("       vaisdb rank <index> <query-text> <k>")
     print("       vaisdb search <index> <query-text> [k]")
     print("       vaisdb msearch <query-text> <k> <index> [index...]")
@@ -523,6 +578,29 @@ fn self_test() -> Int {
     if merged[0].label != "b/b1" { return 55 }
     if merged[1].score != 1 { return 56 }
 
+    # More-like-this: the source doc ranks itself first, so exclusion
+    # leaves the overlapping neighbor as the top similar row.
+    let sdir = path_join(root, "vais-e337-selftest-similar-docs")
+    if fs_mkdirs(sdir) != 0 { return 57 }
+    let sf1 = path_join(sdir, "s1.txt")
+    let sf2 = path_join(sdir, "s2.txt")
+    let sf3 = path_join(sdir, "s3.txt")
+    if sf1.write("alpha beta gamma") != 0 { return 58 }
+    if sf2.write("alpha beta") != 0 { return 59 }
+    if sf3.write("zeta") != 0 { return 60 }
+    let sidx = path_join(root, "vais-e337-selftest-similar-idx")
+    index_reset(sidx)
+    let s_flow = reindex_dir_into(sidx, sdir)
+    let s_note = match s_flow { Ok(sc) => sc, Err(smsg) => smsg }
+    if s_note != "3 0 0 0" { return 61 }
+    let s_query: Map<Str,Int> = {}
+    if doc_terms_guarded_into(sf1.read(), s_query) != 3 { return 62 }
+    let s_ranked: List<RankedDoc> = []
+    ranked_docs_into(sidx, s_query, s_ranked)
+    if s_ranked[0].doc_id != "s1" { return 63 }
+    if s_ranked[1].doc_id != "s2" { return 64 }
+    if s_ranked[1].score != 2 { return 65 }
+
     # 4*10 + 3 - 1 = 42
     return s1 * 10 + s2 - 1
 }
@@ -545,6 +623,11 @@ fn main() -> Int {
     if command == "ingest-dir" {
         if proc_argc() != 3 { return usage() }
         return run_ingest_dir(proc_arg(1), proc_arg(2))
+    }
+    if command == "similar" {
+        if proc_argc() == 3 { return run_similar(proc_arg(1), proc_arg(2), 5) }
+        if proc_argc() == 4 { return run_similar(proc_arg(1), proc_arg(2), parse_int(proc_arg(3))) }
+        return usage()
     }
     if command == "why" {
         if proc_argc() != 4 { return usage() }

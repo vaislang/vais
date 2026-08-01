@@ -254,9 +254,10 @@ statement that sorts in place through local and parameter receivers,
 order records in place for ranking flows,
 `examples/e337_vaisdb_cli_package` for the installable vaisdb CLI package
 whose multi-module source builds to `dist/bin/vaisdb` with
-ingest/query/report/ingest-dir/reindex/rank/search/msearch/why/docs/remove/stats
+ingest/query/report/ingest-dir/reindex/rank/search/msearch/similar/why/docs/remove/stats
 subcommands (msearch merges one query across several indexes with
-`<index>/<doc>` labels; why breaks a document's score into per-term
+`<index>/<doc>` labels; similar ranks more-like-this rows from a
+document's stored source; why breaks a document's score into per-term
 contributions), a deterministic no-argument self-test, and a release archive,
 `examples/e338_fs_list_files.vais` for the built-in `fs_list_files(dir, out)`
 directory enumeration that fills a `List<Str>` with sorted regular-file names,

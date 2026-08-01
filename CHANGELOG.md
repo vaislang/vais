@@ -4,6 +4,21 @@
 
 ### Changed
 
+- Added `vaisdb similar <index> <doc-id> [k]`, more-like-this search:
+  the document's stored on-disk source text becomes the query, every
+  indexed document is ranked against it, the document itself and zero
+  scores drop out, and the top k print as `N. doc=score` rows with the
+  exit code equal to the number of similar rows shown (default k = 5).
+  Docs without an on-disk source (stdin ingests, pre-v2 lines) error
+  politely, and index/doc/source-missing follow the family error
+  contract (exit 3; oversized or empty source exits 1). The
+  implementation is pure Stage 3c-era surface — the exclusion filter
+  feeds `others.take(k)` as the report loop. Locked by package
+  self-test cases 57-65 (reindexed three-doc corpus, self-first
+  ranking, neighbor score) and five workflow gate cases (build,
+  exit-is-shown-count, self-excluded top row, no-overlap silence,
+  unknown-doc error).
+
 - Added vaisfreq (`examples/e390_vaisfreq_package`), the fourteenth
   installable tool and the dogfooding pass for the Stage 3c surface:
   `vaisfreq [-n K] [file...]` counts whitespace-separated words across
