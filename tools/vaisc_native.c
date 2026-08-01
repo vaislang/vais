@@ -21958,6 +21958,299 @@ static int check_option_result_generic_surface_text(const char *text, const char
     return issues == 0 ? 0 : 1;
 }
 
+/* Conservative per-function rebinding tracker. The emitters key local slots
+ * by name with first-match lookup, so rebinding a name to a DIFFERENT type
+ * reuses the first slot's layout and silently reads wrong offsets (a struct
+ * rebind can even emit out-of-bounds field GEPs). Same-type rebinding is the
+ * long-verified aliasing idiom and stays accepted. Kinds are inferred only
+ * from unambiguous spellings (literals, annotations, struct literals,
+ * indexing into an annotated List local, for-each over one); everything else
+ * is unknown and never reported. */
+#define FRONT_REBIND_CAP 1024
+typedef struct {
+    char *names[FRONT_REBIND_CAP];
+    char *kinds[FRONT_REBIND_CAP]; /* NULL = bound, kind unknown */
+    int count;
+    char *list_names[FRONT_REBIND_CAP];
+    char *list_elems[FRONT_REBIND_CAP];
+    int list_count;
+} FrontRebindTab;
+
+static void front_rebind_reset(FrontRebindTab *tab) {
+    for (int i = 0; i < tab->count; i++) {
+        free(tab->names[i]);
+        free(tab->kinds[i]);
+    }
+    for (int i = 0; i < tab->list_count; i++) {
+        free(tab->list_names[i]);
+        free(tab->list_elems[i]);
+    }
+    tab->count = 0;
+    tab->list_count = 0;
+}
+
+static char *front_rebind_anno_kind(const char *anno_start, size_t anno_len) {
+    while (anno_len > 0 && isspace((unsigned char)anno_start[0])) { anno_start++; anno_len--; }
+    while (anno_len > 0 && isspace((unsigned char)anno_start[anno_len - 1])) anno_len--;
+    if (anno_len == 0) return NULL;
+    if (anno_len == 3 && strncmp(anno_start, "Int", 3) == 0) return strdup("INT");
+    if (anno_len == 3 && strncmp(anno_start, "Str", 3) == 0) return strdup("STR");
+    if (anno_len > 4 && strncmp(anno_start, "Map<", 4) == 0) return strdup("MAP");
+    if (anno_len > 6 && strncmp(anno_start, "List<", 5) == 0 && anno_start[anno_len - 1] == '>') {
+        const char *inner = anno_start + 5;
+        size_t inner_len = anno_len - 6;
+        while (inner_len > 0 && isspace((unsigned char)inner[0])) { inner++; inner_len--; }
+        while (inner_len > 0 && isspace((unsigned char)inner[inner_len - 1])) inner_len--;
+        char *kind = (char *)malloc(inner_len + 6);
+        if (kind == NULL) return NULL;
+        memcpy(kind, "LIST:", 5);
+        memcpy(kind + 5, inner, inner_len);
+        kind[5 + inner_len] = '\0';
+        return kind;
+    }
+    if (isupper((unsigned char)anno_start[0])) {
+        for (size_t i = 0; i < anno_len; i++) {
+            if (!is_ident_continue(anno_start[i])) return NULL;
+        }
+        char *kind = (char *)malloc(anno_len + 8);
+        if (kind == NULL) return NULL;
+        memcpy(kind, "STRUCT:", 7);
+        memcpy(kind + 7, anno_start, anno_len);
+        kind[7 + anno_len] = '\0';
+        return kind;
+    }
+    return NULL;
+}
+
+static const char *front_rebind_list_elem(FrontRebindTab *tab, const char *name, size_t name_len) {
+    for (int i = 0; i < tab->list_count; i++) {
+        if (strlen(tab->list_names[i]) == name_len &&
+            strncmp(tab->list_names[i], name, name_len) == 0) {
+            return tab->list_elems[i];
+        }
+    }
+    return NULL;
+}
+
+/* Copy of the raw RHS with any trailing comment removed (string-aware); the
+ * probe is useless here because it blanks string delimiters, and STR-literal
+ * detection needs to see the quote itself. */
+static char *front_rebind_clean_rhs(const char *raw) {
+    StrBuf out;
+    sb_init(&out);
+    char delim = '\0';
+    int escaped = 0;
+    for (size_t i = 0; raw[i] != '\0'; i++) {
+        char ch = raw[i];
+        if (escaped) { sb_append_n(&out, &ch, 1); escaped = 0; continue; }
+        if (delim == '"' && ch == '\\') { sb_append_n(&out, &ch, 1); escaped = 1; continue; }
+        if (delim != '\0') {
+            sb_append_n(&out, &ch, 1);
+            if (ch == delim) delim = '\0';
+            continue;
+        }
+        if (ch == '#') break;
+        if (ch == '"' || ch == '`' || ch == '\'') delim = ch;
+        sb_append_n(&out, &ch, 1);
+    }
+    return sb_take(&out);
+}
+
+static char *front_rebind_rhs_kind(FrontRebindTab *tab, const char *rhs) {
+    while (isspace((unsigned char)*rhs)) rhs++;
+    size_t len = strlen(rhs);
+    while (len > 0 && isspace((unsigned char)rhs[len - 1])) len--;
+    /* the full-path normalizer appends `;` to statements */
+    if (len > 0 && rhs[len - 1] == ';') {
+        len--;
+        while (len > 0 && isspace((unsigned char)rhs[len - 1])) len--;
+    }
+    if (len == 0) return NULL;
+    size_t d = 0;
+    if (rhs[0] == '-') d = 1;
+    if (d < len) {
+        size_t j = d;
+        while (j < len && isdigit((unsigned char)rhs[j])) j++;
+        if (j == len && j > d) return strdup("INT");
+    }
+    if (rhs[0] == '"' || (len > 1 && rhs[0] == 'f' && rhs[1] == '"')) return strdup("STR");
+    if (isupper((unsigned char)rhs[0])) {
+        size_t j = 0;
+        while (j < len && is_ident_continue(rhs[j])) j++;
+        size_t q = j;
+        while (q < len && isspace((unsigned char)rhs[q])) q++;
+        if (q < len && rhs[q] == '{') return front_rebind_anno_kind(rhs, j);
+    }
+    if (is_ident_start(rhs[0])) {
+        size_t j = 0;
+        while (j < len && is_ident_continue(rhs[j])) j++;
+        if (j < len && rhs[j] == '[' && rhs[len - 1] == ']') {
+            int nested = 0;
+            for (size_t q = j + 1; q + 1 < len; q++) {
+                if (rhs[q] == ']') nested = 1;
+            }
+            if (!nested) {
+                const char *elem = front_rebind_list_elem(tab, rhs, j);
+                if (elem != NULL) return front_rebind_anno_kind(elem, strlen(elem));
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Record one binding of `name`; reports when it rebinds an existing name to a
+ * provably different kind. Takes ownership of `kind`. */
+static int front_rebind_bind(const char *path, int line_no, const char *line,
+                             FrontRebindTab *tab, const char *name, size_t name_len, char *kind) {
+    for (int i = 0; i < tab->count; i++) {
+        if (strlen(tab->names[i]) == name_len &&
+            strncmp(tab->names[i], name, name_len) == 0) {
+            if (tab->kinds[i] != NULL && kind != NULL && strcmp(tab->kinds[i], kind) != 0) {
+                char nbuf[96];
+                size_t nl = name_len < sizeof(nbuf) - 1 ? name_len : sizeof(nbuf) - 1;
+                memcpy(nbuf, name, nl);
+                nbuf[nl] = '\0';
+                char summary[192];
+                char help[320];
+                snprintf(summary, sizeof(summary),
+                         "local `%s` is rebound with a different type", nbuf);
+                snprintf(help, sizeof(help),
+                         "the first binding fixes this name's storage layout for the whole function (%s vs %s here), so the second binding would silently read wrong offsets; use a distinct name for the second binding.",
+                         tab->kinds[i], kind);
+                report_issue(path, line_no, find_col(line, nbuf), line, summary, help, NULL);
+                free(kind);
+                return 1;
+            }
+            if (tab->kinds[i] == NULL && kind != NULL) {
+                tab->kinds[i] = kind;
+            } else {
+                free(kind);
+            }
+            return 0;
+        }
+    }
+    if (tab->count < FRONT_REBIND_CAP) {
+        tab->names[tab->count] = (char *)malloc(name_len + 1);
+        if (tab->names[tab->count] == NULL) { free(kind); return 0; }
+        memcpy(tab->names[tab->count], name, name_len);
+        tab->names[tab->count][name_len] = '\0';
+        tab->kinds[tab->count] = kind;
+        tab->count++;
+    } else {
+        free(kind);
+    }
+    return 0;
+}
+
+static int front_check_rebind_line(const char *path, int line_no, const char *line,
+                                   const char *probe, FrontRebindTab *tab) {
+    const char *t = skip_ws(probe);
+    if (starts_with(t, "fn ")) {
+        front_rebind_reset(tab);
+        return 0;
+    }
+    if (starts_with(t, "let ")) {
+        const char *p = t + 4;
+        while (isspace((unsigned char)*p)) p++;
+        if (starts_with(p, "mut ")) {
+            p += 4;
+            while (isspace((unsigned char)*p)) p++;
+        }
+        if (!is_ident_start(*p)) return 0;
+        const char *name = p;
+        while (is_ident_continue(*p)) p++;
+        size_t name_len = (size_t)(p - name);
+        while (isspace((unsigned char)*p)) p++;
+        const char *anno_start = NULL;
+        size_t anno_len = 0;
+        if (*p == ':') {
+            p++;
+            anno_start = p;
+            while (*p != '\0' && *p != '=') p++;
+            if (*p != '=') return 0;
+            anno_len = (size_t)(p - anno_start);
+        }
+        if (*p != '=') return 0;
+        if (p[1] == '=') return 0;
+        const char *rhs_raw = line + ((p + 1) - probe);
+        char *rhs_clean = front_rebind_clean_rhs(rhs_raw);
+        char *kind = NULL;
+        if (anno_start != NULL) {
+            kind = front_rebind_anno_kind(anno_start, anno_len);
+            char *anno_probe = front_rebind_anno_kind(anno_start, anno_len);
+            if (anno_probe != NULL && strncmp(anno_probe, "LIST:", 5) == 0 &&
+                tab->list_count < FRONT_REBIND_CAP) {
+                tab->list_names[tab->list_count] = (char *)malloc(name_len + 1);
+                if (tab->list_names[tab->list_count] != NULL) {
+                    memcpy(tab->list_names[tab->list_count], name, name_len);
+                    tab->list_names[tab->list_count][name_len] = '\0';
+                    tab->list_elems[tab->list_count] = strdup(anno_probe + 5);
+                    if (tab->list_elems[tab->list_count] != NULL) tab->list_count++;
+                    else free(tab->list_names[tab->list_count]);
+                }
+            }
+            free(anno_probe);
+        } else {
+            kind = front_rebind_rhs_kind(tab, rhs_clean);
+        }
+        free(rhs_clean);
+        return front_rebind_bind(path, line_no, line, tab, name, name_len, kind);
+    }
+    if (starts_with(t, "for ")) {
+        const char *p = t + 4;
+        while (isspace((unsigned char)*p)) p++;
+        if (*p == '(') {
+            p++;
+            while (isspace((unsigned char)*p)) p++;
+            if (!is_ident_start(*p)) return 0;
+            const char *a = p;
+            while (is_ident_continue(*p)) p++;
+            size_t a_len = (size_t)(p - a);
+            while (isspace((unsigned char)*p)) p++;
+            if (*p != ',') return 0;
+            p++;
+            while (isspace((unsigned char)*p)) p++;
+            if (!is_ident_start(*p)) return 0;
+            const char *b = p;
+            while (is_ident_continue(*p)) p++;
+            size_t b_len = (size_t)(p - b);
+            int issues = front_rebind_bind(path, line_no, line, tab, a, a_len, strdup("INT"));
+            issues += front_rebind_bind(path, line_no, line, tab, b, b_len, NULL);
+            return issues;
+        }
+        if (!is_ident_start(*p)) return 0;
+        const char *name = p;
+        while (is_ident_continue(*p)) p++;
+        size_t name_len = (size_t)(p - name);
+        while (isspace((unsigned char)*p)) p++;
+        if (!starts_with(p, "in") || is_ident_continue(p[2])) return 0;
+        p += 2;
+        while (isspace((unsigned char)*p)) p++;
+        const char *coll = p;
+        const char *brace = strchr(p, '{');
+        if (brace == NULL) return 0;
+        size_t coll_len = (size_t)(brace - coll);
+        while (coll_len > 0 && isspace((unsigned char)coll[coll_len - 1])) coll_len--;
+        char *kind = NULL;
+        int has_range = 0;
+        for (size_t q = 0; q + 1 < coll_len; q++) {
+            if (coll[q] == '.' && coll[q + 1] == '.') has_range = 1;
+        }
+        if (has_range) {
+            kind = strdup("INT");
+        } else {
+            size_t j = 0;
+            while (j < coll_len && is_ident_continue(coll[j])) j++;
+            if (j == coll_len && coll_len > 0 && is_ident_start(coll[0])) {
+                const char *elem = front_rebind_list_elem(tab, coll, coll_len);
+                if (elem != NULL) kind = front_rebind_anno_kind(elem, strlen(elem));
+            }
+        }
+        return front_rebind_bind(path, line_no, line, tab, name, name_len, kind);
+    }
+    return 0;
+}
+
 static int check_front_contract_text(const char *text, const char *path) {
     LineVec lines = split_lines(text);
     int issues = 0;
@@ -21985,11 +22278,14 @@ static int check_front_contract_text(const char *text, const char *path) {
         free(probe);
     }
     char front_prev_last = '\0';
+    FrontRebindTab rebind_tab;
+    memset(&rebind_tab, 0, sizeof(rebind_tab));
     for (size_t i = 0; i < lines.len; i++) {
         const char *line = lines.items[i];
         char *probe = front_probe_line(line);
         int line_no = (int)i + 1;
         issues += front_check_dangling_else_line(path, line_no, line, front_prev_last);
+        issues += front_check_rebind_line(path, line_no, line, probe, &rebind_tab);
         {
             char front_cur_last = front_last_sig_char(line);
             if (front_cur_last != '\0') front_prev_last = front_cur_last;
@@ -22182,6 +22478,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         for (int c = 0; c < callable_count; c++) free(callable_names[c]);
         free(callable_names);
     }
+    front_rebind_reset(&rebind_tab);
     lines_free(&lines);
     return issues == 0 ? 0 : 1;
 }
@@ -36150,6 +36447,26 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     /* Debug aid: dump the fully lowered source the direct emitter consumes. */
     if (getenv("VAISC_DUMP_PREPARED") != NULL) {
         fputs(prepared, stderr);
+    }
+    /* The direct emitter keys locals by name like the full core, so a
+     * different-type rebind must fail with the same loud front error instead
+     * of a C-level redefinition (or silence when C block scopes mask it). */
+    {
+        LineVec rebind_lines = split_lines(prepared);
+        FrontRebindTab rebind_tab;
+        memset(&rebind_tab, 0, sizeof(rebind_tab));
+        int rebind_issues = 0;
+        for (size_t i = 0; i < rebind_lines.len; i++) {
+            char *probe = front_probe_line(rebind_lines.items[i]);
+            rebind_issues += front_check_rebind_line(source, (int)i + 1, rebind_lines.items[i], probe, &rebind_tab);
+            free(probe);
+        }
+        front_rebind_reset(&rebind_tab);
+        lines_free(&rebind_lines);
+        if (rebind_issues != 0) {
+            free(prepared);
+            return 1;
+        }
     }
     char *c_src = direct_lower_to_c(source, prepared);
     free(prepared);

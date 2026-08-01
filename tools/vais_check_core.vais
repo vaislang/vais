@@ -886,12 +886,274 @@ fn report_issue_at(path: Str, src: Str, pos: Int, message: Str, help: Str) -> In
     return 1
 }
 
+# ---- heterotype local rebinding (mirrors the native front check) ----
+# The emitters key local storage by name with first-match lookup, so a name
+# rebound to a provably different kind silently reuses the first layout.
+# Kinds come only from unambiguous spellings; anything else is unknown and
+# never reported, which keeps the long-verified same-type aliasing idiom.
+
+fn rebind_upper_ident(a: Str) -> Int {
+    if a.len() == 0 { return 0 }
+    let c0 = a[0]
+    if c0 < 65 or c0 > 90 { return 0 }
+    let an = a.len()
+    for ci in 1..an {
+        if is_ident_char(a[ci]) == 0 { return 0 }
+    }
+    return 1
+}
+
+fn rebind_anno_kind(anno: Str) -> Str {
+    let a = anno.trim()
+    if a == "Int" { return "INT" }
+    if a == "Str" { return "STR" }
+    if a.starts("Map<") { return "MAP" }
+    if a.starts("List<") and a.ends(">") and a.len() > 6 {
+        let inner = str_slice(a, 5, a.len() - 6)
+        let inner_t = inner.trim()
+        return f"LIST:{inner_t}"
+    }
+    if rebind_upper_ident(a) == 1 { return f"STRUCT:{a}" }
+    return ""
+}
+
+# Line prefix up to any comment, tracking string state so quote characters
+# inside literals never hide or fake a `#`.
+fn rebind_strip_comment(line: Str) -> Str {
+    let mut delim = 0
+    let mut esc = 0
+    let mut j = 0
+    let n = line.len()
+    while j < n {
+        let c = line[j]
+        if esc == 1 { esc = 0 }
+        else if delim == 34 and c == 92 { esc = 1 }
+        else if delim != 0 {
+            if c == delim { delim = 0 }
+        } else if c == 35 {
+            return str_slice(line, 0, j)
+        } else if c == 34 or c == 96 or c == 39 {
+            delim = c
+        }
+        j = j + 1
+    }
+    return line
+}
+
+fn rebind_int_literal(r: Str) -> Int {
+    let mut j = 0
+    if r.len() > 0 and r[0] == 45 { j = 1 }
+    if j >= r.len() { return 0 }
+    let rn = r.len()
+    for dj in j..rn {
+        let dc = r[dj]
+        if dc < 48 or dc > 57 { return 0 }
+    }
+    return 1
+}
+
+# RHS shape without table access: "INT", "STR", "STRUCT:X", "IDX:head" (an
+# index into a possibly tracked list local), or "" when unresolvable.
+fn rebind_rhs_shape(rhs_in: Str) -> Str {
+    let mut r = rhs_in.trim()
+    if r.ends(";") {
+        let cut = str_slice(r, 0, r.len() - 1)
+        r = cut.trim()
+    }
+    if r.len() == 0 { return "" }
+    if rebind_int_literal(r) == 1 { return "INT" }
+    if r.starts("\"") { return "STR" }
+    if r.starts("f\"") { return "STR" }
+    let rn = r.len()
+    let mut ie = 0
+    while ie < rn and is_ident_char(r[ie]) == 1 { ie = ie + 1 }
+    if ie > 0 {
+        let head = str_slice(r, 0, ie)
+        let mut ws = ie
+        while ws < rn and r[ws] == 32 { ws = ws + 1 }
+        if ws < rn and r[ws] == 123 and rebind_upper_ident(head) == 1 {
+            return f"STRUCT:{head}"
+        }
+        if ie < rn and r[ie] == 91 and r[rn - 1] == 93 {
+            let mut nested = 0
+            for qi in (ie + 1)..(rn - 1) {
+                if r[qi] == 93 { nested = 1 }
+            }
+            if nested == 0 { return f"IDX:{head}" }
+        }
+    }
+    return ""
+}
+
+# Kind strings are interned to Int ids so every table stays on the
+# battle-tested Map<Str,Int> surface: 0 = not bound, 1 = bound with an
+# unknown kind, 2+ = a concrete kind.
+fn rebind_kind_id(reg: Map<Str,Int>, names: List<Str>, kind: Str) -> Int {
+    if kind == "" { return 1 }
+    let known = reg.get(kind, 0)
+    if known != 0 { return known }
+    let fresh = names.len() + 2
+    reg.insert(kind, fresh)
+    names.push(kind)
+    return fresh
+}
+
+fn rebind_scan(path: Str, src: Str) -> Int {
+    let mut issues = 0
+    let binds: Map<Str,Int> = {}
+    let lists: Map<Str,Int> = {}
+    let reg: Map<Str,Int> = {}
+    let regn: List<Str> = []
+    let mut fidx = 0
+    let mut off = 0
+    for raw in src.lines() {
+        let clean = rebind_strip_comment(raw)
+        let cn = clean.len()
+        let mut p = 0
+        # up to two bindings per line (the tuple for-head); kind ids use
+        # 0 = no binding parsed, 1 = bound with unknown kind, 2+ = concrete
+        let mut name1 = ""
+        let mut kid1 = 1
+        let mut pos1 = 0
+        let mut name2 = ""
+        let mut pos2 = 0
+        while p < cn and (clean[p] == 32 or clean[p] == 9) { p = p + 1 }
+        if word_text_at(clean, p, "fn") == 1 {
+            fidx += 1
+        } else if word_text_at(clean, p, "let") == 1 {
+            let mut q = p + 3
+            while q < cn and clean[q] == 32 { q = q + 1 }
+            if word_text_at(clean, q, "mut") == 1 {
+                q = q + 3
+                while q < cn and clean[q] == 32 { q = q + 1 }
+            }
+            let ns = q
+            while q < cn and is_ident_char(clean[q]) == 1 { q = q + 1 }
+            if q > ns {
+                let mut ws2 = q
+                while ws2 < cn and clean[ws2] == 32 { ws2 = ws2 + 1 }
+                let mut eq = 0 - 1
+                let mut anno = ""
+                if ws2 < cn and clean[ws2] == 58 {
+                    let mut ae = ws2 + 1
+                    while ae < cn and clean[ae] != 61 { ae = ae + 1 }
+                    if ae < cn {
+                        anno = str_slice(clean, ws2 + 1, ae - ws2 - 1)
+                        eq = ae
+                    }
+                } else if ws2 < cn and clean[ws2] == 61 {
+                    eq = ws2
+                }
+                let mut usable = 0
+                if eq >= 0 { usable = 1 }
+                if usable == 1 and eq + 1 < cn and clean[eq + 1] == 61 { usable = 0 }
+                if usable == 1 {
+                    name1 = str_slice(clean, ns, q - ns)
+                    pos1 = off + ns
+                    let anno_t = anno.trim()
+                    if anno_t.len() > 0 {
+                        let akind = rebind_anno_kind(anno)
+                        kid1 = rebind_kind_id(reg, regn, akind)
+                        if akind.starts("LIST:") {
+                            let lkey = f"{fidx}.{name1}"
+                            let inner = str_slice(akind, 5, akind.len() - 5)
+                            let ekind = rebind_anno_kind(inner)
+                            lists.insert(lkey, rebind_kind_id(reg, regn, ekind))
+                        }
+                    } else {
+                        let rhs = str_slice(clean, eq + 1, cn - eq - 1)
+                        let shape = rebind_rhs_shape(rhs)
+                        if shape.starts("IDX:") {
+                            let head = str_slice(shape, 4, shape.len() - 4)
+                            let hkey = f"{fidx}.{head}"
+                            let hid = lists.get(hkey, 0)
+                            if hid != 0 { kid1 = hid }
+                        } else {
+                            kid1 = rebind_kind_id(reg, regn, shape)
+                        }
+                    }
+                }
+            }
+        } else if word_text_at(clean, p, "for") == 1 {
+            let mut fq = p + 3
+            while fq < cn and clean[fq] == 32 { fq = fq + 1 }
+            if fq < cn and clean[fq] == 40 {
+                let mut ta = fq + 1
+                while ta < cn and clean[ta] == 32 { ta = ta + 1 }
+                let tas = ta
+                while ta < cn and is_ident_char(clean[ta]) == 1 { ta = ta + 1 }
+                let mut tb = ta
+                while tb < cn and (clean[tb] == 32 or clean[tb] == 44) { tb = tb + 1 }
+                let tbs = tb
+                while tb < cn and is_ident_char(clean[tb]) == 1 { tb = tb + 1 }
+                if ta > tas and tb > tbs {
+                    name1 = str_slice(clean, tas, ta - tas)
+                    kid1 = rebind_kind_id(reg, regn, "INT")
+                    pos1 = off + tas
+                    name2 = str_slice(clean, tbs, tb - tbs)
+                    pos2 = off + tbs
+                }
+            } else {
+                let fns = fq
+                while fq < cn and is_ident_char(clean[fq]) == 1 { fq = fq + 1 }
+                if fq > fns {
+                    let mut iw = fq
+                    while iw < cn and clean[iw] == 32 { iw = iw + 1 }
+                    if word_text_at(clean, iw, "in") == 1 {
+                        let mut cs = iw + 2
+                        while cs < cn and clean[cs] == 32 { cs = cs + 1 }
+                        let mut ce = cs
+                        while ce < cn and clean[ce] != 123 { ce = ce + 1 }
+                        if ce < cn {
+                            name1 = str_slice(clean, fns, fq - fns)
+                            pos1 = off + fns
+                            let coll_raw = str_slice(clean, cs, ce - cs)
+                            let coll = coll_raw.trim()
+                            if coll.has("..") { kid1 = rebind_kind_id(reg, regn, "INT") }
+                            else {
+                                let mut pure = 1
+                                let coln = coll.len()
+                                if coln == 0 { pure = 0 }
+                                for pj in 0..coln {
+                                    if is_ident_char(coll[pj]) == 0 { pure = 0 }
+                                }
+                                if pure == 1 {
+                                    let ckey = f"{fidx}.{coll}"
+                                    let cid = lists.get(ckey, 0)
+                                    if cid != 0 { kid1 = cid }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if name1 != "" {
+            let key1 = f"{fidx}.{name1}"
+            let old1 = binds.get(key1, 0)
+            if old1 >= 2 and kid1 >= 2 and old1 != kid1 {
+                let msg1 = f"error: local {name1} is rebound with a different type"
+                issues = issues + report_issue_at(path, src, pos1, msg1, "  help: the first binding fixes this name's storage layout for the whole function; use a distinct name for the second binding")
+            }
+            if old1 == 0 { binds.insert(key1, kid1) }
+            else if old1 == 1 and kid1 >= 2 { binds.insert(key1, kid1) }
+        }
+        if name2 != "" {
+            let key2 = f"{fidx}.{name2}"
+            let old2 = binds.get(key2, 0)
+            if old2 == 0 { binds.insert(key2, 1) }
+        }
+        off = off + raw.len() + 1
+    }
+    return issues
+}
+
 fn check_text(src: Str) -> Int {
     return check_text_at("memory", src)
 }
 
 fn check_text_at(path: Str, src: Str) -> Int {
-    let mut issues = 0
+    let mut issues = rebind_scan(path, src)
     let mut i = 0
     let mut at_line_start = 1
     while i < src.len() {

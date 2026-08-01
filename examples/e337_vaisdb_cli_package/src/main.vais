@@ -197,6 +197,70 @@ fn run_search(index_dir: Str, query_text: Str, k: Int) -> Int {
     return ranked[0].score
 }
 
+struct MergedHit {
+    label: Str,
+    src: Str,
+    score: Int,
+}
+
+# Cross-index search: rank one query over several indexes, merge by score
+# with the source index visible as `<index-basename>/<doc-id>`, and print
+# the top-k exactly like `search` (zero scores hidden, source path
+# appended when on disk); the exit code is the best merged score.
+fn run_msearch(query_text: Str, k: Int, indexes: List<Str>) -> Int {
+    for index_dir in indexes {
+        if index_exists(index_dir) != 1 {
+            print(f"error: index not found: {index_dir}")
+            return 3
+        }
+    }
+    let query: Map<Str,Int> = {}
+    let total = doc_terms_guarded_into(query_text, query)
+    if total == 0 - 2 {
+        print("error: query too large")
+        return 1
+    }
+    if total == 0 {
+        print("error: query has no terms")
+        return 1
+    }
+    if k < 1 {
+        print("error: search count must be positive")
+        return 1
+    }
+    let merged: List<MergedHit> = []
+    for index_dir in indexes {
+        let tag = path_basename(index_dir)
+        let ranked: List<RankedDoc> = []
+        let count = ranked_docs_into(index_dir, query, ranked)
+        for hit in ranked {
+            let doc_id = hit.doc_id
+            let src = doc_src_path(index_dir, doc_id)
+            merged.push(MergedHit { label: f"{tag}/{doc_id}", src: src, score: hit.score })
+        }
+    }
+    if merged.len() == 0 {
+        print("error: indexes have no documents")
+        return 3
+    }
+    merged.sort_by_desc(|h| h.score)
+    let mut limit = k
+    if merged.len() < k { limit = merged.len() }
+    let mut shown = 0
+    for j in 0..limit {
+        let top = merged[j]
+        if top.score > 0 {
+            shown += 1
+            let mut line = f"{shown}. {top.label}={top.score}"
+            if top.src != "" and top.src != "-" {
+                line = f"{line} {top.src}"
+            }
+            print(line)
+        }
+    }
+    merged[0].score
+}
+
 # Relevance debugging: break a document's score for a query into per-term
 # contributions (query count times doc count), one line per query term with
 # absent terms shown as doc=0, then the total; the exit code is the score,
@@ -310,6 +374,7 @@ fn usage() -> Int {
     print("       vaisdb why <index> <query> <doc-id>")
     print("       vaisdb rank <index> <query-text> <k>")
     print("       vaisdb search <index> <query-text> [k]")
+    print("       vaisdb msearch <query-text> <k> <index> [index...]")
     print("       vaisdb ingest-stdin <index> <doc-id>")
     print("       vaisdb docs <index>")
     print("       vaisdb remove <index> <doc-id>")
@@ -466,6 +531,15 @@ fn self_test() -> Int {
     let ids3: List<Str> = []
     if docs_list_into(dir, ids3) != 2 { return 24 }
 
+    # Cross-index merge: hits from different indexes sort by score while
+    # keeping their `<index>/<doc>` labels and source paths.
+    let merged: List<MergedHit> = []
+    merged.push(MergedHit { label: "a/r1", src: "-", score: 1 })
+    merged.push(MergedHit { label: "b/b1", src: "-", score: 3 })
+    merged.sort_by_desc(|h| h.score)
+    if merged[0].label != "b/b1" { return 55 }
+    if merged[1].score != 1 { return 56 }
+
     # 4*10 + 3 - 1 = 42
     return s1 * 10 + s2 - 1
 }
@@ -505,6 +579,15 @@ fn main() -> Int {
         if proc_argc() == 3 { return run_search(proc_arg(1), proc_arg(2), 5) }
         if proc_argc() == 4 { return run_search(proc_arg(1), proc_arg(2), parse_int(proc_arg(3))) }
         return usage()
+    }
+    if command == "msearch" {
+        if proc_argc() < 4 { return usage() }
+        let argv = args()
+        let indexes: List<Str> = []
+        for i in 3..argv.len() {
+            indexes.push(argv[i])
+        }
+        return run_msearch(argv[1], parse_int(argv[2]), indexes)
     }
     if command == "ingest-stdin" {
         if proc_argc() != 3 { return usage() }

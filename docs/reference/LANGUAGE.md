@@ -166,6 +166,17 @@ let typed: Int = 42
   plain place — a local, list index, or struct field chain; call results and
   string keys on the left are loud front errors so the lowering never
   duplicates side effects.
+- Local names are storage, not scopes: the emitters key every `let` and `for`
+  binder in a function to one slot by name, so binding the same name again
+  aliases the first slot. Rebinding a name with the **same** type is the
+  long-verified aliasing idiom (loop counters, staged reuse); rebinding it
+  with a **different** type is a loud front and `vais-check` error
+  (`local X is rebound with a different type`) because the second binding
+  would silently reuse the first layout and read wrong offsets. The check is
+  conservative — it only fires when both bindings' types are provable from
+  literals, annotations, struct literals, or indexing/iterating an annotated
+  `List<T>` local — so unresolvable rebinds stay accepted. Use a distinct
+  name when the type changes.
 
 ## Types
 
@@ -2323,7 +2334,7 @@ Common corrections:
 | `String` | `Str` |
 | `fn main(argc: Int) -> Int { ... }` | `fn main() -> Int { ... }` |
 | `fn add(a: Int, b: Int) { ... }` | `fn add(a: Int, b: Int) -> Int { ... }` |
-| `x += 1` | `x = x + 1` |
+| `let n = 1` then `let n = "x"` | a distinct name per type |
 
 ## Build And Test
 

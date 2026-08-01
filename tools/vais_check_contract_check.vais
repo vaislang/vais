@@ -232,7 +232,7 @@ fn main() -> Int {
         return 1
     }
 
-    let expected_count = 33
+    let expected_count = 34
     let vaisc = path_join(root, "scripts/vaisc")
     let vais_check = path_join(root, "scripts/vais-check")
     let fixture_dir = path_join(path_join(path_join(root, "tests"), "fixtures"), "vais_check")
@@ -250,7 +250,7 @@ fn main() -> Int {
     let bad_count = count_line_prefix(native_output, "error:")
     let coord_count = count_line_prefix(native_output, "  --> ")
     let help_count = count_line_prefix(native_output, "  help:")
-    if native_status == 42 and bad_count == expected_count and coord_count == expected_count and help_count == expected_count and str_contains(native_output, "error: module declarations are not implemented yet") == 1 and str_contains(native_output, "PASS Vais checker flags the bad fixture") == 1 and str_contains(native_output, "PASS Vais checker accepts the clean fixture") == 1 {
+    if native_status == 42 and bad_count == expected_count and coord_count == expected_count and help_count == expected_count and str_contains(native_output, "error: module declarations are not implemented yet") == 1 and str_contains(native_output, "error: local rb is rebound with a different type") == 1 and str_contains(native_output, "PASS Vais checker flags the bad fixture") == 1 and str_contains(native_output, "PASS Vais checker accepts the clean fixture") == 1 {
         print("  PASS Vais checker native smoke matches expected fixtures")
     } else {
         print(str_concat("  FAIL Vais checker native smoke got=", str_concat(uint_to_str(native_status), " want=42")))

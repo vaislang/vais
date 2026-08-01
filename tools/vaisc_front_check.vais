@@ -8115,6 +8115,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "enumerate") == 1 { return write_enumerate_accept(path) }
     if str_eq(name, "enum_map") == 1 { return write_enum_map_accept(path) }
     if str_eq(name, "list_copy") == 1 { return write_list_copy_accept(path) }
+    if str_eq(name, "rebind") == 1 { return write_rebind_accept(path) }
     if str_eq(name, "day1") == 1 { return write_day1(path) }
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
     if str_eq(name, "io") == 1 { return write_io_accept(path) }
@@ -9166,6 +9167,74 @@ fn write_dangling_else_bad(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_rebind_struct_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct RD {")
+    append_line(out, "    doc_id: Str,")
+    append_line(out, "    score: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "struct MH {")
+    append_line(out, "    label: Str,")
+    append_line(out, "    src: Str,")
+    append_line(out, "    score: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<RD> = []")
+    append_line(out, "    xs.push(RD { doc_id: \"a\", score: 1 })")
+    append_line(out, "    let mut n = 0")
+    append_line(out, "    for hit in xs {")
+    append_line(out, "        n = n + hit.score")
+    append_line(out, "    }")
+    append_line(out, "    let ys: List<MH> = []")
+    append_line(out, "    ys.push(MH { label: \"L\", src: \"-\", score: 41 })")
+    append_line(out, "    let hit = ys[0]")
+    append_line(out, "    return hit.score + n")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_rebind_literal_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let v = 40")
+    append_line(out, "    let n = v + 2")
+    append_line(out, "    let v = \"x\"")
+    append_line(out, "    if v != \"x\" { return 1 }")
+    append_line(out, "    return n")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_rebind_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "struct RD {")
+    append_line(out, "    doc_id: Str,")
+    append_line(out, "    score: Int,")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<RD> = []")
+    append_line(out, "    xs.push(RD { doc_id: \"a\", score: 40 })")
+    append_line(out, "    let mut n = 0")
+    append_line(out, "    for hit in xs {")
+    append_line(out, "        n = n + hit.score")
+    append_line(out, "    }")
+    append_line(out, "    let hit = xs[0]")
+    append_line(out, "    if hit.doc_id != \"a\" { return 1 }")
+    append_line(out, "    let mut total = 0")
+    append_line(out, "    for i in 0..2 {")
+    append_line(out, "        total = total + i")
+    append_line(out, "    }")
+    append_line(out, "    for i in 0..2 {")
+    append_line(out, "        total = total + i")
+    append_line(out, "    }")
+    append_line(out, "    return hit.score + n - total * 19")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_list_copy_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn tail_len(words: List<Str>) -> Int {")
@@ -9334,6 +9403,8 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "enumerate_position") == 1 { return write_enumerate_position_bad(path) }
     if str_eq(name, "enum_map_position") == 1 { return write_enum_map_position_bad(path) }
     if str_eq(name, "dangling_else") == 1 { return write_dangling_else_bad(path) }
+    if str_eq(name, "rebind_struct") == 1 { return write_rebind_struct_bad(path) }
+    if str_eq(name, "rebind_literal") == 1 { return write_rebind_literal_bad(path) }
     if str_eq(name, "fstring_empty_hole") == 1 { return write_fstring_empty_hole_bad(path) }
     if str_eq(name, "fstring_lone_brace") == 1 { return write_fstring_lone_brace_bad(path) }
     if str_eq(name, "fstring_open_hole") == 1 { return write_fstring_open_hole_bad(path) }
@@ -9897,6 +9968,9 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "enum_map_position", "closure tuple parameters are only lowered", "", "enumerate-map")
     fail = fail + expect_accept(vaisc, tmp, "list_copy", "accepts list-copy bindings in both spellings (=42)", 42)
     fail = fail + expect_reject(vaisc, tmp, "dangling_else", "must follow a closed block", "", "closing brace")
+    fail = fail + expect_accept(vaisc, tmp, "rebind", "accepts same-type rebinding and loop-binder reuse (=42)", 42)
+    fail = fail + expect_reject(vaisc, tmp, "rebind_struct", "rebound with a different type", "", "distinct name")
+    fail = fail + expect_reject(vaisc, tmp, "rebind_literal", "rebound with a different type", "", "distinct name")
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/clear/len/is_empty/last/pop/sum", "", "plain function call")
     fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)

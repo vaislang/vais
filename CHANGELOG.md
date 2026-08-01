@@ -4,6 +4,57 @@
 
 ### Changed
 
+- Fixed a full-engine value-correctness bug with engine divergence:
+  `let s = "lit"` (or `= ""`) inside a loop body emitted its
+  initializing store only once at function entry (the slot collector),
+  so every later iteration silently kept the previous iteration's value
+  — `for i in 0..3 { let mut s = "" ... }` accumulated stale state on
+  the full engine while the direct engine reset correctly. The
+  statement-site store is now emitted in gen_stmts for string-literal
+  lets (the entry store stays, preserving reads that precede the let
+  under the flat-slot aliasing semantics), and the core was regenerated
+  to convergence. Locked by `examples/e385_loop_str_literal_init.vais`
+  (for-range and while bodies, mut and immutable bindings) in the
+  parity manifest. Found while dogfooding the rebinding checker, whose
+  per-line state lived in exactly such loop-body literal lets; the only
+  two pre-existing corpus sites (normalize_stage_ir, import_graph_check)
+  are latently corrected by the same fix.
+
+- Added `vaisdb msearch <query> <k> <index> [index...]`, cross-index
+  search: one query ranked over several indexes, merged by score with
+  the source index visible as `<index-basename>/<doc-id>` and printed
+  exactly like `search` (zero scores hidden, on-disk source path
+  appended); the exit code is the best merged score, missing indexes
+  error with the offending path (exit 3), and the query guards mirror
+  the family. The dispatch is the first variadic subcommand (an
+  `args()` binding with a range tail loop feeding a `List<Str>`), and
+  the merge sorts a three-field struct with `sort_by_desc`. Locked by
+  package self-test cases 55-56 and six workflow gate cases (second
+  index build, exit-is-best-score, both index labels, zero-score
+  silence, missing-index error).
+
+- Made different-type local rebinding a loud error on both engines and
+  in `vais-check` (`local X is rebound with a different type`). The
+  emitters key every local to one slot by name with first-match lookup,
+  so `for hit in ranked { ... }` followed by `let hit = merged[j]` with
+  a different struct type silently reused the first layout — unknown
+  fields resolved to out-of-bounds offset -1 GEPs, and same-width cases
+  could run wrong without any diagnostic (heterotype rebinds only
+  clang-error by luck; the dogfooding msearch draft hit exactly this).
+  The new conservative type-lite tracker (literals, annotations, struct
+  literals, indexing/iterating annotated `List<T>` locals) fires only
+  when both bindings' kinds are provable and different, which a corpus
+  sweep confirmed keeps all 758 existing same-type/unknown rebinding
+  pairs accepted with zero false positives. Wired into the shared front
+  loop (full path), the direct pipeline (replacing C-level redefinition
+  noise or block-scope silence), and the `vais-check` core with the
+  same conservative resolver; the bad fixture grows the paired
+  rebinding case (issue count 33 -> 34 across the contract, smoke, and
+  install checks), and the front harness gains one accept and two
+  reject fixtures. `docs/reference/LANGUAGE.md` now states the rule:
+  same-type rebinding is the verified aliasing idiom, different types
+  need distinct names.
+
 - Added `vaisdb why <index> <query> <doc-id>`, the relevance-debugging
   subcommand: it breaks a document's score into per-term contributions —
   one `  <term> q=<n> doc=<n> adds <n>` line per query term with absent

@@ -1,0 +1,31 @@
+# expect: 42
+# Loop-body string-literal lets re-initialize on every iteration on both
+# engines. The full core once emitted the literal store only at function
+# entry (the slot collector), so later iterations silently kept the value
+# written by an earlier iteration; the statement-site store now runs each
+# pass through the loop.
+fn tag_hits(n: Int) -> Int {
+    let mut hits = 0
+    for i in 0..n {
+        let mut s = ""
+        if i == 0 { s = "x" }
+        if s == "x" { hits += 1 }
+    }
+    return hits
+}
+
+fn main() -> Int {
+    let mut total = tag_hits(3) * 10
+    let mut j = 0
+    while j < 3 {
+        let mut mark = "y"
+        if j == 2 { mark = "z" }
+        if mark == "y" { total += 1 }
+        j += 1
+    }
+    for k in 0..3 {
+        let fixed = "c"
+        if fixed == "c" { total += 10 }
+    }
+    return total
+}

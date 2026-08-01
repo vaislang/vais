@@ -254,8 +254,10 @@ statement that sorts in place through local and parameter receivers,
 order records in place for ranking flows,
 `examples/e337_vaisdb_cli_package` for the installable vaisdb CLI package
 whose multi-module source builds to `dist/bin/vaisdb` with
-ingest/query/report/ingest-dir/rank/docs/remove/stats subcommands, a
-deterministic no-argument self-test, and a release archive,
+ingest/query/report/ingest-dir/reindex/rank/search/msearch/why/docs/remove/stats
+subcommands (msearch merges one query across several indexes with
+`<index>/<doc>` labels; why breaks a document's score into per-term
+contributions), a deterministic no-argument self-test, and a release archive,
 `examples/e338_fs_list_files.vais` for the built-in `fs_list_files(dir, out)`
 directory enumeration that fills a `List<Str>` with sorted regular-file names,
 `examples/e339_list_struct_field_in_call_args.vais` for `List<Struct>` indexed
@@ -366,6 +368,9 @@ ranking-report renderer on both engines),
 `examples/e384_list_copy_binding.vais` for list-copy bindings in both
 spellings (`let ys = xs` and `let ys: List<T> = xs` lowering to the
 verified reassignment pair with copy semantics on both engines),
+`examples/e385_loop_str_literal_init.vais` for loop-body string-literal
+lets re-initializing on every iteration (statement-site stores on both
+engines across for-range and while bodies),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between
