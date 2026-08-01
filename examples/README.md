@@ -383,6 +383,10 @@ side effects, 0/1 normalization in statement and value positions),
 bodies, and `let (x, y) = f(...)` destructuring),
 `examples/e389_take_method.vais` for `xs.take(k)` first-k slices (clamped
 index for-in heads and typed fresh-list let bindings),
+`examples/e390_vaisfreq_package` for the installable vaisfreq top-K
+word-frequency tool (`vaisfreq [-n K] [file...]`) dogfooding the Stage 3c
+surface — tuple returns parse the flag pair and carry the leader row, and
+`rows.take(k)` over sorted struct rows is the report itself,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

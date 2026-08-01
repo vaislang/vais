@@ -4,6 +4,22 @@
 
 ### Changed
 
+- Added vaisfreq (`examples/e390_vaisfreq_package`), the fourteenth
+  installable tool and the dogfooding pass for the Stage 3c surface:
+  `vaisfreq [-n K] [file...]` counts whitespace-separated words across
+  files or stdin and prints the top K as `count word` rows (exit = rows
+  printed; oversized vocabulary and missing files follow the family
+  error contract). Tuple returns carry the flag parse (`-> (Int, Int)`)
+  and the leader row (`-> (Str, Int)` with an empty-table path), and
+  `rows.take(k)` over the sort_by_desc'd struct rows IS the report
+  semantic. Compiler gap report: zero — every Stage 3c construct
+  (mixed tuple returns through List<Struct> params, tuple destructuring,
+  take for-in heads over struct rows, take let bindings) worked on both
+  engines on the first run; the two fixes the cycle needed were in the
+  tool itself (a fixture arithmetic slip and the args() indexing
+  convention — user arguments only, no binary name — now stated in a
+  comment at the parse site).
+
 - Promoted the two remaining deferred Token-Density candidates,
   clearing the deferred list. Mixed-type tuples: `fn f(...) -> (T1, T2)`
   now accepts any mix of Int and Str elements (previously Int-only) —

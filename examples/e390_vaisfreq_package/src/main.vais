@@ -1,0 +1,189 @@
+# expect: 42
+# Fourteenth installable Vais tool — and the dogfooding pass for the Stage 3c
+# surface: `vaisfreq [-n K] [file...]` counts whitespace-separated words
+# across its sources and prints the top K as `count word` rows, highest
+# count first. Tuple returns carry the flag parse (`-> (Int, Int)`) and the
+# leader row (`-> (Str, Int)`), and `rows.take(k)` is the product semantic
+# itself: the report IS a take of the sorted rows. A vocabulary past the
+# 4096 map window errors (exit 3), missing files report to stderr and set
+# exit 3 while the remaining sources still count; the normal exit code is
+# the number of rows printed. Run without arguments it executes a
+# deterministic self-test (the release-corpus entry).
+
+struct FreqRow {
+    word: Str,
+    count: Int,
+}
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(f"{msg}\n")
+    0
+}
+
+# Count whitespace-run words into the map with the 4096-vocabulary window
+# guard; -2 past the window, else the total word occurrences added.
+fn count_words(body: Str, counts: Map<Str,Int>) -> Int {
+    let n = body.len()
+    let mut pos = 0
+    let mut total = 0
+    while pos < n {
+        let b0 = body[pos]
+        if b0 == 32 or b0 == 9 or b0 == 10 or b0 == 13 {
+            pos += 1
+        } else {
+            let start = pos
+            while pos < n {
+                let b1 = body[pos]
+                if b1 == 32 or b1 == 9 or b1 == 10 or b1 == 13 { break }
+                pos += 1
+            }
+            let word = str_slice(body, start, pos - start)
+            if counts.contains(word) {
+                counts.insert(word, counts.get(word, 0) + 1)
+            } else {
+                if counts.len() >= 4096 { return 0 - 2 }
+                counts.insert(word, 1)
+            }
+            total += 1
+        }
+    }
+    total
+}
+
+# Sorted rows out of the count map, highest count first.
+fn ranked_rows_into(counts: Map<Str,Int>, rows: List<FreqRow>) -> Int {
+    let n = counts.len()
+    for i in 0..n {
+        rows.push(FreqRow { word: counts.key_at(i), count: counts.value_at(i) })
+    }
+    rows.sort_by_desc(|r| r.count)
+    n
+}
+
+# The leading row as a (word, count) pair; ("", 0) for an empty table.
+fn leader(rows: List<FreqRow>) -> (Str, Int) {
+    if rows.len() == 0 { return ("", 0) }
+    let head = rows[0]
+    return (head.word, head.count)
+}
+
+# Parse a leading `-n K` flag pair: (k, index of the first path argument).
+# args() carries user arguments only — no binary name — so the flag sits
+# at index 0 when present.
+fn parse_flags(argv: List<Str>) -> (Int, Int) {
+    if argv.len() >= 2 and argv[0] == "-n" {
+        return (parse_int(argv[1]), 2)
+    }
+    return (10, 0)
+}
+
+fn read_source(path: Str) -> Str {
+    if path == "-" { return stdin_read_all() }
+    path.read()
+}
+
+fn run_freq(paths: List<Str>, k: Int) -> Int {
+    if k < 1 {
+        eprint("error: row count must be positive")
+        return 2
+    }
+    let counts: Map<Str,Int> = {}
+    let mut status = 0
+    for path in paths {
+        if path != "-" and not path.exists() {
+            eprint(f"error: file not found: {path}")
+            status = 3
+        } else {
+            if count_words(read_source(path), counts) == 0 - 2 {
+                eprint("error: vocabulary too large")
+                return 3
+            }
+        }
+    }
+    let rows: List<FreqRow> = []
+    ranked_rows_into(counts, rows)
+    let mut shown = 0
+    for row in rows.take(k) {
+        print(f"{row.count} {row.word}")
+        shown += 1
+    }
+    if status != 0 { return status }
+    shown
+}
+
+fn usage() -> Int {
+    eprint("usage: vaisfreq [-n K] [file...]   (use - or no files for stdin)")
+    2
+}
+
+fn self_test() -> Int {
+    # Counting: repeats accumulate, whitespace runs split, tabs/newlines too.
+    let counts: Map<Str,Int> = {}
+    let total = count_words("ai cache ai\tcache ai\nbeta", counts)
+    if total != 6 { return 1 }
+    if counts.len() != 3 { return 2 }
+    if counts.get("ai", 0) != 3 { return 3 }
+    if counts.get("beta", 0) != 1 { return 4 }
+
+    # Ranking: rows sort by count descending.
+    let rows: List<FreqRow> = []
+    if ranked_rows_into(counts, rows) != 3 { return 5 }
+    if rows[0].word != "ai" { return 6 }
+    if rows[2].count != 1 { return 7 }
+
+    # The leader tuple destructures the top row; empty tables stay total.
+    let (top_word, top_count) = leader(rows)
+    if top_word != "ai" { return 8 }
+    if top_count != 3 { return 9 }
+    let none: List<FreqRow> = []
+    let (no_word, no_count) = leader(none)
+    if no_word != "" { return 10 }
+    if no_count != 0 { return 11 }
+
+    # take(k) is the report: k rows when available, clamped when not.
+    let mut taken = 0
+    for row in rows.take(2) {
+        taken += row.count
+    }
+    if taken != 5 { return 12 }
+    let mut all = 0
+    for row in rows.take(99) {
+        all += 1
+    }
+    if all != 3 { return 13 }
+
+    # Flag parsing over user-args (no binary name): `-n K` yields (K, 2),
+    # no flag yields (10, 0).
+    let argv: List<Str> = ["-n", "7", "a.txt"]
+    let (k1, start1) = parse_flags(argv)
+    if k1 != 7 { return 14 }
+    if start1 != 2 { return 15 }
+    let bare: List<Str> = ["a.txt"]
+    let (k2, start2) = parse_flags(bare)
+    if k2 != 10 { return 16 }
+    if start2 != 0 { return 17 }
+
+    # File round trip through the runner: top-2 of a real file prints 2 rows.
+    let root = fs_temp_dir()
+    let f1 = path_join(root, "vais-e390-selftest.txt")
+    if f1.write("x x x y y z") != 0 { return 18 }
+    let paths: List<Str> = [f1]
+    if run_freq(paths, 2) != 2 { return 19 }
+
+    # 3 ai + 3 words * 13 = 42
+    top_count + counts.len() * 13
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let argv = args()
+    let (k, start) = parse_flags(argv)
+    let paths: List<Str> = []
+    for i in start..argv.len() {
+        paths.push(argv[i])
+    }
+    if paths.len() == 0 {
+        paths.push("-")
+    }
+    run_freq(paths, k)
+}
