@@ -4,6 +4,23 @@
 
 ### Changed
 
+- Migrated the vaisdb posting-index internals (`vaisdb/index.vais`) to
+  the Token-Density surface in a second, deeper pass now that `and`/`or`
+  short-circuit: guarded single-line conditions
+  (`parts.len() >= 2 and parts[0] == doc_id`), collect methods and
+  for-each over every bounded path (docs registry, per-line field
+  splits, shard loops), f-string entry formatting
+  (`f"{doc_id}\t{src}\t{stamp}\n"`), bare predicates, compound
+  assignment, and expression bodies — 5,016 -> 4,194 o200k tokens
+  (-16.4%) with comments included. The unbounded-volume walks (shard
+  posting scans, remove_doc's shard rewrites, the whole-document
+  snippet scan) deliberately stay byte-level streaming because the 4095
+  line-list contract is a real bound there, now stated in comments at
+  each site. Behavior-identical: package self-test 42/42 on both
+  engines and the full vaisdb workflow gate stays green; the
+  reindex walk binder was renamed (walk_id) away from the deletion
+  loop's for-binder instead of aliasing it.
+
 - Unified `and`/`or` to short-circuit evaluation on both engines. The
   full core emitted logical operators as bitwise `and i64`/`or i64`
   over eagerly generated operands, so `if i == 0 or xs[i - 1] > 0`

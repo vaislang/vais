@@ -222,9 +222,14 @@ so these are conservative whole-file numbers, not code-only:
 | vaisdb (report+main) | 6,692 | 6,430 | -3.9% |
 | Total | 23,342 | 20,547 | **-12.0%** |
 
-The vaisdb posting-index internals (`vaisdb/index.vais`) stay in the
-explicit byte-level style on purpose — the sharded posting machinery is
-correctness-critical and its loops are not idiom-shaped. Migration also
+The vaisdb posting-index internals (`vaisdb/index.vais`) followed in a
+second pass once `and`/`or` short-circuiting made guarded index and
+field-count conditions part of the surface: 5,016 -> 4,194 (-16.4%).
+The unbounded-volume walks (shard scans, whole-document snippet scan)
+deliberately stay byte-level — the 4095 line-list contract is a real
+bound there — while every bounded path (docs registry, per-line field
+splits, shard loops) moved to collect methods, for-each, guarded
+single-line conditions, and f-string entry formatting. Migration also
 field-tested the new diagnostics: the literal-in-receiver front error
 fired twice (bind-first fixes), the direct bare-builtin-statement bound
 surfaced once, and the full-engine eager `or` divergence was caught by a
