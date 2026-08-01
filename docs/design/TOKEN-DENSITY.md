@@ -228,7 +228,9 @@ correctness-critical and its loops are not idiom-shaped. Migration also
 field-tested the new diagnostics: the literal-in-receiver front error
 fired twice (bind-first fixes), the direct bare-builtin-statement bound
 surfaced once, and the full-engine eager `or` divergence was caught by a
-self-test trap and filed as a follow-up.
+self-test trap — and then root-fixed: `and`/`or` now short-circuit on
+both engines (`examples/e387_short_circuit_logic.vais`), so guarded
+index spellings like `j == 0 or xs[j - 1] > 0` are part of the surface.
 
 ## Macro Data Points
 

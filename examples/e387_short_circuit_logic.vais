@@ -1,0 +1,43 @@
+# expect: 42
+# `and`/`or` short-circuit identically on both engines and normalize to 0/1:
+# `and` skips its right side when the left is false, `or` skips it when the
+# left is true. That makes index guards like `i == 0 or xs[i - 1] > 0` safe
+# (the full core once evaluated both sides eagerly, so the guarded index
+# trapped) and keeps right-side side effects from running when the result is
+# already decided.
+fn bump(path: Str) -> Int {
+    let w = fs_append_text(path, "x")
+    1
+}
+
+fn main() -> Int {
+    # Guarded list index in or / and, statement and value positions.
+    let xs: List<Int> = [7]
+    let mut guarded = 0
+    for i in 0..xs.len() {
+        if i == 0 or xs[i - 1] > 0 { guarded += 1 }
+        let masked = i > 0 and xs[i - 1] > 0
+        guarded += masked
+    }
+    if guarded != 1 { return 1 }
+
+    # Skipped right sides leave no side effects; needed right sides run.
+    let root = fs_temp_dir()
+    let mark = path_join(root, "vais-e387-marks.txt")
+    let w0 = mark.write("")
+    if 1 == 1 or bump(mark) == 1 { }
+    let dead = 0 == 1 and bump(mark) == 1
+    if dead { return 2 }
+    if mark.read() != "" { return 3 }
+    if 0 == 1 or bump(mark) == 1 { }
+    let live = 1 == 1 and bump(mark) == 1
+    if not live { return 4 }
+    if mark.read() != "xx" { return 5 }
+
+    # Truth table and 0/1 normalization in value position.
+    let v = 5 > 1 or 9 > 99
+    let w = 5 > 9 and 1 > 0
+    if 1 == 1 and 2 == 2 and 3 == 3 { guarded += 1 }
+    if 1 == 2 or 2 == 3 or 3 == 3 { guarded += 1 }
+    guarded * 10 + v * 12 + w
+}

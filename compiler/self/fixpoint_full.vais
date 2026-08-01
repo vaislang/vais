@@ -9230,25 +9230,90 @@ fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
         # continue folding from rstop so a following `and`/`or` is applied.
         return gen_fold(toks, slots, fns, defs, src, rstop, stop, cacc)
     }
-    # logical `and` (31) / `or` (32) as a value. Operands are 0/1 (from
-    # comparisons), so bitwise `and i64`/`or i64` yields the correct boolean.
+    # logical `and` (31) / `or` (32) as a value, short-circuiting like the
+    # direct engine's C lowering: `and` skips the RHS when the LHS is false,
+    # `or` skips it when the LHS is true, and the result normalizes to 0/1.
+    # The RHS lands in its own block; a dedicated hop block (scX) keeps the
+    # phi's incoming edge stable even when the RHS emits blocks of its own.
     # Lowest precedence -> RHS is a full expression (gen_expr).
     if op.kind == 31 or op.kind == 32 {
         # RHS is the next comparison/additive expr up to the following `and`/`or`
         # (left-associative): `a and b and c` -> `((a and b) and c)`.
         let rstop = next_logical(toks, i + 1, stop)
-        let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, rstop, acc.next)
-        let dest = rhs.next
+        let lbl = acc.next
         emit_str("  %t")
-        pint(dest)
-        emit_str(" = ")
-        if op.kind == 31 { emit_str("and") } else { emit_str("or") }
-        emit_str(" i64 ")
+        pint(lbl)
+        emit_str(" = icmp ne i64 ")
         emit_op(acc)
-        emit_str(", ")
-        emit_op(rhs)
+        emit_str(", 0")
         putchar(10)
-        let nacc = Op { kind: 1, val: dest, next: dest + 1 }
+        emit_str("  br i1 %t")
+        pint(lbl)
+        if op.kind == 31 {
+            # and: true -> evaluate RHS, false -> short 0
+            emit_str(", label %scR")
+            pint(lbl)
+            emit_str(", label %scS")
+        } else {
+            # or: true -> short 1, false -> evaluate RHS
+            emit_str(", label %scS")
+            pint(lbl)
+            emit_str(", label %scR")
+        }
+        pint(lbl)
+        putchar(10)
+        emit_str("scS")
+        pint(lbl)
+        emit_str(":")
+        putchar(10)
+        emit_str("  br label %scM")
+        pint(lbl)
+        putchar(10)
+        emit_str("scR")
+        pint(lbl)
+        emit_str(":")
+        putchar(10)
+        let rhs = gen_expr(toks, slots, fns, defs, src, i + 1, rstop, lbl + 1)
+        let rb = rhs.next
+        emit_str("  %t")
+        pint(rb)
+        emit_str(" = icmp ne i64 ")
+        emit_op(rhs)
+        emit_str(", 0")
+        putchar(10)
+        emit_str("  %t")
+        pint(rb + 1)
+        emit_str(" = zext i1 %t")
+        pint(rb)
+        emit_str(" to i64")
+        putchar(10)
+        emit_str("  br label %scX")
+        pint(lbl)
+        putchar(10)
+        emit_str("scX")
+        pint(lbl)
+        emit_str(":")
+        putchar(10)
+        emit_str("  br label %scM")
+        pint(lbl)
+        putchar(10)
+        emit_str("scM")
+        pint(lbl)
+        emit_str(":")
+        putchar(10)
+        emit_str("  %t")
+        pint(rb + 2)
+        emit_str(" = phi i64 [ ")
+        if op.kind == 31 { emit_str("0") } else { emit_str("1") }
+        emit_str(", %scS")
+        pint(lbl)
+        emit_str(" ], [ %t")
+        pint(rb + 1)
+        emit_str(", %scX")
+        pint(lbl)
+        emit_str(" ]")
+        putchar(10)
+        let nacc = Op { kind: 1, val: rb + 2, next: rb + 3 }
         return gen_fold(toks, slots, fns, defs, src, rstop, stop, nacc)
     }
     return acc

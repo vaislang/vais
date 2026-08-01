@@ -4,6 +4,23 @@
 
 ### Changed
 
+- Unified `and`/`or` to short-circuit evaluation on both engines. The
+  full core emitted logical operators as bitwise `and i64`/`or i64`
+  over eagerly generated operands, so `if i == 0 or xs[i - 1] > 0`
+  aborted on the checked index the guard was written to prevent (the
+  direct engine's C lowering already short-circuited — a real
+  cross-engine semantics divergence caught by a migrated tool's
+  self-test), and right-side calls ran even when the result was
+  decided. gen_fold now lowers both operators to a branch scheme with a
+  0/1-normalizing phi; a dedicated hop block keeps the phi's incoming
+  edge stable even when the right side emits blocks of its own, and
+  left-associative chains keep their nesting. The core was regenerated
+  through the three-generation self-affecting cycle to convergence.
+  Locked by `examples/e387_short_circuit_logic.vais` (guarded indexes,
+  skipped side effects, truth tables in statement and value positions)
+  in the parity manifest, and the semantics are now documented in
+  `docs/reference/LANGUAGE.md`.
+
 - Migrated the eleven landed CLI tools (vaisgrep, vaismake, vaisfmt,
   vaisbench, vaisdiff, vaiswc, vaisbox, vaissort, vaisenv, vaistee,
   vaiscut) plus the vaisdb report/dispatch paths to the Token-Density

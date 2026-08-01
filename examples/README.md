@@ -375,6 +375,9 @@ engines across for-range and while bodies),
 results binding as Str locals (local and parameter receivers) and
 Str-returning calls keeping trailing `.len()` folds in condition and
 arithmetic positions,
+`examples/e387_short_circuit_logic.vais` for `and`/`or` short-circuit
+evaluation on both engines (guarded list indexes, skipped right-side
+side effects, 0/1 normalization in statement and value positions),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

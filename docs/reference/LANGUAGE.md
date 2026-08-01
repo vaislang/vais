@@ -247,6 +247,12 @@ Verified operators:
 - Arithmetic: `+`, `-`, `*`, `/`, `%`
 - Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
 - Boolean words: `and`, `or`, `not`
+- `and` and `or` short-circuit on both engines and normalize to 0/1:
+  `and` never evaluates its right side when the left is false, `or` never
+  evaluates it when the left is true. Index guards like
+  `i == 0 or xs[i - 1] > 0` are therefore safe, and right-side calls do
+  not run when the result is already decided
+  (`examples/e387_short_circuit_logic.vais`).
 - Bool expression locals and Bool-returning helper predicates are covered by
   `examples/e10_bool_logic.vais` and `examples/e36_bool_predicate.vais`.
 - Bit helpers: `bitnot(x)`, `bitand(a, b)`, `bitor(a, b)`, `bitxor(a, b)`,

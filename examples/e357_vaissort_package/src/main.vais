@@ -32,8 +32,6 @@ fn collect_lines(text: Str, out: List<Str>) -> Int {
 fn unique_count(lines: List<Str>) -> Int {
     let mut u = 0
     for (j, cur) in lines.enumerate() {
-        # index guards stay nested: `or` does not short-circuit on the full
-        # engine yet, so `j == 0 or lines[j - 1]` would read out of bounds
         let mut fresh = 1
         if j > 0 {
             if cur == lines[j - 1] { fresh = 0 }
