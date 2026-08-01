@@ -1,0 +1,26 @@
+# expect: 42
+# Str-valued Map lookups bind as Str locals and call-result receivers keep a
+# trailing .len() on both engines: `let v = strmap.get(k, "")` types the
+# destination slot as Str (the full core once left it i64 and the store came
+# out ill-typed), and a Str-returning call followed by `.len()` folds to the
+# byte length instead of the walker silently dropping the length call
+# (`s.trim().len()`, `str_concat(a, b).len()`).
+fn pick(m: Map<Str,Str>, k: Str) -> Int {
+    let v = m.get(k, "")
+    if v == "won" { return 20 }
+    return v.len()
+}
+
+fn main() -> Int {
+    let tab: Map<Str,Str> = {}
+    tab.insert("a", "won")
+    tab.insert("b", "xy")
+    let local = tab.get("b", "")
+    let miss = tab.get("zz", "")
+    let s = "  abc "
+    let mut n = pick(tab, "a") + local.len() + miss.len()
+    if s.trim().len() > 0 { n += 10 }
+    n += str_concat("xx", "yy").len() * 2
+    if str_trim(" z ").len() == 1 { n += 2 }
+    return n
+}

@@ -371,6 +371,10 @@ verified reassignment pair with copy semantics on both engines),
 `examples/e385_loop_str_literal_init.vais` for loop-body string-literal
 lets re-initializing on every iteration (statement-site stores on both
 engines across for-range and while bodies),
+`examples/e386_strmap_get_and_call_len.vais` for Str-valued Map `get`
+results binding as Str locals (local and parameter receivers) and
+Str-returning calls keeping trailing `.len()` folds in condition and
+arithmetic positions,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

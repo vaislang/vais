@@ -40,5 +40,6 @@ fn f(s: String) -> Int {
     else { total = 2 }
     let rb = 40
     let rb = "x"
+    totals.contains_key("k")
     return 0
 }

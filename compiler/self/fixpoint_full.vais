@@ -3461,7 +3461,8 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
     let t = toks[i]
     if t.kind == 0 { return Op { kind: 0, val: t.value, next: counter } }
     if t.kind == 42 {
-        let arg = gen_factor(toks, slots, fns, defs, src, i + 1, counter)
+        let arg0 = gen_factor(toks, slots, fns, defs, src, i + 1, counter)
+        let arg = factor_len_fixup(toks, src, arg0, i + 1, skip_factor(toks, src, i + 1))
         let cmp = arg.next
         emit_str("  %t")
         pint(cmp)
@@ -8547,12 +8548,13 @@ fn gen_term(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<
     let t = toks[i]
     if t.kind == 3 or t.kind == 38 or t.kind == 39 {
         let rf = gen_factor(toks, slots, fns, defs, src, i + 1, acc.next)
-        let mut dest = 0
-        if t.kind == 38 { dest = emit_binop("sdiv", acc, rf, rf.next) }
-        else if t.kind == 39 { dest = emit_binop("srem", acc, rf, rf.next) }
-        else { dest = emit_binop("mul", acc, rf, rf.next) }
-        let nacc = Op { kind: 1, val: dest, next: dest + 1 }
         let after = skip_factor(toks, src, i + 1)
+        let rfx = factor_len_fixup(toks, src, rf, i + 1, after)
+        let mut dest = 0
+        if t.kind == 38 { dest = emit_binop("sdiv", acc, rfx, rfx.next) }
+        else if t.kind == 39 { dest = emit_binop("srem", acc, rfx, rfx.next) }
+        else { dest = emit_binop("mul", acc, rfx, rfx.next) }
+        let nacc = Op { kind: 1, val: dest, next: dest + 1 }
         return gen_term(toks, slots, fns, defs, src, after, stop, nacc)
     }
     return acc
@@ -8569,7 +8571,8 @@ fn skip_term(toks: &List<Token>, src: Str, i: Int, stop: Int) -> Int {
 fn gen_expr(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, stop: Int, counter: Int) -> Op {
     let f0 = gen_factor(toks, slots, fns, defs, src, i, counter)
     let af = skip_factor(toks, src, i)
-    let t0 = gen_term(toks, slots, fns, defs, src, af, stop, f0)
+    let f0x = factor_len_fixup(toks, src, f0, i, af)
+    let t0 = gen_term(toks, slots, fns, defs, src, af, stop, f0x)
     let after = skip_term(toks, src, af, stop)
     return gen_fold(toks, slots, fns, defs, src, after, stop, t0)
 }
@@ -9116,22 +9119,42 @@ fn next_logical(toks: &List<Token>, i: Int, stop: Int) -> Int {
     }
     return j
 }
+# A Str-valued factor whose consumed token region ends with `.len()` had the
+# length call swallowed by skip_factor's generic chain walk while the factor
+# generator emitted nothing for it (the silent-drop class: `str_trim(x).len()`).
+# Fold it to the byte length here; factors that already emit their own strlen
+# return Int-kind Ops and pass through untouched.
+fn factor_len_fixup(toks: &List<Token>, src: Str, f: Op, fstart: Int, fafter: Int) -> Op {
+    if f.kind != 2 { return f }
+    if fafter < fstart + 4 { return f }
+    if toks[fafter - 1].kind != 10 { return f }
+    if toks[fafter - 2].kind != 9 { return f }
+    let ml = toks[fafter - 3]
+    if ml.kind != 1 { return f }
+    if kw3(src, ml.nstart, ml.nlen, 108, 101, 110) != 1 { return f }
+    if toks[fafter - 4].kind != 27 { return f }
+    return emit_strlen_from_ptr(f.val, f.next)
+}
 fn gen_fold(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, stop: Int, acc: Op) -> Op {
     if i >= stop { return acc }
     let op = toks[i]
     if op.kind == 2 {
         let rf = gen_factor(toks, slots, fns, defs, src, i + 1, acc.next)
-        let rt = gen_term(toks, slots, fns, defs, src, skip_factor(toks, src, i + 1), stop, rf)
+        let ra = skip_factor(toks, src, i + 1)
+        let rfx = factor_len_fixup(toks, src, rf, i + 1, ra)
+        let rt = gen_term(toks, slots, fns, defs, src, ra, stop, rfx)
         let dest = emit_binop("add", acc, rt, rt.next)
         let nacc = Op { kind: 1, val: dest, next: dest + 1 }
-        return gen_fold(toks, slots, fns, defs, src, skip_term(toks, src, skip_factor(toks, src, i + 1), stop), stop, nacc)
+        return gen_fold(toks, slots, fns, defs, src, skip_term(toks, src, ra, stop), stop, nacc)
     }
     if op.kind == 4 {
         let rf = gen_factor(toks, slots, fns, defs, src, i + 1, acc.next)
-        let rt = gen_term(toks, slots, fns, defs, src, skip_factor(toks, src, i + 1), stop, rf)
+        let ra = skip_factor(toks, src, i + 1)
+        let rfx = factor_len_fixup(toks, src, rf, i + 1, ra)
+        let rt = gen_term(toks, slots, fns, defs, src, ra, stop, rfx)
         let dest = emit_binop("sub", acc, rt, rt.next)
         let nacc = Op { kind: 1, val: dest, next: dest + 1 }
-        return gen_fold(toks, slots, fns, defs, src, skip_term(toks, src, skip_factor(toks, src, i + 1), stop), stop, nacc)
+        return gen_fold(toks, slots, fns, defs, src, skip_term(toks, src, ra, stop), stop, nacc)
     }
     # comparison as a value: `<` (18) / `>` (19) / `==` (20) -> icmp + zext i1->i64.
     # Lower precedence than +/-, so the RHS is a full additive expression
@@ -9637,6 +9660,12 @@ fn rhs_map_str_index_result(toks: &List<Token>, slots: &List<Slot>, src: Str, np
         if map_is_str_key(slots, src, base.nstart, base.nlen) == 1 { return 1 }
     }
     if is_value_at(src, meth.nstart, meth.nlen) == 1 {
+        if map_is_str_value(slots, src, base.nstart, base.nlen) == 1 { return 1 }
+    }
+    # `let v = strmap.get(k, "")` yields the Str value (the get emitter already
+    # returns the inttoptr'd pointer); without this the collector left the
+    # destination slot as i64 and the store came out ill-typed.
+    if is_get(src, meth.nstart, meth.nlen) == 1 {
         if map_is_str_value(slots, src, base.nstart, base.nlen) == 1 { return 1 }
     }
     return 0
@@ -19360,6 +19389,13 @@ fn collect_top_slots(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>,
                 putchar(10)
                 next_slot = next_slot + 1
             } else if rhs_list_str_elem(toks, &slots, src, npos) == 1 {
+                slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
+                emit_str("  %v")
+                pint(next_slot)
+                emit_str(" = alloca i8*")
+                putchar(10)
+                next_slot = next_slot + 1
+            } else if rhs_map_str_index_result(toks, &slots, src, npos) == 1 {
                 slots.push(Slot { nstart: name.nstart, nlen: name.nlen, slot: next_slot, is_arr: 3, alen: 0 , sty: 0 - 1 })
                 emit_str("  %v")
                 pint(next_slot)

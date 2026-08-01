@@ -9167,6 +9167,17 @@ fn write_dangling_else_bad(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_map_unknown_method_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let seen: Map<Str,Int> = {}")
+    append_line(out, "    seen.insert(\"a\", 1)")
+    append_line(out, "    if seen.contains_key(\"a\") { return 1 }")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_rebind_struct_bad(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "struct RD {")
@@ -9405,6 +9416,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "dangling_else") == 1 { return write_dangling_else_bad(path) }
     if str_eq(name, "rebind_struct") == 1 { return write_rebind_struct_bad(path) }
     if str_eq(name, "rebind_literal") == 1 { return write_rebind_literal_bad(path) }
+    if str_eq(name, "map_unknown_method") == 1 { return write_map_unknown_method_bad(path) }
     if str_eq(name, "fstring_empty_hole") == 1 { return write_fstring_empty_hole_bad(path) }
     if str_eq(name, "fstring_lone_brace") == 1 { return write_fstring_lone_brace_bad(path) }
     if str_eq(name, "fstring_open_hole") == 1 { return write_fstring_open_hole_bad(path) }
@@ -9971,6 +9983,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "rebind", "accepts same-type rebinding and loop-binder reuse (=42)", 42)
     fail = fail + expect_reject(vaisc, tmp, "rebind_struct", "rebound with a different type", "", "distinct name")
     fail = fail + expect_reject(vaisc, tmp, "rebind_literal", "rebound with a different type", "", "distinct name")
+    fail = fail + expect_reject(vaisc, tmp, "map_unknown_method", "not a verified Map method", "", "use `contains(key)`")
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/clear/len/is_empty/last/pop/sum", "", "plain function call")
     fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)

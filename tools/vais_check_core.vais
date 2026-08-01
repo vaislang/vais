@@ -1230,6 +1230,14 @@ fn check_text_at(path: Str, src: Str) -> Int {
         }
 
         if handled == 0 {
+            if src[i] == 46 and word_text_at(src, i + 1, "contains_key") == 1 {
+                issues = issues + report_issue_at(path, src, i + 1, "error: contains_key is not a Map method", "  help: use contains(key); verified Map methods are insert, remove, clear, get, get_opt, contains, len, key_at, and value_at")
+                i = i + 13
+                handled = 1
+            }
+        }
+
+        if handled == 0 {
             if logical_not_at(src, i) == 1 {
                 issues = issues + report_issue_at(path, src, i, "error: logical NOT uses word not", "  help: use the word not")
                 i = i + 1

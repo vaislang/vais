@@ -135,6 +135,8 @@ fn check_required_patterns(output: Str) -> Int {
     fail = fail + require_contains("Vais checker contract includes 'error: else if is two words'", "error: else if is two words", output)
     fail = fail + require_contains("Vais checker contract includes 'error: compound assignment needs a plain place on the left'", "error: compound assignment needs a plain place on the left", output)
     fail = fail + require_contains("Vais checker contract includes 'error: else must follow a closed block'", "error: else must follow a closed block", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: local rb is rebound with a different type'", "error: local rb is rebound with a different type", output)
+    fail = fail + require_contains("Vais checker contract includes 'error: contains_key is not a Map method'", "error: contains_key is not a Map method", output)
     return fail
 }
 
@@ -232,7 +234,7 @@ fn main() -> Int {
         return 1
     }
 
-    let expected_count = 34
+    let expected_count = 35
     let vaisc = path_join(root, "scripts/vaisc")
     let vais_check = path_join(root, "scripts/vais-check")
     let fixture_dir = path_join(path_join(path_join(root, "tests"), "fixtures"), "vais_check")

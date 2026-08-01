@@ -4,6 +4,30 @@
 
 ### Changed
 
+- Fixed the two follow-ups filed from the rebinding cycle, both
+  full-engine divergences (the direct engine was already correct).
+  First, Str-valued Map lookups now bind as Str locals:
+  `let v = strmap.get(k, "")` left the destination slot typed i64 in
+  both slot collectors even though the get emitter already returned the
+  inttoptr'd string, so the store came out ill-typed (clang error at
+  best, wrong-width silence at worst) — the collectors now recognize
+  `get` on str-valued maps (and the second collector gains the missing
+  `key_at`/`value_at` recognizer branch for symmetry). Second, a
+  trailing `.len()` on a Str-returning call was silently swallowed:
+  skip_factor consumed the `.len()` tokens generically while gen_factor
+  emitted nothing, so `s.trim().len() > 0` compared the raw string
+  pointer — a central factor_len_fixup now folds Str-kind factors whose
+  consumed region ends with `.len()` to the byte length across
+  expression, term, fold, and not positions. Both locked by
+  `examples/e386_strmap_get_and_call_len.vais` in the parity manifest.
+  Alongside, unknown methods on tracked Map locals/params are now loud
+  front errors instead of silently compiling to constant-false
+  conditions (`contains_key` reports "use `contains(key)`"; the
+  verified set is insert/remove/clear/get/get_opt/contains/len/key_at/
+  value_at), mirrored in `vais-check` (bad fixture count 34 -> 35
+  across the contract, smoke, and install checks) with a front reject
+  fixture.
+
 - Fixed a full-engine value-correctness bug with engine divergence:
   `let s = "lit"` (or `= ""`) inside a loop body emitted its
   initializing store only once at function entry (the slot collector),

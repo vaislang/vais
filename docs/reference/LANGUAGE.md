@@ -1795,6 +1795,18 @@ Verified today:
   iteratively, and a receiver containing a string literal is a loud front
   error ("method receiver is not a lowerable postfix chain") instead of a
   partial lowering. The function spellings keep working unchanged.
+  A trailing `.len()` on a Str-returning call also folds to the byte
+  length (`s.trim().len()`, `str_concat(a, b).len()`) in condition and
+  arithmetic positions on both engines
+  (`examples/e386_strmap_get_and_call_len.vais`).
+- Str-valued Map lookups bind as Str locals: `let v = strmap.get(k, "")`
+  types the destination as `Str` through local and parameter receivers
+  (same example). Unknown methods on Map values are loud front and
+  `vais-check` errors — the verified set is
+  `insert`/`remove`/`clear`/`get`/`get_opt`/`contains`/`len`/`key_at`/
+  `value_at`, and `contains_key` in particular reports "use
+  `contains(key)`" instead of silently compiling to a constant-false
+  condition.
 - List-copy bindings: `let [mut] name = xs` and
   `let [mut] name: List<T> = xs` copy a list local or parameter with copy
   semantics on both engines (`examples/e384_list_copy_binding.vais`) —

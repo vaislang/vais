@@ -21958,6 +21958,59 @@ static int check_option_result_generic_surface_text(const char *text, const char
     return issues == 0 ? 0 : 1;
 }
 
+/* Unknown methods on tracked Map locals/params previously fell through every
+ * emitter case and the condition silently became constant 0 (the concrete
+ * footgun was `contains_key`, which is not a Vais Map method). */
+static int front_map_method_allowed(const char *m, size_t len) {
+    static const char *ALLOWED[] = {"insert", "remove", "clear", "get", "get_opt",
+                                    "contains", "len", "key_at", "value_at", NULL};
+    for (int i = 0; ALLOWED[i] != NULL; i++) {
+        if (strlen(ALLOWED[i]) == len && strncmp(ALLOWED[i], m, len) == 0) return 1;
+    }
+    return 0;
+}
+
+static int front_check_map_method_line(const char *path, int line_no, const char *line,
+                                       const char *probe, char **map_locals, int map_count) {
+    for (size_t i = 0; probe[i] != '\0'; i++) {
+        if (probe[i] != '.') continue;
+        if (i == 0 || !is_ident_continue(probe[i - 1])) continue;
+        size_t rs = i;
+        while (rs > 0 && is_ident_continue(probe[rs - 1])) rs--;
+        if (!is_ident_start(probe[rs])) continue;
+        size_t rlen = i - rs;
+        size_t ms = i + 1;
+        if (!is_ident_start(probe[ms])) continue;
+        size_t me = ms;
+        while (is_ident_continue(probe[me])) me++;
+        const char *paren = probe + me;
+        while (*paren == ' ') paren++;
+        if (*paren != '(') continue;
+        int tracked = 0;
+        for (int t = 0; t < map_count; t++) {
+            if (map_locals[t] != NULL && strlen(map_locals[t]) == rlen &&
+                strncmp(map_locals[t], probe + rs, rlen) == 0) {
+                tracked = 1;
+                break;
+            }
+        }
+        if (!tracked) continue;
+        if (front_map_method_allowed(probe + ms, me - ms)) continue;
+        char meth[64];
+        size_t ml = me - ms < sizeof(meth) - 1 ? me - ms : sizeof(meth) - 1;
+        memcpy(meth, probe + ms, ml);
+        meth[ml] = '\0';
+        char summary[160];
+        snprintf(summary, sizeof(summary), "`%s` is not a verified Map method", meth);
+        const char *help = strcmp(meth, "contains_key") == 0
+            ? "use `contains(key)`; the verified Map methods are insert/remove/clear/get/get_opt/contains/len/key_at/value_at."
+            : "use one of the verified Map methods: insert/remove/clear/get/get_opt/contains/len/key_at/value_at.";
+        report_issue(path, line_no, (int)rs + 1, line, summary, help, NULL);
+        return 1;
+    }
+    return 0;
+}
+
 /* Conservative per-function rebinding tracker. The emitters key local slots
  * by name with first-match lookup, so rebinding a name to a DIFFERENT type
  * reuses the first slot's layout and silently reads wrong offsets (a struct
@@ -22300,6 +22353,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         issues += front_check_argv_line(path, line_no, line);
         issues += front_check_enumerate_line(path, line_no, line);
         issues += front_check_enum_map_line(path, line_no, line);
+        issues += front_check_map_method_line(path, line_no, line, probe, map_locals, map_local_count);
         {
             const char *eq = strstr(probe, "= if ");
             if (eq != NULL) {
