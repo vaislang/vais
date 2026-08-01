@@ -13,40 +13,34 @@
 fn eprint(msg: Str) -> Int {
     let w = stderr_write(msg)
     let lf = stderr_write(str_byte(10))
-    return 0
+    0
 }
 
 fn read_source(path: Str) -> Str {
     if path == "-" { return stdin_read_all() }
-    return fs_read_text(path)
+    path.read()
 }
 
 fn collect_lines(text: Str, out: List<Str>) -> Int {
-    let tmp: List<Str> = []
-    let n = str_split_lines_into(text, tmp)
-    let mut i = 0
-    while i < n {
-        out.push(tmp[i])
-        i = i + 1
+    let tmp = text.lines()
+    for line in tmp {
+        out.push(line)
     }
-    return n
+    tmp.len()
 }
 
 fn unique_count(lines: List<Str>) -> Int {
-    let n = lines.len()
     let mut u = 0
-    let mut j = 0
-    while j < n {
+    for (j, cur) in lines.enumerate() {
+        # index guards stay nested: `or` does not short-circuit on the full
+        # engine yet, so `j == 0 or lines[j - 1]` would read out of bounds
         let mut fresh = 1
         if j > 0 {
-            let cur = lines[j]
-            let prev = lines[j - 1]
-            if cur == prev { fresh = 0 }
+            if cur == lines[j - 1] { fresh = 0 }
         }
-        u = u + fresh
-        j = j + 1
+        u += fresh
     }
-    return u
+    u
 }
 
 fn emit_lines(lines: List<Str>, unique: Int, reverse: Int) -> Int {
@@ -56,83 +50,60 @@ fn emit_lines(lines: List<Str>, unique: Int, reverse: Int) -> Int {
         let mut j = n - 1
         while j >= 0 {
             let mut show = 1
-            if unique == 1 {
-                if j + 1 < n {
-                    let cur = lines[j]
-                    let succ = lines[j + 1]
-                    if cur == succ { show = 0 }
-                }
+            if unique == 1 and j + 1 < n {
+                if lines[j] == lines[j + 1] { show = 0 }
             }
             if show == 1 {
                 print(lines[j])
-                printed = printed + 1
+                printed += 1
             }
-            j = j - 1
+            j -= 1
         }
         return printed
     }
-    let mut j = 0
-    while j < n {
+    for (j, cur) in lines.enumerate() {
         let mut show = 1
-        if unique == 1 {
-            if j > 0 {
-                let cur = lines[j]
-                let prev = lines[j - 1]
-                if cur == prev { show = 0 }
-            }
+        if unique == 1 and j > 0 {
+            if cur == lines[j - 1] { show = 0 }
         }
         if show == 1 {
-            print(lines[j])
-            printed = printed + 1
+            print(cur)
+            printed += 1
         }
-        j = j + 1
     }
-    return printed
+    printed
 }
 
 fn run_sort(paths: List<Str>, unique: Int, reverse: Int) -> Int {
     let lines: List<Str> = []
     let mut status = 0
-    let mut i = 0
-    while i < paths.len() {
-        let path = paths[i]
-        if path != "-" {
-            if fs_exists(path) != 1 {
-                eprint(str_concat("error: file not found: ", path))
-                status = 3
-                i = i + 1
-            } else {
-                collect_lines(read_source(path), lines)
-                i = i + 1
-            }
+    for path in paths {
+        if path != "-" and not path.exists() {
+            eprint(f"error: file not found: {path}")
+            status = 3
         } else {
             collect_lines(read_source(path), lines)
-            i = i + 1
         }
     }
     lines.sort()
     emit_lines(lines, unique, reverse)
-    return status
+    status
 }
 
 fn is_flag(a: Str) -> Int {
-    if a == "-u" { return 1 }
-    if a == "-r" { return 1 }
-    return 0
+    if a == "-u" or a == "-r" { return 1 }
+    0
 }
 
 fn usage() -> Int {
     eprint("usage: vaissort [-u] [-r] <file...>   (use - for stdin)")
-    return 2
+    2
 }
 
 fn self_test() -> Int {
-    let lf = str_byte(10)
-
     # Split + ascending sort over one source.
     let lines: List<Str> = []
-    let body = str_concat("banana", str_concat(lf, str_concat("apple", str_concat(lf, str_concat("cherry", lf)))))
-    let n = collect_lines(body, lines)
+    let n = collect_lines("banana\napple\ncherry\n", lines)
     if n != 3 { return 1 }
     lines.sort()
     if lines[0] != "apple" { return 2 }
@@ -140,7 +111,7 @@ fn self_test() -> Int {
     if lines[2] != "cherry" { return 4 }
 
     # Multi-source accumulation keeps earlier lines and re-sorts.
-    let extra = collect_lines(str_concat("apple", lf), lines)
+    let extra = collect_lines("apple\n", lines)
     if extra != 1 { return 5 }
     if lines.len() != 4 { return 6 }
     lines.sort()
@@ -161,15 +132,15 @@ fn self_test() -> Int {
     # File round trip sorts disk content too.
     let root = fs_temp_dir()
     let f1 = path_join(root, "vais-e357.txt")
-    if fs_write_text(f1, str_concat("zeta", str_concat(lf, str_concat("eta", lf)))) != 0 { return 12 }
+    if f1.write("zeta\neta\n") != 0 { return 12 }
     let disk: List<Str> = []
-    let dn = collect_lines(fs_read_text(f1), disk)
+    let dn = collect_lines(f1.read(), disk)
     if dn != 2 { return 13 }
     disk.sort()
     if disk[0] != "eta" { return 14 }
 
     # 3 unique lines * 14 = 42
-    return unique_count(lines) * 14
+    unique_count(lines) * 14
 }
 
 fn main() -> Int {
@@ -186,18 +157,17 @@ fn main() -> Int {
             if is_flag(a) == 1 {
                 if a == "-u" { unique = 1 }
                 if a == "-r" { reverse = 1 }
-                start = start + 1
+                start += 1
             } else {
                 scanning = 0
             }
         }
     }
+    let argv = args()
     let paths: List<Str> = []
-    let mut i = start
-    while i < proc_argc() {
-        paths.push(proc_arg(i))
-        i = i + 1
+    for i in start..argv.len() {
+        paths.push(argv[i])
     }
     if paths.len() == 0 { return usage() }
-    return run_sort(paths, unique, reverse)
+    run_sort(paths, unique, reverse)
 }

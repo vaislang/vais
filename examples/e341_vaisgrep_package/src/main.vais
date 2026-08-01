@@ -11,85 +11,71 @@ import grep.scan
 fn eprint(msg: Str) -> Int {
     let w = stderr_write(msg)
     let lf = stderr_write(str_byte(10))
-    return 0
+    0
 }
 
 fn grep_body(pattern: Str, body: Str, prefix: Str, show_lines: Int) -> Int {
     if show_lines == 1 {
         let hits: List<Str> = []
         let count = match_lines_into(body, pattern, hits)
-        let mut i = 0
-        while i < count {
-            print(str_concat(prefix, hits[i]))
-            i = i + 1
+        for hit in hits {
+            print(f"{prefix}{hit}")
         }
         return count
     }
     let count = count_matches(body, pattern)
-    print(str_concat(prefix, str_concat("count=", Str(count))))
-    return count
+    print(f"{prefix}count={count}")
+    count
 }
 
 fn grep_file(pattern: Str, path: Str, prefix: Str, show_lines: Int) -> Int {
-    return grep_body(pattern, fs_read_text(path), prefix, show_lines)
+    grep_body(pattern, path.read(), prefix, show_lines)
 }
 
 fn grep_dir(pattern: Str, dir: Str, rel: Str, show_lines: Int) -> Int {
-    let names: List<Str> = []
-    let n = fs_list_files(dir, names)
     let mut total = 0
-    let mut i = 0
-    while i < n {
-        let name = names[i]
+    for name in dir.files() {
         if is_text_name(name) == 1 {
-            let prefix = str_concat(rel, str_concat(name, ":"))
-            total = total + grep_file(pattern, path_join(dir, name), prefix, show_lines)
+            total += grep_file(pattern, path_join(dir, name), f"{rel}{name}:", show_lines)
         }
-        i = i + 1
     }
-    return total
+    total
 }
 
 fn grep_tree(pattern: Str, dir: Str, rel: Str, show_lines: Int) -> Int {
     let mut total = grep_dir(pattern, dir, rel, show_lines)
-    let subs: List<Str> = []
-    let m = fs_list_dirs(dir, subs)
-    let mut j = 0
-    while j < m {
-        let name = subs[j]
-        let child_rel = str_concat(rel, str_concat(name, "/"))
-        total = total + @(pattern, path_join(dir, name), child_rel, show_lines)
-        j = j + 1
+    for name in dir.dirs() {
+        total += @(pattern, path_join(dir, name), f"{rel}{name}/", show_lines)
     }
-    return total
+    total
 }
 
 fn run_grep(pattern: Str, path: Str, show_lines: Int, recurse: Int) -> Int {
     if pattern.len() == 0 {
-        let e1 = eprint("error: empty pattern")
+        eprint("error: empty pattern")
         return 1
     }
     if path == "-" {
         return grep_body(pattern, stdin_read_all(), "", show_lines)
     }
-    if fs_is_dir(path) == 1 {
+    if path.is_dir() {
         if recurse == 1 {
             return grep_tree(pattern, path, "", show_lines)
         }
         return grep_dir(pattern, path, "", show_lines)
     }
-    if fs_exists(path) == 1 {
+    if path.exists() {
         return grep_file(pattern, path, "", show_lines)
     }
-    let e2 = eprint("error: path not found")
-    return 3
+    eprint("error: path not found")
+    3
 }
 
 fn usage() -> Int {
     print("usage: vaisgrep <pattern> <file-or-dir>   (use - for stdin)")
     print("       vaisgrep -c <pattern> <file-or-dir>")
     print("       vaisgrep -r <pattern> <dir>")
-    return 1
+    1
 }
 
 fn self_test() -> Int {
@@ -99,16 +85,13 @@ fn self_test() -> Int {
     let f1 = path_join(dir, "alpha.txt")
     let f2 = path_join(dir, "beta.vais")
     let f3 = path_join(dir, "skip.bin")
-    let lf = str_byte(10)
-    let body1 = str_concat("cache line one", str_concat(lf, str_concat("plain line", str_concat(lf, "cache line two"))))
-    let body2 = str_concat("let cache = 1", str_concat(lf, "let other = 2"))
-    if fs_write_text(f1, body1) != 0 { return 2 }
-    if fs_write_text(f2, body2) != 0 { return 3 }
-    if fs_write_text(f3, "cache cache cache") != 0 { return 4 }
+    if f1.write("cache line one\nplain line\ncache line two") != 0 { return 2 }
+    if f2.write("let cache = 1\nlet other = 2") != 0 { return 3 }
+    if f3.write("cache cache cache") != 0 { return 4 }
 
     # Single file: matching lines carry 1-based numbers.
     let hits: List<Str> = []
-    let body = fs_read_text(f1)
+    let body = f1.read()
     if match_lines_into(body, "cache", hits) != 2 { return 5 }
     if hits[0] != "1: cache line one" { return 6 }
     if hits[1] != "3: cache line two" { return 7 }
@@ -122,23 +105,26 @@ fn self_test() -> Int {
     if is_text_name("beta.vais") != 1 { return 11 }
     if is_text_name("notes.md") != 1 { return 12 }
     if is_text_name("skip.bin") != 0 { return 13 }
-    if fs_is_dir(dir) != 1 { return 15 }
-    if fs_is_dir(f1) != 0 { return 16 }
-    if fs_is_dir(path_join(dir, "no-such")) != 0 { return 17 }
-    let dir_total = count_matches(fs_read_text(f1), "cache") + count_matches(fs_read_text(f2), "cache")
+    if dir.is_dir() != 1 { return 15 }
+    if f1.is_dir() != 0 { return 16 }
+    let ghost = path_join(dir, "no-such")
+    if ghost.is_dir() != 0 { return 17 }
+    let dir_total = count_matches(f1.read(), "cache") + count_matches(f2.read(), "cache")
     if dir_total != 3 { return 14 }
 
     # Recursive walk sums nested subdirectories through fs_list_dirs.
     let sub = path_join(dir, "nested")
     if fs_mkdirs(path_join(sub, "deeper")) != 0 { return 18 }
-    if fs_write_text(path_join(sub, "d.txt"), "cache nested") != 0 { return 19 }
-    if fs_write_text(path_join(sub, "deeper/e.md"), "cache deep") != 0 { return 22 }
+    let fd = path_join(sub, "d.txt")
+    let fe = path_join(sub, "deeper/e.md")
+    if fd.write("cache nested") != 0 { return 19 }
+    if fe.write("cache deep") != 0 { return 22 }
     if tree_matches("cache", dir) != 5 { return 23 }
     if tree_matches("cache", sub) != 2 { return 24 }
 
     # 2 file hits * 3 dir hits * 7 = 42
     let final_hits: List<Str> = []
-    return match_lines_into(body, "cache", final_hits) * dir_total * 7
+    match_lines_into(body, "cache", final_hits) * dir_total * 7
 }
 
 fn main() -> Int {
@@ -153,5 +139,5 @@ fn main() -> Int {
         return run_grep(proc_arg(1), proc_arg(2), 1, 1)
     }
     if proc_argc() != 2 { return usage() }
-    return run_grep(first, proc_arg(1), 1, 0)
+    run_grep(first, proc_arg(1), 1, 0)
 }

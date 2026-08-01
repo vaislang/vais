@@ -13,31 +13,28 @@
 fn eprint(msg: Str) -> Int {
     let w = stderr_write(msg)
     let lf = stderr_write(str_byte(10))
-    return 0
+    0
 }
 
 fn write_one(path: Str, body: Str, append: Int) -> Int {
     if append == 1 { return fs_append_text(path, body) }
-    return fs_write_text(path, body)
+    path.write(body)
 }
 
 fn write_files(files: List<Str>, body: Str, append: Int) -> Int {
     let mut status = 0
-    let mut i = 0
-    while i < files.len() {
-        let path = files[i]
+    for path in files {
         if write_one(path, body, append) != 0 {
-            eprint(str_concat("error: cannot write: ", path))
+            eprint(f"error: cannot write: {path}")
             status = 3
         }
-        i = i + 1
     }
-    return status
+    status
 }
 
 fn run_tee(files: List<Str>, body: Str, append: Int) -> Int {
     let out = stdout_write(body)
-    return write_files(files, body, append)
+    write_files(files, body, append)
 }
 
 fn self_test() -> Int {
@@ -47,32 +44,28 @@ fn self_test() -> Int {
 
     # Truncating tee writes the same body to every file (write_files is the
     # file half of run_tee — the stdout half stays out of the self-test).
-    let files: List<Str> = []
-    files.push(f1)
-    files.push(f2)
+    let files: List<Str> = [f1, f2]
     if write_files(files, "tee:", 0) != 0 { return 1 }
-    if fs_read_text(f1) != "tee:" { return 2 }
-    if fs_read_text(f2) != "tee:" { return 3 }
+    if f1.read() != "tee:" { return 2 }
+    if f2.read() != "tee:" { return 3 }
 
     # Append mode accumulates on both files.
     if write_files(files, "more", 1) != 0 { return 4 }
-    if fs_read_text(f1) != "tee:more" { return 5 }
-    if fs_read_text(f2) != "tee:more" { return 6 }
+    if f1.read() != "tee:more" { return 5 }
+    if f2.read() != "tee:more" { return 6 }
 
     # Truncate mode resets accumulated bodies.
     if write_files(files, "reset", 0) != 0 { return 7 }
-    if fs_read_text(f1) != "reset" { return 8 }
+    if f1.read() != "reset" { return 8 }
 
     # A bad path reports status 3 but the good file still receives bytes.
-    let mixed: List<Str> = []
-    mixed.push(path_join(root, "vais-e362-no-such-dir/x.txt"))
-    mixed.push(f2)
+    let mixed: List<Str> = [path_join(root, "vais-e362-no-such-dir/x.txt"), f2]
     if write_files(mixed, "kept", 0) != 3 { return 9 }
-    if fs_read_text(f2) != "kept" { return 10 }
+    if f2.read() != "kept" { return 10 }
 
     # 8 accumulated bytes ("tee:more") * 5 + 2 = 42
     let acc = 8
-    return acc * 5 + 2
+    acc * 5 + 2
 }
 
 fn main() -> Int {
@@ -87,18 +80,17 @@ fn main() -> Int {
             let a = proc_arg(start)
             if a == "-a" {
                 append = 1
-                start = start + 1
+                start += 1
             } else {
                 scanning = 0
             }
         }
     }
+    let argv = args()
     let files: List<Str> = []
-    let mut i = start
-    while i < proc_argc() {
-        files.push(proc_arg(i))
-        i = i + 1
+    for i in start..argv.len() {
+        files.push(argv[i])
     }
     let body = stdin_read_all()
-    return run_tee(files, body, append)
+    run_tee(files, body, append)
 }

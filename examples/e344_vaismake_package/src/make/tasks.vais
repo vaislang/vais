@@ -5,97 +5,76 @@
 fn line_task_name(line: Str) -> Str {
     let eq = str_index_of(line, "=")
     if eq < 1 { return "" }
-    return str_trim(str_slice(line, 0, eq))
+    let head = str_slice(line, 0, eq)
+    head.trim()
 }
 
 fn line_task_command(line: Str) -> Str {
     let eq = str_index_of(line, "=")
     if eq < 1 { return "" }
-    return str_trim(str_slice(line, eq + 1, line.len() - eq - 1))
+    let tail = str_slice(line, eq + 1, line.len() - eq - 1)
+    tail.trim()
 }
 
 fn is_entry_line(line: Str) -> Int {
-    let body = str_trim(line)
+    let body = line.trim()
     if body.len() == 0 { return 0 }
-    if str_starts_with(body, "#") == 1 { return 0 }
-    if str_starts_with(body, "!") == 1 { return 0 }
+    if body.starts("#") { return 0 }
+    if body.starts("!") { return 0 }
     if str_index_of(body, "=") < 1 { return 0 }
-    return 1
+    1
 }
 
 fn task_env_into(text: Str, out: List<Str>) -> Int {
-    let lines: List<Str> = []
-    let n = str_split_lines_into(text, lines)
-    let mut i = 0
-    while i < n {
-        let body = str_trim(lines[i])
-        if str_starts_with(body, "!env ") == 1 {
-            let entry = str_trim(str_slice(body, 5, body.len() - 5))
+    for raw in text.lines() {
+        let body = raw.trim()
+        if body.starts("!env ") {
+            let cut = str_slice(body, 5, body.len() - 5)
+            let entry = cut.trim()
             if str_index_of(entry, "=") > 0 {
                 out.push(entry)
             }
         }
-        i = i + 1
     }
-    return out.len()
+    out.len()
 }
 
 fn task_names_into(text: Str, out: List<Str>) -> Int {
-    let lines: List<Str> = []
-    let n = str_split_lines_into(text, lines)
-    let mut i = 0
-    while i < n {
-        let line = lines[i]
+    for line in text.lines() {
         if is_entry_line(line) == 1 {
             out.push(line_task_name(line))
         }
-        i = i + 1
     }
-    return out.len()
+    out.len()
 }
 
 fn task_command(text: Str, name: Str) -> Str {
-    let lines: List<Str> = []
-    let n = str_split_lines_into(text, lines)
-    let mut i = 0
-    while i < n {
-        let line = lines[i]
-        if is_entry_line(line) == 1 {
-            if line_task_name(line) == name {
-                return line_task_command(line)
-            }
+    for line in text.lines() {
+        if is_entry_line(line) == 1 and line_task_name(line) == name {
+            return line_task_command(line)
         }
-        i = i + 1
     }
-    return ""
+    ""
 }
 
 fn command_argv_into(command: Str, out: List<Str>) -> Int {
-    let n = str_split_ws_into(command, out)
-    return n
+    str_split_ws_into(command, out)
 }
 
 fn task_needs_into(text: Str, name: Str, out: List<Str>) -> Int {
-    let lines: List<Str> = []
-    let n = str_split_lines_into(text, lines)
-    let mut i = 0
-    while i < n {
-        let body = str_trim(lines[i])
-        if str_starts_with(body, "!needs ") == 1 {
-            let rest = str_trim(str_slice(body, 7, body.len() - 7))
+    for raw in text.lines() {
+        let body = raw.trim()
+        if body.starts("!needs ") {
+            let cut = str_slice(body, 7, body.len() - 7)
+            let rest = cut.trim()
             let words: List<Str> = []
             let m = str_split_ws_into(rest, words)
-            if m > 1 {
-                if words[0] == name {
-                    let mut j = 1
-                    while j < m {
-                        out.push(words[j])
-                        j = j + 1
-                    }
+            if m > 1 and words[0] == name {
+                for j in 1..m {
+                    out.push(words[j])
                 }
             }
         }
-        i = i + 1
     }
-    return out.len()
+    out.len()
 }

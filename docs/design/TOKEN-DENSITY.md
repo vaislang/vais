@@ -198,6 +198,38 @@ now below TypeScript (1,705) and 9% under Rust, with Python (1,511) 11%
 ahead — the remaining gap is stdlib expressivity (enumerate-style
 pipelines, comprehensions), tracked as Stage 3 candidates.
 
+## Fleet Migration (2026-08-01)
+
+The eleven landed CLI tools plus the vaisdb report/dispatch paths were
+migrated in place to the promoted surface — behavior-identical (every
+package self-test stays 42/42 on both engines, the vaisdb workflow and
+vaisfmt hygiene gates stay green) and measured with comments included,
+so these are conservative whole-file numbers, not code-only:
+
+| Tool | before | after | delta |
+| --- | --- | --- | --- |
+| vaisgrep | 2,156 | 1,747 | -19.0% |
+| vaismake | 2,821 | 2,474 | -12.3% |
+| vaisfmt | 1,855 | 1,600 | -13.7% |
+| vaisbench | 1,479 | 1,225 | -17.2% |
+| vaisdiff | 1,687 | 1,421 | -15.8% |
+| vaiswc | 1,272 | 997 | -21.6% |
+| vaisbox | 1,089 | 855 | -21.5% |
+| vaissort | 1,616 | 1,409 | -12.8% |
+| vaisenv | 566 | 497 | -12.2% |
+| vaistee | 962 | 892 | -7.3% |
+| vaiscut | 1,147 | 1,000 | -12.8% |
+| vaisdb (report+main) | 6,692 | 6,430 | -3.9% |
+| Total | 23,342 | 20,547 | **-12.0%** |
+
+The vaisdb posting-index internals (`vaisdb/index.vais`) stay in the
+explicit byte-level style on purpose — the sharded posting machinery is
+correctness-critical and its loops are not idiom-shaped. Migration also
+field-tested the new diagnostics: the literal-in-receiver front error
+fired twice (bind-first fixes), the direct bare-builtin-statement bound
+surfaced once, and the full-engine eager `or` divergence was caught by a
+self-test trap and filed as a follow-up.
+
 ## Macro Data Points
 
 - `compiler/self/fixpoint_full.vais` = 247.6k o200k tokens (23.1k lines,

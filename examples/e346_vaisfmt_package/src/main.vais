@@ -11,43 +11,32 @@ import fmt.clean
 fn eprint(msg: Str) -> Int {
     let w = stderr_write(msg)
     let lf = stderr_write(str_byte(10))
-    return 0
+    0
 }
 
 fn check_file(path: Str, rel: Str, fix: Int) -> Int {
-    let text = fs_read_text(path)
+    let text = path.read()
     if needs_format(text) == 0 { return 0 }
     if fix == 1 {
-        if fs_write_text(path, normalize_text(text)) != 0 { return 0 }
-        print(str_concat("formatted ", rel))
+        if path.write(normalize_text(text)) != 0 { return 0 }
+        print(f"formatted {rel}")
         return 1
     }
-    print(str_concat("dirty ", rel))
-    return 1
+    print(f"dirty {rel}")
+    1
 }
 
 fn walk(path: Str, rel: Str, fix: Int) -> Int {
-    let names: List<Str> = []
-    let n = fs_list_files(path, names)
     let mut total = 0
-    let mut i = 0
-    while i < n {
-        let name = names[i]
-        if str_ends_with(name, ".vais") == 1 {
-            total = total + check_file(path_join(path, name), str_concat(rel, name), fix)
+    for name in path.files() {
+        if name.ends(".vais") {
+            total += check_file(path_join(path, name), f"{rel}{name}", fix)
         }
-        i = i + 1
     }
-    let subs: List<Str> = []
-    let m = fs_list_dirs(path, subs)
-    let mut j = 0
-    while j < m {
-        let sub = subs[j]
-        let child_rel = str_concat(rel, str_concat(sub, "/"))
-        total = total + @(path_join(path, sub), child_rel, fix)
-        j = j + 1
+    for sub in path.dirs() {
+        total += @(path_join(path, sub), f"{rel}{sub}/", fix)
     }
-    return total
+    total
 }
 
 fn run_fmt(path: Str, fix: Int) -> Int {
@@ -60,28 +49,27 @@ fn run_fmt(path: Str, fix: Int) -> Int {
         if wrote < 0 { return 3 }
         return 0
     }
-    if fs_is_dir(path) == 1 {
+    if path.is_dir() {
         return walk(path, "", fix)
     }
-    if fs_exists(path) == 1 {
+    if path.exists() {
         return check_file(path, path_basename(path), fix)
     }
-    let e1 = eprint("error: path not found")
-    return 3
+    eprint("error: path not found")
+    3
 }
 
 fn usage() -> Int {
     print("usage: vaisfmt -c <file-or-dir>   (use - for stdin: dirty exits 1)")
     print("       vaisfmt <file-or-dir>      (use - to filter stdin to stdout)")
-    return 2
+    2
 }
 
 fn self_test() -> Int {
-    let lf = str_byte(10)
     # Normalization: trailing spaces and tabs go, blank lines survive.
-    let dirty = str_concat("fn main() -> Int {   ", str_concat(lf, str_concat("    return 42", str_concat(str_byte(9), str_concat(lf, str_concat(lf, "}"))))))
+    let dirty = "fn main() -> Int {   \n    return 42\t\n\n}"
     let clean = normalize_text(dirty)
-    let expected = str_concat("fn main() -> Int {", str_concat(lf, str_concat("    return 42", str_concat(lf, str_concat(lf, str_concat("}", lf))))))
+    let expected = "fn main() -> Int {\n    return 42\n\n}\n"
     if clean != expected { return 1 }
     if needs_format(dirty) != 1 { return 2 }
     if needs_format(clean) != 0 { return 3 }
@@ -94,30 +82,31 @@ fn self_test() -> Int {
     let root = fs_temp_dir()
     let dir = path_join(root, "vais-e346-selftest")
     if fs_mkdirs(path_join(dir, "sub")) != 0 { return 8 }
-    if fs_write_text(path_join(dir, "a.vais"), dirty) != 0 { return 9 }
-    if fs_write_text(path_join(dir, "sub/b.vais"), clean) != 0 { return 10 }
-    if fs_write_text(path_join(dir, "skip.txt"), "notvais   ") != 0 { return 11 }
+    let fa = path_join(dir, "a.vais")
+    let fb = path_join(dir, "sub/b.vais")
+    let fskip = path_join(dir, "skip.txt")
+    if fa.write(dirty) != 0 { return 9 }
+    if fb.write(clean) != 0 { return 10 }
+    if fskip.write("notvais   ") != 0 { return 11 }
     if walk(dir, "", 0) != 1 { return 12 }
     if walk(dir, "", 1) != 1 { return 13 }
     if walk(dir, "", 0) != 0 { return 14 }
-    if fs_read_text(path_join(dir, "a.vais")) != clean { return 15 }
+    if fa.read() != clean { return 15 }
 
     # Streaming path: far beyond the 4095 list-slot contract that a
     # split-lines materialization would hit (the self-host source is ~23k
     # lines), a generated 5000-line body normalizes to itself.
     let big = str_builder_new()
-    let mut k = 0
-    while k < 5000 {
+    for k in 0..5000 {
         let r1 = str_builder_append(big, "line body")
         let r2 = str_builder_push(big, 10)
-        k = k + 1
     }
     let big_text = str_builder_finish(big)
     if needs_format(big_text) != 0 { return 16 }
     if normalize_text(big_text) != big_text { return 17 }
 
     # normalized text is 36 bytes; 36 + 6 = 42
-    return clean.len() + 6
+    clean.len() + 6
 }
 
 fn main() -> Int {
@@ -128,5 +117,5 @@ fn main() -> Int {
         return run_fmt(proc_arg(1), 0)
     }
     if proc_argc() != 1 { return usage() }
-    return run_fmt(first, 1)
+    run_fmt(first, 1)
 }

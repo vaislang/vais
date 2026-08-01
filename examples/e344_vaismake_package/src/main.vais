@@ -11,9 +11,9 @@ import make.tasks
 struct ProcessResult { code: Int, stdout: Str, stderr: Str }
 
 fn load_tasks(path: Str) -> Str {
-    if fs_exists(path) != 1 { return "" }
-    if fs_is_dir(path) == 1 { return "" }
-    return fs_read_text(path)
+    if not path.exists() { return "" }
+    if path.is_dir() { return "" }
+    path.read()
 }
 
 fn run_list(path: Str) -> Int {
@@ -24,12 +24,10 @@ fn run_list(path: Str) -> Int {
     }
     let names: List<Str> = []
     let count = task_names_into(text, names)
-    let mut i = 0
-    while i < count {
-        print(names[i])
-        i = i + 1
+    for name in names {
+        print(name)
     }
-    return count
+    count
 }
 
 fn task_argv(path: Str, name: Str, out: List<Str>) -> Int {
@@ -43,12 +41,11 @@ fn task_argv(path: Str, name: Str, out: List<Str>) -> Int {
         print("error: unknown task")
         return 3
     }
-    let n = command_argv_into(command, out)
-    if n == 0 {
+    if command_argv_into(command, out) == 0 {
         print("error: empty command")
         return 1
     }
-    return 0
+    0
 }
 
 fn run_single_task(path: Str, name: Str) -> Int {
@@ -58,7 +55,7 @@ fn run_single_task(path: Str, name: Str) -> Int {
     let env: List<Str> = []
     let envc = task_env_into(load_tasks(path), env)
     if envc > 0 { return proc_run_env(argv, env) }
-    return proc_run(argv)
+    proc_run(argv)
 }
 
 fn run_task_tree(path: Str, name: Str, state: Map<Str,Int>) -> Int {
@@ -72,21 +69,19 @@ fn run_task_tree(path: Str, name: Str, state: Map<Str,Int>) -> Int {
     state.insert(name, 1)
     let deps: List<Str> = []
     let depc = task_needs_into(load_tasks(path), name, deps)
-    let mut i = 0
-    while i < depc {
-        let code = @(path, deps[i], state)
+    for dep in deps {
+        let code = @(path, dep, state)
         if code != 0 { return code }
-        i = i + 1
     }
     let own = run_single_task(path, name)
     if own != 0 { return own }
     state.insert(name, 2)
-    return 0
+    0
 }
 
 fn run_task(path: Str, name: Str) -> Int {
     let state: Map<Str,Int> = {}
-    return run_task_tree(path, name, state)
+    run_task_tree(path, name, state)
 }
 
 fn run_task_capture(path: Str, name: Str) -> Int {
@@ -94,9 +89,9 @@ fn run_task_capture(path: Str, name: Str) -> Int {
     let bad = task_argv(path, name, argv)
     if bad != 0 { return bad }
     let got = proc_capture(argv)
-    let body = str_trim(got.stdout)
+    let body = got.stdout.trim()
     if body.len() > 0 { print(body) }
-    return got.code
+    got.code
 }
 
 fn usage() -> Int {
@@ -105,12 +100,11 @@ fn usage() -> Int {
     print("       vaismake -o <tasks-file> <task>")
     print("tasks file: `name = command args...` lines; `!env NAME=VALUE` lines")
     print("overlay the child environment in run mode (-o capture runs without env)")
-    return 1
+    1
 }
 
 fn self_test() -> Int {
-    let lf = str_byte(10)
-    let text = str_concat("# demo tasks", str_concat(lf, str_concat("hello = /bin/echo hi there", str_concat(lf, str_concat("ok = /usr/bin/true", str_concat(lf, "bad = /usr/bin/false"))))))
+    let text = "# demo tasks\nhello = /bin/echo hi there\nok = /usr/bin/true\nbad = /usr/bin/false"
 
     # Parsing: names, commands, comment/blank filtering.
     let names: List<Str> = []
@@ -125,7 +119,7 @@ fn self_test() -> Int {
     if argv[2] != "there" { return 8 }
 
     # `!env NAME=VALUE` lines overlay the child environment in run mode.
-    let env_text = str_concat("!env VAIS_MAKE_FLAG=on", str_concat(lf, "flag = /usr/bin/printenv VAIS_MAKE_FLAG"))
+    let env_text = "!env VAIS_MAKE_FLAG=on\nflag = /usr/bin/printenv VAIS_MAKE_FLAG"
     let env_entries: List<Str> = []
     if task_env_into(env_text, env_entries) != 1 { return 15 }
     if env_entries[0] != "VAIS_MAKE_FLAG=on" { return 16 }
@@ -134,12 +128,12 @@ fn self_test() -> Int {
     if task_names_into(env_text, env_names) != 1 { return 18 }
     let env_root = fs_temp_dir()
     let env_path = path_join(env_root, "vais-e344-selftest-env-tasks.txt")
-    if fs_write_text(env_path, env_text) != 0 { return 19 }
+    if env_path.write(env_text) != 0 { return 19 }
     if run_task(env_path, "flag") != 0 { return 20 }
 
     # Dependencies: `!needs task dep...` runs deps first, once, and refuses
     # cycles. bad exits 1, so a task needing bad stops before its own command.
-    let dep_text_a = str_concat(text, str_concat(lf, str_concat("!needs bad ok", str_concat(lf, "!needs hello ok"))))
+    let dep_text_a = f"{text}\n!needs bad ok\n!needs hello ok"
     let deps: List<Str> = []
     if task_needs_into(dep_text_a, "bad", deps) != 1 { return 25 }
     if deps[0] != "ok" { return 26 }
@@ -147,27 +141,27 @@ fn self_test() -> Int {
     if task_needs_into(dep_text_a, "missingname", none_deps) != 0 { return 27 }
     let dep_root = fs_temp_dir()
     let dep_path = path_join(dep_root, "vais-e344-selftest-deps.txt")
-    if fs_write_text(dep_path, dep_text_a) != 0 { return 28 }
+    if dep_path.write(dep_text_a) != 0 { return 28 }
     if run_task(dep_path, "bad") != 1 { return 29 }
-    let cycle_text = str_concat(text, str_concat(lf, str_concat("!needs ok hello", str_concat(lf, "!needs hello ok"))))
-    if fs_write_text(dep_path, cycle_text) != 0 { return 30 }
+    let cycle_text = f"{text}\n!needs ok hello\n!needs hello ok"
+    if dep_path.write(cycle_text) != 0 { return 30 }
     if run_task(dep_path, "ok") != 4 { return 31 }
 
     # Process surface: run and capture through a real tasks file.
     let root = fs_temp_dir()
     let path = path_join(root, "vais-e344-selftest-tasks.txt")
-    if fs_write_text(path, text) != 0 { return 9 }
+    if path.write(text) != 0 { return 9 }
     if run_task(path, "ok") != 0 { return 10 }
     if run_task(path, "bad") != 1 { return 11 }
     let capture: List<Str> = []
     if task_argv(path, "hello", capture) != 0 { return 12 }
     let got = proc_capture(capture)
     if got.code != 0 { return 13 }
-    let out_text = str_trim(got.stdout)
+    let out_text = got.stdout.trim()
     if out_text != "hi there" { return 14 }
 
     # 3 tasks * (3 argv words + 8 stdout bytes + 3) = 42
-    return 3 * (3 + out_text.len() + 3)
+    3 * (3 + out_text.len() + 3)
 }
 
 fn main() -> Int {
@@ -179,5 +173,5 @@ fn main() -> Int {
     }
     if proc_argc() == 1 { return run_list(first) }
     if proc_argc() != 2 { return usage() }
-    return run_task(first, proc_arg(1))
+    run_task(first, proc_arg(1))
 }

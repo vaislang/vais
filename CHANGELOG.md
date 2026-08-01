@@ -4,6 +4,25 @@
 
 ### Changed
 
+- Migrated the eleven landed CLI tools (vaisgrep, vaismake, vaisfmt,
+  vaisbench, vaisdiff, vaiswc, vaisbox, vaissort, vaisenv, vaistee,
+  vaiscut) plus the vaisdb report/dispatch paths to the Token-Density
+  surface in place: f-strings, receiver and collection methods, bare
+  predicate conditions, compound assignment, for-each/range loops with
+  break, enumerate destructuring, expression bodies, and args()
+  bindings. Behavior-identical — every package self-test stays 42/42 on
+  both engines and the vaisdb workflow and vaisfmt hygiene gates stay
+  green — and measured with comments included the fleet drops
+  23,342 -> 20,547 o200k tokens (-12.0%; vaiswc -21.6%, vaisbox -21.5%,
+  vaisgrep -19.0%). The vaisdb posting-index internals deliberately stay
+  in the explicit byte-level style. The migration doubled as a
+  diagnostics field test (two literal-in-receiver front errors, one
+  direct bare-builtin-statement bound) and caught a real semantics
+  divergence — the full engine evaluates `or` operands eagerly where the
+  direct engine short-circuits, so an index-guarding
+  `j == 0 or xs[j - 1]...` pattern traps on full only — filed as a
+  follow-up chip; the migrated code keeps nested index guards.
+
 - Fixed the two follow-ups filed from the rebinding cycle, both
   full-engine divergences (the direct engine was already correct).
   First, Str-valued Map lookups now bind as Str locals:

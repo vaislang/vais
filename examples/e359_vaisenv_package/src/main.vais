@@ -12,29 +12,26 @@
 fn eprint(msg: Str) -> Int {
     let w = stderr_write(msg)
     let lf = stderr_write(str_byte(10))
-    return 0
+    0
 }
 
 fn run_env(names: List<Str>) -> Int {
     let mut status = 0
-    let mut i = 0
-    while i < names.len() {
-        let name = names[i]
+    for name in names {
         let value = env_get(name)
         if value.len() == 0 {
-            eprint(str_concat("error: variable not set: ", name))
+            eprint(f"error: variable not set: {name}")
             status = 3
         } else {
             print(value)
         }
-        i = i + 1
     }
-    return status
+    status
 }
 
 fn usage() -> Int {
     eprint("usage: vaisenv <NAME...>")
-    return 2
+    2
 }
 
 fn self_test() -> Int {
@@ -54,17 +51,12 @@ fn self_test() -> Int {
     if env_get("") != "" { return 4 }
 
     # 6 * 7 = 42
-    return 6 * 7
+    6 * 7
 }
 
 fn main() -> Int {
     if proc_argc() == 0 { return self_test() }
-    let names: List<Str> = []
-    let mut i = 0
-    while i < proc_argc() {
-        names.push(proc_arg(i))
-        i = i + 1
-    }
+    let names = args()
     if names.len() == 0 { return usage() }
-    return run_env(names)
+    run_env(names)
 }

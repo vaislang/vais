@@ -9,57 +9,50 @@
 # (the release-corpus entry).
 import bench.stats
 
-fn bench_argv(out: List<Str>) -> Int {
-    let total = proc_argc()
-    let mut i = 1
-    while i < total {
-        out.push(proc_arg(i))
-        i = i + 1
+fn tail_argv(from: Int, out: List<Str>) -> Int {
+    let argv = args()
+    for i in from..argv.len() {
+        out.push(argv[i])
     }
-    return out.len()
+    out.len()
+}
+
+fn timed_runs(n: Int, argv: List<Str>, durations: List<Int>) -> Int {
+    for i in 0..n {
+        let t0 = time_millis()
+        let code = proc_run(argv)
+        let t1 = time_millis()
+        if code != 0 { return code }
+        durations.push(t1 - t0)
+    }
+    0
 }
 
 fn run_bench_budget(n: Int, budget_ms: Int, argv: List<Str>) -> Int {
     let durations: List<Int> = []
-    let mut i = 0
-    while i < n {
-        let t0 = time_millis()
-        let code = proc_run(argv)
-        let t1 = time_millis()
-        if code != 0 { return code }
-        durations.push(t1 - t0)
-        i = i + 1
-    }
+    let code = timed_runs(n, argv, durations)
+    if code != 0 { return code }
     let med = stats_median(durations)
-    let line = str_concat("runs=", str_concat(Str(durations.len()), str_concat(" median=", str_concat(Str(med), str_concat(" budget=", str_concat(Str(budget_ms), " ms"))))))
-    print(line)
+    print(f"runs={durations.len()} median={med} budget={budget_ms} ms")
     if med > budget_ms {
-        print(str_concat("budget exceeded: median=", str_concat(Str(med), str_concat(" > ", str_concat(Str(budget_ms), " ms")))))
+        print(f"budget exceeded: median={med} > {budget_ms} ms")
         return 3
     }
-    return 0
+    0
 }
 
 fn run_bench(n: Int, argv: List<Str>) -> Int {
     let durations: List<Int> = []
-    let mut i = 0
-    while i < n {
-        let t0 = time_millis()
-        let code = proc_run(argv)
-        let t1 = time_millis()
-        if code != 0 { return code }
-        durations.push(t1 - t0)
-        i = i + 1
-    }
-    let line = str_concat("runs=", str_concat(Str(durations.len()), str_concat(" min=", str_concat(Str(stats_min(durations)), str_concat(" median=", str_concat(Str(stats_median(durations)), str_concat(" avg=", str_concat(Str(stats_avg(durations)), str_concat(" max=", str_concat(Str(stats_max(durations)), " ms"))))))))))
-    print(line)
-    return 0
+    let code = timed_runs(n, argv, durations)
+    if code != 0 { return code }
+    print(f"runs={durations.len()} min={stats_min(durations)} median={stats_median(durations)} avg={stats_avg(durations)} max={stats_max(durations)} ms")
+    0
 }
 
 fn usage() -> Int {
     print("usage: vaisbench <n> <cmd> [args...]")
     print("       vaisbench -b <budget-ms> <n> <cmd> [args...]")
-    return 2
+    2
 }
 
 fn self_test() -> Int {
@@ -73,45 +66,22 @@ fn self_test() -> Int {
     if stats_median(one) != 11 { return 5 }
 
     # Real timed runs: /usr/bin/true three times, all zero exits.
-    let argv: List<Str> = []
-    argv.push("/usr/bin/true")
+    let argv: List<Str> = ["/usr/bin/true"]
     let durations: List<Int> = []
-    let mut i = 0
-    while i < 3 {
-        let t0 = time_millis()
-        let code = proc_run(argv)
-        let t1 = time_millis()
-        if code != 0 { return 6 }
-        let d = t1 - t0
-        if d < 0 { return 7 }
-        durations.push(d)
-        i = i + 1
-    }
+    if timed_runs(3, argv, durations) != 0 { return 6 }
     if durations.len() != 3 { return 8 }
+    if stats_min(durations) < 0 { return 7 }
     if stats_min(durations) > stats_max(durations) { return 9 }
 
     # A failing child propagates its exit.
-    let bad: List<Str> = []
-    bad.push("/usr/bin/false")
+    let bad: List<Str> = ["/usr/bin/false"]
     if proc_run(bad) != 1 { return 10 }
 
     # Budget mode: a generous budget passes, an impossible one exits 3.
-    let quick: List<Str> = []
-    quick.push("/usr/bin/true")
-    if run_bench_budget(2, 60000, quick) != 0 { return 11 }
-    if run_bench_budget(2, 0 - 1, quick) != 3 { return 12 }
+    if run_bench_budget(2, 60000, argv) != 0 { return 11 }
+    if run_bench_budget(2, 0 - 1, argv) != 3 { return 12 }
 
-    return 42
-}
-
-fn budget_argv(out: List<Str>) -> Int {
-    let total = proc_argc()
-    let mut i = 3
-    while i < total {
-        out.push(proc_arg(i))
-        i = i + 1
-    }
-    return out.len()
+    42
 }
 
 fn main() -> Int {
@@ -123,15 +93,13 @@ fn main() -> Int {
         let n = parse_int(proc_arg(2))
         if n < 1 { return usage() }
         let argv: List<Str> = []
-        let count = budget_argv(argv)
-        if count == 0 { return usage() }
+        if tail_argv(3, argv) == 0 { return usage() }
         return run_bench_budget(n, budget, argv)
     }
     if proc_argc() < 2 { return usage() }
-    let n = parse_int(proc_arg(0))
+    let n = parse_int(first)
     if n < 1 { return usage() }
     let argv: List<Str> = []
-    let count = bench_argv(argv)
-    if count == 0 { return usage() }
-    return run_bench(n, argv)
+    if tail_argv(1, argv) == 0 { return usage() }
+    run_bench(n, argv)
 }

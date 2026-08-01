@@ -13,14 +13,11 @@ fn top_doc_score(index_dir: Str, query: Map<Str,Int>) -> Int {
     let scores: Map<Str,Int> = {}
     query_scores_into(index_dir, query, scores)
     let mut best_score = 0 - 1
-    let mut i = 0
-    while i < count {
-        let doc_id = ids[i]
+    for doc_id in ids {
         let score = scores.get(doc_id, 0)
         if score > best_score { best_score = score }
-        i = i + 1
     }
-    return best_score
+    best_score
 }
 
 fn top_doc_id(index_dir: Str, query: Map<Str,Int>) -> Str {
@@ -30,17 +27,14 @@ fn top_doc_id(index_dir: Str, query: Map<Str,Int>) -> Str {
     query_scores_into(index_dir, query, scores)
     let mut best_doc = ""
     let mut best_score = 0 - 1
-    let mut i = 0
-    while i < count {
-        let doc_id = ids[i]
+    for doc_id in ids {
         let score = scores.get(doc_id, 0)
         if score > best_score {
             best_score = score
             best_doc = doc_id
         }
-        i = i + 1
     }
-    return best_doc
+    best_doc
 }
 
 fn ranked_docs_into(index_dir: Str, query: Map<Str,Int>, out: List<RankedDoc>) -> Int {
@@ -48,28 +42,23 @@ fn ranked_docs_into(index_dir: Str, query: Map<Str,Int>, out: List<RankedDoc>) -
     let count = docs_list_into(index_dir, ids)
     let scores: Map<Str,Int> = {}
     query_scores_into(index_dir, query, scores)
-    let mut i = 0
-    while i < count {
-        let doc_id = ids[i]
+    for doc_id in ids {
         out.push(RankedDoc { doc_id: doc_id, score: scores.get(doc_id, 0) })
-        i = i + 1
     }
     out.sort_by_desc(|d| d.score)
-    return count
+    count
 }
 
 fn rank_lines(index_dir: Str, query: Map<Str,Int>, k: Int) -> Str {
     let ranked: List<RankedDoc> = []
     let count = ranked_docs_into(index_dir, query, ranked)
-    let lf = str_byte(10)
     let mut report = ""
     let mut limit = k
     if ranked.len() < k { limit = ranked.len() }
-    let mut j = 0
-    while j < limit {
-        let line = str_concat(Str(j + 1), str_concat(". ", str_concat(ranked[j].doc_id, str_concat("=", Str(ranked[j].score)))))
-        if j == 0 { report = line } else { report = str_concat(report, str_concat(lf, line)) }
-        j = j + 1
+    for j in 0..limit {
+        let row = ranked[j]
+        let line = f"{j + 1}. {row.doc_id}={row.score}"
+        if j == 0 { report = line } else { report = f"{report}\n{line}" }
     }
-    return report
+    report
 }

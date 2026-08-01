@@ -7,25 +7,17 @@
 
 fn trimmed_end(text: Str, start: Int, stop: Int) -> Int {
     let mut end = stop
-    let mut go = 1
-    while go == 1 {
-        if end > start {
-            let ch = text[end - 1]
-            if ch == 32 or ch == 9 {
-                end = end - 1
-            } else {
-                go = 0
-            }
-        } else {
-            go = 0
-        }
+    while end > start {
+        let ch = text[end - 1]
+        if ch != 32 and ch != 9 { break }
+        end -= 1
     }
-    return end
+    end
 }
 
 fn line_end_trimmed(line: Str) -> Str {
     let end = trimmed_end(line, 0, line.len())
-    return str_slice(line, 0, end)
+    str_slice(line, 0, end)
 }
 
 fn normalize_text(text: Str) -> Str {
@@ -33,8 +25,7 @@ fn normalize_text(text: Str) -> Str {
     if n == 0 { return "" }
     let b = str_builder_new()
     let mut line_start = 0
-    let mut i = 0
-    while i < n {
+    for i in 0..n {
         if text[i] == 10 {
             let end = trimmed_end(text, line_start, i)
             if end > line_start {
@@ -43,7 +34,6 @@ fn normalize_text(text: Str) -> Str {
             let r2 = str_builder_push(b, 10)
             line_start = i + 1
         }
-        i = i + 1
     }
     if line_start < n {
         let end = trimmed_end(text, line_start, n)
@@ -52,10 +42,10 @@ fn normalize_text(text: Str) -> Str {
         }
         let r4 = str_builder_push(b, 10)
     }
-    return str_builder_finish(b)
+    str_builder_finish(b)
 }
 
 fn needs_format(text: Str) -> Int {
     if normalize_text(text) == text { return 0 }
-    return 1
+    1
 }

@@ -1,55 +1,37 @@
 # Line scanning helpers shared by the vaisgrep subcommand paths.
 
 fn match_lines_into(body: Str, pattern: Str, out: List<Str>) -> Int {
-    let lines: List<Str> = []
-    let n = str_split_lines_into(body, lines)
-    let mut i = 0
-    while i < n {
-        let line = lines[i]
-        if str_contains(line, pattern) == 1 {
-            out.push(str_concat(Str(i + 1), str_concat(": ", line)))
+    for (i, line) in body.lines().enumerate() {
+        if line.has(pattern) {
+            out.push(f"{i + 1}: {line}")
         }
-        i = i + 1
     }
-    return out.len()
+    out.len()
 }
 
 fn count_matches(body: Str, pattern: Str) -> Int {
-    let lines: List<Str> = []
-    let n = str_split_lines_into(body, lines)
-    let mut i = 0
     let mut hits = 0
-    while i < n {
-        if str_contains(lines[i], pattern) == 1 { hits = hits + 1 }
-        i = i + 1
+    for line in body.lines() {
+        if line.has(pattern) { hits += 1 }
     }
-    return hits
+    hits
 }
 
 fn is_text_name(name: Str) -> Int {
-    if str_ends_with(name, ".txt") == 1 { return 1 }
-    if str_ends_with(name, ".vais") == 1 { return 1 }
-    if str_ends_with(name, ".md") == 1 { return 1 }
-    return 0
+    if name.ends(".txt") or name.ends(".vais") or name.ends(".md") { return 1 }
+    0
 }
 
 fn tree_matches(pattern: Str, dir: Str) -> Int {
-    let names: List<Str> = []
-    let n = fs_list_files(dir, names)
     let mut total = 0
-    let mut i = 0
-    while i < n {
-        if is_text_name(names[i]) == 1 {
-            total = total + count_matches(fs_read_text(path_join(dir, names[i])), pattern)
+    for name in dir.files() {
+        if is_text_name(name) == 1 {
+            let fp = path_join(dir, name)
+            total += count_matches(fp.read(), pattern)
         }
-        i = i + 1
     }
-    let subs: List<Str> = []
-    let m = fs_list_dirs(dir, subs)
-    let mut j = 0
-    while j < m {
-        total = total + @(pattern, path_join(dir, subs[j]))
-        j = j + 1
+    for sub in dir.dirs() {
+        total += @(pattern, path_join(dir, sub))
     }
-    return total
+    total
 }

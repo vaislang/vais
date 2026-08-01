@@ -25,8 +25,7 @@ fn run_ingest(index_dir: Str, doc_id: Str, doc_path: Str) -> Int {
         print("error: could not write index")
         return 3
     }
-    let summary = str_concat("ingested ", str_concat(doc_id, str_concat(" terms=", Str(total))))
-    print(summary)
+    print(f"ingested {doc_id} terms={total}")
     return 0
 }
 
@@ -46,8 +45,7 @@ fn run_query(index_dir: Str, doc_id: Str, query_text: Str) -> Int {
         return 1
     }
     let score = doc_score(index_dir, doc_id, query)
-    let line = str_concat("score ", str_concat(doc_id, str_concat("=", Str(score))))
-    print(line)
+    print(f"score {doc_id}={score}")
     return score
 }
 
@@ -72,8 +70,7 @@ fn run_report(index_dir: Str, query_text: Str) -> Int {
         return 3
     }
     let best_doc = top_doc_id(index_dir, query)
-    let line = str_concat("top ", str_concat(best_doc, str_concat("=", Str(best_score))))
-    print(line)
+    print(f"top {best_doc}={best_score}")
     return best_score
 }
 
@@ -81,10 +78,10 @@ fn run_ingest_dir(index_dir: Str, dir: Str) -> Int {
     let flow = ingest_dir_into(index_dir, dir)
     let note = match flow { Ok(count) => count, Err(msg) => msg }
     if flow_failed(note) == 1 {
-        print(str_concat("error: ", note))
+        print(f"error: {note}")
         return 3
     }
-    print(str_concat("ingested ", str_concat(note, " documents")))
+    print(f"ingested {note} documents")
     return 0
 }
 
@@ -102,7 +99,7 @@ fn run_reindex(index_dir: Str, dir: Str) -> Int {
     let flow = reindex_dir_into(index_dir, dir)
     let note = match flow { Ok(rc) => rc, Err(msg) => msg }
     if flow_failed(note) == 1 {
-        print(str_concat("error: ", note))
+        print(f"error: {note}")
         return 3
     }
     let parts = note.split(" ")
@@ -165,34 +162,25 @@ fn run_search(index_dir: Str, query_text: Str, k: Int) -> Int {
     }
     let mut limit = k
     if count < k { limit = count }
-    let mut j = 0
     let mut shown = 0
-    while j < limit {
+    for j in 0..limit {
         let hit = ranked[j]
         if hit.score > 0 {
-            shown = shown + 1
+            shown += 1
             let doc_id = hit.doc_id
             let src = doc_src_path(index_dir, doc_id)
-            let mut line = str_concat(Str(shown), str_concat(". ", str_concat(doc_id, str_concat("=", Str(hit.score)))))
-            if src != "" {
-                if src != "-" {
-                    line = str_concat(line, str_concat(" ", src))
-                }
+            let mut line = f"{shown}. {doc_id}={hit.score}"
+            if src != "" and src != "-" {
+                line = f"{line} {src}"
             }
             print(line)
-            if src != "" {
-                if src != "-" {
-                    if fs_exists(src) == 1 {
-                        let body = fs_read_text(src)
-                        let sn = snippet_from_text(body, query)
-                        if sn.len() > 0 {
-                            print(str_concat("    ", sn))
-                        }
-                    }
+            if src != "" and src != "-" and src.exists() {
+                let sn = snippet_from_text(src.read(), query)
+                if sn.len() > 0 {
+                    print(f"    {sn}")
                 }
             }
         }
-        j = j + 1
     }
     return ranked[0].score
 }
@@ -313,8 +301,7 @@ fn run_ingest_stdin(index_dir: Str, doc_id: Str) -> Int {
         print("error: could not write index")
         return 3
     }
-    let summary = str_concat("ingested ", str_concat(doc_id, str_concat(" terms=", Str(total))))
-    print(summary)
+    print(f"ingested {doc_id} terms={total}")
     return 0
 }
 
@@ -326,10 +313,8 @@ fn run_docs(index_dir: Str) -> Int {
     let ids: List<Str> = []
     let count = docs_list_into(index_dir, ids)
     ids.sort()
-    let mut i = 0
-    while i < count {
-        print(ids[i])
-        i = i + 1
+    for doc_id in ids {
+        print(doc_id)
     }
     return count
 }
@@ -348,8 +333,7 @@ fn run_remove(index_dir: Str, doc_id: Str) -> Int {
         print("error: could not write index")
         return 3
     }
-    let line = str_concat("removed ", str_concat(doc_id, str_concat(" keys=", Str(removed))))
-    print(line)
+    print(f"removed {doc_id} keys={removed}")
     return 0
 }
 
@@ -360,8 +344,7 @@ fn run_stats(index_dir: Str) -> Int {
     }
     let ids: List<Str> = []
     let docs = docs_list_into(index_dir, ids)
-    let line = str_concat("docs=", str_concat(Str(docs), str_concat(" terms=", Str(postings_count(index_dir)))))
-    print(line)
+    print(f"docs={docs} terms={postings_count(index_dir)}")
     return docs
 }
 

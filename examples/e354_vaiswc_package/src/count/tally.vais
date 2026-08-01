@@ -10,22 +10,19 @@ struct Counts {
 
 fn count_lines(text: Str) -> Int {
     let mut n = 0
-    let mut i = 0
-    while i < text.len() {
-        if text[i] == 10 { n = n + 1 }
-        i = i + 1
+    let tn = text.len()
+    for i in 0..tn {
+        if text[i] == 10 { n += 1 }
     }
-    if text.len() > 0 {
-        if text[text.len() - 1] != 10 { n = n + 1 }
-    }
-    return n
+    if tn > 0 and text[tn - 1] != 10 { n += 1 }
+    n
 }
 
 fn count_words(text: Str) -> Int {
     let words: List<Str> = []
-    return str_split_ws_into(text, words)
+    str_split_ws_into(text, words)
 }
 
 fn tally(text: Str) -> Counts {
-    return Counts { lines: count_lines(text), words: count_words(text), bytes: text.len() }
+    Counts { lines: count_lines(text), words: count_words(text), bytes: text.len() }
 }

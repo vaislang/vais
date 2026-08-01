@@ -12,62 +12,54 @@
 fn eprint(msg: Str) -> Int {
     let w = stderr_write(msg)
     let lf = stderr_write(str_byte(10))
-    return 0
+    0
+}
+
+fn roster() -> Str {
+    "vaisdb|vaisgrep|vaismake|vaisfmt|vaisbench|vaisdiff|vaiswc|vaissort|vaisenv|vaistee|vaiscut"
 }
 
 fn known_tool(name: Str) -> Int {
-    if name == "vaisdb" { return 1 }
-    if name == "vaisgrep" { return 1 }
-    if name == "vaismake" { return 1 }
-    if name == "vaisfmt" { return 1 }
-    if name == "vaisbench" { return 1 }
-    if name == "vaisdiff" { return 1 }
-    if name == "vaiswc" { return 1 }
-    if name == "vaissort" { return 1 }
-    if name == "vaisenv" { return 1 }
-    if name == "vaistee" { return 1 }
-    if name == "vaiscut" { return 1 }
-    return 0
+    let fenced = f"|{roster()}|"
+    if fenced.has(f"|{name}|") { return 1 }
+    0
 }
 
 fn tool_list() -> Str {
-    let lf = str_byte(10)
-    return str_concat("vaisdb", str_concat(lf, str_concat("vaisgrep", str_concat(lf, str_concat("vaismake", str_concat(lf, str_concat("vaisfmt", str_concat(lf, str_concat("vaisbench", str_concat(lf, str_concat("vaisdiff", str_concat(lf, str_concat("vaiswc", str_concat(lf, str_concat("vaissort", str_concat(lf, str_concat("vaisenv", str_concat(lf, str_concat("vaistee", str_concat(lf, "vaiscut"))))))))))))))))))))
+    roster().replace("|", "\n")
 }
 
 fn self_dir() -> Str {
-    return path_dirname(proc_self())
+    path_dirname(proc_self())
 }
 
 fn run_tool(tool: Str, arg_start: Int) -> Int {
     if known_tool(tool) == 0 {
-        eprint(str_concat("error: unknown tool: ", tool))
+        eprint(f"error: unknown tool: {tool}")
         return 2
     }
     let target = path_join(self_dir(), tool)
     # Never re-exec ourselves: if the resolved binary is missing or is this
     # very program, dispatch would recurse. Bail loudly instead.
-    if fs_exists(target) != 1 {
-        eprint(str_concat("error: tool binary not found: ", target))
+    if not target.exists() {
+        eprint(f"error: tool binary not found: {target}")
         return 3
     }
     if target == proc_self() {
-        eprint(str_concat("error: refusing to re-exec self as ", tool))
+        eprint(f"error: refusing to re-exec self as {tool}")
         return 3
     }
-    let argv: List<Str> = []
-    argv.push(target)
-    let mut i = arg_start
-    while i < proc_argc() {
-        argv.push(proc_arg(i))
-        i = i + 1
+    let cmd: List<Str> = [target]
+    let argv = args()
+    for i in arg_start..argv.len() {
+        cmd.push(argv[i])
     }
-    return proc_run(argv)
+    proc_run(cmd)
 }
 
 fn usage() -> Int {
     print("usage: vaisbox <tool> [args...]   (or: vaisbox list)")
-    return 2
+    2
 }
 
 fn self_test() -> Int {
@@ -77,9 +69,8 @@ fn self_test() -> Int {
     if known_tool("nope") != 0 { return 3 }
 
     # The applet list carries all eleven names, one per line.
-    let list = tool_list()
-    let names: List<Str> = []
-    let count = str_split_lines_into(list, names)
+    let names = tool_list().lines()
+    let count = names.len()
     if count != 11 { return 4 }
     if names[0] != "vaisdb" { return 5 }
     if names[10] != "vaiscut" { return 6 }
@@ -93,7 +84,7 @@ fn self_test() -> Int {
     if dir.len() == 0 { return 8 }
 
     # 11 tools * 4 - 2 = 42
-    return count * 4 - 2
+    count * 4 - 2
 }
 
 fn main() -> Int {
@@ -107,5 +98,5 @@ fn main() -> Int {
         print(tool_list())
         return 0
     }
-    return run_tool(first, 1)
+    run_tool(first, 1)
 }
